@@ -601,6 +601,7 @@ namespace brw {
       }
 
       ALU2(ADD)
+      ALU3(ADD3)
       ALU2_ACC(ADDC)
       ALU2(AND)
       ALU2(ASR)
@@ -620,6 +621,7 @@ namespace brw {
       ALU1(FBH)
       ALU1(FBL)
       ALU1(FRC)
+      ALU3(DP4A)
       ALU2(LINE)
       ALU1(LZD)
       ALU2(MAC)

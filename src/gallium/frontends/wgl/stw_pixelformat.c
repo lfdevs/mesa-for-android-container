@@ -154,6 +154,7 @@ stw_pixelformat_add(struct stw_device *stw_dev,
 
    memset(pfi, 0, sizeof *pfi);
 
+   pfi->iPixelFormat = util_dynarray_num_elements(&stw_dev->pixelformats, struct stw_pixelformat_info);
    pfi->pfd.nSize = sizeof pfi->pfd;
    pfi->pfd.nVersion = 1;
 

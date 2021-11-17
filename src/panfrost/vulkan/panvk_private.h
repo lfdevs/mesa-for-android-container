@@ -49,24 +49,23 @@
 #include "util/list.h"
 #include "util/macros.h"
 #include "vk_alloc.h"
+#include "vk_command_buffer.h"
 #include "vk_device.h"
 #include "vk_instance.h"
+#include "vk_log.h"
 #include "vk_object.h"
 #include "vk_physical_device.h"
+#include "vk_queue.h"
 #include "wsi_common.h"
 
 #include "drm-uapi/panfrost_drm.h"
 
-#include "midgard/midgard_compile.h"
-
 #include "pan_blend.h"
-#include "pan_blitter.h"
 #include "pan_cs.h"
 #include "pan_device.h"
 #include "panvk_mempool.h"
 #include "pan_texture.h"
 #include "pan_scoreboard.h"
-#include "pan_shader.h"
 #include "vk_extensions.h"
 #include "panvk_varyings.h"
 
@@ -106,32 +105,26 @@ typedef uint32_t xcb_window_t;
 
 #define panvk_printflike(a, b) __attribute__((__format__(__printf__, a, b)))
 
-/* Whenever we generate an error, pass it through this function. Useful for
- * debugging, where we can break on it. Only call at error site, not when
- * propagating errors. Might be useful to plug in a stack trace here.
- */
-
-struct panvk_instance;
-
-VkResult
-__vk_errorf(struct panvk_instance *instance,
-            VkResult error,
-            const char *file,
-            int line,
-            const char *format,
-            ...);
-
-#define vk_error(instance, error)                                            \
-   __vk_errorf(instance, error, __FILE__, __LINE__, NULL);
-#define vk_errorf(instance, error, format, ...)                              \
-   __vk_errorf(instance, error, __FILE__, __LINE__, format, ##__VA_ARGS__);
-
 void
 panvk_logi(const char *format, ...) panvk_printflike(1, 2);
 void
 panvk_logi_v(const char *format, va_list va);
 
 #define panvk_stub() assert(!"stub")
+
+#define PANVK_META_COPY_BUF2IMG_NUM_FORMATS 12
+#define PANVK_META_COPY_IMG2BUF_NUM_FORMATS 12
+#define PANVK_META_COPY_IMG2IMG_NUM_FORMATS 14
+#define PANVK_META_COPY_NUM_TEX_TYPES 5
+#define PANVK_META_COPY_BUF2BUF_NUM_BLKSIZES 5
+
+static inline unsigned
+panvk_meta_copy_tex_type(unsigned dim, bool isarray)
+{
+   assert(dim > 0 && dim <= 3);
+   assert(dim < 3 || !isarray);
+   return (((dim - 1) << 1) | (isarray ? 1 : 0));
+}
 
 struct panvk_meta {
    struct panvk_pool bin_pool;
@@ -145,6 +138,35 @@ struct panvk_meta {
       struct panvk_pool bin_pool;
       struct panvk_pool desc_pool;
    } blitter;
+
+   struct {
+      struct {
+         mali_ptr shader;
+         struct pan_shader_info shader_info;
+      } color[MAX_RTS][3], zs, z, s; /* 3 base types */
+   } clear_attachment;
+
+   struct {
+      struct {
+         mali_ptr rsd;
+         struct panfrost_ubo_push pushmap;
+      } buf2img[PANVK_META_COPY_BUF2IMG_NUM_FORMATS];
+      struct {
+         mali_ptr rsd;
+         struct panfrost_ubo_push pushmap;
+      } img2buf[PANVK_META_COPY_NUM_TEX_TYPES][PANVK_META_COPY_IMG2BUF_NUM_FORMATS];
+      struct {
+         mali_ptr rsd;
+      } img2img[2][PANVK_META_COPY_NUM_TEX_TYPES][PANVK_META_COPY_IMG2IMG_NUM_FORMATS];
+      struct {
+         mali_ptr rsd;
+         struct panfrost_ubo_push pushmap;
+      } buf2buf[PANVK_META_COPY_BUF2BUF_NUM_BLKSIZES];
+      struct {
+         mali_ptr rsd;
+         struct panfrost_ubo_push pushmap;
+      } fillbuf;
+   } copy;
 };
 
 struct panvk_physical_device {
@@ -166,13 +188,6 @@ struct panvk_physical_device {
 
    int master_fd;
 };
-
-void
-panvk_meta_init(struct panvk_physical_device *dev);
-
-void
-panvk_meta_cleanup(struct panvk_physical_device *dev);
-
 
 enum panvk_debug_flags {
    PANVK_DEBUG_STARTUP = 1 << 0,
@@ -217,10 +232,8 @@ struct panvk_pipeline_cache {
 #define PANVK_MAX_QUEUE_FAMILIES 1
 
 struct panvk_queue {
-   struct vk_object_base base;
+   struct vk_queue vk;
    struct panvk_device *device;
-   uint32_t queue_family_index;
-   VkDeviceQueueCreateFlags flags;
    uint32_t sync;
 };
 
@@ -248,6 +261,8 @@ panvk_device_is_lost(struct panvk_device *device)
    return unlikely(p_atomic_read(&device->_lost));
 }
 
+#define TILER_DESC_WORDS 56 
+
 struct panvk_batch {
    struct list_head node;
    struct util_dynarray jobs;
@@ -264,15 +279,11 @@ struct panvk_batch {
    mali_ptr fragment_job;
    struct {
       struct pan_tiler_context ctx;
-      struct panfrost_ptr bifrost_descs;
-      union {
-         struct {
-            struct mali_bifrost_tiler_heap_packed heap;
-            struct mali_bifrost_tiler_packed tiler;
-         } bifrost;
-         struct mali_midgard_tiler_packed midgard;
-      } templ;
+      struct panfrost_ptr descs;
+      uint32_t templ[TILER_DESC_WORDS];
    } tiler;
+   struct pan_tls_info tlsinfo;
+   unsigned wls_total_size;
    bool issued;
 };
 
@@ -338,12 +349,9 @@ struct panvk_descriptor_set {
    struct panvk_descriptor_pool *pool;
    const struct panvk_descriptor_set_layout *layout;
    struct panvk_descriptor *descs;
-   struct mali_uniform_buffer_packed *ubos;
-   struct mali_midgard_sampler_packed *samplers;
-   union {
-      struct mali_bifrost_texture_packed *bifrost;
-      mali_ptr *midgard;
-   } textures;
+   void *ubos;
+   void *samplers;
+   void *textures;
 };
 
 #define MAX_SETS 4
@@ -478,6 +486,8 @@ struct panvk_descriptor_state {
    mali_ptr samplers;
 };
 
+#define INVOCATION_DESC_WORDS 2
+
 struct panvk_draw_info {
    unsigned first_index;
    unsigned index_count;
@@ -488,7 +498,7 @@ struct panvk_draw_info {
    unsigned instance_count;
    int vertex_offset;
    unsigned offset_start;
-   struct mali_invocation_packed invocation;
+   uint32_t invocation[INVOCATION_DESC_WORDS];
    struct {
       mali_ptr varyings;
       mali_ptr attributes;
@@ -545,22 +555,14 @@ struct panvk_attrib_buf {
 };
 
 struct panvk_cmd_state {
-   VkPipelineBindPoint bind_point;
-
-   struct panvk_pipeline *pipeline;
-
    uint32_t dirty;
 
    struct panvk_varyings_info varyings;
    mali_ptr fs_rsd;
 
    struct {
-      float constants[8][4];
+      float constants[4];
    } blend;
-
-   struct {
-      struct pan_compute_dim wg_count;
-   } compute;
 
    struct {
       struct {
@@ -596,6 +598,11 @@ struct panvk_cmd_state {
       } s_front, s_back;
    } zs;
 
+   struct {
+      struct pan_fb_info info;
+      bool crc_valid[MAX_RTS];
+   } fb;
+
    const struct panvk_render_pass *pass;
    const struct panvk_subpass *subpass;
    const struct panvk_framebuffer *framebuffer;
@@ -629,8 +636,13 @@ enum panvk_cmd_buffer_status {
    PANVK_CMD_BUFFER_STATUS_PENDING,
 };
 
+struct panvk_cmd_bind_point_state {
+   struct panvk_descriptor_state desc_state;
+   const struct panvk_pipeline *pipeline;
+};
+
 struct panvk_cmd_buffer {
-   struct vk_object_base base;
+   struct vk_command_buffer vk;
 
    struct panvk_device *device;
 
@@ -652,25 +664,31 @@ struct panvk_cmd_buffer {
    VkShaderStageFlags push_constant_stages;
    struct panvk_descriptor_set meta_push_descriptors;
 
-   struct panvk_descriptor_state descriptors[MAX_BIND_POINTS];
+   struct panvk_cmd_bind_point_state bind_points[MAX_BIND_POINTS];
 
    VkResult record_result;
 };
 
-void
+#define panvk_cmd_get_bind_point_state(cmdbuf, bindpoint) \
+        &(cmdbuf)->bind_points[VK_PIPELINE_BIND_POINT_ ## bindpoint]
+
+#define panvk_cmd_get_pipeline(cmdbuf, bindpoint) \
+        (cmdbuf)->bind_points[VK_PIPELINE_BIND_POINT_ ## bindpoint].pipeline
+
+#define panvk_cmd_get_desc_state(cmdbuf, bindpoint) \
+        &(cmdbuf)->bind_points[VK_PIPELINE_BIND_POINT_ ## bindpoint].desc_state
+
+struct panvk_batch *
 panvk_cmd_open_batch(struct panvk_cmd_buffer *cmdbuf);
 
 void
-panvk_cmd_close_batch(struct panvk_cmd_buffer *cmdbuf);
+panvk_cmd_fb_info_set_subpass(struct panvk_cmd_buffer *cmdbuf);
 
 void
-panvk_cmd_get_midgard_polygon_list(struct panvk_cmd_buffer *cmdbuf,
-                                   unsigned width, unsigned height,
-                                   bool has_draws);
+panvk_cmd_fb_info_init(struct panvk_cmd_buffer *cmdbuf);
 
 void
-panvk_cmd_get_bifrost_tiler_context(struct panvk_cmd_buffer *cmdbuf,
-                                    unsigned width, unsigned height);
+panvk_cmd_preload_fb_after_batch_split(struct panvk_cmd_buffer *cmdbuf);
 
 void
 panvk_pack_color(struct panvk_clear_value *out,
@@ -718,6 +736,9 @@ union panvk_sysval_data {
    uint64_t u64[2];
 };
 
+#define RSD_WORDS 16
+#define BLEND_DESC_WORDS 4
+
 struct panvk_pipeline {
    struct vk_object_base base;
 
@@ -752,13 +773,14 @@ struct panvk_pipeline {
    struct {
       mali_ptr address;
       struct pan_shader_info info;
-      struct mali_renderer_state_packed rsd_template;
+      uint32_t rsd_template[RSD_WORDS];
       bool required;
       bool dynamic_rsd;
+      uint8_t rt_mask;
    } fs;
 
    struct {
-      enum mali_draw_mode topology;
+      unsigned topology;
       bool writes_point_size;
       bool primitive_restart;
    } ia;
@@ -780,13 +802,13 @@ struct panvk_pipeline {
    struct {
       bool z_test;
       bool z_write;
-      enum mali_func z_compare_func;
+      unsigned z_compare_func;
       bool s_test;
       struct {
-         enum mali_stencil_op fail_op;
-         enum mali_stencil_op pass_op;
-         enum mali_stencil_op z_fail_op;
-         enum mali_func compare_func;
+         unsigned fail_op;
+         unsigned pass_op;
+         unsigned z_fail_op;
+         unsigned compare_func;
          uint8_t compare_mask;
          uint8_t write_mask;
          uint8_t ref;
@@ -803,21 +825,17 @@ struct panvk_pipeline {
 
    struct {
       struct pan_blend_state state;
-      struct mali_blend_packed bd_template[8];
+      uint32_t bd_template[8][BLEND_DESC_WORDS];
       struct {
          uint8_t index;
          uint16_t bifrost_factor;
       } constant[8];
+      bool reads_dest;
    } blend;
 
    VkViewport viewport;
    VkRect2D scissor;
 };
-
-bool
-panvk_blend_needs_lowering(const struct panfrost_device *dev,
-                           const struct pan_blend_state *state,
-                           unsigned rt);
 
 struct panvk_image_level {
    VkDeviceSize offset;
@@ -890,6 +908,8 @@ panvk_image_get_plane_size(const struct panvk_image *image, unsigned plane);
 unsigned
 panvk_image_get_total_size(const struct panvk_image *image);
 
+#define TEXTURE_DESC_WORDS 8
+
 struct panvk_image_view {
    struct vk_object_base base;
    struct pan_image_view pview;
@@ -897,13 +917,15 @@ struct panvk_image_view {
    VkFormat vk_format;
    struct panfrost_bo *bo;
    struct {
-      struct mali_bifrost_texture_packed tex_desc;
-   } bifrost;
+      uint32_t tex[TEXTURE_DESC_WORDS];
+   } descs;
 };
+
+#define SAMPLER_DESC_WORDS 8
 
 struct panvk_sampler {
    struct vk_object_base base;
-   struct mali_midgard_sampler_packed desc;
+   uint32_t desc[SAMPLER_DESC_WORDS];
 };
 
 struct panvk_buffer_view {
@@ -939,6 +961,7 @@ struct panvk_subpass_attachment {
    uint32_t idx;
    VkImageLayout layout;
    bool clear;
+   bool preload;
 };
 
 struct panvk_subpass {
@@ -964,7 +987,7 @@ struct panvk_render_pass_attachment {
    VkImageLayout initial_layout;
    VkImageLayout final_layout;
    unsigned view_mask;
-   unsigned clear_subpass;
+   unsigned first_used_in_subpass;
 };
 
 struct panvk_render_pass {
@@ -977,26 +1000,11 @@ struct panvk_render_pass {
    struct panvk_subpass subpasses[0];
 };
 
-static inline enum mali_func
-panvk_translate_compare_func(VkCompareOp comp)
-{
-   STATIC_ASSERT(VK_COMPARE_OP_NEVER == (VkCompareOp)MALI_FUNC_NEVER);
-   STATIC_ASSERT(VK_COMPARE_OP_LESS == (VkCompareOp)MALI_FUNC_LESS);
-   STATIC_ASSERT(VK_COMPARE_OP_EQUAL == (VkCompareOp)MALI_FUNC_EQUAL);
-   STATIC_ASSERT(VK_COMPARE_OP_LESS_OR_EQUAL == (VkCompareOp)MALI_FUNC_LEQUAL);
-   STATIC_ASSERT(VK_COMPARE_OP_GREATER == (VkCompareOp)MALI_FUNC_GREATER);
-   STATIC_ASSERT(VK_COMPARE_OP_NOT_EQUAL == (VkCompareOp)MALI_FUNC_NOT_EQUAL);
-   STATIC_ASSERT(VK_COMPARE_OP_GREATER_OR_EQUAL == (VkCompareOp)MALI_FUNC_GEQUAL);
-   STATIC_ASSERT(VK_COMPARE_OP_ALWAYS == (VkCompareOp)MALI_FUNC_ALWAYS);
-
-   return (enum mali_func)comp;
-}
-
-VK_DEFINE_HANDLE_CASTS(panvk_cmd_buffer, base, VkCommandBuffer, VK_OBJECT_TYPE_COMMAND_BUFFER)
+VK_DEFINE_HANDLE_CASTS(panvk_cmd_buffer, vk.base, VkCommandBuffer, VK_OBJECT_TYPE_COMMAND_BUFFER)
 VK_DEFINE_HANDLE_CASTS(panvk_device, vk.base, VkDevice, VK_OBJECT_TYPE_DEVICE)
 VK_DEFINE_HANDLE_CASTS(panvk_instance, vk.base, VkInstance, VK_OBJECT_TYPE_INSTANCE)
 VK_DEFINE_HANDLE_CASTS(panvk_physical_device, vk.base, VkPhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE)
-VK_DEFINE_HANDLE_CASTS(panvk_queue, base, VkQueue, VK_OBJECT_TYPE_QUEUE)
+VK_DEFINE_HANDLE_CASTS(panvk_queue, vk.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_cmd_pool, base, VkCommandPool, VK_OBJECT_TYPE_COMMAND_POOL)
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_buffer, base, VkBuffer, VK_OBJECT_TYPE_BUFFER)
@@ -1018,5 +1026,69 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_render_pass, base, VkRenderPass, VK_OBJECT_
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_sampler, base, VkSampler, VK_OBJECT_TYPE_SAMPLER)
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_shader_module, base, VkShaderModule, VK_OBJECT_TYPE_SHADER_MODULE)
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_semaphore, base, VkSemaphore, VK_OBJECT_TYPE_SEMAPHORE)
+
+#define panvk_arch_name(name, version) panvk_## version ## _ ## name
+
+#define panvk_arch_dispatch(arch, name, ...) \
+do { \
+   switch (arch) { \
+   case 5: panvk_arch_name(name, v5)(__VA_ARGS__); break; \
+   case 6: panvk_arch_name(name, v6)(__VA_ARGS__); break; \
+   case 7: panvk_arch_name(name, v7)(__VA_ARGS__); break; \
+   default: unreachable("Invalid arch"); \
+   } \
+} while (0)
+
+#ifdef PAN_ARCH
+#if PAN_ARCH == 5
+#define panvk_per_arch(name) panvk_arch_name(name, v5)
+#elif PAN_ARCH == 6
+#define panvk_per_arch(name) panvk_arch_name(name, v6)
+#elif PAN_ARCH == 7
+#define panvk_per_arch(name) panvk_arch_name(name, v7)
+#endif
+#include "panvk_vX_cmd_buffer.h"
+#include "panvk_vX_cs.h"
+#include "panvk_vX_meta.h"
+#else
+#define PAN_ARCH 5
+#define panvk_per_arch(name) panvk_arch_name(name, v5)
+#include "panvk_vX_cmd_buffer.h"
+#include "panvk_vX_cs.h"
+#include "panvk_vX_meta.h"
+#undef PAN_ARCH
+#undef panvk_per_arch
+#define PAN_ARCH 6
+#define panvk_per_arch(name) panvk_arch_name(name, v6)
+#include "panvk_vX_cmd_buffer.h"
+#include "panvk_vX_cs.h"
+#include "panvk_vX_meta.h"
+#undef PAN_ARCH
+#undef panvk_per_arch
+#define PAN_ARCH 7
+#define panvk_per_arch(name) panvk_arch_name(name, v7)
+#include "panvk_vX_cmd_buffer.h"
+#include "panvk_vX_cs.h"
+#include "panvk_vX_meta.h"
+#undef PAN_ARCH
+#undef panvk_per_arch
+#endif
+
+#ifdef PAN_ARCH
+bool
+panvk_per_arch(blend_needs_lowering)(const struct panfrost_device *dev,
+                                     const struct pan_blend_state *state,
+                                     unsigned rt);
+
+struct panvk_shader *
+panvk_per_arch(shader_create)(struct panvk_device *dev,
+                              gl_shader_stage stage,
+                              const VkPipelineShaderStageCreateInfo *stage_info,
+                              const struct panvk_pipeline_layout *layout,
+                              unsigned sysval_ubo,
+                              struct pan_blend_state *blend_state,
+                              bool static_blend_constants,
+                              const VkAllocationCallbacks *alloc);
+#endif
 
 #endif /* PANVK_PRIVATE_H */

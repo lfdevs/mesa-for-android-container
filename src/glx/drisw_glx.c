@@ -216,6 +216,9 @@ swrastPutImageShm(__DRIdrawable * draw, int op,
 {
    struct drisw_drawable *pdp = loaderPrivate;
 
+   if (!pdp)
+      return;
+
    pdp->shminfo.shmaddr = shmaddr;
    swrastXPutImage(draw, op, 0, 0, x, y, w, h, stride, shmid,
                    shmaddr + offset, loaderPrivate);
@@ -230,6 +233,9 @@ swrastPutImageShm2(__DRIdrawable * draw, int op,
 {
    struct drisw_drawable *pdp = loaderPrivate;
 
+   if (!pdp)
+      return;
+
    pdp->shminfo.shmaddr = shmaddr;
    swrastXPutImage(draw, op, x, 0, x, y, w, h, stride, shmid,
                    shmaddr + offset, loaderPrivate);
@@ -240,6 +246,9 @@ swrastPutImage2(__DRIdrawable * draw, int op,
                 int x, int y, int w, int h, int stride,
                 char *data, void *loaderPrivate)
 {
+   if (!loaderPrivate)
+      return;
+
    swrastXPutImage(draw, op, 0, 0, x, y, w, h, stride, -1,
                    data, loaderPrivate);
 }
@@ -249,6 +258,9 @@ swrastPutImage(__DRIdrawable * draw, int op,
                int x, int y, int w, int h,
                char *data, void *loaderPrivate)
 {
+   if (!loaderPrivate)
+      return;
+
    swrastXPutImage(draw, op, 0, 0, x, y, w, h, 0, -1,
                    data, loaderPrivate);
 }
@@ -497,13 +509,7 @@ drisw_create_context_attribs(struct glx_screen *base,
    struct drisw_screen *psc = (struct drisw_screen *) base;
    __DRIcontext *shared = NULL;
 
-   uint32_t minor_ver;
-   uint32_t major_ver;
-   uint32_t renderType;
-   uint32_t flags;
-   unsigned api;
-   int reset;
-   int release;
+   struct dri_ctx_attribs dca;
    uint32_t ctx_attribs[2 * 5];
    unsigned num_ctx_attribs = 0;
 
@@ -513,35 +519,22 @@ drisw_create_context_attribs(struct glx_screen *base,
    if (psc->swrast->base.version < 3)
       return NULL;
 
-   /* Remap the GLX tokens to DRI2 tokens.
-    */
-   if (!dri2_convert_glx_attribs(num_attribs, attribs,
-                                 &major_ver, &minor_ver, &renderType, &flags,
-                                 &api, &reset, &release, error))
+   *error = dri_convert_glx_attribs(num_attribs, attribs, &dca);
+   if (*error != __DRI_CTX_ERROR_SUCCESS)
       return NULL;
 
-   if (!dri2_check_no_error(flags, shareList, major_ver, error))
+   if (!dri2_check_no_error(dca.flags, shareList, dca.major_ver, error))
       return NULL;
 
    /* Check the renderType value */
-   if (!validate_renderType_against_config(config_base, renderType)) {
+   if (!validate_renderType_against_config(config_base, dca.render_type)) {
        return NULL;
    }
 
-   if (reset != __DRI_CTX_RESET_NO_NOTIFICATION)
-      return NULL;
-
-   if (release != __DRI_CTX_RELEASE_BEHAVIOR_FLUSH &&
-       release != __DRI_CTX_RELEASE_BEHAVIOR_NONE)
-      return NULL;
-
    if (shareList) {
-      /* If the shareList context is not a DRISW context, we cannot possibly
-       * create a DRISW context that shares it.
-       */
-      if (shareList->vtable->destroy != drisw_destroy_context) {
-	 return NULL;
-      }
+      /* We can't share with an indirect context */
+      if (!shareList->isDirect)
+         return NULL;
 
       pcp_shared = (struct drisw_context *) shareList;
       shared = pcp_shared->driContext;
@@ -557,31 +550,31 @@ drisw_create_context_attribs(struct glx_screen *base,
    }
 
    ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_MAJOR_VERSION;
-   ctx_attribs[num_ctx_attribs++] = major_ver;
+   ctx_attribs[num_ctx_attribs++] = dca.major_ver;
    ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_MINOR_VERSION;
-   ctx_attribs[num_ctx_attribs++] = minor_ver;
-   if (release != __DRI_CTX_RELEASE_BEHAVIOR_FLUSH) {
+   ctx_attribs[num_ctx_attribs++] = dca.minor_ver;
+   if (dca.release != __DRI_CTX_RELEASE_BEHAVIOR_FLUSH) {
        ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_RELEASE_BEHAVIOR;
-       ctx_attribs[num_ctx_attribs++] = release;
+       ctx_attribs[num_ctx_attribs++] = dca.release;
    }
 
-   if (flags != 0) {
+   if (dca.flags != 0) {
       ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_FLAGS;
 
       /* The current __DRI_CTX_FLAG_* values are identical to the
        * GLX_CONTEXT_*_BIT values.
        */
-      ctx_attribs[num_ctx_attribs++] = flags;
+      ctx_attribs[num_ctx_attribs++] = dca.flags;
 
-      if (flags & __DRI_CTX_FLAG_NO_ERROR)
+      if (dca.flags & __DRI_CTX_FLAG_NO_ERROR)
          pcp->base.noError = GL_TRUE;
    }
 
-   pcp->base.renderType = renderType;
+   pcp->base.renderType = dca.render_type;
 
    pcp->driContext =
       (*psc->swrast->createContextAttribs) (psc->driScreen,
-					    api,
+					    dca.api,
 					    config ? config->driConfig : 0,
 					    shared,
 					    num_ctx_attribs / 2,
@@ -593,7 +586,7 @@ drisw_create_context_attribs(struct glx_screen *base,
       return NULL;
    }
 
-   pcp->base.vtable = &drisw_context_vtable;
+   pcp->base.vtable = base->context_vtable;
 
    return &pcp->base;
 }
@@ -893,6 +886,7 @@ driswCreateScreen(int screen, struct glx_display *priv)
    psc->driver_configs = driver_configs;
 
    psc->base.vtable = &drisw_screen_vtable;
+   psc->base.context_vtable = &drisw_context_vtable;
    psp = &psc->vtable;
    psc->base.driScreen = psp;
    psp->destroyScreen = driswDestroyScreen;

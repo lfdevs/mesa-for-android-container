@@ -59,7 +59,6 @@ struct brw_screen
    /** DRM fd associated with this screen. Not owned by this object. Do not close. */
    int fd;
 
-   bool no_hw;
    bool hw_has_swizzling;
    bool has_exec_fence; /**< I915_PARAM_HAS_EXEC_FENCE */
 
@@ -107,16 +106,6 @@ struct brw_screen
     * I915_PARAM_CMD_PARSER_VERSION parameter
     */
    int cmd_parser_version;
-
-   /**
-    * Number of subslices reported by the I915_PARAM_SUBSLICE_TOTAL parameter
-    */
-   int subslice_total;
-
-   /**
-    * Number of EUs reported by the I915_PARAM_EU_TOTAL parameter
-    */
-   int eu_total;
 
    bool mesa_format_supports_texture[MESA_FORMAT_COUNT];
    bool mesa_format_supports_render[MESA_FORMAT_COUNT];

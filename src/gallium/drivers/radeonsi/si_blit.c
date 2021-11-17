@@ -98,11 +98,13 @@ void si_blitter_end(struct si_context *sctx)
    /* Restore shader pointers because the VS blit shader changed all
     * non-global VS user SGPRs. */
    sctx->shader_pointers_dirty |= SI_DESCS_SHADER_MASK(VERTEX);
+
+   unsigned num_vbos_in_user_sgprs = si_num_vbos_in_user_sgprs(sctx->screen);
    sctx->vertex_buffer_pointer_dirty = sctx->vb_descriptors_buffer != NULL &&
                                        sctx->num_vertex_elements >
-                                       sctx->screen->num_vbos_in_user_sgprs;
+                                       num_vbos_in_user_sgprs;
    sctx->vertex_buffer_user_sgprs_dirty = sctx->num_vertex_elements > 0 &&
-                                          sctx->screen->num_vbos_in_user_sgprs;
+                                          num_vbos_in_user_sgprs;
    si_mark_atom_dirty(sctx, &sctx->atoms.s.shader_pointers);
 }
 
@@ -1027,7 +1029,7 @@ void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst
    /* Copy. */
    si_blitter_begin(sctx, SI_COPY);
    util_blitter_blit_generic(sctx->blitter, dst_view, &dstbox, src_view, src_box, src_width0,
-                             src_height0, PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL, false);
+                             src_height0, PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL, false, false);
    si_blitter_end(sctx);
 
    pipe_surface_reference(&dst_view, NULL);
@@ -1203,9 +1205,46 @@ resolve_to_temp:
 static void si_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
 {
    struct si_context *sctx = (struct si_context *)ctx;
+   struct si_texture *sdst = (struct si_texture *)info->dst.resource;
 
    if (do_hardware_msaa_resolve(ctx, info)) {
       return;
+   }
+
+   if (info->is_dri_blit_image && sdst->surface.is_linear &&
+       sctx->chip_class >= GFX7 && sdst->surface.flags & RADEON_SURF_IMPORTED) {
+      struct si_texture *ssrc = (struct si_texture *)info->src.resource;
+      /* Use SDMA or async compute when copying to a DRI_PRIME imported linear surface. */
+      bool async_copy = info->dst.box.x == 0 && info->dst.box.y == 0 && info->dst.box.z == 0 &&
+                        info->src.box.x == 0 && info->src.box.y == 0 && info->src.box.z == 0 &&
+                        info->dst.level == 0 && info->src.level == 0 &&
+                        info->src.box.width == info->dst.resource->width0 &&
+                        info->src.box.height == info->dst.resource->height0 &&
+                        info->src.box.depth == 1 && util_can_blit_via_copy_region(info, true);
+      /* Try SDMA first... */
+      /* TODO: figure out why SDMA copies are slow on GFX10_3 */
+      if (async_copy && sctx->chip_class < GFX10_3 && si_sdma_copy_image(sctx, sdst, ssrc))
+         return;
+
+      /* ... and use async compute as the fallback. */
+      if (async_copy) {
+         struct si_screen *sscreen = sctx->screen;
+
+         simple_mtx_lock(&sscreen->async_compute_context_lock);
+         if (!sscreen->async_compute_context)
+            si_init_aux_async_compute_ctx(sscreen);
+
+         if (sscreen->async_compute_context) {
+            si_compute_copy_image((struct si_context*)sctx->screen->async_compute_context,
+                                  info->dst.resource, 0, info->src.resource, 0, 0, 0, 0,
+                                  &info->src.box, false, 0);
+            si_flush_gfx_cs((struct si_context*)sctx->screen->async_compute_context, 0, NULL);
+            simple_mtx_unlock(&sscreen->async_compute_context_lock);
+            return;
+         }
+
+         simple_mtx_unlock(&sscreen->async_compute_context_lock);
+      }
    }
 
    if (unlikely(sctx->thread_trace_enabled))

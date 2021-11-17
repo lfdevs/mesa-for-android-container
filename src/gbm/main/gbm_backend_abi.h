@@ -72,7 +72,7 @@ struct gbm_backend_desc;
  * Core ABI version: 4
  * ABI version of a buffer object created by a device from the backend: 4
  */
-#define GBM_BACKEND_ABI_VERSION 0
+#define GBM_BACKEND_ABI_VERSION 1
 
 /**
  * GBM device interface corresponding to GBM_BACKEND_ABI_VERSION = 0
@@ -113,6 +113,10 @@ struct gbm_device_v0 {
                                           uint32_t format,
                                           uint64_t modifier);
 
+   /**
+    * Since version 1, usage is properly populated when modifiers are
+    * supplied. Version 0 always set usage to 0 in this case.
+    */
    struct gbm_bo *(*bo_create)(struct gbm_device *gbm,
                                uint32_t width, uint32_t height,
                                uint32_t format,
@@ -137,6 +141,10 @@ struct gbm_device_v0 {
    uint64_t (*bo_get_modifier)(struct gbm_bo *bo);
    void (*bo_destroy)(struct gbm_bo *bo);
 
+   /**
+    * Since version 1, flags are properly populated when modifiers are
+    * supplied. Version 0 always set flags to 0 in this case.
+    */
    struct gbm_surface *(*surface_create)(struct gbm_device *gbm,
                                          uint32_t width, uint32_t height,
                                          uint32_t format, uint32_t flags,

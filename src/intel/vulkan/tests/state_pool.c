@@ -42,7 +42,7 @@ int main(void)
    struct anv_state_pool state_pool;
 
    pthread_mutex_init(&device.mutex, NULL);
-   anv_bo_cache_init(&device.bo_cache);
+   anv_bo_cache_init(&device.bo_cache, &device);
 
    for (unsigned i = 0; i < NUM_RUNS; i++) {
       anv_state_pool_init(&state_pool, &device, "test", 4096, 0, 256);

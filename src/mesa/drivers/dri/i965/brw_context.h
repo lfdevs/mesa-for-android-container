@@ -376,7 +376,7 @@ struct brw_cache {
 
 #define perf_debug(...) do {                                    \
    static GLuint msg_id = 0;                                    \
-   if (INTEL_DEBUG & DEBUG_PERF)                                \
+   if (INTEL_DEBUG(DEBUG_PERF))                                 \
       dbg_printf(__VA_ARGS__);                                  \
    if (brw->perf_debug)                                         \
       _mesa_gl_debugf(&brw->ctx, &msg_id,                       \

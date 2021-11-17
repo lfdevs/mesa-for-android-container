@@ -102,10 +102,12 @@ d3d12_create_vertex_elements_state(struct pipe_context *pctx,
       cso->elements[i].SemanticName = "TEXCOORD";
       cso->elements[i].SemanticIndex = i;
 
-      enum pipe_format format_helper = d3d12_emulated_vtx_format(elements[i].src_format);
+      enum pipe_format format_helper =
+         d3d12_emulated_vtx_format((enum pipe_format)elements[i].src_format);
       bool needs_emulation = format_helper != elements[i].src_format;
       cso->needs_format_emulation |= needs_emulation;
-      cso->format_conversion[i] = needs_emulation ? elements[i].src_format : PIPE_FORMAT_NONE;
+      cso->format_conversion[i] =
+         needs_emulation ? (enum pipe_format)elements[i].src_format : PIPE_FORMAT_NONE;
 
       cso->elements[i].Format = d3d12_get_format(format_helper);
       assert(cso->elements[i].Format != DXGI_FORMAT_UNKNOWN);
@@ -945,6 +947,7 @@ d3d12_set_sampler_views(struct pipe_context *pctx,
                         unsigned start_slot,
                         unsigned num_views,
                         unsigned unbind_num_trailing_slots,
+                        bool take_ownership,
                         struct pipe_sampler_view **views)
 {
    struct d3d12_context *ctx = d3d12_context(pctx);
@@ -960,7 +963,12 @@ d3d12_set_sampler_views(struct pipe_context *pctx,
       if (new_view)
          d3d12_increment_sampler_view_bind_count(pctx, shader_type, new_view);
 
-      pipe_sampler_view_reference(&old_view, views[i]);
+      if (take_ownership) {
+         pipe_sampler_view_reference(&old_view, NULL);
+         old_view = views[i];
+      } else {
+         pipe_sampler_view_reference(&old_view, views[i]);
+      }
 
       if (views[i]) {
          dxil_wrap_sampler_state &wss = ctx->tex_wrap_states[shader_type][start_slot + i];

@@ -27,7 +27,6 @@
 #ifndef FREEDRENO_CONTEXT_H_
 #define FREEDRENO_CONTEXT_H_
 
-#include "indices/u_primconvert.h"
 #include "pipe/p_context.h"
 #include "util/libsync.h"
 #include "util/list.h"
@@ -35,7 +34,7 @@
 #include "util/u_blitter.h"
 #include "util/u_string.h"
 #include "util/u_threaded_context.h"
-#include "util/u_trace.h"
+#include "util/perf/u_trace.h"
 
 #include "freedreno_autotune.h"
 #include "freedreno_gmem.h"
@@ -219,7 +218,6 @@ struct fd_context {
 
    struct blitter_context *blitter dt;
    void *clear_rs_state[2] dt;
-   struct primconvert_context *primconvert dt;
 
    /* slab for pipe_transfer allocations: */
    struct slab_child_pool transfer_pool dt;
@@ -250,6 +248,8 @@ struct fd_context {
    struct list_head acc_active_queries dt;
    /*@}*/
 
+   uint8_t patch_vertices;
+
    /* Whether we need to recheck the active_queries list next
     * fd_batch_update_queries().
     */
@@ -259,13 +259,6 @@ struct fd_context {
     * be counted against non-perfcounter queries")
     */
    bool active_queries dt;
-
-   /* table with PIPE_PRIM_MAX entries mapping PIPE_PRIM_x to
-    * DI_PT_x value to use for draw initiator.  There are some
-    * slight differences between generation:
-    */
-   const uint8_t *primtypes;
-   uint32_t primtype_mask;
 
    /* shaders used by clear, and gmem->mem blits: */
    struct fd_program_stateobj solid_prog; // TODO move to screen?
@@ -327,9 +320,12 @@ struct fd_context {
     * count increases, it means some other context crashed.  If
     * per-context reset count increases, it means we crashed the
     * gpu.
+    *
+    * Only accessed by front-end thread, never accessed by TC driver
+    * thread.
     */
-   uint32_t context_reset_count dt;
-   uint32_t global_reset_count dt;
+   uint32_t context_reset_count;
+   uint32_t global_reset_count;
 
    /* Context sequence #, used for batch-cache key: */
    uint16_t seqno;
@@ -712,12 +708,6 @@ fd_context_get_scissor(struct fd_context *ctx) assert_dt
    return ctx->current_scissor;
 }
 
-static inline bool
-fd_supported_prim(struct fd_context *ctx, unsigned prim)
-{
-   return (1 << prim) & ctx->primtype_mask;
-}
-
 void fd_context_switch_from(struct fd_context *ctx) assert_dt;
 void fd_context_switch_to(struct fd_context *ctx,
                           struct fd_batch *batch) assert_dt;
@@ -731,8 +721,7 @@ void fd_emit_string5(struct fd_ringbuffer *ring, const char *string, int len);
 
 struct pipe_context *fd_context_init(struct fd_context *ctx,
                                      struct pipe_screen *pscreen,
-                                     const uint8_t *primtypes, void *priv,
-                                     unsigned flags);
+                                     void *priv, unsigned flags);
 struct pipe_context *fd_context_init_tc(struct pipe_context *pctx,
                                         unsigned flags);
 

@@ -73,11 +73,12 @@ panfrost_invert_swizzle(const unsigned char *in, unsigned char *out)
 
 unsigned
 panfrost_format_to_bifrost_blend(const struct panfrost_device *dev,
-                                 enum pipe_format format)
+                                 enum pipe_format format,
+                                 bool dithered)
 {
         mali_pixel_format pixfmt = (dev->arch >= 7) ?
-                panfrost_blendable_formats_v7[format].bifrost :
-                panfrost_blendable_formats_v6[format].bifrost;
+                panfrost_blendable_formats_v7[format].bifrost[dithered] :
+                panfrost_blendable_formats_v6[format].bifrost[dithered];
 
         return pixfmt ?: dev->formats[format].hw;
 }

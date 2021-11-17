@@ -1,5 +1,4 @@
 ; a6xx microcode
-; Disassembling microcode: src/freedreno/.gitlab-ci/reference/afuc_test.fw
 ; Version: 01000001
 
         [01000001]  ; nop
@@ -213,8 +212,8 @@ CP_SET_DRAW_INIT_FLAGS:
 CP_SCRATCH_TO_REG:
 CP_DRAW_PRED_SET:
 CP_MEM_WRITE_CNTR:
-UNKN80:
-CP_SET_BIN_SELECT:
+CP_START_BIN:
+CP_END_BIN:
 CP_WAIT_REG_EQ:
 CP_SMMU_TABLE_UPDATE:
 UNKN84:

@@ -80,9 +80,6 @@ enum radeon_bo_flag
 
 enum radeon_dependency_flag
 {
-   /* Add the dependency to the parallel compute IB only. */
-   RADEON_DEPENDENCY_PARALLEL_COMPUTE_ONLY = 1 << 0,
-
    /* Instead of waiting for a job to finish execution, the dependency will
     * be signaled when the job starts execution.
     */
@@ -511,26 +508,6 @@ struct radeon_winsys {
                      void (*flush)(void *ctx, unsigned flags,
                                    struct pipe_fence_handle **fence),
                      void *flush_ctx, bool stop_exec_on_failure);
-
-   /**
-    * Add a parallel compute IB to a gfx IB. It will share the buffer list
-    * and fence dependencies with the gfx IB. The gfx flush call will submit
-    * both IBs at the same time.
-    *
-    * The compute IB doesn't have an output fence, so the primary IB has
-    * to use a wait packet for synchronization.
-    *
-    * The returned IB is only a stream for writing packets to the new
-    * IB. The only function that can be used on the compute cs is cs_check_space.
-    *
-    * \param compute_cs      The returned structure of the command stream.
-    * \param gfx_cs          Gfx IB
-    *
-    * \return true on success
-    */
-   bool (*cs_add_parallel_compute_ib)(struct radeon_cmdbuf *compute_cs,
-                                      struct radeon_cmdbuf *gfx_cs,
-                                      bool uses_gds_ordered_append);
 
    /**
     * Set up and enable mid command buffer preemption for the command stream.

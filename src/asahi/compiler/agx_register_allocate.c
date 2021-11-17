@@ -30,18 +30,6 @@
  * TODO: Handle phi nodes.
  */
 
-/** Returns number of registers read by an instruction. TODO: 16-bit */
-static unsigned
-agx_read_registers(agx_instr *I, unsigned s)
-{
-   unsigned size = I->src[s].size == AGX_SIZE_32 ? 2 : 1;
-
-   switch (I->op) {
-   default:
-      return size;
-   }
-}
-
 /** Returns number of registers written by an instruction */
 static unsigned
 agx_write_registers(agx_instr *I, unsigned d)
@@ -89,13 +77,21 @@ agx_assign_regs(BITSET_WORD *used_regs, unsigned count, unsigned align, unsigned
       }
    }
 
+   /* Couldn't find a free register, dump the state of the register file */
+   fprintf(stderr, "Failed to find register of size %u aligned %u max %u.\n",
+           count, align, max);
+
+   fprintf(stderr, "Register file:\n");
+   for (unsigned i = 0; i < BITSET_WORDS(max); ++i)
+      fprintf(stderr, "    %08X\n", used_regs[i]);
+
    unreachable("Could not find a free register");
 }
 
 /** Assign registers to SSA values in a block. */
 
 static void
-agx_ra_assign_local(agx_block *block, uint8_t *ssa_to_reg, unsigned max_reg)
+agx_ra_assign_local(agx_block *block, uint8_t *ssa_to_reg, uint8_t *ncomps, unsigned max_reg)
 {
    BITSET_DECLARE(used_regs, AGX_NUM_REGS) = { 0 };
 
@@ -107,13 +103,15 @@ agx_ra_assign_local(agx_block *block, uint8_t *ssa_to_reg, unsigned max_reg)
    BITSET_SET(used_regs, 0); // control flow writes r0l
    BITSET_SET(used_regs, 5*2); // TODO: precolouring, don't overwrite vertex ID
    BITSET_SET(used_regs, (5*2 + 1));
+   BITSET_SET(used_regs, (6*2 + 0));
+   BITSET_SET(used_regs, (6*2 + 1));
 
    agx_foreach_instr_in_block(block, I) {
       /* First, free killed sources */
       agx_foreach_src(I, s) {
          if (I->src[s].type == AGX_INDEX_NORMAL && I->src[s].kill) {
             unsigned reg = ssa_to_reg[I->src[s].value];
-            unsigned count = agx_read_registers(I, s);
+            unsigned count = ncomps[I->src[s].value];
 
             for (unsigned i = 0; i < count; ++i)
                BITSET_CLEAR(used_regs, reg + i);
@@ -143,8 +141,20 @@ agx_ra(agx_context *ctx)
 
    agx_compute_liveness(ctx);
    uint8_t *ssa_to_reg = calloc(ctx->alloc, sizeof(uint8_t));
+   uint8_t *ncomps = calloc(ctx->alloc, sizeof(uint8_t));
+
+   agx_foreach_instr_global(ctx, I) {
+      agx_foreach_dest(I, d) {
+         if (I->dest[d].type != AGX_INDEX_NORMAL) continue;
+
+         unsigned v = I->dest[d].value;
+         assert(ncomps[v] == 0 && "broken SSA");
+         ncomps[v] = agx_write_registers(I, d);
+      }
+   }
+
    agx_foreach_block(ctx, block)
-      agx_ra_assign_local(block, ssa_to_reg, ctx->max_register);
+      agx_ra_assign_local(block, ssa_to_reg, ncomps, ctx->max_register);
 
    /* TODO: Coalesce combines */
 
@@ -190,8 +200,8 @@ agx_ra(agx_context *ctx)
          agx_remove_instruction(ins);
          continue;
       } else if (ins->op == AGX_OPCODE_P_EXTRACT) {
+         /* Uses the destination size */
          assert(ins->dest[0].type == AGX_INDEX_NORMAL);
-         assert(ins->dest[0].size == ins->src[0].size);
          unsigned base = ins->src[0].value;
 
          if (ins->src[0].type != AGX_INDEX_REGISTER) {
@@ -199,7 +209,7 @@ agx_ra(agx_context *ctx)
             base = alloc[base];
          }
 
-         unsigned size = ins->dest[0].size == AGX_SIZE_32 ? 2 : 1;
+         unsigned size = ins->dest[0].size == AGX_SIZE_64 ? 4 : ins->dest[0].size == AGX_SIZE_32 ? 2 : 1;
          unsigned left = ssa_to_reg[ins->dest[0].value];
          unsigned right = ssa_to_reg[ins->src[0].value] + (size * ins->imm);
 
@@ -229,5 +239,6 @@ agx_ra(agx_context *ctx)
    }
 
    free(ssa_to_reg);
+   free(ncomps);
    free(alloc);
 }

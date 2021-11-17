@@ -38,6 +38,13 @@ is_safe_conv(struct ir3_instruction *instr, type_t src_type, opc_t *src_opc)
        full_type(instr->cat1.src_type) != full_type(instr->cat1.dst_type))
       return false;
 
+   /* mul.s24/u24 always return 32b result regardless of its sources size,
+    * hence we cannot guarantee the high 16b of dst being zero or sign extended.
+    */
+   if ((*src_opc == OPC_MUL_S24 || *src_opc == OPC_MUL_U24) &&
+       type_size(instr->cat1.src_type) == 16)
+      return false;
+
    struct ir3_register *dst = instr->dsts[0];
    struct ir3_register *src = instr->srcs[0];
 

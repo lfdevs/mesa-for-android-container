@@ -234,8 +234,9 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
       if (list_is_empty(&block->instr_list) && (opc_cat(n->opc) >= 5))
          ir3_NOP(block);
 
-      if (ctx->compiler->samgq_workaround && ctx->type == MESA_SHADER_VERTEX &&
-          n->opc == OPC_SAMGQ) {
+      if (ctx->compiler->samgq_workaround &&
+          ctx->type != MESA_SHADER_FRAGMENT &&
+          ctx->type != MESA_SHADER_COMPUTE && n->opc == OPC_SAMGQ) {
          struct ir3_instruction *samgp;
 
          list_delinit(&n->node);
@@ -273,7 +274,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
             regmask_set(&state->needs_sy, n->dsts[0]);
       } else if (is_atomic(n->opc)) {
          if (n->flags & IR3_INSTR_G) {
-            if (ctx->compiler->gpu_id >= 600) {
+            if (ctx->compiler->gen >= 6) {
                /* New encoding, returns  result via second src: */
                regmask_set(&state->needs_sy, n->srcs[2]);
             } else {
@@ -292,8 +293,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
        */
       if (is_tex(n) || is_sfu(n) || is_mem(n)) {
          foreach_src (reg, n) {
-            if (reg_gpr(reg))
-               regmask_set(&state->needs_ss_war, reg);
+            regmask_set(&state->needs_ss_war, reg);
          }
       }
 
@@ -508,6 +508,16 @@ retarget_jump(struct ir3_instruction *instr, struct ir3_block *new_target)
    } else {
       debug_assert(cur_block->successors[1] == old_target);
       cur_block->successors[1] = new_target;
+   }
+
+   /* also update physical_successors.. we don't really need them at
+    * this stage, but it keeps ir3_validate happy:
+    */
+   if (cur_block->physical_successors[0] == old_target) {
+      cur_block->physical_successors[0] = new_target;
+   } else {
+      debug_assert(cur_block->physical_successors[1] == old_target);
+      cur_block->physical_successors[1] = new_target;
    }
 
    /* update new target's predecessors: */
@@ -801,7 +811,7 @@ nop_sched(struct ir3 *ir, struct ir3_shader_variant *so)
           * a6xx.
           */
 
-         if ((delay > 0) && (ir->compiler->gpu_id >= 600) && last &&
+         if ((delay > 0) && (ir->compiler->gen >= 6) && last &&
              ((opc_cat(last->opc) == 2) || (opc_cat(last->opc) == 3)) &&
              (last->repeat == 0)) {
             /* the previous cat2/cat3 instruction can encode at most 3 nop's: */
@@ -870,7 +880,7 @@ ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary)
       }
    }
 
-   assert(ctx->early_input_release || ctx->compiler->gpu_id > 500);
+   assert(ctx->early_input_release || ctx->compiler->gen >= 5);
 
    /* process each block: */
    do {

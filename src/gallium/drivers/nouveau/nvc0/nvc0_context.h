@@ -254,6 +254,7 @@ struct nvc0_context {
 
    float default_tess_outer[4];
    float default_tess_inner[2];
+   uint8_t patch_vertices;
 
    bool vbo_push_hint;
 

@@ -22,6 +22,7 @@
  *
  */
 
+#include "aco_builder.h"
 #include "aco_ir.h"
 
 #include <algorithm>
@@ -34,26 +35,65 @@ namespace {
 
 constexpr const size_t max_reg_cnt = 512;
 
-enum {
-   not_written_in_block = -1,
-   clobbered = -2,
-   const_or_undef = -3,
-   written_by_multiple_instrs = -4,
+struct Idx {
+   bool operator==(const Idx& other) const { return block == other.block && instr == other.instr; }
+   bool operator!=(const Idx& other) const { return !operator==(other); }
+
+   bool found() const { return block != UINT32_MAX; }
+
+   uint32_t block;
+   uint32_t instr;
 };
+
+Idx not_written_in_block{UINT32_MAX, 0};
+Idx clobbered{UINT32_MAX, 1};
+Idx const_or_undef{UINT32_MAX, 2};
+Idx written_by_multiple_instrs{UINT32_MAX, 3};
+
+bool
+is_instr_after(Idx second, Idx first)
+{
+   if (first == not_written_in_block && second != not_written_in_block)
+      return true;
+
+   if (!first.found() || !second.found())
+      return false;
+
+   return second.block > first.block || (second.block == first.block && second.instr > first.instr);
+}
 
 struct pr_opt_ctx {
    Program* program;
    Block* current_block;
-   int current_instr_idx;
+   uint32_t current_instr_idx;
    std::vector<uint16_t> uses;
-   std::array<int, max_reg_cnt * 4u> instr_idx_by_regs;
+   std::vector<std::array<Idx, max_reg_cnt>> instr_idx_by_regs;
 
    void reset_block(Block* block)
    {
       current_block = block;
-      current_instr_idx = -1;
-      std::fill(instr_idx_by_regs.begin(), instr_idx_by_regs.end(), not_written_in_block);
+      current_instr_idx = 0;
+
+      if ((block->kind & block_kind_loop_header) || block->linear_preds.empty()) {
+         std::fill(instr_idx_by_regs[block->index].begin(), instr_idx_by_regs[block->index].end(),
+                   not_written_in_block);
+      } else {
+         unsigned first_pred = block->linear_preds[0];
+         for (unsigned i = 0; i < max_reg_cnt; i++) {
+            bool all_same = std::all_of(
+               std::next(block->linear_preds.begin()), block->linear_preds.end(),
+               [&](unsigned pred)
+               { return instr_idx_by_regs[pred][i] == instr_idx_by_regs[first_pred][i]; });
+
+            if (all_same)
+               instr_idx_by_regs[block->index][i] = instr_idx_by_regs[first_pred][i];
+            else
+               instr_idx_by_regs[block->index][i] = not_written_in_block;
+         }
+      }
    }
+
+   Instruction* get(Idx idx) { return program->blocks[idx.block].instructions[idx.instr].get(); }
 };
 
 void
@@ -65,41 +105,42 @@ save_reg_writes(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
 
       unsigned dw_size = DIV_ROUND_UP(def.bytes(), 4u);
       unsigned r = def.physReg().reg();
-      int idx = ctx.current_instr_idx;
+      Idx idx{ctx.current_block->index, ctx.current_instr_idx};
 
       if (def.regClass().is_subdword())
          idx = clobbered;
 
       assert((r + dw_size) <= max_reg_cnt);
       assert(def.size() == dw_size || def.regClass().is_subdword());
-      std::fill(ctx.instr_idx_by_regs.begin() + r,
-                ctx.instr_idx_by_regs.begin() + r + dw_size, idx);
+      std::fill(ctx.instr_idx_by_regs[ctx.current_block->index].begin() + r,
+                ctx.instr_idx_by_regs[ctx.current_block->index].begin() + r + dw_size, idx);
    }
 }
 
-int
+Idx
 last_writer_idx(pr_opt_ctx& ctx, PhysReg physReg, RegClass rc)
 {
    /* Verify that all of the operand's registers are written by the same instruction. */
    assert(physReg.reg() < max_reg_cnt);
-   int instr_idx = ctx.instr_idx_by_regs[physReg.reg()];
+   Idx instr_idx = ctx.instr_idx_by_regs[ctx.current_block->index][physReg.reg()];
    unsigned dw_size = DIV_ROUND_UP(rc.bytes(), 4u);
    unsigned r = physReg.reg();
-   bool all_same = std::all_of(ctx.instr_idx_by_regs.begin() + r,
-                               ctx.instr_idx_by_regs.begin() + r + dw_size,
-                               [instr_idx](int i) { return i == instr_idx; });
+   bool all_same =
+      std::all_of(ctx.instr_idx_by_regs[ctx.current_block->index].begin() + r,
+                  ctx.instr_idx_by_regs[ctx.current_block->index].begin() + r + dw_size,
+                  [instr_idx](Idx i) { return i == instr_idx; });
 
    return all_same ? instr_idx : written_by_multiple_instrs;
 }
 
-int
+Idx
 last_writer_idx(pr_opt_ctx& ctx, const Operand& op)
 {
    if (op.isConstant() || op.isUndefined())
       return const_or_undef;
 
    assert(op.physReg().reg() < max_reg_cnt);
-   int instr_idx = ctx.instr_idx_by_regs[op.physReg().reg()];
+   Idx instr_idx = ctx.instr_idx_by_regs[ctx.current_block->index][op.physReg().reg()];
 
 #ifndef NDEBUG
    /* Debug mode:  */
@@ -134,21 +175,22 @@ try_apply_branch_vcc(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
        instr->operands[0].physReg() != scc)
       return;
 
-   int op0_instr_idx = last_writer_idx(ctx, instr->operands[0]);
-   int last_vcc_wr_idx = last_writer_idx(ctx, vcc, ctx.program->lane_mask);
-   int last_exec_wr_idx = last_writer_idx(ctx, exec, ctx.program->lane_mask);
+   Idx op0_instr_idx = last_writer_idx(ctx, instr->operands[0]);
+   Idx last_vcc_wr_idx = last_writer_idx(ctx, vcc, ctx.program->lane_mask);
+   Idx last_exec_wr_idx = last_writer_idx(ctx, exec, ctx.program->lane_mask);
 
    /* We need to make sure:
     * - the operand register used by the branch, and VCC were both written in the current block
     * - VCC was NOT written after the operand register
     * - EXEC is sane and was NOT written after the operand register
     */
-   if (op0_instr_idx < 0 || last_vcc_wr_idx < 0 || last_vcc_wr_idx > op0_instr_idx ||
-       last_exec_wr_idx > last_vcc_wr_idx || last_exec_wr_idx < not_written_in_block)
+   if (!op0_instr_idx.found() || !last_vcc_wr_idx.found() ||
+       !is_instr_after(last_vcc_wr_idx, last_exec_wr_idx) ||
+       !is_instr_after(op0_instr_idx, last_vcc_wr_idx))
       return;
 
-   aco_ptr<Instruction>& op0_instr = ctx.current_block->instructions[op0_instr_idx];
-   aco_ptr<Instruction>& last_vcc_wr = ctx.current_block->instructions[last_vcc_wr_idx];
+   Instruction* op0_instr = ctx.get(op0_instr_idx);
+   Instruction* last_vcc_wr = ctx.get(last_vcc_wr_idx);
 
    if ((op0_instr->opcode != aco_opcode::s_and_b64 /* wave64 */ &&
         op0_instr->opcode != aco_opcode::s_and_b32 /* wave32 */) ||
@@ -197,12 +239,12 @@ try_optimize_scc_nocompare(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
          return;
 
       /* Make sure both SCC and Operand 0 are written by the same instruction. */
-      int wr_idx = last_writer_idx(ctx, instr->operands[0]);
-      int sccwr_idx = last_writer_idx(ctx, scc, s1);
-      if (wr_idx < 0 || wr_idx != sccwr_idx)
+      Idx wr_idx = last_writer_idx(ctx, instr->operands[0]);
+      Idx sccwr_idx = last_writer_idx(ctx, scc, s1);
+      if (!wr_idx.found() || wr_idx != sccwr_idx)
          return;
 
-      aco_ptr<Instruction>& wr_instr = ctx.current_block->instructions[wr_idx];
+      Instruction* wr_instr = ctx.get(wr_idx);
       if (!wr_instr->isSALU() || wr_instr->definitions.size() < 2 ||
           wr_instr->definitions[1].physReg() != scc)
          return;
@@ -264,11 +306,11 @@ try_optimize_scc_nocompare(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
          scc_op_idx = 2;
       }
 
-      int wr_idx = last_writer_idx(ctx, instr->operands[scc_op_idx]);
-      if (wr_idx < 0)
+      Idx wr_idx = last_writer_idx(ctx, instr->operands[scc_op_idx]);
+      if (!wr_idx.found())
          return;
 
-      aco_ptr<Instruction>& wr_instr = ctx.current_block->instructions[wr_idx];
+      Instruction* wr_instr = ctx.get(wr_idx);
 
       /* Check if we found the pattern above. */
       if (wr_instr->opcode != aco_opcode::s_cmp_eq_u32 &&
@@ -302,16 +344,70 @@ try_optimize_scc_nocompare(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
 }
 
 void
+try_combine_dpp(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
+{
+   if (!instr->isVALU() || instr->isDPP() || !can_use_DPP(instr, false))
+      return;
+
+   for (unsigned i = 0; i < MIN2(2, instr->operands.size()); i++) {
+      Idx op_instr_idx = last_writer_idx(ctx, instr->operands[i]);
+      if (!op_instr_idx.found())
+         continue;
+
+      Instruction* mov = ctx.get(op_instr_idx);
+      if (mov->opcode != aco_opcode::v_mov_b32 || !mov->isDPP())
+         continue;
+
+      /* If we aren't going to remove the v_mov_b32, we have to ensure that it doesn't overwrite
+       * it's own operand before we use it.
+       */
+      if (mov->definitions[0].physReg() == mov->operands[0].physReg() &&
+          (!mov->definitions[0].tempId() || ctx.uses[mov->definitions[0].tempId()] > 1))
+         continue;
+
+      Idx mov_src_idx = last_writer_idx(ctx, mov->operands[0]);
+      if (is_instr_after(mov_src_idx, op_instr_idx))
+         continue;
+
+      if (i && !can_swap_operands(instr, &instr->opcode))
+         continue;
+
+      /* anything else doesn't make sense in SSA */
+      assert(mov->dpp().row_mask == 0xf && mov->dpp().bank_mask == 0xf);
+
+      if (--ctx.uses[mov->definitions[0].tempId()])
+         ctx.uses[mov->operands[0].tempId()]++;
+
+      convert_to_DPP(instr);
+
+      DPP_instruction* dpp = &instr->dpp();
+      if (i) {
+         std::swap(dpp->operands[0], dpp->operands[1]);
+         std::swap(dpp->neg[0], dpp->neg[1]);
+         std::swap(dpp->abs[0], dpp->abs[1]);
+      }
+      dpp->operands[0] = mov->operands[0];
+      dpp->dpp_ctrl = mov->dpp().dpp_ctrl;
+      dpp->bound_ctrl = true;
+      dpp->neg[0] ^= mov->dpp().neg[0] && !dpp->abs[0];
+      dpp->abs[0] |= mov->dpp().abs[0];
+      return;
+   }
+}
+
+void
 process_instruction(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
 {
-   ctx.current_instr_idx++;
-
    try_apply_branch_vcc(ctx, instr);
 
    try_optimize_scc_nocompare(ctx, instr);
 
+   try_combine_dpp(ctx, instr);
+
    if (instr)
       save_reg_writes(ctx, instr);
+
+   ctx.current_instr_idx++;
 }
 
 } // namespace
@@ -322,6 +418,7 @@ optimize_postRA(Program* program)
    pr_opt_ctx ctx;
    ctx.program = program;
    ctx.uses = dead_code_analysis(program);
+   ctx.instr_idx_by_regs.resize(program->blocks.size());
 
    /* Forward pass
     * Goes through each instruction exactly once, and can transform

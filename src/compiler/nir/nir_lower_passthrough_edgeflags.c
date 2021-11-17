@@ -96,5 +96,9 @@ lower_impl(nir_function_impl *impl)
 
 void nir_lower_passthrough_edgeflags(nir_shader *shader)
 {
+   assert(shader->info.stage == MESA_SHADER_VERTEX);
+
+   shader->info.vs.needs_edge_flag = true;
+
    lower_impl(nir_shader_get_entrypoint(shader));
 }

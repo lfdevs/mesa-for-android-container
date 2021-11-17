@@ -147,7 +147,7 @@ do_swap(struct ir3_compiler *compiler, struct ir3_instruction *instr,
    /* a5xx+ is known to support swz, which enables us to swap two registers
     * in-place. If unsupported we emulate it using the xor trick.
     */
-   if (compiler->gpu_id < 500) {
+   if (compiler->gen < 5) {
       /* Shared regs only exist since a5xx, so we don't have to provide a
        * fallback path for them.
        */

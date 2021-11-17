@@ -72,25 +72,25 @@ main(int argc, char *argv[])
 
       fprintf(stdout, "%s:\n", path);
 
-      fprintf(stdout, "   name: %s\n", intel_get_device_name(devinfo.chipset_id));
+      fprintf(stdout, "   name: %s\n", devinfo.name);
       fprintf(stdout, "   gen: %u\n", devinfo.ver);
       fprintf(stdout, "   PCI id: 0x%x\n", devinfo.chipset_id);
       fprintf(stdout, "   revision: %u\n", devinfo.revision);
 
       const char *subslice_name = devinfo.ver >= 12 ? "dualsubslice" : "subslice";
       uint32_t n_s = 0, n_ss = 0, n_eus = 0;
-      for (unsigned s = 0; s < devinfo.num_slices; s++) {
+      for (unsigned s = 0; s < devinfo.max_slices; s++) {
          n_s += (devinfo.slice_masks & (1u << s)) ? 1 : 0;
-         for (unsigned ss = 0; ss < devinfo.num_subslices[s]; ss++) {
+         for (unsigned ss = 0; ss < devinfo.max_subslices_per_slice; ss++) {
             fprintf(stdout, "   slice%u.%s%u: ", s, subslice_name, ss);
             if (intel_device_info_subslice_available(&devinfo, s, ss)) {
                n_ss++;
-               for (unsigned eu = 0; eu < devinfo.num_eu_per_subslice; eu++) {
+               for (unsigned eu = 0; eu < devinfo.max_eu_per_subslice; eu++) {
                   n_eus += intel_device_info_eu_available(&devinfo, s, ss, eu) ? 1 : 0;
                   fprintf(stdout, "%s", intel_device_info_eu_available(&devinfo, s, ss, eu) ? "1" : "0");
                }
             } else {
-               fprintf(stderr, "fused");
+               fprintf(stdout, "fused");
             }
             fprintf(stdout, "\n");
          }

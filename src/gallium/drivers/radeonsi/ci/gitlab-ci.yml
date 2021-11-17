@@ -9,7 +9,7 @@
     KERNEL_IMAGE_TYPE: ""
     HWCI_KERNEL_MODULES: amdgpu
     DRIVER_NAME: radeonsi
-    DEQP_PARALLEL: 4
+    FDO_CI_CONCURRENT: 4
     DEQP_EXPECTED_RENDERER: STONEY
     HWCI_FREQ_MAX: "true"
   tags:
@@ -33,7 +33,7 @@ radeonsi-stoney-gles3:amd64:
   parallel: 2
   variables:
     DEQP_VER: gles3
-    DEQP_PARALLEL: 4
+    FDO_CI_CONCURRENT: 4
     DEQP_EXPECTED_RENDERER: STONEY
     DEQP_FRACTION: 2
 
@@ -45,7 +45,7 @@ radeonsi-stoney-gles31:amd64:
   parallel: 2
   variables:
     DEQP_VER: gles31
-    DEQP_PARALLEL: 4
+    FDO_CI_CONCURRENT: 4
     DEQP_EXPECTED_RENDERER: STONEY
     DEQP_FRACTION: 2
 
@@ -73,3 +73,23 @@ radeonsi-stoney-piglit-gl:amd64:
     PIGLIT_PROFILES: quick_gl
     PIGLIT_JUNIT_RESULTS: 1
     HWCI_START_XORG: 1
+
+radeonsi-stoney-va:amd64:
+  extends:
+    - .lava-test:amd64
+    - .radeonsi-stoney-test:amd64
+    - .radeonsi-vaapi-rules
+  variables:
+    HWCI_TEST_SCRIPT: "/install/gtest-runner.sh"
+    # While the tests don't need Xorg, it's an easy way to keep DRM open so we don't
+    # spend all our time in drm_lastclose()'s modesetting.
+    HWCI_START_XORG: 1
+    GTEST: test_va_api
+    # The big 10-surface 10k allocations oomkill us at around 2.5G of GPU memory
+    # allocated if we run at the normal 4 threads.
+    # https://github.com/intel/libva-utils/issues/248
+    FDO_CI_CONCURRENT: 1
+    # A whole run would be about 25 minutes currently.  Fixing
+    # https://github.com/intel/libva-utils/issues/247 and
+    # https://github.com/google/googletest/issues/3614 would probably help.
+    GTEST_FRACTION: 5

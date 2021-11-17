@@ -249,11 +249,8 @@ setup_render_state(struct gl_context *ctx,
       num_views = MAX2(fpv->bitmap_sampler + 1, num_views);
       sampler_views[fpv->bitmap_sampler] = sv;
       pipe->set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0, num_views, 0,
-                              sampler_views);
+                              true, sampler_views);
       st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = num_views;
-
-      for (unsigned i = 0; i < num_views; i++)
-         pipe_sampler_view_reference(&sampler_views[i], NULL);
    }
 
    /* viewport state: viewport matching window dims */
@@ -276,16 +273,11 @@ restore_render_state(struct gl_context *ctx)
 {
    struct st_context *st = st_context(ctx);
    struct cso_context *cso = st->cso_context;
-   struct pipe_context *pipe = st->pipe;
-
-   cso_restore_state(cso);
 
    /* Unbind all because st/mesa won't do it if the current shader doesn't
     * use them.
     */
-   pipe->set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0, 0,
-                           st->state.num_sampler_views[PIPE_SHADER_FRAGMENT],
-                           NULL);
+   cso_restore_state(cso, CSO_UNBIND_FS_SAMPLERVIEWS);
    st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
 
    st->dirty |= ST_NEW_VERTEX_ARRAYS |

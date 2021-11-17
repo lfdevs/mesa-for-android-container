@@ -527,6 +527,11 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
 
    llvm->jit_context.viewports = draw->viewports;
    llvm->gs_jit_context.viewports = draw->viewports;
+
+   llvm->jit_context.aniso_filter_table = lp_build_sample_aniso_filter_table();
+   llvm->gs_jit_context.aniso_filter_table = lp_build_sample_aniso_filter_table();
+   llvm->tcs_jit_context.aniso_filter_table = lp_build_sample_aniso_filter_table();
+   llvm->tes_jit_context.aniso_filter_table = lp_build_sample_aniso_filter_table();
 }
 
 

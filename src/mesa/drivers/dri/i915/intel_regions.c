@@ -52,58 +52,6 @@
 
 #define FILE_DEBUG_FLAG DEBUG_REGION
 
-/* This should be set to the maximum backtrace size desired.
- * Set it to 0 to disable backtrace debugging.
- */
-#define DEBUG_BACKTRACE_SIZE 0
-
-#if DEBUG_BACKTRACE_SIZE == 0 || !defined(HAVE_EXECINFO_H)
-/* Use the standard debug output */
-#define _DBG(...) DBG(__VA_ARGS__)
-#else
-/* Use backtracing debug output */
-#define _DBG(...) {debug_backtrace(); DBG(__VA_ARGS__);}
-
-/* Backtracing debug support */
-#include <execinfo.h>
-
-static void
-debug_backtrace(void)
-{
-   void *trace[DEBUG_BACKTRACE_SIZE];
-   char **strings = NULL;
-   int traceSize;
-   register int i;
-
-   traceSize = backtrace(trace, DEBUG_BACKTRACE_SIZE);
-   strings = backtrace_symbols(trace, traceSize);
-   if (strings == NULL) {
-      DBG("no backtrace:");
-      return;
-   }
-
-   /* Spit out all the strings with a colon separator.  Ignore
-    * the first, since we don't really care about the call
-    * to debug_backtrace() itself.  Skip until the final "/" in
-    * the trace to avoid really long lines.
-    */
-   for (i = 1; i < traceSize; i++) {
-      char *p = strings[i], *slash = strings[i];
-      while (*p) {
-         if (*p++ == '/') {
-            slash = p;
-         }
-      }
-
-      DBG("%s:", slash);
-   }
-
-   /* Free up the memory, and we're done */
-   free(strings);
-}
-
-#endif
-
 static struct intel_region *
 intel_region_alloc_internal(struct intel_screen *screen,
 			    GLuint cpp,
@@ -124,7 +72,7 @@ intel_region_alloc_internal(struct intel_screen *screen,
    region->bo = buffer;
    region->tiling = tiling;
 
-   _DBG("%s <-- %p\n", __func__, region);
+   DBG("%s <-- %p\n", __func__, region);
    return region;
 }
 
@@ -241,7 +189,7 @@ intel_region_alloc_for_fd(struct intel_screen *screen,
 void
 intel_region_reference(struct intel_region **dst, struct intel_region *src)
 {
-   _DBG("%s: %p(%d) -> %p(%d)\n", __func__,
+   DBG("%s: %p(%d) -> %p(%d)\n", __func__,
 	*dst, *dst ? (*dst)->refcount : 0, src, src ? src->refcount : 0);
 
    if (src != *dst) {
@@ -260,11 +208,11 @@ intel_region_release(struct intel_region **region_handle)
    struct intel_region *region = *region_handle;
 
    if (region == NULL) {
-      _DBG("%s NULL\n", __func__);
+      DBG("%s NULL\n", __func__);
       return;
    }
 
-   _DBG("%s %p %d\n", __func__, region, region->refcount - 1);
+   DBG("%s %p %d\n", __func__, region, region->refcount - 1);
 
    assert(region->refcount > 0);
    region->refcount--;

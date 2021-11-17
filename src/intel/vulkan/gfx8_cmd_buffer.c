@@ -382,7 +382,7 @@ want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer)
     * 3DSTATE_WM_DEPTH_STENCIL::StencilTestEnable
     */
    const bool stc_test_en =
-      (ds_iview->image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
+      (ds_iview->image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
       pipeline->stencil_test_enable;
 
    /* 3DSTATE_STENCIL_BUFFER::STENCIL_BUFFER_ENABLE &&
@@ -390,7 +390,7 @@ want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer)
     *  3DSTATE_DEPTH_BUFFER::STENCIL_WRITE_ENABLE)
     */
    const bool stc_write_en =
-      (ds_iview->image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
+      (ds_iview->image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
       (cmd_buffer->state.gfx.dynamic.stencil_write_mask.front ||
        cmd_buffer->state.gfx.dynamic.stencil_write_mask.back) &&
       pipeline->writes_stencil;
@@ -478,8 +478,8 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
                                       primitive_topology);
 
          genX(rasterization_mode)(
-            dynamic_raster_mode, pipeline->line_mode, &api_mode,
-            &msaa_raster_enable);
+            dynamic_raster_mode, pipeline->line_mode, d->line_width,
+            &api_mode, &msaa_raster_enable);
 
          aa_enable =
             anv_rasterization_aa_mode(dynamic_raster_mode,

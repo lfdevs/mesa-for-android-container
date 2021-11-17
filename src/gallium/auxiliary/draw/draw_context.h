@@ -328,7 +328,8 @@ void draw_vbo(struct draw_context *draw,
               unsigned drawid_offset,
               const struct pipe_draw_indirect_info *indirect,
               const struct pipe_draw_start_count_bias *draws,
-              unsigned num_draws);
+              unsigned num_draws,
+              uint8_t patch_vertices);
 
 
 /*******************************************************************************

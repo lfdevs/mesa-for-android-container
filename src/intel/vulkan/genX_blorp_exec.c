@@ -134,6 +134,22 @@ blorp_alloc_dynamic_state(struct blorp_batch *batch,
    return state.map;
 }
 
+UNUSED static void *
+blorp_alloc_general_state(struct blorp_batch *batch,
+                          uint32_t size,
+                          uint32_t alignment,
+                          uint32_t *offset)
+{
+   struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
+
+   struct anv_state state =
+      anv_state_stream_alloc(&cmd_buffer->general_state_stream, size,
+                             alignment);
+
+   *offset = state.offset;
+   return state.map;
+}
+
 static void
 blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
                           unsigned state_size, unsigned state_alignment,
@@ -238,6 +254,10 @@ genX(blorp_exec)(struct blorp_batch *batch,
                  const struct blorp_params *params)
 {
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
+   if (batch->flags & BLORP_BATCH_USE_COMPUTE)
+      assert(cmd_buffer->pool->queue_family->queueFlags & VK_QUEUE_COMPUTE_BIT);
+   else
+      assert(cmd_buffer->pool->queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT);
 
    if (!cmd_buffer->state.current_l3_config) {
       const struct intel_l3_config *cfg =
@@ -264,21 +284,9 @@ genX(blorp_exec)(struct blorp_batch *batch,
                              "before blorp BTI change");
 #endif
 
-#if GFX_VERx10 == 120
-   if (!(batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL)) {
-      /* Wa_14010455700
-       *
-       * ISL will change some CHICKEN registers depending on the depth surface
-       * format, along with emitting the depth and stencil packets. In that
-       * case, we want to do a depth flush and stall, so the pipeline is not
-       * using these settings while we change the registers.
-       */
-      cmd_buffer->state.pending_pipe_bits |=
-         ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
-         ANV_PIPE_DEPTH_STALL_BIT |
-         ANV_PIPE_END_OF_PIPE_SYNC_BIT;
-   }
-#endif
+   if (params->depth.enabled &&
+       !(batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL))
+      genX(cmd_buffer_emit_gfx12_depth_wa)(cmd_buffer, &params->depth.surf);
 
 #if GFX_VER == 7
    /* The MI_LOAD/STORE_REGISTER_MEM commands which BLORP uses to implement
@@ -295,7 +303,10 @@ genX(blorp_exec)(struct blorp_batch *batch,
 
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
-   genX(flush_pipeline_select_3d)(cmd_buffer);
+   if (batch->flags & BLORP_BATCH_USE_COMPUTE)
+      genX(flush_pipeline_select_gpgpu)(cmd_buffer);
+   else
+      genX(flush_pipeline_select_3d)(cmd_buffer);
 
    genX(cmd_buffer_emit_gfx7_depth_flush)(cmd_buffer);
 
@@ -321,7 +332,25 @@ genX(blorp_exec)(struct blorp_batch *batch,
                              "after blorp BTI change");
 #endif
 
+   /* Calculate state that does not get touched by blorp.
+    * Flush everything else.
+    */
+   anv_cmd_dirty_mask_t skip_bits = ANV_CMD_DIRTY_DYNAMIC_SCISSOR |
+                                    ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS |
+                                    ANV_CMD_DIRTY_INDEX_BUFFER |
+                                    ANV_CMD_DIRTY_XFB_ENABLE |
+                                    ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE |
+                                    ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS_TEST_ENABLE |
+                                    ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS |
+                                    ANV_CMD_DIRTY_DYNAMIC_SHADING_RATE |
+                                    ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_RESTART_ENABLE;
+
+   if (!params->wm_prog_data) {
+      skip_bits |= ANV_CMD_DIRTY_DYNAMIC_COLOR_BLEND_STATE |
+                   ANV_CMD_DIRTY_DYNAMIC_LOGIC_OP;
+   }
+
    cmd_buffer->state.gfx.vb_dirty = ~0;
-   cmd_buffer->state.gfx.dirty = ~0;
+   cmd_buffer->state.gfx.dirty |= ~skip_bits;
    cmd_buffer->state.push_constants_dirty = ~0;
 }

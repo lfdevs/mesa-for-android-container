@@ -50,6 +50,7 @@ enum cpu_family {
    CPU_AMD_ZEN1_ZEN2,
    CPU_AMD_ZEN_HYGON,
    CPU_AMD_ZEN3,
+   CPU_AMD_ZEN_NEXT,
    CPU_AMD_LAST,
 };
 
@@ -101,6 +102,7 @@ struct util_cpu_caps_t {
    unsigned has_vsx:1;
    unsigned has_daz:1;
    unsigned has_neon:1;
+   unsigned has_msa:1;
 
    unsigned has_avx512f:1;
    unsigned has_avx512dq:1;

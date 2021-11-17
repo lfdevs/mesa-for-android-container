@@ -245,12 +245,12 @@ msm_pipe_new(struct fd_device *dev, enum fd_pipe_id id, uint32_t prio)
    if (fd_device_version(pipe->dev) >= FD_VERSION_GMEM_BASE)
       msm_pipe->gmem_base = get_param(pipe, MSM_PARAM_GMEM_BASE);
 
-   if (!msm_pipe->gpu_id)
+   if (!(msm_pipe->gpu_id || msm_pipe->chip_id))
       goto fail;
 
    INFO_MSG("Pipe Info:");
    INFO_MSG(" GPU-id:          %d", msm_pipe->gpu_id);
-   INFO_MSG(" Chip-id:         0x%08x", msm_pipe->chip_id);
+   INFO_MSG(" Chip-id:         0x%016"PRIx64, msm_pipe->chip_id);
    INFO_MSG(" GMEM size:       0x%08x", msm_pipe->gmem);
 
    if (open_submitqueue(pipe, prio))

@@ -169,7 +169,7 @@ void finish_opt_test()
    aco_print_program(program.get(), output);
 }
 
-void finish_ra_test(ra_test_policy policy)
+void finish_ra_test(ra_test_policy policy, bool lower)
 {
    finish_program(program.get());
    if (!aco::validate_ir(program.get())) {
@@ -186,8 +186,12 @@ void finish_ra_test(ra_test_policy policy)
       return;
    }
 
-   finish_program(program.get());
-   aco::optimize_postRA(program.get());
+   if (lower) {
+      aco::ssa_elimination(program.get());
+      aco::lower_to_hw_instr(program.get());
+   }
+
+   aco_print_program(program.get(), output);
 }
 
 void finish_optimizer_postRA_test()
@@ -382,28 +386,31 @@ void print_pipeline_ir(VkDevice device, VkPipeline pipeline, VkShaderStageFlagBi
    result = GetPipelineExecutableInternalRepresentationsKHR(device, &exec_info, &ir_count, ir);
    assert(result == VK_SUCCESS);
 
-   for (unsigned i = 0; i < ir_count; i++) {
-      if (strcmp(ir[i].name, name))
-         continue;
+   VkPipelineExecutableInternalRepresentationKHR* requested_ir = nullptr;
+   for (unsigned i = 0; i < ir_count; ++i) {
+      if (strcmp(ir[i].name, name) == 0) {
+         requested_ir = &ir[i];
+         break;
+      }
+   }
+   assert(requested_ir && "Could not find requested IR");
 
-      char *data = (char*)malloc(ir[i].dataSize);
-      ir[i].pData = data;
-      result = GetPipelineExecutableInternalRepresentationsKHR(device, &exec_info, &ir_count, ir);
-      assert(result == VK_SUCCESS);
+   char *data = (char*)malloc(requested_ir->dataSize);
+   requested_ir->pData = data;
+   result = GetPipelineExecutableInternalRepresentationsKHR(device, &exec_info, &ir_count, ir);
+   assert(result == VK_SUCCESS);
 
-      if (remove_encoding) {
-         for (char *c = data; *c; c++) {
-            if (*c == ';') {
-               for (; *c && *c != '\n'; c++)
-                  *c = ' ';
-            }
+   if (remove_encoding) {
+      for (char *c = data; *c; c++) {
+         if (*c == ';') {
+            for (; *c && *c != '\n'; c++)
+               *c = ' ';
          }
       }
-
-      fprintf(output, "%s", data);
-      free(data);
-      return;
    }
+
+   fprintf(output, "%s", data);
+   free(data);
 }
 
 VkShaderModule __qoCreateShaderModule(VkDevice dev, const QoShaderModuleCreateInfo *module_info)

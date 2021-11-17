@@ -118,7 +118,7 @@ i915_surface_copy_render(struct pipe_context *pipe, struct pipe_resource *dst,
 
    util_blitter_blit_generic(i915->blitter, dst_view, &dstbox, src_view,
                              src_box, src_width0, src_height0, PIPE_MASK_RGBAZS,
-                             PIPE_TEX_FILTER_NEAREST, NULL, false);
+                             PIPE_TEX_FILTER_NEAREST, NULL, false, false);
    return;
 
 fallback:
@@ -221,20 +221,32 @@ i915_surface_copy_blitter(struct pipe_context *pipe, struct pipe_resource *dst,
       assert(src_box->z == 0);
    src_offset = i915_texture_offset(src_tex, src_level, src_box->z);
 
-   assert(util_format_get_blocksize(dpt->format) ==
-          util_format_get_blocksize(spt->format));
-   assert(util_format_get_blockwidth(dpt->format) ==
-          util_format_get_blockwidth(spt->format));
-   assert(util_format_get_blockheight(dpt->format) ==
-          util_format_get_blockheight(spt->format));
-   assert(util_format_get_blockwidth(dpt->format) == 1);
-   assert(util_format_get_blockheight(dpt->format) == 1);
+   int block_width = util_format_get_blockwidth(dpt->format);
+   int block_height = util_format_get_blockheight(dpt->format);
+   int block_size = util_format_get_blocksize(dpt->format);
+   assert(util_format_get_blocksize(spt->format) == block_size);
+   assert(util_format_get_blockwidth(spt->format) == block_width);
+   assert(util_format_get_blockheight(spt->format) == block_height);
 
-   i915_copy_blit(i915_context(pipe), util_format_get_blocksize(dpt->format),
+   dstx /= block_width;
+   dsty /= block_height;
+   int srcx = src_box->x / block_width;
+   int srcy = src_box->y / block_height;
+   int width = DIV_ROUND_UP(src_box->width, block_width);
+   int height = DIV_ROUND_UP(src_box->height, block_height);
+
+   if (block_size > 4) {
+      srcx *= (block_size / 4);
+      dstx *= (block_size / 4);
+      width *= (block_size / 4);
+      block_size = 4;
+   }
+
+   i915_copy_blit(i915_context(pipe), block_size,
                   (unsigned short)src_tex->stride, src_tex->buffer, src_offset,
                   (unsigned short)dst_tex->stride, dst_tex->buffer, dst_offset,
-                  (short)src_box->x, (short)src_box->y, (short)dstx,
-                  (short)dsty, (short)src_box->width, (short)src_box->height);
+                  (short)srcx, (short)srcy, (short)dstx, (short)dsty,
+                  (short)width, (short)height);
 }
 
 static void

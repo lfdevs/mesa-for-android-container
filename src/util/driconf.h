@@ -216,12 +216,11 @@
    DRI_CONF_OPT_B(allow_draw_out_of_order, def, \
                   "Allow out-of-order draw optimizations. Set when Z fighting doesn't have to be accurate.")
 
-#define DRI_CONF_ALLOW_INCORRECT_PRIMITIVE_ID(def) \
-   DRI_CONF_OPT_B(allow_incorrect_primitive_id, def, \
-                  "Allows drawing display list using merged draws (might cause invalid gl_PrimitiveID values).")
-
 #define DRI_CONF_FORCE_GL_VENDOR() \
    DRI_CONF_OPT_S_NODEF(force_gl_vendor, "Override GPU vendor string.")
+
+#define DRI_CONF_FORCE_GL_RENDERER() \
+   DRI_CONF_OPT_S_NODEF(force_gl_renderer, "Override GPU renderer string.")
 
 #define DRI_CONF_FORCE_COMPAT_PROFILE(def) \
    DRI_CONF_OPT_B(force_compat_profile, def, \
@@ -330,6 +329,10 @@
    DRI_CONF_OPT_B(vk_x11_ensure_min_image_count, def, \
                   "Force the X11 WSI to create at least the number of image specified by the driver in VkSurfaceCapabilitiesKHR::minImageCount")
 
+#define DRI_CONF_VK_XWAYLAND_WAIT_READY(def) \
+   DRI_CONF_OPT_B(vk_xwayland_wait_ready, def, \
+                  "Wait for fences before submitting buffers to Xwayland")
+
 #define DRI_CONF_MESA_GLTHREAD(def) \
    DRI_CONF_OPT_B(mesa_glthread, def, \
                   "Enable offloading GL driver work to a separate thread")
@@ -356,6 +359,10 @@
    DRI_CONF_OPT_B(vs_position_always_invariant, def, \
                   "Force the vertex shader's gl_Position output to be considered 'invariant'")
 
+#define DRI_CONF_VS_POSITION_ALWAYS_PRECISE(def) \
+   DRI_CONF_OPT_B(vs_position_always_precise, def, \
+                  "Force the vertex shader's gl_Position output to be considered 'precise'")
+
 #define DRI_CONF_ALLOW_RGB10_CONFIGS(def) \
    DRI_CONF_OPT_B(allow_rgb10_configs, def, \
                   "Allow exposure of visuals and fbconfigs with rgb10a2 formats")
@@ -363,10 +370,6 @@
 #define DRI_CONF_ALLOW_RGB565_CONFIGS(def) \
    DRI_CONF_OPT_B(allow_rgb565_configs, def, \
                   "Allow exposure of visuals and fbconfigs with rgb565 formats")
-
-#define DRI_CONF_ALLOW_FP16_CONFIGS(def) \
-   DRI_CONF_OPT_B(allow_fp16_configs, def, \
-                  "Allow exposure of visuals and fbconfigs with fp16 formats")
 
 #define DRI_CONF_FORCE_INTEGER_TEX_NEAREST(def) \
    DRI_CONF_OPT_B(force_integer_tex_nearest, def, \

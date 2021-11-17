@@ -41,6 +41,14 @@ vn_debug_init(void)
 }
 
 void
+vn_trace_init(void)
+{
+#ifdef ANDROID
+   atrace_init();
+#endif
+}
+
+void
 vn_log(struct vn_instance *instance, const char *format, ...)
 {
    va_list ap;
@@ -62,16 +70,27 @@ vn_log_result(struct vn_instance *instance,
 }
 
 void
-vn_relax(uint32_t *iter)
+vn_relax(uint32_t *iter, const char *reason)
 {
+   /* Yield for the first 2^busy_wait_order times and then sleep for
+    * base_sleep_us microseconds for the same number of times.  After that,
+    * keep doubling both sleep length and count.
+    */
    const uint32_t busy_wait_order = 4;
    const uint32_t base_sleep_us = 10;
+   const uint32_t warn_order = 12;
 
    (*iter)++;
    if (*iter < (1 << busy_wait_order)) {
       thrd_yield();
       return;
    }
+
+   /* warn occasionally if we have slept at least 1.28ms for 2048 times (plus
+    * another 2047 shorter sleeps)
+    */
+   if (unlikely(*iter % (1 << warn_order) == 0))
+      vn_log(NULL, "stuck in %s wait with iter at %d", reason, *iter);
 
    const uint32_t shift = util_last_bit(*iter) - busy_wait_order - 1;
    os_time_sleep(base_sleep_us << shift);

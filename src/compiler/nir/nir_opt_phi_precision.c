@@ -240,10 +240,7 @@ try_move_narrowing_dst(nir_builder *b, nir_phi_instr *phi)
       nir_ssa_def *new_src = nir_build_alu(b, op, old_src, NULL, NULL, NULL);
 
       /* and add corresponding phi_src to the new_phi: */
-      nir_phi_src *phi_src = ralloc(new_phi, nir_phi_src);
-      phi_src->pred = src->pred;
-      phi_src->src = nir_src_for_ssa(new_src);
-      exec_list_push_tail(&new_phi->srcs, &phi_src->node);
+      nir_phi_instr_add_src(new_phi, src->pred, nir_src_for_ssa(new_src));
    }
 
    /* And finally rewrite the original uses of the original phi uses to
@@ -420,10 +417,7 @@ try_move_widening_src(nir_builder *b, nir_phi_instr *phi)
       }
 
       /* add corresponding phi_src to the new_phi: */
-      nir_phi_src *phi_src = ralloc(new_phi, nir_phi_src);
-      phi_src->pred = src->pred;
-      phi_src->src = nir_src_for_ssa(new_src);
-      exec_list_push_tail(&new_phi->srcs, &phi_src->node);
+      nir_phi_instr_add_src(new_phi, src->pred, nir_src_for_ssa(new_src));
    }
 
    /* And insert the new phi after all sources are in place: */

@@ -55,6 +55,10 @@ LLVMValueRef lp_build_coro_suspend(struct gallivm_state *gallivm, bool last);
 LLVMValueRef lp_build_coro_alloc(struct gallivm_state *gallivm, LLVMValueRef id);
 
 LLVMValueRef lp_build_coro_begin_alloc_mem(struct gallivm_state *gallivm, LLVMValueRef coro_id);
+
+LLVMValueRef lp_build_coro_alloc_mem_array(struct gallivm_state *gallivm,
+					   LLVMValueRef coro_hdl_ptr, LLVMValueRef coro_idx,
+					   LLVMValueRef coro_num_hdls);
 void lp_build_coro_free_mem(struct gallivm_state *gallivm, LLVMValueRef coro_id, LLVMValueRef coro_hdl);
 
 struct lp_build_coro_suspend_info {

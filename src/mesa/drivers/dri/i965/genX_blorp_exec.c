@@ -130,6 +130,16 @@ blorp_alloc_dynamic_state(struct blorp_batch *batch,
    return brw_state_batch(brw, size, alignment, offset);
 }
 
+UNUSED static void *
+blorp_alloc_general_state(struct blorp_batch *blorp_batch,
+                          uint32_t size,
+                          uint32_t alignment,
+                          uint32_t *offset)
+{
+   /* Use dynamic state range for general state on i965. */
+   return blorp_alloc_dynamic_state(blorp_batch, size, alignment, offset);
+}
+
 static void
 blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
                           unsigned state_size, unsigned state_alignment,

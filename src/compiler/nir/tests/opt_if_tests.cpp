@@ -123,11 +123,7 @@ TEST_F(nir_opt_if_test, opt_if_simplification_single_source_phi_after_if)
 
    nir_phi_instr *const phi = nir_phi_instr_create(bld.shader);
 
-   nir_phi_src *phi_src;
-   phi_src = ralloc(phi, nir_phi_src);
-   phi_src->pred = then_block;
-   phi_src->src = nir_src_for_ssa(one);
-   exec_list_push_tail(&phi->srcs, &phi_src->node);
+   nir_phi_instr_add_src(phi, then_block, nir_src_for_ssa(one));
 
    nir_ssa_dest_init(&phi->instr, &phi->dest,
                      one->num_components, one->bit_size, NULL);
@@ -154,19 +150,13 @@ TEST_F(nir_opt_if_test, opt_if_alu_of_phi_progress)
       nir_ssa_dest_init(&phi->instr, &phi->dest,
                         x->num_components, x->bit_size, NULL);
 
-      nir_phi_src *phi_src_x = ralloc(phi, nir_phi_src);
-      phi_src_x->pred = x->parent_instr->block;
-      phi_src_x->src = nir_src_for_ssa(x);
-      exec_list_push_tail(&phi->srcs, &phi_src_x->node);
+      nir_phi_instr_add_src(phi, x->parent_instr->block, nir_src_for_ssa(x));
 
       nir_ssa_def *y = nir_iadd(&bld, &phi->dest.ssa, two);
       nir_store_var(&bld, out_var,
                     nir_imul(&bld, &phi->dest.ssa, two), 1);
 
-      nir_phi_src *phi_src_y = ralloc(phi, nir_phi_src);
-      phi_src_y->pred = nir_cursor_current_block(bld.cursor);
-      phi_src_y->src = nir_src_for_ssa(y);
-      exec_list_push_tail(&phi->srcs, &phi_src_y->node);
+      nir_phi_instr_add_src(phi, nir_cursor_current_block(bld.cursor), nir_src_for_ssa(y));
    }
    nir_pop_loop(&bld, loop);
 

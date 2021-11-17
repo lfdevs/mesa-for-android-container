@@ -50,13 +50,13 @@ u_current_destroy(void);
 void
 u_current_set_table(const struct _glapi_table *tbl);
 
-struct _glapi_table *
+_GLAPI_EXPORT struct _glapi_table *
 u_current_get_table_internal(void);
 
 void
 u_current_set_context(const void *ptr);
 
-void *
+_GLAPI_EXPORT void *
 u_current_get_context_internal(void);
 
 #endif /* _U_CURRENT_H_ */

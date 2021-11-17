@@ -41,7 +41,6 @@
 #include "crocus_context.h"
 #include "crocus_defines.h"
 #include "util/u_prim_restart.h"
-#include "indices/u_primconvert.h"
 #include "util/u_prim.h"
 
 static bool
@@ -166,8 +165,8 @@ crocus_update_draw_info(struct crocus_context *ice,
    }
 
    if (info->mode == PIPE_PRIM_PATCHES &&
-       ice->state.vertices_per_patch != info->vertices_per_patch) {
-      ice->state.vertices_per_patch = info->vertices_per_patch;
+       ice->state.vertices_per_patch != ice->state.patch_vertices) {
+      ice->state.vertices_per_patch = ice->state.patch_vertices;
 
       if (screen->devinfo.ver == 8)
          ice->state.dirty |= CROCUS_DIRTY_GEN8_VF_TOPOLOGY;
@@ -406,7 +405,7 @@ crocus_draw_vbo(struct pipe_context *ctx,
    /* We can't safely re-emit 3DSTATE_SO_BUFFERS because it may zero the
     * write offsets, changing the behavior.
     */
-   if (INTEL_DEBUG & DEBUG_REEMIT) {
+   if (INTEL_DEBUG(DEBUG_REEMIT)) {
       ice->state.dirty |= CROCUS_ALL_DIRTY_FOR_RENDER & ~(CROCUS_DIRTY_GEN7_SO_BUFFERS | CROCUS_DIRTY_GEN6_SVBI);
       ice->state.stage_dirty |= CROCUS_ALL_STAGE_DIRTY_FOR_RENDER;
    }
@@ -485,7 +484,7 @@ crocus_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info *grid)
    if (!crocus_check_conditional_render(ice))
       return;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_REEMIT)) {
+   if (INTEL_DEBUG(DEBUG_REEMIT)) {
       ice->state.dirty |= CROCUS_ALL_DIRTY_FOR_COMPUTE;
       ice->state.stage_dirty |= CROCUS_ALL_STAGE_DIRTY_FOR_COMPUTE;
    }

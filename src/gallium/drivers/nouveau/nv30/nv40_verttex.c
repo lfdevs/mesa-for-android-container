@@ -72,6 +72,7 @@ nv40_verttex_sampler_states_bind(struct pipe_context *pipe,
 
 void
 nv40_verttex_set_sampler_views(struct pipe_context *pipe, unsigned nr,
+                               bool take_ownership,
                                struct pipe_sampler_view **views)
 {
    struct nv30_context *nv30 = nv30_context(pipe);
@@ -79,7 +80,12 @@ nv40_verttex_set_sampler_views(struct pipe_context *pipe, unsigned nr,
 
    for (i = 0; i < nr; i++) {
       nouveau_bufctx_reset(nv30->bufctx, BUFCTX_VERTTEX(i));
-      pipe_sampler_view_reference(&nv30->vertprog.textures[i], views[i]);
+      if (take_ownership) {
+         pipe_sampler_view_reference(&nv30->vertprog.textures[i], NULL);
+         nv30->vertprog.textures[i] = views[i];
+      } else {
+         pipe_sampler_view_reference(&nv30->vertprog.textures[i], views[i]);
+      }
       nv30->vertprog.dirty_samplers |= (1 << i);
    }
 

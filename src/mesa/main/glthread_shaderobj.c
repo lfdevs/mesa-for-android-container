@@ -136,6 +136,17 @@ _mesa_unmarshal_GetActiveUniform(struct gl_context *ctx,
    return 0;
 }
 
+static void
+wait_for_glLinkProgram(struct gl_context *ctx)
+{
+   /* Wait for the last glLinkProgram call. */
+   int batch = p_atomic_read(&ctx->GLThread.LastProgramChangeBatch);
+   if (batch != -1) {
+      util_queue_fence_wait(&ctx->GLThread.batches[batch].fence);
+      assert(p_atomic_read(&ctx->GLThread.LastProgramChangeBatch) == -1);
+   }
+}
+
 void GLAPIENTRY
 _mesa_marshal_GetActiveUniform(GLuint program, GLuint index, GLsizei bufSize,
                                GLsizei *length, GLint *size, GLenum *type,
@@ -143,12 +154,7 @@ _mesa_marshal_GetActiveUniform(GLuint program, GLuint index, GLsizei bufSize,
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   /* Wait for the last glLinkProgram call. */
-   int batch = p_atomic_read(&ctx->GLThread.LastProgramChangeBatch);
-   if (batch != -1) {
-      util_queue_fence_wait(&ctx->GLThread.batches[batch].fence);
-      assert(p_atomic_read(&ctx->GLThread.LastProgramChangeBatch) == -1);
-   }
+   wait_for_glLinkProgram(ctx);
 
    /* We can execute glGetActiveUniform without syncing if we are sync'd to
     * the last calls of glLinkProgram and glDeleteProgram because shader
@@ -159,4 +165,24 @@ _mesa_marshal_GetActiveUniform(GLuint program, GLuint index, GLsizei bufSize,
     */
    _mesa_GetActiveUniform_impl(program, index, bufSize, length, size, type,
                                name, true);
+}
+
+uint32_t
+_mesa_unmarshal_GetUniformLocation(struct gl_context *ctx,
+                                   const struct marshal_cmd_GetUniformLocation *cmd,
+                                   const uint64_t *last)
+{
+   unreachable("never executed");
+   return 0;
+}
+
+GLint GLAPIENTRY
+_mesa_marshal_GetUniformLocation(GLuint program, const GLchar *name)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   wait_for_glLinkProgram(ctx);
+
+   /* This is thread-safe. See the comment in _mesa_marshal_GetActiveUniform. */
+   return _mesa_GetUniformLocation_impl(program, name, true);
 }

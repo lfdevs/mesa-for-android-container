@@ -32,7 +32,6 @@
 
 #include "etnaviv_resource.h"
 #include "etnaviv_tiling.h"
-#include "indices/u_primconvert.h"
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_format.h"
@@ -142,9 +141,6 @@ struct etna_context {
       ETNA_DIRTY_DERIVE_TS       = (1 << 19),
       ETNA_DIRTY_SCISSOR_CLIP    = (1 << 20),
    } dirty;
-
-   uint32_t prim_hwsupport;
-   struct primconvert_context *primconvert;
 
    struct slab_child_pool transfer_pool;
    struct blitter_context *blitter;

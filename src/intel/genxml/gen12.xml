@@ -722,14 +722,14 @@
       <value name="YMAJOR" value="3"/>
     </field>
     <field name="Surface Horizontal Alignment" start="14" end="15" type="uint">
-      <value name="HALIGN 4" value="1"/>
-      <value name="HALIGN 8" value="2"/>
-      <value name="HALIGN 16" value="3"/>
+      <value name="HALIGN_4" value="1"/>
+      <value name="HALIGN_8" value="2"/>
+      <value name="HALIGN_16" value="3"/>
     </field>
     <field name="Surface Vertical Alignment" start="16" end="17" type="uint">
-      <value name="VALIGN 4" value="1"/>
-      <value name="VALIGN 8" value="2"/>
-      <value name="VALIGN 16" value="3"/>
+      <value name="VALIGN_4" value="1"/>
+      <value name="VALIGN_8" value="2"/>
+      <value name="VALIGN_16" value="3"/>
     </field>
     <field name="Surface Format" start="18" end="27" type="uint"/>
     <field name="Surface Array" start="28" end="28" type="bool"/>
@@ -7061,6 +7061,11 @@
     <field name="MFX Pipeline Command Flush" start="51" end="51" type="bool"/>
   </instruction>
 
+  <register name="3D_CHICKEN3" length="1" num="0x2090">
+     <field name="AA Line Quality Fix" start="5" end="5" type="bool"/>
+     <field name="AA Line Quality Fix Mask" start="21" end="21" type="bool"/>
+  </register>
+
   <register name="BCS_INSTDONE" length="1" num="0x2206c">
     <field name="Ring Enable" start="0" end="0" type="bool"/>
     <field name="Blitter IDLE" start="1" end="1" type="bool" default="1"/>
@@ -7258,10 +7263,17 @@
   <register name="ROW_INSTDONE" length="1" num="0xe164">
     <field name="BC Done" start="0" end="0" type="bool"/>
     <field name="PSD Done" start="1" end="1" type="bool"/>
+    <field name="TDP Done" start="2" end="2" type="bool"/>
     <field name="DAPR Done" start="3" end="3" type="bool"/>
+    <field name="CPSS Done" start="4" end="4" type="bool"/>
     <field name="TDL Done" start="6" end="6" type="bool"/>
+    <field name="EU00 done SS1" start="7" end="7" type="bool"/>
+    <field name="EU01 done SS1" start="8" end="8" type="bool"/>
+    <field name="EU02 done SS1" start="9" end="9" type="bool"/>
+    <field name="EU03 done SS1" start="10" end="10" type="bool"/>
+    <field name="MA0 done SS1" start="11" end="11" type="bool"/>
     <field name="IC Done" start="12" end="12" type="bool"/>
-    <field name="MA0 Done" start="15" end="15" type="bool"/>
+    <field name="MA0 Done SS0" start="15" end="15" type="bool"/>
     <field name="EU00 Done SS0" start="16" end="16" type="bool"/>
     <field name="EU01 Done SS0" start="17" end="17" type="bool"/>
     <field name="EU02 Done SS0" start="18" end="18" type="bool"/>
@@ -7270,7 +7282,10 @@
     <field name="EU11 Done SS0" start="22" end="22" type="bool"/>
     <field name="EU12 Done SS0" start="23" end="23" type="bool"/>
     <field name="EU13 Done SS0" start="24" end="24" type="bool"/>
-    <field name="MA1 Done SS0" start="26" end="26" type="bool"/>
+    <field name="EU10 Done SS1" start="27" end="27" type="bool"/>
+    <field name="EU11 Done SS1" start="28" end="28" type="bool"/>
+    <field name="EU12 Done SS1" start="29" end="29" type="bool"/>
+    <field name="EU13 Done SS1" start="30" end="30" type="bool"/>
   </register>
 
   <register name="RPSTAT0" length="1" num="0xa01c">
@@ -7287,18 +7302,28 @@
     <field name="DM0 Done" start="5" end="5" type="bool"/>
     <field name="SC Done" start="6" end="6" type="bool"/>
     <field name="FL0 Done" start="7" end="7" type="bool"/>
-    <field name="QC Done" start="8" end="8" type="bool"/>
+    <field name="ST Done" start="8" end="8" type="bool"/>
     <field name="SVSM Done" start="9" end="9" type="bool"/>
     <field name="SI0 Done" start="10" end="10" type="bool"/>
     <field name="MT0 Done" start="11" end="11" type="bool"/>
     <field name="AVS Done" start="12" end="12" type="bool"/>
-    <field name="IEF Done" start="13" end="13" type="bool"/>
+    <field name="VAFE Done" start="13" end="13" type="bool"/>
     <field name="CRE Done" start="14" end="14" type="bool"/>
-    <field name="SVSM_ARB_SIFM" start="15" end="15" type="bool"/>
+    <field name="Media Sampler Arb Done" start="15" end="15" type="bool"/>
     <field name="SVSM ARB2" start="16" end="16" type="bool"/>
     <field name="SVSM ARB1" start="17" end="17" type="bool"/>
     <field name="SVSM Adapter" start="18" end="18" type="bool"/>
     <field name="BDM Done" start="19" end="19" type="bool"/>
+    <field name="SO1 Done" start="22" end="22" type="bool"/>
+    <field name="FL1 Done" start="23" end="23" type="bool"/>
+    <field name="DG1 Done" start="24" end="24" type="bool"/>
+    <field name="PL1 Done" start="25" end="25" type="bool"/>
+    <field name="SI1 Done" start="26" end="26" type="bool"/>
+    <field name="MEDIASAMPLER ARB2" start="27" end="27" type="bool"/>
+    <field name="MEDIASAMPLER ARB1" start="28" end="28" type="bool"/>
+    <field name="MS SUBSLICED FORK" start="29" end="29" type="bool"/>
+    <field name="VMESC Done" start="30" end="30" type="bool"/>
+    <field name="RDE Done" start="31" end="31" type="bool"/>
   </register>
 
   <register name="SAMPLER_MODE" length="1" num="0x0e18c">
@@ -7311,10 +7336,9 @@
     <field name="WMFE Done" start="1" end="1" type="bool"/>
     <field name="WMBE Done" start="2" end="2" type="bool"/>
     <field name="HIZ Done" start="3" end="3" type="bool"/>
-    <field name="STC Done" start="4" end="4" type="bool"/>
-    <field name="IZ Done" start="5" end="5" type="bool"/>
+    <field name="IZBE Done 0" start="4" end="4" type="bool"/>
+    <field name="IZFE Done" start="5" end="5" type="bool"/>
     <field name="SBE Done" start="6" end="6" type="bool"/>
-    <field name="RCZ Done" start="8" end="8" type="bool"/>
     <field name="RCC Done" start="9" end="9" type="bool"/>
     <field name="RCPBE Done" start="10" end="10" type="bool"/>
     <field name="RCPFE Done" start="11" end="11" type="bool"/>
@@ -7324,13 +7348,13 @@
     <field name="DC0 Done" start="16" end="16" type="bool"/>
     <field name="DC1 Done" start="17" end="17" type="bool"/>
     <field name="DC2 Done" start="18" end="18" type="bool"/>
-    <field name="DC3 Done" start="19" end="19" type="bool"/>
     <field name="GW0 Done" start="20" end="20" type="bool"/>
     <field name="GW1 Done" start="21" end="21" type="bool"/>
     <field name="GW2 Done" start="22" end="22" type="bool"/>
-    <field name="GW3 Done" start="23" end="23" type="bool"/>
     <field name="TDC Done" start="24" end="24" type="bool"/>
     <field name="SFBE Done" start="25" end="25" type="bool"/>
+    <field name="PSS Done" start="26" end="26" type="bool"/>
+    <field name="AMFS Done" start="27" end="27" type="bool"/>
   </register>
 
   <register name="SLICE_COMMON_ECO_CHICKEN1" length="1" num="0x731c">

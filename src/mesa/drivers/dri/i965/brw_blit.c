@@ -164,16 +164,18 @@ get_blit_intratile_offset_el(const struct brw_context *brw,
                              struct brw_mipmap_tree *mt,
                              uint32_t total_x_offset_el,
                              uint32_t total_y_offset_el,
-                             uint32_t *base_address_offset,
+                             uint64_t *tile_offset_B,
                              uint32_t *x_offset_el,
                              uint32_t *y_offset_el)
 {
    ASSERTED uint32_t z_offset_el, array_offset;
-   isl_tiling_get_intratile_offset_el(mt->surf.tiling,
-                                      mt->cpp * 8, mt->surf.row_pitch_B,
+   isl_tiling_get_intratile_offset_el(mt->surf.tiling, mt->surf.dim,
+                                      mt->surf.msaa_layout,
+                                      mt->cpp * 8, mt->surf.samples,
+                                      mt->surf.row_pitch_B,
                                       mt->surf.array_pitch_el_rows,
                                       total_x_offset_el, total_y_offset_el, 0, 0,
-                                      base_address_offset,
+                                      tile_offset_B,
                                       x_offset_el, y_offset_el,
                                       &z_offset_el, &array_offset);
    assert(z_offset_el == 0);
@@ -190,12 +192,12 @@ get_blit_intratile_offset_el(const struct brw_context *brw,
        * The offsets we get from ISL in the tiled case are already aligned.
        * In the linear case, we need to do some of our own aligning.
        */
-      uint32_t delta = *base_address_offset & 63;
+      uint32_t delta = *tile_offset_B & 63;
       assert(delta % mt->cpp == 0);
-      *base_address_offset -= delta;
+      *tile_offset_B -= delta;
       *x_offset_el += delta / mt->cpp;
    } else {
-      assert(*base_address_offset % 4096 == 0);
+      assert(*tile_offset_B % 4096 == 0);
    }
 }
 
@@ -419,12 +421,14 @@ emit_miptree_blit(struct brw_context *brw,
          const uint32_t chunk_w = MIN2(max_chunk_size, width - chunk_x);
          const uint32_t chunk_h = MIN2(max_chunk_size, height - chunk_y);
 
-         uint32_t src_offset, src_tile_x, src_tile_y;
+         uint64_t src_offset;
+         uint32_t src_tile_x, src_tile_y;
          get_blit_intratile_offset_el(brw, src_mt,
                                       src_x + chunk_x, src_y + chunk_y,
                                       &src_offset, &src_tile_x, &src_tile_y);
 
-         uint32_t dst_offset, dst_tile_x, dst_tile_y;
+         uint64_t dst_offset;
+         uint32_t dst_tile_x, dst_tile_y;
          get_blit_intratile_offset_el(brw, dst_mt,
                                       dst_x + chunk_x, dst_y + chunk_y,
                                       &dst_offset, &dst_tile_x, &dst_tile_y);
@@ -759,10 +763,11 @@ brw_miptree_set_alpha_to_one(struct brw_context *brw,
          const uint32_t chunk_w = MIN2(max_chunk_size, width - chunk_x);
          const uint32_t chunk_h = MIN2(max_chunk_size, height - chunk_y);
 
-         uint32_t offset, tile_x, tile_y;
+         uint64_t offset_B;
+         uint32_t tile_x, tile_y;
          get_blit_intratile_offset_el(brw, mt,
                                       x + chunk_x, y + chunk_y,
-                                      &offset, &tile_x, &tile_y);
+                                      &offset_B, &tile_x, &tile_y);
 
          BEGIN_BATCH_BLT_TILED(length, dst_y_tiled, false);
          OUT_BATCH(CMD | (length - 2));
@@ -772,9 +777,9 @@ brw_miptree_set_alpha_to_one(struct brw_context *brw,
          OUT_BATCH(SET_FIELD(y + chunk_y + chunk_h, BLT_Y) |
                    SET_FIELD(x + chunk_x + chunk_w, BLT_X));
          if (devinfo->ver >= 8) {
-            OUT_RELOC64(mt->bo, RELOC_WRITE, mt->offset + offset);
+            OUT_RELOC64(mt->bo, RELOC_WRITE, mt->offset + offset_B);
          } else {
-            OUT_RELOC(mt->bo, RELOC_WRITE, mt->offset + offset);
+            OUT_RELOC(mt->bo, RELOC_WRITE, mt->offset + offset_B);
          }
          OUT_BATCH(0xffffffff); /* white, but only alpha gets written */
          ADVANCE_BATCH_TILED(dst_y_tiled, false);

@@ -76,9 +76,9 @@ v3d_setup_slices(struct v3dv_image *image)
 {
    assert(image->cpp > 0);
 
-   uint32_t width = image->extent.width;
-   uint32_t height = image->extent.height;
-   uint32_t depth = image->extent.depth;
+   uint32_t width = image->vk.extent.width;
+   uint32_t height = image->vk.extent.height;
+   uint32_t depth = image->vk.extent.depth;
 
    /* Note that power-of-two padding is based on level 1.  These are not
     * equivalent to just util_next_power_of_two(dimension), because at a
@@ -94,21 +94,21 @@ v3d_setup_slices(struct v3dv_image *image)
    uint32_t uif_block_w = utile_w * 2;
    uint32_t uif_block_h = utile_h * 2;
 
-   uint32_t block_width = vk_format_get_blockwidth(image->vk_format);
-   uint32_t block_height = vk_format_get_blockheight(image->vk_format);
+   uint32_t block_width = vk_format_get_blockwidth(image->vk.format);
+   uint32_t block_height = vk_format_get_blockheight(image->vk.format);
 
-   assert(image->samples == VK_SAMPLE_COUNT_1_BIT ||
-          image->samples == VK_SAMPLE_COUNT_4_BIT);
-   bool msaa = image->samples != VK_SAMPLE_COUNT_1_BIT;
+   assert(image->vk.samples == VK_SAMPLE_COUNT_1_BIT ||
+          image->vk.samples == VK_SAMPLE_COUNT_4_BIT);
+   bool msaa = image->vk.samples != VK_SAMPLE_COUNT_1_BIT;
 
    bool uif_top = msaa;
 
-   assert(image->array_size > 0);
+   assert(image->vk.array_layers > 0);
    assert(depth > 0);
-   assert(image->levels >= 1);
+   assert(image->vk.mip_levels >= 1);
 
    uint32_t offset = 0;
-   for (int32_t i = image->levels - 1; i >= 0; i--) {
+   for (int32_t i = image->vk.mip_levels - 1; i >= 0; i--) {
       struct v3d_resource_slice *slice = &image->slices[i];
 
       uint32_t level_width, level_height, level_depth;
@@ -135,7 +135,7 @@ v3d_setup_slices(struct v3dv_image *image)
 
       if (!image->tiled) {
          slice->tiling = V3D_TILING_RASTER;
-         if (image->type == VK_IMAGE_TYPE_1D)
+         if (image->vk.image_type == VK_IMAGE_TYPE_1D)
             level_width = align(level_width, 64 / image->cpp);
       } else {
          if ((i != 0 || !uif_top) &&
@@ -210,13 +210,12 @@ v3d_setup_slices(struct v3dv_image *image)
     *
     * We additionally align to 4k, which improves UIF XOR performance.
     */
-   image->alignment =
-      image->tiling == VK_IMAGE_TILING_LINEAR ? image->cpp : 4096;
+   image->alignment = image->tiled ? 4096 : image->cpp;
    uint32_t align_offset =
       align(image->slices[0].offset, image->alignment) - image->slices[0].offset;
    if (align_offset) {
       image->size += align_offset;
-      for (int i = 0; i < image->levels; i++)
+      for (int i = 0; i < image->vk.mip_levels; i++)
          image->slices[i].offset += align_offset;
    }
 
@@ -224,10 +223,10 @@ v3d_setup_slices(struct v3dv_image *image)
     * one full mipmap tree to the next (64b aligned).  For 3D textures,
     * we need to program the stride between slices of miplevel 0.
     */
-   if (image->type != VK_IMAGE_TYPE_3D) {
+   if (image->vk.image_type != VK_IMAGE_TYPE_3D) {
       image->cube_map_stride =
          align(image->slices[0].offset + image->slices[0].size, 64);
-      image->size += image->cube_map_stride * (image->array_size - 1);
+      image->size += image->cube_map_stride * (image->vk.array_layers - 1);
    } else {
       image->cube_map_stride = image->slices[0].size;
    }
@@ -238,7 +237,7 @@ v3dv_layer_offset(const struct v3dv_image *image, uint32_t level, uint32_t layer
 {
    const struct v3d_resource_slice *slice = &image->slices[level];
 
-   if (image->type == VK_IMAGE_TYPE_3D)
+   if (image->vk.image_type == VK_IMAGE_TYPE_3D)
       return image->mem_offset + slice->offset + layer * slice->size;
    else
       return image->mem_offset + slice->offset + layer * image->cube_map_stride;
@@ -252,14 +251,9 @@ create_image(struct v3dv_device *device,
 {
    struct v3dv_image *image = NULL;
 
-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
-
-   v3dv_assert(pCreateInfo->mipLevels > 0);
-   v3dv_assert(pCreateInfo->arrayLayers > 0);
-   v3dv_assert(pCreateInfo->samples > 0);
-   v3dv_assert(pCreateInfo->extent.width > 0);
-   v3dv_assert(pCreateInfo->extent.height > 0);
-   v3dv_assert(pCreateInfo->extent.depth > 0);
+   image = vk_image_create(&device->vk, pCreateInfo, pAllocator, sizeof(*image));
+   if (image == NULL)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    /* When using the simulator the WSI common code will see that our
     * driver wsi device doesn't match the display device and because of that
@@ -270,72 +264,60 @@ create_image(struct v3dv_device *device,
     * As a result, on that path, swapchain images do not have any special
     * requirements and are not created with the pNext structs below.
     */
+   VkImageTiling tiling = pCreateInfo->tiling;
    uint64_t modifier = DRM_FORMAT_MOD_INVALID;
-   if (pCreateInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+   if (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
       const VkImageDrmFormatModifierListCreateInfoEXT *mod_info =
          vk_find_struct_const(pCreateInfo->pNext,
                               IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT);
-      assert(mod_info);
-      for (uint32_t i = 0; i < mod_info->drmFormatModifierCount; i++) {
-         switch (mod_info->pDrmFormatModifiers[i]) {
-         case DRM_FORMAT_MOD_LINEAR:
-            if (modifier == DRM_FORMAT_MOD_INVALID)
-               modifier = DRM_FORMAT_MOD_LINEAR;
-            break;
-         case DRM_FORMAT_MOD_BROADCOM_UIF:
-            modifier = DRM_FORMAT_MOD_BROADCOM_UIF;
-            break;
+      const VkImageDrmFormatModifierExplicitCreateInfoEXT *explicit_mod_info =
+         vk_find_struct_const(pCreateInfo->pNext,
+                              IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
+      assert(mod_info || explicit_mod_info);
+
+      if (mod_info) {
+         for (uint32_t i = 0; i < mod_info->drmFormatModifierCount; i++) {
+            switch (mod_info->pDrmFormatModifiers[i]) {
+            case DRM_FORMAT_MOD_LINEAR:
+               if (modifier == DRM_FORMAT_MOD_INVALID)
+                  modifier = DRM_FORMAT_MOD_LINEAR;
+               break;
+            case DRM_FORMAT_MOD_BROADCOM_UIF:
+               modifier = DRM_FORMAT_MOD_BROADCOM_UIF;
+               break;
+            }
          }
+      } else {
+         modifier = explicit_mod_info->drmFormatModifier;
       }
-   } else {
-      const struct wsi_image_create_info *wsi_info =
-         vk_find_struct_const(pCreateInfo->pNext, WSI_IMAGE_CREATE_INFO_MESA);
-      if (wsi_info && wsi_info->scanout)
-         modifier = DRM_FORMAT_MOD_LINEAR;
+      assert(modifier == DRM_FORMAT_MOD_LINEAR ||
+             modifier == DRM_FORMAT_MOD_BROADCOM_UIF);
+   } else if (pCreateInfo->imageType == VK_IMAGE_TYPE_1D ||
+              image->vk.wsi_legacy_scanout) {
+      tiling = VK_IMAGE_TILING_LINEAR;
    }
 
-   const VkExternalMemoryImageCreateInfo *external_info =
-      vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
-
-   /* 1D and 1D_ARRAY textures are always raster-order */
-   VkImageTiling tiling;
-   if (pCreateInfo->imageType == VK_IMAGE_TYPE_1D)
-      tiling = VK_IMAGE_TILING_LINEAR;
-   else if (modifier == DRM_FORMAT_MOD_INVALID)
-      tiling = pCreateInfo->tiling;
-   else if (modifier == DRM_FORMAT_MOD_BROADCOM_UIF)
-      tiling = VK_IMAGE_TILING_OPTIMAL;
-   else
-      tiling = VK_IMAGE_TILING_LINEAR;
-
-   const struct v3dv_format *format = v3dv_X(device, get_format)(pCreateInfo->format);
+   const struct v3dv_format *format =
+      v3dv_X(device, get_format)(pCreateInfo->format);
    v3dv_assert(format != NULL && format->supported);
-
-   image = vk_object_zalloc(&device->vk, pAllocator, sizeof(*image),
-                            VK_OBJECT_TYPE_IMAGE);
-   if (!image)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    assert(pCreateInfo->samples == VK_SAMPLE_COUNT_1_BIT ||
           pCreateInfo->samples == VK_SAMPLE_COUNT_4_BIT);
 
-   image->type = pCreateInfo->imageType;
-   image->extent = pCreateInfo->extent;
-   image->vk_format = pCreateInfo->format;
    image->format = format;
-   image->aspects = vk_format_aspects(image->vk_format);
-   image->levels = pCreateInfo->mipLevels;
-   image->array_size = pCreateInfo->arrayLayers;
-   image->samples = pCreateInfo->samples;
-   image->usage = pCreateInfo->usage;
-   image->flags = pCreateInfo->flags;
+   image->cpp = vk_format_get_blocksize(image->vk.format);
+   image->tiled = tiling == VK_IMAGE_TILING_OPTIMAL ||
+                  (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
+                   modifier != DRM_FORMAT_MOD_LINEAR);
 
-   image->drm_format_mod = modifier;
-   image->tiling = tiling;
-   image->tiled = tiling == VK_IMAGE_TILING_OPTIMAL;
-   image->external = external_info != NULL;
+   image->vk.tiling = tiling;
+   image->vk.drm_format_mod = modifier;
 
-   image->cpp = vk_format_get_blocksize(image->vk_format);
+   /* Our meta paths can create image views with compatible formats for any
+    * image, so always set this flag to keep the common Vulkan image code
+    * happy.
+    */
+   image->vk.create_flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
    v3d_setup_slices(image);
 
@@ -366,26 +348,26 @@ create_image_from_swapchain(struct v3dv_device *device,
     * #swapchain-wsi-image-create-info .
     */
    assert(local_create_info.tiling == VK_IMAGE_TILING_OPTIMAL);
-   local_create_info.tiling = swapchain_image->tiling;
+   local_create_info.tiling = swapchain_image->vk.tiling;
 
    VkImageDrmFormatModifierListCreateInfoEXT local_modifier_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
       .drmFormatModifierCount = 1,
-      .pDrmFormatModifiers = &swapchain_image->drm_format_mod,
+      .pDrmFormatModifiers = &swapchain_image->vk.drm_format_mod,
    };
 
-   if (swapchain_image->drm_format_mod != DRM_FORMAT_MOD_INVALID)
+   if (swapchain_image->vk.drm_format_mod != DRM_FORMAT_MOD_INVALID)
       __vk_append_struct(&local_create_info, &local_modifier_info);
 
-   assert(swapchain_image->type == local_create_info.imageType);
-   assert(swapchain_image->vk_format == local_create_info.format);
-   assert(swapchain_image->extent.width == local_create_info.extent.width);
-   assert(swapchain_image->extent.height == local_create_info.extent.height);
-   assert(swapchain_image->extent.depth == local_create_info.extent.depth);
-   assert(swapchain_image->array_size == local_create_info.arrayLayers);
-   assert(swapchain_image->samples == local_create_info.samples);
-   assert(swapchain_image->tiling == local_create_info.tiling);
-   assert((swapchain_image->usage & local_create_info.usage) ==
+   assert(swapchain_image->vk.image_type == local_create_info.imageType);
+   assert(swapchain_image->vk.format == local_create_info.format);
+   assert(swapchain_image->vk.extent.width == local_create_info.extent.width);
+   assert(swapchain_image->vk.extent.height == local_create_info.extent.height);
+   assert(swapchain_image->vk.extent.depth == local_create_info.extent.depth);
+   assert(swapchain_image->vk.array_layers == local_create_info.arrayLayers);
+   assert(swapchain_image->vk.samples == local_create_info.samples);
+   assert(swapchain_image->vk.tiling == local_create_info.tiling);
+   assert((swapchain_image->vk.usage & local_create_info.usage) ==
           local_create_info.usage);
 
    return create_image(device, &local_create_info, pAllocator, pImage);
@@ -424,7 +406,7 @@ v3dv_GetImageSubresourceLayout(VkDevice device,
    layout->depthPitch = image->cube_map_stride;
    layout->arrayPitch = image->cube_map_stride;
 
-   if (image->type != VK_IMAGE_TYPE_3D) {
+   if (image->vk.image_type != VK_IMAGE_TYPE_3D) {
       layout->size = slice->size;
    } else {
       /* For 3D images, the size of the slice represents the size of a 2D slice
@@ -434,29 +416,13 @@ v3dv_GetImageSubresourceLayout(VkDevice device,
        * arranged in memory from last to first).
        */
       if (subresource->mipLevel == 0) {
-         layout->size = slice->size * image->extent.depth;
+         layout->size = slice->size * image->vk.extent.depth;
       } else {
             const struct v3d_resource_slice *prev_slice =
                &image->slices[subresource->mipLevel - 1];
             layout->size = prev_slice->offset - slice->offset;
       }
    }
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL
-v3dv_GetImageDrmFormatModifierPropertiesEXT(
-   VkDevice device,
-   VkImage _image,
-   VkImageDrmFormatModifierPropertiesEXT *pProperties)
-{
-   V3DV_FROM_HANDLE(v3dv_image, image, _image);
-
-   assert(pProperties->sType ==
-          VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT);
-
-   pProperties->drmFormatModifier = image->drm_format_mod;
-
-   return VK_SUCCESS;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -470,7 +436,7 @@ v3dv_DestroyImage(VkDevice _device,
    if (image == NULL)
       return;
 
-   vk_object_free(&device->vk, pAllocator, image);
+   vk_image_destroy(&device->vk, pAllocator, &image->vk);
 }
 
 VkImageViewType
@@ -486,11 +452,9 @@ v3dv_image_type_to_view_type(VkImageType type)
 }
 
 static enum pipe_swizzle
-vk_component_mapping_to_pipe_swizzle(VkComponentSwizzle comp,
-                                     VkComponentSwizzle swz)
+vk_component_mapping_to_pipe_swizzle(VkComponentSwizzle swz)
 {
-   if (swz == VK_COMPONENT_SWIZZLE_IDENTITY)
-      swz = comp;
+   assert(swz != VK_COMPONENT_SWIZZLE_IDENTITY);
 
    switch (swz) {
    case VK_COMPONENT_SWIZZLE_ZERO:
@@ -520,56 +484,15 @@ v3dv_CreateImageView(VkDevice _device,
    V3DV_FROM_HANDLE(v3dv_image, image, pCreateInfo->image);
    struct v3dv_image_view *iview;
 
-   iview = vk_object_zalloc(&device->vk, pAllocator, sizeof(*iview),
-                            VK_OBJECT_TYPE_IMAGE_VIEW);
+   iview = vk_image_view_create(&device->vk, pCreateInfo, pAllocator,
+                                sizeof(*iview));
    if (iview == NULL)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    const VkImageSubresourceRange *range = &pCreateInfo->subresourceRange;
 
-   assert(range->layerCount > 0);
-   assert(range->baseMipLevel < image->levels);
-
-#ifdef DEBUG
-   switch (image->type) {
-   case VK_IMAGE_TYPE_1D:
-   case VK_IMAGE_TYPE_2D:
-      assert(range->baseArrayLayer + v3dv_layer_count(image, range) - 1 <=
-             image->array_size);
-      break;
-   case VK_IMAGE_TYPE_3D:
-      assert(range->baseArrayLayer + v3dv_layer_count(image, range) - 1
-             <= u_minify(image->extent.depth, range->baseMipLevel));
-      /* VK_KHR_maintenance1 */
-      assert(pCreateInfo->viewType != VK_IMAGE_VIEW_TYPE_2D ||
-             ((image->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) &&
-              range->levelCount == 1 && range->layerCount == 1));
-      assert(pCreateInfo->viewType != VK_IMAGE_VIEW_TYPE_2D_ARRAY ||
-             ((image->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) &&
-              range->levelCount == 1));
-      break;
-   default:
-      unreachable("bad VkImageType");
-   }
-#endif
-
-   iview->image = image;
-   iview->aspects = range->aspectMask;
-   iview->type = pCreateInfo->viewType;
-
-   iview->base_level = range->baseMipLevel;
-   iview->max_level = iview->base_level + v3dv_level_count(image, range) - 1;
-   iview->extent = (VkExtent3D) {
-      .width  = u_minify(image->extent.width , iview->base_level),
-      .height = u_minify(image->extent.height, iview->base_level),
-      .depth  = u_minify(image->extent.depth , iview->base_level),
-   };
-
-   iview->first_layer = range->baseArrayLayer;
-   iview->last_layer = range->baseArrayLayer +
-                       v3dv_layer_count(image, range) - 1;
-   iview->offset =
-      v3dv_layer_offset(image, iview->base_level, iview->first_layer);
+   iview->offset = v3dv_layer_offset(image, iview->vk.base_mip_level,
+                                     iview->vk.base_array_layer);
 
    /* If we have D24S8 format but the view only selects the stencil aspect
     * we want to re-interpret the format as RGBA8_UINT, then map our stencil
@@ -593,25 +516,22 @@ v3dv_CreateImageView(VkDevice _device,
        * better to reimplement the latter using vk component
        */
       image_view_swizzle[0] =
-         vk_component_mapping_to_pipe_swizzle(VK_COMPONENT_SWIZZLE_R,
-                                              pCreateInfo->components.r);
+         vk_component_mapping_to_pipe_swizzle(iview->vk.swizzle.r);
       image_view_swizzle[1] =
-         vk_component_mapping_to_pipe_swizzle(VK_COMPONENT_SWIZZLE_G,
-                                              pCreateInfo->components.g);
+         vk_component_mapping_to_pipe_swizzle(iview->vk.swizzle.g);
       image_view_swizzle[2] =
-         vk_component_mapping_to_pipe_swizzle(VK_COMPONENT_SWIZZLE_B,
-                                              pCreateInfo->components.b);
+         vk_component_mapping_to_pipe_swizzle(iview->vk.swizzle.b);
       image_view_swizzle[3] =
-         vk_component_mapping_to_pipe_swizzle(VK_COMPONENT_SWIZZLE_A,
-                                              pCreateInfo->components.a);
+         vk_component_mapping_to_pipe_swizzle(iview->vk.swizzle.a);
    }
 
-   iview->vk_format = format;
+   iview->vk.format = format;
    iview->format = v3dv_X(device, get_format)(format);
    assert(iview->format && iview->format->supported);
 
-   if (vk_format_is_depth_or_stencil(iview->vk_format)) {
-      iview->internal_type = v3dv_X(device, get_internal_depth_type)(iview->vk_format);
+   if (vk_format_is_depth_or_stencil(iview->vk.format)) {
+      iview->internal_type =
+         v3dv_X(device, get_internal_depth_type)(iview->vk.format);
    } else {
       v3dv_X(device, get_internal_type_bpp_for_output_format)
          (iview->format->rt_type, &iview->internal_type, &iview->internal_bpp);
@@ -640,7 +560,7 @@ v3dv_DestroyImageView(VkDevice _device,
    if (image_view == NULL)
       return;
 
-   vk_object_free(&device->vk, pAllocator, image_view);
+   vk_image_view_destroy(&device->vk, pAllocator, &image_view->vk);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -658,7 +578,7 @@ v3dv_CreateBufferView(VkDevice _device,
       vk_object_zalloc(&device->vk, pAllocator, sizeof(*view),
                        VK_OBJECT_TYPE_BUFFER_VIEW);
    if (!view)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    uint32_t range;
    if (pCreateInfo->range == VK_WHOLE_SIZE)

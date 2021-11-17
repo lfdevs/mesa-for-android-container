@@ -2043,20 +2043,22 @@ _mesa_read_shader_source(const gl_shader_stage stage, const char *source)
 
    generate_sha1(source, sha);
 
-   const char *process_name =
-      ARRAY_SIZE(shader_replacements) ? util_get_process_name() : NULL;
-   for (size_t i = 0; i < ARRAY_SIZE(shader_replacements); i++) {
-      if (stage != shader_replacements[i].stage)
-         continue;
+   if (!debug_get_bool_option("MESA_NO_SHADER_REPLACEMENT", false)) {
+      const char *process_name =
+         ARRAY_SIZE(shader_replacements) ? util_get_process_name() : NULL;
+      for (size_t i = 0; i < ARRAY_SIZE(shader_replacements); i++) {
+         if (stage != shader_replacements[i].stage)
+            continue;
 
-      if (shader_replacements[i].app &&
-          strcmp(process_name, shader_replacements[i].app) != 0)
-         continue;
+         if (shader_replacements[i].app &&
+             strcmp(process_name, shader_replacements[i].app) != 0)
+            continue;
 
-      if (memcmp(sha, shader_replacements[i].sha1, 40) != 0)
-         continue;
+         if (memcmp(sha, shader_replacements[i].sha1, 40) != 0)
+            continue;
 
-      return load_shader_replacement(&shader_replacements[i]);
+         return load_shader_replacement(&shader_replacements[i]);
+      }
    }
 
    if (!path_exists)
@@ -2760,6 +2762,16 @@ _mesa_CreateShaderProgramv(GLenum type, GLsizei count,
 }
 
 
+static void
+set_patch_vertices(struct gl_context *ctx, GLint value)
+{
+   if (ctx->TessCtrlProgram.patch_vertices != value) {
+      FLUSH_VERTICES(ctx, 0, GL_CURRENT_BIT);
+      ctx->NewDriverState |= ctx->DriverFlags.NewTessState;
+      ctx->TessCtrlProgram.patch_vertices = value;
+   }
+}
+
 /**
  * For GL_ARB_tessellation_shader
  */
@@ -2767,8 +2779,8 @@ void GLAPIENTRY
 _mesa_PatchParameteri_no_error(GLenum pname, GLint value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   FLUSH_VERTICES(ctx, 0, GL_CURRENT_BIT);
-   ctx->TessCtrlProgram.patch_vertices = value;
+
+   set_patch_vertices(ctx, value);
 }
 
 
@@ -2792,8 +2804,7 @@ _mesa_PatchParameteri(GLenum pname, GLint value)
       return;
    }
 
-   FLUSH_VERTICES(ctx, 0, GL_CURRENT_BIT);
-   ctx->TessCtrlProgram.patch_vertices = value;
+   set_patch_vertices(ctx, value);
 }
 
 
@@ -2812,13 +2823,13 @@ _mesa_PatchParameterfv(GLenum pname, const GLfloat *values)
       FLUSH_VERTICES(ctx, 0, 0);
       memcpy(ctx->TessCtrlProgram.patch_default_outer_level, values,
              4 * sizeof(GLfloat));
-      ctx->NewDriverState |= ctx->DriverFlags.NewDefaultTessLevels;
+      ctx->NewDriverState |= ctx->DriverFlags.NewTessState;
       return;
    case GL_PATCH_DEFAULT_INNER_LEVEL:
       FLUSH_VERTICES(ctx, 0, 0);
       memcpy(ctx->TessCtrlProgram.patch_default_inner_level, values,
              2 * sizeof(GLfloat));
-      ctx->NewDriverState |= ctx->DriverFlags.NewDefaultTessLevels;
+      ctx->NewDriverState |= ctx->DriverFlags.NewTessState;
       return;
    default:
       _mesa_error(ctx, GL_INVALID_ENUM, "glPatchParameterfv");
@@ -3566,7 +3577,7 @@ _mesa_NamedStringARB(GLenum type, GLint namelen, const GLchar *name,
       return;
    }
 
-   mtx_lock(&ctx->Shared->ShaderIncludeMutex);
+   simple_mtx_lock(&ctx->Shared->ShaderIncludeMutex);
 
    struct hash_table *path_ht =
       ctx->Shared->ShaderIncludes->shader_include_tree;
@@ -3595,7 +3606,7 @@ _mesa_NamedStringARB(GLenum type, GLint namelen, const GLchar *name,
       }
    }
 
-   mtx_unlock(&ctx->Shared->ShaderIncludeMutex);
+   simple_mtx_unlock(&ctx->Shared->ShaderIncludeMutex);
 
    free(name_cp);
    ralloc_free(mem_ctx);
@@ -3621,12 +3632,12 @@ _mesa_DeleteNamedStringARB(GLint namelen, const GLchar *name)
       return;
    }
 
-   mtx_lock(&ctx->Shared->ShaderIncludeMutex);
+   simple_mtx_lock(&ctx->Shared->ShaderIncludeMutex);
 
    free(shader_include->shader_source);
    shader_include->shader_source = NULL;
 
-   mtx_unlock(&ctx->Shared->ShaderIncludeMutex);
+   simple_mtx_unlock(&ctx->Shared->ShaderIncludeMutex);
 
    free(name_cp);
 }
@@ -3646,7 +3657,7 @@ _mesa_CompileShaderIncludeARB(GLuint shader, GLsizei count,
 
    void *mem_ctx = ralloc_context(NULL);
 
-   mtx_lock(&ctx->Shared->ShaderIncludeMutex);
+   simple_mtx_lock(&ctx->Shared->ShaderIncludeMutex);
 
    ctx->Shared->ShaderIncludes->include_paths =
       ralloc_array_size(mem_ctx, sizeof(struct sh_incl_path_entry *), count);
@@ -3690,7 +3701,7 @@ exit:
    ctx->Shared->ShaderIncludes->relative_path_cursor = 0;
    ctx->Shared->ShaderIncludes->include_paths = NULL;
 
-   mtx_unlock(&ctx->Shared->ShaderIncludeMutex);
+   simple_mtx_unlock(&ctx->Shared->ShaderIncludeMutex);
 
    ralloc_free(mem_ctx);
 }

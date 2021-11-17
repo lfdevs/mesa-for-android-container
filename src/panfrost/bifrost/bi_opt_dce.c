@@ -35,11 +35,10 @@ bi_opt_dead_code_eliminate(bi_context *ctx)
         bi_invalidate_liveness(ctx);
         bi_compute_liveness(ctx);
 
-        bi_foreach_block_rev(ctx, _block) {
-                bi_block *block = (bi_block *) _block;
-                uint16_t *live = rzalloc_array(_block, uint16_t, temp_count);
+        bi_foreach_block_rev(ctx, block) {
+                uint8_t *live = rzalloc_array(block, uint8_t, temp_count);
 
-                pan_foreach_successor(_block, succ) {
+                bi_foreach_successor(block, succ) {
                         for (unsigned i = 0; i < temp_count; ++i)
                                 live[i] |= succ->live_in[i];
                 }
@@ -62,8 +61,8 @@ bi_opt_dead_code_eliminate(bi_context *ctx)
                                 bi_liveness_ins_update(live, ins, temp_count);
                 }
 
-                ralloc_free(block->base.live_in);
-                block->base.live_in = live;
+                ralloc_free(block->live_in);
+                block->live_in = live;
         }
 }
 
@@ -94,10 +93,8 @@ bi_postra_liveness_ins(uint64_t live, bi_instr *ins)
 static bool
 bi_postra_liveness_block(bi_block *blk)
 {
-        pan_foreach_successor((&blk->base), _succ) {
-                bi_block *succ = (bi_block *) _succ;
+        bi_foreach_successor(blk, succ)
                 blk->reg_live_out |= succ->reg_live_in;
-        }
 
         uint64_t live = blk->reg_live_out;
 
@@ -129,8 +126,7 @@ bi_postra_liveness(bi_context *ctx)
         struct set_entry *cur;
         cur = _mesa_set_add(work_list, pan_exit_block(&ctx->blocks));
 
-        bi_foreach_block(ctx, _block) {
-                bi_block *block = (bi_block *) _block;
+        bi_foreach_block(ctx, block) {
                 block->reg_live_out = block->reg_live_in = 0;
         }
 
@@ -144,7 +140,7 @@ bi_postra_liveness(bi_context *ctx)
                 /* If we made progress, we need to process the predecessors */
 
                 if (progress || !_mesa_set_search(visited, blk)) {
-                        pan_foreach_predecessor((&blk->base), pred)
+                        bi_foreach_predecessor((blk), pred)
                                 _mesa_set_add(work_list, pred);
                 }
 
@@ -160,8 +156,7 @@ bi_opt_dce_post_ra(bi_context *ctx)
 {
         bi_postra_liveness(ctx);
 
-        bi_foreach_block_rev(ctx, _block) {
-                bi_block *block = (bi_block *) _block;
+        bi_foreach_block_rev(ctx, block) {
                 uint64_t live = block->reg_live_out;
 
                 bi_foreach_instr_in_block_rev(block, ins) {

@@ -173,6 +173,7 @@ nv30_fragtex_sampler_states_bind(struct pipe_context *pipe,
 
 void
 nv30_fragtex_set_sampler_views(struct pipe_context *pipe, unsigned nr,
+                               bool take_ownership,
                                struct pipe_sampler_view **views)
 {
    struct nv30_context *nv30 = nv30_context(pipe);
@@ -180,7 +181,12 @@ nv30_fragtex_set_sampler_views(struct pipe_context *pipe, unsigned nr,
 
    for (i = 0; i < nr; i++) {
       nouveau_bufctx_reset(nv30->bufctx, BUFCTX_FRAGTEX(i));
-      pipe_sampler_view_reference(&nv30->fragprog.textures[i], views[i]);
+      if (take_ownership) {
+         pipe_sampler_view_reference(&nv30->fragprog.textures[i], NULL);
+         nv30->fragprog.textures[i] = views[i];
+      } else {
+         pipe_sampler_view_reference(&nv30->fragprog.textures[i], views[i]);
+      }
       nv30->fragprog.dirty_samplers |= (1 << i);
    }
 
@@ -199,15 +205,16 @@ static void
 nv30_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
                        unsigned start, unsigned nr,
                        unsigned unbind_num_trailing_slots,
+                       bool take_ownership,
                        struct pipe_sampler_view **views)
 {
    assert(start == 0);
    switch (shader) {
    case PIPE_SHADER_FRAGMENT:
-      nv30_fragtex_set_sampler_views(pipe, nr, views);
+      nv30_fragtex_set_sampler_views(pipe, nr, take_ownership, views);
       break;
    case PIPE_SHADER_VERTEX:
-      nv40_verttex_set_sampler_views(pipe, nr, views);
+      nv40_verttex_set_sampler_views(pipe, nr, take_ownership, views);
       break;
    default:
       ;

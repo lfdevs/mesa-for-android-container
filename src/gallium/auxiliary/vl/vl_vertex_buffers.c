@@ -136,6 +136,7 @@ vl_vb_get_quad_vertex_element(void)
    element.src_offset = 0;
    element.instance_divisor = 0;
    element.vertex_buffer_index = 0;
+   element.dual_slot = false;
    element.src_format = PIPE_FORMAT_R32G32_FLOAT;
 
    return element;

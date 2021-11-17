@@ -135,13 +135,13 @@ find_in_bucket(struct fd_bo_bucket *bucket, uint32_t flags)
     * (MRU, since likely to be in GPU cache), rather than head (LRU)..
     */
    simple_mtx_lock(&table_lock);
-   if (!list_is_empty(&bucket->list)) {
-      bo = LIST_ENTRY(struct fd_bo, bucket->list.next, list);
-      /* TODO check for compatible flags? */
-      if (fd_bo_state(bo) == FD_BO_STATE_IDLE) {
+   list_for_each_entry (struct fd_bo, entry, &bucket->list, list) {
+      if (fd_bo_state(entry) != FD_BO_STATE_IDLE)
+         break;
+      if (entry->alloc_flags == flags) {
+         bo = entry;
          list_del(&bo->list);
-      } else {
-         bo = NULL;
+         break;
       }
    }
    simple_mtx_unlock(&table_lock);
@@ -174,7 +174,7 @@ retry:
             goto retry;
          }
          p_atomic_set(&bo->refcnt, 1);
-         bo->flags = FD_RELOC_FLAGS_INIT;
+         bo->reloc_flags = FD_RELOC_FLAGS_INIT;
          return bo;
       }
    }

@@ -1,6 +1,0 @@
-# Timeouts in CI
-KHR-GL46.copy_image.functional
-KHR-GL46.enhanced_layouts.uniform_block_member_align_non_power_of_2
-KHR-GL46.arrays_of_arrays_gl.SizedDeclarationsPrimitive
-KHR-GL46.texture_swizzle.smoke
-KHR-GL46.enhanced_layouts.ssb_member_align_non_power_of_2

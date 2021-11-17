@@ -61,9 +61,12 @@ st_convert_sampler(const struct st_context *st,
                    const struct gl_texture_object *texobj,
                    const struct gl_sampler_object *msamp,
                    float tex_unit_lod_bias,
-                   struct pipe_sampler_state *sampler)
+                   struct pipe_sampler_state *sampler,
+                   bool seamless_cube_map)
 {
    memcpy(sampler, &msamp->Attrib.state, sizeof(*sampler));
+
+   sampler->seamless_cube_map |= seamless_cube_map;
 
    if (texobj->_IsIntegerFormat && st->ctx->Const.ForceIntegerTexNearest) {
       sampler->min_img_filter = PIPE_TEX_FILTER_NEAREST;
@@ -156,9 +159,7 @@ st_convert_sampler_from_unit(const struct st_context *st,
    msamp = _mesa_get_samplerobj(ctx, texUnit);
 
    st_convert_sampler(st, texobj, msamp, ctx->Texture.Unit[texUnit].LodBiasQuantized,
-                      sampler);
-
-   sampler->seamless_cube_map |= ctx->Texture.CubeMapSeamless;
+                      sampler, ctx->Texture.CubeMapSeamless);
 }
 
 

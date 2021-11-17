@@ -78,7 +78,7 @@ get_sysfs_dev_dir(struct intel_perf_config *perf, int fd)
 
    perf->sysfs_dev_dir[0] = '\0';
 
-   if (INTEL_DEBUG & DEBUG_NO_OACONFIG)
+   if (INTEL_DEBUG(DEBUG_NO_OACONFIG))
       return true;
 
    if (fstat(fd, &sb)) {
@@ -252,26 +252,13 @@ kernel_has_dynamic_config_support(struct intel_perf_config *perf, int fd)
                     &invalid_config_id) < 0 && errno == ENOENT;
 }
 
-static int
-i915_query_items(struct intel_perf_config *perf, int fd,
-                 struct drm_i915_query_item *items, uint32_t n_items)
-{
-   struct drm_i915_query q = {
-      .num_items = n_items,
-      .items_ptr = to_user_pointer(items),
-   };
-   return intel_ioctl(fd, DRM_IOCTL_I915_QUERY, &q);
-}
-
 static bool
 i915_query_perf_config_supported(struct intel_perf_config *perf, int fd)
 {
-   struct drm_i915_query_item item = {
-      .query_id = DRM_I915_QUERY_PERF_CONFIG,
-      .flags = DRM_I915_QUERY_PERF_CONFIG_LIST,
-   };
-
-   return i915_query_items(perf, fd, &item, 1) == 0 && item.length > 0;
+   int32_t length = 0;
+   return !intel_i915_query_flags(fd, DRM_I915_QUERY_PERF_CONFIG,
+                                  DRM_I915_QUERY_PERF_CONFIG_LIST,
+                                  NULL, &length);
 }
 
 static bool
@@ -279,25 +266,20 @@ i915_query_perf_config_data(struct intel_perf_config *perf,
                             int fd, const char *guid,
                             struct drm_i915_perf_oa_config *config)
 {
-   struct {
-      struct drm_i915_query_perf_config query;
-      struct drm_i915_perf_oa_config config;
-   } item_data;
-   struct drm_i915_query_item item = {
-      .query_id = DRM_I915_QUERY_PERF_CONFIG,
-      .flags = DRM_I915_QUERY_PERF_CONFIG_DATA_FOR_UUID,
-      .data_ptr = to_user_pointer(&item_data),
-      .length = sizeof(item_data),
-   };
+   char data[sizeof(struct drm_i915_query_perf_config) +
+             sizeof(struct drm_i915_perf_oa_config)] = {};
+   struct drm_i915_query_perf_config *query = (void *)data;
 
-   memset(&item_data, 0, sizeof(item_data));
-   memcpy(item_data.query.uuid, guid, sizeof(item_data.query.uuid));
-   memcpy(&item_data.config, config, sizeof(item_data.config));
+   memcpy(query->uuid, guid, sizeof(query->uuid));
+   memcpy(query->data, config, sizeof(*config));
 
-   if (!(i915_query_items(perf, fd, &item, 1) == 0 && item.length > 0))
+   int32_t item_length = sizeof(data);
+   if (intel_i915_query_flags(fd, DRM_I915_QUERY_PERF_CONFIG,
+                              DRM_I915_QUERY_PERF_CONFIG_DATA_FOR_UUID,
+                              query, &item_length))
       return false;
 
-   memcpy(config, &item_data.config, sizeof(item_data.config));
+   memcpy(config, query->data, sizeof(*config));
 
    return true;
 }
@@ -382,15 +364,15 @@ compute_topology_builtins(struct intel_perf_config *perf,
    perf->sys_vars.eu_threads_count = devinfo->num_thread_per_eu;
 
    /* The subslice mask builtin contains bits for all slices. Prior to Gfx11
-    * it had groups of 3bits for each slice, on Gfx11 it's 8bits for each
-    * slice.
+    * it had groups of 3bits for each slice, on Gfx11 and above it's 8bits for
+    * each slice.
     *
     * Ideally equations would be updated to have a slice/subslice query
     * function/operator.
     */
    perf->sys_vars.subslice_mask = 0;
 
-   int bits_per_subslice = devinfo->ver == 11 ? 8 : 3;
+   int bits_per_subslice = devinfo->ver >= 11 ? 8 : 3;
 
    for (int s = 0; s < util_last_bit(devinfo->slice_masks); s++) {
       for (int ss = 0; ss < (devinfo->subslice_slice_stride * 8); ss++) {
@@ -407,7 +389,7 @@ init_oa_sys_vars(struct intel_perf_config *perf,
 {
    uint64_t min_freq_mhz = 0, max_freq_mhz = 0;
 
-   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
+   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG)) {
       if (!read_sysfs_drm_device_file_uint64(perf, "gt_min_freq_mhz", &min_freq_mhz))
          return false;
 
@@ -768,7 +750,7 @@ load_oa_metrics(struct intel_perf_config *perf, int fd,
     */
    oa_register(perf);
 
-   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
+   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG)) {
       if (kernel_has_dynamic_config_support(perf, fd))
          init_oa_configs(perf, fd, devinfo);
       else

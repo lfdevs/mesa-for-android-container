@@ -58,6 +58,13 @@ static const uint32_t isl_encode_ds_surftype[] = {
    [ISL_SURF_DIM_3D] = SURFTYPE_3D,
 };
 
+#if GFX_VERx10 >= 125
+static const uint8_t isl_encode_tiling[] = {
+   [ISL_TILING_4]  = TILE4,
+   [ISL_TILING_64] = TILE64,
+};
+#endif
+
 void
 isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
                                    const struct isl_depth_stencil_hiz_emit_info *restrict info)
@@ -115,7 +122,13 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       db.MOCS = info->mocs;
 #endif
 
-#if GFX_VER <= 6
+#if GFX_VERx10 >= 125
+      db.TiledMode = isl_encode_tiling[info->depth_surf->tiling];
+      db.MipTailStartLOD = 15;
+      db.CompressionMode = isl_aux_usage_has_ccs(info->hiz_usage);
+      db.RenderCompressionFormat =
+         isl_get_render_compression_format(info->depth_surf->format);
+#elif GFX_VER <= 6
       db.TiledSurface = info->depth_surf->tiling != ISL_TILING_LINEAR;
       db.TileWalk = info->depth_surf->tiling == ISL_TILING_Y0 ? TILEWALK_YMAJOR :
                                                                 TILEWALK_XMAJOR;
@@ -155,6 +168,13 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
    if (info->stencil_surf) {
 #if GFX_VER >= 7 && GFX_VER < 12
       db.StencilWriteEnable = true;
+#endif
+#if GFX_VERx10 >= 125
+      sb.TiledMode = isl_encode_tiling[info->stencil_surf->tiling];
+      sb.MipTailStartLOD = 15;
+      sb.CompressionMode = isl_aux_usage_has_ccs(info->stencil_aux_usage);
+      sb.RenderCompressionFormat =
+         isl_get_render_compression_format(info->stencil_surf->format);
 #endif
 #if GFX_VER >= 12
       sb.StencilWriteEnable = true;
@@ -213,6 +233,11 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       hiz.SurfaceBaseAddress = info->hiz_address;
       hiz.MOCS = info->mocs;
       hiz.SurfacePitch = info->hiz_surf->row_pitch_B - 1;
+
+#if GFX_VERx10 >= 125
+      hiz.TiledMode = isl_encode_tiling[info->hiz_surf->tiling];
+#endif
+
 #if GFX_VER >= 12
       hiz.HierarchicalDepthBufferWriteThruEnable =
          info->hiz_usage == ISL_AUX_USAGE_HIZ_CCS_WT;
@@ -303,50 +328,6 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
 
    GENX(3DSTATE_HIER_DEPTH_BUFFER_pack)(NULL, dw, &hiz);
    dw += GENX(3DSTATE_HIER_DEPTH_BUFFER_length);
-
-#if GFX_VERx10 == 120
-   /* Wa_14010455700
-    *
-    * To avoid sporadic corruptions “Set 0x7010[9] when Depth Buffer Surface
-    * Format is D16_UNORM , surface type is not NULL & 1X_MSAA”.
-    */
-   bool enable_14010455700 =
-      info->depth_surf && info->depth_surf->samples == 1 &&
-      db.SurfaceType != SURFTYPE_NULL && db.SurfaceFormat == D16_UNORM;
-   struct GENX(COMMON_SLICE_CHICKEN1) chicken1 = {
-      .HIZPlaneOptimizationdisablebit = enable_14010455700,
-      .HIZPlaneOptimizationdisablebitMask = true,
-   };
-   uint32_t chicken1_dw;
-   GENX(COMMON_SLICE_CHICKEN1_pack)(NULL, &chicken1_dw, &chicken1);
-
-   struct GENX(MI_LOAD_REGISTER_IMM) lri = {
-      GENX(MI_LOAD_REGISTER_IMM_header),
-      .RegisterOffset = GENX(COMMON_SLICE_CHICKEN1_num),
-      .DataDWord = chicken1_dw,
-   };
-   GENX(MI_LOAD_REGISTER_IMM_pack)(NULL, dw, &lri);
-   dw += GENX(MI_LOAD_REGISTER_IMM_length);
-
-   /* Wa_1806527549
-    *
-    * Set HIZ_CHICKEN (7018h) bit 13 = 1 when depth buffer is D16_UNORM.
-    */
-   struct GENX(HIZ_CHICKEN) hiz_chicken = {
-      .HZDepthTestLEGEOptimizationDisable = db.SurfaceFormat == D16_UNORM,
-      .HZDepthTestLEGEOptimizationDisableMask = true,
-   };
-   uint32_t hiz_chicken_dw;
-   GENX(HIZ_CHICKEN_pack)(NULL, &hiz_chicken_dw, &hiz_chicken);
-
-   struct GENX(MI_LOAD_REGISTER_IMM) lri2 = {
-      GENX(MI_LOAD_REGISTER_IMM_header),
-      .RegisterOffset = GENX(HIZ_CHICKEN_num),
-      .DataDWord = hiz_chicken_dw,
-   };
-   GENX(MI_LOAD_REGISTER_IMM_pack)(NULL, dw, &lri2);
-   dw += GENX(MI_LOAD_REGISTER_IMM_length);
-#endif
 
    GENX(3DSTATE_CLEAR_PARAMS_pack)(NULL, dw, &clear);
    dw += GENX(3DSTATE_CLEAR_PARAMS_length);

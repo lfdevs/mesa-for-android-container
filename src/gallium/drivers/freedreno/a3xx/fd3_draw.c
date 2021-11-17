@@ -56,7 +56,7 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
           struct fd3_emit *emit, unsigned index_offset) assert_dt
 {
    const struct pipe_draw_info *info = emit->info;
-   enum pc_di_primtype primtype = ctx->primtypes[info->mode];
+   enum pc_di_primtype primtype = ctx->screen->primtypes[info->mode];
 
    fd3_emit_state(ctx, ring, emit);
 
@@ -105,7 +105,7 @@ fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
       .debug = &ctx->debug,
       .vtx = &ctx->vtx,
       .info = info,
-		.drawid_offset = drawid_offset,
+      .drawid_offset = drawid_offset,
       .indirect = indirect,
       .draw = draw,
       .key = {

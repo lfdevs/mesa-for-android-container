@@ -8,11 +8,11 @@ traces:
   - path: glxgears/glxgears-2.trace
     expectations:
       - device: i915-g33
-        checksum: 83b1a41392bec71f7aeea6f1170cc23d
+        checksum: ee8dcdb3b9eaef2b32a2914b89373419
   - path: gputest/plot3d.trace
     expectations:
       - device: i915-g33
-        checksum: dc187485584bc45b9050e88163e72c34
+        checksum: 4731890d1f782c106dd9c12af77b3607
   - path: gputest/triangle.trace
     expectations:
       # Weird white bar behind Tux's head.
@@ -27,7 +27,7 @@ traces:
     # The cel shading is pretty chunky, but maybe that's just precision stuff.
     expectations:
       - device: i915-g33
-        checksum: 86094ef6a40bfe48d4b7d66871af97a5
+        checksum: 7518414e4f1a4f1e07c04ec1500f53e7
   # Requires GLSL 1.30
   #- path: humus/DynamicBranching3.trace
   #  expectations:
@@ -41,7 +41,7 @@ traces:
   - path: humus/Portals.trace
     expectations:
       - device: i915-g33
-        checksum: 46a5f3c04ef40f275e1d330c2ac965c8
+        checksum: f782469019417923831d5d53dbe6a507
   # The shadow raytracing shader fails to compile
   #- path: humus/RaytracedShadows.trace
   #  expectations:
@@ -55,9 +55,9 @@ traces:
   - path: neverball/neverball.trace
     expectations:
       - device: i915-g33
-        checksum: e621fd97320f24ea4451565390f9b1ac
+        checksum: f925aa92da47ebc757285f826113f4db
   - path: valve/counterstrike-v2.trace
     # Tree foliage rendering is extra aliased.
     expectations:
       - device: i915-g33
-        checksum: 4a693fcd3b2fbe388ba847ca3a93f079
+        checksum: d17298ad3bb44b43b6c17e017f7c1e6a

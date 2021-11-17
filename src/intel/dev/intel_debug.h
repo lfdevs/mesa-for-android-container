@@ -42,7 +42,8 @@ extern "C" {
 
 extern uint64_t intel_debug;
 
-#define INTEL_DEBUG __builtin_expect(intel_debug, 0)
+/* Returns 0/1, not the matching bit mask. */
+#define INTEL_DEBUG(flags)        unlikely(intel_debug & (flags))
 
 #define DEBUG_TEXTURE             (1ull <<  0)
 #define DEBUG_STATE               (1ull <<  1)
@@ -94,6 +95,8 @@ extern uint64_t intel_debug;
 #define DEBUG_NO32                (1ull << 47)
 #define DEBUG_RT                  (1ull << 48)
 
+#define DEBUG_ANY                 (~0ull)
+
 /* These flags are not compatible with the disk shader cache */
 #define DEBUG_DISK_CACHE_DISABLE_MASK DEBUG_SHADER_TIME
 
@@ -118,9 +121,9 @@ extern uint64_t intel_debug;
 #define dbg_printf(...)	fprintf(stderr, __VA_ARGS__)
 #endif /* HAVE_ANDROID_PLATFORM */
 
-#define DBG(...) do {						\
-	if (INTEL_DEBUG & FILE_DEBUG_FLAG)		\
-		dbg_printf(__VA_ARGS__);			\
+#define DBG(...) do {                  \
+   if (INTEL_DEBUG(FILE_DEBUG_FLAG))   \
+      dbg_printf(__VA_ARGS__);         \
 } while(0)
 
 extern uint64_t intel_debug_flag_for_shader_stage(gl_shader_stage stage);

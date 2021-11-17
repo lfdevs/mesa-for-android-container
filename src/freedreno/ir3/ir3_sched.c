@@ -38,15 +38,17 @@
 #define d(fmt, ...)                                                            \
    do {                                                                        \
       if (SCHED_DEBUG) {                                                       \
-         printf("SCHED: " fmt "\n", ##__VA_ARGS__);                            \
+         mesa_logi("SCHED: " fmt, ##__VA_ARGS__);                              \
       }                                                                        \
    } while (0)
 
 #define di(instr, fmt, ...)                                                    \
    do {                                                                        \
       if (SCHED_DEBUG) {                                                       \
-         printf("SCHED: " fmt ": ", ##__VA_ARGS__);                            \
-         ir3_print_instr(instr);                                               \
+         struct log_stream *stream = mesa_log_streami();                       \
+         mesa_log_stream_printf(stream, "SCHED: " fmt ": ", ##__VA_ARGS__);    \
+         ir3_print_instr_stream(stream, instr);                                \
+         mesa_log_stream_destroy(stream);                                      \
       }                                                                        \
    } while (0)
 
@@ -593,6 +595,30 @@ static struct ir3_sched_node *choose_instr_inc(struct ir3_sched_ctx *ctx,
                                                struct ir3_sched_notes *notes,
                                                bool defer, bool avoid_output);
 
+enum choose_instr_dec_rank {
+   DEC_NEUTRAL,
+   DEC_NEUTRAL_READY,
+   DEC_FREED,
+   DEC_FREED_READY,
+};
+
+static const char *
+dec_rank_name(enum choose_instr_dec_rank rank)
+{
+   switch (rank) {
+   case DEC_NEUTRAL:
+      return "neutral";
+   case DEC_NEUTRAL_READY:
+      return "neutral+ready";
+   case DEC_FREED:
+      return "freed";
+   case DEC_FREED_READY:
+      return "freed+ready";
+   default:
+      return NULL;
+   }
+}
+
 /**
  * Chooses an instruction to schedule using the Goodman/Hsu (1988) CSR (Code
  * Scheduling for Register pressure) heuristic.
@@ -606,8 +632,8 @@ choose_instr_dec(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
 {
    const char *mode = defer ? "-d" : "";
    struct ir3_sched_node *chosen = NULL;
+   enum choose_instr_dec_rank chosen_rank = DEC_NEUTRAL;
 
-   /* Find a ready inst with regs freed and pick the one with max cost. */
    foreach_sched_node (n, &ctx->dag->heads) {
       if (defer && should_defer(ctx, n->instr))
          continue;
@@ -615,97 +641,70 @@ choose_instr_dec(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
       /* Note: mergedregs is only used post-RA, just set it to false */
       unsigned d = ir3_delay_calc_prera(ctx->block, n->instr);
 
-      if (d > 0)
-         continue;
-
-      if (live_effect(n->instr) > -1)
+      int live = live_effect(n->instr);
+      if (live > 0)
          continue;
 
       if (!check_instr(ctx, notes, n->instr))
          continue;
 
-      if (!chosen || chosen->max_delay < n->max_delay) {
+      enum choose_instr_dec_rank rank;
+      if (live < 0) {
+         /* Prioritize instrs which free up regs and can be scheduled with no
+          * delay.
+          */
+         if (d == 0)
+            rank = DEC_FREED_READY;
+         else
+            rank = DEC_FREED;
+      } else {
+         /* Contra the paper, pick a leader with no effect on used regs.  This
+          * may open up new opportunities, as otherwise a single-operand instr
+          * consuming a value will tend to block finding freeing that value.
+          * This had a massive effect on reducing spilling on V3D.
+          *
+          * XXX: Should this prioritize ready?
+          */
+         if (d == 0)
+            rank = DEC_NEUTRAL_READY;
+         else
+            rank = DEC_NEUTRAL;
+      }
+
+      /* Prefer higher-ranked instructions, or in the case of a rank tie, the
+       * highest latency-to-end-of-program instruction.
+       */
+      if (!chosen || rank > chosen_rank ||
+          (rank == chosen_rank && chosen->max_delay < n->max_delay)) {
          chosen = n;
+         chosen_rank = rank;
       }
    }
 
    if (chosen) {
-      di(chosen->instr, "dec%s: chose (freed+ready)", mode);
-      return chosen;
-   }
-
-   /* Find a leader with regs freed and pick the one with max cost. */
-   foreach_sched_node (n, &ctx->dag->heads) {
-      if (defer && should_defer(ctx, n->instr))
-         continue;
-
-      if (live_effect(n->instr) > -1)
-         continue;
-
-      if (!check_instr(ctx, notes, n->instr))
-         continue;
-
-      if (!chosen || chosen->max_delay < n->max_delay) {
-         chosen = n;
-      }
-   }
-
-   if (chosen) {
-      di(chosen->instr, "dec%s: chose (freed)", mode);
-      return chosen;
-   }
-
-   /* Contra the paper, pick a leader with no effect on used regs.  This may
-    * open up new opportunities, as otherwise a single-operand instr consuming
-    * a value will tend to block finding freeing that value.  This had a
-    * massive effect on reducing spilling on V3D.
-    *
-    * XXX: Should this prioritize ready?
-    */
-   foreach_sched_node (n, &ctx->dag->heads) {
-      if (defer && should_defer(ctx, n->instr))
-         continue;
-
-      unsigned d = ir3_delay_calc_prera(ctx->block, n->instr);
-
-      if (d > 0)
-         continue;
-
-      if (live_effect(n->instr) > 0)
-         continue;
-
-      if (!check_instr(ctx, notes, n->instr))
-         continue;
-
-      if (!chosen || chosen->max_delay < n->max_delay)
-         chosen = n;
-   }
-
-   if (chosen) {
-      di(chosen->instr, "dec%s: chose (neutral+ready)", mode);
-      return chosen;
-   }
-
-   foreach_sched_node (n, &ctx->dag->heads) {
-      if (defer && should_defer(ctx, n->instr))
-         continue;
-
-      if (live_effect(n->instr) > 0)
-         continue;
-
-      if (!check_instr(ctx, notes, n->instr))
-         continue;
-
-      if (!chosen || chosen->max_delay < n->max_delay)
-         chosen = n;
-   }
-
-   if (chosen) {
-      di(chosen->instr, "dec%s: chose (neutral)", mode);
+      di(chosen->instr, "dec%s: chose (%s)", mode, dec_rank_name(chosen_rank));
       return chosen;
    }
 
    return choose_instr_inc(ctx, notes, defer, true);
+}
+
+enum choose_instr_inc_rank {
+   INC_DISTANCE,
+   INC_DISTANCE_READY,
+};
+
+static const char *
+inc_rank_name(enum choose_instr_inc_rank rank)
+{
+   switch (rank) {
+   case INC_DISTANCE:
+      return "distance";
+   case INC_DISTANCE_READY:
+      return "distance+ready";
+   default:
+      return NULL;
+   }
 }
 
 /**
@@ -718,6 +717,7 @@ choose_instr_inc(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
 {
    const char *mode = defer ? "-d" : "";
    struct ir3_sched_node *chosen = NULL;
+   enum choose_instr_inc_rank chosen_rank = INC_DISTANCE;
 
    /*
     * From hear on out, we are picking something that increases
@@ -734,48 +734,29 @@ choose_instr_inc(struct ir3_sched_ctx *ctx, struct ir3_sched_notes *notes,
       if (defer && should_defer(ctx, n->instr))
          continue;
 
+      if (!check_instr(ctx, notes, n->instr))
+         continue;
+
       unsigned d = ir3_delay_calc_prera(ctx->block, n->instr);
 
-      if (d > 0)
-         continue;
-
-      if (!check_instr(ctx, notes, n->instr))
-         continue;
+      enum choose_instr_inc_rank rank;
+      if (d == 0)
+         rank = INC_DISTANCE_READY;
+      else
+         rank = INC_DISTANCE;
 
       unsigned distance = nearest_use(n->instr);
 
-      if (!chosen || distance < chosen_distance) {
+      if (!chosen || rank > chosen_rank ||
+          (rank == chosen_rank && distance < chosen_distance)) {
          chosen = n;
          chosen_distance = distance;
+         chosen_rank = rank;
       }
    }
 
    if (chosen) {
-      di(chosen->instr, "inc%s: chose (distance+ready)", mode);
-      return chosen;
-   }
-
-   /* Pick the max delay of the remaining leaders. */
-   foreach_sched_node (n, &ctx->dag->heads) {
-      if (avoid_output && n->output)
-         continue;
-
-      if (defer && should_defer(ctx, n->instr))
-         continue;
-
-      if (!check_instr(ctx, notes, n->instr))
-         continue;
-
-      unsigned distance = nearest_use(n->instr);
-
-      if (!chosen || distance < chosen_distance) {
-         chosen = n;
-         chosen_distance = distance;
-      }
-   }
-
-   if (chosen) {
-      di(chosen->instr, "inc%s: chose (distance)", mode);
+      di(chosen->instr, "inc%s: chose (%s)", mode, inc_rank_name(chosen_rank));
       return chosen;
    }
 

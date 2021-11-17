@@ -54,7 +54,7 @@ ir3_nir_lower_tg4_to_tex_instr(nir_builder *b, nir_instr *instr, void *data)
       tex->dest_type = tg4->dest_type;
 
       for (int j = 0; j < tg4->num_srcs; j++) {
-         nir_src_copy(&tex->src[j].src, &tg4->src[j].src, tex);
+         nir_src_copy(&tex->src[j].src, &tg4->src[j].src);
          tex->src[j].src_type = tg4->src[j].src_type;
       }
       if (i != 3) {

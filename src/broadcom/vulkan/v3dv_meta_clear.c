@@ -22,10 +22,173 @@
  */
 
 #include "v3dv_private.h"
+#include "v3dv_meta_common.h"
 
 #include "compiler/nir/nir_builder.h"
 #include "vk_format_info.h"
 #include "util/u_pack_color.h"
+
+static void
+get_hw_clear_color(struct v3dv_device *device,
+                   const VkClearColorValue *color,
+                   VkFormat fb_format,
+                   VkFormat image_format,
+                   uint32_t internal_type,
+                   uint32_t internal_bpp,
+                   uint32_t *hw_color)
+{
+   const uint32_t internal_size = 4 << internal_bpp;
+
+   /* If the image format doesn't match the framebuffer format, then we are
+    * trying to clear an unsupported tlb format using a compatible
+    * format for the framebuffer. In this case, we want to make sure that
+    * we pack the clear value according to the original format semantics,
+    * not the compatible format.
+    */
+   if (fb_format == image_format) {
+      v3dv_X(device, get_hw_clear_color)(color, internal_type, internal_size,
+                                         hw_color);
+   } else {
+      union util_color uc;
+      enum pipe_format pipe_image_format =
+         vk_format_to_pipe_format(image_format);
+      util_pack_color(color->float32, pipe_image_format, &uc);
+      memcpy(hw_color, uc.ui, internal_size);
+   }
+}
+
+/* Returns true if the implementation is able to handle the case, false
+ * otherwise.
+*/
+static bool
+clear_image_tlb(struct v3dv_cmd_buffer *cmd_buffer,
+                struct v3dv_image *image,
+                const VkClearValue *clear_value,
+                const VkImageSubresourceRange *range)
+{
+   const VkOffset3D origin = { 0, 0, 0 };
+   VkFormat fb_format;
+   if (!v3dv_meta_can_use_tlb(image, &origin, &fb_format))
+      return false;
+
+   uint32_t internal_type, internal_bpp;
+   v3dv_X(cmd_buffer->device, get_internal_type_bpp_for_image_aspects)
+      (fb_format, range->aspectMask,
+       &internal_type, &internal_bpp);
+
+   union v3dv_clear_value hw_clear_value = { 0 };
+   if (range->aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) {
+      get_hw_clear_color(cmd_buffer->device, &clear_value->color, fb_format,
+                         image->vk.format, internal_type, internal_bpp,
+                         &hw_clear_value.color[0]);
+   } else {
+      assert((range->aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) ||
+             (range->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT));
+      hw_clear_value.z = clear_value->depthStencil.depth;
+      hw_clear_value.s = clear_value->depthStencil.stencil;
+   }
+
+   uint32_t level_count = vk_image_subresource_level_count(&image->vk, range);
+   uint32_t min_level = range->baseMipLevel;
+   uint32_t max_level = range->baseMipLevel + level_count;
+
+   /* For 3D images baseArrayLayer and layerCount must be 0 and 1 respectively.
+    * Instead, we need to consider the full depth dimension of the image, which
+    * goes from 0 up to the level's depth extent.
+    */
+   uint32_t min_layer;
+   uint32_t max_layer;
+   if (image->vk.image_type != VK_IMAGE_TYPE_3D) {
+      min_layer = range->baseArrayLayer;
+      max_layer = range->baseArrayLayer +
+                  vk_image_subresource_layer_count(&image->vk, range);
+   } else {
+      min_layer = 0;
+      max_layer = 0;
+   }
+
+   for (uint32_t level = min_level; level < max_level; level++) {
+      if (image->vk.image_type == VK_IMAGE_TYPE_3D)
+         max_layer = u_minify(image->vk.extent.depth, level);
+
+      uint32_t width = u_minify(image->vk.extent.width, level);
+      uint32_t height = u_minify(image->vk.extent.height, level);
+
+      struct v3dv_job *job =
+         v3dv_cmd_buffer_start_job(cmd_buffer, -1, V3DV_JOB_TYPE_GPU_CL);
+
+      if (!job)
+         return true;
+
+      v3dv_job_start_frame(job, width, height, max_layer, false,
+                           1, internal_bpp,
+                           image->vk.samples > VK_SAMPLE_COUNT_1_BIT);
+
+      struct v3dv_meta_framebuffer framebuffer;
+      v3dv_X(job->device, meta_framebuffer_init)(&framebuffer, fb_format,
+                                                 internal_type,
+                                                 &job->frame_tiling);
+
+      v3dv_X(job->device, job_emit_binning_flush)(job);
+
+      /* If this triggers it is an application bug: the spec requires
+       * that any aspects to clear are present in the image.
+       */
+      assert(range->aspectMask & image->vk.aspects);
+
+      v3dv_X(job->device, meta_emit_clear_image_rcl)
+         (job, image, &framebuffer, &hw_clear_value,
+          range->aspectMask, min_layer, max_layer, level);
+
+      v3dv_cmd_buffer_finish_job(cmd_buffer);
+   }
+
+   return true;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+v3dv_CmdClearColorImage(VkCommandBuffer commandBuffer,
+                        VkImage _image,
+                        VkImageLayout imageLayout,
+                        const VkClearColorValue *pColor,
+                        uint32_t rangeCount,
+                        const VkImageSubresourceRange *pRanges)
+{
+   V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
+   V3DV_FROM_HANDLE(v3dv_image, image, _image);
+
+   const VkClearValue clear_value = {
+      .color = *pColor,
+   };
+
+   for (uint32_t i = 0; i < rangeCount; i++) {
+      if (clear_image_tlb(cmd_buffer, image, &clear_value, &pRanges[i]))
+         continue;
+      unreachable("Unsupported color clear.");
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+v3dv_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer,
+                               VkImage _image,
+                               VkImageLayout imageLayout,
+                               const VkClearDepthStencilValue *pDepthStencil,
+                               uint32_t rangeCount,
+                               const VkImageSubresourceRange *pRanges)
+{
+   V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
+   V3DV_FROM_HANDLE(v3dv_image, image, _image);
+
+   const VkClearValue clear_value = {
+      .depthStencil = *pDepthStencil,
+   };
+
+   for (uint32_t i = 0; i < rangeCount; i++) {
+      if (clear_image_tlb(cmd_buffer, image, &clear_value, &pRanges[i]))
+         continue;
+      unreachable("Unsupported depth/stencil clear.");
+   }
+}
 
 static void
 destroy_color_clear_pipeline(VkDevice _device,

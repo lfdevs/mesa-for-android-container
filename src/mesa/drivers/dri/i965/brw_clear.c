@@ -62,7 +62,7 @@ debug_mask(const char *name, GLbitfield mask)
 {
    GLuint i;
 
-   if (INTEL_DEBUG & DEBUG_BLIT) {
+   if (INTEL_DEBUG(DEBUG_BLIT)) {
       DBG("%s clear:", name);
       for (i = 0; i < BUFFER_COUNT; i++) {
          if (mask & (1 << i))
@@ -107,7 +107,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
    struct gl_renderbuffer_attachment *depth_att = &fb->Attachment[BUFFER_DEPTH];
    const struct intel_device_info *devinfo = &brw->screen->devinfo;
 
-   if (INTEL_DEBUG & DEBUG_NO_FAST_CLEAR)
+   if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
       return false;
 
    if (devinfo->ver < 6)

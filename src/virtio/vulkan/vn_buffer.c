@@ -42,6 +42,7 @@ vn_buffer_create(struct vn_device *dev,
    result = vn_call_vkCreateBuffer(dev->instance, device, create_info, NULL,
                                    &buffer);
    if (result != VK_SUCCESS) {
+      vn_object_base_fini(&buf->base);
       vk_free(alloc, buf);
       return result;
    }

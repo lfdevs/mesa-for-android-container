@@ -498,7 +498,8 @@ draw_vbo(struct draw_context *draw,
          unsigned drawid_offset,
          const struct pipe_draw_indirect_info *indirect,
          const struct pipe_draw_start_count_bias *draws,
-         unsigned num_draws)
+         unsigned num_draws,
+         uint8_t patch_vertices)
 {
    unsigned index_limit;
    unsigned fpstate = util_fpstate_get();
@@ -532,7 +533,7 @@ draw_vbo(struct draw_context *draw,
    draw->pt.user.drawid = drawid_offset;
    draw->pt.user.increment_draw_id = use_info->increment_draw_id;
    draw->pt.user.viewid = 0;
-   draw->pt.vertices_per_patch = use_info->vertices_per_patch;
+   draw->pt.vertices_per_patch = patch_vertices;
 
    if (0) {
       for (unsigned i = 0; i < num_draws; i++)

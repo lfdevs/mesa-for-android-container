@@ -1106,6 +1106,7 @@ ALU2(DP4)
 ALU2(DPH)
 ALU2(DP3)
 ALU2(DP2)
+ALU3(DP4A)
 ALU3(MAD)
 ALU3F(LRP)
 ALU1(BFREV)
@@ -1117,6 +1118,7 @@ ALU1(FBL)
 ALU1(CBIT)
 ALU2(ADDC)
 ALU2(SUBB)
+ALU3(ADD3)
 
 brw_inst *
 brw_MOV(struct brw_codegen *p, struct brw_reg dest, struct brw_reg src0)
@@ -3253,17 +3255,22 @@ gfx12_set_memory_fence_message(struct brw_codegen *p,
 
    brw_inst_set_sfid(p->devinfo, insn, sfid);
 
-   enum lsc_fence_scope scope = LSC_FENCE_THREADGROUP;
-   enum lsc_flush_type flush_type = LSC_FLUSH_TYPE_NONE;
+   if (sfid == BRW_SFID_URB) {
+      brw_set_desc(p, insn, brw_urb_fence_desc(p->devinfo) |
+                            brw_message_desc(p->devinfo, mlen, rlen, false));
+   } else {
+      enum lsc_fence_scope scope = LSC_FENCE_THREADGROUP;
+      enum lsc_flush_type flush_type = LSC_FLUSH_TYPE_NONE;
 
-   if (sfid == GFX12_SFID_TGM) {
-      scope = LSC_FENCE_GPU;
-      flush_type = LSC_FLUSH_TYPE_EVICT;
+      if (sfid == GFX12_SFID_TGM) {
+         scope = LSC_FENCE_TILE;
+         flush_type = LSC_FLUSH_TYPE_EVICT;
+      }
+
+      brw_set_desc(p, insn, lsc_fence_msg_desc(p->devinfo, scope,
+                                               flush_type, false) |
+                            brw_message_desc(p->devinfo, mlen, rlen, false));
    }
-
-   brw_set_desc(p, insn, lsc_fence_msg_desc(p->devinfo, scope,
-                                            flush_type, false) |
-                         brw_message_desc(p->devinfo, mlen, rlen, false));
 }
 
 void

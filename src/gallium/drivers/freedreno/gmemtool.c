@@ -159,15 +159,18 @@ main(int argc, char **argv)
       usage();
    }
 
+   struct fd_dev_id dev_id = {
+         .gpu_id = gpu_info->gpu_id,
+   };
    /* Setup a fake screen with enough GMEM related configuration
     * to make gmem_stateobj_init() happy:
     */
    struct fd_screen screen = {
-      .gpu_id = gpu_info->gpu_id,
+      .dev_id = &dev_id,
       .gmemsize_bytes = gpu_info->gmemsize_bytes,
    };
 
-   screen.info = fd_dev_info(gpu_info->gpu_id);
+   screen.info = fd_dev_info(&dev_id);
 
    /* And finally run thru all the GMEM keys: */
    for (int i = 0; i < ARRAY_SIZE(keys); i++) {

@@ -345,6 +345,11 @@ dump_cmdstream(void)
        */
       unsigned ringszdw = ringbuffers[id].size >> 2; /* in dwords */
 
+      if (verbose) {
+         dump_commands(ringbuffers[id].buf, ringszdw, 0);
+         return;
+      }
+
 /* helper macro to deal with modulo size math: */
 #define mod_add(b, v) ((ringszdw + (int)(b) + (int)(v)) % ringszdw)
 

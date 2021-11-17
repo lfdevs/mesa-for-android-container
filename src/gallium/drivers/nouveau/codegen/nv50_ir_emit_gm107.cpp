@@ -567,9 +567,9 @@ CodeEmitterGM107::emitCAL()
    const FlowInstruction *insn = this->insn->asFlow();
 
    if (insn->absolute) {
-      emitInsn(0xe2200000, 0); // JCAL
+      emitInsn(0xe2200000, false); // JCAL
    } else {
-      emitInsn(0xe2600000, 0); // CAL
+      emitInsn(0xe2600000, false); // CAL
    }
 
    if (!insn->srcExists(0) || insn->src(0).getFile() != FILE_MEMORY_CONST) {
@@ -595,7 +595,7 @@ CodeEmitterGM107::emitPCNT()
 {
    const FlowInstruction *insn = this->insn->asFlow();
 
-   emitInsn(0xe2b00000, 0);
+   emitInsn(0xe2b00000, false);
 
    if (!insn->srcExists(0) || insn->src(0).getFile() != FILE_MEMORY_CONST) {
       emitField(0x14, 24, insn->target.bb->binPos - (codeSize + 8));
@@ -617,7 +617,7 @@ CodeEmitterGM107::emitPBK()
 {
    const FlowInstruction *insn = this->insn->asFlow();
 
-   emitInsn(0xe2a00000, 0);
+   emitInsn(0xe2a00000, false);
 
    if (!insn->srcExists(0) || insn->src(0).getFile() != FILE_MEMORY_CONST) {
       emitField(0x14, 24, insn->target.bb->binPos - (codeSize + 8));
@@ -639,7 +639,7 @@ CodeEmitterGM107::emitPRET()
 {
    const FlowInstruction *insn = this->insn->asFlow();
 
-   emitInsn(0xe2700000, 0);
+   emitInsn(0xe2700000, false);
 
    if (!insn->srcExists(0) || insn->src(0).getFile() != FILE_MEMORY_CONST) {
       emitField(0x14, 24, insn->target.bb->binPos - (codeSize + 8));
@@ -661,7 +661,7 @@ CodeEmitterGM107::emitSSY()
 {
    const FlowInstruction *insn = this->insn->asFlow();
 
-   emitInsn(0xe2900000, 0);
+   emitInsn(0xe2900000, false);
 
    if (!insn->srcExists(0) || insn->src(0).getFile() != FILE_MEMORY_CONST) {
       emitField(0x14, 24, insn->target.bb->binPos - (codeSize + 8));
@@ -681,13 +681,13 @@ CodeEmitterGM107::emitSYNC()
 void
 CodeEmitterGM107::emitSAM()
 {
-   emitInsn(0xe3700000, 0);
+   emitInsn(0xe3700000, false);
 }
 
 void
 CodeEmitterGM107::emitRAM()
 {
-   emitInsn(0xe3800000, 0);
+   emitInsn(0xe3800000, false);
 }
 
 /*******************************************************************************
@@ -3880,7 +3880,7 @@ void
 SchedDataCalculatorGM107::setReuseFlag(Instruction *insn)
 {
    Instruction *next = insn->next;
-   BitSet defs(255, 1);
+   BitSet defs(255, true);
 
    if (!targ->isReuseSupported(insn))
       return;
@@ -4040,7 +4040,7 @@ SchedDataCalculatorGM107::setDelay(Instruction *insn, int delay,
 bool
 SchedDataCalculatorGM107::needRdDepBar(const Instruction *insn) const
 {
-   BitSet srcs(255, 1), defs(255, 1);
+   BitSet srcs(255, true), defs(255, true);
    int a, b;
 
    if (!targ->isBarrierRequired(insn))
@@ -4202,7 +4202,7 @@ SchedDataCalculatorGM107::insertBarriers(BasicBlock *bb)
    std::list<LiveBarUse> live_uses;
    std::list<LiveBarDef> live_defs;
    Instruction *insn, *next;
-   BitSet bars(6, 1);
+   BitSet bars(6, true);
    int bar_id;
 
    for (insn = bb->getEntry(); insn != NULL; insn = next) {
@@ -4278,7 +4278,7 @@ SchedDataCalculatorGM107::insertBarriers(BasicBlock *bb)
    }
 
    // Remove unnecessary barrier waits.
-   BitSet alive_bars(6, 1);
+   BitSet alive_bars(6, true);
    for (insn = bb->getEntry(); insn != NULL; insn = next) {
       int wr, rd, wt;
 

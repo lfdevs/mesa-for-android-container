@@ -27,6 +27,7 @@
 
 #include "i915_context.h"
 #include "i915_batch.h"
+#include "i915_debug.h"
 #include "i915_query.h"
 #include "i915_resource.h"
 #include "i915_screen.h"
@@ -41,8 +42,6 @@
 #include "util/u_memory.h"
 #include "util/u_prim.h"
 #include "util/u_upload_mgr.h"
-
-DEBUG_GET_ONCE_BOOL_OPTION(i915_no_vbuf, "I915_NO_VBUF", false)
 
 /*
  * Draw functions
@@ -113,7 +112,7 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    /*
     * Do the drawing
     */
-   draw_vbo(i915->draw, info, drawid_offset, NULL, draws, num_draws);
+   draw_vbo(i915->draw, info, drawid_offset, NULL, draws, num_draws, 0);
 
    /*
     * unmap vertex/index buffers
@@ -166,6 +165,18 @@ i915_destroy(struct pipe_context *pipe)
    FREE(i915);
 }
 
+static void
+i915_set_debug_callback(struct pipe_context *pipe,
+                        const struct pipe_debug_callback *cb)
+{
+   struct i915_context *i915 = i915_context(pipe);
+
+   if (cb)
+      i915->debug = *cb;
+   else
+      memset(&i915->debug, 0, sizeof(i915->debug));
+}
+
 struct pipe_context *
 i915_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
 {
@@ -180,6 +191,7 @@ i915_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
    i915->base.priv = priv;
    i915->base.stream_uploader = u_upload_create_default(&i915->base);
    i915->base.const_uploader = i915->base.stream_uploader;
+   i915->base.set_debug_callback = i915_set_debug_callback;
 
    i915->base.destroy = i915_destroy;
 
@@ -203,7 +215,7 @@ i915_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
     */
    i915->draw = draw_create(&i915->base);
    assert(i915->draw);
-   if (!debug_get_option_i915_no_vbuf()) {
+   if (i915_debug & DBG_VBUF) {
       draw_set_rasterize_stage(i915->draw, i915_draw_vbuf_stage(i915));
    } else {
       draw_set_rasterize_stage(i915->draw, i915_draw_render_stage(i915));

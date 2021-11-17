@@ -378,6 +378,7 @@ namespace {
       case BRW_OPCODE_MOV:
       case BRW_OPCODE_CMP:
       case BRW_OPCODE_ADD:
+      case BRW_OPCODE_ADD3:
       case BRW_OPCODE_MUL:
       case SHADER_OPCODE_MOV_RELOC_IMM:
       case VEC4_OPCODE_MOV_FOR_SCRATCH:
@@ -493,6 +494,13 @@ namespace {
          else
             return calculate_desc(info, unit_fpu, 0, 2, 0, 0, 2,
                                   0, 12, 8 /* XXX */, 18 /* XXX */, 0, 0);
+
+      case BRW_OPCODE_DP4A:
+         if (devinfo->ver >= 12)
+            return calculate_desc(info, unit_fpu, 0, 2, 1, 0, 2,
+                                  0, 10, 6 /* XXX */, 14 /* XXX */, 0, 0);
+         else
+            abort();
 
       case SHADER_OPCODE_RCP:
       case SHADER_OPCODE_RSQ:
@@ -938,6 +946,7 @@ namespace {
             else
                abort();
 
+         case BRW_SFID_URB:
          case GFX7_SFID_DATAPORT_DATA_CACHE:
          case GFX12_SFID_SLM:
          case GFX12_SFID_TGM:

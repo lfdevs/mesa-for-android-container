@@ -49,7 +49,6 @@
 
 #include "drm-uapi/drm_fourcc.h"
 
-#define ETNA_DRM_VERSION(major, minor) ((major) << 16 | (minor))
 #define ETNA_DRM_VERSION_FENCE_FD      ETNA_DRM_VERSION(1, 1)
 #define ETNA_DRM_VERSION_PERFMON       ETNA_DRM_VERSION(1, 2)
 
@@ -259,6 +258,28 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    case PIPE_CAP_MAX_VARYINGS:
       return screen->specs.max_varyings;
+
+   case PIPE_CAP_SUPPORTED_PRIM_MODES:
+   case PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART: {
+      /* Generate the bitmask of supported draw primitives. */
+      uint32_t modes = 1 << PIPE_PRIM_POINTS |
+                       1 << PIPE_PRIM_LINES |
+                       1 << PIPE_PRIM_LINE_STRIP |
+                       1 << PIPE_PRIM_TRIANGLES |
+                       1 << PIPE_PRIM_TRIANGLE_FAN;
+
+      /* TODO: The bug relates only to indexed draws, but here we signal
+       * that there is no support for triangle strips at all. This should
+       * be refined.
+       */
+      if (VIV_FEATURE(screen, chipMinorFeatures2, BUG_FIXES8))
+         modes |= 1 << PIPE_PRIM_TRIANGLE_STRIP;
+
+      if (VIV_FEATURE(screen, chipMinorFeatures2, LINE_LOOP))
+         modes |= 1 << PIPE_PRIM_LINE_LOOP;
+
+      return modes;
+   }
 
    case PIPE_CAP_PCI_GROUP:
    case PIPE_CAP_PCI_BUS:
@@ -947,7 +968,6 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
 {
    struct etna_screen *screen = CALLOC_STRUCT(etna_screen);
    struct pipe_screen *pscreen;
-   drmVersionPtr version;
    uint64_t val;
 
    if (!screen)
@@ -959,16 +979,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    screen->ro = ro;
    screen->refcnt = 1;
 
-   if (!screen->ro) {
-      DBG("could not create renderonly object");
-      goto fail;
-   }
-
-   version = drmGetVersion(screen->ro->gpu_fd);
-   screen->drm_version = ETNA_DRM_VERSION(version->version_major,
-                                          version->version_minor);
-   drmFreeVersion(version);
-
+   screen->drm_version = etnaviv_device_version(screen->dev);
    etna_mesa_debug = debug_get_option_etna_mesa_debug();
 
    /* Disable autodisable for correct rendering with TS */
@@ -1076,6 +1087,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
       .lower_fsqrt = !screen->specs.has_sin_cos_sqrt,
       .lower_sincos = !screen->specs.has_sin_cos_sqrt,
       .lower_uniforms_to_ubo = screen->specs.halti >= 2,
+      .force_indirect_unrolling = nir_var_all,
    };
 
    /* apply debug options that disable individual features */

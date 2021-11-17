@@ -1670,6 +1670,15 @@ vir_emit_tlb_color_write(struct v3d_compile *c, unsigned rt)
 static void
 emit_frag_end(struct v3d_compile *c)
 {
+        /* If the shader has no non-TLB side effects and doesn't write Z
+         * we can promote it to enabling early_fragment_tests even
+         * if the user didn't.
+         */
+        if (c->output_position_index == -1 &&
+            !(c->s->info.num_images || c->s->info.num_ssbos)) {
+                c->s->info.fs.early_fragment_tests = true;
+        }
+
         if (c->output_sample_mask_index != -1) {
                 vir_SETMSF_dest(c, vir_nop_reg(),
                                 vir_AND(c,
@@ -1694,7 +1703,8 @@ emit_frag_end(struct v3d_compile *c)
         }
 
         struct qreg tlbu_reg = vir_magic_reg(V3D_QPU_WADDR_TLBU);
-        if (c->output_position_index != -1) {
+        if (c->output_position_index != -1 &&
+            !c->s->info.fs.early_fragment_tests) {
                 struct qinst *inst = vir_MOV_dest(c, tlbu_reg,
                                                   c->outputs[c->output_position_index]);
                 uint8_t tlb_specifier = TLB_TYPE_DEPTH;
@@ -1877,9 +1887,7 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                 if (c && !c->disable_loop_unrolling &&
                     s->options->max_unroll_iterations > 0) {
                        bool local_progress = false;
-                       NIR_PASS(local_progress, s, nir_opt_loop_unroll,
-                                nir_var_shader_in |
-                                nir_var_function_temp);
+                       NIR_PASS(local_progress, s, nir_opt_loop_unroll);
                        c->unrolled_any_loops |= local_progress;
                        progress |= local_progress;
                 }
@@ -3289,6 +3297,11 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
 
         case nir_intrinsic_load_num_subgroups:
                 unreachable("Should have been lowered");
+                break;
+
+        case nir_intrinsic_load_view_index:
+                ntq_store_dest(c, &instr->dest, 0,
+                               vir_uniform(c, QUNIFORM_VIEW_INDEX, 0));
                 break;
 
         default:

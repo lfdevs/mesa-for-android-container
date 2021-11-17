@@ -597,6 +597,7 @@ struct virgl_caps_v2 {
         uint32_t capability_bits_v2;
         uint32_t max_video_memory;
         char renderer[64];
+        float max_anisotropy;
 };
 
 union virgl_caps {

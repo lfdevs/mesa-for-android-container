@@ -86,12 +86,12 @@ brw_codegen_wm_prog(struct brw_context *brw,
    memset(&prog_data, 0, sizeof(prog_data));
 
    /* Use ALT floating point mode for ARB programs so that 0^0 == 1. */
-   if (fp->program.is_arb_asm)
+   if (fp->program.info.is_arb_asm)
       prog_data.base.use_alt_mode = true;
 
    assign_fs_binding_table_offsets(devinfo, &fp->program, key, &prog_data);
 
-   if (!fp->program.is_arb_asm) {
+   if (!fp->program.info.is_arb_asm) {
       brw_nir_setup_glsl_uniforms(mem_ctx, nir, &fp->program,
                                   &prog_data.base, true);
       if (brw->can_push_ubos) {
@@ -101,7 +101,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
    } else {
       brw_nir_setup_arb_uniforms(mem_ctx, nir, &fp->program, &prog_data.base);
 
-      if (INTEL_DEBUG & DEBUG_WM)
+      if (INTEL_DEBUG(DEBUG_WM))
          brw_dump_arb_asm("fragment", &fp->program);
    }
 
@@ -122,23 +122,23 @@ brw_codegen_wm_prog(struct brw_context *brw,
       .log_data = brw,
    };
 
-   if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
+   if (INTEL_DEBUG(DEBUG_SHADER_TIME)) {
       params.shader_time = true;
       params.shader_time_index8 =
          brw_get_shader_time_index(brw, &fp->program, ST_FS8,
-                                   !fp->program.is_arb_asm);
+                                   !fp->program.info.is_arb_asm);
       params.shader_time_index16 =
          brw_get_shader_time_index(brw, &fp->program, ST_FS16,
-                                   !fp->program.is_arb_asm);
+                                   !fp->program.info.is_arb_asm);
       params.shader_time_index32 =
          brw_get_shader_time_index(brw, &fp->program, ST_FS32,
-                                   !fp->program.is_arb_asm);
+                                   !fp->program.info.is_arb_asm);
    }
 
    program = brw_compile_fs(brw->screen->compiler, mem_ctx, &params);
 
    if (program == NULL) {
-      if (!fp->program.is_arb_asm) {
+      if (!fp->program.info.is_arb_asm) {
          fp->program.sh.data->LinkStatus = LINKING_FAILURE;
          ralloc_strcat(&fp->program.sh.data->InfoLog, params.error_str);
       }
@@ -164,7 +164,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
 
    brw_alloc_stage_scratch(brw, &brw->wm.base, prog_data.base.total_scratch);
 
-   if (((INTEL_DEBUG & DEBUG_WM) && fp->program.is_arb_asm))
+   if (INTEL_DEBUG(DEBUG_WM) && fp->program.info.is_arb_asm)
       fprintf(stderr, "\n");
 
    /* The param and pull_param arrays will be freed by the shader cache. */

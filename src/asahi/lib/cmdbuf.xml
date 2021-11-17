@@ -177,9 +177,14 @@
     </field>
   </struct>
 
+  <enum name="Texture dimension">
+    <value name="2D" value="2"/>
+    <value name="Cube" value="6"/>
+  </enum>
+
   <!-- Payloads follow, right-shifted by 4 because of course -->
   <struct name="Texture" size="16">
-    <field name="Unknown" size="4" start="0" type="hex" default="0x2"/>
+    <field name="Dimension" size="4" start="0" type="Texture dimension" default="2D"/>
     <field name="Layout" size="2" start="4" type="Layout"/>
     <field name="Format" size="10" start="6" type="Pixel Format"/>
     <field name="Swizzle R" size="3" start="16" type="Channel" default="R"/>
@@ -189,7 +194,7 @@
     <field name="Width" size="14" start="28" type="uint" modifier="minus(1)"/>
     <field name="Height" size="14" start="42" type="uint" modifier="minus(1)"/>
     <field name="Levels" size="6" start="60" type="uint" modifier="minus(1)"/>
-    <field name="Unk 1" size="36" start="66" type="hex" modifier="shr(4)"/>
+    <field name="Address" size="36" start="66" type="hex" modifier="shr(4)"/>
     <!-- Unknown bit set by Metal when mipmapping. Might relate to a mechanism
     to switch tile size (or disable tiling altogether?) at small mip levels to
     reduce wasted memory due to padding. Causing test flakiness when set. -->

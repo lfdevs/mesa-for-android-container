@@ -1,21 +1,5 @@
-# These need a patch in CTS (CL#7623)
-dEQP-VK.glsl.atomic_operations.exchange_signed_geometry,Fail
-dEQP-VK.glsl.atomic_operations.exchange_unsigned_geometry,Fail
-dEQP-VK.glsl.atomic_operations.comp_swap_signed_geometry,Fail
-dEQP-VK.glsl.atomic_operations.comp_swap_unsigned_geometry,Fail
-dEQP-VK.glsl.atomic_operations.add_signed_geometry,Fail
-dEQP-VK.glsl.atomic_operations.add_unsigned_geometry,Fail
-dEQP-VK.glsl.atomic_operations.max_signed_geometry,Fail
-dEQP-VK.glsl.atomic_operations.max_unsigned_geometry,Fail
-dEQP-VK.glsl.atomic_operations.and_signed_geometry,Fail
-dEQP-VK.glsl.atomic_operations.and_unsigned_geometry,Fail
-dEQP-VK.glsl.atomic_operations.or_signed_geometry,Fail
-dEQP-VK.glsl.atomic_operations.or_unsigned_geometry,Fail
-dEQP-VK.glsl.atomic_operations.xor_signed_geometry,Fail
-dEQP-VK.glsl.atomic_operations.xor_unsigned_geometry,Fail
-
 # This seems to fail due to the test error threshold being insufficient
 dEQP-VK.geometry.input.basic_primitive.line_strip_adjacency,Fail
 
-# Not analyzed
+# CTS bug; fix submitted
 dEQP-VK.spirv_assembly.instruction.graphics.variable_pointers.graphics.writes_single_buffer_geom,Fail

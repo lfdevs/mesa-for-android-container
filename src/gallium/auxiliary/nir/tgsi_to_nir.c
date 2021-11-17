@@ -23,6 +23,7 @@
  */
 
 #include "util/blob.h"
+#include "util/debug.h"
 #include "util/disk_cache.h"
 #include "util/u_memory.h"
 #include "util/ralloc.h"
@@ -822,7 +823,7 @@ ttn_get_dest(struct ttn_compile *c, struct tgsi_full_dst_register *tgsi_fdst)
    dest.saturate = false;
 
    if (tgsi_dst->Indirect && (tgsi_dst->File != TGSI_FILE_TEMPORARY)) {
-      nir_src *indirect = ralloc(c->build.shader, nir_src);
+      nir_src *indirect = malloc(sizeof(nir_src));
       *indirect = nir_src_for_ssa(ttn_src_for_indirect(c, &tgsi_fdst->Indirect));
       dest.dest.reg.indirect = indirect;
    }
@@ -1259,9 +1260,7 @@ get_sampler_var(struct ttn_compile *c, int binding,
 
       /* Record textures used */
       BITSET_SET(c->build.shader->info.textures_used, binding);
-      if (op == nir_texop_txf ||
-          op == nir_texop_txf_ms ||
-          op == nir_texop_txf_ms_mcs)
+      if (op == nir_texop_txf || op == nir_texop_txf_ms)
          BITSET_SET(c->build.shader->info.textures_used_by_txf, binding);
    }
 
@@ -2448,7 +2447,7 @@ ttn_optimize_nir(nir_shader *nir)
       NIR_PASS(progress, nir, nir_opt_conditional_discard);
 
       if (nir->options->max_unroll_iterations) {
-         NIR_PASS(progress, nir, nir_opt_loop_unroll, (nir_variable_mode)0);
+         NIR_PASS(progress, nir, nir_opt_loop_unroll);
       }
 
    } while (progress);
@@ -2487,7 +2486,8 @@ ttn_finalize_nir(struct ttn_compile *c, struct pipe_screen *screen)
       NIR_PASS_V(nir, nir_lower_samplers);
 
    if (screen->finalize_nir) {
-      screen->finalize_nir(screen, nir, true);
+      char *msg = screen->finalize_nir(screen, nir);
+      free(msg);
    } else {
       ttn_optimize_nir(nir);
       nir_shader_gather_info(nir, c->build.impl);
@@ -2563,6 +2563,7 @@ tgsi_to_nir(const void *tgsi_tokens,
    struct nir_shader *s = NULL;
    uint8_t key[CACHE_KEY_SIZE];
    unsigned processor;
+   bool debug = env_var_as_boolean("TGSI_TO_NIR_DEBUG", false);
 
    if (allow_disk_cache)
       cache = screen->get_disk_shader_cache(screen);
@@ -2580,12 +2581,22 @@ tgsi_to_nir(const void *tgsi_tokens,
    if (s)
       return s;
 
+   if (debug) {
+      fprintf(stderr, "TGSI before translation to NIR:\n");
+      tgsi_dump(tgsi_tokens, 0);
+   }
+
    /* Not in the cache */
 
    c = ttn_compile_init(tgsi_tokens, NULL, screen);
    s = c->build.shader;
    ttn_finalize_nir(c, screen);
    ralloc_free(c);
+
+   if (debug) {
+      mesa_logi("NIR after translation from TGSI:\n");
+      nir_log_shaderi(s);
+   }
 
    if (cache)
       save_nir_to_disk_cache(cache, key, s);

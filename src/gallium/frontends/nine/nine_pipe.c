@@ -216,13 +216,13 @@ nine_convert_sampler_state(struct cso_context *ctx, int idx, const DWORD *ss)
            (idx < NINE_MAX_SAMPLERS_PS || idx >= NINE_SAMPLER_VS(0)) &&
            (idx < NINE_MAX_SAMPLERS));
 
-    memset(&samp, 0, sizeof(samp)); /* memcmp safety */
-
     if (ss[D3DSAMP_MIPFILTER] != D3DTEXF_NONE) {
         samp.lod_bias = asfloat(ss[D3DSAMP_MIPMAPLODBIAS]);
         samp.min_lod = ss[NINED3DSAMP_MINLOD];
         samp.min_mip_filter = (ss[D3DSAMP_MIPFILTER] == D3DTEXF_POINT) ? PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR;
     } else {
+        samp.min_lod = 0.0;
+        samp.lod_bias = 0.0;
         samp.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
     }
     samp.max_lod = 15.0f;
@@ -242,10 +242,15 @@ nine_convert_sampler_state(struct cso_context *ctx, int idx, const DWORD *ss)
     if (ss[D3DSAMP_MINFILTER] == D3DTEXF_ANISOTROPIC ||
         ss[D3DSAMP_MAGFILTER] == D3DTEXF_ANISOTROPIC)
         samp.max_anisotropy = MIN2(16, ss[D3DSAMP_MAXANISOTROPY]);
+    else
+        samp.max_anisotropy = 0;
     samp.compare_mode = ss[NINED3DSAMP_SHADOW] ? PIPE_TEX_COMPARE_R_TO_TEXTURE : PIPE_TEX_COMPARE_NONE;
     samp.compare_func = PIPE_FUNC_LEQUAL;
     samp.normalized_coords = 1;
     samp.seamless_cube_map = 0;
+    samp.border_color_is_integer = 0;
+    samp.reduction_mode = 0;
+    samp.pad = 0;
     d3dcolor_to_pipe_color_union(&samp.border_color, ss[D3DSAMP_BORDERCOLOR]);
 
     /* see nine_state.h */

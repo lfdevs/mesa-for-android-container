@@ -39,7 +39,7 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
                                 const struct pipe_rasterizer_state *cso,
                                 bool primitive_restart)
 {
-   struct fd_ringbuffer *ring = fd_ringbuffer_new_object(ctx->pipe, 18 * 4);
+   struct fd_ringbuffer *ring = fd_ringbuffer_new_object(ctx->pipe, 26 * 4);
    float psize_min, psize_max;
 
    if (cso->point_size_per_vertex) {
@@ -61,7 +61,7 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
    OUT_REG(ring,
            A6XX_GRAS_SU_CNTL(.linehalfwidth = cso->line_width / 2.0,
                              .poly_offset = cso->offset_tri,
-                             .msaa_enable = cso->multisample,
+                             .line_mode = cso->multisample ? RECTANGULAR : BRESENHAM,
                              .cull_front = cso->cull_face & PIPE_FACE_FRONT,
                              .cull_back = cso->cull_face & PIPE_FACE_BACK,
                              .front_cw = !cso->front_ccw, ));
@@ -93,6 +93,13 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
 
    OUT_REG(ring, A6XX_VPC_POLYGON_MODE(mode));
    OUT_REG(ring, A6XX_PC_POLYGON_MODE(mode));
+
+   if (ctx->screen->info->a6xx.has_shading_rate) {
+      OUT_REG(ring, A6XX_RB_UNKNOWN_8A00());
+      OUT_REG(ring, A6XX_RB_UNKNOWN_8A10());
+      OUT_REG(ring, A6XX_RB_UNKNOWN_8A20());
+      OUT_REG(ring, A6XX_RB_UNKNOWN_8A30());
+   }
 
    return ring;
 }

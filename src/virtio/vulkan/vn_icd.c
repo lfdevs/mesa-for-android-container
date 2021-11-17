@@ -10,7 +10,7 @@
 
 #include "vn_icd.h"
 
-#include "vn_device.h"
+#include "vn_instance.h"
 
 /* we support all versions from version 1 up to version 5 */
 static uint32_t vn_icd_version = 5;
@@ -19,6 +19,7 @@ VkResult
 vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pSupportedVersion)
 {
    vn_debug_init();
+   vn_trace_init();
 
    vn_icd_version = MIN2(vn_icd_version, *pSupportedVersion);
    if (VN_DEBUG(INIT))

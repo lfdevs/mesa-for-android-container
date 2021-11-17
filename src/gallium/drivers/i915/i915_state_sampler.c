@@ -84,8 +84,7 @@ update_sampler(struct i915_context *i915, uint32_t unit,
    if (pt->format == PIPE_FORMAT_UYVY || pt->format == PIPE_FORMAT_YUYV)
       state[0] |= SS2_COLORSPACE_CONVERSION;
 
-   if (pt->format == PIPE_FORMAT_B8G8R8A8_SRGB ||
-       pt->format == PIPE_FORMAT_L8_SRGB) {
+   if (util_format_is_srgb(pt->format)) {
       state[0] |= SS2_REVERSE_GAMMA_ENABLE;
    }
 
@@ -213,19 +212,22 @@ translate_texture_format(enum pipe_format pipeFormat,
       return (MAPSURF_422 | MT_422_YCRCB_NORMAL);
    case PIPE_FORMAT_UYVY:
       return (MAPSURF_422 | MT_422_YCRCB_SWAPY);
-#if 0
-   case PIPE_FORMAT_RGB_FXT1:
-   case PIPE_FORMAT_RGBA_FXT1:
+   case PIPE_FORMAT_FXT1_RGB:
+   case PIPE_FORMAT_FXT1_RGBA:
       return (MAPSURF_COMPRESSED | MT_COMPRESS_FXT1);
-#endif
    case PIPE_FORMAT_Z16_UNORM:
       return (MAPSURF_16BIT | MT_16BIT_L16);
-   case PIPE_FORMAT_DXT1_RGBA:
    case PIPE_FORMAT_DXT1_RGB:
+   case PIPE_FORMAT_DXT1_SRGB:
+      return (MAPSURF_COMPRESSED | MT_COMPRESS_DXT1_RGB);
+   case PIPE_FORMAT_DXT1_RGBA:
+   case PIPE_FORMAT_DXT1_SRGBA:
       return (MAPSURF_COMPRESSED | MT_COMPRESS_DXT1);
    case PIPE_FORMAT_DXT3_RGBA:
+   case PIPE_FORMAT_DXT3_SRGBA:
       return (MAPSURF_COMPRESSED | MT_COMPRESS_DXT2_3);
    case PIPE_FORMAT_DXT5_RGBA:
+   case PIPE_FORMAT_DXT5_SRGBA:
       return (MAPSURF_COMPRESSED | MT_COMPRESS_DXT4_5);
    case PIPE_FORMAT_Z24_UNORM_S8_UINT:
    case PIPE_FORMAT_Z24X8_UNORM: {

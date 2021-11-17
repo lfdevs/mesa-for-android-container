@@ -31,24 +31,6 @@
 #include "anv_private.h"
 #include "vk_enum_to_str.h"
 
-/** Log an error message.  */
-void anv_printflike(1, 2)
-anv_loge(const char *format, ...)
-{
-   va_list va;
-
-   va_start(va, format);
-   anv_loge_v(format, va);
-   va_end(va);
-}
-
-/** \see anv_loge() */
-void
-anv_loge_v(const char *format, va_list va)
-{
-   mesa_loge_v(format, va);
-}
-
 void
 __anv_perf_warn(struct anv_device *device,
                 const struct vk_object_base *object,
@@ -56,62 +38,22 @@ __anv_perf_warn(struct anv_device *device,
 {
    va_list ap;
    char buffer[256];
-   char report[512];
 
    va_start(ap, format);
    vsnprintf(buffer, sizeof(buffer), format, ap);
    va_end(ap);
 
-   snprintf(report, sizeof(report), "%s: %s", file, buffer);
-
-   vk_debug_report(&device->physical->instance->vk,
-                   VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
-                   object, line, 0, "anv", report);
-
-   mesa_logw("%s:%d: PERF: %s", file, line, buffer);
-}
-
-VkResult
-__vk_errorv(struct anv_instance *instance,
-            const struct vk_object_base *object, VkResult error,
-            const char *file, int line, const char *format, va_list ap)
-{
-   char buffer[256];
-   char report[512];
-
-   const char *error_str = vk_Result_to_str(error);
-
-   if (format) {
-      vsnprintf(buffer, sizeof(buffer), format, ap);
-
-      snprintf(report, sizeof(report), "%s:%d: %s (%s)", file, line, buffer,
-               error_str);
+   if (object) {
+      __vk_log(VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+               VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+               VK_LOG_OBJS(object), file, line,
+               "PERF: %s", buffer);
    } else {
-      snprintf(report, sizeof(report), "%s:%d: %s", file, line, error_str);
+      __vk_log(VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+               VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+               VK_LOG_NO_OBJS(device->physical->instance), file, line,
+               "PERF: %s", buffer);
    }
-
-   if (instance) {
-      vk_debug_report(&instance->vk, VK_DEBUG_REPORT_ERROR_BIT_EXT,
-                      object, line, 0, "anv", report);
-   }
-
-   mesa_loge("%s", report);
-
-   return error;
-}
-
-VkResult
-__vk_errorf(struct anv_instance *instance,
-            const struct vk_object_base *object, VkResult error,
-            const char *file, int line, const char *format, ...)
-{
-   va_list ap;
-
-   va_start(ap, format);
-   __vk_errorv(instance, object, error, file, line, format, ap);
-   va_end(ap);
-
-   return error;
 }
 
 void

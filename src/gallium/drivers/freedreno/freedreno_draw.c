@@ -69,6 +69,11 @@ batch_draw_tracking_for_dirty_bits(struct fd_batch *batch) assert_dt
       if (fd_depth_enabled(ctx)) {
          if (fd_resource(pfb->zsbuf->texture)->valid) {
             restore_buffers |= FD_BUFFER_DEPTH;
+            /* storing packed d/s depth also stores stencil, so we need
+             * the stencil restored too to avoid invalidating it.
+             */
+            if (pfb->zsbuf->texture->format == PIPE_FORMAT_Z24_UNORM_S8_UINT)
+               restore_buffers |= FD_BUFFER_STENCIL;
          } else {
             batch->invalidated |= FD_BUFFER_DEPTH;
          }
@@ -84,6 +89,11 @@ batch_draw_tracking_for_dirty_bits(struct fd_batch *batch) assert_dt
       if (fd_stencil_enabled(ctx)) {
          if (fd_resource(pfb->zsbuf->texture)->valid) {
             restore_buffers |= FD_BUFFER_STENCIL;
+            /* storing packed d/s stencil also stores depth, so we need
+             * the depth restored too to avoid invalidating it.
+             */
+            if (pfb->zsbuf->texture->format == PIPE_FORMAT_Z24_UNORM_S8_UINT)
+               restore_buffers |= FD_BUFFER_DEPTH;
          } else {
             batch->invalidated |= FD_BUFFER_STENCIL;
          }
@@ -231,7 +241,7 @@ update_draw_stats(struct fd_context *ctx, const struct pipe_draw_info *info,
 {
    ctx->stats.draw_calls++;
 
-   if (ctx->screen->gpu_id < 600) {
+   if (ctx->screen->gen < 6) {
       /* Counting prims in sw doesn't work for GS and tesselation. For older
        * gens we don't have those stages and don't have the hw counters enabled,
        * so keep the count accurate for non-patch geometry.
@@ -286,16 +296,6 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    if (!fd_render_condition_check(pctx))
       return;
 
-   /* emulate unsupported primitives: */
-   if (!fd_supported_prim(ctx, info->mode)) {
-      if (ctx->streamout.num_targets > 0)
-         mesa_loge("stream-out with emulated prims");
-      util_primconvert_save_rasterizer_state(ctx->primconvert, ctx->rasterizer);
-      util_primconvert_draw_vbo(ctx->primconvert, info, drawid_offset, indirect, draws,
-                                num_draws);
-      return;
-   }
-
    /* Upload a user index buffer. */
    struct pipe_resource *indexbuf = NULL;
    unsigned index_offset = 0;
@@ -303,7 +303,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    if (info->index_size) {
       if (info->has_user_indices) {
          if (num_draws > 1) {
-				util_draw_multi(pctx, info, drawid_offset, indirect, draws, num_draws);
+            util_draw_multi(pctx, info, drawid_offset, indirect, draws, num_draws);
             return;
          }
          if (!util_upload_index_buffer(pctx, info, &draws[0], &indexbuf,
@@ -319,7 +319,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    }
 
    if ((ctx->streamout.num_targets > 0) && (num_draws > 1)) {
-		util_draw_multi(pctx, info, drawid_offset, indirect, draws, num_draws);
+      util_draw_multi(pctx, info, drawid_offset, indirect, draws, num_draws);
       return;
    }
 

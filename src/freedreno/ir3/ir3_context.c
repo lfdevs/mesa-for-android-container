@@ -35,7 +35,7 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader_variant *so)
 {
    struct ir3_context *ctx = rzalloc(NULL, struct ir3_context);
 
-   if (compiler->gpu_id >= 400) {
+   if (compiler->gen >= 4) {
       if (so->type == MESA_SHADER_VERTEX) {
          ctx->astc_srgb = so->key.vastc_srgb;
       } else if (so->type == MESA_SHADER_FRAGMENT) {
@@ -50,9 +50,9 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader_variant *so)
       }
    }
 
-   if (compiler->gpu_id >= 600) {
+   if (compiler->gen >= 6) {
       ctx->funcs = &ir3_a6xx_funcs;
-   } else if (compiler->gpu_id >= 400) {
+   } else if (compiler->gen >= 4) {
       ctx->funcs = &ir3_a4xx_funcs;
    }
 
@@ -109,7 +109,7 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader_variant *so)
    /* Enable the texture pre-fetch feature only a4xx onwards.  But
     * only enable it on generations that have been tested:
     */
-   if ((so->type == MESA_SHADER_FRAGMENT) && (compiler->gpu_id >= 600))
+   if ((so->type == MESA_SHADER_FRAGMENT) && (compiler->gen >= 6))
       NIR_PASS_V(ctx->s, ir3_nir_lower_tex_prefetch);
 
    NIR_PASS(progress, ctx->s, nir_lower_phis_to_scalar, true);
@@ -298,10 +298,9 @@ dest_flags(struct ir3_instruction *instr)
 }
 
 struct ir3_instruction *
-ir3_create_collect(struct ir3_context *ctx, struct ir3_instruction *const *arr,
+ir3_create_collect(struct ir3_block *block, struct ir3_instruction *const *arr,
                    unsigned arrsz)
 {
-   struct ir3_block *block = ctx->block;
    struct ir3_instruction *collect;
 
    if (arrsz == 0)
@@ -343,7 +342,7 @@ ir3_create_collect(struct ir3_context *ctx, struct ir3_instruction *const *arr,
          elem = ir3_MOV(block, elem, type);
       }
 
-      compile_assert(ctx, dest_flags(elem) == flags);
+      debug_assert(dest_flags(elem) == flags);
       __ssa_src(collect, elem, flags);
    }
 

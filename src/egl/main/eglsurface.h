@@ -171,6 +171,8 @@ struct _egl_surface
 
    EGLBoolean ProtectedContent;
 
+   EGLBoolean PresentOpaque;
+
    struct _egl_hdr_metadata HdrMetadata;
 
    void *NativeSurface;

@@ -328,8 +328,6 @@ struct vc4_context {
         /** bitfield of VC4_DIRTY_* */
         uint32_t dirty;
 
-        struct primconvert_context *primconvert;
-
         struct hash_table *fs_cache, *vs_cache;
         struct set *fs_inputs_set;
         uint32_t next_uncompiled_program_id;

@@ -680,6 +680,11 @@ buffer_texture_range_size(struct brw_context *brw,
                brw->ctx.Const.MaxTextureBufferSize * texel_size);
 }
 
+static void
+emit_null_surface_state(struct brw_context *brw,
+                        const struct gl_framebuffer *fb,
+                        uint32_t *out_offset);
+
 void
 brw_update_buffer_texture_surface(struct gl_context *ctx,
                                   unsigned unit,
@@ -694,6 +699,11 @@ brw_update_buffer_texture_surface(struct gl_context *ctx,
    mesa_format format = tObj->_BufferObjectFormat;
    const enum isl_format isl_format = brw_isl_format_for_mesa_format(format);
    int texel_size = _mesa_get_format_bytes(format);
+
+   if (tObj->BufferObject == NULL) {
+      emit_null_surface_state(brw, NULL, surf_offset);
+      return;
+   }
 
    if (intel_obj)
       bo = brw_bufferobj_buffer(brw, intel_obj, tObj->BufferOffset, size,

@@ -137,14 +137,10 @@ struct panfrost_batch {
 /* Functions for managing the above */
 
 struct panfrost_batch *
-panfrost_get_fresh_batch(struct panfrost_context *ctx,
-                         const struct pipe_framebuffer_state *key);
-
-struct panfrost_batch *
 panfrost_get_batch_for_fbo(struct panfrost_context *ctx);
 
 struct panfrost_batch *
-panfrost_get_fresh_batch_for_fbo(struct panfrost_context *ctx);
+panfrost_get_fresh_batch_for_fbo(struct panfrost_context *ctx, const char *reason);
 
 void
 panfrost_batch_add_bo(struct panfrost_batch *batch,
@@ -161,24 +157,23 @@ panfrost_batch_write_rsrc(struct panfrost_batch *batch,
                           struct panfrost_resource *rsrc,
                           enum pipe_shader_type stage);
 
-void
-panfrost_batch_add_fbo_bos(struct panfrost_batch *batch);
-
 struct panfrost_bo *
 panfrost_batch_create_bo(struct panfrost_batch *batch, size_t size,
                          uint32_t create_flags, uint32_t access_flags,
                          const char *label);
 
 void
-panfrost_flush_all_batches(struct panfrost_context *ctx);
+panfrost_flush_all_batches(struct panfrost_context *ctx, const char *reason);
 
 void
 panfrost_flush_batches_accessing_rsrc(struct panfrost_context *ctx,
-                                      struct panfrost_resource *rsrc);
+                                      struct panfrost_resource *rsrc,
+                                      const char *reason);
 
 void
 panfrost_flush_writer(struct panfrost_context *ctx,
-                      struct panfrost_resource *rsrc);
+                      struct panfrost_resource *rsrc,
+                      const char *reason);
 
 void
 panfrost_batch_adjust_stack_size(struct panfrost_batch *batch);
@@ -199,13 +194,5 @@ void
 panfrost_batch_union_scissor(struct panfrost_batch *batch,
                              unsigned minx, unsigned miny,
                              unsigned maxx, unsigned maxy);
-
-void
-panfrost_batch_intersection_scissor(struct panfrost_batch *batch,
-                                    unsigned minx, unsigned miny,
-                                    unsigned maxx, unsigned maxy);
-
-mali_ptr
-panfrost_batch_get_bifrost_tiler(struct panfrost_batch *batch, unsigned vertex_count);
 
 #endif

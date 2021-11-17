@@ -322,6 +322,7 @@ fd_perfetto_submit(struct fd_context *ctx)
 
 void
 fd_start_render_pass(struct pipe_context *pctx, uint64_t ts_ns,
+                     const void *flush_data,
                      const struct trace_start_render_pass *payload)
 {
    stage_start(pctx, ts_ns, SURFACE_STAGE_ID);
@@ -342,6 +343,7 @@ fd_start_render_pass(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_end_render_pass(struct pipe_context *pctx, uint64_t ts_ns,
+                   const void *flush_data,
                    const struct trace_end_render_pass *payload)
 {
    stage_end(pctx, ts_ns, SURFACE_STAGE_ID);
@@ -349,6 +351,7 @@ fd_end_render_pass(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_start_binning_ib(struct pipe_context *pctx, uint64_t ts_ns,
+                    const void *flush_data,
                     const struct trace_start_binning_ib *payload)
 {
    stage_start(pctx, ts_ns, BINNING_STAGE_ID);
@@ -356,6 +359,7 @@ fd_start_binning_ib(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_end_binning_ib(struct pipe_context *pctx, uint64_t ts_ns,
+                  const void *flush_data,
                   const struct trace_end_binning_ib *payload)
 {
    stage_end(pctx, ts_ns, BINNING_STAGE_ID);
@@ -363,6 +367,7 @@ fd_end_binning_ib(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_start_draw_ib(struct pipe_context *pctx, uint64_t ts_ns,
+                 const void *flush_data,
                  const struct trace_start_draw_ib *payload)
 {
    stage_start(
@@ -372,6 +377,7 @@ fd_start_draw_ib(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_end_draw_ib(struct pipe_context *pctx, uint64_t ts_ns,
+               const void *flush_data,
                const struct trace_end_draw_ib *payload)
 {
    stage_end(
@@ -381,6 +387,7 @@ fd_end_draw_ib(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_start_blit(struct pipe_context *pctx, uint64_t ts_ns,
+              const void *flush_data,
               const struct trace_start_blit *payload)
 {
    stage_start(pctx, ts_ns, BLIT_STAGE_ID);
@@ -388,6 +395,7 @@ fd_start_blit(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_end_blit(struct pipe_context *pctx, uint64_t ts_ns,
+            const void *flush_data,
             const struct trace_end_blit *payload)
 {
    stage_end(pctx, ts_ns, BLIT_STAGE_ID);
@@ -395,6 +403,7 @@ fd_end_blit(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_start_compute(struct pipe_context *pctx, uint64_t ts_ns,
+                 const void *flush_data,
                  const struct trace_start_compute *payload)
 {
    stage_start(pctx, ts_ns, COMPUTE_STAGE_ID);
@@ -402,6 +411,7 @@ fd_start_compute(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_end_compute(struct pipe_context *pctx, uint64_t ts_ns,
+               const void *flush_data,
                const struct trace_end_compute *payload)
 {
    stage_end(pctx, ts_ns, COMPUTE_STAGE_ID);
@@ -409,6 +419,7 @@ fd_end_compute(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_start_clear_restore(struct pipe_context *pctx, uint64_t ts_ns,
+                       const void *flush_data,
                        const struct trace_start_clear_restore *payload)
 {
    stage_start(pctx, ts_ns, CLEAR_RESTORE_STAGE_ID);
@@ -416,6 +427,7 @@ fd_start_clear_restore(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_end_clear_restore(struct pipe_context *pctx, uint64_t ts_ns,
+                     const void *flush_data,
                      const struct trace_end_clear_restore *payload)
 {
    stage_end(pctx, ts_ns, CLEAR_RESTORE_STAGE_ID);
@@ -423,6 +435,7 @@ fd_end_clear_restore(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_start_resolve(struct pipe_context *pctx, uint64_t ts_ns,
+                 const void *flush_data,
                  const struct trace_start_resolve *payload)
 {
    stage_start(pctx, ts_ns, RESOLVE_STAGE_ID);
@@ -430,6 +443,7 @@ fd_start_resolve(struct pipe_context *pctx, uint64_t ts_ns,
 
 void
 fd_end_resolve(struct pipe_context *pctx, uint64_t ts_ns,
+               const void *flush_data,
                const struct trace_end_resolve *payload)
 {
    stage_end(pctx, ts_ns, RESOLVE_STAGE_ID);

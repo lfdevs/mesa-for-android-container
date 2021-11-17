@@ -5483,7 +5483,7 @@
         <glx ignore="true"/>
     </function>
 
-    <function name="GetUniformLocation" es2="2.0" no_error="true">
+    <function name="GetUniformLocation" es2="2.0" no_error="true" marshal="custom">
         <param name="program" type="GLuint"/>
         <param name="name" type="const GLchar *"/>
         <return type="GLint"/>
@@ -8402,7 +8402,7 @@
 <category name="es3.2">
     <!-- This should be in es_EXT, but this file is included first and
          the alias doesn't work otherwise. -->
-    <function name="PrimitiveBoundingBox" es2="3.2" desktop="false">
+    <function name="PrimitiveBoundingBox" es2="3.2">
         <param name="minX" type="GLfloat"/>
         <param name="minY" type="GLfloat"/>
         <param name="minZ" type="GLfloat"/>

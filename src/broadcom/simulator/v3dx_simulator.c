@@ -266,6 +266,9 @@ v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
         case DRM_V3D_PARAM_SUPPORTS_CACHE_FLUSH:
                 args->value = 1;
                 return 0;
+        case DRM_V3D_PARAM_SUPPORTS_PERFMON:
+                args->value = V3D_VERSION >= 41;
+                return 0;
         }
 
         if (args->param < ARRAY_SIZE(reg_map) && reg_map[args->param]) {
@@ -496,6 +499,51 @@ v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
                 V3D_CLE_0_RFC_RMFCT_SET) == last_rfc) {
                 v3d_hw_tick(v3d);
         }
+}
+
+#if V3D_VERSION >= 41
+#define V3D_PCTR_0_PCTR_N(x) (V3D_PCTR_0_PCTR0 + 4 * (x))
+#define V3D_PCTR_0_SRC_N(x) (V3D_PCTR_0_SRC_0_3 + 4 * (x))
+#define V3D_PCTR_0_SRC_N_SHIFT(x) ((x) * 8)
+#define V3D_PCTR_0_SRC_N_MASK(x) (BITFIELD_RANGE(V3D_PCTR_0_SRC_N_SHIFT(x), \
+                                                 V3D_PCTR_0_SRC_N_SHIFT(x) + 6))
+#endif
+
+void
+v3dX(simulator_perfmon_start)(struct v3d_hw *v3d,
+                              uint32_t ncounters,
+                              uint8_t *events)
+{
+#if V3D_VERSION >= 41
+        int i, j;
+        uint32_t source;
+        uint32_t mask = BITFIELD_RANGE(0, ncounters);
+
+        for (i = 0; i < ncounters; i+=4) {
+                source = i / 4;
+                uint32_t channels = 0;
+                for (j = 0; j < 4 && (i + j) < ncounters; j++)
+                        channels |= events[i + j] << V3D_PCTR_0_SRC_N_SHIFT(j);
+                V3D_WRITE(V3D_PCTR_0_SRC_N(source), channels);
+        }
+        V3D_WRITE(V3D_PCTR_0_CLR, mask);
+        V3D_WRITE(V3D_PCTR_0_OVERFLOW, mask);
+        V3D_WRITE(V3D_PCTR_0_EN, mask);
+#endif
+}
+
+void v3dX(simulator_perfmon_stop)(struct v3d_hw *v3d,
+                                  uint32_t ncounters,
+                                  uint64_t *values)
+{
+#if V3D_VERSION >= 41
+        int i;
+
+        for (i = 0; i < ncounters; i++)
+                values[i] += V3D_READ(V3D_PCTR_0_PCTR_N(i));
+
+        V3D_WRITE(V3D_PCTR_0_EN, 0);
+#endif
 }
 
 #endif /* USE_V3D_SIMULATOR */

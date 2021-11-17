@@ -100,6 +100,15 @@ brw_reg_type_is_integer(enum brw_reg_type type)
    }
 }
 
+static inline bool
+brw_reg_type_is_unsigned_integer(enum brw_reg_type tp)
+{
+   return tp == BRW_REGISTER_TYPE_UB ||
+          tp == BRW_REGISTER_TYPE_UW ||
+          tp == BRW_REGISTER_TYPE_UD ||
+          tp == BRW_REGISTER_TYPE_UQ;
+}
+
 /*
  * Returns a type based on a reference_type (word, float, half-float) and a
  * given bit_size.

@@ -237,6 +237,7 @@ static bool
 init_buffers(struct vl_compositor *c)
 {
    struct pipe_vertex_element vertex_elems[3];
+   memset(vertex_elems, 0, sizeof(vertex_elems));
 
    assert(c);
 

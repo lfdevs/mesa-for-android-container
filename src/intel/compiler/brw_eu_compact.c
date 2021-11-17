@@ -2447,7 +2447,7 @@ void
 brw_compact_instructions(struct brw_codegen *p, int start_offset,
                          struct disasm_info *disasm)
 {
-   if (INTEL_DEBUG & DEBUG_NO_COMPACTION)
+   if (INTEL_DEBUG(DEBUG_NO_COMPACTION))
       return;
 
    const struct intel_device_info *devinfo = p->devinfo;
@@ -2484,7 +2484,7 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
       if (try_compact_instruction(&c, dst, &inst)) {
          compacted_count++;
 
-         if (INTEL_DEBUG) {
+         if (INTEL_DEBUG(DEBUG_ANY)) {
             brw_inst uncompacted;
             uncompact_instruction(&c, &uncompacted, dst);
             if (memcmp(&saved, &uncompacted, sizeof(uncompacted))) {

@@ -52,9 +52,22 @@ def add_gpus(ids, info):
         s.gpus[id] = info
 
 class GPUId(object):
-    def __init__(self, gpu_id, name=None):
+    def __init__(self, gpu_id = None, chip_id = None, name=None):
+        if chip_id == None:
+            assert(gpu_id != None)
+            val = gpu_id
+            core = int(val / 100)
+            val -= (core * 100);
+            major = int(val / 10);
+            val -= (major * 10)
+            minor = val
+            chip_id = (core << 24) | (major << 16) | (minor << 8) | 0xff
+        self.chip_id = chip_id
+        if gpu_id == None:
+            gpu_id = 0
         self.gpu_id = gpu_id
         if name == None:
+            assert(gpu_id != 0)
             name = "FD%d" % gpu_id
         self.name = name
 
@@ -96,8 +109,7 @@ class A6xxGPUInfo(GPUInfo):
        duplication of parameters that are unique to the sub-generation.
     """
     def __init__(self, template, num_sp_cores, num_ccu,
-                 RB_UNKNOWN_8E04_blit, PC_UNKNOWN_9805,
-                 SP_UNKNOWN_A0F8):
+                 RB_UNKNOWN_8E04_blit, PC_POWER_CNTL):
         super().__init__(gmem_align_w = 16, gmem_align_h = 4,
                          tile_align_w = 32, tile_align_h = 32,
                          tile_max_w   = 1024, # max_bitfield_val(5, 0, 5)
@@ -114,10 +126,12 @@ class A6xxGPUInfo(GPUInfo):
         self.a6xx = Struct()
         self.a6xx.magic = Struct()
 
+        for name, val in template["magic"].items():
+            setattr(self.a6xx.magic, name, val)
+
         # Various "magic" register values:
         self.a6xx.magic.RB_UNKNOWN_8E04_blit = RB_UNKNOWN_8E04_blit
-        self.a6xx.magic.PC_UNKNOWN_9805 = PC_UNKNOWN_9805
-        self.a6xx.magic.SP_UNKNOWN_A0F8 = SP_UNKNOWN_A0F8
+        self.a6xx.magic.PC_POWER_CNTL = PC_POWER_CNTL
 
         # Things that earlier gens have and later gens remove, provide
         # defaults here and let them be overridden by sub-gen template:
@@ -125,6 +139,8 @@ class A6xxGPUInfo(GPUInfo):
         self.a6xx.has_8bpp_ubwc = True
 
         for name, val in template.items():
+            if name == "magic": # handled above
+                continue
             setattr(self.a6xx, name, val)
 
 # a2xx is really two sub-generations, a20x and a22x, but we don't currently
@@ -168,7 +184,10 @@ add_gpus([
     ))
 
 add_gpus([
+        GPUId(508),
+        GPUId(509),
         GPUId(510),
+        GPUId(512),
         GPUId(530),
         GPUId(540),
     ], GPUInfo(
@@ -189,6 +208,10 @@ a6xx_gen1 = dict(
         reg_size_vec4 = 96,
         ccu_cntl_gmem_unk2 = True,
         indirect_draw_wfm_quirk = True,
+        depth_bounds_require_depth_test_quirk = True,
+        magic = dict(
+            TPL1_DBG_ECO_CNTL = 0x100000,
+        )
     )
 
 # a640, a680:
@@ -198,6 +221,10 @@ a6xx_gen2 = dict(
         supports_multiview_mask = True,
         has_z24uint_s8uint = True,
         indirect_draw_wfm_quirk = True,
+        depth_bounds_require_depth_test_quirk = True, # TODO: check if true
+        magic = dict(
+            TPL1_DBG_ECO_CNTL = 0,
+        ),
     )
 
 # a650:
@@ -210,9 +237,15 @@ a6xx_gen3 = dict(
         storage_16bit = True,
         has_tex_filter_cubic = True,
         has_sample_locations = True,
+        has_ccu_flush_bug = True,
+        has_8bpp_ubwc = False,
+        magic = dict(
+            # this seems to be a chicken bit that fixes cubic filtering:
+            TPL1_DBG_ECO_CNTL = 0x1000000,
+        ),
     )
 
-# a635, a650:
+# a635, a660:
 a6xx_gen4 = dict(
         fibers_per_sp = 128 * 2 * 16,
         reg_size_vec4 = 64,
@@ -224,6 +257,11 @@ a6xx_gen4 = dict(
         has_sample_locations = True,
         has_cp_reg_write = False,
         has_8bpp_ubwc = False,
+        has_lpac = True,
+        has_shading_rate = True,
+        magic = dict(
+            TPL1_DBG_ECO_CNTL = 0x5008000,
+        ),
     )
 
 add_gpus([
@@ -234,8 +272,7 @@ add_gpus([
         num_sp_cores = 1,
         num_ccu = 1,
         RB_UNKNOWN_8E04_blit = 0x00100000,
-        PC_UNKNOWN_9805 = 0,
-        SP_UNKNOWN_A0F8 = 0,
+        PC_POWER_CNTL = 0,
     ))
 
 add_gpus([
@@ -245,8 +282,7 @@ add_gpus([
         num_sp_cores = 2,
         num_ccu = 2,
         RB_UNKNOWN_8E04_blit = 0x01000000,
-        PC_UNKNOWN_9805 = 1,
-        SP_UNKNOWN_A0F8 = 1,
+        PC_POWER_CNTL = 1,
     ))
 
 add_gpus([
@@ -256,8 +292,17 @@ add_gpus([
         num_sp_cores = 2,
         num_ccu = 2,
         RB_UNKNOWN_8E04_blit = 0x00100000,
-        PC_UNKNOWN_9805 = 1,
-        SP_UNKNOWN_A0F8 = 1,
+        PC_POWER_CNTL = 1,
+    ))
+
+add_gpus([
+        GPUId(680),
+    ], A6xxGPUInfo(
+        a6xx_gen2,
+        num_sp_cores = 4,
+        num_ccu = 4,
+        RB_UNKNOWN_8E04_blit = 0x04100000,
+        PC_POWER_CNTL = 3,
     ))
 
 add_gpus([
@@ -267,19 +312,17 @@ add_gpus([
         num_sp_cores = 3,
         num_ccu = 3,
         RB_UNKNOWN_8E04_blit = 0x04100000,
-        PC_UNKNOWN_9805 = 2,
-        SP_UNKNOWN_A0F8 = 2,
+        PC_POWER_CNTL = 2,
     ))
 
 add_gpus([
-        GPUId(635, "Adreno 7c Gen 3"),
+        GPUId(chip_id=0x06030500, name="Adreno 7c Gen 3"),
     ], A6xxGPUInfo(
         a6xx_gen4,
         num_sp_cores = 2,
         num_ccu = 2,
         RB_UNKNOWN_8E04_blit = 0x00100000,
-        PC_UNKNOWN_9805 = 1,
-        SP_UNKNOWN_A0F8 = 1,
+        PC_POWER_CNTL = 1,
     ))
 
 add_gpus([
@@ -289,8 +332,7 @@ add_gpus([
         num_sp_cores = 3,
         num_ccu = 3,
         RB_UNKNOWN_8E04_blit = 0x04100000,
-        PC_UNKNOWN_9805 = 2,
-        SP_UNKNOWN_A0F8 = 2,
+        PC_POWER_CNTL = 2,
     ))
 
 template = """\
@@ -326,12 +368,11 @@ template = """\
 static const struct fd_dev_info __info${s.info_index(info)} = ${str(info)};
 %endfor
 
-const struct fd_dev_id fd_dev_ids[] = {
+static const struct fd_dev_rec fd_dev_recs[] = {
 %for id, info in s.gpus.items():
-   { ${id.gpu_id}, "${id.name}", &__info${s.info_index(info)} },
+   { {${id.gpu_id}, ${hex(id.chip_id)}}, "${id.name}", &__info${s.info_index(info)} },
 %endfor
 };
-const unsigned fd_dev_ids_count = ${len(s.gpus)};
 """
 
 print(Template(template).render(s=s))

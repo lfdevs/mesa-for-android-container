@@ -388,6 +388,8 @@ enum ac_atomic_op
    ac_atomic_xor,
    ac_atomic_inc_wrap,
    ac_atomic_dec_wrap,
+   ac_atomic_fmin,
+   ac_atomic_fmax,
 };
 
 /* These cache policy bits match the definitions used by the LLVM intrinsics. */
@@ -581,10 +583,12 @@ struct ac_ngg_prim {
    unsigned num_vertices;
    LLVMValueRef isnull;
    LLVMValueRef index[3];
-   LLVMValueRef edgeflag[3];
+   LLVMValueRef edgeflags;
    LLVMValueRef passthrough;
 };
 
+LLVMValueRef ac_pack_edgeflags_for_export(struct ac_llvm_context *ctx,
+                                          const struct ac_shader_args *args);
 LLVMValueRef ac_pack_prim_export(struct ac_llvm_context *ctx, const struct ac_ngg_prim *prim);
 void ac_build_export_prim(struct ac_llvm_context *ctx, const struct ac_ngg_prim *prim);
 

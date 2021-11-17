@@ -62,21 +62,6 @@ isl_gfx4_filter_tiling(const struct isl_device *dev,
                 ISL_TILING_Y0_BIT : (ISL_TILING_Y0_BIT | ISL_TILING_LINEAR_BIT);
    }
 
-   if (info->usage & (ISL_SURF_USAGE_DISPLAY_ROTATE_90_BIT |
-                      ISL_SURF_USAGE_DISPLAY_ROTATE_180_BIT |
-                      ISL_SURF_USAGE_DISPLAY_ROTATE_270_BIT)) {
-      assert(*flags & ISL_SURF_USAGE_DISPLAY_BIT);
-      isl_finishme("%s:%s: handle rotated display surfaces",
-                   __FILE__, __func__);
-   }
-
-   if (info->usage & (ISL_SURF_USAGE_DISPLAY_FLIP_X_BIT |
-                      ISL_SURF_USAGE_DISPLAY_FLIP_Y_BIT)) {
-      assert(*flags & ISL_SURF_USAGE_DISPLAY_BIT);
-      isl_finishme("%s:%s: handle flipped display surfaces",
-                   __FILE__, __func__);
-   }
-
    if (info->usage & ISL_SURF_USAGE_DISPLAY_BIT) {
       /* Before Skylake, the display engine does not accept Y */
       *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT);

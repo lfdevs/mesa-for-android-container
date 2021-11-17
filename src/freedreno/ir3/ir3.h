@@ -57,6 +57,8 @@ struct ir3_info {
    uint16_t nops_count;   /* # of nop instructions, including nopN */
    uint16_t mov_count;
    uint16_t cov_count;
+   uint16_t stp_count;
+   uint16_t ldp_count;
    /* NOTE: max_reg, etc, does not include registers not touched
     * by the shader (ie. vertex fetched via VFD_DECODE but not
     * touched by shader)
@@ -89,6 +91,7 @@ struct ir3_merge_set {
    uint16_t alignment;
 
    unsigned interval_start;
+   unsigned spill_slot;
 
    unsigned regs_count;
    struct ir3_register **regs;
@@ -126,13 +129,28 @@ struct ir3_register {
       /* meta-flags, for intermediate stages of IR, ie.
        * before register assignment is done:
        */
-      IR3_REG_SSA = 0x4000, /* 'instr' is ptr to assigning instr */
+      IR3_REG_SSA = 0x4000, /* 'def' is ptr to assigning destination */
       IR3_REG_ARRAY = 0x8000,
 
+      /* Set on a use whenever the SSA value becomes dead after the current
+       * instruction.
+       */
       IR3_REG_KILL = 0x10000,
+
+      /* Similar to IR3_REG_KILL, except that if there are multiple uses of the
+       * same SSA value in a single instruction, this is only set on the first
+       * use.
+       */
       IR3_REG_FIRST_KILL = 0x20000,
+
+      /* Set when a destination doesn't have any uses and is dead immediately
+       * after the instruction. This can happen even after optimizations for
+       * corner cases such as destinations of atomic instructions.
+       */
       IR3_REG_UNUSED = 0x40000,
    } flags;
+
+   unsigned name;
 
    /* used for cat5 instructions, but also for internal/IR level
     * tracking of what registers are read/written by an instruction.
@@ -155,7 +173,6 @@ struct ir3_register {
     * rN.x becomes: (N << 2) | x
     */
    uint16_t num;
-   uint16_t name;
    union {
       /* immediate: */
       int32_t iim_val;
@@ -188,6 +205,8 @@ struct ir3_register {
     * they must have "tied" pointing to each other.
     */
    struct ir3_register *tied;
+
+   unsigned spill_slot, next_use;
 
    unsigned merge_set_offset;
    struct ir3_merge_set *merge_set;
@@ -365,9 +384,8 @@ struct ir3_instruction {
       } input;
    };
 
-   /* When we get to the RA stage, we need instruction's position/name: */
-   uint16_t ip;
-   uint16_t name;
+   /* For assigning jump offsets, we need instruction's position: */
+   uint32_t ip;
 
    /* used for per-pass extra instruction data.
     *
@@ -575,6 +593,7 @@ struct ir3_block {
    uint32_t dom_post_index;
 
    uint32_t loop_id;
+   uint32_t loop_depth;
 
 #ifdef DEBUG
    uint32_t serialno;
@@ -602,6 +621,8 @@ void ir3_block_add_physical_predecessor(struct ir3_block *block,
                                         struct ir3_block *pred);
 void ir3_block_remove_predecessor(struct ir3_block *block,
                                   struct ir3_block *pred);
+void ir3_block_remove_physical_predecessor(struct ir3_block *block,
+                                           struct ir3_block *pred);
 unsigned ir3_block_get_pred_index(struct ir3_block *block,
                                   struct ir3_block *pred);
 
@@ -695,6 +716,17 @@ ir3_instr_move_after(struct ir3_instruction *instr,
    list_add(&instr->node, &before->node);
 }
 
+/**
+ * Move 'instr' to the beginning of the block:
+ */
+static inline void
+ir3_instr_move_before_block(struct ir3_instruction *instr,
+                            struct ir3_block *block)
+{
+   list_delinit(&instr->node);
+   list_add(&instr->node, &block->instr_list);
+}
+
 void ir3_find_ssa_uses(struct ir3 *ir, void *mem_ctx, bool falsedeps);
 
 void ir3_set_dst_type(struct ir3_instruction *instr, bool half);
@@ -703,6 +735,8 @@ void ir3_fixup_src_type(struct ir3_instruction *instr);
 int ir3_flut(struct ir3_register *src_reg);
 
 bool ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags);
+
+bool ir3_valid_immediate(struct ir3_instruction *instr, int32_t immed);
 
 #include "util/set.h"
 #define foreach_ssa_use(__use, __instr)                                        \
@@ -786,6 +820,8 @@ is_same_type_mov(struct ir3_instruction *instr)
       if (!is_same_type_reg(instr->dsts[0], instr->srcs[0]))
          return false;
       break;
+   case OPC_META_PHI:
+      return instr->srcs_count == 1;
    default:
       return false;
    }
@@ -1111,6 +1147,15 @@ is_reg_special(const struct ir3_register *reg)
 {
    return (reg->flags & IR3_REG_SHARED) || (reg_num(reg) == REG_A0) ||
           (reg_num(reg) == REG_P0);
+}
+
+/* Same as above but in cases where we don't have a register. r48.x and above
+ * are shared/special.
+ */
+static inline bool
+is_reg_num_special(unsigned num)
+{
+   return num >= 48 * 4;
 }
 
 /* returns defining instruction for reg */
@@ -1568,6 +1613,9 @@ void ir3_validate(struct ir3 *ir);
 void ir3_print(struct ir3 *ir);
 void ir3_print_instr(struct ir3_instruction *instr);
 
+struct log_stream;
+void ir3_print_instr_stream(struct log_stream *stream, struct ir3_instruction *instr);
+
 /* delay calculation: */
 int ir3_delayslots(struct ir3_instruction *assigner,
                    struct ir3_instruction *consumer, unsigned n, bool soft);
@@ -1579,6 +1627,9 @@ unsigned ir3_delay_calc_postra(struct ir3_block *block,
 unsigned ir3_delay_calc_exact(struct ir3_block *block,
                               struct ir3_instruction *instr, bool mergedregs);
 void ir3_remove_nops(struct ir3 *ir);
+
+/* unreachable block elimination: */
+bool ir3_remove_unreachable(struct ir3 *ir);
 
 /* dead code elimination: */
 struct ir3_shader_variant;
@@ -2134,6 +2185,9 @@ INSTR3F(G, ATOMIC_OR)
 INSTR3F(G, ATOMIC_XOR)
 #elif GPU >= 400
 INSTR3(LDGB)
+#if GPU >= 500
+INSTR3(LDIB)
+#endif
 INSTR4NODST(STGB)
 INSTR4NODST(STIB)
 INSTR4F(G, ATOMIC_ADD)
@@ -2154,7 +2208,112 @@ INSTR0(BAR)
 INSTR0(FENCE)
 
 /* ************************************************************************* */
-#include "regmask.h"
+#include "bitset.h"
+
+#define MAX_REG 256
+
+typedef BITSET_DECLARE(regmaskstate_t, 2 * MAX_REG);
+
+typedef struct {
+   bool mergedregs;
+   regmaskstate_t mask;
+} regmask_t;
+
+static inline bool
+__regmask_get(regmask_t *regmask, bool half, unsigned n)
+{
+   if (regmask->mergedregs) {
+      /* a6xx+ case, with merged register file, we track things in terms
+       * of half-precision registers, with a full precisions register
+       * using two half-precision slots.
+       *
+       * Pretend that special regs (a0.x, a1.x, etc.) are full registers to
+       * avoid having them alias normal full regs.
+       */
+      if (half && !is_reg_num_special(n)) {
+         return BITSET_TEST(regmask->mask, n);
+      } else {
+         n *= 2;
+         return BITSET_TEST(regmask->mask, n) ||
+                BITSET_TEST(regmask->mask, n + 1);
+      }
+   } else {
+      /* pre a6xx case, with separate register file for half and full
+       * precision:
+       */
+      if (half)
+         n += MAX_REG;
+      return BITSET_TEST(regmask->mask, n);
+   }
+}
+
+static inline void
+__regmask_set(regmask_t *regmask, bool half, unsigned n)
+{
+   if (regmask->mergedregs) {
+      /* a6xx+ case, with merged register file, we track things in terms
+       * of half-precision registers, with a full precisions register
+       * using two half-precision slots:
+       */
+      if (half && !is_reg_num_special(n)) {
+         BITSET_SET(regmask->mask, n);
+      } else {
+         n *= 2;
+         BITSET_SET(regmask->mask, n);
+         BITSET_SET(regmask->mask, n + 1);
+      }
+   } else {
+      /* pre a6xx case, with separate register file for half and full
+       * precision:
+       */
+      if (half)
+         n += MAX_REG;
+      BITSET_SET(regmask->mask, n);
+   }
+}
+
+static inline void
+__regmask_clear(regmask_t *regmask, bool half, unsigned n)
+{
+   if (regmask->mergedregs) {
+      /* a6xx+ case, with merged register file, we track things in terms
+       * of half-precision registers, with a full precisions register
+       * using two half-precision slots:
+       */
+      if (half && !is_reg_num_special(n)) {
+         BITSET_CLEAR(regmask->mask, n);
+      } else {
+         n *= 2;
+         BITSET_CLEAR(regmask->mask, n);
+         BITSET_CLEAR(regmask->mask, n + 1);
+      }
+   } else {
+      /* pre a6xx case, with separate register file for half and full
+       * precision:
+       */
+      if (half)
+         n += MAX_REG;
+      BITSET_CLEAR(regmask->mask, n);
+   }
+}
+
+static inline void
+regmask_init(regmask_t *regmask, bool mergedregs)
+{
+   memset(&regmask->mask, 0, sizeof(regmask->mask));
+   regmask->mergedregs = mergedregs;
+}
+
+static inline void
+regmask_or(regmask_t *dst, regmask_t *a, regmask_t *b)
+{
+   assert(dst->mergedregs == a->mergedregs);
+   assert(dst->mergedregs == b->mergedregs);
+
+   for (unsigned i = 0; i < ARRAY_SIZE(dst->mask); i++)
+      dst->mask[i] = a->mask[i] | b->mask[i];
+}
+
 
 static inline void
 regmask_set(regmask_t *regmask, struct ir3_register *reg)

@@ -68,6 +68,7 @@ class Device(object):
     def __init__(self, xml):
         self.cname = cname('device')
         self.driver = xml.attrib.get('driver', None)
+        self.device = xml.attrib.get('device', None)
         self.applications = []
         self.engines = []
 
@@ -133,6 +134,7 @@ struct driconf_engine {
 
 struct driconf_device {
     const char *driver;
+    const char *device;
     unsigned num_engines;
     const struct driconf_engine *engines;
     unsigned num_applications;
@@ -196,6 +198,9 @@ static const struct driconf_application ${device.cname}_applications[] = {
 static const struct driconf_device ${device.cname} = {
 %    if device.driver:
     .driver = "${device.driver}",
+%    endif
+%    if device.device:
+    .device = "${device.device}",
 %    endif
     .num_engines = ${len(device.engines)},
 %    if len(device.engines) > 0:

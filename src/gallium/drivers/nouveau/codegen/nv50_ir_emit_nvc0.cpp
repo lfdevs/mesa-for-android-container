@@ -2962,7 +2962,7 @@ CodeEmitterNVC0::getMinEncodingSize(const Instruction *i) const
 {
    const Target::OpInfo &info = targ->getOpInfo(i);
 
-   if (writeIssueDelays || info.minEncSize == 8 || 1)
+   if (writeIssueDelays || info.minEncSize == 8 || true)
       return 8;
 
    if (i->ftz || i->saturate || i->join)
@@ -2973,7 +2973,7 @@ CodeEmitterNVC0::getMinEncodingSize(const Instruction *i) const
       return 8;
 
    if (i->op == OP_PINTERP) {
-      if (i->getSampleMode() || 1) // XXX: grr, short op doesn't work
+      if (i->getSampleMode() || true) // XXX: grr, short op doesn't work
          return 8;
    } else
    if (i->op == OP_MOV && i->lanes != 0xf) {

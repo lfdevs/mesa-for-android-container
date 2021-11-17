@@ -35,6 +35,7 @@
 
 #include "pipe/p_shader_tokens.h"
 #include "tgsi/tgsi_dump.h"
+#include "tgsi/tgsi_from_mesa.h"
 #include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_parse.h"
 #include "util/log.h"
@@ -63,19 +64,6 @@ static unsigned passthrough_program[] = {
     (SRC_ZERO << A1_SRC0_CHANNEL_Z_SHIFT) |
     (SRC_ONE << A1_SRC0_CHANNEL_W_SHIFT)),
    0};
-
-/* 2*pi, -(2*pi)^3/3!, (2*pi)^5/5!, -(2*pi)^7/7! */
-static const float sin_constants[4] = {
-   2.0 * M_PI, -8.0f * M_PI *M_PI *M_PI / (3 * 2 * 1),
-   32.0f * M_PI *M_PI *M_PI *M_PI *M_PI / (5 * 4 * 3 * 2 * 1),
-   -128.0f * M_PI *M_PI *M_PI *M_PI *M_PI *M_PI *M_PI /
-      (7 * 6 * 5 * 4 * 3 * 2 * 1)};
-
-/* 1, -(2*pi)^2/2!, (2*pi)^4/4!, -(2*pi)^6/6! */
-static const float cos_constants[4] = {
-   1.0, -4.0f * M_PI *M_PI / (2 * 1),
-   16.0f * M_PI *M_PI *M_PI *M_PI / (4 * 3 * 2 * 1),
-   -64.0f * M_PI *M_PI *M_PI *M_PI *M_PI *M_PI / (6 * 5 * 4 * 3 * 2 * 1)};
 
 /**
  * component-wise negation of ureg
@@ -120,15 +108,18 @@ i915_program_error(struct i915_fp_compile *p, const char *msg, ...)
 }
 
 static uint32_t
-get_mapping(struct i915_fragment_shader *fs, int unit)
+get_mapping(struct i915_fragment_shader *fs, enum tgsi_semantic semantic,
+            int index)
 {
    int i;
    for (i = 0; i < I915_TEX_UNITS; i++) {
-      if (fs->generic_mapping[i] == -1) {
-         fs->generic_mapping[i] = unit;
+      if (fs->texcoords[i].semantic == -1) {
+         fs->texcoords[i].semantic = semantic;
+         fs->texcoords[i].index = index;
          return i;
       }
-      if (fs->generic_mapping[i] == unit)
+      if (fs->texcoords[i].semantic == semantic &&
+          fs->texcoords[i].index == index)
          return i;
    }
    debug_printf("Exceeded max generics\n");
@@ -170,9 +161,14 @@ src_vector(struct i915_fp_compile *p,
       sem_ind = p->shader->info.input_semantic_index[index];
 
       switch (sem_name) {
+      case TGSI_SEMANTIC_GENERIC:
+      case TGSI_SEMANTIC_TEXCOORD:
+      case TGSI_SEMANTIC_PCOORD:
       case TGSI_SEMANTIC_POSITION: {
-         /* for fragcoord */
-         int real_tex_unit = get_mapping(fs, I915_SEMANTIC_POS);
+         if (sem_name == TGSI_SEMANTIC_PCOORD)
+            fs->reads_pntc = true;
+
+         int real_tex_unit = get_mapping(fs, sem_name, sem_ind);
          src = i915_emit_decl(p, REG_TYPE_T, T_TEX0 + real_tex_unit,
                               D0_CHANNEL_ALL);
          break;
@@ -191,15 +187,9 @@ src_vector(struct i915_fp_compile *p,
          src = i915_emit_decl(p, REG_TYPE_T, T_FOG_W, D0_CHANNEL_W);
          src = swizzle(src, W, W, W, W);
          break;
-      case TGSI_SEMANTIC_GENERIC: {
-         int real_tex_unit = get_mapping(fs, sem_ind);
-         src = i915_emit_decl(p, REG_TYPE_T, T_TEX0 + real_tex_unit,
-                              D0_CHANNEL_ALL);
-         break;
-      }
       case TGSI_SEMANTIC_FACE: {
          /* for back/front faces */
-         int real_tex_unit = get_mapping(fs, I915_SEMANTIC_FACE);
+         int real_tex_unit = get_mapping(fs, sem_name, sem_ind);
          src =
             i915_emit_decl(p, REG_TYPE_T, T_TEX0 + real_tex_unit, D0_CHANNEL_X);
          break;
@@ -460,38 +450,6 @@ i915_translate_instruction(struct i915_fp_compile *p,
                       src1); /* NOTE: order of src2, src1 */
       break;
 
-   case TGSI_OPCODE_COS:
-      src0 = src_vector(p, &inst->Src[0], fs);
-      tmp = i915_get_utemp(p);
-
-      i915_emit_arith(p, A0_MUL, tmp, A0_DEST_CHANNEL_X, 0, src0,
-                      i915_emit_const1f(p, 1.0f / (float)(M_PI * 2.0)), 0);
-
-      i915_emit_arith(p, A0_MOD, tmp, A0_DEST_CHANNEL_X, 0, tmp, 0, 0);
-
-      /*
-       * t0.xy = MUL x.xx11, x.x111  ; x^2, x, 1, 1
-       * t0 = MUL t0.xyxy t0.xx11 ; x^4, x^3, x^2, 1
-       * t0 = MUL t0.xxz1 t0.z111    ; x^6 x^4 x^2 1
-       * result = DP4 t0, cos_constants
-       */
-      i915_emit_arith(p, A0_MUL, tmp, A0_DEST_CHANNEL_XY, 0,
-                      swizzle(tmp, X, X, ONE, ONE),
-                      swizzle(tmp, X, ONE, ONE, ONE), 0);
-
-      i915_emit_arith(p, A0_MUL, tmp, A0_DEST_CHANNEL_XYZ, 0,
-                      swizzle(tmp, X, Y, X, ONE), swizzle(tmp, X, X, ONE, ONE),
-                      0);
-
-      i915_emit_arith(p, A0_MUL, tmp, A0_DEST_CHANNEL_XYZ, 0,
-                      swizzle(tmp, X, X, Z, ONE),
-                      swizzle(tmp, Z, ONE, ONE, ONE), 0);
-
-      i915_emit_arith(p, A0_DP4, get_result_vector(p, &inst->Dst[0]),
-                      get_result_flags(inst), 0, swizzle(tmp, ONE, Z, Y, X),
-                      i915_emit_const4fv(p, cos_constants), 0);
-      break;
-
    case TGSI_OPCODE_DDX:
    case TGSI_OPCODE_DDY:
       /* XXX We just output 0 here */
@@ -720,38 +678,6 @@ i915_translate_instruction(struct i915_fp_compile *p,
       emit_simple_arith(p, inst, A0_SGE, 2, fs);
       break;
 
-   case TGSI_OPCODE_SIN:
-      src0 = src_vector(p, &inst->Src[0], fs);
-      tmp = i915_get_utemp(p);
-
-      i915_emit_arith(p, A0_MUL, tmp, A0_DEST_CHANNEL_X, 0, src0,
-                      i915_emit_const1f(p, 1.0f / (float)(M_PI * 2.0)), 0);
-
-      i915_emit_arith(p, A0_MOD, tmp, A0_DEST_CHANNEL_X, 0, tmp, 0, 0);
-
-      /*
-       * t0.xy = MUL x.xx11, x.x1111  ; x^2, x, 1, 1
-       * t0 = MUL t0.xyxy t0.xx11 ; x^4, x^3, x^2, x
-       * t1 = MUL t0.xyyw t0.yz11    ; x^7 x^5 x^3 x
-       * result = DP4 t1.wzyx, sin_constants
-       */
-      i915_emit_arith(p, A0_MUL, tmp, A0_DEST_CHANNEL_XY, 0,
-                      swizzle(tmp, X, X, ONE, ONE),
-                      swizzle(tmp, X, ONE, ONE, ONE), 0);
-
-      i915_emit_arith(p, A0_MUL, tmp, A0_DEST_CHANNEL_ALL, 0,
-                      swizzle(tmp, X, Y, X, Y), swizzle(tmp, X, X, ONE, ONE),
-                      0);
-
-      i915_emit_arith(p, A0_MUL, tmp, A0_DEST_CHANNEL_ALL, 0,
-                      swizzle(tmp, X, Y, Y, W), swizzle(tmp, X, Z, ONE, ONE),
-                      0);
-
-      i915_emit_arith(p, A0_DP4, get_result_vector(p, &inst->Dst[0]),
-                      get_result_flags(inst), 0, swizzle(tmp, W, Z, Y, X),
-                      i915_emit_const4fv(p, sin_constants), 0);
-      break;
-
    case TGSI_OPCODE_SLE:
       /* like SGE, but swap reg0, reg1 */
       emit_simple_arith_swap2(p, inst, A0_SGE, 2, fs);
@@ -795,8 +721,8 @@ i915_translate_instruction(struct i915_fp_compile *p,
                       swizzle(src0, ZERO, ZERO, ZERO, ZERO), src0, 0);
 
       i915_emit_arith(
-         p, A0_ADD, get_result_vector(p, &inst->Dst[0]), get_result_flags(inst), 0,
-         get_result_vector(p, &inst->Dst[0]), negate(tmp, 1, 1, 1, 1), 0);
+         p, A0_ADD, get_result_vector(p, &inst->Dst[0]), get_result_flags(inst),
+         0, get_result_vector(p, &inst->Dst[0]), negate(tmp, 1, 1, 1, 1), 0);
       break;
 
    case TGSI_OPCODE_TEX:
@@ -951,7 +877,7 @@ i915_init_compile(struct i915_context *i915, struct i915_fragment_shader *ifs)
    memset(&p->register_phases, 0, sizeof(p->register_phases));
 
    for (i = 0; i < I915_TEX_UNITS; i++)
-      ifs->generic_mapping[i] = -1;
+      ifs->texcoords[i].semantic = -1;
 
    p->log_program_errors = !i915->no_log_program_errors;
 
@@ -1030,6 +956,12 @@ i915_fini_compile(struct i915_context *i915, struct i915_fp_compile *p)
       memcpy(ifs->program, p->declarations, decl_size * sizeof(uint32_t));
       memcpy(&ifs->program[decl_size], p->program,
              program_size * sizeof(uint32_t));
+
+      pipe_debug_message(
+         &i915->debug, SHADER_INFO,
+         "%s shader: %d inst, %d tex, %d tex_indirect, %d const",
+         _mesa_shader_stage_to_abbrev(MESA_SHADER_FRAGMENT), (int)program_size,
+         p->nr_tex_insn, p->nr_tex_indirect, ifs->num_constants);
    }
 
    /* Release the compilation struct:

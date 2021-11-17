@@ -516,7 +516,7 @@ nvc0_sampler_view_destroy(struct pipe_context *pipe,
 
 static inline void
 nvc0_stage_set_sampler_views(struct nvc0_context *nvc0, int s,
-                             unsigned nr,
+                             unsigned nr, bool take_ownership,
                              struct pipe_sampler_view **views)
 {
    unsigned i;
@@ -525,8 +525,11 @@ nvc0_stage_set_sampler_views(struct nvc0_context *nvc0, int s,
       struct pipe_sampler_view *view = views ? views[i] : NULL;
       struct nv50_tic_entry *old = nv50_tic_entry(nvc0->textures[s][i]);
 
-      if (view == nvc0->textures[s][i])
+      if (view == nvc0->textures[s][i]) {
+         if (take_ownership)
+            pipe_sampler_view_reference(&view, NULL);
          continue;
+      }
       nvc0->textures_dirty[s] |= 1 << i;
 
       if (view && view->texture) {
@@ -548,7 +551,12 @@ nvc0_stage_set_sampler_views(struct nvc0_context *nvc0, int s,
          nvc0_screen_tic_unlock(nvc0->screen, old);
       }
 
-      pipe_sampler_view_reference(&nvc0->textures[s][i], view);
+      if (take_ownership) {
+         pipe_sampler_view_reference(&nvc0->textures[s][i], NULL);
+         nvc0->textures[s][i] = view;
+      } else {
+         pipe_sampler_view_reference(&nvc0->textures[s][i], view);
+      }
    }
 
    for (i = nr; i < nvc0->num_textures[s]; ++i) {
@@ -570,12 +578,13 @@ static void
 nvc0_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
                        unsigned start, unsigned nr,
                        unsigned unbind_num_trailing_slots,
+                       bool take_ownership,
                        struct pipe_sampler_view **views)
 {
    const unsigned s = nvc0_shader_stage(shader);
 
    assert(start == 0);
-   nvc0_stage_set_sampler_views(nvc0_context(pipe), s, nr, views);
+   nvc0_stage_set_sampler_views(nvc0_context(pipe), s, nr, take_ownership, views);
 
    if (s == 5)
       nvc0_context(pipe)->dirty_cp |= NVC0_NEW_CP_TEXTURES;
@@ -992,6 +1001,14 @@ nvc0_set_tess_state(struct pipe_context *pipe,
    memcpy(nvc0->default_tess_outer, default_tess_outer, 4 * sizeof(float));
    memcpy(nvc0->default_tess_inner, default_tess_inner, 2 * sizeof(float));
    nvc0->dirty_3d |= NVC0_NEW_3D_TESSFACTOR;
+}
+
+static void
+nvc0_set_patch_vertices(struct pipe_context *pipe, uint8_t patch_vertices)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+
+   nvc0->patch_vertices = patch_vertices;
 }
 
 static void
@@ -1490,6 +1507,7 @@ nvc0_init_state_functions(struct nvc0_context *nvc0)
    pipe->set_viewport_states = nvc0_set_viewport_states;
    pipe->set_window_rectangles = nvc0_set_window_rectangles;
    pipe->set_tess_state = nvc0_set_tess_state;
+   pipe->set_patch_vertices = nvc0_set_patch_vertices;
 
    pipe->create_vertex_elements_state = nvc0_vertex_state_create;
    pipe->delete_vertex_elements_state = nvc0_vertex_state_delete;

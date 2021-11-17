@@ -246,6 +246,7 @@ ALU3(CSEL)
 ALU1(F32TO16)
 ALU1(F16TO32)
 ALU2(ADD)
+ALU3(ADD3)
 ALU2(AVG)
 ALU2(MUL)
 ALU1(FRC)
@@ -260,6 +261,7 @@ ALU2(DP4)
 ALU2(DPH)
 ALU2(DP3)
 ALU2(DP2)
+ALU3(DP4A)
 ALU2(LINE)
 ALU2(PLN)
 ALU3(MAD)
@@ -371,6 +373,13 @@ brw_urb_desc_msg_type(ASSERTED const struct intel_device_info *devinfo,
 {
    assert(devinfo->ver >= 7);
    return GET_BITS(desc, 3, 0);
+}
+
+static inline uint32_t
+brw_urb_fence_desc(const struct intel_device_info *devinfo)
+{
+   assert(devinfo->has_lsc);
+   return brw_urb_desc(devinfo, GFX125_URB_OPCODE_FENCE, false, false, 0);
 }
 
 /**
@@ -1167,6 +1176,12 @@ lsc_opcode_has_cmask(enum lsc_opcode opcode)
    return opcode == LSC_OP_LOAD_CMASK || opcode == LSC_OP_STORE_CMASK;
 }
 
+static inline bool
+lsc_opcode_has_transpose(enum lsc_opcode opcode)
+{
+   return opcode == LSC_OP_LOAD || opcode == LSC_OP_STORE;
+}
+
 static inline uint32_t
 lsc_data_size_bytes(enum lsc_data_size data_size)
 {
@@ -1250,6 +1265,8 @@ lsc_msg_desc(UNUSED const struct intel_device_info *devinfo,
    unsigned src0_length =
       DIV_ROUND_UP(lsc_addr_size_bytes(addr_sz) * num_coordinates * simd_size,
                    REG_SIZE);
+
+   assert(!transpose || lsc_opcode_has_transpose(opcode));
 
    unsigned msg_desc =
       SET_BITS(opcode, 5, 0) |

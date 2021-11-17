@@ -1280,7 +1280,7 @@ _mesa_uniform(GLint location, GLsizei count, const GLvoid *values,
          return;
 
       uni = shProg->UniformRemapTable[location];
-      if (!uni)
+      if (!uni || uni == INACTIVE_UNIFORM_EXPLICIT_LOCATION)
          return;
 
       /* The array index specified by the uniform location is just the
@@ -1677,6 +1677,17 @@ _mesa_uniform_matrix(GLint location, GLsizei count,
    if (uni == NULL)
       return;
 
+   /* GL_INVALID_VALUE is generated if `transpose' is not GL_FALSE.
+    * http://www.khronos.org/opengles/sdk/docs/man/xhtml/glUniform.xml
+    */
+   if (transpose) {
+      if (ctx->API == API_OPENGLES2 && ctx->Version < 30) {
+         _mesa_error(ctx, GL_INVALID_VALUE,
+                     "glUniformMatrix(matrix transpose is not GL_FALSE)");
+         return;
+      }
+   }
+
    if (!uni->type->is_matrix()) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
 		  "glUniformMatrix(non-matrix uniform)");
@@ -1697,17 +1708,6 @@ _mesa_uniform_matrix(GLint location, GLsizei count,
       _mesa_error(ctx, GL_INVALID_OPERATION,
 		  "glUniformMatrix(matrix size mismatch)");
       return;
-   }
-
-   /* GL_INVALID_VALUE is generated if `transpose' is not GL_FALSE.
-    * http://www.khronos.org/opengles/sdk/docs/man/xhtml/glUniform.xml
-    */
-   if (transpose) {
-      if (ctx->API == API_OPENGLES2 && ctx->Version < 30) {
-	 _mesa_error(ctx, GL_INVALID_VALUE,
-		     "glUniformMatrix(matrix transpose is not GL_FALSE)");
-	 return;
-      }
    }
 
    /* Section 2.11.7 (Uniform Variables) of the OpenGL 4.2 Core Profile spec
@@ -1846,6 +1846,8 @@ _mesa_uniform_handle(GLint location, GLsizei count, const GLvoid *values,
          return;
 
       uni = shProg->UniformRemapTable[location];
+      if (!uni || uni == INACTIVE_UNIFORM_EXPLICIT_LOCATION)
+         return;
 
       /* The array index specified by the uniform location is just the
        * uniform location minus the base location of of the uniform.

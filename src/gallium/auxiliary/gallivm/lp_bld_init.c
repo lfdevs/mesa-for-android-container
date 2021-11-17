@@ -46,7 +46,7 @@
 #endif
 #include <llvm-c/BitWriter.h>
 #if GALLIVM_HAVE_CORO
-#if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390))
+#if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_MIPS64))
 #include <llvm-c/Transforms/IPO.h>
 #endif
 #include <llvm-c/Transforms/Coroutines.h>
@@ -55,13 +55,11 @@
 unsigned gallivm_perf = 0;
 
 static const struct debug_named_value lp_bld_perf_flags[] = {
-   { "no_brilinear", GALLIVM_PERF_NO_BRILINEAR, "disable brilinear optimization" },
-   { "no_rho_approx", GALLIVM_PERF_NO_RHO_APPROX, "disable rho_approx optimization" },
+   { "brilinear", GALLIVM_PERF_BRILINEAR, "enable brilinear optimization" },
+   { "rho_approx", GALLIVM_PERF_RHO_APPROX, "enable rho_approx optimization" },
    { "no_quad_lod", GALLIVM_PERF_NO_QUAD_LOD, "disable quad_lod optimization" },
    { "no_aos_sampling", GALLIVM_PERF_NO_AOS_SAMPLING, "disable aos sampling optimization" },
    { "nopt",   GALLIVM_PERF_NO_OPT, "disable optimization passes to speed up shader compilation" },
-   { "no_filter_hacks", GALLIVM_PERF_NO_BRILINEAR | GALLIVM_PERF_NO_RHO_APPROX |
-     GALLIVM_PERF_NO_QUAD_LOD, "disable filter optimization hacks" },
    DEBUG_NAMED_VALUE_END
 };
 
@@ -137,7 +135,7 @@ create_pass_manager(struct gallivm_state *gallivm)
    }
 
 #if GALLIVM_HAVE_CORO
-#if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390))
+#if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_MIPS64))
    LLVMAddArgumentPromotionPass(gallivm->cgpassmgr);
    LLVMAddFunctionAttrsPass(gallivm->cgpassmgr);
 #endif
@@ -595,10 +593,10 @@ gallivm_compile_module(struct gallivm_state *gallivm)
       LLVMWriteBitcodeToFile(gallivm->module, filename);
       debug_printf("%s written\n", filename);
       debug_printf("Invoke as \"opt %s %s | llc -O%d %s%s\"\n",
-                   gallivm_debug & GALLIVM_PERF_NO_OPT ? "-mem2reg" :
+                   gallivm_perf & GALLIVM_PERF_NO_OPT ? "-mem2reg" :
                    "-sroa -early-cse -simplifycfg -reassociate "
                    "-mem2reg -constprop -instcombine -gvn",
-                   filename, gallivm_debug & GALLIVM_PERF_NO_OPT ? 0 : 2,
+                   filename, gallivm_perf & GALLIVM_PERF_NO_OPT ? 0 : 2,
                    "[-mcpu=<-mcpu option>] ",
                    "[-mattr=<-mattr option(s)>]");
    }

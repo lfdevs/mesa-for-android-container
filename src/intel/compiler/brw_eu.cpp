@@ -529,7 +529,7 @@ brw_disassemble(const struct intel_device_info *devinfo,
                 const void *assembly, int start, int end,
                 const struct brw_label *root_label, FILE *out)
 {
-   bool dump_hex = (INTEL_DEBUG & DEBUG_HEX) != 0;
+   bool dump_hex = INTEL_DEBUG(DEBUG_HEX);
 
    for (int offset = start; offset < end;) {
       const brw_inst *insn = (const brw_inst *)((char *)assembly + offset);
@@ -684,10 +684,12 @@ static const struct opcode_desc opcode_descs[] = {
    { BRW_OPCODE_SUBB,     79,  "subb",    2,    1,    GFX_GE(GFX7) },
    { BRW_OPCODE_SAD2,     80,  "sad2",    2,    1,    GFX_ALL },
    { BRW_OPCODE_SADA2,    81,  "sada2",   2,    1,    GFX_ALL },
+   { BRW_OPCODE_ADD3,     82,  "add3",    3,    1,    GFX_GE(GFX125) },
    { BRW_OPCODE_DP4,      84,  "dp4",     2,    1,    GFX_LT(GFX11) },
    { BRW_OPCODE_DPH,      85,  "dph",     2,    1,    GFX_LT(GFX11) },
    { BRW_OPCODE_DP3,      86,  "dp3",     2,    1,    GFX_LT(GFX11) },
    { BRW_OPCODE_DP2,      87,  "dp2",     2,    1,    GFX_LT(GFX11) },
+   { BRW_OPCODE_DP4A,     88,  "dp4a",    3,    1,    GFX_GE(GFX12) },
    { BRW_OPCODE_LINE,     89,  "line",    2,    1,    GFX_LE(GFX10) },
    { BRW_OPCODE_PLN,      90,  "pln",     2,    1,    GFX_GE(GFX45) & GFX_LE(GFX10) },
    { BRW_OPCODE_MAD,      91,  "mad",     3,    1,    GFX_GE(GFX6) },

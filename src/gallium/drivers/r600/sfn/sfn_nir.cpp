@@ -478,9 +478,13 @@ r600_map_atomic(nir_intrinsic_op op)
 }
 
 static bool
-r600_lower_deref_instr(nir_builder *b, nir_intrinsic_instr *instr,
-                       nir_shader *shader)
+r600_lower_deref_instr(nir_builder *b, nir_instr *instr_, UNUSED void *cb_data)
 {
+   if (instr_->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *instr = nir_instr_as_intrinsic(instr_);
+
    nir_intrinsic_op op = r600_map_atomic(instr->intrinsic);
    if (nir_num_intrinsics == op)
       return false;
@@ -528,8 +532,6 @@ r600_lower_deref_instr(nir_builder *b, nir_intrinsic_instr *instr,
 static bool
 r600_nir_lower_atomics(nir_shader *shader)
 {
-   bool progress = false;
-
    /* First re-do the offsets, in Hardware we start at zero for each new
     * binding, and we use an offset of one per counter */
    int current_binding = -1;
@@ -548,32 +550,10 @@ r600_nir_lower_atomics(nir_shader *shader)
       }
    }
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      bool impl_progress = false;
-
-      nir_builder build;
-      nir_builder_init(&build, function->impl);
-
-      nir_foreach_block(block, function->impl) {
-         nir_foreach_instr_safe(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-
-            impl_progress |= r600_lower_deref_instr(&build,
-                                                    nir_instr_as_intrinsic(instr), shader);
-         }
-      }
-
-      if (impl_progress) {
-         nir_metadata_preserve(function->impl, nir_metadata_block_index | nir_metadata_dominance);
-         progress = true;
-      }
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, r600_lower_deref_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }
 using r600::r600_nir_lower_int_tg4;
 using r600::r600_lower_scratch_addresses;

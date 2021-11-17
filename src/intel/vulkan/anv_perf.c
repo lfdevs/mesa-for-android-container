@@ -68,7 +68,7 @@ anv_physical_device_init_perf(struct anv_physical_device *device, int fd)
    /* We need DRM_I915_PERF_PROP_HOLD_PREEMPTION support, only available in
     * perf revision 2.
     */
-   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
+   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG)) {
       if (!intel_perf_has_hold_preemption(perf))
          goto err;
    }
@@ -223,9 +223,9 @@ VkResult anv_AcquirePerformanceConfigurationINTEL(
    config = vk_object_alloc(&device->vk, NULL, sizeof(*config),
                             VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL);
    if (!config)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
+   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG)) {
       config->register_config =
          intel_perf_load_configuration(device->physical->perf, device->fd,
                                      INTEL_PERF_QUERY_GUID_MDAPI);
@@ -258,7 +258,7 @@ VkResult anv_ReleasePerformanceConfigurationINTEL(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_performance_configuration_intel, config, _configuration);
 
-   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG))
+   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG))
       intel_ioctl(device->fd, DRM_IOCTL_I915_PERF_REMOVE_CONFIG, &config->config_id);
 
    ralloc_free(config->register_config);
@@ -276,7 +276,7 @@ VkResult anv_QueueSetPerformanceConfigurationINTEL(
    ANV_FROM_HANDLE(anv_performance_configuration_intel, config, _configuration);
    struct anv_device *device = queue->device;
 
-   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
+   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG)) {
       if (device->perf_fd < 0) {
          device->perf_fd = anv_device_perf_open(device, config->config_id);
          if (device->perf_fd < 0)
@@ -405,7 +405,7 @@ VkResult anv_AcquireProfilingLockKHR(
 
    assert(device->perf_fd == -1);
 
-   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
+   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG)) {
       fd = anv_device_perf_open(device, first_metric_set->oa_metrics_set_id);
       if (fd < 0)
          return VK_TIMEOUT;
@@ -420,7 +420,7 @@ void anv_ReleaseProfilingLockKHR(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
 
-   if (!(INTEL_DEBUG & DEBUG_NO_OACONFIG)) {
+   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG)) {
       assert(device->perf_fd >= 0);
       close(device->perf_fd);
    }

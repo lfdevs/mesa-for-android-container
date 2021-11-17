@@ -8,7 +8,7 @@
 #ifndef VN_PROTOCOL_DRIVER_PIPELINE_H
 #define VN_PROTOCOL_DRIVER_PIPELINE_H
 
-#include "vn_device.h"
+#include "vn_instance.h"
 #include "vn_protocol_driver_structs.h"
 
 /* struct VkSpecializationMapEntry */
@@ -95,7 +95,7 @@ vn_sizeof_VkPipelineShaderStageCreateInfo_self(const VkPipelineShaderStageCreate
     if (val->pName) {
         const size_t string_size = strlen(val->pName) + 1;
         size += vn_sizeof_array_size(string_size);
-        size += vn_sizeof_blob_array(val->pName, string_size);
+        size += vn_sizeof_char_array(val->pName, string_size);
     } else {
         size += vn_sizeof_array_size(0);
     }
@@ -134,7 +134,7 @@ vn_encode_VkPipelineShaderStageCreateInfo_self(struct vn_cs_encoder *enc, const 
     if (val->pName) {
         const size_t string_size = strlen(val->pName) + 1;
         vn_encode_array_size(enc, string_size);
-        vn_encode_blob_array(enc, val->pName, string_size);
+        vn_encode_char_array(enc, val->pName, string_size);
     } else {
         vn_encode_array_size(enc, 0);
     }
@@ -1350,11 +1350,11 @@ static inline VkResult vn_decode_vkCreateGraphicsPipelines_reply(struct vn_cs_de
     /* skip pCreateInfos */
     /* skip pAllocator */
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, createInfoCount);
-        for (uint32_t i = 0; i < createInfoCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, createInfoCount);
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkPipeline(dec, &pPipelines[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pPipelines = NULL;
     }
 
@@ -1456,11 +1456,11 @@ static inline VkResult vn_decode_vkCreateComputePipelines_reply(struct vn_cs_dec
     /* skip pCreateInfos */
     /* skip pAllocator */
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, createInfoCount);
-        for (uint32_t i = 0; i < createInfoCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, createInfoCount);
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkPipeline(dec, &pPipelines[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pPipelines = NULL;
     }
 
@@ -1583,6 +1583,8 @@ static inline void vn_submit_vkDestroyPipeline(struct vn_instance *vn_instance, 
 
 static inline VkResult vn_call_vkCreateGraphicsPipelines(struct vn_instance *vn_instance, VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkGraphicsPipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkCreateGraphicsPipelines(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1603,6 +1605,8 @@ static inline void vn_async_vkCreateGraphicsPipelines(struct vn_instance *vn_ins
 
 static inline VkResult vn_call_vkCreateComputePipelines(struct vn_instance *vn_instance, VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkComputePipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkCreateComputePipelines(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1623,6 +1627,8 @@ static inline void vn_async_vkCreateComputePipelines(struct vn_instance *vn_inst
 
 static inline void vn_call_vkDestroyPipeline(struct vn_instance *vn_instance, VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks* pAllocator)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkDestroyPipeline(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pipeline, pAllocator, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);

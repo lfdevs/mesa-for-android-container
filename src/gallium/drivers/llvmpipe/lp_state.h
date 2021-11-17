@@ -117,6 +117,9 @@ void
 llvmpipe_update_setup(struct llvmpipe_context *lp);
 
 void
+llvmpipe_update_derived_clear(struct llvmpipe_context *llvmpipe);
+
+void
 llvmpipe_update_derived(struct llvmpipe_context *llvmpipe);
 
 void

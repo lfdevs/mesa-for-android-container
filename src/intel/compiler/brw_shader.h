@@ -127,6 +127,50 @@ brw_get_scratch_size(int size)
    return MAX2(1024, util_next_power_of_two(size));
 }
 
+
+static inline nir_variable_mode
+brw_nir_no_indirect_mask(const struct brw_compiler *compiler,
+                         gl_shader_stage stage)
+{
+   const struct intel_device_info *devinfo = compiler->devinfo;
+   const bool is_scalar = compiler->scalar_stage[stage];
+   nir_variable_mode indirect_mask = (nir_variable_mode) 0;
+
+   switch (stage) {
+   case MESA_SHADER_VERTEX:
+   case MESA_SHADER_FRAGMENT:
+      indirect_mask |= nir_var_shader_in;
+      break;
+
+   case MESA_SHADER_GEOMETRY:
+      if (!is_scalar)
+         indirect_mask |= nir_var_shader_in;
+      break;
+
+   default:
+      /* Everything else can handle indirect inputs */
+      break;
+   }
+
+   if (is_scalar && stage != MESA_SHADER_TESS_CTRL)
+      indirect_mask |= nir_var_shader_out;
+
+   /* On HSW+, we allow indirects in scalar shaders.  They get implemented
+    * using nir_lower_vars_to_explicit_types and nir_lower_explicit_io in
+    * brw_postprocess_nir.
+    *
+    * We haven't plumbed through the indirect scratch messages on gfx6 or
+    * earlier so doing indirects via scratch doesn't work there. On gfx7 and
+    * earlier the scratch space size is limited to 12kB.  If we allowed
+    * indirects as scratch all the time, we may easily exceed this limit
+    * without having any fallback.
+    */
+   if (is_scalar && devinfo->verx10 <= 70)
+      indirect_mask |= nir_var_function_temp;
+
+   return indirect_mask;
+}
+
 bool brw_texture_offset(const nir_tex_instr *tex, unsigned src,
                         uint32_t *offset_bits);
 

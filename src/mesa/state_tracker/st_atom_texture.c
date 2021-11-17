@@ -257,10 +257,11 @@ st_get_sampler_views(struct st_context *st,
 }
 
 static void
-update_textures(struct st_context *st, enum  pipe_shader_type shader_stage,
-                const struct gl_program *prog,
-                struct pipe_sampler_view **sampler_views)
+update_textures(struct st_context *st,
+                enum pipe_shader_type shader_stage,
+                const struct gl_program *prog)
 {
+   struct pipe_sampler_view *sampler_views[PIPE_MAX_SAMPLERS];
    struct pipe_context *pipe = st->pipe;
    unsigned num_textures =
       st_get_sampler_views(st, shader_stage, prog, sampler_views);
@@ -270,23 +271,8 @@ update_textures(struct st_context *st, enum  pipe_shader_type shader_stage,
                             old_num_textures - num_textures : 0;
 
    pipe->set_sampler_views(pipe, shader_stage, 0, num_textures, num_unbind,
-                           sampler_views);
+                           true, sampler_views);
    st->state.num_sampler_views[shader_stage] = num_textures;
-}
-
-/* Same as update_textures, but don't store the views in st_context. */
-static void
-update_textures_local(struct st_context *st,
-                      enum pipe_shader_type shader_stage,
-                      const struct gl_program *prog)
-{
-   struct pipe_sampler_view *local_views[PIPE_MAX_SAMPLERS];
-
-   update_textures(st, shader_stage, prog, local_views);
-
-   unsigned num = st->state.num_sampler_views[shader_stage];
-   for (unsigned i = 0; i < num; i++)
-      pipe_sampler_view_reference(&local_views[i], NULL);
 }
 
 void
@@ -295,7 +281,7 @@ st_update_vertex_textures(struct st_context *st)
    const struct gl_context *ctx = st->ctx;
 
    if (ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits > 0) {
-      update_textures_local(st, PIPE_SHADER_VERTEX,
+      update_textures(st, PIPE_SHADER_VERTEX,
                             ctx->VertexProgram._Current);
    }
 }
@@ -306,7 +292,7 @@ st_update_fragment_textures(struct st_context *st)
 {
    const struct gl_context *ctx = st->ctx;
 
-   update_textures_local(st, PIPE_SHADER_FRAGMENT,
+   update_textures(st, PIPE_SHADER_FRAGMENT,
                          ctx->FragmentProgram._Current);
 }
 
@@ -317,7 +303,7 @@ st_update_geometry_textures(struct st_context *st)
    const struct gl_context *ctx = st->ctx;
 
    if (ctx->GeometryProgram._Current) {
-      update_textures_local(st, PIPE_SHADER_GEOMETRY,
+      update_textures(st, PIPE_SHADER_GEOMETRY,
                             ctx->GeometryProgram._Current);
    }
 }
@@ -329,7 +315,7 @@ st_update_tessctrl_textures(struct st_context *st)
    const struct gl_context *ctx = st->ctx;
 
    if (ctx->TessCtrlProgram._Current) {
-      update_textures_local(st, PIPE_SHADER_TESS_CTRL,
+      update_textures(st, PIPE_SHADER_TESS_CTRL,
                             ctx->TessCtrlProgram._Current);
    }
 }
@@ -341,7 +327,7 @@ st_update_tesseval_textures(struct st_context *st)
    const struct gl_context *ctx = st->ctx;
 
    if (ctx->TessEvalProgram._Current) {
-      update_textures_local(st, PIPE_SHADER_TESS_EVAL,
+      update_textures(st, PIPE_SHADER_TESS_EVAL,
                             ctx->TessEvalProgram._Current);
    }
 }
@@ -353,7 +339,7 @@ st_update_compute_textures(struct st_context *st)
    const struct gl_context *ctx = st->ctx;
 
    if (ctx->ComputeProgram._Current) {
-      update_textures_local(st, PIPE_SHADER_COMPUTE,
+      update_textures(st, PIPE_SHADER_COMPUTE,
                             ctx->ComputeProgram._Current);
    }
 }

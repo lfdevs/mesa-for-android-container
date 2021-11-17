@@ -89,30 +89,14 @@ const std::array<const char*, num_reduce_ops> reduce_ops = []()
 static void
 print_reg_class(const RegClass rc, FILE* output)
 {
-   switch (rc) {
-   case RegClass::s1: fprintf(output, " s1: "); return;
-   case RegClass::s2: fprintf(output, " s2: "); return;
-   case RegClass::s3: fprintf(output, " s3: "); return;
-   case RegClass::s4: fprintf(output, " s4: "); return;
-   case RegClass::s6: fprintf(output, " s6: "); return;
-   case RegClass::s8: fprintf(output, " s8: "); return;
-   case RegClass::s16: fprintf(output, "s16: "); return;
-   case RegClass::v1: fprintf(output, " v1: "); return;
-   case RegClass::v2: fprintf(output, " v2: "); return;
-   case RegClass::v3: fprintf(output, " v3: "); return;
-   case RegClass::v4: fprintf(output, " v4: "); return;
-   case RegClass::v5: fprintf(output, " v5: "); return;
-   case RegClass::v6: fprintf(output, " v6: "); return;
-   case RegClass::v7: fprintf(output, " v7: "); return;
-   case RegClass::v8: fprintf(output, " v8: "); return;
-   case RegClass::v1b: fprintf(output, " v1b: "); return;
-   case RegClass::v2b: fprintf(output, " v2b: "); return;
-   case RegClass::v3b: fprintf(output, " v3b: "); return;
-   case RegClass::v4b: fprintf(output, " v4b: "); return;
-   case RegClass::v6b: fprintf(output, " v6b: "); return;
-   case RegClass::v8b: fprintf(output, " v8b: "); return;
-   case RegClass::v1_linear: fprintf(output, " v1: "); return;
-   case RegClass::v2_linear: fprintf(output, " v2: "); return;
+   if (rc.is_subdword()) {
+      fprintf(output, " v%ub: ", rc.bytes());
+   } else if (rc.type() == RegType::sgpr) {
+      fprintf(output, " s%u: ", rc.size());
+   } else if (rc.is_linear()) {
+      fprintf(output, " lv%u: ", rc.size());
+   } else {
+      fprintf(output, " v%u: ", rc.size());
    }
 }
 
@@ -627,23 +611,32 @@ print_instr_format_specific(const Instruction* instr, FILE* output)
       }
       if (sdwa.clamp)
          fprintf(output, " clamp");
-      switch (sdwa.dst_sel & sdwa_asuint) {
-      case sdwa_udword: break;
-      case sdwa_ubyte0:
-      case sdwa_ubyte1:
-      case sdwa_ubyte2:
-      case sdwa_ubyte3:
-         fprintf(output, " dst_sel:%sbyte%u", sdwa.dst_sel & sdwa_sext ? "s" : "u",
-                 sdwa.dst_sel & sdwa_bytenum);
-         break;
-      case sdwa_uword0:
-      case sdwa_uword1:
-         fprintf(output, " dst_sel:%sword%u", sdwa.dst_sel & sdwa_sext ? "s" : "u",
-                 sdwa.dst_sel & sdwa_wordnum);
-         break;
+      if (!instr->isVOPC()) {
+         char sext = sdwa.dst_sel.sign_extend() ? 's' : 'u';
+         unsigned offset = sdwa.dst_sel.offset();
+         if (instr->definitions[0].isFixed())
+            offset += instr->definitions[0].physReg().byte();
+         switch (sdwa.dst_sel.size()) {
+         case 1: fprintf(output, " dst_sel:%cbyte%u", sext, offset); break;
+         case 2: fprintf(output, " dst_sel:%cword%u", sext, offset >> 1); break;
+         case 4: fprintf(output, " dst_sel:dword"); break;
+         default: break;
+         }
+         if (instr->definitions[0].bytes() < 4)
+            fprintf(output, " dst_preserve");
       }
-      if (sdwa.dst_preserve)
-         fprintf(output, " dst_preserve");
+      for (unsigned i = 0; i < std::min<unsigned>(2, instr->operands.size()); i++) {
+         char sext = sdwa.sel[i].sign_extend() ? 's' : 'u';
+         unsigned offset = sdwa.sel[i].offset();
+         if (instr->operands[i].isFixed())
+            offset += instr->operands[i].physReg().byte();
+         switch (sdwa.sel[i].size()) {
+         case 1: fprintf(output, " src%d_sel:%cbyte%u", i, sext, offset); break;
+         case 2: fprintf(output, " src%d_sel:%cword%u", i, sext, offset >> 1); break;
+         case 4: fprintf(output, " src%d_sel:dword", i); break;
+         default: break;
+         }
+      }
    }
 }
 
@@ -663,12 +656,10 @@ aco_print_instr(const Instruction* instr, FILE* output, unsigned flags)
       bool* const abs = (bool*)alloca(instr->operands.size() * sizeof(bool));
       bool* const neg = (bool*)alloca(instr->operands.size() * sizeof(bool));
       bool* const opsel = (bool*)alloca(instr->operands.size() * sizeof(bool));
-      uint8_t* const sel = (uint8_t*)alloca(instr->operands.size() * sizeof(uint8_t));
       for (unsigned i = 0; i < instr->operands.size(); ++i) {
          abs[i] = false;
          neg[i] = false;
          opsel[i] = false;
-         sel[i] = sdwa_udword;
       }
       if (instr->isVOP3()) {
          const VOP3_instruction& vop3 = instr->vop3();
@@ -676,7 +667,6 @@ aco_print_instr(const Instruction* instr, FILE* output, unsigned flags)
             abs[i] = vop3.abs[i];
             neg[i] = vop3.neg[i];
             opsel[i] = vop3.opsel & (1 << i);
-            sel[i] = sdwa_udword;
          }
       } else if (instr->isDPP()) {
          const DPP_instruction& dpp = instr->dpp();
@@ -684,7 +674,6 @@ aco_print_instr(const Instruction* instr, FILE* output, unsigned flags)
             abs[i] = dpp.abs[i];
             neg[i] = dpp.neg[i];
             opsel[i] = false;
-            sel[i] = sdwa_udword;
          }
       } else if (instr->isSDWA()) {
          const SDWA_instruction& sdwa = instr->sdwa();
@@ -692,7 +681,6 @@ aco_print_instr(const Instruction* instr, FILE* output, unsigned flags)
             abs[i] = sdwa.abs[i];
             neg[i] = sdwa.neg[i];
             opsel[i] = false;
-            sel[i] = sdwa.sel[i];
          }
       }
       for (unsigned i = 0; i < instr->operands.size(); ++i) {
@@ -707,22 +695,9 @@ aco_print_instr(const Instruction* instr, FILE* output, unsigned flags)
             fprintf(output, "|");
          if (opsel[i])
             fprintf(output, "hi(");
-         else if (sel[i] & sdwa_sext)
-            fprintf(output, "sext(");
          aco_print_operand(&instr->operands[i], output, flags);
-         if (opsel[i] || (sel[i] & sdwa_sext))
+         if (opsel[i])
             fprintf(output, ")");
-         if (!(sel[i] & sdwa_isra)) {
-            if (sel[i] == sdwa_udword || sel[i] == sdwa_sdword) {
-               /* print nothing */
-            } else if (sel[i] & sdwa_isword) {
-               unsigned index = sel[i] & sdwa_wordnum;
-               fprintf(output, "[%u:%u]", index * 16, index * 16 + 15);
-            } else {
-               unsigned index = sel[i] & sdwa_bytenum;
-               fprintf(output, "[%u:%u]", index * 8, index * 8 + 7);
-            }
-         }
          if (abs[i])
             fprintf(output, "|");
 

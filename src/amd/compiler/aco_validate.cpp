@@ -163,8 +163,34 @@ validate_ir(Program* program)
                check((instr->definitions[0].isFixed() && instr->definitions[0].physReg() == vcc) ||
                         program->chip_class >= GFX9,
                      "SDWA+VOPC definition must be fixed to vcc on GFX8", instr.get());
+            } else {
+               const Definition& def = instr->definitions[0];
+               check(def.bytes() <= 4, "SDWA definitions must not be larger than 4 bytes",
+                     instr.get());
+               check(def.bytes() >= sdwa.dst_sel.size() + sdwa.dst_sel.offset(),
+                     "SDWA definition selection size must be at most definition size", instr.get());
+               check(
+                  sdwa.dst_sel.size() == 1 || sdwa.dst_sel.size() == 2 || sdwa.dst_sel.size() == 4,
+                  "SDWA definition selection size must be 1, 2 or 4 bytes", instr.get());
+               check(sdwa.dst_sel.offset() % sdwa.dst_sel.size() == 0, "Invalid selection offset",
+                     instr.get());
+               check(def.bytes() == 4 || def.bytes() == sdwa.dst_sel.size(),
+                     "SDWA dst_sel size must be definition size for subdword definitions",
+                     instr.get());
+               check(def.bytes() == 4 || sdwa.dst_sel.offset() == 0,
+                     "SDWA dst_sel offset must be 0 for subdword definitions", instr.get());
             }
 
+            for (unsigned i = 0; i < std::min<unsigned>(2, instr->operands.size()); i++) {
+               const Operand& op = instr->operands[i];
+               check(op.bytes() <= 4, "SDWA operands must not be larger than 4 bytes", instr.get());
+               check(op.bytes() >= sdwa.sel[i].size() + sdwa.sel[i].offset(),
+                     "SDWA operand selection size must be at most operand size", instr.get());
+               check(sdwa.sel[i].size() == 1 || sdwa.sel[i].size() == 2 || sdwa.sel[i].size() == 4,
+                     "SDWA operand selection size must be 1, 2 or 4 bytes", instr.get());
+               check(sdwa.sel[i].offset() % sdwa.sel[i].size() == 0, "Invalid selection offset",
+                     instr.get());
+            }
             if (instr->operands.size() >= 3) {
                check(instr->operands[2].isFixed() && instr->operands[2].physReg() == vcc,
                      "3rd operand must be fixed to vcc with SDWA", instr.get());
@@ -192,10 +218,6 @@ validate_ir(Program* program)
                (instr->opcode == aco_opcode::v_mac_f32 && instr->opcode == aco_opcode::v_mac_f16);
 
             check(sdwa_opcodes || feature_mac, "SDWA can't be used with this opcode", instr.get());
-
-            if (instr->definitions[0].regClass().is_subdword())
-               check((sdwa.dst_sel & sdwa_asuint) == (sdwa_isra | instr->definitions[0].bytes()),
-                     "Unexpected SDWA sel for sub-dword definition", instr.get());
          }
 
          /* check opsel */
@@ -273,7 +295,7 @@ validate_ir(Program* program)
                if (instr->isSDWA())
                   scalar_mask = program->chip_class >= GFX9 ? 0x7 : 0x4;
                else if (instr->isDPP())
-                  scalar_mask = 0x0;
+                  scalar_mask = 0x4;
 
                if (instr->isVOPC() || instr->opcode == aco_opcode::v_readfirstlane_b32 ||
                    instr->opcode == aco_opcode::v_readlane_b32 ||
@@ -400,12 +422,20 @@ validate_ir(Program* program)
                for (unsigned i = 0; i < instr->operands.size(); i++) {
                   check(instr->definitions[i].bytes() == instr->operands[i].bytes(),
                         "Operand and Definition size must match", instr.get());
-                  if (instr->operands[i].isTemp())
+                  if (instr->operands[i].isTemp()) {
                      check((instr->definitions[i].getTemp().type() ==
                             instr->operands[i].regClass().type()) ||
                               (instr->definitions[i].getTemp().type() == RegType::vgpr &&
                                instr->operands[i].regClass().type() == RegType::sgpr),
                            "Operand and Definition types do not match", instr.get());
+                     check(instr->definitions[i].regClass().is_linear_vgpr() ==
+                              instr->operands[i].regClass().is_linear_vgpr(),
+                           "Operand and Definition types do not match", instr.get());
+                  } else {
+                     check(!instr->definitions[i].regClass().is_linear_vgpr(),
+                           "Can only copy linear VGPRs into linear VGPRs, not constant/undef",
+                           instr.get());
+                  }
                }
             } else if (instr->opcode == aco_opcode::p_phi) {
                check(instr->operands.size() == block.logical_preds.size(),
@@ -436,22 +466,29 @@ validate_ir(Program* program)
                         instr->operands[0].getTemp().type() == RegType::sgpr,
                      "Can't extract/insert VGPR to SGPR", instr.get());
 
-               if (instr->operands[0].getTemp().type() == RegType::vgpr)
+               if (instr->opcode == aco_opcode::p_insert)
                   check(instr->operands[0].bytes() == instr->definitions[0].bytes(),
-                        "Sizes of operand and definition must match", instr.get());
+                        "Sizes of p_insert data operand and definition must match", instr.get());
 
                if (instr->definitions[0].getTemp().type() == RegType::sgpr)
                   check(instr->definitions.size() >= 2 && instr->definitions[1].isFixed() &&
                            instr->definitions[1].physReg() == scc,
-                        "SGPR extract/insert needs a SCC definition", instr.get());
+                        "SGPR extract/insert needs an SCC definition", instr.get());
 
-               check(instr->operands[2].constantEquals(8) || instr->operands[2].constantEquals(16),
-                     "Size must be 8 or 16", instr.get());
-               check(instr->operands[2].constantValue() < instr->operands[0].getTemp().bytes() * 8u,
-                     "Size must be smaller than source", instr.get());
+               unsigned data_bits = instr->operands[0].getTemp().bytes() * 8u;
+               unsigned op_bits = instr->operands[2].constantValue();
 
-               unsigned comp =
-                  instr->operands[0].bytes() * 8u / MAX2(instr->operands[2].constantValue(), 1);
+               if (instr->opcode == aco_opcode::p_insert) {
+                  check(op_bits == 8 || op_bits == 16, "Size must be 8 or 16", instr.get());
+                  check(op_bits < data_bits, "Size must be smaller than source", instr.get());
+               } else if (instr->opcode == aco_opcode::p_extract) {
+                  check(op_bits == 8 || op_bits == 16 || op_bits == 32,
+                        "Size must be 8 or 16 or 32", instr.get());
+                  check(data_bits >= op_bits, "Can't extract more bits than what the data has.",
+                        instr.get());
+               }
+
+               unsigned comp = data_bits / MAX2(op_bits, 1);
                check(instr->operands[1].constantValue() < comp, "Index must be in-bounds",
                      instr.get());
             }
@@ -680,10 +717,9 @@ validate_subdword_operand(chip_class chip, const aco_ptr<Instruction>& instr, un
       return byte == 0;
    if (instr->isPseudo() && chip >= GFX8)
       return true;
-   if (instr->isSDWA()) {
-      unsigned sel = instr->sdwa().sel[index] & sdwa_asuint;
-      return (sel & sdwa_isra) && (sel & sdwa_rasize) <= op.bytes();
-   }
+   if (instr->isSDWA())
+      return byte + instr->sdwa().sel[index].offset() + instr->sdwa().sel[index].size() <= 4 &&
+             byte % instr->sdwa().sel[index].size() == 0;
    if (byte == 2 && can_use_opsel(chip, instr->opcode, index, 1))
       return true;
 
@@ -733,8 +769,9 @@ validate_subdword_definition(chip_class chip, const aco_ptr<Instruction>& instr)
 
    if (instr->isPseudo() && chip >= GFX8)
       return true;
-   if (instr->isSDWA() && instr->sdwa().dst_sel == (sdwa_isra | def.bytes()))
-      return true;
+   if (instr->isSDWA())
+      return byte + instr->sdwa().dst_sel.offset() + instr->sdwa().dst_sel.size() <= 4 &&
+             byte % instr->sdwa().dst_sel.size() == 0;
    if (byte == 2 && can_use_opsel(chip, instr->opcode, -1, 1))
       return true;
 
@@ -763,8 +800,16 @@ get_subdword_bytes_written(Program* program, const aco_ptr<Instruction>& instr, 
 
    if (instr->isPseudo())
       return chip >= GFX8 ? def.bytes() : def.size() * 4u;
-   if (instr->isSDWA() && instr->sdwa().dst_sel == (sdwa_isra | def.bytes()))
-      return def.bytes();
+   if (instr->isVALU()) {
+      assert(def.bytes() <= 2);
+      if (instr->isSDWA())
+         return instr->sdwa().dst_sel.size();
+
+      if (instr_is_16bit(chip, instr->opcode))
+         return 2;
+
+      return 4;
+   }
 
    switch (instr->opcode) {
    case aco_opcode::buffer_load_ubyte_d16:
@@ -787,20 +832,8 @@ get_subdword_bytes_written(Program* program, const aco_ptr<Instruction>& instr, 
    case aco_opcode::global_load_short_d16_hi:
    case aco_opcode::ds_read_u8_d16_hi:
    case aco_opcode::ds_read_u16_d16_hi: return program->dev.sram_ecc_enabled ? 4 : 2;
-   case aco_opcode::v_mad_f16:
-   case aco_opcode::v_mad_u16:
-   case aco_opcode::v_mad_i16:
-   case aco_opcode::v_fma_f16:
-   case aco_opcode::v_div_fixup_f16:
-   case aco_opcode::v_interp_p2_f16:
-      if (chip >= GFX9)
-         return 2;
-      break;
-   default: break;
+   default: return def.size() * 4;
    }
-
-   return MAX2(chip >= GFX10 ? def.bytes() : 4,
-               instr_info.definition_size[(int)instr->opcode] / 8u);
 }
 
 } /* end namespace */

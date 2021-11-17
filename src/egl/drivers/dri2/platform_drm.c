@@ -752,6 +752,8 @@ dri2_initialize_drm(_EGLDisplay *disp)
    dri2_dpy->driver_configs = dri2_dpy->gbm_dri->driver_configs;
 
    dri2_dpy->gbm_dri->lookup_image = dri2_lookup_egl_image;
+   dri2_dpy->gbm_dri->validate_image = dri2_validate_egl_image;
+   dri2_dpy->gbm_dri->lookup_image_validated = dri2_lookup_egl_image_validated;
    dri2_dpy->gbm_dri->lookup_user_data = disp;
 
    dri2_dpy->gbm_dri->get_buffers = dri2_drm_get_buffers;

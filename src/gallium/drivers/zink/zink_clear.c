@@ -116,14 +116,16 @@ clear_in_rp(struct pipe_context *pctx,
    }
    cr.baseArrayLayer = 0;
    cr.layerCount = util_framebuffer_get_num_layers(fb);
-   struct zink_batch *batch = zink_batch_rp(ctx);
-   vkCmdClearAttachments(batch->state->cmdbuf, num_attachments, attachments, 1, &cr);
+   struct zink_batch *batch = &ctx->batch;
+   zink_batch_rp(ctx);
+   VKCTX(CmdClearAttachments)(batch->state->cmdbuf, num_attachments, attachments, 1, &cr);
 }
 
 static void
 clear_color_no_rp(struct zink_context *ctx, struct zink_resource *res, const union pipe_color_union *pcolor, unsigned level, unsigned layer, unsigned layerCount)
 {
-   struct zink_batch *batch = zink_batch_no_rp(ctx);
+   struct zink_batch *batch = &ctx->batch;
+   zink_batch_no_rp(ctx);
    VkImageSubresourceRange range = {0};
    range.baseMipLevel = level;
    range.levelCount = 1;
@@ -139,15 +141,16 @@ clear_color_no_rp(struct zink_context *ctx, struct zink_resource *res, const uni
 
    if (zink_resource_image_needs_barrier(res, VK_IMAGE_LAYOUT_GENERAL, 0, 0) &&
        zink_resource_image_needs_barrier(res, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 0))
-      zink_resource_image_barrier(ctx, NULL, res, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 0);
+      zink_resource_image_barrier(ctx, res, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 0);
    zink_batch_reference_resource_rw(batch, res, true);
-   vkCmdClearColorImage(batch->state->cmdbuf, res->obj->image, res->layout, &color, 1, &range);
+   VKCTX(CmdClearColorImage)(batch->state->cmdbuf, res->obj->image, res->layout, &color, 1, &range);
 }
 
 static void
 clear_zs_no_rp(struct zink_context *ctx, struct zink_resource *res, VkImageAspectFlags aspects, double depth, unsigned stencil, unsigned level, unsigned layer, unsigned layerCount)
 {
-   struct zink_batch *batch = zink_batch_no_rp(ctx);
+   struct zink_batch *batch = &ctx->batch;
+   zink_batch_no_rp(ctx);
    VkImageSubresourceRange range = {0};
    range.baseMipLevel = level;
    range.levelCount = 1;
@@ -159,9 +162,9 @@ clear_zs_no_rp(struct zink_context *ctx, struct zink_resource *res, VkImageAspec
 
    if (zink_resource_image_needs_barrier(res, VK_IMAGE_LAYOUT_GENERAL, 0, 0) &&
        zink_resource_image_needs_barrier(res, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 0))
-      zink_resource_image_barrier(ctx, NULL, res, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 0);
+      zink_resource_image_barrier(ctx, res, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, 0);
    zink_batch_reference_resource_rw(batch, res, true);
-   vkCmdClearDepthStencilImage(batch->state->cmdbuf, res->obj->image, res->layout, &zs_value, 1, &range);
+   VKCTX(CmdClearDepthStencilImage)(batch->state->cmdbuf, res->obj->image, res->layout, &zs_value, 1, &range);
 }
 
 
@@ -196,6 +199,9 @@ zink_clear(struct pipe_context *pctx,
    struct pipe_framebuffer_state *fb = &ctx->fb_state;
    struct zink_batch *batch = &ctx->batch;
    bool needs_rp = false;
+
+   if (unlikely(!zink_screen(pctx->screen)->info.have_EXT_conditional_rendering && !zink_check_conditional_render(ctx)))
+      return;
 
    if (scissor_state) {
       struct u_rect scissor = {scissor_state->minx, scissor_state->maxx, scissor_state->miny, scissor_state->maxy};
@@ -448,10 +454,11 @@ zink_clear_buffer(struct pipe_context *pctx,
          - size is the number of bytes to fill, and must be either a multiple of 4,
            or VK_WHOLE_SIZE to fill the range from offset to the end of the buffer
        */
-      struct zink_batch *batch = zink_batch_no_rp(ctx);
+      struct zink_batch *batch = &ctx->batch;
+      zink_batch_no_rp(ctx);
       zink_batch_reference_resource_rw(batch, res, true);
       util_range_add(&res->base.b, &res->valid_buffer_range, offset, offset + size);
-      vkCmdFillBuffer(batch->state->cmdbuf, res->obj->buffer, offset, size, *(uint32_t*)clear_value);
+      VKCTX(CmdFillBuffer)(batch->state->cmdbuf, res->obj->buffer, offset, size, *(uint32_t*)clear_value);
       return;
    }
    struct pipe_transfer *xfer;
@@ -535,12 +542,13 @@ static void
 fb_clears_apply_internal(struct zink_context *ctx, struct pipe_resource *pres, int i)
 {
    struct zink_framebuffer_clear *fb_clear = &ctx->fb_clears[i];
+   struct zink_resource *res = zink_resource(pres);
 
    if (!zink_fb_clear_enabled(ctx, i))
       return;
    if (ctx->batch.in_rp)
       zink_clear_framebuffer(ctx, BITFIELD_BIT(i));
-   else if (zink_resource(pres)->aspect == VK_IMAGE_ASPECT_COLOR_BIT) {
+   else if (res->aspect == VK_IMAGE_ASPECT_COLOR_BIT) {
       if (zink_fb_clear_needs_explicit(fb_clear) || !check_3d_layers(ctx->fb_state.cbufs[i]))
          /* this will automatically trigger all the clears */
          zink_batch_rp(ctx);
@@ -550,7 +558,7 @@ fb_clears_apply_internal(struct zink_context *ctx, struct pipe_resource *pres, i
          union pipe_color_union color;
          zink_fb_clear_util_unpack_clear_color(clear, psurf->format, &color);
 
-         clear_color_no_rp(ctx, zink_resource(pres), &color,
+         clear_color_no_rp(ctx, res, &color,
                                 psurf->u.tex.level, psurf->u.tex.first_layer,
                                 psurf->u.tex.last_layer - psurf->u.tex.first_layer + 1);
       }
@@ -568,7 +576,7 @@ fb_clears_apply_internal(struct zink_context *ctx, struct pipe_resource *pres, i
             aspects |= VK_IMAGE_ASPECT_DEPTH_BIT;
          if (clear->zs.bits & PIPE_CLEAR_STENCIL)
             aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
-         clear_zs_no_rp(ctx, zink_resource(pres), aspects, clear->zs.depth, clear->zs.stencil,
+         clear_zs_no_rp(ctx, res, aspects, clear->zs.depth, clear->zs.stencil,
                              psurf->u.tex.level, psurf->u.tex.first_layer,
                              psurf->u.tex.last_layer - psurf->u.tex.first_layer + 1);
       }
@@ -596,7 +604,6 @@ zink_fb_clears_apply(struct zink_context *ctx, struct pipe_resource *pres)
       for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
          if (ctx->fb_state.cbufs[i] && ctx->fb_state.cbufs[i]->texture == pres) {
             fb_clears_apply_internal(ctx, pres, i);
-            return;
          }
       }
    } else {
@@ -614,7 +621,6 @@ zink_fb_clears_discard(struct zink_context *ctx, struct pipe_resource *pres)
          if (ctx->fb_state.cbufs[i] && ctx->fb_state.cbufs[i]->texture == pres) {
             if (zink_fb_clear_enabled(ctx, i)) {
                zink_fb_clear_reset(ctx, i);
-               return;
             }
          }
       }
@@ -688,7 +694,6 @@ zink_fb_clears_apply_or_discard(struct zink_context *ctx, struct pipe_resource *
       for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
          if (ctx->fb_state.cbufs[i] && ctx->fb_state.cbufs[i]->texture == pres) {
             fb_clears_apply_or_discard_internal(ctx, pres, region, discard_only, false, i);
-            return;
          }
       }
    }  else {
@@ -705,7 +710,6 @@ zink_fb_clears_apply_region(struct zink_context *ctx, struct pipe_resource *pres
       for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
          if (ctx->fb_state.cbufs[i] && ctx->fb_state.cbufs[i]->texture == pres) {
             fb_clears_apply_or_discard_internal(ctx, pres, region, false, true, i);
-            return;
          }
       }
    }  else {

@@ -118,11 +118,47 @@ enum agx_format {
    AGX_NUM_FORMATS,
 };
 
+/* Returns the number of bits at the bottom of the address required to be zero.
+ * That is, returns the base-2 logarithm of the minimum alignment for an
+ * agx_format, where the minimum alignment is 2^n where n is the result of this
+ * function. The offset argument to device_load is left-shifted by this amount
+ * in the hardware */
+
+static inline unsigned
+agx_format_shift(enum agx_format format)
+{
+   switch (format) {
+   case AGX_FORMAT_I8:
+   case AGX_FORMAT_U8NORM:
+   case AGX_FORMAT_S8NORM:
+   case AGX_FORMAT_SRGBA8:
+      return 0;
+
+   case AGX_FORMAT_I16:
+   case AGX_FORMAT_F16:
+   case AGX_FORMAT_U16NORM:
+   case AGX_FORMAT_S16NORM:
+      return 1;
+
+   case AGX_FORMAT_I32:
+   case AGX_FORMAT_RGB10A2:
+   case AGX_FORMAT_RG11B10F:
+   case AGX_FORMAT_RGB9E5:
+      return 2;
+
+   default:
+      unreachable("invalid format");
+   }
+}
+
 struct agx_attribute {
+   uint32_t divisor;
+
    unsigned buf : 5;
    unsigned src_offset : 16;
    unsigned nr_comps_minus_1 : 2;
    enum agx_format format : 4;
+   unsigned padding : 5;
 };
 
 struct agx_vs_shader_key {
@@ -176,6 +212,8 @@ static const nir_shader_compiler_options agx_nir_options = {
 
    .lower_doubles_options = nir_lower_dmod,
    .lower_int64_options = ~(nir_lower_iadd64 | nir_lower_imul_2x32_64),
+
+   .force_indirect_unrolling = (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp),
 
    .has_fsub = true,
    .has_isub = true,

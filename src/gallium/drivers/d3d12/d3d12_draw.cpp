@@ -461,16 +461,16 @@ d3d12_draw_vbo(struct pipe_context *pctx,
    unsigned index_offset = 0;
    enum d3d12_surface_conversion_mode conversion_modes[PIPE_MAX_COLOR_BUFS] = {};
 
-   if (!prim_supported(dinfo->mode) ||
+   if (!prim_supported((enum pipe_prim_type)dinfo->mode) ||
        dinfo->index_size == 1 ||
        (dinfo->primitive_restart && dinfo->restart_index != 0xffff &&
         dinfo->restart_index != 0xffffffff)) {
 
       if (!dinfo->primitive_restart &&
-          !u_trim_pipe_prim(dinfo->mode, (unsigned *)&draws[0].count))
+          !u_trim_pipe_prim((enum pipe_prim_type)dinfo->mode, (unsigned *)&draws[0].count))
          return;
 
-      ctx->initial_api_prim = dinfo->mode;
+      ctx->initial_api_prim = (enum pipe_prim_type)dinfo->mode;
       util_primconvert_save_rasterizer_state(ctx->primconvert, &ctx->gfx_pipeline_state.rast->base);
       util_primconvert_draw_vbo(ctx->primconvert, dinfo, drawid_offset, indirect, draws, num_draws);
       return;
@@ -497,13 +497,13 @@ d3d12_draw_vbo(struct pipe_context *pctx,
                                                  D3D12_SHADER_DIRTY_SAMPLERS;
 
    /* this should *really* be fixed at a higher level than here! */
-   enum pipe_prim_type reduced_prim = u_reduced_prim(dinfo->mode);
+   enum pipe_prim_type reduced_prim = u_reduced_prim((enum pipe_prim_type)dinfo->mode);
    if (reduced_prim == PIPE_PRIM_TRIANGLES &&
        ctx->gfx_pipeline_state.rast->base.cull_face == PIPE_FACE_FRONT_AND_BACK)
       return;
 
    if (ctx->gfx_pipeline_state.prim_type != dinfo->mode) {
-      ctx->gfx_pipeline_state.prim_type = dinfo->mode;
+      ctx->gfx_pipeline_state.prim_type = (enum pipe_prim_type)dinfo->mode;
       ctx->state_dirty |= D3D12_DIRTY_PRIM_MODE;
    }
 
@@ -640,7 +640,7 @@ d3d12_draw_vbo(struct pipe_context *pctx,
       ctx->cmdlist->OMSetStencilRef(ctx->stencil_ref.ref_value[0]);
 
    if (ctx->cmdlist_dirty & D3D12_DIRTY_PRIM_MODE)
-      ctx->cmdlist->IASetPrimitiveTopology(topology(dinfo->mode));
+      ctx->cmdlist->IASetPrimitiveTopology(topology((enum pipe_prim_type)dinfo->mode));
 
    for (unsigned i = 0; i < ctx->num_vbs; ++i) {
       if (ctx->vbs[i].buffer.resource) {

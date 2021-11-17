@@ -31,22 +31,36 @@ anv_render_pass_add_subpass_dep(struct anv_device *device,
                                 struct anv_render_pass *pass,
                                 const VkSubpassDependency2KHR *dep)
 {
+   /* From the Vulkan 1.2.195 spec:
+    *
+    *    "If an instance of VkMemoryBarrier2 is included in the pNext chain,
+    *    srcStageMask, dstStageMask, srcAccessMask, and dstAccessMask
+    *    parameters are ignored. The synchronization and access scopes instead
+    *    are defined by the parameters of VkMemoryBarrier2."
+    */
+   const VkMemoryBarrier2KHR *barrier =
+      vk_find_struct_const(dep->pNext, MEMORY_BARRIER_2_KHR);
+   VkAccessFlags2KHR src_access_mask =
+      barrier ? barrier->srcAccessMask : dep->srcAccessMask;
+   VkAccessFlags2KHR dst_access_mask =
+      barrier ? barrier->dstAccessMask : dep->dstAccessMask;
+
    if (dep->dstSubpass == VK_SUBPASS_EXTERNAL) {
       pass->subpass_flushes[pass->subpass_count] |=
-         anv_pipe_invalidate_bits_for_access_flags(device, dep->dstAccessMask);
+         anv_pipe_invalidate_bits_for_access_flags(device, dst_access_mask);
    } else {
       assert(dep->dstSubpass < pass->subpass_count);
       pass->subpass_flushes[dep->dstSubpass] |=
-         anv_pipe_invalidate_bits_for_access_flags(device, dep->dstAccessMask);
+         anv_pipe_invalidate_bits_for_access_flags(device, dst_access_mask);
    }
 
    if (dep->srcSubpass == VK_SUBPASS_EXTERNAL) {
       pass->subpass_flushes[0] |=
-         anv_pipe_flush_bits_for_access_flags(device, dep->srcAccessMask);
+         anv_pipe_flush_bits_for_access_flags(device, src_access_mask);
    } else {
       assert(dep->srcSubpass < pass->subpass_count);
       pass->subpass_flushes[dep->srcSubpass + 1] |=
-         anv_pipe_flush_bits_for_access_flags(device, dep->srcAccessMask);
+         anv_pipe_flush_bits_for_access_flags(device, src_access_mask);
    }
 }
 
@@ -330,7 +344,7 @@ VkResult anv_CreateRenderPass2(
 
    if (!vk_object_multizalloc(&device->vk, &ma, pAllocator,
                               VK_OBJECT_TYPE_RENDER_PASS))
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    /* Clear the subpasses along with the parent pass. This required because
     * each array member of anv_subpass must be a valid pointer if not NULL.

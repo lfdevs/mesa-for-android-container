@@ -241,39 +241,26 @@ dri3_create_context_attribs(struct glx_screen *base,
    __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) config_base;
    __DRIcontext *shared = NULL;
 
-   uint32_t minor_ver = 1;
-   uint32_t major_ver = 2;
-   uint32_t flags = 0;
-   unsigned api;
-   int reset = __DRI_CTX_RESET_NO_NOTIFICATION;
-   int release = __DRI_CTX_RELEASE_BEHAVIOR_FLUSH;
+   struct dri_ctx_attribs dca;
    uint32_t ctx_attribs[2 * 6];
    unsigned num_ctx_attribs = 0;
-   uint32_t render_type;
 
-   /* Remap the GLX tokens to DRI2 tokens.
-    */
-   if (!dri2_convert_glx_attribs(num_attribs, attribs,
-                                 &major_ver, &minor_ver,
-                                 &render_type, &flags, &api,
-                                 &reset, &release, error))
+   *error = dri_convert_glx_attribs(num_attribs, attribs, &dca);
+   if (*error != __DRI_CTX_ERROR_SUCCESS)
       goto error_exit;
 
-   if (!dri2_check_no_error(flags, shareList, major_ver, error)) {
+   if (!dri2_check_no_error(dca.flags, shareList, dca.major_ver, error)) {
       goto error_exit;
    }
 
    /* Check the renderType value */
-   if (!validate_renderType_against_config(config_base, render_type))
+   if (!validate_renderType_against_config(config_base, dca.render_type))
        goto error_exit;
 
    if (shareList) {
-      /* If the shareList context is not a DRI3 context, we cannot possibly
-       * create a DRI3 context that shares it.
-       */
-      if (shareList->vtable->destroy != dri3_destroy_context) {
-	 return NULL;
-      }
+      /* We can't share with an indirect context */
+      if (!shareList->isDirect)
+         return NULL;
 
       pcp_shared = (struct dri3_context *) shareList;
       shared = pcp_shared->driContext;
@@ -289,39 +276,39 @@ dri3_create_context_attribs(struct glx_screen *base,
       goto error_exit;
 
    ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_MAJOR_VERSION;
-   ctx_attribs[num_ctx_attribs++] = major_ver;
+   ctx_attribs[num_ctx_attribs++] = dca.major_ver;
    ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_MINOR_VERSION;
-   ctx_attribs[num_ctx_attribs++] = minor_ver;
+   ctx_attribs[num_ctx_attribs++] = dca.minor_ver;
 
    /* Only send a value when the non-default value is requested.  By doing
     * this we don't have to check the driver's DRI3 version before sending the
     * default value.
     */
-   if (reset != __DRI_CTX_RESET_NO_NOTIFICATION) {
+   if (dca.reset != __DRI_CTX_RESET_NO_NOTIFICATION) {
       ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_RESET_STRATEGY;
-      ctx_attribs[num_ctx_attribs++] = reset;
+      ctx_attribs[num_ctx_attribs++] = dca.reset;
    }
 
-   if (release != __DRI_CTX_RELEASE_BEHAVIOR_FLUSH) {
+   if (dca.release != __DRI_CTX_RELEASE_BEHAVIOR_FLUSH) {
       ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_RELEASE_BEHAVIOR;
-      ctx_attribs[num_ctx_attribs++] = release;
+      ctx_attribs[num_ctx_attribs++] = dca.release;
    }
 
-   if (flags != 0) {
+   if (dca.flags != 0) {
       ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_FLAGS;
 
       /* The current __DRI_CTX_FLAG_* values are identical to the
        * GLX_CONTEXT_*_BIT values.
        */
-      ctx_attribs[num_ctx_attribs++] = flags;
+      ctx_attribs[num_ctx_attribs++] = dca.flags;
 
-      if (flags & __DRI_CTX_FLAG_NO_ERROR)
+      if (dca.flags & __DRI_CTX_FLAG_NO_ERROR)
          pcp->base.noError = GL_TRUE;
    }
 
    pcp->driContext =
       (*psc->image_driver->createContextAttribs) (psc->driScreen,
-                                                  api,
+                                                  dca.api,
                                                   config ? config->driConfig
                                                          : NULL,
                                                   shared,
@@ -333,7 +320,7 @@ dri3_create_context_attribs(struct glx_screen *base,
    if (pcp->driContext == NULL)
       goto error_exit;
 
-   pcp->base.vtable = &dri3_context_vtable;
+   pcp->base.vtable = base->context_vtable;
 
    return &pcp->base;
 
@@ -388,6 +375,7 @@ dri3_create_drawable(struct glx_screen *base, XID xDrawable,
    if (loader_dri3_drawable_init(XGetXCBConnection(base->dpy),
                                  xDrawable, psc->driScreen,
                                  psc->is_different_gpu, has_multibuffer,
+                                 psc->prefer_back_buffer_reuse,
                                  config->driConfig,
                                  &psc->loader_dri3_ext, &glx_dri3_vtable,
                                  &pdraw->loader_drawable)) {
@@ -991,6 +979,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
    psc->driver_configs = driver_configs;
 
    psc->base.vtable = &dri3_screen_vtable;
+   psc->base.context_vtable = &dri3_context_vtable;
    psp = &psc->vtable;
    psc->base.driScreen = psp;
    psp->destroyScreen = dri3_destroy_screen;
@@ -1033,6 +1022,15 @@ dri3_create_screen(int screen, struct glx_display * priv)
       psc->show_fps_interval = 0;
 
    InfoMessageF("Using DRI3 for screen %d\n", screen);
+
+   psc->prefer_back_buffer_reuse = 1;
+   if (psc->is_different_gpu && psc->rendererQuery) {
+      unsigned value;
+      if (psc->rendererQuery->queryInteger(psc->driScreen,
+                                           __DRI2_RENDERER_PREFER_BACK_BUFFER_REUSE,
+                                           &value) == 0)
+         psc->prefer_back_buffer_reuse = value;
+   }
 
    return &psc->base;
 

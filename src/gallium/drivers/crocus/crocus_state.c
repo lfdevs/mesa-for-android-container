@@ -771,12 +771,12 @@ crocus_calculate_urb_fence(struct crocus_batch *batch, unsigned csize,
             exit(1);
          }
 
-         if (unlikely(INTEL_DEBUG & (DEBUG_URB|DEBUG_PERF)))
+         if (INTEL_DEBUG(DEBUG_URB|DEBUG_PERF))
             fprintf(stderr, "URB CONSTRAINED\n");
       }
 
 done:
-      if (unlikely(INTEL_DEBUG & DEBUG_URB))
+      if (INTEL_DEBUG(DEBUG_URB))
          fprintf(stderr,
                  "URB fence: %d ..VS.. %d ..GS.. %d ..CLP.. %d ..SF.. %d ..CS.. %d\n",
                  ice->urb.vs_start,
@@ -1197,7 +1197,7 @@ emit_l3_state(struct crocus_batch *batch, bool compute)
       compute ? batch->screen->l3_config_cs : batch->screen->l3_config_3d;
 
    setup_l3_config(batch, cfg);
-   if (unlikely(INTEL_DEBUG & DEBUG_L3)) {
+   if (INTEL_DEBUG(DEBUG_L3)) {
       intel_dump_l3_config(cfg, stderr);
    }
 }
@@ -1321,13 +1321,8 @@ emit_pipeline_select(struct crocus_batch *batch, uint32_t pipeline)
 static void
 crocus_alloc_push_constants(struct crocus_batch *batch)
 {
-#if GFX_VERx10 == 75
-   const unsigned push_constant_kb = batch->screen->devinfo.gt == 3 ? 32 : 16;
-#elif GFX_VER == 8
-   const unsigned push_constant_kb = 32;
-#else
-   const unsigned push_constant_kb = 16;
-#endif
+   const unsigned push_constant_kb =
+      batch->screen->devinfo.max_constant_urb_size_kb;
    unsigned size_per_stage = push_constant_kb / 5;
 
    /* For now, we set a static partitioning of the push constant area,
@@ -2911,7 +2906,8 @@ crocus_create_surface(struct pipe_context *ctx,
          crocus_resource_finish_aux_import(&screen->base, res);
 
       memcpy(&surf->surf, &res->surf, sizeof(surf->surf));
-      uint32_t temp_offset, temp_x, temp_y;
+      uint64_t temp_offset;
+      uint32_t temp_x, temp_y;
 
       isl_surf_get_image_offset_B_tile_sa(&res->surf, tmpl->u.tex.level,
                                           res->base.b.target == PIPE_TEXTURE_3D ? 0 : tmpl->u.tex.first_layer,
@@ -2957,7 +2953,8 @@ crocus_create_surface(struct pipe_context *ctx,
    /* TODO: compressed pbo uploads aren't working here */
    return NULL;
 
-   uint32_t offset_B = 0, tile_x_sa = 0, tile_y_sa = 0;
+   uint64_t offset_B = 0;
+   uint32_t tile_x_sa = 0, tile_y_sa = 0;
 
    if (view->base_level > 0) {
       /* We can't rely on the hardware's miplevel selection with such
@@ -3146,6 +3143,7 @@ crocus_set_sampler_views(struct pipe_context *ctx,
                          enum pipe_shader_type p_stage,
                          unsigned start, unsigned count,
                          unsigned unbind_num_trailing_slots,
+                         bool take_ownership,
                          struct pipe_sampler_view **views)
 {
    struct crocus_context *ice = (struct crocus_context *) ctx;
@@ -3156,8 +3154,16 @@ crocus_set_sampler_views(struct pipe_context *ctx,
 
    for (unsigned i = 0; i < count; i++) {
       struct pipe_sampler_view *pview = views ? views[i] : NULL;
-      pipe_sampler_view_reference((struct pipe_sampler_view **)
-                                  &shs->textures[start + i], pview);
+
+      if (take_ownership) {
+         pipe_sampler_view_reference((struct pipe_sampler_view **)
+                                     &shs->textures[start + i], NULL);
+         shs->textures[start + i] = (struct crocus_sampler_view *)pview;
+      } else {
+         pipe_sampler_view_reference((struct pipe_sampler_view **)
+                                     &shs->textures[start + i], pview);
+      }
+
       struct crocus_sampler_view *view = (void *) pview;
       if (view) {
          view->res->bind_history |= PIPE_BIND_SAMPLER_VIEW;
@@ -3193,6 +3199,14 @@ crocus_set_tess_state(struct pipe_context *ctx,
 
    ice->state.stage_dirty |= CROCUS_STAGE_DIRTY_CONSTANTS_TCS;
    shs->sysvals_need_upload = true;
+}
+
+static void
+crocus_set_patch_vertices(struct pipe_context *ctx, uint8_t patch_vertices)
+{
+   struct crocus_context *ice = (struct crocus_context *) ctx;
+
+   ice->state.patch_vertices = patch_vertices;
 }
 
 static void
@@ -4953,7 +4967,8 @@ emit_surface_state(struct crocus_batch *batch,
    const struct intel_device_info *devinfo = &batch->screen->devinfo;
    struct isl_device *isl_dev = &batch->screen->isl_dev;
    uint32_t reloc = RELOC_32BIT;
-   uint32_t offset = res->offset, tile_x_sa = 0, tile_y_sa = 0;
+   uint64_t offset_B = res->offset;
+   uint32_t tile_x_sa = 0, tile_y_sa = 0;
 
    if (writeable)
       reloc |= RELOC_WRITE;
@@ -4965,7 +4980,7 @@ emit_surface_state(struct crocus_batch *batch,
          isl_surf_get_image_surf(isl_dev, in_surf,
                                  view.base_level, 0,
                                  view.base_array_layer,
-                                 &surf, &offset,
+                                 &surf, &offset_B,
                                  &tile_x_sa, &tile_y_sa);
          view.base_array_layer = 0;
          view.base_level = 0;
@@ -4973,7 +4988,7 @@ emit_surface_state(struct crocus_batch *batch,
          isl_surf_get_image_surf(isl_dev, in_surf,
                                  view.base_level, view.base_array_layer,
                                  0,
-                                 &surf, &offset,
+                                 &surf, &offset_B,
                                  &tile_x_sa, &tile_y_sa);
          view.base_array_layer = 0;
          view.base_level = 0;
@@ -4998,7 +5013,7 @@ emit_surface_state(struct crocus_batch *batch,
                        .view = &view,
                        .address = crocus_state_reloc(batch,
                                                      addr_offset + isl_dev->ss.addr_offset,
-                                                     res->bo, offset, reloc),
+                                                     res->bo, offset_B, reloc),
                        .aux_surf = aux_surf,
                        .aux_usage = aux_usage,
                        .aux_address = aux_offset,
@@ -7446,7 +7461,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
             if (crocus_resource_level_has_hiz(zres, view.base_level)) {
                info.hiz_usage = zres->aux.usage;
                info.hiz_surf = &zres->aux.surf;
-               uint32_t hiz_offset = 0;
+               uint64_t hiz_offset = 0;
 
 #if GFX_VER == 6
                /* HiZ surfaces on Sandy Bridge technically don't support
@@ -7471,7 +7486,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
             info.stencil_aux_usage = sres->aux.usage;
             info.stencil_surf = &sres->surf;
 
-            uint32_t stencil_offset = 0;
+            uint64_t stencil_offset = 0;
 #if GFX_VER == 6
             /* Stencil surfaces on Sandy Bridge technically don't support
              * mip-mapping.  However, we can fake it by offsetting to the
@@ -7513,7 +7528,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
    if (dirty & CROCUS_DIRTY_GEN8_VF_TOPOLOGY) {
       crocus_emit_cmd(batch, GENX(3DSTATE_VF_TOPOLOGY), topo) {
          topo.PrimitiveTopologyType =
-            translate_prim_type(draw->mode, draw->vertices_per_patch);
+            translate_prim_type(draw->mode, ice->state.patch_vertices);
       }
    }
 #endif
@@ -7980,7 +7995,7 @@ crocus_upload_render_state(struct crocus_context *ice,
       prim.PredicateEnable = use_predicate;
 #endif
 
-      prim.PrimitiveTopologyType = translate_prim_type(ice->state.prim_mode, draw->vertices_per_patch);
+      prim.PrimitiveTopologyType = translate_prim_type(ice->state.prim_mode, ice->state.patch_vertices);
       if (indirect) {
          // XXX Probably have to do something for gen6 here?
 #if GFX_VER >= 7
@@ -8074,12 +8089,12 @@ crocus_upload_compute_state(struct crocus_context *ice,
          }
 
          vfe.MaximumNumberofThreads =
-            devinfo->max_cs_threads * screen->subslice_total - 1;
+            devinfo->max_cs_threads * devinfo->subslice_total - 1;
          vfe.ResetGatewayTimer =
             Resettingrelativetimerandlatchingtheglobaltimestamp;
          vfe.BypassGatewayControl = true;
 #if GFX_VER == 7
-         vfe.GPGPUMode = 1;
+         vfe.GPGPUMode = true;
 #endif
 #if GFX_VER == 8
          vfe.BypassGatewayControl = true;
@@ -8794,7 +8809,7 @@ crocus_emit_raw_pipe_control(struct crocus_batch *batch,
 
    /* Emit --------------------------------------------------------------- */
 
-   if (INTEL_DEBUG & DEBUG_PIPE_CONTROL) {
+   if (INTEL_DEBUG(DEBUG_PIPE_CONTROL)) {
       fprintf(stderr,
               "  PC [%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%"PRIx64"]: %s\n",
               (flags & PIPE_CONTROL_FLUSH_ENABLE) ? "PipeCon " : "",
@@ -9229,6 +9244,7 @@ genX(crocus_init_state)(struct crocus_context *ice)
    ctx->set_shader_images = crocus_set_shader_images;
    ctx->set_sampler_views = crocus_set_sampler_views;
    ctx->set_tess_state = crocus_set_tess_state;
+   ctx->set_patch_vertices = crocus_set_patch_vertices;
    ctx->set_framebuffer_state = crocus_set_framebuffer_state;
    ctx->set_polygon_stipple = crocus_set_polygon_stipple;
    ctx->set_sample_mask = crocus_set_sample_mask;

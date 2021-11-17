@@ -455,7 +455,7 @@ nir_opt_peephole_select_block(nir_block *block, nir_shader *shader,
 
       nir_phi_instr *phi = nir_instr_as_phi(instr);
       nir_alu_instr *sel = nir_alu_instr_create(shader, nir_op_bcsel);
-      nir_src_copy(&sel->src[0].src, &if_stmt->condition, sel);
+      nir_src_copy(&sel->src[0].src, &if_stmt->condition);
       /* Splat the condition to all channels */
       memset(sel->src[0].swizzle, 0, sizeof sel->src[0].swizzle);
 
@@ -465,7 +465,7 @@ nir_opt_peephole_select_block(nir_block *block, nir_shader *shader,
          assert(src->src.is_ssa);
 
          unsigned idx = src->pred == then_block ? 1 : 2;
-         nir_src_copy(&sel->src[idx].src, &src->src, sel);
+         nir_src_copy(&sel->src[idx].src, &src->src);
       }
 
       nir_ssa_dest_init(&sel->instr, &sel->dest.dest,

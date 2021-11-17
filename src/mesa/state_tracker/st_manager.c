@@ -942,7 +942,8 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    if (attribs->visual.color_format == PIPE_FORMAT_NONE)
       mode_ptr = NULL;
    st = st_create_context(api, pipe, mode_ptr, shared_ctx,
-                          &attribs->options, no_error);
+                          &attribs->options, no_error,
+                          !!smapi->validate_egl_image);
    if (!st) {
       *error = ST_CONTEXT_ERROR_NO_MEMORY;
       pipe->destroy(pipe);

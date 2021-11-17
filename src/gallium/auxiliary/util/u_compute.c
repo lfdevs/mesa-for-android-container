@@ -139,7 +139,7 @@ void util_compute_blit(struct pipe_context *ctx, struct pipe_blit_info *blit_inf
    u_sampler_view_default_template(&src_templ, src, src->format);
    src_templ.format = util_format_linear(blit_info->src.format);
    src_view = ctx->create_sampler_view(ctx, src, &src_templ);
-   ctx->set_sampler_views(ctx, PIPE_SHADER_COMPUTE, 0, 1, 0, &src_view);
+   ctx->set_sampler_views(ctx, PIPE_SHADER_COMPUTE, 0, 1, 0, false, &src_view);
 
    if (!*compute_state)
      *compute_state = blit_compute_shader(ctx);
@@ -160,7 +160,7 @@ void util_compute_blit(struct pipe_context *ctx, struct pipe_blit_info *blit_inf
 
    ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 0, 1, NULL);
    ctx->set_constant_buffer(ctx, PIPE_SHADER_COMPUTE, 0, false, NULL);
-   ctx->set_sampler_views(ctx, PIPE_SHADER_COMPUTE, 0, 0, 1, NULL);
+   ctx->set_sampler_views(ctx, PIPE_SHADER_COMPUTE, 0, 0, 1, false, NULL);
    pipe_sampler_view_reference(&src_view, NULL);
    ctx->delete_sampler_state(ctx, sampler_state_p);
    ctx->bind_compute_state(ctx, NULL);

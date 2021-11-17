@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 copyright = '''
 /*
  * Copyright 2009 VMware, Inc.

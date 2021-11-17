@@ -273,6 +273,7 @@ clc_lower_printf_base(nir_shader *nir, unsigned uav_id)
                printf_deref = &deref->dest.ssa;
             }
             nir_ssa_def_rewrite_uses(&intrin->dest.ssa, printf_deref);
+            progress = true;
          }
       }
 
@@ -301,53 +302,49 @@ find_identical_const_sampler(nir_shader *nir, nir_variable *sampler)
    unreachable("Should have at least found the input sampler");
 }
 
+static bool
+clc_nir_dedupe_const_samplers_instr(nir_builder *b,
+                                    nir_instr *instr,
+                                    void *cb_data)
+{
+   nir_shader *nir = cb_data;
+   if (instr->type != nir_instr_type_tex)
+      return false;
+
+   nir_tex_instr *tex = nir_instr_as_tex(instr);
+   int sampler_idx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
+   if (sampler_idx == -1)
+      return false;
+
+   nir_deref_instr *deref = nir_src_as_deref(tex->src[sampler_idx].src);
+   nir_variable *sampler = nir_deref_instr_get_variable(deref);
+   if (!sampler)
+      return false;
+
+   assert(sampler->data.mode == nir_var_uniform);
+
+   if (!sampler->data.sampler.is_inline_sampler)
+      return false;
+
+   nir_variable *replacement = find_identical_const_sampler(nir, sampler);
+   if (replacement == sampler)
+      return false;
+
+   b->cursor = nir_before_instr(&tex->instr);
+   nir_deref_instr *replacement_deref = nir_build_deref_var(b, replacement);
+   nir_instr_rewrite_src(&tex->instr, &tex->src[sampler_idx].src,
+                         nir_src_for_ssa(&replacement_deref->dest.ssa));
+   nir_deref_instr_remove_if_unused(deref);
+
+   return true;
+}
+
 bool
 clc_nir_dedupe_const_samplers(nir_shader *nir)
 {
-   bool progress = false;
-   nir_foreach_function(func, nir) {
-      if (!func->impl)
-         continue;
-
-      nir_builder b;
-      nir_builder_init(&b, func->impl);
-
-      nir_foreach_block(block, func->impl) {
-         nir_foreach_instr_safe(instr, block) {
-            if (instr->type != nir_instr_type_tex)
-               continue;
-
-            nir_tex_instr *tex = nir_instr_as_tex(instr);
-            int sampler_idx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
-            if (sampler_idx == -1)
-               continue;
-
-            nir_deref_instr *deref = nir_src_as_deref(tex->src[sampler_idx].src);
-            nir_variable *sampler = nir_deref_instr_get_variable(deref);
-            if (!sampler)
-               continue;
-
-            assert(sampler->data.mode == nir_var_uniform);
-
-            if (!sampler->data.sampler.is_inline_sampler)
-               continue;
-
-            nir_variable *replacement = find_identical_const_sampler(nir, sampler);
-            if (replacement == sampler)
-               continue;
-
-            b.cursor = nir_before_instr(&tex->instr);
-            nir_deref_instr *replacement_deref = nir_build_deref_var(&b, replacement);
-            nir_instr_rewrite_src(&tex->instr, &tex->src[sampler_idx].src,
-                                  nir_src_for_ssa(&replacement_deref->dest.ssa));
-            nir_deref_instr_remove_if_unused(deref);
-            progress = true;
-         }
-      }
-
-      if (progress) {
-         nir_metadata_preserve(func->impl, nir_metadata_block_index | nir_metadata_dominance);
-      }
-   }
-   return progress;
+   return nir_shader_instructions_pass(nir,
+                                       clc_nir_dedupe_const_samplers_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       nir);
 }

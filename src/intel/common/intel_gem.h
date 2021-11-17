@@ -83,12 +83,13 @@ intel_ioctl(int fd, unsigned long request, void *arg)
  * it's better to have a common helper.
  */
 static inline int
-intel_i915_query(int fd, uint64_t query_id, void *buffer,
-                 int32_t *buffer_len)
+intel_i915_query_flags(int fd, uint64_t query_id, uint32_t flags,
+                       void *buffer, int32_t *buffer_len)
 {
    struct drm_i915_query_item item = {
       .query_id = query_id,
       .length = *buffer_len,
+      .flags = flags,
       .data_ptr = (uintptr_t)buffer,
    };
 
@@ -106,6 +107,13 @@ intel_i915_query(int fd, uint64_t query_id, void *buffer,
 
    *buffer_len = item.length;
    return 0;
+}
+
+static inline int
+intel_i915_query(int fd, uint64_t query_id, void *buffer,
+                 int32_t *buffer_len)
+{
+   return intel_i915_query_flags(fd, query_id, 0, buffer, buffer_len);
 }
 
 /**

@@ -72,7 +72,7 @@ static bool
 wait_event(HANDLE event, int event_fd, uint64_t timeout_ns)
 {
    int timeout_ms = (timeout_ns == PIPE_TIMEOUT_INFINITE) ? -1 : timeout_ns / 1000000;
-   return sync_wait(event_fd, timeout_ms);
+   return sync_wait(event_fd, timeout_ms) == 0;
 }
 #endif
 

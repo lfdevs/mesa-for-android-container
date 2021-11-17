@@ -70,7 +70,7 @@ gbm_device_get_backend_name(struct gbm_device *gbm)
  *
  * \param gbm The created buffer manager
  * \param format The format to test
- * \param usage A bitmask of the usages to test the format against
+ * \param flags A bitmask of the usages to test the format against
  * \return 1 if the format is supported otherwise 0
  *
  * \sa enum gbm_bo_flags for the list of flags that the format can be
@@ -80,9 +80,9 @@ gbm_device_get_backend_name(struct gbm_device *gbm)
  */
 GBM_EXPORT int
 gbm_device_is_format_supported(struct gbm_device *gbm,
-                               uint32_t format, uint32_t usage)
+                               uint32_t format, uint32_t flags)
 {
-   return gbm->v0.is_format_supported(gbm, format, usage);
+   return gbm->v0.is_format_supported(gbm, format, flags);
 }
 
 /** Get the number of planes that are required for a given format+modifier
@@ -469,7 +469,7 @@ gbm_bo_destroy(struct gbm_bo *bo)
  * \param height The height for the buffer
  * \param format The format to use for the buffer, from GBM_FORMAT_* or
  * GBM_BO_FORMAT_* tokens
- * \param usage The union of the usage flags for this buffer
+ * \param flags The union of the usage flags for this buffer
  *
  * \return A newly allocated buffer that should be freed with gbm_bo_destroy()
  * when no longer needed. If an error occurs during allocation %NULL will be
@@ -480,14 +480,14 @@ gbm_bo_destroy(struct gbm_bo *bo)
 GBM_EXPORT struct gbm_bo *
 gbm_bo_create(struct gbm_device *gbm,
               uint32_t width, uint32_t height,
-              uint32_t format, uint32_t usage)
+              uint32_t format, uint32_t flags)
 {
    if (width == 0 || height == 0) {
       errno = EINVAL;
       return NULL;
    }
 
-   return gbm->v0.bo_create(gbm, width, height, format, usage, NULL, 0);
+   return gbm->v0.bo_create(gbm, width, height, format, flags, NULL, 0);
 }
 
 GBM_EXPORT struct gbm_bo *
@@ -496,6 +496,18 @@ gbm_bo_create_with_modifiers(struct gbm_device *gbm,
                              uint32_t format,
                              const uint64_t *modifiers,
                              const unsigned int count)
+{
+   return gbm_bo_create_with_modifiers2(gbm, width, height, format, modifiers,
+                                        count, GBM_BO_USE_SCANOUT);
+}
+
+GBM_EXPORT struct gbm_bo *
+gbm_bo_create_with_modifiers2(struct gbm_device *gbm,
+                              uint32_t width, uint32_t height,
+                              uint32_t format,
+                              const uint64_t *modifiers,
+                              const unsigned int count,
+                              uint32_t flags)
 {
    if (width == 0 || height == 0) {
       errno = EINVAL;
@@ -507,7 +519,12 @@ gbm_bo_create_with_modifiers(struct gbm_device *gbm,
       return NULL;
    }
 
-   return gbm->v0.bo_create(gbm, width, height, format, 0, modifiers, count);
+   if (modifiers && (flags & GBM_BO_USE_LINEAR)) {
+      errno = EINVAL;
+      return NULL;
+   }
+
+   return gbm->v0.bo_create(gbm, width, height, format, flags, modifiers, count);
 }
 
 /**
@@ -529,7 +546,7 @@ gbm_bo_create_with_modifiers(struct gbm_device *gbm,
  * \param gbm The gbm device returned from gbm_create_device()
  * \param type The type of object we're importing
  * \param buffer Pointer to the external object
- * \param usage The union of the usage flags for this buffer
+ * \param flags The union of the usage flags for this buffer
  *
  * \return A newly allocated buffer object that should be freed with
  * gbm_bo_destroy() when no longer needed. On error, %NULL is returned
@@ -539,9 +556,9 @@ gbm_bo_create_with_modifiers(struct gbm_device *gbm,
  */
 GBM_EXPORT struct gbm_bo *
 gbm_bo_import(struct gbm_device *gbm,
-              uint32_t type, void *buffer, uint32_t usage)
+              uint32_t type, void *buffer, uint32_t flags)
 {
-   return gbm->v0.bo_import(gbm, type, buffer, usage);
+   return gbm->v0.bo_import(gbm, type, buffer, flags);
 }
 
 /**
@@ -631,12 +648,30 @@ gbm_surface_create_with_modifiers(struct gbm_device *gbm,
                                   const uint64_t *modifiers,
                                   const unsigned int count)
 {
+   return gbm_surface_create_with_modifiers2(gbm, width, height, format,
+                                             modifiers, count,
+                                             GBM_BO_USE_SCANOUT);
+}
+
+GBM_EXPORT struct gbm_surface *
+gbm_surface_create_with_modifiers2(struct gbm_device *gbm,
+                                   uint32_t width, uint32_t height,
+                                   uint32_t format,
+                                   const uint64_t *modifiers,
+                                   const unsigned int count,
+                                   uint32_t flags)
+{
    if ((count && !modifiers) || (modifiers && !count)) {
       errno = EINVAL;
       return NULL;
    }
 
-   return gbm->v0.surface_create(gbm, width, height, format, 0,
+   if (modifiers && (flags & GBM_BO_USE_LINEAR)) {
+      errno = EINVAL;
+      return NULL;
+   }
+
+   return gbm->v0.surface_create(gbm, width, height, format, flags,
                                  modifiers, count);
 }
 

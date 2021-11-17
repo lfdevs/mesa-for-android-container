@@ -467,9 +467,9 @@ vertex_format_to_pipe_format(GLubyte size, GLenum16 type, GLenum16 format,
    assert(size >= 1 && size <= 4);
    assert(format == GL_RGBA || format == GL_BGRA);
 
-   /* 64-bit attributes are translated by drivers. */
+   /* Raw doubles use 64_UINT. */
    if (doubles)
-      return PIPE_FORMAT_NONE;
+      return PIPE_FORMAT_R64_UINT + size - 1;
 
    switch (type) {
    case GL_HALF_FLOAT_OES:
@@ -545,6 +545,8 @@ _mesa_set_vertex_format(struct gl_vertex_format *vertex_format,
    vertex_format->_PipeFormat =
       vertex_format_to_pipe_format(size, type, format, normalized, integer,
                                    doubles);
+   /* pipe_vertex_element::src_format has only 8 bits, assuming a signed enum */
+   assert(vertex_format->_PipeFormat <= 255);
 }
 
 

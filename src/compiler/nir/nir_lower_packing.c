@@ -86,6 +86,15 @@ lower_unpack_64_to_16(nir_builder *b, nir_ssa_def *src)
                       nir_unpack_32_2x16_split_y(b, zw));
 }
 
+static nir_ssa_def *
+lower_pack_32_from_8(nir_builder *b, nir_ssa_def *src)
+{
+   return nir_pack_32_4x8_split(b, nir_channel(b, src, 0),
+                                   nir_channel(b, src, 1),
+                                   nir_channel(b, src, 2),
+                                   nir_channel(b, src, 3));
+}
+
 static bool
 lower_pack_instr(nir_builder *b, nir_instr *instr, void *data)
 {
@@ -99,8 +108,8 @@ lower_pack_instr(nir_builder *b, nir_instr *instr, void *data)
        alu_instr->op != nir_op_pack_64_4x16 &&
        alu_instr->op != nir_op_unpack_64_4x16 &&
        alu_instr->op != nir_op_pack_32_2x16 &&
-       alu_instr->op != nir_op_unpack_32_2x16)
-
+       alu_instr->op != nir_op_unpack_32_2x16 &&
+       alu_instr->op != nir_op_pack_32_4x8)
       return false;
 
    b->cursor = nir_before_instr(&alu_instr->instr);
@@ -126,6 +135,9 @@ lower_pack_instr(nir_builder *b, nir_instr *instr, void *data)
       break;
    case nir_op_unpack_32_2x16:
       dest = lower_unpack_32_to_16(b, src);
+      break;
+   case nir_op_pack_32_4x8:
+      dest = lower_pack_32_from_8(b, src);
       break;
    default:
       unreachable("Impossible opcode");

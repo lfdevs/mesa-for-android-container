@@ -522,9 +522,8 @@ drisw_init_screen(__DRIscreen * sPriv)
    }
 
    if (pipe_loader_sw_probe_dri(&screen->dev, lf)) {
-      dri_init_options(screen);
-
       pscreen = pipe_loader_create_screen(screen->dev);
+      dri_init_options(screen);
    }
 
    if (!pscreen)
@@ -541,6 +540,15 @@ drisw_init_screen(__DRIscreen * sPriv)
    else
       sPriv->extensions = drisw_screen_extensions;
    screen->lookup_egl_image = dri2_lookup_egl_image;
+
+   const __DRIimageLookupExtension *image = sPriv->dri2.image;
+   if (image &&
+       image->base.version >= 2 &&
+       image->validateEGLImage &&
+       image->lookupEGLImageValidated) {
+      screen->validate_egl_image = dri2_validate_egl_image;
+      screen->lookup_egl_image_validated = dri2_lookup_egl_image_validated;
+   }
 
    return configs;
 fail:

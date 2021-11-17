@@ -1548,10 +1548,7 @@ vc4_optimize_nir(struct nir_shader *s)
                 }
 
                 NIR_PASS(progress, s, nir_opt_undef);
-                NIR_PASS(progress, s, nir_opt_loop_unroll,
-                         nir_var_shader_in |
-                         nir_var_shader_out |
-                         nir_var_function_temp);
+                NIR_PASS(progress, s, nir_opt_loop_unroll);
         } while (progress);
 }
 
@@ -2195,6 +2192,7 @@ static const nir_shader_compiler_options nir_options = {
         .has_fsub = true,
         .has_isub = true,
         .max_unroll_iterations = 32,
+        .force_indirect_unrolling = (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp),
 };
 
 const void *

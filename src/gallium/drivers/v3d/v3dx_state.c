@@ -520,6 +520,8 @@ translate_wrap(uint32_t pipe_wrap)
                 return V3D_WRAP_MODE_MIRROR;
         case PIPE_TEX_WRAP_CLAMP_TO_BORDER:
                 return V3D_WRAP_MODE_BORDER;
+        case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:
+                return V3D_WRAP_MODE_MIRROR_ONCE;
         default:
                 unreachable("Unknown wrap mode");
         }
@@ -1148,6 +1150,7 @@ v3d_set_sampler_views(struct pipe_context *pctx,
                       enum pipe_shader_type shader,
                       unsigned start, unsigned nr,
                       unsigned unbind_num_trailing_slots,
+                      bool take_ownership,
                       struct pipe_sampler_view **views)
 {
         struct v3d_context *v3d = v3d_context(pctx);
@@ -1160,7 +1163,12 @@ v3d_set_sampler_views(struct pipe_context *pctx,
         for (i = 0; i < nr; i++) {
                 if (views[i])
                         new_nr = i + 1;
-                pipe_sampler_view_reference(&stage_tex->textures[i], views[i]);
+                if (take_ownership) {
+                        pipe_sampler_view_reference(&stage_tex->textures[i], NULL);
+                        stage_tex->textures[i] = views[i];
+                } else {
+                        pipe_sampler_view_reference(&stage_tex->textures[i], views[i]);
+                }
         }
 
         for (; i < stage_tex->num_textures; i++) {

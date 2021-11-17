@@ -49,7 +49,9 @@
 #include "glapi/glapi.h"
 #include "../../mesa/main/dispatch.h"
 
+#ifndef GLX_USE_APPLEGL
 static const void *nil = 0;
+#endif
 
 #define EXTRA_DISPATCH 111
 

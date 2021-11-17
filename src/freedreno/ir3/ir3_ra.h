@@ -36,15 +36,17 @@
 #define d(fmt, ...)                                                            \
    do {                                                                        \
       if (RA_DEBUG) {                                                          \
-         printf("RA: " fmt "\n", ##__VA_ARGS__);                               \
+         mesa_logi("RA: " fmt, ##__VA_ARGS__);                                 \
       }                                                                        \
    } while (0)
 
 #define di(instr, fmt, ...)                                                    \
    do {                                                                        \
       if (RA_DEBUG) {                                                          \
-         printf("RA: " fmt ": ", ##__VA_ARGS__);                               \
-         ir3_print_instr(instr);                                               \
+         struct log_stream *stream = mesa_log_streami();                       \
+         mesa_log_stream_printf(stream, "RA: " fmt ": ", ##__VA_ARGS__);       \
+         ir3_print_instr_stream(stream, instr);                                \
+         mesa_log_stream_destroy(stream);                                      \
       }                                                                        \
    } while (0)
 
@@ -106,14 +108,14 @@ ra_reg_is_dst(const struct ir3_register *reg)
 /* Iterators for sources and destinations which:
  * - Don't include fake sources (irrelevant for RA)
  * - Don't include non-SSA sources (immediates and constants, also irrelevant)
- * - Consider array destinations as both a source and a destination
  */
 
+#define ra_foreach_src_n(__srcreg, __n, __instr)                               \
+   foreach_src_n(__srcreg, __n, __instr)                                       \
+      if (ra_reg_is_src(__srcreg))
+
 #define ra_foreach_src(__srcreg, __instr)                                      \
-   for (struct ir3_register *__srcreg = (void *)~0; __srcreg; __srcreg = NULL) \
-      for (unsigned __cnt = (__instr)->srcs_count, __i = 0; __i < __cnt;       \
-           __i++)                                                              \
-         if (ra_reg_is_src((__srcreg = (__instr)->srcs[__i])))
+   ra_foreach_src_n(__srcreg, __i, __instr)
 
 #define ra_foreach_src_rev(__srcreg, __instr)                                  \
    for (struct ir3_register *__srcreg = (void *)~0; __srcreg; __srcreg = NULL) \
@@ -121,11 +123,12 @@ ra_reg_is_dst(const struct ir3_register *reg)
            __i--)                                                              \
          if (ra_reg_is_src((__srcreg = (__instr)->srcs[__i])))
 
+#define ra_foreach_dst_n(__dstreg, __n, __instr)                               \
+   foreach_dst_n(__dstreg, __n, instr)                                         \
+      if (ra_reg_is_dst(__dstreg))
+
 #define ra_foreach_dst(__dstreg, __instr)                                      \
-   for (struct ir3_register *__dstreg = (void *)~0; __dstreg; __dstreg = NULL) \
-      for (unsigned __cnt = (__instr)->dsts_count, __i = 0; __i < __cnt;       \
-           __i++)                                                              \
-         if (ra_reg_is_dst((__dstreg = (__instr)->dsts[__i])))
+   ra_foreach_dst_n(__dstreg, __i, __instr)
 
 #define RA_HALF_SIZE     (4 * 48)
 #define RA_FULL_SIZE     (4 * 48 * 2)
@@ -134,12 +137,13 @@ ra_reg_is_dst(const struct ir3_register *reg)
 
 struct ir3_liveness {
    unsigned block_count;
+   unsigned interval_offset;
    DECLARE_ARRAY(struct ir3_register *, definitions);
    DECLARE_ARRAY(BITSET_WORD *, live_out);
    DECLARE_ARRAY(BITSET_WORD *, live_in);
 };
 
-struct ir3_liveness *ir3_calc_liveness(struct ir3_shader_variant *v);
+struct ir3_liveness *ir3_calc_liveness(void *mem_ctx, struct ir3 *ir);
 
 bool ir3_def_live_after(struct ir3_liveness *live, struct ir3_register *def,
                         struct ir3_instruction *instr);
@@ -148,12 +152,21 @@ void ir3_create_parallel_copies(struct ir3 *ir);
 
 void ir3_merge_regs(struct ir3_liveness *live, struct ir3 *ir);
 
+void ir3_force_merge(struct ir3_register *a, struct ir3_register *b,
+                     int b_offset);
+
 struct ir3_pressure {
    unsigned full, half, shared;
 };
 
 void ir3_calc_pressure(struct ir3_shader_variant *v, struct ir3_liveness *live,
                        struct ir3_pressure *max_pressure);
+
+bool ir3_spill(struct ir3 *ir, struct ir3_shader_variant *v,
+               struct ir3_liveness **live,
+               const struct ir3_pressure *limit_pressure);
+
+bool ir3_lower_spill(struct ir3 *ir);
 
 void ir3_ra_validate(struct ir3_shader_variant *v, unsigned full_size,
                      unsigned half_size, unsigned block_count);
@@ -256,7 +269,8 @@ ir3_reg_interval_init(struct ir3_reg_interval *interval,
    interval->inserted = false;
 }
 
-void ir3_reg_interval_dump(struct ir3_reg_interval *interval);
+void ir3_reg_interval_dump(struct log_stream *stream,
+                           struct ir3_reg_interval *interval);
 
 void ir3_reg_interval_insert(struct ir3_reg_ctx *ctx,
                              struct ir3_reg_interval *interval);

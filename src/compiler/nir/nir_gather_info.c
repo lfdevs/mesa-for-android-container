@@ -533,6 +533,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
 
    case nir_intrinsic_load_output:
    case nir_intrinsic_load_per_vertex_output:
+   case nir_intrinsic_load_per_primitive_output:
       if (shader->info.stage == MESA_SHADER_TESS_CTRL &&
           instr->intrinsic == nir_intrinsic_load_output) {
          shader->info.patch_outputs_read |= slot_mask;
@@ -559,6 +560,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
 
    case nir_intrinsic_store_output:
    case nir_intrinsic_store_per_vertex_output:
+   case nir_intrinsic_store_per_primitive_output:
       if (shader->info.stage == MESA_SHADER_TESS_CTRL &&
           instr->intrinsic == nir_intrinsic_store_output) {
          shader->info.patch_outputs_written |= slot_mask;
@@ -909,5 +911,28 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
        * shading must stay enabled.
        */
       shader->info.fs.uses_sample_shading = true;
+   }
+
+   shader->info.per_primitive_outputs = 0;
+   if (shader->info.stage == MESA_SHADER_MESH) {
+      nir_foreach_shader_out_variable(var, shader) {
+         if (var->data.per_primitive) {
+            assert(nir_is_arrayed_io(var, shader->info.stage));
+            const unsigned slots =
+               glsl_count_attribute_slots(glsl_get_array_element(var->type), false);
+            shader->info.per_primitive_outputs |= BITFIELD64_RANGE(var->data.location, slots);
+         }
+      }
+   }
+
+   shader->info.per_primitive_inputs = 0;
+   if (shader->info.stage == MESA_SHADER_FRAGMENT) {
+      nir_foreach_shader_in_variable(var, shader) {
+         if (var->data.per_primitive) {
+            const unsigned slots =
+               glsl_count_attribute_slots(var->type, false);
+            shader->info.per_primitive_inputs |= BITFIELD64_RANGE(var->data.location, slots);
+         }
+      }
    }
 }

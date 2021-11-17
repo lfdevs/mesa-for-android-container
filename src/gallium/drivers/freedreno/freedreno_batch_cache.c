@@ -315,7 +315,7 @@ fd_bc_invalidate_resource(struct fd_resource *rsc, bool destroy)
 
    if (destroy) {
       foreach_batch (batch, &screen->batch_cache, rsc->track->batch_mask) {
-         struct set_entry *entry = _mesa_set_search(batch->resources, rsc);
+         struct set_entry *entry = _mesa_set_search_pre_hashed(batch->resources, rsc->hash, rsc);
          _mesa_set_remove(batch->resources, entry);
       }
       rsc->track->batch_mask = 0;

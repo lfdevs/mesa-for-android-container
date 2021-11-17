@@ -3145,8 +3145,7 @@ teximage(struct gl_context *ctx, GLboolean compressed, GLuint dims,
          unpack = &unpack_no_border;
       }
 
-      if (ctx->NewState & _NEW_PIXEL)
-         _mesa_update_pixel(ctx);
+      _mesa_update_pixel(ctx);
 
       _mesa_lock_texture(ctx, texObj);
       {
@@ -3439,7 +3438,8 @@ egl_image_target_texture(struct gl_context *ctx,
       return;
    }
 
-   if (!image) {
+   if (!image || (ctx->Driver.ValidateEGLImage &&
+                  !ctx->Driver.ValidateEGLImage(ctx, image))) {
       _mesa_error(ctx, GL_INVALID_VALUE, "%s(image=%p)", caller, image);
       return;
    }
@@ -3586,8 +3586,7 @@ texture_sub_image(struct gl_context *ctx, GLuint dims,
 {
    FLUSH_VERTICES(ctx, 0, 0);
 
-   if (ctx->NewState & _NEW_PIXEL)
-      _mesa_update_pixel(ctx);
+   _mesa_update_pixel(ctx);
 
    _mesa_lock_texture(ctx, texObj);
    {
@@ -4270,8 +4269,7 @@ copy_texture_sub_image_err(struct gl_context *ctx, GLuint dims,
                   _mesa_enum_to_string(target),
                   level, xoffset, yoffset, zoffset, x, y, width, height);
 
-   if (ctx->NewState & _NEW_PIXEL)
-      _mesa_update_pixel(ctx);
+   _mesa_update_pixel(ctx);
 
    if (ctx->NewState & NEW_COPY_TEX_STATE)
       _mesa_update_state(ctx);
@@ -4296,8 +4294,7 @@ copy_texture_sub_image_no_error(struct gl_context *ctx, GLuint dims,
 {
    FLUSH_VERTICES(ctx, 0, 0);
 
-   if (ctx->NewState & _NEW_PIXEL)
-      _mesa_update_pixel(ctx);
+   _mesa_update_pixel(ctx);
 
    if (ctx->NewState & NEW_COPY_TEX_STATE)
       _mesa_update_state(ctx);
@@ -4328,8 +4325,7 @@ copyteximage(struct gl_context *ctx, GLuint dims, struct gl_texture_object *texO
                   _mesa_enum_to_string(internalFormat),
                   x, y, width, height, border);
 
-   if (ctx->NewState & _NEW_PIXEL)
-      _mesa_update_pixel(ctx);
+   _mesa_update_pixel(ctx);
 
    if (ctx->NewState & NEW_COPY_TEX_STATE)
       _mesa_update_state(ctx);

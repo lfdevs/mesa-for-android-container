@@ -8,7 +8,7 @@
 #ifndef VN_PROTOCOL_DRIVER_TRANSPORT_H
 #define VN_PROTOCOL_DRIVER_TRANSPORT_H
 
-#include "vn_device.h"
+#include "vn_instance.h"
 #include "vn_protocol_driver_structs.h"
 
 /*
@@ -862,7 +862,7 @@ static inline void vn_encode_vkGetVenusExperimentalFeatureData100000MESA(struct 
 
     if (vn_encode_simple_pointer(enc, pDataSize))
         vn_encode_size_t(enc, pDataSize);
-    vn_encode_array_size(enc, pData ? *pDataSize : 0); /* out */
+    vn_encode_array_size(enc, pData ? (pDataSize ? *pDataSize : 0) : 0); /* out */
 }
 
 static inline size_t vn_sizeof_vkGetVenusExperimentalFeatureData100000MESA_reply(size_t* pDataSize, void* pData)
@@ -874,8 +874,8 @@ static inline size_t vn_sizeof_vkGetVenusExperimentalFeatureData100000MESA_reply
     if (pDataSize)
         cmd_size += vn_sizeof_size_t(pDataSize);
     if (pData) {
-        cmd_size += vn_sizeof_array_size(*pDataSize);
-        cmd_size += vn_sizeof_blob_array(pData, *pDataSize);
+        cmd_size += vn_sizeof_array_size((pDataSize ? *pDataSize : 0));
+        cmd_size += vn_sizeof_blob_array(pData, (pDataSize ? *pDataSize : 0));
     } else {
         cmd_size += vn_sizeof_array_size(0);
     }
@@ -895,10 +895,10 @@ static inline void vn_decode_vkGetVenusExperimentalFeatureData100000MESA_reply(s
         pDataSize = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        const size_t array_size = vn_decode_array_size(dec, *pDataSize);
+        const size_t array_size = vn_decode_array_size(dec, (pDataSize ? *pDataSize : 0));
         vn_decode_blob_array(dec, pData, array_size);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pData = NULL;
     }
 }
@@ -1094,6 +1094,8 @@ static inline void vn_submit_vkGetVenusExperimentalFeatureData100000MESA(struct 
 
 static inline void vn_call_vkSetReplyCommandStreamMESA(struct vn_instance *vn_instance, const VkCommandStreamDescriptionMESA* pStream)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkSetReplyCommandStreamMESA(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, pStream, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1111,6 +1113,8 @@ static inline void vn_async_vkSetReplyCommandStreamMESA(struct vn_instance *vn_i
 
 static inline void vn_call_vkSeekReplyCommandStreamMESA(struct vn_instance *vn_instance, size_t position)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkSeekReplyCommandStreamMESA(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, position, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1128,6 +1132,8 @@ static inline void vn_async_vkSeekReplyCommandStreamMESA(struct vn_instance *vn_
 
 static inline void vn_call_vkExecuteCommandStreamsMESA(struct vn_instance *vn_instance, uint32_t streamCount, const VkCommandStreamDescriptionMESA* pStreams, const size_t* pReplyPositions, uint32_t dependencyCount, const VkCommandStreamDependencyMESA* pDependencies, VkCommandStreamExecutionFlagsMESA flags)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkExecuteCommandStreamsMESA(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, streamCount, pStreams, pReplyPositions, dependencyCount, pDependencies, flags, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1145,6 +1151,8 @@ static inline void vn_async_vkExecuteCommandStreamsMESA(struct vn_instance *vn_i
 
 static inline void vn_call_vkCreateRingMESA(struct vn_instance *vn_instance, uint64_t ring, const VkRingCreateInfoMESA* pCreateInfo)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkCreateRingMESA(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, ring, pCreateInfo, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1162,6 +1170,8 @@ static inline void vn_async_vkCreateRingMESA(struct vn_instance *vn_instance, ui
 
 static inline void vn_call_vkDestroyRingMESA(struct vn_instance *vn_instance, uint64_t ring)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkDestroyRingMESA(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, ring, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1179,6 +1189,8 @@ static inline void vn_async_vkDestroyRingMESA(struct vn_instance *vn_instance, u
 
 static inline void vn_call_vkNotifyRingMESA(struct vn_instance *vn_instance, uint64_t ring, uint32_t seqno, VkRingNotifyFlagsMESA flags)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkNotifyRingMESA(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, ring, seqno, flags, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1196,6 +1208,8 @@ static inline void vn_async_vkNotifyRingMESA(struct vn_instance *vn_instance, ui
 
 static inline void vn_call_vkWriteRingExtraMESA(struct vn_instance *vn_instance, uint64_t ring, size_t offset, uint32_t value)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkWriteRingExtraMESA(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, ring, offset, value, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1213,6 +1227,8 @@ static inline void vn_async_vkWriteRingExtraMESA(struct vn_instance *vn_instance
 
 static inline VkResult vn_call_vkGetMemoryResourcePropertiesMESA(struct vn_instance *vn_instance, VkDevice device, uint32_t resourceId, VkMemoryResourcePropertiesMESA* pMemoryResourceProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetMemoryResourcePropertiesMESA(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, resourceId, pMemoryResourceProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -1233,6 +1249,8 @@ static inline void vn_async_vkGetMemoryResourcePropertiesMESA(struct vn_instance
 
 static inline void vn_call_vkGetVenusExperimentalFeatureData100000MESA(struct vn_instance *vn_instance, size_t* pDataSize, void* pData)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetVenusExperimentalFeatureData100000MESA(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, pDataSize, pData, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);

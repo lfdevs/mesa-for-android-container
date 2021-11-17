@@ -130,16 +130,20 @@ handlePictureParameterBuffer(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *
       vlVaHandlePictureParameterBufferMPEG4(drv, context, buf);
       break;
 
-  case PIPE_VIDEO_FORMAT_HEVC:
+   case PIPE_VIDEO_FORMAT_HEVC:
       vlVaHandlePictureParameterBufferHEVC(drv, context, buf);
       break;
 
-  case PIPE_VIDEO_FORMAT_JPEG:
+   case PIPE_VIDEO_FORMAT_JPEG:
       vlVaHandlePictureParameterBufferMJPEG(drv, context, buf);
       break;
 
-  case PIPE_VIDEO_FORMAT_VP9:
+   case PIPE_VIDEO_FORMAT_VP9:
       vlVaHandlePictureParameterBufferVP9(drv, context, buf);
+      break;
+
+   case PIPE_VIDEO_FORMAT_AV1:
+      vlVaHandlePictureParameterBufferAV1(drv, context, buf);
       break;
 
    default:
@@ -204,7 +208,7 @@ handleIQMatrixBuffer(vlVaContext *context, vlVaBuffer *buf)
 }
 
 static void
-handleSliceParameterBuffer(vlVaContext *context, vlVaBuffer *buf)
+handleSliceParameterBuffer(vlVaContext *context, vlVaBuffer *buf, unsigned num)
 {
    switch (u_reduce_video_profile(context->templat.profile)) {
    case PIPE_VIDEO_FORMAT_MPEG12:
@@ -233,6 +237,10 @@ handleSliceParameterBuffer(vlVaContext *context, vlVaBuffer *buf)
 
    case PIPE_VIDEO_FORMAT_VP9:
       vlVaHandleSliceParameterBufferVP9(context, buf);
+      break;
+
+   case PIPE_VIDEO_FORMAT_AV1:
+      vlVaHandleSliceParameterBufferAV1(context, buf, num);
       break;
 
    default:
@@ -324,23 +332,19 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
          sizes[num_buffers++] = context->mjpeg.slice_header_size;
          break;
       case PIPE_VIDEO_FORMAT_VP9:
-         vlVaDecoderVP9BitstreamHeader(context, buf);
+         if (false == context->desc.base.protected_playback)
+            vlVaDecoderVP9BitstreamHeader(context, buf);
+         break;
+      case PIPE_VIDEO_FORMAT_AV1:
          break;
       default:
          break;
       }
    }
 
-   if (context->desc.base.protected_playback && PIPE_VIDEO_FORMAT_VP9 == format){
-        vlVaDecoderVP9BitstreamHeader(context, buf);
-        buffers[num_buffers] = buf->data + context->desc.vp9.picture_parameter.frame_header_length_in_bytes;
-        sizes[num_buffers] = buf->size - context->desc.vp9.picture_parameter.frame_header_length_in_bytes;
-        ++num_buffers;
-   } else {
-        buffers[num_buffers] = buf->data;
-        sizes[num_buffers] = buf->size;
-        ++num_buffers;
-   }
+   buffers[num_buffers] = buf->data;
+   sizes[num_buffers] = buf->size;
+   ++num_buffers;
 
    if (format == PIPE_VIDEO_FORMAT_JPEG) {
       buffers[num_buffers] = (void *const)&eoi_jpeg;
@@ -399,6 +403,26 @@ handleVAEncMiscParameterTypeFrameRate(vlVaContext *context, VAEncMiscParameterBu
 }
 
 static VAStatus
+handleVAEncMiscParameterTypeTemporalLayer(vlVaContext *context, VAEncMiscParameterBuffer *misc)
+{
+   VAStatus status = VA_STATUS_SUCCESS;
+
+   switch (u_reduce_video_profile(context->templat.profile)) {
+   case PIPE_VIDEO_FORMAT_MPEG4_AVC:
+      status = vlVaHandleVAEncMiscParameterTypeTemporalLayerH264(context, misc);
+      break;
+
+   case PIPE_VIDEO_FORMAT_HEVC:
+      break;
+
+   default:
+      break;
+   }
+
+   return status;
+}
+
+static VAStatus
 handleVAEncSequenceParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
    VAStatus status = VA_STATUS_SUCCESS;
@@ -433,6 +457,10 @@ handleVAEncMiscParameterBufferType(vlVaContext *context, vlVaBuffer *buf)
 
    case VAEncMiscParameterTypeFrameRate:
       vaStatus = handleVAEncMiscParameterTypeFrameRate(context, misc);
+      break;
+
+   case VAEncMiscParameterTypeTemporalLayerStructure:
+      vaStatus = handleVAEncMiscParameterTypeTemporalLayer(context, misc);
       break;
 
    default:
@@ -574,7 +602,7 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
          break;
 
       case VASliceParameterBufferType:
-         handleSliceParameterBuffer(context, buf);
+         handleSliceParameterBuffer(context, buf, i);
          break;
 
       case VASliceDataBufferType:
@@ -705,6 +733,14 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       else
          surf->templat.bind &= ~PIPE_BIND_PROTECTED;
       realloc = true;
+   }
+
+   if (u_reduce_video_profile(context->templat.profile) == PIPE_VIDEO_FORMAT_AV1 &&
+       surf->buffer->buffer_format == PIPE_FORMAT_NV12) {
+      if (context->desc.av1.picture_parameter.bit_depth_idx == 1) {
+         surf->templat.buffer_format = PIPE_FORMAT_P010;
+         realloc = true;
+      }
    }
 
    if (realloc) {

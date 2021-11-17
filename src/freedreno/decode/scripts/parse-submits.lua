@@ -64,10 +64,6 @@ local depthwrite
 local stenciltest
 local stencilwrite
 
-function start_cmdstream(name)
-	printf("Parsing %s\n", name)
-end
-
 function reset()
 	dbg("reset\n")
 	mrts = {}
@@ -386,7 +382,7 @@ function draw(primtype, nindx)
 		depthwrite = true
 	end
 
-	if r.RB_DEPTH_CNTL.Z_ENABLE then
+	if r.RB_DEPTH_CNTL.Z_TEST_ENABLE then
 		depthtest = true
 	end
 

@@ -242,7 +242,7 @@ brw_emit_l3_state(struct brw_context *brw)
       update_urb_size(brw, cfg);
       brw->l3.config = cfg;
 
-      if (INTEL_DEBUG & DEBUG_L3) {
+      if (INTEL_DEBUG(DEBUG_L3)) {
          fprintf(stderr, "L3 config transition (%f > %f): ", dw, dw_threshold);
          intel_dump_l3_config(cfg, stderr);
       }

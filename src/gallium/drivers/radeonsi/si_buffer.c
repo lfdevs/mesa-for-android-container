@@ -145,30 +145,20 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
       res->flags |= RADEON_FLAG_UNCACHED;
 
    /* Set expected VRAM and GART usage for the buffer. */
-   res->vram_usage_kb = 0;
-   res->gart_usage_kb = 0;
-   res->max_forced_staging_uploads = 0;
-   res->b.max_forced_staging_uploads = 0;
+   res->memory_usage_kb = MAX2(1, size / 1024);
 
    if (res->domains & RADEON_DOMAIN_VRAM) {
-      res->vram_usage_kb = MAX2(1, size / 1024);
-
-      if (!sscreen->info.smart_access_memory) {
-         /* We don't want to evict buffers from VRAM by mapping them for CPU access,
-          * because they might never be moved back again. If a buffer is large enough,
-          * upload data by copying from a temporary GTT buffer. 8K might not seem much,
-          * but there can be 100000 buffers.
-          *
-          * This tweak improves performance for viewperf.
-          */
-         const unsigned min_size = 8196; /* tuned to minimize mapped VRAM */
-         const unsigned max_staging_uploads = 1; /* number of uploads before mapping directly */
-
-         res->max_forced_staging_uploads = res->b.max_forced_staging_uploads =
-            sscreen->info.has_dedicated_vram && size >= min_size ? max_staging_uploads : 0;
-      }
-   } else if (res->domains & RADEON_DOMAIN_GTT) {
-      res->gart_usage_kb = MAX2(1, size / 1024);
+      /* We don't want to evict buffers from VRAM by mapping them for CPU access,
+       * because they might never be moved back again. If a buffer is large enough,
+       * upload data by copying from a temporary GTT buffer. 8K might not seem much,
+       * but there can be 100000 buffers.
+       *
+       * This tweak improves performance for viewperf creo & snx.
+       */
+      if (!sscreen->info.smart_access_memory &&
+          sscreen->info.has_dedicated_vram &&
+          size >= 8196)
+         res->b.b.flags |= PIPE_RESOURCE_FLAG_DONT_MAP_DIRECTLY;
    }
 }
 
@@ -228,12 +218,12 @@ static void si_resource_destroy(struct pipe_screen *screen, struct pipe_resource
       util_range_destroy(&buffer->valid_buffer_range);
       radeon_bo_reference(((struct si_screen*)screen)->ws, &buffer->buf, NULL);
       util_idalloc_mt_free(&sscreen->buffer_ids, buffer->b.buffer_id_unique);
-      FREE(buffer);
+      FREE_CL(buffer);
    } else if (buf->flags & SI_RESOURCE_AUX_PLANE) {
       struct si_auxiliary_texture *tex = (struct si_auxiliary_texture *)buf;
 
       radeon_bo_reference(((struct si_screen*)screen)->ws, &tex->buffer, NULL);
-      FREE(tex);
+      FREE_CL(tex);
    } else {
       struct si_texture *tex = (struct si_texture *)buf;
       struct si_resource *resource = &tex->buffer;
@@ -244,7 +234,7 @@ static void si_resource_destroy(struct pipe_screen *screen, struct pipe_resource
          si_resource_reference(&tex->cmask_buffer, NULL);
       }
       radeon_bo_reference(((struct si_screen*)screen)->ws, &resource->buf, NULL);
-      FREE(tex);
+      FREE_CL(tex);
    }
 }
 
@@ -295,12 +285,9 @@ void si_replace_buffer_storage(struct pipe_context *ctx, struct pipe_resource *d
    radeon_bo_reference(sctx->screen->ws, &sdst->buf, ssrc->buf);
    sdst->gpu_address = ssrc->gpu_address;
    sdst->b.b.bind = ssrc->b.b.bind;
-   sdst->b.max_forced_staging_uploads = ssrc->b.max_forced_staging_uploads;
-   sdst->max_forced_staging_uploads = ssrc->max_forced_staging_uploads;
    sdst->flags = ssrc->flags;
 
-   assert(sdst->vram_usage_kb == ssrc->vram_usage_kb);
-   assert(sdst->gart_usage_kb == ssrc->gart_usage_kb);
+   assert(sdst->memory_usage_kb == ssrc->memory_usage_kb);
    assert(sdst->bo_size == ssrc->bo_size);
    assert(sdst->bo_alignment_log2 == ssrc->bo_alignment_log2);
    assert(sdst->domains == ssrc->domains);
@@ -394,10 +381,7 @@ static void *si_buffer_transfer_map(struct pipe_context *ctx, struct pipe_resour
    bool force_discard_range = false;
    if (usage & (PIPE_MAP_DISCARD_WHOLE_RESOURCE | PIPE_MAP_DISCARD_RANGE) &&
        !(usage & PIPE_MAP_PERSISTENT) &&
-       /* Try not to decrement the counter if it's not positive. Still racy,
-        * but it makes it harder to wrap the counter from INT_MIN to INT_MAX. */
-       buf->max_forced_staging_uploads > 0 &&
-       p_atomic_dec_return(&buf->max_forced_staging_uploads) >= 0) {
+       buf->b.b.flags & PIPE_RESOURCE_FLAG_DONT_MAP_DIRECTLY) {
       usage &= ~(PIPE_MAP_DISCARD_WHOLE_RESOURCE | PIPE_MAP_UNSYNCHRONIZED);
       usage |= PIPE_MAP_DISCARD_RANGE;
       force_discard_range = true;
@@ -576,9 +560,7 @@ static void si_buffer_subdata(struct pipe_context *ctx, struct pipe_resource *bu
 static struct si_resource *si_alloc_buffer_struct(struct pipe_screen *screen,
                                                   const struct pipe_resource *templ)
 {
-   struct si_resource *buf;
-
-   buf = MALLOC_STRUCT(si_resource);
+   struct si_resource *buf = MALLOC_STRUCT_CL(si_resource);
 
    buf->b.b = *templ;
    buf->b.b.next = NULL;
@@ -610,7 +592,7 @@ static struct pipe_resource *si_buffer_create(struct pipe_screen *screen,
 
    if (!si_alloc_resource(sscreen, buf)) {
       threaded_resource_deinit(&buf->b.b);
-      FREE(buf);
+      FREE_CL(buf);
       return NULL;
    }
 
@@ -660,13 +642,12 @@ static struct pipe_resource *si_buffer_from_user_memory(struct pipe_screen *scre
    buf->buf = ws->buffer_from_ptr(ws, user_memory, templ->width0);
    if (!buf->buf) {
       threaded_resource_deinit(&buf->b.b);
-      FREE(buf);
+      FREE_CL(buf);
       return NULL;
    }
 
    buf->gpu_address = ws->buffer_get_virtual_address(buf->buf);
-   buf->vram_usage_kb = 0;
-   buf->gart_usage_kb = templ->width0 / 1024;
+   buf->memory_usage_kb = templ->width0 / 1024;
    buf->b.buffer_id_unique = util_idalloc_mt_alloc(&sscreen->buffer_ids);
    return &buf->b.b;
 }
@@ -688,10 +669,7 @@ struct pipe_resource *si_buffer_from_winsys_buffer(struct pipe_screen *screen,
    res->bo_alignment_log2 = imported_buf->alignment_log2;
    res->domains = sscreen->ws->buffer_get_initial_domain(res->buf);
 
-   if (res->domains & RADEON_DOMAIN_VRAM)
-      res->vram_usage_kb = MAX2(1, res->bo_size / 1024);
-   else if (res->domains & RADEON_DOMAIN_GTT)
-      res->gart_usage_kb = MAX2(1, res->bo_size / 1024);
+   res->memory_usage_kb = MAX2(1, res->bo_size / 1024);
 
    if (sscreen->ws->buffer_get_flags)
       res->flags = sscreen->ws->buffer_get_flags(res->buf);

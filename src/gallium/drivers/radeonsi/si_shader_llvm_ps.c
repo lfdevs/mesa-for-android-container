@@ -486,14 +486,14 @@ static bool si_export_mrt_color(struct si_shader_context *ctx, LLVMValueRef *col
  *
  * The alpha-ref SGPR is returned via its original location.
  */
-static void si_llvm_return_fs_outputs(struct ac_shader_abi *abi, unsigned max_outputs,
-                                      LLVMValueRef *addrs)
+static void si_llvm_return_fs_outputs(struct ac_shader_abi *abi)
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
    struct si_shader *shader = ctx->shader;
    struct si_shader_info *info = &shader->selector->info;
    LLVMBuilderRef builder = ctx->ac.builder;
    unsigned i, j, first_vgpr, vgpr;
+   LLVMValueRef *addrs = abi->outputs;
 
    LLVMValueRef color[8][4] = {};
    LLVMValueRef depth = NULL, stencil = NULL, samplemask = NULL;

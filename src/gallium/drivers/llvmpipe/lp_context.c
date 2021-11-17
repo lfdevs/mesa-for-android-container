@@ -284,6 +284,9 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    draw_wide_point_threshold(llvmpipe->draw, 10000.0);
    draw_wide_line_threshold(llvmpipe->draw, 10000.0);
 
+   /* initial state for clipping - enabled, with no guardband */
+   draw_set_driver_clipping(llvmpipe->draw, FALSE, FALSE, FALSE, TRUE);
+
    lp_reset_counters();
 
    /* If llvmpipe_set_scissor_states() is never called, we still need to

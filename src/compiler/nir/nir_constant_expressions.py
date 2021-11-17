@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import re
 from nir_opcodes import opcodes
 from nir_opcodes import type_has_size, type_size, type_sizes, type_base_type

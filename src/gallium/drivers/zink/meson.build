@@ -24,12 +24,13 @@ files_libzink = files(
   'nir_to_spirv/spirv_builder.c',
   'zink_batch.c',
   'zink_blit.c',
+  'zink_bo.c',
   'zink_clear.c',
   'zink_compiler.c',
   'zink_context.c',
   'zink_descriptors.c',
   'zink_descriptors_lazy.c',
-  'zink_draw.c',
+  'zink_draw.cpp',
   'zink_fence.c',
   'zink_format.c',
   'zink_framebuffer.c',
@@ -91,8 +92,11 @@ libzink = static_library(
   'zink',
   [files_libzink, zink_device_info, zink_instance, zink_nir_algebraic_c, vk_dispatch_table],
   gnu_symbol_visibility : 'hidden',
-  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_vulkan_wsi, inc_vulkan_util, inc_zink_vk],
-  dependencies: [dep_vulkan, idep_nir_headers, idep_mesautil, idep_vulkan_util_headers],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_vulkan_util, inc_zink_vk],
+  dependencies: [
+    dep_vulkan, idep_nir_headers, idep_mesautil, idep_vulkan_util_headers,
+    idep_vulkan_wsi_headers, dep_libdrm
+  ],
   c_args: zink_c_args,
 )
 

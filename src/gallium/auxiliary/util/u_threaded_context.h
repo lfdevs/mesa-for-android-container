@@ -145,6 +145,10 @@
  *    the threaded context wants to replace a resource's backing storage with
  *    another resource's backing storage. The threaded context uses it to
  *    implement buffer invalidation. This call is always queued.
+ *    Note that 'minimum_num_rebinds' specifies only the minimum number of rebinds
+ *    which must be managed by the driver; if a buffer is bound multiple times in
+ *    the same binding point (e.g., vertex buffer slots 0,1,2), this will be counted
+ *    as a single rebind.
  *
  *
  * Optional resource busy callbacks for better performance
@@ -290,7 +294,7 @@ enum tc_binding_type {
 typedef void (*tc_replace_buffer_storage_func)(struct pipe_context *ctx,
                                                struct pipe_resource *dst,
                                                struct pipe_resource *src,
-                                               unsigned num_rebinds,
+                                               unsigned minimum_num_rebinds,
                                                uint32_t rebind_mask,
                                                uint32_t delete_buffer_id);
 typedef struct pipe_fence_handle *(*tc_create_fence_func)(struct pipe_context *ctx,
@@ -332,12 +336,6 @@ struct threaded_resource {
     * Use util_idalloc_mt to generate these IDs.
     */
    uint32_t buffer_id_unique;
-
-   /* If positive, prefer DISCARD_RANGE with a staging buffer over any other
-    * method of CPU access when map flags allow it. Useful for buffers that
-    * are too large for the visible VRAM window.
-    */
-   int max_forced_staging_uploads;
 
    /* If positive, then a staging transfer is in progress.
     */
@@ -410,13 +408,29 @@ struct tc_buffer_list {
    BITSET_DECLARE(buffer_list, TC_BUFFER_ID_MASK + 1);
 };
 
+/**
+ * Optional TC parameters/callbacks.
+ */
+struct threaded_context_options {
+   tc_create_fence_func create_fence;
+   tc_is_resource_busy is_resource_busy;
+   bool driver_calls_flush_notify;
+
+   /**
+    * If true, ctx->get_device_reset_status() will be called without
+    * synchronizing with driver thread.  Drivers can enable this to avoid
+    * TC syncs if their implementation of get_device_reset_status() is
+    * safe to call without synchronizing with driver thread.
+    */
+   bool unsynchronized_get_device_reset_status;
+};
+
 struct threaded_context {
    struct pipe_context base;
    struct pipe_context *pipe;
    struct slab_child_pool pool_transfers;
    tc_replace_buffer_storage_func replace_buffer_storage;
-   tc_create_fence_func create_fence;
-   tc_is_resource_busy is_resource_busy;
+   struct threaded_context_options options;
    unsigned map_buffer_alignment;
    unsigned ubo_alignment;
 
@@ -427,7 +441,6 @@ struct threaded_context {
    unsigned num_direct_slots;
    unsigned num_syncs;
 
-   bool driver_calls_flush_notify;
    bool use_forced_staging_uploads;
    bool add_all_gfx_bindings_to_buffer_list;
    bool add_all_compute_bindings_to_buffer_list;
@@ -499,10 +512,11 @@ struct pipe_context *
 threaded_context_create(struct pipe_context *pipe,
                         struct slab_parent_pool *parent_transfer_pool,
                         tc_replace_buffer_storage_func replace_buffer,
-                        tc_create_fence_func create_fence,
-                        tc_is_resource_busy is_resource_busy,
-                        bool driver_calls_flush_notify,
+                        const struct threaded_context_options *options,
                         struct threaded_context **out);
+
+void
+threaded_context_init_bytes_mapped_limit(struct threaded_context *tc, unsigned divisor);
 
 void
 threaded_context_flush(struct pipe_context *_pipe,

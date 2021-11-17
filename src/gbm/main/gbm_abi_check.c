@@ -46,8 +46,13 @@
  * -Add a new block of checks in main()
  */
 
-/* From: 49a7331cb02 - James Jones - gbm: Version the backend interface */
-#define GBM_BACKEND_ABI_VERSION_abi0 0
+/*
+ * From: Simon Ser - "gbm: assume USE_SCANOUT in create_with_modifiers"
+ *
+ * Note: ABI 1 is identical to ABI 0, except gbm_device_v0.bo_create can
+ * provide both modifiers and usage.
+ */
+#define GBM_BACKEND_ABI_VERSION_abi0 1
 struct gbm_device_v0_abi0 {
    const struct gbm_backend_desc *backend_desc;
    uint32_t backend_version;

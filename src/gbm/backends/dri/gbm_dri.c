@@ -68,6 +68,28 @@ dri_lookup_egl_image(__DRIscreen *screen, void *image, void *data)
    return dri->lookup_image(screen, image, dri->lookup_user_data);
 }
 
+static GLboolean
+dri_validate_egl_image(void *image, void *data)
+{
+   struct gbm_dri_device *dri = data;
+
+   if (dri->validate_image == NULL)
+      return false;
+
+   return dri->validate_image(image, dri->lookup_user_data);
+}
+
+static __DRIimage *
+dri_lookup_egl_image_validated(void *image, void *data)
+{
+   struct gbm_dri_device *dri = data;
+
+   if (dri->lookup_image_validated == NULL)
+      return NULL;
+
+   return dri->lookup_image_validated(image, dri->lookup_user_data);
+}
+
 static __DRIbuffer *
 dri_get_buffers(__DRIdrawable * driDrawable,
 		 int *width, int *height,
@@ -214,9 +236,11 @@ static const __DRIuseInvalidateExtension use_invalidate = {
 };
 
 static const __DRIimageLookupExtension image_lookup_extension = {
-   .base = { __DRI_IMAGE_LOOKUP, 1 },
+   .base = { __DRI_IMAGE_LOOKUP, 2 },
 
-   .lookupEGLImage          = dri_lookup_egl_image
+   .lookupEGLImage          = dri_lookup_egl_image,
+   .validateEGLImage        = dri_validate_egl_image,
+   .lookupEGLImageValidated = dri_lookup_egl_image_validated,
 };
 
 static const __DRIdri2LoaderExtension dri2_loader_extension = {
@@ -503,6 +527,11 @@ static const struct gbm_dri_visual gbm_dri_visuals_table[] = {
      GBM_FORMAT_R8, __DRI_IMAGE_FORMAT_R8,
      { 0, -1, -1, -1 },
      { 8, 0, 0, 0 },
+   },
+   {
+     GBM_FORMAT_R16, __DRI_IMAGE_FORMAT_R16,
+     { 0, -1, -1, -1 },
+     { 16, 0, 0, 0 },
    },
    {
      GBM_FORMAT_GR88, __DRI_IMAGE_FORMAT_GR88,
@@ -1155,11 +1184,6 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    struct gbm_dri_bo *bo;
    int dri_format;
    unsigned dri_use = 0;
-
-   /* Callers of this may specify a modifier, or a dri usage, but not both. The
-    * newer modifier interface deprecates the older usage flags.
-    */
-   assert(!(usage && count));
 
    format = gbm_core.v0.format_canonicalize(format);
 

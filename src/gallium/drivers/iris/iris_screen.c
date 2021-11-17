@@ -38,6 +38,7 @@
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 #include "util/debug.h"
+#include "util/u_cpu_detect.h"
 #include "util/u_inlines.h"
 #include "util/format/u_format.h"
 #include "util/u_transfer_helper.h"
@@ -144,13 +145,10 @@ static const char *
 iris_get_name(struct pipe_screen *pscreen)
 {
    struct iris_screen *screen = (struct iris_screen *)pscreen;
+   const struct intel_device_info *devinfo = &screen->devinfo;
    static char buf[128];
-   const char *name = intel_get_device_name(screen->pci_id);
 
-   if (!name)
-      name = "Intel Unknown";
-
-   snprintf(buf, sizeof(buf), "Mesa %s", name);
+   snprintf(buf, sizeof(buf), "Mesa %s", devinfo->name);
    return buf;
 }
 
@@ -519,9 +517,7 @@ iris_get_compute_param(struct pipe_screen *pscreen,
    struct iris_screen *screen = (struct iris_screen *)pscreen;
    const struct intel_device_info *devinfo = &screen->devinfo;
 
-   /* Limit max_threads to 64 for the GPGPU_WALKER command. */
-   const unsigned max_threads = MIN2(64, devinfo->max_cs_threads);
-   const uint32_t max_invocations = 32 * max_threads;
+   const uint32_t max_invocations = 32 * devinfo->max_cs_workgroup_threads;
 
 #define RET(x) do {                  \
    if (ret)                          \
@@ -563,7 +559,7 @@ iris_get_compute_param(struct pipe_screen *pscreen,
       RET((uint64_t []) { 64 * 1024 });
 
    case PIPE_COMPUTE_CAP_IMAGES_SUPPORTED:
-      RET((uint32_t []) { 0 });
+      RET((uint32_t []) { 1 });
 
    case PIPE_COMPUTE_CAP_SUBGROUP_SIZE:
       RET((uint32_t []) { BRW_SUBGROUP_SIZE });
@@ -576,10 +572,7 @@ iris_get_compute_param(struct pipe_screen *pscreen,
       RET((uint32_t []) { 400 }); /* TODO */
 
    case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS: {
-      unsigned total_num_subslices = 0;
-      for (unsigned i = 0; i < devinfo->num_slices; i++)
-         total_num_subslices += devinfo->num_subslices[i];
-      RET((uint32_t []) { total_num_subslices });
+      RET((uint32_t []) { intel_device_info_subslice_total(devinfo) });
    }
 
    case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE:
@@ -614,6 +607,7 @@ void
 iris_screen_destroy(struct iris_screen *screen)
 {
    iris_destroy_screen_measure(screen);
+   util_queue_destroy(&screen->shader_compiler_queue);
    glsl_type_singleton_decref();
    iris_bo_unreference(screen->workaround_bo);
    u_transfer_helper_destroy(screen->base.transfer_helper);
@@ -688,29 +682,27 @@ iris_get_default_l3_config(const struct intel_device_info *devinfo,
 }
 
 static void
-iris_shader_debug_log(void *data, const char *fmt, ...)
+iris_shader_debug_log(void *data, unsigned *id, const char *fmt, ...)
 {
    struct pipe_debug_callback *dbg = data;
-   unsigned id = 0;
    va_list args;
 
    if (!dbg->debug_message)
       return;
 
    va_start(args, fmt);
-   dbg->debug_message(dbg->data, &id, PIPE_DEBUG_TYPE_SHADER_INFO, fmt, args);
+   dbg->debug_message(dbg->data, id, PIPE_DEBUG_TYPE_SHADER_INFO, fmt, args);
    va_end(args);
 }
 
 static void
-iris_shader_perf_log(void *data, const char *fmt, ...)
+iris_shader_perf_log(void *data, unsigned *id, const char *fmt, ...)
 {
    struct pipe_debug_callback *dbg = data;
-   unsigned id = 0;
    va_list args;
    va_start(args, fmt);
 
-   if (INTEL_DEBUG & DEBUG_PERF) {
+   if (INTEL_DEBUG(DEBUG_PERF)) {
       va_list args_copy;
       va_copy(args_copy, args);
       vfprintf(stderr, fmt, args_copy);
@@ -718,7 +710,7 @@ iris_shader_perf_log(void *data, const char *fmt, ...)
    }
 
    if (dbg->debug_message) {
-      dbg->debug_message(dbg->data, &id, PIPE_DEBUG_TYPE_PERF_INFO, fmt, args);
+      dbg->debug_message(dbg->data, id, PIPE_DEBUG_TYPE_PERF_INFO, fmt, args);
    }
 
    va_end(args);
@@ -741,7 +733,10 @@ iris_init_identifier_bo(struct iris_screen *screen)
    if (!bo_map)
       return false;
 
-   screen->workaround_bo->kflags |= EXEC_OBJECT_CAPTURE;
+   assert(iris_bo_is_real(screen->workaround_bo));
+
+   screen->workaround_bo->real.kflags |=
+      EXEC_OBJECT_CAPTURE | EXEC_OBJECT_ASYNC;
    screen->workaround_address = (struct iris_address) {
       .bo = screen->workaround_bo,
       .offset = ALIGN(
@@ -777,12 +772,14 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    if (!intel_get_device_info_from_fd(fd, &screen->devinfo))
       return NULL;
    screen->pci_id = screen->devinfo.chipset_id;
-   screen->no_hw = screen->devinfo.no_hw;
 
    p_atomic_set(&screen->refcount, 1);
 
    if (screen->devinfo.ver < 8 || screen->devinfo.is_cherryview)
       return NULL;
+
+   driParseConfigFiles(config->options, config->options_info, 0, "iris",
+                       NULL, NULL, NULL, 0, NULL, 0);
 
    bool bo_reuse = false;
    int bo_reuse_mode = driQueryOptioni(config->options, "bo_reuse");
@@ -801,12 +798,11 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    screen->fd = iris_bufmgr_get_fd(screen->bufmgr);
    screen->winsys_fd = fd;
 
-   if (getenv("INTEL_NO_HW") != NULL)
-      screen->no_hw = true;
+   screen->id = iris_bufmgr_create_screen_id(screen->bufmgr);
 
    screen->workaround_bo =
       iris_bo_alloc(screen->bufmgr, "workaround", 4096, 1,
-                    IRIS_MEMZONE_OTHER, 0);
+                    IRIS_MEMZONE_OTHER, BO_ALLOC_NO_SUBALLOC);
    if (!screen->workaround_bo)
       return NULL;
 
@@ -821,6 +817,8 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
       driQueryOptionb(config->options, "disable_throttling");
    screen->driconf.always_flush_cache =
       driQueryOptionb(config->options, "always_flush_cache");
+   screen->driconf.sync_compile =
+      driQueryOptionb(config->options, "sync_compile");
 
    screen->precompile = env_var_as_boolean("shader_precompile", true);
 
@@ -841,9 +839,6 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
 
    slab_create_parent(&screen->transfer_pool,
                       sizeof(struct iris_transfer), 64);
-
-   screen->subslice_total = intel_device_info_subslice_total(&screen->devinfo);
-   assert(screen->subslice_total >= 1);
 
    iris_detect_kernel_features(screen);
 
@@ -872,10 +867,35 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    pscreen->query_memory_info = iris_query_memory_info;
    pscreen->get_driver_query_group_info = iris_get_monitor_group_info;
    pscreen->get_driver_query_info = iris_get_monitor_info;
+   iris_init_screen_program_functions(pscreen);
 
    genX_call(&screen->devinfo, init_screen_state, screen);
 
    glsl_type_singleton_init_or_ref();
+
+   /* FINISHME: Big core vs little core (for CPUs that have both kinds of
+    * cores) and, possibly, thread vs core should be considered here too.
+    */
+   unsigned compiler_threads = 1;
+   const struct util_cpu_caps_t *caps = util_get_cpu_caps();
+   unsigned hw_threads = caps->nr_cpus;
+
+   if (hw_threads >= 12) {
+      compiler_threads = hw_threads * 3 / 4;
+   } else if (hw_threads >= 6) {
+      compiler_threads = hw_threads - 2;
+   } else if (hw_threads >= 2) {
+      compiler_threads = hw_threads - 1;
+   }
+
+   if (!util_queue_init(&screen->shader_compiler_queue,
+                        "sh", 64, compiler_threads,
+                        UTIL_QUEUE_INIT_RESIZE_IF_FULL |
+                        UTIL_QUEUE_INIT_SET_FULL_THREAD_AFFINITY,
+                        NULL)) {
+      iris_screen_destroy(screen);
+      return NULL;
+   }
 
    return pscreen;
 }

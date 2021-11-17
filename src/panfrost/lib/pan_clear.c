@@ -23,6 +23,8 @@
  *
  */
 
+#include "genxml/gen_macros.h"
+
 #include <string.h>
 #include "pan_util.h"
 #include "pan_format.h"
@@ -70,18 +72,6 @@ float_to_fixed(float f, unsigned bits_int, unsigned bits_frac, bool dither)
         }
 }
 
-/* These values are shared across hardware versions. Don't include GenXML. */
-enum mali_color_buffer_internal_format {
-        MALI_COLOR_BUFFER_INTERNAL_FORMAT_RAW = 0,
-        MALI_COLOR_BUFFER_INTERNAL_FORMAT_R8G8B8A8 = 1,
-        MALI_COLOR_BUFFER_INTERNAL_FORMAT_R10G10B10A2 = 2,
-        MALI_COLOR_BUFFER_INTERNAL_FORMAT_R8G8B8A2 = 3,
-        MALI_COLOR_BUFFER_INTERNAL_FORMAT_R4G4B4A4 = 4,
-        MALI_COLOR_BUFFER_INTERNAL_FORMAT_R5G6B5A0 = 5,
-        MALI_COLOR_BUFFER_INTERNAL_FORMAT_R5G5B5A1 = 6,
-        MALI_COLOR_BUFFER_NUM_FORMATS,
-};
-
 struct mali_tib_layout {
         unsigned int_r, frac_r;
         unsigned int_g, frac_g;
@@ -89,7 +79,7 @@ struct mali_tib_layout {
         unsigned int_a, frac_a;
 };
 
-static const struct mali_tib_layout tib_layouts[MALI_COLOR_BUFFER_NUM_FORMATS] = {
+static const struct mali_tib_layout tib_layouts[] = {
         [MALI_COLOR_BUFFER_INTERNAL_FORMAT_R8G8B8A8] = { 8, 0, 8, 0, 8, 0, 8, 0 },
         [MALI_COLOR_BUFFER_INTERNAL_FORMAT_R10G10B10A2] = { 10, 0, 10, 0, 10, 0, 2, 0 },
         [MALI_COLOR_BUFFER_INTERNAL_FORMAT_R8G8B8A2] = { 8, 2, 8, 2, 8, 2, 2, 0 },
@@ -132,7 +122,7 @@ pan_pack_color(uint32_t *packed, const union pipe_color_union *color,
         enum mali_color_buffer_internal_format internal =
                 panfrost_blendable_formats_v7[format].internal;
 
-        if (internal == MALI_COLOR_BUFFER_INTERNAL_FORMAT_RAW) {
+        if (internal == MALI_COLOR_BUFFER_INTERNAL_FORMAT_RAW_VALUE) {
                 pan_pack_raw(packed, color, format);
                 return;
         }
@@ -155,7 +145,7 @@ pan_pack_color(uint32_t *packed, const union pipe_color_union *color,
         }
 
         /* Look up the layout of the tilebuffer */
-        assert(internal < MALI_COLOR_BUFFER_NUM_FORMATS);
+        assert(internal < ARRAY_SIZE(tib_layouts));
         struct mali_tib_layout l = tib_layouts[internal];
 
         unsigned count_r = l.int_r + l.frac_r;

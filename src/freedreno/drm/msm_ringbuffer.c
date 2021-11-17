@@ -149,7 +149,7 @@ append_bo(struct msm_submit *submit, struct fd_bo *bo)
          idx = APPEND(
             submit, submit_bos,
             (struct drm_msm_gem_submit_bo){
-               .flags = bo->flags & (MSM_SUBMIT_BO_READ | MSM_SUBMIT_BO_WRITE),
+               .flags = bo->reloc_flags & (MSM_SUBMIT_BO_READ | MSM_SUBMIT_BO_WRITE),
                .handle = bo->handle,
                .presumed = 0,
             });
@@ -512,7 +512,7 @@ msm_ringbuffer_emit_reloc(struct fd_ringbuffer *ring,
 
    ring->cur++;
 
-   if (pipe->gpu_id >= 500) {
+   if (fd_dev_64b(&pipe->dev_id)) {
       APPEND(msm_ring->cmd, relocs,
              (struct drm_msm_gem_submit_reloc){
                 .reloc_idx = reloc_idx,

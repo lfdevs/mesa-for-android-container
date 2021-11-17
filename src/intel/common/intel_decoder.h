@@ -252,6 +252,7 @@ struct intel_batch_decode_ctx {
    enum drm_i915_gem_engine_class engine;
 
    int n_batch_buffer_start;
+   uint64_t acthd;
 };
 
 void intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,

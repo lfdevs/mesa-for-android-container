@@ -22,7 +22,7 @@ cuts taken to get things up and running (which are mostly not inherent to
 the xml schema, and should not be too difficult to remove from the py and
 decode/disasm utility):
 
-* Maximum "bitset" size is 64b
+* Maximum "field" size is 64b
 * Fixed instruction size
 
 Often times, especially when new functionality is added in later gens
@@ -183,6 +183,9 @@ At some level in the bitset inheritance hiearchy, there is expected to be a
 decoding.  The display template consists of references to fields (which may
 be derived fields) specified as ``{FIELDNAME}`` and other characters
 which are just echoed through to the resulting decoded bitset.
+
+It is possible to define a line column alignment value per field to influence
+the visual output. It needs to be pecified as ``{FIELDNAME:align=xx}``.
 
 The ``<override>`` element will be described in the next section, but it
 provides for both different decoded instruction syntax/mnemonics (when

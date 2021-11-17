@@ -1,8 +1,0 @@
---- a/bin/symbols-check.py
-+++ b/bin/symbols-check.py
-@@ -1,4 +1,4 @@
--#!/usr/bin/env python
-+#!/usr/bin/env python3
- 
- import argparse
- import os

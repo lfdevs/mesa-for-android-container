@@ -550,7 +550,7 @@ read_src(read_ctx *ctx, nir_src *src, void *mem_ctx)
       src->reg.reg = read_lookup_object(ctx, header.any.object_idx);
       src->reg.base_offset = blob_read_uint32(ctx->blob);
       if (header.any.is_indirect) {
-         src->reg.indirect = ralloc(mem_ctx, nir_src);
+         src->reg.indirect = malloc(sizeof(nir_src));
          read_src(ctx, src->reg.indirect, mem_ctx);
       } else {
          src->reg.indirect = NULL;
@@ -770,7 +770,7 @@ read_dest(read_ctx *ctx, nir_dest *dst, nir_instr *instr,
       dst->reg.reg = read_object(ctx);
       dst->reg.base_offset = blob_read_uint32(ctx->blob);
       if (dest.reg.is_indirect) {
-         dst->reg.indirect = ralloc(instr, nir_src);
+         dst->reg.indirect = malloc(sizeof(nir_src));
          read_src(ctx, dst->reg.indirect, instr);
       }
    }
@@ -1590,11 +1590,9 @@ read_phi(read_ctx *ctx, nir_block *blk, union packed_instr header)
    nir_instr_insert_after_block(blk, &phi->instr);
 
    for (unsigned i = 0; i < header.phi.num_srcs; i++) {
-      nir_phi_src *src = ralloc(phi, nir_phi_src);
-
-      src->src.is_ssa = true;
-      src->src.ssa = (nir_ssa_def *)(uintptr_t) blob_read_uint32(ctx->blob);
-      src->pred = (nir_block *)(uintptr_t) blob_read_uint32(ctx->blob);
+      nir_ssa_def *def = (nir_ssa_def *)(uintptr_t) blob_read_uint32(ctx->blob);
+      nir_block *pred = (nir_block *)(uintptr_t) blob_read_uint32(ctx->blob);
+      nir_phi_src *src = nir_phi_instr_add_src(phi, pred, nir_src_for_ssa(def));
 
       /* Since we're not letting nir_insert_instr handle use/def stuff for us,
        * we have to set the parent_instr manually.  It doesn't really matter
@@ -1606,8 +1604,6 @@ read_phi(read_ctx *ctx, nir_block *blk, union packed_instr header)
        * sources at the very end of read_function_impl.
        */
       list_add(&src->src.use_link, &ctx->phi_srcs);
-
-      exec_list_push_tail(&phi->srcs, &src->node);
    }
 
    return phi;
@@ -2105,6 +2101,8 @@ nir_deserialize(void *mem_ctx,
    }
 
    free(ctx.idx_table);
+
+   nir_validate_shader(ctx.nir, "after deserialize");
 
    return ctx.nir;
 }

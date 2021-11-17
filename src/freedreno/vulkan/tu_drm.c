@@ -34,8 +34,11 @@
 #include "drm-uapi/msm_drm.h"
 #include "util/timespec.h"
 #include "util/os_time.h"
+#include "util/perf/u_trace.h"
 
 #include "tu_private.h"
+
+#include "tu_cs.h"
 
 struct tu_binary_syncobj {
    uint32_t permanent, temporary;
@@ -84,6 +87,7 @@ struct tu_queue_submit
    struct   list_head link;
 
    VkCommandBuffer *cmd_buffers;
+   struct tu_u_trace_cmd_data *cmd_buffer_trace_data;
    uint32_t cmd_buffer_count;
 
    struct   tu_syncobj **wait_semaphores;
@@ -110,6 +114,12 @@ struct tu_queue_submit
    bool     last_submit;
    uint32_t entry_count;
    uint32_t counter_pass_index;
+};
+
+struct tu_u_trace_syncobj
+{
+   uint32_t msm_queue_id;
+   uint32_t fence;
 };
 
 static int
@@ -163,6 +173,12 @@ static int
 tu_drm_get_gmem_base(const struct tu_physical_device *dev, uint64_t *base)
 {
    return tu_drm_get_param(dev, MSM_PARAM_GMEM_BASE, base);
+}
+
+int
+tu_drm_get_timestamp(struct tu_physical_device *device, uint64_t *ts)
+{
+   return tu_drm_get_param(device, MSM_PARAM_TIMESTAMP, ts);
 }
 
 int
@@ -246,10 +262,8 @@ tu_bo_init(struct tu_device *dev,
       struct drm_msm_gem_submit_bo *new_ptr =
          vk_realloc(&dev->vk.alloc, dev->bo_list, new_len * sizeof(*dev->bo_list),
                     8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-      if (!new_ptr) {
-         tu_gem_close(dev, gem_handle);
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
+      if (!new_ptr)
+         goto fail_bo_list;
 
       dev->bo_list = new_ptr;
       dev->bo_list_size = new_len;
@@ -261,10 +275,8 @@ tu_bo_init(struct tu_device *dev,
       uint32_t *new_ptr =
          vk_realloc(&dev->vk.alloc, dev->bo_idx, new_len * sizeof(*dev->bo_idx),
                     8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-      if (!new_ptr) {
-         tu_gem_close(dev, gem_handle);
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
+      if (!new_ptr)
+         goto fail_bo_idx;
 
       dev->bo_idx = new_ptr;
       dev->bo_idx_size = new_len;
@@ -280,6 +292,12 @@ tu_bo_init(struct tu_device *dev,
    mtx_unlock(&dev->bo_mutex);
 
    return VK_SUCCESS;
+
+fail_bo_idx:
+   vk_free(&dev->vk.alloc, dev->bo_list);
+fail_bo_list:
+   tu_gem_close(dev, gem_handle);
+   return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 VkResult
@@ -300,7 +318,7 @@ tu_bo_init_new(struct tu_device *dev, struct tu_bo *bo, uint64_t size,
    int ret = drmCommandWriteRead(dev->fd,
                                  DRM_MSM_GEM_NEW, &req, sizeof(req));
    if (ret)
-      return vk_error(dev->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      return vk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
    return tu_bo_init(dev, bo, req.handle, size, flags & TU_BO_ALLOC_ALLOW_DUMP);
 }
@@ -315,13 +333,13 @@ tu_bo_init_dmabuf(struct tu_device *dev,
    off_t real_size = lseek(prime_fd, 0, SEEK_END);
    lseek(prime_fd, 0, SEEK_SET);
    if (real_size < 0 || (uint64_t) real_size < size)
-      return vk_error(dev->instance, VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      return vk_error(dev, VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
    uint32_t gem_handle;
    int ret = drmPrimeFDToHandle(dev->fd, prime_fd,
                                 &gem_handle);
    if (ret)
-      return vk_error(dev->instance, VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      return vk_error(dev, VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
    return tu_bo_init(dev, bo, gem_handle, size, false);
 }
@@ -344,13 +362,13 @@ tu_bo_map(struct tu_device *dev, struct tu_bo *bo)
 
    uint64_t offset = tu_gem_info(dev, bo->gem_handle, MSM_INFO_GET_OFFSET);
    if (!offset)
-      return vk_error(dev->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      return vk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
    /* TODO: Should we use the wrapper os_mmap() like Freedreno does? */
    void *map = mmap(0, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
                     dev->fd, offset);
    if (map == MAP_FAILED)
-      return vk_error(dev->instance, VK_ERROR_MEMORY_MAP_FAILED);
+      return vk_error(dev, VK_ERROR_MEMORY_MAP_FAILED);
 
    bo->map = map;
    return VK_SUCCESS;
@@ -445,9 +463,15 @@ tu_drm_device_init(struct tu_physical_device *device,
    device->master_fd = master_fd;
    device->local_fd = fd;
 
-   if (tu_drm_get_gpu_id(device, &device->gpu_id)) {
+   if (tu_drm_get_gpu_id(device, &device->dev_id.gpu_id)) {
       result = vk_startup_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                                  "could not get GPU ID");
+      goto fail;
+   }
+
+   if (tu_drm_get_param(device, MSM_PARAM_CHIP_ID, &device->dev_id.chip_id)) {
+      result = vk_startup_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
+                                 "could not get CHIP ID");
       goto fail;
    }
 
@@ -555,7 +579,7 @@ sync_create(VkDevice _device,
          vk_object_alloc(&device->vk, pAllocator, sizeof(*sync),
                          fence ? VK_OBJECT_TYPE_FENCE : VK_OBJECT_TYPE_SEMAPHORE);
    if (!sync)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    if (binary) {
       struct drm_syncobj_create create = {};
@@ -677,7 +701,7 @@ sync_export(VkDevice _device, struct tu_syncobj *sync, bool sync_fd, int *p_fd)
    };
    int ret = drmIoctl(device->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &handle);
    if (ret)
-      return vk_error(device->instance, VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      return vk_error(device, VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
    /* restore permanent payload on export */
    sync_set_temporary(device, sync, 0);
@@ -868,7 +892,7 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
          VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 
    if (new_submit->cmd_buffers == NULL) {
-      result = vk_error(queue->device->instance, VK_ERROR_OUT_OF_HOST_MEMORY)
+      result = vk_error(queue, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto fail_cmd_buffers;
    }
 
@@ -879,7 +903,7 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
          submit_info->waitSemaphoreCount * sizeof(*new_submit->wait_semaphores),
          8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (new_submit->wait_semaphores == NULL) {
-      result = vk_error(queue->device->instance, VK_ERROR_OUT_OF_HOST_MEMORY)
+      result = vk_error(queue, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto fail_wait_semaphores;
    }
    new_submit->wait_semaphore_count = submit_info->waitSemaphoreCount;
@@ -888,7 +912,7 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
          submit_info->signalSemaphoreCount *sizeof(*new_submit->signal_semaphores),
          8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (new_submit->signal_semaphores == NULL) {
-      result = vk_error(queue->device->instance, VK_ERROR_OUT_OF_HOST_MEMORY)
+      result = vk_error(queue, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto fail_signal_semaphores;
    }
    new_submit->signal_semaphore_count = submit_info->signalSemaphoreCount;
@@ -917,6 +941,9 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
       }
    }
 
+   bool u_trace_enabled = u_trace_context_tracing(&queue->device->trace_context);
+   bool has_trace_points = false;
+
    uint32_t entry_count = 0;
    for (uint32_t j = 0; j < new_submit->cmd_buffer_count; ++j) {
       TU_FROM_HANDLE(tu_cmd_buffer, cmdbuf, new_submit->cmd_buffers[j]);
@@ -925,6 +952,13 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
          entry_count++;
 
       entry_count += cmdbuf->cs.entry_count;
+
+      if (u_trace_enabled && u_trace_has_points(&cmdbuf->trace)) {
+         if (!(cmdbuf->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT))
+            entry_count++;
+
+         has_trace_points = true;
+      }
    }
 
    new_submit->cmds = vk_zalloc(&queue->device->vk.alloc,
@@ -932,8 +966,41 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
          VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 
    if (new_submit->cmds == NULL) {
-      result = vk_error(queue->device->instance, VK_ERROR_OUT_OF_HOST_MEMORY)
+      result = vk_error(queue, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto fail_cmds;
+   }
+
+   if (has_trace_points) {
+      new_submit->cmd_buffer_trace_data = vk_zalloc(&queue->device->vk.alloc,
+            new_submit->cmd_buffer_count * sizeof(struct tu_u_trace_cmd_data), 8,
+            VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+      if (new_submit->cmd_buffer_trace_data == NULL) {
+         result = vk_error(queue, VK_ERROR_OUT_OF_HOST_MEMORY);
+         goto fail_cmd_trace_data;
+      }
+
+      for (uint32_t i = 0; i < new_submit->cmd_buffer_count; ++i) {
+         TU_FROM_HANDLE(tu_cmd_buffer, cmdbuf, new_submit->cmd_buffers[i]);
+
+         if (!(cmdbuf->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) &&
+             u_trace_has_points(&cmdbuf->trace)) {
+            /* A single command buffer could be submitted several times, but we
+             * already backed timestamp iova addresses and trace points are
+             * single-use. Therefor we have to copy trace points and create
+             * a new timestamp buffer on every submit of reusable command buffer.
+             */
+            if (tu_create_copy_timestamp_cs(cmdbuf,
+                  &new_submit->cmd_buffer_trace_data[i].timestamp_copy_cs,
+                  &new_submit->cmd_buffer_trace_data[i].trace) != VK_SUCCESS) {
+               result = vk_error(queue, VK_ERROR_OUT_OF_HOST_MEMORY);
+               goto fail_copy_timestamp_cs;
+            }
+            assert(new_submit->cmd_buffer_trace_data[i].timestamp_copy_cs->entry_count == 1);
+         } else {
+            new_submit->cmd_buffer_trace_data[i].trace = &cmdbuf->trace;
+         }
+      }
    }
 
    /* Allocate without wait timeline semaphores */
@@ -942,7 +1009,7 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
          sizeof(*new_submit->in_syncobjs), 8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 
    if (new_submit->in_syncobjs == NULL) {
-      result = vk_error(queue->device->instance, VK_ERROR_OUT_OF_HOST_MEMORY)
+      result = vk_error(queue, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto fail_in_syncobjs;
    }
 
@@ -952,7 +1019,7 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
          VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 
    if (new_submit->out_syncobjs == NULL) {
-      result = vk_error(queue->device->instance, VK_ERROR_OUT_OF_HOST_MEMORY)
+      result = vk_error(queue, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto fail_out_syncobjs;
    }
 
@@ -971,6 +1038,12 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
 fail_out_syncobjs:
    vk_free(&queue->device->vk.alloc, new_submit->in_syncobjs);
 fail_in_syncobjs:
+   if (new_submit->cmd_buffer_trace_data)
+      tu_u_trace_cmd_data_finish(queue->device, new_submit->cmd_buffer_trace_data,
+                                 new_submit->cmd_buffer_count);
+fail_copy_timestamp_cs:
+   vk_free(&queue->device->vk.alloc, new_submit->cmd_buffer_trace_data);
+fail_cmd_trace_data:
    vk_free(&queue->device->vk.alloc, new_submit->cmds);
 fail_cmds:
 fail_signal_timelines:
@@ -1038,12 +1111,35 @@ tu_queue_build_msm_gem_submit_cmds(struct tu_queue *queue,
          cmds[entry_idx].nr_relocs = 0;
          cmds[entry_idx].relocs = 0;
       }
+
+      if (submit->cmd_buffer_trace_data) {
+         struct tu_cs *ts_cs = submit->cmd_buffer_trace_data[j].timestamp_copy_cs;
+         if (ts_cs) {
+            cmds[entry_idx].type = MSM_SUBMIT_CMD_BUF;
+            cmds[entry_idx].submit_idx =
+               queue->device->bo_idx[ts_cs->entries[0].bo->gem_handle];
+
+            assert(cmds[entry_idx].submit_idx < queue->device->bo_count);
+
+            cmds[entry_idx].submit_offset = ts_cs->entries[0].offset;
+            cmds[entry_idx].size = ts_cs->entries[0].size;
+            cmds[entry_idx].pad = 0;
+            cmds[entry_idx].nr_relocs = 0;
+            cmds[entry_idx++].relocs = 0;
+         }
+      }
    }
 }
 
 static VkResult
 tu_queue_submit_locked(struct tu_queue *queue, struct tu_queue_submit *submit)
 {
+   queue->device->submit_count++;
+
+#if HAVE_PERFETTO
+   tu_perfetto_submit(queue->device, queue->device->submit_count);
+#endif
+
    uint32_t flags = MSM_PIPE_3D0;
 
    if (submit->nr_in_syncobjs)
@@ -1110,6 +1206,27 @@ tu_queue_submit_locked(struct tu_queue *queue, struct tu_queue_submit *submit)
       sem->timeline.highest_submitted = signal_value;
    }
 
+   if (submit->cmd_buffer_trace_data) {
+      struct tu_u_trace_flush_data *flush_data =
+         vk_alloc(&queue->device->vk.alloc, sizeof(struct tu_u_trace_flush_data),
+               8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+      flush_data->submission_id = queue->device->submit_count;
+      flush_data->syncobj =
+         vk_alloc(&queue->device->vk.alloc, sizeof(struct tu_u_trace_syncobj),
+               8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+      flush_data->syncobj->fence = req.fence;
+      flush_data->syncobj->msm_queue_id = queue->msm_queue_id;
+
+      flush_data->cmd_trace_data = submit->cmd_buffer_trace_data;
+      flush_data->trace_count = submit->cmd_buffer_count;
+      submit->cmd_buffer_trace_data = NULL;
+
+      for (uint32_t i = 0; i < submit->cmd_buffer_count; i++) {
+         bool free_data = i == (submit->cmd_buffer_count - 1);
+         u_trace_flush(flush_data->cmd_trace_data[i].trace, flush_data, free_data);
+      }
+   }
+
    pthread_cond_broadcast(&queue->device->timeline_cond);
 
    return VK_SUCCESS;
@@ -1141,14 +1258,14 @@ tu_timeline_add_point_locked(struct tu_device *device,
             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 
       if (!(*point))
-         return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
       struct drm_syncobj_create create = {};
 
       int ret = drmIoctl(device->fd, DRM_IOCTL_SYNCOBJ_CREATE, &create);
       if (ret) {
          vk_free(&device->vk.alloc, *point);
-         return vk_error(device->instance, VK_ERROR_DEVICE_LOST);
+         return vk_error(device, VK_ERROR_DEVICE_LOST);
       }
 
       (*point)->syncobj = create.handle;
@@ -1236,6 +1353,35 @@ tu_device_submit_deferred_locked(struct tu_device *dev)
     } while(advance);
 
     return result;
+}
+
+static inline void
+get_abs_timeout(struct drm_msm_timespec *tv, uint64_t ns)
+{
+   struct timespec t;
+   clock_gettime(CLOCK_MONOTONIC, &t);
+   tv->tv_sec = t.tv_sec + ns / 1000000000;
+   tv->tv_nsec = t.tv_nsec + ns % 1000000000;
+}
+
+VkResult
+tu_device_wait_u_trace(struct tu_device *dev, struct tu_u_trace_syncobj *syncobj)
+{
+   struct drm_msm_wait_fence req = {
+      .fence = syncobj->fence,
+      .queueid = syncobj->msm_queue_id,
+   };
+   int ret;
+
+   get_abs_timeout(&req.timeout, 1000000000);
+
+   ret = drmCommandWrite(dev->fd, DRM_MSM_WAIT_FENCE, &req, sizeof(req));
+   if (ret && (ret != -ETIMEDOUT)) {
+      fprintf(stderr, "wait-fence failed! %d (%s)", ret, strerror(errno));
+      return VK_TIMEOUT;
+   }
+
+   return VK_SUCCESS;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL

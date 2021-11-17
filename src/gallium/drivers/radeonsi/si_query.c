@@ -260,15 +260,6 @@ static bool si_query_sw_begin(struct si_context *sctx, struct si_query *squery)
    case SI_QUERY_DISK_SHADER_CACHE_MISSES:
       query->begin_result = sctx->screen->num_disk_shader_cache_misses;
       break;
-   case SI_QUERY_PD_NUM_PRIMS_ACCEPTED:
-      query->begin_result = sctx->compute_num_verts_accepted;
-      break;
-   case SI_QUERY_PD_NUM_PRIMS_REJECTED:
-      query->begin_result = sctx->compute_num_verts_rejected;
-      break;
-   case SI_QUERY_PD_NUM_PRIMS_INELIGIBLE:
-      query->begin_result = sctx->compute_num_verts_ineligible;
-      break;
    case SI_QUERY_GPIN_ASIC_ID:
    case SI_QUERY_GPIN_NUM_SIMD:
    case SI_QUERY_GPIN_NUM_RB:
@@ -429,15 +420,6 @@ static bool si_query_sw_end(struct si_context *sctx, struct si_query *squery)
    case SI_QUERY_DISK_SHADER_CACHE_MISSES:
       query->end_result = sctx->screen->num_disk_shader_cache_misses;
       break;
-   case SI_QUERY_PD_NUM_PRIMS_ACCEPTED:
-      query->end_result = sctx->compute_num_verts_accepted;
-      break;
-   case SI_QUERY_PD_NUM_PRIMS_REJECTED:
-      query->end_result = sctx->compute_num_verts_rejected;
-      break;
-   case SI_QUERY_PD_NUM_PRIMS_INELIGIBLE:
-      query->end_result = sctx->compute_num_verts_ineligible;
-      break;
    case SI_QUERY_GPIN_ASIC_ID:
    case SI_QUERY_GPIN_NUM_SIMD:
    case SI_QUERY_GPIN_NUM_RB:
@@ -478,11 +460,6 @@ static bool si_query_sw_get_result(struct si_context *sctx, struct si_query *squ
    case SI_QUERY_GALLIUM_THREAD_BUSY:
       result->u64 =
          (query->end_result - query->begin_result) * 100 / (query->end_time - query->begin_time);
-      return true;
-   case SI_QUERY_PD_NUM_PRIMS_ACCEPTED:
-   case SI_QUERY_PD_NUM_PRIMS_REJECTED:
-   case SI_QUERY_PD_NUM_PRIMS_INELIGIBLE:
-      result->u64 = ((unsigned)query->end_result - (unsigned)query->begin_result) / 3;
       return true;
    case SI_QUERY_GPIN_ASIC_ID:
       result->u32 = 0;
@@ -781,10 +758,10 @@ static unsigned event_type_for_stream(unsigned stream)
 static void emit_sample_streamout(struct radeon_cmdbuf *cs, uint64_t va, unsigned stream)
 {
    radeon_begin(cs);
-   radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-   radeon_emit(cs, EVENT_TYPE(event_type_for_stream(stream)) | EVENT_INDEX(3));
-   radeon_emit(cs, va);
-   radeon_emit(cs, va >> 32);
+   radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
+   radeon_emit(EVENT_TYPE(event_type_for_stream(stream)) | EVENT_INDEX(3));
+   radeon_emit(va);
+   radeon_emit(va >> 32);
    radeon_end();
 }
 
@@ -798,10 +775,10 @@ static void si_query_hw_do_emit_start(struct si_context *sctx, struct si_query_h
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE: {
       radeon_begin(cs);
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
-      radeon_emit(cs, va);
-      radeon_emit(cs, va >> 32);
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
+      radeon_emit(va);
+      radeon_emit(va >> 32);
       radeon_end();
       break;
    }
@@ -821,10 +798,10 @@ static void si_query_hw_do_emit_start(struct si_context *sctx, struct si_query_h
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS: {
       radeon_begin(cs);
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2));
-      radeon_emit(cs, va);
-      radeon_emit(cs, va >> 32);
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2));
+      radeon_emit(va);
+      radeon_emit(va >> 32);
       radeon_end();
       break;
    }
@@ -866,10 +843,10 @@ static void si_query_hw_do_emit_stop(struct si_context *sctx, struct si_query_hw
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE: {
       va += 8;
       radeon_begin(cs);
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
-      radeon_emit(cs, va);
-      radeon_emit(cs, va >> 32);
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
+      radeon_emit(va);
+      radeon_emit(va >> 32);
       radeon_end();
 
       fence_va = va + sctx->screen->info.max_render_backends * 16 - 8;
@@ -900,10 +877,10 @@ static void si_query_hw_do_emit_stop(struct si_context *sctx, struct si_query_hw
 
       va += sample_size;
       radeon_begin(cs);
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2));
-      radeon_emit(cs, va);
-      radeon_emit(cs, va >> 32);
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2));
+      radeon_emit(va);
+      radeon_emit(va >> 32);
       radeon_end();
 
       fence_va = va + sample_size;
@@ -959,14 +936,14 @@ static void emit_set_predicate(struct si_context *ctx, struct si_resource *buf, 
    radeon_begin(cs);
 
    if (ctx->chip_class >= GFX9) {
-      radeon_emit(cs, PKT3(PKT3_SET_PREDICATION, 2, 0));
-      radeon_emit(cs, op);
-      radeon_emit(cs, va);
-      radeon_emit(cs, va >> 32);
+      radeon_emit(PKT3(PKT3_SET_PREDICATION, 2, 0));
+      radeon_emit(op);
+      radeon_emit(va);
+      radeon_emit(va >> 32);
    } else {
-      radeon_emit(cs, PKT3(PKT3_SET_PREDICATION, 1, 0));
-      radeon_emit(cs, va);
-      radeon_emit(cs, op | ((va >> 32) & 0xFF));
+      radeon_emit(PKT3(PKT3_SET_PREDICATION, 1, 0));
+      radeon_emit(va);
+      radeon_emit(op | ((va >> 32) & 0xFF));
    }
    radeon_end();
 
@@ -1758,10 +1735,6 @@ static struct pipe_driver_query_info si_driver_query_list[] = {
    X("GPU-surf-sync-busy", GPU_SURF_SYNC_BUSY, UINT64, AVERAGE),
    X("GPU-cp-dma-busy", GPU_CP_DMA_BUSY, UINT64, AVERAGE),
    X("GPU-scratch-ram-busy", GPU_SCRATCH_RAM_BUSY, UINT64, AVERAGE),
-
-   X("pd-num-prims-accepted", PD_NUM_PRIMS_ACCEPTED, UINT64, AVERAGE),
-   X("pd-num-prims-rejected", PD_NUM_PRIMS_REJECTED, UINT64, AVERAGE),
-   X("pd-num-prims-ineligible", PD_NUM_PRIMS_INELIGIBLE, UINT64, AVERAGE),
 };
 
 #undef X

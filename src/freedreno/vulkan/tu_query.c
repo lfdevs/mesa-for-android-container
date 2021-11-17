@@ -265,10 +265,10 @@ tu_CreateQueryPool(VkDevice _device,
          vk_object_alloc(&device->vk, pAllocator, pool_size,
                          VK_OBJECT_TYPE_QUERY_POOL);
    if (!pool)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    if (pCreateInfo->queryType == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR) {
-      pool->perf_group = fd_perfcntrs(device->physical_device->gpu_id,
+      pool->perf_group = fd_perfcntrs(&device->physical_device->dev_id,
                                       &pool->perf_group_count);
 
       pool->counter_index_count = perf_query_info->counterIndexCount;
@@ -426,7 +426,7 @@ wait_for_available(struct tu_device *device, struct tu_query_pool *pool,
       if (query_is_available(slot))
          return VK_SUCCESS;
    }
-   return vk_error(device->instance, VK_TIMEOUT);
+   return vk_error(device, VK_TIMEOUT);
 }
 
 /* Writes a query value to a buffer from the CPU. */
@@ -1422,7 +1422,7 @@ tu_EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
    uint32_t desc_count = *pCounterCount;
    uint32_t group_count;
    const struct fd_perfcntr_group *group =
-         fd_perfcntrs(phydev->gpu_id, &group_count);
+         fd_perfcntrs(&phydev->dev_id, &group_count);
 
    VK_OUTARRAY_MAKE(out, pCounters, pCounterCount);
    VK_OUTARRAY_MAKE(out_desc, pCounterDescriptions, &desc_count);
@@ -1470,7 +1470,7 @@ tu_GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR(
    uint32_t group_count = 0;
    uint32_t gid = 0, cid = 0, n_passes;
    const struct fd_perfcntr_group *group =
-         fd_perfcntrs(phydev->gpu_id, &group_count);
+         fd_perfcntrs(&phydev->dev_id, &group_count);
 
    uint32_t counters_requested[group_count];
    memset(counters_requested, 0x0, sizeof(counters_requested));

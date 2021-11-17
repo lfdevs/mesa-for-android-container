@@ -107,17 +107,9 @@ pan_transfer(struct pipe_transfer *p)
         return (struct panfrost_transfer *)p;
 }
 
-mali_ptr
-panfrost_get_texture_address(struct panfrost_resource *rsrc,
-                             unsigned level, unsigned layer,
-                             unsigned sample);
-
-void
-panfrost_get_afbc_pointers(struct panfrost_resource *rsrc,
-                           unsigned level, unsigned layer,
-                           mali_ptr *header, mali_ptr *body);
-
 void panfrost_resource_screen_init(struct pipe_screen *screen);
+
+void panfrost_resource_screen_destroy(struct pipe_screen *screen);
 
 void panfrost_resource_context_init(struct pipe_context *pctx);
 
@@ -162,6 +154,11 @@ panfrost_translate_texture_dimension(enum pipe_texture_target t) {
 void
 pan_resource_modifier_convert(struct panfrost_context *ctx,
                               struct panfrost_resource *rsrc,
-                              uint64_t modifier);
+                              uint64_t modifier, const char *reason);
+
+void
+pan_legalize_afbc_format(struct panfrost_context *ctx,
+                         struct panfrost_resource *rsrc,
+                         enum pipe_format format);
 
 #endif /* PAN_RESOURCE_H */

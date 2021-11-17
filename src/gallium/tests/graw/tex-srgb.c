@@ -129,11 +129,11 @@ static void draw( void )
 
    info.ctx->clear(info.ctx, PIPE_CLEAR_COLOR, NULL, &clear_color, 0, 0);
 
-   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, 0, &linear_sv);
+   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, 0, false, &linear_sv);
    set_vertices(vertices1, 4);
    util_draw_arrays(info.ctx, PIPE_PRIM_QUADS, 0, 4);
 
-   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, 0, &srgb_sv);
+   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, 0, false, &srgb_sv);
    set_vertices(vertices2, 4);
    util_draw_arrays(info.ctx, PIPE_PRIM_QUADS, 0, 4);
 

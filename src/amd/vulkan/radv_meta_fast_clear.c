@@ -28,6 +28,12 @@
 #include "radv_private.h"
 #include "sid.h"
 
+enum radv_color_op {
+   FAST_CLEAR_ELIMINATE,
+   FMASK_DECOMPRESS,
+   DCC_DECOMPRESS,
+};
+
 static nir_shader *
 build_dcc_decompress_compute_shader(struct radv_device *dev)
 {
@@ -48,17 +54,15 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
    output_img->data.descriptor_set = 0;
    output_img->data.binding = 1;
 
-   nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
-   nir_ssa_def *wg_id = nir_load_workgroup_id(&b, 32);
-   nir_ssa_def *block_size =
-      nir_imm_ivec4(&b, b.shader->info.workgroup_size[0], b.shader->info.workgroup_size[1],
-                    b.shader->info.workgroup_size[2], 0);
+   nir_ssa_def *global_id = get_global_ids(&b, 2);
+   nir_ssa_def *img_coord = nir_vec4(&b, nir_channel(&b, global_id, 0),
+                                         nir_channel(&b, global_id, 1),
+                                         nir_ssa_undef(&b, 1, 32),
+                                         nir_ssa_undef(&b, 1, 32));
 
-   nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
-
-   nir_ssa_def *data =
-      nir_image_deref_load(&b, 4, 32, &nir_build_deref_var(&b, input_img)->dest.ssa, global_id,
-                           nir_ssa_undef(&b, 1, 32), nir_imm_int(&b, 0));
+   nir_ssa_def *data = nir_image_deref_load(
+      &b, 4, 32, &nir_build_deref_var(&b, input_img)->dest.ssa, img_coord, nir_ssa_undef(&b, 1, 32),
+      nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_2D);
 
    /* We need a NIR_SCOPE_DEVICE memory_scope because ACO will avoid
     * creating a vmcnt(0) because it expects the L1 cache to keep memory
@@ -67,8 +71,9 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
    nir_scoped_barrier(&b, .execution_scope = NIR_SCOPE_WORKGROUP, .memory_scope = NIR_SCOPE_DEVICE,
                       .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_ssbo);
 
-   nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, global_id,
-                         nir_ssa_undef(&b, 1, 32), data, nir_imm_int(&b, 0));
+   nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->dest.ssa, img_coord,
+                         nir_ssa_undef(&b, 1, 32), data, nir_imm_int(&b, 0),
+                         .image_dim = GLSL_SAMPLER_DIM_2D);
    return b.shader;
 }
 
@@ -615,24 +620,52 @@ radv_process_color_image_layer(struct radv_cmd_buffer *cmd_buffer, struct radv_i
 
    radv_cmd_buffer_end_render_pass(cmd_buffer);
 
+   radv_image_view_finish(&iview);
    radv_DestroyFramebuffer(radv_device_to_handle(device), fb_h, &cmd_buffer->pool->alloc);
 }
 
 static void
 radv_process_color_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
-                         const VkImageSubresourceRange *subresourceRange, bool decompress_dcc)
+                         const VkImageSubresourceRange *subresourceRange, enum radv_color_op op)
 {
    struct radv_device *device = cmd_buffer->device;
    struct radv_meta_saved_state saved_state;
+   bool old_predicating = false;
    bool flush_cb = false;
+   uint64_t pred_offset;
    VkPipeline *pipeline;
 
-   if (decompress_dcc) {
-      pipeline = &device->meta_state.fast_clear_flush.dcc_decompress_pipeline;
-   } else if (radv_image_has_fmask(image) && !image->tc_compatible_cmask) {
-      pipeline = &device->meta_state.fast_clear_flush.fmask_decompress_pipeline;
-   } else {
+   switch (op) {
+   case FAST_CLEAR_ELIMINATE:
       pipeline = &device->meta_state.fast_clear_flush.cmask_eliminate_pipeline;
+      pred_offset = image->fce_pred_offset;
+      break;
+   case FMASK_DECOMPRESS:
+      pipeline = &device->meta_state.fast_clear_flush.fmask_decompress_pipeline;
+      pred_offset = 0; /* FMASK_DECOMPRESS is never predicated. */
+
+      /* Flushing CB is required before and after FMASK_DECOMPRESS. */
+      flush_cb = true;
+      break;
+   case DCC_DECOMPRESS:
+      pipeline = &device->meta_state.fast_clear_flush.dcc_decompress_pipeline;
+      pred_offset = image->dcc_pred_offset;
+
+      /* Flushing CB is required before and after DCC_DECOMPRESS. */
+      flush_cb = true;
+      break;
+   default:
+      unreachable("Invalid color op");
+   }
+
+   if (radv_dcc_enabled(image, subresourceRange->baseMipLevel) &&
+       (image->info.array_size != radv_get_layerCount(image, subresourceRange) ||
+        subresourceRange->baseArrayLayer != 0)) {
+      /* Only use predication if the image has DCC with mipmaps or
+       * if the range of layers covers the whole image because the
+       * predication is based on mip level.
+       */
+      pred_offset = 0;
    }
 
    if (!*pipeline) {
@@ -645,15 +678,16 @@ radv_process_color_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *
       }
    }
 
-   if (pipeline == &device->meta_state.fast_clear_flush.dcc_decompress_pipeline ||
-       pipeline == &device->meta_state.fast_clear_flush.fmask_decompress_pipeline) {
-      /* Flushing CB is required before and after DCC_DECOMPRESS or
-       * FMASK_DECOMPRESS.
-       */
-      flush_cb = true;
-   }
-
    radv_meta_save(&saved_state, cmd_buffer, RADV_META_SAVE_GRAPHICS_PIPELINE | RADV_META_SAVE_PASS);
+
+   if (pred_offset) {
+      pred_offset += 8 * subresourceRange->baseMipLevel;
+
+      old_predicating = cmd_buffer->state.predicating;
+
+      radv_emit_set_predication_state_from_image(cmd_buffer, image, pred_offset, true);
+      cmd_buffer->state.predicating = true;
+   }
 
    radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_GRAPHICS,
                         *pipeline);
@@ -662,7 +696,7 @@ radv_process_color_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *
       uint32_t width, height;
 
       /* Do not decompress levels without DCC. */
-      if (decompress_dcc && !radv_dcc_enabled(image, subresourceRange->baseMipLevel + l))
+      if (op == DCC_DECOMPRESS && !radv_dcc_enabled(image, subresourceRange->baseMipLevel + l))
          continue;
 
       width = radv_minify(image->info.width, subresourceRange->baseMipLevel + l);
@@ -690,52 +724,7 @@ radv_process_color_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *
    cmd_buffer->state.flush_bits |=
       RADV_CMD_FLAG_FLUSH_AND_INV_CB | RADV_CMD_FLAG_FLUSH_AND_INV_CB_META;
 
-   radv_meta_restore(&saved_state, cmd_buffer);
-}
-
-static void
-radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
-                           const VkImageSubresourceRange *subresourceRange, bool decompress_dcc)
-{
-   bool use_predication = false;
-   bool old_predicating = false;
-
-   assert(cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL);
-
-   if (decompress_dcc ||
-       (!(radv_image_has_fmask(image) && !image->tc_compatible_cmask) && image->fce_pred_offset)) {
-      use_predication = true;
-   }
-
-   /* If we are asked for DCC decompression without DCC predicates we cannot
-    * use the FCE predicate. */
-   if (decompress_dcc && image->dcc_pred_offset == 0)
-      use_predication = false;
-
-   if (radv_dcc_enabled(image, subresourceRange->baseMipLevel) &&
-       (image->info.array_size != radv_get_layerCount(image, subresourceRange) ||
-        subresourceRange->baseArrayLayer != 0)) {
-      /* Only use predication if the image has DCC with mipmaps or
-       * if the range of layers covers the whole image because the
-       * predication is based on mip level.
-       */
-      use_predication = false;
-   }
-
-   if (use_predication) {
-      uint64_t pred_offset = decompress_dcc ? image->dcc_pred_offset : image->fce_pred_offset;
-      pred_offset += 8 * subresourceRange->baseMipLevel;
-
-      old_predicating = cmd_buffer->state.predicating;
-
-      radv_emit_set_predication_state_from_image(cmd_buffer, image, pred_offset, true);
-      cmd_buffer->state.predicating = true;
-   }
-
-   radv_process_color_image(cmd_buffer, image, subresourceRange, decompress_dcc);
-
-   if (use_predication) {
-      uint64_t pred_offset = decompress_dcc ? image->dcc_pred_offset : image->fce_pred_offset;
+   if (pred_offset) {
       pred_offset += 8 * subresourceRange->baseMipLevel;
 
       cmd_buffer->state.predicating = old_predicating;
@@ -750,41 +739,62 @@ radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer, struct radv_image
       }
    }
 
-   if (image->fce_pred_offset != 0) {
-      /* Clear the image's fast-clear eliminate predicate because
-       * FMASK and DCC also imply a fast-clear eliminate.
-       */
-      radv_update_fce_metadata(cmd_buffer, image, subresourceRange, false);
-   }
+   radv_meta_restore(&saved_state, cmd_buffer);
+
+   /* Clear the image's fast-clear eliminate predicate because FMASK_DECOMPRESS and DCC_DECOMPRESS
+    * also perform a fast-clear eliminate.
+    */
+   radv_update_fce_metadata(cmd_buffer, image, subresourceRange, false);
 
    /* Mark the image as being decompressed. */
-   if (decompress_dcc)
+   if (op == DCC_DECOMPRESS)
       radv_update_dcc_metadata(cmd_buffer, image, subresourceRange, false);
+}
+
+static void
+radv_fast_clear_eliminate(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
+                          const VkImageSubresourceRange *subresourceRange)
+{
+   struct radv_barrier_data barrier = {0};
+
+   barrier.layout_transitions.fast_clear_eliminate = 1;
+   radv_describe_layout_transition(cmd_buffer, &barrier);
+
+   radv_process_color_image(cmd_buffer, image, subresourceRange, FAST_CLEAR_ELIMINATE);
+}
+
+static void
+radv_fmask_decompress(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
+                      const VkImageSubresourceRange *subresourceRange)
+{
+   struct radv_barrier_data barrier = {0};
+
+   barrier.layout_transitions.fmask_decompress = 1;
+   radv_describe_layout_transition(cmd_buffer, &barrier);
+
+   radv_process_color_image(cmd_buffer, image, subresourceRange, FMASK_DECOMPRESS);
 }
 
 void
 radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                                     const VkImageSubresourceRange *subresourceRange)
 {
-   struct radv_barrier_data barrier = {0};
-
    if (radv_image_has_fmask(image) && !image->tc_compatible_cmask) {
-      barrier.layout_transitions.fmask_decompress = 1;
+      if (radv_image_has_dcc(image) && radv_image_has_cmask(image)) {
+         /* MSAA images with DCC and CMASK might have been fast-cleared and might require a FCE but
+          * FMASK_DECOMPRESS can't eliminate DCC fast clears.
+          */
+         radv_fast_clear_eliminate(cmd_buffer, image, subresourceRange);
+      }
+
+      radv_fmask_decompress(cmd_buffer, image, subresourceRange);
    } else {
-      barrier.layout_transitions.fast_clear_eliminate = 1;
+      /* Skip fast clear eliminate for images that support comp-to-single fast clears. */
+      if (image->support_comp_to_single)
+         return;
+
+      radv_fast_clear_eliminate(cmd_buffer, image, subresourceRange);
    }
-   radv_describe_layout_transition(cmd_buffer, &barrier);
-
-   assert(cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL);
-   radv_emit_color_decompress(cmd_buffer, image, subresourceRange, false);
-}
-
-static void
-radv_decompress_dcc_gfx(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
-                        const VkImageSubresourceRange *subresourceRange)
-{
-   assert(radv_dcc_enabled(image, subresourceRange->baseMipLevel));
-   radv_emit_color_decompress(cmd_buffer, image, subresourceRange, true);
 }
 
 static void
@@ -884,6 +894,9 @@ radv_decompress_dcc_compute(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
                                       }}});
 
          radv_unaligned_dispatch(cmd_buffer, width, height, 1);
+
+         radv_image_view_finish(&load_iview);
+         radv_image_view_finish(&store_iview);
       }
    }
 
@@ -910,7 +923,7 @@ radv_decompress_dcc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image
    radv_describe_layout_transition(cmd_buffer, &barrier);
 
    if (cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL)
-      radv_decompress_dcc_gfx(cmd_buffer, image, subresourceRange);
+      radv_process_color_image(cmd_buffer, image, subresourceRange, DCC_DECOMPRESS);
    else
       radv_decompress_dcc_compute(cmd_buffer, image, subresourceRange);
 }

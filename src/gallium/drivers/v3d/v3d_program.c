@@ -297,7 +297,7 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
         } else {
                 assert(type == PIPE_SHADER_IR_TGSI);
 
-                if (V3D_DEBUG & V3D_DEBUG_TGSI) {
+                if (unlikely(V3D_DEBUG & V3D_DEBUG_TGSI)) {
                         fprintf(stderr, "prog %d TGSI:\n",
                                 so->program_id);
                         tgsi_dump(ir, 0);
@@ -328,8 +328,8 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
         so->base.type = PIPE_SHADER_IR_NIR;
         so->base.ir.nir = s;
 
-        if (V3D_DEBUG & (V3D_DEBUG_NIR |
-                         v3d_debug_flag_for_shader_stage(s->info.stage))) {
+        if (unlikely(V3D_DEBUG & (V3D_DEBUG_NIR |
+                                  v3d_debug_flag_for_shader_stage(s->info.stage)))) {
                 fprintf(stderr, "%s prog %d NIR:\n",
                         gl_shader_stage_name(s->info.stage),
                         so->program_id);
@@ -337,7 +337,7 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
                 fprintf(stderr, "\n");
         }
 
-        if (V3D_DEBUG & V3D_DEBUG_PRECOMPILE)
+        if (unlikely(V3D_DEBUG & V3D_DEBUG_PRECOMPILE))
                 v3d_shader_precompile(v3d, so);
 
         return so;
@@ -600,9 +600,8 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
         if (key->is_points) {
                 key->point_sprite_mask =
                         v3d->rasterizer->base.sprite_coord_enable;
-                key->point_coord_upper_left =
-                        (v3d->rasterizer->base.sprite_coord_mode ==
-                         PIPE_SPRITE_COORD_UPPER_LEFT);
+                /* this is handled by lower_wpos_pntc */
+                key->point_coord_upper_left = false;
         }
 
         struct v3d_compiled_shader *old_fs = v3d->prog.fs;

@@ -352,11 +352,8 @@ try_setup_point( struct lp_setup_context *setup,
    int adj = (setup->bottom_edge_rule != 0) ? 1 : 0;
    float pixel_offset = setup->multisample ? 0.0 : setup->pixel_offset;
    struct lp_scene *scene = setup->scene;
-   struct lp_rast_triangle *point;
-   unsigned bytes;
    struct u_rect bbox;
    int x[2], y[2];
-   unsigned nr_planes = 4;
    struct point_info info;
    unsigned viewport_index = 0;
    unsigned layer = 0;
@@ -461,75 +458,82 @@ try_setup_point( struct lp_setup_context *setup,
    }
 
    if (!u_rect_test_intersection(&setup->draw_regions[viewport_index], &bbox)) {
-      if (0) debug_printf("offscreen\n");
+      if (0) debug_printf("no intersection\n");
       LP_COUNT(nr_culled_tris);
       return TRUE;
    }
 
    u_rect_find_intersection(&setup->draw_regions[viewport_index], &bbox);
 
-   point = lp_setup_alloc_triangle(scene,
-                                   key->num_inputs,
-                                   nr_planes,
-                                   &bytes);
-   if (!point)
-      return FALSE;
-
+   /* We can't use rectangle reasterizer for non-legacy points for now. */
+   if (!setup->legacy_points || setup->multisample) {
+      struct lp_rast_triangle *point;
+      struct lp_rast_plane *plane;
+      unsigned bytes;
+      unsigned nr_planes = 4;
+      
+      point = lp_setup_alloc_triangle(scene,
+                                      key->num_inputs,
+                                      nr_planes,
+                                      &bytes);
+     if (!point)
+        return FALSE;
+        
 #ifdef DEBUG
-   point->v[0][0] = v0[0][0];
-   point->v[0][1] = v0[0][1];
+      point->v[0][0] = v0[0][0];
+      point->v[0][1] = v0[0][1];
 #endif
 
-   LP_COUNT(nr_tris);
+      LP_COUNT(nr_tris);
 
-   if (draw_will_inject_frontface(lp_context->draw) &&
-       setup->face_slot > 0) {
-      point->inputs.frontfacing = v0[setup->face_slot][0];
-   } else {
-      point->inputs.frontfacing = TRUE;
-   }
+      if (draw_will_inject_frontface(lp_context->draw) &&
+          setup->face_slot > 0) {
+         point->inputs.frontfacing = v0[setup->face_slot][0];
+      } else {
+         point->inputs.frontfacing = TRUE;
+      }
 
-   info.v0 = v0;
-   info.dx01 = 0;
-   info.dx12 = fixed_width;
-   info.dy01 = fixed_width;
-   info.dy12 = 0;
-   info.a0 = GET_A0(&point->inputs);
-   info.dadx = GET_DADX(&point->inputs);
-   info.dady = GET_DADY(&point->inputs);
-   info.frontfacing = point->inputs.frontfacing;
+      info.v0 = v0;
+      info.dx01 = 0;
+      info.dx12 = fixed_width;
+      info.dy01 = fixed_width;
+      info.dy12 = 0;
+      info.a0 = GET_A0(&point->inputs);
+      info.dadx = GET_DADX(&point->inputs);
+      info.dady = GET_DADY(&point->inputs);
+      info.frontfacing = point->inputs.frontfacing;
    
-   /* Setup parameter interpolants:
-    */
-   setup_point_coefficients(setup, &info);
+      /* Setup parameter interpolants:
+       */
+      setup_point_coefficients(setup, &info);
 
-   point->inputs.disable = FALSE;
-   point->inputs.opaque = FALSE;
-   point->inputs.layer = layer;
-   point->inputs.viewport_index = viewport_index;
-   point->inputs.view_index = setup->view_index;
+      point->inputs.disable = FALSE;
+      point->inputs.is_blit = FALSE;
+      point->inputs.opaque = setup->fs.current.variant->opaque;
+      point->inputs.layer = layer;
+      point->inputs.viewport_index = viewport_index;
+      point->inputs.view_index = setup->view_index;
 
-   {
-      struct lp_rast_plane *plane = GET_PLANES(point);
+      plane = GET_PLANES(point);
 
       plane[0].dcdx = ~0U << 8;
       plane[0].dcdy = 0;
-      plane[0].c = -x[0];
+      plane[0].c = -MAX2(x[0], bbox.x0 << 8);
       plane[0].eo = 1 << 8;
 
       plane[1].dcdx = 1 << 8;
       plane[1].dcdy = 0;
-      plane[1].c = x[1];
+      plane[1].c = MIN2(x[1], (bbox.x1 + 1) << 8);
       plane[1].eo = 0;
 
       plane[2].dcdx = 0;
       plane[2].dcdy = 1 << 8;
-      plane[2].c = -y[0];
+      plane[2].c = -MAX2(y[0], (bbox.y0 << 8) - adj);
       plane[2].eo = 1 << 8;
 
       plane[3].dcdx = 0;
       plane[3].dcdy = ~0U << 8;
-      plane[3].c = y[1];
+      plane[3].c = MIN2(y[1], (bbox.y1 + 1) << 8);
       plane[3].eo = 0;
 
       if (!setup->legacy_points || setup->multisample) {
@@ -540,9 +544,57 @@ try_setup_point( struct lp_setup_context *setup,
          else
             plane[3].c++; /* bottom-left */
       }
-   }
 
-   return lp_setup_bin_triangle(setup, point, &bbox, &bbox, nr_planes, viewport_index);
+      return lp_setup_bin_triangle(setup, point, &bbox, &bbox, nr_planes, viewport_index);
+
+   } else {
+      struct lp_rast_rectangle *point;
+      point = lp_setup_alloc_rectangle(scene,
+                                       key->num_inputs);
+      if (!point)
+         return FALSE;
+#ifdef DEBUG
+      point->v[0][0] = v0[0][0];
+      point->v[0][1] = v0[0][1];
+#endif
+
+      point->box.x0 = bbox.x0;
+      point->box.x1 = bbox.x1;
+      point->box.y0 = bbox.y0;
+      point->box.y1 = bbox.y1;
+
+      LP_COUNT(nr_tris);
+
+      if (draw_will_inject_frontface(lp_context->draw) &&
+          setup->face_slot > 0) {
+         point->inputs.frontfacing = v0[setup->face_slot][0];
+      } else {
+         point->inputs.frontfacing = TRUE;
+      }
+
+      info.v0 = v0;
+      info.dx01 = 0;
+      info.dx12 = fixed_width;
+      info.dy01 = fixed_width;
+      info.dy12 = 0;
+      info.a0 = GET_A0(&point->inputs);
+      info.dadx = GET_DADX(&point->inputs);
+      info.dady = GET_DADY(&point->inputs);
+      info.frontfacing = point->inputs.frontfacing;
+   
+      /* Setup parameter interpolants:
+       */
+      setup_point_coefficients(setup, &info);
+
+      point->inputs.disable = FALSE;
+      point->inputs.is_blit = FALSE;
+      point->inputs.opaque = setup->fs.current.variant->opaque;
+      point->inputs.layer = layer;
+      point->inputs.viewport_index = viewport_index;
+      point->inputs.view_index = setup->view_index;
+
+      return lp_setup_bin_rectangle(setup, point);
+   }
 }
 
 

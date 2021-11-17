@@ -67,7 +67,7 @@ foreach g : [['70', ['gfx7_cmd_buffer.c']], ['75', ['gfx7_cmd_buffer.c']],
     'anv_per_hw_ver@0@'.format(_gfx_ver),
     [anv_per_hw_ver_files, g[1], anv_entrypoints[0]],
     include_directories : [
-      inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_compiler, inc_intel, inc_vulkan_wsi,
+      inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_compiler, inc_intel,
     ],
     c_args : [
       no_override_init_args, c_sse2_args,
@@ -75,7 +75,8 @@ foreach g : [['70', ['gfx7_cmd_buffer.c']], ['75', ['gfx7_cmd_buffer.c']],
     ],
     gnu_symbol_visibility : 'hidden',
     dependencies : [
-      dep_libdrm, dep_valgrind, idep_nir_headers, idep_genxml, idep_vulkan_util_headers,
+      dep_libdrm, dep_valgrind, idep_nir_headers, idep_genxml,
+      idep_vulkan_util_headers, idep_vulkan_wsi_headers,
     ],
   )
 endforeach
@@ -117,6 +118,7 @@ anv_deps = [
   idep_genxml,
   idep_nir_headers,
   idep_vulkan_util_headers,
+  idep_vulkan_wsi_headers,
 ]
 anv_flags = [
   no_override_init_args,
@@ -125,31 +127,21 @@ anv_flags = [
 
 if with_platform_x11
   anv_deps += dep_xcb_dri3
-  anv_flags += [
-    '-DVK_USE_PLATFORM_XCB_KHR',
-    '-DVK_USE_PLATFORM_XLIB_KHR',
-  ]
-  libanv_files += files('anv_wsi_x11.c')
 endif
 
 if with_platform_wayland
   anv_deps += dep_wayland_client
-  anv_flags += '-DVK_USE_PLATFORM_WAYLAND_KHR'
-  libanv_files += files('anv_wsi_wayland.c')
 endif
 
 if system_has_kms_drm and not with_platform_android
-  anv_flags += '-DVK_USE_PLATFORM_DISPLAY_KHR'
   libanv_files += files('anv_wsi_display.c')
 endif
 
 if with_xlib_lease
   anv_deps += [dep_xlib_xrandr]
-  anv_flags += '-DVK_USE_PLATFORM_XLIB_XRANDR_EXT'
 endif
 
 if with_platform_android
-  anv_flags += '-DVK_USE_PLATFORM_ANDROID_KHR'
   libanv_files += files('anv_android.c')
 else
   libanv_files += files('anv_android_stubs.c')
@@ -163,7 +155,7 @@ libanv_common = static_library(
   ],
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler,
-    inc_vulkan_wsi, inc_util,
+    inc_util,
   ],
   c_args : anv_flags,
   gnu_symbol_visibility : 'hidden',
@@ -174,16 +166,16 @@ libvulkan_intel = shared_library(
   'vulkan_intel',
   [files('anv_gem.c'), anv_entrypoints[0]],
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler, inc_vulkan_wsi,
+    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler,
   ],
   link_whole : [libanv_common, libanv_per_hw_ver_libs],
   link_with : [
-    libintel_compiler, libintel_dev, libisl, libblorp, libvulkan_wsi,
-    libintel_perf,
+    libintel_compiler, libintel_dev, libisl, libblorp, libintel_perf,
   ],
   dependencies : [
     dep_thread, dep_dl, dep_m, anv_deps, idep_libintel_common,
-    idep_nir, idep_genxml, idep_vulkan_util, idep_mesautil, idep_xmlconfig,
+    idep_nir, idep_genxml, idep_vulkan_util, idep_vulkan_wsi,
+    idep_mesautil, idep_xmlconfig,
   ],
   c_args : anv_flags,
   gnu_symbol_visibility : 'hidden',
@@ -209,16 +201,16 @@ if with_tests
     'vulkan_intel_test',
     [files('anv_gem_stubs.c'), anv_entrypoints[0]],
     include_directories : [
-      inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler, inc_vulkan_wsi,
+      inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler,
     ],
     link_whole : libanv_common,
     link_with : [
       libanv_per_hw_ver_libs, libintel_compiler, libintel_common, libintel_dev,
-      libisl, libblorp, libvulkan_wsi, libintel_perf,
+      libisl, libblorp, libintel_perf,
     ],
     dependencies : [
       dep_thread, dep_dl, dep_m, anv_deps,
-      idep_nir, idep_vulkan_util, idep_mesautil,
+      idep_nir, idep_vulkan_util, idep_vulkan_wsi, idep_mesautil,
     ],
     c_args : anv_flags,
     gnu_symbol_visibility : 'hidden',
@@ -234,9 +226,12 @@ if with_tests
         ['tests/@0@.c'.format(t), anv_entrypoints[0]],
         c_args : [ c_sse2_args ],
         link_with : libvulkan_intel_test,
-        dependencies : [dep_libdrm, dep_thread, dep_m, dep_valgrind, idep_vulkan_util, ],
+        dependencies : [
+          dep_libdrm, dep_thread, dep_m, dep_valgrind,
+          idep_vulkan_util, idep_vulkan_wsi_headers,
+        ],
         include_directories : [
-          inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler, inc_vulkan_wsi,
+          inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler,
         ],
       ),
       suite : ['intel'],

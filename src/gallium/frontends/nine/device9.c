@@ -257,13 +257,13 @@ NineDevice9_ctor( struct NineDevice9 *This,
 
     This->pure = !!(This->params.BehaviorFlags & D3DCREATE_PUREDEVICE);
 
-    This->context.pipe = This->screen->context_create(This->screen, NULL, 0);
+    This->context.pipe = This->screen->context_create(This->screen, NULL, PIPE_CONTEXT_PREFER_THREADED);
     This->pipe_secondary = This->screen->context_create(This->screen, NULL, 0);
     if (!This->context.pipe || !This->pipe_secondary) { return E_OUTOFMEMORY; } /* guess */
-    This->pipe_sw = This->screen_sw->context_create(This->screen_sw, NULL, 0);
+    This->pipe_sw = This->screen_sw->context_create(This->screen_sw, NULL, PIPE_CONTEXT_PREFER_THREADED);
     if (!This->pipe_sw) { return E_OUTOFMEMORY; }
 
-    This->context.cso = cso_create_context(This->context.pipe, 0);
+    This->context.cso = cso_create_context(This->context.pipe, CSO_NO_USER_VERTEX_BUFFERS);
     if (!This->context.cso) { return E_OUTOFMEMORY; } /* also a guess */
     This->cso_sw = cso_create_context(This->pipe_sw, 0);
     if (!This->cso_sw) { return E_OUTOFMEMORY; }

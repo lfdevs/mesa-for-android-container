@@ -25,6 +25,7 @@
 #include "ac_gpu_info.h"
 
 #include "sid.h"
+#include "u_math.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -510,4 +511,73 @@ void ac_compute_late_alloc(const struct radeon_info *info, bool ngg, bool ngg_cu
       *late_alloc_wave64 = MIN2(*late_alloc_wave64, G_00B204_SPI_SHADER_LATE_ALLOC_GS_GFX10(~0u));
    else /* VS */
       *late_alloc_wave64 = MIN2(*late_alloc_wave64, G_00B11C_LIMIT(~0u));
+}
+
+unsigned ac_compute_cs_workgroup_size(uint16_t sizes[3], bool variable, unsigned max)
+{
+   if (variable)
+      return max;
+
+   return sizes[0] * sizes[1] * sizes[2];
+}
+
+unsigned ac_compute_lshs_workgroup_size(enum chip_class chip_class, gl_shader_stage stage,
+                                        unsigned tess_num_patches,
+                                        unsigned tess_patch_in_vtx,
+                                        unsigned tess_patch_out_vtx)
+{
+   /* When tessellation is used, API VS runs on HW LS, API TCS runs on HW HS.
+    * These two HW stages are merged on GFX9+.
+    */
+
+   bool merged_shaders = chip_class >= GFX9;
+   unsigned ls_workgroup_size = tess_num_patches * tess_patch_in_vtx;
+   unsigned hs_workgroup_size = tess_num_patches * tess_patch_out_vtx;
+
+   if (merged_shaders)
+      return MAX2(ls_workgroup_size, hs_workgroup_size);
+   else if (stage == MESA_SHADER_VERTEX)
+      return ls_workgroup_size;
+   else if (stage == MESA_SHADER_TESS_CTRL)
+      return hs_workgroup_size;
+   else
+      unreachable("invalid LSHS shader stage");
+}
+
+unsigned ac_compute_esgs_workgroup_size(enum chip_class chip_class, unsigned wave_size,
+                                        unsigned es_verts, unsigned gs_inst_prims)
+{
+   /* ESGS may operate in workgroups if on-chip GS (LDS rings) are enabled.
+    *
+    * GFX6: Not possible in the HW.
+    * GFX7-8 (unmerged): possible in the HW, but not implemented in Mesa.
+    * GFX9+ (merged): implemented in Mesa.
+    */
+
+   if (chip_class <= GFX8)
+      return wave_size;
+
+   unsigned workgroup_size = MAX2(es_verts, gs_inst_prims);
+   return CLAMP(workgroup_size, 1, 256);
+}
+
+unsigned ac_compute_ngg_workgroup_size(unsigned es_verts, unsigned gs_inst_prims,
+                                       unsigned max_vtx_out, unsigned prim_amp_factor)
+{
+   /* NGG always operates in workgroups.
+    *
+    * For API VS/TES/GS:
+    * - 1 invocation per input vertex
+    * - 1 invocation per input primitive
+    *
+    * The same invocation can process both an input vertex and primitive,
+    * however 1 invocation can only output up to 1 vertex and 1 primitive.
+    */
+
+   unsigned max_vtx_in = es_verts < 256 ? es_verts : 3 * gs_inst_prims;
+   unsigned max_prim_in = gs_inst_prims;
+   unsigned max_prim_out = gs_inst_prims * prim_amp_factor;
+   unsigned workgroup_size = MAX4(max_vtx_in, max_vtx_out, max_prim_in, max_prim_out);
+
+   return CLAMP(workgroup_size, 1, 256);
 }

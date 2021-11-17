@@ -564,15 +564,6 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
       surface_type &= ~EGL_PIXMAP_BIT;
    }
 
-   /* No support for pbuffer + MSAA for now.
-    *
-    * XXX TODO: pbuffer + MSAA does not work and causes crashes.
-    * See QT bugreport: https://bugreports.qt.io/browse/QTBUG-47509
-    */
-   if (base.Samples) {
-      surface_type &= ~EGL_PBUFFER_BIT;
-   }
-
    if (!surface_type)
       return NULL;
 
@@ -658,33 +649,53 @@ dri2_add_pbuffer_configs_for_visuals(_EGLDisplay *disp)
    return (config_count != 0);
 }
 
-__DRIimage *
-dri2_lookup_egl_image(__DRIscreen *screen, void *image, void *data)
+GLboolean
+dri2_validate_egl_image(void *image, void *data)
 {
    _EGLDisplay *disp = data;
-   struct dri2_egl_image *dri2_img;
    _EGLImage *img;
-
-   (void) screen;
 
    mtx_lock(&disp->Mutex);
    img = _eglLookupImage(image, disp);
    mtx_unlock(&disp->Mutex);
 
    if (img == NULL) {
-      _eglError(EGL_BAD_PARAMETER, "dri2_lookup_egl_image");
-      return NULL;
+      _eglError(EGL_BAD_PARAMETER, "dri2_validate_egl_image");
+      return false;
    }
+
+   return true;
+}
+
+__DRIimage *
+dri2_lookup_egl_image_validated(void *image, void *data)
+{
+   struct dri2_egl_image *dri2_img;
+
+   (void)data;
 
    dri2_img = dri2_egl_image(image);
 
    return dri2_img->dri_image;
 }
 
-const __DRIimageLookupExtension image_lookup_extension = {
-   .base = { __DRI_IMAGE_LOOKUP, 1 },
+__DRIimage *
+dri2_lookup_egl_image(__DRIscreen *screen, void *image, void *data)
+{
+   (void) screen;
 
-   .lookupEGLImage       = dri2_lookup_egl_image
+   if (!dri2_validate_egl_image(image, data))
+      return NULL;
+
+   return dri2_lookup_egl_image_validated(image, data);
+}
+
+const __DRIimageLookupExtension image_lookup_extension = {
+   .base = { __DRI_IMAGE_LOOKUP, 2 },
+
+   .lookupEGLImage       = dri2_lookup_egl_image,
+   .validateEGLImage     = dri2_validate_egl_image,
+   .lookupEGLImageValidated = dri2_lookup_egl_image_validated,
 };
 
 struct dri2_extension_match {

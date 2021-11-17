@@ -157,7 +157,7 @@ bi_opt_cse(bi_context *ctx)
                 bi_index *replacement = calloc(sizeof(bi_index), ((ctx->ssa_alloc + 1) << 2));
                 _mesa_set_clear(instr_set, NULL);
 
-                bi_foreach_instr_in_block((bi_block *) block, instr) {
+                bi_foreach_instr_in_block(block, instr) {
                         /* Rewrite before trying to CSE anything so we converge
                          * locally in one iteration */
                         bi_foreach_src(instr, s) {

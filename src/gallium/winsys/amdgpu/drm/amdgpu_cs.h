@@ -32,6 +32,12 @@
 #include "util/u_memory.h"
 #include "drm-uapi/amdgpu_drm.h"
 
+/* Smaller submits means the GPU gets busy sooner and there is less
+ * waiting for buffers and fences. Proof:
+ *   http://www.phoronix.com/scan.php?page=article&item=mesa-111-si&num=1
+ */
+#define IB_MAX_SUBMIT_DWORDS (20 * 1024)
+
 struct amdgpu_ctx {
    struct amdgpu_winsys *ws;
    amdgpu_context_handle ctx;
@@ -58,7 +64,6 @@ struct amdgpu_cs_buffer {
 enum ib_type {
    IB_PREAMBLE,
    IB_MAIN,
-   IB_PARALLEL_COMPUTE,
    IB_NUM,
 };
 
@@ -90,6 +95,7 @@ struct amdgpu_fence_list {
 
 struct amdgpu_cs_context {
    struct drm_amdgpu_cs_chunk_ib ib[IB_NUM];
+   uint32_t                    *ib_main_addr; /* the beginning of IB before chaining */
 
    /* Buffers. */
    unsigned                    max_real_buffers;
@@ -115,10 +121,6 @@ struct amdgpu_cs_context {
    struct amdgpu_fence_list    syncobj_dependencies;
    struct amdgpu_fence_list    syncobj_to_signal;
 
-   /* The compute IB uses the dependencies above + these: */
-   struct amdgpu_fence_list    compute_fence_dependencies;
-   struct amdgpu_fence_list    compute_start_fence_dependencies;
-
    struct pipe_fence_handle    *fence;
 
    /* the error returned from cs_flush for non-async submissions */
@@ -132,7 +134,6 @@ struct amdgpu_cs_context {
 
 struct amdgpu_cs {
    struct amdgpu_ib main; /* must be first because this is inherited */
-   struct amdgpu_ib compute_ib;      /* optional parallel compute IB */
    struct amdgpu_winsys *ws;
    struct amdgpu_ctx *ctx;
    enum ring_type ring_type;

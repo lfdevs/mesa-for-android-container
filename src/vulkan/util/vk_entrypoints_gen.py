@@ -99,7 +99,7 @@ extern const struct vk_device_entrypoint_table ${p}_device_entrypoints;
 #endif
 
 #endif /* ${guard} */
-""", output_encoding='utf-8')
+""")
 
 TEMPLATE_C = Template(COPYRIGHT + """
 /* This file generated from ${filename}, don't edit directly. */
@@ -123,13 +123,12 @@ TEMPLATE_C = Template(COPYRIGHT + """
     % endif
     % for p in prefixes:
 #ifdef _MSC_VER
-    ${e.return_type} (*${p}_${e.name}_Null)(${e.decl_params()}) = 0;
 #ifdef _M_IX86
       % for args_size in [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 60, 104]:
-    #pragma comment(linker, "/alternatename:_${p}_${e.name}@${args_size}=_${p}_${e.name}_Null")
+    #pragma comment(linker, "/alternatename:_${p}_${e.name}@${args_size}=_vk_entrypoint_stub@0")
       % endfor
 #else
-    #pragma comment(linker, "/alternatename:${p}_${e.name}=${p}_${e.name}_Null")
+    #pragma comment(linker, "/alternatename:${p}_${e.name}=vk_entrypoint_stub")
 #endif
 #else
     VKAPI_ATTR ${e.return_type} VKAPI_CALL ${p}_${e.name}(${e.decl_params()}) __attribute__ ((weak));
@@ -149,6 +148,8 @@ const struct vk_${type}_entrypoint_table ${p}_${type}_entrypoints = {
     % endif
     .${e.name} = ${p}_${e.name},
     % if e.guard is not None:
+#elif defined(_MSC_VER)
+    .${e.name} = (PFN_vkVoidFunction)vk_entrypoint_stub,
 #endif // ${e.guard}
     % endif
   % endfor
@@ -159,7 +160,7 @@ const struct vk_${type}_entrypoint_table ${p}_${type}_entrypoints = {
 ${entrypoint_table('instance', instance_entrypoints, instance_prefixes)}
 ${entrypoint_table('physical_device', physical_device_entrypoints, physical_device_prefixes)}
 ${entrypoint_table('device', device_entrypoints, device_prefixes)}
-""", output_encoding='utf-8')
+""")
 
 def get_entrypoints_defines(doc):
     """Maps entry points to extension defines."""
@@ -236,10 +237,10 @@ def main():
     # For outputting entrypoints.h we generate a anv_EntryPoint() prototype
     # per entry point.
     try:
-        with open(args.out_h, 'wb') as f:
+        with open(args.out_h, 'w') as f:
             guard = os.path.basename(args.out_h).replace('.', '_').upper()
             f.write(TEMPLATE_H.render(guard=guard, **environment))
-        with open(args.out_c, 'wb') as f:
+        with open(args.out_c, 'w') as f:
             f.write(TEMPLATE_C.render(**environment))
 
     except Exception:

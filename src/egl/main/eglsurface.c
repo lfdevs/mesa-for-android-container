@@ -216,6 +216,21 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
             surf->ActiveRenderBuffer = val;
          }
          break;
+      case EGL_PRESENT_OPAQUE_EXT:
+         if (!disp->Extensions.EXT_present_opaque) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+         if (type != EGL_WINDOW_BIT) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+         if (val != EGL_TRUE && val != EGL_FALSE) {
+            err = EGL_BAD_PARAMETER;
+            break;
+         }
+         surf->PresentOpaque = val;
+         break;
       case EGL_POST_SUB_BUFFER_SUPPORTED_NV:
          if (!disp->Extensions.NV_post_sub_buffer ||
              type != EGL_WINDOW_BIT) {
@@ -392,6 +407,7 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
    surf->VGColorspace = EGL_VG_COLORSPACE_sRGB;
    surf->GLColorspace = EGL_GL_COLORSPACE_LINEAR_KHR;
    surf->ProtectedContent = EGL_FALSE;
+   surf->PresentOpaque = EGL_FALSE;
 
    surf->MipmapLevel = 0;
    surf->MultisampleResolve = EGL_MULTISAMPLE_RESOLVE_DEFAULT;
@@ -594,6 +610,11 @@ _eglQuerySurface(_EGLDisplay *disp, _EGLSurface *surface,
       if (!disp->Extensions.EXT_protected_surface)
          return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
       *value = surface->ProtectedContent;
+      break;
+   case EGL_PRESENT_OPAQUE_EXT:
+      if (!disp->Extensions.EXT_present_opaque)
+         return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
+      *value = surface->PresentOpaque;
       break;
    default:
       return _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");

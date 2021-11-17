@@ -26,7 +26,32 @@
 #include <stdbool.h>
 #include "util/ralloc.h"
 #include "brw_eu.h"
-#include "brw_gfx_ver_enum.h"
+
+#include <gtest/gtest.h>
+
+struct CompactParams {
+   unsigned verx10;
+   unsigned align;
+};
+
+std::string
+get_compact_params_name(const testing::TestParamInfo<CompactParams> p)
+{
+   CompactParams params = p.param;
+   std::stringstream ss;
+   ss << params.verx10 << "_";
+   switch (params.align) {
+   case BRW_ALIGN_1:
+      ss << "Align_1";
+      break;
+   case BRW_ALIGN_16:
+      ss << "Align_16";
+      break;
+   default:
+      unreachable("invalid align");
+   }
+   return ss.str();
+}
 
 static bool
 test_compact_instruction(struct brw_codegen *p, brw_inst src)
@@ -173,8 +198,66 @@ test_fuzz_compact_instruction(struct brw_codegen *p, brw_inst src)
    return true;
 }
 
-static void
-test_ADD_GRF_GRF_GRF(struct brw_codegen *p)
+class CompactTestFixture : public testing::TestWithParam<CompactParams> {
+protected:
+   virtual void SetUp() {
+      CompactParams params = GetParam();
+      mem_ctx = ralloc_context(NULL);
+      devinfo = rzalloc(mem_ctx, intel_device_info);
+      p = rzalloc(mem_ctx, brw_codegen);
+
+      devinfo->verx10 = params.verx10;
+      devinfo->ver = devinfo->verx10 / 10;
+
+      brw_init_codegen(devinfo, p, p);
+      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+      brw_set_default_access_mode(p, params.align);
+   };
+
+   virtual void TearDown() {
+      EXPECT_EQ(p->nr_insn, 1);
+      EXPECT_TRUE(test_compact_instruction(p, p->store[0]));
+      EXPECT_TRUE(test_fuzz_compact_instruction(p, p->store[0]));
+
+      ralloc_free(mem_ctx);
+   };
+
+   void *mem_ctx;
+   intel_device_info *devinfo;
+   brw_codegen *p;
+};
+
+class Instructions : public CompactTestFixture {};
+
+INSTANTIATE_TEST_CASE_P(
+   CompactTest,
+   Instructions,
+   testing::Values(
+      CompactParams{ 50,  BRW_ALIGN_1 }, CompactParams{ 50, BRW_ALIGN_16 },
+      CompactParams{ 60,  BRW_ALIGN_1 }, CompactParams{ 60, BRW_ALIGN_16 },
+      CompactParams{ 70,  BRW_ALIGN_1 }, CompactParams{ 70, BRW_ALIGN_16 },
+      CompactParams{ 75,  BRW_ALIGN_1 }, CompactParams{ 75, BRW_ALIGN_16 },
+      CompactParams{ 80,  BRW_ALIGN_1 }, CompactParams{ 80, BRW_ALIGN_16 },
+      CompactParams{ 90,  BRW_ALIGN_1 }, CompactParams{ 90, BRW_ALIGN_16 },
+      CompactParams{ 110, BRW_ALIGN_1 },
+      CompactParams{ 120, BRW_ALIGN_1 },
+      CompactParams{ 125, BRW_ALIGN_1 }
+   ),
+   get_compact_params_name);
+
+class InstructionsBeforeIvyBridge : public CompactTestFixture {};
+
+INSTANTIATE_TEST_CASE_P(
+   CompactTest,
+   InstructionsBeforeIvyBridge,
+   testing::Values(
+      CompactParams{ 50,  BRW_ALIGN_1 }, CompactParams{ 50, BRW_ALIGN_16 },
+      CompactParams{ 60,  BRW_ALIGN_1 }, CompactParams{ 60, BRW_ALIGN_16 }
+   ),
+   get_compact_params_name);
+
+
+TEST_P(Instructions, ADD_GRF_GRF_GRF)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -183,8 +266,7 @@ test_ADD_GRF_GRF_GRF(struct brw_codegen *p)
    brw_ADD(p, g0, g2, g4);
 }
 
-static void
-test_ADD_GRF_GRF_IMM(struct brw_codegen *p)
+TEST_P(Instructions, ADD_GRF_GRF_IMM)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -192,8 +274,7 @@ test_ADD_GRF_GRF_IMM(struct brw_codegen *p)
    brw_ADD(p, g0, g2, brw_imm_f(1.0));
 }
 
-static void
-test_ADD_GRF_GRF_IMM_d(struct brw_codegen *p)
+TEST_P(Instructions, ADD_GRF_GRF_IMM_d)
 {
    struct brw_reg g0 = retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_D);
    struct brw_reg g2 = retype(brw_vec8_grf(2, 0), BRW_REGISTER_TYPE_D);
@@ -201,8 +282,7 @@ test_ADD_GRF_GRF_IMM_d(struct brw_codegen *p)
    brw_ADD(p, g0, g2, brw_imm_d(1));
 }
 
-static void
-test_MOV_GRF_GRF(struct brw_codegen *p)
+TEST_P(Instructions, MOV_GRF_GRF)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -210,8 +290,7 @@ test_MOV_GRF_GRF(struct brw_codegen *p)
    brw_MOV(p, g0, g2);
 }
 
-static void
-test_ADD_MRF_GRF_GRF(struct brw_codegen *p)
+TEST_P(InstructionsBeforeIvyBridge, ADD_MRF_GRF_GRF)
 {
    struct brw_reg m6 = brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, 6, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -220,8 +299,7 @@ test_ADD_MRF_GRF_GRF(struct brw_codegen *p)
    brw_ADD(p, m6, g2, g4);
 }
 
-static void
-test_ADD_vec1_GRF_GRF_GRF(struct brw_codegen *p)
+TEST_P(Instructions, ADD_vec1_GRF_GRF_GRF)
 {
    struct brw_reg g0 = brw_vec1_grf(0, 0);
    struct brw_reg g2 = brw_vec1_grf(2, 0);
@@ -230,8 +308,7 @@ test_ADD_vec1_GRF_GRF_GRF(struct brw_codegen *p)
    brw_ADD(p, g0, g2, g4);
 }
 
-static void
-test_PLN_MRF_GRF_GRF(struct brw_codegen *p)
+TEST_P(InstructionsBeforeIvyBridge, PLN_MRF_GRF_GRF)
 {
    struct brw_reg m6 = brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, 6, 0);
    struct brw_reg interp = brw_vec1_grf(2, 0);
@@ -240,8 +317,7 @@ test_PLN_MRF_GRF_GRF(struct brw_codegen *p)
    brw_PLN(p, m6, interp, g4);
 }
 
-static void
-test_f0_0_MOV_GRF_GRF(struct brw_codegen *p)
+TEST_P(Instructions, f0_0_MOV_GRF_GRF)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -256,8 +332,7 @@ test_f0_0_MOV_GRF_GRF(struct brw_codegen *p)
  * it, so that we run the fuzzing can run over all the other bits that might
  * interact with it.
  */
-static void
-test_f0_1_MOV_GRF_GRF(struct brw_codegen *p)
+TEST_P(Instructions, f0_1_MOV_GRF_GRF)
 {
    struct brw_reg g0 = brw_vec8_grf(0, 0);
    struct brw_reg g2 = brw_vec8_grf(2, 0);
@@ -267,80 +342,4 @@ test_f0_1_MOV_GRF_GRF(struct brw_codegen *p)
    brw_inst *mov = brw_MOV(p, g0, g2);
    brw_inst_set_flag_subreg_nr(p->devinfo, mov, 1);
    brw_pop_insn_state(p);
-}
-
-struct {
-   void (*func)(struct brw_codegen *p);
-   int gfx_vers;
-} tests[] = {
-   { test_MOV_GRF_GRF,          GFX_ALL      },
-   { test_ADD_GRF_GRF_GRF,      GFX_ALL      },
-   { test_ADD_GRF_GRF_IMM,      GFX_ALL      },
-   { test_ADD_GRF_GRF_IMM_d,    GFX_ALL      },
-   { test_ADD_MRF_GRF_GRF,      GFX_LE(GFX6) },
-   { test_ADD_vec1_GRF_GRF_GRF, GFX_ALL      },
-   { test_PLN_MRF_GRF_GRF,      GFX_LE(GFX6) },
-   { test_f0_0_MOV_GRF_GRF,     GFX_ALL      },
-   { test_f0_1_MOV_GRF_GRF,     GFX_ALL      },
-};
-
-static bool
-run_tests(const struct intel_device_info *devinfo)
-{
-   bool fail = false;
-
-   for (unsigned i = 0; i < ARRAY_SIZE(tests); i++) {
-      if ((tests[i].gfx_vers & gfx_ver_from_devinfo(devinfo)) == 0)
-         continue;
-
-      for (int align_16 = 0; align_16 <= 1; align_16++) {
-         /* Align16 support is not present on Gfx11+ */
-         if (devinfo->ver >= 11 && align_16)
-            continue;
-
-	 struct brw_codegen *p = rzalloc(NULL, struct brw_codegen);
-	 brw_init_codegen(devinfo, p, p);
-
-	 brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
-	 if (align_16)
-	    brw_set_default_access_mode(p, BRW_ALIGN_16);
-	 else
-	    brw_set_default_access_mode(p, BRW_ALIGN_1);
-
-	 tests[i].func(p);
-	 assert(p->nr_insn == 1);
-
-	 if (!test_compact_instruction(p, p->store[0])) {
-	    fail = true;
-	    continue;
-	 }
-
-	 if (!test_fuzz_compact_instruction(p, p->store[0])) {
-	    fail = true;
-	    continue;
-	 }
-
-	 ralloc_free(p);
-      }
-   }
-
-   return fail;
-}
-
-int
-main(UNUSED int argc, UNUSED char **argv)
-{
-   struct intel_device_info *devinfo = (struct intel_device_info *)calloc(1, sizeof(*devinfo));
-   bool fail = false;
-
-   for (devinfo->ver = 5; devinfo->ver <= 12; devinfo->ver++) {
-      if (devinfo->ver == 10)
-         continue;
-
-      devinfo->verx10 = devinfo->ver * 10;
-      fail |= run_tests(devinfo);
-   }
-
-   free(devinfo);
-   return fail;
 }

@@ -6650,7 +6650,7 @@ st_translate_program(
    glsl_to_tgsi_visitor *program,
    const struct gl_program *proginfo,
    GLuint numInputs,
-   const ubyte inputMapping[],
+   const ubyte attrToIndex[],
    const ubyte inputSlotToAttr[],
    const ubyte inputSemanticName[],
    const ubyte inputSemanticIndex[],
@@ -6666,6 +6666,7 @@ st_translate_program(
    struct gl_program_constants *prog_const =
       &ctx->Const.Program[program->shader->Stage];
    enum pipe_error ret = PIPE_OK;
+   uint8_t inputMapping[VARYING_SLOT_TESS_MAX] = {0};
 
    assert(numInputs <= ARRAY_SIZE(t->inputs));
    assert(numOutputs <= ARRAY_SIZE(t->outputs));
@@ -6682,6 +6683,27 @@ st_translate_program(
                         (enum pipe_format) (PIPE_FORMAT_COUNT - 1));
    ASSERT_BITFIELD_SIZE(glsl_to_tgsi_instruction, op,
                         (enum tgsi_opcode) (TGSI_OPCODE_LAST - 1));
+
+   if (proginfo->DualSlotInputs != 0) {
+      /* adjust attrToIndex to include placeholder for second
+       * part of a double attribute
+       */
+      numInputs = 0;
+      for (unsigned attr = 0; attr < VERT_ATTRIB_MAX; attr++) {
+         if ((proginfo->info.inputs_read & BITFIELD64_BIT(attr)) != 0) {
+            inputMapping[attr] = numInputs++;
+
+            if ((proginfo->DualSlotInputs & BITFIELD64_BIT(attr)) != 0) {
+               /* add placeholder for second part of a double attribute */
+               numInputs++;
+            }
+         }
+      }
+      inputMapping[VERT_ATTRIB_EDGEFLAG] = numInputs;
+   }
+   else {
+      memcpy(inputMapping, attrToIndex, sizeof(inputMapping));
+   }
 
    t = CALLOC_STRUCT(st_translate);
    if (!t) {
@@ -6738,10 +6760,10 @@ st_translate_program(
             interp_location = (enum tgsi_interpolate_loc) decl->interp_loc;
          }
 
-         src = ureg_DECL_fs_input_cyl_centroid_layout(ureg,
+         src = ureg_DECL_fs_input_centroid_layout(ureg,
                   (enum tgsi_semantic) inputSemanticName[slot],
                   inputSemanticIndex[slot],
-                  interp_mode, 0, interp_location, slot, tgsi_usage_mask,
+                  interp_mode, interp_location, slot, tgsi_usage_mask,
                   decl->array_id, decl->size);
 
          for (unsigned j = 0; j < decl->size; ++j) {
@@ -6858,12 +6880,6 @@ st_translate_program(
             goto out;
          }
       }
-
-      if (program->shader->Program->sh.fs.BlendSupport)
-         ureg_property(ureg,
-                       TGSI_PROPERTY_FS_BLEND_EQUATION_ADVANCED,
-                       program->shader->Program->sh.fs.BlendSupport);
-
    }
    else if (procType == PIPE_SHADER_VERTEX) {
       for (i = 0; i < numOutputs; i++) {

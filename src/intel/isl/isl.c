@@ -99,7 +99,11 @@ static void
 isl_device_setup_mocs(struct isl_device *dev)
 {
    if (dev->info->ver >= 12) {
-      if (dev->info->is_dg1) {
+      if (dev->info->is_dg2) {
+         /* L3CC=WB; BSpec: 45101 */
+         dev->mocs.internal = 3 << 1;
+         dev->mocs.external = 3 << 1;
+      } else if (dev->info->is_dg1) {
          /* L3CC=WB */
          dev->mocs.internal = 5 << 1;
          /* Displayables on DG1 are free to cache in L3 since L3 is transient
@@ -265,8 +269,19 @@ isl_device_init(struct isl_device *dev,
       dev->ds.hiz_offset = 0;
    }
 
-   if (ISL_GFX_VERX10(dev) == 120) {
-      dev->ds.size += GFX12_MI_LOAD_REGISTER_IMM_length * 4 * 2;
+   if (ISL_GFX_VER(dev) >= 7) {
+      /* From the IVB PRM, SURFACE_STATE::Height,
+       *
+       *    For typed buffer and structured buffer surfaces, the number
+       *    of entries in the buffer ranges from 1 to 2^27. For raw buffer
+       *    surfaces, the number of entries in the buffer is the number of bytes
+       *    which can range from 1 to 2^30.
+       *
+       * This limit is only concerned with raw buffers.
+       */
+      dev->max_buffer_size = 1ull << 30;
+   } else {
+      dev->max_buffer_size = 1ull << 27;
    }
 
    isl_device_setup_mocs(dev);
@@ -306,13 +321,22 @@ isl_device_get_sample_counts(struct isl_device *dev)
 
 /**
  * Returns an isl_tile_info representation of the given isl_tiling when
- * combined with a format of the given size.
+ * combined when used in the given configuration.
  *
- * @param[out] info is written only on success
+ * @param[in]  tiling      The tiling format to introspect
+ * @param[in]  dim         The dimensionality of the surface being tiled
+ * @param[in]  msaa_layout The layout of samples in the surface being tiled
+ * @param[in]  format_bpb  The number of bits per surface element (block) for
+ *                         the surface being tiled
+ * @param[in]  samples     The samples in the surface being tiled
+ * @param[out] tile_info   Return parameter for the tiling information
  */
 void
 isl_tiling_get_info(enum isl_tiling tiling,
+                    enum isl_surf_dim dim,
+                    enum isl_msaa_layout msaa_layout,
                     uint32_t format_bpb,
+                    uint32_t samples,
                     struct isl_tile_info *tile_info)
 {
    const uint32_t bs = format_bpb / 8;
@@ -323,11 +347,13 @@ isl_tiling_get_info(enum isl_tiling tiling,
       /* It is possible to have non-power-of-two formats in a tiled buffer.
        * The easiest way to handle this is to treat the tile as if it is three
        * times as wide.  This way no pixel will ever cross a tile boundary.
-       * This really only works on legacy X and Y tiling formats.
+       * This really only works on a subset of tiling formats.
        */
-      assert(tiling == ISL_TILING_X || tiling == ISL_TILING_Y0);
+      assert(tiling == ISL_TILING_X || tiling == ISL_TILING_Y0 ||
+             tiling == ISL_TILING_4);
       assert(bs % 3 == 0 && isl_is_pow2(format_bpb / 3));
-      isl_tiling_get_info(tiling, format_bpb / 3, tile_info);
+      isl_tiling_get_info(tiling, dim, msaa_layout, format_bpb / 3, samples,
+                          tile_info);
       return;
    }
 
@@ -345,6 +371,7 @@ isl_tiling_get_info(enum isl_tiling tiling,
       break;
 
    case ISL_TILING_Y0:
+   case ISL_TILING_4:
       assert(bs > 0);
       logical_el = isl_extent4d(128 / bs, 32, 1, 1);
       phys_B = isl_extent2d(128, 32);
@@ -379,6 +406,64 @@ isl_tiling_get_info(enum isl_tiling tiling,
       phys_B = isl_extent2d(width, height);
       break;
    }
+   case ISL_TILING_64:
+      /* The tables below are taken from the "2D Surfaces" page in the Bspec
+       * which are formulated in terms of the Cv and Cu constants. This is
+       * different from the tables in the "Tile64 Format" page which should be
+       * equivalent but are usually in terms of pixels. Also note that Cv and
+       * Cu are HxW order to match the Bspec table, not WxH order like you
+       * might expect.
+       *
+       * From the Bspec's "Tile64 Format" page:
+       *
+       *    MSAA Depth/Stencil surface use IMS (Interleaved Multi Samples)
+       *    which means:
+       *
+       *    - Use the 1X MSAA (non-MSRT) version of the Tile64 equations and
+       *      let the client unit do the swizzling internally
+       *
+       * Surfaces using the IMS layout will use the mapping for 1x MSAA.
+       */
+#define tile_extent(bs, cv, cu, a) \
+      isl_extent4d((1 << cu) / bs, 1 << cv, 1, a)
+
+      /* Only 2D surfaces are handled. */
+      assert(dim == ISL_SURF_DIM_2D);
+
+      if (samples == 1 || msaa_layout == ISL_MSAA_LAYOUT_INTERLEAVED) {
+         switch (format_bpb) {
+         case 128: logical_el = tile_extent(bs, 6, 10, 1); break;
+         case  64: logical_el = tile_extent(bs, 6, 10, 1); break;
+         case  32: logical_el = tile_extent(bs, 7,  9, 1); break;
+         case  16: logical_el = tile_extent(bs, 7,  9, 1); break;
+         case   8: logical_el = tile_extent(bs, 8,  8, 1); break;
+         default: unreachable("Unsupported format size.");
+         }
+      } else if (samples == 2) {
+         switch (format_bpb) {
+         case 128: logical_el = tile_extent(bs, 6,  9, 2); break;
+         case  64: logical_el = tile_extent(bs, 6,  9, 2); break;
+         case  32: logical_el = tile_extent(bs, 7,  8, 2); break;
+         case  16: logical_el = tile_extent(bs, 7,  8, 2); break;
+         case   8: logical_el = tile_extent(bs, 8,  7, 2); break;
+         default: unreachable("Unsupported format size.");
+         }
+      } else {
+         switch (format_bpb) {
+         case 128: logical_el = tile_extent(bs, 5,  9, 4); break;
+         case  64: logical_el = tile_extent(bs, 5,  9, 4); break;
+         case  32: logical_el = tile_extent(bs, 6,  8, 4); break;
+         case  16: logical_el = tile_extent(bs, 6,  8, 4); break;
+         case   8: logical_el = tile_extent(bs, 7,  7, 4); break;
+         default: unreachable("Unsupported format size.");
+         }
+      }
+
+#undef tile_extent
+
+      phys_B.w = logical_el.w * bs;
+      phys_B.h = 64 * 1024 / phys_B.w;
+      break;
 
    case ISL_TILING_HIZ:
       /* HiZ buffers are required to have ISL_FORMAT_HIZ which is an 8x4
@@ -525,7 +610,9 @@ isl_surf_choose_tiling(const struct isl_device *dev,
       return true;
    }
 
-   if (ISL_GFX_VER(dev) >= 6) {
+   if (ISL_GFX_VERX10(dev) >= 125) {
+      isl_gfx125_filter_tiling(dev, info, &tiling_flags);
+   } else if (ISL_GFX_VER(dev) >= 6) {
       isl_gfx6_filter_tiling(dev, info, &tiling_flags);
    } else {
       isl_gfx4_filter_tiling(dev, info, &tiling_flags);
@@ -552,6 +639,8 @@ isl_surf_choose_tiling(const struct isl_device *dev,
       CHOOSE(ISL_TILING_LINEAR);
    }
 
+   CHOOSE(ISL_TILING_4);
+   CHOOSE(ISL_TILING_64);
    CHOOSE(ISL_TILING_Ys);
    CHOOSE(ISL_TILING_Yf);
    CHOOSE(ISL_TILING_Y0);
@@ -773,7 +862,10 @@ isl_choose_image_alignment_el(const struct isl_device *dev,
       return;
    }
 
-   if (ISL_GFX_VER(dev) >= 12) {
+   if (ISL_GFX_VERX10(dev) >= 125) {
+      isl_gfx125_choose_image_alignment_el(dev, info, tiling, dim_layout,
+                                           msaa_layout, image_align_el);
+   } else if (ISL_GFX_VER(dev) >= 12) {
       isl_gfx12_choose_image_alignment_el(dev, info, tiling, dim_layout,
                                           msaa_layout, image_align_el);
    } else if (ISL_GFX_VER(dev) >= 9) {
@@ -1190,13 +1282,23 @@ isl_calc_phys_total_extent_el_gfx4_2d(
                                            image_align_sa, phys_level0_sa,
                                            array_pitch_span,
                                            &phys_slice0_sa);
-   *phys_total_el = (struct isl_extent4d) {
-      .w = isl_align_div_npot(phys_slice0_sa.w, fmtl->bw),
-      .h = *array_pitch_el_rows * (phys_level0_sa->array_len - 1) +
-           isl_align_div_npot(phys_slice0_sa.h, fmtl->bh),
-      .d = 1,
-      .a = 1,
-   };
+
+   if (tile_info->tiling == ISL_TILING_64) {
+      *phys_total_el = (struct isl_extent4d) {
+         .w = isl_align_div_npot(phys_slice0_sa.w, fmtl->bw),
+         .h = isl_align_div_npot(phys_slice0_sa.h, fmtl->bh),
+         .d = isl_align_div_npot(phys_level0_sa->d, fmtl->bd),
+         .a = phys_level0_sa->array_len,
+      };
+   } else {
+      *phys_total_el = (struct isl_extent4d) {
+         .w = isl_align_div_npot(phys_slice0_sa.w, fmtl->bw),
+         .h = *array_pitch_el_rows * (phys_level0_sa->array_len - 1) +
+              isl_align_div_npot(phys_slice0_sa.h, fmtl->bh),
+         .d = 1,
+         .a = 1,
+      };
+   }
 }
 
 /**
@@ -1479,10 +1581,20 @@ isl_calc_row_pitch_alignment(const struct isl_device *dev,
     *    "When using linear memory, this must be at least 64 byte aligned."
     *
     * However, when displaying on NVIDIA and recent AMD GPUs via PRIME,
-    * we need a larger pitch of 256 bytes.  We do that just in case.
+    * we need a larger pitch of 256 bytes.
+    *
+    * If the ISL caller didn't specify a row_pitch_B, then we should assume
+    * the NVIDIA/AMD requirements. Otherwise, if we have a specified
+    * row_pitch_B, this is probably because the caller is trying to import a
+    * buffer. In that case we limit the minimum row pitch to the Intel HW
+    * requirement.
     */
-   if (surf_info->usage & ISL_SURF_USAGE_DISPLAY_BIT)
-      alignment = isl_align(alignment, 256);
+   if (surf_info->usage & ISL_SURF_USAGE_DISPLAY_BIT) {
+      if (surf_info->row_pitch_B == 0)
+         alignment = isl_align(alignment, 256);
+      else
+         alignment = isl_align(alignment, 64);
+   }
 
    return alignment;
 }
@@ -1641,15 +1753,16 @@ isl_surf_init_s(const struct isl_device *dev,
    if (!isl_surf_choose_tiling(dev, info, &tiling))
       return false;
 
-   struct isl_tile_info tile_info;
-   isl_tiling_get_info(tiling, fmtl->bpb, &tile_info);
-
    const enum isl_dim_layout dim_layout =
       isl_surf_choose_dim_layout(dev, info->dim, tiling, info->usage);
 
    enum isl_msaa_layout msaa_layout;
    if (!isl_choose_msaa_layout(dev, info, tiling, &msaa_layout))
        return false;
+
+   struct isl_tile_info tile_info;
+   isl_tiling_get_info(tiling, info->dim, msaa_layout, fmtl->bpb,
+                       info->samples, &tile_info);
 
    struct isl_extent3d image_align_el;
    isl_choose_image_alignment_el(dev, info, tiling, dim_layout, msaa_layout,
@@ -1729,7 +1842,6 @@ isl_surf_init_s(const struct isl_device *dev,
                                               tile_info.logical_extent_el.h);
          array_slices = isl_align_div(phys_total_el.a,
                                       tile_info.logical_extent_el.a);
-         assert(array_pitch_el_rows % tile_info.logical_extent_el.h == 0);
       } else {
          assert(phys_total_el.d == 1 && phys_total_el.a == 1);
          array_pitch_tl_rows = 0;
@@ -1827,7 +1939,8 @@ isl_surf_get_tile_info(const struct isl_surf *surf,
                        struct isl_tile_info *tile_info)
 {
    const struct isl_format_layout *fmtl = isl_format_get_layout(surf->format);
-   isl_tiling_get_info(surf->tiling, fmtl->bpb, tile_info);
+   isl_tiling_get_info(surf->tiling, surf->dim, surf->msaa_layout, fmtl->bpb,
+                       surf->samples, tile_info);
 }
 
 bool
@@ -2486,7 +2599,7 @@ get_image_offset_sa_gfx6_stencil_hiz(const struct isl_surf *surf,
       isl_surf_get_image_alignment_sa(surf);
 
    struct isl_tile_info tile_info;
-   isl_tiling_get_info(surf->tiling, fmtl->bpb, &tile_info);
+   isl_surf_get_tile_info(surf, &tile_info);
    const struct isl_extent2d tile_extent_sa = {
       .w = tile_info.logical_extent_el.w * fmtl->bw,
       .h = tile_info.logical_extent_el.h * fmtl->bh,
@@ -2654,7 +2767,7 @@ isl_surf_get_image_offset_B_tile_sa(const struct isl_surf *surf,
                                     uint32_t level,
                                     uint32_t logical_array_layer,
                                     uint32_t logical_z_offset_px,
-                                    uint32_t *offset_B,
+                                    uint64_t *offset_B,
                                     uint32_t *x_offset_sa,
                                     uint32_t *y_offset_sa)
 {
@@ -2686,7 +2799,7 @@ isl_surf_get_image_offset_B_tile_el(const struct isl_surf *surf,
                                     uint32_t level,
                                     uint32_t logical_array_layer,
                                     uint32_t logical_z_offset_px,
-                                    uint32_t *offset_B,
+                                    uint64_t *offset_B,
                                     uint32_t *x_offset_el,
                                     uint32_t *y_offset_el)
 {
@@ -2702,7 +2815,9 @@ isl_surf_get_image_offset_B_tile_el(const struct isl_surf *surf,
                                 &total_array_offset);
 
    uint32_t z_offset_el, array_offset;
-   isl_tiling_get_intratile_offset_el(surf->tiling, fmtl->bpb,
+   isl_tiling_get_intratile_offset_el(surf->tiling, surf->dim,
+                                      surf->msaa_layout, fmtl->bpb,
+                                      surf->samples,
                                       surf->row_pitch_B,
                                       surf->array_pitch_el_rows,
                                       total_x_offset_el,
@@ -2723,8 +2838,8 @@ isl_surf_get_image_range_B_tile(const struct isl_surf *surf,
                                 uint32_t level,
                                 uint32_t logical_array_layer,
                                 uint32_t logical_z_offset_px,
-                                uint32_t *start_tile_B,
-                                uint32_t *end_tile_B)
+                                uint64_t *start_tile_B,
+                                uint64_t *end_tile_B)
 {
    uint32_t start_x_offset_el, start_y_offset_el;
    uint32_t start_z_offset_el, start_array_slice;
@@ -2751,7 +2866,9 @@ isl_surf_get_image_range_B_tile(const struct isl_surf *surf,
    const uint32_t end_array_slice = start_array_slice;
 
    UNUSED uint32_t x_offset_el, y_offset_el, z_offset_el, array_slice;
-   isl_tiling_get_intratile_offset_el(surf->tiling, fmtl->bpb,
+   isl_tiling_get_intratile_offset_el(surf->tiling, surf->dim,
+                                      surf->msaa_layout, fmtl->bpb,
+                                      surf->samples,
                                       surf->row_pitch_B,
                                       surf->array_pitch_el_rows,
                                       start_x_offset_el,
@@ -2764,7 +2881,9 @@ isl_surf_get_image_range_B_tile(const struct isl_surf *surf,
                                       &z_offset_el,
                                       &array_slice);
 
-   isl_tiling_get_intratile_offset_el(surf->tiling, fmtl->bpb,
+   isl_tiling_get_intratile_offset_el(surf->tiling, surf->dim,
+                                      surf->msaa_layout, fmtl->bpb,
+                                      surf->samples,
                                       surf->row_pitch_B,
                                       surf->array_pitch_el_rows,
                                       end_x_offset_el,
@@ -2792,7 +2911,7 @@ isl_surf_get_image_surf(const struct isl_device *dev,
                         uint32_t logical_array_layer,
                         uint32_t logical_z_offset_px,
                         struct isl_surf *image_surf,
-                        uint32_t *offset_B,
+                        uint64_t *offset_B,
                         uint32_t *x_offset_sa,
                         uint32_t *y_offset_sa)
 {
@@ -2832,7 +2951,7 @@ isl_surf_get_uncompressed_surf(const struct isl_device *dev,
                                const struct isl_view *view,
                                struct isl_surf *ucompr_surf,
                                struct isl_view *ucompr_view,
-                               uint32_t *offset_B,
+                               uint64_t *offset_B,
                                uint32_t *x_offset_el,
                                uint32_t *y_offset_el)
 {
@@ -2846,18 +2965,18 @@ isl_surf_get_uncompressed_surf(const struct isl_device *dev,
    assert(isl_format_get_layout(view->format)->bpb == fmtl->bpb);
    assert(view->levels == 1);
 
-   const uint32_t view_width =
+   const uint32_t view_width_px =
       isl_minify(surf->logical_level0_px.width, view->base_level);
-   const uint32_t view_height =
+   const uint32_t view_height_px =
       isl_minify(surf->logical_level0_px.height, view->base_level);
 
-   const uint32_t ucompr_width = isl_align_div_npot(view_width, fmtl->bw);
-   const uint32_t ucompr_height = isl_align_div_npot(view_height, fmtl->bh);
+   assert(surf->samples == 1);
+   const uint32_t view_width_el = isl_align_div_npot(view_width_px, fmtl->bw);
+   const uint32_t view_height_el = isl_align_div_npot(view_height_px, fmtl->bh);
 
    /* If we ever enable 3D block formats, we'll need to re-think this */
    assert(fmtl->bd == 1);
 
-   uint32_t x_offset_sa = 0, y_offset_sa = 0;
    if (view->array_len > 1) {
       /* The Skylake PRM Vol. 2d, "RENDER_SURFACE_STATE::X Offset" says:
        *
@@ -2890,9 +3009,21 @@ isl_surf_get_uncompressed_surf(const struct isl_device *dev,
 
       *ucompr_surf = *surf;
       ucompr_surf->levels = 1;
+      ucompr_surf->format = view_format;
+
+      /* We're making an uncompressed view here.  The image dimensions
+       * need to be scaled down by the block size.
+       */
+      assert(ucompr_surf->logical_level0_px.width == view_width_px);
+      assert(ucompr_surf->logical_level0_px.height == view_height_px);
+      ucompr_surf->logical_level0_px.width = view_width_el;
+      ucompr_surf->logical_level0_px.height = view_height_el;
+      ucompr_surf->phys_level0_sa = isl_surf_get_phys_level0_el(surf);
 
       /* The surface mostly stays as-is; there is no offset */
       *offset_B = 0;
+      *x_offset_el = 0;
+      *y_offset_el = 0;
 
       /* The view remains the same */
       *ucompr_view = *view;
@@ -2902,14 +3033,36 @@ isl_surf_get_uncompressed_surf(const struct isl_device *dev,
        * prepared for this and everyone who calls this function should be
        * prepared to handle an X/Y offset.
        */
-      isl_surf_get_image_surf(dev, surf,
-                              view->base_level,
-                              surf->dim == ISL_SURF_DIM_3D ?
-                                 0 : view->base_array_layer,
-                              surf->dim == ISL_SURF_DIM_3D ?
-                                 view->base_array_layer : 0,
-                              ucompr_surf,
-                              offset_B, &x_offset_sa, &y_offset_sa);
+      isl_surf_get_image_offset_B_tile_el(surf,
+                                          view->base_level,
+                                          surf->dim == ISL_SURF_DIM_3D ?
+                                             0 : view->base_array_layer,
+                                          surf->dim == ISL_SURF_DIM_3D ?
+                                             view->base_array_layer : 0,
+                                          offset_B,
+                                          x_offset_el,
+                                          y_offset_el);
+
+      /* Even for cube maps there will be only single face, therefore drop the
+       * corresponding flag if present.
+       */
+      const isl_surf_usage_flags_t usage =
+         surf->usage & (~ISL_SURF_USAGE_CUBE_BIT);
+
+      bool ok UNUSED;
+      ok = isl_surf_init(dev, ucompr_surf,
+                         .dim = ISL_SURF_DIM_2D,
+                         .format = view_format,
+                         .width = view_width_el,
+                         .height = view_height_el,
+                         .depth = 1,
+                         .levels = 1,
+                         .array_len = 1,
+                         .samples = 1,
+                         .row_pitch_B = surf->row_pitch_B,
+                         .usage = usage,
+                         .tiling_flags = (1 << surf->tiling));
+      assert(ok);
 
       /* The newly created image represents the one subimage we're
        * referencing with this view so it only has one array slice and
@@ -2920,33 +3073,22 @@ isl_surf_get_uncompressed_surf(const struct isl_device *dev,
       ucompr_view->base_level = 0;
    }
 
-   ucompr_surf->format = view_format;
-
-   /* We're making an uncompressed view here.  The image dimensions
-    * need to be scaled down by the block size.
-    */
-   assert(ucompr_surf->logical_level0_px.width == view_width);
-   assert(ucompr_surf->logical_level0_px.height == view_height);
-   ucompr_surf->logical_level0_px.width = ucompr_width;
-   ucompr_surf->logical_level0_px.height = ucompr_height;
-   ucompr_surf->phys_level0_sa = isl_surf_get_phys_level0_el(surf);
-
-   *x_offset_el = isl_assert_div(x_offset_sa, fmtl->bw);
-   *y_offset_el = isl_assert_div(y_offset_sa, fmtl->bh);
-
    return true;
 }
 
 void
 isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
+                                   enum isl_surf_dim dim,
+                                   enum isl_msaa_layout msaa_layout,
                                    uint32_t bpb,
+                                   uint32_t samples,
                                    uint32_t row_pitch_B,
                                    uint32_t array_pitch_el_rows,
                                    uint32_t total_x_offset_el,
                                    uint32_t total_y_offset_el,
                                    uint32_t total_z_offset_el,
                                    uint32_t total_array_offset,
-                                   uint32_t *base_address_offset,
+                                   uint64_t *tile_offset_B,
                                    uint32_t *x_offset_el,
                                    uint32_t *y_offset_el,
                                    uint32_t *z_offset_el,
@@ -2954,9 +3096,10 @@ isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
 {
    if (tiling == ISL_TILING_LINEAR) {
       assert(bpb % 8 == 0);
+      assert(samples == 1);
       assert(total_z_offset_el == 0 && total_array_offset == 0);
-      *base_address_offset = total_y_offset_el * row_pitch_B +
-                             total_x_offset_el * (bpb / 8);
+      *tile_offset_B = (uint64_t)total_y_offset_el * row_pitch_B +
+                       (uint64_t)total_x_offset_el * (bpb / 8);
       *x_offset_el = 0;
       *y_offset_el = 0;
       *z_offset_el = 0;
@@ -2965,7 +3108,7 @@ isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
    }
 
    struct isl_tile_info tile_info;
-   isl_tiling_get_info(tiling, bpb, &tile_info);
+   isl_tiling_get_info(tiling, dim, msaa_layout, bpb, samples, &tile_info);
 
    /* Pitches must make sense with the tiling */
    assert(row_pitch_B % tile_info.phys_extent_B.width == 0);
@@ -3003,9 +3146,9 @@ isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
    /* Add the Z and array offset to the Y offset to get a 2D offset */
    y_offset_tl += (z_offset_tl + a_offset_tl) * array_pitch_tl_rows;
 
-   *base_address_offset =
-      y_offset_tl * tile_info.phys_extent_B.h * row_pitch_B +
-      x_offset_tl * tile_info.phys_extent_B.h * tile_info.phys_extent_B.w;
+   *tile_offset_B =
+      (uint64_t)y_offset_tl * tile_info.phys_extent_B.h * row_pitch_B +
+      (uint64_t)x_offset_tl * tile_info.phys_extent_B.h * tile_info.phys_extent_B.w;
 }
 
 uint32_t
@@ -3267,6 +3410,106 @@ isl_format_get_aux_map_encoding(enum isl_format format)
    case ISL_FORMAT_YCRCB_SWAPY: return 0xB;
    default:
       unreachable("Unsupported aux-map format!");
+      return 0;
+   }
+}
+
+/*
+ * Returns compression format encoding for Unified Lossless Compression
+ */
+uint8_t
+isl_get_render_compression_format(enum isl_format format)
+{
+   /* From the Bspec, Enumeration_RenderCompressionFormat section (53726): */
+   switch(format) {
+   case ISL_FORMAT_R32G32B32A32_FLOAT:
+   case ISL_FORMAT_R32G32B32X32_FLOAT:
+   case ISL_FORMAT_R32G32B32A32_SINT:
+      return 0x0;
+   case ISL_FORMAT_R32G32B32A32_UINT:
+      return 0x1;
+   case ISL_FORMAT_R32G32_FLOAT:
+   case ISL_FORMAT_R32G32_SINT:
+      return 0x2;
+   case ISL_FORMAT_R32G32_UINT:
+      return 0x3;
+   case ISL_FORMAT_R16G16B16A16_UNORM:
+   case ISL_FORMAT_R16G16B16X16_UNORM:
+   case ISL_FORMAT_R16G16B16A16_UINT:
+      return 0x4;
+   case ISL_FORMAT_R16G16B16A16_SNORM:
+   case ISL_FORMAT_R16G16B16A16_SINT:
+   case ISL_FORMAT_R16G16B16A16_FLOAT:
+   case ISL_FORMAT_R16G16B16X16_FLOAT:
+      return 0x5;
+   case ISL_FORMAT_R16G16_UNORM:
+   case ISL_FORMAT_R16G16_UINT:
+      return 0x6;
+   case ISL_FORMAT_R16G16_SNORM:
+   case ISL_FORMAT_R16G16_SINT:
+   case ISL_FORMAT_R16G16_FLOAT:
+      return 0x7;
+   case ISL_FORMAT_B8G8R8A8_UNORM:
+   case ISL_FORMAT_B8G8R8X8_UNORM:
+   case ISL_FORMAT_B8G8R8A8_UNORM_SRGB:
+   case ISL_FORMAT_B8G8R8X8_UNORM_SRGB:
+   case ISL_FORMAT_R8G8B8A8_UNORM:
+   case ISL_FORMAT_R8G8B8X8_UNORM:
+   case ISL_FORMAT_R8G8B8A8_UNORM_SRGB:
+   case ISL_FORMAT_R8G8B8X8_UNORM_SRGB:
+   case ISL_FORMAT_R8G8B8A8_UINT:
+      return 0x8;
+   case ISL_FORMAT_R8G8B8A8_SNORM:
+   case ISL_FORMAT_R8G8B8A8_SINT:
+      return 0x9;
+   case ISL_FORMAT_B5G6R5_UNORM:
+   case ISL_FORMAT_B5G6R5_UNORM_SRGB:
+   case ISL_FORMAT_B5G5R5A1_UNORM:
+   case ISL_FORMAT_B5G5R5A1_UNORM_SRGB:
+   case ISL_FORMAT_B4G4R4A4_UNORM:
+   case ISL_FORMAT_B4G4R4A4_UNORM_SRGB:
+   case ISL_FORMAT_B5G5R5X1_UNORM:
+   case ISL_FORMAT_B5G5R5X1_UNORM_SRGB:
+   case ISL_FORMAT_A1B5G5R5_UNORM:
+   case ISL_FORMAT_A4B4G4R4_UNORM:
+   case ISL_FORMAT_R8G8_UNORM:
+   case ISL_FORMAT_R8G8_UINT:
+      return 0xA;
+   case ISL_FORMAT_R8G8_SNORM:
+   case ISL_FORMAT_R8G8_SINT:
+      return 0xB;
+   case ISL_FORMAT_R10G10B10A2_UNORM:
+   case ISL_FORMAT_R10G10B10A2_UNORM_SRGB:
+   case ISL_FORMAT_R10G10B10_FLOAT_A2_UNORM:
+   case ISL_FORMAT_R10G10B10A2_UINT:
+   case ISL_FORMAT_B10G10R10A2_UNORM:
+   case ISL_FORMAT_B10G10R10X2_UNORM:
+   case ISL_FORMAT_B10G10R10A2_UNORM_SRGB:
+      return 0xC;
+   case ISL_FORMAT_R11G11B10_FLOAT:
+      return 0xD;
+   case ISL_FORMAT_R32_SINT:
+   case ISL_FORMAT_R32_FLOAT:
+      return 0x10;
+   case ISL_FORMAT_R32_UINT:
+   case ISL_FORMAT_R24_UNORM_X8_TYPELESS:
+      return 0x11;
+   case ISL_FORMAT_R16_UNORM:
+   case ISL_FORMAT_R16_UINT:
+      return 0x14;
+   case ISL_FORMAT_R16_SNORM:
+   case ISL_FORMAT_R16_SINT:
+   case ISL_FORMAT_R16_FLOAT:
+      return 0x15;
+   case ISL_FORMAT_R8_UNORM:
+   case ISL_FORMAT_R8_UINT:
+   case ISL_FORMAT_A8_UNORM:
+      return 0x18;
+   case ISL_FORMAT_R8_SNORM:
+   case ISL_FORMAT_R8_SINT:
+      return 0x19;
+   default:
+      unreachable("Unsupported render compression format!");
       return 0;
    }
 }

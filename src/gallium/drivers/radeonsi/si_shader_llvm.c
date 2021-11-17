@@ -22,6 +22,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include "ac_exp_param.h"
 #include "ac_nir_to_llvm.h"
 #include "ac_rtld.h"
 #include "si_pipe.h"
@@ -441,9 +442,7 @@ static void si_llvm_declare_compute_memory(struct si_shader_context *ctx)
 
 static bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir)
 {
-   if (nir->info.stage == MESA_SHADER_VERTEX) {
-      si_llvm_load_vs_inputs(ctx, nir);
-   } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+   if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       unsigned colors_read = ctx->shader->selector->info.colors_read;
       LLVMValueRef main_fn = ctx->main_fn;
 
@@ -490,7 +489,6 @@ static bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *
          si_llvm_declare_compute_memory(ctx);
    }
 
-   ctx->abi.inputs = &ctx->inputs[0];
    ctx->abi.clamp_shadow_reference = true;
    ctx->abi.robust_buffer_access = true;
    ctx->abi.convert_undef_to_zero = true;
@@ -807,9 +805,6 @@ void si_build_wrapper_function(struct si_shader_context *ctx, LLVMValueRef *part
        !same_thread_count && si_is_multi_part_shader(ctx->shader))
       ac_build_endif(&ctx->ac, 6507);
 
-   /* Return the value from the last part. It's non-void only for the prim
-    * discard compute shader.
-    */
    if (LLVMGetTypeKind(LLVMTypeOf(ret)) == LLVMVoidTypeKind)
       LLVMBuildRetVoid(builder);
    else
@@ -901,12 +896,8 @@ bool si_llvm_translate_nir(struct si_shader_context *ctx, struct si_shader *shad
       /* Unconditionally declare scratch space base for streamout and
        * vertex compaction. Whether space is actually allocated is
        * determined during linking / PM4 creation.
-       *
-       * Add an extra dword per vertex to ensure an odd stride, which
-       * avoids bank conflicts for SoA accesses.
        */
-      if (!gfx10_is_ngg_passthrough(shader))
-         si_llvm_declare_esgs_ring(ctx);
+      si_llvm_declare_esgs_ring(ctx);
 
       /* This is really only needed when streamout and / or vertex
        * compaction is enabled.
@@ -1119,9 +1110,6 @@ bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *
       parts[num_parts++] = main_fn;
 
       si_build_wrapper_function(&ctx, parts, num_parts, first_is_prolog ? 1 : 0, 0, false);
-
-      if (ctx.shader->key.opt.vs_as_prim_discard_cs)
-         si_build_prim_discard_compute_shader(&ctx);
    } else if (shader->is_monolithic && ctx.stage == MESA_SHADER_TESS_EVAL && ngg_cull_main_fn) {
       LLVMValueRef parts[3], prolog, main_fn = ctx.main_fn;
 
@@ -1292,8 +1280,7 @@ bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *
    }
 
    /* Make sure the input is a pointer and not integer followed by inttoptr. */
-   if (!shader->key.opt.vs_as_prim_discard_cs)
-      assert(LLVMGetTypeKind(LLVMTypeOf(LLVMGetParam(ctx.main_fn, 0))) == LLVMPointerTypeKind);
+   assert(LLVMGetTypeKind(LLVMTypeOf(LLVMGetParam(ctx.main_fn, 0))) == LLVMPointerTypeKind);
 
    /* Compile to bytecode. */
    if (!si_compile_llvm(sscreen, &shader->binary, &shader->config, compiler, &ctx.ac, debug,

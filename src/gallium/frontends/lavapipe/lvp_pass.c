@@ -138,10 +138,14 @@ lvp_render_pass_compile(struct lvp_render_pass *pass)
 static unsigned
 lvp_num_subpass_attachments2(const VkSubpassDescription2 *desc)
 {
+   const VkSubpassDescriptionDepthStencilResolve *ds_resolve =
+      vk_find_struct_const(desc->pNext,
+                           SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE);
    return desc->inputAttachmentCount +
       desc->colorAttachmentCount +
       (desc->pResolveAttachments ? desc->colorAttachmentCount : 0) +
-      (desc->pDepthStencilAttachment != NULL);
+      (desc->pDepthStencilAttachment != NULL) +
+      (ds_resolve && ds_resolve->pDepthStencilResolveAttachment);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateRenderPass2(
@@ -163,7 +167,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateRenderPass2(
    pass = vk_alloc2(&device->vk.alloc, pAllocator, size, 8,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (pass == NULL)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    /* Clear the subpasses along with the parent pass. This required because
     * each array member of lvp_subpass must be a valid pointer if not NULL.
@@ -202,7 +206,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateRenderPass2(
                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       if (pass->subpass_attachments == NULL) {
          vk_free2(&device->vk.alloc, pAllocator, pass);
-         return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
       }
    } else
       pass->subpass_attachments = NULL;
@@ -261,6 +265,21 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateRenderPass2(
             .attachment = desc->pDepthStencilAttachment->attachment,
             .layout = desc->pDepthStencilAttachment->layout,
          };
+      }
+
+      const VkSubpassDescriptionDepthStencilResolve *ds_resolve =
+         vk_find_struct_const(desc->pNext, SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE);
+
+      if (ds_resolve && ds_resolve->pDepthStencilResolveAttachment) {
+         subpass->ds_resolve_attachment = p++;
+
+         *subpass->ds_resolve_attachment = (struct lvp_subpass_attachment){
+            .attachment = ds_resolve->pDepthStencilResolveAttachment->attachment,
+            .layout = ds_resolve->pDepthStencilResolveAttachment->layout,
+         };
+
+         subpass->depth_resolve_mode = ds_resolve->depthResolveMode;
+         subpass->stencil_resolve_mode = ds_resolve->stencilResolveMode;
       }
    }
 

@@ -95,7 +95,7 @@ _libaco = static_library(
   ],
   gnu_symbol_visibility : 'hidden',
   build_by_default : true,
-  cpp_args : cpp_args_aco,
+  cpp_args : [cpp_args_aco, cpp_msvc_compat_args],
 )
 
 # Also link with aco

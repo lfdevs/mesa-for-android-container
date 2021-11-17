@@ -8,7 +8,7 @@
 #ifndef VN_PROTOCOL_DRIVER_IMAGE_H
 #define VN_PROTOCOL_DRIVER_IMAGE_H
 
-#include "vn_device.h"
+#include "vn_instance.h"
 #include "vn_protocol_driver_structs.h"
 
 /* struct VkSparseImageMemoryRequirements */
@@ -566,16 +566,16 @@ vn_decode_VkBindImageMemoryDeviceGroupInfo_self(struct vn_cs_decoder *dec, VkBin
         const size_t array_size = vn_decode_array_size(dec, val->deviceIndexCount);
         vn_decode_uint32_t_array(dec, (uint32_t *)val->pDeviceIndices, array_size);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         val->pDeviceIndices = NULL;
     }
     vn_decode_uint32_t(dec, &val->splitInstanceBindRegionCount);
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, val->splitInstanceBindRegionCount);
-        for (uint32_t i = 0; i < val->splitInstanceBindRegionCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, val->splitInstanceBindRegionCount);
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkRect2D(dec, &((VkRect2D *)val->pSplitInstanceBindRegions)[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         val->pSplitInstanceBindRegions = NULL;
     }
 }
@@ -1361,8 +1361,8 @@ static inline size_t vn_sizeof_vkGetImageSparseMemoryRequirements(VkDevice devic
     if (pSparseMemoryRequirementCount)
         cmd_size += vn_sizeof_uint32_t(pSparseMemoryRequirementCount);
     if (pSparseMemoryRequirements) {
-        cmd_size += vn_sizeof_array_size(*pSparseMemoryRequirementCount);
-        for (uint32_t i = 0; i < *pSparseMemoryRequirementCount; i++)
+        cmd_size += vn_sizeof_array_size((pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0));
+        for (uint32_t i = 0; i < (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0); i++)
             cmd_size += vn_sizeof_VkSparseImageMemoryRequirements_partial(&pSparseMemoryRequirements[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -1383,8 +1383,8 @@ static inline void vn_encode_vkGetImageSparseMemoryRequirements(struct vn_cs_enc
     if (vn_encode_simple_pointer(enc, pSparseMemoryRequirementCount))
         vn_encode_uint32_t(enc, pSparseMemoryRequirementCount);
     if (pSparseMemoryRequirements) {
-        vn_encode_array_size(enc, *pSparseMemoryRequirementCount);
-        for (uint32_t i = 0; i < *pSparseMemoryRequirementCount; i++)
+        vn_encode_array_size(enc, (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0));
+        for (uint32_t i = 0; i < (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0); i++)
             vn_encode_VkSparseImageMemoryRequirements_partial(enc, &pSparseMemoryRequirements[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -1402,8 +1402,8 @@ static inline size_t vn_sizeof_vkGetImageSparseMemoryRequirements_reply(VkDevice
     if (pSparseMemoryRequirementCount)
         cmd_size += vn_sizeof_uint32_t(pSparseMemoryRequirementCount);
     if (pSparseMemoryRequirements) {
-        cmd_size += vn_sizeof_array_size(*pSparseMemoryRequirementCount);
-        for (uint32_t i = 0; i < *pSparseMemoryRequirementCount; i++)
+        cmd_size += vn_sizeof_array_size((pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0));
+        for (uint32_t i = 0; i < (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0); i++)
             cmd_size += vn_sizeof_VkSparseImageMemoryRequirements(&pSparseMemoryRequirements[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -1426,11 +1426,11 @@ static inline void vn_decode_vkGetImageSparseMemoryRequirements_reply(struct vn_
         pSparseMemoryRequirementCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pSparseMemoryRequirementCount);
-        for (uint32_t i = 0; i < *pSparseMemoryRequirementCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkSparseImageMemoryRequirements(dec, &pSparseMemoryRequirements[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pSparseMemoryRequirements = NULL;
     }
 }
@@ -1763,8 +1763,8 @@ static inline size_t vn_sizeof_vkGetImageSparseMemoryRequirements2(VkDevice devi
     if (pSparseMemoryRequirementCount)
         cmd_size += vn_sizeof_uint32_t(pSparseMemoryRequirementCount);
     if (pSparseMemoryRequirements) {
-        cmd_size += vn_sizeof_array_size(*pSparseMemoryRequirementCount);
-        for (uint32_t i = 0; i < *pSparseMemoryRequirementCount; i++)
+        cmd_size += vn_sizeof_array_size((pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0));
+        for (uint32_t i = 0; i < (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0); i++)
             cmd_size += vn_sizeof_VkSparseImageMemoryRequirements2_partial(&pSparseMemoryRequirements[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -1786,8 +1786,8 @@ static inline void vn_encode_vkGetImageSparseMemoryRequirements2(struct vn_cs_en
     if (vn_encode_simple_pointer(enc, pSparseMemoryRequirementCount))
         vn_encode_uint32_t(enc, pSparseMemoryRequirementCount);
     if (pSparseMemoryRequirements) {
-        vn_encode_array_size(enc, *pSparseMemoryRequirementCount);
-        for (uint32_t i = 0; i < *pSparseMemoryRequirementCount; i++)
+        vn_encode_array_size(enc, (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0));
+        for (uint32_t i = 0; i < (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0); i++)
             vn_encode_VkSparseImageMemoryRequirements2_partial(enc, &pSparseMemoryRequirements[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -1805,8 +1805,8 @@ static inline size_t vn_sizeof_vkGetImageSparseMemoryRequirements2_reply(VkDevic
     if (pSparseMemoryRequirementCount)
         cmd_size += vn_sizeof_uint32_t(pSparseMemoryRequirementCount);
     if (pSparseMemoryRequirements) {
-        cmd_size += vn_sizeof_array_size(*pSparseMemoryRequirementCount);
-        for (uint32_t i = 0; i < *pSparseMemoryRequirementCount; i++)
+        cmd_size += vn_sizeof_array_size((pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0));
+        for (uint32_t i = 0; i < (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0); i++)
             cmd_size += vn_sizeof_VkSparseImageMemoryRequirements2(&pSparseMemoryRequirements[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -1829,11 +1829,11 @@ static inline void vn_decode_vkGetImageSparseMemoryRequirements2_reply(struct vn
         pSparseMemoryRequirementCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pSparseMemoryRequirementCount);
-        for (uint32_t i = 0; i < *pSparseMemoryRequirementCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pSparseMemoryRequirementCount ? *pSparseMemoryRequirementCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkSparseImageMemoryRequirements2(dec, &pSparseMemoryRequirements[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pSparseMemoryRequirements = NULL;
     }
 }
@@ -2113,6 +2113,8 @@ static inline void vn_submit_vkGetImageDrmFormatModifierPropertiesEXT(struct vn_
 
 static inline void vn_call_vkGetImageMemoryRequirements(struct vn_instance *vn_instance, VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetImageMemoryRequirements(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, image, pMemoryRequirements, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -2130,6 +2132,8 @@ static inline void vn_async_vkGetImageMemoryRequirements(struct vn_instance *vn_
 
 static inline VkResult vn_call_vkBindImageMemory(struct vn_instance *vn_instance, VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkBindImageMemory(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, image, memory, memoryOffset, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -2150,6 +2154,8 @@ static inline void vn_async_vkBindImageMemory(struct vn_instance *vn_instance, V
 
 static inline void vn_call_vkGetImageSparseMemoryRequirements(struct vn_instance *vn_instance, VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetImageSparseMemoryRequirements(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, image, pSparseMemoryRequirementCount, pSparseMemoryRequirements, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -2167,6 +2173,8 @@ static inline void vn_async_vkGetImageSparseMemoryRequirements(struct vn_instanc
 
 static inline VkResult vn_call_vkCreateImage(struct vn_instance *vn_instance, VkDevice device, const VkImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkImage* pImage)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkCreateImage(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pCreateInfo, pAllocator, pImage, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -2187,6 +2195,8 @@ static inline void vn_async_vkCreateImage(struct vn_instance *vn_instance, VkDev
 
 static inline void vn_call_vkDestroyImage(struct vn_instance *vn_instance, VkDevice device, VkImage image, const VkAllocationCallbacks* pAllocator)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkDestroyImage(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, image, pAllocator, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -2204,6 +2214,8 @@ static inline void vn_async_vkDestroyImage(struct vn_instance *vn_instance, VkDe
 
 static inline void vn_call_vkGetImageSubresourceLayout(struct vn_instance *vn_instance, VkDevice device, VkImage image, const VkImageSubresource* pSubresource, VkSubresourceLayout* pLayout)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetImageSubresourceLayout(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, image, pSubresource, pLayout, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -2221,6 +2233,8 @@ static inline void vn_async_vkGetImageSubresourceLayout(struct vn_instance *vn_i
 
 static inline VkResult vn_call_vkBindImageMemory2(struct vn_instance *vn_instance, VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo* pBindInfos)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkBindImageMemory2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, bindInfoCount, pBindInfos, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -2241,6 +2255,8 @@ static inline void vn_async_vkBindImageMemory2(struct vn_instance *vn_instance, 
 
 static inline void vn_call_vkGetImageMemoryRequirements2(struct vn_instance *vn_instance, VkDevice device, const VkImageMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetImageMemoryRequirements2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pInfo, pMemoryRequirements, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -2258,6 +2274,8 @@ static inline void vn_async_vkGetImageMemoryRequirements2(struct vn_instance *vn
 
 static inline void vn_call_vkGetImageSparseMemoryRequirements2(struct vn_instance *vn_instance, VkDevice device, const VkImageSparseMemoryRequirementsInfo2* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2* pSparseMemoryRequirements)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetImageSparseMemoryRequirements2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pInfo, pSparseMemoryRequirementCount, pSparseMemoryRequirements, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -2275,6 +2293,8 @@ static inline void vn_async_vkGetImageSparseMemoryRequirements2(struct vn_instan
 
 static inline VkResult vn_call_vkGetImageDrmFormatModifierPropertiesEXT(struct vn_instance *vn_instance, VkDevice device, VkImage image, VkImageDrmFormatModifierPropertiesEXT* pProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetImageDrmFormatModifierPropertiesEXT(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, image, pProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);

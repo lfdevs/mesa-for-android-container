@@ -55,6 +55,7 @@ const struct v3dv_dynamic_state default_dynamic_state = {
       .slope_factor = 0.0f,
    },
    .line_width = 1.0f,
+   .color_write_enable = (1ull << (4 * V3D_MAX_DRAW_BUFFERS)) - 1,
 };
 
 void
@@ -97,7 +98,7 @@ v3dv_CreateCommandPool(VkDevice _device,
    pool = vk_object_zalloc(&device->vk, pAllocator, sizeof(*pool),
                            VK_OBJECT_TYPE_COMMAND_POOL);
    if (pool == NULL)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    if (pAllocator)
       pool->alloc = *pAllocator;
@@ -121,7 +122,7 @@ cmd_buffer_init(struct v3dv_cmd_buffer *cmd_buffer,
     * buffer reset that would reset the loader's dispatch table for the
     * command buffer, and any other relevant info from vk_object_base
     */
-   const uint32_t base_size = sizeof(struct vk_object_base);
+   const uint32_t base_size = sizeof(struct vk_command_buffer);
    uint8_t *cmd_buffer_driver_start = ((uint8_t *) cmd_buffer) + base_size;
    memset(cmd_buffer_driver_start, 0, sizeof(*cmd_buffer) - base_size);
 
@@ -149,12 +150,20 @@ cmd_buffer_create(struct v3dv_device *device,
                   VkCommandBuffer *pCommandBuffer)
 {
    struct v3dv_cmd_buffer *cmd_buffer;
-   cmd_buffer = vk_object_zalloc(&device->vk,
-                                 &pool->alloc,
-                                 sizeof(*cmd_buffer),
-                                 VK_OBJECT_TYPE_COMMAND_BUFFER);
+   cmd_buffer = vk_zalloc2(&device->vk.alloc,
+                           &pool->alloc,
+                           sizeof(*cmd_buffer),
+                           8,
+                           VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (cmd_buffer == NULL)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   VkResult result;
+   result = vk_command_buffer_init(&cmd_buffer->vk, &device->vk);
+   if (result != VK_SUCCESS) {
+      vk_free2(&device->vk.alloc, &pool->alloc, cmd_buffer);
+      return result;
+   }
 
    cmd_buffer_init(cmd_buffer, device, pool, level);
 
@@ -339,7 +348,9 @@ cmd_buffer_destroy(struct v3dv_cmd_buffer *cmd_buffer)
 {
    list_del(&cmd_buffer->pool_link);
    cmd_buffer_free_resources(cmd_buffer);
-   vk_object_free(&cmd_buffer->device->vk, &cmd_buffer->pool->alloc, cmd_buffer);
+   vk_command_buffer_finish(&cmd_buffer->vk);
+   vk_free2(&cmd_buffer->device->vk.alloc, &cmd_buffer->pool->alloc,
+            cmd_buffer);
 }
 
 static bool
@@ -397,6 +408,13 @@ cmd_buffer_can_merge_subpass(struct v3dv_cmd_buffer *cmd_buffer,
    assert(state->subpass_idx == subpass_idx - 1);
    struct v3dv_subpass *prev_subpass = &state->pass->subpasses[state->subpass_idx];
    struct v3dv_subpass *subpass = &state->pass->subpasses[subpass_idx];
+
+   /* Don't merge if the subpasses have different view masks, since in that
+    * case the framebuffer setup is different and we need to emit different
+    * RCLs.
+    */
+   if (subpass->view_mask != prev_subpass->view_mask)
+      return false;
 
    /* Because the list of subpass attachments can include VK_ATTACHMENT_UNUSED,
     * we need to check that for each subpass all its used attachments are
@@ -513,6 +531,7 @@ v3dv_job_start_frame(struct v3dv_job *job,
                      uint32_t width,
                      uint32_t height,
                      uint32_t layers,
+                     bool allocate_tile_state_for_all_layers,
                      uint32_t render_target_count,
                      uint8_t max_internal_bpp,
                      bool msaa)
@@ -527,6 +546,16 @@ v3dv_job_start_frame(struct v3dv_job *job,
 
    v3dv_cl_ensure_space_with_branch(&job->bcl, 256);
    v3dv_return_if_oom(NULL, job);
+
+   /* We only need to allocate tile state for all layers if the binner
+    * writes primitives to layers other than the first. This can only be
+    * done using layered rendering (writing gl_Layer from a geometry shader),
+    * so for other cases of multilayered framebuffers (typically with
+    * meta copy/clear operations) that won't use layered rendering, we only
+    * need one layer worth of of tile state for the binner.
+    */
+   if (!allocate_tile_state_for_all_layers)
+      layers = 1;
 
    /* The PTB will request the tile alloc initial size per tile at start
     * of tile binning.
@@ -768,7 +797,7 @@ v3dv_job_init(struct v3dv_job *job,
 
       v3dv_cl_init(job, &job->indirect);
 
-      if (V3D_DEBUG & V3D_DEBUG_ALWAYS_FLUSH)
+      if (unlikely(V3D_DEBUG & V3D_DEBUG_ALWAYS_FLUSH))
          job->always_flush = true;
    }
 
@@ -845,6 +874,7 @@ static VkResult
 cmd_buffer_reset(struct v3dv_cmd_buffer *cmd_buffer,
                  VkCommandBufferResetFlags flags)
 {
+   vk_command_buffer_reset(&cmd_buffer->vk);
    if (cmd_buffer->status != V3DV_CMD_BUFFER_STATUS_INITIALIZED) {
       struct v3dv_device *device = cmd_buffer->device;
       struct v3dv_cmd_pool *pool = cmd_buffer->pool;
@@ -996,26 +1026,28 @@ cmd_buffer_subpass_handle_pending_resolves(struct v3dv_cmd_buffer *cmd_buffer)
          .sType = VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2_KHR,
          .srcSubresource = {
             VK_IMAGE_ASPECT_COLOR_BIT,
-            src_iview->base_level,
-            src_iview->first_layer,
-            src_iview->last_layer - src_iview->first_layer + 1,
+            src_iview->vk.base_mip_level,
+            src_iview->vk.base_array_layer,
+            src_iview->vk.layer_count,
          },
          .srcOffset = { 0, 0, 0 },
          .dstSubresource =  {
             VK_IMAGE_ASPECT_COLOR_BIT,
-            dst_iview->base_level,
-            dst_iview->first_layer,
-            dst_iview->last_layer - dst_iview->first_layer + 1,
+            dst_iview->vk.base_mip_level,
+            dst_iview->vk.base_array_layer,
+            dst_iview->vk.layer_count,
          },
          .dstOffset = { 0, 0, 0 },
-         .extent = src_iview->image->extent,
+         .extent = src_iview->vk.image->extent,
       };
 
+      struct v3dv_image *src_image = (struct v3dv_image *) src_iview->vk.image;
+      struct v3dv_image *dst_image = (struct v3dv_image *) dst_iview->vk.image;
       VkResolveImageInfo2KHR resolve_info = {
          .sType = VK_STRUCTURE_TYPE_RESOLVE_IMAGE_INFO_2_KHR,
-         .srcImage = v3dv_image_to_handle(src_iview->image),
+         .srcImage = v3dv_image_to_handle(src_image),
          .srcImageLayout = VK_IMAGE_LAYOUT_GENERAL,
-         .dstImage = v3dv_image_to_handle(dst_iview->image),
+         .dstImage = v3dv_image_to_handle(dst_image),
          .dstImageLayout = VK_IMAGE_LAYOUT_GENERAL,
          .regionCount = 1,
          .pRegions = &region,
@@ -1486,10 +1518,27 @@ cmd_buffer_subpass_create_job(struct v3dv_cmd_buffer *cmd_buffer,
       v3dv_X(job->device, framebuffer_compute_internal_bpp_msaa)
          (framebuffer, subpass, &internal_bpp, &msaa);
 
+      /* From the Vulkan spec:
+       *
+       *    "If the render pass uses multiview, then layers must be one and
+       *     each attachment requires a number of layers that is greater than
+       *     the maximum bit index set in the view mask in the subpasses in
+       *     which it is used."
+       *
+       * So when multiview is enabled, we take the number of layers from the
+       * last bit set in the view mask.
+       */
+      uint32_t layers = framebuffer->layers;
+      if (subpass->view_mask != 0) {
+         assert(framebuffer->layers == 1);
+         layers = util_last_bit(subpass->view_mask);
+      }
+
       v3dv_job_start_frame(job,
                            framebuffer->width,
                            framebuffer->height,
-                           framebuffer->layers,
+                           layers,
+                           true,
                            subpass->color_count,
                            internal_bpp,
                            msaa);
@@ -1835,6 +1884,13 @@ cmd_buffer_bind_pipeline_static_state(struct v3dv_cmd_buffer *cmd_buffer,
       }
    }
 
+   if (!(dynamic_mask & V3DV_DYNAMIC_COLOR_WRITE_ENABLE)) {
+      if (dest->color_write_enable != src->color_write_enable) {
+         dest->color_write_enable = src->color_write_enable;
+         dirty |= V3DV_CMD_DIRTY_COLOR_WRITE_ENABLE;
+      }
+   }
+
    cmd_buffer->state.dynamic.mask = dynamic_mask;
    cmd_buffer->state.dirty |= dirty;
 }
@@ -2084,6 +2140,7 @@ update_gfx_uniform_state(struct v3dv_cmd_buffer *cmd_buffer,
    const bool has_new_viewport = dirty_uniform_state & V3DV_CMD_DIRTY_VIEWPORT;
    const bool has_new_push_constants = dirty_uniform_state & V3DV_CMD_DIRTY_PUSH_CONSTANTS;
    const bool has_new_descriptors = dirty_uniform_state & V3DV_CMD_DIRTY_DESCRIPTOR_SETS;
+   const bool has_new_view_index = dirty_uniform_state & V3DV_CMD_DIRTY_VIEW_INDEX;
 
    /* VK_SHADER_STAGE_FRAGMENT_BIT */
    const bool has_new_descriptors_fs =
@@ -2095,8 +2152,10 @@ update_gfx_uniform_state(struct v3dv_cmd_buffer *cmd_buffer,
       (cmd_buffer->state.dirty_push_constants_stages & VK_SHADER_STAGE_FRAGMENT_BIT);
 
    const bool needs_fs_update = has_new_pipeline ||
+                                has_new_view_index ||
                                 has_new_push_constants_fs ||
-                                has_new_descriptors_fs;
+                                has_new_descriptors_fs ||
+                                has_new_view_index;
 
    if (needs_fs_update) {
       struct v3dv_shader_variant *fs_variant =
@@ -2119,6 +2178,7 @@ update_gfx_uniform_state(struct v3dv_cmd_buffer *cmd_buffer,
           VK_SHADER_STAGE_GEOMETRY_BIT);
 
       const bool needs_gs_update = has_new_viewport ||
+                                   has_new_view_index ||
                                    has_new_pipeline ||
                                    has_new_push_constants_gs ||
                                    has_new_descriptors_gs;
@@ -2148,6 +2208,7 @@ update_gfx_uniform_state(struct v3dv_cmd_buffer *cmd_buffer,
       (cmd_buffer->state.dirty_push_constants_stages & VK_SHADER_STAGE_VERTEX_BIT);
 
    const bool needs_vs_update = has_new_viewport ||
+                                has_new_view_index ||
                                 has_new_pipeline ||
                                 has_new_push_constants_vs ||
                                 has_new_descriptors_vs;
@@ -2165,6 +2226,8 @@ update_gfx_uniform_state(struct v3dv_cmd_buffer *cmd_buffer,
       cmd_buffer->state.uniforms.vs_bin =
          v3dv_write_uniforms(cmd_buffer, pipeline, vs_bin_variant);
    }
+
+   cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_VIEW_INDEX;
 }
 
 /* This stores command buffer state that we might be about to stomp for
@@ -2405,6 +2468,7 @@ cmd_buffer_restart_job_for_msaa_if_needed(struct v3dv_cmd_buffer *cmd_buffer)
                         old_job->frame_tiling.width,
                         old_job->frame_tiling.height,
                         old_job->frame_tiling.layers,
+                        true,
                         old_job->frame_tiling.render_target_count,
                         old_job->frame_tiling.internal_bpp,
                         true /* msaa */);
@@ -2449,7 +2513,8 @@ v3dv_cmd_buffer_emit_pre_draw(struct v3dv_cmd_buffer *cmd_buffer)
       *dirty & (V3DV_CMD_DIRTY_PIPELINE |
                 V3DV_CMD_DIRTY_PUSH_CONSTANTS |
                 V3DV_CMD_DIRTY_DESCRIPTOR_SETS |
-                V3DV_CMD_DIRTY_VIEWPORT);
+                V3DV_CMD_DIRTY_VIEWPORT |
+                V3DV_CMD_DIRTY_VIEW_INDEX);
 
    if (dirty_uniform_state)
       update_gfx_uniform_state(cmd_buffer, dirty_uniform_state);
@@ -2497,15 +2562,38 @@ v3dv_cmd_buffer_emit_pre_draw(struct v3dv_cmd_buffer *cmd_buffer)
    if (*dirty & V3DV_CMD_DIRTY_PIPELINE)
       v3dv_X(device, cmd_buffer_emit_sample_state)(cmd_buffer);
 
+   if (*dirty & (V3DV_CMD_DIRTY_PIPELINE | V3DV_CMD_DIRTY_COLOR_WRITE_ENABLE))
+      v3dv_X(device, cmd_buffer_emit_color_write_mask)(cmd_buffer);
+
    cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_PIPELINE;
+}
+
+static inline void
+cmd_buffer_set_view_index(struct v3dv_cmd_buffer *cmd_buffer,
+                          uint32_t view_index)
+{
+   cmd_buffer->state.view_index = view_index;
+   cmd_buffer->state.dirty |= V3DV_CMD_DIRTY_VIEW_INDEX;
 }
 
 static void
 cmd_buffer_draw(struct v3dv_cmd_buffer *cmd_buffer,
                 struct v3dv_draw_info *info)
 {
-   v3dv_cmd_buffer_emit_pre_draw(cmd_buffer);
-   v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw)(cmd_buffer, info);
+
+   struct v3dv_render_pass *pass = cmd_buffer->state.pass;
+   if (likely(!pass->multiview_enabled)) {
+      v3dv_cmd_buffer_emit_pre_draw(cmd_buffer);
+      v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw)(cmd_buffer, info);
+      return;
+   }
+
+   uint32_t view_mask = pass->subpasses[cmd_buffer->state.subpass_idx].view_mask;
+   while (view_mask) {
+      cmd_buffer_set_view_index(cmd_buffer, u_bit_scan(&view_mask));
+      v3dv_cmd_buffer_emit_pre_draw(cmd_buffer);
+      v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw)(cmd_buffer, info);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2541,9 +2629,23 @@ v3dv_CmdDrawIndexed(VkCommandBuffer commandBuffer,
 
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
 
-   v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw_indexed)
-      (cmd_buffer, indexCount, instanceCount,
-       firstIndex, vertexOffset, firstInstance);
+   struct v3dv_render_pass *pass = cmd_buffer->state.pass;
+   if (likely(!pass->multiview_enabled)) {
+      v3dv_cmd_buffer_emit_pre_draw(cmd_buffer);
+      v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw_indexed)
+         (cmd_buffer, indexCount, instanceCount,
+          firstIndex, vertexOffset, firstInstance);
+      return;
+   }
+
+   uint32_t view_mask = pass->subpasses[cmd_buffer->state.subpass_idx].view_mask;
+   while (view_mask) {
+      cmd_buffer_set_view_index(cmd_buffer, u_bit_scan(&view_mask));
+      v3dv_cmd_buffer_emit_pre_draw(cmd_buffer);
+      v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw_indexed)
+         (cmd_buffer, indexCount, instanceCount,
+          firstIndex, vertexOffset, firstInstance);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2560,8 +2662,21 @@ v3dv_CmdDrawIndirect(VkCommandBuffer commandBuffer,
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
    V3DV_FROM_HANDLE(v3dv_buffer, buffer, _buffer);
 
-   v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw_indirect)
-      (cmd_buffer, buffer, offset, drawCount, stride);
+   struct v3dv_render_pass *pass = cmd_buffer->state.pass;
+   if (likely(!pass->multiview_enabled)) {
+      v3dv_cmd_buffer_emit_pre_draw(cmd_buffer);
+      v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw_indirect)
+         (cmd_buffer, buffer, offset, drawCount, stride);
+      return;
+   }
+
+   uint32_t view_mask = pass->subpasses[cmd_buffer->state.subpass_idx].view_mask;
+   while (view_mask) {
+      cmd_buffer_set_view_index(cmd_buffer, u_bit_scan(&view_mask));
+      v3dv_cmd_buffer_emit_pre_draw(cmd_buffer);
+      v3dv_X(cmd_buffer->device, cmd_buffer_emit_draw_indirect)
+         (cmd_buffer, buffer, offset, drawCount, stride);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2578,8 +2693,21 @@ v3dv_CmdDrawIndexedIndirect(VkCommandBuffer commandBuffer,
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
    V3DV_FROM_HANDLE(v3dv_buffer, buffer, _buffer);
 
-   v3dv_X(cmd_buffer->device, cmd_buffer_emit_indexed_indirect)
-      (cmd_buffer, buffer, offset, drawCount, stride);
+   struct v3dv_render_pass *pass = cmd_buffer->state.pass;
+   if (likely(!pass->multiview_enabled)) {
+      v3dv_cmd_buffer_emit_pre_draw(cmd_buffer);
+      v3dv_X(cmd_buffer->device, cmd_buffer_emit_indexed_indirect)
+         (cmd_buffer, buffer, offset, drawCount, stride);
+      return;
+   }
+
+   uint32_t view_mask = pass->subpasses[cmd_buffer->state.subpass_idx].view_mask;
+   while (view_mask) {
+      cmd_buffer_set_view_index(cmd_buffer, u_bit_scan(&view_mask));
+      v3dv_cmd_buffer_emit_pre_draw(cmd_buffer);
+      v3dv_X(cmd_buffer->device, cmd_buffer_emit_indexed_indirect)
+         (cmd_buffer, buffer, offset, drawCount, stride);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2861,6 +2989,26 @@ v3dv_CmdSetBlendConstants(VkCommandBuffer commandBuffer,
    cmd_buffer->state.dirty |= V3DV_CMD_DIRTY_BLEND_CONSTANTS;
 }
 
+VKAPI_ATTR void VKAPI_CALL
+v3dv_CmdSetColorWriteEnableEXT(VkCommandBuffer commandBuffer,
+                               uint32_t attachmentCount,
+                               const VkBool32 *pColorWriteEnables)
+{
+   V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
+   struct v3dv_cmd_buffer_state *state = &cmd_buffer->state;
+   uint32_t color_write_enable = 0;
+
+   for (uint32_t i = 0; i < attachmentCount; i++)
+      color_write_enable |= pColorWriteEnables[i] ? (0xfu << (i * 4)) : 0;
+
+   if (state->dynamic.color_write_enable == color_write_enable)
+      return;
+
+   state->dynamic.color_write_enable = color_write_enable;
+
+   state->dirty |= V3DV_CMD_DIRTY_COLOR_WRITE_ENABLE;
+}
+
 void
 v3dv_cmd_buffer_reset_queries(struct v3dv_cmd_buffer *cmd_buffer,
                               struct v3dv_query_pool *pool,
@@ -2957,6 +3105,27 @@ v3dv_cmd_buffer_end_query(struct v3dv_cmd_buffer *cmd_buffer,
 
       info->pool = pool;
       info->query = query;
+
+      /* From the Vulkan spec:
+       *
+       *   "If queries are used while executing a render pass instance that has
+       *    multiview enabled, the query uses N consecutive query indices in
+       *    the query pool (starting at query) where N is the number of bits set
+       *    in the view mask in the subpass the query is used in. How the
+       *    numerical results of the query are distributed among the queries is
+       *    implementation-dependent."
+       *
+       * In our case, only the first query is used but this means we still need
+       * to flag the other queries as available so we don't emit errors when
+       * the applications attempt to retrive values from them.
+       */
+      struct v3dv_render_pass *pass = cmd_buffer->state.pass;
+      if (!pass->multiview_enabled) {
+         info->count = 1;
+      } else {
+         struct v3dv_subpass *subpass = &pass->subpasses[state->subpass_idx];
+         info->count = util_bitcount(subpass->view_mask);
+      }
    } else {
       /* Otherwise, schedule the CPU job immediately */
       struct v3dv_job *job =
@@ -2967,6 +3136,10 @@ v3dv_cmd_buffer_end_query(struct v3dv_cmd_buffer *cmd_buffer,
 
       job->cpu.query_end.pool = pool;
       job->cpu.query_end.query = query;
+
+      /* Multiview queries cannot cross subpass boundaries */
+      job->cpu.query_end.count = 1;
+
       list_addtail(&job->list_link, &cmd_buffer->jobs);
    }
 
@@ -3145,7 +3318,8 @@ v3dv_CmdWriteTimestamp(VkCommandBuffer commandBuffer,
    /* If this is called inside a render pass we need to finish the current
     * job here...
     */
-   if (cmd_buffer->state.pass)
+   struct v3dv_render_pass *pass = cmd_buffer->state.pass;
+   if (pass)
       v3dv_cmd_buffer_finish_job(cmd_buffer);
 
    struct v3dv_job *job =
@@ -3156,6 +3330,14 @@ v3dv_CmdWriteTimestamp(VkCommandBuffer commandBuffer,
 
    job->cpu.query_timestamp.pool = query_pool;
    job->cpu.query_timestamp.query = query;
+
+   if (!pass || !pass->multiview_enabled) {
+      job->cpu.query_timestamp.count = 1;
+   } else {
+      struct v3dv_subpass *subpass =
+         &pass->subpasses[cmd_buffer->state.subpass_idx];
+      job->cpu.query_timestamp.count = util_bitcount(subpass->view_mask);
+   }
 
    list_addtail(&job->list_link, &cmd_buffer->jobs);
    cmd_buffer->state.job = NULL;

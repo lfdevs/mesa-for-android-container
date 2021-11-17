@@ -100,22 +100,22 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
    radeon_begin(cs);
 
    if (sctx->chip_class >= GFX7) {
-      radeon_emit(cs, PKT3(PKT3_DMA_DATA, 5, 0));
-      radeon_emit(cs, header);
-      radeon_emit(cs, src_va);       /* SRC_ADDR_LO [31:0] */
-      radeon_emit(cs, src_va >> 32); /* SRC_ADDR_HI [31:0] */
-      radeon_emit(cs, dst_va);       /* DST_ADDR_LO [31:0] */
-      radeon_emit(cs, dst_va >> 32); /* DST_ADDR_HI [31:0] */
-      radeon_emit(cs, command);
+      radeon_emit(PKT3(PKT3_DMA_DATA, 5, 0));
+      radeon_emit(header);
+      radeon_emit(src_va);       /* SRC_ADDR_LO [31:0] */
+      radeon_emit(src_va >> 32); /* SRC_ADDR_HI [31:0] */
+      radeon_emit(dst_va);       /* DST_ADDR_LO [31:0] */
+      radeon_emit(dst_va >> 32); /* DST_ADDR_HI [31:0] */
+      radeon_emit(command);
    } else {
       header |= S_411_SRC_ADDR_HI(src_va >> 32);
 
-      radeon_emit(cs, PKT3(PKT3_CP_DMA, 4, 0));
-      radeon_emit(cs, src_va);                  /* SRC_ADDR_LO [31:0] */
-      radeon_emit(cs, header);                  /* SRC_ADDR_HI [15:0] + flags. */
-      radeon_emit(cs, dst_va);                  /* DST_ADDR_LO [31:0] */
-      radeon_emit(cs, (dst_va >> 32) & 0xffff); /* DST_ADDR_HI [15:0] */
-      radeon_emit(cs, command);
+      radeon_emit(PKT3(PKT3_CP_DMA, 4, 0));
+      radeon_emit(src_va);                  /* SRC_ADDR_LO [31:0] */
+      radeon_emit(header);                  /* SRC_ADDR_HI [15:0] + flags. */
+      radeon_emit(dst_va);                  /* DST_ADDR_LO [31:0] */
+      radeon_emit((dst_va >> 32) & 0xffff); /* DST_ADDR_HI [15:0] */
+      radeon_emit(command);
    }
 
    /* CP DMA is executed in ME, but index buffers are read by PFP.
@@ -124,8 +124,8 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
     * should precede it.
     */
    if (sctx->has_graphics && flags & CP_DMA_PFP_SYNC_ME) {
-      radeon_emit(cs, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
-      radeon_emit(cs, 0);
+      radeon_emit(PKT3(PKT3_PFP_SYNC_ME, 0, 0));
+      radeon_emit(0);
    }
    radeon_end();
 }
@@ -230,10 +230,8 @@ void si_cp_dma_clear_buffer(struct si_context *sctx, struct radeon_cmdbuf *cs,
       sdst->TC_L2_dirty = true;
 
    /* If it's not a framebuffer fast clear... */
-   if (coher == SI_COHERENCY_SHADER) {
+   if (coher == SI_COHERENCY_SHADER)
       sctx->num_cp_dma_calls++;
-      si_prim_discard_signal_next_compute_ib_start(sctx);
-   }
 }
 
 /**
@@ -387,10 +385,8 @@ void si_cp_dma_copy_buffer(struct si_context *sctx, struct pipe_resource *dst,
       si_resource(dst)->TC_L2_dirty = true;
 
    /* If it's not a prefetch or GDS copy... */
-   if (dst && src && (dst != src || dst_offset != src_offset)) {
+   if (dst && src && (dst != src || dst_offset != src_offset))
       sctx->num_cp_dma_calls++;
-      si_prim_discard_signal_next_compute_ib_start(sctx);
-   }
 }
 
 void si_cp_dma_prefetch(struct si_context *sctx, struct pipe_resource *buf,
@@ -423,13 +419,13 @@ void si_cp_dma_prefetch(struct si_context *sctx, struct pipe_resource *buf,
 
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    radeon_begin(cs);
-   radeon_emit(cs, PKT3(PKT3_DMA_DATA, 5, 0));
-   radeon_emit(cs, header);
-   radeon_emit(cs, address);       /* SRC_ADDR_LO [31:0] */
-   radeon_emit(cs, address >> 32); /* SRC_ADDR_HI [31:0] */
-   radeon_emit(cs, address);       /* DST_ADDR_LO [31:0] */
-   radeon_emit(cs, address >> 32); /* DST_ADDR_HI [31:0] */
-   radeon_emit(cs, command);
+   radeon_emit(PKT3(PKT3_DMA_DATA, 5, 0));
+   radeon_emit(header);
+   radeon_emit(address);       /* SRC_ADDR_LO [31:0] */
+   radeon_emit(address >> 32); /* SRC_ADDR_HI [31:0] */
+   radeon_emit(address);       /* DST_ADDR_LO [31:0] */
+   radeon_emit(address >> 32); /* DST_ADDR_HI [31:0] */
+   radeon_emit(command);
    radeon_end();
 }
 
@@ -495,11 +491,11 @@ void si_cp_write_data(struct si_context *sctx, struct si_resource *buf, unsigned
    uint64_t va = buf->gpu_address + offset;
 
    radeon_begin(cs);
-   radeon_emit(cs, PKT3(PKT3_WRITE_DATA, 2 + size / 4, 0));
-   radeon_emit(cs, S_370_DST_SEL(dst_sel) | S_370_WR_CONFIRM(1) | S_370_ENGINE_SEL(engine));
-   radeon_emit(cs, va);
-   radeon_emit(cs, va >> 32);
-   radeon_emit_array(cs, (const uint32_t *)data, size / 4);
+   radeon_emit(PKT3(PKT3_WRITE_DATA, 2 + size / 4, 0));
+   radeon_emit(S_370_DST_SEL(dst_sel) | S_370_WR_CONFIRM(1) | S_370_ENGINE_SEL(engine));
+   radeon_emit(va);
+   radeon_emit(va >> 32);
+   radeon_emit_array((const uint32_t *)data, size / 4);
    radeon_end();
 }
 
@@ -519,11 +515,11 @@ void si_cp_copy_data(struct si_context *sctx, struct radeon_cmdbuf *cs, unsigned
    uint64_t src_va = (src ? src->gpu_address : 0ull) + src_offset;
 
    radeon_begin(cs);
-   radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
-   radeon_emit(cs, COPY_DATA_SRC_SEL(src_sel) | COPY_DATA_DST_SEL(dst_sel) | COPY_DATA_WR_CONFIRM);
-   radeon_emit(cs, src_va);
-   radeon_emit(cs, src_va >> 32);
-   radeon_emit(cs, dst_va);
-   radeon_emit(cs, dst_va >> 32);
+   radeon_emit(PKT3(PKT3_COPY_DATA, 4, 0));
+   radeon_emit(COPY_DATA_SRC_SEL(src_sel) | COPY_DATA_DST_SEL(dst_sel) | COPY_DATA_WR_CONFIRM);
+   radeon_emit(src_va);
+   radeon_emit(src_va >> 32);
+   radeon_emit(dst_va);
+   radeon_emit(dst_va >> 32);
    radeon_end();
 }

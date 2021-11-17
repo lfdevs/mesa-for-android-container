@@ -75,7 +75,6 @@ print_instr_name(struct log_stream *stream, struct ir3_instruction *instr,
 #ifdef DEBUG
    mesa_log_stream_printf(stream, "%04u:", instr->serialno);
 #endif
-   mesa_log_stream_printf(stream, "%04u:", instr->name);
    mesa_log_stream_printf(stream, "%04u:", instr->ip);
    if (instr->flags & IR3_INSTR_UNUSED) {
       mesa_log_stream_printf(stream, "XXX: ");
@@ -250,7 +249,7 @@ print_reg_name(struct log_stream *stream, struct ir3_instruction *instr,
     * although it's more convenient for RA if it's a pointer.
     */
    if (reg->tied)
-      printf("(tied)");
+      mesa_log_stream_printf(stream, "(tied)");
 
    if (reg->flags & IR3_REG_SHARED)
       mesa_log_stream_printf(stream, "s");
@@ -367,23 +366,20 @@ print_instr(struct log_stream *stream, struct ir3_instruction *instr, int lvl)
       /* the predicate register src is implied: */
       if (instr->opc == OPC_B) {
          static const struct {
-            const char *suffix;
             int nsrc;
             bool idx;
          } brinfo[7] = {
             /* clang-format off */
-            [BRANCH_PLAIN] = {"r",   1, false},
-            [BRANCH_OR]    = {"rao", 2, false},
-            [BRANCH_AND]   = {"raa", 2, false},
-            [BRANCH_CONST] = {"rac", 0, true},
-            [BRANCH_ANY]   = {"any", 1, false},
-            [BRANCH_ALL]   = {"all", 1, false},
-            [BRANCH_X]     = {"rax", 0, false},
+            [BRANCH_PLAIN] = {1, false},
+            [BRANCH_OR]    = {2, false},
+            [BRANCH_AND]   = {2, false},
+            [BRANCH_CONST] = {0, true},
+            [BRANCH_ANY]   = {1, false},
+            [BRANCH_ALL]   = {1, false},
+            [BRANCH_X]     = {0, false},
             /* clang-format on */
          };
 
-         mesa_log_stream_printf(stream, "%s",
-                                brinfo[instr->cat0.brtype].suffix);
          if (brinfo[instr->cat0.brtype].idx) {
             mesa_log_stream_printf(stream, ".%u", instr->cat0.idx);
          }
@@ -423,6 +419,12 @@ print_instr(struct log_stream *stream, struct ir3_instruction *instr, int lvl)
 }
 
 void
+ir3_print_instr_stream(struct log_stream *stream, struct ir3_instruction *instr)
+{
+   print_instr(stream, instr, 0);
+}
+
+void
 ir3_print_instr(struct ir3_instruction *instr)
 {
    struct log_stream *stream = mesa_log_streami();
@@ -450,6 +452,18 @@ print_block(struct ir3_block *block, int lvl)
       mesa_log_stream_printf(stream, "\n");
    }
 
+   if (block->physical_predecessors_count > 0) {
+      tab(stream, lvl + 1);
+      mesa_log_stream_printf(stream, "physical pred: ");
+      for (unsigned i = 0; i < block->physical_predecessors_count; i++) {
+         struct ir3_block *pred = block->physical_predecessors[i];
+         if (i != 0)
+            mesa_log_stream_printf(stream, ", ");
+         mesa_log_stream_printf(stream, "block%u", block_id(pred));
+      }
+      mesa_log_stream_printf(stream, "\n");
+   }
+
    foreach_instr (instr, &block->instr_list) {
       print_instr(stream, instr, lvl + 1);
    }
@@ -470,13 +484,13 @@ print_block(struct ir3_block *block, int lvl)
       case IR3_BRANCH_COND:
          break;
       case IR3_BRANCH_ANY:
-         printf("any ");
+         mesa_log_stream_printf(stream, "any ");
          break;
       case IR3_BRANCH_ALL:
-         printf("all ");
+         mesa_log_stream_printf(stream, "all ");
          break;
       case IR3_BRANCH_GETONE:
-         printf("getone ");
+         mesa_log_stream_printf(stream, "getone ");
          break;
       }
       if (block->condition)
@@ -489,6 +503,16 @@ print_block(struct ir3_block *block, int lvl)
       tab(stream, lvl + 1);
       mesa_log_stream_printf(stream, "/* succs: block%u; */\n",
                              block_id(block->successors[0]));
+   }
+   if (block->physical_successors[0]) {
+      tab(stream, lvl + 1);
+      mesa_log_stream_printf(stream, "/* physical succs: block%u",
+                             block_id(block->physical_successors[0]));
+      if (block->physical_successors[1]) {
+         mesa_log_stream_printf(stream, ", block%u",
+                                block_id(block->physical_successors[1]));
+      }
+      mesa_log_stream_printf(stream, " */\n");
    }
    tab(stream, lvl);
    mesa_log_stream_printf(stream, "}\n");

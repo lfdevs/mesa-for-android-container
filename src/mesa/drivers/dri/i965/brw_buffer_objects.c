@@ -247,7 +247,7 @@ brw_buffer_data_mem(struct gl_context *ctx,
 
    if (size != 0) {
       intel_obj->buffer = intel_memObj->bo;
-      mark_buffer_valid_data(intel_obj, 0, size);
+      mark_buffer_valid_data(intel_obj, offset, size);
    }
 
    return true;

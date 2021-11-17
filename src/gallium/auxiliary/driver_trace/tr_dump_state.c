@@ -700,6 +700,10 @@ void trace_dump_vertex_element(const struct pipe_vertex_element *state)
 
    trace_dump_member(uint, state, vertex_buffer_index);
 
+   trace_dump_member(uint, state, instance_divisor);
+
+   trace_dump_member(bool, state, dual_slot);
+
    trace_dump_member(format, state, src_format);
 
    trace_dump_struct_end();
@@ -820,8 +824,6 @@ void trace_dump_draw_info(const struct pipe_draw_info *state)
    trace_dump_member(uint, state, start_instance);
    trace_dump_member(uint, state, instance_count);
 
-   trace_dump_member(uint, state, vertices_per_patch);
-
    trace_dump_member(uint, state, min_index);
    trace_dump_member(uint, state, max_index);
 
@@ -829,6 +831,17 @@ void trace_dump_draw_info(const struct pipe_draw_info *state)
    trace_dump_member(uint, state, restart_index);
 
    trace_dump_member(ptr, state, index.resource);
+   trace_dump_struct_end();
+}
+
+void trace_dump_draw_vertex_state_info(struct pipe_draw_vertex_state_info state)
+{
+   if (!trace_dumping_enabled_locked())
+      return;
+
+   trace_dump_struct_begin("pipe_draw_vertex_state_info");
+   trace_dump_member(uint, &state, mode);
+   trace_dump_member(uint, &state, take_vertex_state_ownership);
    trace_dump_struct_end();
 }
 

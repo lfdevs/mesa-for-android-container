@@ -50,6 +50,28 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 		<value name="LANE_SWAP_2103" value="6"/>
 		<value name="LANE_SWAP_3210" value="7"/>
 	</enum>
+		<enum name="video_config_bpp">
+		<value name="VIDEO_CONFIG_18BPP" value="0"/>
+		<value name="VIDEO_CONFIG_24BPP" value="1"/>
+	</enum>
+	<enum name="video_pattern_sel">
+		<value name="VID_PRBS" value="0"/>
+		<value name="VID_INCREMENTAL" value="1"/>
+		<value name="VID_FIXED" value="2"/>
+		<value name="VID_MDSS_GENERAL_PATTERN" value="3"/>
+	</enum>
+	<enum name="cmd_mdp_stream0_pattern_sel">
+		<value name="CMD_MDP_PRBS" value="0"/>
+		<value name="CMD_MDP_INCREMENTAL" value="1"/>
+		<value name="CMD_MDP_FIXED" value="2"/>
+		<value name="CMD_MDP_MDSS_GENERAL_PATTERN" value="3"/>
+	</enum>
+	<enum name="cmd_dma_pattern_sel">
+		<value name="CMD_DMA_PRBS" value="0"/>
+		<value name="CMD_DMA_INCREMENTAL" value="1"/>
+		<value name="CMD_DMA_FIXED" value="2"/>
+		<value name="CMD_DMA_CUSTOM_PATTERN_DMA_FIFO" value="3"/>
+	</enum>
 	<bitset name="DSI_IRQ">
 		<bitfield name="CMD_DMA_DONE" pos="0" type="boolean"/>
 		<bitfield name="MASK_CMD_DMA_DONE" pos="1" type="boolean"/>
@@ -249,6 +271,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 		<bitfield name="DLN0_DIRECTION" pos="16" type="boolean"/>
 	</reg32>
 	<reg32 offset="0x000a8" name="LANE_CTRL">
+		<bitfield name="HS_REQ_SEL_PHY" pos="24" type="boolean"/>
 		<bitfield name="CLKLN_HS_FORCE_REQUEST" pos="28" type="boolean"/>
 	</reg32>
 	<reg32 offset="0x000ac" name="LANE_SWAP_CTRL">
@@ -286,6 +309,31 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	</reg32>
 	<reg32 offset="0x00128" name="PHY_RESET">
 		<bitfield name="RESET" pos="0" type="boolean"/>
+	</reg32>
+	<reg32 offset="0x00160" name="TEST_PATTERN_GEN_VIDEO_INIT_VAL"/>
+	<reg32 offset="0x00198" name="TPG_MAIN_CONTROL">
+		<bitfield name="CHECKERED_RECTANGLE_PATTERN" pos="8" type="boolean"/>
+	</reg32>
+	<reg32 offset="0x001a0" name="TPG_VIDEO_CONFIG">
+		<bitfield name="BPP" low="0" high="1" type="video_config_bpp"/>
+		<bitfield name="RGB" pos="2" type="boolean"/>
+	</reg32>
+	<reg32 offset="0x00158" name="TEST_PATTERN_GEN_CTRL">
+		<bitfield name="CMD_DMA_PATTERN_SEL" low="16" high="17" type="cmd_dma_pattern_sel"/>
+		<bitfield name="CMD_MDP_STREAM0_PATTERN_SEL" low="8" high="9" type="cmd_mdp_stream0_pattern_sel"/>
+		<bitfield name="VIDEO_PATTERN_SEL" low="4" high="5" type="video_pattern_sel"/>
+		<bitfield name="TPG_DMA_FIFO_MODE" pos="2" type="boolean"/>
+		<bitfield name="CMD_DMA_TPG_EN" pos="1" type="boolean"/>
+		<bitfield name="EN" pos="0" type="boolean"/>
+	</reg32>
+	<reg32 offset="0x00168" name="TEST_PATTERN_GEN_CMD_MDP_INIT_VAL0"/>
+	<reg32 offset="0x00180" name="TEST_PATTERN_GEN_CMD_STREAM0_TRIGGER">
+		<bitfield name="SW_TRIGGER" pos="0" type="boolean"/>
+	</reg32>
+	<reg32 offset="0x0019c" name="TPG_MAIN_CONTROL2">
+		<bitfield name="CMD_MDP0_CHECKERED_RECTANGLE_PATTERN" pos="7" type="boolean"/>
+		<bitfield name="CMD_MDP1_CHECKERED_RECTANGLE_PATTERN" pos="16" type="boolean"/>
+		<bitfield name="CMD_MDP2_CHECKERED_RECTANGLE_PATTERN" pos="25" type="boolean"/>
 	</reg32>
 	<reg32 offset="0x0017c" name="T_CLK_PRE_EXTEND">
 		<bitfield name="INC_BY_2_BYTECLK" pos="0" type="boolean"/>

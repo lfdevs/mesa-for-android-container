@@ -187,8 +187,8 @@ struct InstrPred {
          return aSDWA.sel[0] == bSDWA.sel[0] && aSDWA.sel[1] == bSDWA.sel[1] &&
                 aSDWA.dst_sel == bSDWA.dst_sel && aSDWA.abs[0] == bSDWA.abs[0] &&
                 aSDWA.abs[1] == bSDWA.abs[1] && aSDWA.neg[0] == bSDWA.neg[0] &&
-                aSDWA.neg[1] == bSDWA.neg[1] && aSDWA.dst_preserve == bSDWA.dst_preserve &&
-                aSDWA.clamp == bSDWA.clamp && aSDWA.omod == bSDWA.omod;
+                aSDWA.neg[1] == bSDWA.neg[1] && aSDWA.clamp == bSDWA.clamp &&
+                aSDWA.omod == bSDWA.omod;
       }
 
       switch (a->format) {

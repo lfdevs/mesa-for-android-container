@@ -71,8 +71,7 @@ gfx7_allocate_push_constants(struct brw_context *brw)
    bool tess_present = brw->programs[MESA_SHADER_TESS_EVAL];
 
    unsigned avail_size = 16;
-   unsigned multiplier =
-      (devinfo->ver >= 8 || (devinfo->is_haswell && devinfo->gt == 3)) ? 2 : 1;
+   unsigned multiplier = devinfo->max_constant_urb_size_kb / 16;
 
    int stages = 2 + gs_present + 2 * tess_present;
 

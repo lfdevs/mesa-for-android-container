@@ -47,8 +47,6 @@
 extern "C" {
 #endif
 
-#define ST_DOUBLE_ATTRIB_PLACEHOLDER 0xff
-
 struct st_external_sampler_key
 {
    GLuint lower_nv12;             /**< bitmask of 2 plane YUV samplers */
@@ -253,9 +251,7 @@ struct st_common_variant
    /* Parameters which generated this variant. */
    struct st_common_variant_key key;
 
-   /* Bitfield of VERT_BIT_* bits matching vertex shader inputs,
-    * but not include the high part of doubles.
-    */
+   /* Bitfield of VERT_BIT_* bits matching vertex shader inputs. */
    GLbitfield vert_attrib_mask;
 };
 
@@ -285,11 +281,8 @@ struct st_vertex_program
 {
    struct st_program Base;
 
-   /** maps a TGSI input index back to a Mesa VERT_ATTRIB_x */
-   ubyte index_to_input[PIPE_MAX_ATTRIBS];
+   uint32_t vert_attrib_mask; /**< mask of sourced vertex attribs */
    ubyte num_inputs;
-   /** Reverse mapping of the above */
-   ubyte input_to_index[VERT_ATTRIB_MAX];
 
    /** Maps VARYING_SLOT_x to slot */
    ubyte result_to_output[VARYING_SLOT_MAX];
@@ -361,7 +354,7 @@ extern void
 st_finalize_nir_before_variants(struct nir_shader *nir);
 
 extern void
-st_prepare_vertex_program(struct st_program *stvp);
+st_prepare_vertex_program(struct st_program *stvp, uint8_t *attrib_to_index);
 
 extern void
 st_translate_stream_output_info(struct gl_program *prog);

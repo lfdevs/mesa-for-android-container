@@ -586,7 +586,6 @@ bool EmitTexInstruction::get_inputs(const nir_tex_instr& instr, TexInputs &src)
       case nir_tex_src_plane:
       case nir_tex_src_projector:
       case nir_tex_src_min_lod:
-      case nir_tex_src_ms_mcs:
       default:
          sfn_log << SfnLog::tex << "Texture source type " <<  instr.src[i].src_type << " not supported\n";
          retval = false;

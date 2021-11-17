@@ -21,7 +21,6 @@
 
 """Script to generate and run glsl optimization tests."""
 
-from __future__ import print_function
 import argparse
 import difflib
 import errno

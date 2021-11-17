@@ -4,6 +4,7 @@
     - .radv-rules
   variables:
     VK_DRIVER: radeon
+    DRIVER_NAME: radv
     ACO_DEBUG: validateir,validatera
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
 
@@ -50,7 +51,7 @@ radv_polaris10_vkcts:
     - .test-radv
     - .test-manual
   variables:
-    GPU_VERSION: radv-polaris10
+    GPU_VERSION: radv-polaris10-aco
   tags:
     - polaris10
 
@@ -63,7 +64,7 @@ radv_stoney_vkcts:amd64:
   variables:
     DEQP_VER: vk
     DEQP_FRACTION: 10
-    DEQP_PARALLEL: 4
+    FDO_CI_CONCURRENT: 4
     DEQP_EXPECTED_RENDERER: STONEY
     DEVICE_TYPE: hp-11A-G6-EE-grunt
     DTB: ""
@@ -73,6 +74,7 @@ radv_stoney_vkcts:amd64:
     HWCI_KERNEL_MODULES: amdgpu
     HWCI_FREQ_MAX: "true"
     VK_DRIVER: radeon
+    DRIVER_NAME: radv
   tags:
     - mesa-ci-x86-64-lava-hp-11A-G6-EE-grunt
 

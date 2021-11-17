@@ -47,7 +47,7 @@
 /** Subclass of draw_stage */
 struct stipple_stage {
    struct draw_stage stage;
-   float counter;
+   unsigned counter;
    ushort pattern;
    ushort factor;
    bool rectangular;
@@ -110,9 +110,9 @@ emit_segment(struct draw_stage *stage, struct prim_header *header,
 
 
 static inline bool
-stipple_test(int counter, ushort pattern, ushort factor)
+stipple_test(unsigned counter, ushort pattern, ushort factor)
 {
-   int b = (counter / factor) & 0xf;
+   unsigned b = (counter / factor) & 0xf;
    return !!((1 << b) & pattern);
 }
 
@@ -159,7 +159,7 @@ stipple_line(struct draw_stage *stage, struct prim_header *header)
    /* XXX ToDo: instead of iterating pixel-by-pixel, use a look-up table.
     */
    for (i = 0; i < intlength; i++) {
-      bool result = stipple_test((int)stipple->counter + i,
+      bool result = stipple_test(stipple->counter + i,
                                  stipple->pattern, stipple->factor);
       if (result != state) {
          /* changing from "off" to "on" or vice versa */
@@ -178,7 +178,7 @@ stipple_line(struct draw_stage *stage, struct prim_header *header)
    if (state && start < length)
       emit_segment(stage, header, start / length, 1.0);
 
-   stipple->counter += length;
+   stipple->counter += intlength;
 }
 
 

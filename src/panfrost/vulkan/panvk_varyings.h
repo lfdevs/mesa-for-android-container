@@ -28,8 +28,9 @@
 #include "util/format/u_format.h"
 
 #include "compiler/shader_enums.h"
-#include "midgard_pack.h"
 #include "panfrost-job.h"
+
+#include "pan_pool.h"
 
 struct pan_pool;
 struct panvk_device;
@@ -69,15 +70,6 @@ struct panvk_varyings_info {
    unsigned buf_mask;
 };
 
-void
-panvk_varyings_alloc(struct panvk_varyings_info *varyings,
-                     struct pan_pool *varying_mem_pool,
-                     unsigned vertex_count);
-
-unsigned
-panvk_varyings_buf_count(const struct panvk_device *dev,
-                         struct panvk_varyings_info *varyings);
-
 static inline unsigned
 panvk_varying_buf_index(const struct panvk_varyings_info *varyings,
                         enum panvk_varying_buf_id b)
@@ -114,6 +106,7 @@ panvk_varying_is_builtin(gl_shader_stage stage, gl_varying_slot loc)
    }
 }
 
+#if defined(PAN_ARCH) && PAN_ARCH <= 5
 static inline enum mali_attribute_special
 panvk_varying_special_buf_id(enum panvk_varying_buf_id buf_id)
 {
@@ -126,6 +119,7 @@ panvk_varying_special_buf_id(enum panvk_varying_buf_id buf_id)
       return 0;
    }
 }
+#endif
 
 static inline unsigned
 panvk_varying_size(const struct panvk_varyings_info *varyings,
@@ -138,6 +132,36 @@ panvk_varying_size(const struct panvk_varyings_info *varyings,
       return sizeof(uint16_t);
    default:
       return util_format_get_blocksize(varyings->varying[loc].format);
+   }
+}
+
+#ifdef PAN_ARCH
+static inline unsigned
+panvk_varyings_buf_count(struct panvk_varyings_info *varyings)
+{
+   return util_bitcount(varyings->buf_mask) + (PAN_ARCH >= 6 ? 1 : 0);
+}
+#endif
+
+static inline void
+panvk_varyings_alloc(struct panvk_varyings_info *varyings,
+                     struct pan_pool *varying_mem_pool,
+                     unsigned vertex_count)
+{
+   for (unsigned i = 0; i < PANVK_VARY_BUF_MAX; i++) {
+      if (!(varyings->buf_mask & (1 << i))) continue;
+
+      unsigned buf_idx = panvk_varying_buf_index(varyings, i);
+      unsigned size = varyings->buf[buf_idx].stride * vertex_count;
+      if (!size)
+         continue;
+
+      struct panfrost_ptr ptr =
+         pan_pool_alloc_aligned(varying_mem_pool, size, 64);
+
+      varyings->buf[buf_idx].size = size;
+      varyings->buf[buf_idx].address = ptr.gpu;
+      varyings->buf[buf_idx].cpu = ptr.cpu;
    }
 }
 

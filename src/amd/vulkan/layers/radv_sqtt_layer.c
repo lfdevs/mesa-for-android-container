@@ -389,15 +389,6 @@ radv_handle_thread_trace(VkQueue _queue)
 #endif
 
       if (frame_trigger || file_trigger || resize_trigger) {
-         /* FIXME: SQTT on compute hangs. */
-         if (queue->queue_family_index == RADV_QUEUE_COMPUTE) {
-            fprintf(stderr, "RADV: Capturing a SQTT trace on the compute "
-                            "queue is currently broken and might hang! "
-                            "Please, disable presenting on compute if "
-                            "you can.\n");
-            return;
-         }
-
          radv_begin_thread_trace(queue);
          assert(!thread_trace_enabled);
          thread_trace_enabled = true;
@@ -624,12 +615,6 @@ sqtt_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPoo
 
 #define API_MARKER(cmd_name, ...) API_MARKER_ALIAS(cmd_name, cmd_name, __VA_ARGS__);
 
-static bool
-radv_sqtt_dump_pipeline()
-{
-   return getenv("RADV_THREAD_TRACE_PIPELINE");
-}
-
 void
 sqtt_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
                      VkPipeline _pipeline)
@@ -638,7 +623,7 @@ sqtt_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipeline
 
    API_MARKER(BindPipeline, commandBuffer, pipelineBindPoint, _pipeline);
 
-   if (radv_sqtt_dump_pipeline())
+   if (radv_is_instruction_timing_enabled())
       radv_describe_pipeline_bind(cmd_buffer, pipelineBindPoint, pipeline);
 }
 
@@ -890,7 +875,7 @@ radv_add_code_object(struct radv_device *device, struct radv_pipeline *pipeline)
       }
       memcpy(code, shader->code_ptr, shader->code_size);
 
-      va = radv_buffer_get_va(shader->bo) + shader->bo_offset;
+      va = radv_shader_variant_get_va(shader);
 
       record->shader_data[i].hash[0] = (uint64_t)(uintptr_t)shader;
       record->shader_data[i].hash[1] = (uint64_t)(uintptr_t)shader >> 32;
@@ -898,6 +883,8 @@ radv_add_code_object(struct radv_device *device, struct radv_pipeline *pipeline)
       record->shader_data[i].code = code;
       record->shader_data[i].vgpr_count = shader->config.num_vgprs;
       record->shader_data[i].sgpr_count = shader->config.num_sgprs;
+      record->shader_data[i].scratch_memory_size = shader->config.scratch_bytes_per_wave;
+      record->shader_data[i].wavefront_size = shader->info.wave_size;
       record->shader_data[i].base_address = va & 0xffffffffffff;
       record->shader_data[i].elf_symbol_offset = 0;
       record->shader_data[i].hw_stage = radv_mesa_to_rgp_shader_stage(pipeline, i);
@@ -933,7 +920,7 @@ radv_register_pipeline(struct radv_device *device, struct radv_pipeline *pipelin
       if (!shader)
          continue;
 
-      va = radv_buffer_get_va(shader->bo) + shader->bo_offset;
+      va = radv_shader_variant_get_va(shader);
       base_va = MIN2(base_va, va);
    }
 
@@ -1020,7 +1007,7 @@ sqtt_CreateGraphicsPipelines(VkDevice _device, VkPipelineCache pipelineCache, ui
    if (result != VK_SUCCESS)
       return result;
 
-   if (radv_sqtt_dump_pipeline()) {
+   if (radv_is_instruction_timing_enabled()) {
       for (unsigned i = 0; i < count; i++) {
          RADV_FROM_HANDLE(radv_pipeline, pipeline, pPipelines[i]);
 
@@ -1056,7 +1043,7 @@ sqtt_CreateComputePipelines(VkDevice _device, VkPipelineCache pipelineCache, uin
    if (result != VK_SUCCESS)
       return result;
 
-   if (radv_sqtt_dump_pipeline()) {
+   if (radv_is_instruction_timing_enabled()) {
       for (unsigned i = 0; i < count; i++) {
          RADV_FROM_HANDLE(radv_pipeline, pipeline, pPipelines[i]);
 
@@ -1089,7 +1076,7 @@ sqtt_DestroyPipeline(VkDevice _device, VkPipeline _pipeline,
    if (!_pipeline)
       return;
 
-   if (radv_sqtt_dump_pipeline())
+   if (radv_is_instruction_timing_enabled())
       radv_unregister_pipeline(device, pipeline);
 
    radv_DestroyPipeline(_device, _pipeline, pAllocator);

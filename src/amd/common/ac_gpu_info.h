@@ -70,6 +70,7 @@ struct radeon_info {
    bool has_load_ctx_reg_pkt;
    bool has_out_of_order_rast;
    bool has_packed_math_16bit;
+   bool has_accelerated_dot_product;
    bool cpdma_prefetch_writes_memory;
    bool has_gfx9_scissor_bug;
    bool has_tc_compat_zrange_bug;
@@ -207,7 +208,6 @@ struct radeon_info {
    uint32_t min_wave64_vgpr_alloc;
    uint32_t max_vgpr_alloc;
    uint32_t wave64_vgpr_alloc_granularity;
-   bool use_late_alloc; /* deprecated: remove this after radv switches to ac_compute_late_alloc */
 
    /* Render backends (color + depth blocks). */
    uint32_t r300_num_gb_pipes;

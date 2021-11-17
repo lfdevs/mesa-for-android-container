@@ -18,6 +18,7 @@
 #include "vn_android.h"
 #include "vn_device.h"
 #include "vn_device_memory.h"
+#include "vn_wsi.h"
 
 static void
 vn_image_init_memory_requirements(struct vn_image *img,
@@ -190,6 +191,7 @@ vn_image_create(struct vn_device *dev,
 
    result = vn_image_init(dev, create_info, img);
    if (result != VK_SUCCESS) {
+      vn_object_base_fini(&img->base);
       vk_free(alloc, img);
       return result;
    }
@@ -226,6 +228,7 @@ vn_image_create_deferred(struct vn_device *dev,
    result = vn_image_store_deferred_create_info(create_info, alloc,
                                                 &img->deferred_info);
    if (result != VK_SUCCESS) {
+      vn_object_base_fini(&img->base);
       vk_free(alloc, img);
       return result;
    }

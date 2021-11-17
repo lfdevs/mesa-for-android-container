@@ -114,11 +114,10 @@ struct ureg_program
    bool supports_any_inout_decl_range;
    int next_shader_processor;
 
-   struct {
+   struct ureg_input_decl {
       enum tgsi_semantic semantic_name;
       unsigned semantic_index;
       enum tgsi_interpolate_mode interp;
-      unsigned char cylindrical_wrap;
       unsigned char usage_mask;
       enum tgsi_interpolate_loc interp_location;
       unsigned first;
@@ -135,7 +134,7 @@ struct ureg_program
    } system_value[UREG_MAX_SYSTEM_VALUE];
    unsigned nr_system_values;
 
-   struct {
+   struct ureg_output_decl {
       enum tgsi_semantic semantic_name;
       unsigned semantic_index;
       unsigned streams;
@@ -284,11 +283,10 @@ ureg_property(struct ureg_program *ureg, unsigned name, unsigned value)
 }
 
 struct ureg_src
-ureg_DECL_fs_input_cyl_centroid_layout(struct ureg_program *ureg,
+ureg_DECL_fs_input_centroid_layout(struct ureg_program *ureg,
                        enum tgsi_semantic semantic_name,
                        unsigned semantic_index,
                        enum tgsi_interpolate_mode interp_mode,
-                       unsigned cylindrical_wrap,
                        enum tgsi_interpolate_loc interp_location,
                        unsigned index,
                        unsigned usage_mask,
@@ -304,7 +302,6 @@ ureg_DECL_fs_input_cyl_centroid_layout(struct ureg_program *ureg,
       if (ureg->input[i].semantic_name == semantic_name &&
           ureg->input[i].semantic_index == semantic_index) {
          assert(ureg->input[i].interp == interp_mode);
-         assert(ureg->input[i].cylindrical_wrap == cylindrical_wrap);
          assert(ureg->input[i].interp_location == interp_location);
          if (ureg->input[i].array_id == array_id) {
             ureg->input[i].usage_mask |= usage_mask;
@@ -319,7 +316,6 @@ ureg_DECL_fs_input_cyl_centroid_layout(struct ureg_program *ureg,
       ureg->input[i].semantic_name = semantic_name;
       ureg->input[i].semantic_index = semantic_index;
       ureg->input[i].interp = interp_mode;
-      ureg->input[i].cylindrical_wrap = cylindrical_wrap;
       ureg->input[i].interp_location = interp_location;
       ureg->input[i].first = index;
       ureg->input[i].last = index + array_size - 1;
@@ -337,18 +333,17 @@ out:
 }
 
 struct ureg_src
-ureg_DECL_fs_input_cyl_centroid(struct ureg_program *ureg,
+ureg_DECL_fs_input_centroid(struct ureg_program *ureg,
                        enum tgsi_semantic semantic_name,
                        unsigned semantic_index,
                        enum tgsi_interpolate_mode interp_mode,
-                       unsigned cylindrical_wrap,
                        enum tgsi_interpolate_loc interp_location,
                        unsigned array_id,
                        unsigned array_size)
 {
-   return ureg_DECL_fs_input_cyl_centroid_layout(ureg,
+   return ureg_DECL_fs_input_centroid_layout(ureg,
          semantic_name, semantic_index, interp_mode,
-         cylindrical_wrap, interp_location,
+         interp_location,
          ureg->nr_input_regs, TGSI_WRITEMASK_XYZW, array_id, array_size);
 }
 
@@ -374,9 +369,9 @@ ureg_DECL_input_layout(struct ureg_program *ureg,
                 unsigned array_id,
                 unsigned array_size)
 {
-   return ureg_DECL_fs_input_cyl_centroid_layout(ureg,
+   return ureg_DECL_fs_input_centroid_layout(ureg,
                semantic_name, semantic_index,
-               TGSI_INTERPOLATE_CONSTANT, 0, TGSI_INTERPOLATE_LOC_CENTER,
+               TGSI_INTERPOLATE_CONSTANT, TGSI_INTERPOLATE_LOC_CENTER,
                index, usage_mask, array_id, array_size);
 }
 
@@ -388,8 +383,8 @@ ureg_DECL_input(struct ureg_program *ureg,
                 unsigned array_id,
                 unsigned array_size)
 {
-   return ureg_DECL_fs_input_cyl_centroid(ureg, semantic_name, semantic_index,
-                                          TGSI_INTERPOLATE_CONSTANT, 0,
+   return ureg_DECL_fs_input_centroid(ureg, semantic_name, semantic_index,
+                                          TGSI_INTERPOLATE_CONSTANT,
                                           TGSI_INTERPOLATE_LOC_CENTER,
                                           array_id, array_size);
 }
@@ -1587,7 +1582,6 @@ emit_decl_fs(struct ureg_program *ureg,
              enum tgsi_semantic semantic_name,
              unsigned semantic_index,
              enum tgsi_interpolate_mode interpolate,
-             unsigned cylindrical_wrap,
              enum tgsi_interpolate_loc interpolate_location,
              unsigned array_id,
              unsigned usage_mask)
@@ -1610,7 +1604,6 @@ emit_decl_fs(struct ureg_program *ureg,
 
    out[2].value = 0;
    out[2].decl_interp.Interpolate = interpolate;
-   out[2].decl_interp.CylindricalWrap = cylindrical_wrap;
    out[2].decl_interp.Location = interpolate_location;
 
    out[3].value = 0;
@@ -1819,6 +1812,21 @@ emit_property(struct ureg_program *ureg,
    out[1].prop_data.Data = data;
 }
 
+static int
+input_sort(const void *in_a, const void *in_b)
+{
+   const struct ureg_input_decl *a = in_a, *b = in_b;
+
+   return a->first - b->first;
+}
+
+static int
+output_sort(const void *in_a, const void *in_b)
+{
+   const struct ureg_output_decl *a = in_a, *b = in_b;
+
+   return a->first - b->first;
+}
 
 static void emit_decls( struct ureg_program *ureg )
 {
@@ -1827,6 +1835,11 @@ static void emit_decls( struct ureg_program *ureg )
    for (i = 0; i < ARRAY_SIZE(ureg->properties); i++)
       if (ureg->properties[i] != ~0u)
          emit_property(ureg, i, ureg->properties[i]);
+
+   /* While not required by TGSI spec, virglrenderer has a dependency on the
+    * inputs being sorted.
+    */
+   qsort(ureg->input, ureg->nr_inputs, sizeof(ureg->input[0]), input_sort);
 
    if (ureg->processor == PIPE_SHADER_VERTEX) {
       for (i = 0; i < PIPE_MAX_ATTRIBS; i++) {
@@ -1844,7 +1857,6 @@ static void emit_decls( struct ureg_program *ureg )
                          ureg->input[i].semantic_name,
                          ureg->input[i].semantic_index,
                          ureg->input[i].interp,
-                         ureg->input[i].cylindrical_wrap,
                          ureg->input[i].interp_location,
                          ureg->input[i].array_id,
                          ureg->input[i].usage_mask);
@@ -1860,7 +1872,6 @@ static void emit_decls( struct ureg_program *ureg )
                             ureg->input[i].semantic_index +
                             (j - ureg->input[i].first),
                             ureg->input[i].interp,
-                            ureg->input[i].cylindrical_wrap,
                             ureg->input[i].interp_location, 0,
                             ureg->input[i].usage_mask);
             }
@@ -1907,6 +1918,11 @@ static void emit_decls( struct ureg_program *ureg )
                          0,
                          TGSI_WRITEMASK_XYZW, 0, FALSE);
    }
+
+   /* While not required by TGSI spec, virglrenderer has a dependency on the
+    * outputs being sorted.
+    */
+   qsort(ureg->output, ureg->nr_outputs, sizeof(ureg->output[0]), output_sort);
 
    if (ureg->supports_any_inout_decl_range) {
       for (i = 0; i < ureg->nr_outputs; i++) {
@@ -2346,6 +2362,11 @@ ureg_setup_fragment_shader(struct ureg_program *ureg,
       default:
          assert(0);
       }
+   }
+
+   if (info->fs.advanced_blend_modes) {
+      ureg_property(ureg, TGSI_PROPERTY_FS_BLEND_EQUATION_ADVANCED,
+                    info->fs.advanced_blend_modes);
    }
 }
 

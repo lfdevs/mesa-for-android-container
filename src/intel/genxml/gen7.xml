@@ -1931,7 +1931,7 @@
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Per Thread Scratch Space" start="32" end="35" type="uint"/>
     <field name="Scratch Space Base Pointer" start="42" end="63" type="address"/>
-    <field name="GPGPU Mode" start="66" end="66" type="uint"/>
+    <field name="GPGPU Mode" start="66" end="66" type="bool"/>
     <field name="Gateway MMIO Access Control" start="67" end="68" type="uint">
       <value name="No MMIO read/write allowed" value="0"/>
       <value name="MMIO read/write to any address" value="2"/>

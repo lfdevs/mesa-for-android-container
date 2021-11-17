@@ -526,13 +526,13 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups, agx
       unsigned q1 = 0; // XXX
       unsigned q2 = 0; // XXX
       unsigned q3 = 12; // XXX
-      unsigned q4 = 1; // XXX
+      unsigned kill = 0; // helper invocation kill bit
       unsigned q5 = 0; // XXX
       unsigned q6 = 0; // XXX
 
       uint32_t extend =
             ((U & BITFIELD_MASK(5)) << 0) |
-            (q4 << 5) |
+            (kill << 5) |
             ((R >> 6) << 8) |
             ((C >> 6) << 10) |
             ((D >> 6) << 12) |

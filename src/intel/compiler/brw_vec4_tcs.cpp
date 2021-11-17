@@ -143,7 +143,7 @@ vec4_tcs_visitor::emit_thread_end()
       emit(BRW_OPCODE_ENDIF);
    }
 
-   if (INTEL_DEBUG & DEBUG_SHADER_TIME)
+   if (INTEL_DEBUG(DEBUG_SHADER_TIME))
       emit_shader_time_end();
 
    inst = emit(TCS_OPCODE_THREAD_END);
@@ -368,7 +368,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    const struct intel_device_info *devinfo = compiler->devinfo;
    struct brw_vue_prog_data *vue_prog_data = &prog_data->base;
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_CTRL];
-   const bool debug_enabled = INTEL_DEBUG & DEBUG_TCS;
+   const bool debug_enabled = INTEL_DEBUG(DEBUG_TCS);
    const unsigned *assembly;
 
    vue_prog_data->base.stage = MESA_SHADER_TESS_CTRL;
@@ -495,7 +495,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
          return NULL;
       }
 
-      if (INTEL_DEBUG & DEBUG_TCS)
+      if (INTEL_DEBUG(DEBUG_TCS))
          v.dump_instructions();
 
 

@@ -526,6 +526,7 @@ enum pipe_flush_flags
 #define PIPE_RESOURCE_FLAG_SINGLE_THREAD_USE     (1 << 4)
 #define PIPE_RESOURCE_FLAG_ENCRYPTED             (1 << 5)
 #define PIPE_RESOURCE_FLAG_DONT_OVER_ALLOCATE    (1 << 6)
+#define PIPE_RESOURCE_FLAG_DONT_MAP_DIRECTLY     (1 << 7) /* for small visible VRAM */
 #define PIPE_RESOURCE_FLAG_DRV_PRIV    (1 << 8) /* driver/winsys private */
 #define PIPE_RESOURCE_FLAG_FRONTEND_PRIV         (1 << 24) /* gallium frontend private */
 
@@ -574,7 +575,7 @@ enum pipe_prim_type {
    PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY,
    PIPE_PRIM_PATCHES,
    PIPE_PRIM_MAX,
-};
+} ENUM_PACKED;
 
 /**
  * Tessellator spacing types
@@ -763,6 +764,7 @@ enum pipe_cap
    PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER,
    PIPE_CAP_DEPTH_CLIP_DISABLE,
    PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE,
+   PIPE_CAP_DEPTH_CLAMP_ENABLE,
    PIPE_CAP_SHADER_STENCIL_EXPORT,
    PIPE_CAP_TGSI_INSTANCEID,
    PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR,
@@ -991,6 +993,8 @@ enum pipe_cap
    PIPE_CAP_EMULATE_NONFIXED_PRIMITIVE_RESTART,
    PIPE_CAP_SUPPORTED_PRIM_MODES,
    PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART,
+   PIPE_CAP_PREFER_BACK_BUFFER_REUSE,
+   PIPE_CAP_DRAW_VERTEX_STATE,
 
    PIPE_CAP_LAST,
    /* XXX do not add caps after PIPE_CAP_LAST! */
@@ -1349,6 +1353,10 @@ enum pipe_perf_counter_data_type
 };
 
 #define PIPE_UUID_SIZE 16
+
+#ifdef PIPE_OS_UNIX
+#define PIPE_MEMORY_FD
+#endif
 
 #ifdef __cplusplus
 }

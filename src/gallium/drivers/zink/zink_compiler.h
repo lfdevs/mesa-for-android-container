@@ -68,7 +68,9 @@ zink_tgsi_to_nir(struct pipe_screen *screen, const struct tgsi_token *tokens);
 
 struct zink_shader {
    struct util_live_shader base;
+   uint32_t hash;
    struct nir_shader *nir;
+   enum pipe_prim_type reduced_prim; // PIPE_PRIM_MAX for vs
 
    struct zink_so_info streamout;
 
@@ -82,11 +84,15 @@ struct zink_shader {
    unsigned num_texel_buffers;
    uint32_t ubos_used; // bitfield of which ubo indices are used
    uint32_t ssbos_used; // bitfield of which ssbo indices are used
+   bool bindless;
+
+   simple_mtx_t lock;
    struct set *programs;
 
    union {
       struct zink_shader *generated; // a generated shader that this shader "owns"
       bool is_generated; // if this is a driver-created shader (e.g., tcs)
+      nir_variable *fbfetch; //for fs output
    };
 };
 
@@ -95,20 +101,20 @@ zink_screen_init_compiler(struct zink_screen *screen);
 void
 zink_compiler_assign_io(nir_shader *producer, nir_shader *consumer);
 VkShaderModule
-zink_shader_compile(struct zink_screen *screen, struct zink_shader *zs, nir_shader *nir, struct zink_shader_key *key);
+zink_shader_compile(struct zink_screen *screen, struct zink_shader *zs, nir_shader *nir, const struct zink_shader_key *key);
 
 struct zink_shader *
 zink_shader_create(struct zink_screen *screen, struct nir_shader *nir,
                  const struct pipe_stream_output_info *so_info);
 
-void
-zink_shader_finalize(struct pipe_screen *pscreen, void *nirptr, bool optimize);
+char *
+zink_shader_finalize(struct pipe_screen *pscreen, void *nirptr);
 
 void
 zink_shader_free(struct zink_context *ctx, struct zink_shader *shader);
 
 struct zink_shader *
-zink_shader_tcs_create(struct zink_context *ctx, struct zink_shader *vs);
+zink_shader_tcs_create(struct zink_screen *screen, struct zink_shader *vs, unsigned vertices_per_patch);
 
 static inline bool
 zink_shader_descriptor_is_buffer(struct zink_shader *zs, enum zink_descriptor_type type, unsigned i)

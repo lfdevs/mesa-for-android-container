@@ -141,7 +141,7 @@ disasm_annotate(struct disasm_info *disasm,
                              exec_list_get_tail_raw(&disasm->group_list), link);
    }
 
-   if ((INTEL_DEBUG & DEBUG_ANNOTATION) != 0) {
+   if (INTEL_DEBUG(DEBUG_ANNOTATION)) {
       group->ir = inst->ir;
       group->annotation = inst->annotation;
    }

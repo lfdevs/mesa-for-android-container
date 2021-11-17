@@ -27,6 +27,8 @@
 #include <vulkan/vulkan.h>
 
 #include "pipe/p_state.h"
+#include "zink_shader_keys.h"
+#include "zink_state.h"
 
 struct zink_blend_state;
 struct zink_depth_stencil_alpha_state;
@@ -38,38 +40,33 @@ struct zink_screen;
 struct zink_vertex_elements_state;
 
 struct zink_gfx_pipeline_state {
-   struct zink_render_pass *render_pass;
-
-   uint8_t void_alpha_attachments:PIPE_MAX_COLOR_BUFS;
-   uint32_t num_attachments;
-   struct zink_blend_state *blend_state;
-
-   struct zink_rasterizer_hw_state *rast_state;
-
+   uint32_t rast_state : ZINK_RAST_HW_STATE_SIZE; //zink_rasterizer_hw_state
+   uint32_t vertices_per_patch:5;
+   uint32_t rast_samples:7;
+   uint32_t void_alpha_attachments:PIPE_MAX_COLOR_BUFS;
    VkSampleMask sample_mask;
-   uint8_t rast_samples;
-   uint8_t vertices_per_patch;
 
-   unsigned num_viewports;
-
-   bool primitive_restart;
+   unsigned rp_state;
+   uint32_t blend_id;
 
    /* Pre-hashed value for table lookup, invalid when zero.
     * Members after this point are not included in pipeline state hash key */
    uint32_t hash;
    bool dirty;
 
-   struct zink_depth_stencil_alpha_hw_state *depth_stencil_alpha_state; //non-dynamic state
-   VkFrontFace front_face;
+   struct {
+      struct zink_depth_stencil_alpha_hw_state *depth_stencil_alpha_state; //non-dynamic state
+      VkFrontFace front_face;
+      unsigned num_viewports;
+   } dyn_state1;
+
+   bool primitive_restart; //dynamic state2
 
    VkShaderModule modules[PIPE_SHADER_TYPES - 1];
-   uint32_t module_hash;
-
-   uint32_t combined_hash;
-   bool combined_dirty;
+   bool modules_changed;
 
    struct zink_vertex_elements_hw_state *element_state;
-   bool vertex_state_dirty;
+   uint32_t vertex_hash;
 
    uint32_t final_hash;
 
@@ -77,9 +74,18 @@ struct zink_gfx_pipeline_state {
    uint32_t vertex_strides[PIPE_MAX_ATTRIBS];
    bool sample_locations_enabled;
    bool have_EXT_extended_dynamic_state;
-
+   bool have_EXT_extended_dynamic_state2;
+   uint8_t has_points; //either gs outputs points or prim type is points
+   struct {
+      struct zink_shader_key key[5];
+      struct zink_shader_key last_vertex;
+   } shader_keys;
+   struct zink_blend_state *blend_state;
+   struct zink_render_pass *render_pass;
    VkPipeline pipeline;
-   enum pipe_prim_type mode : 8;
+   uint8_t patch_vertices;
+   unsigned idx : 8;
+   enum pipe_prim_type gfx_prim_mode; //pending mode
 };
 
 struct zink_compute_pipeline_state {

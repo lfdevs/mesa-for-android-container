@@ -566,7 +566,7 @@ set_vertex_processing_mode(struct gl_context *ctx, gl_vertex_processing_mode m)
       assert(ctx->API != API_OPENGLES);
 
       /* Other parts of the code assume that inputs[VERT_ATTRIB_POS] through
-       * inputs[VERT_ATTRIB_FF_MAX] will be non-NULL.  However, in OpenGL
+       * inputs[VERT_ATTRIB_GENERIC0-1] will be non-NULL.  However, in OpenGL
        * ES 2.0+ or OpenGL core profile, none of these arrays should ever
        * be enabled.
        */

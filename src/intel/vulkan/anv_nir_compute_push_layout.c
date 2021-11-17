@@ -149,12 +149,21 @@ anv_nir_compute_push_layout(const struct anv_physical_device *pdevice,
 
                nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
                switch (intrin->intrinsic) {
-               case nir_intrinsic_load_push_constant:
+               case nir_intrinsic_load_push_constant: {
+                  /* With bindless shaders we load uniforms with SEND
+                   * messages. All the push constants are located after the
+                   * RT_DISPATCH_GLOBALS. We just need to add the offset to
+                   * the address right after RT_DISPATCH_GLOBALS (see
+                   * brw_nir_lower_rt_intrinsics.c).
+                   */
+                  unsigned base_offset =
+                     brw_shader_stage_is_bindless(nir->info.stage) ? 0 : push_start;
                   intrin->intrinsic = nir_intrinsic_load_uniform;
                   nir_intrinsic_set_base(intrin,
                                          nir_intrinsic_base(intrin) -
-                                         push_start);
+                                         base_offset);
                   break;
+               }
 
                case nir_intrinsic_load_desc_set_address_intel: {
                   b->cursor = nir_before_instr(&intrin->instr);

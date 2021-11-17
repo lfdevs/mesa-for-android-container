@@ -8,7 +8,7 @@
 #ifndef VN_PROTOCOL_DRIVER_DEVICE_H
 #define VN_PROTOCOL_DRIVER_DEVICE_H
 
-#include "vn_device.h"
+#include "vn_instance.h"
 #include "vn_protocol_driver_structs.h"
 
 /*
@@ -549,7 +549,7 @@ vn_sizeof_VkPhysicalDeviceProperties(const VkPhysicalDeviceProperties *val)
     size += vn_sizeof_uint32_t(&val->deviceID);
     size += vn_sizeof_VkPhysicalDeviceType(&val->deviceType);
     size += vn_sizeof_array_size(VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
-    size += vn_sizeof_blob_array(val->deviceName, VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
+    size += vn_sizeof_char_array(val->deviceName, VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
     size += vn_sizeof_array_size(VK_UUID_SIZE);
     size += vn_sizeof_uint8_t_array(val->pipelineCacheUUID, VK_UUID_SIZE);
     size += vn_sizeof_VkPhysicalDeviceLimits(&val->limits);
@@ -567,7 +567,7 @@ vn_decode_VkPhysicalDeviceProperties(struct vn_cs_decoder *dec, VkPhysicalDevice
     vn_decode_VkPhysicalDeviceType(dec, &val->deviceType);
     {
         const size_t array_size = vn_decode_array_size(dec, VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
-        vn_decode_blob_array(dec, val->deviceName, array_size);
+        vn_decode_char_array(dec, val->deviceName, array_size);
     }
     {
         const size_t array_size = vn_decode_array_size(dec, VK_UUID_SIZE);
@@ -739,14 +739,14 @@ vn_decode_VkPhysicalDeviceMemoryProperties(struct vn_cs_decoder *dec, VkPhysical
 {
     vn_decode_uint32_t(dec, &val->memoryTypeCount);
     {
-        vn_decode_array_size(dec, VK_MAX_MEMORY_TYPES);
-        for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, VK_MAX_MEMORY_TYPES);
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkMemoryType(dec, &val->memoryTypes[i]);
     }
     vn_decode_uint32_t(dec, &val->memoryHeapCount);
     {
-        vn_decode_array_size(dec, VK_MAX_MEMORY_HEAPS);
-        for (uint32_t i = 0; i < VK_MAX_MEMORY_HEAPS; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, VK_MAX_MEMORY_HEAPS);
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkMemoryHeap(dec, &val->memoryHeaps[i]);
     }
 }
@@ -5630,7 +5630,7 @@ vn_sizeof_VkDeviceCreateInfo_self(const VkDeviceCreateInfo *val)
         for (uint32_t i = 0; i < val->enabledLayerCount; i++) {
             const size_t string_size = strlen(val->ppEnabledLayerNames[i]) + 1;
             size += vn_sizeof_array_size(string_size);
-            size += vn_sizeof_blob_array(val->ppEnabledLayerNames[i], string_size);
+            size += vn_sizeof_char_array(val->ppEnabledLayerNames[i], string_size);
         }
     } else {
         size += vn_sizeof_array_size(0);
@@ -5641,7 +5641,7 @@ vn_sizeof_VkDeviceCreateInfo_self(const VkDeviceCreateInfo *val)
         for (uint32_t i = 0; i < val->enabledExtensionCount; i++) {
             const size_t string_size = strlen(val->ppEnabledExtensionNames[i]) + 1;
             size += vn_sizeof_array_size(string_size);
-            size += vn_sizeof_blob_array(val->ppEnabledExtensionNames[i], string_size);
+            size += vn_sizeof_char_array(val->ppEnabledExtensionNames[i], string_size);
         }
     } else {
         size += vn_sizeof_array_size(0);
@@ -5844,7 +5844,7 @@ vn_encode_VkDeviceCreateInfo_self(struct vn_cs_encoder *enc, const VkDeviceCreat
         for (uint32_t i = 0; i < val->enabledLayerCount; i++) {
             const size_t string_size = strlen(val->ppEnabledLayerNames[i]) + 1;
             vn_encode_array_size(enc, string_size);
-            vn_encode_blob_array(enc, val->ppEnabledLayerNames[i], string_size);
+            vn_encode_char_array(enc, val->ppEnabledLayerNames[i], string_size);
         }
     } else {
         vn_encode_array_size(enc, 0);
@@ -5855,7 +5855,7 @@ vn_encode_VkDeviceCreateInfo_self(struct vn_cs_encoder *enc, const VkDeviceCreat
         for (uint32_t i = 0; i < val->enabledExtensionCount; i++) {
             const size_t string_size = strlen(val->ppEnabledExtensionNames[i]) + 1;
             vn_encode_array_size(enc, string_size);
-            vn_encode_blob_array(enc, val->ppEnabledExtensionNames[i], string_size);
+            vn_encode_char_array(enc, val->ppEnabledExtensionNames[i], string_size);
         }
     } else {
         vn_encode_array_size(enc, 0);
@@ -5931,9 +5931,9 @@ vn_sizeof_VkPhysicalDeviceDriverProperties_self(const VkPhysicalDeviceDriverProp
     /* skip val->{sType,pNext} */
     size += vn_sizeof_VkDriverId(&val->driverID);
     size += vn_sizeof_array_size(VK_MAX_DRIVER_NAME_SIZE);
-    size += vn_sizeof_blob_array(val->driverName, VK_MAX_DRIVER_NAME_SIZE);
+    size += vn_sizeof_char_array(val->driverName, VK_MAX_DRIVER_NAME_SIZE);
     size += vn_sizeof_array_size(VK_MAX_DRIVER_INFO_SIZE);
-    size += vn_sizeof_blob_array(val->driverInfo, VK_MAX_DRIVER_INFO_SIZE);
+    size += vn_sizeof_char_array(val->driverInfo, VK_MAX_DRIVER_INFO_SIZE);
     size += vn_sizeof_VkConformanceVersion(&val->conformanceVersion);
     return size;
 }
@@ -5965,11 +5965,11 @@ vn_decode_VkPhysicalDeviceDriverProperties_self(struct vn_cs_decoder *dec, VkPhy
     vn_decode_VkDriverId(dec, &val->driverID);
     {
         const size_t array_size = vn_decode_array_size(dec, VK_MAX_DRIVER_NAME_SIZE);
-        vn_decode_blob_array(dec, val->driverName, array_size);
+        vn_decode_char_array(dec, val->driverName, array_size);
     }
     {
         const size_t array_size = vn_decode_array_size(dec, VK_MAX_DRIVER_INFO_SIZE);
-        vn_decode_blob_array(dec, val->driverInfo, array_size);
+        vn_decode_char_array(dec, val->driverInfo, array_size);
     }
     vn_decode_VkConformanceVersion(dec, &val->conformanceVersion);
 }
@@ -7783,9 +7783,9 @@ vn_sizeof_VkPhysicalDeviceVulkan12Properties_self(const VkPhysicalDeviceVulkan12
     /* skip val->{sType,pNext} */
     size += vn_sizeof_VkDriverId(&val->driverID);
     size += vn_sizeof_array_size(VK_MAX_DRIVER_NAME_SIZE);
-    size += vn_sizeof_blob_array(val->driverName, VK_MAX_DRIVER_NAME_SIZE);
+    size += vn_sizeof_char_array(val->driverName, VK_MAX_DRIVER_NAME_SIZE);
     size += vn_sizeof_array_size(VK_MAX_DRIVER_INFO_SIZE);
-    size += vn_sizeof_blob_array(val->driverInfo, VK_MAX_DRIVER_INFO_SIZE);
+    size += vn_sizeof_char_array(val->driverInfo, VK_MAX_DRIVER_INFO_SIZE);
     size += vn_sizeof_VkConformanceVersion(&val->conformanceVersion);
     size += vn_sizeof_VkShaderFloatControlsIndependence(&val->denormBehaviorIndependence);
     size += vn_sizeof_VkShaderFloatControlsIndependence(&val->roundingModeIndependence);
@@ -7865,11 +7865,11 @@ vn_decode_VkPhysicalDeviceVulkan12Properties_self(struct vn_cs_decoder *dec, VkP
     vn_decode_VkDriverId(dec, &val->driverID);
     {
         const size_t array_size = vn_decode_array_size(dec, VK_MAX_DRIVER_NAME_SIZE);
-        vn_decode_blob_array(dec, val->driverName, array_size);
+        vn_decode_char_array(dec, val->driverName, array_size);
     }
     {
         const size_t array_size = vn_decode_array_size(dec, VK_MAX_DRIVER_INFO_SIZE);
-        vn_decode_blob_array(dec, val->driverInfo, array_size);
+        vn_decode_char_array(dec, val->driverInfo, array_size);
     }
     vn_decode_VkConformanceVersion(dec, &val->conformanceVersion);
     vn_decode_VkShaderFloatControlsIndependence(dec, &val->denormBehaviorIndependence);
@@ -8661,11 +8661,11 @@ vn_decode_VkDrmFormatModifierPropertiesListEXT_self(struct vn_cs_decoder *dec, V
     /* skip val->{sType,pNext} */
     vn_decode_uint32_t(dec, &val->drmFormatModifierCount);
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, val->drmFormatModifierCount);
-        for (uint32_t i = 0; i < val->drmFormatModifierCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, val->drmFormatModifierCount);
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkDrmFormatModifierPropertiesEXT(dec, &val->pDrmFormatModifierProperties[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         val->pDrmFormatModifierProperties = NULL;
     }
 }
@@ -8694,7 +8694,7 @@ vn_sizeof_VkDrmFormatModifierPropertiesListEXT_self_partial(const VkDrmFormatMod
 {
     size_t size = 0;
     /* skip val->{sType,pNext} */
-    /* skip val->drmFormatModifierCount */
+    /* WA1: size += vn_sizeof_uint32_t(&val->drmFormatModifierCount) */(void)0;
     if (val->pDrmFormatModifierProperties) {
         size += vn_sizeof_array_size(val->drmFormatModifierCount);
         for (uint32_t i = 0; i < val->drmFormatModifierCount; i++)
@@ -8728,7 +8728,7 @@ static inline void
 vn_encode_VkDrmFormatModifierPropertiesListEXT_self_partial(struct vn_cs_encoder *enc, const VkDrmFormatModifierPropertiesListEXT *val)
 {
     /* skip val->{sType,pNext} */
-    /* skip val->drmFormatModifierCount */
+    /* WA1: vn_encode_uint32_t(enc, &val->drmFormatModifierCount) */(void)0;
     if (val->pDrmFormatModifierProperties) {
         vn_encode_array_size(enc, val->drmFormatModifierCount);
         for (uint32_t i = 0; i < val->drmFormatModifierCount; i++)
@@ -10598,8 +10598,8 @@ vn_decode_VkPhysicalDeviceGroupProperties_self(struct vn_cs_decoder *dec, VkPhys
     /* skip val->{sType,pNext} */
     vn_decode_uint32_t(dec, &val->physicalDeviceCount);
     {
-        vn_decode_array_size(dec, VK_MAX_DEVICE_GROUP_SIZE);
-        for (uint32_t i = 0; i < VK_MAX_DEVICE_GROUP_SIZE; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, VK_MAX_DEVICE_GROUP_SIZE);
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkPhysicalDevice(dec, &val->physicalDevices[i]);
     }
     vn_decode_VkBool32(dec, &val->subsetAllocation);
@@ -10744,8 +10744,8 @@ static inline size_t vn_sizeof_vkEnumeratePhysicalDevices(VkInstance instance, u
     if (pPhysicalDeviceCount)
         cmd_size += vn_sizeof_uint32_t(pPhysicalDeviceCount);
     if (pPhysicalDevices) {
-        cmd_size += vn_sizeof_array_size(*pPhysicalDeviceCount);
-        for (uint32_t i = 0; i < *pPhysicalDeviceCount; i++)
+        cmd_size += vn_sizeof_array_size((pPhysicalDeviceCount ? *pPhysicalDeviceCount : 0));
+        for (uint32_t i = 0; i < (pPhysicalDeviceCount ? *pPhysicalDeviceCount : 0); i++)
             cmd_size += vn_sizeof_VkPhysicalDevice(&pPhysicalDevices[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -10765,8 +10765,8 @@ static inline void vn_encode_vkEnumeratePhysicalDevices(struct vn_cs_encoder *en
     if (vn_encode_simple_pointer(enc, pPhysicalDeviceCount))
         vn_encode_uint32_t(enc, pPhysicalDeviceCount);
     if (pPhysicalDevices) {
-        vn_encode_array_size(enc, *pPhysicalDeviceCount);
-        for (uint32_t i = 0; i < *pPhysicalDeviceCount; i++)
+        vn_encode_array_size(enc, (pPhysicalDeviceCount ? *pPhysicalDeviceCount : 0));
+        for (uint32_t i = 0; i < (pPhysicalDeviceCount ? *pPhysicalDeviceCount : 0); i++)
             vn_encode_VkPhysicalDevice(enc, &pPhysicalDevices[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -10785,8 +10785,8 @@ static inline size_t vn_sizeof_vkEnumeratePhysicalDevices_reply(VkInstance insta
     if (pPhysicalDeviceCount)
         cmd_size += vn_sizeof_uint32_t(pPhysicalDeviceCount);
     if (pPhysicalDevices) {
-        cmd_size += vn_sizeof_array_size(*pPhysicalDeviceCount);
-        for (uint32_t i = 0; i < *pPhysicalDeviceCount; i++)
+        cmd_size += vn_sizeof_array_size((pPhysicalDeviceCount ? *pPhysicalDeviceCount : 0));
+        for (uint32_t i = 0; i < (pPhysicalDeviceCount ? *pPhysicalDeviceCount : 0); i++)
             cmd_size += vn_sizeof_VkPhysicalDevice(&pPhysicalDevices[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -10810,11 +10810,11 @@ static inline VkResult vn_decode_vkEnumeratePhysicalDevices_reply(struct vn_cs_d
         pPhysicalDeviceCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pPhysicalDeviceCount);
-        for (uint32_t i = 0; i < *pPhysicalDeviceCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pPhysicalDeviceCount ? *pPhysicalDeviceCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkPhysicalDevice(dec, &pPhysicalDevices[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pPhysicalDevices = NULL;
     }
 
@@ -10885,8 +10885,8 @@ static inline size_t vn_sizeof_vkGetPhysicalDeviceQueueFamilyProperties(VkPhysic
     if (pQueueFamilyPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pQueueFamilyPropertyCount);
     if (pQueueFamilyProperties) {
-        cmd_size += vn_sizeof_array_size(*pQueueFamilyPropertyCount);
-        for (uint32_t i = 0; i < *pQueueFamilyPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0));
+        for (uint32_t i = 0; i < (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkQueueFamilyProperties_partial(&pQueueFamilyProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -10906,8 +10906,8 @@ static inline void vn_encode_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_
     if (vn_encode_simple_pointer(enc, pQueueFamilyPropertyCount))
         vn_encode_uint32_t(enc, pQueueFamilyPropertyCount);
     if (pQueueFamilyProperties) {
-        vn_encode_array_size(enc, *pQueueFamilyPropertyCount);
-        for (uint32_t i = 0; i < *pQueueFamilyPropertyCount; i++)
+        vn_encode_array_size(enc, (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0));
+        for (uint32_t i = 0; i < (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0); i++)
             vn_encode_VkQueueFamilyProperties_partial(enc, &pQueueFamilyProperties[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -10924,8 +10924,8 @@ static inline size_t vn_sizeof_vkGetPhysicalDeviceQueueFamilyProperties_reply(Vk
     if (pQueueFamilyPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pQueueFamilyPropertyCount);
     if (pQueueFamilyProperties) {
-        cmd_size += vn_sizeof_array_size(*pQueueFamilyPropertyCount);
-        for (uint32_t i = 0; i < *pQueueFamilyPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0));
+        for (uint32_t i = 0; i < (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkQueueFamilyProperties(&pQueueFamilyProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -10947,11 +10947,11 @@ static inline void vn_decode_vkGetPhysicalDeviceQueueFamilyProperties_reply(stru
         pQueueFamilyPropertyCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pQueueFamilyPropertyCount);
-        for (uint32_t i = 0; i < *pQueueFamilyPropertyCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkQueueFamilyProperties(dec, &pQueueFamilyProperties[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pQueueFamilyProperties = NULL;
     }
 }
@@ -11329,8 +11329,8 @@ static inline size_t vn_sizeof_vkEnumerateDeviceLayerProperties(VkPhysicalDevice
     if (pPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pPropertyCount);
     if (pProperties) {
-        cmd_size += vn_sizeof_array_size(*pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkLayerProperties_partial(&pProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -11350,8 +11350,8 @@ static inline void vn_encode_vkEnumerateDeviceLayerProperties(struct vn_cs_encod
     if (vn_encode_simple_pointer(enc, pPropertyCount))
         vn_encode_uint32_t(enc, pPropertyCount);
     if (pProperties) {
-        vn_encode_array_size(enc, *pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        vn_encode_array_size(enc, (pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             vn_encode_VkLayerProperties_partial(enc, &pProperties[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -11370,8 +11370,8 @@ static inline size_t vn_sizeof_vkEnumerateDeviceLayerProperties_reply(VkPhysical
     if (pPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pPropertyCount);
     if (pProperties) {
-        cmd_size += vn_sizeof_array_size(*pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkLayerProperties(&pProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -11395,11 +11395,11 @@ static inline VkResult vn_decode_vkEnumerateDeviceLayerProperties_reply(struct v
         pPropertyCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkLayerProperties(dec, &pProperties[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pProperties = NULL;
     }
 
@@ -11416,7 +11416,7 @@ static inline size_t vn_sizeof_vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (pLayerName) {
         const size_t string_size = strlen(pLayerName) + 1;
         cmd_size += vn_sizeof_array_size(string_size);
-        cmd_size += vn_sizeof_blob_array(pLayerName, string_size);
+        cmd_size += vn_sizeof_char_array(pLayerName, string_size);
     } else {
         cmd_size += vn_sizeof_array_size(0);
     }
@@ -11424,8 +11424,8 @@ static inline size_t vn_sizeof_vkEnumerateDeviceExtensionProperties(VkPhysicalDe
     if (pPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pPropertyCount);
     if (pProperties) {
-        cmd_size += vn_sizeof_array_size(*pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkExtensionProperties_partial(&pProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -11445,15 +11445,15 @@ static inline void vn_encode_vkEnumerateDeviceExtensionProperties(struct vn_cs_e
     if (pLayerName) {
         const size_t string_size = strlen(pLayerName) + 1;
         vn_encode_array_size(enc, string_size);
-        vn_encode_blob_array(enc, pLayerName, string_size);
+        vn_encode_char_array(enc, pLayerName, string_size);
     } else {
         vn_encode_array_size(enc, 0);
     }
     if (vn_encode_simple_pointer(enc, pPropertyCount))
         vn_encode_uint32_t(enc, pPropertyCount);
     if (pProperties) {
-        vn_encode_array_size(enc, *pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        vn_encode_array_size(enc, (pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             vn_encode_VkExtensionProperties_partial(enc, &pProperties[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -11473,8 +11473,8 @@ static inline size_t vn_sizeof_vkEnumerateDeviceExtensionProperties_reply(VkPhys
     if (pPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pPropertyCount);
     if (pProperties) {
-        cmd_size += vn_sizeof_array_size(*pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkExtensionProperties(&pProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -11499,11 +11499,11 @@ static inline VkResult vn_decode_vkEnumerateDeviceExtensionProperties_reply(stru
         pPropertyCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkExtensionProperties(dec, &pProperties[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pProperties = NULL;
     }
 
@@ -11633,8 +11633,8 @@ static inline size_t vn_sizeof_vkGetPhysicalDeviceSparseImageFormatProperties(Vk
     if (pPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pPropertyCount);
     if (pProperties) {
-        cmd_size += vn_sizeof_array_size(*pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkSparseImageFormatProperties_partial(&pProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -11659,8 +11659,8 @@ static inline void vn_encode_vkGetPhysicalDeviceSparseImageFormatProperties(stru
     if (vn_encode_simple_pointer(enc, pPropertyCount))
         vn_encode_uint32_t(enc, pPropertyCount);
     if (pProperties) {
-        vn_encode_array_size(enc, *pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        vn_encode_array_size(enc, (pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             vn_encode_VkSparseImageFormatProperties_partial(enc, &pProperties[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -11682,8 +11682,8 @@ static inline size_t vn_sizeof_vkGetPhysicalDeviceSparseImageFormatProperties_re
     if (pPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pPropertyCount);
     if (pProperties) {
-        cmd_size += vn_sizeof_array_size(*pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkSparseImageFormatProperties(&pProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -11710,11 +11710,11 @@ static inline void vn_decode_vkGetPhysicalDeviceSparseImageFormatProperties_repl
         pPropertyCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkSparseImageFormatProperties(dec, &pProperties[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pProperties = NULL;
     }
 }
@@ -11959,8 +11959,8 @@ static inline size_t vn_sizeof_vkGetPhysicalDeviceQueueFamilyProperties2(VkPhysi
     if (pQueueFamilyPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pQueueFamilyPropertyCount);
     if (pQueueFamilyProperties) {
-        cmd_size += vn_sizeof_array_size(*pQueueFamilyPropertyCount);
-        for (uint32_t i = 0; i < *pQueueFamilyPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0));
+        for (uint32_t i = 0; i < (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkQueueFamilyProperties2_partial(&pQueueFamilyProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -11980,8 +11980,8 @@ static inline void vn_encode_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn
     if (vn_encode_simple_pointer(enc, pQueueFamilyPropertyCount))
         vn_encode_uint32_t(enc, pQueueFamilyPropertyCount);
     if (pQueueFamilyProperties) {
-        vn_encode_array_size(enc, *pQueueFamilyPropertyCount);
-        for (uint32_t i = 0; i < *pQueueFamilyPropertyCount; i++)
+        vn_encode_array_size(enc, (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0));
+        for (uint32_t i = 0; i < (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0); i++)
             vn_encode_VkQueueFamilyProperties2_partial(enc, &pQueueFamilyProperties[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -11998,8 +11998,8 @@ static inline size_t vn_sizeof_vkGetPhysicalDeviceQueueFamilyProperties2_reply(V
     if (pQueueFamilyPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pQueueFamilyPropertyCount);
     if (pQueueFamilyProperties) {
-        cmd_size += vn_sizeof_array_size(*pQueueFamilyPropertyCount);
-        for (uint32_t i = 0; i < *pQueueFamilyPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0));
+        for (uint32_t i = 0; i < (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkQueueFamilyProperties2(&pQueueFamilyProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -12021,11 +12021,11 @@ static inline void vn_decode_vkGetPhysicalDeviceQueueFamilyProperties2_reply(str
         pQueueFamilyPropertyCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pQueueFamilyPropertyCount);
-        for (uint32_t i = 0; i < *pQueueFamilyPropertyCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pQueueFamilyPropertyCount ? *pQueueFamilyPropertyCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkQueueFamilyProperties2(dec, &pQueueFamilyProperties[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pQueueFamilyProperties = NULL;
     }
 }
@@ -12097,8 +12097,8 @@ static inline size_t vn_sizeof_vkGetPhysicalDeviceSparseImageFormatProperties2(V
     if (pPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pPropertyCount);
     if (pProperties) {
-        cmd_size += vn_sizeof_array_size(*pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkSparseImageFormatProperties2_partial(&pProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -12120,8 +12120,8 @@ static inline void vn_encode_vkGetPhysicalDeviceSparseImageFormatProperties2(str
     if (vn_encode_simple_pointer(enc, pPropertyCount))
         vn_encode_uint32_t(enc, pPropertyCount);
     if (pProperties) {
-        vn_encode_array_size(enc, *pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        vn_encode_array_size(enc, (pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             vn_encode_VkSparseImageFormatProperties2_partial(enc, &pProperties[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -12139,8 +12139,8 @@ static inline size_t vn_sizeof_vkGetPhysicalDeviceSparseImageFormatProperties2_r
     if (pPropertyCount)
         cmd_size += vn_sizeof_uint32_t(pPropertyCount);
     if (pProperties) {
-        cmd_size += vn_sizeof_array_size(*pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        cmd_size += vn_sizeof_array_size((pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < (pPropertyCount ? *pPropertyCount : 0); i++)
             cmd_size += vn_sizeof_VkSparseImageFormatProperties2(&pProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -12163,11 +12163,11 @@ static inline void vn_decode_vkGetPhysicalDeviceSparseImageFormatProperties2_rep
         pPropertyCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pPropertyCount);
-        for (uint32_t i = 0; i < *pPropertyCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pPropertyCount ? *pPropertyCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkSparseImageFormatProperties2(dec, &pProperties[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pProperties = NULL;
     }
 }
@@ -12363,8 +12363,8 @@ static inline size_t vn_sizeof_vkEnumeratePhysicalDeviceGroups(VkInstance instan
     if (pPhysicalDeviceGroupCount)
         cmd_size += vn_sizeof_uint32_t(pPhysicalDeviceGroupCount);
     if (pPhysicalDeviceGroupProperties) {
-        cmd_size += vn_sizeof_array_size(*pPhysicalDeviceGroupCount);
-        for (uint32_t i = 0; i < *pPhysicalDeviceGroupCount; i++)
+        cmd_size += vn_sizeof_array_size((pPhysicalDeviceGroupCount ? *pPhysicalDeviceGroupCount : 0));
+        for (uint32_t i = 0; i < (pPhysicalDeviceGroupCount ? *pPhysicalDeviceGroupCount : 0); i++)
             cmd_size += vn_sizeof_VkPhysicalDeviceGroupProperties_partial(&pPhysicalDeviceGroupProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -12384,8 +12384,8 @@ static inline void vn_encode_vkEnumeratePhysicalDeviceGroups(struct vn_cs_encode
     if (vn_encode_simple_pointer(enc, pPhysicalDeviceGroupCount))
         vn_encode_uint32_t(enc, pPhysicalDeviceGroupCount);
     if (pPhysicalDeviceGroupProperties) {
-        vn_encode_array_size(enc, *pPhysicalDeviceGroupCount);
-        for (uint32_t i = 0; i < *pPhysicalDeviceGroupCount; i++)
+        vn_encode_array_size(enc, (pPhysicalDeviceGroupCount ? *pPhysicalDeviceGroupCount : 0));
+        for (uint32_t i = 0; i < (pPhysicalDeviceGroupCount ? *pPhysicalDeviceGroupCount : 0); i++)
             vn_encode_VkPhysicalDeviceGroupProperties_partial(enc, &pPhysicalDeviceGroupProperties[i]);
     } else {
         vn_encode_array_size(enc, 0);
@@ -12404,8 +12404,8 @@ static inline size_t vn_sizeof_vkEnumeratePhysicalDeviceGroups_reply(VkInstance 
     if (pPhysicalDeviceGroupCount)
         cmd_size += vn_sizeof_uint32_t(pPhysicalDeviceGroupCount);
     if (pPhysicalDeviceGroupProperties) {
-        cmd_size += vn_sizeof_array_size(*pPhysicalDeviceGroupCount);
-        for (uint32_t i = 0; i < *pPhysicalDeviceGroupCount; i++)
+        cmd_size += vn_sizeof_array_size((pPhysicalDeviceGroupCount ? *pPhysicalDeviceGroupCount : 0));
+        for (uint32_t i = 0; i < (pPhysicalDeviceGroupCount ? *pPhysicalDeviceGroupCount : 0); i++)
             cmd_size += vn_sizeof_VkPhysicalDeviceGroupProperties(&pPhysicalDeviceGroupProperties[i]);
     } else {
         cmd_size += vn_sizeof_array_size(0);
@@ -12429,11 +12429,11 @@ static inline VkResult vn_decode_vkEnumeratePhysicalDeviceGroups_reply(struct vn
         pPhysicalDeviceGroupCount = NULL;
     }
     if (vn_peek_array_size(dec)) {
-        vn_decode_array_size(dec, *pPhysicalDeviceGroupCount);
-        for (uint32_t i = 0; i < *pPhysicalDeviceGroupCount; i++)
+        const uint32_t iter_count = vn_decode_array_size(dec, (pPhysicalDeviceGroupCount ? *pPhysicalDeviceGroupCount : 0));
+        for (uint32_t i = 0; i < iter_count; i++)
             vn_decode_VkPhysicalDeviceGroupProperties(dec, &pPhysicalDeviceGroupProperties[i]);
     } else {
-        vn_decode_array_size(dec, 0);
+        vn_decode_array_size_unchecked(dec);
         pPhysicalDeviceGroupProperties = NULL;
     }
 
@@ -13131,6 +13131,8 @@ static inline void vn_submit_vkGetDeviceQueue2(struct vn_instance *vn_instance, 
 
 static inline VkResult vn_call_vkEnumeratePhysicalDevices(struct vn_instance *vn_instance, VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkEnumeratePhysicalDevices(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, instance, pPhysicalDeviceCount, pPhysicalDevices, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13151,6 +13153,8 @@ static inline void vn_async_vkEnumeratePhysicalDevices(struct vn_instance *vn_in
 
 static inline void vn_call_vkGetPhysicalDeviceProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13168,6 +13172,8 @@ static inline void vn_async_vkGetPhysicalDeviceProperties(struct vn_instance *vn
 
 static inline void vn_call_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceQueueFamilyProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13185,6 +13191,8 @@ static inline void vn_async_vkGetPhysicalDeviceQueueFamilyProperties(struct vn_i
 
 static inline void vn_call_vkGetPhysicalDeviceMemoryProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceMemoryProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pMemoryProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13202,6 +13210,8 @@ static inline void vn_async_vkGetPhysicalDeviceMemoryProperties(struct vn_instan
 
 static inline void vn_call_vkGetPhysicalDeviceFeatures(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceFeatures(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pFeatures, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13219,6 +13229,8 @@ static inline void vn_async_vkGetPhysicalDeviceFeatures(struct vn_instance *vn_i
 
 static inline void vn_call_vkGetPhysicalDeviceFormatProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceFormatProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, pFormatProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13236,6 +13248,8 @@ static inline void vn_async_vkGetPhysicalDeviceFormatProperties(struct vn_instan
 
 static inline VkResult vn_call_vkGetPhysicalDeviceImageFormatProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceImageFormatProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, type, tiling, usage, flags, pImageFormatProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13256,6 +13270,8 @@ static inline void vn_async_vkGetPhysicalDeviceImageFormatProperties(struct vn_i
 
 static inline VkResult vn_call_vkCreateDevice(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkCreateDevice(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pCreateInfo, pAllocator, pDevice, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13276,6 +13292,8 @@ static inline void vn_async_vkCreateDevice(struct vn_instance *vn_instance, VkPh
 
 static inline void vn_call_vkDestroyDevice(struct vn_instance *vn_instance, VkDevice device, const VkAllocationCallbacks* pAllocator)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkDestroyDevice(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pAllocator, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13293,6 +13311,8 @@ static inline void vn_async_vkDestroyDevice(struct vn_instance *vn_instance, VkD
 
 static inline VkResult vn_call_vkEnumerateDeviceLayerProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkEnumerateDeviceLayerProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pPropertyCount, pProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13313,6 +13333,8 @@ static inline void vn_async_vkEnumerateDeviceLayerProperties(struct vn_instance 
 
 static inline VkResult vn_call_vkEnumerateDeviceExtensionProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkEnumerateDeviceExtensionProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pLayerName, pPropertyCount, pProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13333,6 +13355,8 @@ static inline void vn_async_vkEnumerateDeviceExtensionProperties(struct vn_insta
 
 static inline void vn_call_vkGetDeviceQueue(struct vn_instance *vn_instance, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetDeviceQueue(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, queueFamilyIndex, queueIndex, pQueue, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13350,6 +13374,8 @@ static inline void vn_async_vkGetDeviceQueue(struct vn_instance *vn_instance, Vk
 
 static inline VkResult vn_call_vkDeviceWaitIdle(struct vn_instance *vn_instance, VkDevice device)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkDeviceWaitIdle(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13370,6 +13396,8 @@ static inline void vn_async_vkDeviceWaitIdle(struct vn_instance *vn_instance, Vk
 
 static inline void vn_call_vkGetPhysicalDeviceSparseImageFormatProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, type, samples, usage, tiling, pPropertyCount, pProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13387,6 +13415,8 @@ static inline void vn_async_vkGetPhysicalDeviceSparseImageFormatProperties(struc
 
 static inline void vn_call_vkGetPhysicalDeviceFeatures2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceFeatures2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pFeatures, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13404,6 +13434,8 @@ static inline void vn_async_vkGetPhysicalDeviceFeatures2(struct vn_instance *vn_
 
 static inline void vn_call_vkGetPhysicalDeviceProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13421,6 +13453,8 @@ static inline void vn_async_vkGetPhysicalDeviceProperties2(struct vn_instance *v
 
 static inline void vn_call_vkGetPhysicalDeviceFormatProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceFormatProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, format, pFormatProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13438,6 +13472,8 @@ static inline void vn_async_vkGetPhysicalDeviceFormatProperties2(struct vn_insta
 
 static inline VkResult vn_call_vkGetPhysicalDeviceImageFormatProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo, VkImageFormatProperties2* pImageFormatProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceImageFormatProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pImageFormatInfo, pImageFormatProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13458,6 +13494,8 @@ static inline void vn_async_vkGetPhysicalDeviceImageFormatProperties2(struct vn_
 
 static inline void vn_call_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceQueueFamilyProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13475,6 +13513,8 @@ static inline void vn_async_vkGetPhysicalDeviceQueueFamilyProperties2(struct vn_
 
 static inline void vn_call_vkGetPhysicalDeviceMemoryProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceMemoryProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pMemoryProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13492,6 +13532,8 @@ static inline void vn_async_vkGetPhysicalDeviceMemoryProperties2(struct vn_insta
 
 static inline void vn_call_vkGetPhysicalDeviceSparseImageFormatProperties2(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceSparseImageFormatProperties2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pFormatInfo, pPropertyCount, pProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13509,6 +13551,8 @@ static inline void vn_async_vkGetPhysicalDeviceSparseImageFormatProperties2(stru
 
 static inline void vn_call_vkGetPhysicalDeviceExternalBufferProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo, VkExternalBufferProperties* pExternalBufferProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceExternalBufferProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pExternalBufferInfo, pExternalBufferProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13526,6 +13570,8 @@ static inline void vn_async_vkGetPhysicalDeviceExternalBufferProperties(struct v
 
 static inline void vn_call_vkGetPhysicalDeviceExternalSemaphoreProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceExternalSemaphoreProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13543,6 +13589,8 @@ static inline void vn_async_vkGetPhysicalDeviceExternalSemaphoreProperties(struc
 
 static inline void vn_call_vkGetPhysicalDeviceExternalFenceProperties(struct vn_instance *vn_instance, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetPhysicalDeviceExternalFenceProperties(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, physicalDevice, pExternalFenceInfo, pExternalFenceProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13560,6 +13608,8 @@ static inline void vn_async_vkGetPhysicalDeviceExternalFenceProperties(struct vn
 
 static inline VkResult vn_call_vkEnumeratePhysicalDeviceGroups(struct vn_instance *vn_instance, VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkEnumeratePhysicalDeviceGroups(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13580,6 +13630,8 @@ static inline void vn_async_vkEnumeratePhysicalDeviceGroups(struct vn_instance *
 
 static inline void vn_call_vkGetDeviceGroupPeerMemoryFeatures(struct vn_instance *vn_instance, VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetDeviceGroupPeerMemoryFeatures(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -13597,6 +13649,8 @@ static inline void vn_async_vkGetDeviceGroupPeerMemoryFeatures(struct vn_instanc
 
 static inline void vn_call_vkGetDeviceQueue2(struct vn_instance *vn_instance, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkGetDeviceQueue2(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pQueueInfo, pQueue, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);

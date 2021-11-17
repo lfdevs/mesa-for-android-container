@@ -489,8 +489,9 @@ print_var_decl(nir_variable *var, print_state *state)
    const char *const patch = (var->data.patch) ? "patch " : "";
    const char *const inv = (var->data.invariant) ? "invariant " : "";
    const char *const per_view = (var->data.per_view) ? "per_view " : "";
-   fprintf(fp, "%s%s%s%s%s%s %s ",
-           cent, samp, patch, inv, per_view,
+   const char *const per_primitive = (var->data.per_primitive) ? "per_primitive " : "";
+   fprintf(fp, "%s%s%s%s%s%s%s %s ",
+           cent, samp, patch, inv, per_view, per_primitive,
            get_variable_mode_str(var->data.mode, false),
            glsl_interp_mode_name(var->data.interpolation));
 
@@ -1078,8 +1079,8 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
    case nir_texop_txf_ms_fb:
       fprintf(fp, "txf_ms_fb ");
       break;
-   case nir_texop_txf_ms_mcs:
-      fprintf(fp, "txf_ms_mcs ");
+   case nir_texop_txf_ms_mcs_intel:
+      fprintf(fp, "txf_ms_mcs_intel ");
       break;
    case nir_texop_txs:
       fprintf(fp, "txs ");
@@ -1102,11 +1103,11 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
    case nir_texop_tex_prefetch:
       fprintf(fp, "tex (pre-dispatchable) ");
       break;
-   case nir_texop_fragment_fetch:
-      fprintf(fp, "fragment_fetch ");
+   case nir_texop_fragment_fetch_amd:
+      fprintf(fp, "fragment_fetch_amd ");
       break;
-   case nir_texop_fragment_mask_fetch:
-      fprintf(fp, "fragment_mask_fetch ");
+   case nir_texop_fragment_mask_fetch_amd:
+      fprintf(fp, "fragment_mask_fetch_amd ");
       break;
    default:
       unreachable("Invalid texture operation");
@@ -1123,6 +1124,12 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
       fprintf(fp, " ");
 
       switch(instr->src[i].src_type) {
+      case nir_tex_src_backend1:
+         fprintf(fp, "(backend1)");
+         break;
+      case nir_tex_src_backend2:
+         fprintf(fp, "(backend2)");
+         break;
       case nir_tex_src_coord:
          fprintf(fp, "(coord)");
          break;
@@ -1147,8 +1154,8 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
       case nir_tex_src_ms_index:
          fprintf(fp, "(ms_index)");
          break;
-      case nir_tex_src_ms_mcs:
-         fprintf(fp, "(ms_mcs)");
+      case nir_tex_src_ms_mcs_intel:
+         fprintf(fp, "(ms_mcs_intel)");
          break;
       case nir_tex_src_ddx:
          fprintf(fp, "(ddx)");
@@ -1257,7 +1264,7 @@ print_load_const_instr(nir_load_const_instr *instr, print_state *state)
 
       switch (instr->def.bit_size) {
       case 64:
-         fprintf(fp, "0x%16" PRIx64 " /* %f */", instr->value[i].u64,
+         fprintf(fp, "0x%016" PRIx64 " /* %f */", instr->value[i].u64,
                  instr->value[i].f64);
          break;
       case 32:

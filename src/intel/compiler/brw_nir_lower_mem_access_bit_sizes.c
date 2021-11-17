@@ -189,7 +189,7 @@ lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
 
    for (unsigned i = 0; i < num_components; i++) {
       if (writemask & (1u << i))
-         BITSET_SET_RANGE(mask, i * byte_size, ((i + 1) * byte_size) - 1);
+         BITSET_SET_RANGE_INSIDE_WORD(mask, i * byte_size, ((i + 1) * byte_size) - 1);
    }
 
    while (BITSET_FFS(mask) != 0) {
@@ -237,54 +237,35 @@ lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
 }
 
 static bool
-lower_mem_access_bit_sizes_impl(nir_function_impl *impl,
-                                const struct intel_device_info *devinfo)
+lower_mem_access_bit_sizes_instr(nir_builder *b,
+                                nir_instr *instr,
+                                void *cb_data)
 {
-   bool progress = false;
+   const struct intel_device_info *devinfo = cb_data;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
 
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         if (instr->type != nir_instr_type_intrinsic)
-            continue;
+   b->cursor = nir_after_instr(instr);
 
-         b.cursor = nir_after_instr(instr);
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_load_global:
+   case nir_intrinsic_load_global_constant:
+   case nir_intrinsic_load_ssbo:
+   case nir_intrinsic_load_shared:
+   case nir_intrinsic_load_scratch:
+      return lower_mem_load_bit_size(b, intrin, devinfo);
 
-         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-         switch (intrin->intrinsic) {
-         case nir_intrinsic_load_global:
-         case nir_intrinsic_load_global_constant:
-         case nir_intrinsic_load_ssbo:
-         case nir_intrinsic_load_shared:
-         case nir_intrinsic_load_scratch:
-            if (lower_mem_load_bit_size(&b, intrin, devinfo))
-               progress = true;
-            break;
+   case nir_intrinsic_store_global:
+   case nir_intrinsic_store_ssbo:
+   case nir_intrinsic_store_shared:
+   case nir_intrinsic_store_scratch:
+      return lower_mem_store_bit_size(b, intrin, devinfo);
 
-         case nir_intrinsic_store_global:
-         case nir_intrinsic_store_ssbo:
-         case nir_intrinsic_store_shared:
-         case nir_intrinsic_store_scratch:
-            if (lower_mem_store_bit_size(&b, intrin, devinfo))
-               progress = true;
-            break;
-
-         default:
-            break;
-         }
-      }
+   default:
+      return false;
    }
-
-   if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
-   } else {
-      nir_metadata_preserve(impl, nir_metadata_all);
-   }
-
-   return progress;
 }
 
 /**
@@ -313,12 +294,8 @@ bool
 brw_nir_lower_mem_access_bit_sizes(nir_shader *shader,
                                    const struct intel_device_info *devinfo)
 {
-   bool progress = false;
-
-   nir_foreach_function(func, shader) {
-      if (func->impl && lower_mem_access_bit_sizes_impl(func->impl, devinfo))
-         progress = true;
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, lower_mem_access_bit_sizes_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       (void *)devinfo);
 }

@@ -8,7 +8,7 @@
 #ifndef VN_PROTOCOL_DRIVER_DESCRIPTOR_UPDATE_TEMPLATE_H
 #define VN_PROTOCOL_DRIVER_DESCRIPTOR_UPDATE_TEMPLATE_H
 
-#include "vn_device.h"
+#include "vn_instance.h"
 #include "vn_protocol_driver_structs.h"
 
 /* struct VkDescriptorUpdateTemplateEntry */
@@ -284,6 +284,8 @@ static inline void vn_submit_vkDestroyDescriptorUpdateTemplate(struct vn_instanc
 
 static inline VkResult vn_call_vkCreateDescriptorUpdateTemplate(struct vn_instance *vn_instance, VkDevice device, const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplate* pDescriptorUpdateTemplate)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkCreateDescriptorUpdateTemplate(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
@@ -304,6 +306,8 @@ static inline void vn_async_vkCreateDescriptorUpdateTemplate(struct vn_instance 
 
 static inline void vn_call_vkDestroyDescriptorUpdateTemplate(struct vn_instance *vn_instance, VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator)
 {
+    VN_TRACE_FUNC();
+
     struct vn_instance_submit_command submit;
     vn_submit_vkDestroyDescriptorUpdateTemplate(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, device, descriptorUpdateTemplate, pAllocator, &submit);
     struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);

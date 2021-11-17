@@ -34,6 +34,9 @@ void
 v3dX(job_emit_binning_flush)(struct v3dv_job *job);
 
 void
+v3dX(cmd_buffer_emit_color_write_mask)(struct v3dv_cmd_buffer *cmd_buffer);
+
+void
 v3dX(cmd_buffer_end_render_pass_secondary)(struct v3dv_cmd_buffer *cmd_buffer);
 
 void
@@ -130,7 +133,8 @@ v3dX(cmd_buffer_render_pass_setup_render_target)(struct v3dv_cmd_buffer *cmd_buf
 
 void
 v3dX(pack_sampler_state)(struct v3dv_sampler *sampler,
-                         const VkSamplerCreateInfo *pCreateInfo);
+                         const VkSamplerCreateInfo *pCreateInfo,
+                         const VkSamplerCustomBorderColorCreateInfoEXT *bc_info);
 
 void
 v3dX(framebuffer_compute_internal_bpp_msaa)(const struct v3dv_framebuffer *framebuffer,
@@ -170,7 +174,7 @@ void
 v3dX(pack_texture_shader_state_from_buffer_view)(struct v3dv_device *device,
                                                  struct v3dv_buffer_view *buffer_view);
 
-/* Used at v3dv_meta_copy */
+/* Used at v3dv_meta_* */
 
 uint32_t
 v3dX(zs_buffer_from_aspect_bits)(VkImageAspectFlags aspects);
@@ -178,84 +182,84 @@ v3dX(zs_buffer_from_aspect_bits)(VkImageAspectFlags aspects);
 uint8_t
 v3dX(get_internal_depth_type)(VkFormat format);
 
-struct framebuffer_data;
+struct v3dv_meta_framebuffer;
 
 void
-v3dX(job_emit_copy_image_to_buffer_rcl)(struct v3dv_job *job,
-                                        struct v3dv_buffer *buffer,
-                                        struct v3dv_image *image,
-                                        struct framebuffer_data *framebuffer,
-                                        const VkBufferImageCopy2KHR *region);
+v3dX(meta_emit_copy_image_to_buffer_rcl)(struct v3dv_job *job,
+                                         struct v3dv_buffer *buffer,
+                                         struct v3dv_image *image,
+                                         struct v3dv_meta_framebuffer *framebuffer,
+                                         const VkBufferImageCopy2KHR *region);
 
 void
-v3dX(job_emit_resolve_image_rcl)(struct v3dv_job *job,
-                                 struct v3dv_image *dst,
-                                 struct v3dv_image *src,
-                                 struct framebuffer_data *framebuffer,
-                                 const VkImageResolve2KHR *region);
-
-
-void
-v3dX(job_emit_copy_buffer)(struct v3dv_job *job,
-                           struct v3dv_bo *dst,
-                           struct v3dv_bo *src,
-                           uint32_t dst_offset,
-                           uint32_t src_offset,
-                           struct framebuffer_data *framebuffer,
-                           uint32_t format,
-                           uint32_t item_size);
+v3dX(meta_emit_resolve_image_rcl)(struct v3dv_job *job,
+                                  struct v3dv_image *dst,
+                                  struct v3dv_image *src,
+                                  struct v3dv_meta_framebuffer *framebuffer,
+                                  const VkImageResolve2KHR *region);
 
 void
-v3dX(job_emit_copy_buffer_rcl)(struct v3dv_job *job,
-                               struct v3dv_bo *dst,
-                               struct v3dv_bo *src,
-                               uint32_t dst_offset,
-                               uint32_t src_offset,
-                               struct framebuffer_data *framebuffer,
-                               uint32_t format,
-                               uint32_t item_size);
+v3dX(meta_emit_copy_buffer)(struct v3dv_job *job,
+                            struct v3dv_bo *dst,
+                            struct v3dv_bo *src,
+                            uint32_t dst_offset,
+                            uint32_t src_offset,
+                            struct v3dv_meta_framebuffer *framebuffer,
+                            uint32_t format,
+                            uint32_t item_size);
 
 void
-v3dX(job_emit_copy_image_rcl)(struct v3dv_job *job,
-                              struct v3dv_image *dst,
-                              struct v3dv_image *src,
-                              struct framebuffer_data *framebuffer,
-                              const VkImageCopy2KHR *region);
+v3dX(meta_emit_copy_buffer_rcl)(struct v3dv_job *job,
+                                struct v3dv_bo *dst,
+                                struct v3dv_bo *src,
+                                uint32_t dst_offset,
+                                uint32_t src_offset,
+                                struct v3dv_meta_framebuffer *framebuffer,
+                                uint32_t format,
+                                uint32_t item_size);
 
 void
-v3dX(cmd_buffer_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
-                              struct v3dv_image *dst,
-                              uint32_t dst_mip_level,
-                              uint32_t dst_layer,
-                              struct v3dv_image *src,
-                              uint32_t src_mip_level,
-                              uint32_t src_layer,
-                              uint32_t width,
-                              uint32_t height,
-                              const struct v3dv_format *format);
+v3dX(meta_emit_copy_image_rcl)(struct v3dv_job *job,
+                               struct v3dv_image *dst,
+                               struct v3dv_image *src,
+                               struct v3dv_meta_framebuffer *framebuffer,
+                               const VkImageCopy2KHR *region);
 
 void
-v3dX(job_emit_clear_image_rcl)(struct v3dv_job *job,
-                               struct v3dv_image *image,
-                               struct framebuffer_data *framebuffer,
-                               const union v3dv_clear_value *clear_value,
-                               VkImageAspectFlags aspects,
-                               uint32_t layer,
-                               uint32_t level);
+v3dX(meta_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
+                        struct v3dv_image *dst,
+                        uint32_t dst_mip_level,
+                        uint32_t dst_layer,
+                        struct v3dv_image *src,
+                        uint32_t src_mip_level,
+                        uint32_t src_layer,
+                        uint32_t width,
+                        uint32_t height,
+                        const struct v3dv_format *format);
 
 void
-v3dX(job_emit_fill_buffer_rcl)(struct v3dv_job *job,
-                               struct v3dv_bo *bo,
-                               uint32_t offset,
-                               struct framebuffer_data *framebuffer,
-                               uint32_t data);
+v3dX(meta_emit_clear_image_rcl)(struct v3dv_job *job,
+                                struct v3dv_image *image,
+                                struct v3dv_meta_framebuffer *framebuffer,
+                                const union v3dv_clear_value *clear_value,
+                                VkImageAspectFlags aspects,
+                                uint32_t min_layer,
+                                uint32_t max_layer,
+                                uint32_t level);
 
 void
-v3dX(job_emit_copy_buffer_to_image_rcl)(struct v3dv_job *job,
-                                        struct v3dv_image *image,
-                                        struct v3dv_buffer *buffer,
-                                        struct framebuffer_data *framebuffer,
-                                        const VkBufferImageCopy2KHR *region);
+v3dX(meta_emit_fill_buffer_rcl)(struct v3dv_job *job,
+                                struct v3dv_bo *bo,
+                                uint32_t offset,
+                                struct v3dv_meta_framebuffer *framebuffer,
+                                uint32_t data);
+
+void
+v3dX(meta_emit_copy_buffer_to_image_rcl)(struct v3dv_job *job,
+                                         struct v3dv_image *image,
+                                         struct v3dv_buffer *buffer,
+                                         struct v3dv_meta_framebuffer *framebuffer,
+                                         const VkBufferImageCopy2KHR *region);
 
 void
 v3dX(get_internal_type_bpp_for_image_aspects)(VkFormat vk_format,
@@ -264,25 +268,25 @@ v3dX(get_internal_type_bpp_for_image_aspects)(VkFormat vk_format,
                                               uint32_t *internal_bpp);
 
 struct v3dv_job *
-v3dX(cmd_buffer_copy_buffer)(struct v3dv_cmd_buffer *cmd_buffer,
-                             struct v3dv_bo *dst,
-                             uint32_t dst_offset,
-                             struct v3dv_bo *src,
-                             uint32_t src_offset,
-                             const VkBufferCopy2KHR *region);
+v3dX(meta_copy_buffer)(struct v3dv_cmd_buffer *cmd_buffer,
+                       struct v3dv_bo *dst,
+                       uint32_t dst_offset,
+                       struct v3dv_bo *src,
+                       uint32_t src_offset,
+                       const VkBufferCopy2KHR *region);
 
 void
-v3dX(cmd_buffer_fill_buffer)(struct v3dv_cmd_buffer *cmd_buffer,
-                             struct v3dv_bo *bo,
-                             uint32_t offset,
-                             uint32_t size,
-                             uint32_t data);
+v3dX(meta_fill_buffer)(struct v3dv_cmd_buffer *cmd_buffer,
+                       struct v3dv_bo *bo,
+                       uint32_t offset,
+                       uint32_t size,
+                       uint32_t data);
 
 void
-v3dX(setup_framebuffer_data)(struct framebuffer_data *fb,
-                             VkFormat vk_format,
-                             uint32_t internal_type,
-                             const struct v3dv_frame_tiling *tiling);
+v3dX(meta_framebuffer_init)(struct v3dv_meta_framebuffer *fb,
+                            VkFormat vk_format,
+                            uint32_t internal_type,
+                            const struct v3dv_frame_tiling *tiling);
 
 /* Used at v3dv_pipeline */
 void
@@ -290,11 +294,12 @@ v3dX(pipeline_pack_state)(struct v3dv_pipeline *pipeline,
                           const VkPipelineColorBlendStateCreateInfo *cb_info,
                           const VkPipelineDepthStencilStateCreateInfo *ds_info,
                           const VkPipelineRasterizationStateCreateInfo *rs_info,
+                          const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *pv_info,
                           const VkPipelineMultisampleStateCreateInfo *ms_info);
 void
 v3dX(pipeline_pack_compile_state)(struct v3dv_pipeline *pipeline,
-                                  const VkPipelineVertexInputStateCreateInfo *vi_info);
-
+                                  const VkPipelineVertexInputStateCreateInfo *vi_info,
+                                  const VkPipelineVertexInputDivisorStateCreateInfoEXT *vd_info);
 /* Used at v3dv_queue */
 void
 v3dX(job_emit_noop)(struct v3dv_job *job);

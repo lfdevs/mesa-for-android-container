@@ -31,8 +31,6 @@
 # amplitude slightly.  Apparently this also minimizes the error function,
 # reducing the maximum error from 0.00006 to about 0.00003.
 
-from __future__ import print_function
-
 import argparse
 import sys
 

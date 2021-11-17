@@ -953,6 +953,8 @@ lp_build_insert_soa_chan(struct lp_build_context *bld,
        if (type.floating) {
           if (chan_desc.size == 16) {
              chan = lp_build_float_to_half(gallivm, rgba);
+             chan = LLVMBuildBitCast(builder, chan,
+				     lp_build_vec_type(gallivm, lp_type_int_vec(16, 16 * type.length)), "");
              chan = LLVMBuildZExt(builder, chan, bld->int_vec_type, "");
              if (start)
                 chan = LLVMBuildShl(builder, chan,

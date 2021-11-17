@@ -17,6 +17,35 @@
 
 #include "vn_device.h"
 
+void
+vn_descriptor_set_layout_destroy(struct vn_device *dev,
+                                 struct vn_descriptor_set_layout *layout)
+{
+   VkDevice dev_handle = vn_device_to_handle(dev);
+   VkDescriptorSetLayout layout_handle =
+      vn_descriptor_set_layout_to_handle(layout);
+   const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
+
+   vn_async_vkDestroyDescriptorSetLayout(dev->instance, dev_handle,
+                                         layout_handle, NULL);
+
+   vn_object_base_fini(&layout->base);
+   vk_free(alloc, layout);
+}
+
+static void
+vn_descriptor_set_destroy(struct vn_device *dev,
+                          struct vn_descriptor_set *set,
+                          const VkAllocationCallbacks *alloc)
+{
+   list_del(&set->head);
+
+   vn_descriptor_set_layout_unref(dev, set->layout);
+
+   vn_object_base_fini(&set->base);
+   vk_free(alloc, set);
+}
+
 /* descriptor set layout commands */
 
 void
@@ -32,6 +61,76 @@ vn_GetDescriptorSetLayoutSupport(
                                            pSupport);
 }
 
+static void
+vn_descriptor_set_layout_init(
+   struct vn_device *dev,
+   const VkDescriptorSetLayoutCreateInfo *create_info,
+   uint32_t last_binding,
+   struct vn_descriptor_set_layout *layout)
+{
+   VkDevice dev_handle = vn_device_to_handle(dev);
+   VkDescriptorSetLayout layout_handle =
+      vn_descriptor_set_layout_to_handle(layout);
+   const VkDescriptorSetLayoutBindingFlagsCreateInfo *binding_flags =
+      vk_find_struct_const(create_info->pNext,
+                           DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO);
+
+   /* 14.2.1. Descriptor Set Layout
+    *
+    * If bindingCount is zero or if this structure is not included in
+    * the pNext chain, the VkDescriptorBindingFlags for each descriptor
+    * set layout binding is considered to be zero.
+    */
+   if (binding_flags && !binding_flags->bindingCount)
+      binding_flags = NULL;
+
+   layout->refcount = VN_REFCOUNT_INIT(1);
+   layout->last_binding = last_binding;
+
+   for (uint32_t i = 0; i < create_info->bindingCount; i++) {
+      const VkDescriptorSetLayoutBinding *binding_info =
+         &create_info->pBindings[i];
+      struct vn_descriptor_set_layout_binding *binding =
+         &layout->bindings[binding_info->binding];
+
+      if (binding_info->binding == last_binding) {
+         /* 14.2.1. Descriptor Set Layout
+          *
+          * VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT must only be
+          * used for the last binding in the descriptor set layout (i.e. the
+          * binding with the largest value of binding).
+          *
+          * 41. Features
+          *
+          * descriptorBindingVariableDescriptorCount indicates whether the
+          * implementation supports descriptor sets with a variable-sized last
+          * binding. If this feature is not enabled,
+          * VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT must not be
+          * used.
+          */
+         layout->has_variable_descriptor_count =
+            binding_flags &&
+            (binding_flags->pBindingFlags[i] &
+             VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT);
+      }
+
+      binding->type = binding_info->descriptorType;
+      binding->count = binding_info->descriptorCount;
+
+      switch (binding_info->descriptorType) {
+      case VK_DESCRIPTOR_TYPE_SAMPLER:
+      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+         binding->has_immutable_samplers = binding_info->pImmutableSamplers;
+         break;
+      default:
+         break;
+      }
+   }
+
+   vn_async_vkCreateDescriptorSetLayout(dev->instance, dev_handle,
+                                        create_info, NULL, &layout_handle);
+}
+
 VkResult
 vn_CreateDescriptorSetLayout(
    VkDevice device,
@@ -40,10 +139,10 @@ vn_CreateDescriptorSetLayout(
    VkDescriptorSetLayout *pSetLayout)
 {
    struct vn_device *dev = vn_device_from_handle(device);
-   const VkAllocationCallbacks *alloc =
-      pAllocator ? pAllocator : &dev->base.base.alloc;
+   /* ignore pAllocator as the layout is reference-counted */
+   const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
 
-   uint32_t max_binding = 0;
+   uint32_t last_binding = 0;
    VkDescriptorSetLayoutBinding *local_bindings = NULL;
    VkDescriptorSetLayoutCreateInfo local_create_info;
    if (pCreateInfo->bindingCount) {
@@ -61,8 +160,8 @@ vn_CreateDescriptorSetLayout(
       for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++) {
          VkDescriptorSetLayoutBinding *binding = &local_bindings[i];
 
-         if (max_binding < binding->binding)
-            max_binding = binding->binding;
+         if (last_binding < binding->binding)
+            last_binding = binding->binding;
 
          switch (binding->descriptorType) {
          case VK_DESCRIPTOR_TYPE_SAMPLER:
@@ -80,10 +179,11 @@ vn_CreateDescriptorSetLayout(
    }
 
    const size_t layout_size =
-      offsetof(struct vn_descriptor_set_layout, bindings[max_binding + 1]);
+      offsetof(struct vn_descriptor_set_layout, bindings[last_binding + 1]);
+   /* allocated with the device scope */
    struct vn_descriptor_set_layout *layout =
       vk_zalloc(alloc, layout_size, VN_DEFAULT_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (!layout) {
       vk_free(alloc, local_bindings);
       return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -92,30 +192,11 @@ vn_CreateDescriptorSetLayout(
    vn_object_base_init(&layout->base, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
                        &dev->base);
 
-   for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++) {
-      const VkDescriptorSetLayoutBinding *binding =
-         &pCreateInfo->pBindings[i];
-      struct vn_descriptor_set_layout_binding *dst =
-         &layout->bindings[binding->binding];
-
-      switch (binding->descriptorType) {
-      case VK_DESCRIPTOR_TYPE_SAMPLER:
-      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-         dst->has_immutable_samplers = binding->pImmutableSamplers;
-         break;
-      default:
-         break;
-      }
-   }
-
-   VkDescriptorSetLayout layout_handle =
-      vn_descriptor_set_layout_to_handle(layout);
-   vn_async_vkCreateDescriptorSetLayout(dev->instance, device, pCreateInfo,
-                                        NULL, &layout_handle);
+   vn_descriptor_set_layout_init(dev, pCreateInfo, last_binding, layout);
 
    vk_free(alloc, local_bindings);
 
-   *pSetLayout = layout_handle;
+   *pSetLayout = vn_descriptor_set_layout_to_handle(layout);
 
    return VK_SUCCESS;
 }
@@ -128,17 +209,11 @@ vn_DestroyDescriptorSetLayout(VkDevice device,
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_descriptor_set_layout *layout =
       vn_descriptor_set_layout_from_handle(descriptorSetLayout);
-   const VkAllocationCallbacks *alloc =
-      pAllocator ? pAllocator : &dev->base.base.alloc;
 
    if (!layout)
       return;
 
-   vn_async_vkDestroyDescriptorSetLayout(dev->instance, device,
-                                         descriptorSetLayout, NULL);
-
-   vn_object_base_fini(&layout->base);
-   vk_free(alloc, layout);
+   vn_descriptor_set_layout_unref(dev, layout);
 }
 
 /* descriptor pool commands */
@@ -163,6 +238,25 @@ vn_CreateDescriptorPool(VkDevice device,
                        &dev->base);
 
    pool->allocator = *alloc;
+
+   /* Without VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT, the set
+    * allocation must not fail due to a fragmented pool per spec. In this
+    * case, set allocation can be asynchronous with pool resource tracking.
+    */
+   pool->async_set_allocation = !(
+      pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
+
+   pool->max.set_count = pCreateInfo->maxSets;
+
+   for (uint32_t i = 0; i < pCreateInfo->poolSizeCount; i++) {
+      const VkDescriptorPoolSize *pool_size = &pCreateInfo->pPoolSizes[i];
+
+      assert(pool_size->type < VN_NUM_DESCRIPTOR_TYPES);
+
+      pool->max.descriptor_counts[pool_size->type] +=
+         pool_size->descriptorCount;
+   }
+
    list_inithead(&pool->descriptor_sets);
 
    VkDescriptorPool pool_handle = vn_descriptor_pool_to_handle(pool);
@@ -197,15 +291,78 @@ vn_DestroyDescriptorPool(VkDevice device,
                                     NULL);
 
    list_for_each_entry_safe(struct vn_descriptor_set, set,
-                            &pool->descriptor_sets, head) {
-      list_del(&set->head);
-
-      vn_object_base_fini(&set->base);
-      vk_free(alloc, set);
-   }
+                            &pool->descriptor_sets, head)
+      vn_descriptor_set_destroy(dev, set, alloc);
 
    vn_object_base_fini(&pool->base);
    vk_free(alloc, pool);
+}
+
+static bool
+vn_descriptor_pool_alloc_descriptors(
+   struct vn_descriptor_pool *pool,
+   const struct vn_descriptor_set_layout *layout,
+   uint32_t last_binding_descriptor_count)
+{
+   struct vn_descriptor_pool_state recovery;
+
+   if (!pool->async_set_allocation)
+      return true;
+
+   if (pool->used.set_count == pool->max.set_count)
+      return false;
+
+   /* backup current pool state to recovery */
+   recovery = pool->used;
+
+   ++pool->used.set_count;
+
+   for (uint32_t i = 0; i <= layout->last_binding; i++) {
+      const VkDescriptorType type = layout->bindings[i].type;
+      const uint32_t count = i == layout->last_binding
+                                ? last_binding_descriptor_count
+                                : layout->bindings[i].count;
+
+      pool->used.descriptor_counts[type] += count;
+
+      if (pool->used.descriptor_counts[type] >
+          pool->max.descriptor_counts[type]) {
+         /* restore pool state before this allocation */
+         pool->used = recovery;
+         return false;
+      }
+   }
+
+   return true;
+}
+
+static void
+vn_descriptor_pool_free_descriptors(
+   struct vn_descriptor_pool *pool,
+   const struct vn_descriptor_set_layout *layout,
+   uint32_t last_binding_descriptor_count)
+{
+   if (!pool->async_set_allocation)
+      return;
+
+   for (uint32_t i = 0; i <= layout->last_binding; i++) {
+      const uint32_t count = i == layout->last_binding
+                                ? last_binding_descriptor_count
+                                : layout->bindings[i].count;
+
+      pool->used.descriptor_counts[layout->bindings[i].type] -= count;
+   }
+
+   --pool->used.set_count;
+}
+
+static void
+vn_descriptor_pool_reset_descriptors(struct vn_descriptor_pool *pool)
+{
+   if (!pool->async_set_allocation)
+      return;
+
+   memset(&pool->used, 0, sizeof(pool->used));
 }
 
 VkResult
@@ -222,12 +379,10 @@ vn_ResetDescriptorPool(VkDevice device,
                                   flags);
 
    list_for_each_entry_safe(struct vn_descriptor_set, set,
-                            &pool->descriptor_sets, head) {
-      list_del(&set->head);
+                            &pool->descriptor_sets, head)
+      vn_descriptor_set_destroy(dev, set, alloc);
 
-      vn_object_base_fini(&set->base);
-      vk_free(alloc, set);
-   }
+   vn_descriptor_pool_reset_descriptors(pool);
 
    return VK_SUCCESS;
 }
@@ -243,47 +398,112 @@ vn_AllocateDescriptorSets(VkDevice device,
    struct vn_descriptor_pool *pool =
       vn_descriptor_pool_from_handle(pAllocateInfo->descriptorPool);
    const VkAllocationCallbacks *alloc = &pool->allocator;
+   const VkDescriptorSetVariableDescriptorCountAllocateInfo *variable_info =
+      NULL;
+   VkResult result;
+
+   /* 14.2.3. Allocation of Descriptor Sets
+    *
+    * If descriptorSetCount is zero or this structure is not included in
+    * the pNext chain, then the variable lengths are considered to be zero.
+    */
+   variable_info = vk_find_struct_const(
+      pAllocateInfo->pNext,
+      DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO);
+
+   if (variable_info && !variable_info->descriptorSetCount)
+      variable_info = NULL;
 
    for (uint32_t i = 0; i < pAllocateInfo->descriptorSetCount; i++) {
-      struct vn_descriptor_set *set =
-         vk_zalloc(alloc, sizeof(*set), VN_DEFAULT_ALIGN,
-                   VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      struct vn_descriptor_set_layout *layout =
+         vn_descriptor_set_layout_from_handle(pAllocateInfo->pSetLayouts[i]);
+      uint32_t last_binding_descriptor_count = 0;
+      struct vn_descriptor_set *set = NULL;
+
+      /* 14.2.3. Allocation of Descriptor Sets
+       *
+       * If VkDescriptorSetAllocateInfo::pSetLayouts[i] does not include a
+       * variable count descriptor binding, then pDescriptorCounts[i] is
+       * ignored.
+       */
+      if (!layout->has_variable_descriptor_count) {
+         last_binding_descriptor_count =
+            layout->bindings[layout->last_binding].count;
+      } else if (variable_info) {
+         last_binding_descriptor_count = variable_info->pDescriptorCounts[i];
+      }
+
+      if (!vn_descriptor_pool_alloc_descriptors(
+             pool, layout, last_binding_descriptor_count)) {
+         pDescriptorSets[i] = VK_NULL_HANDLE;
+         result = VK_ERROR_OUT_OF_POOL_MEMORY;
+         goto fail;
+      }
+
+      set = vk_zalloc(alloc, sizeof(*set), VN_DEFAULT_ALIGN,
+                      VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       if (!set) {
-         for (uint32_t j = 0; j < i; j++) {
-            set = vn_descriptor_set_from_handle(pDescriptorSets[j]);
-            list_del(&set->head);
-            vk_free(alloc, set);
-         }
-         memset(pDescriptorSets, 0,
-                sizeof(*pDescriptorSets) * pAllocateInfo->descriptorSetCount);
-         return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+         vn_descriptor_pool_free_descriptors(pool, layout,
+                                             last_binding_descriptor_count);
+         pDescriptorSets[i] = VK_NULL_HANDLE;
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         goto fail;
       }
 
       vn_object_base_init(&set->base, VK_OBJECT_TYPE_DESCRIPTOR_SET,
                           &dev->base);
-      set->layout =
-         vn_descriptor_set_layout_from_handle(pAllocateInfo->pSetLayouts[i]);
+
+      /* We might reorder vkCmdBindDescriptorSets after
+       * vkDestroyDescriptorSetLayout due to batching.  The spec says
+       *
+       *   VkDescriptorSetLayout objects may be accessed by commands that
+       *   operate on descriptor sets allocated using that layout, and those
+       *   descriptor sets must not be updated with vkUpdateDescriptorSets
+       *   after the descriptor set layout has been destroyed. Otherwise, a
+       *   VkDescriptorSetLayout object passed as a parameter to create
+       *   another object is not further accessed by that object after the
+       *   duration of the command it is passed into.
+       *
+       * It is ambiguous but the reordering is likely invalid.  Let's keep the
+       * layout alive with the set to defer vkDestroyDescriptorSetLayout.
+       */
+      set->layout = vn_descriptor_set_layout_ref(dev, layout);
+      set->last_binding_descriptor_count = last_binding_descriptor_count;
       list_addtail(&set->head, &pool->descriptor_sets);
 
       VkDescriptorSet set_handle = vn_descriptor_set_to_handle(set);
       pDescriptorSets[i] = set_handle;
    }
 
-   VkResult result = vn_call_vkAllocateDescriptorSets(
-      dev->instance, device, pAllocateInfo, pDescriptorSets);
-   if (result != VK_SUCCESS) {
-      for (uint32_t i = 0; i < pAllocateInfo->descriptorSetCount; i++) {
-         struct vn_descriptor_set *set =
-            vn_descriptor_set_from_handle(pDescriptorSets[i]);
-         list_del(&set->head);
-         vk_free(alloc, set);
-      }
-      memset(pDescriptorSets, 0,
-             sizeof(*pDescriptorSets) * pAllocateInfo->descriptorSetCount);
-      return vn_error(dev->instance, result);
+   if (pool->async_set_allocation) {
+      vn_async_vkAllocateDescriptorSets(dev->instance, device, pAllocateInfo,
+                                        pDescriptorSets);
+   } else {
+      result = vn_call_vkAllocateDescriptorSets(
+         dev->instance, device, pAllocateInfo, pDescriptorSets);
+      if (result != VK_SUCCESS)
+         goto fail;
    }
 
    return VK_SUCCESS;
+
+fail:
+   for (uint32_t i = 0; i < pAllocateInfo->descriptorSetCount; i++) {
+      struct vn_descriptor_set *set =
+         vn_descriptor_set_from_handle(pDescriptorSets[i]);
+      if (!set)
+         break;
+
+      vn_descriptor_pool_free_descriptors(pool, set->layout,
+                                          set->last_binding_descriptor_count);
+
+      vn_descriptor_set_destroy(dev, set, alloc);
+   }
+
+   memset(pDescriptorSets, 0,
+          sizeof(*pDescriptorSets) * pAllocateInfo->descriptorSetCount);
+
+   return vn_error(dev->instance, result);
 }
 
 VkResult
@@ -307,10 +527,7 @@ vn_FreeDescriptorSets(VkDevice device,
       if (!set)
          continue;
 
-      list_del(&set->head);
-
-      vn_object_base_fini(&set->base);
-      vk_free(alloc, set);
+      vn_descriptor_set_destroy(dev, set, alloc);
    }
 
    return VK_SUCCESS;

@@ -390,8 +390,10 @@ st_prog_to_nir_postprocess(struct st_context *st, nir_shader *nir,
    st_nir_opts(nir);
    st_finalize_nir_before_variants(nir);
 
-   if (st->allow_st_finalize_nir_twice)
-      st_finalize_nir(st, prog, NULL, nir, true, true);
+   if (st->allow_st_finalize_nir_twice) {
+      char *msg = st_finalize_nir(st, prog, NULL, nir, true, true);
+      free(msg);
+   }
 
    nir_validate_shader(nir, "after st/glsl finalize_nir");
 }
@@ -414,13 +416,20 @@ st_translate_prog_to_nir(struct st_context *st, struct gl_program *prog,
    return nir;
 }
 
+/**
+ * Prepare st_vertex_program info.
+ *
+ * attrib_to_index is an optional mapping from a vertex attrib to a shader
+ * input index.
+ */
 void
-st_prepare_vertex_program(struct st_program *stp)
+st_prepare_vertex_program(struct st_program *stp, uint8_t *out_attrib_to_index)
 {
    struct st_vertex_program *stvp = (struct st_vertex_program *)stp;
+   uint8_t attrib_to_index[VERT_ATTRIB_MAX] = {0};
 
    stvp->num_inputs = 0;
-   memset(stvp->input_to_index, ~0, sizeof(stvp->input_to_index));
+   stvp->vert_attrib_mask = 0;
    memset(stvp->result_to_output, ~0, sizeof(stvp->result_to_output));
 
    /* Determine number of inputs, the mappings between VERT_ATTRIB_x
@@ -428,20 +437,14 @@ st_prepare_vertex_program(struct st_program *stp)
     */
    for (unsigned attr = 0; attr < VERT_ATTRIB_MAX; attr++) {
       if ((stp->Base.info.inputs_read & BITFIELD64_BIT(attr)) != 0) {
-         stvp->input_to_index[attr] = stvp->num_inputs;
-         stvp->index_to_input[stvp->num_inputs] = attr;
+         attrib_to_index[attr] = stvp->num_inputs;
+         stvp->vert_attrib_mask |= BITFIELD_BIT(attr);
          stvp->num_inputs++;
-
-         if ((stp->Base.DualSlotInputs & BITFIELD64_BIT(attr)) != 0) {
-            /* add placeholder for second part of a double attribute */
-            stvp->index_to_input[stvp->num_inputs] = ST_DOUBLE_ATTRIB_PLACEHOLDER;
-            stvp->num_inputs++;
-         }
       }
    }
+
    /* pre-setup potentially unused edgeflag input */
-   stvp->input_to_index[VERT_ATTRIB_EDGEFLAG] = stvp->num_inputs;
-   stvp->index_to_input[stvp->num_inputs] = VERT_ATTRIB_EDGEFLAG;
+   attrib_to_index[VERT_ATTRIB_EDGEFLAG] = stvp->num_inputs;
 
    /* Compute mapping of vertex program outputs to slots. */
    unsigned num_outputs = 0;
@@ -451,6 +454,9 @@ st_prepare_vertex_program(struct st_program *stp)
    }
    /* pre-setup potentially unused edgeflag output */
    stvp->result_to_output[VARYING_SLOT_EDGE] = num_outputs;
+
+   if (out_attrib_to_index)
+      memcpy(out_attrib_to_index, attrib_to_index, sizeof(attrib_to_index));
 }
 
 void
@@ -613,11 +619,12 @@ st_translate_vertex_program(struct st_context *st,
                                                MESA_SHADER_VERTEX);
       stp->Base.info = stp->Base.nir->info;
 
-      st_prepare_vertex_program(stp);
+      st_prepare_vertex_program(stp, NULL);
       return true;
    }
 
-   st_prepare_vertex_program(stp);
+   uint8_t input_to_index[VERT_ATTRIB_MAX];
+   st_prepare_vertex_program(stp, input_to_index);
 
    /* Get semantic names and indices. */
    for (attr = 0; attr < VARYING_SLOT_MAX; attr++) {
@@ -655,7 +662,7 @@ st_translate_vertex_program(struct st_context *st,
                                 &stp->Base,
                                 /* inputs */
                                 stvp->num_inputs,
-                                stvp->input_to_index,
+                                input_to_index,
                                 NULL, /* inputSlotToAttr */
                                 NULL, /* input semantic name */
                                 NULL, /* input semantic index */
@@ -823,8 +830,9 @@ st_create_common_variant(struct st_context *st,
       }
 
       if (finalize || !st->allow_st_finalize_nir_twice) {
-         st_finalize_nir(st, &stp->Base, stp->shader_program, state.ir.nir,
-                         true, false);
+         char *msg = st_finalize_nir(st, &stp->Base, stp->shader_program, state.ir.nir,
+                                     true, false);
+         free(msg);
 
          /* Clip lowering and edgeflags may have introduced new varyings, so
           * update the inputs_read/outputs_written. However, with
@@ -981,13 +989,10 @@ st_get_common_variant(struct st_context *st,
 
          if (stp->Base.info.stage == MESA_SHADER_VERTEX) {
             struct st_vertex_program *stvp = (struct st_vertex_program *)stp;
-            unsigned num_inputs = stvp->num_inputs + key->passthrough_edgeflags;
-            for (unsigned index = 0; index < num_inputs; ++index) {
-               unsigned attr = stvp->index_to_input[index];
-               if (attr == ST_DOUBLE_ATTRIB_PLACEHOLDER)
-                  continue;
-               v->vert_attrib_mask |= 1u << attr;
-            }
+
+            v->vert_attrib_mask =
+               stvp->vert_attrib_mask |
+               (key->passthrough_edgeflags ? VERT_BIT_EDGEFLAG : 0);
          }
 
          st_add_variant(&stp->variants, &v->base);
@@ -1489,8 +1494,9 @@ st_create_fp_variant(struct st_context *st,
       }
 
       if (finalize || !st->allow_st_finalize_nir_twice) {
-         st_finalize_nir(st, &stfp->Base, stfp->shader_program, state.ir.nir,
-                         false, false);
+         char *msg = st_finalize_nir(st, &stfp->Base, stfp->shader_program, state.ir.nir,
+                                     false, false);
+         free(msg);
       }
 
       /* This pass needs to happen *after* nir_lower_sampler */
@@ -1509,8 +1515,10 @@ st_create_fp_variant(struct st_context *st,
                                 nir_shader_get_entrypoint(state.ir.nir));
 
          struct pipe_screen *screen = st->screen;
-         if (screen->finalize_nir)
-            screen->finalize_nir(screen, state.ir.nir, false);
+         if (screen->finalize_nir) {
+            char *msg = screen->finalize_nir(screen, state.ir.nir);
+            free(msg);
+         }
       }
 
       variant->base.driver_shader = st_create_nir_shader(st, &state);

@@ -44,7 +44,6 @@
 #include "util/format/u_format.h"
 #include "util/u_prim.h"
 #include "util/u_prim_restart.h"
-#include "indices/u_primconvert.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_from_mesa.h"
 #include "util/u_math.h"
@@ -73,7 +72,7 @@ panfrost_clear(
          * color/depth/stencil value, thus avoiding the generation of extra
          * fragment jobs.
          */
-        struct panfrost_batch *batch = panfrost_get_fresh_batch_for_fbo(ctx);
+        struct panfrost_batch *batch = panfrost_get_fresh_batch_for_fbo(ctx, "Clear");
         panfrost_batch_clear(batch, buffers, color, depth, stencil);
 }
 
@@ -99,7 +98,7 @@ panfrost_flush(
 
 
         /* Submit all pending jobs */
-        panfrost_flush_all_batches(ctx);
+        panfrost_flush_all_batches(ctx, NULL);
 
         if (fence) {
                 struct pipe_fence_handle *f = panfrost_fence_create(ctx);
@@ -115,14 +114,14 @@ static void
 panfrost_texture_barrier(struct pipe_context *pipe, unsigned flags)
 {
         struct panfrost_context *ctx = pan_context(pipe);
-        panfrost_flush_all_batches(ctx);
+        panfrost_flush_all_batches(ctx, "Texture barrier");
 }
 
 static void
 panfrost_set_frontend_noop(struct pipe_context *pipe, bool enable)
 {
         struct panfrost_context *ctx = pan_context(pipe);
-        panfrost_flush_all_batches(ctx);
+        panfrost_flush_all_batches(ctx, "Frontend no-op change");
         ctx->is_noop = enable;
 }
 
@@ -201,8 +200,11 @@ panfrost_get_blend(struct panfrost_batch *batch, unsigned rti, struct panfrost_b
 
         pthread_mutex_lock(&dev->blend_shaders.lock);
         struct pan_blend_shader_variant *shader =
-                pan_blend_get_shader_locked(dev, &pan_blend,
-                                col0_type, col1_type, rti);
+                pan_screen(ctx->base.screen)->vtbl.get_blend_shader(dev,
+                                                                    &pan_blend,
+                                                                    col0_type,
+                                                                    col1_type,
+                                                                    rti);
 
         /* Size check and upload */
         unsigned offset = *shader_offset;
@@ -265,7 +267,8 @@ panfrost_set_shader_images(
                 /* Images don't work with AFBC, since they require pixel-level granularity */
                 if (drm_is_afbc(rsrc->image.layout.modifier)) {
                         pan_resource_modifier_convert(ctx, rsrc,
-                                        DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED);
+                                        DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED,
+                                        "Shader image");
                 }
 
                 util_copy_image_view(&ctx->images[shader][start_slot+i], image);
@@ -328,9 +331,11 @@ panfrost_delete_shader_state(
 {
         struct panfrost_shader_variants *cso = (struct panfrost_shader_variants *) so;
 
-        if (cso->base.type == PIPE_SHADER_IR_TGSI) {
-                /* TODO: leaks TGSI tokens! */
-        }
+        if (!cso->is_compute && cso->base.type == PIPE_SHADER_IR_NIR)
+                ralloc_free(cso->base.ir.nir);
+
+        if (cso->base.type == PIPE_SHADER_IR_TGSI)
+                tgsi_free_tokens(cso->base.tokens);
 
         for (unsigned i = 0; i < cso->variant_count; ++i) {
                 struct panfrost_shader_state *shader_state = &cso->variants[i];
@@ -617,6 +622,7 @@ panfrost_set_sampler_views(
         enum pipe_shader_type shader,
         unsigned start_slot, unsigned num_views,
         unsigned unbind_num_trailing_slots,
+        bool take_ownership,
         struct pipe_sampler_view **views)
 {
         struct panfrost_context *ctx = pan_context(pctx);
@@ -633,8 +639,14 @@ panfrost_set_sampler_views(
         for (i = 0; i < num_views; ++i) {
                 if (views[i])
                         new_nr = i + 1;
-		pipe_sampler_view_reference((struct pipe_sampler_view **)&ctx->sampler_views[shader][i],
-		                            views[i]);
+                if (take_ownership) {
+                        pipe_sampler_view_reference((struct pipe_sampler_view **)&ctx->sampler_views[shader][i],
+                                                    NULL);
+                        ctx->sampler_views[shader][i] = (struct panfrost_sampler_view *)views[i];
+                } else {
+                        pipe_sampler_view_reference((struct pipe_sampler_view **)&ctx->sampler_views[shader][i],
+                                                    views[i]);
+                }
         }
 
         for (; i < ctx->sampler_view_count[shader]; i++) {
@@ -642,18 +654,6 @@ panfrost_set_sampler_views(
 		                            NULL);
         }
         ctx->sampler_view_count[shader] = new_nr;
-}
-
-static void
-panfrost_sampler_view_destroy(
-        struct pipe_context *pctx,
-        struct pipe_sampler_view *pview)
-{
-        struct panfrost_sampler_view *view = (struct panfrost_sampler_view *) pview;
-
-        pipe_resource_reference(&pview->texture, NULL);
-        panfrost_bo_unreference(view->state.bo);
-        ralloc_free(view);
 }
 
 static void
@@ -688,11 +688,10 @@ panfrost_set_framebuffer_state(struct pipe_context *pctx,
         }
 
         /* We may need to generate a new variant if the fragment shader is
-         * keyed to the framebuffer format (due to EXT_framebuffer_fetch) */
+         * keyed to the framebuffer format or render target count */
         struct panfrost_shader_variants *fs = ctx->shader[PIPE_SHADER_FRAGMENT];
 
-        if (fs && fs->variant_count &&
-            fs->variants[fs->active_variant].info.fs.outputs_read)
+        if (fs && fs->variant_count)
                 ctx->base.bind_fs_state(&ctx->base, fs);
 }
 
@@ -919,7 +918,7 @@ panfrost_get_query_result(struct pipe_context *pipe,
         case PIPE_QUERY_OCCLUSION_COUNTER:
         case PIPE_QUERY_OCCLUSION_PREDICATE:
         case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
-                panfrost_flush_writer(ctx, rsrc);
+                panfrost_flush_writer(ctx, rsrc, "Occlusion query");
                 panfrost_bo_wait(rsrc->image.data.bo, INT64_MAX, false);
 
                 /* Read back the query results */
@@ -942,7 +941,7 @@ panfrost_get_query_result(struct pipe_context *pipe,
 
         case PIPE_QUERY_PRIMITIVES_GENERATED:
         case PIPE_QUERY_PRIMITIVES_EMITTED:
-                panfrost_flush_all_batches(ctx);
+                panfrost_flush_all_batches(ctx, "Primitive count query");
                 vresult->u64 = query->end - query->start;
                 break;
 
@@ -959,6 +958,8 @@ panfrost_render_condition_check(struct panfrost_context *ctx)
 {
 	if (!ctx->cond_query)
 		return true;
+
+        perf_debug_ctx(ctx, "Implementing conditional rendering on the CPU");
 
 	union pipe_query_result res = { 0 };
 	bool wait =
@@ -1054,7 +1055,6 @@ panfrost_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
         gallium->set_stencil_ref = panfrost_set_stencil_ref;
 
         gallium->set_sampler_views = panfrost_set_sampler_views;
-        gallium->sampler_view_destroy = panfrost_sampler_view_destroy;
 
         gallium->bind_rasterizer_state = panfrost_bind_rasterizer_state;
         gallium->delete_rasterizer_state = panfrost_generic_cso_delete;
@@ -1101,7 +1101,8 @@ panfrost_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
 
         gallium->set_blend_color = panfrost_set_blend_color;
 
-        panfrost_cmdstream_context_init(gallium);
+        pan_screen(screen)->vtbl.context_init(gallium);
+
         panfrost_resource_context_init(gallium);
         panfrost_compute_context_init(gallium);
 
@@ -1113,18 +1114,6 @@ panfrost_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
 
         panfrost_pool_init(&ctx->shaders, ctx, dev,
                         PAN_BO_EXECUTE, 4096, "Shaders", true, false);
-
-        /* All of our GPUs support ES mode. Midgard supports additionally
-         * QUADS/QUAD_STRIPS/POLYGON. Bifrost supports just QUADS. */
-
-        ctx->draw_modes = (1 << (PIPE_PRIM_QUADS + 1)) - 1;
-
-        if (!pan_is_bifrost(dev)) {
-                ctx->draw_modes |= (1 << PIPE_PRIM_QUAD_STRIP);
-                ctx->draw_modes |= (1 << PIPE_PRIM_POLYGON);
-        }
-
-        ctx->primconvert = util_primconvert_create(gallium, ctx->draw_modes);
 
         ctx->blitter = util_blitter_create(gallium);
 

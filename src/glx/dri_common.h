@@ -66,11 +66,19 @@ driReleaseDrawables(struct glx_context *gc);
 extern const __DRIextension **driOpenDriver(const char *driverName,
                                             void **out_driver_handle);
 
-extern bool
-dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
-                         unsigned *major_ver, unsigned *minor_ver,
-                         uint32_t *render_type, uint32_t *flags, unsigned *api,
-                         int *reset, int *release, unsigned *error);
+struct dri_ctx_attribs {
+   unsigned major_ver;
+   unsigned minor_ver;
+   uint32_t render_type;
+   uint32_t flags;
+   unsigned api;
+   int reset;
+   int release;
+};
+
+extern int
+dri_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
+                        struct dri_ctx_attribs *dca);
 
 extern bool
 dri2_check_no_error(uint32_t flags, struct glx_context *share_context,

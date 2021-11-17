@@ -135,7 +135,7 @@ ir3_should_double_threadsize(struct ir3_shader_variant *v, unsigned regs_count)
        * fit. For smaller workgroup sizes, we follow the blob and use the
        * smaller threadsize.
        */
-      if (compiler->gpu_id < 600) {
+      if (compiler->gen < 6) {
          return v->local_size_variable ||
                 threads_per_wg >
                    compiler->threadsize_base * compiler->max_waves;
@@ -262,11 +262,15 @@ ir3_collect_info(struct ir3_shader_variant *v)
          }
 
          if ((instr->opc == OPC_STP || instr->opc == OPC_LDP)) {
-            struct ir3_register *base =
-               (instr->opc == OPC_STP) ? instr->srcs[2] : instr->srcs[1];
-            if (base->iim_val * type_size(instr->cat6.type) > 32) {
+            unsigned components = instr->srcs[2]->uim_val;
+            if (components * type_size(instr->cat6.type) > 32) {
                info->multi_dword_ldp_stp = true;
             }
+
+            if (instr->opc == OPC_STP)
+               info->stp_count += components;
+            else
+               info->ldp_count += components;
          }
 
          if ((instr->opc == OPC_BARY_F) && (instr->dsts[0]->flags & IR3_REG_EI))
@@ -317,7 +321,7 @@ ir3_collect_info(struct ir3_shader_variant *v)
     */
    unsigned regs_count =
       info->max_reg + 1 +
-      (compiler->gpu_id >= 600 ? ((info->max_half_reg + 2) / 2) : 0);
+      (compiler->gen >= 6 ? ((info->max_half_reg + 2) / 2) : 0);
 
    info->double_threadsize = ir3_should_double_threadsize(v, regs_count);
    unsigned reg_independent_max_waves =
@@ -388,6 +392,22 @@ ir3_block_remove_predecessor(struct ir3_block *block, struct ir3_block *pred)
          }
 
          block->predecessors_count--;
+         return;
+      }
+   }
+}
+
+void
+ir3_block_remove_physical_predecessor(struct ir3_block *block, struct ir3_block *pred)
+{
+   for (unsigned i = 0; i < block->physical_predecessors_count; i++) {
+      if (block->physical_predecessors[i] == pred) {
+         if (i < block->predecessors_count - 1) {
+            block->physical_predecessors[i] =
+               block->physical_predecessors[block->predecessors_count - 1];
+         }
+
+         block->physical_predecessors_count--;
          return;
       }
    }
@@ -781,7 +801,7 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
        * same block (since we can't propagate address register values
        * across blocks currently)
        */
-      if (compiler->gpu_id < 600)
+      if (compiler->gen < 6)
          return false;
 
       /* NOTE in the special try_swap_mad_two_srcs() case we can be
@@ -939,7 +959,6 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
          switch (instr->opc) {
          case OPC_LDIB:
          case OPC_STIB:
-         case OPC_LDC:
          case OPC_RESINFO:
             if (n != 0)
                return false;
@@ -953,4 +972,40 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
    }
 
    return true;
+}
+
+bool
+ir3_valid_immediate(struct ir3_instruction *instr, int32_t immed)
+{
+   if (instr->opc == OPC_MOV || is_meta(instr))
+      return true;
+
+   if (is_mem(instr)) {
+      switch (instr->opc) {
+      /* Some load/store instructions have a 13-bit offset and size which must
+       * always be an immediate and the rest of the sources cannot be
+       * immediates, so the frontend is responsible for checking the size:
+       */
+      case OPC_LDL:
+      case OPC_STL:
+      case OPC_LDP:
+      case OPC_STP:
+      case OPC_LDG:
+      case OPC_STG:
+      case OPC_SPILL_MACRO:
+      case OPC_RELOAD_MACRO:
+      case OPC_LDG_A:
+      case OPC_STG_A:
+      case OPC_LDLW:
+      case OPC_STLW:
+      case OPC_LDLV:
+         return true;
+      default:
+         /* most cat6 src immediates can only encode 8 bits: */
+         return !(immed & ~0xff);
+      }
+   }
+
+   /* Other than cat1 (mov) we can only encode up to 10 bits, sign-extended: */
+   return !(immed & ~0x1ff) || !(-immed & ~0x1ff);
 }

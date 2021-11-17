@@ -111,6 +111,7 @@ setup_border_colors(struct fd_texture_stateobj *tex,
       enum pipe_format format = view->format;
       const struct util_format_description *desc =
          util_format_description(format);
+      const struct fd_resource *rsc = fd_resource(view->texture);
 
       e->rgb565 = 0;
       e->rgb5a1 = 0;
@@ -120,7 +121,7 @@ setup_border_colors(struct fd_texture_stateobj *tex,
 
       unsigned char swiz[4];
 
-      fd6_tex_swiz(format, swiz, view->swizzle_r, view->swizzle_g,
+      fd6_tex_swiz(format, rsc->layout.tile_mode, swiz, view->swizzle_r, view->swizzle_g,
                    view->swizzle_b, view->swizzle_a);
 
       for (j = 0; j < 4; j++) {
@@ -909,23 +910,30 @@ fd6_emit_streamout(struct fd_ringbuffer *ring, struct fd6_emit *emit) assert_dt
    if (emit->streamout_mask) {
       fd6_emit_add_group(emit, prog->streamout_stateobj, FD6_GROUP_SO,
                          ENABLE_ALL);
-   } else {
+   } else if (ctx->last.streamout_mask != 0) {
       /* If we transition from a draw with streamout to one without, turn
        * off streamout.
        */
-      if (ctx->last.streamout_mask != 0) {
-         struct fd_ringbuffer *obj = fd_submit_new_ringbuffer(
-            emit->ctx->batch->submit, 5 * 4, FD_RINGBUFFER_STREAMING);
-
-         OUT_PKT7(obj, CP_CONTEXT_REG_BUNCH, 4);
-         OUT_RING(obj, REG_A6XX_VPC_SO_CNTL);
-         OUT_RING(obj, 0);
-         OUT_RING(obj, REG_A6XX_VPC_SO_STREAM_CNTL);
-         OUT_RING(obj, 0);
-
-         fd6_emit_take_group(emit, obj, FD6_GROUP_SO, ENABLE_ALL);
-      }
+      fd6_emit_add_group(emit, fd6_context(ctx)->streamout_disable_stateobj,
+                         FD6_GROUP_SO, ENABLE_ALL);
    }
+
+   /* Make sure that any use of our TFB outputs (indirect draw source or shader
+    * UBO reads) comes after the TFB output is written.  From the GL 4.6 core
+    * spec:
+    *
+    *     "Buffers should not be bound or in use for both transform feedback and
+    *      other purposes in the GL.  Specifically, if a buffer object is
+    *      simultaneously bound to a transform feedback buffer binding point
+    *      and elsewhere in the GL, any writes to or reads from the buffer
+    *      generate undefined values."
+    *
+    * So we idle whenever SO buffers change.  Note that this function is called
+    * on every draw with TFB enabled, so check the dirty flag for the buffers
+    * themselves.
+    */
+   if (ctx->dirty & FD_DIRTY_STREAMOUT)
+      fd_wfi(ctx->batch, ring);
 
    ctx->last.streamout_mask = emit->streamout_mask;
 }
@@ -1076,7 +1084,6 @@ fd6_emit_state(struct fd_ringbuffer *ring, struct fd6_emit *emit)
          break;
       case FD6_GROUP_IBO:
          state = build_ibo(emit);
-         fd6_emit_ibo_consts(emit, fs, PIPE_SHADER_FRAGMENT, ring);
          break;
       case FD6_GROUP_CONST:
          state = fd6_build_user_consts(emit);
@@ -1218,10 +1225,10 @@ fd6_emit_cs_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 void
 fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
-   // struct fd_context *ctx = batch->ctx;
+   struct fd_screen *screen = batch->ctx->screen;
 
    if (!batch->nondraw) {
-      trace_start_state_restore(&batch->trace);
+      trace_start_state_restore(&batch->trace, ring);
    }
 
    fd6_cache_inv(batch, ring);
@@ -1242,14 +1249,14 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
    WRITE(REG_A6XX_SP_UNKNOWN_AE00, 0);
    WRITE(REG_A6XX_SP_PERFCTR_ENABLE, 0x3f);
    WRITE(REG_A6XX_TPL1_UNKNOWN_B605, 0x44);
-   WRITE(REG_A6XX_TPL1_UNKNOWN_B600, 0x100000);
+   WRITE(REG_A6XX_TPL1_DBG_ECO_CNTL, screen->info->a6xx.magic.TPL1_DBG_ECO_CNTL);
    WRITE(REG_A6XX_HLSQ_UNKNOWN_BE00, 0x80);
    WRITE(REG_A6XX_HLSQ_UNKNOWN_BE01, 0);
 
    WRITE(REG_A6XX_VPC_UNKNOWN_9600, 0);
-   WRITE(REG_A6XX_GRAS_UNKNOWN_8600, 0x880);
+   WRITE(REG_A6XX_GRAS_DBG_ECO_CNTL, 0x880);
    WRITE(REG_A6XX_HLSQ_UNKNOWN_BE04, 0x80000);
-   WRITE(REG_A6XX_SP_UNKNOWN_AE03, 0x1430);
+   WRITE(REG_A6XX_SP_CHICKEN_BITS, 0x1430);
    WRITE(REG_A6XX_SP_IBO_COUNT, 0);
    WRITE(REG_A6XX_SP_UNKNOWN_B182, 0);
    WRITE(REG_A6XX_HLSQ_SHARED_CONSTS, 0);
@@ -1262,7 +1269,7 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
    WRITE(REG_A6XX_RB_UNKNOWN_8811, 0x00000010);
    WRITE(REG_A6XX_PC_MODE_CNTL, 0x1f);
 
-   WRITE(REG_A6XX_GRAS_UNKNOWN_8101, 0);
+   WRITE(REG_A6XX_GRAS_LRZ_PS_INPUT_CNTL, 0);
    WRITE(REG_A6XX_GRAS_SAMPLE_CNTL, 0);
    WRITE(REG_A6XX_GRAS_UNKNOWN_8110, 0x2);
 
@@ -1286,19 +1293,20 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 
    WRITE(REG_A6XX_SP_UNKNOWN_B183, 0);
 
-   WRITE(REG_A6XX_GRAS_UNKNOWN_8099, 0);
+   WRITE(REG_A6XX_GRAS_SU_CONSERVATIVE_RAS_CNTL, 0);
    WRITE(REG_A6XX_GRAS_VS_LAYER_CNTL, 0);
-   WRITE(REG_A6XX_GRAS_UNKNOWN_80A0, 2);
+   WRITE(REG_A6XX_GRAS_SC_CNTL, A6XX_GRAS_SC_CNTL_CCUSINGLECACHELINESIZE(2));
    WRITE(REG_A6XX_GRAS_UNKNOWN_80AF, 0);
    WRITE(REG_A6XX_VPC_UNKNOWN_9210, 0);
    WRITE(REG_A6XX_VPC_UNKNOWN_9211, 0);
    WRITE(REG_A6XX_VPC_UNKNOWN_9602, 0);
    WRITE(REG_A6XX_PC_UNKNOWN_9E72, 0);
    WRITE(REG_A6XX_SP_TP_SAMPLE_CONFIG, 0);
-   /* NOTE blob seems to (mostly?) use 0xb2 for SP_TP_UNKNOWN_B309
+   /* NOTE blob seems to (mostly?) use 0xb2 for SP_TP_MODE_CNTL
     * but this seems to kill texture gather offsets.
     */
-   WRITE(REG_A6XX_SP_TP_UNKNOWN_B309, 0xa2);
+   WRITE(REG_A6XX_SP_TP_MODE_CNTL, 0xa0 |
+         A6XX_SP_TP_MODE_CNTL_ISAMMODE(ISAMMODE_GL));
    WRITE(REG_A6XX_RB_SAMPLE_CONFIG, 0);
    WRITE(REG_A6XX_GRAS_SAMPLE_CONFIG, 0);
    WRITE(REG_A6XX_RB_Z_BOUNDS_MIN, 0);
@@ -1333,7 +1341,7 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
    OUT_RING(ring, 0x00000000);
 
    if (!batch->nondraw) {
-      trace_end_state_restore(&batch->trace);
+      trace_end_state_restore(&batch->trace, ring);
    }
 }
 
@@ -1386,6 +1394,7 @@ fd6_framebuffer_barrier(struct fd_context *ctx) assert_dt
    fd6_event_write(batch, ring, PC_CCU_FLUSH_DEPTH_TS, true);
 
    seqno = fd6_event_write(batch, ring, CACHE_FLUSH_TS, true);
+   fd_wfi(batch, ring);
 
    fd6_event_write(batch, ring, 0x31, false);
 

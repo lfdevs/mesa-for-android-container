@@ -60,10 +60,18 @@ bifrost_get_quirks(unsigned product_id)
                 return BIFROST_LIMITED_CLPER;
         case 0x71:
         case 0x72:
+        case 0x73:
         case 0x74:
                 return 0;
+        case 0x90:
+        case 0x91:
+        case 0x92:
+        case 0x93:
+        case 0x94:
+        case 0x95:
+                return BIFROST_NO_PRELOAD;
         default:
-                unreachable("Unknown Bifrost GPU ID");
+                unreachable("Unknown Bifrost/Valhall GPU ID");
         }
 }
 
@@ -73,9 +81,12 @@ bifrost_get_quirks(unsigned product_id)
 static inline unsigned
 bifrost_lanes_per_warp(unsigned product_id)
 {
-        unsigned major = product_id >> 12;
-        assert(major == 6 || major == 7);
-        return (major == 7) ? 8 : 4;
+        switch (product_id >> 12) {
+        case 6: return 4;
+        case 7: return 8;
+        case 9: return 16;
+        default: unreachable("Invalid Bifrost/Valhall GPU major");
+        }
 }
 
 #endif

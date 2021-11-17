@@ -418,144 +418,124 @@ driReleaseDrawables(struct glx_context *gc)
 
 }
 
-_X_HIDDEN bool
-dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
-                         unsigned *major_ver, unsigned *minor_ver,
-                         uint32_t *render_type, uint32_t *flags, unsigned *api,
-                         int *reset, int *release, unsigned *error)
+_X_HIDDEN int
+dri_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
+                        struct dri_ctx_attribs *dca)
 {
    unsigned i;
-   bool got_profile = false;
    int no_error = 0;
-   uint32_t profile;
+   uint32_t profile = GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
 
-   *major_ver = 1;
-   *minor_ver = 0;
-   *render_type = GLX_RGBA_TYPE;
-   *reset = __DRI_CTX_RESET_NO_NOTIFICATION;
-   *release = __DRI_CTX_RELEASE_BEHAVIOR_FLUSH;
-   *flags = 0;
-   *api = __DRI_API_OPENGL;
+   dca->major_ver = 1;
+   dca->minor_ver = 0;
+   dca->render_type = GLX_RGBA_TYPE;
+   dca->reset = __DRI_CTX_RESET_NO_NOTIFICATION;
+   dca->release = __DRI_CTX_RELEASE_BEHAVIOR_FLUSH;
+   dca->flags = 0;
+   dca->api = __DRI_API_OPENGL;
 
-   if (num_attribs == 0) {
-      return true;
-   }
+   if (num_attribs == 0)
+      return __DRI_CTX_ERROR_SUCCESS;
 
-   /* This is actually an internal error, but what the heck.
-    */
-   if (attribs == NULL) {
-      *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
-      return false;
-   }
+   /* This is actually an internal error, but what the heck. */
+   if (attribs == NULL)
+      return __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
 
    for (i = 0; i < num_attribs; i++) {
       switch (attribs[i * 2]) {
       case GLX_CONTEXT_MAJOR_VERSION_ARB:
-	 *major_ver = attribs[i * 2 + 1];
+	 dca->major_ver = attribs[i * 2 + 1];
 	 break;
       case GLX_CONTEXT_MINOR_VERSION_ARB:
-	 *minor_ver = attribs[i * 2 + 1];
+	 dca->minor_ver = attribs[i * 2 + 1];
 	 break;
       case GLX_CONTEXT_FLAGS_ARB:
-	 *flags = attribs[i * 2 + 1];
+	 dca->flags = attribs[i * 2 + 1];
 	 break;
       case GLX_CONTEXT_OPENGL_NO_ERROR_ARB:
 	 no_error = attribs[i * 2 + 1];
 	 break;
       case GLX_CONTEXT_PROFILE_MASK_ARB:
 	 profile = attribs[i * 2 + 1];
-	 got_profile = true;
 	 break;
       case GLX_RENDER_TYPE:
-         *render_type = attribs[i * 2 + 1];
+         dca->render_type = attribs[i * 2 + 1];
 	 break;
       case GLX_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB:
          switch (attribs[i * 2 + 1]) {
          case GLX_NO_RESET_NOTIFICATION_ARB:
-            *reset = __DRI_CTX_RESET_NO_NOTIFICATION;
+            dca->reset = __DRI_CTX_RESET_NO_NOTIFICATION;
             break;
          case GLX_LOSE_CONTEXT_ON_RESET_ARB:
-            *reset = __DRI_CTX_RESET_LOSE_CONTEXT;
+            dca->reset = __DRI_CTX_RESET_LOSE_CONTEXT;
             break;
          default:
-            *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
-            return false;
+            return __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
          }
          break;
       case GLX_CONTEXT_RELEASE_BEHAVIOR_ARB:
          switch (attribs[i * 2 + 1]) {
          case GLX_CONTEXT_RELEASE_BEHAVIOR_NONE_ARB:
-            *release = __DRI_CTX_RELEASE_BEHAVIOR_NONE;
+            dca->release = __DRI_CTX_RELEASE_BEHAVIOR_NONE;
             break;
          case GLX_CONTEXT_RELEASE_BEHAVIOR_FLUSH_ARB:
-            *release = __DRI_CTX_RELEASE_BEHAVIOR_FLUSH;
+            dca->release = __DRI_CTX_RELEASE_BEHAVIOR_FLUSH;
             break;
          default:
-            *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
-            return false;
+            return __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
          }
          break;
       case GLX_SCREEN:
          /* Implies GLX_EXT_no_config_context */
-         *render_type = GLX_DONT_CARE;
+         dca->render_type = GLX_DONT_CARE;
          break;
       default:
 	 /* If an unknown attribute is received, fail.
 	  */
-	 *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
-	 return false;
+	 return __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
       }
    }
 
    if (no_error) {
-      *flags |= __DRI_CTX_FLAG_NO_ERROR;
+      dca->flags |= __DRI_CTX_FLAG_NO_ERROR;
    }
 
-   if (!got_profile) {
-      if (*major_ver > 3 || (*major_ver == 3 && *minor_ver >= 2))
-	 *api = __DRI_API_OPENGL_CORE;
-   } else {
-      switch (profile) {
-      case GLX_CONTEXT_CORE_PROFILE_BIT_ARB:
-	 /* There are no profiles before OpenGL 3.2.  The
-	  * GLX_ARB_create_context_profile spec says:
-	  *
-	  *     "If the requested OpenGL version is less than 3.2,
-	  *     GLX_CONTEXT_PROFILE_MASK_ARB is ignored and the functionality
-	  *     of the context is determined solely by the requested version."
-	  */
-	 *api = (*major_ver > 3 || (*major_ver == 3 && *minor_ver >= 2))
-	    ? __DRI_API_OPENGL_CORE : __DRI_API_OPENGL;
-	 break;
-      case GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB:
-	 *api = __DRI_API_OPENGL;
-	 break;
-      case GLX_CONTEXT_ES_PROFILE_BIT_EXT:
-         if (*major_ver >= 3)
-            *api = __DRI_API_GLES3;
-         else if (*major_ver == 2 && *minor_ver == 0)
-            *api = __DRI_API_GLES2;
-         else if (*major_ver == 1 && *minor_ver < 2)
-            *api = __DRI_API_GLES;
-         else {
-            *error = __DRI_CTX_ERROR_BAD_API;
-            return false;
-         }
-         break;
-      default:
-	 *error = __DRI_CTX_ERROR_BAD_API;
-	 return false;
+   switch (profile) {
+   case GLX_CONTEXT_CORE_PROFILE_BIT_ARB:
+      /* This is the default value, but there are no profiles before OpenGL
+       * 3.2. The GLX_ARB_create_context_profile spec says:
+       *
+       *     "If the requested OpenGL version is less than 3.2,
+       *     GLX_CONTEXT_PROFILE_MASK_ARB is ignored and the functionality
+       *     of the context is determined solely by the requested version."
+       */
+      dca->api = (dca->major_ver > 3 || (dca->major_ver == 3 && dca->minor_ver >= 2))
+         ? __DRI_API_OPENGL_CORE : __DRI_API_OPENGL;
+      break;
+   case GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB:
+      dca->api = __DRI_API_OPENGL;
+      break;
+   case GLX_CONTEXT_ES_PROFILE_BIT_EXT:
+      if (dca->major_ver >= 3)
+         dca->api = __DRI_API_GLES3;
+      else if (dca->major_ver == 2 && dca->minor_ver == 0)
+         dca->api = __DRI_API_GLES2;
+      else if (dca->major_ver == 1 && dca->minor_ver < 2)
+         dca->api = __DRI_API_GLES;
+      else {
+         return __DRI_CTX_ERROR_BAD_API;
       }
+      break;
+   default:
+      return __DRI_CTX_ERROR_BAD_API;
    }
 
-   /* Unknown flag value.
-    */
-   if (*flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE
-                  | __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS
-                  | __DRI_CTX_FLAG_NO_ERROR)) {
-      *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
-      return false;
-   }
+   /* Unknown flag value */
+   if (dca->flags & ~(__DRI_CTX_FLAG_DEBUG |
+                      __DRI_CTX_FLAG_FORWARD_COMPATIBLE |
+                      __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS |
+                      __DRI_CTX_FLAG_NO_ERROR))
+      return __DRI_CTX_ERROR_UNKNOWN_FLAG;
 
    /* There are no forward-compatible contexts before OpenGL 3.0.  The
     * GLX_ARB_create_context spec says:
@@ -563,18 +543,13 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
     *     "Forward-compatible contexts are defined only for OpenGL versions
     *     3.0 and later."
     */
-   if (*major_ver < 3 && (*flags & __DRI_CTX_FLAG_FORWARD_COMPATIBLE) != 0) {
-      *error = __DRI_CTX_ERROR_BAD_FLAG;
-      return false;
-   }
+   if (dca->major_ver < 3 && (dca->flags & __DRI_CTX_FLAG_FORWARD_COMPATIBLE) != 0)
+      return __DRI_CTX_ERROR_BAD_FLAG;
 
-   if (*major_ver >= 3 && *render_type == GLX_COLOR_INDEX_TYPE) {
-      *error = __DRI_CTX_ERROR_BAD_FLAG;
-      return false;
-   }
+   if (dca->major_ver >= 3 && dca->render_type == GLX_COLOR_INDEX_TYPE)
+      return __DRI_CTX_ERROR_BAD_FLAG;
 
-   *error = __DRI_CTX_ERROR_SUCCESS;
-   return true;
+   return __DRI_CTX_ERROR_SUCCESS;
 }
 
 _X_HIDDEN bool

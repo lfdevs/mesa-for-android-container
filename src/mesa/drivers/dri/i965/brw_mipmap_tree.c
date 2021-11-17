@@ -170,7 +170,7 @@ brw_miptree_choose_aux_usage(struct brw_context *brw,
    if (_mesa_is_format_color_format(mt->format)) {
       if (mt->surf.samples > 1) {
          mt->aux_usage = ISL_AUX_USAGE_MCS;
-      } else if (!(INTEL_DEBUG & DEBUG_NO_RBC) &&
+      } else if (!INTEL_DEBUG(DEBUG_NO_RBC) &&
                  format_supports_ccs_e(brw, mt->format)) {
          mt->aux_usage = ISL_AUX_USAGE_CCS_E;
       } else if (brw->mesa_format_supports_render[mt->format]) {

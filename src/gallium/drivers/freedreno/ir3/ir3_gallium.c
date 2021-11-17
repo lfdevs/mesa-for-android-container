@@ -84,7 +84,8 @@ dump_shader_info(struct ir3_shader_variant *v,
       "%s shader: %u inst, %u nops, %u non-nops, %u mov, %u cov, "
       "%u dwords, %u last-baryf, %u half, %u full, %u constlen, "
       "%u cat0, %u cat1, %u cat2, %u cat3, %u cat4, %u cat5, %u cat6, %u cat7, "
-      "%u sstall, %u (ss), %u (sy), %d waves, %d max_sun, %d loops\n",
+      "%u stp, %u ldp, %u sstall, %u (ss), %u (sy), %d waves, %d max_sun, "
+      "%d loops\n",
       ir3_shader_stage(v), v->info.instrs_count, v->info.nops_count,
       v->info.instrs_count - v->info.nops_count, v->info.mov_count,
       v->info.cov_count, v->info.sizedwords, v->info.last_baryf,
@@ -92,7 +93,8 @@ dump_shader_info(struct ir3_shader_variant *v,
       v->info.instrs_per_cat[0], v->info.instrs_per_cat[1],
       v->info.instrs_per_cat[2], v->info.instrs_per_cat[3],
       v->info.instrs_per_cat[4], v->info.instrs_per_cat[5],
-      v->info.instrs_per_cat[6], v->info.instrs_per_cat[7], v->info.sstall,
+      v->info.instrs_per_cat[6], v->info.instrs_per_cat[7],
+      v->info.stp_count, v->info.ldp_count, v->info.sstall,
       v->info.ss, v->info.sy, v->info.max_waves, v->max_sun, v->loops);
 }
 
@@ -131,7 +133,7 @@ ir3_shader_variant(struct ir3_shader *shader, struct ir3_shader_key key,
 
    if (created) {
       if (shader->initial_variants_done) {
-         pipe_debug_message(debug, SHADER_INFO,
+         perf_debug_message(debug, SHADER_INFO,
                             "%s shader: recompiling at draw time: global "
                             "0x%08x, vfsamples %x/%x, astc %x/%x\n",
                             ir3_shader_stage(v), key.global, key.vsamples,
@@ -460,13 +462,15 @@ ir3_fixup_shader_state(struct pipe_context *pctx, struct ir3_shader_key *key)
    }
 }
 
-static void
-ir3_screen_finalize_nir(struct pipe_screen *pscreen, void *nir, bool optimize)
+static char *
+ir3_screen_finalize_nir(struct pipe_screen *pscreen, void *nir)
 {
    struct fd_screen *screen = fd_screen(pscreen);
 
    ir3_nir_lower_io_to_temporaries(nir);
    ir3_finalize_nir(screen->compiler, nir);
+
+   return NULL;
 }
 
 static void
@@ -515,7 +519,7 @@ ir3_screen_init(struct pipe_screen *pscreen)
 {
    struct fd_screen *screen = fd_screen(pscreen);
 
-   screen->compiler = ir3_compiler_create(screen->dev, screen->gpu_id, false);
+   screen->compiler = ir3_compiler_create(screen->dev, screen->dev_id, false);
 
    /* TODO do we want to limit things to # of fast cores, or just limit
     * based on total # of both big and little cores.  The little cores

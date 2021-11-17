@@ -185,8 +185,6 @@ struct crocus_screen {
    /** PCI ID for our GPU device */
    int pci_id;
 
-   bool no_hw;
-
    struct crocus_vtable vtbl;
 
    /** Global program_string_id counter (see get_program_string_id()) */
@@ -202,8 +200,6 @@ struct crocus_screen {
       bool disable_throttling;
       bool always_flush_cache;
    } driconf;
-
-   unsigned subslice_total;
 
    uint64_t aperture_bytes;
 

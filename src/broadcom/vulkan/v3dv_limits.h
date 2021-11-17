@@ -53,6 +53,8 @@
 
 #define MAX_RENDER_TARGETS 4
 
+#define MAX_MULTIVIEW_VIEW_COUNT 16
+
 /* These are tunable parameters in the HW design, but all the V3D
  * implementations agree.
  */

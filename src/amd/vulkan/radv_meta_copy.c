@@ -405,6 +405,33 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
    old_predicating = cmd_buffer->state.predicating;
    cmd_buffer->state.predicating = false;
 
+   if (cs) {
+      /* For partial copies, HTILE should be decompressed before copying because the metadata is
+       * re-initialized to the uncompressed state after.
+       */
+      uint32_t queue_mask = radv_image_queue_family_mask(dst_image, cmd_buffer->queue_family_index,
+                                                         cmd_buffer->queue_family_index);
+
+      if (radv_layout_is_htile_compressed(cmd_buffer->device, dst_image, dst_image_layout,
+                                          false, queue_mask) &&
+          (region->dstOffset.x || region->dstOffset.y || region->dstOffset.z ||
+           region->extent.width != dst_image->info.width ||
+           region->extent.height != dst_image->info.height ||
+           region->extent.depth != dst_image->info.depth)) {
+         u_foreach_bit(i, region->dstSubresource.aspectMask) {
+            unsigned aspect_mask = 1u << i;
+            radv_expand_depth_stencil(cmd_buffer, dst_image,
+                                      &(VkImageSubresourceRange){
+                                         .aspectMask = aspect_mask,
+                                         .baseMipLevel = region->dstSubresource.mipLevel,
+                                         .levelCount = 1,
+                                         .baseArrayLayer = region->dstSubresource.baseArrayLayer,
+                                         .layerCount = region->dstSubresource.layerCount,
+                                      }, NULL);
+         }
+      }
+   }
+
    VkImageAspectFlags src_aspects[3] = {VK_IMAGE_ASPECT_PLANE_0_BIT, VK_IMAGE_ASPECT_PLANE_1_BIT,
                                         VK_IMAGE_ASPECT_PLANE_2_BIT};
    VkImageAspectFlags dst_aspects[3] = {VK_IMAGE_ASPECT_PLANE_0_BIT, VK_IMAGE_ASPECT_PLANE_1_BIT,
@@ -434,8 +461,11 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
       bool src_compressed = radv_layout_dcc_compressed(cmd_buffer->device, src_image,
                                                        region->srcSubresource.mipLevel,
                                                        src_image_layout, false, src_queue_mask);
+      bool need_dcc_sign_reinterpret = false;
 
-      if (!src_compressed || radv_dcc_formats_compatible(b_src.format, b_dst.format)) {
+      if (!src_compressed ||
+          (radv_dcc_formats_compatible(b_src.format, b_dst.format, &need_dcc_sign_reinterpret) &&
+           !need_dcc_sign_reinterpret)) {
          b_src.format = b_dst.format;
       } else if (!dst_compressed) {
          b_dst.format = b_src.format;
@@ -514,6 +544,30 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
             slice_3d++;
          else
             slice_array++;
+      }
+   }
+
+   if (cs) {
+      /* Fixup HTILE after a copy on compute. */
+      uint32_t queue_mask = radv_image_queue_family_mask(dst_image, cmd_buffer->queue_family_index,
+                                                         cmd_buffer->queue_family_index);
+
+      if (radv_layout_is_htile_compressed(cmd_buffer->device, dst_image, dst_image_layout,
+                                          false, queue_mask)) {
+
+         cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE;
+
+         VkImageSubresourceRange range = {
+            .aspectMask = region->dstSubresource.aspectMask,
+            .baseMipLevel = region->dstSubresource.mipLevel,
+            .levelCount = 1,
+            .baseArrayLayer = region->dstSubresource.baseArrayLayer,
+            .layerCount = region->dstSubresource.layerCount,
+         };
+
+         uint32_t htile_value = radv_get_htile_initial_value(cmd_buffer->device, dst_image);
+
+         cmd_buffer->state.flush_bits |= radv_clear_htile(cmd_buffer, dst_image, &range, htile_value);
       }
    }
 

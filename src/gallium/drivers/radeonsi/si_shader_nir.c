@@ -108,21 +108,25 @@ static void scan_io_usage(struct si_shader_info *info, nir_intrinsic_instr *intr
    unsigned num_slots = indirect ? nir_intrinsic_io_semantics(intr).num_slots : 1;
 
    if (is_input) {
-      assert(driver_location + num_slots <= ARRAY_SIZE(info->input_usage_mask));
+      assert(driver_location + num_slots <= ARRAY_SIZE(info->input));
 
       for (unsigned i = 0; i < num_slots; i++) {
          unsigned loc = driver_location + i;
 
-         info->input_semantic[loc] = semantic + i;
-         info->input_interpolate[loc] = interp;
+         info->input[loc].semantic = semantic + i;
+
+         if (semantic == SYSTEM_VALUE_PRIMITIVE_ID)
+            info->input[loc].interpolate = INTERP_MODE_FLAT;
+         else
+            info->input[loc].interpolate = interp;
 
          if (mask) {
-            info->input_usage_mask[loc] |= mask;
+            info->input[loc].usage_mask |= mask;
             if (bit_size == 16) {
                if (nir_intrinsic_io_semantics(intr).high_16bits)
-                  info->input_fp16_lo_hi_valid[loc] |= 0x2;
+                  info->input[loc].fp16_lo_hi_valid |= 0x2;
                else
-                  info->input_fp16_lo_hi_valid[loc] |= 0x1;
+                  info->input[loc].fp16_lo_hi_valid |= 0x1;
             }
             info->num_inputs = MAX2(info->num_inputs, loc + 1);
          }
@@ -130,13 +134,11 @@ static void scan_io_usage(struct si_shader_info *info, nir_intrinsic_instr *intr
    } else {
       /* Outputs. */
       assert(driver_location + num_slots <= ARRAY_SIZE(info->output_usagemask));
-      assert(semantic + num_slots < ARRAY_SIZE(info->output_semantic_to_slot));
 
       for (unsigned i = 0; i < num_slots; i++) {
          unsigned loc = driver_location + i;
 
          info->output_semantic[loc] = semantic + i;
-         info->output_semantic_to_slot[semantic + i] = loc;
 
          if (is_output_load) {
             /* Output loads have only a few things that we need to track. */
@@ -242,6 +244,9 @@ static void scan_instruction(const struct nir_shader *nir, struct si_shader_info
          case nir_intrinsic_load_ubo:
             if (!nir_src_is_const(intr->src[1]))
                info->uses_vmem_return_type_other = true;
+            break;
+         case nir_intrinsic_load_constant:
+            info->uses_vmem_return_type_other = true;
             break;
 
          case nir_intrinsic_load_barycentric_at_sample: /* This loads sample positions. */
@@ -475,12 +480,20 @@ void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *inf
       info->writes_position = nir->info.outputs_written & VARYING_BIT_POS;
    }
 
-   memset(info->output_semantic_to_slot, -1, sizeof(info->output_semantic_to_slot));
-
    func = (struct nir_function *)exec_list_get_head_const(&nir->functions);
    nir_foreach_block (block, func->impl) {
       nir_foreach_instr (instr, block)
          scan_instruction(nir, info, instr);
+   }
+
+   if (info->stage == MESA_SHADER_VERTEX || info->stage == MESA_SHADER_TESS_EVAL) {
+      /* Add the PrimitiveID output, but don't increment num_outputs.
+       * The driver inserts PrimitiveID only when it's used by the pixel shader,
+       * and si_emit_spi_map uses this unconditionally when such a pixel shader is used.
+       */
+      info->output_semantic[info->num_outputs] = VARYING_SLOT_PRIMITIVE_ID;
+      info->output_type[info->num_outputs] = nir_type_uint32;
+      info->output_usagemask[info->num_outputs] = 0x1;
    }
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
@@ -496,16 +509,25 @@ void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *inf
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS) ||
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_MASK_IN) ||
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_HELPER_INVOCATION));
-   }
 
-   /* Add color inputs to the list of inputs. */
-   if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-      for (unsigned i = 0; i < 2; i++) {
-         if ((info->colors_read >> (i * 4)) & 0xf) {
-            info->input_semantic[info->num_inputs] = VARYING_SLOT_COL0 + i;
-            info->input_interpolate[info->num_inputs] = info->color_interpolate[i];
-            info->input_usage_mask[info->num_inputs] = info->colors_read >> (i * 4);
-            info->num_inputs++;
+      /* Add both front and back color inputs. */
+      unsigned num_inputs_with_colors = info->num_inputs;
+      for (unsigned back = 0; back < 2; back++) {
+         for (unsigned i = 0; i < 2; i++) {
+            if ((info->colors_read >> (i * 4)) & 0xf) {
+               unsigned index = num_inputs_with_colors;
+
+               info->input[index].semantic = (back ? VARYING_SLOT_BFC0 : VARYING_SLOT_COL0) + i;
+               info->input[index].interpolate = info->color_interpolate[i];
+               info->input[index].usage_mask = info->colors_read >> (i * 4);
+               num_inputs_with_colors++;
+
+               /* Back-face color don't increment num_inputs. si_emit_spi_map will use
+                * back-face colors conditionally only when they are needed.
+                */
+               if (!back)
+                  info->num_inputs = num_inputs_with_colors;
+            }
          }
       }
    }
@@ -596,7 +618,7 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
       NIR_PASS(progress, nir, nir_opt_undef);
       NIR_PASS(progress, nir, nir_opt_conditional_discard);
       if (nir->options->max_unroll_iterations) {
-         NIR_PASS(progress, nir, nir_opt_loop_unroll, 0);
+         NIR_PASS(progress, nir, nir_opt_loop_unroll);
       }
 
       if (nir->info.stage == MESA_SHADER_FRAGMENT)
@@ -815,8 +837,14 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
 
    static const struct nir_lower_tex_options lower_tex_options = {
       .lower_txp = ~0u,
+      .lower_txs_cube_array = true,
    };
    NIR_PASS_V(nir, nir_lower_tex, &lower_tex_options);
+
+   static const struct nir_lower_image_options lower_image_options = {
+      .lower_cube_size = true,
+   };
+   NIR_PASS_V(nir, nir_lower_image, &lower_image_options);
 
    const nir_lower_subgroups_options subgroups_options = {
       .subgroup_size = 64,
@@ -826,12 +854,12 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
       .lower_subgroup_masks = true,
       .lower_vote_trivial = false,
       .lower_vote_eq = true,
-      .lower_elect = true,
    };
    NIR_PASS_V(nir, nir_lower_subgroups, &subgroups_options);
 
    NIR_PASS_V(nir, nir_lower_discard_or_demote,
-              sscreen->debug_flags & DBG(FS_CORRECT_DERIVS_AFTER_KILL));
+              (sscreen->debug_flags & DBG(FS_CORRECT_DERIVS_AFTER_KILL)) ||
+               nir->info.is_arb_asm);
 
    /* Lower load constants to scalar and then clean up the mess */
    NIR_PASS_V(nir, nir_lower_load_const_to_scalar);
@@ -896,7 +924,7 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
    NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 }
 
-void si_finalize_nir(struct pipe_screen *screen, void *nirptr, bool optimize)
+char *si_finalize_nir(struct pipe_screen *screen, void *nirptr)
 {
    struct si_screen *sscreen = (struct si_screen *)screen;
    struct nir_shader *nir = (struct nir_shader *)nirptr;
@@ -907,4 +935,6 @@ void si_finalize_nir(struct pipe_screen *screen, void *nirptr, bool optimize)
 
    if (sscreen->options.inline_uniforms)
       nir_find_inlinable_uniforms(nir);
+
+   return NULL;
 }

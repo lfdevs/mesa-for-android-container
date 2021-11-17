@@ -88,7 +88,8 @@ lp_setup_set_line_state( struct lp_setup_context *setup,
 
 void 
 lp_setup_set_point_state( struct lp_setup_context *setup,
-                          float point_size,                          
+                          float point_size,
+                          boolean point_tri_clip,
                           boolean point_size_per_vertex,
                           uint sprite_coord_enable,
                           uint sprite_coord_origin,
@@ -167,6 +168,10 @@ lp_setup_set_rasterizer_discard( struct lp_setup_context *setup,
 void
 lp_setup_set_vertex_info( struct lp_setup_context *setup, 
                           struct vertex_info *info );
+
+void
+lp_setup_set_linear_mode( struct lp_setup_context *setup, 
+                          boolean permit_linear_rasterizer );
 
 void
 lp_setup_begin_query(struct lp_setup_context *setup,

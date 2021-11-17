@@ -254,6 +254,7 @@ st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
       velem.velems[0].instance_divisor = 0;
       velem.velems[0].vertex_buffer_index = 0;
       velem.velems[0].src_format = PIPE_FORMAT_R32G32_FLOAT;
+      velem.velems[0].dual_slot = false;
 
       cso_set_vertex_elements(cso, &velem);
 
@@ -568,7 +569,8 @@ create_fs(struct st_context *st, bool download,
                             nir_vec4(&b, pbo_addr, zero, zero, zero),
                             zero,
                             result,
-                            nir_imm_int(&b, 0));
+                            nir_imm_int(&b, 0),
+                            .image_dim = GLSL_SAMPLER_DIM_BUF);
    } else {
       nir_variable *color =
          nir_variable_create(b.shader, nir_var_shader_out, glsl_vec4_type(),

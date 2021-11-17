@@ -129,20 +129,3 @@ __indirect_glPopClientAttrib(void)
    }
 }
 #endif
-
-void
-__glFreeAttributeState(struct glx_context * gc)
-{
-   __GLXattribute *sp, **spp;
-
-   for (spp = &gc->attributes.stack[0];
-        spp < &gc->attributes.stack[__GL_CLIENT_ATTRIB_STACK_DEPTH]; spp++) {
-      sp = *spp;
-      if (sp) {
-         free((char *) sp);
-      }
-      else {
-         break;
-      }
-   }
-}

@@ -124,7 +124,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
    memset(&prog_data, 0, sizeof(prog_data));
 
    /* Use ALT floating point mode for ARB programs so that 0^0 == 1. */
-   if (vp->program.is_arb_asm)
+   if (vp->program.info.is_arb_asm)
       stage_prog_data->use_alt_mode = true;
 
    mem_ctx = ralloc_context(NULL);
@@ -134,7 +134,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
    brw_assign_common_binding_table_offsets(devinfo, &vp->program,
                                            &prog_data.base.base, 0);
 
-   if (!vp->program.is_arb_asm) {
+   if (!vp->program.info.is_arb_asm) {
       brw_nir_setup_glsl_uniforms(mem_ctx, nir, &vp->program,
                                   &prog_data.base.base,
                                   compiler->scalar_stage[MESA_SHADER_VERTEX]);
@@ -172,8 +172,8 @@ brw_codegen_vs_prog(struct brw_context *brw,
       start_time = get_time();
    }
 
-   if (INTEL_DEBUG & DEBUG_VS) {
-      if (vp->program.is_arb_asm)
+   if (INTEL_DEBUG(DEBUG_VS)) {
+      if (vp->program.info.is_arb_asm)
          brw_dump_arb_asm("vertex", &vp->program);
    }
 
@@ -187,16 +187,16 @@ brw_codegen_vs_prog(struct brw_context *brw,
       .log_data = brw,
    };
 
-   if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
+   if (INTEL_DEBUG(DEBUG_SHADER_TIME)) {
       params.shader_time = true;
       params.shader_time_index =
          brw_get_shader_time_index(brw, &vp->program, ST_VS,
-                                   !vp->program.is_arb_asm);
+                                   !vp->program.info.is_arb_asm);
    }
 
    program = brw_compile_vs(compiler, mem_ctx, &params);
    if (program == NULL) {
-      if (!vp->program.is_arb_asm) {
+      if (!vp->program.info.is_arb_asm) {
          vp->program.sh.data->LinkStatus = LINKING_FAILURE;
          ralloc_strcat(&vp->program.sh.data->InfoLog, params.error_str);
       }

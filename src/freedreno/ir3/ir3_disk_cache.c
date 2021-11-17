@@ -51,12 +51,7 @@ ir3_disk_cache_init(struct ir3_compiler *compiler)
    if (ir3_shader_debug & IR3_DBG_NOCACHE)
       return;
 
-   /* array length = print length + nul char + 1 extra to verify it's unused */
-   char renderer[7];
-   ASSERTED int len =
-      snprintf(renderer, sizeof(renderer), "FD%03d", compiler->gpu_id);
-   assert(len == sizeof(renderer) - 2);
-
+   const char *renderer = fd_dev_name(compiler->dev_id);
    const struct build_id_note *note =
       build_id_find_nhdr_for_addr(ir3_disk_cache_init);
    assert(note && build_id_length(note) == 20); /* sha1 */

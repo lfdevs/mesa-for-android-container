@@ -19,6 +19,7 @@
 #include "vn_device.h"
 #include "vn_device_memory.h"
 #include "vn_renderer.h"
+#include "vn_wsi.h"
 
 /* queue commands */
 
@@ -492,6 +493,7 @@ vn_CreateFence(VkDevice device,
    VkResult result = vn_fence_init_payloads(
       dev, fence, pCreateInfo->flags & VK_FENCE_CREATE_SIGNALED_BIT, alloc);
    if (result != VK_SUCCESS) {
+      vn_object_base_fini(&fence->base);
       vk_free(alloc, fence);
       return vn_error(dev->instance, result);
    }
@@ -613,7 +615,7 @@ vn_update_sync_result(VkResult result, int64_t abs_timeout, uint32_t *iter)
           os_time_get_nano() >= abs_timeout)
          result = VK_TIMEOUT;
       else
-         vn_relax(iter);
+         vn_relax(iter, "client");
       break;
    default:
       assert(result == VK_SUCCESS || result < 0);
@@ -815,6 +817,7 @@ vn_CreateSemaphore(VkDevice device,
 
    VkResult result = vn_semaphore_init_payloads(dev, sem, initial_val, alloc);
    if (result != VK_SUCCESS) {
+      vn_object_base_fini(&sem->base);
       vk_free(alloc, sem);
       return vn_error(dev->instance, result);
    }

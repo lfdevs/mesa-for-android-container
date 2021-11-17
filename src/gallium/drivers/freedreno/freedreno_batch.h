@@ -31,7 +31,7 @@
 #include "util/simple_mtx.h"
 #include "util/u_inlines.h"
 #include "util/u_queue.h"
-#include "util/u_trace.h"
+#include "util/perf/u_trace.h"
 
 #include "freedreno_context.h"
 #include "freedreno_fence.h"

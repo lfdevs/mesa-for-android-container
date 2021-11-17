@@ -157,6 +157,20 @@ agx_push_exec(agx_builder *b, unsigned n)
    return agx_if_fcmp(b, agx_zero(), agx_zero(), n, AGX_FCOND_EQ, false);
 }
 
+static inline agx_instr *
+agx_ushr_to(agx_builder *b, agx_index dst, agx_index s0, agx_index s1)
+{
+    return agx_bfeil_to(b, dst, agx_zero(), s0, s1, 0);
+}
+
+static inline agx_index
+agx_ushr(agx_builder *b, agx_index s0, agx_index s1)
+{
+    agx_index tmp = agx_temp(b->shader, s0.size);
+    agx_ushr_to(b, tmp, s0, s1);
+    return tmp;
+}
+
 #endif
 """
 

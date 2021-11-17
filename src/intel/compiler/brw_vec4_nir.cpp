@@ -1112,7 +1112,7 @@ static bool
 const_src_fits_in_16_bits(const nir_src &src, brw_reg_type type)
 {
    assert(nir_src_is_const(src));
-   if (type_is_unsigned_int(type)) {
+   if (brw_reg_type_is_unsigned_integer(type)) {
       return nir_src_comp_as_uint(src, 0) <= UINT16_MAX;
    } else {
       const int64_t c = nir_src_comp_as_int(src, 0);
@@ -1144,6 +1144,14 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       op[i] = get_nir_src(instr->src[i].src, src_type, 4);
       op[i].swizzle = brw_swizzle_for_nir_swizzle(instr->src[i].swizzle);
    }
+
+#ifndef NDEBUG
+   /* On Gen7 and earlier, no functionality is exposed that should allow 8-bit
+    * integer types to ever exist.
+    */
+   for (unsigned i = 0; i < nir_op_infos[instr->op].num_inputs; i++)
+      assert(type_sz(op[i].type) > 1);
+#endif
 
    switch (instr->op) {
    case nir_op_mov:

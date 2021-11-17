@@ -63,6 +63,20 @@ cache_dump_stats(struct v3dv_pipeline_cache *cache)
    fprintf(stderr, "  cache hit  count:   %d\n", cache->stats.hit);
 }
 
+static void
+pipeline_cache_lock(struct v3dv_pipeline_cache *cache)
+{
+   if (!cache->externally_synchronized)
+      pthread_mutex_lock(&cache->mutex);
+}
+
+static void
+pipeline_cache_unlock(struct v3dv_pipeline_cache *cache)
+{
+   if (!cache->externally_synchronized)
+      pthread_mutex_unlock(&cache->mutex);
+}
+
 void
 v3dv_pipeline_cache_upload_nir(struct v3dv_pipeline *pipeline,
                                struct v3dv_pipeline_cache *cache,
@@ -75,10 +89,10 @@ v3dv_pipeline_cache_upload_nir(struct v3dv_pipeline *pipeline,
    if (cache->nir_stats.count > V3DV_MAX_PIPELINE_CACHE_ENTRIES)
       return;
 
-   pthread_mutex_lock(&cache->mutex);
+   pipeline_cache_lock(cache);
    struct hash_entry *entry =
       _mesa_hash_table_search(cache->nir_cache, sha1_key);
-   pthread_mutex_unlock(&cache->mutex);
+   pipeline_cache_unlock(cache);
    if (entry)
       return;
 
@@ -91,7 +105,7 @@ v3dv_pipeline_cache_upload_nir(struct v3dv_pipeline *pipeline,
       return;
    }
 
-   pthread_mutex_lock(&cache->mutex);
+   pipeline_cache_lock(cache);
    /* Because ralloc isn't thread-safe, we have to do all this inside the
     * lock.  We could unlock for the big memcpy but it's probably not worth
     * the hassle.
@@ -99,7 +113,7 @@ v3dv_pipeline_cache_upload_nir(struct v3dv_pipeline *pipeline,
    entry = _mesa_hash_table_search(cache->nir_cache, sha1_key);
    if (entry) {
       blob_finish(&blob);
-      pthread_mutex_unlock(&cache->mutex);
+      pipeline_cache_unlock(cache);
       return;
    }
 
@@ -122,7 +136,7 @@ v3dv_pipeline_cache_upload_nir(struct v3dv_pipeline *pipeline,
 
    _mesa_hash_table_insert(cache->nir_cache, snir->sha1_key, snir);
 
-   pthread_mutex_unlock(&cache->mutex);
+   pipeline_cache_unlock(cache);
 }
 
 nir_shader*
@@ -143,12 +157,12 @@ v3dv_pipeline_cache_search_for_nir(struct v3dv_pipeline *pipeline,
 
    const struct serialized_nir *snir = NULL;
 
-   pthread_mutex_lock(&cache->mutex);
+   pipeline_cache_lock(cache);
    struct hash_entry *entry =
       _mesa_hash_table_search(cache->nir_cache, sha1_key);
    if (entry)
       snir = entry->data;
-   pthread_mutex_unlock(&cache->mutex);
+   pipeline_cache_unlock(cache);
 
    if (snir) {
       struct blob_reader blob;
@@ -185,6 +199,7 @@ v3dv_pipeline_cache_search_for_nir(struct v3dv_pipeline *pipeline,
 void
 v3dv_pipeline_cache_init(struct v3dv_pipeline_cache *cache,
                          struct v3dv_device *device,
+                         VkPipelineCacheCreateFlags flags,
                          bool cache_enabled)
 {
    cache->device = device;
@@ -202,6 +217,9 @@ v3dv_pipeline_cache_init(struct v3dv_pipeline_cache *cache,
       cache->stats.miss = 0;
       cache->stats.hit = 0;
       cache->stats.count = 0;
+
+      cache->externally_synchronized = flags &
+         VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT_EXT;
    } else {
       cache->nir_cache = NULL;
       cache->cache = NULL;
@@ -229,7 +247,8 @@ v3dv_pipeline_shared_data_write_to_blob(const struct v3dv_pipeline_shared_data *
  */
 struct v3dv_pipeline_shared_data *
 v3dv_pipeline_cache_search_for_pipeline(struct v3dv_pipeline_cache *cache,
-                                        unsigned char sha1_key[20])
+                                        unsigned char sha1_key[20],
+                                        bool *cache_hit)
 {
    if (!cache || !cache->cache)
       return NULL;
@@ -241,7 +260,7 @@ v3dv_pipeline_cache_search_for_pipeline(struct v3dv_pipeline_cache *cache,
       fprintf(stderr, "pipeline cache %p, search pipeline with key %s\n", cache, sha1buf);
    }
 
-   pthread_mutex_lock(&cache->mutex);
+   pipeline_cache_lock(cache);
 
    struct hash_entry *entry =
       _mesa_hash_table_search(cache->cache, sha1_key);
@@ -252,6 +271,7 @@ v3dv_pipeline_cache_search_for_pipeline(struct v3dv_pipeline_cache *cache,
       assert(cache_entry);
 
       cache->stats.hit++;
+      *cache_hit = true;
       if (debug_cache) {
          fprintf(stderr, "\tcache hit: %p\n", cache_entry);
          if (dump_stats)
@@ -261,7 +281,7 @@ v3dv_pipeline_cache_search_for_pipeline(struct v3dv_pipeline_cache *cache,
 
       v3dv_pipeline_shared_data_ref(cache_entry);
 
-      pthread_mutex_unlock(&cache->mutex);
+      pipeline_cache_unlock(cache);
 
       return cache_entry;
    }
@@ -273,7 +293,7 @@ v3dv_pipeline_cache_search_for_pipeline(struct v3dv_pipeline_cache *cache,
          cache_dump_stats(cache);
    }
 
-   pthread_mutex_unlock(&cache->mutex);
+   pipeline_cache_unlock(cache);
 
 #ifdef ENABLE_SHADER_CACHE
    struct v3dv_device *device = cache->device;
@@ -404,12 +424,12 @@ pipeline_cache_upload_shared_data(struct v3dv_pipeline_cache *cache,
    if (cache->stats.count > V3DV_MAX_PIPELINE_CACHE_ENTRIES)
       return;
 
-   pthread_mutex_lock(&cache->mutex);
+   pipeline_cache_lock(cache);
    struct hash_entry *entry =
       _mesa_hash_table_search(cache->cache, shared_data->sha1_key);
 
    if (entry) {
-      pthread_mutex_unlock(&cache->mutex);
+      pipeline_cache_unlock(cache);
       return;
    }
 
@@ -426,7 +446,7 @@ pipeline_cache_upload_shared_data(struct v3dv_pipeline_cache *cache,
          cache_dump_stats(cache);
    }
 
-   pthread_mutex_unlock(&cache->mutex);
+   pipeline_cache_unlock(cache);
 
 #ifdef ENABLE_SHADER_CACHE
    /* If we are being called from a on-disk-cache hit, we can skip writing to
@@ -669,16 +689,15 @@ v3dv_CreatePipelineCache(VkDevice _device,
    struct v3dv_pipeline_cache *cache;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO);
-   assert(pCreateInfo->flags == 0);
 
    cache = vk_object_zalloc(&device->vk, pAllocator,
                             sizeof(*cache),
                             VK_OBJECT_TYPE_PIPELINE_CACHE);
 
    if (cache == NULL)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   v3dv_pipeline_cache_init(cache, device,
+   v3dv_pipeline_cache_init(cache, device, pCreateInfo->flags,
                             device->instance->pipeline_cache_enabled);
 
    if (pCreateInfo->initialDataSize > 0) {
@@ -918,7 +937,7 @@ v3dv_GetPipelineCacheData(VkDevice _device,
    struct v3dv_physical_device *pdevice = &device->instance->physicalDevice;
    VkResult result = VK_INCOMPLETE;
 
-   pthread_mutex_lock(&cache->mutex);
+   pipeline_cache_lock(cache);
 
    struct vk_pipeline_cache_header header = {
       .header_size = sizeof(struct vk_pipeline_cache_header),
@@ -995,7 +1014,7 @@ v3dv_GetPipelineCacheData(VkDevice _device,
  done:
    blob_finish(&blob);
 
-   pthread_mutex_unlock(&cache->mutex);
+   pipeline_cache_unlock(cache);
 
    return result;
 }

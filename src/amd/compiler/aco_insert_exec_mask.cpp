@@ -813,6 +813,20 @@ process_instructions(exec_ctx& ctx, Block* block, std::vector<aco_ptr<Instructio
          instr->opcode = aco_opcode::p_exit_early_if;
          instr->operands[0] = bld.scc(exit_cond);
          state = Exact;
+
+      } else if (instr->opcode == aco_opcode::p_elect) {
+         bool all_lanes_enabled = ctx.info[block->index].exec.back().first.constantEquals(-1u);
+         Definition dst = instr->definitions[0];
+
+         if (all_lanes_enabled) {
+            bld.copy(Definition(dst), Operand::c32_or_c64(1u, dst.size() == 2));
+         } else {
+            Temp first_lane_idx = bld.sop1(Builder::s_ff1_i32, bld.def(s1), Operand(exec, bld.lm));
+            bld.sop2(Builder::s_lshl, Definition(dst), bld.def(s1, scc),
+                     Operand::c32_or_c64(1u, dst.size() == 2), Operand(first_lane_idx));
+         }
+         instr.reset();
+         continue;
       }
 
       bld.insert(std::move(instr));

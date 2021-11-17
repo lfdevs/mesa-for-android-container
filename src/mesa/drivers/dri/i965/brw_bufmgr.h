@@ -350,7 +350,6 @@ int brw_bo_busy(struct brw_bo *bo);
  */
 int brw_bo_madvise(struct brw_bo *bo, int madv);
 
-/* drm_bacon_bufmgr_gem.c */
 struct brw_bufmgr *brw_bufmgr_get_for_fd(struct intel_device_info *devinfo,
                                          int fd, bool bo_reuse);
 

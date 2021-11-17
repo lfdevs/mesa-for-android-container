@@ -836,7 +836,7 @@ vl_idct_flush(struct vl_idct *idct, struct vl_idct_buffer *buffer, unsigned num_
                                    0, 2, idct->samplers);
 
    idct->pipe->set_sampler_views(idct->pipe, PIPE_SHADER_FRAGMENT, 0, 2, 0,
-                                 buffer->sampler_views.stage[0]);
+                                 false, buffer->sampler_views.stage[0]);
 
    /* mismatch control */
    idct->pipe->set_framebuffer_state(idct->pipe, &buffer->fb_state_mismatch);
@@ -863,6 +863,6 @@ vl_idct_prepare_stage2(struct vl_idct *idct, struct vl_idct_buffer *buffer)
    idct->pipe->bind_sampler_states(idct->pipe, PIPE_SHADER_FRAGMENT,
                                    0, 2, idct->samplers);
    idct->pipe->set_sampler_views(idct->pipe, PIPE_SHADER_FRAGMENT,
-                                 0, 2, 0, buffer->sampler_views.stage[1]);
+                                 0, 2, 0, false, buffer->sampler_views.stage[1]);
 }
 

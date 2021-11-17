@@ -214,15 +214,17 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
    unsigned num_threads = MAX2(1, screen->num_threads);
    struct llvmpipe_query *pq = llvmpipe_query(q);
    struct llvmpipe_resource *lpr = llvmpipe_resource(resource);
-   bool unflushed = false;
    bool unsignalled = false;
    if (pq->fence) {
       /* only have a fence if there was a scene */
       if (!lp_fence_signalled(pq->fence)) {
-         unsignalled = true;
          if (!lp_fence_issued(pq->fence))
-            unflushed = true;
+            llvmpipe_flush(pipe, NULL, __FUNCTION__);
+
+         if (wait)
+            lp_fence_wait(pq->fence);
       }
+      unsignalled = !lp_fence_signalled(pq->fence);
    }
 
 
@@ -235,15 +237,6 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
          value = 1;
    else {
       unsigned i;
-
-      if (unflushed) {
-         llvmpipe_flush(pipe, NULL, __FUNCTION__);
-
-         if (!wait)
-            return;
-
-         lp_fence_wait(pq->fence);
-      }
 
       switch (pq->type) {
       case PIPE_QUERY_OCCLUSION_COUNTER:

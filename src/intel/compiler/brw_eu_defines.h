@@ -270,10 +270,12 @@ enum opcode {
    BRW_OPCODE_SUBB, /**< Gfx7+ */
    BRW_OPCODE_SAD2,
    BRW_OPCODE_SADA2,
+   BRW_OPCODE_ADD3, /* Gen12+ only */
    BRW_OPCODE_DP4,
    BRW_OPCODE_DPH,
    BRW_OPCODE_DP3,
    BRW_OPCODE_DP2,
+   BRW_OPCODE_DP4A, /**< Gfx12+ */
    BRW_OPCODE_LINE,
    BRW_OPCODE_PLN, /**< G45+ */
    BRW_OPCODE_MAD, /**< Gfx6+ */
@@ -440,6 +442,7 @@ enum opcode {
    SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT64_LOGICAL,
    SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT16_LOGICAL,
    SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT32_LOGICAL,
+   SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT64_LOGICAL,
 
    SHADER_OPCODE_TYPED_ATOMIC_LOGICAL,
    SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL,
@@ -1566,6 +1569,7 @@ enum brw_message_target {
 #define BRW_AOP_FMAX                  1
 #define BRW_AOP_FMIN                  2
 #define BRW_AOP_FCMPWR                3
+#define BRW_AOP_FADD                  4
 
 #define BRW_MATH_FUNCTION_INV                              1
 #define BRW_MATH_FUNCTION_LOG                              2
@@ -1604,6 +1608,7 @@ enum brw_message_target {
 #define GFX8_URB_OPCODE_ATOMIC_ADD  6
 #define GFX8_URB_OPCODE_SIMD8_WRITE 7
 #define GFX8_URB_OPCODE_SIMD8_READ  8
+#define GFX125_URB_OPCODE_FENCE     9
 
 #define BRW_URB_SWIZZLE_NONE          0
 #define BRW_URB_SWIZZLE_INTERLEAVE    1

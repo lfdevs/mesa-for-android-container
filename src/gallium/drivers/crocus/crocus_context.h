@@ -318,9 +318,6 @@ struct crocus_uncompiled_shader {
    /** Have any shader variants been compiled yet? */
    bool compiled_once;
 
-   /** Should we use ALT mode for math?  Useful for ARB programs. */
-   bool use_alt_mode;
-
    bool needs_edge_flag;
 
    /** Constant data scraped from the shader by nir_opt_large_constants */
@@ -591,6 +588,7 @@ struct crocus_context {
       enum pipe_prim_type prim_mode:8;
       bool prim_is_points_or_lines;
       uint8_t vertices_per_patch;
+      uint8_t patch_vertices;
 
       bool window_space_position;
 
@@ -756,7 +754,7 @@ struct crocus_context {
 };
 
 #define perf_debug(dbg, ...) do {                      \
-   if (INTEL_DEBUG & DEBUG_PERF)                       \
+   if (INTEL_DEBUG(DEBUG_PERF))                        \
       dbg_printf(__VA_ARGS__);                         \
    if (unlikely(dbg))                                  \
       pipe_debug_message(dbg, PERF_INFO, __VA_ARGS__); \

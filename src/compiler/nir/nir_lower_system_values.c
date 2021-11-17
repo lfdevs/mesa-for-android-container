@@ -502,8 +502,7 @@ bool
 nir_lower_compute_system_values(nir_shader *shader,
                                 const nir_lower_compute_system_values_options *options)
 {
-   if (shader->info.stage != MESA_SHADER_COMPUTE &&
-       shader->info.stage != MESA_SHADER_KERNEL)
+   if (!gl_shader_stage_uses_workgroup(shader->info.stage))
       return false;
 
    struct lower_sysval_state state;

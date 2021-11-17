@@ -391,7 +391,7 @@ VkResult anv_CreateDescriptorSetLayout(
 
    if (!vk_object_multizalloc(&device->vk, &ma, NULL,
                               VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT))
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    set_layout->ref_cnt = 1;
    set_layout->binding_count = num_bindings;
@@ -714,7 +714,7 @@ VkResult anv_CreatePipelineLayout(
    layout = vk_object_alloc(&device->vk, pAllocator, sizeof(*layout),
                             VK_OBJECT_TYPE_PIPELINE_LAYOUT);
    if (layout == NULL)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    layout->num_sets = pCreateInfo->setLayoutCount;
 
@@ -860,7 +860,7 @@ VkResult anv_CreateDescriptorPool(
    pool = vk_object_alloc(&device->vk, pAllocator, total_size,
                           VK_OBJECT_TYPE_DESCRIPTOR_POOL);
    if (!pool)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    pool->size = pool_size;
    pool->next = 0;
@@ -980,9 +980,9 @@ anv_descriptor_pool_alloc_set(struct anv_descriptor_pool *pool,
       }
 
       if (pool->free_list != EMPTY) {
-         return vk_error(VK_ERROR_FRAGMENTED_POOL);
+         return VK_ERROR_FRAGMENTED_POOL;
       } else {
-         return vk_error(VK_ERROR_OUT_OF_POOL_MEMORY);
+         return VK_ERROR_OUT_OF_POOL_MEMORY;
       }
    }
 }
@@ -1071,7 +1071,7 @@ anv_descriptor_set_create(struct anv_device *device,
                              ANV_UBO_ALIGNMENT);
       if (pool_vma_offset == 0) {
          anv_descriptor_pool_free_set(pool, set);
-         return vk_error(VK_ERROR_FRAGMENTED_POOL);
+         return vk_error(pool, VK_ERROR_FRAGMENTED_POOL);
       }
       assert(pool_vma_offset >= POOL_HEAP_OFFSET &&
              pool_vma_offset - POOL_HEAP_OFFSET <= INT32_MAX);
@@ -1360,10 +1360,10 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
       assert(!(bind_layout->data & ANV_DESCRIPTOR_IMAGE_PARAM));
       assert(image_view->n_planes == 1);
       struct anv_storage_image_descriptor desc_data = {
-         .read_write = anv_surface_state_to_handle(
+         .vanilla = anv_surface_state_to_handle(
                            image_view->planes[0].storage_surface_state.state),
-         .write_only = anv_surface_state_to_handle(
-                           image_view->planes[0].writeonly_storage_surface_state.state),
+         .lowered = anv_surface_state_to_handle(
+                           image_view->planes[0].lowered_storage_surface_state.state),
       };
       memcpy(desc_map, &desc_data, sizeof(desc_data));
    }
@@ -1372,7 +1372,7 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
       /* Storage images can only ever have one plane */
       assert(image_view->n_planes == 1);
       const struct brw_image_param *image_param =
-         &image_view->planes[0].storage_image_param;
+         &image_view->planes[0].lowered_storage_image_param;
 
       anv_descriptor_set_write_image_param(desc_map, image_param);
    }
@@ -1437,17 +1437,17 @@ anv_descriptor_set_write_buffer_view(struct anv_device *device,
    if (bind_layout->data & ANV_DESCRIPTOR_STORAGE_IMAGE) {
       assert(!(bind_layout->data & ANV_DESCRIPTOR_IMAGE_PARAM));
       struct anv_storage_image_descriptor desc_data = {
-         .read_write = anv_surface_state_to_handle(
+         .vanilla = anv_surface_state_to_handle(
                            buffer_view->storage_surface_state),
-         .write_only = anv_surface_state_to_handle(
-                           buffer_view->writeonly_storage_surface_state),
+         .lowered = anv_surface_state_to_handle(
+                           buffer_view->lowered_storage_surface_state),
       };
       memcpy(desc_map, &desc_data, sizeof(desc_data));
    }
 
    if (bind_layout->data & ANV_DESCRIPTOR_IMAGE_PARAM) {
       anv_descriptor_set_write_image_param(desc_map,
-                                           &buffer_view->storage_image_param);
+         &buffer_view->lowered_storage_image_param);
    }
 }
 
@@ -1811,7 +1811,7 @@ VkResult anv_CreateDescriptorUpdateTemplate(
    template = vk_object_alloc(&device->vk, pAllocator, size,
                               VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE);
    if (template == NULL)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    template->bind_point = pCreateInfo->pipelineBindPoint;
 

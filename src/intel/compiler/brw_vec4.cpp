@@ -263,7 +263,7 @@ vec4_instruction::can_do_cmod()
     */
    for (unsigned i = 0; i < 3; i++) {
       if (src[i].file != BAD_FILE &&
-          type_is_unsigned_int(src[i].type) && src[i].negate)
+          brw_reg_type_is_unsigned_integer(src[i].type) && src[i].negate)
          return false;
    }
 
@@ -2748,7 +2748,7 @@ vec4_visitor::run()
       pass_num++;                                                      \
       bool this_progress = pass(args);                                 \
                                                                        \
-      if ((INTEL_DEBUG & DEBUG_OPTIMIZER) && this_progress) {  \
+      if (INTEL_DEBUG(DEBUG_OPTIMIZER) && this_progress) {             \
          char filename[64];                                            \
          snprintf(filename, 64, "%s-%s-%02d-%02d-" #pass,              \
                   stage_abbrev, nir->info.name, iteration, pass_num); \
@@ -2761,7 +2761,7 @@ vec4_visitor::run()
    })
 
 
-   if (INTEL_DEBUG & DEBUG_OPTIMIZER) {
+   if (INTEL_DEBUG(DEBUG_OPTIMIZER)) {
       char filename[64];
       snprintf(filename, 64, "%s-%s-00-00-start",
                stage_abbrev, nir->info.name);
@@ -2824,7 +2824,7 @@ vec4_visitor::run()
 
    setup_payload();
 
-   if (INTEL_DEBUG & DEBUG_SPILL_VEC4) {
+   if (INTEL_DEBUG(DEBUG_SPILL_VEC4)) {
       /* Debug of register spilling: Go spill everything. */
       const int grf_count = alloc.count;
       float spill_costs[alloc.count];
@@ -2848,11 +2848,11 @@ vec4_visitor::run()
    bool allocated_without_spills = reg_allocate();
 
    if (!allocated_without_spills) {
-      compiler->shader_perf_log(log_data,
-                                "%s shader triggered register spilling.  "
-                                "Try reducing the number of live vec4 values "
-                                "to improve performance.\n",
-                                stage_name);
+      brw_shader_perf_log(compiler, log_data,
+                          "%s shader triggered register spilling.  "
+                          "Try reducing the number of live vec4 values "
+                          "to improve performance.\n",
+                          stage_name);
 
       while (!reg_allocate()) {
          if (failed)
@@ -2893,7 +2893,7 @@ brw_compile_vs(const struct brw_compiler *compiler,
    const struct brw_vs_prog_key *key = params->key;
    struct brw_vs_prog_data *prog_data = params->prog_data;
    const bool debug_enabled =
-      INTEL_DEBUG & (params->debug_flag ? params->debug_flag : DEBUG_VS);
+      INTEL_DEBUG(params->debug_flag ? params->debug_flag : DEBUG_VS);
 
    prog_data->base.base.stage = MESA_SHADER_VERTEX;
 

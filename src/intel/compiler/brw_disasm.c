@@ -487,10 +487,11 @@ static const char *const aop[16] = {
    [BRW_AOP_PREDEC] = "predec",
 };
 
-static const char *const aop_float[4] = {
+static const char *const aop_float[5] = {
    [BRW_AOP_FMAX]   = "fmax",
    [BRW_AOP_FMIN]   = "fmin",
    [BRW_AOP_FCMPWR] = "fcmpwr",
+   [BRW_AOP_FADD]   = "fadd",
 };
 
 static const char * const pixel_interpolator_msg_types[4] = {
@@ -561,7 +562,8 @@ static const char *const gfx7_urb_opcode[] = {
    [GFX8_URB_OPCODE_ATOMIC_ADD] = "atomic add",  /* Gfx8+ */
    [GFX8_URB_OPCODE_SIMD8_WRITE] = "SIMD8 write", /* Gfx8+ */
    [GFX8_URB_OPCODE_SIMD8_READ] = "SIMD8 read",  /* Gfx8+ */
-   /* [9-15] - reserved */
+   [GFX125_URB_OPCODE_FENCE] = "fence",  /* Gfx12.5+ */
+   /* [10-15] - reserved */
 };
 
 static const char *const urb_swizzle[4] = {
@@ -2188,7 +2190,7 @@ brw_disassemble_inst(FILE *file, const struct intel_device_info *devinfo,
                 opcode == GFX8_URB_OPCODE_SIMD8_READ) {
                if (brw_inst_urb_channel_mask_present(devinfo, inst))
                   string(file, " masked");
-            } else {
+            } else if (opcode != GFX125_URB_OPCODE_FENCE) {
                err |= control(file, "urb swizzle", urb_swizzle,
                               brw_inst_urb_swizzle_control(devinfo, inst),
                               &space);

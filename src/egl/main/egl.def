@@ -2,14 +2,21 @@ EXPORTS
    eglBindAPI
    eglBindTexImage
    eglChooseConfig
+   eglClientWaitSync
    eglCopyBuffers
    eglCreateContext
+   eglCreateImage
    eglCreatePbufferFromClientBuffer
    eglCreatePbufferSurface
    eglCreatePixmapSurface
+   eglCreatePlatformPixmapSurface
+   eglCreatePlatformWindowSurface
+   eglCreateSync
    eglCreateWindowSurface
    eglDestroyContext
+   eglDestroyImage
    eglDestroySurface
+   eglDestroySync
    eglGetConfigAttrib
    eglGetConfigs
    eglGetCurrentContext
@@ -17,7 +24,9 @@ EXPORTS
    eglGetCurrentSurface
    eglGetDisplay
    eglGetError
+   eglGetPlatformDisplay
    eglGetProcAddress
+   eglGetSyncAttrib
    eglInitialize
    eglMakeCurrent
    eglQueryAPI
@@ -33,3 +42,6 @@ EXPORTS
    eglWaitClient
    eglWaitGL
    eglWaitNative
+   eglWaitSync
+   MesaGLInteropEGLQueryDeviceInfo
+   MesaGLInteropEGLExportObject

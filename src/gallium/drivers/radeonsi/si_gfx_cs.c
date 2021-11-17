@@ -31,29 +31,6 @@
 #include "util/u_upload_mgr.h"
 #include "ac_debug.h"
 
-/* initialize */
-void si_need_gfx_cs_space(struct si_context *ctx, unsigned num_draws)
-{
-   struct radeon_cmdbuf *cs = &ctx->gfx_cs;
-
-   /* There are two memory usage counters in the winsys for all buffers
-    * that have been added (cs_add_buffer) and two counters in the pipe
-    * driver for those that haven't been added yet.
-    */
-   if (unlikely(!radeon_cs_memory_below_limit(ctx->screen, &ctx->gfx_cs, ctx->vram_kb, ctx->gtt_kb))) {
-      ctx->gtt_kb = 0;
-      ctx->vram_kb = 0;
-      si_flush_gfx_cs(ctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
-      return;
-   }
-   ctx->gtt_kb = 0;
-   ctx->vram_kb = 0;
-
-   unsigned need_dwords = si_get_minimum_num_gfx_cs_dwords(ctx, num_draws);
-   if (!ctx->ws->cs_check_space(cs, need_dwords, false))
-      si_flush_gfx_cs(ctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
-}
-
 void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_handle **fence)
 {
    struct radeon_cmdbuf *cs = &ctx->gfx_cs;
@@ -115,9 +92,6 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
 
    ctx->gfx_flush_in_progress = true;
 
-   if (radeon_emitted(&ctx->prim_discard_compute_cs, 0))
-      si_compute_signal_gfx(ctx);
-
    if (ctx->has_graphics) {
       if (!list_is_empty(&ctx->active_queries))
          si_suspend_queries(ctx);
@@ -159,28 +133,8 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
       si_log_hw_flush(ctx);
    }
 
-   if (si_compute_prim_discard_enabled(ctx)) {
-      /* The compute IB can start after the previous gfx IB starts. */
-      if (radeon_emitted(&ctx->prim_discard_compute_cs, 0) && ctx->last_gfx_fence) {
-         ctx->ws->cs_add_fence_dependency(
-            &ctx->gfx_cs, ctx->last_gfx_fence,
-            RADEON_DEPENDENCY_PARALLEL_COMPUTE_ONLY | RADEON_DEPENDENCY_START_FENCE);
-      }
-
-      /* Remember the last execution barrier. It's in the IB.
-       * It will signal the start of the next compute IB.
-       */
-      if (flags & RADEON_FLUSH_START_NEXT_GFX_IB_NOW && ctx->last_pkt3_write_data) {
-         *ctx->last_pkt3_write_data = PKT3(PKT3_WRITE_DATA, 3, 0);
-         ctx->last_pkt3_write_data = NULL;
-
-         si_resource_reference(&ctx->last_ib_barrier_buf, ctx->barrier_buf);
-         ctx->last_ib_barrier_buf_offset = ctx->barrier_buf_offset;
-         si_resource_reference(&ctx->barrier_buf, NULL);
-
-         ws->fence_reference(&ctx->last_ib_barrier_fence, NULL);
-      }
-   }
+   if (sscreen->debug_flags & DBG(IB))
+      si_print_current_ib(ctx, stderr);
 
    if (ctx->is_noop)
       flags |= RADEON_FLUSH_NOOP;
@@ -193,17 +147,6 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
       ws->fence_reference(fence, ctx->last_gfx_fence);
 
    ctx->num_gfx_cs_flushes++;
-
-   if (si_compute_prim_discard_enabled(ctx)) {
-      /* Remember the last execution barrier, which is the last fence
-       * in this case.
-       */
-      if (!(flags & RADEON_FLUSH_START_NEXT_GFX_IB_NOW)) {
-         ctx->last_pkt3_write_data = NULL;
-         si_resource_reference(&ctx->last_ib_barrier_buf, NULL);
-         ws->fence_reference(&ctx->last_ib_barrier_fence, ctx->last_gfx_fence);
-      }
-   }
 
    /* Check VM faults if needed. */
    if (sscreen->debug_flags & DBG(CHECK_VM)) {
@@ -239,7 +182,7 @@ static void si_begin_gfx_cs_debug(struct si_context *ctx)
    pipe_reference_init(&ctx->current_saved_cs->reference, 1);
 
    ctx->current_saved_cs->trace_buf =
-      si_resource(pipe_buffer_create(ctx->b.screen, 0, PIPE_USAGE_STAGING, 8));
+      si_resource(pipe_buffer_create(ctx->b.screen, 0, PIPE_USAGE_STAGING, 4));
    if (!ctx->current_saved_cs->trace_buf) {
       free(ctx->current_saved_cs);
       ctx->current_saved_cs = NULL;
@@ -304,8 +247,7 @@ void si_set_tracked_regs_to_clear_state(struct si_context *ctx)
    ctx->tracked_regs.reg_value[SI_TRACKED_PA_SC_MODE_CNTL_1] = 0x00000000;
    ctx->tracked_regs.reg_value[SI_TRACKED_PA_SU_PRIM_FILTER_CNTL] = 0;
    ctx->tracked_regs.reg_value[SI_TRACKED_PA_SU_SMALL_PRIM_FILTER_CNTL] = 0x00000000;
-   ctx->tracked_regs.reg_value[SI_TRACKED_PA_CL_VS_OUT_CNTL__VS] = 0x00000000;
-   ctx->tracked_regs.reg_value[SI_TRACKED_PA_CL_VS_OUT_CNTL__CL] = 0x00000000;
+   ctx->tracked_regs.reg_value[SI_TRACKED_PA_CL_VS_OUT_CNTL] = 0x00000000;
    ctx->tracked_regs.reg_value[SI_TRACKED_PA_CL_CLIP_CNTL] = 0x00090000;
    ctx->tracked_regs.reg_value[SI_TRACKED_PA_SC_BINNER_CNTL_0] = 0x00000003;
    ctx->tracked_regs.reg_value[SI_TRACKED_DB_VRS_OVERRIDE_CNTL] = 0x00000000;
@@ -351,21 +293,35 @@ void si_set_tracked_regs_to_clear_state(struct si_context *ctx)
    ctx->tracked_regs.reg_value[SI_TRACKED_VGT_VERTEX_REUSE_BLOCK_CNTL]  = 0x0000001e; /* From GFX8 */
 
    /* Set all cleared context registers to saved. */
-   ctx->tracked_regs.reg_saved = ~(1ull << SI_TRACKED_GE_PC_ALLOC); /* uconfig reg */
+   ctx->tracked_regs.reg_saved = BITFIELD64_MASK(SI_TRACKED_GE_PC_ALLOC);
    ctx->last_gs_out_prim = 0; /* cleared by CLEAR_STATE */
 }
 
-void si_install_draw_wrapper(struct si_context *sctx, pipe_draw_vbo_func wrapper)
+void si_install_draw_wrapper(struct si_context *sctx, pipe_draw_vbo_func wrapper,
+                             pipe_draw_vertex_state_func vstate_wrapper)
 {
    if (wrapper) {
       if (wrapper != sctx->b.draw_vbo) {
-         assert (!sctx->real_draw_vbo);
+         assert(!sctx->real_draw_vbo);
+         assert(!sctx->real_draw_vertex_state);
          sctx->real_draw_vbo = sctx->b.draw_vbo;
+         sctx->real_draw_vertex_state = sctx->b.draw_vertex_state;
          sctx->b.draw_vbo = wrapper;
+         sctx->b.draw_vertex_state = vstate_wrapper;
       }
    } else if (sctx->real_draw_vbo) {
       sctx->real_draw_vbo = NULL;
+      sctx->real_draw_vertex_state = NULL;
       si_select_draw_vbo(sctx);
+   }
+}
+
+static void si_tmz_preamble(struct si_context *sctx)
+{
+   bool secure = si_gfx_resources_check_encrypted(sctx);
+   if (secure != sctx->ws->cs_is_secure(&sctx->gfx_cs)) {
+      si_flush_gfx_cs(sctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW |
+                            RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION, NULL);
    }
 }
 
@@ -377,13 +333,20 @@ static void si_draw_vbo_tmz_preamble(struct pipe_context *ctx,
                                      unsigned num_draws) {
    struct si_context *sctx = (struct si_context *)ctx;
 
-   bool secure = si_gfx_resources_check_encrypted(sctx);
-   if (secure != sctx->ws->cs_is_secure(&sctx->gfx_cs)) {
-      si_flush_gfx_cs(sctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW |
-                            RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION, NULL);
-   }
-
+   si_tmz_preamble(sctx);
    sctx->real_draw_vbo(ctx, info, drawid_offset, indirect, draws, num_draws);
+}
+
+static void si_draw_vstate_tmz_preamble(struct pipe_context *ctx,
+                                        struct pipe_vertex_state *state,
+                                        uint32_t partial_velem_mask,
+                                        struct pipe_draw_vertex_state_info info,
+                                        const struct pipe_draw_start_count_bias *draws,
+                                        unsigned num_draws) {
+   struct si_context *sctx = (struct si_context *)ctx;
+
+   si_tmz_preamble(sctx);
+   sctx->real_draw_vertex_state(ctx, state, partial_velem_mask, info, draws, num_draws);
 }
 
 void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
@@ -391,14 +354,10 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    bool is_secure = false;
 
    if (unlikely(radeon_uses_secure_bos(ctx->ws))) {
-      /* Disable features that don't work with TMZ:
-       *   - primitive discard
-       */
-      ctx->prim_discard_vertex_count_threshold = UINT_MAX;
-
       is_secure = ctx->ws->cs_is_secure(&ctx->gfx_cs);
 
-      si_install_draw_wrapper(ctx, si_draw_vbo_tmz_preamble);
+      si_install_draw_wrapper(ctx, si_draw_vbo_tmz_preamble,
+                              si_draw_vstate_tmz_preamble);
    }
 
    if (ctx->is_debug)
@@ -420,8 +379,10 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
                  SI_CONTEXT_INV_L2 | SI_CONTEXT_START_PIPELINE_STATS;
    ctx->pipeline_stats_enabled = -1;
 
-   /* We don't know if the last draw used NGG. */
-   if (ctx->screen->info.has_vgt_flush_ngg_legacy_bug)
+   /* We don't know if the last draw used NGG because it can be a different process.
+    * When switching NGG->legacy, we need to flush VGT for certain hw generations.
+    */
+   if (ctx->screen->info.has_vgt_flush_ngg_legacy_bug && !ctx->ngg)
       ctx->flags |= SI_CONTEXT_VGT_FLUSH;
 
    if (ctx->border_color_buffer) {
@@ -557,9 +518,9 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
       memset(ctx->tracked_regs.spi_ps_input_cntl, 0xff, sizeof(uint32_t) * 32);
    }
 
-   si_mark_atom_dirty(ctx, &ctx->atoms.s.scratch_state);
    if (ctx->scratch_buffer) {
       si_context_add_resource_size(ctx, &ctx->scratch_buffer->b.b);
+      si_mark_atom_dirty(ctx, &ctx->atoms.s.scratch_state);
    }
 
    if (ctx->streamout.suspended) {
@@ -572,18 +533,6 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
 
    assert(!ctx->gfx_cs.prev_dw);
    ctx->initial_gfx_cs_size = ctx->gfx_cs.current.cdw;
-   ctx->prim_discard_compute_ib_initialized = false;
-
-   /* Compute-based primitive discard:
-    *   The index ring is divided into 2 halves. Switch between the halves
-    *   in the same fashion as doublebuffering.
-    */
-   if (ctx->index_ring_base)
-      ctx->index_ring_base = 0;
-   else
-      ctx->index_ring_base = ctx->index_ring_size_per_ib;
-
-   ctx->index_ring_offset = 0;
 
    /* All buffer references are removed on a flush, so si_check_needs_implicit_sync
     * cannot determine if si_make_CB_shader_coherent() needs to be called.
@@ -601,42 +550,17 @@ void si_trace_emit(struct si_context *sctx)
    si_cp_write_data(sctx, sctx->current_saved_cs->trace_buf, 0, 4, V_370_MEM, V_370_ME, &trace_id);
 
    radeon_begin(cs);
-   radeon_emit(cs, PKT3(PKT3_NOP, 0, 0));
-   radeon_emit(cs, AC_ENCODE_TRACE_POINT(trace_id));
+   radeon_emit(PKT3(PKT3_NOP, 0, 0));
+   radeon_emit(AC_ENCODE_TRACE_POINT(trace_id));
    radeon_end();
 
    if (sctx->log)
       u_log_flush(sctx->log);
 }
 
-void si_prim_discard_signal_next_compute_ib_start(struct si_context *sctx)
-{
-   if (!si_compute_prim_discard_enabled(sctx))
-      return;
-
-   if (!sctx->barrier_buf) {
-      u_suballocator_alloc(&sctx->allocator_zeroed_memory, 4, 4, &sctx->barrier_buf_offset,
-                           (struct pipe_resource **)&sctx->barrier_buf);
-   }
-
-   /* Emit a placeholder to signal the next compute IB to start.
-    * See si_compute_prim_discard.c for explanation.
-    */
-   uint32_t signal = 1;
-   si_cp_write_data(sctx, sctx->barrier_buf, sctx->barrier_buf_offset, 4, V_370_MEM, V_370_ME,
-                    &signal);
-
-   sctx->last_pkt3_write_data = &sctx->gfx_cs.current.buf[sctx->gfx_cs.current.cdw - 5];
-
-   /* Only the last occurrence of WRITE_DATA will be executed.
-    * The packet will be enabled in si_flush_gfx_cs.
-    */
-   *sctx->last_pkt3_write_data = PKT3(PKT3_NOP, 3, 0);
-}
-
 void si_emit_surface_sync(struct si_context *sctx, struct radeon_cmdbuf *cs, unsigned cp_coher_cntl)
 {
-   bool compute_ib = !sctx->has_graphics || cs == &sctx->prim_discard_compute_cs;
+   bool compute_ib = !sctx->has_graphics;
 
    assert(sctx->chip_class <= GFX9);
 
@@ -648,20 +572,20 @@ void si_emit_surface_sync(struct si_context *sctx, struct radeon_cmdbuf *cs, uns
 
    if (sctx->chip_class == GFX9 || compute_ib) {
       /* Flush caches and wait for the caches to assert idle. */
-      radeon_emit(cs, PKT3(PKT3_ACQUIRE_MEM, 5, 0));
-      radeon_emit(cs, cp_coher_cntl); /* CP_COHER_CNTL */
-      radeon_emit(cs, 0xffffffff);    /* CP_COHER_SIZE */
-      radeon_emit(cs, 0xffffff);      /* CP_COHER_SIZE_HI */
-      radeon_emit(cs, 0);             /* CP_COHER_BASE */
-      radeon_emit(cs, 0);             /* CP_COHER_BASE_HI */
-      radeon_emit(cs, 0x0000000A);    /* POLL_INTERVAL */
+      radeon_emit(PKT3(PKT3_ACQUIRE_MEM, 5, 0));
+      radeon_emit(cp_coher_cntl); /* CP_COHER_CNTL */
+      radeon_emit(0xffffffff);    /* CP_COHER_SIZE */
+      radeon_emit(0xffffff);      /* CP_COHER_SIZE_HI */
+      radeon_emit(0);             /* CP_COHER_BASE */
+      radeon_emit(0);             /* CP_COHER_BASE_HI */
+      radeon_emit(0x0000000A);    /* POLL_INTERVAL */
    } else {
       /* ACQUIRE_MEM is only required on a compute ring. */
-      radeon_emit(cs, PKT3(PKT3_SURFACE_SYNC, 3, 0));
-      radeon_emit(cs, cp_coher_cntl); /* CP_COHER_CNTL */
-      radeon_emit(cs, 0xffffffff);    /* CP_COHER_SIZE */
-      radeon_emit(cs, 0);             /* CP_COHER_BASE */
-      radeon_emit(cs, 0x0000000A);    /* POLL_INTERVAL */
+      radeon_emit(PKT3(PKT3_SURFACE_SYNC, 3, 0));
+      radeon_emit(cp_coher_cntl); /* CP_COHER_CNTL */
+      radeon_emit(0xffffffff);    /* CP_COHER_SIZE */
+      radeon_emit(0);             /* CP_COHER_BASE */
+      radeon_emit(0x0000000A);    /* POLL_INTERVAL */
    }
    radeon_end();
 
@@ -690,8 +614,8 @@ void gfx10_emit_cache_flush(struct si_context *ctx, struct radeon_cmdbuf *cs)
    radeon_begin(cs);
 
    if (flags & SI_CONTEXT_VGT_FLUSH) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_VGT_FLUSH) | EVENT_INDEX(0));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_VGT_FLUSH) | EVENT_INDEX(0));
    }
 
    if (flags & SI_CONTEXT_FLUSH_AND_INV_CB)
@@ -733,13 +657,13 @@ void gfx10_emit_cache_flush(struct si_context *ctx, struct radeon_cmdbuf *cs)
    if (flags & (SI_CONTEXT_FLUSH_AND_INV_CB | SI_CONTEXT_FLUSH_AND_INV_DB)) {
       if (flags & SI_CONTEXT_FLUSH_AND_INV_CB) {
          /* Flush CMASK/FMASK/DCC. Will wait for idle later. */
-         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-         radeon_emit(cs, EVENT_TYPE(V_028A90_FLUSH_AND_INV_CB_META) | EVENT_INDEX(0));
+         radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(EVENT_TYPE(V_028A90_FLUSH_AND_INV_CB_META) | EVENT_INDEX(0));
       }
       if (flags & SI_CONTEXT_FLUSH_AND_INV_DB) {
          /* Flush HTILE. Will wait for idle later. */
-         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-         radeon_emit(cs, EVENT_TYPE(V_028A90_FLUSH_AND_INV_DB_META) | EVENT_INDEX(0));
+         radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(EVENT_TYPE(V_028A90_FLUSH_AND_INV_DB_META) | EVENT_INDEX(0));
       }
 
       /* First flush CB/DB, then L1/L2. */
@@ -758,21 +682,21 @@ void gfx10_emit_cache_flush(struct si_context *ctx, struct radeon_cmdbuf *cs)
    } else {
       /* Wait for graphics shaders to go idle if requested. */
       if (flags & SI_CONTEXT_PS_PARTIAL_FLUSH) {
-         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-         radeon_emit(cs, EVENT_TYPE(V_028A90_PS_PARTIAL_FLUSH) | EVENT_INDEX(4));
+         radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(EVENT_TYPE(V_028A90_PS_PARTIAL_FLUSH) | EVENT_INDEX(4));
          /* Only count explicit shader flushes, not implicit ones. */
          ctx->num_vs_flushes++;
          ctx->num_ps_flushes++;
       } else if (flags & SI_CONTEXT_VS_PARTIAL_FLUSH) {
-         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-         radeon_emit(cs, EVENT_TYPE(V_028A90_VS_PARTIAL_FLUSH) | EVENT_INDEX(4));
+         radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(EVENT_TYPE(V_028A90_VS_PARTIAL_FLUSH) | EVENT_INDEX(4));
          ctx->num_vs_flushes++;
       }
    }
 
    if (flags & SI_CONTEXT_CS_PARTIAL_FLUSH && ctx->compute_is_busy) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_CS_PARTIAL_FLUSH | EVENT_INDEX(4)));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_CS_PARTIAL_FLUSH | EVENT_INDEX(4)));
       ctx->num_cs_flushes++;
       ctx->compute_is_busy = false;
    }
@@ -839,27 +763,27 @@ void gfx10_emit_cache_flush(struct si_context *ctx, struct radeon_cmdbuf *cs)
        * The cache flush is executed in the ME, but the PFP waits
        * for completion.
        */
-      radeon_emit(cs, PKT3(PKT3_ACQUIRE_MEM, 6, 0));
-      radeon_emit(cs, dont_sync_pfp); /* CP_COHER_CNTL */
-      radeon_emit(cs, 0xffffffff); /* CP_COHER_SIZE */
-      radeon_emit(cs, 0xffffff);   /* CP_COHER_SIZE_HI */
-      radeon_emit(cs, 0);          /* CP_COHER_BASE */
-      radeon_emit(cs, 0);          /* CP_COHER_BASE_HI */
-      radeon_emit(cs, 0x0000000A); /* POLL_INTERVAL */
-      radeon_emit(cs, gcr_cntl);   /* GCR_CNTL */
+      radeon_emit(PKT3(PKT3_ACQUIRE_MEM, 6, 0));
+      radeon_emit(dont_sync_pfp); /* CP_COHER_CNTL */
+      radeon_emit(0xffffffff); /* CP_COHER_SIZE */
+      radeon_emit(0xffffff);   /* CP_COHER_SIZE_HI */
+      radeon_emit(0);          /* CP_COHER_BASE */
+      radeon_emit(0);          /* CP_COHER_BASE_HI */
+      radeon_emit(0x0000000A); /* POLL_INTERVAL */
+      radeon_emit(gcr_cntl);   /* GCR_CNTL */
    } else if (flags & SI_CONTEXT_PFP_SYNC_ME) {
       /* Synchronize PFP with ME. (this stalls PFP) */
-      radeon_emit(cs, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
-      radeon_emit(cs, 0);
+      radeon_emit(PKT3(PKT3_PFP_SYNC_ME, 0, 0));
+      radeon_emit(0);
    }
 
    if (flags & SI_CONTEXT_START_PIPELINE_STATS && ctx->pipeline_stats_enabled != 1) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_START) | EVENT_INDEX(0));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_PIPELINESTAT_START) | EVENT_INDEX(0));
       ctx->pipeline_stats_enabled = 1;
    } else if (flags & SI_CONTEXT_STOP_PIPELINE_STATS && ctx->pipeline_stats_enabled != 0) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_STOP) | EVENT_INDEX(0));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_PIPELINESTAT_STOP) | EVENT_INDEX(0));
       ctx->pipeline_stats_enabled = 0;
    }
    radeon_end();
@@ -880,14 +804,6 @@ void si_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs)
 
    uint32_t cp_coher_cntl = 0;
    const uint32_t flush_cb_db = flags & (SI_CONTEXT_FLUSH_AND_INV_CB | SI_CONTEXT_FLUSH_AND_INV_DB);
-   const bool is_barrier =
-      flush_cb_db ||
-      /* INV_ICACHE == beginning of gfx IB. Checking
-       * INV_ICACHE fixes corruption for DeusExMD with
-       * compute-based culling, but I don't know why.
-       */
-      flags & (SI_CONTEXT_INV_ICACHE | SI_CONTEXT_PS_PARTIAL_FLUSH | SI_CONTEXT_VS_PARTIAL_FLUSH) ||
-      (flags & SI_CONTEXT_CS_PARTIAL_FLUSH && sctx->compute_is_busy);
 
    assert(sctx->chip_class <= GFX9);
 
@@ -930,13 +846,13 @@ void si_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs)
 
    if (flags & SI_CONTEXT_FLUSH_AND_INV_CB) {
       /* Flush CMASK/FMASK/DCC. SURFACE_SYNC will wait for idle. */
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_FLUSH_AND_INV_CB_META) | EVENT_INDEX(0));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_FLUSH_AND_INV_CB_META) | EVENT_INDEX(0));
    }
    if (flags & (SI_CONTEXT_FLUSH_AND_INV_DB | SI_CONTEXT_FLUSH_AND_INV_DB_META)) {
       /* Flush HTILE. SURFACE_SYNC will wait for idle. */
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_FLUSH_AND_INV_DB_META) | EVENT_INDEX(0));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_FLUSH_AND_INV_DB_META) | EVENT_INDEX(0));
    }
 
    /* Wait for shader engines to go idle.
@@ -945,35 +861,35 @@ void si_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs)
     */
    if (!flush_cb_db) {
       if (flags & SI_CONTEXT_PS_PARTIAL_FLUSH) {
-         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-         radeon_emit(cs, EVENT_TYPE(V_028A90_PS_PARTIAL_FLUSH) | EVENT_INDEX(4));
+         radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(EVENT_TYPE(V_028A90_PS_PARTIAL_FLUSH) | EVENT_INDEX(4));
          /* Only count explicit shader flushes, not implicit ones
           * done by SURFACE_SYNC.
           */
          sctx->num_vs_flushes++;
          sctx->num_ps_flushes++;
       } else if (flags & SI_CONTEXT_VS_PARTIAL_FLUSH) {
-         radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-         radeon_emit(cs, EVENT_TYPE(V_028A90_VS_PARTIAL_FLUSH) | EVENT_INDEX(4));
+         radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+         radeon_emit(EVENT_TYPE(V_028A90_VS_PARTIAL_FLUSH) | EVENT_INDEX(4));
          sctx->num_vs_flushes++;
       }
    }
 
    if (flags & SI_CONTEXT_CS_PARTIAL_FLUSH && sctx->compute_is_busy) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_CS_PARTIAL_FLUSH) | EVENT_INDEX(4));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_CS_PARTIAL_FLUSH) | EVENT_INDEX(4));
       sctx->num_cs_flushes++;
       sctx->compute_is_busy = false;
    }
 
    /* VGT state synchronization. */
    if (flags & SI_CONTEXT_VGT_FLUSH) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_VGT_FLUSH) | EVENT_INDEX(0));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_VGT_FLUSH) | EVENT_INDEX(0));
    }
    if (flags & SI_CONTEXT_VGT_STREAMOUT_SYNC) {
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_VGT_STREAMOUT_SYNC) | EVENT_INDEX(0));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_VGT_STREAMOUT_SYNC) | EVENT_INDEX(0));
    }
 
    radeon_end();
@@ -1095,24 +1011,21 @@ void si_emit_cache_flush(struct si_context *sctx, struct radeon_cmdbuf *cs)
 
    if (flags & SI_CONTEXT_PFP_SYNC_ME) {
       radeon_begin(cs);
-      radeon_emit(cs, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
-      radeon_emit(cs, 0);
+      radeon_emit(PKT3(PKT3_PFP_SYNC_ME, 0, 0));
+      radeon_emit(0);
       radeon_end();
    }
 
-   if (is_barrier)
-      si_prim_discard_signal_next_compute_ib_start(sctx);
-
    if (flags & SI_CONTEXT_START_PIPELINE_STATS && sctx->pipeline_stats_enabled != 1) {
       radeon_begin(cs);
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_START) | EVENT_INDEX(0));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_PIPELINESTAT_START) | EVENT_INDEX(0));
       radeon_end();
       sctx->pipeline_stats_enabled = 1;
    } else if (flags & SI_CONTEXT_STOP_PIPELINE_STATS && sctx->pipeline_stats_enabled != 0) {
       radeon_begin(cs);
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_PIPELINESTAT_STOP) | EVENT_INDEX(0));
+      radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(EVENT_TYPE(V_028A90_PIPELINESTAT_STOP) | EVENT_INDEX(0));
       radeon_end();
       sctx->pipeline_stats_enabled = 0;
    }

@@ -369,7 +369,7 @@ static void translate_vertex_program(struct radeon_compiler *c, void *user)
 	struct r300_vertex_program_compiler *compiler = (struct r300_vertex_program_compiler*)c;
 	struct rc_instruction *rci;
 
-	unsigned loops[R500_PVS_MAX_LOOP_DEPTH];
+	unsigned loops[R500_PVS_MAX_LOOP_DEPTH] = {};
 	unsigned loop_depth = 0;
 
 	compiler->code->pos_end = 0;	/* Not supported yet */
@@ -755,8 +755,8 @@ static void rc_vs_add_artificial_outputs(struct radeon_compiler *c, void *user)
 	int i;
 
 	for(i = 0; i < 32; ++i) {
-		if ((compiler->RequiredOutputs & (1 << i)) &&
-		    !(compiler->Base.Program.OutputsWritten & (1 << i))) {
+		if ((compiler->RequiredOutputs & (1U << i)) &&
+		    !(compiler->Base.Program.OutputsWritten & (1U << i))) {
 			struct rc_instruction * inst = rc_insert_new_instruction(&compiler->Base, compiler->Base.Program.Instructions.Prev);
 			inst->U.I.Opcode = RC_OPCODE_MOV;
 
@@ -768,7 +768,7 @@ static void rc_vs_add_artificial_outputs(struct radeon_compiler *c, void *user)
 			inst->U.I.SrcReg[0].Index = 0;
 			inst->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_XYZW;
 
-			compiler->Base.Program.OutputsWritten |= 1 << i;
+			compiler->Base.Program.OutputsWritten |= 1U << i;
 		}
 	}
 }
@@ -780,7 +780,7 @@ static void dataflow_outputs_mark_used(void * userdata, void * data,
 	int i;
 
 	for(i = 0; i < 32; ++i) {
-		if (c->RequiredOutputs & (1 << i))
+		if (c->RequiredOutputs & (1U << i))
 			callback(data, i, RC_MASK_XYZW);
 	}
 }
@@ -864,7 +864,7 @@ static void rc_emulate_negative_addressing(struct radeon_compiler *compiler, voi
 		transform_negative_addressing(c, lastARL, inst, min_offset);
 }
 
-struct rc_swizzle_caps r300_vertprog_swizzle_caps = {
+const struct rc_swizzle_caps r300_vertprog_swizzle_caps = {
 	.IsNative = &swizzle_is_native,
 	.Split = 0 /* should never be called */
 };

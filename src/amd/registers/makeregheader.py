@@ -1,5 +1,3 @@
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 COPYRIGHT = '''
 /*
  * Copyright 2015-2019 Advanced Micro Devices, Inc.

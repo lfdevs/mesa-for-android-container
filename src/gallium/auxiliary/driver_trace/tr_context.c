@@ -141,6 +141,39 @@ trace_context_draw_vbo(struct pipe_context *_pipe,
 }
 
 
+static void
+trace_context_draw_vertex_state(struct pipe_context *_pipe,
+                                struct pipe_vertex_state *state,
+                                uint32_t partial_velem_mask,
+                                struct pipe_draw_vertex_state_info info,
+                                const struct pipe_draw_start_count_bias *draws,
+                                unsigned num_draws)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+
+   if (!tr_ctx->seen_fb_state && trace_dump_is_triggered())
+      dump_fb_state(tr_ctx, "current_framebuffer_state", true);
+
+   trace_dump_call_begin("pipe_context", "draw_vertex_state");
+
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg(ptr, state);
+   trace_dump_arg(uint, partial_velem_mask);
+   trace_dump_arg(draw_vertex_state_info, info);
+   trace_dump_arg_begin("draws");
+   trace_dump_struct_array(draw_start_count, draws, num_draws);
+   trace_dump_arg_end();
+   trace_dump_arg(uint, num_draws);
+
+   trace_dump_trace_flush();
+
+   pipe->draw_vertex_state(pipe, state, partial_velem_mask, info, draws,
+                           num_draws);
+   trace_dump_call_end();
+}
+
+
 static struct pipe_query *
 trace_context_create_query(struct pipe_context *_pipe,
                            unsigned query_type,
@@ -1022,6 +1055,8 @@ trace_context_create_sampler_view(struct pipe_context *_pipe,
    pipe_resource_reference(&tr_view->base.texture, resource);
    tr_view->base.context = _pipe;
    tr_view->sampler_view = result;
+   result->reference.count += 100000000;
+   tr_view->refcount = 100000000;
    result = &tr_view->base;
 
    return result;
@@ -1042,6 +1077,7 @@ trace_context_sampler_view_destroy(struct pipe_context *_pipe,
    trace_dump_arg(ptr, pipe);
    trace_dump_arg(ptr, view);
 
+   p_atomic_add(&tr_view->sampler_view->reference.count, -tr_view->refcount);
    pipe_sampler_view_reference(&tr_view->sampler_view, NULL);
 
    trace_dump_call_end();
@@ -1112,6 +1148,7 @@ trace_context_set_sampler_views(struct pipe_context *_pipe,
                                 unsigned start,
                                 unsigned num,
                                 unsigned unbind_num_trailing_slots,
+                                bool take_ownership,
                                 struct pipe_sampler_view **views)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
@@ -1125,6 +1162,13 @@ trace_context_set_sampler_views(struct pipe_context *_pipe,
 
    for (i = 0; i < num; ++i) {
       tr_view = trace_sampler_view(views[i]);
+      if (tr_view) {
+         tr_view->refcount--;
+         if (!tr_view->refcount) {
+            tr_view->refcount = 100000000;
+            p_atomic_add(&tr_view->sampler_view->reference.count, tr_view->refcount);
+         }
+      }
       unwrapped_views[i] = tr_view ? tr_view->sampler_view : NULL;
    }
    views = unwrapped_views;
@@ -1136,10 +1180,11 @@ trace_context_set_sampler_views(struct pipe_context *_pipe,
    trace_dump_arg(uint, start);
    trace_dump_arg(uint, num);
    trace_dump_arg(uint, unbind_num_trailing_slots);
+   trace_dump_arg(bool, take_ownership);
    trace_dump_arg_array(ptr, views, num);
 
    pipe->set_sampler_views(pipe, shader, start, num,
-                           unbind_num_trailing_slots, views);
+                           unbind_num_trailing_slots, take_ownership, views);
 
    trace_dump_call_end();
 }
@@ -1949,6 +1994,20 @@ trace_context_set_tess_state(struct pipe_context *_context,
    context->set_tess_state(context, default_outer_level, default_inner_level);
 }
 
+static void
+trace_context_set_patch_vertices(struct pipe_context *_context,
+                                 uint8_t patch_vertices)
+{
+   struct trace_context *tr_context = trace_context(_context);
+   struct pipe_context *context = tr_context->pipe;
+
+   trace_dump_call_begin("pipe_context", "set_patch_vertices");
+   trace_dump_arg(ptr, context);
+   trace_dump_arg(uint, patch_vertices);
+   trace_dump_call_end();
+
+   context->set_patch_vertices(context, patch_vertices);
+}
 
 static void trace_context_set_shader_buffers(struct pipe_context *_context,
                                              enum pipe_shader_type shader,
@@ -2151,6 +2210,7 @@ trace_context_create(struct trace_screen *tr_scr,
    tr_ctx->base . _member = pipe -> _member ? trace_context_ ## _member : NULL
 
    TR_CTX_INIT(draw_vbo);
+   TR_CTX_INIT(draw_vertex_state);
    TR_CTX_INIT(render_condition);
    TR_CTX_INIT(create_query);
    TR_CTX_INIT(destroy_query);
@@ -2227,6 +2287,7 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(memory_barrier);
    TR_CTX_INIT(resource_commit);
    TR_CTX_INIT(set_tess_state);
+   TR_CTX_INIT(set_patch_vertices);
    TR_CTX_INIT(set_shader_buffers);
    TR_CTX_INIT(launch_grid);
    TR_CTX_INIT(set_shader_images);

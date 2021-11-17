@@ -74,7 +74,7 @@ can_fast_clear_color(struct iris_context *ice,
 {
    struct iris_resource *res = (void *) p_res;
 
-   if (INTEL_DEBUG & DEBUG_NO_FAST_CLEAR)
+   if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
       return false;
 
    if (!isl_aux_usage_has_fast_clears(res->aux.usage))
@@ -114,7 +114,7 @@ can_fast_clear_color(struct iris_context *ice,
     * resource and not the renderbuffer.
     */
    if (!iris_render_formats_color_compatible(render_format, res->surf.format,
-                                             color)) {
+                                             color, false)) {
       return false;
    }
 
@@ -218,8 +218,8 @@ fast_clear_color(struct iris_context *ice,
    struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
    struct pipe_resource *p_res = (void *) res;
 
-   bool color_changed = !!memcmp(&res->aux.clear_color, &color,
-                                 sizeof(color));
+   bool color_changed = res->aux.clear_color_unknown ||
+      memcmp(&res->aux.clear_color, &color, sizeof(color)) != 0;
 
    if (color_changed) {
       /* If we are clearing to a new clear value, we need to resolve fast
@@ -257,16 +257,24 @@ fast_clear_color(struct iris_context *ice,
                                          res_lvl, 1, layer, 1,
                                          res->aux.usage,
                                          false);
-            perf_debug(&ice->dbg,
-                       "Resolving resource (%p) level %d, layer %d: color changing from "
-                       "(%0.2f, %0.2f, %0.2f, %0.2f) to "
-                       "(%0.2f, %0.2f, %0.2f, %0.2f)\n",
-                       res, res_lvl, layer,
-                       res->aux.clear_color.f32[0],
-                       res->aux.clear_color.f32[1],
-                       res->aux.clear_color.f32[2],
-                       res->aux.clear_color.f32[3],
-                       color.f32[0], color.f32[1], color.f32[2], color.f32[3]);
+            if (res->aux.clear_color_unknown) {
+               perf_debug(&ice->dbg,
+                          "Resolving resource (%p) level %d, layer %d: color changing from "
+                          "(unknown) to (%0.2f, %0.2f, %0.2f, %0.2f)\n",
+                          res, res_lvl, layer,
+                          color.f32[0], color.f32[1], color.f32[2], color.f32[3]);
+            } else {
+               perf_debug(&ice->dbg,
+                          "Resolving resource (%p) level %d, layer %d: color changing from "
+                          "(%0.2f, %0.2f, %0.2f, %0.2f) to "
+                          "(%0.2f, %0.2f, %0.2f, %0.2f)\n",
+                          res, res_lvl, layer,
+                          res->aux.clear_color.f32[0],
+                          res->aux.clear_color.f32[1],
+                          res->aux.clear_color.f32[2],
+                          res->aux.clear_color.f32[3],
+                          color.f32[0], color.f32[1], color.f32[2], color.f32[3]);
+            }
          }
       }
    }
@@ -367,7 +375,6 @@ clear_color(struct iris_context *ice,
       return;
    }
 
-   bool color_write_disable[4] = { false, false, false, false };
    enum isl_aux_usage aux_usage =
       iris_resource_render_aux_usage(ice, res, level, format, false);
 
@@ -391,7 +398,7 @@ clear_color(struct iris_context *ice,
    blorp_clear(&blorp_batch, &surf, format, swizzle,
                level, box->z, box->depth, box->x, box->y,
                box->x + box->width, box->y + box->height,
-               color, color_write_disable);
+               color, 0 /* color_write_disable */);
 
    blorp_batch_finish(&blorp_batch);
    iris_batch_sync_region_end(batch);
@@ -417,7 +424,7 @@ can_fast_clear_depth(struct iris_context *ice,
    struct iris_screen *screen = (void *) ctx->screen;
    const struct intel_device_info *devinfo = &screen->devinfo;
 
-   if (INTEL_DEBUG & DEBUG_NO_FAST_CLEAR)
+   if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
       return false;
 
    /* Check for partial clears */
@@ -463,7 +470,7 @@ fast_clear_depth(struct iris_context *ice,
    /* If we're clearing to a new clear value, then we need to resolve any clear
     * flags out of the HiZ buffer into the real depth buffer.
     */
-   if (res->aux.clear_color.f32[0] != depth) {
+   if (res->aux.clear_color_unknown || res->aux.clear_color.f32[0] != depth) {
       for (unsigned res_level = 0; res_level < res->surf.levels; res_level++) {
          const unsigned level_layers =
             iris_get_num_logical_layers(res, res_level);
@@ -494,13 +501,28 @@ fast_clear_depth(struct iris_context *ice,
                           ISL_AUX_OP_FULL_RESOLVE, false);
             iris_resource_set_aux_state(ice, res, res_level, layer, 1,
                                         ISL_AUX_STATE_RESOLVED);
-            iris_emit_pipe_control_flush(batch, "hiz op: post depth resolve",
-                                         PIPE_CONTROL_TILE_CACHE_FLUSH);
          }
       }
       const union isl_color_value clear_value = { .f32 = {depth, } };
       iris_resource_set_clear_color(ice, res, clear_value);
       update_clear_depth = true;
+   }
+
+   if (res->aux.usage == ISL_AUX_USAGE_HIZ_CCS_WT) {
+      /* From Bspec 47010 (Depth Buffer Clear):
+       *
+       *    Since the fast clear cycles to CCS are not cached in TileCache,
+       *    any previous depth buffer writes to overlapping pixels must be
+       *    flushed out of TileCache before a succeeding Depth Buffer Clear.
+       *    This restriction only applies to Depth Buffer with write-thru
+       *    enabled, since fast clears to CCS only occur for write-thru mode.
+       *
+       * There may have been a write to this depth buffer. Flush it from the
+       * tile cache just in case.
+       */
+      iris_emit_pipe_control_flush(batch, "hiz_ccs_wt: before fast clear",
+                                   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                                   PIPE_CONTROL_TILE_CACHE_FLUSH);
    }
 
    for (unsigned l = 0; l < box->depth; l++) {
@@ -610,8 +632,7 @@ clear_depth_stencil(struct iris_context *ice,
    blorp_batch_finish(&blorp_batch);
    iris_batch_sync_region_end(batch);
 
-   iris_flush_and_dirty_for_history(ice, batch, res,
-                                    PIPE_CONTROL_TILE_CACHE_FLUSH,
+   iris_flush_and_dirty_for_history(ice, batch, res, 0,
                                     "cache history: post slow ZS clear");
 
    if (clear_depth && z_res) {
@@ -696,11 +717,7 @@ iris_clear_texture(struct pipe_context *ctx,
 {
    struct iris_context *ice = (void *) ctx;
    struct iris_screen *screen = (void *) ctx->screen;
-   struct iris_resource *res = (void *) p_res;
    const struct intel_device_info *devinfo = &screen->devinfo;
-
-   if (iris_resource_unfinished_aux_import(res))
-      iris_resource_finish_aux_import(ctx->screen, res);
 
    if (util_format_is_depth_or_stencil(p_res->format)) {
       const struct util_format_unpack_description *unpack =

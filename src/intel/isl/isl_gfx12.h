@@ -31,6 +31,19 @@ extern "C" {
 #endif
 
 void
+isl_gfx125_filter_tiling(const struct isl_device *dev,
+                         const struct isl_surf_init_info *restrict info,
+                         isl_tiling_flags_t *flags);
+
+void
+isl_gfx125_choose_image_alignment_el(const struct isl_device *dev,
+                                     const struct isl_surf_init_info *restrict info,
+                                     enum isl_tiling tiling,
+                                     enum isl_dim_layout dim_layout,
+                                     enum isl_msaa_layout msaa_layout,
+                                     struct isl_extent3d *image_align_el);
+
+void
 isl_gfx12_choose_image_alignment_el(const struct isl_device *dev,
                                     const struct isl_surf_init_info *restrict info,
                                     enum isl_tiling tiling,

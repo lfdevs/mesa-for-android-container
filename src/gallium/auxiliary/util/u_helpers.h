@@ -62,6 +62,11 @@ bool util_upload_index_buffer(struct pipe_context *pipe,
                               struct pipe_resource **out_buffer,
                               unsigned *out_offset, unsigned alignment);
 
+void
+util_lower_uint64_vertex_elements(const struct pipe_vertex_element **velems,
+                                  unsigned *velem_count,
+                                  struct pipe_vertex_element tmp[PIPE_MAX_ATTRIBS]);
+
 /* Helper function to determine if the varying should contain the point
  * coordinates, given the sprite_coord_enable mask.  Requires
  * PIPE_CAP_TGSI_TEXCOORD to be enabled.
@@ -115,6 +120,15 @@ void util_throttle_memory_usage(struct pipe_context *pipe,
 
 bool
 util_lower_clearsize_to_dword(const void *clearValue, int *clearValueSize, uint32_t *clamped);
+
+void
+util_init_pipe_vertex_state(struct pipe_screen *screen,
+                            struct pipe_vertex_buffer *buffer,
+                            const struct pipe_vertex_element *elements,
+                            unsigned num_elements,
+                            struct pipe_resource *indexbuf,
+                            uint32_t full_velem_mask,
+                            struct pipe_vertex_state *state);
 
 #ifdef __cplusplus
 }

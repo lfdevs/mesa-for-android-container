@@ -659,7 +659,7 @@ crocus_get_query_result(struct pipe_context *ctx,
    struct crocus_screen *screen = (void *) ctx->screen;
    const struct intel_device_info *devinfo = &screen->devinfo;
 
-   if (unlikely(screen->no_hw)) {
+   if (unlikely(screen->devinfo.no_hw)) {
       result->u64 = 0;
       return true;
    }

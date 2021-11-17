@@ -394,7 +394,7 @@ brw_emit_depthbuffer(struct brw_context *brw)
       if (info.hiz_usage == ISL_AUX_USAGE_HIZ) {
          info.hiz_surf = &depth_mt->aux_buf->surf;
 
-         uint32_t hiz_offset = 0;
+         uint64_t hiz_offset = 0;
          if (devinfo->ver == 6) {
             /* HiZ surfaces on Sandy Bridge technically don't support
              * mip-mapping.  However, we can fake it by offsetting to the
@@ -428,7 +428,7 @@ brw_emit_depthbuffer(struct brw_context *brw)
          view.format = stencil_mt->surf.format;
       }
 
-      uint32_t stencil_offset = 0;
+      uint64_t stencil_offset = 0;
       if (devinfo->ver == 6) {
          /* Stencil surfaces on Sandy Bridge technically don't support
           * mip-mapping.  However, we can fake it by offsetting to the
@@ -497,9 +497,8 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
       /* We seem to have issues with geometry flickering when 3D and compute
        * are combined in the same batch and this appears to fix it.
        */
-      const uint32_t subslices = MAX2(brw->screen->subslice_total, 1);
       const uint32_t maxNumberofThreads =
-         devinfo->max_cs_threads * subslices - 1;
+         devinfo->max_cs_threads * devinfo->subslice_total - 1;
 
       BEGIN_BATCH(9);
       OUT_BATCH(MEDIA_VFE_STATE << 16 | (9 - 2));

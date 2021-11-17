@@ -36,6 +36,7 @@
 
 #include "tgsi/tgsi_scan.h"
 
+#include "util/log.h"
 #include "util/slab.h"
 #include "util/u_blitter.h"
 #include "i915_reg.h"
@@ -122,10 +123,15 @@ struct i915_fragment_shader {
    ubyte constant_flags[I915_MAX_CONSTANT];
 
    /**
-    * The mapping between generics and hw texture coords.
+    * The mapping between TGSI inputs and hw texture coords.
     * We need to share this between the vertex and fragment stages.
     **/
-   int generic_mapping[I915_TEX_UNITS];
+   struct {
+      enum tgsi_semantic semantic;
+      int index;
+   } texcoords[I915_TEX_UNITS];
+
+   bool reads_pntc;
 };
 
 struct i915_cache_context;
@@ -303,6 +309,8 @@ struct i915_context {
 
    /** blitter/hw-clear */
    struct blitter_context *blitter;
+
+   struct pipe_debug_callback debug;
 };
 
 /* A flag for each frontend state object:

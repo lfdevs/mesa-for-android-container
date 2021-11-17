@@ -397,9 +397,10 @@ PIPE_FORMAT_IYUV                  , planar3, 1, 1, 1,     ,     ,     ,     , xy
 PIPE_FORMAT_NV12                  , planar2, 1, 1, 1,     ,     ,     ,     , xyzw, yuv
 PIPE_FORMAT_NV21                  , planar2, 1, 1, 1,     ,     ,     ,     , xyzw, yuv
 
-# RGB version of NV12 for hardware that supports sampling from
+# RGB version of NV12 and YV12 for hardware that supports sampling from
 # multiplane textures but needs color-space conversion in the shader.
 PIPE_FORMAT_R8_G8B8_420_UNORM     , planar2, 1, 1, 1,  un8,     ,     ,     , xyzw, rgb
+PIPE_FORMAT_R8_G8_B8_420_UNORM    , planar3, 1, 1, 1,  un8,     ,     ,     , xyzw, rgb
 
 PIPE_FORMAT_Y8_U8_V8_422_UNORM    , planar3, 1, 1, 1,     ,     ,     ,     , xyzw, yuv
 PIPE_FORMAT_Y8_U8V8_422_UNORM     , planar2, 1, 1, 1,     ,     ,     ,     , xyzw, yuv
@@ -467,6 +468,10 @@ PIPE_FORMAT_R32G32B32_SINT          , plain, 1, 1, 1, sp32, sp32, sp32, , xyz1, 
 PIPE_FORMAT_R32G32B32A32_SINT       , plain, 1, 1, 1, sp32, sp32, sp32, sp32, xyzw, rgb
 
 PIPE_FORMAT_R64_UINT                , plain, 1, 1, 1, up64, , , , x001, rgb
+PIPE_FORMAT_R64G64_UINT             , plain, 1, 1, 1, up64, up64, , , xy01, rgb
+PIPE_FORMAT_R64G64B64_UINT          , plain, 1, 1, 1, up64, up64, up64, , xyz1, rgb
+PIPE_FORMAT_R64G64B64A64_UINT       , plain, 1, 1, 1, up64, up64, up64, up64, xyzw, rgb
+
 PIPE_FORMAT_R64_SINT                , plain, 1, 1, 1, sp64, , , , x001, rgb
 
 PIPE_FORMAT_A8_UINT                 , plain, 1, 1, 1, up8, , , , 000x, rgb

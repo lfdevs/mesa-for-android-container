@@ -1064,10 +1064,11 @@ _mesa_draw_gallium_fallback(struct gl_context *ctx,
       }
    }
 
-   ctx->Driver.Draw(ctx, prim, num_prims, index_size ? &ib : NULL,
-                    index_bounds_valid, info->primitive_restart,
-                    info->restart_index, min_index, max_index,
-                    info->instance_count, info->start_instance);
+   if (num_prims)
+      ctx->Driver.Draw(ctx, prim, num_prims, index_size ? &ib : NULL,
+                       index_bounds_valid, info->primitive_restart,
+                       info->restart_index, min_index, max_index,
+                       info->instance_count, info->start_instance);
    FREE_PRIMS(prim, num_draws);
 }
 
@@ -1077,11 +1078,10 @@ _mesa_draw_gallium_fallback(struct gl_context *ctx,
  */
 void
 _mesa_draw_gallium_multimode_fallback(struct gl_context *ctx,
-                                    struct pipe_draw_info *info,
-                                    unsigned drawid_offset,
-                                    const struct pipe_draw_start_count_bias *draws,
-                                    const unsigned char *mode,
-                                    unsigned num_draws)
+                                      struct pipe_draw_info *info,
+                                      const struct pipe_draw_start_count_bias *draws,
+                                      const unsigned char *mode,
+                                      unsigned num_draws)
 {
    unsigned i, first;
  
@@ -1089,7 +1089,7 @@ _mesa_draw_gallium_multimode_fallback(struct gl_context *ctx,
    for (i = 0, first = 0; i <= num_draws; i++) {
       if (i == num_draws || mode[i] != mode[first]) {
          info->mode = mode[first];
-         ctx->Driver.DrawGallium(ctx, info, drawid_offset, &draws[first], i - first);
+         ctx->Driver.DrawGallium(ctx, info, 0, &draws[first], i - first);
          first = i;
       }
    }
@@ -1298,7 +1298,6 @@ _mesa_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
    struct pipe_draw_start_count_bias draw;
 
    info.mode = mode;
-   info.vertices_per_patch = ctx->TessCtrlProgram.patch_vertices;
    info.index_size = 0;
    /* Packed section begin. */
    info.primitive_restart = false;
@@ -1626,7 +1625,6 @@ _mesa_MultiDrawArrays(GLenum mode, const GLint *first,
    ALLOC_PRIMS(draw, primcount, "glMultiDrawElements");
 
    info.mode = mode;
-   info.vertices_per_patch = ctx->TessCtrlProgram.patch_vertices;
    info.index_size = 0;
    /* Packed section begin. */
    info.primitive_restart = false;
@@ -1743,7 +1741,6 @@ _mesa_validated_drawrangeelements(struct gl_context *ctx, GLenum mode,
       return;
 
    info.mode = mode;
-   info.vertices_per_patch = ctx->TessCtrlProgram.patch_vertices;
    info.index_size = 1 << index_size_shift;
    /* Packed section begin. */
    info.primitive_restart = ctx->Array._PrimitiveRestart[index_size_shift];
@@ -2130,7 +2127,6 @@ _mesa_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
    struct pipe_draw_info info;
 
    info.mode = mode;
-   info.vertices_per_patch = ctx->TessCtrlProgram.patch_vertices;
    info.index_size = 1 << index_size_shift;
    /* Packed section begin. */
    info.primitive_restart = ctx->Array._PrimitiveRestart[index_size_shift];

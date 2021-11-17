@@ -62,10 +62,10 @@ stream_state(struct iris_batch *batch,
    iris_use_pinned_bo(batch, bo, false, IRIS_DOMAIN_NONE);
 
    iris_record_state_size(batch->state_sizes,
-                          bo->gtt_offset + *out_offset, size);
+                          bo->address + *out_offset, size);
 
    /* If the caller has asked for a BO, we leave them the responsibility of
-    * adding bo->gtt_offset (say, by handing an address to genxml).  If not,
+    * adding bo->address (say, by handing an address to genxml).  If not,
     * we assume they want the offset from a base address.
     */
    if (out_bo)
@@ -96,7 +96,7 @@ combine_and_pin_address(struct blorp_batch *blorp_batch,
                       IRIS_DOMAIN_NONE);
 
    /* Assume this is a general address, not relative to a base. */
-   return bo->gtt_offset + addr.offset;
+   return bo->address + addr.offset;
 }
 
 static uint64_t
@@ -139,6 +139,16 @@ blorp_alloc_dynamic_state(struct blorp_batch *blorp_batch,
                        size, alignment, offset, NULL);
 }
 
+UNUSED static void *
+blorp_alloc_general_state(struct blorp_batch *blorp_batch,
+                          uint32_t size,
+                          uint32_t alignment,
+                          uint32_t *offset)
+{
+   /* Use dynamic state range for general state on iris. */
+   return blorp_alloc_dynamic_state(blorp_batch, size, alignment, offset);
+}
+
 static void
 blorp_alloc_binding_table(struct blorp_batch *blorp_batch,
                           unsigned num_entries,
@@ -159,7 +169,7 @@ blorp_alloc_binding_table(struct blorp_batch *blorp_batch,
       surface_maps[i] = stream_state(batch, ice->state.surface_uploader,
                                      state_size, state_alignment,
                                      &surface_offsets[i], NULL);
-      bt_map[i] = surface_offsets[i] - (uint32_t) binder->bo->gtt_offset;
+      bt_map[i] = surface_offsets[i] - (uint32_t) binder->bo->address;
    }
 
    iris_use_pinned_bo(batch, binder->bo, false, IRIS_DOMAIN_NONE);
@@ -207,7 +217,7 @@ blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *blorp_batch,
 
    for (unsigned i = 0; i < num_vbs; i++) {
       struct iris_bo *bo = addrs[i].buffer;
-      uint16_t high_bits = bo->gtt_offset >> 32u;
+      uint16_t high_bits = bo->address >> 32u;
 
       if (high_bits != ice->state.last_vbo_high_bits[i]) {
          need_invalidate = true;
@@ -274,21 +284,9 @@ iris_blorp_exec(struct blorp_batch *blorp_batch,
                                 PIPE_CONTROL_STALL_AT_SCOREBOARD);
 #endif
 
-#if GFX_VERx10 == 120
-   if (!(blorp_batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL)) {
-      /* Wa_14010455700
-       *
-       * ISL will change some CHICKEN registers depending on the depth surface
-       * format, along with emitting the depth and stencil packets. In that
-       * case, we want to do a depth flush and stall, so the pipeline is not
-       * using these settings while we change the registers.
-       */
-      iris_emit_end_of_pipe_sync(batch,
-                                 "Workaround: Stop pipeline for 14010455700",
-                                 PIPE_CONTROL_DEPTH_STALL |
-                                 PIPE_CONTROL_DEPTH_CACHE_FLUSH);
-   }
-#endif
+   if (params->depth.enabled &&
+       !(blorp_batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL))
+      genX(emit_depth_state_workarounds)(ice, batch, &params->depth.surf);
 
    /* Flush the render cache in cases where the same surface is used with
     * different aux modes, which can lead to GPU hangs.  Invalidation of

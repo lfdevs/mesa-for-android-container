@@ -55,16 +55,16 @@ protected:
    virtual void gs_emit_vertex(int stream_id);
    virtual void gs_end_primitive();
    virtual void emit_urb_write_header(int mrf);
-   virtual void emit_urb_write_opcode(bool complete,
-                                      int base_mrf,
-                                      int last_mrf,
-                                      int urb_offset);
    virtual void setup_payload();
 
 private:
    void xfb_write();
    void xfb_program(unsigned vertex, unsigned num_verts);
    int get_vertex_output_offset_for_varying(int vertex, int varying);
+   void emit_snb_gs_urb_write_opcode(bool complete,
+                                     int base_mrf,
+                                     int last_mrf,
+                                     int urb_offset);
 
    src_reg vertex_output;
    src_reg vertex_output_offset;

@@ -243,6 +243,19 @@ vir_set_cond(struct qinst *inst, enum v3d_qpu_cond cond)
         }
 }
 
+enum v3d_qpu_cond
+vir_get_cond(struct qinst *inst)
+{
+        assert(inst->qpu.type == V3D_QPU_INSTR_TYPE_ALU);
+
+        if (vir_is_add(inst))
+                return inst->qpu.flags.ac;
+        else if (vir_is_mul(inst))
+                return inst->qpu.flags.mc;
+        else /* NOP */
+                return V3D_QPU_COND_NONE;
+}
+
 void
 vir_set_pf(struct v3d_compile *c, struct qinst *inst, enum v3d_qpu_pf pf)
 {
@@ -550,7 +563,8 @@ vir_compile_init(const struct v3d_compiler *compiler,
         c->fallback_scheduler = fallback_scheduler;
         c->disable_tmu_pipelining = disable_tmu_pipelining;
         c->disable_constant_ubo_load_sorting = disable_constant_ubo_load_sorting;
-        c->disable_loop_unrolling = disable_loop_unrolling;
+        c->disable_loop_unrolling = V3D_DEBUG & V3D_DEBUG_NO_LOOP_UNROLL
+                ? true : disable_loop_unrolling;
 
         s = nir_shader_clone(c, s);
         c->s = s;
@@ -970,14 +984,6 @@ v3d_nir_lower_fs_early(struct v3d_compile *c)
                 NIR_PASS_V(c->s, nir_lower_global_vars_to_local);
                 /* The lowering pass can introduce new sysval reads */
                 nir_shader_gather_info(c->s, nir_shader_get_entrypoint(c->s));
-        }
-
-        /* If the shader has no non-TLB side effects, we can promote it to
-         * enabling early_fragment_tests even if the user didn't.
-         */
-        if (!(c->s->info.num_images ||
-              c->s->info.num_ssbos)) {
-                c->s->info.fs.early_fragment_tests = true;
         }
 }
 
@@ -1864,6 +1870,24 @@ try_opt_ldunif(struct v3d_compile *c, uint32_t index, struct qreg *unif)
 {
         uint32_t count = 20;
         struct qinst *prev_inst = NULL;
+        assert(c->cur_block);
+
+#ifdef DEBUG
+        /* We can only reuse a uniform if it was emitted in the same block,
+         * so callers must make sure the current instruction is being emitted
+         * in the current block.
+         */
+        bool found = false;
+        vir_for_each_inst(inst, c->cur_block) {
+                if (&inst->link == c->cursor.link) {
+                        found = true;
+                        break;
+                }
+        }
+
+        assert(found || &c->cur_block->instructions == c->cursor.link);
+#endif
+
         list_for_each_entry_from_rev(struct qinst, inst, c->cursor.link->prev,
                                      &c->cur_block->instructions, link) {
                 if ((inst->qpu.sig.ldunif || inst->qpu.sig.ldunifrf) &&

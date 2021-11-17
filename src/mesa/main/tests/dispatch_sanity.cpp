@@ -1463,6 +1463,9 @@ const struct function common_desktop_functions_possible[] = {
    /* GL_NV_viewport_swizzle */
    { "glViewportSwizzleNV", 11, -1 },
 
+   /* ARB_ES3_2_compatibility */
+   { "glPrimitiveBoundingBoxARB", 45, -1 },
+
    { "glInternalBufferSubDataCopyMESA", 11, -1 },
    { "glInternalSetError", 20, -1 },
 
@@ -1995,9 +1998,6 @@ const struct function gl_compatibility_functions_possible[] = {
 };
 
 const struct function gl_core_functions_possible[] = {
-   /* GL_ARB_ES3_2_compatibility */
-   { "glPrimitiveBoundingBoxARB", 45, -1 },
-
    /* GL_ARB_gl_spirv */
    { "glSpecializeShaderARB", 45, -1 },
 
@@ -2496,6 +2496,10 @@ const struct function gles2_functions_possible[] = {
    { "glGetQueryivEXT", 20, -1 },
    { "glGetQueryObjectivEXT", 20, -1 },
    { "glGetQueryObjectuivEXT", 20, -1 },
+
+   /* GL_EXT_clear_texture */
+   { "glClearTexImageEXT", 31, -1 },
+   { "glClearTexSubImageEXT", 31, -1 },
 
    /* GL_EXT_clip_control */
    { "glClipControlEXT", 20, -1 },

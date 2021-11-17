@@ -98,6 +98,7 @@ struct ir3_context {
    struct ir3_instruction *patch_vertices_in;
    struct ir3_instruction *tcs_header;
    struct ir3_instruction *tess_coord;
+   struct ir3_instruction *rel_patch_id;
 
    /* Compute shader inputs: */
    struct ir3_instruction *local_invocation_id, *work_group_id;
@@ -113,6 +114,7 @@ struct ir3_context {
    unsigned stack, max_stack;
 
    unsigned loop_id;
+   unsigned loop_depth;
 
    /* a common pattern for indirect addressing is to request the
     * same address register multiple times.  To avoid generating
@@ -202,7 +204,7 @@ struct ir3_instruction **ir3_get_dst(struct ir3_context *ctx, nir_dest *dst,
 struct ir3_instruction *const *ir3_get_src(struct ir3_context *ctx,
                                            nir_src *src);
 void ir3_put_dst(struct ir3_context *ctx, nir_dest *dst);
-struct ir3_instruction *ir3_create_collect(struct ir3_context *ctx,
+struct ir3_instruction *ir3_create_collect(struct ir3_block *block,
                                            struct ir3_instruction *const *arr,
                                            unsigned arrsz);
 void ir3_split_dest(struct ir3_block *block, struct ir3_instruction **dst,
@@ -214,10 +216,10 @@ void emit_intrinsic_image_size_tex(struct ir3_context *ctx,
                                    nir_intrinsic_instr *intr,
                                    struct ir3_instruction **dst);
 
-#define ir3_collect(ctx, ...)                                                  \
+#define ir3_collect(block, ...)                                                \
    ({                                                                          \
       struct ir3_instruction *__arr[] = {__VA_ARGS__};                         \
-      ir3_create_collect(ctx, __arr, ARRAY_SIZE(__arr));                       \
+      ir3_create_collect(block, __arr, ARRAY_SIZE(__arr));                     \
    })
 
 NORETURN void ir3_context_error(struct ir3_context *ctx, const char *format,

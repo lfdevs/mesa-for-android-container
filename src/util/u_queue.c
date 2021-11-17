@@ -374,17 +374,17 @@ util_queue_adjust_num_threads(struct util_queue *queue, unsigned num_threads)
    num_threads = MIN2(num_threads, queue->max_threads);
    num_threads = MAX2(num_threads, 1);
 
-   mtx_lock(&queue->finish_lock);
+   simple_mtx_lock(&queue->finish_lock);
    unsigned old_num_threads = queue->num_threads;
 
    if (num_threads == old_num_threads) {
-      mtx_unlock(&queue->finish_lock);
+      simple_mtx_unlock(&queue->finish_lock);
       return;
    }
 
    if (num_threads < old_num_threads) {
       util_queue_kill_threads(queue, num_threads, true);
-      mtx_unlock(&queue->finish_lock);
+      simple_mtx_unlock(&queue->finish_lock);
       return;
    }
 
@@ -398,7 +398,7 @@ util_queue_adjust_num_threads(struct util_queue *queue, unsigned num_threads)
       if (!util_queue_create_thread(queue, i))
          break;
    }
-   mtx_unlock(&queue->finish_lock);
+   simple_mtx_unlock(&queue->finish_lock);
 }
 
 bool
@@ -445,17 +445,17 @@ util_queue_init(struct util_queue *queue,
    queue->max_jobs = max_jobs;
    queue->global_data = global_data;
 
-   queue->jobs = (struct util_queue_job*)
-                 calloc(max_jobs, sizeof(struct util_queue_job));
-   if (!queue->jobs)
-      goto fail;
-
    (void) mtx_init(&queue->lock, mtx_plain);
-   (void) mtx_init(&queue->finish_lock, mtx_plain);
+   (void) simple_mtx_init(&queue->finish_lock, mtx_plain);
 
    queue->num_queued = 0;
    cnd_init(&queue->has_queued_cond);
    cnd_init(&queue->has_space_cond);
+
+   queue->jobs = (struct util_queue_job*)
+                 calloc(max_jobs, sizeof(struct util_queue_job));
+   if (!queue->jobs)
+      goto fail;
 
    queue->threads = (thrd_t*) calloc(queue->max_threads, sizeof(thrd_t));
    if (!queue->threads)
@@ -500,10 +500,10 @@ util_queue_kill_threads(struct util_queue *queue, unsigned keep_num_threads,
 
    /* Signal all threads to terminate. */
    if (!finish_locked)
-      mtx_lock(&queue->finish_lock);
+      simple_mtx_lock(&queue->finish_lock);
 
    if (keep_num_threads >= queue->num_threads) {
-      mtx_unlock(&queue->finish_lock);
+      simple_mtx_unlock(&queue->finish_lock);
       return;
    }
 
@@ -520,7 +520,7 @@ util_queue_kill_threads(struct util_queue *queue, unsigned keep_num_threads,
       thrd_join(queue->threads[i], NULL);
 
    if (!finish_locked)
-      mtx_unlock(&queue->finish_lock);
+      simple_mtx_unlock(&queue->finish_lock);
 }
 
 static void
@@ -534,11 +534,14 @@ void
 util_queue_destroy(struct util_queue *queue)
 {
    util_queue_kill_threads(queue, 0, false);
-   remove_from_atexit_list(queue);
+
+   /* This makes it safe to call on a queue that failedutil_queue_init. */
+   if (queue->head.next != NULL)
+      remove_from_atexit_list(queue);
 
    cnd_destroy(&queue->has_space_cond);
    cnd_destroy(&queue->has_queued_cond);
-   mtx_destroy(&queue->finish_lock);
+   simple_mtx_destroy(&queue->finish_lock);
    mtx_destroy(&queue->lock);
    free(queue->jobs);
    free(queue->threads);
@@ -679,11 +682,11 @@ util_queue_finish(struct util_queue *queue)
     * a deadlock would happen, because 1 barrier requires that all threads
     * wait for it exclusively.
     */
-   mtx_lock(&queue->finish_lock);
+   simple_mtx_lock(&queue->finish_lock);
 
    /* The number of threads can be changed to 0, e.g. by the atexit handler. */
    if (!queue->num_threads) {
-      mtx_unlock(&queue->finish_lock);
+      simple_mtx_unlock(&queue->finish_lock);
       return;
    }
 
@@ -700,7 +703,7 @@ util_queue_finish(struct util_queue *queue)
       util_queue_fence_wait(&fences[i]);
       util_queue_fence_destroy(&fences[i]);
    }
-   mtx_unlock(&queue->finish_lock);
+   simple_mtx_unlock(&queue->finish_lock);
 
    util_barrier_destroy(&barrier);
 

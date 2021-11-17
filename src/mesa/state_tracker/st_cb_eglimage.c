@@ -433,10 +433,24 @@ st_egl_image_target_tex_storage(struct gl_context *ctx, GLenum target,
    pipe_resource_reference(&stimg.texture, NULL);
 }
 
+static GLboolean
+st_validate_egl_image(struct gl_context *ctx, GLeglImageOES image_handle)
+{
+   struct st_context *st = st_context(ctx);
+   struct st_manager *smapi =
+      (struct st_manager *) st->iface.st_context_private;
+
+   return smapi->validate_egl_image(smapi, (void *)image_handle);
+}
+
 void
-st_init_eglimage_functions(struct dd_function_table *functions)
+st_init_eglimage_functions(struct dd_function_table *functions,
+                           bool has_egl_image_validate)
 {
    functions->EGLImageTargetTexture2D = st_egl_image_target_texture_2d;
    functions->EGLImageTargetTexStorage = st_egl_image_target_tex_storage;
    functions->EGLImageTargetRenderbufferStorage = st_egl_image_target_renderbuffer_storage;
+
+   if (has_egl_image_validate)
+      functions->ValidateEGLImage = st_validate_egl_image;
 }

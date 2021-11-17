@@ -90,6 +90,7 @@ enum pipe_video_cap
    PIPE_VIDEO_CAP_MAX_LEVEL = 8,
    PIPE_VIDEO_CAP_STACKED_FRAMES = 9,
    PIPE_VIDEO_CAP_MAX_MACROBLOCKS = 10,
+   PIPE_VIDEO_CAP_MAX_TEMPORAL_LAYERS = 11,
 };
 
 enum pipe_video_entrypoint

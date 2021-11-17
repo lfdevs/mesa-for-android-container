@@ -1,46 +1,29 @@
-softpipe-gles2:
+.softpipe-deqp-test:
   extends:
-    - llvmpipe-gles2
+    - .test-gl
+    - .deqp-test
+    # this must be last to avoid breaking dependency rules
     - .softpipe-rules
   variables:
     GPU_VERSION: softpipe
+    LIBGL_ALWAYS_SOFTWARE: "true"
     GALLIUM_DRIVER: "softpipe"
     DEQP_EXPECTED_RENDERER: softpipe
     FLAKES_CHANNEL: "#mesa-swrast-ci"
 
-softpipe-gles3:
+softpipe-deqp:
   variables:
-    DEQP_VER: gles3
-  extends: softpipe-gles2
-
-softpipe-gles31:
+    DEQP_SUITE: softpipe
   parallel: 2
-  variables:
-    DEQP_VER: gles31
-  extends: softpipe-gles2
-
-softpipe-khr-gles2:
-  variables:
-    DEQP_VER: gles2-khr
-  extends: softpipe-gles2
-
-softpipe-khr-gles3:
-  variables:
-    DEQP_VER: gles3-khr
-  extends: softpipe-gles2
-
-softpipe-khr-gles31:
-  variables:
-    DEQP_VER: gles31-khr
-  extends: softpipe-gles2
+  extends: .softpipe-deqp-test
 
 softpipe-asan-gles31:
   variables:
     GPU_VERSION: softpipe-asan
     DEQP_FRACTION: 10
     DEQP_VER: gles31
-    TEST_LD_PRELOAD: libasan.so.6
-  extends: softpipe-gles2
+    DEQP_RUNNER_OPTIONS: "--env LD_PRELOAD=libasan.so.6"
+  extends: .softpipe-deqp-test
   needs:
     - debian/x86_test-gl
     - debian-testing-asan
@@ -86,12 +69,3 @@ softpipe-piglit-quick:
       -x glsl-uniform-interstage-limits
     PIGLIT_PROFILES: quick_gl quick_shader
     PIGLIT_RESULTS: softpipe-quick
-
-# Note that KHR-GL3* test sets include all tests from the previous
-# version, so we only need to run one test list (unlike dEQP-GLES,
-# where the test sets are separate).
-softpipe-gl:
-  variables:
-    DEQP_VER: gl33
-  extends:
-    - softpipe-gles2

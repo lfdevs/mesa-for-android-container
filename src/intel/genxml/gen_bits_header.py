@@ -19,10 +19,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from __future__ import (
-    absolute_import, division, print_function, unicode_literals
-)
-
 import argparse
 import os
 import xml.parsers.expat
@@ -122,7 +118,7 @@ ${emit_per_gen_prop_func(field, 'start')}
 }
 #endif
 
-#endif /* ${guard} */""", output_encoding='utf-8')
+#endif /* ${guard} */""")
 
 class Gen(object):
 
@@ -328,7 +324,7 @@ def main():
         p.engines = set(engines)
         p.parse(source)
 
-    with open(pargs.output, 'wb') as f:
+    with open(pargs.output, 'w') as f:
         f.write(TEMPLATE.render(containers=containers, guard=pargs.cpp_guard))
 
 if __name__ == '__main__':

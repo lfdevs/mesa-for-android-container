@@ -466,9 +466,11 @@ st_regen_renderbuffer_surface(struct st_context *st,
    surf_tmpl.u.tex.first_layer = surf->u.tex.first_layer;
    surf_tmpl.u.tex.last_layer = surf->u.tex.last_layer;
 
+   /* create -> destroy to avoid blowing up cached surfaces */
+   surf = pipe->create_surface(pipe, resource, &surf_tmpl);
    pipe_surface_release(pipe, psurf);
+   *psurf = surf;
 
-   *psurf = pipe->create_surface(pipe, resource, &surf_tmpl);
    strb->surface = *psurf;
 }
 
@@ -569,9 +571,10 @@ st_update_renderbuffer_surface(struct st_context *st,
       surf_tmpl.u.tex.first_layer = first_layer;
       surf_tmpl.u.tex.last_layer = last_layer;
 
+      /* create -> destroy to avoid blowing up cached surfaces */
+      struct pipe_surface *surf = pipe->create_surface(pipe, resource, &surf_tmpl);
       pipe_surface_release(pipe, psurf);
-
-      *psurf = pipe->create_surface(pipe, resource, &surf_tmpl);
+      *psurf = surf;
    }
    strb->surface = *psurf;
 }

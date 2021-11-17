@@ -77,7 +77,7 @@ binder_realloc(struct iris_context *ice)
       /* Place the new binder just after the old binder, unless we've hit the
        * end of the memory zone...then wrap around to the start again.
        */
-      next_address = binder->bo->gtt_offset + IRIS_BINDER_SIZE;
+      next_address = binder->bo->address + IRIS_BINDER_SIZE;
       if (next_address >= IRIS_MEMZONE_BINDLESS_START)
          next_address = IRIS_MEMZONE_BINDER_START;
 
@@ -87,7 +87,7 @@ binder_realloc(struct iris_context *ice)
 
    binder->bo = iris_bo_alloc(bufmgr, "binder", IRIS_BINDER_SIZE, 1,
                               IRIS_MEMZONE_BINDER, 0);
-   binder->bo->gtt_offset = next_address;
+   binder->bo->address = next_address;
    binder->map = iris_bo_map(NULL, binder->bo, MAP_WRITE);
    binder->insert_point = INIT_INSERT_POINT;
 
@@ -186,7 +186,7 @@ iris_binder_reserve_3d(struct iris_context *ice)
       if (ice->state.stage_dirty & (IRIS_STAGE_DIRTY_BINDINGS_VS << stage)) {
          binder->bt_offset[stage] = sizes[stage] > 0 ? offset : 0;
          iris_record_state_size(ice->state.sizes,
-                                binder->bo->gtt_offset + offset, sizes[stage]);
+                                binder->bo->address + offset, sizes[stage]);
          offset += sizes[stage];
       }
    }

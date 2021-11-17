@@ -31,52 +31,31 @@
 #include "compiler/nir/nir_builder.h"
 
 static bool
-lower_impl(nir_function_impl *impl)
+lower_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   bool progress = false;
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
 
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         if (instr->type != nir_instr_type_intrinsic)
-            continue;
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
 
-         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   if (intr->intrinsic != nir_intrinsic_scoped_barrier ||
+       nir_intrinsic_execution_scope(intr) == NIR_SCOPE_NONE)
+      return false;
 
-         if (intr->intrinsic != nir_intrinsic_scoped_barrier ||
-             nir_intrinsic_execution_scope(intr) == NIR_SCOPE_NONE)
-            continue;
-
-         if (nir_intrinsic_execution_scope(intr) == NIR_SCOPE_WORKGROUP) {
-            b.cursor = nir_after_instr(&intr->instr);
-            nir_control_barrier(&b);
-         }
-
-         nir_intrinsic_set_execution_scope(intr, NIR_SCOPE_NONE);
-         progress = true;
-      }
+   if (nir_intrinsic_execution_scope(intr) == NIR_SCOPE_WORKGROUP) {
+      b->cursor = nir_after_instr(&intr->instr);
+      nir_control_barrier(b);
    }
 
-   if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
-   } else {
-      nir_metadata_preserve(impl, nir_metadata_all);
-   }
-
-   return progress;
+   nir_intrinsic_set_execution_scope(intr, NIR_SCOPE_NONE);
+   return true;
 }
 
 bool
 brw_nir_lower_scoped_barriers(nir_shader *nir)
 {
-   bool progress = false;
-
-   nir_foreach_function(function, nir) {
-      if (function->impl)
-         progress |= lower_impl(function->impl);
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(nir, lower_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

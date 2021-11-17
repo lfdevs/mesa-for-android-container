@@ -186,7 +186,7 @@ brw_nir_lower_resources(nir_shader *nir, struct gl_shader_program *shader_prog,
    BITSET_COPY(prog->info.textures_used, prog->nir->info.textures_used);
    BITSET_COPY(prog->info.textures_used_by_txf, prog->nir->info.textures_used_by_txf);
 
-   NIR_PASS_V(prog->nir, brw_nir_lower_image_load_store, devinfo, NULL);
+   NIR_PASS_V(prog->nir, brw_nir_lower_storage_image, devinfo);
 
    if (prog->nir->info.stage == MESA_SHADER_COMPUTE &&
        shader_prog->data->spirv) {
@@ -437,97 +437,11 @@ brw_alloc_stage_scratch(struct brw_context *brw,
       brw_bo_unreference(stage_state->scratch_bo);
 
    const struct intel_device_info *devinfo = &brw->screen->devinfo;
-   unsigned thread_count;
-   switch(stage_state->stage) {
-   case MESA_SHADER_VERTEX:
-      thread_count = devinfo->max_vs_threads;
-      break;
-   case MESA_SHADER_TESS_CTRL:
-      thread_count = devinfo->max_tcs_threads;
-      break;
-   case MESA_SHADER_TESS_EVAL:
-      thread_count = devinfo->max_tes_threads;
-      break;
-   case MESA_SHADER_GEOMETRY:
-      thread_count = devinfo->max_gs_threads;
-      break;
-   case MESA_SHADER_FRAGMENT:
-      thread_count = devinfo->max_wm_threads;
-      break;
-   case MESA_SHADER_COMPUTE: {
-      unsigned subslices = MAX2(brw->screen->subslice_total, 1);
-
-      /* The documentation for 3DSTATE_PS "Scratch Space Base Pointer" says:
-       *
-       * "Scratch Space per slice is computed based on 4 sub-slices.  SW must
-       *  allocate scratch space enough so that each slice has 4 slices
-       *  allowed."
-       *
-       * According to the other driver team, this applies to compute shaders
-       * as well.  This is not currently documented at all.
-       *
-       * brw->screen->subslice_total is the TOTAL number of subslices
-       * and we wish to view that there are 4 subslices per slice
-       * instead of the actual number of subslices per slice.
-       *
-       * For, ICL, scratch space allocation is based on the number of threads
-       * in the base configuration.
-       */
-      if (devinfo->ver == 11)
-         subslices = 8;
-      else if (devinfo->ver >= 9 && devinfo->ver < 11)
-         subslices = 4 * brw->screen->devinfo.num_slices;
-
-      unsigned scratch_ids_per_subslice;
-      if (devinfo->ver >= 11) {
-         /* The MEDIA_VFE_STATE docs say:
-          *
-          *    "Starting with this configuration, the Maximum Number of
-          *     Threads must be set to (#EU * 8) for GPGPU dispatches.
-          *
-          *     Although there are only 7 threads per EU in the configuration,
-          *     the FFTID is calculated as if there are 8 threads per EU,
-          *     which in turn requires a larger amount of Scratch Space to be
-          *     allocated by the driver."
-          */
-         scratch_ids_per_subslice = 8 * 8;
-      } else if (devinfo->is_haswell) {
-         /* WaCSScratchSize:hsw
-          *
-          * Haswell's scratch space address calculation appears to be sparse
-          * rather than tightly packed. The Thread ID has bits indicating
-          * which subslice, EU within a subslice, and thread within an EU it
-          * is. There's a maximum of two slices and two subslices, so these
-          * can be stored with a single bit. Even though there are only 10 EUs
-          * per subslice, this is stored in 4 bits, so there's an effective
-          * maximum value of 16 EUs. Similarly, although there are only 7
-          * threads per EU, this is stored in a 3 bit number, giving an
-          * effective maximum value of 8 threads per EU.
-          *
-          * This means that we need to use 16 * 8 instead of 10 * 7 for the
-          * number of threads per subslice.
-          */
-         scratch_ids_per_subslice = 16 * 8;
-      } else if (devinfo->is_cherryview) {
-         /* Cherryview devices have either 6 or 8 EUs per subslice, and each
-          * EU has 7 threads. The 6 EU devices appear to calculate thread IDs
-          * as if it had 8 EUs.
-          */
-         scratch_ids_per_subslice = 8 * 7;
-      } else {
-         scratch_ids_per_subslice = devinfo->max_cs_threads;
-      }
-
-      thread_count = scratch_ids_per_subslice * subslices;
-      break;
-   }
-   default:
-      unreachable("Unsupported stage!");
-   }
-
+   assert(stage_state->stage < ARRAY_SIZE(devinfo->max_scratch_ids));
+   unsigned max_ids = devinfo->max_scratch_ids[stage_state->stage];
    stage_state->scratch_bo =
       brw_bo_alloc(brw->bufmgr, "shader scratch space",
-                   per_thread_size * thread_count, BRW_MEMZONE_SCRATCH);
+                   per_thread_size * max_ids, BRW_MEMZONE_SCRATCH);
 }
 
 void
@@ -877,7 +791,7 @@ brw_assign_common_binding_table_offsets(const struct intel_device_info *devinfo,
       stage_prog_data->binding_table.ssbo_start = 0xd0d0d0d0;
    }
 
-   if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
+   if (INTEL_DEBUG(DEBUG_SHADER_TIME)) {
       stage_prog_data->binding_table.shader_time_start = next_binding_table_offset;
       next_binding_table_offset++;
    } else {
@@ -964,8 +878,8 @@ brw_debug_recompile(struct brw_context *brw,
    const struct brw_compiler *compiler = brw->screen->compiler;
    enum brw_cache_id cache_id = brw_stage_cache_id(stage);
 
-   compiler->shader_perf_log(brw, "Recompiling %s shader for program %d\n",
-                             _mesa_shader_stage_to_string(stage), api_id);
+   brw_shader_perf_log(compiler, brw, "Recompiling %s shader for program %d\n",
+                       _mesa_shader_stage_to_string(stage), api_id);
 
    const void *old_key =
       brw_find_previous_compile(&brw->cache, cache_id, key->program_string_id);

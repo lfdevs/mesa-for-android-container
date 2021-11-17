@@ -102,8 +102,10 @@ process_glsl_ir(struct brw_context *brw,
 
    ralloc_adopt(mem_ctx, shader->ir);
 
-   lower_blend_equation_advanced(
-      shader, ctx->Extensions.KHR_blend_equation_advanced_coherent);
+   if (shader->Stage == MESA_SHADER_FRAGMENT) {
+      lower_blend_equation_advanced(
+         shader, ctx->Extensions.KHR_blend_equation_advanced_coherent);
+   }
 
    /* lower_packing_builtins() inserts arithmetic instructions, so it
     * must precede lower_instructions().
@@ -246,7 +248,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       prog->ShadowSamplers = shader->shadow_samplers;
 
       bool debug_enabled =
-         (INTEL_DEBUG & intel_debug_flag_for_shader_stage(shader->Stage));
+         INTEL_DEBUG(intel_debug_flag_for_shader_stage(shader->Stage));
 
       if (debug_enabled && shader->ir) {
          fprintf(stderr, "GLSL IR for native %s shader %d:\n",

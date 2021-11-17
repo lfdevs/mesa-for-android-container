@@ -1112,7 +1112,7 @@ virtgpu_bo_destroy(struct vn_renderer *renderer, struct vn_renderer_bo *_bo)
    /* Check the refcount again after the import lock is grabbed.  Yes, we use
     * the double-checked locking anti-pattern.
     */
-   if (atomic_load_explicit(&bo->base.refcount, memory_order_relaxed) > 0) {
+   if (vn_refcount_is_valid(&bo->base.refcount)) {
       mtx_unlock(&gpu->dma_buf_import_mutex);
       return false;
    }
@@ -1173,15 +1173,20 @@ virtgpu_bo_create_from_dma_buf(struct vn_renderer *renderer,
       if (info.blob_mem != VIRTGPU_BLOB_MEM_HOST3D)
          goto fail;
 
-      if (info.size < size)
-         goto fail;
-
       /* blob_flags is not passed to the kernel and is only for internal use
        * on imports.  Set it to what works best for us.
        */
       blob_flags = virtgpu_bo_blob_flags(flags, 0);
       blob_flags |= VIRTGPU_BLOB_FLAG_USE_SHAREABLE;
-      mmap_size = size;
+
+      /* mmap_size is only used when mappable */
+      mmap_size = 0;
+      if (blob_flags & VIRTGPU_BLOB_FLAG_USE_MAPPABLE) {
+         if (info.size < size)
+            goto fail;
+
+         mmap_size = size;
+      }
    } else {
       /* must be classic resource here
        * set blob_flags to 0 to fail virtgpu_bo_map
@@ -1203,11 +1208,11 @@ virtgpu_bo_create_from_dma_buf(struct vn_renderer *renderer,
       /* we can't use vn_renderer_bo_ref as the refcount may drop to 0
        * temporarily before virtgpu_bo_destroy grabs the lock
        */
-      atomic_fetch_add_explicit(&bo->base.refcount, 1, memory_order_relaxed);
+      vn_refcount_fetch_add_relaxed(&bo->base.refcount, 1);
    } else {
       *bo = (struct virtgpu_bo){
          .base = {
-            .refcount = 1,
+            .refcount = VN_REFCOUNT_INIT(1),
             .res_id = info.res_handle,
             .mmap_size = mmap_size,
          },
@@ -1250,7 +1255,7 @@ virtgpu_bo_create_from_device_memory(
    struct virtgpu_bo *bo = util_sparse_array_get(&gpu->bo_array, gem_handle);
    *bo = (struct virtgpu_bo){
       .base = {
-         .refcount = 1,
+         .refcount = VN_REFCOUNT_INIT(1),
          .res_id = res_id,
          .mmap_size = size,
       },
@@ -1296,7 +1301,7 @@ virtgpu_shmem_create(struct vn_renderer *renderer, size_t size)
       util_sparse_array_get(&gpu->shmem_array, gem_handle);
    *shmem = (struct virtgpu_shmem){
       .base = {
-         .refcount = 1,
+         .refcount = VN_REFCOUNT_INIT(1),
          .res_id = res_id,
          .mmap_size = size,
          .mmap_ptr = ptr,

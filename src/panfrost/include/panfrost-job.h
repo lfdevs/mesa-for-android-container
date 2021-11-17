@@ -238,12 +238,6 @@ typedef uint64_t mali_ptr;
  */
 #define MAX_MIP_LEVELS (14)
 
-/* Cubemap bloats everything up */
-#define MAX_CUBE_FACES (6)
-
-/* For each pointer, there is an address and optionally also a stride */
-#define MAX_ELEMENTS (2)
-
 /* Used for lod encoding. Thanks @urjaman for pointing out these routines can
  * be cleaned up a lot. */
 

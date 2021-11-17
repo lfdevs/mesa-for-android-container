@@ -29,6 +29,7 @@
 #include <stdint.h>
 
 #include "util/macros.h"
+#include "compiler/shader_enums.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,6 +37,7 @@ extern "C" {
 
 struct drm_i915_query_topology_info;
 
+#define INTEL_DEVICE_MAX_NAME_SIZE        64
 #define INTEL_DEVICE_MAX_SLICES           (6)  /* Maximum on gfx10 */
 #define INTEL_DEVICE_MAX_SUBSLICES        (8)  /* Maximum on gfx11 */
 #define INTEL_DEVICE_MAX_EUS_PER_SUBSLICE (16) /* Maximum on gfx12 */
@@ -69,6 +71,7 @@ struct intel_device_info
    bool is_rocketlake;
    bool is_dg1;
    bool is_alderlake;
+   bool is_dg2;
 
    bool has_hiz_and_separate_stencil;
    bool must_use_separate_stencil;
@@ -133,9 +136,22 @@ struct intel_device_info
    unsigned num_slices;
 
    /**
+    * Maximum number of slices present on this device (can be more than
+    * num_slices if some slices are fused).
+    */
+   unsigned max_slices;
+
+   /**
     * Number of subslices for each slice (used to be uniform until CNL).
     */
    unsigned num_subslices[INTEL_DEVICE_MAX_SUBSLICES];
+
+   /**
+    * Maximum number of subslices per slice present on this device (can be
+    * more than the maximum value in the num_subslices[] array if some
+    * subslices are fused).
+    */
+   unsigned max_subslices_per_slice;
 
    /**
     * Number of subslices on each pixel pipe (ICL).
@@ -148,6 +164,12 @@ struct intel_device_info
     * be acurate for one subslice).
     */
    unsigned num_eu_per_subslice;
+
+   /**
+    * Maximum number of EUs per subslice (can be more than num_eu_per_subslice
+    * if some EUs are fused off).
+    */
+   unsigned max_eu_per_subslice;
 
    /**
     * Number of threads per eu, varies between 4 and 8 between generations.
@@ -165,6 +187,12 @@ struct intel_device_info
     */
    uint8_t subslice_masks[INTEL_DEVICE_MAX_SLICES *
                           DIV_ROUND_UP(INTEL_DEVICE_MAX_SUBSLICES, 8)];
+
+   /**
+    * The number of enabled subslices (considering fusing). For exactly which
+    * subslices are enabled, see subslice_masks[].
+    */
+   unsigned subslice_total;
 
    /**
     * An array of bit mask of EUs available, use eu_slice_stride &
@@ -214,6 +242,24 @@ struct intel_device_info
     */
    unsigned max_cs_threads;
 
+   /**
+    * Maximum number of threads per workgroup supported by the GPGPU_WALKER or
+    * COMPUTE_WALKER command.
+    *
+    * This may be smaller than max_cs_threads as it takes into account added
+    * restrictions on the GPGPU/COMPUTE_WALKER commands.  While max_cs_threads
+    * expresses the total parallelism of the GPU, this expresses the maximum
+    * number of threads we can dispatch in a single workgroup.
+    */
+   unsigned max_cs_workgroup_threads;
+
+   /**
+    * The maximum number of potential scratch ids. Due to hardware
+    * implementation details, the range of scratch ids may be larger than the
+    * number of subslices.
+    */
+   unsigned max_scratch_ids[MESA_SHADER_STAGES];
+
    struct {
       /**
        * Fixed size of the URB.
@@ -237,6 +283,12 @@ struct intel_device_info
        */
       unsigned max_entries[4];
    } urb;
+
+   /* Maximum size in Kb that can be allocated to constants in the URB, this
+    * is usually divided among the stages for implementing push constants.
+    * See 3DSTATE_PUSH_CONSTANT_ALLOC_*.
+    */
+   unsigned max_constant_urb_size_kb;
 
    /**
     * Size of the command streamer prefetch. This is important to know for
@@ -280,6 +332,11 @@ struct intel_device_info
    uint32_t chipset_id;
 
    /**
+    * holds the name of the device
+    */
+   char name[INTEL_DEVICE_MAX_NAME_SIZE];
+
+   /**
     * no_hw is true when the chipset_id pci device id has been overridden
     */
    bool no_hw;
@@ -321,8 +378,9 @@ intel_device_info_subslice_total(const struct intel_device_info *devinfo)
 {
    uint32_t total = 0;
 
-   for (uint32_t i = 0; i < devinfo->num_slices; i++)
+   for (size_t i = 0; i < ARRAY_SIZE(devinfo->subslice_masks); i++) {
       total += __builtin_popcount(devinfo->subslice_masks[i]);
+   }
 
    return total;
 }
@@ -346,7 +404,6 @@ intel_device_info_num_dual_subslices(UNUSED
 }
 
 int intel_device_name_to_pci_device_id(const char *name);
-const char *intel_get_device_name(int devid);
 
 static inline uint64_t
 intel_device_info_timebase_scale(const struct intel_device_info *devinfo,

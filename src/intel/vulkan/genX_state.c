@@ -79,24 +79,24 @@ static void
 genX(emit_slice_hashing_state)(struct anv_device *device,
                                struct anv_batch *batch)
 {
-   device->slice_hash = (struct anv_state) { 0 };
-
 #if GFX_VER == 11
    assert(device->info.ppipe_subslices[2] == 0);
 
    if (device->info.ppipe_subslices[0] == device->info.ppipe_subslices[1])
      return;
 
-   unsigned size = GENX(SLICE_HASH_TABLE_length) * 4;
-   device->slice_hash =
-      anv_state_pool_alloc(&device->dynamic_state_pool, size, 64);
+   if (!device->slice_hash.alloc_size) {
+      unsigned size = GENX(SLICE_HASH_TABLE_length) * 4;
+      device->slice_hash =
+         anv_state_pool_alloc(&device->dynamic_state_pool, size, 64);
 
-   const bool flip = device->info.ppipe_subslices[0] <
+      const bool flip = device->info.ppipe_subslices[0] <
                      device->info.ppipe_subslices[1];
-   struct GENX(SLICE_HASH_TABLE) table;
-   calculate_pixel_hashing_table(16, 16, 3, 3, flip, table.Entry[0]);
+      struct GENX(SLICE_HASH_TABLE) table;
+      calculate_pixel_hashing_table(16, 16, 3, 3, flip, table.Entry[0]);
 
-   GENX(SLICE_HASH_TABLE_pack)(NULL, device->slice_hash.map, &table);
+      GENX(SLICE_HASH_TABLE_pack)(NULL, device->slice_hash.map, &table);
+   }
 
    anv_batch_emit(batch, GENX(3DSTATE_SLICE_TABLE_STATE_POINTERS), ptr) {
       ptr.SliceHashStatePointerValid = true;
@@ -256,6 +256,20 @@ init_render_queue_state(struct anv_queue *queue)
       cc1.ReplayMode = MidcmdbufferPreemption;
       cc1.ReplayModeMask = true;
    }
+
+#if GFX_VERx10 < 125
+#define AA_LINE_QUALITY_REG GENX(3D_CHICKEN3)
+#else
+#define AA_LINE_QUALITY_REG GENX(CHICKEN_RASTER_1)
+#endif
+
+   /* Enable the new line drawing algorithm that produces higher quality
+    * lines.
+    */
+   anv_batch_write_reg(&batch, AA_LINE_QUALITY_REG, c3) {
+      c3.AALineQualityFix = true;
+      c3.AALineQualityFixMask = true;
+   }
 #endif
 
 #if GFX_VER == 12
@@ -319,6 +333,7 @@ genX(init_device_state)(struct anv_device *device)
 {
    VkResult res;
 
+   device->slice_hash = (struct anv_state) { 0 };
    for (uint32_t i = 0; i < device->queue_count; i++) {
       struct anv_queue *queue = &device->queues[i];
       switch (queue->family->engine_class) {
@@ -326,7 +341,7 @@ genX(init_device_state)(struct anv_device *device)
          res = init_render_queue_state(queue);
          break;
       default:
-         res = vk_error(VK_ERROR_INITIALIZATION_FAILED);
+         res = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
          break;
       }
       if (res != VK_SUCCESS)
@@ -693,7 +708,7 @@ VkResult genX(CreateSampler)(
    sampler = vk_object_zalloc(&device->vk, pAllocator, sizeof(*sampler),
                               VK_OBJECT_TYPE_SAMPLER);
    if (!sampler)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    sampler->n_planes = 1;
 

@@ -33,8 +33,9 @@
  */
 
 struct lower_phis_to_scalar_state {
+   nir_shader *shader;
    void *mem_ctx;
-   void *dead_ctx;
+   struct exec_list dead_instrs;
 
    bool lower_all;
 
@@ -219,14 +220,14 @@ lower_phis_to_scalar_block(nir_block *block,
        */
       nir_op vec_op = nir_op_vec(phi->dest.ssa.num_components);
 
-      nir_alu_instr *vec = nir_alu_instr_create(state->mem_ctx, vec_op);
+      nir_alu_instr *vec = nir_alu_instr_create(state->shader, vec_op);
       nir_ssa_dest_init(&vec->instr, &vec->dest.dest,
                         phi->dest.ssa.num_components,
                         bit_size, NULL);
       vec->dest.write_mask = (1 << phi->dest.ssa.num_components) - 1;
 
       for (unsigned i = 0; i < phi->dest.ssa.num_components; i++) {
-         nir_phi_instr *new_phi = nir_phi_instr_create(state->mem_ctx);
+         nir_phi_instr *new_phi = nir_phi_instr_create(state->shader);
          nir_ssa_dest_init(&new_phi->instr, &new_phi->dest, 1,
                            phi->dest.ssa.bit_size, NULL);
 
@@ -234,11 +235,11 @@ lower_phis_to_scalar_block(nir_block *block,
 
          nir_foreach_phi_src(src, phi) {
             /* We need to insert a mov to grab the i'th component of src */
-            nir_alu_instr *mov = nir_alu_instr_create(state->mem_ctx,
+            nir_alu_instr *mov = nir_alu_instr_create(state->shader,
                                                       nir_op_mov);
             nir_ssa_dest_init(&mov->instr, &mov->dest.dest, 1, bit_size, NULL);
             mov->dest.write_mask = 1;
-            nir_src_copy(&mov->src[0].src, &src->src, state->mem_ctx);
+            nir_src_copy(&mov->src[0].src, &src->src);
             mov->src[0].swizzle[0] = i;
 
             /* Insert at the end of the predecessor but before the jump */
@@ -248,11 +249,7 @@ lower_phis_to_scalar_block(nir_block *block,
             else
                nir_instr_insert_after_block(src->pred, &mov->instr);
 
-            nir_phi_src *new_src = ralloc(new_phi, nir_phi_src);
-            new_src->pred = src->pred;
-            new_src->src = nir_src_for_ssa(&mov->dest.dest.ssa);
-
-            exec_list_push_tail(&new_phi->srcs, &new_src->node);
+            nir_phi_instr_add_src(new_phi, src->pred, nir_src_for_ssa(&mov->dest.dest.ssa));
          }
 
          nir_instr_insert_before(&phi->instr, &new_phi->instr);
@@ -263,8 +260,8 @@ lower_phis_to_scalar_block(nir_block *block,
       nir_ssa_def_rewrite_uses(&phi->dest.ssa,
                                &vec->dest.dest.ssa);
 
-      ralloc_steal(state->dead_ctx, phi);
       nir_instr_remove(&phi->instr);
+      exec_list_push_tail(&state->dead_instrs, &phi->instr.node);
 
       progress = true;
 
@@ -287,9 +284,10 @@ lower_phis_to_scalar_impl(nir_function_impl *impl, bool lower_all)
    struct lower_phis_to_scalar_state state;
    bool progress = false;
 
+   state.shader = impl->function->shader;
    state.mem_ctx = ralloc_parent(impl);
-   state.dead_ctx = ralloc_context(NULL);
-   state.phi_table = _mesa_pointer_hash_table_create(state.dead_ctx);
+   exec_list_make_empty(&state.dead_instrs);
+   state.phi_table = _mesa_pointer_hash_table_create(NULL);
    state.lower_all = lower_all;
 
    nir_foreach_block(block, impl) {
@@ -299,7 +297,10 @@ lower_phis_to_scalar_impl(nir_function_impl *impl, bool lower_all)
    nir_metadata_preserve(impl, nir_metadata_block_index |
                                nir_metadata_dominance);
 
-   ralloc_free(state.dead_ctx);
+   nir_instr_free_list(&state.dead_instrs);
+
+   ralloc_free(state.phi_table);
+
    return progress;
 }
 

@@ -214,7 +214,7 @@ ValueDef::replace(const ValueRef &repVal, bool doSet)
       set(repVal.get());
 }
 
-Value::Value()
+Value::Value() : id(-1)
 {
   join = this;
   memset(&reg, 0, sizeof(reg));

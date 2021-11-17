@@ -51,6 +51,7 @@ typedef struct
    bool passthrough;
    bool export_prim_id;
    bool early_prim_export;
+   bool use_edgeflags;
    unsigned wave_size;
    unsigned max_num_waves;
    unsigned num_vertices_per_primitives;
@@ -60,6 +61,10 @@ typedef struct
 
    uint64_t inputs_needed_by_pos;
    uint64_t inputs_needed_by_others;
+   uint32_t instance_rate_inputs;
+
+   nir_instr *compact_arg_stores[4];
+   nir_intrinsic_instr *overwrite_args;
 } lower_ngg_nogs_state;
 
 typedef struct
@@ -97,11 +102,6 @@ typedef struct {
    nir_variable *pos_value_replacement;
 } remove_extra_position_output_state;
 
-typedef struct {
-   nir_ssa_def *reduction_result;
-   nir_ssa_def *excl_scan_result;
-} wg_scan_result;
-
 /* Per-vertex LDS layout of culling shaders */
 enum {
    /* Position of the ES vertex (at the beginning for alignment reasons) */
@@ -133,6 +133,70 @@ typedef struct {
    nir_ssa_def *num_repacked_invocations;
    nir_ssa_def *repacked_invocation_index;
 } wg_repack_result;
+
+/**
+ * Computes a horizontal sum of 8-bit packed values loaded from LDS.
+ *
+ * Each lane N will sum packed bytes 0 to N-1.
+ * We only care about the results from up to wave_id+1 lanes.
+ * (Other lanes are not deactivated but their calculation is not used.)
+ */
+static nir_ssa_def *
+summarize_repack(nir_builder *b, nir_ssa_def *packed_counts, unsigned num_lds_dwords)
+{
+   /* We'll use shift to filter out the bytes not needed by the current lane.
+    *
+    * Need to shift by: num_lds_dwords * 4 - lane_id (in bytes).
+    * However, two shifts are needed because one can't go all the way,
+    * so the shift amount is half that (and in bits).
+    *
+    * When v_dot4_u32_u8 is available, we right-shift a series of 0x01 bytes.
+    * This will yield 0x01 at wanted byte positions and 0x00 at unwanted positions,
+    * therefore v_dot can get rid of the unneeded values.
+    * This sequence is preferable because it better hides the latency of the LDS.
+    *
+    * If the v_dot instruction can't be used, we left-shift the packed bytes.
+    * This will shift out the unneeded bytes and shift in zeroes instead,
+    * then we sum them using v_sad_u8.
+    */
+
+   nir_ssa_def *lane_id = nir_load_subgroup_invocation(b);
+   nir_ssa_def *shift = nir_iadd_imm_nuw(b, nir_imul_imm(b, lane_id, -4u), num_lds_dwords * 16);
+   bool use_dot = b->shader->options->has_dot_4x8;
+
+   if (num_lds_dwords == 1) {
+      nir_ssa_def *dot_op = !use_dot ? NULL : nir_ushr(b, nir_ushr(b, nir_imm_int(b, 0x01010101), shift), shift);
+
+      /* Broadcast the packed data we read from LDS (to the first 16 lanes, but we only care up to num_waves). */
+      nir_ssa_def *packed = nir_build_lane_permute_16_amd(b, packed_counts, nir_imm_int(b, 0), nir_imm_int(b, 0));
+
+      /* Horizontally add the packed bytes. */
+      if (use_dot) {
+         return nir_udot_4x8_uadd(b, packed, dot_op, nir_imm_int(b, 0));
+      } else {
+         nir_ssa_def *sad_op = nir_ishl(b, nir_ishl(b, packed, shift), shift);
+         return nir_sad_u8x4(b, sad_op, nir_imm_int(b, 0), nir_imm_int(b, 0));
+      }
+   } else if (num_lds_dwords == 2) {
+      nir_ssa_def *dot_op = !use_dot ? NULL : nir_ushr(b, nir_ushr(b, nir_imm_int64(b, 0x0101010101010101), shift), shift);
+
+      /* Broadcast the packed data we read from LDS (to the first 16 lanes, but we only care up to num_waves). */
+      nir_ssa_def *packed_dw0 = nir_build_lane_permute_16_amd(b, nir_unpack_64_2x32_split_x(b, packed_counts), nir_imm_int(b, 0), nir_imm_int(b, 0));
+      nir_ssa_def *packed_dw1 = nir_build_lane_permute_16_amd(b, nir_unpack_64_2x32_split_y(b, packed_counts), nir_imm_int(b, 0), nir_imm_int(b, 0));
+
+      /* Horizontally add the packed bytes. */
+      if (use_dot) {
+         nir_ssa_def *sum = nir_udot_4x8_uadd(b, packed_dw0, nir_unpack_64_2x32_split_x(b, dot_op), nir_imm_int(b, 0));
+         return nir_udot_4x8_uadd(b, packed_dw1, nir_unpack_64_2x32_split_y(b, dot_op), sum);
+      } else {
+         nir_ssa_def *sad_op = nir_ishl(b, nir_ishl(b, nir_pack_64_2x32_split(b, packed_dw0, packed_dw1), shift), shift);
+         nir_ssa_def *sum = nir_sad_u8x4(b, nir_unpack_64_2x32_split_x(b, sad_op), nir_imm_int(b, 0), nir_imm_int(b, 0));
+         return nir_sad_u8x4(b, nir_unpack_64_2x32_split_y(b, sad_op), nir_imm_int(b, 0), sum);
+      }
+   } else {
+      unreachable("Unimplemented NGG wave count");
+   }
+}
 
 /**
  * Repacks invocations in the current workgroup to eliminate gaps between them.
@@ -209,41 +273,7 @@ repack_invocations_in_workgroup(nir_builder *b, nir_ssa_def *input_bool,
     */
 
    nir_ssa_def *num_waves = nir_build_load_num_subgroups(b);
-
-   /* sel = 0x01010101 * lane_id + 0x03020100 */
-   nir_ssa_def *lane_id = nir_load_subgroup_invocation(b);
-   nir_ssa_def *packed_id = nir_build_byte_permute_amd(b, nir_imm_int(b, 0), lane_id, nir_imm_int(b, 0));
-   nir_ssa_def *sel = nir_iadd_imm_nuw(b, packed_id, 0x03020100);
-   nir_ssa_def *sum = NULL;
-
-   if (num_lds_dwords == 1) {
-      /* Broadcast the packed data we read from LDS (to the first 16 lanes, but we only care up to num_waves). */
-      nir_ssa_def *packed_dw = nir_build_lane_permute_16_amd(b, packed_counts, nir_imm_int(b, 0), nir_imm_int(b, 0));
-
-      /* Use byte-permute to filter out the bytes not needed by the current lane. */
-      nir_ssa_def *filtered_packed = nir_build_byte_permute_amd(b, packed_dw, nir_imm_int(b, 0), sel);
-
-      /* Horizontally add the packed bytes. */
-      sum = nir_sad_u8x4(b, filtered_packed, nir_imm_int(b, 0), nir_imm_int(b, 0));
-   } else if (num_lds_dwords == 2) {
-      /* Create selectors for the byte-permutes below. */
-      nir_ssa_def *dw0_selector = nir_build_lane_permute_16_amd(b, sel, nir_imm_int(b, 0x44443210), nir_imm_int(b, 0x4));
-      nir_ssa_def *dw1_selector = nir_build_lane_permute_16_amd(b, sel, nir_imm_int(b, 0x32100000), nir_imm_int(b, 0x4));
-
-      /* Broadcast the packed data we read from LDS (to the first 16 lanes, but we only care up to num_waves). */
-      nir_ssa_def *packed_dw0 = nir_build_lane_permute_16_amd(b, nir_unpack_64_2x32_split_x(b, packed_counts), nir_imm_int(b, 0), nir_imm_int(b, 0));
-      nir_ssa_def *packed_dw1 = nir_build_lane_permute_16_amd(b, nir_unpack_64_2x32_split_y(b, packed_counts), nir_imm_int(b, 0), nir_imm_int(b, 0));
-
-      /* Use byte-permute to filter out the bytes not needed by the current lane. */
-      nir_ssa_def *filtered_packed_dw0 = nir_build_byte_permute_amd(b, packed_dw0, nir_imm_int(b, 0), dw0_selector);
-      nir_ssa_def *filtered_packed_dw1 = nir_build_byte_permute_amd(b, packed_dw1, nir_imm_int(b, 0), dw1_selector);
-
-      /* Horizontally add the packed bytes. */
-      sum = nir_sad_u8x4(b, filtered_packed_dw0, nir_imm_int(b, 0), nir_imm_int(b, 0));
-      sum = nir_sad_u8x4(b, filtered_packed_dw1, nir_imm_int(b, 0), sum);
-   } else {
-      unreachable("Unimplemented NGG wave count");
-   }
+   nir_ssa_def *sum = summarize_repack(b, packed_counts, num_lds_dwords);
 
    nir_ssa_def *wg_repacked_index_base = nir_build_read_invocation(b, sum, wave_id);
    nir_ssa_def *wg_num_repacked_invocations = nir_build_read_invocation(b, sum, num_waves);
@@ -265,20 +295,16 @@ pervertex_lds_addr(nir_builder *b, nir_ssa_def *vertex_idx, unsigned per_vtx_byt
 
 static nir_ssa_def *
 emit_pack_ngg_prim_exp_arg(nir_builder *b, unsigned num_vertices_per_primitives,
-                           nir_ssa_def *vertex_indices[3], nir_ssa_def *is_null_prim)
+                           nir_ssa_def *vertex_indices[3], nir_ssa_def *is_null_prim,
+                           bool use_edgeflags)
 {
-   nir_ssa_def *arg = vertex_indices[0];
+   nir_ssa_def *arg = use_edgeflags
+                      ? nir_build_load_initial_edgeflags_amd(b)
+                      : nir_imm_int(b, 0);
 
    for (unsigned i = 0; i < num_vertices_per_primitives; ++i) {
       assert(vertex_indices[i]);
-
-      if (i)
-         arg = nir_ior(b, arg, nir_ishl(b, vertex_indices[i], nir_imm_int(b, 10u * i)));
-
-      if (b->shader->info.stage == MESA_SHADER_VERTEX) {
-         nir_ssa_def *edgeflag = nir_build_load_initial_edgeflag_amd(b, 32, nir_imm_int(b, i));
-         arg = nir_ior(b, arg, nir_ishl(b, edgeflag, nir_imm_int(b, 10u * i + 9u)));
-      }
+      arg = nir_ior(b, arg, nir_ishl(b, vertex_indices[i], nir_imm_int(b, 10u * i)));
    }
 
    if (is_null_prim) {
@@ -294,9 +320,8 @@ emit_pack_ngg_prim_exp_arg(nir_builder *b, unsigned num_vertices_per_primitives,
 static nir_ssa_def *
 ngg_input_primitive_vertex_index(nir_builder *b, unsigned vertex)
 {
-   /* TODO: This is RADV specific. We'll need to refactor RADV and/or RadeonSI to match. */
-   return nir_ubfe(b, nir_build_load_gs_vertex_offset_amd(b, .base = vertex / 2u * 2u),
-                      nir_imm_int(b, (vertex % 2u) * 16u), nir_imm_int(b, 16u));
+   return nir_ubfe(b, nir_build_load_gs_vertex_offset_amd(b, .base = vertex / 2u),
+                      nir_imm_int(b, (vertex & 1u) * 16u), nir_imm_int(b, 16u));
 }
 
 static nir_ssa_def *
@@ -316,14 +341,18 @@ emit_ngg_nogs_prim_exp_arg(nir_builder *b, lower_ngg_nogs_state *st)
                ? ngg_input_primitive_vertex_index(b, 2)
                : nir_imm_zero(b, 1, 32);
 
-      return emit_pack_ngg_prim_exp_arg(b, st->num_vertices_per_primitives, vtx_idx, NULL);
+      return emit_pack_ngg_prim_exp_arg(b, st->num_vertices_per_primitives, vtx_idx, NULL, st->use_edgeflags);
    }
 }
 
 static void
 emit_ngg_nogs_prim_export(nir_builder *b, lower_ngg_nogs_state *st, nir_ssa_def *arg)
 {
-   nir_if *if_gs_thread = nir_push_if(b, nir_build_has_input_primitive_amd(b));
+   nir_ssa_def *gs_thread = st->gs_accepted_var
+                            ? nir_load_var(b, st->gs_accepted_var)
+                            : nir_build_has_input_primitive_amd(b);
+
+   nir_if *if_gs_thread = nir_push_if(b, gs_thread);
    {
       if (!arg)
          arg = emit_ngg_nogs_prim_exp_arg(b, st);
@@ -533,6 +562,105 @@ remove_extra_pos_outputs(nir_shader *shader, lower_ngg_nogs_state *nogs_state)
                                 nir_metadata_block_index | nir_metadata_dominance, &s);
 }
 
+static bool
+remove_compacted_arg(lower_ngg_nogs_state *state, nir_builder *b, unsigned idx)
+{
+   nir_instr *store_instr = state->compact_arg_stores[idx];
+   if (!store_instr)
+      return false;
+
+   /* Simply remove the store. */
+   nir_instr_remove(store_instr);
+
+   /* Find the intrinsic that overwrites the shader arguments,
+    * and change its corresponding source.
+    * This will cause NIR's DCE to recognize the load and its phis as dead.
+    */
+   b->cursor = nir_before_instr(&state->overwrite_args->instr);
+   nir_ssa_def *undef_arg = nir_ssa_undef(b, 1, 32);
+   nir_ssa_def_rewrite_uses(state->overwrite_args->src[idx].ssa, undef_arg);
+
+   state->compact_arg_stores[idx] = NULL;
+   return true;
+}
+
+static bool
+cleanup_culling_shader_after_dce(nir_shader *shader,
+                                 nir_function_impl *function_impl,
+                                 lower_ngg_nogs_state *state)
+{
+   bool uses_vs_vertex_id = false;
+   bool uses_vs_instance_id = false;
+   bool uses_tes_u = false;
+   bool uses_tes_v = false;
+   bool uses_tes_rel_patch_id = false;
+   bool uses_tes_patch_id = false;
+
+   bool progress = false;
+   nir_builder b;
+   nir_builder_init(&b, function_impl);
+
+   nir_foreach_block_reverse_safe(block, function_impl) {
+      nir_foreach_instr_reverse_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+
+         switch (intrin->intrinsic) {
+         case nir_intrinsic_alloc_vertices_and_primitives_amd:
+            goto cleanup_culling_shader_after_dce_done;
+         case nir_intrinsic_load_vertex_id:
+         case nir_intrinsic_load_vertex_id_zero_base:
+            uses_vs_vertex_id = true;
+            break;
+         case nir_intrinsic_load_instance_id:
+            uses_vs_instance_id = true;
+            break;
+         case nir_intrinsic_load_input:
+            if (state->instance_rate_inputs &
+                (1 << (nir_intrinsic_base(intrin) - VERT_ATTRIB_GENERIC0)))
+               uses_vs_instance_id = true;
+            else
+               uses_vs_vertex_id = true;
+            break;
+         case nir_intrinsic_load_tess_coord:
+            uses_tes_u = uses_tes_v = true;
+            break;
+         case nir_intrinsic_load_tess_rel_patch_id_amd:
+            uses_tes_rel_patch_id = true;
+            break;
+         case nir_intrinsic_load_primitive_id:
+            if (shader->info.stage == MESA_SHADER_TESS_EVAL)
+               uses_tes_patch_id = true;
+            break;
+         default:
+            break;
+         }
+      }
+   }
+
+   cleanup_culling_shader_after_dce_done:
+
+   if (shader->info.stage == MESA_SHADER_VERTEX) {
+      if (!uses_vs_vertex_id)
+         progress |= remove_compacted_arg(state, &b, 0);
+      if (!uses_vs_instance_id)
+         progress |= remove_compacted_arg(state, &b, 1);
+   } else if (shader->info.stage == MESA_SHADER_TESS_EVAL) {
+      if (!uses_tes_u)
+         progress |= remove_compacted_arg(state, &b, 0);
+      if (!uses_tes_v)
+         progress |= remove_compacted_arg(state, &b, 1);
+      if (!uses_tes_rel_patch_id)
+         progress |= remove_compacted_arg(state, &b, 2);
+      if (!uses_tes_patch_id)
+         progress |= remove_compacted_arg(state, &b, 3);
+   }
+
+   return progress;
+}
+
 /**
  * Perform vertex compaction after culling.
  *
@@ -545,12 +673,13 @@ remove_extra_pos_outputs(nir_shader *shader, lower_ngg_nogs_state *nogs_state)
 static void
 compact_vertices_after_culling(nir_builder *b,
                                lower_ngg_nogs_state *nogs_state,
-                               nir_variable *vertices_in_wave_var,
-                               nir_variable *primitives_in_wave_var,
                                nir_variable **repacked_arg_vars,
                                nir_variable **gs_vtxaddr_vars,
                                nir_ssa_def *invocation_index,
                                nir_ssa_def *es_vertex_lds_addr,
+                               nir_ssa_def *es_exporter_tid,
+                               nir_ssa_def *num_live_vertices_in_workgroup,
+                               nir_ssa_def *fully_culled,
                                unsigned ngg_scratch_lds_base_addr,
                                unsigned pervertex_lds_bytes,
                                unsigned max_exported_args)
@@ -560,15 +689,7 @@ compact_vertices_after_culling(nir_builder *b,
    nir_variable *position_value_var = nogs_state->position_value_var;
    nir_variable *prim_exp_arg_var = nogs_state->prim_exp_arg_var;
 
-   nir_ssa_def *es_accepted = nir_load_var(b, es_accepted_var);
-
-   /* Repack the vertices that survived the culling. */
-   wg_repack_result rep = repack_invocations_in_workgroup(b, es_accepted, ngg_scratch_lds_base_addr,
-                                                          nogs_state->max_num_waves, nogs_state->wave_size);
-   nir_ssa_def *num_live_vertices_in_workgroup = rep.num_repacked_invocations;
-   nir_ssa_def *es_exporter_tid = rep.repacked_invocation_index;
-
-   nir_if *if_es_accepted = nir_push_if(b, es_accepted);
+   nir_if *if_es_accepted = nir_push_if(b, nir_load_var(b, es_accepted_var));
    {
       nir_ssa_def *exporter_addr = pervertex_lds_addr(b, es_exporter_tid, pervertex_lds_bytes);
 
@@ -582,31 +703,12 @@ compact_vertices_after_culling(nir_builder *b,
       /* Store the current thread's repackable arguments to the exporter thread's LDS space */
       for (unsigned i = 0; i < max_exported_args; ++i) {
          nir_ssa_def *arg_val = nir_load_var(b, repacked_arg_vars[i]);
-         nir_build_store_shared(b, arg_val, exporter_addr, .base = lds_es_arg_0 + 4u * i, .align_mul = 4u, .write_mask = 0x1u);
+         nir_intrinsic_instr *store = nir_build_store_shared(b, arg_val, exporter_addr, .base = lds_es_arg_0 + 4u * i, .align_mul = 4u, .write_mask = 0x1u);
+
+         nogs_state->compact_arg_stores[i] = &store->instr;
       }
    }
    nir_pop_if(b, if_es_accepted);
-
-   /* If all vertices are culled, set primitive count to 0 as well. */
-   nir_ssa_def *num_exported_prims = nir_build_load_workgroup_num_input_primitives_amd(b);
-   num_exported_prims = nir_bcsel(b, nir_ieq_imm(b, num_live_vertices_in_workgroup, 0u), nir_imm_int(b, 0u), num_exported_prims);
-
-   nir_if *if_wave_0 = nir_push_if(b, nir_ieq(b, nir_build_load_subgroup_id(b), nir_imm_int(b, 0)));
-   {
-      /* Tell the final vertex and primitive count to the HW.
-       * We do this here to mask some of the latency of the LDS.
-       */
-      nir_build_alloc_vertices_and_primitives_amd(b, num_live_vertices_in_workgroup, num_exported_prims);
-   }
-   nir_pop_if(b, if_wave_0);
-
-   /* Calculate the number of vertices and primitives left in the current wave */
-   nir_ssa_def *has_vtx_after_culling = nir_ilt(b, invocation_index, num_live_vertices_in_workgroup);
-   nir_ssa_def *has_prm_after_culling = nir_ilt(b, invocation_index, num_exported_prims);
-   nir_ssa_def *vtx_cnt = nir_bit_count(b, nir_build_ballot(b, 1, nogs_state->wave_size, has_vtx_after_culling));
-   nir_ssa_def *prm_cnt = nir_bit_count(b, nir_build_ballot(b, 1, nogs_state->wave_size, has_prm_after_culling));
-   nir_store_var(b, vertices_in_wave_var, vtx_cnt, 0x1u);
-   nir_store_var(b, primitives_in_wave_var, prm_cnt, 0x1u);
 
    /* TODO: Consider adding a shortcut exit.
     * Waves that have no vertices and primitives left can s_endpgm right here.
@@ -615,7 +717,8 @@ compact_vertices_after_culling(nir_builder *b,
    nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
                          .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_mem_shared);
 
-   nir_if *if_packed_es_thread = nir_push_if(b, nir_ilt(b, invocation_index, num_live_vertices_in_workgroup));
+   nir_ssa_def *es_survived = nir_ilt(b, invocation_index, num_live_vertices_in_workgroup);
+   nir_if *if_packed_es_thread = nir_push_if(b, es_survived);
    {
       /* Read position from the current ES thread's LDS space (written by the exported vertex's ES thread) */
       nir_ssa_def *exported_pos = nir_build_load_shared(b, 4, 32, es_vertex_lds_addr, .base = lds_es_pos_x, .align_mul = 4u);
@@ -626,6 +729,12 @@ compact_vertices_after_culling(nir_builder *b,
          nir_ssa_def *arg_val = nir_build_load_shared(b, 1, 32, es_vertex_lds_addr, .base = lds_es_arg_0 + 4u * i, .align_mul = 4u);
          nir_store_var(b, repacked_arg_vars[i], arg_val, 0x1u);
       }
+   }
+   nir_push_else(b, if_packed_es_thread);
+   {
+      nir_store_var(b, position_value_var, nir_ssa_undef(b, 4, 32), 0xfu);
+      for (unsigned i = 0; i < max_exported_args; ++i)
+         nir_store_var(b, repacked_arg_vars[i], nir_ssa_undef(b, 1, 32), 0x1u);
    }
    nir_pop_if(b, if_packed_es_thread);
 
@@ -640,10 +749,13 @@ compact_vertices_after_culling(nir_builder *b,
          exporter_vtx_indices[v] = nir_u2u32(b, exporter_vtx_idx);
       }
 
-      nir_ssa_def *prim_exp_arg = emit_pack_ngg_prim_exp_arg(b, 3, exporter_vtx_indices, NULL);
+      nir_ssa_def *prim_exp_arg = emit_pack_ngg_prim_exp_arg(b, 3, exporter_vtx_indices, NULL, nogs_state->use_edgeflags);
       nir_store_var(b, prim_exp_arg_var, prim_exp_arg, 0x1u);
    }
    nir_pop_if(b, if_gs_accepted);
+
+   nir_store_var(b, es_accepted_var, es_survived, 0x1u);
+   nir_store_var(b, gs_accepted_var, nir_bcsel(b, fully_culled, nir_imm_false(b), nir_build_has_input_primitive_amd(b)), 0x1u);
 }
 
 static void
@@ -741,7 +853,7 @@ analyze_shader_before_culling(nir_shader *shader, lower_ngg_nogs_state *nogs_sta
 static void
 save_reusable_variables(nir_builder *b, lower_ngg_nogs_state *nogs_state)
 {
-   ASSERTED int vec_ok = u_vector_init(&nogs_state->saved_uniforms, sizeof(saved_uniform), 4 * sizeof(saved_uniform));
+   ASSERTED int vec_ok = u_vector_init(&nogs_state->saved_uniforms, 4, sizeof(saved_uniform));
    assert(vec_ok);
 
    nir_block *block = nir_start_block(b->impl);
@@ -879,9 +991,7 @@ apply_reusable_variables(nir_builder *b, lower_ngg_nogs_state *nogs_state)
          /* When we found any of these intrinsics, it means
           * we reached the top part and we must stop.
           */
-         if (intrin->intrinsic == nir_intrinsic_overwrite_subgroup_num_vertices_and_primitives_amd ||
-             intrin->intrinsic == nir_intrinsic_alloc_vertices_and_primitives_amd ||
-             intrin->intrinsic == nir_intrinsic_export_primitive_amd)
+         if (intrin->intrinsic == nir_intrinsic_alloc_vertices_and_primitives_amd)
             goto done;
 
          if (intrin->intrinsic != nir_intrinsic_store_deref)
@@ -931,8 +1041,6 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
    nir_variable *prim_exp_arg_var = nogs_state->prim_exp_arg_var;
    nir_variable *gs_accepted_var = nogs_state->gs_accepted_var;
    nir_variable *es_accepted_var = nogs_state->es_accepted_var;
-   nir_variable *vertices_in_wave_var = nir_local_variable_create(impl, glsl_uint_type(), "vertices_in_wave");
-   nir_variable *primitives_in_wave_var = nir_local_variable_create(impl, glsl_uint_type(), "primitives_in_wave");
    nir_variable *gs_vtxaddr_vars[3] = {
       nir_local_variable_create(impl, glsl_uint_type(), "gs_vtx0_addr"),
       nir_local_variable_create(impl, glsl_uint_type(), "gs_vtx1_addr"),
@@ -954,7 +1062,8 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
 
    b->cursor = nir_before_cf_list(&impl->body);
 
-   nir_if *if_es_thread = nir_push_if(b, nir_build_has_input_vertex_amd(b));
+   nir_ssa_def *es_thread = nir_build_has_input_vertex_amd(b);
+   nir_if *if_es_thread = nir_push_if(b, es_thread);
    {
       /* Initialize the position output variable to zeroes, in case not all VS/TES invocations store the output.
        * The spec doesn't require it, but we use (0, 0, 0, 1) because some games rely on that.
@@ -984,6 +1093,9 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
       }
    }
    nir_pop_if(b, if_es_thread);
+
+   nir_store_var(b, es_accepted_var, es_thread, 0x1u);
+   nir_store_var(b, gs_accepted_var, nir_build_has_input_primitive_amd(b), 0x1u);
 
    /* Remove all non-position outputs, and put the position output into the variable. */
    nir_metadata_preserve(impl, nir_metadata_none);
@@ -1077,11 +1189,31 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
       }
       nir_pop_if(b, if_es_thread);
 
+      nir_ssa_def *es_accepted = nir_load_var(b, es_accepted_var);
+
+      /* Repack the vertices that survived the culling. */
+      wg_repack_result rep = repack_invocations_in_workgroup(b, es_accepted, ngg_scratch_lds_base_addr,
+                                                            nogs_state->max_num_waves, nogs_state->wave_size);
+      nir_ssa_def *num_live_vertices_in_workgroup = rep.num_repacked_invocations;
+      nir_ssa_def *es_exporter_tid = rep.repacked_invocation_index;
+
+      /* If all vertices are culled, set primitive count to 0 as well. */
+      nir_ssa_def *num_exported_prims = nir_build_load_workgroup_num_input_primitives_amd(b);
+      nir_ssa_def *fully_culled = nir_ieq_imm(b, num_live_vertices_in_workgroup, 0u);
+      num_exported_prims = nir_bcsel(b, fully_culled, nir_imm_int(b, 0u), num_exported_prims);
+
+      nir_if *if_wave_0 = nir_push_if(b, nir_ieq(b, nir_build_load_subgroup_id(b), nir_imm_int(b, 0)));
+      {
+         /* Tell the final vertex and primitive count to the HW. */
+         nir_build_alloc_vertices_and_primitives_amd(b, num_live_vertices_in_workgroup, num_exported_prims);
+      }
+      nir_pop_if(b, if_wave_0);
+
       /* Vertex compaction. */
       compact_vertices_after_culling(b, nogs_state,
-                                     vertices_in_wave_var, primitives_in_wave_var,
                                      repacked_arg_vars, gs_vtxaddr_vars,
                                      invocation_index, es_vertex_lds_addr,
+                                     es_exporter_tid, num_live_vertices_in_workgroup, fully_culled,
                                      ngg_scratch_lds_base_addr, pervertex_lds_bytes, max_exported_args);
    }
    nir_push_else(b, if_cull_en);
@@ -1095,11 +1227,6 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
       }
       nir_pop_if(b, if_wave_0);
       nir_store_var(b, prim_exp_arg_var, emit_ngg_nogs_prim_exp_arg(b, nogs_state), 0x1u);
-
-      nir_ssa_def *vtx_cnt = nir_bit_count(b, nir_build_ballot(b, 1, nogs_state->wave_size, nir_build_has_input_vertex_amd(b)));
-      nir_ssa_def *prm_cnt = nir_bit_count(b, nir_build_ballot(b, 1, nogs_state->wave_size, nir_build_has_input_primitive_amd(b)));
-      nir_store_var(b, vertices_in_wave_var, vtx_cnt, 0x1u);
-      nir_store_var(b, primitives_in_wave_var, prm_cnt, 0x1u);
    }
    nir_pop_if(b, if_cull_en);
 
@@ -1121,60 +1248,36 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
     */
 
    if (b->shader->info.stage == MESA_SHADER_VERTEX)
-      nir_build_overwrite_vs_arguments_amd(b,
-         nir_load_var(b, repacked_arg_vars[0]), nir_load_var(b, repacked_arg_vars[1]));
+      nogs_state->overwrite_args =
+         nir_build_overwrite_vs_arguments_amd(b,
+            nir_load_var(b, repacked_arg_vars[0]), nir_load_var(b, repacked_arg_vars[1]));
    else if (b->shader->info.stage == MESA_SHADER_TESS_EVAL)
-      nir_build_overwrite_tes_arguments_amd(b,
-         nir_load_var(b, repacked_arg_vars[0]), nir_load_var(b, repacked_arg_vars[1]),
-         nir_load_var(b, repacked_arg_vars[2]), nir_load_var(b, repacked_arg_vars[3]));
+      nogs_state->overwrite_args =
+         nir_build_overwrite_tes_arguments_amd(b,
+            nir_load_var(b, repacked_arg_vars[0]), nir_load_var(b, repacked_arg_vars[1]),
+            nir_load_var(b, repacked_arg_vars[2]), nir_load_var(b, repacked_arg_vars[3]));
    else
       unreachable("Should be VS or TES.");
-
-   nir_ssa_def *vertices_in_wave = nir_load_var(b, vertices_in_wave_var);
-   nir_ssa_def *primitives_in_wave = nir_load_var(b, primitives_in_wave_var);
-   nir_build_overwrite_subgroup_num_vertices_and_primitives_amd(b, vertices_in_wave, primitives_in_wave);
 }
 
-static bool
-can_use_deferred_attribute_culling(nir_shader *shader)
-{
-   /* When the shader writes memory, it is difficult to guarantee correctness.
-    * Future work:
-    * - if only write-only SSBOs are used
-    * - if we can prove that non-position outputs don't rely on memory stores
-    * then may be okay to keep the memory stores in the 1st shader part, and delete them from the 2nd.
-    */
-   if (shader->info.writes_memory)
-      return false;
-
-   /* When the shader relies on the subgroup invocation ID, we'd break it, because the ID changes after the culling.
-    * Future work: try to save this to LDS and reload, but it can still be broken in subtle ways.
-    */
-   if (BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_SUBGROUP_INVOCATION))
-      return false;
-
-   return true;
-}
-
-ac_nir_ngg_config
+void
 ac_nir_lower_ngg_nogs(nir_shader *shader,
                       unsigned max_num_es_vertices,
                       unsigned num_vertices_per_primitives,
                       unsigned max_workgroup_size,
                       unsigned wave_size,
-                      bool consider_culling,
-                      bool consider_passthrough,
+                      bool can_cull,
+                      bool early_prim_export,
+                      bool passthrough,
                       bool export_prim_id,
-                      bool provoking_vtx_last)
+                      bool provoking_vtx_last,
+                      bool use_edgeflags,
+                      uint32_t instance_rate_inputs)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
    assert(impl);
    assert(max_num_es_vertices && max_workgroup_size && wave_size);
-
-   bool can_cull = consider_culling && (num_vertices_per_primitives == 3) &&
-                   can_use_deferred_attribute_culling(shader);
-   bool passthrough = consider_passthrough && !can_cull &&
-                      !(shader->info.stage == MESA_SHADER_VERTEX && export_prim_id);
+   assert(!(can_cull && passthrough));
 
    nir_variable *position_value_var = nir_local_variable_create(impl, glsl_vec4_type(), "position_value");
    nir_variable *prim_exp_arg_var = nir_local_variable_create(impl, glsl_uint_type(), "prim_exp_arg");
@@ -1184,7 +1287,8 @@ ac_nir_lower_ngg_nogs(nir_shader *shader,
    lower_ngg_nogs_state state = {
       .passthrough = passthrough,
       .export_prim_id = export_prim_id,
-      .early_prim_export = exec_list_is_singular(&impl->body),
+      .early_prim_export = early_prim_export,
+      .use_edgeflags = use_edgeflags,
       .num_vertices_per_primitives = num_vertices_per_primitives,
       .provoking_vtx_idx = provoking_vtx_last ? (num_vertices_per_primitives - 1) : 0,
       .position_value_var = position_value_var,
@@ -1194,14 +1298,12 @@ ac_nir_lower_ngg_nogs(nir_shader *shader,
       .max_num_waves = DIV_ROUND_UP(max_workgroup_size, wave_size),
       .max_es_num_vertices = max_num_es_vertices,
       .wave_size = wave_size,
+      .instance_rate_inputs = instance_rate_inputs,
    };
 
    /* We need LDS space when VS needs to export the primitive ID. */
    if (shader->info.stage == MESA_SHADER_VERTEX && export_prim_id)
       state.total_lds_bytes = max_num_es_vertices * 4u;
-
-   /* The shader only needs this much LDS when culling is turned off. */
-   unsigned lds_bytes_if_culling_off = state.total_lds_bytes;
 
    nir_builder builder;
    nir_builder *b = &builder; /* This is to avoid the & */
@@ -1242,8 +1344,9 @@ ac_nir_lower_ngg_nogs(nir_shader *shader,
    }
 
    nir_intrinsic_instr *export_vertex_instr;
+   nir_ssa_def *es_thread = can_cull ? nir_load_var(b, es_accepted_var) : nir_build_has_input_vertex_amd(b);
 
-   nir_if *if_es_thread = nir_push_if(b, nir_build_has_input_vertex_amd(b));
+   nir_if *if_es_thread = nir_push_if(b, es_thread);
    {
       /* Run the actual shader */
       nir_cf_reinsert(&extracted, b->cursor);
@@ -1262,7 +1365,7 @@ ac_nir_lower_ngg_nogs(nir_shader *shader,
    if (!state.early_prim_export) {
       emit_ngg_nogs_prim_export(b, &state, nir_load_var(b, prim_exp_arg_var));
       if (state.export_prim_id && shader->info.stage == MESA_SHADER_VERTEX) {
-         if_es_thread = nir_push_if(b, nir_build_has_input_vertex_amd(b));
+         if_es_thread = nir_push_if(b, can_cull ? es_thread : nir_build_has_input_vertex_amd(b));
          emit_store_ngg_nogs_es_primitive_id(b);
          nir_pop_if(b, if_es_thread);
       }
@@ -1306,23 +1409,14 @@ ac_nir_lower_ngg_nogs(nir_shader *shader,
    do {
       progress = false;
       NIR_PASS(progress, shader, nir_opt_undef);
-      NIR_PASS(progress, shader, nir_opt_cse);
       NIR_PASS(progress, shader, nir_opt_dce);
       NIR_PASS(progress, shader, nir_opt_dead_cf);
+
+      if (can_cull)
+         progress |= cleanup_culling_shader_after_dce(shader, b->impl, &state);
    } while (progress);
 
    shader->info.shared_size = state.total_lds_bytes;
-
-   ac_nir_ngg_config ret = {
-      .lds_bytes_if_culling_off = lds_bytes_if_culling_off,
-      .can_cull = can_cull,
-      .passthrough = passthrough,
-      .early_prim_export = state.early_prim_export,
-      .nggc_inputs_read_by_pos = state.inputs_needed_by_pos,
-      .nggc_inputs_read_by_others = state.inputs_needed_by_others,
-   };
-
-   return ret;
 }
 
 static nir_ssa_def *
@@ -1610,7 +1704,7 @@ ngg_gs_export_primitives(nir_builder *b, nir_ssa_def *max_num_out_prims, nir_ssa
       }
    }
 
-   nir_ssa_def *arg = emit_pack_ngg_prim_exp_arg(b, s->num_vertices_per_primitive, vtx_indices, is_null_prim);
+   nir_ssa_def *arg = emit_pack_ngg_prim_exp_arg(b, s->num_vertices_per_primitive, vtx_indices, is_null_prim, false);
    nir_build_export_primitive_amd(b, arg);
    nir_pop_if(b, if_prim_export_thread);
 }

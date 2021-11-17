@@ -443,8 +443,6 @@ glx_context_init(struct glx_context *gc,
       (gc)->error = code;       \
    }
 
-extern void __glFreeAttributeState(struct glx_context *);
-
 /************************************************************************/
 
 /**
@@ -502,6 +500,7 @@ struct glx_screen_vtable {
 struct glx_screen
 {
    const struct glx_screen_vtable *vtable;
+   const struct glx_context_vtable *context_vtable;
 
     /**
      * \name Storage for the GLX vendor, version, and extension strings
@@ -735,17 +734,6 @@ __glX_send_client_info(struct glx_display *glx_dpy);
 
 /************************************************************************/
 
-/*
-** Declarations that should be in Xlib
-*/
-#ifdef __GL_USE_OUR_PROTOTYPES
-extern void _XFlush(Display *);
-extern Status _XReply(Display *, xReply *, int, Bool);
-extern void _XRead(Display *, void *, long);
-extern void _XSend(Display *, const void *, long);
-#endif
-
-
 extern void __glXInitializeVisualConfigFromTags(struct glx_config * config,
                                                 int count, const INT32 * bp,
                                                 Bool tagged_only,
@@ -766,9 +754,6 @@ __glxGetMscRate(struct glx_screen *psc,
 /* So that dri2.c:DRI2WireToEvent() can access
  * glx_info->codes->first_event */
 XExtDisplayInfo *__glXFindDisplay (Display *dpy);
-
-extern void
-GarbageCollectDRIDrawables(struct glx_screen *psc);
 
 extern __GLXDRIdrawable *
 GetGLXDRIDrawable(Display *dpy, GLXDrawable drawable);

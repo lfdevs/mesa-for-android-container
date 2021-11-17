@@ -118,6 +118,7 @@ struct fd_resource {
    struct threaded_resource b;
    struct fd_bo *bo; /* use fd_resource_set_bo() to write */
    enum pipe_format internal_format;
+   uint32_t hash; /* _mesa_hash_pointer() on this resource's address. */
    struct fdl_layout layout;
 
    /* buffer range that has been initialized */

@@ -76,7 +76,8 @@ build_local_primitive_id(nir_builder *b, struct state *state)
 static bool
 is_tess_levels(gl_varying_slot slot)
 {
-   return (slot == VARYING_SLOT_TESS_LEVEL_OUTER ||
+   return (slot == VARYING_SLOT_PRIMITIVE_ID ||
+           slot == VARYING_SLOT_TESS_LEVEL_OUTER ||
            slot == VARYING_SLOT_TESS_LEVEL_INNER);
 }
 
@@ -391,9 +392,9 @@ build_per_vertex_offset(nir_builder *b, struct state *state,
                         nir_ssa_def *vertex, uint32_t location, uint32_t comp,
                         nir_ssa_def *offset)
 {
-   nir_ssa_def *primitive_id = nir_load_primitive_id(b);
+   nir_ssa_def *patch_id = nir_load_rel_patch_id_ir3(b);
    nir_ssa_def *patch_stride = nir_load_hs_patch_stride_ir3(b);
-   nir_ssa_def *patch_offset = nir_imul24(b, primitive_id, patch_stride);
+   nir_ssa_def *patch_offset = nir_imul24(b, patch_id, patch_stride);
    nir_ssa_def *attr_offset;
 
    if (nir_src_is_const(nir_src_for_ssa(offset))) {
@@ -471,15 +472,17 @@ build_tessfactor_base(nir_builder *b, gl_varying_slot slot, struct state *state)
 
    const uint32_t patch_stride = 1 + inner_levels + outer_levels;
 
-   nir_ssa_def *primitive_id = nir_load_primitive_id(b);
+   nir_ssa_def *patch_id = nir_load_rel_patch_id_ir3(b);
 
    nir_ssa_def *patch_offset =
-      nir_imul24(b, primitive_id, nir_imm_int(b, patch_stride));
+      nir_imul24(b, patch_id, nir_imm_int(b, patch_stride));
 
    uint32_t offset;
    switch (slot) {
+   case VARYING_SLOT_PRIMITIVE_ID:
+      offset = 0;
+      break;
    case VARYING_SLOT_TESS_LEVEL_OUTER:
-      /* There's some kind of header dword, tess levels start at index 1. */
       offset = 1;
       break;
    case VARYING_SLOT_TESS_LEVEL_INNER:
@@ -582,39 +585,42 @@ lower_tess_ctrl_block(nir_block *block, nir_builder *b, struct state *state)
 
          gl_varying_slot location = nir_intrinsic_io_semantics(intr).location;
          if (is_tess_levels(location)) {
-            /* with tess levels are defined as float[4] and float[2],
-             * but tess factor BO has smaller sizes for tris/isolines,
-             * so we have to discard any writes beyond the number of
-             * components for inner/outer levels */
             uint32_t inner_levels, outer_levels, levels;
             tess_level_components(state, &inner_levels, &outer_levels);
-
-            if (location == VARYING_SLOT_TESS_LEVEL_OUTER)
-               levels = outer_levels;
-            else
-               levels = inner_levels;
 
             assert(intr->src[0].ssa->num_components == 1);
 
             nir_ssa_def *offset =
                nir_iadd_imm(b, intr->src[1].ssa, nir_intrinsic_component(intr));
 
-            nir_if *nif =
-               nir_push_if(b, nir_ult(b, offset, nir_imm_int(b, levels)));
+            nir_if *nif = NULL;
+            if (location != VARYING_SLOT_PRIMITIVE_ID) {
+               /* with tess levels are defined as float[4] and float[2],
+                * but tess factor BO has smaller sizes for tris/isolines,
+                * so we have to discard any writes beyond the number of
+                * components for inner/outer levels
+                */
+               if (location == VARYING_SLOT_TESS_LEVEL_OUTER)
+                  levels = outer_levels;
+               else
+                  levels = inner_levels;
+
+               nif = nir_push_if(b, nir_ult(b, offset, nir_imm_int(b, levels)));
+            }
 
             replace_intrinsic(
                b, intr, nir_intrinsic_store_global_ir3, intr->src[0].ssa,
                nir_load_tess_factor_base_ir3(b),
                nir_iadd(b, offset, build_tessfactor_base(b, location, state)));
 
-            nir_pop_if(b, nif);
+            if (location != VARYING_SLOT_PRIMITIVE_ID) {
+               nir_pop_if(b, nif);
+            }
          } else {
             nir_ssa_def *address = nir_load_tess_param_base_ir3(b);
             nir_ssa_def *offset = build_patch_offset(
                b, state, location, nir_intrinsic_component(intr),
                intr->src[1].ssa);
-
-            debug_assert(nir_intrinsic_component(intr) == 0);
 
             replace_intrinsic(b, intr, nir_intrinsic_store_global_ir3,
                               intr->src[0].ssa, address, offset);
@@ -664,6 +670,19 @@ ir3_nir_lower_tess_ctrl(nir_shader *shader, struct ir3_shader_variant *v,
 
    state.header = nir_load_tcs_header_ir3(&b);
 
+   /* If required, store gl_PrimitiveID. */
+   if (v->key.tcs_store_primid) {
+      b.cursor = nir_after_cf_list(&impl->body);
+
+      nir_store_output(&b, nir_load_primitive_id(&b), nir_imm_int(&b, 0),
+                       .io_semantics = {
+                           .location = VARYING_SLOT_PRIMITIVE_ID,
+                           .num_slots = 1
+                        });
+
+      b.cursor = nir_before_cf_list(&impl->body);
+   }
+
    nir_foreach_block_safe (block, impl)
       lower_tess_ctrl_block(block, &b, &state);
 
@@ -701,7 +720,7 @@ ir3_nir_lower_tess_ctrl(nir_shader *shader, struct ir3_shader_variant *v,
 
    nir_pop_if(&b, nif);
 
-   nir_metadata_preserve(impl, 0);
+   nir_metadata_preserve(impl, nir_metadata_none);
 }
 
 static void
@@ -809,7 +828,7 @@ ir3_nir_lower_tess_eval(nir_shader *shader, struct ir3_shader_variant *v,
 
    v->input_size = calc_primitive_map_size(shader);
 
-   nir_metadata_preserve(impl, 0);
+   nir_metadata_preserve(impl, nir_metadata_none);
 }
 
 static void
@@ -979,7 +998,7 @@ ir3_nir_lower_gs(nir_shader *shader)
    exec_list_append(&shader->variables, &state.emit_outputs);
    exec_list_append(&shader->variables, &state.new_outputs);
 
-   nir_metadata_preserve(impl, 0);
+   nir_metadata_preserve(impl, nir_metadata_none);
 
    nir_lower_global_vars_to_local(shader);
    nir_split_var_copies(shader);

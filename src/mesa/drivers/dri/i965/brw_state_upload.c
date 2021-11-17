@@ -353,7 +353,7 @@ void brw_init_state( struct brw_context *brw )
    ctx->DriverFlags.NewTextureBuffer = BRW_NEW_TEXTURE_BUFFER;
    ctx->DriverFlags.NewAtomicBuffer = BRW_NEW_UNIFORM_BUFFER;
    ctx->DriverFlags.NewImageUnits = BRW_NEW_IMAGE_UNITS;
-   ctx->DriverFlags.NewDefaultTessLevels = BRW_NEW_DEFAULT_TESS_LEVELS;
+   ctx->DriverFlags.NewTessState = BRW_NEW_DEFAULT_TESS_LEVELS;
    ctx->DriverFlags.NewIntelConservativeRasterization = BRW_NEW_CONSERVATIVE_RASTERIZATION;
 }
 
@@ -619,7 +619,7 @@ brw_upload_pipeline_state(struct brw_context *brw,
    if (pipeline == BRW_RENDER_PIPELINE && brw->current_hash_scale != 1)
       brw_emit_hashing_mode(brw, UINT_MAX, UINT_MAX, 1);
 
-   if (INTEL_DEBUG & DEBUG_REEMIT) {
+   if (INTEL_DEBUG(DEBUG_REEMIT)) {
       /* Always re-emit all state. */
       brw->NewGLState = ~0;
       ctx->NewDriverState = ~0ull;
@@ -689,7 +689,7 @@ brw_upload_pipeline_state(struct brw_context *brw,
       brw_get_pipeline_atoms(brw, pipeline);
    const int num_atoms = brw->num_atoms[pipeline];
 
-   if (INTEL_DEBUG) {
+   if (INTEL_DEBUG(DEBUG_ANY)) {
       /* Debug version which enforces various sanity checks on the
        * state flags which are generated and checked to help ensure
        * state atoms are ordered correctly in the list.
@@ -723,7 +723,7 @@ brw_upload_pipeline_state(struct brw_context *brw,
       }
    }
 
-   if (INTEL_DEBUG & DEBUG_STATE) {
+   if (INTEL_DEBUG(DEBUG_STATE)) {
       STATIC_ASSERT(ARRAY_SIZE(brw_bits) == BRW_NUM_STATE_BITS + 1);
 
       brw_update_dirty_count(mesa_bits, state.mesa);

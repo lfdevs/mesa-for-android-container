@@ -49,14 +49,13 @@
 #include "pan_resource.h"
 #include "pan_public.h"
 #include "pan_util.h"
-#include "pan_indirect_dispatch.h"
-#include "pan_indirect_draw.h"
 #include "decode.h"
 
 #include "pan_context.h"
 #include "panfrost-quirks.h"
 
 static const struct debug_named_value panfrost_debug_options[] = {
+        {"perf",      PAN_DBG_PERF,     "Enable performance warnings"},
         {"trace",     PAN_DBG_TRACE,    "Trace the command stream"},
         {"deqp",      PAN_DBG_DEQP,     "Hacks for dEQP"},
         {"dirty",     PAN_DBG_DIRTY,    "Always re-emit all state"},
@@ -280,7 +279,9 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
                 return 4;
 
         case PIPE_CAP_MAX_VARYINGS:
-                return PIPE_MAX_ATTRIBS;
+                /* Return the GLSL maximum. The internal maximum
+                 * PAN_MAX_VARYINGS accommodates internal varyings. */
+                return MAX_VARYING;
 
         /* Removed in v6 (Bifrost) */
         case PIPE_CAP_ALPHA_TEST:
@@ -307,6 +308,19 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_START_INSTANCE:
         case PIPE_CAP_DRAW_PARAMETERS:
                 return pan_is_bifrost(dev);
+
+        case PIPE_CAP_SUPPORTED_PRIM_MODES:
+        case PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART: {
+                /* Mali supports GLES and QUADS. Midgard supports more */
+                uint32_t modes = BITFIELD_MASK(PIPE_PRIM_QUADS + 1);
+
+                if (dev->arch <= 5) {
+                        modes |= BITFIELD_BIT(PIPE_PRIM_QUAD_STRIP);
+                        modes |= BITFIELD_BIT(PIPE_PRIM_POLYGON);
+                }
+
+                return modes;
+        }
 
         default:
                 return u_pipe_screen_get_param_defaults(screen, param);
@@ -560,11 +574,8 @@ panfrost_walk_dmabuf_modifiers(struct pipe_screen *screen,
 {
         /* Query AFBC status */
         struct panfrost_device *dev = pan_device(screen);
-        bool afbc = panfrost_format_supports_afbc(dev, format);
+        bool afbc = dev->has_afbc && panfrost_format_supports_afbc(dev, format);
         bool ytr = panfrost_afbc_can_ytr(format);
-
-        /* Don't advertise AFBC before T760 */
-        afbc &= !(dev->quirks & MIDGARD_NO_AFBC);
 
         unsigned count = 0;
 
@@ -694,8 +705,7 @@ panfrost_destroy_screen(struct pipe_screen *pscreen)
         struct panfrost_device *dev = pan_device(pscreen);
         struct panfrost_screen *screen = pan_screen(pscreen);
 
-        pan_indirect_dispatch_cleanup(dev);
-        panfrost_cleanup_indirect_draw_shaders(dev);
+        panfrost_resource_screen_destroy(pscreen);
         panfrost_pool_cleanup(&screen->indirect_draw.bin_pool);
         panfrost_pool_cleanup(&screen->blitter.bin_pool);
         panfrost_pool_cleanup(&screen->blitter.desc_pool);
@@ -810,7 +820,7 @@ panfrost_screen_get_compiler_options(struct pipe_screen *pscreen,
                                      enum pipe_shader_ir ir,
                                      enum pipe_shader_type shader)
 {
-        return pan_shader_get_compiler_options(pan_device(pscreen));
+        return pan_screen(pscreen)->vtbl.get_compiler_options();
 }
 
 struct pipe_screen *
@@ -829,15 +839,7 @@ panfrost_create_screen(int fd, struct renderonly *ro)
         panfrost_open_device(screen, fd, dev);
 
         if (dev->debug & PAN_DBG_NO_AFBC)
-                dev->quirks |= MIDGARD_NO_AFBC;
-
-        /* XXX: AFBC is currently broken on Bifrost in a few different ways
-         *
-         *  - Preload is broken if the effective tile size is not 16x16
-         *  - Some systems lack AFBC but we need kernel changes to know that
-         */
-        if (dev->arch == 7)
-                dev->quirks |= MIDGARD_NO_AFBC;
+                dev->has_afbc = false;
 
         dev->ro = ro;
 
@@ -885,13 +887,20 @@ panfrost_create_screen(int fd, struct renderonly *ro)
         panfrost_pool_init(&screen->indirect_draw.bin_pool, NULL, dev,
                            PAN_BO_EXECUTE, 65536, "Indirect draw shaders",
                            false, true);
-        panfrost_init_indirect_draw_shaders(dev, &screen->indirect_draw.bin_pool.base);
-        pan_indirect_dispatch_init(dev);
         panfrost_pool_init(&screen->blitter.bin_pool, NULL, dev, PAN_BO_EXECUTE,
                            4096, "Blitter shaders", false, true);
         panfrost_pool_init(&screen->blitter.desc_pool, NULL, dev, 0, 65536,
                            "Blitter RSDs", false, true);
-        panfrost_cmdstream_screen_init(screen);
+        if (dev->arch == 4)
+                panfrost_cmdstream_screen_init_v4(screen);
+        else if (dev->arch == 5)
+                panfrost_cmdstream_screen_init_v5(screen);
+        else if (dev->arch == 6)
+                panfrost_cmdstream_screen_init_v6(screen);
+        else if (dev->arch == 7)
+                panfrost_cmdstream_screen_init_v7(screen);
+        else
+                unreachable("Unhandled architecture major");
 
         return &screen->base;
 }

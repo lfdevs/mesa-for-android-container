@@ -2653,7 +2653,7 @@ RegAlloc::InsertConstraintsPass::insertConstraintMoves()
       Instruction *cst = *it;
       Instruction *mov;
 
-      if (cst->op == OP_SPLIT && 0) {
+      if (cst->op == OP_SPLIT && false) {
          // spilling splits is annoying, just make sure they're separate
          for (int d = 0; cst->defExists(d); ++d) {
             if (!cst->getDef(d)->refCount())

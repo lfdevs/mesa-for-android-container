@@ -25,6 +25,7 @@
 #ifndef FREEDRENO_DEVICE_INFO_H
 #define FREEDRENO_DEVICE_INFO_H
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -68,6 +69,9 @@ struct fd_dev_info {
 
          bool tess_use_shared;
 
+         /* Does the hw support GL_QCOM_shading_rate? */
+         bool has_shading_rate;
+
          /* newer a6xx allows using 16-bit descriptor for both 16-bit
           * and 32-bit access
           */
@@ -85,6 +89,11 @@ struct fd_dev_info {
           */
          bool indirect_draw_wfm_quirk;
 
+         /* On some GPUs, the depth test needs to be enabled when the
+          * depth bounds test is enabled and the depth attachment uses UBWC.
+          */
+         bool depth_bounds_require_depth_test_quirk;
+
          bool has_tex_filter_cubic;
 
          bool has_sample_locations;
@@ -96,10 +105,27 @@ struct fd_dev_info {
 
          bool has_8bpp_ubwc;
 
+         /* a650 seems to be affected by a bug where flushing CCU color into
+          * depth or vice-versa requires a WFI. In particular, clearing a
+          * depth attachment (which writes to it as a color attachment) then
+          * using it as a normal depth attachment requires a WFI in addition
+          * to the expected CCU_FLUSH_COLOR + CCU_INVALIDATE_DEPTH, even
+          * though all those operations happen in the same stage. As this is
+          * usually the only scenario where a CCU flush doesn't require a WFI
+          * we just insert a WFI after every CCU flush.
+          *
+          * Tests affected include
+          * dEQP-VK.renderpass.suballocation.formats.d16_unorm.* in sysmem
+          * mode (a few tests flake when the entire series is run).
+          */
+         bool has_ccu_flush_bug;
+
+         bool has_lpac;
+
          struct {
             uint32_t RB_UNKNOWN_8E04_blit;
-            uint32_t PC_UNKNOWN_9805;
-            uint32_t SP_UNKNOWN_A0F8;
+            uint32_t PC_POWER_CNTL;
+            uint32_t TPL1_DBG_ECO_CNTL;
          } magic;
       } a6xx;
    };
@@ -107,9 +133,39 @@ struct fd_dev_info {
 
 struct fd_dev_id {
    uint32_t gpu_id;
-   const char *name;
-   const struct fd_dev_info *info;
+   uint64_t chip_id;
 };
+
+/**
+ * Note that gpu-id should be considered deprecated.  For newer a6xx, if
+ * there is no gpu-id, this attempts to generate one from the chip-id.
+ * But that may not work forever, so avoid depending on this for newer
+ * gens
+ */
+static inline uint32_t
+fd_dev_gpu_id(const struct fd_dev_id *id)
+{
+   assert(id->gpu_id || id->chip_id);
+   if (!id->gpu_id) {
+      return ((id->chip_id >> 24) & 0xff) * 100 +
+             ((id->chip_id >> 16) & 0xff) * 10 +
+             ((id->chip_id >>  8) & 0xff);
+
+   }
+   return id->gpu_id;
+}
+
+static uint8_t
+fd_dev_gen(const struct fd_dev_id *id)
+{
+   return fd_dev_gpu_id(id) / 100;
+}
+
+static inline bool
+fd_dev_64b(const struct fd_dev_id *id)
+{
+   return fd_dev_gen(id) >= 5;
+}
 
 /* per CCU GMEM amount reserved for depth cache for direct rendering */
 #define A6XX_CCU_DEPTH_SIZE (64 * 1024)
@@ -122,8 +178,8 @@ struct fd_dev_id {
  */
 #define A6XX_CCU_GMEM_COLOR_SIZE (16 * 1024)
 
-const struct fd_dev_info * fd_dev_info(uint32_t gpu_id);
-const char * fd_dev_name(uint32_t gpu_id);
+const struct fd_dev_info * fd_dev_info(const struct fd_dev_id *id);
+const char * fd_dev_name(const struct fd_dev_id *id);
 
 #ifdef __cplusplus
 } /* end of extern "C" */

@@ -52,6 +52,41 @@ The three GitLab CI systems currently integrated are:
    LAVA
    docker
 
+Application traces replay
+-------------------------
+
+The CI replays application traces with various drivers in two different jobs. The first
+job replays traces listed in ``src/<driver>/ci/traces-<driver>.yml`` files and if any
+of those traces fail the pipeline fails as well. The second job replays traces listed in
+``src/<driver>/ci/restricted-traces-<driver>.yml`` and it is allowed to fail. This second
+job is only created when the pipeline is triggered by `marge-bot` or any other user that
+has been granted access to these traces.
+
+A traces YAML file also includes a ``download-url`` pointing to a MinIO
+instance where to download the traces from. While the first job should always work with
+publicly accessible traces, the second job could point to an url with restricted access.
+
+Restricted traces are those that have been made available to Mesa developers without a
+license to redistribute at will, and thus should not be exposed to the public. Failing to
+access that URL would not prevent the pipeline to pass, therefore forks made by
+contributors without permissions to download non-redistributable traces can be merged
+without friction.
+
+As an aside, only maintainers of such non-redistributable traces are responsible for
+ensuring that replays are successful, since other contributors would not be able to
+download and test them by themselves.
+
+Those Mesa contributors that believe they could have permission to access such
+non-redistributable traces can request permission to Daniel Stone <daniels@collabora.com>.
+
+gitlab.freedesktop.org accounts that are to be granted access to these traces will be
+added to the OPA policy for the MinIO repository as per
+https://gitlab.freedesktop.org/freedesktop/helm-gitlab-config/-/commit/a3cd632743019f68ac8a829267deb262d9670958 .
+
+So the jobs are created in personal repositories, the name of the user's account needs
+to be added to the rules attribute of the Gitlab CI job that accesses the restricted
+accounts.
+
 Intel CI
 --------
 

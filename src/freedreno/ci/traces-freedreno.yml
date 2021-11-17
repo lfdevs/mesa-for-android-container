@@ -24,9 +24,9 @@ traces:
       #   checksum: 8f5929c82e7d990e8c3d2bea14688224
       # 2 minutes
       - device: freedreno-a530
-        checksum: 5def334bb574b024198ddddb1a069529
+        checksum: f7e6f426d7b9c82742f00baed830797f
       - device: freedreno-a630
-        checksum: b6ac60027699d49618cc9f2dde1c308c
+        checksum: 14f7656971b98fdaaf00bf576ada7ccf
   - path: valve/portal-2-v2.trace
     expectations:
       # Skipped since it's slow even on a530.
@@ -45,9 +45,9 @@ traces:
       #   checksum: 4b707f385256b380c936186db8c251cb
       # 1 minute
       - device: freedreno-a530
-        checksum: bbe74b2171d62fc6738086740e1aa0d8
+        checksum: 130dbeac42683b46fed4b268c5aad984
       - device: freedreno-a630
-        checksum: e7b57988348b2ce98b964d71b18c1771
+        checksum: 139861e52f9425b4adb7c0b90b885f91
   - path: xonotic/xonotic-keybench-high.trace
     expectations:
       # Skipped since it's long on a530.
@@ -67,7 +67,7 @@ traces:
       # - device: freedreno-a530
       #   checksum: 1ae49af7017ae2a08fbb1caf377ada91
       - device: freedreno-a630
-        checksum: eb89b63087f6f252923f567228035b4b
+        checksum: 47016a34553e5a28e2e1e0b92d11c92f
   - path: 0ad/0ad.trace
     expectations:
       # triggers hangcheck on db410c
@@ -77,7 +77,7 @@ traces:
       # - device: freedreno-a530
       #   checksum: b007061e6e93020ddf2aff6a0f32ed72
       - device: freedreno-a630
-        checksum: fc26f34216d456ed841114d31215cb51
+        checksum: c846e0721b7e7576e523eab6d3129e9c
   - path: valve/counterstrike-v2.trace
     expectations:
 # With the addition of userspace fences we start feeding the GPU fast
@@ -90,14 +90,18 @@ traces:
       #   checksum: 14e78caf29b6a3341081c8f2e678355f
       - device: freedreno-a630
         checksum: c8608d54cc6298476a2b60686d152dbc
-  - path: minetest/minetest.trace
-    expectations:
-      - device: freedreno-a306
-        checksum: daedbc987cc1b1f934364ce6b633bc54
-      - device: freedreno-a530
-        checksum: 0054f0ba67ace5d2defe17b74b5364e9
-      - device: freedreno-a630
-        checksum: eea608db257a1caa21517f0b13807952
+  # Disabled on all devices due to:
+  # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4595
+  # - path: minetest/minetest.trace
+  #   expectations:
+  #     # Started flaking and sometimes not drawing the left side of the crosshair around 2021-06-25.
+  #     # Note that the crosshair is drawn some time in the middle of the frame.
+  #     # - device: freedreno-a306
+  #     #   checksum: bd6e158327d68e69ecf5edfacc368a7b
+  #     - device: freedreno-a530
+  #       checksum: 599b00e7a443a90b0edcd06fccd1a400
+  #     - device: freedreno-a630
+  #       checksum: a71da1e8c855209d79fa8a0b83a46775
   - path: neverball/neverball.trace
     expectations:
       # Skipped since it's long on a530.
@@ -107,11 +111,11 @@ traces:
       # - device: freedreno-a530
       #   checksum: 2a53e6086588f4675ae3dcda9f26603b
       - device: freedreno-a630
-        checksum: 5a97da6dbb6c10d615f92030c03d116c
+        checksum: 7038fe16ec1483ca1f475c563afcee84
   - path: behdad-glyphy/glyphy.trace
     expectations:
       - device: freedreno-a306
-        checksum: 7fbe8cb1f3429ff52a6ce1a4e4af2c98
+        checksum: 2d4a6b609ba58cfb0df1e78ef30c7ab5
       - device: freedreno-a530
         checksum: 3a37faf7ec62d48dada63f157f30d876
       - device: freedreno-a630
@@ -143,28 +147,28 @@ traces:
   - path: glmark2/bump:bump-render=height.trace
     expectations:
       - device: freedreno-a306
-        checksum: e736dba1888f9616f370c5c87b423cc7
+        checksum: 8ed4fa21732e57dc53dc004e572f910c
       # a530/a630: grid-like rendering glitches since "ir3: nir_op_f2f16 should round to even"
       - device: freedreno-a530
-        checksum: ea8b8f0da4e4b91d40952ab11e6f55b4
+        checksum: 88c1dd62b6b42b18ba35f79657ef46c8
       - device: freedreno-a630
-        checksum: ea8b8f0da4e4b91d40952ab11e6f55b4
+        checksum: ddc2fab265aac11a971afcae8655835c
   - path: glmark2/bump:bump-render=high-poly.trace
     expectations:
       - device: freedreno-a306
         checksum: 5513a099b67446a365f9899bb9b226fb
       - device: freedreno-a530
-        checksum: 5041dd39e55ba0e842a451f3141d6133
+        checksum: 5d3a8c494789e48fecd99cdf55e1506f
       - device: freedreno-a630
-        checksum: 5041dd39e55ba0e842a451f3141d6133
+        checksum: 5d3a8c494789e48fecd99cdf55e1506f
   - path: glmark2/bump:bump-render=normals.trace
     expectations:
       - device: freedreno-a306
         checksum: c4baca790e93ba5198352d45937adc01
       - device: freedreno-a530
-        checksum: 9de28165649526027b1916c9cf7a1054
+        checksum: 9298dc5a65182a7c3441882d46fee6f9
       - device: freedreno-a630
-        checksum: 99ca60c4ad4cff9ead3d955d03fef16b
+        checksum: edef28326ed7a4121791d84862fa8b08
   - path: glmark2/conditionals:vertex-steps=0:fragment-steps=0.trace
     expectations:
       - device: freedreno-a306
@@ -216,9 +220,9 @@ traces:
       - device: freedreno-a306
         checksum: bfb9695c876a3b9e98757df9e82c9456
       - device: freedreno-a530
-        checksum: 239acfe03a5fa53af1a6bc297b456230
+        checksum: 7712c8143a244c56922124f4ac207722
       - device: freedreno-a630
-        checksum: 239acfe03a5fa53af1a6bc297b456230
+        checksum: 7712c8143a244c56922124f4ac207722
   - path: glmark2/effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;.trace
     expectations:
       - device: freedreno-a306
@@ -252,17 +256,17 @@ traces:
       - device: freedreno-a306
         checksum: 592c711716f249ca94d073fc058b5ccf
       - device: freedreno-a530
-        checksum: fcf8ef38fa49fecf0bceac8684d280ce
+        checksum: 2bb3a186838a5a7138b80af34e5fea52
       - device: freedreno-a630
         checksum: eaff1a204f1319c039b3b5cb161294e4
   - path: glmark2/build:use-vbo=true.trace
     expectations:
       - device: freedreno-a306
-        checksum: 41c9e26c67a9d9e7c2368714a40235e5
+        checksum: 4271c14511d650a962ee967c2c73d5e8
       - device: freedreno-a530
-        checksum: d20d20656fdd25d0b9d456027feeb023
+        checksum: b05e0e05543e2b1b587233ef201c9ae9
       - device: freedreno-a630
-        checksum: f5421b11c334937fb7b5aa91d3717586
+        checksum: f31b28d3b83ee3873683ebafaa857a8a
   - path: glmark2/ideas:speed=10000.trace
     expectations:
       - device: freedreno-a306
@@ -323,19 +327,19 @@ traces:
       #- device: freedreno-a306
       #  checksum: 0c57ccc3989b75a940b28ea1cc09cb0d
       - device: freedreno-a530
-        checksum: bc19f0f58935fdb348f401396e6845e1
+        checksum: 4715d72a7958f2fd5a387c16b3a01579
       - device: freedreno-a630
-        checksum: f546f840e916ab0f11f8df0e4eee584d
+        checksum: 1e397c5c34c9c50350a8db1a060a6bbb
   - path: glmark2/shading:shading=blinn-phong-inf.trace
     expectations:
       - device: freedreno-a306
-        checksum: 657ca68bc8d275aced8a770890a97fec
+        checksum: 7d3ee3db4f209066c380f1dcce2d4603
     # Some speckling on the main specular highlight on a530/a630 that may just be
     # mediump artifacts
       - device: freedreno-a530
-        checksum: 7fd31a107465acba61c99cedeb48b395
+        checksum: 77018ae203d254fdb563de95f41cfb92
       - device: freedreno-a630
-        checksum: c44b015f6faa85b7d38f53904e2c1b30
+        checksum: 77018ae203d254fdb563de95f41cfb92
   - path: glmark2/shading:shading=cel.trace
     expectations:
       - device: freedreno-a306
@@ -347,11 +351,11 @@ traces:
   - path: glmark2/shading:shading=gouraud.trace
     expectations:
       - device: freedreno-a306
-        checksum: 1f0a5f7e125e3e3f64a0e79ed5891a40
+        checksum: 6dcee5beb1e45d4976acfc20f90f72bb
       - device: freedreno-a530
-        checksum: 7778e5c30ba3630238557ca2c94b0110
+        checksum: f3042c3069e5bcb61af26b111de50f66
       - device: freedreno-a630
-        checksum: dcc51b8e94844421131ecc76eaa8f2c6
+        checksum: 30e8c8b9ac5044a214d7e52797802719
   - path: glmark2/shading:shading=phong.trace
     expectations:
       - device: freedreno-a306
@@ -373,7 +377,7 @@ traces:
   - path: glmark2/texture:texture-filter=linear.trace
     expectations:
       - device: freedreno-a306
-        checksum: 3b6bc226797088d6c7af8cb17a26fc97
+        checksum: 8870474a93cd94c0fde9a4cb8486284c
       - device: freedreno-a530
         checksum: 2f9304ddf783e43a28d8d8436e578bb9
       - device: freedreno-a630
@@ -390,7 +394,7 @@ traces:
   - path: glmark2/texture:texture-filter=nearest.trace
     expectations:
       - device: freedreno-a306
-        checksum: c63fa7e1a1c778d29c52ca90c15d48ca
+        checksum: 678998df410b2e656af1241ca1947985
       - device: freedreno-a530
         checksum: 509cfb6ad7b973aaf1ea42ac9328d65f
       - device: freedreno-a630
@@ -411,18 +415,18 @@ traces:
       # - device: freedreno-a306
       #   checksum: 751e0e784ba2f003cfc456fe8699f1fa
       - device: freedreno-a530
-        checksum: a8580a2a85f37600c15fb897cd874432
+        checksum: ba53d1ffbe911171546a93259fb2e57c
       - device: freedreno-a630
-        checksum: 66d7cfb1aedfe40048fe2cdf8032071c
+        checksum: 313ef615f0f5a11eeaf95a2a87769a32
 # Note: Requires GL3.3
   - path: gputest/gimark.trace
     expectations:
       - device: freedreno-a630
-        checksum: 286cab0d6d6562d5dcc969d778cfa666
+        checksum: dd8fb768033d09f6edc98b4cfff02c6f
   - path: gputest/pixmark-julia-fp32.trace
     expectations:
       - device: freedreno-a630
-        checksum: db8e339d8d04aad46189de4d28cc125d
+        checksum: f83f7ad4b147607e2a7de65a48f8ed4d
 # Note: Requires GL4 (fp64).
 #  - path: gputest/pixmark-julia-fp64.trace
 #    expectations:
@@ -448,16 +452,16 @@ traces:
   - path: gputest/plot3d.trace
     expectations:
       - device: freedreno-a306
-        checksum: 2f9316b732bc119d4e3a18a41d0a8adc
+        checksum: 302943895dbdd7730958fb0175f23b7f
       - device: freedreno-a530
-        checksum: 6a05db4e26406b5550157a835a3019d0
+        checksum: 755aa5b521237ddf9fea3181d2ba2b75
       - device: freedreno-a630
-        checksum: 6f7c5493ca1cd71fa6a627bdea1e1665
+        checksum: 302aec1ced68e22182460b617b0f2aef
 # Note: Requires GL4 for tess.
   - path: gputest/tessmark.trace
     expectations:
       - device: freedreno-a630
-        checksum: 93d7cb8c775a7b60c499695045edc07f
+        checksum: af356a98c4d55fb10613a11fbe687adb
   - path: gputest/triangle.trace
     expectations:
       - device: freedreno-a306
@@ -469,9 +473,9 @@ traces:
   - path: humus/AmbientAperture.trace
     expectations:
       - device: freedreno-a306
-        checksum: 8d4c52f0af9c09710d358f24c73fae3c
+        checksum: 3d9243cbd0659cb58b16cade2be3f2c2
       - device: freedreno-a530
-        checksum: aab5c853e383e1cda56663d65f6925ad
+        checksum: c55c1ba5683306980956b5f89563f343
       - device: freedreno-a630
         checksum: 83fd7bce0fc1e1f30bd143b7d30ca890
   - path: humus/CelShading.trace
@@ -532,12 +536,12 @@ traces:
     expectations:
       # a306/a630 would need higher GL version to run
       - device: freedreno-a630
-        checksum: 0e32ca8fc815a7250f38a07faeafb21b
-  - path: pathfinder/canvas_text.trace
+        checksum: e93cf9682c9ca5ed6a6effe5b7fdd386
+  - path: pathfinder/canvas_text_v2.trace
     expectations:
       # a306/a630 would need higher GL version to run
       - device: freedreno-a630
-        checksum: 74129b650bd3ca806ff2dd46813ba6e6
+        checksum: c163253b33a93577600e2f1c0571737c
   - path: pathfinder/demo.trace
     expectations:
       # a306/a630 would need higher GL version to run

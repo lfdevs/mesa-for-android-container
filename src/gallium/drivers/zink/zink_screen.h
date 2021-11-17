@@ -37,7 +37,8 @@
 #include "util/simple_mtx.h"
 #include "util/u_queue.h"
 #include "util/u_live_shader_cache.h"
-
+#include "pipebuffer/pb_cache.h"
+#include "pipebuffer/pb_slab.h"
 #include <vulkan/vulkan.h>
 
 extern uint32_t zink_debug;
@@ -50,14 +51,20 @@ struct zink_program;
 struct zink_shader;
 enum zink_descriptor_type;
 
+/* this is the spec minimum */
+#define ZINK_SPARSE_BUFFER_PAGE_SIZE (64 * 1024)
+
 #define ZINK_DEBUG_NIR 0x1
 #define ZINK_DEBUG_SPIRV 0x2
 #define ZINK_DEBUG_TGSI 0x4
 #define ZINK_DEBUG_VALIDATION 0x8
 
+#define NUM_SLAB_ALLOCATORS 3
+
 enum zink_descriptor_mode {
    ZINK_DESCRIPTOR_MODE_AUTO,
    ZINK_DESCRIPTOR_MODE_LAZY,
+   ZINK_DESCRIPTOR_MODE_NOFALLBACK,
    ZINK_DESCRIPTOR_MODE_NOTEMPLATES,
 };
 
@@ -75,15 +82,14 @@ struct zink_screen {
    VkSemaphore prev_sem;
    struct util_queue flush_queue;
 
+   unsigned buffer_rebind_counter;
+
    bool device_lost;
    struct sw_winsys *winsys;
+   int drm_fd;
 
    struct hash_table framebuffer_cache;
    simple_mtx_t framebuffer_mtx;
-   struct hash_table surface_cache;
-   simple_mtx_t surface_mtx;
-   struct hash_table bufferview_cache;
-   simple_mtx_t bufferview_mtx;
 
    struct slab_parent_pool transfer_pool;
    struct disk_cache *disk_cache;
@@ -92,12 +98,19 @@ struct zink_screen {
 
    struct util_live_shader_cache shaders;
 
-   simple_mtx_t mem_cache_mtx;
-   struct hash_table *resource_mem_cache;
-   uint64_t mem_cache_size;
-   unsigned mem_cache_count;
+   struct {
+      struct pb_cache bo_cache;
+      struct pb_slabs bo_slabs[NUM_SLAB_ALLOCATORS];
+      unsigned min_alloc_size;
+      struct hash_table *bo_export_table;
+      simple_mtx_t bo_export_table_lock;
+      uint32_t next_bo_unique_id;
+   } pb;
+   uint8_t heap_map[VK_MAX_MEMORY_TYPES];
+   bool resizable_bar;
 
    uint64_t total_video_mem;
+   uint64_t clamp_video_mem;
    uint64_t total_mem;
 
    VkInstance instance;
@@ -120,6 +133,7 @@ struct zink_screen {
    VkDevice dev;
    VkQueue queue; //gfx+compute
    VkQueue thread_queue; //gfx+compute
+   simple_mtx_t queue_lock;
    VkDebugUtilsMessengerEXT debugUtilsCallbackHandle;
 
    uint32_t cur_custom_border_color_samplers;
@@ -226,6 +240,9 @@ struct mem_cache_entry {
    void *map;
 };
 
+#define VKCTX(fn) zink_screen(ctx->base.screen)->vk.fn
+#define VKSCR(fn) screen->vk.fn
+
 VkFormat
 zink_get_format(struct zink_screen *screen, enum pipe_format format);
 
@@ -251,4 +268,16 @@ zink_screen_init_descriptor_funcs(struct zink_screen *screen, bool fallback);
 
 void
 zink_stub_function_not_loaded(void);
+
+#define warn_missing_feature(feat) \
+   do { \
+      static bool warned = false; \
+      if (!warned) { \
+         fprintf(stderr, "WARNING: Incorrect rendering will happen, " \
+                         "because the Vulkan device doesn't support " \
+                         "the %s feature\n", feat); \
+         warned = true; \
+      } \
+   } while (0)
+
 #endif

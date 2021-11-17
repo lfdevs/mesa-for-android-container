@@ -28,6 +28,8 @@
 #ifndef __PAN_FORMAT_H
 #define __PAN_FORMAT_H
 
+#include "genxml/gen_macros.h"
+
 #include "util/format/u_format.h"
 
 /* Formats */
@@ -42,7 +44,9 @@ struct panfrost_format {
 struct pan_blendable_format {
         /* enum mali_color_buffer_internal_format */ uint16_t internal;
         /* enum mali_mfbd_color_format */ uint16_t writeback;
-        mali_pixel_format bifrost;
+
+        /* Indexed by the dithered? flag. So _PU first, then _AU */
+        mali_pixel_format bifrost[2];
 };
 
 extern const struct pan_blendable_format panfrost_blendable_formats_v6[PIPE_FORMAT_COUNT];
@@ -51,18 +55,6 @@ extern const struct panfrost_format panfrost_pipe_format_v6[PIPE_FORMAT_COUNT];
 extern const struct panfrost_format panfrost_pipe_format_v7[PIPE_FORMAT_COUNT];
 
 /* Helpers to construct swizzles */
-#ifndef PAN_PACK_H
-/* Avoid the GenXML dependence */
-
-enum mali_channel {
-        MALI_CHANNEL_R = 0,
-        MALI_CHANNEL_G = 1,
-        MALI_CHANNEL_B = 2,
-        MALI_CHANNEL_A = 3,
-        MALI_CHANNEL_0 = 4,
-        MALI_CHANNEL_1 = 5,
-};
-#endif
 
 #define PAN_V6_SWIZZLE(R, G, B, A) ( \
         ((MALI_CHANNEL_ ## R) << 0) | \

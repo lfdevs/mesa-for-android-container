@@ -399,7 +399,7 @@ st_create_context(gl_api api, struct pipe_context *pipe,
                   const struct gl_config *visual,
                   struct st_context *share,
                   const struct st_config_options *options,
-                  bool no_error);
+                  bool no_error, bool has_egl_image_validate);
 
 extern void
 st_destroy_context(struct st_context *st);

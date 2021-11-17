@@ -1,5 +1,6 @@
 gbm_bo_create
 gbm_bo_create_with_modifiers
+gbm_bo_create_with_modifiers2
 gbm_bo_destroy
 gbm_bo_get_bpp
 gbm_bo_get_device
@@ -30,6 +31,7 @@ gbm_device_is_format_supported
 gbm_format_get_name
 gbm_surface_create
 gbm_surface_create_with_modifiers
+gbm_surface_create_with_modifiers2
 gbm_surface_destroy
 gbm_surface_has_free_buffers
 gbm_surface_lock_front_buffer

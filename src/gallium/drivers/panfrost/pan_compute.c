@@ -44,7 +44,7 @@ panfrost_create_compute_state(
         const struct pipe_compute_state *cso)
 {
         struct panfrost_context *ctx = pan_context(pctx);
-        struct panfrost_device *dev = pan_device(pctx->screen);
+        struct panfrost_screen *screen = pan_screen(pctx->screen);
 
         struct panfrost_shader_variants *so = CALLOC_STRUCT(panfrost_shader_variants);
         so->cbase = *cso;
@@ -63,7 +63,7 @@ panfrost_create_compute_state(
                 blob_reader_init(&reader, hdr->blob, hdr->num_bytes);
 
                 const struct nir_shader_compiler_options *options =
-                        pan_shader_get_compiler_options(dev);
+                        screen->vtbl.get_compiler_options();
 
                 so->cbase.prog = nir_deserialize(NULL, options, &reader);
                 so->cbase.ir_type = PIPE_SHADER_IR_NIR;
@@ -72,6 +72,10 @@ panfrost_create_compute_state(
         panfrost_shader_compile(pctx->screen, &ctx->shaders, &ctx->descs,
                         so->cbase.ir_type, so->cbase.prog, MESA_SHADER_COMPUTE,
                         v);
+
+        /* There are no variants so we won't need the NIR again */
+        ralloc_free((void *)so->cbase.prog);
+        so->cbase.prog = NULL;
 
         return so;
 }
@@ -86,6 +90,10 @@ panfrost_bind_compute_state(struct pipe_context *pipe, void *cso)
 static void
 panfrost_delete_compute_state(struct pipe_context *pipe, void *cso)
 {
+        struct panfrost_shader_variants *so =
+                (struct panfrost_shader_variants *)cso;
+
+        free(so->variants);
         free(cso);
 }
 
@@ -126,7 +134,7 @@ panfrost_memory_barrier(struct pipe_context *pctx, unsigned flags)
 {
         /* TODO: Be smart and only flush the minimum needed, maybe emitting a
          * cache flush job if that would help */
-        panfrost_flush_all_batches(pan_context(pctx));
+        panfrost_flush_all_batches(pan_context(pctx), "Memory barrier");
 }
 
 void

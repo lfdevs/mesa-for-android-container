@@ -27,8 +27,6 @@
 
 using namespace brw;
 
-int ret = 0;
-
 class copy_propagation_test : public ::testing::Test {
    virtual void SetUp();
    virtual void TearDown();

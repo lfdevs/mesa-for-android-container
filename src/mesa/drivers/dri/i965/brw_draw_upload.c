@@ -256,7 +256,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
    const bool is_ivybridge_or_older =
       devinfo->verx10 <= 70 && !devinfo->is_baytrail;
 
-   if (INTEL_DEBUG & DEBUG_VERTS)
+   if (INTEL_DEBUG(DEBUG_VERTS))
       fprintf(stderr, "type %s size %d normalized %d\n",
               _mesa_enum_to_string(glformat->Type),
               glformat->Size, glformat->Normalized);

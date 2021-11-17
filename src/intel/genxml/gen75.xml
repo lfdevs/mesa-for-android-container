@@ -2305,7 +2305,7 @@
     <field name="Per Thread Scratch Space" start="32" end="35" type="uint"/>
     <field name="Stack Size" start="36" end="39" type="uint"/>
     <field name="Scratch Space Base Pointer" start="42" end="63" type="address"/>
-    <field name="GPGPU Mode" start="66" end="66" type="uint"/>
+    <field name="GPGPU Mode" start="66" end="66" type="bool"/>
     <field name="Bypass Gateway Control" start="70" end="70" type="uint">
       <value name="Maintaining OpenGateway/ForwardMsg/CloseGateway protocol (legacy mode)" value="0"/>
       <value name="Bypassing OpenGateway/CloseGateway protocol" value="1"/>

@@ -252,8 +252,7 @@ lower_offset_for_ssbo(nir_intrinsic_instr *intrinsic, nir_builder *b,
 }
 
 static bool
-lower_io_offsets_block(nir_block *block, nir_builder *b, void *mem_ctx,
-                       int gpu_id)
+lower_io_offsets_block(nir_block *block, nir_builder *b, void *mem_ctx)
 {
    bool progress = false;
 
@@ -278,7 +277,7 @@ lower_io_offsets_block(nir_block *block, nir_builder *b, void *mem_ctx,
 }
 
 static bool
-lower_io_offsets_func(nir_function_impl *impl, int gpu_id)
+lower_io_offsets_func(nir_function_impl *impl)
 {
    void *mem_ctx = ralloc_parent(impl);
    nir_builder b;
@@ -286,7 +285,7 @@ lower_io_offsets_func(nir_function_impl *impl, int gpu_id)
 
    bool progress = false;
    nir_foreach_block_safe (block, impl) {
-      progress |= lower_io_offsets_block(block, &b, mem_ctx, gpu_id);
+      progress |= lower_io_offsets_block(block, &b, mem_ctx);
    }
 
    if (progress) {
@@ -298,13 +297,13 @@ lower_io_offsets_func(nir_function_impl *impl, int gpu_id)
 }
 
 bool
-ir3_nir_lower_io_offsets(nir_shader *shader, int gpu_id)
+ir3_nir_lower_io_offsets(nir_shader *shader)
 {
    bool progress = false;
 
    nir_foreach_function (function, shader) {
       if (function->impl)
-         progress |= lower_io_offsets_func(function->impl, gpu_id);
+         progress |= lower_io_offsets_func(function->impl);
    }
 
    return progress;

@@ -38,7 +38,7 @@ i915_init_resource_functions(struct i915_context *i915)
    i915->base.buffer_unmap = i915_buffer_transfer_unmap;
    i915->base.texture_unmap = i915_texture_transfer_unmap;
    i915->base.buffer_subdata = i915_buffer_subdata;
-   i915->base.texture_subdata = u_default_texture_subdata;
+   i915->base.texture_subdata = i915_texture_subdata;
 }
 
 void

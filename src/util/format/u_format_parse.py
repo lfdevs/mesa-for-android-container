@@ -29,7 +29,6 @@
 '''
 
 
-from __future__ import division
 import copy
 
 VOID, UNSIGNED, SIGNED, FIXED, FLOAT = range(5)

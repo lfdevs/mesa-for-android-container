@@ -1,6 +1,0 @@
-dEQP-GLES31.functional.blend_equation_advanced.msaa.colordodge,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.exclusion,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.multiply,Fail
-dEQP-VK.renderpass.dedicated_allocation.attachment_allocation.input_output.7,Fail
-dEQP-VK.renderpass.suballocation.attachment_allocation.input_output.7,Fail
-dEQP-VK.renderpass.suballocation.subpass_dependencies.implicit_dependencies.render_passes_5,Fail

@@ -249,7 +249,7 @@ brw_begin_perf_query(struct gl_context *ctx,
 
    bool ret = intel_perf_begin_query(perf_ctx, obj);
 
-   if (INTEL_DEBUG & DEBUG_PERFMON)
+   if (INTEL_DEBUG(DEBUG_PERFMON))
       dump_perf_queries(brw);
 
    return ret;
@@ -315,7 +315,7 @@ brw_get_perf_query_data(struct gl_context *ctx,
 
    DBG("GetData(%d)\n", o->Id);
 
-   if (INTEL_DEBUG & DEBUG_PERFMON)
+   if (INTEL_DEBUG(DEBUG_PERFMON))
       dump_perf_queries(brw);
 
    /* We expect that the frontend only calls this hook when it knows

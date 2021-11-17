@@ -461,10 +461,14 @@ static rvcn_dec_message_vp9_t get_vp9_msg(struct radeon_decoder *dec,
                                 RDECODE_FRAME_HDR_INFO_VP9_MODE_REF_DELTA_UPDATE_MASK;
 
    result.frame_header_flags |=
-      ((dec->show_frame && !pic->picture_parameter.pic_fields.error_resilient_mode)
+      ((dec->show_frame && !pic->picture_parameter.pic_fields.error_resilient_mode &&
+        dec->last_width == dec->base.width && dec->last_height == dec->base.height)
        << RDECODE_FRAME_HDR_INFO_VP9_USE_PREV_IN_FIND_MV_REFS_SHIFT) &
       RDECODE_FRAME_HDR_INFO_VP9_USE_PREV_IN_FIND_MV_REFS_MASK;
    dec->show_frame = pic->picture_parameter.pic_fields.show_frame;
+
+   result.frame_header_flags |=  (1 << RDECODE_FRAME_HDR_INFO_VP9_USE_UNCOMPRESSED_HEADER_SHIFT) &
+                                 RDECODE_FRAME_HDR_INFO_VP9_USE_UNCOMPRESSED_HEADER_MASK;
 
    result.interp_filter = pic->picture_parameter.pic_fields.mcomp_filter_type;
 
@@ -564,6 +568,9 @@ static rvcn_dec_message_vp9_t get_vp9_msg(struct radeon_decoder *dec,
       memset(dec->ref_codec.ref_list, 0x7f, sizeof(dec->ref_codec.ref_list));
       memcpy(dec->ref_codec.ref_list, result.ref_frame_map, sizeof(result.ref_frame_map));
    }
+
+   dec->last_width = dec->base.width;
+   dec->last_height = dec->base.height;
 
    return result;
 }
@@ -853,14 +860,14 @@ static rvcn_dec_message_av1_t get_av1_msg(struct radeon_decoder *dec,
       }
    }
 
-   result.p010_mode = 0;
-   result.msb_mode = 0;
-   if (!pic->picture_parameter.bit_depth_idx) {
-      result.luma_10to8 = 0;
-      result.chroma_10to8 = 0;
-   } else {
-      result.luma_10to8 = 1;
-      result.chroma_10to8 = 1;
+   if (pic->picture_parameter.bit_depth_idx) {
+      if (target->buffer_format == PIPE_FORMAT_P010 || target->buffer_format == PIPE_FORMAT_P016) {
+         result.p010_mode = 1;
+         result.msb_mode = 1;
+      } else {
+         result.luma_10to8 = 1;
+         result.chroma_10to8 = 1;
+      }
    }
 
    result.preskip_segid = 0;
@@ -1332,7 +1339,7 @@ static void rvcn_dec_message_create(struct radeon_decoder *dec)
 static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn_dec_message_decode_t *decode,
       rvcn_dec_message_dynamic_dpb_t2_t *dynamic_dpb_t2)
 {
-   struct rvcn_dec_dynamic_dpb_t2 *dpb = NULL;
+   struct rvcn_dec_dynamic_dpb_t2 *dpb = NULL, *dummy = NULL;
    unsigned width, height, size;
    uint64_t addr;
    int i;
@@ -1346,7 +1353,14 @@ static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn
    list_for_each_entry_safe(struct rvcn_dec_dynamic_dpb_t2, d, &dec->dpb_ref_list, list) {
       for (i = 0; i < dec->ref_codec.ref_size; ++i) {
          if ((dec->ref_codec.ref_list[i] != 0x7f) && (d->index == (dec->ref_codec.ref_list[i] & 0x7f))) {
+            if (!dummy)
+               dummy = d;
+
             addr = dec->ws->buffer_get_virtual_address(d->dpb.res->buf);
+            if (!addr && dummy) {
+               RVID_ERR("Ref list from application is incorrect, using dummy buffer instead.\n");
+               addr = dec->ws->buffer_get_virtual_address(dummy->dpb.res->buf);
+            }
             dynamic_dpb_t2->dpbAddrLo[i] = addr;
             dynamic_dpb_t2->dpbAddrHi[i] = addr >> 32;
             ++dynamic_dpb_t2->dpbArraySize;
@@ -1354,8 +1368,12 @@ static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn
          }
       }
       if (i == dec->ref_codec.ref_size) {
-         list_del(&d->list);
-         list_addtail(&d->list, &dec->dpb_unref_list);
+         if (d->dpb.res->b.b.width0 * d->dpb.res->b.b.height0 != size) {
+            list_del(&d->list);
+            list_addtail(&d->list, &dec->dpb_unref_list);
+         } else {
+            d->index = 0x7f;
+         }
       }
    }
 
@@ -1367,11 +1385,9 @@ static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn
    }
 
    if (!dpb) {
-      list_for_each_entry_safe(struct rvcn_dec_dynamic_dpb_t2, d, &dec->dpb_unref_list, list) {
-         if (d->dpb.res->b.b.width0 * d->dpb.res->b.b.height0 == size) {
+      list_for_each_entry_safe(struct rvcn_dec_dynamic_dpb_t2, d, &dec->dpb_ref_list, list) {
+         if (d->index == 0x7f) {
             d->index = dec->ref_codec.index;
-            list_del(&d->list);
-            list_addtail(&d->list, &dec->dpb_ref_list);
             dpb = d;
             break;
          }

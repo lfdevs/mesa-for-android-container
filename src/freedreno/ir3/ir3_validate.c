@@ -30,6 +30,9 @@
 struct ir3_validate_ctx {
    struct ir3 *ir;
 
+   /* Current block being validated: */
+   struct ir3_block *current_block;
+
    /* Current instruction being validated: */
    struct ir3_instruction *current_instr;
 
@@ -43,8 +46,12 @@ static void
 validate_error(struct ir3_validate_ctx *ctx, const char *condstr)
 {
    fprintf(stderr, "validation fail: %s\n", condstr);
-   fprintf(stderr, "  -> for instruction: ");
-   ir3_print_instr(ctx->current_instr);
+   if (ctx->current_instr) {
+      fprintf(stderr, "  -> for instruction: ");
+      ir3_print_instr(ctx->current_instr);
+   } else {
+      fprintf(stderr, "  -> for block%u\n", block_id(ctx->current_block));
+   }
    abort();
 }
 
@@ -65,6 +72,9 @@ static void
 validate_src(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr,
              struct ir3_register *reg)
 {
+   if (reg->flags & IR3_REG_IMMED)
+      validate_assert(ctx, ir3_valid_immediate(instr, reg->iim_val));
+
    if (!(reg->flags & IR3_REG_SSA) || !reg->def)
       return;
 
@@ -181,10 +191,14 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
             else
                validate_assert(ctx, reg->flags & IR3_REG_HALF);
          }
-      } else if (opc_cat(instr->opc) == 6) {
+      } else if (opc_cat(instr->opc) == 1 || opc_cat(instr->opc) == 6) {
          /* handled below */
       } else if (opc_cat(instr->opc) == 0) {
          /* end/chmask/etc are allowed to have different size sources */
+      } else if (instr->opc == OPC_META_PARALLEL_COPY) {
+         /* pcopy sources have to match with their destination but can have
+          * different sizes from each other.
+          */
       } else if (n > 0) {
          validate_assert(ctx, (last_reg->flags & IR3_REG_HALF) ==
                                  (reg->flags & IR3_REG_HALF));
@@ -299,6 +313,7 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
       case OPC_STL:
       case OPC_STP:
       case OPC_STLW:
+      case OPC_SPILL_MACRO:
          validate_assert(ctx, !(instr->srcs[0]->flags & IR3_REG_HALF));
          validate_reg_size(ctx, instr->srcs[1], instr->cat6.type);
          validate_assert(ctx, !(instr->srcs[2]->flags & IR3_REG_HALF));
@@ -322,6 +337,22 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
          break;
       }
    }
+
+   if (instr->opc == OPC_META_PARALLEL_COPY) {
+      foreach_src_n (src, n, instr) {
+         validate_assert(ctx, reg_class_flags(src) ==
+                         reg_class_flags(instr->dsts[n]));
+      }
+   }
+}
+
+static bool
+is_physical_successor(struct ir3_block *block, struct ir3_block *succ)
+{
+   for (unsigned i = 0; i < ARRAY_SIZE(block->physical_successors); i++)
+      if (block->physical_successors[i] == succ)
+         return true;
+   return false;
 }
 
 void
@@ -342,6 +373,9 @@ ir3_validate(struct ir3 *ir)
    ctx->defs = _mesa_pointer_set_create(ctx);
 
    foreach_block (block, &ir->block_list) {
+      ctx->current_block = block;
+      ctx->current_instr = NULL;
+
       /* We require that the first block does not have any predecessors,
        * which allows us to assume that phi nodes and meta:input's do not
        * appear in the same basic block.
@@ -363,9 +397,18 @@ ir3_validate(struct ir3 *ir)
       }
 
       for (unsigned i = 0; i < 2; i++) {
-         if (block->successors[i])
+         if (block->successors[i]) {
             validate_phi_src(ctx, block->successors[i], block);
+
+            ctx->current_instr = NULL;
+
+            /* Each logical successor should also be a physical successor: */
+            validate_assert(ctx, is_physical_successor(block, block->successors[i]));
+         }
       }
+
+      validate_assert(ctx, block->successors[0] || !block->successors[1]);
+      validate_assert(ctx, block->physical_successors[0] || !block->physical_successors[1]);
    }
 
    ralloc_free(ctx);

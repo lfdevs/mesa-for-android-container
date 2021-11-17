@@ -247,7 +247,7 @@ void enc_ScaleInput_common(vid_enc_PrivateType * priv, OMX_VIDEO_PORTDEFINITIONT
 
 void enc_ControlPicture_common(vid_enc_PrivateType * priv, struct pipe_h264_enc_picture_desc *picture)
 {
-   struct pipe_h264_enc_rate_control *rate_ctrl = &picture->rate_ctrl;
+   struct pipe_h264_enc_rate_control *rate_ctrl = &picture->rate_ctrl[0];
 
    /* Get bitrate from port */
    switch (priv->bitrate.eControlRate) {
@@ -302,7 +302,7 @@ void enc_ControlPicture_common(vid_enc_PrivateType * priv, struct pipe_h264_enc_
    picture->frame_num = priv->frame_num;
    picture->ref_idx_l0 = priv->ref_idx_l0;
    picture->ref_idx_l1 = priv->ref_idx_l1;
-   picture->enable_vui = (picture->rate_ctrl.frame_rate_num != 0);
+   picture->enable_vui = (picture->rate_ctrl[0].frame_rate_num != 0);
    enc_GetPictureParamPreset(picture);
 }
 

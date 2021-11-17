@@ -312,26 +312,26 @@ get_texture_size_from_image_view(struct v3dv_image_view *image_view,
       /* We don't u_minify the values, as we are using the image_view
        * extents
        */
-      return image_view->extent.width;
+      return image_view->vk.extent.width;
    case QUNIFORM_IMAGE_HEIGHT:
    case QUNIFORM_TEXTURE_HEIGHT:
-      return image_view->extent.height;
+      return image_view->vk.extent.height;
    case QUNIFORM_IMAGE_DEPTH:
    case QUNIFORM_TEXTURE_DEPTH:
-      return image_view->extent.depth;
+      return image_view->vk.extent.depth;
    case QUNIFORM_IMAGE_ARRAY_SIZE:
    case QUNIFORM_TEXTURE_ARRAY_SIZE:
-      if (image_view->type != VK_IMAGE_VIEW_TYPE_CUBE_ARRAY) {
-         return image_view->last_layer - image_view->first_layer + 1;
+      if (image_view->vk.view_type != VK_IMAGE_VIEW_TYPE_CUBE_ARRAY) {
+         return image_view->vk.layer_count;
       } else {
-         assert((image_view->last_layer - image_view->first_layer + 1) % 6 == 0);
-         return (image_view->last_layer - image_view->first_layer + 1) / 6;
+         assert(image_view->vk.layer_count % 6 == 0);
+         return image_view->vk.layer_count / 6;
       }
    case QUNIFORM_TEXTURE_LEVELS:
-      return image_view->max_level - image_view->base_level + 1;
+      return image_view->vk.level_count;
    case QUNIFORM_TEXTURE_SAMPLES:
-      assert(image_view->image);
-      return image_view->image->samples;
+      assert(image_view->vk.image);
+      return image_view->vk.image->samples;
    default:
       unreachable("Bad texture size field");
    }
@@ -506,10 +506,23 @@ v3dv_write_uniforms_wg_offsets(struct v3dv_cmd_buffer *cmd_buffer,
        * is only for sanityzing the shader and it only affects the specific case
        * of secondary command buffers without framebuffer info available it
        * might not be worth the trouble.
+       *
+       * With multiview the number of layers is dictated by the view mask
+       * and not by the framebuffer layers. We do set the job's frame tiling
+       * information correctly from the view mask in that case, however,
+       * secondary command buffers may not have valid frame tiling data,
+       * so when multiview is enabled, we always set the number of layers
+       * from the subpass view mask.
        */
       case QUNIFORM_FB_LAYERS: {
+         const struct v3dv_cmd_buffer_state *state = &job->cmd_buffer->state;
+         const uint32_t view_mask =
+            state->pass->subpasses[state->subpass_idx].view_mask;
+
          uint32_t num_layers;
-         if (job->frame_tiling.layers != 0) {
+         if (view_mask != 0) {
+            num_layers = util_last_bit(view_mask);
+         } else if (job->frame_tiling.layers != 0) {
             num_layers = job->frame_tiling.layers;
          } else if (cmd_buffer->state.framebuffer) {
             num_layers = cmd_buffer->state.framebuffer->layers;
@@ -524,6 +537,10 @@ v3dv_write_uniforms_wg_offsets(struct v3dv_cmd_buffer *cmd_buffer,
          cl_aligned_u32(&uniforms, num_layers);
          break;
       }
+
+      case QUNIFORM_VIEW_INDEX:
+         cl_aligned_u32(&uniforms, job->cmd_buffer->state.view_index);
+         break;
 
       case QUNIFORM_NUM_WORK_GROUPS:
          assert(job->type == V3DV_JOB_TYPE_GPU_CSD);

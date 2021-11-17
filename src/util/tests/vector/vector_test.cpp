@@ -30,7 +30,7 @@ static void test(uint32_t size_in_elements, uint32_t elements_to_walk, uint32_t 
    uint32_t add_counter = 0;
    uint32_t remove_counter = 0;
 
-   ASSERT_TRUE(u_vector_init(&vector, sizeof(uint64_t), sizeof(uint64_t) * size_in_elements));
+   ASSERT_TRUE(u_vector_init(&vector, size_in_elements, sizeof(uint64_t)));
 
    // Override the head and tail so we can quickly test rollover
    vector.head = vector.tail = start;

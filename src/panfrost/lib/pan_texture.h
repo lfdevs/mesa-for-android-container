@@ -28,11 +28,13 @@
 #ifndef __PAN_TEXTURE_H
 #define __PAN_TEXTURE_H
 
+#include "genxml/gen_macros.h"
+
 #include <stdbool.h>
 #include "drm-uapi/drm_fourcc.h"
 #include "util/format/u_format.h"
 #include "compiler/shader_enums.h"
-#include "midgard_pack.h"
+#include "genxml/gen_macros.h"
 #include "pan_bo.h"
 #include "pan_device.h"
 #include "pan_util.h"
@@ -82,17 +84,6 @@ enum pan_image_crc_mode {
       PAN_IMAGE_CRC_INBAND,
       PAN_IMAGE_CRC_OOB,
 };
-
-#ifndef PAN_PACK_H
-/* Avoid the GenXML dependence */
-
-enum mali_texture_dimension {
-        MALI_TEXTURE_DIMENSION_CUBE = 0,
-        MALI_TEXTURE_DIMENSION_1D   = 1,
-        MALI_TEXTURE_DIMENSION_2D   = 2,
-        MALI_TEXTURE_DIMENSION_3D   = 3,
-};
-#endif
 
 struct pan_image_layout {
         uint64_t modifier;
@@ -157,6 +148,9 @@ bool
 panfrost_format_supports_afbc(const struct panfrost_device *dev,
                 enum pipe_format format);
 
+enum pipe_format
+panfrost_afbc_format(const struct panfrost_device *dev, enum pipe_format format);
+
 #define AFBC_HEADER_BYTES_PER_TILE 16
 
 unsigned
@@ -168,15 +162,16 @@ panfrost_afbc_can_ytr(enum pipe_format format);
 unsigned
 panfrost_block_dim(uint64_t modifier, bool width, unsigned plane);
 
+#ifdef PAN_ARCH
 unsigned
-panfrost_estimate_texture_payload_size(const struct panfrost_device *dev,
-                                       const struct pan_image_view *iview);
+GENX(panfrost_estimate_texture_payload_size)(const struct pan_image_view *iview);
 
 void
-panfrost_new_texture(const struct panfrost_device *dev,
-                     const struct pan_image_view *iview,
-                     void *out,
-                     const struct panfrost_ptr *payload);
+GENX(panfrost_new_texture)(const struct panfrost_device *dev,
+                           const struct pan_image_view *iview,
+                           void *out,
+                           const struct panfrost_ptr *payload);
+#endif
 
 unsigned
 panfrost_get_layer_stride(const struct pan_image_layout *layout,
@@ -195,21 +190,6 @@ struct pan_scoreboard;
 #define drm_is_afbc(mod) \
         ((mod >> 52) == (DRM_FORMAT_MOD_ARM_TYPE_AFBC | \
                 (DRM_FORMAT_MOD_VENDOR_ARM << 4)))
-
-/* Map modifiers to mali_texture_layout for packing in a texture descriptor */
-
-static inline enum mali_texture_layout
-panfrost_modifier_to_layout(uint64_t modifier)
-{
-        if (drm_is_afbc(modifier))
-                return MALI_TEXTURE_LAYOUT_AFBC;
-        else if (modifier == DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED)
-                return MALI_TEXTURE_LAYOUT_TILED;
-        else if (modifier == DRM_FORMAT_MOD_LINEAR)
-                return MALI_TEXTURE_LAYOUT_LINEAR;
-        else
-                unreachable("Invalid modifer");
-}
 
 struct pan_image_explicit_layout {
         unsigned offset;

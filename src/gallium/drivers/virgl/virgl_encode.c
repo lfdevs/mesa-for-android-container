@@ -764,7 +764,7 @@ int virgl_encoder_draw_vbo(struct virgl_context *ctx,
    else
       virgl_encoder_write_dword(ctx->cbuf, 0);
    if (length >= VIRGL_DRAW_VBO_SIZE_TESS) {
-      virgl_encoder_write_dword(ctx->cbuf, info->vertices_per_patch); /* vertices per patch */
+      virgl_encoder_write_dword(ctx->cbuf, ctx->patch_vertices); /* vertices per patch */
       virgl_encoder_write_dword(ctx->cbuf, drawid_offset); /* drawid */
    }
    if (length == VIRGL_DRAW_VBO_SIZE_INDIRECT) {
@@ -949,7 +949,8 @@ int virgl_encode_sampler_state(struct virgl_context *ctx,
       VIRGL_OBJ_SAMPLE_STATE_S0_MAG_IMG_FILTER(state->mag_img_filter) |
       VIRGL_OBJ_SAMPLE_STATE_S0_COMPARE_MODE(state->compare_mode) |
       VIRGL_OBJ_SAMPLE_STATE_S0_COMPARE_FUNC(state->compare_func) |
-      VIRGL_OBJ_SAMPLE_STATE_S0_SEAMLESS_CUBE_MAP(state->seamless_cube_map);
+      VIRGL_OBJ_SAMPLE_STATE_S0_SEAMLESS_CUBE_MAP(state->seamless_cube_map) |
+      VIRGL_OBJ_SAMPLE_STATE_S0_MAX_ANISOTROPY((int)(state->max_anisotropy));
 
    virgl_encoder_write_dword(ctx->cbuf, tmp);
    virgl_encoder_write_dword(ctx->cbuf, fui(state->lod_bias));
@@ -1536,7 +1537,9 @@ void virgl_encode_get_memory_info(struct virgl_context *ctx, struct virgl_resour
 void virgl_encode_emit_string_marker(struct virgl_context *ctx,
                                      const char *message, int len)
 {
-    if (!len)
+   /* len is guaranteed to be non-negative but be defensive */
+   assert(len >= 0);
+   if (len <= 0)
       return;
 
    if (len > 4 * 0xffff) {

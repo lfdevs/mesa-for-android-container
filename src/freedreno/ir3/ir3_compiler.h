@@ -30,6 +30,8 @@
 #include "util/disk_cache.h"
 #include "util/log.h"
 
+#include "freedreno_dev_info.h"
+
 #include "ir3.h"
 
 struct ir3_ra_reg_set;
@@ -37,7 +39,8 @@ struct ir3_shader;
 
 struct ir3_compiler {
    struct fd_device *dev;
-   uint32_t gpu_id;
+   const struct fd_dev_id *dev_id;
+   uint8_t gen;
    uint32_t shader_count;
 
    struct disk_cache *disk_cache;
@@ -153,10 +156,14 @@ struct ir3_compiler {
 
    /* Whether private memory is supported */
    bool has_pvtmem;
+
+   /* True if 16-bit descriptors are used for both 16-bit and 32-bit access. */
+   bool storage_16bit;
 };
 
 void ir3_compiler_destroy(struct ir3_compiler *compiler);
-struct ir3_compiler *ir3_compiler_create(struct fd_device *dev, uint32_t gpu_id,
+struct ir3_compiler *ir3_compiler_create(struct fd_device *dev,
+                                         const struct fd_dev_id *dev_id,
                                          bool robust_ubo_access);
 
 void ir3_disk_cache_init(struct ir3_compiler *compiler);
@@ -174,7 +181,7 @@ int ir3_compile_shader_nir(struct ir3_compiler *compiler,
 static inline unsigned
 ir3_pointer_size(struct ir3_compiler *compiler)
 {
-   return (compiler->gpu_id >= 500) ? 2 : 1;
+   return fd_dev_64b(compiler->dev_id) ? 2 : 1;
 }
 
 enum ir3_shader_debug {
@@ -190,6 +197,7 @@ enum ir3_shader_debug {
    IR3_DBG_NOUBOOPT = BITFIELD_BIT(9),
    IR3_DBG_NOFP16 = BITFIELD_BIT(10),
    IR3_DBG_NOCACHE = BITFIELD_BIT(11),
+   IR3_DBG_SPILLALL = BITFIELD_BIT(12),
 
    /* DEBUG-only options: */
    IR3_DBG_SCHEDMSGS = BITFIELD_BIT(20),

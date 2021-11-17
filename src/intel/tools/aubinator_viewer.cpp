@@ -1006,7 +1006,7 @@ display_aubfile_window(struct window *win)
    ImGui::Text("Execbufs          %u", context.file->n_execs);
    ImGui::Text("PCI ID:           0x%x", context.file->pci_id);
    ImGui::Text("Application name: %s", context.file->app_name);
-   ImGui::Text("%s", intel_get_device_name(context.file->pci_id));
+   ImGui::Text("%s", context.file->devinfo.name);
 
    ImGui::SetNextWindowContentWidth(500);
    if (ImGui::BeginPopupModal("Help", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {

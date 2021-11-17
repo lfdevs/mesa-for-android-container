@@ -17,6 +17,7 @@
 #include "vn_buffer.h"
 #include "vn_device.h"
 #include "vn_image.h"
+#include "vn_physical_device.h"
 
 /* device memory commands */
 
@@ -47,6 +48,7 @@ vn_device_memory_simple_alloc(struct vn_device *dev,
       },
       NULL, &mem_handle);
    if (result != VK_SUCCESS) {
+      vn_object_base_fini(&mem->base);
       vk_free(alloc, mem);
       return result;
    }
@@ -60,6 +62,7 @@ vn_device_memory_simple_alloc(struct vn_device *dev,
    if (result != VK_SUCCESS) {
       vn_async_vkFreeMemory(dev->instance, vn_device_to_handle(dev),
                             mem_handle, NULL);
+      vn_object_base_fini(&mem->base);
       vk_free(alloc, mem);
       return result;
    }
@@ -221,20 +224,23 @@ VkResult
 vn_device_memory_import_dma_buf(struct vn_device *dev,
                                 struct vn_device_memory *mem,
                                 const VkMemoryAllocateInfo *alloc_info,
+                                bool force_unmappable,
                                 int fd)
 {
    VkDevice device = vn_device_to_handle(dev);
    VkDeviceMemory memory = vn_device_memory_to_handle(mem);
    const VkPhysicalDeviceMemoryProperties *mem_props =
       &dev->physical_device->memory_properties.memoryProperties;
-   const VkMemoryType *mem_type =
-      &mem_props->memoryTypes[alloc_info->memoryTypeIndex];
+   VkMemoryPropertyFlags mem_flags =
+      mem_props->memoryTypes[alloc_info->memoryTypeIndex].propertyFlags;
    struct vn_renderer_bo *bo;
    VkResult result = VK_SUCCESS;
 
-   result = vn_renderer_bo_create_from_dma_buf(dev->renderer,
-                                               alloc_info->allocationSize, fd,
-                                               mem_type->propertyFlags, &bo);
+   if (force_unmappable)
+      mem_flags &= ~VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+
+   result = vn_renderer_bo_create_from_dma_buf(
+      dev->renderer, alloc_info->allocationSize, fd, mem_flags, &bo);
    if (result != VK_SUCCESS)
       return result;
 
@@ -352,7 +358,7 @@ vn_AllocateMemory(VkDevice device,
    } else if (export_ahb) {
       result = vn_android_device_allocate_ahb(dev, mem, pAllocateInfo, alloc);
    } else if (import_fd_info) {
-      result = vn_device_memory_import_dma_buf(dev, mem, pAllocateInfo,
+      result = vn_device_memory_import_dma_buf(dev, mem, pAllocateInfo, false,
                                                import_fd_info->fd);
    } else if (export_info) {
       result = vn_device_memory_alloc(dev, mem, pAllocateInfo, true,
@@ -369,6 +375,7 @@ vn_AllocateMemory(VkDevice device,
                                       mem_type->propertyFlags, 0);
    }
    if (result != VK_SUCCESS) {
+      vn_object_base_fini(&mem->base);
       vk_free(alloc, mem);
       return vn_error(dev->instance, result);
    }

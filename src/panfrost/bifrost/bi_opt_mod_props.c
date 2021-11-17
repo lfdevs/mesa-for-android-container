@@ -26,14 +26,15 @@
 #include "bi_builder.h"
 
 static bool
-bi_takes_fabs(bi_instr *I, bi_index repl, unsigned s)
+bi_takes_fabs(unsigned arch, bi_instr *I, bi_index repl, unsigned s)
 {
         switch (I->op) {
         case BI_OPCODE_FCMP_V2F16:
         case BI_OPCODE_FMAX_V2F16:
         case BI_OPCODE_FMIN_V2F16:
-                /* Encoding restriction: can't have both abs if equal sources */
-                return !(I->src[1 - s].abs && bi_is_word_equiv(I->src[1 - s], repl));
+                /* Bifrost encoding restriction: can't have both abs if equal sources */
+                return !(arch <= 8 && I->src[1 - s].abs
+                                   && bi_is_word_equiv(I->src[1 - s], repl));
         case BI_OPCODE_V2F32_TO_V2F16:
                 /* TODO: Needs both match or lower */
                 return false;
@@ -46,14 +47,14 @@ bi_takes_fabs(bi_instr *I, bi_index repl, unsigned s)
 }
 
 static bool
-bi_takes_fneg(bi_instr *I, unsigned s)
+bi_takes_fneg(unsigned arch, bi_instr *I, unsigned s)
 {
         switch (I->op) {
         case BI_OPCODE_CUBE_SSEL:
         case BI_OPCODE_CUBE_TSEL:
         case BI_OPCODE_CUBEFACE:
-                /* TODO: Needs match or lower */
-                return false;
+                /* TODO: Bifrost encoding restriction: need to match or lower */
+                return arch >= 9;
         case BI_OPCODE_FREXPE_F32:
         case BI_OPCODE_FREXPE_V2F16:
         case BI_OPCODE_FLOG_TABLE_F32:
@@ -65,11 +66,10 @@ bi_takes_fneg(bi_instr *I, unsigned s)
 }
 
 static bool
-bi_is_fabsneg(bi_instr *I)
+bi_is_fabsneg(enum bi_opcode op, enum bi_size size)
 {
-        return (I->op == BI_OPCODE_FADD_F32 || I->op == BI_OPCODE_FADD_V2F16) &&
-                (I->src[1].type == BI_INDEX_CONSTANT && I->src[1].value == 0) &&
-                (I->clamp == BI_CLAMP_NONE);
+        return (size == BI_SIZE_32 && op == BI_OPCODE_FABSNEG_F32) ||
+               (size == BI_SIZE_16 && op == BI_OPCODE_FABSNEG_V2F16);
 }
 
 static enum bi_swizzle
@@ -105,6 +105,35 @@ bi_compose_float_index(bi_index old, bi_index repl)
         return repl;
 }
 
+/* DISCARD.b32(FCMP.f(x, y)) --> DISCARD.f(x, y) */
+
+static inline void
+bi_fuse_discard_fcmp(bi_instr *I, bi_instr *mod, unsigned arch)
+{
+        if (I->op != BI_OPCODE_DISCARD_B32) return;
+        if (mod->op != BI_OPCODE_FCMP_F32 && mod->op != BI_OPCODE_FCMP_V2F16) return;
+        if (mod->cmpf >= BI_CMPF_GTLT) return;
+
+        /* .abs and .neg modifiers allowed on Valhall DISCARD but not Bifrost */
+        bool absneg = mod->src[0].neg || mod->src[0].abs;
+        absneg     |= mod->src[1].neg || mod->src[1].abs;
+
+        if (arch <= 8 && absneg) return;
+
+        enum bi_swizzle r = I->src[0].swizzle;
+
+        /* result_type doesn't matter */
+        I->op = BI_OPCODE_DISCARD_F32;
+        I->cmpf = mod->cmpf;
+        I->src[0] = mod->src[0];
+        I->src[1] = mod->src[1];
+
+        if (mod->op == BI_OPCODE_FCMP_V2F16) {
+                I->src[0].swizzle = bi_compose_swizzle_16(r, I->src[0].swizzle);
+                I->src[1].swizzle = bi_compose_swizzle_16(r, I->src[1].swizzle);
+        }
+}
+
 void
 bi_opt_mod_prop_forward(bi_context *ctx)
 {
@@ -123,14 +152,15 @@ bi_opt_mod_prop_forward(bi_context *ctx)
                         if (!mod)
                                 continue;
 
-                        if (bi_opcode_props[mod->op].size != bi_opcode_props[I->op].size)
-                                continue;
+                        unsigned size = bi_opcode_props[I->op].size;
 
-                        if (bi_is_fabsneg(mod)) {
-                                if (mod->src[0].abs && !bi_takes_fabs(I, mod->src[0], s))
+                        bi_fuse_discard_fcmp(I, mod, ctx->arch);
+
+                        if (bi_is_fabsneg(mod->op, size)) {
+                                if (mod->src[0].abs && !bi_takes_fabs(ctx->arch, I, mod->src[0], s))
                                         continue;
 
-                                if (mod->src[0].neg && !bi_takes_fneg(I, s))
+                                if (mod->src[0].neg && !bi_takes_fneg(ctx->arch, I, s))
                                         continue;
 
                                 I->src[s] = bi_compose_float_index(I->src[s], mod->src[0]);
@@ -157,38 +187,21 @@ bi_takes_clamp(bi_instr *I)
         }
 }
 
-/* Treating clamps as functions, compute the composition f circ g. For {NONE,
- * SAT, SAT_SIGNED, CLAMP_POS}, anything left- or right-composed with NONE is
- * unchanged, anything composed with itself is unchanged, and any two
- * nontrivial distinct clamps compose to SAT (left as an exercise) */
-
-static enum bi_clamp
-bi_compose_clamp(enum bi_clamp f, enum bi_clamp g)
-{
-        return  (f == BI_CLAMP_NONE) ? g :
-                (g == BI_CLAMP_NONE) ? f :
-                (f == g)             ? f :
-                BI_CLAMP_CLAMP_0_1;
-}
-
 static bool
-bi_is_fclamp(bi_instr *I)
+bi_is_fclamp(enum bi_opcode op, enum bi_size size)
 {
-        return (I->op == BI_OPCODE_FADD_F32 || I->op == BI_OPCODE_FADD_V2F16) &&
-                (!I->src[0].abs && !I->src[0].neg) &&
-                (I->src[1].type == BI_INDEX_CONSTANT && I->src[1].value == 0) &&
-                (I->clamp != BI_CLAMP_NONE);
+        return (size == BI_SIZE_32 && op == BI_OPCODE_FCLAMP_F32) ||
+               (size == BI_SIZE_16 && op == BI_OPCODE_FCLAMP_V2F16);
 }
 
 static bool
 bi_optimizer_clamp(bi_instr *I, bi_instr *use)
 {
-        if (bi_opcode_props[use->op].size != bi_opcode_props[I->op].size) return false;
-        if (!bi_is_fclamp(use)) return false;
+        if (!bi_is_fclamp(use->op, bi_opcode_props[I->op].size)) return false;
         if (!bi_takes_clamp(I)) return false;
-        if (use->src[0].neg || use->src[0].abs) return false;
 
-        I->clamp = bi_compose_clamp(I->clamp, use->clamp);
+        /* Clamps are bitfields (clamp_m1_1/clamp_0_inf) so composition is OR */
+        I->clamp |= use->clamp;
         I->dest[0] = use->dest[0];
         return true;
 }
@@ -265,4 +278,32 @@ bi_opt_mod_prop_backward(bi_context *ctx)
 
         free(uses);
         free(multiple);
+}
+
+/** Lower pseudo instructions that exist to simplify the optimizer */
+
+void
+bi_lower_opt_instruction(bi_instr *I)
+{
+        switch (I->op) {
+        case BI_OPCODE_FABSNEG_F32:
+        case BI_OPCODE_FABSNEG_V2F16:
+        case BI_OPCODE_FCLAMP_F32:
+        case BI_OPCODE_FCLAMP_V2F16:
+                I->op = (bi_opcode_props[I->op].size == BI_SIZE_32) ?
+                        BI_OPCODE_FADD_F32 : BI_OPCODE_FADD_V2F16;
+
+                I->round = BI_ROUND_NONE;
+                I->src[1] = bi_negzero();
+                break;
+
+        case BI_OPCODE_DISCARD_B32:
+                I->op = BI_OPCODE_DISCARD_F32;
+                I->src[1] = bi_imm_u16(0);
+                I->cmpf = BI_CMPF_NE;
+                break;
+
+        default:
+                break;
+        }
 }

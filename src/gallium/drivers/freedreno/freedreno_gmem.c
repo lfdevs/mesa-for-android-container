@@ -33,6 +33,7 @@
 #include "util/u_memory.h"
 #include "util/u_string.h"
 #include "u_tracepoints.h"
+#include "util/u_trace_gallium.h"
 
 #include "freedreno_context.h"
 #include "freedreno_fence.h"
@@ -591,7 +592,7 @@ render_tiles(struct fd_batch *batch, struct fd_gmem_stateobj *gmem) assert_dt
    for (i = 0; i < (gmem->nbins_x * gmem->nbins_y); i++) {
       struct fd_tile *tile = &gmem->tile[i];
 
-      trace_start_tile(&batch->trace, tile->bin_h, tile->yoff, tile->bin_w,
+      trace_start_tile(&batch->trace, batch->gmem, tile->bin_h, tile->yoff, tile->bin_w,
                        tile->xoff);
 
       ctx->emit_tile_prep(batch, tile);
@@ -606,13 +607,13 @@ render_tiles(struct fd_batch *batch, struct fd_gmem_stateobj *gmem) assert_dt
          ctx->query_prepare_tile(batch, i, batch->gmem);
 
       /* emit IB to drawcmds: */
-      trace_start_draw_ib(&batch->trace);
+      trace_start_draw_ib(&batch->trace, batch->gmem);
       if (ctx->emit_tile) {
          ctx->emit_tile(batch, tile);
       } else {
          ctx->screen->emit_ib(batch->gmem, batch->draw);
       }
-      trace_end_draw_ib(&batch->trace);
+      trace_end_draw_ib(&batch->trace, batch->gmem);
       fd_reset_wfi(batch);
 
       /* emit gmem2mem to transfer tile back to system memory: */
@@ -636,13 +637,13 @@ render_sysmem(struct fd_batch *batch) assert_dt
       ctx->query_prepare_tile(batch, 0, batch->gmem);
 
    if (!batch->nondraw) {
-      trace_start_draw_ib(&batch->trace);
+      trace_start_draw_ib(&batch->trace, batch->gmem);
    }
    /* emit IB to drawcmds: */
    ctx->screen->emit_ib(batch->gmem, batch->draw);
 
    if (!batch->nondraw) {
-      trace_end_draw_ib(&batch->trace);
+      trace_end_draw_ib(&batch->trace, batch->gmem);
    }
 
    fd_reset_wfi(batch);
@@ -681,9 +682,9 @@ fd_gmem_render_tiles(struct fd_batch *batch)
        */
       fd_perfetto_submit(ctx);
 #endif
-      trace_flush_batch(&batch->trace, batch, batch->cleared,
+      trace_flush_batch(&batch->trace, batch->gmem, batch, batch->cleared,
                         batch->gmem_reason, batch->num_draws);
-      trace_framebuffer_state(&batch->trace, pfb);
+      trace_framebuffer_state(&batch->trace, batch->gmem, pfb);
    }
 
    if (ctx->emit_sysmem_prep && !batch->nondraw) {
@@ -723,33 +724,34 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 
    if (batch->nondraw) {
       DBG("%p: rendering non-draw", batch);
-      render_sysmem(batch);
+      if (!fd_ringbuffer_empty(batch->draw))
+         render_sysmem(batch);
       ctx->stats.batch_nondraw++;
    } else if (sysmem) {
-      trace_render_sysmem(&batch->trace);
-      trace_start_render_pass(
-         &batch->trace, ctx->submit_count, pipe_surface_format(pfb->cbufs[0]),
+      trace_render_sysmem(&batch->trace, batch->gmem);
+      trace_start_render_pass(&batch->trace, batch->gmem,
+         ctx->submit_count, pipe_surface_format(pfb->cbufs[0]),
          pipe_surface_format(pfb->zsbuf), pfb->width, pfb->height,
          pfb->nr_cbufs, pfb->samples, 0, 0, 0);
       if (ctx->query_prepare)
          ctx->query_prepare(batch, 1);
       render_sysmem(batch);
-      trace_end_render_pass(&batch->trace);
+      trace_end_render_pass(&batch->trace, batch->gmem);
       ctx->stats.batch_sysmem++;
    } else {
       struct fd_gmem_stateobj *gmem = lookup_gmem_state(batch, false, false);
       batch->gmem_state = gmem;
-      trace_render_gmem(&batch->trace, gmem->nbins_x, gmem->nbins_y,
+      trace_render_gmem(&batch->trace, batch->gmem, gmem->nbins_x, gmem->nbins_y,
                         gmem->bin_w, gmem->bin_h);
-      trace_start_render_pass(
-         &batch->trace, ctx->submit_count, pipe_surface_format(pfb->cbufs[0]),
+      trace_start_render_pass(&batch->trace, batch->gmem,
+         ctx->submit_count, pipe_surface_format(pfb->cbufs[0]),
          pipe_surface_format(pfb->zsbuf), pfb->width, pfb->height,
          pfb->nr_cbufs, pfb->samples, gmem->nbins_x * gmem->nbins_y,
          gmem->bin_w, gmem->bin_h);
       if (ctx->query_prepare)
          ctx->query_prepare(batch, gmem->nbins_x * gmem->nbins_y);
       render_tiles(batch, gmem);
-      trace_end_render_pass(&batch->trace);
+      trace_end_render_pass(&batch->trace, batch->gmem);
       batch->gmem_state = NULL;
 
       fd_screen_lock(ctx->screen);
@@ -761,7 +763,7 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 
    flush_ring(batch);
 
-   u_trace_flush(&batch->trace);
+   u_trace_flush(&batch->trace, NULL, false);
 }
 
 /* Determine a worst-case estimate (ie. assuming we don't eliminate an

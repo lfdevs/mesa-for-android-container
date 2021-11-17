@@ -270,7 +270,7 @@ CodeEmitterNV50::emitFlagsWr(const Instruction *i)
       for (int d = 0; i->defExists(d); ++d)
          if (i->def(d).getFile() == FILE_FLAGS)
             flagsDef = d;
-      if (flagsDef >= 0 && 0) // TODO: enforce use of flagsDef at some point
+      if (flagsDef >= 0 && false) // TODO: enforce use of flagsDef at some point
          WARN("Instruction::flagsDef was not set properly\n");
    }
    if (flagsDef == 0 && i->defExists(1))

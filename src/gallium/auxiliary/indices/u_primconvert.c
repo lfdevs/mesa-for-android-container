@@ -202,8 +202,11 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
                             &direct_draw_func);
          /* this should always be a direct translation */
          assert(new_draw.count == total_index_count);
-         /* step 3: allocate a temp buffer for an intermediate rewrite step */
-         rewrite_buffer = malloc(index_size * total_index_count);
+         /* step 3: allocate a temp buffer for an intermediate rewrite step
+          *         if no indices were found, this was a single incomplete restart and can be discarded
+          */
+         if (total_index_count)
+            rewrite_buffer = malloc(index_size * total_index_count);
          if (!rewrite_buffer) {
             if (src_transfer)
                pipe_buffer_unmap(pc->pipe, src_transfer);

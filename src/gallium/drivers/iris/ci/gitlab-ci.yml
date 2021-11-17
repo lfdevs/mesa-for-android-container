@@ -10,76 +10,77 @@
     FLAKES_CHANNEL: "#intel-ci"
     HWCI_FREQ_MAX: "true"
 
+# 5 boards
 .iris-apl-test:
   extends:
     - .iris-test
   variables:
     DEVICE_TYPE: asus-C523NA-A20057-coral
     GPU_VERSION: iris-apl
-    DEQP_EXPECTED_RENDERER: APL
   tags:
     - mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
 
+# 4 boards
 .iris-glk-test:
   extends:
     - .iris-test
     - .test-manual-mr
   variables:
-    DEVICE_TYPE: hp-x360-12b-n4000-octopus
+    DEVICE_TYPE: hp-x360-12b-ca0010nr-n4020-octopus
     GPU_VERSION: iris-glk
-    DEQP_EXPECTED_RENDERER: GLK
   tags:
-    - mesa-ci-x86-64-lava-hp-x360-12b-n4000-octopus
+    - mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
 
+# 5 boards
 .iris-amly-test:
   extends:
     - .iris-test
+    - .test-manual-mr
   variables:
     DEVICE_TYPE: asus-C433TA-AJ0005-rammus
     GPU_VERSION: iris-amly
-    DEQP_EXPECTED_RENDERER: AML
   tags:
     - mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
 
+# 6 boards
 .iris-kbl-test:
   extends:
     - .iris-test
+    - .test-manual-mr
   variables:
     DEVICE_TYPE: hp-x360-14-G1-sona
     GPU_VERSION: iris-kbl
-    DEQP_EXPECTED_RENDERER: KBL
   tags:
     - mesa-ci-x86-64-lava-hp-x360-14-G1-sona
 
-iris-apl-gles2:
+# 1 board
+.iris-whl-test:
   extends:
-    - .iris-apl-test
-  variables:
-    DEQP_VER: gles2
-
-iris-apl-gles3:
-  extends:
-    - .iris-apl-test
-  variables:
-    DEQP_VER: gles3
-    DEQP_EXPECTED_RENDERER: APL
-    DEQP_FRACTION: 4
-
-iris-apl-gles31:
-  extends:
-    - .iris-apl-test
-  variables:
-    DEQP_VER: gles31
-    DEQP_EXPECTED_RENDERER: APL
-    DEQP_FRACTION: 6
-
-# this appears to silently kill the board sometimes.  Leave it as a manual job for debugging.
-iris-apl-gl:
-  extends:
-    - .iris-apl-test
+    - .iris-test
     - .test-manual-mr
   variables:
-    DEQP_VER: gl46
+    DEVICE_TYPE: dell-latitude-5400-4305U-sarien
+    GPU_VERSION: iris-whl
+  tags:
+    - mesa-ci-x86-64-lava-dell-latitude-5400-4305U-sarien
+
+# 4 boards
+.iris-cml-test:
+  extends:
+    - .iris-test
+    - .test-manual-mr
+  variables:
+    DEVICE_TYPE: asus-C436FA-Flip-hatch
+    GPU_VERSION: iris-cml
+  tags:
+    - mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
+
+iris-apl-deqp:
+  extends:
+    - .iris-apl-test
+  variables:
+    DEQP_SUITE: iris-apl
+  parallel: 3
 
 iris-apl-egl:
   extends:
@@ -89,36 +90,12 @@ iris-apl-egl:
     HWCI_START_XORG: 1
     DEQP_VER: egl
 
-iris-glk-gles2:
+iris-glk-deqp:
   extends:
     - .iris-glk-test
   variables:
-    DEQP_VER: gles2
-
-iris-glk-gles3:
-  extends:
-    - .iris-glk-test
-  variables:
-    DEQP_VER: gles3
-    DEQP_EXPECTED_RENDERER: GLK
-    DEQP_FRACTION: 8
-
-iris-glk-gles31:
-  extends:
-    - .iris-glk-test
-  variables:
-    DEQP_VER: gles31
-    DEQP_EXPECTED_RENDERER: GLK
-    DEQP_FRACTION: 8
-
-# this appears to be just unusably slow, timed out at an hour.  Needs debugging,
-# so leave it as a manual job.
-iris-glk-gl:
-  extends:
-    - .iris-glk-test
-    - .test-manual-mr
-  variables:
-    DEQP_VER: gl46
+    DEQP_SUITE: iris-glk
+  parallel: 2
 
 iris-glk-egl:
   extends:
@@ -128,37 +105,34 @@ iris-glk-egl:
     HWCI_START_XORG: 1
     DEQP_VER: egl
 
-.iris-amly-gles2:
+iris-amly-deqp:
   extends:
     - .iris-amly-test
   variables:
-    DEQP_VER: gles2
+    DEQP_SUITE: iris-amly
+  parallel: 3
 
-.iris-amly-gles3:
+iris-kbl-deqp:
   extends:
-    - .iris-amly-test
-    - .test-manual-mr
+    - .iris-kbl-test
   variables:
-    DEQP_VER: gles3
-    DEQP_EXPECTED_RENDERER: AML
-    DEQP_FRACTION: 2
+    DEQP_SUITE: iris-kbl
+  parallel: 3
 
-.iris-amly-gles31:
+iris-whl-deqp:
   extends:
-    - .iris-amly-test
-    - .test-manual-mr
+    - .iris-whl-test
   variables:
-    DEQP_VER: gles31
-    DEQP_EXPECTED_RENDERER: AML
-    DEQP_FRACTION: 2
+    DEQP_SUITE: iris-whl
 
-.iris-amly-gl:
+iris-cml-deqp:
   extends:
-    - .iris-amly-test
+    - .iris-cml-test
   variables:
-    DEQP_VER: gl46
+    DEQP_SUITE: iris-cml
+  parallel: 2
 
-.iris-amly-egl:
+iris-amly-egl:
   extends:
     - .iris-amly-test
   variables:
@@ -166,7 +140,7 @@ iris-glk-egl:
     HWCI_START_XORG: 1
     DEQP_VER: egl
 
-.iris-amly-piglit:
+iris-amly-piglit:
   extends:
     - .iris-amly-test
     - .lava-piglit
@@ -204,7 +178,7 @@ iris-glk-traces:
     - .iris-glk-test
     - .iris-traces
 
-.iris-amly-traces:
+iris-amly-traces:
   variables:
     GPU_VERSION: intel-amly
   extends:
@@ -217,4 +191,77 @@ iris-kbl-traces:
   extends:
     - .iris-kbl-test
     - .iris-traces
-    - .test-manual-mr
+
+iris-whl-traces:
+  variables:
+    GPU_VERSION: intel-whl
+  extends:
+    - .iris-whl-test
+    - .iris-traces
+
+iris-cml-traces:
+  variables:
+    GPU_VERSION: intel-cml
+  extends:
+    - .iris-cml-test
+    - .iris-traces
+
+.profile-traces:
+  extends:
+    - .iris-traces
+    - .iris-rules-performance
+  variables:
+    PIGLIT_REPLAY_SUBCOMMAND: "profile"
+    PIGLIT_REPLAY_EXTRA_ARGS: "--db-path ${CI_PROJECT_DIR}/replayer-db/"
+    # More than this can hit OOM due to BOs leaked during the replay of the last frame
+    PIGLIT_REPLAY_LOOP_TIMES: 150
+    # We don't want for more than one workload to be submitted to the GPU at a time
+    FDO_CI_CONCURRENT: 1
+    # So we aren't capped by VSync by the X server
+    EGL_PLATFORM: surfaceless
+    GIT_STRATEGY: none
+    HWCI_FREQ_MAX: "true"
+    LAVA_TAGS: "cbg-0"
+  allow_failure: true
+
+iris-apl-traces-performance:
+  extends:
+    - .iris-apl-test
+    - .profile-traces
+  variables:
+    GPU_VERSION: intel-apl
+
+iris-glk-traces-performance:
+  extends:
+    - .iris-glk-test
+    - .profile-traces
+  variables:
+    GPU_VERSION: intel-glk
+
+iris-amly-traces-performance:
+  extends:
+    - .iris-amly-test
+    - .profile-traces
+  variables:
+    GPU_VERSION: intel-amly
+
+iris-kbl-traces-performance:
+  extends:
+    - .iris-kbl-test
+    - .profile-traces
+  variables:
+    GPU_VERSION: intel-kbl
+
+iris-whl-traces-performance:
+  extends:
+    - .iris-whl-test
+    - .profile-traces
+  variables:
+    GPU_VERSION: intel-whl
+
+iris-cml-traces-performance:
+  extends:
+    - .iris-cml-test
+    - .profile-traces
+  variables:
+    GPU_VERSION: intel-cml

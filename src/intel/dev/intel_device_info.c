@@ -28,9 +28,9 @@
 #include <string.h>
 #include <unistd.h>
 #include "intel_device_info.h"
-#include "compiler/shader_enums.h"
 #include "intel/common/intel_gem.h"
 #include "util/bitscan.h"
+#include "util/debug.h"
 #include "util/log.h"
 #include "util/macros.h"
 
@@ -65,6 +65,7 @@ static const struct {
    { "rkl", 0x4c8a },
    { "dg1", 0x4905 },
    { "adl", 0x4680 },
+   { "sg1", 0x4907 },
 };
 
 /**
@@ -218,6 +219,7 @@ static const struct intel_device_info intel_device_info_snb_gt2 = {
    .has_64bit_float = true,                         \
    .has_surface_tile_offset = true,                 \
    .timestamp_frequency = 12500000,                 \
+   .max_constant_urb_size_kb = 16,                  \
    .cs_prefetch_size = 512
 
 static const struct intel_device_info intel_device_info_ivb_gt1 = {
@@ -371,7 +373,7 @@ static const struct intel_device_info intel_device_info_hsw_gt2 = {
 static const struct intel_device_info intel_device_info_hsw_gt3 = {
    HSW_FEATURES, .gt = 3,
    .num_slices = 2,
-   .num_subslices = { 2, },
+   .num_subslices = { 2, 2, },
    .num_eu_per_subslice = 10,
    .num_thread_per_eu = 7,
    .l3_banks = 8,
@@ -393,6 +395,7 @@ static const struct intel_device_info intel_device_info_hsw_gt3 = {
          [MESA_SHADER_GEOMETRY]  = 640,
       },
    },
+   .max_constant_urb_size_kb = 32,
    .simulator_id = 9,
 };
 
@@ -418,6 +421,7 @@ static const struct intel_device_info intel_device_info_hsw_gt3 = {
    .max_gs_threads = 504,                           \
    .max_wm_threads = 384,                           \
    .timestamp_frequency = 12500000,                 \
+   .max_constant_urb_size_kb = 32,                  \
    .cs_prefetch_size = 512
 
 static const struct intel_device_info intel_device_info_bdw_gt1 = {
@@ -995,7 +999,7 @@ static const struct intel_device_info intel_device_info_adl_gt2 = {
    .display_ver = 13,
 };
 
-#define GFX12_DG1_FEATURES                      \
+#define GFX12_DG1_SG1_FEATURES                  \
    GFX12_GT_FEATURES(2),                        \
    .is_dg1 = true,                              \
    .has_llc = false,                            \
@@ -1003,60 +1007,13 @@ static const struct intel_device_info intel_device_info_adl_gt2 = {
    .urb.size = 768,                             \
    .simulator_id = 30
 
-UNUSED static const struct intel_device_info intel_device_info_dg1 = {
-   GFX12_DG1_FEATURES,
+static const struct intel_device_info intel_device_info_dg1 = {
+   GFX12_DG1_SG1_FEATURES,
 };
 
-static void
-intel_device_info_set_eu_mask(struct intel_device_info *devinfo,
-                            unsigned slice,
-                            unsigned subslice,
-                            unsigned eu_mask)
-{
-   unsigned subslice_offset = slice * devinfo->eu_slice_stride +
-      subslice * devinfo->eu_subslice_stride;
-
-   for (unsigned b_eu = 0; b_eu < devinfo->eu_subslice_stride; b_eu++) {
-      devinfo->eu_masks[subslice_offset + b_eu] =
-         (((1U << devinfo->num_eu_per_subslice) - 1) >> (b_eu * 8)) & 0xff;
-   }
-}
-
-/* Generate slice/subslice/eu masks from number of
- * slices/subslices/eu_per_subslices in the per generation/gt intel_device_info
- * structure.
- *
- * These can be overridden with values reported by the kernel either from
- * getparam SLICE_MASK/SUBSLICE_MASK values or from the kernel version 4.17+
- * through the i915 query uapi.
- */
-static void
-fill_masks(struct intel_device_info *devinfo)
-{
-   devinfo->slice_masks = (1U << devinfo->num_slices) - 1;
-
-   /* Subslice masks */
-   unsigned max_subslices = 0;
-   for (int s = 0; s < devinfo->num_slices; s++)
-      max_subslices = MAX2(devinfo->num_subslices[s], max_subslices);
-   devinfo->subslice_slice_stride = DIV_ROUND_UP(max_subslices, 8);
-
-   for (int s = 0; s < devinfo->num_slices; s++) {
-      devinfo->subslice_masks[s * devinfo->subslice_slice_stride] =
-         (1U << devinfo->num_subslices[s]) - 1;
-   }
-
-   /* EU masks */
-   devinfo->eu_subslice_stride = DIV_ROUND_UP(devinfo->num_eu_per_subslice, 8);
-   devinfo->eu_slice_stride = max_subslices * devinfo->eu_subslice_stride;
-
-   for (int s = 0; s < devinfo->num_slices; s++) {
-      for (int ss = 0; ss < devinfo->num_subslices[s]; ss++) {
-         intel_device_info_set_eu_mask(devinfo, s, ss,
-                                     (1U << devinfo->num_eu_per_subslice) - 1);
-      }
-   }
-}
+static const struct intel_device_info intel_device_info_sg1 = {
+   GFX12_DG1_SG1_FEATURES,
+};
 
 static void
 reset_masks(struct intel_device_info *devinfo)
@@ -1081,6 +1038,10 @@ update_from_topology(struct intel_device_info *devinfo,
 {
    reset_masks(devinfo);
 
+   assert(topology->max_slices > 0);
+   assert(topology->max_subslices > 0);
+   assert(topology->max_eus_per_subslice > 0);
+
    devinfo->subslice_slice_stride = topology->subslice_stride;
 
    devinfo->eu_subslice_stride = DIV_ROUND_UP(topology->max_eus_per_subslice, 8);
@@ -1089,6 +1050,9 @@ update_from_topology(struct intel_device_info *devinfo,
    assert(sizeof(devinfo->slice_masks) >= DIV_ROUND_UP(topology->max_slices, 8));
    memcpy(&devinfo->slice_masks, topology->data, DIV_ROUND_UP(topology->max_slices, 8));
    devinfo->num_slices = __builtin_popcount(devinfo->slice_masks);
+   devinfo->max_slices = topology->max_slices;
+   devinfo->max_subslices_per_slice = topology->max_subslices;
+   devinfo->max_eu_per_subslice = topology->max_eus_per_subslice;
 
    uint32_t subslice_mask_len =
       topology->max_slices * topology->subslice_stride;
@@ -1151,6 +1115,9 @@ update_from_topology(struct intel_device_info *devinfo,
    devinfo->num_eu_per_subslice = DIV_ROUND_UP(n_eus, n_subslices);
 }
 
+/* Generate detailed mask from the I915_PARAM_SLICE_MASK,
+ * I915_PARAM_SUBSLICE_MASK & I915_PARAM_EU_TOTAL getparam.
+ */
 static bool
 update_from_masks(struct intel_device_info *devinfo, uint32_t slice_mask,
                   uint32_t subslice_mask, uint32_t n_eus)
@@ -1176,8 +1143,9 @@ update_from_masks(struct intel_device_info *devinfo, uint32_t slice_mask,
    uint32_t num_eu_per_subslice = DIV_ROUND_UP(n_eus, n_subslices);
    uint32_t eu_mask = (1U << num_eu_per_subslice) - 1;
 
+   topology->max_eus_per_subslice = num_eu_per_subslice;
    topology->eu_offset = topology->subslice_offset +
-      DIV_ROUND_UP(topology->max_subslices, 8);
+      topology->max_slices * DIV_ROUND_UP(topology->max_subslices, 8);
    topology->eu_stride = DIV_ROUND_UP(num_eu_per_subslice, 8);
 
    /* Set slice mask in topology */
@@ -1211,6 +1179,23 @@ update_from_masks(struct intel_device_info *devinfo, uint32_t slice_mask,
    return true;
 }
 
+/* Generate mask from the device data. */
+static void
+fill_masks(struct intel_device_info *devinfo)
+{
+   /* All of our internal device descriptions assign the same number of
+    * subslices for each slice. Just verify that this is true.
+    */
+   for (int s = 1; s < devinfo->num_slices; s++)
+      assert(devinfo->num_subslices[0] == devinfo->num_subslices[s]);
+
+   update_from_masks(devinfo,
+                     (1U << devinfo->num_slices) - 1,
+                     (1U << devinfo->num_subslices[0]) - 1,
+                     devinfo->num_slices * devinfo->num_subslices[0] *
+                     devinfo->num_eu_per_subslice);
+}
+
 static bool
 getparam(int fd, uint32_t param, int *value)
 {
@@ -1227,6 +1212,21 @@ getparam(int fd, uint32_t param, int *value)
 
    *value = tmp;
    return true;
+}
+
+static void
+update_cs_workgroup_threads(struct intel_device_info *devinfo)
+{
+   /* GPGPU_WALKER::ThreadWidthCounterMaximum is U6-1 so the most threads we
+    * can program is 64 without going up to a rectangular group. This only
+    * impacts Haswell and TGL which have higher thread counts.
+    *
+    * INTERFACE_DESCRIPTOR_DATA::NumberofThreadsinGPGPUThreadGroup on Xe-HP+
+    * is 10 bits so we have no such restrictions.
+    */
+   devinfo->max_cs_workgroup_threads =
+      devinfo->verx10 >= 125 ? devinfo->max_cs_threads :
+                               MIN2(devinfo->max_cs_threads, 64);
 }
 
 bool
@@ -1248,6 +1248,21 @@ intel_get_device_info_from_pci_id(int pci_id,
    default:
       mesa_logw("Driver does not support the 0x%x PCI ID.", pci_id);
       return false;
+   }
+
+   switch (pci_id) {
+#undef CHIPSET
+#define CHIPSET(_id, _family, _fam_str, _name) \
+   case _id: \
+      /* sizeof(str_literal) includes the null */ \
+      STATIC_ASSERT(sizeof(_name) + sizeof(_fam_str) + 2 <= \
+                    sizeof(devinfo->name)); \
+      strncpy(devinfo->name, _name " (" _fam_str ")", sizeof(devinfo->name)); \
+      break;
+#include "pci_ids/i965_pci_ids.h"
+#include "pci_ids/iris_pci_ids.h"
+   default:
+      strncpy(devinfo->name, "Intel Unknown", sizeof(devinfo->name));
    }
 
    fill_masks(devinfo);
@@ -1291,21 +1306,10 @@ intel_get_device_info_from_pci_id(int pci_id,
    if (devinfo->display_ver == 0)
       devinfo->display_ver = devinfo->ver;
 
+   update_cs_workgroup_threads(devinfo);
+
    devinfo->chipset_id = pci_id;
    return true;
-}
-
-const char *
-intel_get_device_name(int devid)
-{
-   switch (devid) {
-#undef CHIPSET
-#define CHIPSET(id, family, fam_str, name) case id: return name " (" fam_str ")"; break;
-#include "pci_ids/i965_pci_ids.h"
-#include "pci_ids/iris_pci_ids.h"
-   default:
-      return NULL;
-   }
 }
 
 /**
@@ -1345,26 +1349,9 @@ getparam_topology(struct intel_device_info *devinfo, int fd)
 static bool
 query_topology(struct intel_device_info *devinfo, int fd)
 {
-   struct drm_i915_query_item item = {
-      .query_id = DRM_I915_QUERY_TOPOLOGY_INFO,
-   };
-   struct drm_i915_query query = {
-      .num_items = 1,
-      .items_ptr = (uintptr_t) &item,
-   };
-
-   if (intel_ioctl(fd, DRM_IOCTL_I915_QUERY, &query))
-      return false;
-
-   if (item.length < 0)
-      return false;
-
    struct drm_i915_query_topology_info *topo_info =
-      (struct drm_i915_query_topology_info *) calloc(1, item.length);
-   item.data_ptr = (uintptr_t) topo_info;
-
-   if (intel_ioctl(fd, DRM_IOCTL_I915_QUERY, &query) ||
-       item.length <= 0)
+      intel_i915_query_alloc(fd, DRM_I915_QUERY_TOPOLOGY_INFO);
+   if (topo_info == NULL)
       return false;
 
    update_from_topology(devinfo, topo_info);
@@ -1414,6 +1401,152 @@ has_get_tiling(int fd)
    return ret == 0;
 }
 
+static void
+fixup_chv_device_info(struct intel_device_info *devinfo)
+{
+   assert(devinfo->is_cherryview);
+
+   /* Cherryview is annoying.  The number of EUs is depending on fusing and
+    * isn't determinable from the PCI ID alone.  We default to the minimum
+    * available for that PCI ID and then compute the real value from the
+    * subslice information we get from the kernel.
+    */
+   const uint32_t subslice_total = intel_device_info_eu_total(devinfo);
+   const uint32_t eu_total = intel_device_info_eu_total(devinfo);
+
+   /* Logical CS threads = EUs per subslice * num threads per EU */
+   uint32_t max_cs_threads =
+      eu_total / subslice_total * devinfo->num_thread_per_eu;
+
+   /* Fuse configurations may give more threads than expected, never less. */
+   if (max_cs_threads > devinfo->max_cs_threads)
+      devinfo->max_cs_threads = max_cs_threads;
+
+   update_cs_workgroup_threads(devinfo);
+
+   /* Braswell is even more annoying.  Its marketing name isn't determinable
+    * from the PCI ID and is also dependent on fusing.
+    */
+   if (devinfo->chipset_id != 0x22B1)
+      return;
+
+   char *bsw_model;
+   switch (eu_total) {
+   case 16: bsw_model = "405"; break;
+   case 12: bsw_model = "400"; break;
+   default: bsw_model = "   "; break;
+   }
+
+   char *needle = strstr(devinfo->name, "XXX");
+   assert(needle);
+   if (needle)
+      memcpy(needle, bsw_model, 3);
+}
+
+static void
+init_max_scratch_ids(struct intel_device_info *devinfo)
+{
+   /* Determine the max number of subslices that potentially might be used in
+    * scratch space ids.
+    *
+    * For, Gfx11+, scratch space allocation is based on the number of threads
+    * in the base configuration.
+    *
+    * For Gfx9, devinfo->subslice_total is the TOTAL number of subslices and
+    * we wish to view that there are 4 subslices per slice instead of the
+    * actual number of subslices per slice. The documentation for 3DSTATE_PS
+    * "Scratch Space Base Pointer" says:
+    *
+    *    "Scratch Space per slice is computed based on 4 sub-slices.  SW
+    *     must allocate scratch space enough so that each slice has 4
+    *     slices allowed."
+    *
+    * According to the other driver team, this applies to compute shaders
+    * as well.  This is not currently documented at all.
+    *
+    * For Gfx8 and older we user devinfo->subslice_total.
+    */
+   unsigned subslices;
+   if (devinfo->verx10 == 125)
+      subslices = 32;
+   else if (devinfo->ver == 12)
+      subslices = (devinfo->is_dg1 || devinfo->gt == 2 ? 6 : 2);
+   else if (devinfo->ver == 11)
+      subslices = 8;
+   else if (devinfo->ver >= 9 && devinfo->ver < 11)
+      subslices = 4 * devinfo->num_slices;
+   else
+      subslices = devinfo->subslice_total;
+   assert(subslices >= devinfo->subslice_total);
+
+   unsigned scratch_ids_per_subslice;
+   if (devinfo->ver >= 12) {
+      /* Same as ICL below, but with 16 EUs. */
+      scratch_ids_per_subslice = 16 * 8;
+   } else if (devinfo->ver >= 11) {
+      /* The MEDIA_VFE_STATE docs say:
+       *
+       *    "Starting with this configuration, the Maximum Number of
+       *     Threads must be set to (#EU * 8) for GPGPU dispatches.
+       *
+       *     Although there are only 7 threads per EU in the configuration,
+       *     the FFTID is calculated as if there are 8 threads per EU,
+       *     which in turn requires a larger amount of Scratch Space to be
+       *     allocated by the driver."
+       */
+      scratch_ids_per_subslice = 8 * 8;
+   } else if (devinfo->is_haswell) {
+      /* WaCSScratchSize:hsw
+       *
+       * Haswell's scratch space address calculation appears to be sparse
+       * rather than tightly packed. The Thread ID has bits indicating
+       * which subslice, EU within a subslice, and thread within an EU it
+       * is. There's a maximum of two slices and two subslices, so these
+       * can be stored with a single bit. Even though there are only 10 EUs
+       * per subslice, this is stored in 4 bits, so there's an effective
+       * maximum value of 16 EUs. Similarly, although there are only 7
+       * threads per EU, this is stored in a 3 bit number, giving an
+       * effective maximum value of 8 threads per EU.
+       *
+       * This means that we need to use 16 * 8 instead of 10 * 7 for the
+       * number of threads per subslice.
+       */
+      scratch_ids_per_subslice = 16 * 8;
+   } else if (devinfo->is_cherryview) {
+      /* Cherryview devices have either 6 or 8 EUs per subslice, and each
+       * EU has 7 threads. The 6 EU devices appear to calculate thread IDs
+       * as if it had 8 EUs.
+       */
+      scratch_ids_per_subslice = 8 * 7;
+   } else {
+      scratch_ids_per_subslice = devinfo->max_cs_threads;
+   }
+
+   unsigned max_thread_ids = scratch_ids_per_subslice * subslices;
+
+   if (devinfo->verx10 >= 125) {
+      /* On GFX version 12.5, scratch access changed to a surface-based model.
+       * Instead of each shader type having its own layout based on IDs passed
+       * from the relevant fixed-function unit, all scratch access is based on
+       * thread IDs like it always has been for compute.
+       */
+      for (int i = MESA_SHADER_VERTEX; i < MESA_SHADER_STAGES; i++)
+         devinfo->max_scratch_ids[i] = max_thread_ids;
+   } else {
+      unsigned max_scratch_ids[] = {
+         [MESA_SHADER_VERTEX]    = devinfo->max_vs_threads,
+         [MESA_SHADER_TESS_CTRL] = devinfo->max_tcs_threads,
+         [MESA_SHADER_TESS_EVAL] = devinfo->max_tes_threads,
+         [MESA_SHADER_GEOMETRY]  = devinfo->max_gs_threads,
+         [MESA_SHADER_FRAGMENT]  = devinfo->max_wm_threads,
+         [MESA_SHADER_COMPUTE]   = max_thread_ids,
+      };
+      STATIC_ASSERT(sizeof(devinfo->max_scratch_ids) == sizeof(max_scratch_ids));
+      memcpy(devinfo->max_scratch_ids, max_scratch_ids,
+             sizeof(devinfo->max_scratch_ids));
+   }
+}
+
 bool
 intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
 {
@@ -1450,7 +1583,7 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
          return false;
       if (!intel_get_device_info_from_pci_id(devid, devinfo))
          return false;
-      devinfo->no_hw = false;
+      devinfo->no_hw = env_var_as_boolean("INTEL_NO_HW", false);
    }
 
    if (devinfo->ver == 10) {
@@ -1486,8 +1619,21 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
       getparam_topology(devinfo, fd);
    }
 
+   if (devinfo->is_cherryview)
+      fixup_chv_device_info(devinfo);
+
    intel_get_aperture_size(fd, &devinfo->aperture_bytes);
    devinfo->has_tiling_uapi = has_get_tiling(fd);
+
+   devinfo->subslice_total = 0;
+   for (uint32_t i = 0; i < devinfo->max_slices; i++)
+      devinfo->subslice_total += __builtin_popcount(devinfo->subslice_masks[i]);
+
+   /* Gfx7 and older do not support EU/Subslice info */
+   assert(devinfo->subslice_total >= 1 || devinfo->ver <= 7);
+   devinfo->subslice_total = MAX2(devinfo->subslice_total, 1);
+
+   init_max_scratch_ids(devinfo);
 
    return true;
 }

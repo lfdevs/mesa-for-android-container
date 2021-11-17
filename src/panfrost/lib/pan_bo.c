@@ -267,7 +267,7 @@ panfrost_bo_cache_put(struct panfrost_bo *bo)
 {
         struct panfrost_device *dev = bo->dev;
 
-        if (bo->flags & PAN_BO_SHARED)
+        if (bo->flags & PAN_BO_SHARED || dev->debug & PAN_DBG_NO_CACHE)
                 return false;
 
         /* Must be first */

@@ -21,12 +21,12 @@
  * IN THE SOFTWARE.
  */
 
+#include "dxil_signature.h"
 #include "dxil_enums.h"
 #include "dxil_module.h"
-#include "dxil_signature.h"
 
-#include "nir_to_dxil.h"
 #include "glsl_types.h"
+#include "nir_to_dxil.h"
 #include "util/u_debug.h"
 
 #include <string.h>
@@ -50,8 +50,8 @@ struct semantic_info {
 static bool
 is_depth_output(enum dxil_semantic_kind kind)
 {
-   return kind == DXIL_SEM_DEPTH ||
-         kind == DXIL_SEM_STENCIL_REF;
+   return kind == DXIL_SEM_DEPTH || kind == DXIL_SEM_DEPTH_GE ||
+          kind == DXIL_SEM_DEPTH_LE || kind == DXIL_SEM_STENCIL_REF;
 }
 
 static uint8_t
@@ -111,7 +111,11 @@ get_additional_semantic_info(nir_shader *s, nir_variable *var, struct semantic_i
    info->rows = 1;
    if (info->kind == DXIL_SEM_TARGET) {
       info->start_row = info->index;
-   } else if (is_depth || (info->kind == DXIL_SEM_PRIMITIVE_ID && is_gs_shader)) {
+   } else if (is_depth ||
+              (info->kind == DXIL_SEM_PRIMITIVE_ID && is_gs_shader) ||
+              info->kind == DXIL_SEM_COVERAGE ||
+              info->kind == DXIL_SEM_SAMPLE_INDEX) {
+      // This turns into a 'N/A' mask in the disassembly
       info->start_row = -1;
    } else if (var->data.compact) {
       if (var->data.location_frac) {
@@ -184,6 +188,10 @@ get_semantic_sv_name(nir_variable *var, struct semantic_info *info, bool _vulkan
       break;
    case SYSTEM_VALUE_PRIMITIVE_ID:
       info->kind = DXIL_SEM_PRIMITIVE_ID;
+      break;
+   case SYSTEM_VALUE_SAMPLE_ID:
+      info->kind = DXIL_SEM_SAMPLE_INDEX;
+      info->interpolation = get_interpolation(var);
       break;
    default:
       unreachable("unsupported system value");
@@ -482,6 +490,14 @@ get_input_signature_group(struct dxil_module *mod, const struct dxil_mdnode **in
                              &inputs[num_inputs], elm, psv_elm))
          return 0;
 
+      mod->num_psv_inputs = MAX2(mod->num_psv_inputs,
+                                 semantic.start_row + semantic.rows);
+
+      mod->info.has_per_sample_input |=
+         semantic.kind == DXIL_SEM_SAMPLE_INDEX ||
+         semantic.interpolation == DXIL_INTERP_LINEAR_SAMPLE ||
+         semantic.interpolation == DXIL_INTERP_LINEAR_NOPERSPECTIVE_SAMPLE;
+
       ++num_inputs;
       assert(num_inputs < VARYING_SLOT_MAX);
    }
@@ -515,8 +531,6 @@ get_input_signature(struct dxil_module *mod, nir_shader *s, bool vulkan)
 
    if (!mod->num_sig_inputs && !mod->num_sig_inputs)
       return NULL;
-
-   mod->num_psv_inputs = next_row;
 
    const struct dxil_mdnode *retval = mod->num_sig_inputs ?
          dxil_get_metadata_node(mod, inputs, mod->num_sig_inputs) : NULL;
@@ -579,8 +593,8 @@ get_output_signature(struct dxil_module *mod, nir_shader *s, bool vulkan)
 
       ++num_outputs;
 
-      if (!is_depth_output(semantic.kind))
-         ++mod->num_psv_outputs;
+      mod->num_psv_outputs = MAX2(mod->num_psv_outputs,
+                                  semantic.start_row + semantic.rows);
 
       assert(num_outputs < ARRAY_SIZE(outputs));
    }

@@ -89,6 +89,7 @@
 
 #include "util/u_dump.h"
 #include "util/format/u_format.h"
+#include "util/u_helpers.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "indices/u_primconvert.h"
@@ -841,6 +842,9 @@ static void *
 u_vbuf_create_vertex_elements(struct u_vbuf *mgr, unsigned count,
                               const struct pipe_vertex_element *attribs)
 {
+   struct pipe_vertex_element tmp[PIPE_MAX_ATTRIBS];
+   util_lower_uint64_vertex_elements(&attribs, &count, tmp);
+
    struct pipe_context *pipe = mgr->pipe;
    unsigned i;
    struct pipe_vertex_element driver_attribs[PIPE_MAX_ATTRIBS];

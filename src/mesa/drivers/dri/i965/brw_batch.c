@@ -138,7 +138,7 @@ brw_batch_init(struct brw_context *brw)
    struct brw_batch *batch = &brw->batch;
    const struct intel_device_info *devinfo = &screen->devinfo;
 
-   if (INTEL_DEBUG & DEBUG_BATCH) {
+   if (INTEL_DEBUG(DEBUG_BATCH)) {
       /* The shadow doesn't get relocs written so state decode fails. */
       batch->use_shadow_copy = false;
    } else
@@ -157,13 +157,13 @@ brw_batch_init(struct brw_context *brw)
       malloc(batch->exec_array_size * sizeof(batch->validation_list[0]));
    batch->contains_fence_signal = false;
 
-   if (INTEL_DEBUG & DEBUG_BATCH) {
+   if (INTEL_DEBUG(DEBUG_BATCH)) {
       batch->state_batch_sizes =
          _mesa_hash_table_u64_create(NULL);
 
       const unsigned decode_flags =
          INTEL_BATCH_DECODE_FULL |
-         ((INTEL_DEBUG & DEBUG_COLOR) ? INTEL_BATCH_DECODE_IN_COLOR : 0) |
+         (INTEL_DEBUG(DEBUG_COLOR) ? INTEL_BATCH_DECODE_IN_COLOR : 0) |
          INTEL_BATCH_DECODE_OFFSETS |
          INTEL_BATCH_DECODE_FLOATS;
 
@@ -600,7 +600,7 @@ brw_new_batch(struct brw_context *brw)
     * while, because many programs won't cleanly destroy our context, so the
     * end-of-run printout may not happen.
     */
-   if (INTEL_DEBUG & DEBUG_SHADER_TIME)
+   if (INTEL_DEBUG(DEBUG_SHADER_TIME))
       brw_collect_and_report_shader_time(brw);
 
    brw_batch_maybe_noop(brw);
@@ -791,7 +791,7 @@ submit_batch(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
    brw_bo_unmap(batch->batch.bo);
    brw_bo_unmap(batch->state.bo);
 
-   if (!brw->screen->no_hw) {
+   if (!brw->screen->devinfo.no_hw) {
       /* The requirement for using I915_EXEC_NO_RELOC are:
        *
        *   The addresses written in the objects must match the corresponding
@@ -850,7 +850,7 @@ submit_batch(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
       throttle(brw);
    }
 
-   if (INTEL_DEBUG & DEBUG_BATCH) {
+   if (INTEL_DEBUG(DEBUG_BATCH)) {
       intel_print_batch(&batch->decoder, batch->batch.map,
                         4 * USED_BATCH(*batch),
                         batch->batch.bo->gtt_offset, false);
@@ -862,7 +862,7 @@ submit_batch(struct brw_context *brw, int in_fence_fd, int *out_fence_fd)
    if (ret != 0) {
       fprintf(stderr, "i965: Failed to submit batchbuffer: %s\n",
               strerror(-ret));
-      exit(1);
+      abort();
    }
 
    return ret;
@@ -899,7 +899,7 @@ _brw_batch_flush_fence(struct brw_context *brw,
       brw_bo_reference(brw->throttle_batch[0]);
    }
 
-   if (INTEL_DEBUG & (DEBUG_BATCH | DEBUG_SUBMIT)) {
+   if (INTEL_DEBUG(DEBUG_BATCH | DEBUG_SUBMIT)) {
       int bytes_for_commands = 4 * USED_BATCH(brw->batch);
       int bytes_for_state = brw->batch.state_used;
       fprintf(stderr, "%19s:%-3d: Batchbuffer flush with %5db (%0.1f%%) (pkt),"
@@ -917,7 +917,7 @@ _brw_batch_flush_fence(struct brw_context *brw,
 
    ret = submit_batch(brw, in_fence_fd, out_fence_fd);
 
-   if (INTEL_DEBUG & DEBUG_SYNC) {
+   if (INTEL_DEBUG(DEBUG_SYNC)) {
       fprintf(stderr, "waiting for idle\n");
       brw_bo_wait_rendering(brw->batch.batch.bo);
    }
@@ -1087,7 +1087,7 @@ brw_state_batch(struct brw_context *brw,
       assert(offset + size < batch->state.bo->size);
    }
 
-   if (INTEL_DEBUG & DEBUG_BATCH) {
+   if (INTEL_DEBUG(DEBUG_BATCH)) {
       _mesa_hash_table_u64_insert(batch->state_batch_sizes,
                                   offset, (void *) (uintptr_t) size);
    }

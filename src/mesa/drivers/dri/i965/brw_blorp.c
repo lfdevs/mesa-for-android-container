@@ -1165,7 +1165,7 @@ err:
 
 static bool
 set_write_disables(const struct brw_renderbuffer *irb,
-                   const unsigned color_mask, bool *color_write_disable)
+                   const unsigned color_mask, uint8_t *color_write_disable)
 {
    /* Format information in the renderbuffer represents the requirements
     * given by the client. There are cases where the backing miptree uses,
@@ -1174,16 +1174,9 @@ set_write_disables(const struct brw_renderbuffer *irb,
     */
    const GLenum base_format = irb->Base.Base._BaseFormat;
    const int components = _mesa_components_in_format(base_format);
-   bool disables = false;
-
    assert(components > 0);
-
-   for (int i = 0; i < components; i++) {
-      color_write_disable[i] = !(color_mask & (1 << i));
-      disables = disables || color_write_disable[i];
-   }
-
-   return disables;
+   *color_write_disable = ~color_mask & BITFIELD_MASK(components);
+   return *color_write_disable;
 }
 
 static void
@@ -1216,12 +1209,12 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
 
    bool can_fast_clear = !partial_clear;
 
-   if (INTEL_DEBUG & DEBUG_NO_FAST_CLEAR)
+   if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
       can_fast_clear = false;
 
-   bool color_write_disable[4] = { false, false, false, false };
+   uint8_t color_write_disable = 0;
    if (set_write_disables(irb, GET_COLORMASK(ctx->Color.ColorMask, buf),
-                          color_write_disable))
+                          &color_write_disable))
       can_fast_clear = false;
 
    /* We store clear colors as floats or uints as needed.  If there are

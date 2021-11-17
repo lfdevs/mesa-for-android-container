@@ -32,6 +32,7 @@ MESA_VK_LIB_SUFFIX_amd := radeon
 MESA_VK_LIB_SUFFIX_intel := intel
 MESA_VK_LIB_SUFFIX_freedreno := freedreno
 MESA_VK_LIB_SUFFIX_broadcom := broadcom
+MESA_VK_LIB_SUFFIX_panfrost := panfrost
 MESA_VK_LIB_SUFFIX_virtio-experimental := virtio
 MESA_VK_LIB_SUFFIX_swrast := lvp
 
@@ -74,10 +75,10 @@ MESON_GEN_PKGCONFIGS += libdrm_nouveau:$(LIBDRM_VERSION)
 endif
 
 ifneq ($(MESON_GEN_LLVM_STUB),)
-MESON_LLVM_VERSION := 11.0.0
+MESON_LLVM_VERSION := 12.0.0
 # Required for swr gallium target
 MESON_LLVM_IRBUILDER_PATH := external/llvm-project/llvm/include/llvm/IR/IRBuilder.h
-LOCAL_SHARED_LIBRARIES += libLLVM11
+LOCAL_SHARED_LIBRARIES += libLLVM12
 endif
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30; echo $$?), 0)

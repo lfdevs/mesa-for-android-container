@@ -310,16 +310,6 @@ pb_check_usage(unsigned requested, unsigned provided)
    return (requested & provided) == requested ? TRUE : FALSE;
 }
 
-
-/**
- * Malloc-based buffer to store data that can't be used by the graphics
- * hardware.
- */
-struct pb_buffer *
-pb_malloc_buffer_create(pb_size size,
-                        const struct pb_desc *desc);
-
-
 #ifdef __cplusplus
 }
 #endif

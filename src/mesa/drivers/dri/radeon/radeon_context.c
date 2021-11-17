@@ -183,7 +183,7 @@ r100CreateContext( gl_api api,
     * the default textures.
     */
    driParseConfigFiles (&rmesa->radeon.optionCache, &screen->optionCache,
-			screen->driScreen->myNum, "radeon", NULL, NULL, 0, NULL, 0);
+			screen->driScreen->myNum, "radeon", NULL, NULL, NULL, 0, NULL, 0);
    rmesa->radeon.initialMaxAnisotropy = driQueryOptionf(&rmesa->radeon.optionCache,
                                                  "def_max_anisotropy");
 

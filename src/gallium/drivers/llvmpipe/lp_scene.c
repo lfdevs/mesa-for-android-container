@@ -68,9 +68,7 @@ lp_scene_create( struct pipe_context *pipe )
       return NULL;
 
    scene->pipe = pipe;
-
-   scene->data.head =
-      CALLOC_STRUCT(data_block);
+   scene->data.head = &scene->data.first;
 
    (void) mtx_init(&scene->mutex, mtx_plain);
 
@@ -101,8 +99,7 @@ lp_scene_destroy(struct lp_scene *scene)
 {
    lp_fence_reference(&scene->fence, NULL);
    mtx_destroy(&scene->mutex);
-   assert(scene->data.head->next == NULL);
-   FREE(scene->data.head);
+   assert(scene->data.head == &scene->data.first);
    FREE(scene);
 }
 
@@ -129,8 +126,8 @@ lp_scene_is_empty(struct lp_scene *scene )
 
 
 /* Returns true if there has ever been a failed allocation attempt in
- * this scene.  Used in triangle emit to avoid having to check success
- * at each bin.
+ * this scene.  Used in triangle/rectangle emit to avoid having to
+ * check success at each bin.
  */
 boolean
 lp_scene_is_oom(struct lp_scene *scene)
@@ -222,7 +219,7 @@ lp_scene_begin_rasterization(struct lp_scene *scene)
 void
 lp_scene_end_rasterization(struct lp_scene *scene )
 {
-   int i, j;
+   int i;
 
    /* Unmap color buffers */
    for (i = 0; i < scene->fb.nr_cbufs; i++) {
@@ -248,19 +245,7 @@ lp_scene_end_rasterization(struct lp_scene *scene )
 
    /* Reset all command lists:
     */
-   for (i = 0; i < scene->tiles_x; i++) {
-      for (j = 0; j < scene->tiles_y; j++) {
-         struct cmd_bin *bin = lp_scene_get_bin(scene, i, j);
-         bin->head = NULL;
-         bin->tail = NULL;
-         bin->last_state = NULL;
-      }
-   }
-
-   /* If there are any bins which weren't cleared by the loop above,
-    * they will be caught (on debug builds at least) by this assert:
-    */
-   assert(lp_scene_is_empty(scene));
+   memset(scene->tile, 0, sizeof scene->tile);
 
    /* Decrement texture ref counts
     */
@@ -310,13 +295,14 @@ lp_scene_end_rasterization(struct lp_scene *scene )
       struct data_block_list *list = &scene->data;
       struct data_block *block, *tmp;
 
-      for (block = list->head->next; block; block = tmp) {
+      for (block = list->head; block; block = tmp) {
          tmp = block->next;
-	 FREE(block);
+         if (block != &list->first)
+            FREE(block);
       }
 
+      list->head = &list->first;
       list->head->next = NULL;
-      list->head->used = 0;
    }
 
    lp_fence_reference(&scene->fence, NULL);

@@ -325,6 +325,11 @@ enum quniform_contents {
          * out-of-bounds accesses into the tile state during binning.
          */
         QUNIFORM_FB_LAYERS,
+
+        /**
+         * Current value of gl_ViewIndex for Multiview rendering.
+         */
+        QUNIFORM_VIEW_INDEX,
 };
 
 static inline uint32_t v3d_unit_data_create(uint32_t unit, uint32_t value)
@@ -1044,6 +1049,7 @@ struct v3d_qpu_instr v3d_qpu_nop(void);
 struct qreg vir_emit_def(struct v3d_compile *c, struct qinst *inst);
 struct qinst *vir_emit_nondef(struct v3d_compile *c, struct qinst *inst);
 void vir_set_cond(struct qinst *inst, enum v3d_qpu_cond cond);
+enum v3d_qpu_cond vir_get_cond(struct qinst *inst);
 void vir_set_pf(struct v3d_compile *c, struct qinst *inst, enum v3d_qpu_pf pf);
 void vir_set_uf(struct v3d_compile *c, struct qinst *inst, enum v3d_qpu_uf uf);
 void vir_set_unpack(struct qinst *inst, int src,
@@ -1408,30 +1414,6 @@ vir_TLB_COLOR_READ(struct v3d_compile *c)
         ldtlb->qpu.sig.ldtlb = true;
         return vir_emit_def(c, ldtlb);
 }
-
-/*
-static inline struct qreg
-vir_LOAD_IMM(struct v3d_compile *c, uint32_t val)
-{
-        return vir_emit_def(c, vir_inst(QOP_LOAD_IMM, c->undef,
-                                        vir_reg(QFILE_LOAD_IMM, val), c->undef));
-}
-
-static inline struct qreg
-vir_LOAD_IMM_U2(struct v3d_compile *c, uint32_t val)
-{
-        return vir_emit_def(c, vir_inst(QOP_LOAD_IMM_U2, c->undef,
-                                        vir_reg(QFILE_LOAD_IMM, val),
-                                        c->undef));
-}
-static inline struct qreg
-vir_LOAD_IMM_I2(struct v3d_compile *c, uint32_t val)
-{
-        return vir_emit_def(c, vir_inst(QOP_LOAD_IMM_I2, c->undef,
-                                        vir_reg(QFILE_LOAD_IMM, val),
-                                        c->undef));
-}
-*/
 
 static inline struct qinst *
 vir_BRANCH(struct v3d_compile *c, enum v3d_qpu_branch_cond cond)

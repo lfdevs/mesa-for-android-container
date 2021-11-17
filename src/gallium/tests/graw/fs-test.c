@@ -355,7 +355,7 @@ static void init_tex( void )
    if (sv == NULL)
       exit(5);
 
-   ctx->set_sampler_views(ctx, PIPE_SHADER_FRAGMENT, 0, 1, 0, &sv);
+   ctx->set_sampler_views(ctx, PIPE_SHADER_FRAGMENT, 0, 1, 0, false, &sv);
    
 
    memset(&sampler_desc, 0, sizeof sampler_desc);

@@ -61,6 +61,7 @@ _eglAddDevice(int fd, bool software);
 enum _egl_device_extension {
    _EGL_DEVICE_SOFTWARE,
    _EGL_DEVICE_DRM,
+   _EGL_DEVICE_DRM_RENDER_NODE,
 };
 
 typedef enum _egl_device_extension _EGLDeviceExtension;

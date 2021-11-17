@@ -28,6 +28,7 @@
 #include "draw/draw_context.h"
 #include "draw/draw_vertex.h"
 #include "pipe/p_shader_tokens.h"
+#include "util/log.h"
 #include "util/u_memory.h"
 #include "i915_context.h"
 #include "i915_debug.h"
@@ -35,17 +36,6 @@
 #include "i915_reg.h"
 #include "i915_state.h"
 
-static uint32_t
-find_mapping(const struct i915_fragment_shader *fs, int unit)
-{
-   int i;
-   for (i = 0; i < I915_TEX_UNITS; i++) {
-      if (fs->generic_mapping[i] == unit)
-         return i;
-   }
-   debug_printf("Mapping not found\n");
-   return 0;
-}
 
 /***********************************************************************
  * Determine the hardware vertex layout.
@@ -56,11 +46,10 @@ calculate_vertex_layout(struct i915_context *i915)
 {
    const struct i915_fragment_shader *fs = i915->fs;
    struct vertex_info vinfo;
-   bool texCoords[I915_TEX_UNITS], colors[2], fog, needW, face;
+   bool colors[2], fog, needW, face;
    uint32_t i;
    int src;
 
-   memset(texCoords, 0, sizeof(texCoords));
    colors[0] = colors[1] = fog = needW = face = false;
    memset(&vinfo, 0, sizeof(vinfo));
 
@@ -69,26 +58,21 @@ calculate_vertex_layout(struct i915_context *i915)
     */
    for (i = 0; i < fs->info.num_inputs; i++) {
       switch (fs->info.input_semantic_name[i]) {
-      case TGSI_SEMANTIC_POSITION: {
-         uint32_t unit = I915_SEMANTIC_POS;
-         texCoords[find_mapping(fs, unit)] = true;
-      } break;
+      case TGSI_SEMANTIC_POSITION:
+      case TGSI_SEMANTIC_PCOORD:
+      case TGSI_SEMANTIC_FACE:
+         /* Handled as texcoord inputs below */
+         break;
       case TGSI_SEMANTIC_COLOR:
          assert(fs->info.input_semantic_index[i] < 2);
          colors[fs->info.input_semantic_index[i]] = true;
          break;
-      case TGSI_SEMANTIC_GENERIC: {
-         /* texcoords/varyings/other generic */
-         uint32_t unit = fs->info.input_semantic_index[i];
-
-         texCoords[find_mapping(fs, unit)] = true;
+      case TGSI_SEMANTIC_TEXCOORD:
+      case TGSI_SEMANTIC_GENERIC:
          needW = true;
-      } break;
+         break;
       case TGSI_SEMANTIC_FOG:
          fog = true;
-         break;
-      case TGSI_SEMANTIC_FACE:
-         face = true;
          break;
       default:
          debug_printf("Unknown input type %d\n",
@@ -142,34 +126,25 @@ calculate_vertex_layout(struct i915_context *i915)
    /* texcoords/varyings */
    for (i = 0; i < I915_TEX_UNITS; i++) {
       uint32_t hwtc;
-      if (texCoords[i]) {
-         hwtc = TEXCOORDFMT_4D;
-         if (fs->generic_mapping[i] == I915_SEMANTIC_POS) {
-            src =
-               draw_find_shader_output(i915->draw, TGSI_SEMANTIC_POSITION, 0);
+      if (fs->texcoords[i].semantic != -1) {
+         src = draw_find_shader_output(i915->draw, fs->texcoords[i].semantic,
+                                       fs->texcoords[i].index);
+         if (fs->texcoords[i].semantic == TGSI_SEMANTIC_FACE) {
+            /* XXX Because of limitations in the draw module, currently src will
+             * be 0 for SEMANTIC_FACE, so this aliases to POS. We need to fix in
+             * the draw module by adding an extra shader output.
+             */
+            mesa_loge("Front/back face is broken\n");
+            draw_emit_vertex_attr(&vinfo, EMIT_1F, src);
+            hwtc = TEXCOORDFMT_1D;
          } else {
-            src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_GENERIC,
-                                          fs->generic_mapping[i]);
+            hwtc = TEXCOORDFMT_4D;
+            draw_emit_vertex_attr(&vinfo, EMIT_4F, src);
          }
-         draw_emit_vertex_attr(&vinfo, EMIT_4F, src);
       } else {
          hwtc = TEXCOORDFMT_NOT_PRESENT;
       }
       vinfo.hwfmt[1] |= hwtc << (i * 4);
-   }
-
-   /* front/back face */
-   if (face) {
-      uint32_t slot = find_mapping(fs, I915_SEMANTIC_FACE);
-      debug_printf("Front/back face is broken\n");
-      /* XXX Because of limitations in the draw module, currently src will be 0
-       * for SEMANTIC_FACE, so this aliases to POS. We need to fix in the draw
-       * module by adding an extra shader output.
-       */
-      src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_FACE, 0);
-      draw_emit_vertex_attr(&vinfo, EMIT_1F, src);
-      vinfo.hwfmt[1] &= ~(TEXCOORDFMT_NOT_PRESENT << (slot * 4));
-      vinfo.hwfmt[1] |= TEXCOORDFMT_1D << (slot * 4);
    }
 
    draw_compute_vertex_size(&vinfo);

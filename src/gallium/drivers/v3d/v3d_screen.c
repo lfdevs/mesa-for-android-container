@@ -123,6 +123,8 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
         case PIPE_CAP_VERTEX_SHADER_SATURATE:
         case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
+        case PIPE_CAP_EMULATE_NONFIXED_PRIMITIVE_RESTART:
+        case PIPE_CAP_PRIMITIVE_RESTART:
         case PIPE_CAP_OCCLUSION_QUERY:
         case PIPE_CAP_POINT_SPRITE:
         case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
@@ -136,6 +138,7 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
         case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
         case PIPE_CAP_TGSI_TEXCOORD:
+        case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
                 return 1;
 
         case PIPE_CAP_TEXTURE_QUERY_LOD:
@@ -274,6 +277,10 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return 256;
         case PIPE_CAP_MAX_GS_INVOCATIONS:
                 return 32;
+
+        case PIPE_CAP_SUPPORTED_PRIM_MODES:
+        case PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART:
+                return screen->prim_types;
 
         default:
                 return u_pipe_screen_get_param_defaults(pscreen, param);
@@ -639,7 +646,8 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
 }
 
 static const nir_shader_compiler_options v3d_nir_options = {
-        .lower_add_sat = true,
+        .lower_uadd_sat = true,
+        .lower_iadd_sat = true,
         .lower_all_io_to_temps = true,
         .lower_extract_byte = true,
         .lower_extract_word = true,
@@ -793,6 +801,9 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
         if (!v3d_get_device_info(screen->fd, &screen->devinfo, &v3d_ioctl))
                 goto fail;
 
+        driParseConfigFiles(config->options, config->options_info, 0, "v3d",
+                            NULL, NULL, NULL, 0, NULL, 0);
+
         /* We have to driCheckOption for the simulator mode to not assertion
          * fail on not having our XML config.
          */
@@ -806,6 +817,7 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
         screen->has_csd = v3d_has_feature(screen, DRM_V3D_PARAM_SUPPORTS_CSD);
         screen->has_cache_flush =
                 v3d_has_feature(screen, DRM_V3D_PARAM_SUPPORTS_CACHE_FLUSH);
+        screen->has_perfmon = v3d_has_feature(screen, DRM_V3D_PARAM_SUPPORTS_PERFMON);
 
         v3d_fence_init(screen);
 
@@ -822,6 +834,24 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
         pscreen->query_dmabuf_modifiers = v3d_screen_query_dmabuf_modifiers;
         pscreen->is_dmabuf_modifier_supported =
                 v3d_screen_is_dmabuf_modifier_supported;
+
+        if (screen->has_perfmon) {
+                pscreen->get_driver_query_group_info = v3d_get_driver_query_group_info;
+                pscreen->get_driver_query_info = v3d_get_driver_query_info;
+        }
+
+        /* Generate the bitmask of supported draw primitives. */
+        screen->prim_types = BITFIELD_BIT(PIPE_PRIM_POINTS) |
+                             BITFIELD_BIT(PIPE_PRIM_LINES) |
+                             BITFIELD_BIT(PIPE_PRIM_LINE_LOOP) |
+                             BITFIELD_BIT(PIPE_PRIM_LINE_STRIP) |
+                             BITFIELD_BIT(PIPE_PRIM_TRIANGLES) |
+                             BITFIELD_BIT(PIPE_PRIM_TRIANGLE_STRIP) |
+                             BITFIELD_BIT(PIPE_PRIM_TRIANGLE_FAN) |
+                             BITFIELD_BIT(PIPE_PRIM_LINES_ADJACENCY) |
+                             BITFIELD_BIT(PIPE_PRIM_LINE_STRIP_ADJACENCY) |
+                             BITFIELD_BIT(PIPE_PRIM_TRIANGLES_ADJACENCY) |
+                             BITFIELD_BIT(PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY);
 
         return pscreen;
 

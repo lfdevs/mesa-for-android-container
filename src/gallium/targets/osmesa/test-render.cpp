@@ -285,3 +285,26 @@ TEST(OSMesaRenderTest, separate_buffers_per_context)
    EXPECT_EQ(pixel1, be_bswap32(0x000000ff));
    EXPECT_EQ(pixel2, be_bswap32(0x00ff0000));
 }
+
+TEST(OSMesaRenderTest, resize)
+{
+   std::unique_ptr<osmesa_context, decltype(&OSMesaDestroyContext)> ctx{
+      OSMesaCreateContext(GL_RGBA, NULL), &OSMesaDestroyContext};
+   ASSERT_TRUE(ctx);
+
+   uint32_t draw1[1], draw2[4];
+
+   ASSERT_EQ(OSMesaMakeCurrent(ctx.get(), draw1, GL_UNSIGNED_BYTE, 1, 1), GL_TRUE);
+   glClearColor(1.0, 0.0, 0.0, 0.0);
+   glClear(GL_COLOR_BUFFER_BIT);
+   glFinish();
+   EXPECT_EQ(draw1[0], be_bswap32(0x000000ff));
+
+   ASSERT_EQ(OSMesaMakeCurrent(ctx.get(), draw2, GL_UNSIGNED_BYTE, 2, 2), GL_TRUE);
+   glClearColor(0.0, 1.0, 0.0, 0.0);
+   glClear(GL_COLOR_BUFFER_BIT);
+   glFinish();
+   for (unsigned i = 0; i < ARRAY_SIZE(draw2); i++)
+      EXPECT_EQ(draw2[i], be_bswap32(0x0000ff00));
+   EXPECT_EQ(draw1[0], be_bswap32(0x000000ff));
+}

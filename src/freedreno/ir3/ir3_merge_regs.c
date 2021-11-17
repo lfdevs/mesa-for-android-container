@@ -198,6 +198,7 @@ get_merge_set(struct ir3_register *def)
    struct ir3_merge_set *set = ralloc(def, struct ir3_merge_set);
    set->preferred_reg = ~0;
    set->interval_start = ~0;
+   set->spill_slot = ~0;
    set->size = reg_size(def);
    set->alignment = (def->flags & IR3_REG_HALF) ? 1 : 2;
    set->regs_count = 1;
@@ -339,6 +340,19 @@ try_merge_defs(struct ir3_liveness *live, struct ir3_register *a,
       merge_merge_sets(a_set, b_set, b_set_offset);
 }
 
+void
+ir3_force_merge(struct ir3_register *a, struct ir3_register *b, int b_offset)
+{
+   struct ir3_merge_set *a_set = get_merge_set(a);
+   struct ir3_merge_set *b_set = get_merge_set(b);
+
+   if (a_set == b_set)
+      return;
+
+   int b_set_offset = a->merge_set_offset + b_offset - b->merge_set_offset;
+   merge_merge_sets(a_set, b_set, b_set_offset);
+}
+
 static void
 coalesce_phi(struct ir3_liveness *live, struct ir3_instruction *phi)
 {
@@ -429,7 +443,8 @@ create_parallel_copy(struct ir3_block *block)
       for (j = 0; j < phi_count; j++) {
          struct ir3_register *reg = __ssa_dst(pcopy);
          reg->flags |= src[j]->flags & (IR3_REG_HALF | IR3_REG_ARRAY);
-         reg->size = reg_elems(src[j]);
+         reg->size = src[j]->size;
+         reg->wrmask = src[j]->wrmask;
       }
 
       for (j = 0; j < phi_count; j++) {
@@ -461,7 +476,7 @@ ir3_create_parallel_copies(struct ir3 *ir)
 }
 
 static void
-index_merge_sets(struct ir3 *ir)
+index_merge_sets(struct ir3_liveness *live, struct ir3 *ir)
 {
    unsigned offset = 0;
    foreach_block (block, &ir->block_list) {
@@ -488,6 +503,8 @@ index_merge_sets(struct ir3 *ir)
          }
       }
    }
+
+   live->interval_offset = offset;
 }
 
 #define RESET      "\x1b[0m"
@@ -497,7 +514,7 @@ index_merge_sets(struct ir3 *ir)
 static void
 dump_merge_sets(struct ir3 *ir)
 {
-   printf("merge sets:\n");
+   d("merge sets:");
    struct set *merge_sets = _mesa_pointer_set_create(NULL);
    foreach_block (block, &ir->block_list) {
       foreach_instr (instr, &block->instr_list) {
@@ -508,12 +525,12 @@ dump_merge_sets(struct ir3 *ir)
             if (!merge_set || _mesa_set_search(merge_sets, merge_set))
                continue;
 
-            printf("merge set, size %u, align %u:\n", merge_set->size,
-                   merge_set->alignment);
+            d("merge set, size %u, align %u:", merge_set->size,
+              merge_set->alignment);
             for (unsigned j = 0; j < merge_set->regs_count; j++) {
                struct ir3_register *reg = merge_set->regs[j];
-               printf("\t" SYN_SSA("ssa_%u") ":%u, offset %u\n",
-                      reg->instr->serialno, reg->name, reg->merge_set_offset);
+               d("\t" SYN_SSA("ssa_%u") ":%u, offset %u",
+                 reg->instr->serialno, reg->name, reg->merge_set_offset);
             }
 
             _mesa_set_add(merge_sets, merge_set);
@@ -558,7 +575,7 @@ ir3_merge_regs(struct ir3_liveness *live, struct ir3 *ir)
       }
    }
 
-   index_merge_sets(ir);
+   index_merge_sets(live, ir);
 
    if (ir3_shader_debug & IR3_DBG_RAMSGS)
       dump_merge_sets(ir);

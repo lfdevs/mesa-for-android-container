@@ -648,7 +648,7 @@ brw_compile_ff_gs_prog(struct brw_compiler *compiler,
     */
    program = brw_get_program(&c.func, final_assembly_size);
 
-   if (INTEL_DEBUG & DEBUG_GS) {
+   if (INTEL_DEBUG(DEBUG_GS)) {
       fprintf(stderr, "gs:\n");
       brw_disassemble_with_labels(compiler->devinfo, c.func.store,
                                   0, *final_assembly_size, stderr);

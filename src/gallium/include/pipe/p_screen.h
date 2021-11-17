@@ -58,9 +58,23 @@ struct pipe_surface;
 struct pipe_transfer;
 struct pipe_box;
 struct pipe_memory_info;
+struct pipe_vertex_buffer;
+struct pipe_vertex_element;
+struct pipe_vertex_state;
 struct disk_cache;
 struct driOptionCache;
 struct u_transfer_helper;
+struct pipe_screen;
+
+typedef struct pipe_vertex_state *
+   (*pipe_create_vertex_state_func)(struct pipe_screen *screen,
+                                    struct pipe_vertex_buffer *buffer,
+                                    const struct pipe_vertex_element *elements,
+                                    unsigned num_elements,
+                                    struct pipe_resource *indexbuf,
+                                    uint32_t full_velem_mask);
+typedef void (*pipe_vertex_state_destroy_func)(struct pipe_screen *screen,
+                                               struct pipe_vertex_state *);
 
 /**
  * Gallium screen/adapter context.  Basically everything
@@ -521,10 +535,10 @@ struct pipe_screen {
     * gallium frontends should call this before passing shaders to drivers,
     * and ideally also before shader caching.
     *
-    * \param optimize  Whether the input shader hasn't been optimized and
-    *                  should be.
+    * The driver may return a non-NULL string to trigger GLSL link failure and
+    * logging of that message in the GLSL linker log.
     */
-   void (*finalize_nir)(struct pipe_screen *screen, void *nir, bool optimize);
+   char *(*finalize_nir)(struct pipe_screen *screen, void *nir);
 
    /*Separated memory/resource allocations interfaces for Vulkan */
 
@@ -546,6 +560,27 @@ struct pipe_screen {
     */
    void (*free_memory)(struct pipe_screen *screen,
                        struct pipe_memory_allocation *);
+
+   /**
+    * Allocate fd-based memory to be bound to resources.
+    */
+   struct pipe_memory_allocation *(*allocate_memory_fd)(struct pipe_screen *screen,
+                                                        uint64_t size,
+                                                        int *fd);
+
+   /**
+    * Import memory from an fd-handle.
+    */
+   bool (*import_memory_fd)(struct pipe_screen *screen,
+                            int fd,
+                            struct pipe_memory_allocation **pmem,
+                            uint64_t *size);
+
+   /**
+    * Free previously allocated fd-based memory.
+    */
+   void (*free_memory_fd)(struct pipe_screen *screen,
+                          struct pipe_memory_allocation *pmem);
 
    /**
     * Bind memory to a resource.
@@ -604,6 +639,13 @@ struct pipe_screen {
    unsigned int (*get_dmabuf_modifier_planes)(struct pipe_screen *screen,
                                               uint64_t modifier,
                                               enum pipe_format format);
+
+   /**
+    * Vertex state CSO functions for precomputing vertex and index buffer
+    * states for display lists.
+    */
+   pipe_create_vertex_state_func create_vertex_state;
+   pipe_vertex_state_destroy_func vertex_state_destroy;
 };
 
 
@@ -611,7 +653,8 @@ struct pipe_screen {
  * Global configuration options for screen creation.
  */
 struct pipe_screen_config {
-   const struct driOptionCache *options;
+   struct driOptionCache *options;
+   const struct driOptionCache *options_info;
 };
 
 

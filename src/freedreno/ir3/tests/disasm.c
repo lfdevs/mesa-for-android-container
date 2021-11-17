@@ -153,9 +153,18 @@ static const struct test {
 
 	/* cat6 */
 
-	INSTR_5XX(c6e60000_00010600, "ldgb.untyped.4d.u32.1 r0.x, g[0], r1.x, r0.x"),
-	INSTR_5XX(d7660204_02000a01, "(sy)stib.typed.2d.u32.1 g[1], r0.x, r0.z, r1.x"),
-	INSTR_6XX(c0240402_00674100, "stib.b.untyped.1d.u16.1.imm.base0 r0.z, r0.x, 2"),
+	INSTR_5XX(c6e60000_00010600, "ldgb.untyped.4d.u32.1 r0.x, g[0], r1.x, r0.x"), /* ldgb.a.untyped.1dtype.u32.1 r0.x, g[r1.x], r0.x, 0 */
+	INSTR_5XX(d7660204_02000a01, "(sy)stib.typed.2d.u32.1 g[1], r0.x, r0.z, r1.x"), /* (sy)stib.a.u32.2d.1 g[r1.x], r0.x, r0.z, 1.  r1.x is offset in ibo, r0.x is value*/
+	/* dEQP-VK.image.load_store.1d_array.r8g8b8a8_unorm */
+	INSTR_5XX(c1a20006_0600ba01, "ldib.typed.2d.f32.4 r1.z, g[0], r0.z, r1.z"), /* ldib.a.f32.2d.4 r1.z, g[r0.z], r1.z, 0.  r0.z is offset in ibo as src.  r1.z */
+	/* dEQP-VK.image.load_store.3d.r32g32b32a32_sint */
+	INSTR_5XX(c1aa0003_0500fc01, "ldib.typed.3d.s32.4 r0.w, g[0], r0.w, r1.y"), /* ldib.a.s32.3d.4 r0.w, g[r0.w], r1.y, 0.  r0.w is offset in ibo as src, and dst */
+	/* dEQP-VK.binding_model.shader_access.primary_cmd_buf.storage_image.vertex.descriptor_array.3d */
+	INSTR_5XX(c1a20204_0401fc01, "ldib.typed.3d.f32.4 r1.x, g[1], r1.w, r1.x"), /* ldib.a.f32.3d.4 r1.x, g[r1.w], r1.x, 1 */
+	/* dEQP-VK.binding_model.shader_access.secondary_cmd_buf.with_push.storage_texel_buffer.vertex_fragment.single_descriptor.offset_zero */
+	INSTR_5XX(c1a20005_0501be01, "ldib.typed.4d.f32.4 r1.y, g[0], r1.z, r1.y"), /* ldib.a.f32.1dtype.4 r1.y, g[r1.z], r1.y, 0 */
+	/* dEQP-VK.texture.filtering.cube.formats.r8g8b8a8_snorm_nearest */
+	INSTR_5XX(c1a60200_0000ba01, "ldib.typed.2d.u32.4 r0.x, g[1], r0.z, r0.x"), /* ldib.a.u32.2d.4 r0.x, g[r0.z], r0.x, 1 */
 
 	// TODO is this a real instruction?  Or float -6.0 ?
 	// INSTR_6XX(c0c00000_00000000, "stg.f16 g[hr0.x], hr0.x, hr0.x", .parse_fail=true),
@@ -194,6 +203,8 @@ static const struct test {
 
 	/* dEQP-VK.image.image_size.cube_array.readonly_writeonly_1x1x12 */
 	INSTR_6XX(c0260200_03676100, "stib.b.untyped.1d.u32.3.imm.base0 r0.x, r0.w, 1"), /* stib.untyped.u32.1d.3.mode4.base0 r0.x, r0.w, 1 */
+
+	INSTR_6XX(c0240402_00674100, "stib.b.untyped.1d.u16.1.imm.base0 r0.z, r0.x, 2"),
 #if 0
    /* TODO blob sometimes/frequently sets b0, although there does not seem
     * to be an obvious pattern and our encoding never sets it.  AFAICT it
@@ -226,6 +237,8 @@ static const struct test {
    INSTR_6XX(c0260000_0063c000, "resinfo.b.untyped.1d.u32.1.imm r0.x, 0"), /* resinfo.u32.1d.mode0.base0 r0.x, 0 */
    /* dEQP-VK.image.image_size.2d.readonly_12x34.txt */
    INSTR_6XX(c0260000_0063c300, "resinfo.b.untyped.2d.u32.1.imm.base0 r0.x, 0"), /* resinfo.u32.2d.mode4.base0 r0.x, 0 */
+   /* Custom test */
+   INSTR_6XX(c0260000_0063c382, "resinfo.b.untyped.2d.u32.1.nonuniform.base1 r0.x, r0.x"), /* resinfo.u32.2d.mode6.base1 r0.x, r0.x */
 
    /* dEQP-GLES31.functional.image_load_store.2d.image_size.readonly_writeonly_32x32.txt */
    INSTR_5XX(c3e60000_00000200, "resinfo.u32.2d r0.x, g[0]"), /* resinfo.u32.2d r0.x, 0 */
@@ -278,22 +291,16 @@ static const struct test {
    /* LDC.  Our disasm differs greatly from qcom here, and we've got some
     * important info they lack(?!), but same goes the other way.
     */
-#if 0
-   /* TODO our encoding differs in b23 for these four.. unsure if that is dontcare bit */
    /* dEQP-GLES31.functional.shaders.opaque_type_indexing.ubo.uniform_fragment */
-   INSTR_6XX(c0260000_00c78040, "ldc.offset0.1.uniform r0.x, r0.x, r0.x"), /* ldc.1.mode1.base0 r0.x, 0, r0.x */
-   INSTR_6XX(c0260201_00c78040, "ldc.offset0.1.uniform r0.y, r0.x, r0.y"), /* ldc.1.mode1.base0 r0.y, 0, r0.y */
+   INSTR_6XX(c0260000_00c78040, "ldc.offset0.1.uniform r0.x, 0, r0.x"), /* ldc.1.mode1.base0 r0.x, 0, r0.x */
+   INSTR_6XX(c0260201_00c78040, "ldc.offset0.1.uniform r0.y, 0, r0.y"), /* ldc.1.mode1.base0 r0.y, 0, r0.y */
    /* dEQP-GLES31.functional.shaders.opaque_type_indexing.ubo.dynamically_uniform_fragment  */
-   INSTR_6XX(c0260000_00c78080, "ldc.offset0.1.nonuniform r0.x, r0.x, r0.x"), /* ldc.1.mode2.base0 r0.x, 0, r0.x */
-   INSTR_6XX(c0260201_00c78080, "ldc.offset0.1.nonuniform r0.y, r0.x, r0.y"), /* ldc.1.mode2.base0 r0.y, 0, r0.y */
-#else
-   /* dEQP-GLES31.functional.shaders.opaque_type_indexing.ubo.uniform_fragment */
-   INSTR_6XX(c0260000_00478040, "ldc.offset0.1.uniform r0.x, r0.x, r0.x"), /* ldc.1.mode1.base0 r0.x, 0, r0.x */
-   INSTR_6XX(c0260201_00478040, "ldc.offset0.1.uniform r0.y, r0.x, r0.y"), /* ldc.1.mode1.base0 r0.y, 0, r0.y */
-   /* dEQP-GLES31.functional.shaders.opaque_type_indexing.ubo.dynamically_uniform_fragment  */
-   INSTR_6XX(c0260000_00478080, "ldc.offset0.1.nonuniform r0.x, r0.x, r0.x"), /* ldc.1.mode2.base0 r0.x, 0, r0.x */
-   INSTR_6XX(c0260201_00478080, "ldc.offset0.1.nonuniform r0.y, r0.x, r0.y"), /* ldc.1.mode2.base0 r0.y, 0, r0.y */
-#endif
+   INSTR_6XX(c0260000_00c78080, "ldc.offset0.1.nonuniform r0.x, 0, r0.x"), /* ldc.1.mode2.base0 r0.x, 0, r0.x */
+   INSTR_6XX(c0260201_00c78080, "ldc.offset0.1.nonuniform r0.y, 0, r0.y"), /* ldc.1.mode2.base0 r0.y, 0, r0.y */
+
+   /* custom */
+   INSTR_6XX(c0260201_ffc78080, "ldc.offset0.1.nonuniform r0.y, 255, r0.y"), /* ldc.1.mode2.base0 r0.y, 255, r0.y */
+
    /* custom shaders, loading .x, .y, .z, .w from an array of vec4 in block 0 */
    INSTR_6XX(c0260000_00478000, "ldc.offset0.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
    INSTR_6XX(c0260000_00478200, "ldc.offset1.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
@@ -376,6 +383,7 @@ main(int argc, char **argv)
    }
 
    struct ir3_compiler *compilers[10] = {};
+   struct fd_dev_id dev_ids[ARRAY_SIZE(compilers)];
 
    for (int i = 0; i < ARRAY_SIZE(tests); i++) {
       const struct test *test = &tests[i];
@@ -417,7 +425,8 @@ main(int argc, char **argv)
 
       unsigned gen = test->gpu_id / 100;
       if (!compilers[gen]) {
-         compilers[gen] = ir3_compiler_create(NULL, test->gpu_id, false);
+         dev_ids[gen].gpu_id = test->gpu_id;
+         compilers[gen] = ir3_compiler_create(NULL, &dev_ids[gen], false);
       }
 
       FILE *fasm =

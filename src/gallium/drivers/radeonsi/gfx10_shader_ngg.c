@@ -70,17 +70,6 @@ static LLVMValueRef ngg_get_query_buf(struct si_shader_context *ctx)
                                 LLVMConstInt(ctx->ac.i32, GFX10_GS_QUERY_BUF, false));
 }
 
-static LLVMValueRef ngg_get_initial_edgeflag(struct si_shader_context *ctx, unsigned index)
-{
-   if (ctx->stage == MESA_SHADER_VERTEX) {
-      LLVMValueRef tmp;
-      tmp = LLVMBuildLShr(ctx->ac.builder, ac_get_arg(&ctx->ac, ctx->args.gs_invocation_id),
-                          LLVMConstInt(ctx->ac.i32, 8 + index, false), "");
-      return LLVMBuildTrunc(ctx->ac.builder, tmp, ctx->ac.i1, "");
-   }
-   return ctx->ac.i1false;
-}
-
 /**
  * Return the number of vertices as a constant in \p num_vertices,
  * and return a more precise value as LLVMValueRef from the function.
@@ -94,11 +83,13 @@ static LLVMValueRef ngg_get_vertices_per_prim(struct si_shader_context *ctx, uns
          /* Blits always use axis-aligned rectangles with 3 vertices. */
          *num_vertices = 3;
          return LLVMConstInt(ctx->ac.i32, 3, 0);
+      } else if (ctx->shader->key.opt.ngg_culling & SI_NGG_CULL_LINES) {
+         *num_vertices = 2;
+         return LLVMConstInt(ctx->ac.i32, 2, 0);
       } else {
          /* We always build up all three indices for the prim export
           * independent of the primitive type. The additional garbage
-          * data shouldn't hurt. This number doesn't matter with
-          * NGG passthrough.
+          * data shouldn't hurt. This is used by exports and streamout.
           */
          *num_vertices = 3;
 
@@ -126,7 +117,8 @@ bool gfx10_ngg_export_prim_early(struct si_shader *shader)
 
    assert(shader->key.as_ngg && !shader->key.as_es);
 
-   return sel->info.stage != MESA_SHADER_GEOMETRY && !sel->info.writes_edgeflag;
+   return sel->info.stage != MESA_SHADER_GEOMETRY &&
+          !gfx10_ngg_writes_user_edgeflags(shader);
 }
 
 void gfx10_ngg_build_sendmsg_gs_alloc_req(struct si_shader_context *ctx)
@@ -153,12 +145,12 @@ void gfx10_ngg_build_export_prim(struct si_shader_context *ctx, LLVMValueRef use
          if (prim_passthrough)
             prim.passthrough = prim_passthrough;
          else
-            prim.passthrough = ac_get_arg(&ctx->ac, ctx->gs_vtx01_offset);
+            prim.passthrough = ac_get_arg(&ctx->ac, ctx->args.gs_vtx_offset[0]);
 
          /* This is only used with NGG culling, which returns the NGG
           * passthrough prim export encoding.
           */
-         if (ctx->shader->selector->info.writes_edgeflag) {
+         if (gfx10_ngg_writes_user_edgeflags(ctx->shader)) {
             unsigned all_bits_no_edgeflags = ~SI_NGG_PRIM_EDGE_FLAG_BITS;
             LLVMValueRef edgeflags = LLVMConstInt(ctx->ac.i32, all_bits_no_edgeflags, 0);
 
@@ -190,20 +182,27 @@ void gfx10_ngg_build_export_prim(struct si_shader_context *ctx, LLVMValueRef use
       ngg_get_vertices_per_prim(ctx, &prim.num_vertices);
 
       prim.isnull = ctx->ac.i1false;
-      prim.index[0] = si_unpack_param(ctx, ctx->gs_vtx01_offset, 0, 16);
-      prim.index[1] = si_unpack_param(ctx, ctx->gs_vtx01_offset, 16, 16);
-      prim.index[2] = si_unpack_param(ctx, ctx->gs_vtx23_offset, 0, 16);
 
-      for (unsigned i = 0; i < prim.num_vertices; ++i) {
-         prim.edgeflag[i] = ngg_get_initial_edgeflag(ctx, i);
+      if (gfx10_edgeflags_have_effect(ctx->shader))
+         prim.edgeflags = ac_pack_edgeflags_for_export(&ctx->ac, &ctx->args);
+      else
+         prim.edgeflags = ctx->ac.i32_0;
 
-         if (ctx->shader->selector->info.writes_edgeflag) {
+      for (unsigned i = 0; i < prim.num_vertices; ++i)
+         prim.index[i] = si_unpack_param(ctx, ctx->args.gs_vtx_offset[i / 2], (i & 1) * 16, 16);
+
+      if (gfx10_ngg_writes_user_edgeflags(ctx->shader)) {
+         LLVMValueRef edgeflags = ctx->ac.i32_0;
+
+         for (unsigned i = 0; i < prim.num_vertices; ++i) {
             LLVMValueRef edge;
 
             edge = LLVMBuildLoad(ctx->ac.builder, user_edgeflags[i], "");
-            edge = LLVMBuildAnd(ctx->ac.builder, prim.edgeflag[i], edge, "");
-            prim.edgeflag[i] = edge;
+            edge = LLVMBuildZExt(ctx->ac.builder, edge, ctx->ac.i32, "");
+            edge = LLVMBuildShl(ctx->ac.builder, edge, LLVMConstInt(ctx->ac.i32, 9 + i*10, 0), "");
+            edgeflags = LLVMBuildOr(ctx->ac.builder, edgeflags, edge, "");
          }
+         prim.edgeflags = LLVMBuildAnd(ctx->ac.builder, prim.edgeflags, edgeflags, "");
       }
 
       ac_build_export_prim(&ctx->ac, &prim);
@@ -607,7 +606,7 @@ static unsigned ngg_nogs_vertex_size(struct si_shader *shader)
     * used for padding to reduce LDS bank conflicts. */
    if (shader->selector->so.num_outputs)
       lds_vertex_size = 4 * shader->selector->info.num_outputs + 1;
-   if (shader->selector->info.writes_edgeflag)
+   if (gfx10_ngg_writes_user_edgeflags(shader))
       lds_vertex_size = MAX2(lds_vertex_size, 1);
 
    /* LDS size for passing data from GS to ES.
@@ -796,9 +795,12 @@ static void gfx10_build_primitive_accepted(struct ac_llvm_context *ac, LLVMValue
    LLVMValueRef gs_accepted = params[0];
    LLVMValueRef *gs_vtxptr = (LLVMValueRef *)params[1];
 
+   unsigned num_vertices;
+   ngg_get_vertices_per_prim(ctx, &num_vertices);
+
    ac_build_ifcc(&ctx->ac, accepted, 0);
    LLVMBuildStore(ctx->ac.builder, ctx->ac.i32_1, gs_accepted);
-   for (unsigned vtx = 0; vtx < 3; vtx++) {
+   for (unsigned vtx = 0; vtx < num_vertices; vtx++) {
       LLVMBuildStore(ctx->ac.builder, ctx->ac.i8_1,
                      si_build_gep_i8(ctx, gs_vtxptr[vtx], lds_byte0_accept_flag));
    }
@@ -811,14 +813,14 @@ static void gfx10_build_primitive_accepted(struct ac_llvm_context *ac, LLVMValue
  * Also return the position, which is passed to the shader as an input,
  * so that we don't compute it twice.
  */
-void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_outputs,
-                                     LLVMValueRef *addrs)
+void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi)
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
    struct si_shader *shader = ctx->shader;
    struct si_shader_selector *sel = shader->selector;
    struct si_shader_info *info = &sel->info;
    LLVMBuilderRef builder = ctx->ac.builder;
+   LLVMValueRef *addrs = abi->outputs;
    unsigned max_waves = DIV_ROUND_UP(ctx->screen->ngg_subgroup_size, ctx->ac.wave_size);
 
    assert(shader->key.opt.ngg_culling);
@@ -875,6 +877,9 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
 
    LLVMValueRef tid = ac_get_thread_id(&ctx->ac);
 
+   unsigned num_vertices;
+   ngg_get_vertices_per_prim(ctx, &num_vertices);
+
    /* The hardware requires that there are no holes between unculled vertices,
     * which means we have to pack ES threads, i.e. reduce the ES thread count
     * and move ES input VGPRs to lower threads. The upside is that varyings
@@ -904,23 +909,13 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
     */
 
    LLVMValueRef vtxindex[3];
-   if (shader->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_ALL) {
-      /* For the GS fast launch, the VS prolog simply puts the Vertex IDs
-       * into these VGPRs.
-       */
-      vtxindex[0] = ac_get_arg(&ctx->ac, ctx->gs_vtx01_offset);
-      vtxindex[1] = ac_get_arg(&ctx->ac, ctx->gs_vtx23_offset);
-      vtxindex[2] = ac_get_arg(&ctx->ac, ctx->gs_vtx45_offset);
-   } else {
-      vtxindex[0] = si_unpack_param(ctx, ctx->gs_vtx01_offset, 0, 16);
-      vtxindex[1] = si_unpack_param(ctx, ctx->gs_vtx01_offset, 16, 16);
-      vtxindex[2] = si_unpack_param(ctx, ctx->gs_vtx23_offset, 0, 16);
-   };
-   LLVMValueRef gs_vtxptr[] = {
-      ngg_nogs_vertex_ptr(ctx, vtxindex[0]),
-      ngg_nogs_vertex_ptr(ctx, vtxindex[1]),
-      ngg_nogs_vertex_ptr(ctx, vtxindex[2]),
-   };
+   for (unsigned i = 0; i < num_vertices; ++i)
+      vtxindex[i] = si_unpack_param(ctx, ctx->args.gs_vtx_offset[i / 2], (i & 1) * 16, 16);
+
+   LLVMValueRef gs_vtxptr[3];
+   for (unsigned i = 0; i < num_vertices; i++)
+      gs_vtxptr[i] = ngg_nogs_vertex_ptr(ctx, vtxindex[i]);
+
    es_vtxptr = ngg_nogs_vertex_ptr(ctx, get_thread_id_in_tg(ctx));
 
    /* Adding these optimization barriers improves the generated code as follows. Crazy right?
@@ -948,9 +943,8 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
     * - v_mul_u32_u24_e32 v17, 28, v11
     * - v_mul_u32_u24_e32 v18, 28, v10
     */
-   ac_build_optimization_barrier(&ctx->ac, &gs_vtxptr[0], false);
-   ac_build_optimization_barrier(&ctx->ac, &gs_vtxptr[1], false);
-   ac_build_optimization_barrier(&ctx->ac, &gs_vtxptr[2], false);
+   for (unsigned i = 0; i < num_vertices; i++)
+      ac_build_optimization_barrier(&ctx->ac, &gs_vtxptr[i], false);
 
    LLVMValueRef gs_accepted = ac_build_alloca(&ctx->ac, ctx->ac.i32, "");
 
@@ -959,7 +953,7 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
    {
       /* Load positions. */
       LLVMValueRef pos[3][4] = {};
-      for (unsigned vtx = 0; vtx < 3; vtx++) {
+      for (unsigned vtx = 0; vtx < num_vertices; vtx++) {
          for (unsigned chan = 0; chan < 4; chan++) {
             unsigned index;
             if (chan == 0 || chan == 1)
@@ -996,21 +990,30 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
 
       /* Execute culling code. */
       struct ac_cull_options options = {};
-      options.cull_front = shader->key.opt.ngg_culling & SI_NGG_CULL_FRONT_FACE;
-      options.cull_back = shader->key.opt.ngg_culling & SI_NGG_CULL_BACK_FACE;
-      options.cull_view_xy = shader->key.opt.ngg_culling & SI_NGG_CULL_VIEW_SMALLPRIMS;
-      options.cull_small_prims = options.cull_view_xy;
-      options.cull_zero_area = options.cull_front || options.cull_back;
+      options.cull_view_xy = true;
       options.cull_w = true;
+
+      if (shader->key.opt.ngg_culling & SI_NGG_CULL_LINES) {
+         options.num_vertices = 2;
+
+         assert(!(shader->key.opt.ngg_culling & SI_NGG_CULL_BACK_FACE));
+         assert(!(shader->key.opt.ngg_culling & SI_NGG_CULL_FRONT_FACE));
+      } else {
+         options.num_vertices = 3;
+         options.cull_front = shader->key.opt.ngg_culling & SI_NGG_CULL_FRONT_FACE;
+         options.cull_back = shader->key.opt.ngg_culling & SI_NGG_CULL_BACK_FACE;
+         options.cull_small_prims = true; /* this would only be false with conservative rasterization */
+         options.cull_zero_area = options.cull_front || options.cull_back;
+      }
 
       /* Tell ES threads whether their vertex survived. */
       LLVMValueRef params[] = {
          gs_accepted,
          (void*)gs_vtxptr,
       };
-      ac_cull_triangle(&ctx->ac, pos, ctx->ac.i1true, vp_scale, vp_translate,
-                       small_prim_precision, &options,
-                       gfx10_build_primitive_accepted, params);
+      ac_cull_primitive(&ctx->ac, pos, ctx->ac.i1true, vp_scale, vp_translate,
+                        small_prim_precision, &options,
+                        gfx10_build_primitive_accepted, params);
    }
    ac_build_endif(&ctx->ac, 16002);
    ac_build_s_barrier(&ctx->ac);
@@ -1160,14 +1163,18 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
    ac_build_ifcc(&ctx->ac, LLVMBuildTrunc(builder, gs_accepted, ctx->ac.i1, ""), 16011);
    {
       struct ac_ngg_prim prim = {};
-      prim.num_vertices = 3;
+      prim.num_vertices = num_vertices;
       prim.isnull = ctx->ac.i1false;
 
-      for (unsigned vtx = 0; vtx < 3; vtx++) {
+      if (gfx10_edgeflags_have_effect(shader))
+         prim.edgeflags = ac_pack_edgeflags_for_export(&ctx->ac, &ctx->args);
+      else
+         prim.edgeflags = ctx->ac.i32_0;
+
+      for (unsigned vtx = 0; vtx < num_vertices; vtx++) {
          prim.index[vtx] = LLVMBuildLoad(
             builder, si_build_gep_i8(ctx, gs_vtxptr[vtx], lds_byte1_new_thread_id), "");
          prim.index[vtx] = LLVMBuildZExt(builder, prim.index[vtx], ctx->ac.i32, "");
-         prim.edgeflag[vtx] = ngg_get_initial_edgeflag(ctx, vtx);
       }
 
       /* Set the new GS input VGPR. */
@@ -1237,11 +1244,11 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
 
    val = LLVMBuildLoad(builder, new_vgpr0, "");
    ret = LLVMBuildInsertValue(builder, ret, ac_to_float(&ctx->ac, val), vgpr++, "");
-   vgpr++; /* gs_vtx23_offset */
+   vgpr++; /* gs_vtx_offset[1] = offsets of vertices 2-3  */
 
    ret = si_insert_input_ret_float(ctx, ret, ctx->args.gs_prim_id, vgpr++);
    ret = si_insert_input_ret_float(ctx, ret, ctx->args.gs_invocation_id, vgpr++);
-   vgpr++; /* gs_vtx45_offset */
+   vgpr++; /* gs_vtx_offset[2] = offsets of vertices 4-5 */
 
    /* Set the input VPGRs to the corresponding LDS addresses where the VGPR values are
     * stored. The VS prolog will load them.
@@ -1270,7 +1277,7 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
    }
 
    /* These two also use LDS. */
-   if (sel->info.writes_edgeflag ||
+   if (gfx10_ngg_writes_user_edgeflags(shader) ||
        (ctx->stage == MESA_SHADER_VERTEX && shader->key.mono.u.vs_export_prim_id))
       ac_build_s_barrier(&ctx->ac);
 
@@ -1280,21 +1287,22 @@ void gfx10_emit_ngg_culling_epilogue(struct ac_shader_abi *abi, unsigned max_out
 /**
  * Emit the epilogue of an API VS or TES shader compiled as ESGS shader.
  */
-void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi, unsigned max_outputs, LLVMValueRef *addrs)
+void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi)
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
    struct si_shader_selector *sel = ctx->shader->selector;
    struct si_shader_info *info = &sel->info;
    struct si_shader_output_values outputs[PIPE_MAX_SHADER_OUTPUTS];
    LLVMBuilderRef builder = ctx->ac.builder;
+   LLVMValueRef *addrs = abi->outputs;
    LLVMValueRef tmp, tmp2;
 
    assert(!ctx->shader->is_gs_copy_shader);
-   assert(info->num_outputs <= max_outputs);
+   assert(info->num_outputs <= AC_LLVM_MAX_OUTPUTS);
 
    LLVMValueRef vertex_ptr = NULL;
 
-   if (sel->so.num_outputs || sel->info.writes_edgeflag)
+   if (sel->so.num_outputs || gfx10_ngg_writes_user_edgeflags(ctx->shader))
       vertex_ptr = ngg_nogs_vertex_ptr(ctx, get_thread_id_in_tg(ctx));
 
    for (unsigned i = 0; i < info->num_outputs; i++) {
@@ -1315,7 +1323,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi, unsigned max_outputs, LL
       }
 
       /* Store the edgeflag at the end (if streamout is enabled) */
-      if (info->output_semantic[i] == VARYING_SLOT_EDGE && sel->info.writes_edgeflag) {
+      if (info->output_semantic[i] == VARYING_SLOT_EDGE && gfx10_ngg_writes_user_edgeflags(ctx->shader)) {
          LLVMValueRef edgeflag = LLVMBuildLoad(builder, addrs[4 * i], "");
          /* The output is a float, but the hw expects a 1-bit integer. */
          edgeflag = LLVMBuildFPToUI(ctx->ac.builder, edgeflag, ctx->ac.i32, "");
@@ -1328,7 +1336,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi, unsigned max_outputs, LL
    }
 
    bool unterminated_es_if_block =
-      !sel->so.num_outputs && !sel->info.writes_edgeflag &&
+      !sel->so.num_outputs && !gfx10_ngg_writes_user_edgeflags(ctx->shader) &&
       !ctx->screen->use_ngg_streamout && /* no query buffer */
       (ctx->stage != MESA_SHADER_VERTEX || !ctx->shader->key.mono.u.vs_export_prim_id);
 
@@ -1339,14 +1347,12 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi, unsigned max_outputs, LL
    LLVMValueRef is_es_thread = si_is_es_thread(ctx);
    LLVMValueRef vtxindex[3];
 
-   if (ctx->shader->key.opt.ngg_culling) {
-      vtxindex[0] = si_unpack_param(ctx, ctx->gs_vtx01_offset, 0, 9);
-      vtxindex[1] = si_unpack_param(ctx, ctx->gs_vtx01_offset, 10, 9);
-      vtxindex[2] = si_unpack_param(ctx, ctx->gs_vtx01_offset, 20, 9);
+   if (ctx->shader->key.opt.ngg_culling || gfx10_is_ngg_passthrough(ctx->shader)) {
+      for (unsigned i = 0; i < 3; ++i)
+         vtxindex[i] = si_unpack_param(ctx, ctx->args.gs_vtx_offset[0], 10 * i, 9);
    } else {
-      vtxindex[0] = si_unpack_param(ctx, ctx->gs_vtx01_offset, 0, 16);
-      vtxindex[1] = si_unpack_param(ctx, ctx->gs_vtx01_offset, 16, 16);
-      vtxindex[2] = si_unpack_param(ctx, ctx->gs_vtx23_offset, 0, 16);
+      for (unsigned i = 0; i < 3; ++i)
+         vtxindex[i] = si_unpack_param(ctx, ctx->args.gs_vtx_offset[i / 2], (i & 1) * 16, 16);
    }
 
    /* Determine the number of vertices per primitive. */
@@ -1372,7 +1378,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi, unsigned max_outputs, LL
 
    LLVMValueRef user_edgeflags[3] = {};
 
-   if (sel->info.writes_edgeflag) {
+   if (gfx10_ngg_writes_user_edgeflags(ctx->shader)) {
       assert(!unterminated_es_if_block);
 
       /* Streamout already inserted the barrier, so don't insert it again. */
@@ -1400,7 +1406,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi, unsigned max_outputs, LL
       assert(!unterminated_es_if_block);
 
       /* Streamout and edge flags use LDS. Make it idle, so that we can reuse it. */
-      if (sel->so.num_outputs || sel->info.writes_edgeflag)
+      if (sel->so.num_outputs || gfx10_ngg_writes_user_edgeflags(ctx->shader))
          ac_build_s_barrier(&ctx->ac);
 
       ac_build_ifcc(&ctx->ac, is_gs_thread, 5400);
@@ -1913,11 +1919,11 @@ void gfx10_ngg_gs_emit_epilogue(struct si_shader_context *ctx)
       tmp = ngg_gs_vertex_ptr(ctx, tid);
       flags = LLVMBuildLoad(builder, ngg_gs_get_emit_primflag_ptr(ctx, tmp, 0), "");
       prim.isnull = LLVMBuildNot(builder, LLVMBuildTrunc(builder, flags, ctx->ac.i1, ""), "");
+      prim.edgeflags = ctx->ac.i32_0;
 
       for (unsigned i = 0; i < verts_per_prim; ++i) {
          prim.index[i] = LLVMBuildSub(builder, vertlive_scan.result_exclusive,
                                       LLVMConstInt(ctx->ac.i32, verts_per_prim - i - 1, false), "");
-         prim.edgeflag[i] = ctx->ac.i1false;
       }
 
       /* Geometry shaders output triangle strips, but NGG expects triangles. */
@@ -1994,7 +2000,7 @@ bool gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
       shader->previous_stage_sel ? shader->previous_stage_sel : gs_sel;
    const gl_shader_stage gs_stage = gs_sel->info.stage;
    const unsigned gs_num_invocations = MAX2(gs_sel->info.base.gs.invocations, 1);
-   const unsigned input_prim = si_get_input_prim(gs_sel);
+   const unsigned input_prim = si_get_input_prim(gs_sel, &shader->key);
    const bool use_adjacency =
       input_prim >= PIPE_PRIM_LINES_ADJACENCY && input_prim <= PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY;
    const unsigned max_verts_per_prim = u_vertices_per_prim(input_prim);
@@ -2013,14 +2019,6 @@ bool gfx10_ngg_calculate_subgroup_info(struct si_shader *shader)
    bool max_vert_out_per_gs_instance = false;
    unsigned max_gsprims_base = gs_sel->screen->ngg_subgroup_size; /* default prim group size clamp */
    unsigned max_esverts_base = gs_sel->screen->ngg_subgroup_size;
-
-   if (shader->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_TRI_LIST) {
-      /* All lanes are filled in wave32. */
-      max_gsprims_base = ROUND_DOWN_TO(max_gsprims_base / 3, 32);
-      max_esverts_base = max_gsprims_base * 3;
-   } else if (shader->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_TRI_STRIP) {
-      max_gsprims_base = max_esverts_base - 2;
-   }
 
    if (gs_stage == MESA_SHADER_GEOMETRY) {
       bool force_multi_cycling = false;
@@ -2149,28 +2147,6 @@ retry_select_mode:
       /* Number of output primitives per GS input primitive after
        * GS instancing. */
       prim_amp_factor = gs_sel->info.base.gs.vertices_out;
-   }
-
-   /* Fix up the thread counts for fast launch. */
-   if (shader->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_TRI_LIST) {
-      /* The vertex count must be a multiple of 3. */
-      max_esverts -= max_esverts % 3;
-      /* We can only decrease the size, not increase it. */
-      if (max_gsprims * 3 < max_esverts) {
-         max_esverts = max_gsprims * 3;
-      } else {
-         max_gsprims = max_esverts / 3;
-      }
-   } else if (shader->key.opt.ngg_culling & SI_NGG_CULL_GS_FAST_LAUNCH_TRI_STRIP) {
-      /* The primitive count must be even to get correct winding for triangle strips. */
-      max_gsprims &= ~1;
-      if (max_gsprims - 2 < max_esverts) {
-         max_esverts = max_gsprims + 2;
-      } else {
-         max_gsprims = max_esverts - 2;
-         max_gsprims &= ~1;
-         max_esverts = max_gsprims + 2;
-      }
    }
 
    shader->ngg.hw_max_esverts = max_esverts;

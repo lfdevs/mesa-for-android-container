@@ -369,10 +369,7 @@ optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend)
                 NIR_PASS(progress, nir, nir_opt_undef);
                 NIR_PASS(progress, nir, nir_lower_undef_to_zero);
 
-                NIR_PASS(progress, nir, nir_opt_loop_unroll,
-                         nir_var_shader_in |
-                         nir_var_shader_out |
-                         nir_var_function_temp);
+                NIR_PASS(progress, nir, nir_opt_loop_unroll);
 
                 NIR_PASS(progress, nir, nir_opt_vectorize,
                          midgard_vectorize_filter, NULL);
@@ -2040,6 +2037,10 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
                 emit_sysval_read(ctx, &instr->instr, 3, 0);
                 break;
 
+        case nir_intrinsic_load_blend_const_color_rgba:
+                emit_sysval_read(ctx, &instr->instr, 4, 0);
+                break;
+
         case nir_intrinsic_load_workgroup_id:
         case nir_intrinsic_load_local_invocation_id:
         case nir_intrinsic_load_global_invocation_id:
@@ -3091,7 +3092,8 @@ midgard_compile_shader_nir(nir_shader *nir,
 
         unsigned pan_quirks = panfrost_get_quirks(inputs->gpu_id, 0);
         NIR_PASS_V(nir, pan_lower_framebuffer,
-                   inputs->rt_formats, inputs->is_blend, pan_quirks);
+                   inputs->rt_formats, inputs->raw_fmt_mask,
+                   inputs->is_blend, pan_quirks);
 
         NIR_PASS_V(nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
                         glsl_type_size, 0);
@@ -3284,6 +3286,9 @@ midgard_compile_shader_nir(nir_shader *nir,
                         ctx->loop_count,
                         ctx->spills, ctx->fills);
         }
+
+        _mesa_hash_table_u64_destroy(ctx->ssa_constants);
+        _mesa_hash_table_u64_destroy(ctx->sysval_to_id);
 
         ralloc_free(ctx);
 }

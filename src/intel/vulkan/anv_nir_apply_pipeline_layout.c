@@ -143,6 +143,7 @@ get_used_bindings(UNUSED nir_builder *_b, nir_instr *instr, void *_state)
       case nir_intrinsic_image_deref_atomic_xor:
       case nir_intrinsic_image_deref_atomic_exchange:
       case nir_intrinsic_image_deref_atomic_comp_swap:
+      case nir_intrinsic_image_deref_atomic_fadd:
       case nir_intrinsic_image_deref_size:
       case nir_intrinsic_image_deref_samples:
       case nir_intrinsic_image_deref_load_param_intel:
@@ -722,7 +723,8 @@ try_lower_direct_buffer_intrinsic(nir_builder *b,
       /* 64-bit atomics only support A64 messages so we can't lower them to
        * the index+offset model.
        */
-      if (is_atomic && nir_dest_bit_size(intrin->dest) == 64)
+      if (is_atomic && nir_dest_bit_size(intrin->dest) == 64 &&
+          !state->pdevice->info.has_lsc)
          return false;
 
       /* Normal binding table-based messages can't handle non-uniform access
@@ -819,6 +821,7 @@ lower_direct_buffer_instr(nir_builder *b, nir_instr *instr, void *_state)
    case nir_intrinsic_deref_atomic_xor:
    case nir_intrinsic_deref_atomic_exchange:
    case nir_intrinsic_deref_atomic_comp_swap:
+   case nir_intrinsic_deref_atomic_fadd:
    case nir_intrinsic_deref_atomic_fmin:
    case nir_intrinsic_deref_atomic_fmax:
    case nir_intrinsic_deref_atomic_fcomp_swap:
@@ -1001,6 +1004,13 @@ lower_get_ssbo_size(nir_builder *b, nir_intrinsic_instr *intrin,
 }
 
 static bool
+image_binding_needs_lowered_surface(nir_variable *var)
+{
+   return !(var->data.access & ACCESS_NON_READABLE) &&
+          var->data.image.format != PIPE_FORMAT_NONE;
+}
+
+static bool
 lower_image_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
                       struct apply_pipeline_layout_state *state)
 {
@@ -1028,11 +1038,11 @@ lower_image_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
 
       nir_ssa_def_rewrite_uses(&intrin->dest.ssa, desc);
    } else if (binding_offset > MAX_BINDING_TABLE_SIZE) {
-      const bool write_only =
-         (var->data.access & ACCESS_NON_READABLE) != 0;
+      const unsigned desc_comp =
+         image_binding_needs_lowered_surface(var) ? 1 : 0;
       nir_ssa_def *desc =
          build_load_var_deref_descriptor_mem(b, deref, 0, 2, 32, state);
-      nir_ssa_def *handle = nir_channel(b, desc, write_only ? 1 : 0);
+      nir_ssa_def *handle = nir_channel(b, desc, desc_comp);
       nir_rewrite_image_intrinsic(intrin, handle, true);
    } else {
       unsigned array_size =
@@ -1350,6 +1360,7 @@ apply_pipeline_layout(nir_builder *b, nir_instr *instr, void *_state)
       case nir_intrinsic_image_deref_atomic_xor:
       case nir_intrinsic_image_deref_atomic_exchange:
       case nir_intrinsic_image_deref_atomic_comp_swap:
+      case nir_intrinsic_image_deref_atomic_fadd:
       case nir_intrinsic_image_deref_size:
       case nir_intrinsic_image_deref_samples:
       case nir_intrinsic_image_deref_load_param_intel:
@@ -1605,9 +1616,8 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
              dim == GLSL_SAMPLER_DIM_SUBPASS_MS)
             pipe_binding[i].input_attachment_index = var->data.index + i;
 
-         /* NOTE: This is a uint8_t so we really do need to != 0 here */
-         pipe_binding[i].write_only =
-            (var->data.access & ACCESS_NON_READABLE) != 0;
+         pipe_binding[i].lowered_storage_surface =
+            image_binding_needs_lowered_surface(var);
       }
    }
 

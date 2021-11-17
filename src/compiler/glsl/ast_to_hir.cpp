@@ -3996,9 +3996,9 @@ apply_layout_qualifier_to_variable(const struct ast_type_qualifier *qual,
          _mesa_glsl_error(loc, state, "gl_Layer redeclaration with "
                           "different viewport_relative setting than earlier");
       }
-      state->redeclares_gl_layer = 1;
+      state->redeclares_gl_layer = true;
       if (qual->flags.q.viewport_relative) {
-         state->layer_viewport_relative = 1;
+         state->layer_viewport_relative = true;
       }
    } else if (qual->flags.q.viewport_relative) {
       _mesa_glsl_error(loc, state,

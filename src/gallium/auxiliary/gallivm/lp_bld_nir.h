@@ -49,6 +49,7 @@ struct lp_build_nir_context
    struct lp_build_context int8_bld;
    struct lp_build_context uint16_bld;
    struct lp_build_context int16_bld;
+   struct lp_build_context half_bld;
    struct lp_build_context dbl_bld;
    struct lp_build_context uint64_bld;
    struct lp_build_context int64_bld;
@@ -59,6 +60,8 @@ struct lp_build_nir_context
 
    /** Value range analysis hash table used in code generation. */
    struct hash_table *range_ht;
+
+   LLVMValueRef aniso_filter_table;
 
    nir_shader *shader;
 
@@ -287,6 +290,8 @@ static inline struct lp_build_context *get_flt_bld(struct lp_build_nir_context *
    switch (op_bit_size) {
    case 64:
       return &bld_base->dbl_bld;
+   case 16:
+      return &bld_base->half_bld;
    default:
    case 32:
       return &bld_base->base;

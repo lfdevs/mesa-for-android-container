@@ -96,11 +96,6 @@ struct si_state_rasterizer {
    unsigned rasterizer_discard : 1;
    unsigned scissor_enable : 1;
    unsigned clip_halfz : 1;
-   unsigned cull_front : 1;
-   unsigned cull_back : 1;
-   unsigned depth_clamp_any : 1;
-   unsigned provoking_vertex_first : 1;
-   unsigned polygon_mode_enabled : 1;
    unsigned polygon_mode_is_lines : 1;
    unsigned polygon_mode_is_points : 1;
 };
@@ -174,7 +169,6 @@ struct si_vertex_elements {
    uint16_t vb_alignment_check_mask;
 
    uint8_t count;
-   bool uses_instance_divisors;
 
    uint16_t first_vb_use_mask;
    /* Vertex buffer descriptor list size aligned for optimal prefetch. */
@@ -189,13 +183,13 @@ union si_state {
       struct si_state_rasterizer *rasterizer;
       struct si_state_dsa *dsa;
       struct si_pm4_state *poly_offset;
-      struct si_pm4_state *ls;
-      struct si_pm4_state *hs;
-      struct si_pm4_state *es;
-      struct si_pm4_state *gs;
+      struct si_shader *ls;
+      struct si_shader *hs;
+      struct si_shader *es;
+      struct si_shader *gs;
       struct si_pm4_state *vgt_shader_config;
-      struct si_pm4_state *vs;
-      struct si_pm4_state *ps;
+      struct si_shader *vs;
+      struct si_shader *ps;
    } named;
    struct si_pm4_state *array[sizeof(struct si_state_named) / sizeof(struct si_pm4_state *)];
 };
@@ -255,12 +249,6 @@ struct si_shader_data {
    uint32_t sh_base[SI_NUM_SHADERS];
 };
 
-#define SI_TRACKED_PA_CL_VS_OUT_CNTL__VS_MASK                                                      \
-   (S_02881C_USE_VTX_POINT_SIZE(1) | S_02881C_USE_VTX_EDGE_FLAG(1) |                               \
-    S_02881C_USE_VTX_RENDER_TARGET_INDX(1) | S_02881C_USE_VTX_VIEWPORT_INDX(1) |                   \
-    S_02881C_VS_OUT_MISC_VEC_ENA(1) | S_02881C_VS_OUT_MISC_SIDE_BUS_ENA(1) |                       \
-    S_02881C_USE_VTX_VRS_RATE(1))
-
 /* The list of registers whose emitted values are remembered by si_context. */
 enum si_tracked_reg
 {
@@ -286,8 +274,7 @@ enum si_tracked_reg
    SI_TRACKED_PA_SU_PRIM_FILTER_CNTL,
    SI_TRACKED_PA_SU_SMALL_PRIM_FILTER_CNTL,
 
-   SI_TRACKED_PA_CL_VS_OUT_CNTL__VS, /* set with SI_TRACKED_PA_CL_VS_OUT_CNTL__VS_MASK*/
-   SI_TRACKED_PA_CL_VS_OUT_CNTL__CL, /* set with ~SI_TRACKED_PA_CL_VS_OUT_CNTL__VS_MASK */
+   SI_TRACKED_PA_CL_VS_OUT_CNTL,
    SI_TRACKED_PA_CL_CLIP_CNTL,
 
    SI_TRACKED_PA_SC_BINNER_CNTL_0,
@@ -348,7 +335,10 @@ enum si_tracked_reg
    SI_TRACKED_VGT_TF_PARAM,
    SI_TRACKED_VGT_VERTEX_REUSE_BLOCK_CNTL,
 
+   /* Non-context registers: */
    SI_TRACKED_GE_PC_ALLOC,
+   SI_TRACKED_SPI_SHADER_PGM_RSRC3_GS,
+   SI_TRACKED_SPI_SHADER_PGM_RSRC4_GS,
 
    SI_NUM_TRACKED_REGS,
 };
@@ -494,6 +484,7 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture
                                     /* restrict decreases overhead of si_set_sampler_view_desc ~8x. */
                                     bool is_stencil, uint16_t access, uint32_t * restrict state);
 void si_update_ps_colorbuf0_slot(struct si_context *sctx);
+void si_invalidate_inlinable_uniforms(struct si_context *sctx, enum pipe_shader_type shader);
 void si_get_pipe_constant_buffer(struct si_context *sctx, uint shader, uint slot,
                                  struct pipe_constant_buffer *cbuf);
 void si_get_shader_buffers(struct si_context *sctx, enum pipe_shader_type shader, uint start_slot,
@@ -529,6 +520,7 @@ struct pb_slab *si_bindless_descriptor_slab_alloc(void *priv, unsigned heap, uns
 void si_bindless_descriptor_slab_free(void *priv, struct pb_slab *pslab);
 void si_rebind_buffer(struct si_context *sctx, struct pipe_resource *buf);
 /* si_state.c */
+uint32_t si_translate_colorformat(enum chip_class chip_class, enum pipe_format format);
 void si_init_state_compute_functions(struct si_context *sctx);
 void si_init_state_functions(struct si_context *sctx);
 void si_init_screen_state_functions(struct si_screen *sscreen);
@@ -569,7 +561,6 @@ bool si_shader_cache_load_shader(struct si_screen *sscreen, unsigned char ir_sha
 void si_shader_cache_insert_shader(struct si_screen *sscreen, unsigned char ir_sha1_cache_key[20],
                                    struct si_shader *shader, bool insert_into_disk_cache);
 bool si_shader_mem_ordered(struct si_shader *shader);
-bool si_update_shaders(struct si_context *sctx);
 void si_init_screen_live_shader_cache(struct si_screen *sscreen);
 void si_init_shader_functions(struct si_context *sctx);
 bool si_init_shader_cache(struct si_screen *sscreen);
@@ -580,21 +571,40 @@ void si_schedule_initial_compile(struct si_context *sctx, gl_shader_stage stage,
                                  util_queue_execute_func execute);
 void si_get_active_slot_masks(const struct si_shader_info *info, uint64_t *const_and_shader_buffers,
                               uint64_t *samplers_and_images);
-int si_shader_select_with_key(struct si_screen *sscreen, struct si_shader_ctx_state *state,
-                              struct si_compiler_ctx_state *compiler_state,
-                              struct si_shader_key *key, int thread_index, bool optimized_or_none);
-void si_shader_selector_key_vs(struct si_context *sctx, struct si_shader_selector *vs,
-                               struct si_shader_key *key, struct si_vs_prolog_bits *prolog_key);
-unsigned si_get_input_prim(const struct si_shader_selector *gs);
+int si_shader_select_with_key(struct si_context *sctx, struct si_shader_ctx_state *state,
+                              const struct si_shader_key *key, int thread_index,
+                              bool optimized_or_none);
+int si_shader_select(struct pipe_context *ctx, struct si_shader_ctx_state *state);
+void si_vs_key_update_inputs(struct si_context *sctx);
+void si_get_vs_key_inputs(struct si_context *sctx, struct si_shader_key *key,
+                          struct si_vs_prolog_bits *prolog_key);
+void si_update_ps_inputs_read_or_disabled(struct si_context *sctx);
+void si_update_ps_kill_enable(struct si_context *sctx);
+void si_update_vrs_flat_shading(struct si_context *sctx);
+unsigned si_get_input_prim(const struct si_shader_selector *gs, const struct si_shader_key *key);
 bool si_update_ngg(struct si_context *sctx);
+void si_ps_key_update_framebuffer(struct si_context *sctx);
+void si_ps_key_update_framebuffer_blend(struct si_context *sctx);
+void si_ps_key_update_blend_rasterizer(struct si_context *sctx);
+void si_ps_key_update_rasterizer(struct si_context *sctx);
+void si_ps_key_update_dsa(struct si_context *sctx);
+void si_ps_key_update_sample_shading(struct si_context *sctx);
+void si_ps_key_update_framebuffer_rasterizer_sample_shading(struct si_context *sctx);
+void si_init_tess_factor_ring(struct si_context *sctx);
+bool si_update_gs_ring_buffers(struct si_context *sctx);
+bool si_update_spi_tmpring_size(struct si_context *sctx, unsigned bytes);
 
-/* si_state_draw.c */
+/* si_state_draw.cpp */
+void si_set_vertex_buffer_descriptor(struct si_screen *sscreen, struct si_vertex_elements *velems,
+                                     struct pipe_vertex_buffer *vb, unsigned element_index,
+                                     uint32_t *out);
 void si_init_draw_functions_GFX6(struct si_context *sctx);
 void si_init_draw_functions_GFX7(struct si_context *sctx);
 void si_init_draw_functions_GFX8(struct si_context *sctx);
 void si_init_draw_functions_GFX9(struct si_context *sctx);
 void si_init_draw_functions_GFX10(struct si_context *sctx);
 void si_init_draw_functions_GFX10_3(struct si_context *sctx);
+void si_init_spi_map_functions(struct si_context *sctx);
 
 /* si_state_msaa.c */
 void si_init_msaa_functions(struct si_context *sctx);

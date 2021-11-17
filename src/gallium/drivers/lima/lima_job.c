@@ -552,8 +552,8 @@ lima_generate_pp_stream(struct lima_job *job, int off_x, int off_y,
     */
    int max = MAX2(tiled_w, tiled_h);
    int index = 0;
-   uint32_t *stream[4];
-   int si[4] = {0};
+   uint32_t *stream[8];
+   int si[8] = {0};
    int dim = 0;
    int count = 0;
 

@@ -169,7 +169,7 @@ i915_texture_tiling(struct i915_screen *is, struct i915_texture *tex)
    if (tex->b.target == PIPE_TEXTURE_1D)
       return I915_TILE_NONE;
 
-   if (util_format_is_s3tc(tex->b.format))
+   if (util_format_is_compressed(tex->b.format))
       return I915_TILE_X;
 
    if (is->debug.use_blitter)
@@ -367,7 +367,7 @@ i915_texture_layout_2d(struct i915_texture *tex)
    unsigned nblocksy = util_format_get_nblocksy(pt->format, width);
    unsigned align_y = 2;
 
-   if (util_format_is_s3tc(pt->format))
+   if (util_format_is_compressed(pt->format))
       align_y = 1;
 
    tex->stride = align(util_format_get_stride(pt->format, width), 4);
@@ -471,7 +471,7 @@ i945_texture_layout_2d(struct i915_texture *tex)
    unsigned nblocksx = util_format_get_nblocksx(pt->format, width);
    unsigned nblocksy = util_format_get_nblocksy(pt->format, height);
 
-   if (util_format_is_s3tc(pt->format)) {
+   if (util_format_is_compressed(pt->format)) {
       align_x = 1;
       align_y = 1;
    }
@@ -528,7 +528,7 @@ i945_texture_layout_3d(struct i915_texture *tex)
    unsigned width = util_next_power_of_two(pt->width0);
    unsigned height = util_next_power_of_two(pt->height0);
    unsigned depth = util_next_power_of_two(pt->depth0);
-   unsigned nblocksy = util_format_get_nblocksy(pt->format, width);
+   unsigned nblocksy = util_format_get_nblocksy(pt->format, height);
    unsigned pack_x_pitch, pack_x_nr;
    unsigned pack_y_pitch;
    unsigned level;
@@ -648,8 +648,8 @@ i945_texture_layout_cube(struct i915_texture *tex)
    unsigned level;
    unsigned face;
 
-   assert(pt->width0 == pt->height0);       /* cubemap images are square */
-   assert(util_format_is_s3tc(pt->format)); /* compressed only */
+   assert(pt->width0 == pt->height0); /* cubemap images are square */
+   assert(util_format_is_compressed(pt->format)); /* compressed only */
 
    /*
     * Depending on the size of the largest images, pitch can be
@@ -748,7 +748,7 @@ i945_texture_layout(struct i915_texture *tex)
       i945_texture_layout_3d(tex);
       break;
    case PIPE_TEXTURE_CUBE:
-      if (!util_format_is_s3tc(tex->b.format))
+      if (!util_format_is_compressed(tex->b.format))
          i9x5_texture_layout_cube(tex);
       else
          i945_texture_layout_cube(tex);
@@ -830,8 +830,10 @@ i915_texture_transfer_map(struct pipe_context *pipe,
    }
 
    if (resource->target != PIPE_TEXTURE_3D &&
-       resource->target != PIPE_TEXTURE_CUBE)
+       resource->target != PIPE_TEXTURE_CUBE) {
       assert(box->z == 0);
+      assert(box->depth == 1);
+   }
 
    if (transfer->staging_texture) {
       tex = i915_texture(transfer->staging_texture);
@@ -888,94 +890,24 @@ i915_texture_transfer_unmap(struct pipe_context *pipe,
    slab_free_st(&i915->texture_transfer_pool, itransfer);
 }
 
-#if 0
-static void i915_texture_subdata(struct pipe_context *pipe,
-                                 struct pipe_resource *resource,
-                                 unsigned level,
-                                 unsigned usage,
-                                 const struct pipe_box *box,
-                                 const void *data,
-                                 unsigned stride,
-                                 unsigned layer_stride)
+void
+i915_texture_subdata(struct pipe_context *pipe, struct pipe_resource *resource,
+                     unsigned level, unsigned usage, const struct pipe_box *box,
+                     const void *data, unsigned stride, unsigned layer_stride)
 {
-   struct pipe_transfer *transfer = NULL;
-   struct i915_transfer *itransfer = NULL;
-   const uint8_t *src_data = data;
-   unsigned i;
-
-   transfer = pipe->transfer_get(pipe,
-                                 resource,
-                                 level,
-                                 usage,
-                                 box );
-   if (transfer == NULL)
-      goto out;
-
-   itransfer = (struct i915_transfer*)transfer;
-
-   if (itransfer->staging_texture) {
-      struct i915_texture *tex = i915_texture(itransfer->staging_texture);
-      enum pipe_format format = tex->b.format;
-      struct i915_winsys *iws = i915_screen(tex->b.screen)->iws;
-      size_t offset;
-      size_t size;
-
-      offset = i915_texture_offset(tex, transfer->level, transfer->box.z);
-
-      for (i = 0; i < box->depth; i++) {
-         if (!tex->b.last_level &&
-                     tex->b.width0 == transfer->box.width) {
-             unsigned nby = util_format_get_nblocksy(format, transfer->box.y);
-             assert(!offset);
-             assert(!transfer->box.x);
-             assert(tex->stride == transfer->stride);
-
-             offset += tex->stride * nby;
-             size = util_format_get_2d_size(format, transfer->stride,
-                             transfer->box.height);
-             iws->buffer_write(iws, tex->buffer, offset, size, transfer->data);
-
-         } else {
-             unsigned nby = util_format_get_nblocksy(format, transfer->box.y);
-             int i;
-             offset += util_format_get_stride(format, transfer->box.x);
-             size = transfer->stride;
-
-             for (i = 0; i < nby; i++) {
-                     iws->buffer_write(iws, tex->buffer, offset, size, transfer->data);
-                     offset += tex->stride;
-             }
-         }
-         offset += layer_stride;
-      }
-   } else {
-      uint8_t *map = pipe_transfer_map(pipe, &itransfer->b);
-      if (map == NULL)
-         goto nomap;
-
-      for (i = 0; i < box->depth; i++) {
-         util_copy_rect(map,
-                        resource->format,
-                        itransfer->b.stride, /* bytes */
-                        0, 0,
-                        box->width,
-                        box->height,
-                        src_data,
-                        stride,       /* bytes */
-                        0, 0);
-         map += itransfer->b.layer_stride;
-         src_data += layer_stride;
-      }
-nomap:
-      if (map)
-         pipe_transfer_unmap(pipe, &itransfer->b);
+   /* i915's cube and 3D maps are not laid out such that one could use a
+    * layer_stride to get from one layer to the next, so we have to walk the
+    * layers individually.
+    */
+   struct pipe_box layer_box = *box;
+   layer_box.depth = 1;
+   for (layer_box.z = box->z; layer_box.z < box->z + box->depth;
+        layer_box.z++) {
+      u_default_texture_subdata(pipe, resource, level, usage, &layer_box, data,
+                                stride, layer_stride);
+      data += layer_stride;
    }
-
-out:
-   if (itransfer)
-      pipe_transfer_destroy(pipe, &itransfer->b);
 }
-#endif
 
 struct pipe_resource *
 i915_texture_create(struct pipe_screen *screen,

@@ -114,8 +114,16 @@ struct iris_resource {
       } extra_aux;
 
       /**
+       * When importing resources with a clear color, we may not know the
+       * clear color on the CPU at first.
+       */
+      bool clear_color_unknown;
+
+      /**
        * Fast clear color for this surface.  For depth surfaces, the clear
        * value is stored as a float32 in the red component.
+       *
+       * Do not rely on this value if clear_color_unknown is set.
        */
       union isl_color_value clear_color;
 
@@ -204,7 +212,7 @@ struct iris_surface_state {
    unsigned num_states;
 
    /**
-    * Address of the resource (res->bo->gtt_offset).  Note that "Surface
+    * Address of the resource (res->bo->address).  Note that "Surface
     * Base Address" may be offset from this value.
     */
    uint64_t bo_address;
@@ -324,10 +332,6 @@ void iris_get_depth_stencil_resources(struct pipe_resource *res,
 bool iris_resource_set_clear_color(struct iris_context *ice,
                                    struct iris_resource *res,
                                    union isl_color_value color);
-union isl_color_value
-iris_resource_get_clear_color(const struct iris_resource *res,
-                              struct iris_bo **clear_color_bo,
-                              uint64_t *clear_color_offset);
 
 void iris_replace_buffer_storage(struct pipe_context *ctx,
                                  struct pipe_resource *dst,
@@ -484,16 +488,6 @@ enum isl_aux_usage iris_image_view_aux_usage(struct iris_context *ice,
 enum isl_format iris_image_view_get_format(struct iris_context *ice,
                                            const struct pipe_image_view *img);
 
-static inline bool
-iris_resource_unfinished_aux_import(struct iris_resource *res)
-{
-   return res->aux.bo == NULL && res->mod_info &&
-      res->mod_info->aux_usage != ISL_AUX_USAGE_NONE;
-}
-
-void iris_resource_finish_aux_import(struct pipe_screen *pscreen,
-                                     struct iris_resource *res);
-
 bool iris_has_invalid_primary(const struct iris_resource *res,
                               unsigned start_level, unsigned num_levels,
                               unsigned start_layer, unsigned num_layers);
@@ -516,7 +510,8 @@ bool iris_has_color_unresolved(const struct iris_resource *res,
 
 bool iris_render_formats_color_compatible(enum isl_format a,
                                           enum isl_format b,
-                                          union isl_color_value color);
+                                          union isl_color_value color,
+                                          bool clear_color_unknown);
 enum isl_aux_usage iris_resource_render_aux_usage(struct iris_context *ice,
                                                   struct iris_resource *res,
                                                   uint32_t level,

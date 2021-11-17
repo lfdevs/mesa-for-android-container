@@ -35,6 +35,8 @@
 #include "fd6_resource.h"
 #include "fd6_texture.h"
 
+#define FDL6_TEX_CONST_DWORDS 16
+
 struct fd6_image {
    struct pipe_resource *prsc;
    enum pipe_format pfmt;
@@ -135,7 +137,6 @@ translate_image(struct fd6_image *img, const struct pipe_image_view *pimg)
 static void
 translate_buf(struct fd6_image *img, const struct pipe_shader_buffer *pimg)
 {
-   enum pipe_format format = PIPE_FORMAT_R32_UINT;
    struct pipe_resource *prsc = pimg->buffer;
    struct fd_resource *rsc = fd_resource(prsc);
 
@@ -143,6 +144,11 @@ translate_buf(struct fd6_image *img, const struct pipe_shader_buffer *pimg)
       memset(img, 0, sizeof(*img));
       return;
    }
+
+   const struct fd_dev_info *dev_info = fd_screen(prsc->screen)->info;
+   enum pipe_format format = dev_info->a6xx.storage_16bit
+                                ? PIPE_FORMAT_R16_UINT
+                                : PIPE_FORMAT_R32_UINT;
 
    img->prsc = prsc;
    img->pfmt = format;
@@ -161,7 +167,7 @@ translate_buf(struct fd6_image *img, const struct pipe_shader_buffer *pimg)
    /* size is encoded with low 15b in WIDTH and high bits in HEIGHT,
     * in units of elements:
     */
-   unsigned sz = pimg->buffer_size / 4;
+   unsigned sz = pimg->buffer_size / (dev_info->a6xx.storage_16bit ? 2 : 4);
    img->width = sz & MASK(15);
    img->height = sz >> 15;
    img->depth = 0;
@@ -170,6 +176,12 @@ translate_buf(struct fd6_image *img, const struct pipe_shader_buffer *pimg)
 static void
 emit_image_tex(struct fd_ringbuffer *ring, struct fd6_image *img)
 {
+   if (!img->prsc) {
+      for (int i = 0; i < FDL6_TEX_CONST_DWORDS; i++)
+         OUT_RING(ring, 0);
+      return;
+   }
+
    struct fd_resource *rsc = fd_resource(img->prsc);
    bool ubwc_enabled = fd_resource_ubwc_enabled(rsc, img->level);
 
@@ -256,7 +268,7 @@ emit_image_ssbo(struct fd_ringbuffer *ring, struct fd6_image *img)
    enum a6xx_tile_mode tile_mode = fd_resource_tile_mode(img->prsc, img->level);
    bool ubwc_enabled = fd_resource_ubwc_enabled(rsc, img->level);
 
-   OUT_RING(ring, A6XX_IBO_0_FMT(fd6_pipe2tex(img->pfmt)) |
+   OUT_RING(ring, A6XX_IBO_0_FMT(fd6_texture_format(img->pfmt, rsc->layout.tile_mode)) |
                      A6XX_IBO_0_TILE_MODE(tile_mode));
    OUT_RING(ring,
             A6XX_IBO_1_WIDTH(img->width) | A6XX_IBO_1_HEIGHT(img->height));

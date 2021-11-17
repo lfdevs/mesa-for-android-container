@@ -230,16 +230,17 @@ struct st_config_options
    bool glsl_ignore_write_to_readonly_var;
    bool glsl_zero_init;
    bool vs_position_always_invariant;
+   bool vs_position_always_precise;
    bool force_glsl_abs_sqrt;
    bool allow_glsl_cross_stage_interpolation_mismatch;
    bool allow_draw_out_of_order;
-   bool allow_incorrect_primitive_id;
    bool ignore_map_unsynchronized;
    bool force_integer_tex_nearest;
    bool force_gl_names_reuse;
    bool transcode_etc;
    bool transcode_astc;
    char *force_gl_vendor;
+   char *force_gl_renderer;
    unsigned char config_options_sha1[20];
 };
 
@@ -471,6 +472,12 @@ struct st_manager
    bool (*get_egl_image)(struct st_manager *smapi,
                          void *egl_image,
                          struct st_egl_image *out);
+
+   /**
+    * Validate EGLImage passed to get_egl_image.
+    */
+   bool (*validate_egl_image)(struct st_manager *smapi,
+                              void *egl_image);
 
    /**
     * Query an manager param.

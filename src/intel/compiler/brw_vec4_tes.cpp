@@ -106,7 +106,7 @@ vec4_tes_visitor::emit_urb_write_opcode(bool complete)
 {
    /* For DS, the URB writes end the thread. */
    if (complete) {
-      if (INTEL_DEBUG & DEBUG_SHADER_TIME)
+      if (INTEL_DEBUG(DEBUG_SHADER_TIME))
          emit_shader_time_end();
    }
 

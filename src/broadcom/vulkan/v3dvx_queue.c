@@ -29,7 +29,7 @@
 void
 v3dX(job_emit_noop)(struct v3dv_job *job)
 {
-   v3dv_job_start_frame(job, 1, 1, 1, 1, V3D_INTERNAL_BPP_32, false);
+   v3dv_job_start_frame(job, 1, 1, 1, true, 1, V3D_INTERNAL_BPP_32, false);
    v3dX(job_emit_binning_flush)(job);
 
    struct v3dv_cl *rcl = &job->rcl;

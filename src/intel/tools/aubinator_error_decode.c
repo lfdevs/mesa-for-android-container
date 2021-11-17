@@ -418,6 +418,7 @@ read_data_file(FILE *file)
    bool ring_wraps = false;
    char *ring_name = NULL;
    struct intel_device_info devinfo;
+   uint64_t acthd = 0;
 
    while (getline(&line, &line_size, file) > 0) {
       char *new_ring_name = NULL;
@@ -538,6 +539,10 @@ read_data_file(FILE *file)
                                                    ring_name), reg);
          }
 
+         matched = sscanf(line, "  ACTHD: 0x%08x %08x\n", &reg, &reg2);
+         if (matched == 2)
+            acthd = ((uint64_t)reg << 32) | reg2;
+
          matched = sscanf(line, "  PGTBL_ER: 0x%08x\n", &reg);
          if (matched == 1 && reg)
             print_pgtbl_err(reg, &devinfo);
@@ -559,6 +564,14 @@ read_data_file(FILE *file)
          if (matched == 1)
             print_register(spec, "SC_INSTDONE", reg);
 
+         matched = sscanf(line, "  SC_INSTDONE_EXTRA: 0x%08x\n", &reg);
+         if (matched == 1)
+            print_register(spec, "SC_INSTDONE_EXTRA", reg);
+
+         matched = sscanf(line, "  SC_INSTDONE_EXTRA2: 0x%08x\n", &reg);
+         if (matched == 1)
+            print_register(spec, "SC_INSTDONE_EXTRA2", reg);
+
          matched = sscanf(line, "  SAMPLER_INSTDONE[%*d][%*d]: 0x%08x\n", &reg);
          if (matched == 1)
             print_register(spec, "SAMPLER_INSTDONE", reg);
@@ -566,6 +579,10 @@ read_data_file(FILE *file)
          matched = sscanf(line, "  ROW_INSTDONE[%*d][%*d]: 0x%08x\n", &reg);
          if (matched == 1)
             print_register(spec, "ROW_INSTDONE", reg);
+
+         matched = sscanf(line, "  GEOM_SVGUNIT_INSTDONE[%*d][%*d]: 0x%08x\n", &reg);
+         if (matched == 1)
+            print_register(spec, "INSTDONE_GEOM", reg);
 
          matched = sscanf(line, "  INSTDONE1: 0x%08x\n", &reg);
          if (matched == 1)
@@ -659,6 +676,7 @@ read_data_file(FILE *file)
    struct intel_batch_decode_ctx batch_ctx;
    intel_batch_decode_ctx_init(&batch_ctx, &devinfo, stdout, batch_flags,
                                xml_path, get_intel_batch_bo, NULL, NULL);
+   batch_ctx.acthd = acthd;
 
 
    for (int s = 0; s < num_sections; s++) {

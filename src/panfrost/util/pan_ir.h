@@ -53,6 +53,11 @@ enum pan_special_varying {
         PAN_VARY_MAX,
 };
 
+/* Maximum number of attribute descriptors required for varyings. These include
+ * up to MAX_VARYING source level varyings plus a descriptor each non-GENERAL
+ * special varying */
+#define PAN_MAX_VARYINGS (MAX_VARYING + PAN_VARY_MAX - 1)
+
 /* Define the general compiler entry point */
 
 #define MAX_SYSVAL_COUNT 32
@@ -82,6 +87,7 @@ enum {
         PAN_SYSVAL_RT_CONVERSION = 13,
         PAN_SYSVAL_VERTEX_INSTANCE_OFFSETS = 14,
         PAN_SYSVAL_DRAWID = 15,
+        PAN_SYSVAL_BLEND_CONSTANTS = 16,
 };
 
 #define PAN_TXS_SYSVAL_ID(texidx, dim, is_array)          \
@@ -155,7 +161,15 @@ struct panfrost_compile_inputs {
         bool no_ubo_to_push;
 
         enum pipe_format rt_formats[8];
+        uint8_t raw_fmt_mask;
         unsigned nr_cbufs;
+
+        union {
+                struct {
+                        bool static_rt_conv;
+                        uint32_t rt_conv[8];
+                } bifrost;
+        };
 };
 
 struct pan_shader_varying {
@@ -229,9 +243,9 @@ struct pan_shader_info {
 
         struct {
                 unsigned input_count;
-                struct pan_shader_varying input[MAX_VARYING];
+                struct pan_shader_varying input[PAN_MAX_VARYINGS];
                 unsigned output_count;
-                struct pan_shader_varying output[MAX_VARYING];
+                struct pan_shader_varying output[PAN_MAX_VARYINGS];
         } varyings;
 
         struct panfrost_sysvals sysvals;

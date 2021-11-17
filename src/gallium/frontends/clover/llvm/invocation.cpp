@@ -60,7 +60,7 @@
 #include "util/algorithm.hpp"
 
 
-using clover::module;
+using clover::binary;
 using clover::device;
 using clover::build_error;
 using clover::invalid_build_options_error;
@@ -224,8 +224,18 @@ namespace {
       // Parse the compiler options.  A file name should be present at the end
       // and must have the .cl extension in order for the CompilerInvocation
       // class to recognize it as an OpenCL source file.
+#if LLVM_VERSION_MAJOR >= 12
+      std::vector<const char *> copts;
+      for (auto &opt : opts) {
+         if (opt == "-cl-denorms-are-zero")
+            copts.push_back("-fdenormal-fp-math=positive-zero");
+         else
+            copts.push_back(opt.c_str());
+      }
+#else
       const std::vector<const char *> copts =
          map(std::mem_fn(&std::string::c_str), opts);
+#endif
 
       const target &target = ir_target;
       const cl_version device_clc_version = dev.device_clc_version();
@@ -241,6 +251,17 @@ namespace {
       c->getTargetOpts().CPU = target.cpu;
       c->getTargetOpts().Triple = target.triple;
       c->getLangOpts().NoBuiltin = true;
+
+#if LLVM_VERSION_MAJOR >= 13
+      c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("-__opencl_c_generic_address_space");
+      c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("-__opencl_c_pipes");
+      c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("-__opencl_c_device_enqueue");
+      c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("-__opencl_c_program_scope_global_variables");
+      c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("-__opencl_c_subgroups");
+      c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("-__opencl_c_work_group_collective_functions");
+      c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("-__opencl_c_atomic_scope_device");
+      c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("-__opencl_c_atomic_order_seq_cst");
+#endif
 
       // This is a workaround for a Clang bug which causes the number
       // of warnings and errors to be printed to stderr.
@@ -368,7 +389,7 @@ namespace {
 #endif
 }
 
-module
+binary
 clover::llvm::compile_program(const std::string &source,
                               const header_map &headers,
                               const device &dev,
@@ -386,7 +407,7 @@ clover::llvm::compile_program(const std::string &source,
    if (has_flag(debug::llvm))
       debug::log(".ll", print_module_bitcode(*mod));
 
-   return build_module_library(*mod, module::section::text_intermediate);
+   return build_module_library(*mod, binary::section::text_intermediate);
 }
 
 namespace {
@@ -400,10 +421,10 @@ namespace {
       // functions as internal enables the optimizer to perform optimizations
       // like function inlining and global dead-code elimination.
       //
-      // When there is no "main" function in a module, the internalize pass will
-      // treat the module like a library, and it won't internalize any functions.
+      // When there is no "main" function in a binary, the internalize pass will
+      // treat the binary like a library, and it won't internalize any functions.
       // Since there is no "main" function in our kernels, we need to tell
-      // the internalizer pass that this module is not a library by passing a
+      // the internalizer pass that this binary is not a library by passing a
       // list of kernel functions to the internalizer.  The internalizer will
       // treat the functions in the list as "main" functions and internalize
       // all of the other functions.
@@ -427,12 +448,12 @@ namespace {
 
    std::unique_ptr<Module>
    link(LLVMContext &ctx, const clang::CompilerInstance &c,
-        const std::vector<module> &modules, std::string &r_log) {
+        const std::vector<binary> &binaries, std::string &r_log) {
       std::unique_ptr<Module> mod { new Module("link", ctx) };
       std::unique_ptr< ::llvm::Linker> linker { new ::llvm::Linker(*mod) };
 
-      for (auto &m : modules) {
-         if (linker->linkInModule(parse_module_library(m, ctx, r_log)))
+      for (auto &b : binaries) {
+         if (linker->linkInModule(parse_module_library(b, ctx, r_log)))
             throw build_error();
       }
 
@@ -440,8 +461,8 @@ namespace {
    }
 }
 
-module
-clover::llvm::link_program(const std::vector<module> &modules,
+binary
+clover::llvm::link_program(const std::vector<binary> &binaries,
                            const device &dev, const std::string &opts,
                            std::string &r_log) {
    std::vector<std::string> options = tokenize(opts + " input.cl");
@@ -450,7 +471,7 @@ clover::llvm::link_program(const std::vector<module> &modules,
 
    auto ctx = create_context(r_log);
    auto c = create_compiler_instance(dev, dev.ir_target(), options, r_log);
-   auto mod = link(*ctx, *c, modules, r_log);
+   auto mod = link(*ctx, *c, binaries, r_log);
 
    optimize(*mod, c->getCodeGenOpts().OptimizationLevel, !create_library);
 
@@ -462,7 +483,7 @@ clover::llvm::link_program(const std::vector<module> &modules,
       debug::log(id + ".ll", print_module_bitcode(*mod));
 
    if (create_library) {
-      return build_module_library(*mod, module::section::text_library);
+      return build_module_library(*mod, binary::section::text_library);
 
    } else if (dev.ir_format() == PIPE_SHADER_IR_NATIVE) {
       if (has_flag(debug::native))
@@ -476,7 +497,7 @@ clover::llvm::link_program(const std::vector<module> &modules,
 }
 
 #ifdef HAVE_CLOVER_SPIRV
-module
+binary
 clover::llvm::compile_to_spirv(const std::string &source,
                                const header_map &headers,
                                const device &dev,

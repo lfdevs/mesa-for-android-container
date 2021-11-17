@@ -70,12 +70,6 @@ si_create_shadowing_ib_preamble(struct si_context *sctx)
 {
    struct si_pm4_state *pm4 = CALLOC_STRUCT(si_pm4_state);
 
-   if (sctx->chip_class == GFX10) {
-      /* SQ_NON_EVENT must be emitted before GE_PC_ALLOC is written. */
-      si_pm4_cmd_add(pm4, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      si_pm4_cmd_add(pm4, EVENT_TYPE(V_028A90_SQ_NON_EVENT) | EVENT_INDEX(0));
-   }
-
    if (sctx->screen->dpbb_allowed) {
       si_pm4_cmd_add(pm4, PKT3(PKT3_EVENT_WRITE, 0, 0));
       si_pm4_cmd_add(pm4, EVENT_TYPE(V_028A90_BREAK_BATCH) | EVENT_INDEX(0));
@@ -148,8 +142,8 @@ static void si_set_context_reg_array(struct radeon_cmdbuf *cs, unsigned reg, uns
                                      const uint32_t *values)
 {
    radeon_begin(cs);
-   radeon_set_context_reg_seq(cs, reg, num);
-   radeon_emit_array(cs, values, num);
+   radeon_set_context_reg_seq(reg, num);
+   radeon_emit_array(values, num);
    radeon_end();
 }
 

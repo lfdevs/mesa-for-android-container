@@ -366,7 +366,7 @@ flush_submit_list(struct list_head *submit_list)
    }
 
    for (unsigned i = 0; i < msm_submit->nr_bos; i++) {
-      submit_bos[i].flags = msm_submit->bos[i]->flags;
+      submit_bos[i].flags = msm_submit->bos[i]->reloc_flags;
       submit_bos[i].handle = msm_submit->bos[i]->handle;
       submit_bos[i].presumed = 0;
    }
@@ -798,13 +798,13 @@ msm_ringbuffer_sp_init(struct msm_ringbuffer_sp *msm_ring, uint32_t size,
    ring->flags = flags;
 
    if (flags & _FD_RINGBUFFER_OBJECT) {
-      if (msm_ring->u.pipe->gpu_id >= 500) {
+      if (fd_dev_64b(&msm_ring->u.pipe->dev_id)) {
          ring->funcs = &ring_funcs_obj_64;
       } else {
          ring->funcs = &ring_funcs_obj_32;
       }
    } else {
-      if (msm_ring->u.submit->pipe->gpu_id >= 500) {
+      if (fd_dev_64b(&msm_ring->u.submit->pipe->dev_id)) {
          ring->funcs = &ring_funcs_nonobj_64;
       } else {
          ring->funcs = &ring_funcs_nonobj_32;

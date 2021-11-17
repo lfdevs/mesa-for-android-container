@@ -149,12 +149,12 @@ static const struct intel_l3_config tgl_l3_configs[] = {
 DECLARE_L3_LIST(tgl);
 
 /**
- * DG1 validated L3 configurations.  \sa dg1_l3_configs.
+ * Empty L3 configurations.  \sa empty_l3_configs.
  */
-static const struct intel_l3_config dg1_l3_configs[] = {
+static const struct intel_l3_config empty_l3_configs[] = {
    /* No configurations. L3FullWayAllocationEnable is always set. */
 };
-DECLARE_L3_LIST(dg1);
+DECLARE_L3_LIST(empty);
 
 /**
  * Return a zero-terminated array of validated L3 configurations for the
@@ -179,8 +179,8 @@ get_l3_list(const struct intel_device_info *devinfo)
       return &icl_l3_list;
 
    case 12:
-      if (devinfo->is_dg1)
-         return &dg1_l3_list;
+      if (devinfo->is_dg1 || devinfo->is_dg2)
+         return &empty_l3_list;
       else
          return &tgl_l3_list;
 

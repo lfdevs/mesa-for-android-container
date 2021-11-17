@@ -29,6 +29,7 @@ glx/glx-visuals-depth -pixmap: fail
 glx/glx-visuals-stencil: fail
 glx/glx-visuals-stencil -pixmap: fail
 glx/glx_arb_create_context_es2_profile/invalid opengl es version: fail
+glx/glx_arb_create_context_no_error/no error: fail
 glx/glx_arb_create_context_robustness/invalid reset notification strategy: skip
 glx/glx_arb_create_context_robustness/require gl_arb_robustness: skip
 glx/glx_arb_sync_control/glxgetmscrateoml: skip
@@ -542,6 +543,7 @@ spec/arb_buffer_storage/bufferstorage-persistent_gles3 read coherent client-stor
 spec/arb_clear_texture/arb_clear_texture-multisample: skip
 spec/arb_color_buffer_float/gl_rgba8_snorm-render: fail
 spec/arb_color_buffer_float/gl_rgba8_snorm-render-fog: fail
+spec/arb_compute_shader/compute-and-render-bug-109630: skip
 spec/arb_compute_shader/execution/min-dvec4-double-large-group-size: skip
 spec/arb_compute_variable_group_size/errors: skip
 spec/arb_compute_variable_group_size/execution/basic-local-size: skip
@@ -842,6 +844,7 @@ spec/arb_sample_shading/samplemask 6: skip
 spec/arb_sample_shading/samplemask 6 all: skip
 spec/arb_sample_shading/samplemask 8: skip
 spec/arb_sample_shading/samplemask 8 all: skip
+spec/arb_separate_shader_objects/execution/layout-location-named-block-with-array: skip
 spec/arb_separate_shader_objects/linker/pervertex-clipdistance-tcs-out-tes: skip
 spec/arb_separate_shader_objects/linker/pervertex-clipdistance-tes-out-gs: skip
 spec/arb_separate_shader_objects/linker/pervertex-clipdistance-vs-out-tcs: skip
@@ -1835,14 +1838,7 @@ spec/egl_khr_fence_sync/conformance/eglcreatesynckhr_wrong_display_same_thread: 
 spec/egl_khr_gl_image/egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24: fail
 spec/egl_nok_swap_region/basic: skip
 spec/egl_nok_texture_from_pixmap/basic: skip
-spec/ext_clear_texture/ext_clear_texture-3d: skip
-spec/ext_clear_texture/ext_clear_texture-base-formats: skip
-spec/ext_clear_texture/ext_clear_texture-clear-max-level: skip
-spec/ext_clear_texture/ext_clear_texture-cube: skip
-spec/ext_clear_texture/ext_clear_texture-error: skip
 spec/ext_clear_texture/ext_clear_texture-multisample: skip
-spec/ext_clear_texture/ext_clear_texture-stencil: skip
-spec/ext_clear_texture/ext_clear_texture-texview: skip
 spec/ext_demote_to_helper_invocation/execution/demote: skip
 spec/ext_demote_to_helper_invocation/execution/demote_with_derivatives: skip
 spec/ext_direct_state_access/indexed-state-queries 12/getdoublei_vext: skip
@@ -1857,6 +1853,7 @@ spec/ext_external_objects/semaphore-api-errors: skip
 spec/ext_external_objects/vk-buf-exchange: skip
 spec/ext_external_objects/vk-depth-display: skip
 spec/ext_external_objects/vk-image-display: skip
+spec/ext_external_objects/vk-image-display-muliple-textures: skip
 spec/ext_external_objects/vk-image-display-overwrite: skip
 spec/ext_external_objects/vk-image-overwrite: skip
 spec/ext_external_objects/vk-pix-buf-update-errors: skip
@@ -2723,18 +2720,6 @@ spec/glsl-1.30/execution/tex-miplevel-selection textureprojgradoffset 2d: fail
 spec/glsl-1.30/execution/tex-miplevel-selection textureprojgradoffset 2d_projvec4: fail
 spec/glsl-1.30/execution/tex-miplevel-selection textureprojgradoffset 2dshadow: fail
 spec/glsl-1.30/execution/tex-miplevel-selection textureprojgradoffset 3d: fail
-spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-const-accept: fail
-spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-const-reject: fail
-spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-different-from-position: fail
-spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-homogeneity: fail
-spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-primitives-lines: fail
-spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-primitives-points: fail
-spec/glsl-1.50/execution/compatibility/clipping/gs-clip-vertex-primitives-triangle-strip: fail
-spec/glsl-1.50/execution/compatibility/clipping/vs-gs-clip-vertex-const-accept: fail
-spec/glsl-1.50/execution/compatibility/clipping/vs-gs-clip-vertex-const-reject: fail
-spec/glsl-1.50/execution/compatibility/clipping/vs-gs-clip-vertex-different-from-position: fail
-spec/glsl-1.50/execution/compatibility/clipping/vs-gs-clip-vertex-homogeneity: fail
-spec/glsl-1.50/execution/compatibility/clipping/vs-gs-clip-vertex-primitives-triangle-strip: fail
 spec/glsl-1.50/execution/compatibility/gs-clamp-vertex-color: fail
 spec/glsl-1.50/execution/geometry/clip-distance-bulk-copy: fail
 spec/glsl-1.50/execution/geometry/clip-distance-itemized-copy: fail
@@ -2743,8 +2728,8 @@ spec/glsl-1.50/execution/interface-vs-unnamed-to-fs-unnamed: fail
 spec/glsl-1.50/execution/primitive-id-no-gs: fail
 spec/glsl-1.50/execution/primitive-id-no-gs-first-vertex: fail
 spec/glsl-1.50/execution/primitive-id-no-gs-instanced: fail
-spec/glsl-1.50/execution/primitive-id-no-gs-quad-strip: crash
-spec/glsl-1.50/execution/primitive-id-no-gs-quads: crash
+spec/glsl-1.50/execution/primitive-id-no-gs-quad-strip: fail
+spec/glsl-1.50/execution/primitive-id-no-gs-quads: fail
 spec/glsl-1.50/execution/primitive-id-no-gs-strip: fail
 spec/glsl-1.50/execution/primitive-id-no-gs-strip-first-vertex: fail
 spec/glsl-1.50/execution/texturesize/tes-texturesize-isampler1d: skip

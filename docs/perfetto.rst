@@ -31,8 +31,17 @@ The exact supported features vary per driver:
    * - Driver
      - PPS Counters
      - Render Stages
+   * - Freedreno
+     - ``gpu.counters.msm``
+     - ``gpu.renderstages.msm``
+   * - Turnip
+     - ``gpu.counters.msm``
+     -
+   * - Intel
+     - ``gpu.counters.i915``
+     -
    * - Panfrost
-     - gpu.counters.panfrost
+     - ``gpu.counters.panfrost``
      -
 
 Run
@@ -75,6 +84,35 @@ Driver Specifics
 ~~~~~~~~~~~~~~~~
 
 Below is driver specific information/instructions for the PPS producer.
+
+Freedreno / Turnip
+^^^^^^^^^^^^^^^^^^
+
+The Freedreno PPS driver needs root access to read system-wide
+performance counters, so you can simply run it with sudo:
+
+.. code-block:: console
+
+   sudo ./build/src/tool/pps/pps-producer
+
+Intel
+^^^^^
+
+The Intel PPS driver needs root access to read system-wide
+`RenderBasic <https://software.intel.com/content/www/us/en/develop/documentation/vtune-help/top/reference/gpu-metrics-reference.html>`__
+performance counters, so you can simply run it with sudo:
+
+.. code-block:: console
+
+   sudo ./build/src/tool/pps/pps-producer
+
+Another option to enable access wide data without root permissions would be running the following:
+
+.. code-block:: console
+
+   sudo sysctl dev.i915.perf_stream_paranoid=0
+
+Alternatively using the ``CAP_PERFMON`` permission on the binary should work too.
 
 Panfrost
 ^^^^^^^^

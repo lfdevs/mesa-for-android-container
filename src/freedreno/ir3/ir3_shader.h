@@ -169,8 +169,6 @@ struct ir3_const_state {
    struct {
       /* user const start at zero */
       unsigned ubo;
-      /* NOTE that a3xx might need a section for SSBO addresses too */
-      unsigned ssbo_sizes;
       unsigned image_dims;
       unsigned driver_param;
       unsigned tfbo;
@@ -178,16 +176,6 @@ struct ir3_const_state {
       unsigned primitive_map;
       unsigned immediate;
    } offsets;
-
-   struct {
-      uint32_t mask;  /* bitmask of SSBOs that have get_ssbo_size */
-      uint32_t count; /* number of consts allocated */
-      /* one const allocated per SSBO which has get_ssbo_size,
-       * ssbo_sizes.off[ssbo_id] is offset from start of ssbo_sizes
-       * consts:
-       */
-      uint32_t off[IR3_MAX_SHADER_BUFFERS];
-   } ssbo_size;
 
    struct {
       uint32_t mask;  /* bitmask of images that have image_store */
@@ -313,6 +301,11 @@ struct ir3_shader_key {
          unsigned tessellation : 2;
 
          unsigned has_gs : 1;
+
+         /* Whether stages after TCS read gl_PrimitiveID, used to determine
+          * whether the TCS has to store it in the tess factor BO.
+          */
+         unsigned tcs_store_primid : 1;
 
          /* Whether this variant sticks to the "safe" maximum constlen,
           * which guarantees that the combined stages will never go over
@@ -991,6 +984,7 @@ void ir3_link_stream_out(struct ir3_shader_linkage *l,
 #define VARYING_SLOT_GS_HEADER_IR3       (VARYING_SLOT_MAX + 0)
 #define VARYING_SLOT_GS_VERTEX_FLAGS_IR3 (VARYING_SLOT_MAX + 1)
 #define VARYING_SLOT_TCS_HEADER_IR3      (VARYING_SLOT_MAX + 2)
+#define VARYING_SLOT_REL_PATCH_ID_IR3    (VARYING_SLOT_MAX + 3)
 
 static inline uint32_t
 ir3_find_sysval_regid(const struct ir3_shader_variant *so, unsigned slot)
@@ -1028,7 +1022,7 @@ ir3_shader_branchstack_hw(const struct ir3_shader_variant *v)
    if (!v->shader)
       return 0;
 
-   if (v->shader->compiler->gpu_id < 500)
+   if (v->shader->compiler->gen < 5)
       return v->branchstack;
 
    if (v->branchstack > 0) {

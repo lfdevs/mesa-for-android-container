@@ -77,7 +77,7 @@ bo_from_handle(struct fd_device *dev, uint32_t size, uint32_t handle)
    bo->size = size;
    bo->handle = handle;
    bo->iova = bo->funcs->iova(bo);
-   bo->flags = FD_RELOC_FLAGS_INIT;
+   bo->reloc_flags = FD_RELOC_FLAGS_INIT;
 
    p_atomic_set(&bo->refcnt, 1);
    list_inithead(&bo->list);
@@ -94,6 +94,10 @@ bo_new(struct fd_device *dev, uint32_t size, uint32_t flags,
    uint32_t handle;
    int ret;
 
+   /* demote cached-coherent to WC if not supported: */
+   if ((flags & FD_BO_CACHED_COHERENT) && !dev->has_cached_coherent)
+      flags &= ~FD_BO_CACHED_COHERENT;
+
    bo = fd_bo_cache_alloc(cache, &size, flags);
    if (bo)
       return bo;
@@ -106,6 +110,7 @@ bo_new(struct fd_device *dev, uint32_t size, uint32_t flags,
    bo = bo_from_handle(dev, size, handle);
    simple_mtx_unlock(&table_lock);
 
+   bo->alloc_flags = flags;
    bo->max_fences = 1;
    bo->fences = &bo->_inline_fence;
 
@@ -137,11 +142,11 @@ _fd_bo_set_name(struct fd_bo *bo, const char *fmt, va_list ap)
 struct fd_bo *
 fd_bo_new_ring(struct fd_device *dev, uint32_t size)
 {
-   uint32_t flags = FD_BO_GPUREADONLY;
+   uint32_t flags = FD_BO_GPUREADONLY | FD_BO_CACHED_COHERENT;
    struct fd_bo *bo = bo_new(dev, size, flags, &dev->ring_cache);
    if (bo) {
       bo->bo_reuse = RING_CACHE;
-      bo->flags |= FD_RELOC_DUMP;
+      bo->reloc_flags |= FD_RELOC_DUMP;
       fd_bo_set_name(bo, "cmdstream");
    }
    return bo;
@@ -239,7 +244,7 @@ out_unlock:
 void
 fd_bo_mark_for_dump(struct fd_bo *bo)
 {
-   bo->flags |= FD_RELOC_DUMP;
+   bo->reloc_flags |= FD_RELOC_DUMP;
 }
 
 uint64_t
@@ -428,6 +433,12 @@ uint32_t
 fd_bo_size(struct fd_bo *bo)
 {
    return bo->size;
+}
+
+bool
+fd_bo_is_cached(struct fd_bo *bo)
+{
+   return !!(bo->alloc_flags & FD_BO_CACHED_COHERENT);
 }
 
 void *

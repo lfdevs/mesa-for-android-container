@@ -122,7 +122,7 @@ aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
 
    fprintf(outfile, "Application name: %s\n", app_name);
 
-   fprintf(outfile, "Decoding as:      %s\n", intel_get_device_name(pci_id));
+   fprintf(outfile, "Decoding as:      %s\n", devinfo.name);
 
    /* Throw in a new line before the first batch */
    fprintf(outfile, "\n");

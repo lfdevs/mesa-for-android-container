@@ -77,12 +77,13 @@ blorp_batch_finish(struct blorp_batch *batch)
 }
 
 void
-brw_blorp_surface_info_init(struct blorp_context *blorp,
+brw_blorp_surface_info_init(struct blorp_batch *batch,
                             struct brw_blorp_surface_info *info,
                             const struct blorp_surf *surf,
                             unsigned int level, float layer,
-                            enum isl_format format, bool is_render_target)
+                            enum isl_format format, bool is_dest)
 {
+   struct blorp_context *blorp = batch->blorp;
    memset(info, 0, sizeof(*info));
    assert(level < surf->surf->levels);
    assert(layer < MAX2(surf->surf->logical_level0_px.depth >> level,
@@ -105,9 +106,18 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
    info->clear_color = surf->clear_color;
    info->clear_color_addr = surf->clear_color_addr;
 
+   isl_surf_usage_flags_t view_usage;
+   if (is_dest) {
+      if (batch->flags & BLORP_BATCH_USE_COMPUTE)
+         view_usage = ISL_SURF_USAGE_STORAGE_BIT;
+      else
+         view_usage = ISL_SURF_USAGE_RENDER_TARGET_BIT;
+   } else {
+      view_usage = ISL_SURF_USAGE_TEXTURE_BIT;
+   }
+
    info->view = (struct isl_view) {
-      .usage = is_render_target ? ISL_SURF_USAGE_RENDER_TARGET_BIT :
-                                  ISL_SURF_USAGE_TEXTURE_BIT,
+      .usage = view_usage,
       .format = format,
       .base_level = level,
       .levels = 1,
@@ -117,7 +127,7 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
    info->view.array_len = MAX2(info->surf.logical_level0_px.depth,
                                info->surf.logical_level0_px.array_len);
 
-   if (!is_render_target &&
+   if (!is_dest &&
        (info->surf.dim == ISL_SURF_DIM_3D ||
         info->surf.msaa_layout == ISL_MSAA_LAYOUT_ARRAY)) {
       /* 3-D textures don't support base_array layer and neither do 2-D
@@ -138,7 +148,7 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
    /* Sandy Bridge and earlier have a limit of a maximum of 512 layers for
     * layered rendering.
     */
-   if (is_render_target && blorp->isl_dev->info->ver <= 6)
+   if (is_dest && blorp->isl_dev->info->ver <= 6)
       info->view.array_len = MIN2(info->view.array_len, 512);
 
    if (surf->tile_x_sa || surf->tile_y_sa) {
@@ -174,13 +184,26 @@ blorp_params_init(struct blorp_params *params)
    params->num_layers = 1;
 }
 
+static void
+blorp_init_base_prog_key(struct brw_base_prog_key *key)
+{
+   for (int i = 0; i < MAX_SAMPLERS; i++)
+      key->tex.swizzles[i] = SWIZZLE_XYZW;
+}
+
 void
 brw_blorp_init_wm_prog_key(struct brw_wm_prog_key *wm_key)
 {
    memset(wm_key, 0, sizeof(*wm_key));
    wm_key->nr_color_regions = 1;
-   for (int i = 0; i < MAX_SAMPLERS; i++)
-      wm_key->base.tex.swizzles[i] = SWIZZLE_XYZW;
+   blorp_init_base_prog_key(&wm_key->base);
+}
+
+void
+brw_blorp_init_cs_prog_key(struct brw_cs_prog_key *cs_key)
+{
+   memset(cs_key, 0, sizeof(*cs_key));
+   blorp_init_base_prog_key(&cs_key->base);
 }
 
 const unsigned *
@@ -264,6 +287,56 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
    };
 
    return brw_compile_vs(compiler, mem_ctx, &params);
+}
+
+const unsigned *
+blorp_compile_cs(struct blorp_context *blorp, void *mem_ctx,
+                 struct nir_shader *nir,
+                 struct brw_cs_prog_key *cs_key,
+                 struct brw_cs_prog_data *cs_prog_data)
+{
+   const struct brw_compiler *compiler = blorp->compiler;
+
+   nir->options =
+      compiler->glsl_compiler_options[MESA_SHADER_COMPUTE].NirOptions;
+
+   memset(cs_prog_data, 0, sizeof(*cs_prog_data));
+
+   /* BLORP always uses the first two binding table entries:
+    * - Surface 0 is the destination image (which always start from 0)
+    * - Surface 1 is the source texture
+    */
+   cs_prog_data->base.binding_table.texture_start = BLORP_TEXTURE_BT_INDEX;
+
+   brw_preprocess_nir(compiler, nir, NULL);
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+   NIR_PASS_V(nir, nir_lower_io, nir_var_uniform, type_size_scalar_bytes,
+              (nir_lower_io_options)0);
+
+   STATIC_ASSERT(offsetof(struct brw_blorp_wm_inputs, subgroup_id) + 4 ==
+                 sizeof(struct brw_blorp_wm_inputs));
+   nir->num_uniforms = offsetof(struct brw_blorp_wm_inputs, subgroup_id);
+   unsigned nr_params = nir->num_uniforms / 4;
+   cs_prog_data->base.nr_params = nr_params;
+   cs_prog_data->base.param = rzalloc_array(NULL, uint32_t, nr_params);
+
+   NIR_PASS_V(nir, brw_nir_lower_cs_intrinsics);
+
+   struct brw_compile_cs_params params = {
+      .nir = nir,
+      .key = cs_key,
+      .prog_data = cs_prog_data,
+      .log_data = blorp->driver_ctx,
+      .debug_flag = DEBUG_BLORP,
+   };
+
+   const unsigned *program = brw_compile_cs(compiler, mem_ctx, &params);
+
+   ralloc_free(cs_prog_data->base.param);
+   cs_prog_data->base.param = NULL;
+
+   return program;
 }
 
 struct blorp_sf_key {
@@ -359,7 +432,7 @@ blorp_hiz_op(struct blorp_batch *batch, struct blorp_surf *surf,
    for (uint32_t a = 0; a < num_layers; a++) {
       const uint32_t layer = start_layer + a;
 
-      brw_blorp_surface_info_init(batch->blorp, &params.depth, surf, level,
+      brw_blorp_surface_info_init(batch, &params.depth, surf, level,
                                   layer, surf->surf->format, true);
 
       /* Align the rectangle primitive to 8x4 pixels.

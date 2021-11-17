@@ -39,6 +39,7 @@
 #include "egldisplay.h"
 
 #include "util/macros.h"
+#include "util/os_misc.h"
 
 #ifdef HAVE_MINCORE
 #include <unistd.h>
@@ -137,7 +138,8 @@ EGLBoolean
 _eglPointerIsDereferencable(void *p)
 {
    uintptr_t addr = (uintptr_t) p;
-   const long page_size = getpagesize();
+   uint64_t page_size = 0;
+   os_get_page_size(&page_size);
 #ifdef HAVE_MINCORE
    unsigned char valid = 0;
 

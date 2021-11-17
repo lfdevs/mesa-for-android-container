@@ -35,7 +35,11 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 #include <fcntl.h>
 #include "c11/threads.h"
 #include "util/macros.h"
@@ -60,6 +64,9 @@
 #ifdef HAVE_DRM_PLATFORM
 #include <gbm.h>
 #endif
+#ifdef HAVE_WINDOWS_PLATFORM
+#include <windows.h>
+#endif
 
 
 /**
@@ -77,6 +84,7 @@ static const struct {
    { _EGL_PLATFORM_HAIKU, "haiku" },
    { _EGL_PLATFORM_SURFACELESS, "surfaceless" },
    { _EGL_PLATFORM_DEVICE, "device" },
+   { _EGL_PLATFORM_WINDOWS, "windows" },
 };
 
 
@@ -123,10 +131,14 @@ _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
    if (nativeDisplay == EGL_DEFAULT_DISPLAY)
       return _EGL_INVALID_PLATFORM;
 
+#ifdef HAVE_WINDOWS_PLATFORM
+   if (GetObjectType(nativeDisplay) == OBJ_DC)
+      return _EGL_PLATFORM_WINDOWS;
+#endif
+
+#if defined(HAVE_WAYLAND_PLATFORM) || defined(HAVE_DRM_PLATFORM)
    if (_eglPointerIsDereferencable(nativeDisplay)) {
       void *first_pointer = *(void **) nativeDisplay;
-
-      (void) first_pointer; /* silence unused var warning */
 
 #ifdef HAVE_WAYLAND_PLATFORM
       /* wl_display is a wl_proxy, which is a wl_object.
@@ -141,6 +153,7 @@ _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
          return _EGL_PLATFORM_DRM;
 #endif
    }
+#endif
 
    return _EGL_INVALID_PLATFORM;
 }

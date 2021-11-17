@@ -51,6 +51,9 @@ fd6_context_destroy(struct pipe_context *pctx) in_dt
    u_upload_destroy(fd6_ctx->border_color_uploader);
    pipe_resource_reference(&fd6_ctx->border_color_buf, NULL);
 
+   if (fd6_ctx->streamout_disable_stateobj)
+      fd_ringbuffer_del(fd6_ctx->streamout_disable_stateobj);
+
    fd_context_destroy(pctx);
 
    if (fd6_ctx->vsc_draw_strm)
@@ -65,24 +68,6 @@ fd6_context_destroy(struct pipe_context *pctx) in_dt
 
    free(fd6_ctx);
 }
-
-/* clang-format off */
-static const uint8_t primtypes[] = {
-   [PIPE_PRIM_POINTS]                      = DI_PT_POINTLIST,
-   [PIPE_PRIM_LINES]                       = DI_PT_LINELIST,
-   [PIPE_PRIM_LINE_STRIP]                  = DI_PT_LINESTRIP,
-   [PIPE_PRIM_LINE_LOOP]                   = DI_PT_LINELOOP,
-   [PIPE_PRIM_TRIANGLES]                   = DI_PT_TRILIST,
-   [PIPE_PRIM_TRIANGLE_STRIP]              = DI_PT_TRISTRIP,
-   [PIPE_PRIM_TRIANGLE_FAN]                = DI_PT_TRIFAN,
-   [PIPE_PRIM_LINES_ADJACENCY]             = DI_PT_LINE_ADJ,
-   [PIPE_PRIM_LINE_STRIP_ADJACENCY]        = DI_PT_LINESTRIP_ADJ,
-   [PIPE_PRIM_TRIANGLES_ADJACENCY]         = DI_PT_TRI_ADJ,
-   [PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY]    = DI_PT_TRISTRIP_ADJ,
-   [PIPE_PRIM_PATCHES]                     = DI_PT_PATCHES0,
-   [PIPE_PRIM_MAX]                         = DI_PT_RECTLIST,  /* internal clear blits */
-};
-/* clang-format on */
 
 static void *
 fd6_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
@@ -101,7 +86,7 @@ fd6_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
    for (int32_t i = 0; i < num_elements; i++) {
       const struct pipe_vertex_element *elem = &elements[i];
       enum pipe_format pfmt = elem->src_format;
-      enum a6xx_format fmt = fd6_pipe2vtx(pfmt);
+      enum a6xx_format fmt = fd6_vertex_format(pfmt);
       bool isint = util_format_is_pure_integer(pfmt);
       debug_assert(fmt != FMT6_NONE);
 
@@ -110,7 +95,7 @@ fd6_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
                         A6XX_VFD_DECODE_INSTR_FORMAT(fmt) |
                         COND(elem->instance_divisor,
                              A6XX_VFD_DECODE_INSTR_INSTANCED) |
-                        A6XX_VFD_DECODE_INSTR_SWAP(fd6_pipe2swap(pfmt)) |
+                        A6XX_VFD_DECODE_INSTR_SWAP(fd6_vertex_swap(pfmt)) |
                         A6XX_VFD_DECODE_INSTR_UNK30 |
                         COND(!isint, A6XX_VFD_DECODE_INSTR_FLOAT));
       OUT_RING(ring,
@@ -245,7 +230,7 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
 
    setup_state_map(&fd6_ctx->base);
 
-   pctx = fd_context_init(&fd6_ctx->base, pscreen, primtypes, priv, flags);
+   pctx = fd_context_init(&fd6_ctx->base, pscreen, priv, flags);
    if (!pctx)
       return NULL;
 

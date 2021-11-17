@@ -61,19 +61,6 @@ struct asm_context {
    int subvector_begin_pos = -1;
 };
 
-static uint32_t
-get_sdwa_sel(unsigned sel, PhysReg reg)
-{
-   if (sel & sdwa_isra) {
-      unsigned size = sdwa_rasize & sel;
-      if (size == 1)
-         return reg.byte();
-      else /* size == 2 */
-         return sdwa_isword | (reg.byte() >> 1);
-   }
-   return sel & sdwa_asuint;
-}
-
 unsigned
 get_mimg_nsa_dwords(const Instruction* instr)
 {
@@ -715,23 +702,23 @@ emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction* inst
             }
             encoding |= (sdwa.clamp ? 1 : 0) << 13;
          } else {
-            encoding |= get_sdwa_sel(sdwa.dst_sel, instr->definitions[0].physReg()) << 8;
-            uint32_t dst_u = sdwa.dst_sel & sdwa_sext ? 1 : 0;
-            if (sdwa.dst_preserve || (sdwa.dst_sel & sdwa_isra))
+            encoding |= sdwa.dst_sel.to_sdwa_sel(instr->definitions[0].physReg().byte()) << 8;
+            uint32_t dst_u = sdwa.dst_sel.sign_extend() ? 1 : 0;
+            if (instr->definitions[0].bytes() < 4) /* dst_preserve */
                dst_u = 2;
             encoding |= dst_u << 11;
             encoding |= (sdwa.clamp ? 1 : 0) << 13;
             encoding |= sdwa.omod << 14;
          }
 
-         encoding |= get_sdwa_sel(sdwa.sel[0], sdwa_op.physReg()) << 16;
-         encoding |= sdwa.sel[0] & sdwa_sext ? 1 << 19 : 0;
+         encoding |= sdwa.sel[0].to_sdwa_sel(sdwa_op.physReg().byte()) << 16;
+         encoding |= sdwa.sel[0].sign_extend() ? 1 << 19 : 0;
          encoding |= sdwa.abs[0] << 21;
          encoding |= sdwa.neg[0] << 20;
 
          if (instr->operands.size() >= 2) {
-            encoding |= get_sdwa_sel(sdwa.sel[1], instr->operands[1].physReg()) << 24;
-            encoding |= sdwa.sel[1] & sdwa_sext ? 1 << 27 : 0;
+            encoding |= sdwa.sel[1].to_sdwa_sel(instr->operands[1].physReg().byte()) << 24;
+            encoding |= sdwa.sel[1].sign_extend() ? 1 << 27 : 0;
             encoding |= sdwa.abs[1] << 29;
             encoding |= sdwa.neg[1] << 28;
          }

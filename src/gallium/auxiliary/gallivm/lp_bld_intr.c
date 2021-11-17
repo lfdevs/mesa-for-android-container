@@ -86,6 +86,10 @@ lp_format_intrinsic(char *name,
       c = 'f';
       width = 64;
       break;
+   case LLVMHalfTypeKind:
+      c = 'f';
+      width = 16;
+      break;
    default:
       unreachable("unexpected LLVMTypeKind");
    }

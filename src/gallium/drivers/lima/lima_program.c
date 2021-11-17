@@ -61,6 +61,7 @@ static const nir_shader_compiler_options vs_nir_options = {
    .lower_fceil = true,
    .lower_insert_byte = true,
    .lower_insert_word = true,
+   .force_indirect_unrolling = (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp),
 };
 
 static const nir_shader_compiler_options fs_nir_options = {
@@ -80,6 +81,7 @@ static const nir_shader_compiler_options fs_nir_options = {
    .lower_insert_word = true,
    .lower_bitops = true,
    .lower_vector_cmp = true,
+   .force_indirect_unrolling = (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp),
 };
 
 const void *
@@ -131,10 +133,7 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
       NIR_PASS(progress, s, lima_nir_lower_ftrunc);
       NIR_PASS(progress, s, nir_opt_constant_folding);
       NIR_PASS(progress, s, nir_opt_undef);
-      NIR_PASS(progress, s, nir_opt_loop_unroll,
-               nir_var_shader_in |
-               nir_var_shader_out |
-               nir_var_function_temp);
+      NIR_PASS(progress, s, nir_opt_loop_unroll);
    } while (progress);
 
    NIR_PASS_V(s, nir_lower_int_to_float);
@@ -144,6 +143,7 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
 
    NIR_PASS_V(s, nir_copy_prop);
    NIR_PASS_V(s, nir_opt_dce);
+   NIR_PASS_V(s, lima_nir_split_loads);
    NIR_PASS_V(s, nir_lower_locals_to_regs);
    NIR_PASS_V(s, nir_convert_from_ssa, true);
    NIR_PASS_V(s, nir_remove_dead_variables, nir_var_function_temp, NULL);
@@ -236,10 +236,7 @@ lima_program_optimize_fs_nir(struct nir_shader *s,
       NIR_PASS(progress, s, nir_opt_algebraic);
       NIR_PASS(progress, s, nir_opt_constant_folding);
       NIR_PASS(progress, s, nir_opt_undef);
-      NIR_PASS(progress, s, nir_opt_loop_unroll,
-               nir_var_shader_in |
-               nir_var_shader_out |
-               nir_var_function_temp);
+      NIR_PASS(progress, s, nir_opt_loop_unroll);
       NIR_PASS(progress, s, lima_nir_split_load_input);
    } while (progress);
 

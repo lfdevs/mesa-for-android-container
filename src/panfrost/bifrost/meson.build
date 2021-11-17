@@ -19,6 +19,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+subdir('valhall')
+
 libpanfrost_bifrost_files = files(
   'bi_helper_invocations.c',
   'bi_layout.c',
@@ -36,7 +38,7 @@ libpanfrost_bifrost_files = files(
   'bi_ra.c',
   'bi_schedule.c',
   'bi_scoreboard.c',
-  'bi_test_pack.c',
+  'bi_validate.c',
   'bir.c',
   'bifrost_compile.c',
 )
@@ -138,3 +140,75 @@ libpanfrost_bifrost = static_library(
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
+
+if with_tests
+  test(
+    'bifrost_scheduler_predicates',
+    executable(
+      'bifrost_scheduler_predicates_test',
+      files('test/test-scheduler-predicates.c'),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      include_directories : [inc_include, inc_src, inc_mesa],
+      dependencies: [idep_nir, idep_bi_opcodes_h, idep_bi_builder_h],
+      link_with : [libpanfrost_bifrost],
+    ),
+    suite : ['panfrost'],
+  )
+
+  test(
+    'bifrost_packing',
+    executable(
+      'bifrost_packing_test',
+      files('test/test-packing.c'),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      include_directories : [inc_include, inc_src, inc_mesa],
+      dependencies: [idep_nir, idep_bi_opcodes_h, idep_bi_builder_h],
+      link_with : [libpanfrost_bifrost],
+    ),
+    suite : ['panfrost'],
+  )
+
+  test(
+    'bifrost_pack_formats',
+    executable(
+      'bifrost_pack_formats_test',
+      files('test/test-pack-formats.c'),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      include_directories : [inc_include, inc_src, inc_mesa],
+      dependencies: [idep_nir, idep_bi_opcodes_h, idep_bi_builder_h],
+      link_with : [libpanfrost_bifrost],
+    ),
+    suite : ['panfrost'],
+  )
+
+  test(
+    'bifrost_optimizer',
+    executable(
+      'bifrost_optimizer_test',
+      files('test/test-optimizer.c'),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      include_directories : [inc_include, inc_src, inc_mesa],
+      dependencies: [idep_nir, idep_bi_opcodes_h, idep_bi_builder_h],
+      link_with : [libpanfrost_bifrost],
+    ),
+    suite : ['panfrost'],
+  )
+
+  test(
+    'bifrost_constant_fold',
+    executable(
+      'bifrost_constant_fold_test',
+      files('test/test-constant-fold.c'),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      include_directories : [inc_include, inc_src, inc_mesa],
+      dependencies: [idep_nir, idep_bi_opcodes_h, idep_bi_builder_h],
+      link_with : [libpanfrost_bifrost],
+    ),
+    suite : ['panfrost'],
+  )
+endif

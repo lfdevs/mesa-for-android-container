@@ -100,6 +100,7 @@ struct fd6_emit {
    bool sprite_coord_mode;
    bool rasterflat;
    bool primitive_restart;
+   uint8_t patch_vertices;
 
    /* cached to avoid repeated lookups: */
    const struct fd6_program_state *prog;

@@ -25,26 +25,53 @@
 #include "freedreno_dev_info.h"
 #include "util/macros.h"
 
-extern const struct fd_dev_id fd_dev_ids[];
-extern const unsigned fd_dev_ids_count;
+/**
+ * Table entry for a single GPU version
+ */
+struct fd_dev_rec {
+   struct fd_dev_id id;
+   const char *name;
+   const struct fd_dev_info *info;
+};
+
+#include "freedreno_devices.h"
+
+static bool
+dev_id_compare(const struct fd_dev_id *a, const struct fd_dev_id *b)
+{
+   if (a->gpu_id && b->gpu_id) {
+      return a->gpu_id == b->gpu_id;
+   } else {
+      assert(a->chip_id && b->chip_id);
+      /* Match on either:
+       * (a) exact match
+       * (b) device table entry has 0xff wildcard patch_id and core/
+       *     major/minor match
+       */
+      return (a->chip_id == b->chip_id) ||
+             (((a->chip_id & 0xff) == 0xff) &&
+              ((a->chip_id & UINT64_C(0xffffff00)) ==
+               (b->chip_id & UINT64_C(0xffffff00))));
+   }
+}
 
 const struct fd_dev_info *
-fd_dev_info(uint32_t gpu_id)
+fd_dev_info(const struct fd_dev_id *id)
 {
-   for (int i = 0; i < fd_dev_ids_count; i++) {
-      if (gpu_id == fd_dev_ids[i].gpu_id) {
-         return fd_dev_ids[i].info;
+   for (int i = 0; i < ARRAY_SIZE(fd_dev_recs); i++) {
+      if (dev_id_compare(&fd_dev_recs[i].id, id)) {
+         return fd_dev_recs[i].info;
       }
    }
    return NULL;
 }
 
 const char *
-fd_dev_name(uint32_t gpu_id)
+fd_dev_name(const struct fd_dev_id *id)
 {
-   for (int i = 0; i < fd_dev_ids_count; i++) {
-      if (gpu_id == fd_dev_ids[i].gpu_id) {
-         return fd_dev_ids[i].name;
+   for (int i = 0; i < ARRAY_SIZE(fd_dev_recs); i++) {
+      if (dev_id_compare(&fd_dev_recs[i].id, id)) {
+         return fd_dev_recs[i].name;
       }
    }
    return NULL;

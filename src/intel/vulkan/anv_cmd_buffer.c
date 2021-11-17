@@ -268,10 +268,14 @@ static VkResult anv_create_cmd_buffer(
    struct anv_cmd_buffer *cmd_buffer;
    VkResult result;
 
-   cmd_buffer = vk_object_alloc(&device->vk, &pool->alloc, sizeof(*cmd_buffer),
-                                VK_OBJECT_TYPE_COMMAND_BUFFER);
+   cmd_buffer = vk_alloc2(&device->vk.alloc, &pool->alloc, sizeof(*cmd_buffer),
+                          8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (cmd_buffer == NULL)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(pool, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   result = vk_command_buffer_init(&cmd_buffer->vk, &device->vk);
+   if (result != VK_SUCCESS)
+      goto fail;
 
    cmd_buffer->batch.status = VK_SUCCESS;
 
@@ -303,7 +307,7 @@ static VkResult anv_create_cmd_buffer(
    return VK_SUCCESS;
 
  fail:
-   vk_free(&cmd_buffer->pool->alloc, cmd_buffer);
+   vk_free2(&device->vk.alloc, &pool->alloc, cmd_buffer);
 
    return result;
 }
@@ -353,7 +357,9 @@ anv_cmd_buffer_destroy(struct anv_cmd_buffer *cmd_buffer)
 
    vk_free(&cmd_buffer->pool->alloc, cmd_buffer->self_mod_locations);
 
-   vk_object_free(&cmd_buffer->device->vk, &cmd_buffer->pool->alloc, cmd_buffer);
+   vk_command_buffer_finish(&cmd_buffer->vk);
+   vk_free2(&cmd_buffer->device->vk.alloc, &cmd_buffer->pool->alloc,
+            cmd_buffer);
 }
 
 void anv_FreeCommandBuffers(
@@ -375,6 +381,8 @@ void anv_FreeCommandBuffers(
 VkResult
 anv_cmd_buffer_reset(struct anv_cmd_buffer *cmd_buffer)
 {
+   vk_command_buffer_reset(&cmd_buffer->vk);
+
    cmd_buffer->usage_flags = 0;
    cmd_buffer->perf_query_pool = NULL;
    anv_cmd_buffer_reset_batch_bo_chain(cmd_buffer);
@@ -1260,7 +1268,11 @@ VkResult anv_CreateCommandPool(
    pool = vk_object_alloc(&device->vk, pAllocator, sizeof(*pool),
                           VK_OBJECT_TYPE_COMMAND_POOL);
    if (pool == NULL)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   assert(pCreateInfo->queueFamilyIndex < device->physical->queue.family_count);
+   pool->queue_family =
+      &device->physical->queue.families[pCreateInfo->queueFamilyIndex];
 
    if (pAllocator)
       pool->alloc = *pAllocator;
@@ -1332,8 +1344,8 @@ anv_cmd_buffer_get_depth_stencil_view(const struct anv_cmd_buffer *cmd_buffer)
    const struct anv_image_view *iview =
       cmd_buffer->state.attachments[subpass->depth_stencil_attachment->attachment].image_view;
 
-   assert(iview->aspect_mask & (VK_IMAGE_ASPECT_DEPTH_BIT |
-                                VK_IMAGE_ASPECT_STENCIL_BIT));
+   assert(iview->vk.aspects & (VK_IMAGE_ASPECT_DEPTH_BIT |
+                               VK_IMAGE_ASPECT_STENCIL_BIT));
 
    return iview;
 }

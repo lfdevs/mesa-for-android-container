@@ -419,6 +419,16 @@ agx_translate_layout(uint64_t modifier)
    }
 }
 
+static enum agx_texture_dimension
+agx_translate_texture_dimension(enum pipe_texture_target dim)
+{
+   switch (dim) {
+   case PIPE_TEXTURE_2D: return AGX_TEXTURE_DIMENSION_2D;
+   case PIPE_TEXTURE_CUBE: return AGX_TEXTURE_DIMENSION_CUBE;
+   default: unreachable("Unsupported texture dimension");
+   }
+}
+
 static struct pipe_sampler_view *
 agx_create_sampler_view(struct pipe_context *pctx,
                         struct pipe_resource *texture,
@@ -449,9 +459,11 @@ agx_create_sampler_view(struct pipe_context *pctx,
    util_format_compose_swizzles(desc->swizzle, view_swizzle, out_swizzle);
 
    unsigned level = state->u.tex.first_level;
+   assert(state->u.tex.first_layer == 0);
 
    /* Pack the descriptor into GPU memory */
    agx_pack(so->desc->ptr.cpu, TEXTURE, cfg) {
+      cfg.dimension = agx_translate_texture_dimension(state->target);
       cfg.layout = agx_translate_layout(rsrc->modifier);
       cfg.format = agx_pixel_format[state->format].hw;
       cfg.swizzle_r = agx_channel_from_pipe(out_swizzle[0]);
@@ -462,7 +474,7 @@ agx_create_sampler_view(struct pipe_context *pctx,
       cfg.height = u_minify(texture->height0, level);
       cfg.levels = state->u.tex.last_level - level + 1;
       cfg.srgb = (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB);
-      cfg.unk_1 = rsrc->bo->ptr.gpu + rsrc->slices[level].offset;
+      cfg.address = rsrc->bo->ptr.gpu + rsrc->slices[level].offset;
       cfg.unk_2 = false;
 
       cfg.stride = (rsrc->modifier == DRM_FORMAT_MOD_LINEAR) ?
@@ -484,6 +496,7 @@ agx_set_sampler_views(struct pipe_context *pctx,
                       enum pipe_shader_type shader,
                       unsigned start, unsigned count,
                       unsigned unbind_num_trailing_slots,
+                      bool take_ownership,
                       struct pipe_sampler_view **views)
 {
    struct agx_context *ctx = agx_context(pctx);
@@ -499,8 +512,14 @@ agx_set_sampler_views(struct pipe_context *pctx,
       if (views[i])
          new_nr = i + 1;
 
-      pipe_sampler_view_reference((struct pipe_sampler_view **)
-                                  &ctx->stage[shader].textures[i], views[i]);
+      if (take_ownership) {
+         pipe_sampler_view_reference((struct pipe_sampler_view **)
+                                     &ctx->stage[shader].textures[i], NULL);
+         ctx->stage[shader].textures[i] = (struct agx_sampler_view *)views[i];
+      } else {
+         pipe_sampler_view_reference((struct pipe_sampler_view **)
+                                     &ctx->stage[shader].textures[i], views[i]);
+      }
    }
 
    for (; i < ctx->stage[shader].texture_count; i++) {
@@ -786,19 +805,22 @@ agx_create_vertex_elements(struct pipe_context *ctx,
    struct agx_attribute *attribs = calloc(sizeof(*attribs), AGX_MAX_ATTRIBS);
    for (unsigned i = 0; i < count; ++i) {
       const struct pipe_vertex_element ve = state[i];
-      assert(ve.instance_divisor == 0 && "no instancing");
 
       const struct util_format_description *desc =
          util_format_description(ve.src_format);
 
+      unsigned chan_size = desc->channel[0].size / 8;
+
+      assert(chan_size == 1 || chan_size == 2 || chan_size == 4);
       assert(desc->nr_channels >= 1 && desc->nr_channels <= 4);
-      assert((ve.src_offset & 0x3) == 0);
+      assert((ve.src_offset & (chan_size - 1)) == 0);
 
       attribs[i] = (struct agx_attribute) {
          .buf = ve.vertex_buffer_index,
-         .src_offset = ve.src_offset / 4,
+         .src_offset = ve.src_offset / chan_size,
          .nr_comps_minus_1 = desc->nr_channels - 1,
          .format = agx_vertex_format[ve.src_format],
+         .divisor = ve.instance_divisor
       };
    }
 
@@ -940,8 +962,7 @@ agx_update_vs(struct agx_context *ctx)
           sizeof(key.attributes[0]) * AGX_MAX_ATTRIBS);
 
    u_foreach_bit(i, ctx->vb_mask) {
-      assert((ctx->vertex_buffers[i].stride & 0x3) == 0);
-      key.vbuf_strides[i] = ctx->vertex_buffers[i].stride / 4;
+      key.vbuf_strides[i] = ctx->vertex_buffers[i].stride;
    }
 
    struct asahi_shader_key akey = {
@@ -1189,7 +1210,7 @@ agx_build_reload_pipeline(struct agx_context *ctx, uint32_t code, struct pipe_su
       cfg.height = surf->height;
       cfg.levels = 1;
       cfg.srgb = (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB);
-      cfg.unk_1 = rsrc->bo->ptr.gpu;
+      cfg.address = rsrc->bo->ptr.gpu;
       cfg.unk_2 = false;
 
       cfg.stride = (rsrc->modifier == DRM_FORMAT_MOD_LINEAR) ?
@@ -1521,8 +1542,6 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
 
    if (info->index_size && draws->index_bias)
       unreachable("todo: index bias");
-   if (info->instance_count != 1)
-      unreachable("todo: instancing");
 
    struct agx_context *ctx = agx_context(pctx);
    struct agx_batch *batch = ctx->batch;

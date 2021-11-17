@@ -73,10 +73,14 @@ files_mesa_util = files(
   'os_time.c',
   'os_time.h',
   'os_file.c',
+  'os_memory_fd.c',
   'os_misc.c',
   'os_misc.h',
   'os_socket.c',
   'os_socket.h',
+  'perf/u_trace.h',
+  'perf/u_trace.c',
+  'perf/u_trace_priv.h',
   'u_process.c',
   'u_process.h',
   'u_qsort.cpp',
@@ -114,8 +118,15 @@ files_mesa_util = files(
   'timespec.h',
   'u_atomic.c',
   'u_atomic.h',
+  'u_debug_describe.c',
+  'u_debug_describe.h',
+  'u_debug_refcnt.c',
+  'u_debug_refcnt.h',
   'u_dynarray.h',
   'u_endian.h',
+  'u_fifo.h',
+  'u_hash_table.c',
+  'u_hash_table.h',
   'u_queue.c',
   'u_queue.h',
   'u_string.h',
@@ -211,6 +222,8 @@ if with_perfetto
   )
   deps_for_libmesa_util += dep_perfetto
 endif
+
+u_trace_py = files('perf/u_trace.py')
 
 _libmesa_util = static_library(
   'mesa_util',
@@ -388,6 +401,17 @@ if with_tests
     files('tests/int_min_max.cpp'),
       include_directories : [inc_include, inc_src],
       dependencies : [idep_mesautil, idep_gtest],
+    ),
+    suite : ['util'],
+  )
+
+  test(
+    'dag',
+    executable(
+      'dag_test',
+      'tests/dag_test.cpp',
+      dependencies : [idep_mesautil, idep_gtest],
+      include_directories : [inc_include, inc_src],
     ),
     suite : ['util'],
   )

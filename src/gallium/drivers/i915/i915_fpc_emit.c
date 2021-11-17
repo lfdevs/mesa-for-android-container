@@ -192,7 +192,7 @@ i915_emit_texld(struct i915_fp_compile *p, uint32_t dest, uint32_t destmask,
        * program, texturing returns undefined results (even if the Y wrap is
        * REPEAT).
        */
-      coord = swizzle(coord, X, X, Y, Z);
+      coord = swizzle(coord, X, X, Z, W);
       FALLTHROUGH;
    case 2:
       ignore |= (0xf << UREG_CHANNEL_Z_SHIFT);

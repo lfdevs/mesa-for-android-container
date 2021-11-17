@@ -38,6 +38,7 @@
 #include "pipe/p_state.h"
 #include "util/u_draw.h"
 #include "util/u_framebuffer.h"
+#include "util/u_helpers.h"
 #include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
@@ -72,6 +73,8 @@ struct cso_context {
    boolean has_tessellation;
    boolean has_compute_shader;
    boolean has_streamout;
+
+   uint32_t max_fs_samplerviews : 16;
 
    unsigned saved_state;  /**< bitmask of CSO_BIT_x flags */
    unsigned saved_compute_state;  /**< bitmask of CSO_BIT_COMPUTE_x flags */
@@ -282,6 +285,9 @@ cso_create_context(struct pipe_context *pipe, unsigned flags)
       ctx->has_streamout = TRUE;
    }
 
+   ctx->max_fs_samplerviews = pipe->screen->get_shader_param(pipe->screen, PIPE_SHADER_FRAGMENT,
+                                                             PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS);
+
    ctx->max_sampler_seen = -1;
    return ctx;
 }
@@ -338,7 +344,7 @@ void cso_unbind_context(struct cso_context *ctx)
                ctx->pipe->bind_sampler_states(ctx->pipe, sh, 0, maxsam, zeros);
             }
             if (maxview > 0) {
-               ctx->pipe->set_sampler_views(ctx->pipe, sh, 0, maxview, 0, views);
+               ctx->pipe->set_sampler_views(ctx->pipe, sh, 0, maxview, 0, false, views);
             }
             if (maxssbo > 0) {
                ctx->pipe->set_shader_buffers(ctx->pipe, sh, 0, maxssbo, ssbos, 0);
@@ -1034,9 +1040,15 @@ cso_set_vertex_elements_direct(struct cso_context *ctx,
          return;
 
       memcpy(&cso->state, velems, key_size);
-      cso->data = ctx->pipe->create_vertex_elements_state(ctx->pipe,
-                                                          velems->count,
-                                                      &cso->state.velems[0]);
+
+      /* Lower 64-bit vertex attributes. */
+      unsigned new_count = velems->count;
+      const struct pipe_vertex_element *new_elems = velems->velems;
+      struct pipe_vertex_element tmp[PIPE_MAX_ATTRIBS];
+      util_lower_uint64_vertex_elements(&new_elems, &new_count, tmp);
+
+      cso->data = ctx->pipe->create_vertex_elements_state(ctx->pipe, new_count,
+                                                          new_elems);
 
       iter = cso_insert_state(&ctx->cache, hash_key, CSO_VELEMENTS, cso);
       if (cso_hash_iter_is_null(iter)) {
@@ -1472,46 +1484,60 @@ cso_save_state(struct cso_context *cso, unsigned state_mask)
  * Restore the state which was saved by cso_save_state().
  */
 void
-cso_restore_state(struct cso_context *cso)
+cso_restore_state(struct cso_context *cso, unsigned unbind)
 {
    unsigned state_mask = cso->saved_state;
 
    assert(state_mask);
 
-   if (state_mask & CSO_BIT_BLEND)
-      cso_restore_blend(cso);
    if (state_mask & CSO_BIT_DEPTH_STENCIL_ALPHA)
       cso_restore_depth_stencil_alpha(cso);
-   if (state_mask & CSO_BIT_FRAGMENT_SAMPLERS)
-      cso_restore_fragment_samplers(cso);
+   if (state_mask & CSO_BIT_STENCIL_REF)
+      cso_restore_stencil_ref(cso);
    if (state_mask & CSO_BIT_FRAGMENT_SHADER)
       cso_restore_fragment_shader(cso);
-   if (state_mask & CSO_BIT_FRAMEBUFFER)
-      cso_restore_framebuffer(cso);
    if (state_mask & CSO_BIT_GEOMETRY_SHADER)
       cso_restore_geometry_shader(cso);
-   if (state_mask & CSO_BIT_MIN_SAMPLES)
-      cso_restore_min_samples(cso);
+   if (state_mask & CSO_BIT_TESSEVAL_SHADER)
+      cso_restore_tesseval_shader(cso);
+   if (state_mask & CSO_BIT_TESSCTRL_SHADER)
+      cso_restore_tessctrl_shader(cso);
+   if (state_mask & CSO_BIT_VERTEX_SHADER)
+      cso_restore_vertex_shader(cso);
+   if (unbind & CSO_UNBIND_FS_SAMPLERVIEWS)
+      cso->pipe->set_sampler_views(cso->pipe, PIPE_SHADER_FRAGMENT, 0, 0,
+                                   cso->max_fs_samplerviews, false, NULL);
+   if (unbind & CSO_UNBIND_FS_SAMPLERVIEW0)
+      cso->pipe->set_sampler_views(cso->pipe, PIPE_SHADER_FRAGMENT, 0, 0,
+                                   1, false, NULL);
+   if (state_mask & CSO_BIT_FRAGMENT_SAMPLERS)
+      cso_restore_fragment_samplers(cso);
+   if (unbind & CSO_UNBIND_FS_IMAGE0)
+      cso->pipe->set_shader_images(cso->pipe, PIPE_SHADER_FRAGMENT, 0, 0, 1, NULL);
+   if (state_mask & CSO_BIT_FRAMEBUFFER)
+      cso_restore_framebuffer(cso);
+   if (state_mask & CSO_BIT_BLEND)
+      cso_restore_blend(cso);
    if (state_mask & CSO_BIT_RASTERIZER)
       cso_restore_rasterizer(cso);
+   if (state_mask & CSO_BIT_MIN_SAMPLES)
+      cso_restore_min_samples(cso);
    if (state_mask & CSO_BIT_RENDER_CONDITION)
       cso_restore_render_condition(cso);
    if (state_mask & CSO_BIT_SAMPLE_MASK)
       cso_restore_sample_mask(cso);
-   if (state_mask & CSO_BIT_STENCIL_REF)
-      cso_restore_stencil_ref(cso);
-   if (state_mask & CSO_BIT_STREAM_OUTPUTS)
-      cso_restore_stream_outputs(cso);
-   if (state_mask & CSO_BIT_TESSCTRL_SHADER)
-      cso_restore_tessctrl_shader(cso);
-   if (state_mask & CSO_BIT_TESSEVAL_SHADER)
-      cso_restore_tesseval_shader(cso);
-   if (state_mask & CSO_BIT_VERTEX_ELEMENTS)
-      cso_restore_vertex_elements(cso);
-   if (state_mask & CSO_BIT_VERTEX_SHADER)
-      cso_restore_vertex_shader(cso);
    if (state_mask & CSO_BIT_VIEWPORT)
       cso_restore_viewport(cso);
+   if (unbind & CSO_UNBIND_VS_CONSTANTS)
+      cso->pipe->set_constant_buffer(cso->pipe, PIPE_SHADER_VERTEX, 0, false, NULL);
+   if (unbind & CSO_UNBIND_FS_CONSTANTS)
+      cso->pipe->set_constant_buffer(cso->pipe, PIPE_SHADER_FRAGMENT, 0, false, NULL);
+   if (state_mask & CSO_BIT_VERTEX_ELEMENTS)
+      cso_restore_vertex_elements(cso);
+   if (unbind & CSO_UNBIND_VERTEX_BUFFER0)
+      cso->pipe->set_vertex_buffers(cso->pipe, 0, 0, 1, false, NULL);
+   if (state_mask & CSO_BIT_STREAM_OUTPUTS)
+      cso_restore_stream_outputs(cso);
    if (state_mask & CSO_BIT_PAUSE_QUERIES)
       cso->pipe->set_active_query_state(cso->pipe, true);
 

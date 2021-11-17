@@ -25,48 +25,39 @@
 #include "nir/nir_builder.h"
 #include "compiler/brw_compiler.h"
 
+static bool
+anv_nir_add_base_work_group_id_instr(nir_builder *b,
+                                     nir_instr *instr,
+                                     UNUSED void *cb_data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *load_id = nir_instr_as_intrinsic(instr);
+   if (load_id->intrinsic != nir_intrinsic_load_workgroup_id)
+      return false;
+
+   b->cursor = nir_after_instr(&load_id->instr);
+
+   nir_ssa_def *load_base =
+      nir_load_push_constant(b, 3, 32, nir_imm_int(b, 0),
+                             .base = offsetof(struct anv_push_constants, cs.base_work_group_id),
+                             .range = 3 * sizeof(uint32_t));
+
+   nir_ssa_def *id = nir_iadd(b, &load_id->dest.ssa, load_base);
+
+   nir_ssa_def_rewrite_uses_after(&load_id->dest.ssa, id, id->parent_instr);
+   return true;
+}
+
 bool
 anv_nir_add_base_work_group_id(nir_shader *shader)
 {
    assert(shader->info.stage == MESA_SHADER_COMPUTE);
 
-   nir_builder b;
-   bool progress = false;
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      nir_builder_init(&b, function->impl);
-
-      nir_foreach_block(block, function->impl) {
-         nir_foreach_instr_safe(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-
-            nir_intrinsic_instr *load_id = nir_instr_as_intrinsic(instr);
-            if (load_id->intrinsic != nir_intrinsic_load_workgroup_id)
-               continue;
-
-            b.cursor = nir_after_instr(&load_id->instr);
-
-            nir_ssa_def *load_base =
-               nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 0),
-                                      .base = offsetof(struct anv_push_constants, cs.base_work_group_id),
-                                      .range = 3 * sizeof(uint32_t));
-
-            nir_ssa_def *id = nir_iadd(&b, &load_id->dest.ssa,
-                                           load_base);
-
-            nir_ssa_def_rewrite_uses_after(&load_id->dest.ssa,
-                                           id,
-                                           id->parent_instr);
-            progress = true;
-         }
-      }
-
-      nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                            nir_metadata_dominance);
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader,
+                                       anv_nir_add_base_work_group_id_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

@@ -100,7 +100,7 @@ brw_codegen_tcs_prog(struct brw_context *brw, struct brw_program *tcp,
    }
 
    int st_index = -1;
-   if (((INTEL_DEBUG & DEBUG_SHADER_TIME) && tep))
+   if (INTEL_DEBUG(DEBUG_SHADER_TIME) && tep)
       st_index = brw_get_shader_time_index(brw, &tep->program, ST_TCS, true);
 
    if (unlikely(brw->perf_debug)) {

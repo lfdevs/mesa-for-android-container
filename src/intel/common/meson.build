@@ -95,7 +95,7 @@ if install_intel_gpu_tests
   endforeach
 endif
 
-if with_tests
+if with_tests and not with_platform_android
   gentest_xml = files('tests/gentest.xml')
   _name = 'gentest_pack.h'
   gentest_pack = custom_target(

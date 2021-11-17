@@ -38,8 +38,6 @@ tu_spirv_to_nir(struct tu_device *dev,
 {
    /* TODO these are made-up */
    const struct spirv_to_nir_options spirv_options = {
-      .frag_coord_is_sysval = true,
-
       .ubo_addr_format = nir_address_format_vec2_index_32bit_offset,
       .ssbo_addr_format = nir_address_format_vec2_index_32bit_offset,
 
@@ -95,40 +93,9 @@ tu_spirv_to_nir(struct tu_device *dev,
 
    /* convert VkSpecializationInfo */
    const VkSpecializationInfo *spec_info = stage_info->pSpecializationInfo;
-   struct nir_spirv_specialization *spec = NULL;
    uint32_t num_spec = 0;
-   if (spec_info && spec_info->mapEntryCount) {
-      spec = calloc(spec_info->mapEntryCount, sizeof(*spec));
-      if (!spec)
-         return NULL;
-
-      for (uint32_t i = 0; i < spec_info->mapEntryCount; i++) {
-         const VkSpecializationMapEntry *entry = &spec_info->pMapEntries[i];
-         const void *data = spec_info->pData + entry->offset;
-         assert(data + entry->size <= spec_info->pData + spec_info->dataSize);
-         spec[i].id = entry->constantID;
-         switch (entry->size) {
-         case 8:
-            spec[i].value.u64 = *(const uint64_t *)data;
-            break;
-         case 4:
-            spec[i].value.u32 = *(const uint32_t *)data;
-            break;
-         case 2:
-            spec[i].value.u16 = *(const uint16_t *)data;
-            break;
-         case 1:
-            spec[i].value.u8 = *(const uint8_t *)data;
-            break;
-         default:
-            assert(!"Invalid spec constant size");
-            break;
-         }
-         spec[i].defined_on_module = false;
-      }
-
-      num_spec = spec_info->mapEntryCount;
-   }
+   struct nir_spirv_specialization *spec =
+      vk_spec_info_to_nir_spirv(spec_info, &num_spec);
 
    struct vk_shader_module *module =
       vk_shader_module_from_handle(stage_info->module);
@@ -142,6 +109,11 @@ tu_spirv_to_nir(struct tu_device *dev,
 
    assert(nir->info.stage == stage);
    nir_validate_shader(nir, "after spirv_to_nir");
+
+   const struct nir_lower_sysvals_to_varyings_options sysvals_to_varyings = {
+      .point_coord = true,
+   };
+   NIR_PASS_V(nir, nir_lower_sysvals_to_varyings, &sysvals_to_varyings);
 
    if (unlikely(dev->physical_device->instance->debug_flags & TU_DEBUG_NIR)) {
       fprintf(stderr, "translated nir:\n");
@@ -373,7 +345,7 @@ build_bindless(nir_builder *b, nir_deref_instr *deref, bool is_sampler,
       const struct glsl_type *glsl_type = glsl_without_array(var->type);
       uint32_t idx = var->data.index * 2;
 
-      BITSET_SET_RANGE(b->shader->info.textures_used, idx * 2, ((idx * 2) + (bind_layout->array_size * 2)) - 1);
+      BITSET_SET_RANGE_INSIDE_WORD(b->shader->info.textures_used, idx * 2, ((idx * 2) + (bind_layout->array_size * 2)) - 1);
 
       /* D24S8 workaround: stencil of D24S8 will be sampled as uint */
       if (glsl_get_sampler_result_type(glsl_type) == GLSL_TYPE_UINT)
@@ -577,38 +549,25 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
    return true;
 }
 
+struct lower_instr_params {
+   struct tu_shader *shader;
+   const struct tu_pipeline_layout *layout;
+};
+
 static bool
-lower_impl(nir_function_impl *impl, struct tu_shader *shader,
-            const struct tu_pipeline_layout *layout)
+lower_instr(nir_builder *b, nir_instr *instr, void *cb_data)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   bool progress = false;
-
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         b.cursor = nir_before_instr(instr);
-         switch (instr->type) {
-         case nir_instr_type_tex:
-            progress |= lower_tex(&b, nir_instr_as_tex(instr), shader, layout);
-            break;
-         case nir_instr_type_intrinsic:
-            progress |= lower_intrinsic(&b, nir_instr_as_intrinsic(instr), shader, layout);
-            break;
-         default:
-            break;
-         }
-      }
+   struct lower_instr_params *params = cb_data;
+   b->cursor = nir_before_instr(instr);
+   switch (instr->type) {
+   case nir_instr_type_tex:
+      return lower_tex(b, nir_instr_as_tex(instr), params->shader, params->layout);
+   case nir_instr_type_intrinsic:
+      return lower_intrinsic(b, nir_instr_as_intrinsic(instr), params->shader, params->layout);
+   default:
+      return false;
    }
-
-   if (progress)
-      nir_metadata_preserve(impl, nir_metadata_none);
-   else
-      nir_metadata_preserve(impl, nir_metadata_all);
-
-   return progress;
 }
-
 
 /* Figure out the range of push constants that we're actually going to push to
  * the shader, and tell the backend to reserve this range when pushing UBO
@@ -660,14 +619,17 @@ static bool
 tu_lower_io(nir_shader *shader, struct tu_shader *tu_shader,
             const struct tu_pipeline_layout *layout)
 {
-   bool progress = false;
-
    gather_push_constants(shader, tu_shader);
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= lower_impl(function->impl, tu_shader, layout);
-   }
+   struct lower_instr_params params = {
+      .shader = tu_shader,
+      .layout = layout,
+   };
+
+   bool progress = nir_shader_instructions_pass(shader,
+                                                lower_instr,
+                                                nir_metadata_none,
+                                                &params);
 
    /* Remove now-unused variables so that when we gather the shader info later
     * they won't be counted.
@@ -682,50 +644,6 @@ tu_lower_io(nir_shader *shader, struct tu_shader *tu_shader,
                                 NULL);
 
    return progress;
-}
-
-static bool
-lower_image_size_filter(const nir_instr *instr, UNUSED const void *data)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-   if(intrin->intrinsic != nir_intrinsic_bindless_image_size)
-      return false;
-
-   return (intrin->num_components == 3 && nir_intrinsic_image_dim(intrin) == GLSL_SAMPLER_DIM_CUBE);
-}
-
-/* imageSize() expects the last component of the return value to be the
- * number of layers in the texture array. In the case of cube map array,
- * it will return a ivec3, with the third component being the number of
- * layer-faces. Therefore, we need to divide it by 6 (# faces of the
- * cube map).
- */
-static nir_ssa_def *
-lower_image_size_lower(nir_builder *b, nir_instr *instr, UNUSED void *data)
-{
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-   b->cursor = nir_after_instr(&intrin->instr);
-   nir_ssa_def *channels[NIR_MAX_VEC_COMPONENTS];
-   for (unsigned i = 0; i < intrin->num_components; i++) {
-      channels[i] = nir_vector_extract(b, &intrin->dest.ssa, nir_imm_int(b, i));
-   }
-
-   channels[2] = nir_idiv(b, channels[2], nir_imm_int(b, 6u));
-   nir_ssa_def *result = nir_vec(b, channels, intrin->num_components);
-
-   return result;
-}
-
-static bool
-tu_lower_image_size(nir_shader *shader)
-{
-   return nir_shader_lower_instructions(shader,
-                                        lower_image_size_filter,
-                                        lower_image_size_lower,
-                                        NULL);
 }
 
 static void
@@ -855,8 +773,6 @@ tu_shader_create(struct tu_device *dev,
       tu_gather_xfb_info(nir, &so_info);
 
    NIR_PASS_V(nir, tu_lower_io, shader, layout);
-
-   NIR_PASS_V(nir, tu_lower_image_size);
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 

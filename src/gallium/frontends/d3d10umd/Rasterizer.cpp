@@ -226,6 +226,7 @@ CreateRasterizerState(
    state.clip_halfz = 1;
    state.depth_clip_near = pRasterizerDesc->DepthClipEnable ? 1 : 0;
    state.depth_clip_far = pRasterizerDesc->DepthClipEnable ? 1 : 0;
+   state.depth_clamp = 1;
 
    state.point_quad_rasterization = 1;
    state.point_size = 1.0f;

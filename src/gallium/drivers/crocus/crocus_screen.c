@@ -127,14 +127,10 @@ static const char *
 crocus_get_name(struct pipe_screen *pscreen)
 {
    struct crocus_screen *screen = (struct crocus_screen *)pscreen;
+   const struct intel_device_info *devinfo = &screen->devinfo;
    static char buf[128];
 
-   const char *name = intel_get_device_name(screen->pci_id);
-
-   if (!name)
-      name = "Intel Unknown";
-
-   snprintf(buf, sizeof(buf), "Mesa %s", name);
+   snprintf(buf, sizeof(buf), "Mesa %s", devinfo->name);
    return buf;
 }
 
@@ -549,8 +545,7 @@ crocus_get_compute_param(struct pipe_screen *pscreen,
    struct crocus_screen *screen = (struct crocus_screen *)pscreen;
    const struct intel_device_info *devinfo = &screen->devinfo;
 
-   const unsigned max_threads = MIN2(64, devinfo->max_cs_threads);
-   const uint32_t max_invocations = 32 * max_threads;
+   const uint32_t max_invocations = 32 * devinfo->max_cs_workgroup_threads;
 
    if (devinfo->ver < 7)
       return 0;
@@ -679,29 +674,27 @@ crocus_get_default_l3_config(const struct intel_device_info *devinfo,
 }
 
 static void
-crocus_shader_debug_log(void *data, const char *fmt, ...)
+crocus_shader_debug_log(void *data, unsigned *id, const char *fmt, ...)
 {
    struct pipe_debug_callback *dbg = data;
-   unsigned id = 0;
    va_list args;
 
    if (!dbg->debug_message)
       return;
 
    va_start(args, fmt);
-   dbg->debug_message(dbg->data, &id, PIPE_DEBUG_TYPE_SHADER_INFO, fmt, args);
+   dbg->debug_message(dbg->data, id, PIPE_DEBUG_TYPE_SHADER_INFO, fmt, args);
    va_end(args);
 }
 
 static void
-crocus_shader_perf_log(void *data, const char *fmt, ...)
+crocus_shader_perf_log(void *data, unsigned *id, const char *fmt, ...)
 {
    struct pipe_debug_callback *dbg = data;
-   unsigned id = 0;
    va_list args;
    va_start(args, fmt);
 
-   if (unlikely(INTEL_DEBUG & DEBUG_PERF)) {
+   if (INTEL_DEBUG(DEBUG_PERF)) {
       va_list args_copy;
       va_copy(args_copy, args);
       vfprintf(stderr, fmt, args_copy);
@@ -709,7 +702,7 @@ crocus_shader_perf_log(void *data, const char *fmt, ...)
    }
 
    if (dbg->debug_message) {
-      dbg->debug_message(dbg->data, &id, PIPE_DEBUG_TYPE_PERF_INFO, fmt, args);
+      dbg->debug_message(dbg->data, id, PIPE_DEBUG_TYPE_PERF_INFO, fmt, args);
    }
 
    va_end(args);
@@ -753,7 +746,6 @@ crocus_screen_create(int fd, const struct pipe_screen_config *config)
    if (!intel_get_device_info_from_fd(fd, &screen->devinfo))
       return NULL;
    screen->pci_id = screen->devinfo.chipset_id;
-   screen->no_hw = screen->devinfo.no_hw;
 
    if (screen->devinfo.ver > 8)
       return NULL;
@@ -769,8 +761,8 @@ crocus_screen_create(int fd, const struct pipe_screen_config *config)
 
    screen->aperture_bytes = get_aperture_size(fd);
 
-   if (getenv("INTEL_NO_HW") != NULL)
-      screen->no_hw = true;
+   driParseConfigFiles(config->options, config->options_info, 0, "crocus",
+                       NULL, NULL, NULL, 0, NULL, 0);
 
    bool bo_reuse = false;
    int bo_reuse_mode = driQueryOptioni(config->options, "bo_reuse");
@@ -820,9 +812,6 @@ crocus_screen_create(int fd, const struct pipe_screen_config *config)
 
    slab_create_parent(&screen->transfer_pool,
                       sizeof(struct crocus_transfer), 64);
-
-   screen->subslice_total = intel_device_info_subslice_total(&screen->devinfo);
-   assert(screen->subslice_total >= 1);
 
    struct pipe_screen *pscreen = &screen->base;
 

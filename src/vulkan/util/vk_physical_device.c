@@ -205,3 +205,50 @@ vk_common_GetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice
 
    return result;
 }
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice,
+                                                       VkFormat format,
+                                                       VkImageType type,
+                                                       uint32_t samples,
+                                                       VkImageUsageFlags usage,
+                                                       VkImageTiling tiling,
+                                                       uint32_t *pNumProperties,
+                                                       VkSparseImageFormatProperties *pProperties)
+{
+   VK_FROM_HANDLE(vk_physical_device, pdevice, physicalDevice);
+
+   VkPhysicalDeviceSparseImageFormatInfo2 info = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2,
+      .format = format,
+      .type = type,
+      .samples = samples,
+      .usage = usage,
+      .tiling = tiling
+   };
+
+   if (!pProperties) {
+      pdevice->dispatch_table.GetPhysicalDeviceSparseImageFormatProperties2(physicalDevice,
+                                                                            &info,
+                                                                            pNumProperties,
+                                                                            NULL);
+      return;
+   }
+
+   STACK_ARRAY(VkSparseImageFormatProperties2, props2, *pNumProperties);
+
+   for (unsigned i = 0; i < *pNumProperties; ++i) {
+      props2[i].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2;
+      props2[i].pNext = NULL;
+   }
+
+   pdevice->dispatch_table.GetPhysicalDeviceSparseImageFormatProperties2(physicalDevice,
+                                                                         &info,
+                                                                         pNumProperties,
+                                                                         props2);
+
+   for (unsigned i = 0; i < *pNumProperties; ++i)
+      pProperties[i] = props2[i].properties;
+
+   STACK_ARRAY_FINISH(props2);
+}

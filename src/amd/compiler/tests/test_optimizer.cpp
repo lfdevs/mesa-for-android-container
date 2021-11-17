@@ -395,73 +395,6 @@ BEGIN_TEST(optimize.add_lshl)
    }
 END_TEST
 
-Temp create_mad_u32_u16(Operand a, Operand b, Operand c, bool is16bit = true)
-{
-   a.set16bit(is16bit);
-   b.set16bit(is16bit);
-
-   return bld.vop3(aco_opcode::v_mad_u32_u16, bld.def(v1), a, b, c);
-}
-
-BEGIN_TEST(optimize.mad_u32_u16)
-   for (unsigned i = GFX9; i <= GFX10; i++) {
-      //>> v1: %a, v1: %b, s1: %c = p_startpgm
-      if (!setup_cs("v1 v1 s1", (chip_class)i))
-         continue;
-
-      //! v1: %res0 = v_mul_u32_u24 (is16bit)%a, (is16bit)%b
-      //! p_unit_test 0, %res0
-      writeout(0, create_mad_u32_u16(Operand(inputs[0]), Operand(inputs[1]), Operand::zero()));
-
-      //! v1: %res1 = v_mul_u32_u24 42, (is16bit)%a
-      //! p_unit_test 1, %res1
-      writeout(1, create_mad_u32_u16(Operand::c32(42u), Operand(inputs[0]), Operand::zero()));
-
-      //! v1: %res2 = v_mul_u32_u24 42, (is16bit)%a
-      //! p_unit_test 2, %res2
-      writeout(2, create_mad_u32_u16(Operand(inputs[0]), Operand::c32(42u), Operand::zero()));
-
-      //! v1: %res3 = v_mul_u32_u24 (is16bit)%c, (is16bit)%a
-      //! p_unit_test 3, %res3
-      writeout(3, create_mad_u32_u16(Operand(inputs[2]), Operand(inputs[0]), Operand::zero()));
-
-      //! v1: %res4 = v_mad_u32_u16 42, (is16bit)%c, 0
-      //! p_unit_test 4, %res4
-      writeout(4, create_mad_u32_u16(Operand::c32(42u), Operand(inputs[2]), Operand::zero()));
-
-      //! v1: %res5 = v_mad_u32_u16 42, %a, 0
-      //! p_unit_test 5, %res5
-      writeout(5,
-               create_mad_u32_u16(Operand::c32(42u), Operand(inputs[0]), Operand::zero(), false));
-
-      //~gfx9! v1: %mul6 = v_mul_lo_u16 %a, %b
-      //~gfx9! v1: %res6 = v_add_u32 %mul6, %b
-      //~gfx10! v1: %mul6 = v_mul_lo_u16_e64 %a, %b
-      //~gfx10! v1: %res6 = v_add_u32 %mul6, %b
-      //! p_unit_test 6, %res6
-      Temp mul;
-      if (i >= GFX10) {
-         mul = bld.vop3(aco_opcode::v_mul_lo_u16_e64, bld.def(v1), inputs[0], inputs[1]);
-      } else {
-         mul = bld.vop2(aco_opcode::v_mul_lo_u16, bld.def(v1), inputs[0], inputs[1]);
-      }
-      writeout(6, bld.vadd32(bld.def(v1), mul, inputs[1]));
-
-      //~gfx9! v1: %res7 = v_mad_u32_u16 %a, %b, %b
-      //~gfx10! v1: (nuw)%mul7 = v_mul_lo_u16_e64 %a, %b
-      //~gfx10! v1: %res7 = v_add_u32 %mul7, %b
-      //! p_unit_test 7, %res7
-      if (i >= GFX10) {
-         mul = bld.nuw().vop3(aco_opcode::v_mul_lo_u16_e64, bld.def(v1), inputs[0], inputs[1]);
-      } else {
-         mul = bld.nuw().vop2(aco_opcode::v_mul_lo_u16, bld.def(v1), inputs[0], inputs[1]);
-      }
-      writeout(7, bld.vadd32(bld.def(v1), mul, inputs[1]));
-
-      finish_opt_test();
-   }
-END_TEST
-
 BEGIN_TEST(optimize.bcnt)
    for (unsigned i = GFX8; i <= GFX10; i++) {
       //>> v1: %a, s1: %b = p_startpgm
@@ -869,8 +802,7 @@ BEGIN_TEST(optimize.add_lshlrev)
       lshl = bld.vop2(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand::c32(4u), a_16bit);
       writeout(4, bld.vadd32(bld.def(v1), lshl, Operand(inputs[1])));
 
-      //~gfx8! v1: %lshl5 = v_lshlrev_b32 4, (is24bit)%c
-      //~gfx8! v1: %res5, s2: %_ = v_add_co_u32 %c, %lshl5
+      //~gfx8! v1: %res5 = v_mad_u32_u24 (is24bit)%c, 16, %c
       //~gfx(9|10)! v1: %res5 = v_lshl_add_u32 (is24bit)%c, 4, %c
       //! p_unit_test 5, %res5
       Operand c_24bit = Operand(inputs[2]);
@@ -1020,3 +952,125 @@ BEGIN_TEST(optimize.denorm_propagation)
       }
    }
 END_TEST
+
+BEGIN_TEST(optimizer.dpp)
+   //>> v1: %a, v1: %b, s2: %c = p_startpgm
+   if (!setup_cs("v1 v1 s2", GFX10_3))
+      return;
+
+   Operand a(inputs[0]);
+   Operand b(inputs[1]);
+   Operand c(inputs[2]);
+
+   /* basic optimization */
+   //! v1: %res0 = v_add_f32 %a, %b row_mirror bound_ctrl:1
+   //! p_unit_test 0, %res0
+   Temp tmp0 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
+   Temp res0 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1), tmp0, b);
+   writeout(0, res0);
+
+   /* operand swapping */
+   //! v1: %res1 = v_subrev_f32 %a, %b row_mirror bound_ctrl:1
+   //! p_unit_test 1, %res1
+   Temp tmp1 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
+   Temp res1 = bld.vop2(aco_opcode::v_sub_f32, bld.def(v1), b, tmp1);
+   writeout(1, res1);
+
+   //! v1: %tmp2 = v_mov_b32 %a row_mirror bound_ctrl:1
+   //! v1: %res2 = v_sub_f32 %b, %tmp2 row_half_mirror bound_ctrl:1
+   //! p_unit_test 2, %res2
+   Temp tmp2 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
+   Temp res2 = bld.vop2_dpp(aco_opcode::v_sub_f32, bld.def(v1), b, tmp2, dpp_row_half_mirror);
+   writeout(2, res2);
+
+   /* modifiers */
+   //! v1: %res3 = v_add_f32 -%a, %b row_mirror bound_ctrl:1
+   //! p_unit_test 3, %res3
+   auto tmp3 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
+   tmp3.instr->dpp().neg[0] = true;
+   Temp res3 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1), tmp3, b);
+   writeout(3, res3);
+
+   //! v1: %res4 = v_add_f32 -%a, %b row_mirror bound_ctrl:1
+   //! p_unit_test 4, %res4
+   Temp tmp4 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
+   auto res4 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1), tmp4, b);
+   res4.instr->vop3().neg[0] = true;
+   writeout(4, res4);
+
+   //! v1: %tmp5 = v_mov_b32 %a row_mirror bound_ctrl:1
+   //! v1: %res5 = v_add_f32 %tmp5, %b clamp
+   //! p_unit_test 5, %res5
+   Temp tmp5 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
+   auto res5 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1), tmp5, b);
+   res5.instr->vop3().clamp = true;
+   writeout(5, res5);
+
+   //! v1: %res6 = v_add_f32 |%a|, %b row_mirror bound_ctrl:1
+   //! p_unit_test 6, %res6
+   auto tmp6 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
+   tmp6.instr->dpp().neg[0] = true;
+   auto res6 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1), tmp6, b);
+   res6.instr->vop3().abs[0] = true;
+   writeout(6, res6);
+
+   //! v1: %res7 = v_subrev_f32 %a, |%b| row_mirror bound_ctrl:1
+   //! p_unit_test 7, %res7
+   Temp tmp7 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
+   auto res7 = bld.vop2_e64(aco_opcode::v_sub_f32, bld.def(v1), b, tmp7);
+   res7.instr->vop3().abs[0] = true;
+   writeout(7, res7);
+
+   /* vcc */
+   //! v1: %res8 = v_cndmask_b32 %a, %b, %c:vcc row_mirror bound_ctrl:1
+   //! p_unit_test 8, %res8
+   Temp tmp8 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
+   Temp res8 = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), tmp8, b, c);
+   writeout(8, res8);
+
+   finish_opt_test();
+END_TEST
+
+BEGIN_TEST(optimize.dpp_prop)
+   //>> v1: %a, s1: %b = p_startpgm
+   if (!setup_cs("v1 s1", GFX10))
+      return;
+
+   //! v1: %one = p_parallelcopy 1
+   //! v1: %res0 = v_mul_f32 1, %a
+   //! p_unit_test 0, %res0
+   Temp one = bld.copy(bld.def(v1), Operand::c32(1));
+   writeout(0, bld.vop2_dpp(aco_opcode::v_mul_f32, bld.def(v1), one, inputs[0], dpp_row_sl(1)));
+
+   //! v1: %res1 = v_mul_f32 %a, %one row_shl:1 bound_ctrl:1
+   //! p_unit_test 1, %res1
+   writeout(1, bld.vop2_dpp(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], one, dpp_row_sl(1)));
+
+   //! v1: %res2 = v_mul_f32 0x12345678, %a
+   //! p_unit_test 2, %res2
+   Temp literal1 = bld.copy(bld.def(v1), Operand::c32(0x12345678u));
+   writeout(2, bld.vop2_dpp(aco_opcode::v_mul_f32, bld.def(v1), literal1, inputs[0], dpp_row_sl(1)));
+
+   //! v1: %literal2 = p_parallelcopy 0x12345679
+   //! v1: %res3 = v_mul_f32 %a, %literal row_shl:1 bound_ctrl:1
+   //! p_unit_test 3, %res3
+   Temp literal2 = bld.copy(bld.def(v1), Operand::c32(0x12345679u));
+   writeout(3, bld.vop2_dpp(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], literal2, dpp_row_sl(1)));
+
+   //! v1: %b_v = p_parallelcopy %b
+   //! v1: %res4 = v_mul_f32 %b, %a
+   //! p_unit_test 4, %res4
+   Temp b_v = bld.copy(bld.def(v1), inputs[1]);
+   writeout(4, bld.vop2_dpp(aco_opcode::v_mul_f32, bld.def(v1), b_v, inputs[0], dpp_row_sl(1)));
+
+   //! v1: %res5 = v_mul_f32 %a, %b_v row_shl:1 bound_ctrl:1
+   //! p_unit_test 5, %res5
+   writeout(5, bld.vop2_dpp(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], b_v, dpp_row_sl(1)));
+
+   //! v1: %res6 = v_rcp_f32 %b
+   //! p_unit_test 6, %res6
+   writeout(6, bld.vop1_dpp(aco_opcode::v_rcp_f32, bld.def(v1), b_v, dpp_row_sl(1)));
+
+   finish_opt_test();
+END_TEST
+

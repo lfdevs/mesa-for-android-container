@@ -47,6 +47,23 @@ extern struct _glapi_table *__glXNewIndirectAPI(void);
 static struct _glapi_table *IndirectAPI = NULL;
 
 static void
+__glFreeAttributeState(struct glx_context * gc)
+{
+   __GLXattribute *sp, **spp;
+
+   for (spp = &gc->attributes.stack[0];
+        spp < &gc->attributes.stack[__GL_CLIENT_ATTRIB_STACK_DEPTH]; spp++) {
+      sp = *spp;
+      if (sp) {
+         free((char *) sp);
+      }
+      else {
+         break;
+      }
+   }
+}
+
+static void
 indirect_destroy_context(struct glx_context *gc)
 {
    __glXFreeVertexArrayState(gc);
@@ -253,10 +270,6 @@ indirect_create_context(struct glx_screen *psc,
  * \todo Eliminate \c __glXInitVertexArrayState.  Replace it with a new
  * function called \c __glXAllocateClientState that allocates the memory and
  * does all the initialization (including the pixel pack / unpack).
- *
- * \note
- * This function is \b not the place to validate the context creation
- * parameters.  It is just the allocator for the \c glx_context.
  */
 _X_HIDDEN struct glx_context *
 indirect_create_context_attribs(struct glx_screen *psc,
@@ -301,6 +314,10 @@ indirect_create_context_attribs(struct glx_screen *psc,
        minor > 4) {
       return NULL;
    }
+
+   /* We can't share with a direct context */
+   if (shareList && shareList->isDirect)
+      return NULL;
 
    /* Allocate our context record */
    gc = calloc(1, sizeof *gc);

@@ -40,6 +40,7 @@
 #include "swrast/s_renderbuffer.h"
 
 #include "utils.h"
+#include "util/debug.h"
 #include "util/driconf.h"
 #include "util/u_memory.h"
 
@@ -1019,7 +1020,7 @@ intel_init_bufmgr(struct intel_screen *intelScreen)
 {
    __DRIscreen *spriv = intelScreen->driScrnPriv;
 
-   intelScreen->no_hw = getenv("INTEL_NO_HW") != NULL;
+   intelScreen->no_hw = env_var_as_boolean("INTEL_NO_HW", false);
 
    intelScreen->bufmgr = intel_bufmgr_gem_init(spriv->fd, BATCH_SZ);
    if (intelScreen->bufmgr == NULL) {

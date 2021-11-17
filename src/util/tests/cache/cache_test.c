@@ -192,7 +192,7 @@ cache_exists(struct disk_cache *cache)
 #define CACHE_TEST_TMP "./cache-test-tmp"
 
 static void
-test_disk_cache_create(void)
+test_disk_cache_create(const char *cache_dir_name)
 {
    struct disk_cache *cache;
    int err;
@@ -255,8 +255,10 @@ test_disk_cache_create(void)
    expect_true(cache_exists(cache), "disk_cache_create with XDG_CACHE_HOME "
                "set");
 
-   check_directories_created(CACHE_TEST_TMP "/xdg-cache-home/"
-                             CACHE_DIR_NAME);
+   char *path;
+   asprintf(&path, "%s%s", CACHE_TEST_TMP "/xdg-cache-home/", cache_dir_name);
+   check_directories_created(path);
+   free(path);
 
    disk_cache_destroy(cache);
 
@@ -281,14 +283,16 @@ test_disk_cache_create(void)
    expect_true(cache_exists(cache), "disk_cache_create with "
                "MESA_GLSL_CACHE_DIR set");
 
-   check_directories_created(CACHE_TEST_TMP "/mesa-glsl-cache-dir/"
-                             CACHE_DIR_NAME);
+   asprintf(&path, "%s%s", CACHE_TEST_TMP "/mesa-glsl-cache-dir/",
+            cache_dir_name);
+   check_directories_created(path);
+   free(path);
 
    disk_cache_destroy(cache);
 }
 
 static void
-test_put_and_get(void)
+test_put_and_get(bool test_cache_size_limit)
 {
    struct disk_cache *cache;
    char blob[] = "This is a blob of thirty-seven bytes";
@@ -341,6 +345,9 @@ test_put_and_get(void)
 
    /* Set the cache size to 1KB and add a 1KB item to force an eviction. */
    disk_cache_destroy(cache);
+
+   if (!test_cache_size_limit)
+      return;
 
    setenv("MESA_GLSL_CACHE_MAX_SIZE", "1K", 1);
    cache = disk_cache_create("test", "make_check", 0);
@@ -517,22 +524,127 @@ test_put_key_and_get_key(void)
 
    disk_cache_destroy(cache);
 }
+
+/* To make sure we are not just using the inmemory cache index for the single
+ * file cache we test adding and retriving cache items between two different
+ * cache instances.
+ */
+static void
+test_put_and_get_between_instances()
+{
+   char blob[] = "This is a blob of thirty-seven bytes";
+   uint8_t blob_key[20];
+   char string[] = "While this string has thirty-four";
+   uint8_t string_key[20];
+   char *result;
+   size_t size;
+
+#ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
+   setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
+#endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
+
+   struct disk_cache *cache1 = disk_cache_create("test_between_instances",
+                                                 "make_check", 0);
+   struct disk_cache *cache2 = disk_cache_create("test_between_instances",
+                                                 "make_check", 0);
+
+   disk_cache_compute_key(cache1, blob, sizeof(blob), blob_key);
+
+   /* Ensure that disk_cache_get returns nothing before anything is added. */
+   result = disk_cache_get(cache1, blob_key, &size);
+   expect_null(result, "disk_cache_get(cache1) with non-existent item (pointer)");
+   expect_equal(size, 0, "disk_cache_get(cach1) with non-existent item (size)");
+
+   result = disk_cache_get(cache2, blob_key, &size);
+   expect_null(result, "disk_cache_get(cache2) with non-existent item (pointer)");
+   expect_equal(size, 0, "disk_cache_get(cache2) with non-existent item (size)");
+
+   /* Simple test of put and get. */
+   disk_cache_put(cache1, blob_key, blob, sizeof(blob), NULL);
+
+   /* disk_cache_put() hands things off to a thread so wait for it. */
+   disk_cache_wait_for_idle(cache1);
+
+   result = disk_cache_get(cache2, blob_key, &size);
+   expect_equal_str(blob, result, "disk_cache_get(cache2) of existing item (pointer)");
+   expect_equal(size, sizeof(blob), "disk_cache_get of(cache2) existing item (size)");
+
+   free(result);
+
+   /* Test put and get of a second item, via the opposite instances */
+   disk_cache_compute_key(cache2, string, sizeof(string), string_key);
+   disk_cache_put(cache2, string_key, string, sizeof(string), NULL);
+
+   /* disk_cache_put() hands things off to a thread so wait for it. */
+   disk_cache_wait_for_idle(cache2);
+
+   result = disk_cache_get(cache1, string_key, &size);
+   expect_equal_str(result, string, "2nd disk_cache_get(cache1) of existing item (pointer)");
+   expect_equal(size, sizeof(string), "2nd disk_cache_get(cache1) of existing item (size)");
+
+   free(result);
+
+   disk_cache_destroy(cache1);
+   disk_cache_destroy(cache2);
+}
 #endif /* ENABLE_SHADER_CACHE */
+
+static void
+test_multi_file_cache(void)
+{
+   int err;
+
+   printf("Test multi file disk cache - Start\n");
+
+   test_disk_cache_create(CACHE_DIR_NAME);
+
+   test_put_and_get(true);
+
+   test_put_key_and_get_key();
+
+   printf("Test multi file disk cache - End\n");
+
+   err = rmrf_local(CACHE_TEST_TMP);
+   expect_equal(err, 0, "Removing " CACHE_TEST_TMP " again");
+}
+
+static void
+test_single_file_cache(void)
+{
+   int err;
+
+   printf("Test single file disk cache - Start\n");
+
+   setenv("MESA_DISK_CACHE_SINGLE_FILE", "true", 1);
+
+   test_disk_cache_create(CACHE_DIR_NAME_SF);
+
+   /* We skip testing cache size limit as the single file cache currently
+    * doesn't have any functionality to enforce cache size limits.
+    */
+   test_put_and_get(false);
+
+   test_put_key_and_get_key();
+
+   test_put_and_get_between_instances();
+
+   setenv("MESA_DISK_CACHE_SINGLE_FILE", "false", 1);
+
+   printf("Test single file disk cache - End\n");
+
+   err = rmrf_local(CACHE_TEST_TMP);
+   expect_equal(err, 0, "Removing " CACHE_TEST_TMP " again");
+}
 
 int
 main(void)
 {
 #ifdef ENABLE_SHADER_CACHE
-   int err;
 
-   test_disk_cache_create();
+   test_multi_file_cache();
 
-   test_put_and_get();
+   test_single_file_cache();
 
-   test_put_key_and_get_key();
-
-   err = rmrf_local(CACHE_TEST_TMP);
-   expect_equal(err, 0, "Removing " CACHE_TEST_TMP " again");
 #endif /* ENABLE_SHADER_CACHE */
 
    return error ? 1 : 0;

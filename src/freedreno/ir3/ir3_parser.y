@@ -333,6 +333,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_A_IN
 %token <tok> T_A_OUT
 %token <tok> T_A_TEX
+%token <tok> T_A_PVTMEM
 /* todo, re-add @sampler/@uniform/@varying if needed someday */
 
 /* src register flags */
@@ -655,6 +656,7 @@ header:            localsize_header
 |                  in_header
 |                  out_header
 |                  tex_header
+|                  pvtmem_header
 
 const_val:         T_FLOAT   { $$ = fui($1); }
 |                  T_INT     { $$ = $1;      }
@@ -696,8 +698,15 @@ invocationid_header: T_A_INVOCATIONID '(' T_REGISTER ')' {
 wgid_header:       T_A_WGID '(' T_REGISTER ')' {
                        assert(($3 & 0x1) == 0);  /* half-reg not allowed */
                        unsigned reg = $3 >> 1;
+                       assert(variant->shader->compiler->gen >= 5);
                        assert(reg >= regid(48, 0)); /* must be a high reg */
                        add_sysval(reg, 0x7, SYSTEM_VALUE_WORKGROUP_ID);
+}
+|                  T_A_WGID '(' T_CONSTANT ')' {
+                       assert(($3 & 0x1) == 0);  /* half-reg not allowed */
+                       unsigned reg = $3 >> 1;
+                       assert(variant->shader->compiler->gen < 5);
+                       info->wgid = reg;
 }
 
 numwg_header:      T_A_NUMWG '(' T_CONSTANT ')' {
@@ -705,10 +714,13 @@ numwg_header:      T_A_NUMWG '(' T_CONSTANT ')' {
                        unsigned reg = $3 >> 1;
                        info->numwg = reg;
                        /* reserve space in immediates for the actual value to be plugged in later: */
-                       add_const($3, 0, 0, 0, 0);
+                       if (variant->shader->compiler->gen >= 5)
+                          add_const($3, 0, 0, 0, 0);
 }
 
 branchstack_header: T_A_BRANCHSTACK const_val { variant->branchstack = $2; }
+
+pvtmem_header: T_A_PVTMEM const_val { variant->pvtmem_size = $2; }
 
 /* Stubs for now */
 in_header:         T_A_IN '(' T_REGISTER ')' T_IDENTIFIER '(' T_IDENTIFIER '=' integer ')' { }
@@ -1030,15 +1042,13 @@ cat6_load:         T_OP_LDG   { new_instr(OPC_LDG); }   cat6_type dst_reg ',' 'g
                        new_src(0, IR3_REG_IMMED)->iim_val = $8;
                    } ',' immediate
 
-// TODO some of the cat6 instructions have different syntax for a6xx..
-//|                  T_OP_LDIB { new_instr(OPC_LDIB); } cat6_type dst_reg cat6_offset ',' reg ',' cat6_immed
-
 cat6_store:        T_OP_STG   { new_instr(OPC_STG); dummy_dst(); }   cat6_type 'g' '[' src cat6_imm_offset ']' ',' src ',' immediate
 |                  T_OP_STG_A { new_instr(OPC_STG_A); dummy_dst(); } cat6_type 'g' '[' src cat6_stg_ldg_a6xx_offset ']' ',' src ',' immediate
 |                  T_OP_STP  { new_instr(OPC_STP); dummy_dst(); }  cat6_type 'p' '[' src cat6_dst_offset ']' ',' src ',' immediate
 |                  T_OP_STL  { new_instr(OPC_STL); dummy_dst(); }  cat6_type 'l' '[' src cat6_dst_offset ']' ',' src ',' immediate
 |                  T_OP_STLW { new_instr(OPC_STLW); dummy_dst(); } cat6_type 'l' '[' src cat6_dst_offset ']' ',' src ',' immediate
 
+cat6_loadib:       T_OP_LDIB { new_instr(OPC_LDIB); } cat6_typed cat6_dim cat6_type '.' cat6_immed dst_reg ',' 'g' '[' immediate ']' ',' src ',' src
 cat6_storeib:      T_OP_STIB { new_instr(OPC_STIB); dummy_dst(); } cat6_typed cat6_dim cat6_type '.' cat6_immed'g' '[' immediate ']' ',' src ',' src ',' src
 
 cat6_prefetch:     T_OP_PREFETCH { new_instr(OPC_PREFETCH); new_dst(0,0); /* dummy dst */ } 'g' '[' src cat6_offset ']' ',' cat6_immed
@@ -1124,6 +1134,7 @@ cat6_todo:         T_OP_G2L                 { new_instr(OPC_G2L); }
 |                  T_OP_RESFMT              { new_instr(OPC_RESFMT); }
 
 cat6_instr:        cat6_load
+|                  cat6_loadib
 |                  cat6_store
 |                  cat6_storeib
 |                  cat6_prefetch

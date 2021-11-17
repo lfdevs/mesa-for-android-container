@@ -1,3 +1,18 @@
+mesa (21.3.0~rc5-1) experimental; urgency=medium
+
+  * New upstream prerelease.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 17 Nov 2021 10:42:29 +0200
+
+mesa (21.3.0~rc1-1) experimental; urgency=medium
+
+  * New upstream prerelease.
+  * fix-python-shebang.diff: Dropped, upstream.
+  * libgbm1.symbols: Updated.
+  * rules: Enable crocus gallium driver. (LP: #1947200)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 20 Oct 2021 11:40:14 +0300
+
 mesa (21.2.4-1) unstable; urgency=medium
 
   * New upstream release.

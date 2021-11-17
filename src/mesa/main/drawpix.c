@@ -73,8 +73,7 @@ _mesa_DrawPixels( GLsizei width, GLsizei height,
     */
    _mesa_set_vp_override(ctx, GL_TRUE);
 
-   if (ctx->NewState & _NEW_PIXEL)
-      _mesa_update_pixel(ctx);
+   _mesa_update_pixel(ctx);
 
    if (ctx->NewState)
       _mesa_update_state(ctx);
@@ -245,8 +244,7 @@ _mesa_CopyPixels( GLint srcx, GLint srcy, GLsizei width, GLsizei height,
     */
    _mesa_set_vp_override(ctx, GL_TRUE);
 
-   if (ctx->NewState & _NEW_PIXEL)
-      _mesa_update_pixel(ctx);
+   _mesa_update_pixel(ctx);
 
    if (ctx->NewState)
       _mesa_update_state(ctx);
@@ -334,8 +332,7 @@ _mesa_Bitmap( GLsizei width, GLsizei height,
       return;    /* do nothing */
    }
 
-   if (ctx->NewState & _NEW_PIXEL)
-      _mesa_update_pixel(ctx);
+   _mesa_update_pixel(ctx);
 
    if (ctx->NewState)
       _mesa_update_state(ctx);

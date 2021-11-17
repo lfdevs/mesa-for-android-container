@@ -244,8 +244,8 @@ extern void nv50_ir_get_target_library(uint32_t chipset,
 #ifdef __cplusplus
 namespace nv50_ir
 {
-   class FixupEntry;
-   class FixupData;
+   struct FixupEntry;
+   struct FixupData;
 
    void
    gk110_interpApply(const nv50_ir::FixupEntry *entry, uint32_t *code,

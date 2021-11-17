@@ -146,4 +146,10 @@ void *i915_texture_transfer_map(struct pipe_context *pipe,
 void i915_texture_transfer_unmap(struct pipe_context *pipe,
                                  struct pipe_transfer *transfer);
 
+void i915_texture_subdata(struct pipe_context *pipe,
+                          struct pipe_resource *resource, unsigned level,
+                          unsigned usage, const struct pipe_box *box,
+                          const void *data, unsigned stride,
+                          unsigned layer_stride);
+
 #endif /* I915_RESOURCE_H */

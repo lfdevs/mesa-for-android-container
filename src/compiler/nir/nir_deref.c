@@ -709,7 +709,7 @@ rematerialize_deref_in_block(nir_deref_instr *deref,
          parent = rematerialize_deref_in_block(parent, state);
          new_deref->parent = nir_src_for_ssa(&parent->dest.ssa);
       } else {
-         nir_src_copy(&new_deref->parent, &deref->parent, new_deref);
+         nir_src_copy(&new_deref->parent, &deref->parent);
       }
    }
 
@@ -726,7 +726,7 @@ rematerialize_deref_in_block(nir_deref_instr *deref,
    case nir_deref_type_array:
    case nir_deref_type_ptr_as_array:
       assert(!nir_src_as_deref(deref->arr.index));
-      nir_src_copy(&new_deref->arr.index, &deref->arr.index, new_deref);
+      nir_src_copy(&new_deref->arr.index, &deref->arr.index);
       break;
 
    case nir_deref_type_struct:

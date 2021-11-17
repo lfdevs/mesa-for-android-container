@@ -306,7 +306,8 @@ TEST_F(alu_srcs_negative_equal_test, unused_components_mismatch)
    nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);
 
    /* Disable the channels that aren't negations of each other. */
-   instr->dest.dest.is_ssa = false;
+   nir_register *reg = nir_local_reg_create(bld.impl);
+   nir_instr_rewrite_dest(&instr->instr, &instr->dest.dest, nir_dest_for_reg(reg));
    instr->dest.write_mask = 8 + 1;
 
    EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));

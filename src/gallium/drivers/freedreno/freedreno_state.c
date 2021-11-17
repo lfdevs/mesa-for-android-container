@@ -352,7 +352,7 @@ fd_set_viewport_states(struct pipe_context *pctx, unsigned start_slot,
       swap(miny, maxy);
    }
 
-   const float max_dims = ctx->screen->gpu_id >= 400 ? 16384.f : 4096.f;
+   const float max_dims = ctx->screen->gen >= 4 ? 16384.f : 4096.f;
 
    /* Clamp, convert to integer and round up the max bounds. */
    scissor->minx = CLAMP(minx, 0.f, max_dims);
@@ -377,7 +377,7 @@ fd_set_vertex_buffers(struct pipe_context *pctx, unsigned start_slot,
     * we need to mark VTXSTATE as dirty as well to trigger patching
     * and re-emitting the vtx shader:
     */
-   if (ctx->screen->gpu_id < 300) {
+   if (ctx->screen->gen < 3) {
       for (i = 0; i < count; i++) {
          bool new_enabled = vb && vb[i].buffer.resource;
          bool old_enabled = so->vb[i].buffer.resource != NULL;
@@ -560,7 +560,7 @@ fd_set_stream_output_targets(struct pipe_context *pctx, unsigned num_targets,
    debug_assert(num_targets <= ARRAY_SIZE(so->targets));
 
    /* Older targets need sw stats enabled for streamout emulation in VS: */
-   if (ctx->screen->gpu_id < 500) {
+   if (ctx->screen->gen < 5) {
       if (num_targets && !so->num_targets) {
          ctx->stats_users++;
       } else if (so->num_targets && !num_targets) {

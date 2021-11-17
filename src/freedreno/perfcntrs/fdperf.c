@@ -842,7 +842,10 @@ main(int argc, char **argv)
    find_device();
 
    const struct fd_perfcntr_group *groups;
-   groups = fd_perfcntrs((dev.chipid >> 24) * 100, &dev.ngroups);
+   struct fd_dev_id dev_id = {
+         .gpu_id = (dev.chipid >> 24) * 100,
+   };
+   groups = fd_perfcntrs(&dev_id, &dev.ngroups);
    if (!groups) {
       errx(1, "no perfcntr support");
    }

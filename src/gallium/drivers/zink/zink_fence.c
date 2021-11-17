@@ -34,9 +34,7 @@
 static void
 destroy_fence(struct zink_screen *screen, struct zink_tc_fence *mfence)
 {
-   struct zink_batch_state *bs = zink_batch_state(mfence->fence);
    mfence->fence = NULL;
-   zink_batch_state_reference(screen, &bs, NULL);
    tc_unflushed_batch_token_reference(&mfence->tc_token, NULL);
    FREE(mfence);
 }
@@ -100,9 +98,6 @@ tc_fence_finish(struct zink_context *ctx, struct zink_tc_fence *mfence, uint64_t
          threaded_context_flush(&ctx->base, mfence->tc_token, *timeout_ns == 0);
       }
 
-      if (!timeout_ns)
-         return false;
-
       /* this is a tc mfence, so we're just waiting on the queue mfence to complete
        * after being signaled by the real mfence
        */
@@ -136,9 +131,9 @@ zink_vkfence_wait(struct zink_screen *screen, struct zink_fence *fence, uint64_t
 
    VkResult ret;
    if (timeout_ns)
-      ret = vkWaitForFences(screen->dev, 1, &fence->fence, VK_TRUE, timeout_ns);
+      ret = VKSCR(WaitForFences)(screen->dev, 1, &fence->fence, VK_TRUE, timeout_ns);
    else
-      ret = vkGetFenceStatus(screen->dev, fence->fence);
+      ret = VKSCR(GetFenceStatus)(screen->dev, fence->fence);
    success = zink_screen_handle_vkresult(screen, ret);
 
    if (success) {
@@ -206,7 +201,7 @@ zink_fence_server_sync(struct pipe_context *pctx, struct pipe_fence_handle *pfen
 {
    struct zink_tc_fence *mfence = zink_tc_fence(pfence);
 
-   if (pctx && mfence->deferred_ctx == pctx)
+   if (mfence->deferred_ctx == pctx)
       return;
 
    if (mfence->deferred_ctx) {

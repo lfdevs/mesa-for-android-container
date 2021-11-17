@@ -327,6 +327,13 @@ do {                       \
 #define ATTRIBUTE_NOINLINE
 #endif
 
+/* Use as: enum name { X, Y } ENUM_PACKED; */
+#if defined(__GNUC__)
+#define ENUM_PACKED __attribute__((packed))
+#else
+#define ENUM_PACKED
+#endif
+
 
 /**
  * Check that STRUCT::FIELD can hold MAXVAL.  We use a lot of bitfields
@@ -469,5 +476,8 @@ typedef int lock_cap_t;
 #define disable_thread_safety_analysis
 
 #endif
+
+/* TODO: this could be different on non-x86 architectures. */
+#define CACHE_LINE_SIZE 64
 
 #endif /* UTIL_MACROS_H */

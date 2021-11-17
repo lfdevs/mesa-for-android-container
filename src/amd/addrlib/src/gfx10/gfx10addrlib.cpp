@@ -369,6 +369,17 @@ ADDR_E_RETURNCODE Gfx10Lib::HwlComputeCmaskInfo(
 
         pOut->sliceSize  = pOut->metaBlkNumPerSlice * metaBlkSize;
         pOut->cmaskBytes = pOut->sliceSize * pIn->numSlices;
+
+        // Get the CMASK address equation (copied from CmaskAddrFromCoord)
+        const UINT_32  fmaskBpp      = GetFmaskBpp(1, 1);
+        const UINT_32  fmaskElemLog2 = Log2(fmaskBpp >> 3);
+        const UINT_32  index         = m_xmaskBaseIndex + fmaskElemLog2;
+        const UINT_8*  patIdxTable   =
+            (pIn->swizzleMode == ADDR_SW_VAR_Z_X) ? GFX10_CMASK_VAR_RBPLUS_PATIDX :
+            (m_settings.supportRbPlus ? GFX10_CMASK_64K_RBPLUS_PATIDX : GFX10_CMASK_64K_PATIDX);
+
+        ADDR_C_ASSERT(sizeof(GFX10_CMASK_SW_PATTERN[patIdxTable[index]]) == 68 * 2);
+        pOut->equation.gfx10_bits = (UINT_16*)GFX10_CMASK_SW_PATTERN[patIdxTable[index]];
     }
 
     return ret;

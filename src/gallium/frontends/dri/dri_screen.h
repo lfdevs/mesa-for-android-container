@@ -81,6 +81,8 @@ struct dri_screen
 
    /* hooks filled in by dri2 & drisw */
    __DRIimage * (*lookup_egl_image)(struct dri_screen *ctx, void *handle);
+   boolean (*validate_egl_image)(struct dri_screen *ctx, void *handle);
+   __DRIimage * (*lookup_egl_image_validated)(struct dri_screen *ctx, void *handle);
 
    /* DRI exts that vary based on gallium pipe_screen caps. */
    __DRIimageExtension image_extension;

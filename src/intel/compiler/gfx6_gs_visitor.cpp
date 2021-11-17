@@ -285,8 +285,8 @@ align_interleaved_urb_mlen(unsigned mlen)
 }
 
 void
-gfx6_gs_visitor::emit_urb_write_opcode(bool complete, int base_mrf,
-                                       int last_mrf, int urb_offset)
+gfx6_gs_visitor::emit_snb_gs_urb_write_opcode(bool complete, int base_mrf,
+                                              int last_mrf, int urb_offset)
 {
    vec4_instruction *inst = NULL;
 
@@ -430,7 +430,7 @@ gfx6_gs_visitor::emit_thread_end()
             }
 
             complete = slot >= prog_data->vue_map.num_slots;
-            emit_urb_write_opcode(complete, base_mrf, mrf, urb_offset);
+            emit_snb_gs_urb_write_opcode(complete, base_mrf, mrf, urb_offset);
          } while (!complete);
 
          /* Skip over the flags data item so that vertex_output_offset points

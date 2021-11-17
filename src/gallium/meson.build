@@ -240,6 +240,7 @@ if with_platform_windows
   else
     winsys_d3d12_wgl = declare_dependency()
   endif
+  subdir('targets/wgl')
   subdir('targets/libgl-gdi')
 endif
 if with_tests

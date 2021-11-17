@@ -240,7 +240,7 @@ v3dv_descriptor_map_get_texture_format(struct v3dv_descriptor_state *descriptor_
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
       assert(descriptor->image_view);
-      *out_vk_format = descriptor->image_view->vk_format;
+      *out_vk_format = descriptor->image_view->vk.format;
       return descriptor->image_view->format;
    default:
       unreachable("descriptor type doesn't has a texture format");
@@ -266,9 +266,12 @@ v3dv_descriptor_map_get_texture_bo(struct v3dv_descriptor_state *descriptor_stat
    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-   case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+   case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
       assert(descriptor->image_view);
-      return descriptor->image_view->image->mem->bo;
+      struct v3dv_image *image =
+         (struct v3dv_image *) descriptor->image_view->vk.image;
+      return image->mem->bo;
+   }
    default:
       unreachable("descriptor type doesn't has a texture bo");
    }
@@ -323,7 +326,7 @@ v3dv_CreatePipelineLayout(VkDevice _device,
    layout = vk_object_zalloc(&device->vk, pAllocator, sizeof(*layout),
                              VK_OBJECT_TYPE_PIPELINE_LAYOUT);
    if (layout == NULL)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    layout->num_sets = pCreateInfo->setLayoutCount;
 
@@ -430,7 +433,7 @@ v3dv_CreateDescriptorPool(VkDevice _device,
                            VK_OBJECT_TYPE_DESCRIPTOR_POOL);
 
    if (!pool)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    if (!(pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT)) {
       pool->host_memory_base = (uint8_t*)pool + sizeof(struct v3dv_descriptor_pool);
@@ -460,7 +463,7 @@ v3dv_CreateDescriptorPool(VkDevice _device,
 
  out_of_device_memory:
    vk_object_free(&device->vk, pAllocator, pool);
-   return vk_error(device->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+   return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 }
 
 static void
@@ -580,7 +583,7 @@ v3dv_CreateDescriptorSetLayout(VkDevice _device,
                                  VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT);
 
    if (!set_layout)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    /* We just allocate all the immutable samplers at the end of the struct */
    struct v3dv_sampler *samplers = (void*) &set_layout->binding[num_bindings];
@@ -592,7 +595,7 @@ v3dv_CreateDescriptorSetLayout(VkDevice _device,
                                                pCreateInfo->bindingCount, &bindings);
    if (result != VK_SUCCESS) {
       vk_object_free(&device->vk, pAllocator, set_layout);
-      return vk_error(device->instance, result);
+      return vk_error(device, result);
    }
 
    memset(set_layout->binding, 0,
@@ -694,7 +697,7 @@ out_of_pool_memory(const struct v3dv_device *device,
     * by allocating a new pool, so they don't point to real issues.
     */
    if (!pool->is_driver_internal)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_POOL_MEMORY)
+      return vk_error(device, VK_ERROR_OUT_OF_POOL_MEMORY);
    else
       return VK_ERROR_OUT_OF_POOL_MEMORY;
 }
@@ -723,7 +726,7 @@ descriptor_set_create(struct v3dv_device *device,
                              VK_OBJECT_TYPE_DESCRIPTOR_SET);
 
       if (!set)
-         return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
    set->pool = pool;
@@ -918,7 +921,7 @@ write_image_descriptor(struct v3dv_device *device,
 
    if (iview) {
       const uint32_t tex_state_index =
-         iview->type != VK_IMAGE_VIEW_TYPE_CUBE_ARRAY ||
+         iview->vk.view_type != VK_IMAGE_VIEW_TYPE_CUBE_ARRAY ||
          desc_type != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ? 0 : 1;
       memcpy(desc_map,
              iview->texture_shader_state[tex_state_index],
@@ -1139,7 +1142,7 @@ v3dv_CreateDescriptorUpdateTemplate(
    template = vk_object_alloc(&device->vk, pAllocator, size,
                               VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE);
    if (template == NULL)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    template->bind_point = pCreateInfo->pipelineBindPoint;
 
@@ -1252,4 +1255,24 @@ v3dv_UpdateDescriptorSetWithTemplate(
          unreachable("Unsupported descriptor type");
       }
    }
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_CreateSamplerYcbcrConversion(
+    VkDevice _device,
+    const VkSamplerYcbcrConversionCreateInfo *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator,
+    VkSamplerYcbcrConversion *pYcbcrConversion)
+{
+   unreachable("Ycbcr sampler conversion is not supported");
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+v3dv_DestroySamplerYcbcrConversion(
+    VkDevice _device,
+    VkSamplerYcbcrConversion YcbcrConversion,
+    const VkAllocationCallbacks *pAllocator)
+{
+   unreachable("Ycbcr sampler conversion is not supported");
 }

@@ -179,7 +179,7 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    ctx->max_attributes = 1;
    ctx->max_image_formats = VL_VA_MAX_IMAGE_FORMATS;
    ctx->max_subpic_formats = 1;
-   ctx->max_display_attributes = 1;
+   ctx->max_display_attributes = 0;
 
    snprintf(drv->vendor_string, sizeof(drv->vendor_string),
             "Mesa Gallium driver " PACKAGE_VERSION " for %s",
@@ -316,7 +316,7 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
    if (config->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
       switch (u_reduce_video_profile(context->templat.profile)) {
       case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-         context->desc.h264enc.rate_ctrl.rate_ctrl_method = config->rc;
+         context->desc.h264enc.rate_ctrl[0].rate_ctrl_method = config->rc;
          context->desc.h264enc.frame_idx = util_hash_table_create_ptr_keys();
          break;
       case PIPE_VIDEO_FORMAT_HEVC:

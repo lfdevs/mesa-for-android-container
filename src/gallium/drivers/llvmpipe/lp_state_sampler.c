@@ -120,6 +120,7 @@ llvmpipe_set_sampler_views(struct pipe_context *pipe,
                            unsigned start,
                            unsigned num,
                            unsigned unbind_num_trailing_slots,
+                           bool take_ownership,
                            struct pipe_sampler_view **views)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
@@ -150,8 +151,15 @@ llvmpipe_set_sampler_views(struct pipe_context *pipe,
 
       if (view)
          llvmpipe_flush_resource(pipe, view->texture, 0, true, false, false, "sampler_view");
-      pipe_sampler_view_reference(&llvmpipe->sampler_views[shader][start + i],
-                                  view);
+
+      if (take_ownership) {
+         pipe_sampler_view_reference(&llvmpipe->sampler_views[shader][start + i],
+                                     NULL);
+         llvmpipe->sampler_views[shader][start + i] = view;
+      } else {
+         pipe_sampler_view_reference(&llvmpipe->sampler_views[shader][start + i],
+                                     view);
+      }
    }
 
    for (; i < num + unbind_num_trailing_slots; i++) {
@@ -178,8 +186,12 @@ llvmpipe_set_sampler_views(struct pipe_context *pipe,
    }
    else if (shader == PIPE_SHADER_COMPUTE) {
       llvmpipe->cs_dirty |= LP_CSNEW_SAMPLER_VIEW;
-   } else {
+   }
+   else if (shader == PIPE_SHADER_FRAGMENT) {
       llvmpipe->dirty |= LP_NEW_SAMPLER_VIEW;
+      lp_setup_set_fragment_sampler_views(llvmpipe->setup,
+                                          llvmpipe->num_sampler_views[PIPE_SHADER_FRAGMENT],
+                                          llvmpipe->sampler_views[PIPE_SHADER_FRAGMENT]);
    }
 }
 

@@ -37,6 +37,7 @@ sys.path.insert(0, args.import_path)
 
 from u_trace import Header
 from u_trace import Tracepoint
+from u_trace import TracepointArg
 from u_trace import utrace_generate
 
 #
@@ -50,19 +51,19 @@ Tracepoint('start_state_restore')
 Tracepoint('end_state_restore')
 
 Tracepoint('flush_batch',
-    args=[['struct fd_batch *', 'batch'],
-          ['uint16_t', 'cleared'],
-          ['uint16_t', 'gmem_reason'],
-          ['uint16_t', 'num_draws']],
+    args=[TracepointArg(type='struct fd_batch *', var='batch',       c_format='%x'),
+          TracepointArg(type='uint16_t',          var='cleared',     c_format='%x'),
+          TracepointArg(type='uint16_t',          var='gmem_reason', c_format='%x'),
+          TracepointArg(type='uint16_t',          var='num_draws',   c_format='%u')],
     tp_print=['%p: cleared=%x, gmem_reason=%x, num_draws=%u', '__entry->batch',
         '__entry->cleared', '__entry->gmem_reason', '__entry->num_draws'],
 )
 
 Tracepoint('render_gmem',
-    args=[['uint16_t', 'nbins_x'],
-          ['uint16_t', 'nbins_y'],
-          ['uint16_t', 'bin_w'],
-          ['uint16_t', 'bin_h']],
+    args=[TracepointArg(type='uint16_t', var='nbins_x', c_format='%u'),
+          TracepointArg(type='uint16_t', var='nbins_y', c_format='%u'),
+          TracepointArg(type='uint16_t', var='bin_w',   c_format='%u'),
+          TracepointArg(type='uint16_t', var='bin_h',   c_format='%u')],
     tp_print=['%ux%u bins of %ux%u',
         '__entry->nbins_x', '__entry->nbins_y', '__entry->bin_w', '__entry->bin_h'],
 )
@@ -72,16 +73,16 @@ Tracepoint('render_sysmem')
 # Note that this doesn't include full information about all of the MRTs
 # but seems to roughly match what I see with a blob trace
 Tracepoint('start_render_pass',
-    args=[['uint32_t', 'submit_id'],
-          ['enum pipe_format', 'cbuf0_format'],
-          ['enum pipe_format', 'zs_format'],
-          ['uint16_t', 'width'],
-          ['uint16_t', 'height'],
-          ['uint8_t', 'mrts'],
-          ['uint8_t', 'samples'],
-          ['uint16_t', 'nbins'],
-          ['uint16_t', 'binw'],
-          ['uint16_t', 'binh']],
+    args=[TracepointArg(type='uint32_t',         var='submit_id',     c_format='%u'),
+          TracepointArg(type='enum pipe_format', var='cbuf0_format',  c_format='%s', to_prim_type='util_format_description({})->short_name'),
+          TracepointArg(type='enum pipe_format', var='zs_format',     c_format='%s', to_prim_type='util_format_description({})->short_name'),
+          TracepointArg(type='uint16_t',         var='width',         c_format='%u'),
+          TracepointArg(type='uint16_t',         var='height',        c_format='%u'),
+          TracepointArg(type='uint8_t',          var='mrts',          c_format='%u'),
+          TracepointArg(type='uint8_t',          var='samples',       c_format='%u'),
+          TracepointArg(type='uint16_t',         var='nbins',         c_format='%u'),
+          TracepointArg(type='uint16_t',         var='binw',          c_format='%u'),
+          TracepointArg(type='uint16_t',         var='binh',          c_format='%u')],
     tp_perfetto='fd_start_render_pass'
 )
 Tracepoint('end_render_pass',
@@ -100,7 +101,7 @@ Tracepoint('end_prologue')
 
 # For GMEM pass, where this could either be a clear or resolve
 Tracepoint('start_clear_restore',
-    args=[['uint16_t', 'fast_cleared']],
+    args=[TracepointArg(type='uint16_t', var='fast_cleared', c_format='0x%x')],
     tp_print=['fast_cleared: 0x%x', '__entry->fast_cleared'],
     tp_perfetto='fd_start_clear_restore',
 )
@@ -113,10 +114,10 @@ Tracepoint('end_resolve',
     tp_perfetto='fd_end_resolve')
 
 Tracepoint('start_tile',
-    args=[['uint16_t', 'bin_h'],
-          ['uint16_t', 'yoff'],
-          ['uint16_t', 'bin_w'],
-          ['uint16_t', 'xoff']],
+    args=[TracepointArg(type='uint16_t', var='bin_h', c_format='%u'),
+          TracepointArg(type='uint16_t', var='yoff',  c_format='%u'),
+          TracepointArg(type='uint16_t', var='bin_w', c_format='%u'),
+          TracepointArg(type='uint16_t', var='xoff',  c_format='%u')],
     tp_print=['bin_h=%d, yoff=%d, bin_w=%d, xoff=%d',
         '__entry->bin_h', '__entry->yoff', '__entry->bin_w', '__entry->xoff'],
 )
@@ -127,8 +128,8 @@ Tracepoint('end_draw_ib',
     tp_perfetto='fd_end_draw_ib')
 
 Tracepoint('start_blit',
-    args=[['enum pipe_texture_target', 'src_target'],
-          ['enum pipe_texture_target', 'dst_target']],
+    args=[TracepointArg(type='enum pipe_texture_target', var='src_target', c_format='%s', to_prim_type="util_str_tex_target({}, true)"),
+          TracepointArg(type='enum pipe_texture_target', var='dst_target', c_format='%s', to_prim_type="util_str_tex_target({}, true)")],
     tp_print=['%s -> %s', 'util_str_tex_target(__entry->src_target, true)',
         'util_str_tex_target(__entry->dst_target, true)'],
     tp_perfetto='fd_start_blit',
@@ -141,4 +142,4 @@ Tracepoint('start_compute',
 Tracepoint('end_compute',
     tp_perfetto='fd_end_compute')
 
-utrace_generate(cpath=args.src, hpath=args.hdr)
+utrace_generate(cpath=args.src, hpath=args.hdr, ctx_param='struct pipe_context *pctx')

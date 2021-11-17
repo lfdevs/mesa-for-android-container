@@ -196,6 +196,7 @@ realloc_bo(struct fd_resource *rsc, uint32_t size)
    struct pipe_resource *prsc = &rsc->b.b;
    struct fd_screen *screen = fd_screen(rsc->b.b.screen);
    uint32_t flags =
+      COND(prsc->usage & PIPE_USAGE_STAGING, FD_BO_CACHED_COHERENT) |
       COND(prsc->bind & PIPE_BIND_SCANOUT, FD_BO_SCANOUT);
    /* TODO other flags? */
 
@@ -452,9 +453,9 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
     */
    debug_assert(shadow->track->batch_mask == 0);
    foreach_batch (batch, &ctx->screen->batch_cache, rsc->track->batch_mask) {
-      struct set_entry *entry = _mesa_set_search(batch->resources, rsc);
+      struct set_entry *entry = _mesa_set_search_pre_hashed(batch->resources, rsc->hash, rsc);
       _mesa_set_remove(batch->resources, entry);
-      _mesa_set_add(batch->resources, shadow);
+      _mesa_set_add_pre_hashed(batch->resources, shadow->hash, shadow);
    }
    swap(rsc->track, shadow->track);
 
@@ -580,7 +581,7 @@ fd_alloc_staging(struct fd_context *ctx, struct fd_resource *rsc,
    /* We cannot currently do stencil export on earlier gens, and
     * u_blitter cannot do blits involving stencil otherwise:
     */
-   if ((ctx->screen->gpu_id < 600) && !ctx->blit &&
+   if ((ctx->screen->gen < 6) && !ctx->blit &&
        (util_format_get_mask(tmpl.format) & PIPE_MASK_S))
       return NULL;
 
@@ -818,6 +819,9 @@ resource_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
 
          return buf;
       }
+   } else if ((usage & PIPE_MAP_READ) && !fd_bo_is_cached(rsc->bo)) {
+      perf_debug_ctx(ctx, "wc readback: prsc=%p, level=%u, usage=%x, box=%dx%d+%d,%d",
+                     prsc, level, usage, box->width, box->height, box->x, box->y);
    }
 
    if (usage & PIPE_MAP_DISCARD_WHOLE_RESOURCE) {
@@ -1092,6 +1096,7 @@ alloc_resource_struct(struct pipe_screen *pscreen,
 
    pipe_reference_init(&prsc->reference, 1);
    prsc->screen = pscreen;
+   rsc->hash = _mesa_hash_pointer(rsc);
 
    util_range_init(&rsc->valid_buffer_range);
    simple_mtx_init(&rsc->lock, mtx_plain);
@@ -1110,6 +1115,87 @@ alloc_resource_struct(struct pipe_screen *pscreen,
       rsc->b.buffer_id_unique = util_idalloc_mt_alloc(&screen->buffer_ids);
 
    return rsc;
+}
+
+enum fd_layout_type {
+   ERROR,
+   LINEAR,
+   TILED,
+   UBWC,
+};
+
+static enum fd_layout_type
+get_best_layout(struct fd_screen *screen, struct pipe_resource *prsc,
+                const struct pipe_resource *tmpl, const uint64_t *modifiers,
+                int count)
+{
+   bool implicit_modifiers =
+      (count == 0 ||
+       drm_find_modifier(DRM_FORMAT_MOD_INVALID, modifiers, count));
+
+   /* First, find all the conditions which would force us to linear */
+   if (!screen->tile_mode)
+      return LINEAR;
+
+   if (!screen->tile_mode(prsc))
+      return LINEAR;
+
+   if (tmpl->target == PIPE_BUFFER)
+      return LINEAR;
+
+   if (tmpl->bind & PIPE_BIND_LINEAR) {
+      if (tmpl->usage != PIPE_USAGE_STAGING)
+         perf_debug("%" PRSC_FMT ": forcing linear: bind flags",
+                    PRSC_ARGS(prsc));
+      return LINEAR;
+   }
+
+   if (FD_DBG(NOTILE))
+       return LINEAR;
+
+   /* Shared resources with implicit modifiers must always be linear */
+   if (implicit_modifiers && (tmpl->bind & PIPE_BIND_SHARED)) {
+      perf_debug("%" PRSC_FMT
+                 ": forcing linear: shared resource + implicit modifiers",
+                 PRSC_ARGS(prsc));
+      return LINEAR;
+   }
+
+   bool ubwc_ok = is_a6xx(screen);
+   if (FD_DBG(NOUBWC))
+      ubwc_ok = false;
+
+   if (ubwc_ok && !implicit_modifiers &&
+       !drm_find_modifier(DRM_FORMAT_MOD_QCOM_COMPRESSED, modifiers, count)) {
+      perf_debug("%" PRSC_FMT
+                 ": not using UBWC: not in acceptable modifier set",
+                 PRSC_ARGS(prsc));
+      ubwc_ok = false;
+   }
+
+   if (ubwc_ok)
+      return UBWC;
+
+   /* We can't use tiled with explicit modifiers, as there is no modifier token
+    * defined for it. But we might internally force tiled allocation using a
+    * private modifier token.
+    *
+    * TODO we should probably also limit TILED in a similar way to UBWC above,
+    * once we have a public modifier token defined.
+    */
+   if (implicit_modifiers ||
+       drm_find_modifier(FD_FORMAT_MOD_QCOM_TILED, modifiers, count))
+      return TILED;
+
+   if (!drm_find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count)) {
+      perf_debug("%" PRSC_FMT ": need linear but not in modifier set",
+                 PRSC_ARGS(prsc));
+      return ERROR;
+   }
+
+   perf_debug("%" PRSC_FMT ": not using tiling: explicit modifiers and no UBWC",
+              PRSC_ARGS(prsc));
+   return LINEAR;
 }
 
 /**
@@ -1137,6 +1223,10 @@ fd_resource_allocate_and_resolve(struct pipe_screen *pscreen,
 
    prsc = &rsc->b.b;
 
+   /* Clover creates buffers with PIPE_FORMAT_NONE: */
+   if ((prsc->target == PIPE_BUFFER) && (format == PIPE_FORMAT_NONE))
+      format = prsc->format = PIPE_FORMAT_R8_UNORM;
+
    DBG("%" PRSC_FMT, PRSC_ARGS(prsc));
 
    if (tmpl->bind & PIPE_BIND_SHARED)
@@ -1144,60 +1234,19 @@ fd_resource_allocate_and_resolve(struct pipe_screen *pscreen,
 
    fd_resource_layout_init(prsc);
 
-#define LINEAR (PIPE_BIND_SCANOUT | PIPE_BIND_LINEAR | PIPE_BIND_DISPLAY_TARGET)
-
-   bool linear = drm_find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count);
-   if (linear) {
-      perf_debug("%" PRSC_FMT ": linear: DRM_FORMAT_MOD_LINEAR requested!",
-                 PRSC_ARGS(prsc));
-   } else if (tmpl->bind & LINEAR) {
-      if (tmpl->usage != PIPE_USAGE_STAGING)
-         perf_debug("%" PRSC_FMT ": linear: LINEAR bind requested!",
-                    PRSC_ARGS(prsc));
-      linear = true;
+   enum fd_layout_type layout =
+      get_best_layout(screen, prsc, tmpl, modifiers, count);
+   if (layout == ERROR) {
+      free(prsc);
+      return NULL;
    }
 
-   if (FD_DBG(NOTILE))
-      linear = true;
-
-   /* Normally, for non-shared buffers, allow buffer compression if
-    * not shared, otherwise only allow if QCOM_COMPRESSED modifier
-    * is requested:
-    *
-    * TODO we should probably also limit tiled in a similar way,
-    * except we don't have a format modifier for tiled.  (We probably
-    * should.)
-    */
-   bool allow_ubwc = false;
-   if (!linear) {
-      allow_ubwc = drm_find_modifier(DRM_FORMAT_MOD_INVALID, modifiers, count);
-      if (!allow_ubwc) {
-         perf_debug("%" PRSC_FMT
-                    ": not UBWC: DRM_FORMAT_MOD_INVALID not requested!",
-                    PRSC_ARGS(prsc));
-      }
-      if (tmpl->bind & PIPE_BIND_SHARED) {
-         allow_ubwc =
-            drm_find_modifier(DRM_FORMAT_MOD_QCOM_COMPRESSED, modifiers, count);
-         if (!allow_ubwc) {
-            perf_debug("%" PRSC_FMT
-                       ": not UBWC: shared and DRM_FORMAT_MOD_QCOM_COMPRESSED "
-                       "not requested!",
-                       PRSC_ARGS(prsc));
-            linear = true;
-         }
-      }
-   }
-
-   allow_ubwc &= !FD_DBG(NOUBWC);
-
-   if (screen->tile_mode && (tmpl->target != PIPE_BUFFER) && !linear) {
+   if (layout >= TILED)
       rsc->layout.tile_mode = screen->tile_mode(prsc);
-   }
+   if (layout == UBWC)
+      rsc->layout.ubwc = true;
 
    rsc->internal_format = format;
-
-   rsc->layout.ubwc = rsc->layout.tile_mode && is_a6xx(screen) && allow_ubwc;
 
    if (prsc->target == PIPE_BUFFER) {
       assert(prsc->format == PIPE_FORMAT_R8_UNORM);
@@ -1565,7 +1614,7 @@ void
 fd_resource_screen_init(struct pipe_screen *pscreen)
 {
    struct fd_screen *screen = fd_screen(pscreen);
-   bool fake_rgtc = screen->gpu_id < 400;
+   bool fake_rgtc = screen->gen < 4;
 
    pscreen->resource_create = u_transfer_helper_resource_create;
    /* NOTE: u_transfer_helper does not yet support the _with_modifiers()

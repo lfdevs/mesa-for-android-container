@@ -147,6 +147,7 @@ static void
 pack_cfg_bits(struct v3dv_pipeline *pipeline,
               const VkPipelineDepthStencilStateCreateInfo *ds_info,
               const VkPipelineRasterizationStateCreateInfo *rs_info,
+              const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *pv_info,
               const VkPipelineMultisampleStateCreateInfo *ms_info)
 {
    assert(sizeof(pipeline->cfg_bits) == cl_packet_length(CFG_BITS));
@@ -192,7 +193,13 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
        * First vertex is the Direct3D style for provoking vertex. OpenGL uses
        * the last vertex by default.
        */
-      config.direct3d_provoking_vertex = true;
+      if (pv_info) {
+         config.direct3d_provoking_vertex =
+            pv_info->provokingVertexMode ==
+               VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT;
+      } else {
+         config.direct3d_provoking_vertex = true;
+      }
 
       config.blend_enable = pipeline->blend.enables != 0;
 
@@ -336,10 +343,11 @@ v3dX(pipeline_pack_state)(struct v3dv_pipeline *pipeline,
                           const VkPipelineColorBlendStateCreateInfo *cb_info,
                           const VkPipelineDepthStencilStateCreateInfo *ds_info,
                           const VkPipelineRasterizationStateCreateInfo *rs_info,
+                          const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *pv_info,
                           const VkPipelineMultisampleStateCreateInfo *ms_info)
 {
    pack_blend(pipeline, cb_info);
-   pack_cfg_bits(pipeline, ds_info, rs_info, ms_info);
+   pack_cfg_bits(pipeline, ds_info, rs_info, pv_info, ms_info);
    pack_stencil_cfg(pipeline, ds_info);
 }
 
@@ -591,7 +599,8 @@ pack_shader_state_attribute_record(struct v3dv_pipeline *pipeline,
 
 void
 v3dX(pipeline_pack_compile_state)(struct v3dv_pipeline *pipeline,
-                                  const VkPipelineVertexInputStateCreateInfo *vi_info)
+                                  const VkPipelineVertexInputStateCreateInfo *vi_info,
+                                  const VkPipelineVertexInputDivisorStateCreateInfoEXT *vd_info)
 {
    pack_shader_state_record(pipeline);
    pack_vcm_cache_size(pipeline);
@@ -603,6 +612,15 @@ v3dX(pipeline_pack_compile_state)(struct v3dv_pipeline *pipeline,
 
       pipeline->vb[desc->binding].stride = desc->stride;
       pipeline->vb[desc->binding].instance_divisor = desc->inputRate;
+   }
+
+   if (vd_info) {
+      for (uint32_t i = 0; i < vd_info->vertexBindingDivisorCount; i++) {
+         const VkVertexInputBindingDivisorDescriptionEXT *desc =
+            &vd_info->pVertexBindingDivisors[i];
+
+         pipeline->vb[desc->binding].instance_divisor = desc->divisor;
+      }
    }
 
    pipeline->va_count = 0;

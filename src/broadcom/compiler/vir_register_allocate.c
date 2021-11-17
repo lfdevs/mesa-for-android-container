@@ -177,7 +177,12 @@ v3d_choose_spill_node(struct v3d_compile *c, struct ra_graph *g,
 void
 v3d_setup_spill_base(struct v3d_compile *c)
 {
-        c->cursor = vir_before_block(vir_entry_block(c));
+        /* Setting up the spill base is done in the entry block; so change
+         * both the current block to emit and the cursor.
+         */
+        struct qblock *current_block = c->cur_block;
+        c->cur_block = vir_entry_block(c);
+        c->cursor = vir_before_block(c->cur_block);
 
         int start_num_temps = c->num_temps;
 
@@ -204,16 +209,16 @@ v3d_setup_spill_base(struct v3d_compile *c)
         for (int i = start_num_temps; i < c->num_temps; i++)
                 BITSET_CLEAR(c->spillable, i);
 
+        /* Restore the current block. */
+        c->cur_block = current_block;
         c->cursor = vir_after_block(c->cur_block);
 }
 
-static void
+static struct qinst *
 v3d_emit_spill_tmua(struct v3d_compile *c, uint32_t spill_offset)
 {
-        vir_ADD_dest(c, vir_reg(QFILE_MAGIC,
-                                V3D_QPU_WADDR_TMUA),
-                     c->spill_base,
-                     vir_uniform_ui(c, spill_offset));
+        return vir_ADD_dest(c, vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_TMUA),
+                            c->spill_base, vir_uniform_ui(c, spill_offset));
 }
 
 
@@ -221,12 +226,17 @@ static void
 v3d_emit_tmu_spill(struct v3d_compile *c, struct qinst *inst,
                    struct qinst *position, uint32_t spill_offset)
 {
+        assert(inst->qpu.type == V3D_QPU_INSTR_TYPE_ALU);
+
         c->cursor = vir_after_inst(position);
         inst->dst = vir_get_temp(c);
-        vir_MOV_dest(c, vir_reg(QFILE_MAGIC,
-                                V3D_QPU_WADDR_TMUD),
-                     inst->dst);
-        v3d_emit_spill_tmua(c, spill_offset);
+        enum v3d_qpu_cond cond = vir_get_cond(inst);
+        struct qinst *tmp =
+                vir_MOV_dest(c, vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_TMUD),
+                             inst->dst);
+        tmp->qpu.flags.mc = cond;
+        tmp = v3d_emit_spill_tmua(c, spill_offset);
+        tmp->qpu.flags.ac = cond;
         vir_emit_thrsw(c);
         vir_TMUWT(c);
         c->spills++;

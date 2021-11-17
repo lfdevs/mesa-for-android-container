@@ -90,6 +90,9 @@ spirv_builder_emit_decoration(struct spirv_builder *b, SpvId target,
                               SpvDecoration decoration);
 
 void
+spirv_builder_emit_input_attachment_index(struct spirv_builder *b, SpvId target, uint32_t id);
+
+void
 spirv_builder_emit_specid(struct spirv_builder *b, SpvId target, uint32_t id);
 
 void

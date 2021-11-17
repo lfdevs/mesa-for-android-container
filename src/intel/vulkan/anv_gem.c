@@ -99,8 +99,8 @@ anv_gem_mmap_offset(struct anv_device *device, uint32_t gem_handle,
 {
    struct drm_i915_gem_mmap_offset gem_mmap = {
       .handle = gem_handle,
-      .flags = (flags & I915_MMAP_WC) ?
-         I915_MMAP_OFFSET_WC : I915_MMAP_OFFSET_WB,
+      .flags = device->info.has_local_mem ? I915_MMAP_OFFSET_FIXED :
+         (flags & I915_MMAP_WC) ? I915_MMAP_OFFSET_WC : I915_MMAP_OFFSET_WB,
    };
    assert(offset == 0);
 
@@ -119,6 +119,8 @@ static void*
 anv_gem_mmap_legacy(struct anv_device *device, uint32_t gem_handle,
                     uint64_t offset, uint64_t size, uint32_t flags)
 {
+   assert(!device->info.has_local_mem);
+
    struct drm_i915_gem_mmap gem_mmap = {
       .handle = gem_handle,
       .offset = offset,
@@ -170,6 +172,9 @@ anv_gem_userptr(struct anv_device *device, void *mem, size_t size)
       .user_size = size,
       .flags = 0,
    };
+
+   if (device->physical->has_userptr_probe)
+      userptr.flags |= I915_USERPTR_PROBE;
 
    int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_USERPTR, &userptr);
    if (ret == -1)

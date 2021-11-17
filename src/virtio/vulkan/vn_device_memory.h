@@ -47,6 +47,7 @@ VkResult
 vn_device_memory_import_dma_buf(struct vn_device *dev,
                                 struct vn_device_memory *mem,
                                 const VkMemoryAllocateInfo *alloc_info,
+                                bool force_unmappable,
                                 int fd);
 
 VkResult

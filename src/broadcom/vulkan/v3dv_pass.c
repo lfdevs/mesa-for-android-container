@@ -47,6 +47,12 @@ pass_find_subpass_range_for_attachments(struct v3dv_device *device,
    for (uint32_t i = 0; i < pass->attachment_count; i++) {
       pass->attachments[i].first_subpass = pass->subpass_count - 1;
       pass->attachments[i].last_subpass = 0;
+      if (pass->multiview_enabled) {
+         for (uint32_t j = 0; j < MAX_MULTIVIEW_VIEW_COUNT; j++) {
+            pass->attachments[i].views[j].first_subpass = pass->subpass_count - 1;
+            pass->attachments[i].views[j].last_subpass = 0;
+         }
+      }
    }
 
    for (uint32_t i = 0; i < pass->subpass_count; i++) {
@@ -57,14 +63,26 @@ pass_find_subpass_range_for_attachments(struct v3dv_device *device,
          if (attachment_idx == VK_ATTACHMENT_UNUSED)
             continue;
 
-         if (i < pass->attachments[attachment_idx].first_subpass)
-            pass->attachments[attachment_idx].first_subpass = i;
-         if (i > pass->attachments[attachment_idx].last_subpass)
-            pass->attachments[attachment_idx].last_subpass = i;
+         struct v3dv_render_pass_attachment *att =
+            &pass->attachments[attachment_idx];
+
+         if (i < att->first_subpass)
+            att->first_subpass = i;
+         if (i > att->last_subpass)
+            att->last_subpass = i;
+
+         uint32_t view_mask = subpass->view_mask;
+         while (view_mask) {
+            uint32_t view_index = u_bit_scan(&view_mask);
+            if (i < att->views[view_index].first_subpass)
+               att->views[view_index].first_subpass = i;
+            if (i > att->views[view_index].last_subpass)
+               att->views[view_index].last_subpass = i;
+         }
 
          if (subpass->resolve_attachments &&
              subpass->resolve_attachments[j].attachment != VK_ATTACHMENT_UNUSED) {
-            set_use_tlb_resolve(device, &pass->attachments[attachment_idx]);
+            set_use_tlb_resolve(device, att);
          }
       }
 
@@ -112,6 +130,10 @@ v3dv_CreateRenderPass(VkDevice _device,
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO);
 
+   const VkRenderPassMultiviewCreateInfo *multiview_info =
+      vk_find_struct_const(pCreateInfo->pNext, RENDER_PASS_MULTIVIEW_CREATE_INFO);
+   bool multiview_enabled = multiview_info && multiview_info->subpassCount > 0;
+
    size_t size = sizeof(*pass);
    size_t subpasses_offset = size;
    size += pCreateInfo->subpassCount * sizeof(pass->subpasses[0]);
@@ -121,8 +143,9 @@ v3dv_CreateRenderPass(VkDevice _device,
    pass = vk_object_zalloc(&device->vk, pAllocator, size,
                            VK_OBJECT_TYPE_RENDER_PASS);
    if (pass == NULL)
-      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
+   pass->multiview_enabled = multiview_enabled;
    pass->attachment_count = pCreateInfo->attachmentCount;
    pass->attachments = (void *) pass + attachments_offset;
    pass->subpass_count = pCreateInfo->subpassCount;
@@ -145,7 +168,7 @@ v3dv_CreateRenderPass(VkDevice _device,
                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       if (pass->subpass_attachments == NULL) {
          vk_object_free(&device->vk, pAllocator, pass);
-         return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
       }
    } else {
       pass->subpass_attachments = NULL;
@@ -158,6 +181,8 @@ v3dv_CreateRenderPass(VkDevice _device,
 
       subpass->input_count = desc->inputAttachmentCount;
       subpass->color_count = desc->colorAttachmentCount;
+      if (multiview_enabled)
+         subpass->view_mask = multiview_info->pViewMasks[i];
 
       if (desc->inputAttachmentCount > 0) {
          subpass->input_attachments = p;

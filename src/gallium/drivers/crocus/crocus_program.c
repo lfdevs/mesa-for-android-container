@@ -951,7 +951,7 @@ crocus_setup_binding_table(const struct intel_device_info *devinfo,
    }
    bt->size_bytes = next * 4;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_BT)) {
+   if (INTEL_DEBUG(DEBUG_BT)) {
       crocus_print_binding_table(stderr, gl_shader_stage_name(info->stage), bt);
    }
 
@@ -1074,10 +1074,10 @@ crocus_debug_recompile(struct crocus_context *ice,
    if (!info)
       return;
 
-   c->shader_perf_log(&ice->dbg, "Recompiling %s shader for program %s: %s\n",
-                      _mesa_shader_stage_to_string(info->stage),
-                      info->name ? info->name : "(no identifier)",
-                      info->label ? info->label : "");
+   brw_shader_perf_log(c, &ice->dbg, "Recompiling %s shader for program %s: %s\n",
+                       _mesa_shader_stage_to_string(info->stage),
+                       info->name ? info->name : "(no identifier)",
+                       info->label ? info->label : "");
 
    const void *old_key =
       crocus_find_previous_compile(ice, info->stage, key->program_string_id);
@@ -1200,7 +1200,7 @@ crocus_compile_vs(struct crocus_context *ice,
       nir_shader_gather_info(nir, impl);
    }
 
-   prog_data->use_alt_mode = ish->use_alt_mode;
+   prog_data->use_alt_mode = nir->info.is_arb_asm;
 
    crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
                          &num_system_values, &num_cbufs);
@@ -1829,7 +1829,7 @@ crocus_compile_fs(struct crocus_context *ice,
 
    nir_shader *nir = nir_shader_clone(mem_ctx, ish->nir);
 
-   prog_data->use_alt_mode = ish->use_alt_mode;
+   prog_data->use_alt_mode = nir->info.is_arb_asm;
 
    crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
                          &num_system_values, &num_cbufs);
@@ -2645,24 +2645,9 @@ crocus_get_scratch_space(struct crocus_context *ice,
 
    struct crocus_bo **bop = &ice->shaders.scratch_bos[encoded_size][stage];
 
-   unsigned subslice_total = screen->subslice_total;
-   subslice_total = 4 * devinfo->num_slices;
-   //   assert(subslice_total >= screen->subslice_total);
-
    if (!*bop) {
-      unsigned scratch_ids_per_subslice = devinfo->max_cs_threads;
-
-      uint32_t max_threads[] = {
-         [MESA_SHADER_VERTEX]    = devinfo->max_vs_threads,
-         [MESA_SHADER_TESS_CTRL] = devinfo->max_tcs_threads,
-         [MESA_SHADER_TESS_EVAL] = devinfo->max_tes_threads,
-         [MESA_SHADER_GEOMETRY]  = devinfo->max_gs_threads,
-         [MESA_SHADER_FRAGMENT]  = devinfo->max_wm_threads,
-         [MESA_SHADER_COMPUTE]   = scratch_ids_per_subslice * subslice_total,
-      };
-
-      uint32_t size = per_thread_scratch * max_threads[stage];
-
+      assert(stage < ARRAY_SIZE(devinfo->max_scratch_ids));
+      uint32_t size = per_thread_scratch * devinfo->max_scratch_ids[stage];
       *bop = crocus_bo_alloc(bufmgr, "scratch", size);
    }
 
@@ -2698,7 +2683,7 @@ crocus_create_uncompiled_shader(struct pipe_context *ctx,
 
    brw_preprocess_nir(screen->compiler, nir, NULL);
 
-   NIR_PASS_V(nir, brw_nir_lower_image_load_store, devinfo, false);
+   NIR_PASS_V(nir, brw_nir_lower_storage_image, devinfo);
    NIR_PASS_V(nir, crocus_lower_storage_image_derefs);
 
    nir_sweep(nir);
@@ -2709,10 +2694,6 @@ crocus_create_uncompiled_shader(struct pipe_context *ctx,
       memcpy(&ish->stream_output, so_info, sizeof(*so_info));
       update_so_info(&ish->stream_output, nir->info.outputs_written);
    }
-
-   /* Save this now before potentially dropping nir->info.name */
-   if (nir->info.name && strncmp(nir->info.name, "ARB", 3) == 0)
-      ish->use_alt_mode = true;
 
    if (screen->disk_cache) {
       /* Serialize the NIR to a binary blob that we can hash for the disk

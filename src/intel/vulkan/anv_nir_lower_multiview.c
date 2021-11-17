@@ -279,6 +279,8 @@ anv_nir_lower_multiview(nir_shader *shader,
    if (progress) {
       nir_metadata_preserve(entrypoint, nir_metadata_block_index |
                                         nir_metadata_dominance);
+   } else {
+      nir_metadata_preserve(entrypoint, nir_metadata_all);
    }
 
    return progress;

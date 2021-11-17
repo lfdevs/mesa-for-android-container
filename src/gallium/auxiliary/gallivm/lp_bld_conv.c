@@ -120,6 +120,8 @@ lp_build_half_to_float(struct gallivm_state *gallivm,
          else {
             intrinsic = "llvm.x86.vcvtph2ps.256";
          }
+         src = LLVMBuildBitCast(builder, src,
+                                LLVMVectorType(LLVMInt16TypeInContext(gallivm->context), 8), "");
          return lp_build_intrinsic_unary(builder, intrinsic,
                                          lp_build_vec_type(gallivm, f32_type), src);
       } else {
@@ -193,6 +195,7 @@ lp_build_float_to_half(struct gallivm_state *gallivm,
       if (length == 4) {
          result = lp_build_extract_range(gallivm, result, 0, 4);
       }
+      result = LLVMBuildBitCast(builder, result, lp_build_vec_type(gallivm, lp_type_float_vec(16, 16 * length)), "");
    }
 
    else {

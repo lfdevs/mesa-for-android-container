@@ -68,6 +68,10 @@ TEMPLATE_H = Template(COPYRIGHT + """\
 extern "C" {
 #endif
 
+#ifdef _MSC_VER
+VKAPI_ATTR void VKAPI_CALL vk_entrypoint_stub(void);
+#endif
+
 <%def name="dispatch_table(entrypoints)">
 % for e in entrypoints:
   % if e.alias:
@@ -221,7 +225,7 @@ extern struct vk_device_dispatch_table vk_device_trampolines;
 #endif
 
 #endif /* VK_DISPATCH_TABLE_H */
-""", output_encoding='utf-8')
+""")
 
 TEMPLATE_C = Template(COPYRIGHT + """\
 /* This file generated from ${filename}, don't edit directly. */
@@ -464,6 +468,13 @@ vk_device_entrypoint_is_enabled(int index, uint32_t core_version,
    }
 }
 
+#ifdef _MSC_VER
+VKAPI_ATTR void VKAPI_CALL vk_entrypoint_stub(void)
+{
+   unreachable(!"Entrypoint not implemented");
+}
+#endif
+
 <%def name="dispatch_table_from_entrypoints(type)">
 void vk_${type}_dispatch_table_from_entrypoints(
     struct vk_${type}_dispatch_table *dispatch_table,
@@ -477,8 +488,8 @@ void vk_${type}_dispatch_table_from_entrypoints(
         memset(dispatch_table, 0, sizeof(*dispatch_table));
         for (unsigned i = 0; i < ARRAY_SIZE(${type}_compaction_table); i++) {
 #ifdef _MSC_VER
-            const uintptr_t zero = 0;
-            if (entry[i] == NULL || memcmp(entry[i], &zero, sizeof(zero)) == 0)
+            assert(entry[i] != NULL);
+            if (entry[i] == vk_entrypoint_stub)
 #else
             if (entry[i] == NULL)
 #endif
@@ -490,7 +501,12 @@ void vk_${type}_dispatch_table_from_entrypoints(
     } else {
         for (unsigned i = 0; i < ARRAY_SIZE(${type}_compaction_table); i++) {
             unsigned disp_index = ${type}_compaction_table[i];
+#ifdef _MSC_VER
+            assert(entry[i] != NULL);
+            if (disp[disp_index] == NULL && entry[i] != vk_entrypoint_stub)
+#else
             if (disp[disp_index] == NULL)
+#endif
                 disp[disp_index] = entry[i];
         }
     }
@@ -667,7 +683,7 @@ struct vk_device_dispatch_table vk_device_trampolines = {
   % endif
 % endfor
 };
-""", output_encoding='utf-8')
+""")
 
 U32_MASK = 2**32 - 1
 
@@ -726,7 +742,7 @@ class StringIntMap(object):
             self.collisions[min(level, 9)] += 1
             self.mapping[h & self.hash_mask] = idx
 
-EntrypointParam = namedtuple('EntrypointParam', 'type name decl')
+EntrypointParam = namedtuple('EntrypointParam', 'type name decl len')
 
 class EntrypointBase(object):
     def __init__(self, name):
@@ -811,7 +827,8 @@ def get_entrypoints(doc, entrypoints_to_defines):
             params = [EntrypointParam(
                 type=p.find('./type').text,
                 name=p.find('./name').text,
-                decl=''.join(p.itertext())
+                decl=''.join(p.itertext()),
+                len=p.attrib.get('len', None)
             ) for p in command.findall('./param')]
             guard = entrypoints_to_defines.get(name)
             # They really need to be unique
@@ -927,13 +944,13 @@ def main():
     # per entry point.
     try:
         if args.out_h:
-            with open(args.out_h, 'wb') as f:
+            with open(args.out_h, 'w') as f:
                 f.write(TEMPLATE_H.render(instance_entrypoints=instance_entrypoints,
                                           physical_device_entrypoints=physical_device_entrypoints,
                                           device_entrypoints=device_entrypoints,
                                           filename=os.path.basename(__file__)))
         if args.out_c:
-            with open(args.out_c, 'wb') as f:
+            with open(args.out_c, 'w') as f:
                 f.write(TEMPLATE_C.render(instance_entrypoints=instance_entrypoints,
                                           physical_device_entrypoints=physical_device_entrypoints,
                                           device_entrypoints=device_entrypoints,

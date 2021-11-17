@@ -378,21 +378,35 @@ SOFTWARE.
 	</encode>
 </bitset>
 
-<!-- ldgb.untyped.4d.f32.4 r0.x, g[0], r0.x, r1.z -->
-<bitset name="ldgb" extends="#instruction-cat6-a3xx">
+<!-- base pattern for a3xx cat6 ssbo/ibo load/store instructions -->
+<bitset name="#instruction-cat6-a3xx-ibo" extends="#instruction-cat6-a3xx">
+	<derived name="D" expr="#cat6-d" type="uint"/>
+	<derived name="TYPE_SIZE" expr="#cat6-type-size" type="uint"/>
+
+	<field   low="9"  high="10" name="D_MINUS_ONE" type="uint"/>
+	<field   pos="11"           name="TYPED" type="#cat6-typed"/>
+	<field   low="12" high="13" name="TYPE_SIZE_MINUS_ONE" type="uint"/>
+	<field   low="41" high="48" name="SSBO" type="#cat6-src">   <!-- SSBO/image binding point -->
+		<param name="SSBO_IM" as="SRC_IM"/>
+	</field>
+	<pattern pos="52"          >x</pattern>         <!-- G -->
+	<field   pos="53"          name="SSBO_IM" type="bool"/>
+	<encode>
+		<map name="D_MINUS_ONE">src->cat6.d - 1</map>
+		<map name="TYPED">src</map>
+		<map name="TYPE_SIZE_MINUS_ONE">src->cat6.iim_val - 1</map>
+		<map name="SSBO">src->srcs[0]</map>
+		<map name="SSBO_IM">!!(src->srcs[0]->flags &amp; IR3_REG_IMMED)</map>
+	</encode>
+</bitset>
+
+<bitset name="#instruction-cat6-a3xx-ibo-load" extends="#instruction-cat6-a3xx-ibo">
 	<display>
 		{SY}{JP}{NAME}.{TYPED}.{D}d.{TYPE}.{TYPE_SIZE} {DST}, g[{SSBO}], {SRC1}, {SRC2}
 	</display>
 	<gen max="599"/>
 
-	<derived name="D" expr="#cat6-d" type="uint"/>
-	<derived name="TYPE_SIZE" expr="#cat6-type-size" type="uint"/>
-
-	<pattern pos="0"           >x</pattern>
 	<pattern low="1"  high="8" >xxxxxxxx</pattern>  <!-- SRC3 -->
-	<field   low="9"  high="10" name="D_MINUS_ONE" type="uint"/>
-	<field   pos="11"           name="TYPED" type="#cat6-typed"/>
-	<field   low="12" high="13" name="TYPE_SIZE_MINUS_ONE" type="uint"/>
 	<field   low="14" high="21" name="SRC1" type="#cat6-src">
 		<param name="SRC1_IM" as="SRC_IM"/>
 	</field>
@@ -402,19 +416,8 @@ SOFTWARE.
 		<param name="SRC2_IM" as="SRC_IM"/>
 	</field>
 	<field   low="32" high="39" name="DST" type="#reg-gpr"/>
-	<pattern pos="40"          >0</pattern>
-	<field   low="41" high="48" name="SSBO" type="#cat6-src">   <!-- SSBO/image binding point -->
-		<param name="SSBO_IM" as="SRC_IM"/>
-	</field>
-	<pattern pos="52"          >x</pattern>         <!-- G -->
-	<field   pos="53"          name="SSBO_IM" type="bool"/>
-	<pattern low="54" high="58">11011</pattern>  <!-- OPC -->
+	<pattern pos="40"          >x</pattern> <!-- .rck -->
 	<encode>
-		<map name="D_MINUS_ONE">src->cat6.d - 1</map>
-		<map name="TYPED">src</map>
-		<map name="TYPE_SIZE_MINUS_ONE">src->cat6.iim_val - 1</map>
-		<map name="SSBO">src->srcs[0]</map>
-		<map name="SSBO_IM">!!(src->srcs[0]->flags &amp; IR3_REG_IMMED)</map>
 		<map name="SRC1">src->srcs[1]</map>
 		<map name="SRC1_IM">!!(src->srcs[1]->flags &amp; IR3_REG_IMMED)</map>
 		<map name="SRC2">src->srcs[2]</map>
@@ -422,20 +425,24 @@ SOFTWARE.
 	</encode>
 </bitset>
 
-<bitset name="#instruction-cat6-a3xx-ibo" extends="#instruction-cat6-a3xx">
+<bitset name="ldgb" extends="#instruction-cat6-a3xx-ibo-load">
+	<pattern low="54" high="58">11011</pattern>  <!-- OPC -->
+        <pattern pos="0"           >x</pattern> <!-- .a -->
+</bitset>
+
+<bitset name="ldib" extends="#instruction-cat6-a3xx-ibo-load">
+	<pattern low="54" high="58">00110</pattern>  <!-- OPC -->
+        <pattern pos="0"           >1</pattern> <!-- .a -->
+</bitset>
+
+<bitset name="#instruction-cat6-a3xx-ibo-store" extends="#instruction-cat6-a3xx-ibo">
 	<display>
 		{SY}{JP}{NAME}.{TYPED}.{D}d.{TYPE}.{TYPE_SIZE} g[{SSBO}], {SRC1}, {SRC2}, {SRC3}
 	</display>
 	<gen max="599"/>
 
-	<derived name="D" expr="#cat6-d" type="uint"/>
-	<derived name="TYPE_SIZE" expr="#cat6-type-size" type="uint"/>
-
-	<pattern pos="0"           >1</pattern>
+        <pattern pos="0"           >1</pattern> <!-- .a -->
 	<field   low="1"  high="8"  name="SRC1" type="#reg-gpr"/>
-	<field   low="9"  high="10" name="D_MINUS_ONE" type="uint"/>
-	<field   pos="11"           name="TYPED" type="#cat6-typed"/>
-	<field   low="12" high="13" name="TYPE_SIZE_MINUS_ONE" type="uint"/>
 	<pattern low="14" high="22">xxxxxxxxx</pattern>
 	<field   pos="23"           name="SRC2_IM" type="bool"/>
 	<field   low="24" high="31" name="SRC2" type="#cat6-src">
@@ -445,17 +452,7 @@ SOFTWARE.
 		<param name="SRC3_IM" as="SRC_IM"/>
 	</field>
 	<field   pos="40"           name="SRC3_IM" type="bool"/>
-	<field   low="41" high="48" name="SSBO" type="#cat6-src">   <!-- SSBO/image binding point -->
-		<param name="SSBO_IM" as="SRC_IM"/>
-	</field>
-	<pattern pos="52"          >x</pattern>         <!-- G -->
-	<field   pos="53"          name="SSBO_IM" type="bool"/>
 	<encode>
-		<map name="D_MINUS_ONE">src->cat6.d - 1</map>
-		<map name="TYPED">src</map>
-		<map name="TYPE_SIZE_MINUS_ONE">src->cat6.iim_val - 1</map>
-		<map name="SSBO">src->srcs[0]</map>
-		<map name="SSBO_IM">!!(src->srcs[0]->flags &amp; IR3_REG_IMMED)</map>
 		<map name="SRC1">src->srcs[1]</map>
 		<map name="SRC1_IM">!!(src->srcs[1]->flags &amp; IR3_REG_IMMED)</map>
 		<map name="SRC2">src->srcs[2]</map>
@@ -465,11 +462,11 @@ SOFTWARE.
 	</encode>
 </bitset>
 
-<bitset name="stgb" extends="#instruction-cat6-a3xx-ibo">
+<bitset name="stgb" extends="#instruction-cat6-a3xx-ibo-store">
 	<pattern low="54" high="58">11100</pattern>  <!-- OPC -->
 </bitset>
 
-<bitset name="stib" extends="#instruction-cat6-a3xx-ibo">
+<bitset name="stib" extends="#instruction-cat6-a3xx-ibo-store">
 	<pattern low="54" high="58">11101</pattern>  <!-- OPC -->
 </bitset>
 
@@ -721,8 +718,9 @@ SOFTWARE.
 	<pattern low="24" high="31">xxxxxxxx</pattern>    <!-- SRC2 -->
 	<field   low="32" high="39" name="DST" type="#reg-gpr"/>
 	<field   low="41" high="48" name="SSBO" type="#cat6-src">   <!-- SSBO/image binding point -->
-		<param name="TRUE" as="SRC_IM"/>
+		<param name="SSBO_IM" as="SRC_IM"/>
 	</field>
+	<derived name="SSBO_IM" expr="#cat6-direct" type="bool"/>
 	<field   low="49" high="51" name="TYPE" type="#type"/>
 	<pattern low="52" high="53">1x</pattern>
 	<encode>
@@ -894,7 +892,7 @@ SOFTWARE.
 		<display>
 			{IMMED}
 		</display>
-		<field name="IMMED" low="0" high="7" type="int"/>
+		<field name="IMMED" low="0" high="7" type="uint"/>
 	</override>
 	<display>
 		r{GPR}.{SWIZ}

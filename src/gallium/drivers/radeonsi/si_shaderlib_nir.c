@@ -33,7 +33,7 @@ static void *create_nir_cs(struct si_context *sctx, nir_builder *b)
    struct pipe_compute_state state = {0};
    state.ir_type = PIPE_SHADER_IR_NIR;
    state.prog = b->shader;
-   sctx->b.screen->finalize_nir(sctx->b.screen, (void*)state.prog, false);
+   sctx->b.screen->finalize_nir(sctx->b.screen, (void*)state.prog);
    return sctx->b.create_compute_state(&sctx->b, &state);
 }
 

@@ -367,7 +367,8 @@ st_convert_sampler(const struct st_context *st,
                    const struct gl_texture_object *texobj,
                    const struct gl_sampler_object *msamp,
                    float tex_unit_lod_bias,
-                   struct pipe_sampler_state *sampler);
+                   struct pipe_sampler_state *sampler,
+                   bool seamless_cube_map);
 
 void
 st_convert_sampler_from_unit(const struct st_context *st,

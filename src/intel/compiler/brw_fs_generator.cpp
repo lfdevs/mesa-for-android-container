@@ -2072,6 +2072,11 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 	 brw_MACH(p, dst, src[0], src[1]);
 	 break;
 
+      case BRW_OPCODE_DP4A:
+         assert(devinfo->ver >= 12);
+         brw_DP4A(p, dst, src[0], src[1], src[2]);
+         break;
+
       case BRW_OPCODE_LINE:
          brw_LINE(p, dst, src[0], src[1]);
          break;
@@ -2089,6 +2094,11 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
             brw_set_default_access_mode(p, BRW_ALIGN_16);
          brw_LRP(p, dst, src[0], src[1], src[2]);
 	 break;
+
+      case BRW_OPCODE_ADD3:
+         assert(devinfo->verx10 >= 125);
+         brw_ADD3(p, dst, src[0], src[1], src[2]);
+         break;
 
       case BRW_OPCODE_FRC:
 	 brw_FRC(p, dst, src[0]);
@@ -2789,19 +2799,19 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 #endif
    assert(validated);
 
-   compiler->shader_debug_log(log_data,
-                              "%s SIMD%d shader: %d inst, %d loops, %u cycles, "
-                              "%d:%d spills:fills, %u sends, "
-                              "scheduled with mode %s, "
-                              "Promoted %u constants, "
-                              "compacted %d to %d bytes.",
-                              _mesa_shader_stage_to_abbrev(stage),
-                              dispatch_width, before_size / 16 - nop_count,
-                              loop_count, perf.latency,
-                              spill_count, fill_count, send_count,
-                              shader_stats.scheduler_mode,
-                              shader_stats.promoted_constants,
-                              before_size, after_size);
+   brw_shader_debug_log(compiler, log_data,
+                        "%s SIMD%d shader: %d inst, %d loops, %u cycles, "
+                        "%d:%d spills:fills, %u sends, "
+                        "scheduled with mode %s, "
+                        "Promoted %u constants, "
+                        "compacted %d to %d bytes.\n",
+                        _mesa_shader_stage_to_abbrev(stage),
+                        dispatch_width, before_size / 16 - nop_count,
+                        loop_count, perf.latency,
+                        spill_count, fill_count, send_count,
+                        shader_stats.scheduler_mode,
+                        shader_stats.promoted_constants,
+                        before_size, after_size);
    if (stats) {
       stats->dispatch_width = dispatch_width;
       stats->instructions = before_size / 16 - nop_count;

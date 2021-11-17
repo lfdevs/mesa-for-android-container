@@ -246,6 +246,36 @@ ISL, we represent a W-tile as a tiling with a logical dimension of 64el x 64el
 but a physical size of 128B x 32rows.  This cleanly takes care of the pitch
 issue above and seems to nicely model the hardware.
 
+Tile4
+-----
+
+The tile4 format, introduced on Xe-HP, is somewhat similar to Y but with more
+internal shuffling.  Each tile4 tile is an 8x8 grid of cache lines arranged
+as follows:
+
+===== ===== ===== ===== ===== ===== ===== =====
+===== ===== ===== ===== ===== ===== ===== =====
+0x000 0x040 0x080 0x0a0 0x200 0x240 0x280 0x2a0
+0x100 0x140 0x180 0x1a0 0x300 0x340 0x380 0x3a0
+0x400 0x440 0x480 0x4a0 0x600 0x640 0x680 0x6a0
+0x500 0x540 0x580 0x5a0 0x700 0x740 0x780 0x7a0
+0x800 0x840 0x880 0x8a0 0xa00 0xa40 0xa80 0xaa0
+0x900 0x940 0x980 0x9a0 0xb00 0xb40 0xb80 0xba0
+0xc00 0xc40 0xc80 0xca0 0xe00 0xe40 0xe80 0xea0
+0xd00 0xd40 0xd80 0xda0 0xf00 0xf40 0xf80 0xfa0
+===== ===== ===== ===== ===== ===== ===== =====
+
+Each 64B cache line within the tile is laid out the same way as for a Y-tile,
+as 4 rows of 16B each:
+
+==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ====
+==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ====
+0x00 0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0a 0x0b 0x0c 0x0d 0x0e 0x0f
+0x10 0x11 0x12 0x13 0x14 0x15 0x16 0x17 0x18 0x19 0x1a 0x1b 0x1c 0x1d 0x1e 0x1f
+0x20 0x21 0x22 0x23 0x24 0x25 0x26 0x27 0x28 0x29 0x2a 0x2b 0x2c 0x2d 0x2e 0x2f
+0x30 0x31 0x32 0x33 0x34 0x35 0x36 0x37 0x38 0x39 0x3a 0x3b 0x3c 0x3d 0x3e 0x3f
+==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ==== ====
+
 Tiling as a bit pattern
 -----------------------
 
@@ -281,6 +311,7 @@ the tile are given by the table below:
 :cpp:enumerator:`isl_tiling::ISL_TILING_X`  :math:`v_2` :math:`v_1` :math:`v_0` :math:`u_8` :math:`u_7` :math:`u_6` :math:`u_5` :math:`u_4` :math:`u_3` :math:`u_2` :math:`u_1` :math:`u_0`
 :cpp:enumerator:`isl_tiling::ISL_TILING_Y0` :math:`u_6` :math:`u_5` :math:`u_4` :math:`v_4` :math:`v_3` :math:`v_2` :math:`v_1` :math:`v_0` :math:`u_3` :math:`u_2` :math:`u_1` :math:`u_0`
 :cpp:enumerator:`isl_tiling::ISL_TILING_W`  :math:`u_5` :math:`u_4` :math:`u_3` :math:`v_5` :math:`v_4` :math:`v_3` :math:`v_2` :math:`u_2` :math:`v_1` :math:`u_1` :math:`v_0` :math:`u_0`
+:cpp:enumerator:`isl_tiling::ISL_TILING_4`  :math:`v_4` :math:`v_3` :math:`u_6` :math:`v_2` :math:`u_5` :math:`u_4` :math:`v_1` :math:`v_0` :math:`u_3` :math:`u_2` :math:`u_1` :math:`u_0`
 =========================================== =========== =========== =========== =========== =========== =========== =========== =========== =========== =========== =========== ===========
 
 Constructing the mapping this way makes a lot of sense when you think about

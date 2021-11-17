@@ -140,6 +140,13 @@ elif with_platform_haiku
   files_egl += files('drivers/haiku/egl_haiku.cpp')
   link_for_egl += libgl
   deps_for_egl += cpp.find_library('be')
+elif with_platform_windows
+  c_args_for_egl += [
+    '-DEGLAPI=', '-DPUBLIC='
+  ]
+  files_egl += files('drivers/wgl/egl_wgl.c')
+  incs_for_egl += [inc_wgl, inc_gallium, inc_gallium_aux]
+  link_for_egl += libgallium_wgl
 endif
 
 if cc.has_function('mincore')
@@ -149,9 +156,11 @@ endif
 if not with_glvnd
   egl_lib_name = 'EGL' + get_option('egl-lib-suffix')
   egl_lib_version = '1.0.0'
+  egl_lib_soversion = host_machine.system() == 'windows' ? '' : '1'
 else
   egl_lib_name = 'EGL_@0@'.format(glvnd_vendor_name)
   egl_lib_version = '0.0.0'
+  egl_lib_soversion = '0'
   deps_for_egl += dep_glvnd
   files_egl += [g_egldispatchstubs_h, g_egldispatchstubs_c]
   files_egl += files('main/eglglvnd.c', 'main/egldispatchstubs.c')
@@ -181,6 +190,9 @@ libegl = shared_library(
   dependencies : [deps_for_egl, dep_dl, dep_libdrm, dep_clock, dep_thread, idep_mesautil],
   install : true,
   version : egl_lib_version,
+  soversion : egl_lib_soversion,
+  name_prefix : 'lib', # even on windows
+  vs_module_defs : 'main/egl.def'
 )
 
 if not with_glvnd

@@ -1046,20 +1046,6 @@ fs_visitor::emit_cs_terminate()
 void
 fs_visitor::emit_barrier()
 {
-   uint32_t barrier_id_mask;
-   switch (devinfo->ver) {
-   case 7:
-   case 8:
-      barrier_id_mask = 0x0f000000u; break;
-   case 9:
-      barrier_id_mask = 0x8f000000u; break;
-   case 11:
-   case 12:
-      barrier_id_mask = 0x7f000000u; break;
-   default:
-      unreachable("barrier is only available on gen >= 7");
-   }
-
    /* We are getting the barrier ID from the compute shader header */
    assert(stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_KERNEL);
 
@@ -1068,10 +1054,33 @@ fs_visitor::emit_barrier()
    /* Clear the message payload */
    bld.exec_all().group(8, 0).MOV(payload, brw_imm_ud(0u));
 
-   /* Copy the barrier id from r0.2 to the message payload reg.2 */
-   fs_reg r0_2 = fs_reg(retype(brw_vec1_grf(0, 2), BRW_REGISTER_TYPE_UD));
-   bld.exec_all().group(1, 0).AND(component(payload, 2), r0_2,
-                                  brw_imm_ud(barrier_id_mask));
+   if (devinfo->verx10 >= 125) {
+      /* mov r0.2[31:24] into m0.2[31:24] and m0.2[23:16] */
+      fs_reg m0_10ub = component(retype(payload, BRW_REGISTER_TYPE_UB), 10);
+      fs_reg r0_11ub =
+         stride(suboffset(retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_UB), 11),
+                0, 1, 0);
+      bld.exec_all().group(2, 0).MOV(m0_10ub, r0_11ub);
+   } else {
+      uint32_t barrier_id_mask;
+      switch (devinfo->ver) {
+      case 7:
+      case 8:
+         barrier_id_mask = 0x0f000000u; break;
+      case 9:
+         barrier_id_mask = 0x8f000000u; break;
+      case 11:
+      case 12:
+         barrier_id_mask = 0x7f000000u; break;
+      default:
+         unreachable("barrier is only available on gen >= 7");
+      }
+
+      /* Copy the barrier id from r0.2 to the message payload reg.2 */
+      fs_reg r0_2 = fs_reg(retype(brw_vec1_grf(0, 2), BRW_REGISTER_TYPE_UD));
+      bld.exec_all().group(1, 0).AND(component(payload, 2), r0_2,
+                                     brw_imm_ud(barrier_id_mask));
+   }
 
    /* Emit a gateway "barrier" message using the payload we set up, followed
     * by a wait instruction.

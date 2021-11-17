@@ -1,6 +1,7 @@
 libgbm.so.1 libgbm1 #MINVER#
 | libgbm1-private
  gbm_bo_create@Base 7.11~1
+ gbm_bo_create_with_modifiers2@Base 21.3.0~rc1
  gbm_bo_create_with_modifiers@Base 17.1.0~rc2
  gbm_bo_destroy@Base 7.11~1
  gbm_bo_get_bpp@Base 17.3.0~rc1
@@ -31,6 +32,7 @@ libgbm.so.1 libgbm1 #MINVER#
  gbm_device_is_format_supported@Base 8.1~0
  gbm_format_get_name@Base 19.0.0~rc5
  gbm_surface_create@Base 8.1~0
+ gbm_surface_create_with_modifiers2@Base 21.3.0~rc1
  gbm_surface_create_with_modifiers@Base 17.1.0~rc2
  gbm_surface_destroy@Base 8.1~0
  gbm_surface_has_free_buffers@Base 8.1~0

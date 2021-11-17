@@ -1047,9 +1047,9 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
             src = ureg_src_register(TGSI_FILE_INPUT, param->idx);
         } else {
             if (tx->version.major < 3) {
-                src = ureg_DECL_fs_input_cyl_centroid(
+                src = ureg_DECL_fs_input_centroid(
                     ureg, TGSI_SEMANTIC_COLOR, param->idx,
-                    TGSI_INTERPOLATE_COLOR, 0,
+                    TGSI_INTERPOLATE_COLOR,
                     tx->info->force_color_in_centroid ?
                       TGSI_INTERPOLATE_LOC_CENTROID : 0,
                     0, 1);
@@ -2327,10 +2327,9 @@ DECL_SPECIAL(DCL)
                 (tgsi.Name == TGSI_SEMANTIC_COLOR && tx->info->force_color_in_centroid))
                 interp_location = TGSI_INTERPOLATE_LOC_CENTROID;
 
-            tx->regs.v[sem.reg.idx] = ureg_DECL_fs_input_cyl_centroid(
+            tx->regs.v[sem.reg.idx] = ureg_DECL_fs_input_centroid(
                 ureg, tgsi.Name, tgsi.Index,
                 nine_tgsi_to_interp_mode(&tgsi),
-                0, /* cylwrap */
                 interp_location, 0, 1);
         } else
         if (!is_input && 0) { /* declare in COLOROUT/DEPTHOUT case */

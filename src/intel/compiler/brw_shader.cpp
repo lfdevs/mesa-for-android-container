@@ -331,6 +331,8 @@ brw_instruction_name(const struct intel_device_info *devinfo, enum opcode op)
       return "a64_untyped_atomic_float16_logical";
    case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT32_LOGICAL:
       return "a64_untyped_atomic_float32_logical";
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT64_LOGICAL:
+      return "a64_untyped_atomic_float64_logical";
    case SHADER_OPCODE_TYPED_ATOMIC_LOGICAL:
       return "typed_atomic_logical";
    case SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL:
@@ -866,6 +868,7 @@ backend_instruction::is_commutative() const
    case BRW_OPCODE_OR:
    case BRW_OPCODE_XOR:
    case BRW_OPCODE_ADD:
+   case BRW_OPCODE_ADD3:
    case BRW_OPCODE_MUL:
    case SHADER_OPCODE_MULH:
       return true;
@@ -968,6 +971,7 @@ backend_instruction::can_do_source_mods() const
    case BRW_OPCODE_ROL:
    case BRW_OPCODE_ROR:
    case BRW_OPCODE_SUBB:
+   case BRW_OPCODE_DP4A:
    case SHADER_OPCODE_BROADCAST:
    case SHADER_OPCODE_CLUSTER_BROADCAST:
    case SHADER_OPCODE_MOV_INDIRECT:
@@ -985,6 +989,7 @@ backend_instruction::can_do_saturate() const
 {
    switch (opcode) {
    case BRW_OPCODE_ADD:
+   case BRW_OPCODE_ADD3:
    case BRW_OPCODE_ASR:
    case BRW_OPCODE_AVG:
    case BRW_OPCODE_CSEL:
@@ -992,6 +997,7 @@ backend_instruction::can_do_saturate() const
    case BRW_OPCODE_DP3:
    case BRW_OPCODE_DP4:
    case BRW_OPCODE_DPH:
+   case BRW_OPCODE_DP4A:
    case BRW_OPCODE_F16TO32:
    case BRW_OPCODE_F32TO16:
    case BRW_OPCODE_LINE:
@@ -1030,6 +1036,7 @@ backend_instruction::can_do_cmod() const
 {
    switch (opcode) {
    case BRW_OPCODE_ADD:
+   case BRW_OPCODE_ADD3:
    case BRW_OPCODE_ADDC:
    case BRW_OPCODE_AND:
    case BRW_OPCODE_ASR:
@@ -1117,6 +1124,7 @@ backend_instruction::has_side_effects() const
    case SHADER_OPCODE_A64_UNTYPED_ATOMIC_INT64_LOGICAL:
    case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT16_LOGICAL:
    case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT32_LOGICAL:
+   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT64_LOGICAL:
    case SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL:
    case SHADER_OPCODE_DWORD_SCATTERED_WRITE_LOGICAL:
    case SHADER_OPCODE_TYPED_ATOMIC_LOGICAL:
@@ -1286,14 +1294,14 @@ backend_shader::dump_instructions(const char *name) const
    if (cfg) {
       int ip = 0;
       foreach_block_and_inst(block, backend_instruction, inst, cfg) {
-         if (!(INTEL_DEBUG & DEBUG_OPTIMIZER))
+         if (!INTEL_DEBUG(DEBUG_OPTIMIZER))
             fprintf(file, "%4d: ", ip++);
          dump_instruction(inst, file);
       }
    } else {
       int ip = 0;
       foreach_in_list(backend_instruction, inst, &instructions) {
-         if (!(INTEL_DEBUG & DEBUG_OPTIMIZER))
+         if (!INTEL_DEBUG(DEBUG_OPTIMIZER))
             fprintf(file, "%4d: ", ip++);
          dump_instruction(inst, file);
       }
@@ -1332,7 +1340,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_EVAL];
-   const bool debug_enabled = INTEL_DEBUG & DEBUG_TES;
+   const bool debug_enabled = INTEL_DEBUG(DEBUG_TES);
    const unsigned *assembly;
 
    prog_data->base.base.stage = MESA_SHADER_TESS_EVAL;

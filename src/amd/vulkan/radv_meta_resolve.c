@@ -451,15 +451,7 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
    radv_meta_save(&saved_state, cmd_buffer, RADV_META_SAVE_GRAPHICS_PIPELINE);
 
    assert(src_image->info.samples > 1);
-   if (src_image->info.samples <= 1) {
-      /* this causes GPU hangs if we get past here */
-      fprintf(stderr, "radv: Illegal resolve operation (src not multisampled), will hang GPU.");
-      return;
-   }
    assert(dst_image->info.samples == 1);
-
-   if (src_image->info.array_size > 1)
-      radv_finishme("vkCmdResolveImage: multisample array images");
 
    unsigned fs_key = radv_format_meta_fs_key(device, dst_image->vk_format);
 
@@ -608,6 +600,8 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
 
       radv_cmd_buffer_end_render_pass(cmd_buffer);
 
+      radv_image_view_finish(&src_iview);
+      radv_image_view_finish(&dst_iview);
       radv_DestroyFramebuffer(radv_device_to_handle(device), fb_h, &cmd_buffer->pool->alloc);
    }
 
@@ -736,7 +730,7 @@ radv_cmd_buffer_resolve_subpass_hw(struct radv_cmd_buffer *cmd_buffer)
                    &(VkExtent2D){fb->width, fb->height});
    }
 
-   radv_cmd_buffer_set_subpass(cmd_buffer, subpass);
+   radv_cmd_buffer_restore_subpass(cmd_buffer, subpass);
 
    radv_meta_restore(&saved_state, cmd_buffer);
 }

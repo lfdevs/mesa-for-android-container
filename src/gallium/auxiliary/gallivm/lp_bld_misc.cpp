@@ -464,6 +464,12 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 #endif
 #endif
 
+#if defined(PIPE_ARCH_MIPS64)
+   MAttrs.push_back(util_get_cpu_caps()->has_msa ? "+msa" : "-msa");
+   /* MSA requires a 64-bit FPU register file */
+   MAttrs.push_back("+fp64");
+#endif
+
    builder.setMAttrs(MAttrs);
 
    if (gallivm_debug & (GALLIVM_DEBUG_IR | GALLIVM_DEBUG_ASM | GALLIVM_DEBUG_DUMP_BC)) {
@@ -516,6 +522,19 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
       MCPU = "pwr8";
 #endif
 #endif
+
+#if defined(PIPE_ARCH_MIPS64)
+      /*
+       * ls3a4000 CPU and ls2k1000 SoC is a mips64r5 compatible with MSA SIMD
+       * instruction set implemented, while ls3a3000 is mips64r2 compatible
+       * only. getHostCPUName() return "generic" on all loongson
+       * mips CPU currently. So we override the MCPU to mips64r5 if MSA is
+       * implemented, feedback to mips64r2 for all other ordinary mips64 cpu.
+       */
+   if (MCPU == "generic")
+      MCPU = util_get_cpu_caps()->has_msa ? "mips64r5" : "mips64r2";
+#endif
+
    builder.setMCPU(MCPU);
    if (gallivm_debug & (GALLIVM_DEBUG_IR | GALLIVM_DEBUG_ASM | GALLIVM_DEBUG_DUMP_BC)) {
       debug_printf("llc -mcpu option: %s\n", MCPU.str().c_str());

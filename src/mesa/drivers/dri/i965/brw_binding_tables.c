@@ -66,7 +66,7 @@ brw_upload_binding_table(struct brw_context *brw,
       stage_state->bind_bo_offset = 0;
    } else {
       /* Upload a new binding table. */
-      if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
+      if (INTEL_DEBUG(DEBUG_SHADER_TIME)) {
          brw_emit_buffer_surface_state(
             brw, &stage_state->surf_offset[
                     prog_data->binding_table.shader_time_start],

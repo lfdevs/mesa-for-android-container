@@ -79,6 +79,7 @@ must_promote_imm(const struct intel_device_info *devinfo, const fs_inst *inst)
    case SHADER_OPCODE_POW:
       return devinfo->ver < 8;
    case BRW_OPCODE_MAD:
+   case BRW_OPCODE_ADD3:
    case BRW_OPCODE_LRP:
       return true;
    default:
@@ -336,20 +337,87 @@ representable_as_hf(float f, uint16_t *hf)
 }
 
 static bool
-represent_src_as_imm(const struct intel_device_info *devinfo,
-                     fs_reg *src)
+representable_as_w(int d, int16_t *w)
 {
+   int res = ((d & 0xffff8000) + 0x8000) & 0xffff7fff;
+   if (!res) {
+      *w = d;
+      return true;
+   }
+
+   return false;
+}
+
+static bool
+representable_as_uw(unsigned ud, uint16_t *uw)
+{
+   if (!(ud & 0xffff0000)) {
+      *uw = ud;
+      return true;
+   }
+
+   return false;
+}
+
+static bool
+supports_src_as_imm(const struct intel_device_info *devinfo, enum opcode op)
+{
+   switch (op) {
+   case BRW_OPCODE_ADD3:
+      return devinfo->verx10 >= 125;
+   case BRW_OPCODE_MAD:
+      return devinfo->ver == 12 && devinfo->verx10 < 125;
+   default:
+      return false;
+   }
+}
+
+static bool
+can_promote_src_as_imm(const struct intel_device_info *devinfo, fs_inst *inst,
+                       unsigned src_idx)
+{
+   bool can_promote = false;
+
+   /* Experiment shows that we can only support src0 as immediate */
+   if (src_idx != 0)
+      return false;
+
+   if (!supports_src_as_imm(devinfo, inst->opcode))
+      return false;
+
    /* TODO - Fix the codepath below to use a bfloat16 immediate on XeHP,
     *        since HF/F mixed mode has been removed from the hardware.
     */
-   if (devinfo->ver == 12 && devinfo->verx10 < 125) {
+   switch (inst->src[src_idx].type) {
+   case BRW_REGISTER_TYPE_F: {
       uint16_t hf;
-      if (representable_as_hf(src->f, &hf)) {
-         *src = retype(brw_imm_uw(hf), BRW_REGISTER_TYPE_HF);
-         return true;
+      if (representable_as_hf(inst->src[src_idx].f, &hf)) {
+         inst->src[src_idx] = retype(brw_imm_uw(hf), BRW_REGISTER_TYPE_HF);
+         can_promote = true;
       }
+      break;
    }
-   return false;
+   case BRW_REGISTER_TYPE_W: {
+      int16_t w;
+      if (representable_as_w(inst->src[src_idx].d, &w)) {
+         inst->src[src_idx] = brw_imm_w(w);
+         can_promote = true;
+      }
+      break;
+   }
+   case BRW_REGISTER_TYPE_UW: {
+      uint16_t uw;
+      if (representable_as_uw(inst->src[src_idx].ud, &uw)) {
+         inst->src[src_idx] = brw_imm_uw(uw);
+         can_promote = true;
+      }
+      break;
+   }
+   default:
+      break;
+   }
+
+   return can_promote;
 }
 
 bool
@@ -375,17 +443,12 @@ fs_visitor::opt_combine_constants()
       if (!could_coissue(devinfo, inst) && !must_promote_imm(devinfo, inst))
          continue;
 
-      bool represented_as_imm = false;
       for (int i = 0; i < inst->sources; i++) {
          if (inst->src[i].file != IMM)
             continue;
 
-         if (!represented_as_imm && i == 0 &&
-             inst->opcode == BRW_OPCODE_MAD &&
-             represent_src_as_imm(devinfo, &inst->src[i])) {
-            represented_as_imm = true;
+         if (can_promote_src_as_imm(devinfo, inst, i))
             continue;
-         }
 
          char data[8];
          brw_reg_type type;
