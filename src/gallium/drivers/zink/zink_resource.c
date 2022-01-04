@@ -348,8 +348,7 @@ create_ici(struct zink_screen *screen, VkImageCreateInfo *ici, const struct pipe
 
    case PIPE_TEXTURE_3D:
       ici->imageType = VK_IMAGE_TYPE_3D;
-      if (bind & PIPE_BIND_RENDER_TARGET)
-         ici->flags |= VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
+      ici->flags |= VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
       break;
 
    case PIPE_BUFFER:
@@ -373,7 +372,7 @@ create_ici(struct zink_screen *screen, VkImageCreateInfo *ici, const struct pipe
    ici->samples = templ->nr_samples ? templ->nr_samples : VK_SAMPLE_COUNT_1_BIT;
    ici->tiling = modifiers_count ? VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT : bind & PIPE_BIND_LINEAR ? VK_IMAGE_TILING_LINEAR : VK_IMAGE_TILING_OPTIMAL;
    ici->sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-   ici->initialLayout = dmabuf ? VK_IMAGE_LAYOUT_PREINITIALIZED : VK_IMAGE_LAYOUT_UNDEFINED;
+   ici->initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
    /* sampleCounts will be set to VK_SAMPLE_COUNT_1_BIT if at least one of the following conditions is true:
     * - flags contains VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
@@ -447,21 +446,20 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
    VkMemoryRequirements reqs;
    VkMemoryPropertyFlags flags;
    bool need_dedicated = false;
+   bool shared = templ->bind & PIPE_BIND_SHARED;
    VkExternalMemoryHandleTypeFlags export_types = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
 
    VkExternalMemoryHandleTypeFlags external = 0;
    if (whandle) {
-      if (whandle->type == WINSYS_HANDLE_TYPE_FD)
+      if (whandle->type == WINSYS_HANDLE_TYPE_FD) {
          external = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-      else
+         export_types |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+      } else
          unreachable("unknown handle type");
    }
 
    /* TODO: remove linear for wsi */
    bool scanout = templ->bind & PIPE_BIND_SCANOUT;
-   bool shared = templ->bind & PIPE_BIND_SHARED;
-   if (shared && screen->info.have_EXT_external_memory_dma_buf)
-      export_types |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
 
    pipe_reference_init(&obj->reference, 1);
    util_dynarray_init(&obj->tmp, NULL);

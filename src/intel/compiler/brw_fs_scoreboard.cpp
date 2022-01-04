@@ -122,6 +122,8 @@ namespace {
       else if (inst->opcode == SHADER_OPCODE_BROADCAST &&
                !devinfo->has_64bit_float && type_sz(t) >= 8)
          return TGL_PIPE_INT;
+      else if (inst->opcode == FS_OPCODE_PACK_HALF_2x16_SPLIT)
+         return TGL_PIPE_FLOAT;
       else if (type_sz(inst->dst.type) >= 8 || type_sz(t) >= 8 ||
                is_dword_multiply)
          return TGL_PIPE_LONG;

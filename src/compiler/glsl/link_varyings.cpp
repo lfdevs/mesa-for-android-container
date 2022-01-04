@@ -319,13 +319,13 @@ cross_validate_types_and_qualifiers(struct gl_context *ctx,
       return;
    }
 
-   /* The GLSL 4.30 and GLSL ES 3.00 specifications say:
+   /* The GLSL 4.20 and GLSL ES 3.00 specifications say:
     *
     *    "As only outputs need be declared with invariant, an output from
     *     one shader stage will still match an input of a subsequent stage
     *     without the input being declared as invariant."
     *
-    * while GLSL 4.20 says:
+    * while GLSL 4.10 says:
     *
     *    "For variables leaving one shader and coming into another shader,
     *     the invariant keyword has to be used in both shaders, or a link
@@ -337,7 +337,7 @@ cross_validate_types_and_qualifiers(struct gl_context *ctx,
     *     and fragment shaders must match."
     */
    if (input->data.explicit_invariant != output->data.explicit_invariant &&
-       prog->data->Version < (prog->IsES ? 300 : 430)) {
+       prog->data->Version < (prog->IsES ? 300 : 420)) {
       linker_error(prog,
                    "%s shader output `%s' %s invariant qualifier, "
                    "but %s shader input %s invariant qualifier\n",

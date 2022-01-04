@@ -62,7 +62,7 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
 
    if (!indirect &&
        !info->primitive_restart &&
-       !u_trim_pipe_prim(info->mode, (unsigned*)&draws[0].count))
+       !u_trim_pipe_prim((enum pipe_prim_type)info->mode, (unsigned*)&draws[0].count))
       return;
 
    if (!swr_check_render_cond(pipe))
@@ -102,7 +102,7 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
          STREAMOUT_COMPILE_STATE state = {0};
          struct pipe_stream_output_info *so = &ctx->vs->pipe.stream_output;
 
-         state.numVertsPerPrim = u_vertices_per_prim(info->mode);
+         state.numVertsPerPrim = u_vertices_per_prim((enum pipe_prim_type)info->mode);
 
          uint32_t offsets[MAX_SO_STREAMS] = {0};
          uint32_t num = 0;
@@ -221,7 +221,7 @@ swr_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    if (ctx->gs)
       topology = (pipe_prim_type)ctx->gs->info.base.properties[TGSI_PROPERTY_GS_OUTPUT_PRIM];
    else
-      topology = info->mode;
+      topology = (enum pipe_prim_type)info->mode;
 
    switch (topology) {
    case PIPE_PRIM_TRIANGLE_FAN:

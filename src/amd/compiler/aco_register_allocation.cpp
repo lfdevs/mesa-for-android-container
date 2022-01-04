@@ -1898,10 +1898,9 @@ get_reg_for_operand(ra_ctx& ctx, RegisterFile& register_file,
       dst = operand.physReg();
 
    } else {
+      /* clear the operand in case it's only a stride mismatch */
+      register_file.clear(src, operand.regClass());
       dst = get_reg(ctx, register_file, operand.getTemp(), parallelcopy, instr, operand_index);
-      update_renames(
-         ctx, register_file, parallelcopy, instr,
-         instr->opcode != aco_opcode::p_create_vector ? rename_not_killed_ops : (UpdateRenames)0);
    }
 
    Operand pc_op = operand;

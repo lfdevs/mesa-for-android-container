@@ -454,6 +454,8 @@ ra_set_deserialize(void *mem_ctx, struct blob_reader *blob)
    for (unsigned int c = 0; c < class_count; c++) {
       struct ra_class *class = rzalloc(regs, struct ra_class);
       regs->classes[c] = class;
+      class->regset = regs;
+      class->index = c;
 
       class->regs = ralloc_array(class, BITSET_WORD, BITSET_WORDS(reg_count));
       blob_copy_bytes(blob, class->regs, BITSET_WORDS(reg_count) *

@@ -1706,11 +1706,11 @@ zink_query_memory_info(struct pipe_screen *pscreen, struct pipe_memory_info *inf
          if (mem.memoryProperties.memoryHeaps[i].flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
             /* VRAM */
             info->total_device_memory += mem.memoryProperties.memoryHeaps[i].size / 1024;
-            info->avail_device_memory += (budget.heapBudget[i] - budget.heapUsage[i]) / 1024;
+            info->avail_device_memory += (mem.memoryProperties.memoryHeaps[i].size - budget.heapUsage[i]) / 1024;
          } else {
             /* GART */
             info->total_staging_memory += mem.memoryProperties.memoryHeaps[i].size / 1024;
-            info->avail_staging_memory += (budget.heapBudget[i] - budget.heapUsage[i]) / 1024;
+            info->avail_staging_memory += (mem.memoryProperties.memoryHeaps[i].size - budget.heapUsage[i]) / 1024;
          }
       }
       /* evictions not yet supported in vulkan */

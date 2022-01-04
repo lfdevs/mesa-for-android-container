@@ -155,10 +155,8 @@ anv_state_table_init(struct anv_state_table *table,
     * userptr and send a chunk of it off to the GPU.
     */
    table->fd = os_create_anonymous_file(BLOCK_POOL_MEMFD_SIZE, "state table");
-   if (table->fd == -1) {
-      result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
-      goto fail_fd;
-   }
+   if (table->fd == -1)
+      return vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
 
    if (!u_vector_init(&table->cleanups, 8,
                       sizeof(struct anv_state_table_cleanup))) {

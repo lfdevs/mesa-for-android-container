@@ -732,7 +732,11 @@ lp_setup_set_fs_images(struct lp_setup_context *setup,
 
          if (llvmpipe_resource_is_texture(res)) {
             uint32_t mip_offset = lp_res->mip_offsets[image->u.tex.level];
+            const uint32_t bw = util_format_get_blockwidth(image->resource->format);
+            const uint32_t bh = util_format_get_blockheight(image->resource->format);
 
+            jit_image->width = DIV_ROUND_UP(jit_image->width, bw);
+            jit_image->height = DIV_ROUND_UP(jit_image->height, bh);
             jit_image->width = u_minify(jit_image->width, image->u.tex.level);
             jit_image->height = u_minify(jit_image->height, image->u.tex.level);
 

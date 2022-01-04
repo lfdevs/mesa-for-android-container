@@ -780,10 +780,12 @@ try_evict_regs(struct ra_ctx *ctx, struct ra_file *file,
          return false;
       }
 
+      unsigned conflicting_file_size =
+         reg_file_size(file, conflicting->interval.reg);
       unsigned avail_start, avail_end;
       bool evicted = false;
       BITSET_FOREACH_RANGE (avail_start, avail_end, available_to_evict,
-                            reg_file_size(file, conflicting->interval.reg)) {
+                            conflicting_file_size) {
          unsigned size = avail_end - avail_start;
 
          /* non-half registers must be aligned */
@@ -818,6 +820,10 @@ try_evict_regs(struct ra_ctx *ctx, struct ra_file *file,
 
          if (killed->physreg_end - killed->physreg_start !=
              conflicting->physreg_end - conflicting->physreg_start)
+            continue;
+
+         if (killed->physreg_end > conflicting_file_size ||
+             conflicting->physreg_end > reg_file_size(file, killed->interval.reg))
             continue;
 
          /* We can't swap the killed range if it partially/fully overlaps the

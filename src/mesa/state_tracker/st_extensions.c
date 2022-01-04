@@ -1849,6 +1849,7 @@ void st_init_extensions(struct pipe_screen *screen,
    if (prefer_nir &&
        screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_INTEGERS) &&
        extensions->ARB_stencil_texturing &&
+       screen->get_param(screen, PIPE_CAP_DOUBLES) &&
        !(nir_options->lower_doubles_options & nir_lower_fp64_full_software))
       extensions->NV_copy_depth_to_color = TRUE;
 

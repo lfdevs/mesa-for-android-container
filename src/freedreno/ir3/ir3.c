@@ -490,6 +490,11 @@ ir3_instr_clone(struct ir3_instruction *instr)
       *new_reg = *reg;
    }
 
+   if (instr->address) {
+      assert(instr->srcs_count > 0);
+      new_instr->address = new_instr->srcs[instr->srcs_count - 1];
+   }
+
    return new_instr;
 }
 

@@ -100,11 +100,14 @@ zink_context_destroy(struct pipe_context *pctx)
       pipe_surface_release(&ctx->base, &ctx->dummy_surface[i]);
    zink_buffer_view_reference(screen, &ctx->dummy_bufferview, NULL);
 
-   zink_descriptors_deinit_bindless(ctx);
+   if (ctx->dd)
+      zink_descriptors_deinit_bindless(ctx);
 
    simple_mtx_destroy(&ctx->batch_mtx);
-   zink_clear_batch_state(ctx, ctx->batch.state);
-   zink_batch_state_destroy(screen, ctx->batch.state);
+   if (ctx->batch.state) {
+      zink_clear_batch_state(ctx, ctx->batch.state);
+      zink_batch_state_destroy(screen, ctx->batch.state);
+   }
    struct zink_batch_state *bs = ctx->batch_states;
    while (bs) {
       struct zink_batch_state *bs_next = bs->next;
@@ -149,7 +152,8 @@ zink_context_destroy(struct pipe_context *pctx)
    _mesa_hash_table_destroy(ctx->render_pass_cache, NULL);
    slab_destroy_child(&ctx->transfer_pool_unsync);
 
-   screen->descriptors_deinit(ctx);
+   if (ctx->dd)
+      screen->descriptors_deinit(ctx);
 
    zink_descriptor_layouts_deinit(ctx);
 
@@ -595,8 +599,10 @@ zink_delete_sampler_state(struct pipe_context *pctx,
    struct zink_sampler_state *sampler = sampler_state;
    struct zink_batch *batch = &zink_context(pctx)->batch;
    zink_descriptor_set_refs_clear(&sampler->desc_set_refs, sampler_state);
-   util_dynarray_append(&batch->state->zombie_samplers, VkSampler,
-                        sampler->sampler);
+   /* may be called if context_create fails */
+   if (batch->state)
+      util_dynarray_append(&batch->state->zombie_samplers, VkSampler,
+                           sampler->sampler);
    if (sampler->custom_border_color)
       p_atomic_dec(&zink_screen(pctx->screen)->cur_custom_border_color_samplers);
    FREE(sampler);

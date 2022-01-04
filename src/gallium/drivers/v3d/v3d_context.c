@@ -194,6 +194,20 @@ v3d_get_real_line_width(struct v3d_context *v3d)
 }
 
 void
+v3d_ensure_prim_counts_allocated(struct v3d_context *ctx)
+{
+        if (ctx->prim_counts)
+                return;
+
+        /* Init all 7 counters and 1 padding to 0 */
+        uint32_t zeroes[8] = { 0 };
+        u_upload_data(ctx->uploader,
+                      0, sizeof(zeroes), 32, zeroes,
+                      &ctx->prim_counts_offset,
+                      &ctx->prim_counts);
+}
+
+void
 v3d_flag_dirty_sampler_state(struct v3d_context *v3d,
                              enum pipe_shader_type shader)
 {

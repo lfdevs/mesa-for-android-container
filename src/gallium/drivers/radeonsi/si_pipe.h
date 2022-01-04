@@ -374,6 +374,7 @@ struct si_texture {
    bool db_compatible : 1;
    bool can_sample_z : 1;
    bool can_sample_s : 1;
+   bool need_flush_after_depth_decompression: 1;
 
    /* We need to track DCC dirtiness, because st/dri usually calls
     * flush_resource twice per frame (not a bug) and we don't wanna

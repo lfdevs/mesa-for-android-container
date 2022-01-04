@@ -653,11 +653,12 @@ static int peephole_add_presub_inv(
 	/* XXX It would be nice to use is_src_uniform_constant here, but that
 	 * function only works if the register's file is RC_FILE_NONE */
 	for(i = 0; i < 4; i++ ) {
+		if (!(inst_add->U.I.DstReg.WriteMask & (1 << i)))
+			continue;
+
 		swz = GET_SWZ(inst_add->U.I.SrcReg[0].Swizzle, i);
-		if(((1 << i) & inst_add->U.I.DstReg.WriteMask)
-						&& swz != RC_SWIZZLE_ONE) {
+		if (swz != RC_SWIZZLE_ONE || inst_add->U.I.SrcReg[0].Negate & (1 << i))
 			return 0;
-		}
 	}
 
 	/* Check src1. */

@@ -829,6 +829,8 @@ static void si_fast_clear(struct si_context *sctx, unsigned *buffers,
                clear_value = !zstex->htile_stencil_disabled ? 0xfffff30f : 0xfffc000f;
             }
 
+            zstex->need_flush_after_depth_decompression = sctx->chip_class == GFX10_3;
+
             assert(num_clears < ARRAY_SIZE(info));
             si_init_buffer_clear(&info[num_clears++], &zstex->buffer.b.b,
                                  zstex->surface.meta_offset, zstex->surface.meta_size, clear_value);
@@ -933,6 +935,8 @@ static void si_fast_clear(struct si_context *sctx, unsigned *buffers,
                update_db_stencil_clear = true;
             }
          }
+
+         zstex->need_flush_after_depth_decompression = update_db_depth_clear && sctx->chip_class == GFX10_3;
 
          /* Update DB_DEPTH_CLEAR. */
          if (update_db_depth_clear &&

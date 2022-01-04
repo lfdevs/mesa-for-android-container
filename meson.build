@@ -1211,7 +1211,7 @@ if host_machine.system() == 'windows'
     endif
   else
     add_project_link_arguments(
-      cc.get_supported_arguments(
+      cc.get_supported_link_arguments(
         '-Wl,--nxcompat',
         '-Wl,--dynamicbase',
         '-static-libgcc',
@@ -1220,7 +1220,7 @@ if host_machine.system() == 'windows'
       language : ['c'],
     )
     add_project_link_arguments(
-      cpp.get_supported_arguments(
+      cpp.get_supported_link_arguments(
         '-Wl,--nxcompat',
         '-Wl,--dynamicbase',
         '-static-libgcc',

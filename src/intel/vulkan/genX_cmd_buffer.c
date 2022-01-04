@@ -1179,9 +1179,12 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
    UNUSED const uint32_t image_layers = MAX2(image->vk.array_layers, max_depth);
    assert((uint64_t)base_layer + layer_count  <= image_layers);
    assert(last_level_num <= image->vk.mip_levels);
-   /* The spec disallows these final layouts. */
-   assert(final_layout != VK_IMAGE_LAYOUT_UNDEFINED &&
-          final_layout != VK_IMAGE_LAYOUT_PREINITIALIZED);
+   /* If there is a layout transfer, the final layout cannot be undefined or
+    * preinitialized (VUID-VkImageMemoryBarrier-newLayout-01198).
+    */
+   assert(initial_layout == final_layout ||
+          (final_layout != VK_IMAGE_LAYOUT_UNDEFINED &&
+           final_layout != VK_IMAGE_LAYOUT_PREINITIALIZED));
    const struct isl_drm_modifier_info *isl_mod_info =
       image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT
       ? isl_drm_modifier_get_info(image->vk.drm_format_mod)

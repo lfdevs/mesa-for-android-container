@@ -344,7 +344,8 @@ static ioctl_fn_t driver_ioctls[] = {
    [DRM_I915_GEM_CONTEXT_GETPARAM] = i915_ioctl_gem_context_getparam,
    [DRM_I915_GEM_CONTEXT_SETPARAM] = i915_ioctl_noop,
    [DRM_I915_GEM_EXECBUFFER2] = i915_ioctl_noop,
-   [DRM_I915_GEM_EXECBUFFER2_WR] = i915_ioctl_noop,
+   /* [DRM_I915_GEM_EXECBUFFER2_WR] = i915_ioctl_noop,
+       same value as DRM_I915_GEM_EXECBUFFER2. */
 
    [DRM_I915_GEM_USERPTR] = i915_ioctl_gem_userptr,
 

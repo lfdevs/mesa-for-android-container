@@ -115,7 +115,7 @@ static void scan_io_usage(struct si_shader_info *info, nir_intrinsic_instr *intr
 
          info->input[loc].semantic = semantic + i;
 
-         if (semantic == SYSTEM_VALUE_PRIMITIVE_ID)
+         if (semantic == VARYING_SLOT_PRIMITIVE_ID)
             info->input[loc].interpolate = INTERP_MODE_FLAT;
          else
             info->input[loc].interpolate = interp;

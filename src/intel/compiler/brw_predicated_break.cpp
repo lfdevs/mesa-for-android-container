@@ -53,19 +53,79 @@ using namespace brw;
  * and we can remove the BREAK instruction and predicate the WHILE.
  */
 
+#define MAX_NESTING 128
+
+struct loop_continue_tracking {
+   BITSET_WORD has_continue[BITSET_WORDS(MAX_NESTING)];
+   unsigned depth;
+};
+
+static void
+enter_loop(struct loop_continue_tracking *s)
+{
+   s->depth++;
+
+   /* Any loops deeper than that maximum nesting will just re-use the last
+    * flag.  This simplifies most of the code.  MAX_NESTING is chosen to be
+    * large enough that it is unlikely to occur.  Even if it does, the
+    * optimization that uses this tracking is unlikely to make much
+    * difference.
+    */
+   if (s->depth < MAX_NESTING)
+      BITSET_CLEAR(s->has_continue, s->depth);
+}
+
+static void
+exit_loop(struct loop_continue_tracking *s)
+{
+   assert(s->depth > 0);
+   s->depth--;
+}
+
+static void
+set_continue(struct loop_continue_tracking *s)
+{
+   const unsigned i = MIN2(s->depth, MAX_NESTING - 1);
+
+   BITSET_SET(s->has_continue, i);
+}
+
+static bool
+has_continue(const struct loop_continue_tracking *s)
+{
+   const unsigned i = MIN2(s->depth, MAX_NESTING - 1);
+
+   return BITSET_TEST(s->has_continue, i);
+}
+
 bool
 opt_predicated_break(backend_shader *s)
 {
    bool progress = false;
+   struct loop_continue_tracking state = { {0, }, 0 };
 
    foreach_block (block, s->cfg) {
+      /* DO instructions, by definition, can only be found at the beginning of
+       * basic blocks.
+       */
+      backend_instruction *const do_inst = block->start();
+
+      /* BREAK, CONTINUE, and WHILE instructions, by definition, can only be
+       * found at the ends of basic blocks.
+       */
+      backend_instruction *jump_inst = block->end();
+
+      if (do_inst->opcode == BRW_OPCODE_DO)
+         enter_loop(&state);
+
+      if (jump_inst->opcode == BRW_OPCODE_CONTINUE)
+         set_continue(&state);
+      else if (jump_inst->opcode == BRW_OPCODE_WHILE)
+         exit_loop(&state);
+
       if (block->start_ip != block->end_ip)
          continue;
 
-      /* BREAK and CONTINUE instructions, by definition, can only be found at
-       * the ends of basic blocks.
-       */
-      backend_instruction *jump_inst = block->end();
       if (jump_inst->opcode != BRW_OPCODE_BREAK &&
           jump_inst->opcode != BRW_OPCODE_CONTINUE)
          continue;
@@ -119,13 +179,20 @@ opt_predicated_break(backend_shader *s)
       /* Now look at the first instruction of the block following the BREAK. If
        * it's a WHILE, we can delete the break, predicate the WHILE, and join
        * the two basic blocks.
+       *
+       * This optimization can only be applied if the only instruction that
+       * can transfer control to the WHILE is the BREAK.  If other paths can
+       * lead to the while, the flags may be in an unknown state, and the loop
+       * could terminate prematurely.  This can occur if the loop contains a
+       * CONT instruction.
        */
       bblock_t *while_block = earlier_block->next();
       backend_instruction *while_inst = while_block->start();
 
       if (jump_inst->opcode == BRW_OPCODE_BREAK &&
           while_inst->opcode == BRW_OPCODE_WHILE &&
-          while_inst->predicate == BRW_PREDICATE_NONE) {
+          while_inst->predicate == BRW_PREDICATE_NONE &&
+          !has_continue(&state)) {
          jump_inst->remove(earlier_block);
          while_inst->predicate = jump_inst->predicate;
          while_inst->predicate_inverse = !jump_inst->predicate_inverse;

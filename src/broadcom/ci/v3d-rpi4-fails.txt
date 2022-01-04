@@ -1,8 +1,3 @@
-dEQP-GLES31.functional.geometry_shading.query.primitives_generated_amplification,Fail
-dEQP-GLES31.functional.geometry_shading.query.primitives_generated_instanced,Fail
-dEQP-GLES31.functional.geometry_shading.query.primitives_generated_no_amplification,Fail
-dEQP-GLES31.functional.geometry_shading.query.primitives_generated_partial_primitives,Fail
-
 glx@glx-make-current,Crash
 glx@glx-multi-window-single-context,Fail
 glx@glx-multithread-buffer,Fail
@@ -282,11 +277,6 @@ spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp@sRGB decode full precision,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x223344ff,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x76356278,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x223344ff,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x76356278,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color,Crash
 spec@nv_image_formats@compiler@declaration-disallow-r16-snorm-2d-array.frag,Fail
 spec@nv_image_formats@compiler@declaration-disallow-r16-snorm-2d-array.vert,Fail
 spec@nv_image_formats@compiler@declaration-disallow-r16-snorm-2d.frag,Fail

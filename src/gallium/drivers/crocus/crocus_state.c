@@ -4750,6 +4750,22 @@ crocus_populate_gs_key(const struct crocus_context *ice,
       key->nr_userclip_plane_consts = cso_rast->num_clip_plane_consts;
 }
 
+static inline GLenum
+compare_func_to_gl(enum pipe_compare_func pipe_func)
+{
+   static const unsigned map[] = {
+      [PIPE_FUNC_NEVER]    = GL_NEVER,
+      [PIPE_FUNC_LESS]     = GL_LESS,
+      [PIPE_FUNC_EQUAL]    = GL_EQUAL,
+      [PIPE_FUNC_LEQUAL]   = GL_LEQUAL,
+      [PIPE_FUNC_GREATER]  = GL_GREATER,
+      [PIPE_FUNC_NOTEQUAL] = GL_NOTEQUAL,
+      [PIPE_FUNC_GEQUAL]   = GL_GEQUAL,
+      [PIPE_FUNC_ALWAYS]   = GL_ALWAYS,
+   };
+   return map[pipe_func];
+}
+
 /**
  * Populate FS program key fields based on the current state.
  */
@@ -4836,7 +4852,7 @@ crocus_populate_fs_key(const struct crocus_context *ice,
 
 #if GFX_VER <= 5
    if (fb->nr_cbufs > 1 && zsa->cso.alpha_enabled) {
-      key->alpha_test_func = zsa->cso.alpha_func;
+      key->alpha_test_func = compare_func_to_gl(zsa->cso.alpha_func);
       key->alpha_test_ref = zsa->cso.alpha_ref_value;
    }
 #endif

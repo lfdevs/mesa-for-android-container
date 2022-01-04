@@ -60,6 +60,9 @@ dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    for (unsigned i = 0; i < info->num_indices; i++)
       dup->const_index[i] = intrin->const_index[i];
 
+   if (nir_intrinsic_has_access(intrin))
+      nir_intrinsic_set_access(dup, nir_intrinsic_access(intrin));
+
    nir_intrinsic_set_align(dup, align, 0);
 
    if (info->has_dest) {

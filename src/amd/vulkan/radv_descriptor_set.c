@@ -495,11 +495,16 @@ radv_CreatePipelineLayout(VkDevice _device, const VkPipelineLayoutCreateInfo *pC
       layout->set[set].layout = set_layout;
 
       layout->set[set].dynamic_offset_start = dynamic_offset_count;
+      layout->set[set].dynamic_offset_count = 0;
+      layout->set[set].dynamic_offset_stages = 0;
 
       for (uint32_t b = 0; b < set_layout->binding_count; b++) {
-         dynamic_offset_count += set_layout->binding[b].array_size * set_layout->binding[b].dynamic_offset_count;
-         dynamic_shader_stages |= set_layout->dynamic_shader_stages;
+         layout->set[set].dynamic_offset_count +=
+            set_layout->binding[b].array_size * set_layout->binding[b].dynamic_offset_count;
+         layout->set[set].dynamic_offset_stages |= set_layout->dynamic_shader_stages;
       }
+      dynamic_offset_count += layout->set[set].dynamic_offset_count;
+      dynamic_shader_stages |= layout->set[set].dynamic_offset_stages;
 
       /* Hash the entire set layout except for the vk_object_base. The
        * rest of the set layout is carefully constructed to not have

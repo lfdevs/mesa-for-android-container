@@ -3336,7 +3336,7 @@
   </instruction>
 
   <instruction name="MI_FLUSH_DW" bias="2" length="4" engine="video">
-    <field name="DWord Length" start="0" end="5" type="uint"/>
+    <field name="DWord Length" start="0" end="5" type="uint" default="2"/>
     <field name="Video Pipeline Cache Invalidate" start="7" end="7" type="bool"/>
     <field name="Notify Enable" start="8" end="8" type="bool"/>
     <field name="Post-Sync Operation" start="14" end="15" type="uint"/>

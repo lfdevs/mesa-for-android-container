@@ -646,6 +646,9 @@ lower_image_size_instr(nir_builder *b,
    if (var->data.access & ACCESS_NON_READABLE)
       return false;
 
+   if (var->data.image.format == PIPE_FORMAT_NONE)
+      return false;
+
    /* If we have a matching typed format, then we have an actual image surface
     * so we fall back and let the back-end emit a TXS for this.
     */

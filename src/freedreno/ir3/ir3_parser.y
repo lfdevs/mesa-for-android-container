@@ -674,7 +674,7 @@ const_header:      T_A_CONST '(' T_CONSTANT ')' const_val ',' const_val ',' cons
 }
 
 buf_header_addr_reg:
-|                  '(' T_CONSTANT ')' {
+                   '(' T_CONSTANT ')' {
                        assert(($2 & 0x1) == 0);  /* half-reg not allowed */
                        unsigned reg = $2 >> 1;
 
@@ -682,6 +682,7 @@ buf_header_addr_reg:
                        /* reserve space in immediates for the actual value to be plugged in later: */
                        add_const($2, 0, 0, 0, 0);
 }
+|
 
 buf_header:        T_A_BUF const_val {
                        int idx = info->num_bufs++;

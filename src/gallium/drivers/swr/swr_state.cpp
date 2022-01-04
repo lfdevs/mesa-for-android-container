@@ -1731,7 +1731,7 @@ swr_update_derived(struct pipe_context *pipe,
    /* Has to be before fragment shader, since it sets SWR_NEW_FS */
    if (p_draw_info) {
       bool new_prim_is_poly =
-         (u_reduced_prim(p_draw_info->mode) == PIPE_PRIM_TRIANGLES) &&
+         (u_reduced_prim((enum pipe_prim_type)p_draw_info->mode) == PIPE_PRIM_TRIANGLES) &&
          (ctx->derived.rastState.fillMode == SWR_FILLMODE_SOLID);
       if (new_prim_is_poly != ctx->poly_stipple.prim_is_poly) {
          ctx->dirty |= SWR_NEW_FS;

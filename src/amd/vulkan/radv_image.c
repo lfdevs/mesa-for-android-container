@@ -352,6 +352,11 @@ radv_use_htile_for_image(const struct radv_device *device, const struct radv_ima
    bool use_htile_for_mips =
       image->info.array_size == 1 && device->physical_device->rad_info.chip_class >= GFX10;
 
+   /* Stencil texturing with HTILE doesn't work with mipmapping on Navi10-14. */
+   if (device->physical_device->rad_info.chip_class == GFX10 &&
+       image->vk_format == VK_FORMAT_D32_SFLOAT_S8_UINT && image->info.levels > 1)
+      return false;
+
    /* Do not enable HTILE for very small images because it seems less performant but make sure it's
     * allowed with VRS attachments because we need HTILE.
     */

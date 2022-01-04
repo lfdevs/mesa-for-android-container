@@ -135,6 +135,19 @@ radv_null_winsys_query_info(struct radeon_winsys *rws, struct radeon_info *info)
 
    info->has_image_load_dcc_bug =
       info->family == CHIP_DIMGREY_CAVEFISH || info->family == CHIP_VANGOGH;
+
+   info->has_accelerated_dot_product =
+      info->family == CHIP_ARCTURUS || info->family == CHIP_ALDEBARAN ||
+      info->family == CHIP_VEGA20 || info->family >= CHIP_NAVI12;
+
+   info->address32_hi = info->chip_class >= GFX9 ? 0xffff8000u : 0x0;
+
+   info->has_rbplus = info->family == CHIP_STONEY || info->chip_class >= GFX9;
+   info->rbplus_allowed =
+      info->has_rbplus &&
+      (info->family == CHIP_STONEY || info->family == CHIP_VEGA12 || info->family == CHIP_RAVEN ||
+       info->family == CHIP_RAVEN2 || info->family == CHIP_RENOIR || info->chip_class >= GFX10_3);
+
 }
 
 static void

@@ -166,7 +166,7 @@ main(int argc, char **argv)
    }
 
    char *filename = NULL;
-   filename = argv[n];
+   filename = argv[argc - 1];
 
    uint32_t size = 0;
    uint32_t *prog = extract_shader_binary(filename, &size, &is_frag);

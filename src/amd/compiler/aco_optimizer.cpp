@@ -3135,10 +3135,12 @@ combine_vop3p(opt_ctx& ctx, aco_ptr<Instruction>& instr)
              * if 0 - pick selection from fneg->lo
              * if 1 - pick selection from fneg->hi
              */
-            bool opsel_lo = vop3p->opsel_lo & (1 << i);
-            bool opsel_hi = vop3p->opsel_hi & (1 << i);
-            vop3p->neg_lo[i] ^= true ^ (opsel_lo ? fneg->neg_hi[0] : fneg->neg_lo[0]);
-            vop3p->neg_hi[i] ^= true ^ (opsel_hi ? fneg->neg_hi[0] : fneg->neg_lo[0]);
+            bool opsel_lo = (vop3p->opsel_lo >> i) & 1;
+            bool opsel_hi = (vop3p->opsel_hi >> i) & 1;
+            bool neg_lo = true ^ fneg->neg_lo[0] ^ fneg->neg_lo[1];
+            bool neg_hi = true ^ fneg->neg_hi[0] ^ fneg->neg_hi[1];
+            vop3p->neg_lo[i] ^= opsel_lo ? neg_hi : neg_lo;
+            vop3p->neg_hi[i] ^= opsel_hi ? neg_hi : neg_lo;
             vop3p->opsel_lo ^= ((opsel_lo ? ~fneg->opsel_hi : fneg->opsel_lo) & 1) << i;
             vop3p->opsel_hi ^= ((opsel_hi ? ~fneg->opsel_hi : fneg->opsel_lo) & 1) << i;
 

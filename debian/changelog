@@ -1,3 +1,18 @@
+mesa (21.3.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * rules: Enable turnip, freedreno vulkan driver.
+  * freedreno-afuc-Disable-the-disassembler-on-32-bit-bu.diff: Fix ftbfs
+    on armhf.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 04 Jan 2022 10:30:13 +0200
+
+mesa (21.3.0-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 25 Nov 2021 16:35:02 +0200
+
 mesa (21.3.0~rc5-1) experimental; urgency=medium
 
   * New upstream prerelease.
@@ -12,6 +27,18 @@ mesa (21.3.0~rc1-1) experimental; urgency=medium
   * rules: Enable crocus gallium driver. (LP: #1947200)
 
  -- Timo Aaltonen <tjaalton@debian.org>  Wed, 20 Oct 2021 11:40:14 +0300
+
+mesa (21.2.6-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 25 Nov 2021 16:07:58 +0200
+
+mesa (21.2.5-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 03 Nov 2021 11:35:38 +0200
 
 mesa (21.2.4-1) unstable; urgency=medium
 

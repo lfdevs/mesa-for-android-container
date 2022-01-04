@@ -2965,7 +2965,15 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
 
    struct vk_device_dispatch_table dispatch_table;
 
-   if (radv_thread_trace_enabled()) {
+   if (physical_device->instance->vk.app_info.app_name &&
+       !strcmp(physical_device->instance->vk.app_info.app_name, "metroexodus")) {
+      /* Metro Exodus (Linux native) calls vkGetSemaphoreCounterValue() with a NULL semaphore and it
+       * crashes sometimes.  Workaround this game bug by enabling an internal layer. Remove this
+       * when the game is fixed.
+       */
+      vk_device_dispatch_table_from_entrypoints(&dispatch_table, &metro_exodus_device_entrypoints, true);
+      vk_device_dispatch_table_from_entrypoints(&dispatch_table, &radv_device_entrypoints, false);
+   } else if (radv_thread_trace_enabled()) {
       vk_device_dispatch_table_from_entrypoints(&dispatch_table, &sqtt_device_entrypoints, true);
       vk_device_dispatch_table_from_entrypoints(&dispatch_table, &radv_device_entrypoints, false);
    } else {
@@ -4845,8 +4853,12 @@ wait_for_submission_timelines_available(struct radv_deferred_queue_submission *s
       points[syncobj_idx] = submission->wait_values[i];
       ++syncobj_idx;
    }
-   bool success = device->ws->wait_timeline_syncobj(device->ws, syncobj, points, syncobj_idx, true,
-                                                    true, timeout);
+
+   bool success = true;
+   if (syncobj_idx > 0) {
+      success = device->ws->wait_timeline_syncobj(device->ws, syncobj, points, syncobj_idx, true,
+                                                  true, timeout);
+   }
 
    free(points);
    return success ? VK_SUCCESS : VK_TIMEOUT;

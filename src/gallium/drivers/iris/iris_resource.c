@@ -1446,7 +1446,7 @@ iris_reallocate_resource_inplace(struct iris_context *ice,
             .depth = util_num_layers(&templ, l),
          };
 
-         iris_copy_region(&ice->blorp, batch, &new_res->base.b, 0, 0, 0, l,
+         iris_copy_region(&ice->blorp, batch, &new_res->base.b, l, 0, 0, 0,
                           &old_res->base.b, l, &box);
       }
    }

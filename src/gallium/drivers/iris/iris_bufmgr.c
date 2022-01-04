@@ -1664,6 +1664,16 @@ iris_bufmgr_destroy(struct iris_bufmgr *bufmgr)
       }
    }
 
+   for (int i = 0; i < bufmgr->num_local_buckets; i++) {
+      struct bo_cache_bucket *bucket = &bufmgr->local_cache_bucket[i];
+
+      list_for_each_entry_safe(struct iris_bo, bo, &bucket->head, head) {
+         list_del(&bo->head);
+
+         bo_free(bo);
+      }
+   }
+
    /* Close any buffer objects on the dead list. */
    list_for_each_entry_safe(struct iris_bo, bo, &bufmgr->zombie_list, head) {
       list_del(&bo->head);

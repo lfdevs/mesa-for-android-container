@@ -395,11 +395,12 @@ static void si_decompress_depth(struct si_context *sctx, struct si_texture *tex,
       si_make_CB_shader_coherent(sctx, tex->buffer.b.b.nr_samples, false, true /* no DCC */);
 }
 
-static void si_decompress_sampler_depth_textures(struct si_context *sctx,
+static bool si_decompress_sampler_depth_textures(struct si_context *sctx,
                                                  struct si_samplers *textures)
 {
    unsigned i;
    unsigned mask = textures->needs_depth_decompress_mask;
+   bool need_flush = false;
 
    while (mask) {
       struct pipe_sampler_view *view;
@@ -418,7 +419,14 @@ static void si_decompress_sampler_depth_textures(struct si_context *sctx,
       si_decompress_depth(sctx, tex, sview->is_stencil_sampler ? PIPE_MASK_S : PIPE_MASK_Z,
                           view->u.tex.first_level, view->u.tex.last_level, 0,
                           util_max_layer(&tex->buffer.b.b, view->u.tex.first_level));
+
+      if (tex->need_flush_after_depth_decompression) {
+         need_flush = true;
+         tex->need_flush_after_depth_decompression = false;
+      }
    }
+
+   return need_flush;
 }
 
 static void si_blit_decompress_color(struct si_context *sctx, struct si_texture *tex,
@@ -757,6 +765,7 @@ static void si_decompress_resident_images(struct si_context *sctx)
 void si_decompress_textures(struct si_context *sctx, unsigned shader_mask)
 {
    unsigned compressed_colortex_counter, mask;
+   bool need_flush = false;
 
    if (sctx->blitter_running)
       return;
@@ -774,7 +783,7 @@ void si_decompress_textures(struct si_context *sctx, unsigned shader_mask)
       unsigned i = u_bit_scan(&mask);
 
       if (sctx->samplers[i].needs_depth_decompress_mask) {
-         si_decompress_sampler_depth_textures(sctx, &sctx->samplers[i]);
+         need_flush |= si_decompress_sampler_depth_textures(sctx, &sctx->samplers[i]);
       }
       if (sctx->samplers[i].needs_color_decompress_mask) {
          si_decompress_sampler_color_textures(sctx, &sctx->samplers[i]);
@@ -782,6 +791,16 @@ void si_decompress_textures(struct si_context *sctx, unsigned shader_mask)
       if (sctx->images[i].needs_color_decompress_mask) {
          si_decompress_image_color_textures(sctx, &sctx->images[i]);
       }
+   }
+
+   if (sctx->chip_class == GFX10_3 && need_flush) {
+      /* This fixes a corruption with the following sequence:
+       *   - fast clear depth
+       *   - decompress depth
+       *   - draw
+       * (see https://gitlab.freedesktop.org/drm/amd/-/issues/1810#note_1170171)
+       */
+      sctx->b.flush(&sctx->b, NULL, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW);
    }
 
    if (shader_mask & u_bit_consecutive(0, SI_NUM_GRAPHICS_SHADERS)) {

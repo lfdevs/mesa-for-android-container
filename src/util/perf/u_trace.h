@@ -235,9 +235,6 @@ typedef void (*u_trace_copy_ts_buffer)(struct u_trace_context *utctx,
  * Provides callback for driver to copy timestamps on GPU from
  * one buffer to another.
  *
- * The payload is shared and remains owned by the original u_trace
- * if tracepoints are being copied between different u_trace!
- *
  * It allows:
  * - Tracing re-usable command buffer in Vulkan, by copying tracepoints
  *   each time it is submitted.

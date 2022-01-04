@@ -13,7 +13,6 @@
 #define MASK(count) ((1ull << (count)) - 1)
 #define SEXT(b, count) ((b ^ BIT(count - 1)) - BIT(count - 1))
 #define UNUSED __attribute__((unused))
-static inline float fui(uint32_t u) { float f; memcpy(&f, &u, 4); return f; }
 
 #define VA_SRC_UNIFORM_TYPE 0x2
 #define VA_SRC_IMM_TYPE 0x3

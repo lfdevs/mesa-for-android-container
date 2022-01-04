@@ -22,6 +22,7 @@
 
 #include "radeon_compiler.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "r300_reg.h"
@@ -559,15 +560,33 @@ struct temporary_allocation {
 	struct rc_instruction * LastRead;
 };
 
+static int get_reg(struct radeon_compiler *c, struct temporary_allocation *ta, bool *hwtemps,
+                   unsigned int orig)
+{
+    if (!ta[orig].Allocated) {
+        int j;
+        for (j = 0; j < c->max_temp_regs; ++j)
+        {
+            if (!hwtemps[j])
+                break;
+        }
+        ta[orig].Allocated = 1;
+        ta[orig].HwTemp = j;
+        hwtemps[ta[orig].HwTemp] = true;
+    }
+
+    return ta[orig].HwTemp;
+}
+
 static void allocate_temporary_registers(struct radeon_compiler *c, void *user)
 {
 	struct r300_vertex_program_compiler *compiler = (struct r300_vertex_program_compiler*)c;
 	struct rc_instruction *inst;
 	struct rc_instruction *end_loop = NULL;
 	unsigned int num_orig_temps = 0;
-	char hwtemps[RC_REGISTER_MAX_INDEX];
+	bool hwtemps[RC_REGISTER_MAX_INDEX];
 	struct temporary_allocation * ta;
-	unsigned int i, j;
+	unsigned int i;
 
 	memset(hwtemps, 0, sizeof(hwtemps));
 
@@ -638,28 +657,17 @@ static void allocate_temporary_registers(struct radeon_compiler *c, void *user)
 		for (i = 0; i < opcode->NumSrcRegs; ++i) {
 			if (inst->U.I.SrcReg[i].File == RC_FILE_TEMPORARY) {
 				unsigned int orig = inst->U.I.SrcReg[i].Index;
-				inst->U.I.SrcReg[i].Index = ta[orig].HwTemp;
+				inst->U.I.SrcReg[i].Index = get_reg(c, ta, hwtemps, orig);
 
 				if (ta[orig].Allocated && inst == ta[orig].LastRead)
-					hwtemps[ta[orig].HwTemp] = 0;
+					hwtemps[ta[orig].HwTemp] = false;
 			}
 		}
 
 		if (opcode->HasDstReg) {
 			if (inst->U.I.DstReg.File == RC_FILE_TEMPORARY) {
 				unsigned int orig = inst->U.I.DstReg.Index;
-
-				if (!ta[orig].Allocated) {
-					for(j = 0; j < c->max_temp_regs; ++j) {
-						if (!hwtemps[j])
-							break;
-					}
-					ta[orig].Allocated = 1;
-					ta[orig].HwTemp = j;
-					hwtemps[ta[orig].HwTemp] = 1;
-				}
-
-				inst->U.I.DstReg.Index = ta[orig].HwTemp;
+				inst->U.I.DstReg.Index = get_reg(c, ta, hwtemps, orig);
 			}
 		}
 	}

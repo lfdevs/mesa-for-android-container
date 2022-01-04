@@ -364,6 +364,8 @@ cfg_t::cfg_t(const backend_shader *s, exec_list *instructions) :
 	 next = new_block();
 	 if (inst->predicate)
             cur->add_successor(mem_ctx, next, bblock_link_logical);
+         else
+            cur->add_successor(mem_ctx, next, bblock_link_physical);
 
 	 set_next_block(&cur, next, ip);
 	 break;

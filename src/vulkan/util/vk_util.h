@@ -26,6 +26,7 @@
 #include "util/bitscan.h"
 #include "util/macros.h"
 #include "compiler/shader_enums.h"
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef __cplusplus

@@ -1131,7 +1131,6 @@ create_indirect_draw_shader(struct panfrost_device *dev,
                 pan_pack(state, RENDERER_STATE, cfg) {
                         pan_shader_prepare_rsd(&shader_info, address, &cfg);
                 }
-                pthread_mutex_unlock(&dev->indirect_draw_shaders.lock);
 
                 draw_shader->push = shader_info.push;
                 draw_shader->rsd = dev->indirect_draw_shaders.states->ptr.gpu +
@@ -1171,15 +1170,15 @@ get_ubos(struct pan_pool *pool,
          const struct indirect_draw_inputs *inputs)
 {
         struct panfrost_ptr inputs_buf =
-                pan_pool_alloc_aligned(pool, sizeof(inputs), 16);
+                pan_pool_alloc_aligned(pool, sizeof(*inputs), 16);
 
-        memcpy(inputs_buf.cpu, &inputs, sizeof(inputs));
+        memcpy(inputs_buf.cpu, inputs, sizeof(*inputs));
 
         struct panfrost_ptr ubos_buf =
                 pan_pool_alloc_desc(pool, UNIFORM_BUFFER);
 
         pan_pack(ubos_buf.cpu, UNIFORM_BUFFER, cfg) {
-                cfg.entries = DIV_ROUND_UP(sizeof(inputs), 16);
+                cfg.entries = DIV_ROUND_UP(sizeof(*inputs), 16);
                 cfg.pointer = inputs_buf.gpu;
         }
 

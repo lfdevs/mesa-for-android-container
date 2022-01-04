@@ -109,6 +109,7 @@ entry_size(struct cache_entry *entry)
    for (int i = 0; i < MESA_SHADER_STAGES; ++i)
       if (entry->binary_sizes[i])
          ret += entry->binary_sizes[i];
+   ret += sizeof(struct radv_pipeline_shader_stack_size) * entry->num_stack_sizes;
    ret = align(ret, alignof(struct cache_entry));
    return ret;
 }

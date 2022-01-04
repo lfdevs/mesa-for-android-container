@@ -88,11 +88,12 @@ MESON_GEN_NINJA := \
 	-Ddri-search-path=/vendor/$(MESA3D_LIB_DIR)/dri                              \
 	-Dplatforms=android                                                          \
 	-Dplatform-sdk-version=$(PLATFORM_SDK_VERSION)                               \
-	-Ddri-drivers=                                                               \
+	-Ddri-drivers=$(subst $(space),$(comma),$(BOARD_MESA3D_CLASSIC_DRIVERS))     \
 	-Dgallium-drivers=$(subst $(space),$(comma),$(BOARD_MESA3D_GALLIUM_DRIVERS)) \
 	-Dvulkan-drivers=$(subst $(space),$(comma),$(subst radeon,amd,$(BOARD_MESA3D_VULKAN_DRIVERS)))   \
 	-Dgbm=enabled                                                                \
 	-Degl=enabled                                                                \
+	-Dcpp_rtti=false                                                             \
 
 MESON_BUILD := PATH=/usr/bin:/bin:/sbin:$$PATH ninja -C $(MESON_OUT_DIR)/build
 
@@ -128,7 +129,6 @@ $(MESON_GEN_FILES_TARGET): PRIVATE_C_INCLUDES := $(my_c_includes)
 $(MESON_GEN_FILES_TARGET): PRIVATE_IMPORTED_INCLUDES := $(imported_includes)
 $(MESON_GEN_FILES_TARGET): PRIVATE_LDFLAGS := $(my_ldflags)
 $(MESON_GEN_FILES_TARGET): PRIVATE_LDLIBS := $(my_ldlibs)
-$(MESON_GEN_FILES_TARGET): PRIVATE_TARGET_GLOBAL_LDFLAGS := $(my_target_global_ldflags)
 $(MESON_GEN_FILES_TARGET): PRIVATE_TIDY_CHECKS := $(my_tidy_checks)
 $(MESON_GEN_FILES_TARGET): PRIVATE_TIDY_FLAGS := $(my_tidy_flags)
 $(MESON_GEN_FILES_TARGET): PRIVATE_ARFLAGS := $(my_arflags)
@@ -138,6 +138,11 @@ $(MESON_GEN_FILES_TARGET): PRIVATE_ALL_WHOLE_STATIC_LIBRARIES := $(built_whole_l
 $(MESON_GEN_FILES_TARGET): PRIVATE_ALL_OBJECTS := $(strip $(all_objects))
 
 $(MESON_GEN_FILES_TARGET): PRIVATE_ARM_CFLAGS := $(normal_objects_cflags)
+
+$(MESON_GEN_FILES_TARGET): PRIVATE_TARGET_GLOBAL_CFLAGS := $(my_target_global_cflags)
+$(MESON_GEN_FILES_TARGET): PRIVATE_TARGET_GLOBAL_CONLYFLAGS := $(my_target_global_conlyflags)
+$(MESON_GEN_FILES_TARGET): PRIVATE_TARGET_GLOBAL_CPPFLAGS := $(my_target_global_cppflags)
+$(MESON_GEN_FILES_TARGET): PRIVATE_TARGET_GLOBAL_LDFLAGS := $(my_target_global_ldflags)
 
 $(MESON_GEN_FILES_TARGET): PRIVATE_TARGET_LIBCRT_BUILTINS := $(my_target_libcrt_builtins)
 $(MESON_GEN_FILES_TARGET): PRIVATE_TARGET_LIBATOMIC := $(my_target_libatomic)
@@ -284,13 +289,17 @@ endef
 
 $(foreach driver,$(BOARD_MESA3D_VULKAN_DRIVERS), $(eval $(call vulkan_target,$(driver))))
 
-$($(M_TARGET_PREFIX)TARGET_OUT_VENDOR_SHARED_LIBRARIES)/dri/.symlinks.timestamp: MESA3D_GALLIUM_DRI_DIR:=$(MESA3D_GALLIUM_DRI_DIR)
-$($(M_TARGET_PREFIX)TARGET_OUT_VENDOR_SHARED_LIBRARIES)/dri/.symlinks.timestamp: $(MESON_OUT_DIR)/install/.install.timestamp
-	# Create Symlinks
+$($(M_TARGET_PREFIX)TARGET_OUT_VENDOR_SHARED_LIBRARIES)/dri/.targets.timestamp: MESA3D_GALLIUM_DRI_DIR:=$(MESA3D_GALLIUM_DRI_DIR)
+$($(M_TARGET_PREFIX)TARGET_OUT_VENDOR_SHARED_LIBRARIES)/dri/.targets.timestamp: $(MESON_OUT_DIR)/install/.install.timestamp
 	mkdir -p $(dir $@)
+	# Create Symlinks for gallium and kmsro drivers
 	ls -1 $(MESA3D_GALLIUM_DRI_DIR)/ | PATH=/usr/bin:$$PATH xargs -I{} ln -s -f libgallium_dri.so $(dir $@)/{}
+	# Remove unwanted Symlinks created for classic dri drivers
+	$(foreach d,$(BOARD_MESA3D_CLASSIC_DRIVERS), rm $(dir $@)/$(d)_dri.so;)
+	# Copy classic dri drivers
+	$(foreach d,$(BOARD_MESA3D_CLASSIC_DRIVERS), cp $(MESA3D_GALLIUM_DRI_DIR)/$(d)_dri.so $(dir $@)/$(d)_dri.so;)
 	touch $@
 
-$($(M_TARGET_PREFIX)MESA3D_GALLIUM_DRI_BIN): $(TARGET_OUT_VENDOR)/$(MESA3D_LIB_DIR)/dri/.symlinks.timestamp
+$($(M_TARGET_PREFIX)MESA3D_GALLIUM_DRI_BIN): $(TARGET_OUT_VENDOR)/$(MESA3D_LIB_DIR)/dri/.targets.timestamp
 	echo "Build $@"
 	touch $@

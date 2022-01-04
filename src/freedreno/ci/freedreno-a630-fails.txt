@@ -513,13 +513,6 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp@sRGB decode full precision,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb@sRGB decode,Fail
 
-# "MESA: error: Unhandled ALU op: f2f64"
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x223344ff,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x76356278,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x223344ff,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x76356278,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color,Crash
-
 spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3@oes_egl_image_external_essl3_imageLoad,Fail
 spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3@oes_egl_image_external_essl3_imageStore,Fail
 spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3,Fail

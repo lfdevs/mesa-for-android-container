@@ -514,11 +514,7 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb@sRGB decode,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x223344ff,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x76356278,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x223344ff,Crash
-spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x76356278,Crash
+
 spec@nv_copy_image@nv_copy_image-formats,Fail
 spec@nv_copy_image@nv_copy_image-formats@Source: GL_DEPTH32F_STENCIL8/Destination: GL_DEPTH32F_STENCIL8,Fail
 spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3,Crash

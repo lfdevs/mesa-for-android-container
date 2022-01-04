@@ -447,6 +447,8 @@ struct v3d_job {
          */
         bool tf_enabled;
 
+        bool needs_primitives_generated;
+
         /**
          * Current EZ state for drawing. Updated at the start of draw after
          * we've decided on the shader being rendered.
@@ -573,6 +575,8 @@ struct v3d_context {
 
         uint32_t tf_prims_generated;
         uint32_t prims_generated;
+
+        uint32_t n_primitives_generated_queries_in_flight;
 
         struct pipe_poly_stipple stipple;
         struct pipe_clip_state clip;
@@ -763,6 +767,8 @@ void v3d_update_primitive_counters(struct v3d_context *v3d);
 bool v3d_line_smoothing_enabled(struct v3d_context *v3d);
 
 float v3d_get_real_line_width(struct v3d_context *v3d);
+
+void v3d_ensure_prim_counts_allocated(struct v3d_context *ctx);
 
 void v3d_flag_dirty_sampler_state(struct v3d_context *v3d,
                                   enum pipe_shader_type shader);

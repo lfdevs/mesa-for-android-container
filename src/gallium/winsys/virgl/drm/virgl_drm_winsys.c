@@ -1220,15 +1220,15 @@ virgl_drm_winsys_create(int drmFD)
    if (drm_version < 0)
       return NULL;
 
-   qdws = CALLOC_STRUCT(virgl_drm_winsys);
-   if (!qdws)
-      return NULL;
-
    if (params[param_context_init].value) {
       ret = virgl_init_context(drmFD);
       if (ret)
          return NULL;
    }
+
+   qdws = CALLOC_STRUCT(virgl_drm_winsys);
+   if (!qdws)
+      return NULL;
 
    qdws->fd = drmFD;
    virgl_resource_cache_init(&qdws->cache, CACHE_TIMEOUT_USEC,

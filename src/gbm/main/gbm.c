@@ -497,8 +497,22 @@ gbm_bo_create_with_modifiers(struct gbm_device *gbm,
                              const uint64_t *modifiers,
                              const unsigned int count)
 {
+   uint32_t flags = 0;
+
+   /*
+    * ABI version 1 added the modifiers+flags capability. Backends from
+    * prior versions may fail if "unknown" flags are provided along with
+    * modifiers, but assume scanout is required when modifiers are used.
+    * Newer backends expect scanout to be explicitly requested if required,
+    * but applications using this older interface rely on the older implied
+    * requirement, so that behavior must be preserved.
+    */
+   if (gbm->v0.backend_version >= 1) {
+      flags |= GBM_BO_USE_SCANOUT;
+   }
+
    return gbm_bo_create_with_modifiers2(gbm, width, height, format, modifiers,
-                                        count, GBM_BO_USE_SCANOUT);
+                                        count, flags);
 }
 
 GBM_EXPORT struct gbm_bo *
@@ -648,9 +662,23 @@ gbm_surface_create_with_modifiers(struct gbm_device *gbm,
                                   const uint64_t *modifiers,
                                   const unsigned int count)
 {
+   uint32_t flags = 0;
+
+   /*
+    * ABI version 1 added the modifiers+flags capability. Backends from
+    * prior versions may fail if "unknown" flags are provided along with
+    * modifiers, but assume scanout is required when modifiers are used.
+    * Newer backends expect scanout to be explicitly requested if required,
+    * but applications using this older interface rely on the older implied
+    * requirement, so that behavior must be preserved.
+    */
+   if (gbm->v0.backend_version >= 1) {
+      flags |= GBM_BO_USE_SCANOUT;
+   }
+
    return gbm_surface_create_with_modifiers2(gbm, width, height, format,
                                              modifiers, count,
-                                             GBM_BO_USE_SCANOUT);
+                                             flags);
 }
 
 GBM_EXPORT struct gbm_surface *

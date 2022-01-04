@@ -306,6 +306,8 @@ dri3_create_context_attribs(struct glx_screen *base,
          pcp->base.noError = GL_TRUE;
    }
 
+   pcp->base.renderType = dca.render_type;
+
    pcp->driContext =
       (*psc->image_driver->createContextAttribs) (psc->driScreen,
                                                   dca.api,

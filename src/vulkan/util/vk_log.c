@@ -268,7 +268,6 @@ vk_object_for_error(struct vk_object_base *obj, VkResult error)
    case VK_ERROR_TOO_MANY_OBJECTS:
       return &vk_object_to_device(obj)->base;
    default:
-      assert(obj->client_visible);
       return obj;
    }
 }

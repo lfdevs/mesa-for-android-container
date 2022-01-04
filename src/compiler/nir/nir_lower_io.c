@@ -306,6 +306,9 @@ emit_load(struct lower_io_state *state,
       nir_intrinsic_set_range(load,
                               state->type_size(var->type, var->data.bindless));
 
+   if (nir_intrinsic_has_access(load))
+      nir_intrinsic_set_access(load, var->data.access);
+
    nir_intrinsic_set_dest_type(load, dest_type);
 
    if (load->intrinsic != nir_intrinsic_load_uniform) {
@@ -411,6 +414,9 @@ emit_store(struct lower_io_state *state, nir_ssa_def *data,
    nir_intrinsic_set_src_type(store, src_type);
 
    nir_intrinsic_set_write_mask(store, write_mask);
+
+   if (nir_intrinsic_has_access(store))
+      nir_intrinsic_set_access(store, var->data.access);
 
    if (array_index)
       store->src[1] = nir_src_for_ssa(array_index);
