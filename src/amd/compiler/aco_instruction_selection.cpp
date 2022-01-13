@@ -3189,12 +3189,8 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
    case nir_op_pack_32_4x8: bld.copy(Definition(dst), get_alu_src(ctx, instr->src[0], 4)); break;
    case nir_op_pack_half_2x16_split: {
       if (dst.regClass() == v1) {
-         nir_const_value* val = nir_src_as_const_value(instr->src[1].src);
-         if (val && val->u32 == 0 && ctx->program->chip_class <= GFX9) {
-            /* upper bits zero on GFX6-GFX9 */
-            bld.vop1(aco_opcode::v_cvt_f16_f32, Definition(dst), get_alu_src(ctx, instr->src[0]));
-         } else if (!ctx->block->fp_mode.care_about_round16_64 ||
-                    ctx->block->fp_mode.round16_64 == fp_round_tz) {
+         if (!ctx->block->fp_mode.care_about_round16_64 ||
+             ctx->block->fp_mode.round16_64 == fp_round_tz) {
             if (ctx->program->chip_class == GFX8 || ctx->program->chip_class == GFX9)
                emit_vop3a_instruction(ctx, instr, aco_opcode::v_cvt_pkrtz_f16_f32_e64, dst);
             else

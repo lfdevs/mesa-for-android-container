@@ -365,6 +365,9 @@ radv_use_htile_for_image(const struct radv_device *device, const struct radv_ima
        !device->attachment_vrs_enabled)
       return false;
 
+   if (device->instance->disable_htile_layers && image->info.array_size > 1)
+      return false;
+
    return (image->info.levels == 1 || use_htile_for_mips) && !image->shareable;
 }
 

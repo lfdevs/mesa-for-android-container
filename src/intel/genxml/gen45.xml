@@ -1032,7 +1032,7 @@
     <field name="2D Command Opcode" start="22" end="28" type="uint" default="1"/>
     <field name="Command Type" start="29" end="31" type="uint" default="2"/>
     <field name="Destination Pitch" start="32" end="47" type="int"/>
-    <field name="Raster Operation" start="48" end="55" type="int"/>
+    <field name="Raster Operation" start="48" end="55" type="uint"/>
     <field name="Color Depth" start="56" end="57" type="uint" prefix="COLOR_DEPTH">
       <value name="8 bit" value="0"/>
       <value name="565" value="1"/>

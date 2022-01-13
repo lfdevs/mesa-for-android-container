@@ -137,7 +137,7 @@ get_device_extensions(const struct v3dv_physical_device *device,
       .KHR_sampler_mirror_clamp_to_edge    = true,
       .KHR_storage_buffer_storage_class    = true,
       .KHR_uniform_buffer_standard_layout  = true,
-#ifdef V3DV_HAS_SURFACE
+#ifdef V3DV_USE_WSI_PLATFORM
       .KHR_swapchain                       = true,
       .KHR_incremental_present             = true,
 #endif

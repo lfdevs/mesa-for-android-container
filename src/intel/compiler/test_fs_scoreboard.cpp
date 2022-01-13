@@ -104,6 +104,14 @@ emit_SEND(const fs_builder &bld, const fs_reg &dst,
    return inst;
 }
 
+static tgl_swsb
+tgl_swsb_testcase(unsigned regdist, unsigned sbid, enum tgl_sbid_mode mode)
+{
+   tgl_swsb swsb = tgl_swsb_sbid(mode, sbid);
+   swsb.regdist = regdist;
+   return swsb;
+}
+
 bool operator ==(const tgl_swsb &a, const tgl_swsb &b)
 {
    return a.mode == b.mode &&
@@ -178,8 +186,7 @@ TEST_F(scoreboard_test, RAW_inorder_outoforder)
 
    EXPECT_EQ(instruction(block0, 0)->sched, tgl_swsb_null());
    EXPECT_EQ(instruction(block0, 1)->sched, tgl_swsb_null());
-   EXPECT_EQ(instruction(block0, 2)->sched,
-             (tgl_swsb { .regdist = 2, .sbid = 0, .mode = TGL_SBID_SET }));
+   EXPECT_EQ(instruction(block0, 2)->sched, tgl_swsb_testcase(2, 0, TGL_SBID_SET));
 }
 
 TEST_F(scoreboard_test, RAW_outoforder_inorder)
@@ -206,8 +213,7 @@ TEST_F(scoreboard_test, RAW_outoforder_inorder)
 
    EXPECT_EQ(instruction(block0, 0)->sched, tgl_swsb_sbid(TGL_SBID_SET, 0));
    EXPECT_EQ(instruction(block0, 1)->sched, tgl_swsb_null());
-   EXPECT_EQ(instruction(block0, 2)->sched,
-             (tgl_swsb { .regdist = 1, .sbid = 0, .mode = TGL_SBID_DST }));
+   EXPECT_EQ(instruction(block0, 2)->sched, tgl_swsb_testcase(1, 0, TGL_SBID_DST));
 }
 
 TEST_F(scoreboard_test, RAW_outoforder_outoforder)
@@ -292,8 +298,7 @@ TEST_F(scoreboard_test, WAR_inorder_outoforder)
 
    EXPECT_EQ(instruction(block0, 0)->sched, tgl_swsb_null());
    EXPECT_EQ(instruction(block0, 1)->sched, tgl_swsb_null());
-   EXPECT_EQ(instruction(block0, 2)->sched,
-             (tgl_swsb { .regdist = 2, .sbid = 0, .mode = TGL_SBID_SET }));
+   EXPECT_EQ(instruction(block0, 2)->sched, tgl_swsb_testcase(2, 0, TGL_SBID_SET));
 }
 
 TEST_F(scoreboard_test, WAR_outoforder_inorder)
@@ -405,8 +410,7 @@ TEST_F(scoreboard_test, WAW_inorder_outoforder)
 
    EXPECT_EQ(instruction(block0, 0)->sched, tgl_swsb_null());
    EXPECT_EQ(instruction(block0, 1)->sched, tgl_swsb_null());
-   EXPECT_EQ(instruction(block0, 2)->sched,
-             (tgl_swsb { .regdist = 2, .sbid = 0, .mode = TGL_SBID_SET }));
+   EXPECT_EQ(instruction(block0, 2)->sched, tgl_swsb_testcase(2, 0, TGL_SBID_SET));
 }
 
 TEST_F(scoreboard_test, WAW_outoforder_inorder)

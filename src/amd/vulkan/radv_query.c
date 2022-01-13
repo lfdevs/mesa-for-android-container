@@ -1317,7 +1317,7 @@ radv_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPoo
 
       radv_query_shader(cmd_buffer, &cmd_buffer->device->meta_state.query.tfb_query_pipeline,
                         pool->bo, dst_buffer->bo, firstQuery * pool->stride,
-                        dst_buffer->offset + dstOffset, pool->stride, dst_size, stride, queryCount,
+                        dst_buffer->offset + dstOffset, pool->stride, stride, dst_size, queryCount,
                         flags, 0, 0);
       break;
    default:

@@ -86,7 +86,11 @@ static struct etna_bo *lookup_bo(void *tbl, uint32_t handle)
 		bo = etna_bo_ref(entry->data);
 
 		/* don't break the bucket if this bo was found in one */
-		list_delinit(&bo->list);
+		if (list_is_linked(&bo->list)) {
+			VG_BO_OBTAIN(bo);
+			etna_device_ref(bo->dev);
+			list_delinit(&bo->list);
+		}
 	}
 
 	return bo;

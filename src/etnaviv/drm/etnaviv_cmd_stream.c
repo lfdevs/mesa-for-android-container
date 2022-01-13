@@ -56,13 +56,13 @@ void etna_cmd_stream_realloc(struct etna_cmd_stream *stream, size_t n)
 	void *buffer;
 
 	/*
-	 * Increase the command buffer size by 1 kiB. Here we pick 1 kiB
+	 * Increase the command buffer size by 4 kiB. Here we pick 4 kiB
 	 * increment to prevent it from growing too much too quickly.
 	 */
 	size = ALIGN(stream->size + n, 1024);
 
 	/* Command buffer is too big for older kernel versions */
-	if (size >= 32768)
+	if (size > 0x4000)
 		goto error;
 
 	buffer = realloc(stream->buffer, size * 4);
@@ -75,7 +75,7 @@ void etna_cmd_stream_realloc(struct etna_cmd_stream *stream, size_t n)
 	return;
 
 error:
-	WARN_MSG("command buffer too long, forcing flush.");
+	DEBUG_MSG("command buffer too long, forcing flush.");
 	etna_cmd_stream_force_flush(stream);
 }
 

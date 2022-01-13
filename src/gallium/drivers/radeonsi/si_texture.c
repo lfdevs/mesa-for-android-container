@@ -123,7 +123,14 @@ static unsigned si_texture_get_offset(struct si_screen *sscreen, struct si_textu
                                       unsigned *layer_stride)
 {
    if (sscreen->info.chip_class >= GFX9) {
-      *stride = tex->surface.u.gfx9.surf_pitch * tex->surface.bpe;
+      unsigned pitch;
+      if (tex->surface.is_linear) {
+         pitch = tex->surface.u.gfx9.pitch[level];
+      } else {
+         pitch = tex->surface.u.gfx9.surf_pitch;
+      }
+
+      *stride = pitch * tex->surface.bpe;
       *layer_stride = tex->surface.u.gfx9.surf_slice_size;
 
       if (!box)
@@ -133,9 +140,8 @@ static unsigned si_texture_get_offset(struct si_screen *sscreen, struct si_textu
        * of mipmap levels. */
       return tex->surface.u.gfx9.surf_offset + box->z * tex->surface.u.gfx9.surf_slice_size +
              tex->surface.u.gfx9.offset[level] +
-             (box->y / tex->surface.blk_h * tex->surface.u.gfx9.surf_pitch +
-              box->x / tex->surface.blk_w) *
-                tex->surface.bpe;
+             (box->y / tex->surface.blk_h * pitch + box->x / tex->surface.blk_w) *
+             tex->surface.bpe;
    } else {
       *stride = tex->surface.u.legacy.level[level].nblk_x * tex->surface.bpe;
       assert((uint64_t)tex->surface.u.legacy.level[level].slice_size_dw * 4 <= UINT_MAX);

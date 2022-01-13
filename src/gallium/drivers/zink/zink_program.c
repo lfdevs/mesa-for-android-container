@@ -821,6 +821,9 @@ bind_last_vertex_stage(struct zink_context *ctx)
       if (old != PIPE_SHADER_TYPES) {
          memset(&ctx->gfx_pipeline_state.shader_keys.key[old].key.vs_base, 0, sizeof(struct zink_vs_key_base));
          ctx->dirty_shader_stages |= BITFIELD_BIT(old);
+      } else {
+         /* always unset vertex shader values when changing to a non-vs last stage */
+         memset(&ctx->gfx_pipeline_state.shader_keys.key[PIPE_SHADER_VERTEX].key.vs_base, 0, sizeof(struct zink_vs_key_base));
       }
       ctx->last_vertex_stage_dirty = true;
    }

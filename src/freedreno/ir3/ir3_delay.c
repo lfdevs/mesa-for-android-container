@@ -98,7 +98,7 @@ ir3_delayslots(struct ir3_instruction *assigner,
        */
       bool mismatched_half = (assigner->dsts[0]->flags & IR3_REG_HALF) !=
                              (consumer->srcs[n]->flags & IR3_REG_HALF);
-      unsigned penalty = mismatched_half ? 2 : 0;
+      unsigned penalty = mismatched_half ? 3 : 0;
       if ((is_mad(consumer->opc) || is_madsh(consumer->opc)) && (n == 2)) {
          /* special case, 3rd src to cat3 not required on first cycle */
          return 1 + penalty;

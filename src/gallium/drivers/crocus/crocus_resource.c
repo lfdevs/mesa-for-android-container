@@ -688,9 +688,10 @@ crocus_resource_create_with_modifiers(struct pipe_screen *pscreen,
        devinfo->ver < 6)
       return NULL;
 
-   UNUSED const bool isl_surf_created_successfully =
+   const bool isl_surf_created_successfully =
       crocus_resource_configure_main(screen, res, templ, modifier, 0);
-   assert(isl_surf_created_successfully);
+   if (!isl_surf_created_successfully)
+      return NULL;
 
    const char *name = "miptree";
 

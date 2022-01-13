@@ -477,7 +477,6 @@ void
 tu6_apply_depth_bounds_workaround(struct tu_device *device,
                                   uint32_t *rb_depth_cntl)
 {
-   return;
    if (!device->physical_device->info->a6xx.depth_bounds_require_depth_test_quirk)
       return;
 

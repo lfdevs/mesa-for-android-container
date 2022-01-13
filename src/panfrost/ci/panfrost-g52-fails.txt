@@ -104,14 +104,11 @@ spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl
 spec@arb_framebuffer_object@fbo-luminance-alpha,Fail
 spec@arb_framebuffer_srgb@fbo-fast-clear,Fail
 spec@arb_get_program_binary@restore-sso-program,Fail
-spec@arb_get_texture_sub_image@arb_get_texture_sub_image-getcompressed,Fail
-spec@arb_get_texture_sub_image@arb_get_texture_sub_image-get,Fail
 spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small,Fail
 spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small@GL_DEPTH32F_STENCIL8-GL_DEPTH_STENCIL,Fail
 spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small@GL_DEPTH32F_STENCIL8-GL_STENCIL_INDEX,Fail
 spec@arb_pixel_buffer_object@texsubimage array pbo,Fail
 spec@arb_pixel_buffer_object@texsubimage cube_map_array pbo,Fail
-spec@arb_pixel_buffer_object@texsubimage pbo,Fail
 spec@arb_point_sprite@arb_point_sprite-checkerboard,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail
@@ -530,8 +527,6 @@ spec@ext_packed_float@texwrap formats bordercolor@GL_R11F_G11F_B10F- border colo
 spec@ext_packed_float@texwrap formats bordercolor-swizzled,Fail
 spec@ext_packed_float@texwrap formats bordercolor-swizzled@GL_R11F_G11F_B10F- swizzled- border color only,Fail
 spec@ext_texture_array@array-texture,Fail
-spec@ext_texture_array@compressed texsubimage,Fail
-spec@ext_texture_array@compressed texsubimage pbo,Fail
 spec@ext_texture_array@copyteximage 1d_array,Fail
 spec@ext_texture_array@copyteximage 1d_array samples=2,Fail
 spec@ext_texture_array@copyteximage 1d_array samples=4,Fail
@@ -556,10 +551,6 @@ spec@ext_texture_compression_rgtc@texwrap formats bordercolor-swizzled@GL_COMPRE
 spec@ext_texture_compression_rgtc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RG_RGTC2- swizzled- border color only,Fail
 spec@ext_texture_compression_rgtc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_SIGNED_RED_RGTC1- swizzled- border color only,Fail
 spec@ext_texture_compression_rgtc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_SIGNED_RG_RGTC2- swizzled- border color only,Fail
-spec@ext_texture_compression_s3tc@s3tc-errors,Fail
-spec@ext_texture_compression_s3tc@s3tc-errors_gles2,Fail
-spec@ext_texture_compression_s3tc@s3tc-texsubimage,Fail
-spec@ext_texture_compression_s3tc@s3tc-texsubimage_gles2,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor@GL_COMPRESSED_RGBA_S3TC_DXT1_EXT- border color only,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor@GL_COMPRESSED_RGBA_S3TC_DXT3_EXT- border color only,Fail
@@ -927,17 +918,9 @@ spec@nv_copy_image@nv_copy_image-formats --samples=4@Source: GL_RGBA/Destination
 spec@nv_copy_image@nv_copy_image-formats --samples=4@Source: GL_RGB/Destination: GL_RGB,Fail
 spec@nv_copy_image@nv_copy_image-formats --samples=4@Source: GL_RG/Destination: GL_RG,Fail
 spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_RED_RGTC1/Destination: GL_COMPRESSED_RED_RGTC1,Fail
-spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_RGBA_S3TC_DXT1_EXT/Destination: GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,Fail
-spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_RGBA_S3TC_DXT3_EXT/Destination: GL_COMPRESSED_RGBA_S3TC_DXT3_EXT,Fail
-spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_RGBA_S3TC_DXT5_EXT/Destination: GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,Fail
-spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_RGB_S3TC_DXT1_EXT/Destination: GL_COMPRESSED_RGB_S3TC_DXT1_EXT,Fail
 spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_RG_RGTC2/Destination: GL_COMPRESSED_RG_RGTC2,Fail
 spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_SIGNED_RED_RGTC1/Destination: GL_COMPRESSED_SIGNED_RED_RGTC1,Fail
 spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_SIGNED_RG_RGTC2/Destination: GL_COMPRESSED_SIGNED_RG_RGTC2,Fail
-spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT/Destination: GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT,Fail
-spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT/Destination: GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT,Fail
-spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT/Destination: GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT,Fail
-spec@nv_copy_image@nv_copy_image-formats@Source: GL_COMPRESSED_SRGB_S3TC_DXT1_EXT/Destination: GL_COMPRESSED_SRGB_S3TC_DXT1_EXT,Fail
 spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3,Crash
 spec@oes_texture_view@sampling-2d-array-as-cubemap,Crash
 spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
@@ -1200,7 +1183,6 @@ spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on right edg
 spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on top edge,Fail
 spec@!opengl 1.1@polygon-mode-offset,Fail
 spec@!opengl 1.1@streaming-texture-leak,Crash
-spec@!opengl 1.1@texsubimage,Fail
 spec@!opengl 1.1@texwrap 1d bordercolor,Fail
 spec@!opengl 1.1@texwrap 1d bordercolor@GL_RGBA8- border color only,Fail
 spec@!opengl 1.1@texwrap 1d proj bordercolor,Fail
@@ -1289,5 +1271,4 @@ spec@!opengl 3.1@primitive-restart-xfb generated,Fail
 spec@!opengl 3.1@primitive-restart-xfb written,Fail
 spec@!opengl 3.1@required-texture-attachment-formats,Fail
 spec@!opengl 3.2@coord-replace-doesnt-eliminate-frag-tex-coords,Fail
-spec@!opengl es 3.0@ext_texture_array-compressed_gles3 texsubimage,Fail
 spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail

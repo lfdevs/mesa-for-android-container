@@ -839,7 +839,8 @@ panfrost_ptr_map(struct pipe_context *pctx,
         struct panfrost_context *ctx = pan_context(pctx);
         struct panfrost_device *dev = pan_device(pctx->screen);
         struct panfrost_resource *rsrc = pan_resource(resource);
-        int bytes_per_pixel = util_format_get_blocksize(rsrc->image.layout.format);
+        enum pipe_format format = rsrc->image.layout.format;
+        int bytes_per_block = util_format_get_blocksize(format);
         struct panfrost_bo *bo = rsrc->image.data.bo;
 
         /* Can't map tiled/compressed directly */
@@ -970,9 +971,17 @@ panfrost_ptr_map(struct pipe_context *pctx,
                 }
         }
 
+        /* For access to compressed textures, we want the (x, y, w, h)
+         * region-of-interest in blocks, not pixels. Then we compute the stride
+         * between rows of blocks as the width in blocks times the width per
+         * block, etc.
+         */
+        struct pipe_box box_blocks;
+        u_box_pixels_to_blocks(&box_blocks, box, format);
+
         if (rsrc->image.layout.modifier == DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED) {
-                transfer->base.stride = box->width * bytes_per_pixel;
-                transfer->base.layer_stride = transfer->base.stride * box->height;
+                transfer->base.stride = box_blocks.width * bytes_per_block;
+                transfer->base.layer_stride = transfer->base.stride * box_blocks.height;
                 transfer->map = ralloc_size(transfer, transfer->base.layer_stride * box->depth);
                 assert(box->depth == 1);
 
@@ -1013,9 +1022,9 @@ panfrost_ptr_map(struct pipe_context *pctx,
 
                 return bo->ptr.cpu
                        + rsrc->image.layout.slices[level].offset
-                       + transfer->base.box.z * transfer->base.layer_stride
-                       + transfer->base.box.y * rsrc->image.layout.slices[level].line_stride
-                       + transfer->base.box.x * bytes_per_pixel;
+                       + box->z * transfer->base.layer_stride
+                       + box_blocks.y * rsrc->image.layout.slices[level].line_stride
+                       + box_blocks.x * bytes_per_block;
         }
 }
 

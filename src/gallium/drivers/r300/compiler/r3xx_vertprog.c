@@ -732,10 +732,13 @@ static int transform_source_conflicts(
 			inst_mov->U.I.DstReg.File = RC_FILE_TEMPORARY;
 			inst_mov->U.I.DstReg.Index = tmpreg;
 			inst_mov->U.I.SrcReg[0] = inst->U.I.SrcReg[2];
+			inst_mov->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_XYZW;
+			inst_mov->U.I.SrcReg[0].Negate = 0;
+			inst_mov->U.I.SrcReg[0].Abs = 0;
 
-			reset_srcreg(&inst->U.I.SrcReg[2]);
 			inst->U.I.SrcReg[2].File = RC_FILE_TEMPORARY;
 			inst->U.I.SrcReg[2].Index = tmpreg;
+			inst->U.I.SrcReg[2].RelAddr = false;
 		}
 	}
 
@@ -747,10 +750,13 @@ static int transform_source_conflicts(
 			inst_mov->U.I.DstReg.File = RC_FILE_TEMPORARY;
 			inst_mov->U.I.DstReg.Index = tmpreg;
 			inst_mov->U.I.SrcReg[0] = inst->U.I.SrcReg[1];
+			inst_mov->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_XYZW;
+			inst_mov->U.I.SrcReg[0].Negate = 0;
+			inst_mov->U.I.SrcReg[0].Abs = 0;
 
-			reset_srcreg(&inst->U.I.SrcReg[1]);
 			inst->U.I.SrcReg[1].File = RC_FILE_TEMPORARY;
 			inst->U.I.SrcReg[1].Index = tmpreg;
+			inst->U.I.SrcReg[1].RelAddr = false;
 		}
 	}
 

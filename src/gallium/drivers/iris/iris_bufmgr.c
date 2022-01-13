@@ -594,19 +594,26 @@ iris_slab_free(void *priv, struct pb_slab *pslab)
 
    assert(!slab->bo->aux_map_address);
 
-   if (aux_map_ctx) {
-      /* Since we're freeing the whole slab, all buffers allocated out of it
-       * must be reclaimable.  We require buffers to be idle to be reclaimed
-       * (see iris_can_reclaim_slab()), so we know all entries must be idle.
-       * Therefore, we can safely unmap their aux table entries.
-       */
-      for (unsigned i = 0; i < pslab->num_entries; i++) {
-         struct iris_bo *bo = &slab->entries[i];
-         if (bo->aux_map_address) {
-            intel_aux_map_unmap_range(aux_map_ctx, bo->address, bo->size);
-            bo->aux_map_address = 0;
+   /* Since we're freeing the whole slab, all buffers allocated out of it
+    * must be reclaimable.  We require buffers to be idle to be reclaimed
+    * (see iris_can_reclaim_slab()), so we know all entries must be idle.
+    * Therefore, we can safely unmap their aux table entries.
+    */
+   for (unsigned i = 0; i < pslab->num_entries; i++) {
+      struct iris_bo *bo = &slab->entries[i];
+      if (aux_map_ctx && bo->aux_map_address) {
+         intel_aux_map_unmap_range(aux_map_ctx, bo->address, bo->size);
+         bo->aux_map_address = 0;
+      }
+
+      /* Unref read/write dependency syncobjs and free the array. */
+      for (int d = 0; d < bo->deps_size; d++) {
+         for (int b = 0; b < IRIS_BATCH_COUNT; b++) {
+            iris_syncobj_reference(bufmgr, &bo->deps[d].write_syncobjs[b], NULL);
+            iris_syncobj_reference(bufmgr, &bo->deps[d].read_syncobjs[b], NULL);
          }
       }
+      free(bo->deps);
    }
 
    iris_bo_unreference(slab->bo);

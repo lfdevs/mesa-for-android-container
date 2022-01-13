@@ -87,7 +87,6 @@ brw_init_extensions(struct gl_context *ctx)
    ctx->Extensions.ARB_texture_mirror_clamp_to_edge = true;
    ctx->Extensions.ARB_texture_non_power_of_two = true;
    ctx->Extensions.ARB_texture_rg = true;
-   ctx->Extensions.ARB_texture_rgb10_a2ui = true;
    ctx->Extensions.ARB_vertex_program = true;
    ctx->Extensions.ARB_vertex_shader = true;
    ctx->Extensions.ARB_vertex_type_2_10_10_10_rev = true;
@@ -112,7 +111,6 @@ brw_init_extensions(struct gl_context *ctx)
    ctx->Extensions.EXT_texture_array = true;
    ctx->Extensions.EXT_texture_env_dot3 = true;
    ctx->Extensions.EXT_texture_filter_anisotropic = true;
-   ctx->Extensions.EXT_texture_integer = true;
    ctx->Extensions.EXT_texture_norm16 = true;
    ctx->Extensions.EXT_texture_shared_exponent = true;
    ctx->Extensions.EXT_texture_snorm = true;
@@ -202,8 +200,10 @@ brw_init_extensions(struct gl_context *ctx)
       ctx->Extensions.ARB_texture_cube_map_array = true;
       ctx->Extensions.ARB_texture_gather = true;
       ctx->Extensions.ARB_texture_multisample = true;
+      ctx->Extensions.ARB_texture_rgb10_a2ui = true;
       ctx->Extensions.ARB_uniform_buffer_object = true;
       ctx->Extensions.EXT_gpu_shader4 = true;
+      ctx->Extensions.EXT_texture_integer = true;
       ctx->Extensions.EXT_texture_shadow_lod = true;
 
       if (ctx->API != API_OPENGL_COMPAT ||

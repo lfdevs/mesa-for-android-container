@@ -520,4 +520,8 @@
    DRI_CONF_OPT_B(radv_report_apu_as_dgpu, def, \
                   "Report APUs as discrete GPUs instead of integrated GPUs")
 
+#define DRI_CONF_RADV_DISABLE_HTILE_LAYERS(def) \
+   DRI_CONF_OPT_B(radv_disable_htile_layers, def, \
+                  "Disable HTILE for layered depth/stencil formats")
+
 #endif

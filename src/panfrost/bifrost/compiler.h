@@ -701,6 +701,19 @@ bi_temp_reg(bi_context *ctx)
         return bi_get_index(ctx->reg_alloc++, true, 0);
 }
 
+/* NIR booleans are 1-bit (0/1). For now, backend IR booleans are N-bit
+ * (0/~0) where N depends on the context. This requires us to sign-extend
+ * when converting constants from NIR to the backend IR.
+ */
+static inline uint32_t
+bi_extend_constant(uint32_t constant, unsigned bit_size)
+{
+        if (bit_size == 1 && constant != 0)
+                return ~0;
+        else
+                return constant;
+}
+
 /* Inline constants automatically, will be lowered out by bi_lower_fau where a
  * constant is not allowed. load_const_to_scalar gaurantees that this makes
  * sense */
@@ -708,11 +721,13 @@ bi_temp_reg(bi_context *ctx)
 static inline bi_index
 bi_src_index(nir_src *src)
 {
-        if (nir_src_is_const(*src) && nir_src_bit_size(*src) <= 32)
-                return bi_imm_u32(nir_src_as_uint(*src));
-        else if (src->is_ssa)
+        if (nir_src_is_const(*src) && nir_src_bit_size(*src) <= 32) {
+                uint32_t v = nir_src_as_uint(*src);
+
+                return bi_imm_u32(bi_extend_constant(v, nir_src_bit_size(*src)));
+        } else if (src->is_ssa) {
                 return bi_get_index(src->ssa->index, false, 0);
-        else {
+        } else {
                 assert(!src->reg.indirect);
                 return bi_get_index(src->reg.reg->index, true, 0);
         }

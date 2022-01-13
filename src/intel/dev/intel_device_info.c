@@ -1411,7 +1411,7 @@ fixup_chv_device_info(struct intel_device_info *devinfo)
     * available for that PCI ID and then compute the real value from the
     * subslice information we get from the kernel.
     */
-   const uint32_t subslice_total = intel_device_info_eu_total(devinfo);
+   const uint32_t subslice_total = intel_device_info_subslice_total(devinfo);
    const uint32_t eu_total = intel_device_info_eu_total(devinfo);
 
    /* Logical CS threads = EUs per subslice * num threads per EU */

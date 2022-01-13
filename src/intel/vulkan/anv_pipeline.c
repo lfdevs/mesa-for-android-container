@@ -497,13 +497,6 @@ pipeline_has_coarse_pixel(const struct anv_graphics_pipeline *pipeline,
    return true;
 }
 
-static bool
-is_sample_shading(const VkPipelineMultisampleStateCreateInfo *ms_info)
-{
-   return ms_info->sampleShadingEnable &&
-      (ms_info->minSampleShading * ms_info->rasterizationSamples) > 1;
-}
-
 static void
 populate_wm_prog_key(const struct anv_graphics_pipeline *pipeline,
                      VkPipelineShaderStageCreateFlags flags,
@@ -552,8 +545,15 @@ populate_wm_prog_key(const struct anv_graphics_pipeline *pipeline,
    key->alpha_test_replicate_alpha = false;
 
    if (ms_info) {
-      key->persample_interp = is_sample_shading(ms_info);
-      key->multisample_fbo = ms_info->rasterizationSamples > 1;
+      /* We should probably pull this out of the shader, but it's fairly
+       * harmless to compute it and then let dead-code take care of it.
+       */
+      if (ms_info->rasterizationSamples > 1) {
+         key->persample_interp = ms_info->sampleShadingEnable &&
+            (ms_info->minSampleShading * ms_info->rasterizationSamples) > 1;
+         key->multisample_fbo = true;
+      }
+
       key->frag_coord_adds_sample_pos = key->persample_interp;
    }
 
@@ -1156,6 +1156,24 @@ anv_pipeline_link_fs(const struct brw_compiler *compiler,
 
    if (deleted_output)
       nir_fixup_deref_modes(stage->nir);
+
+   /* Initially the valid outputs value is based off the renderpass color
+    * attachments (see populate_wm_prog_key()), now that we've potentially
+    * deleted variables that map to unused attachments, we need to update the
+    * valid outputs for the backend compiler based on what output variables
+    * are actually used. */
+   stage->key.wm.color_outputs_valid = 0;
+   nir_foreach_shader_out_variable_safe(var, stage->nir) {
+      if (var->data.location < FRAG_RESULT_DATA0)
+         continue;
+
+      const unsigned rt = var->data.location - FRAG_RESULT_DATA0;
+      const unsigned array_len =
+         glsl_type_is_array(var->type) ? glsl_get_length(var->type) : 1;
+      assert(rt + array_len <= MAX_RTS);
+
+      stage->key.wm.color_outputs_valid |= BITFIELD_RANGE(rt, array_len);
+   }
 
    /* We stored the number of subpass color attachments in nr_color_regions
     * when calculating the key for caching.  Now that we've computed the bind
@@ -2403,16 +2421,10 @@ anv_graphics_pipeline_init(struct anv_graphics_pipeline *pipeline,
                            PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT);
    pipeline->depth_clip_enable = clip_info ? clip_info->depthClipEnable : !pipeline->depth_clamp_enable;
 
-   /* If rasterization is not enabled, ms_info must be ignored. */
-   const bool raster_enabled =
-      !pCreateInfo->pRasterizationState->rasterizerDiscardEnable ||
-      (pipeline->dynamic_states &
-       ANV_CMD_DIRTY_DYNAMIC_RASTERIZER_DISCARD_ENABLE);
-
-   const VkPipelineMultisampleStateCreateInfo *ms_info =
-      raster_enabled ? pCreateInfo->pMultisampleState : NULL;
-
-   pipeline->sample_shading_enable = ms_info && is_sample_shading(ms_info);
+   pipeline->sample_shading_enable =
+      !pCreateInfo->pRasterizationState->rasterizerDiscardEnable &&
+      pCreateInfo->pMultisampleState &&
+      pCreateInfo->pMultisampleState->sampleShadingEnable;
 
    result = anv_pipeline_compile_graphics(pipeline, cache, pCreateInfo);
    if (result != VK_SUCCESS) {
@@ -2493,6 +2505,15 @@ anv_graphics_pipeline_init(struct anv_graphics_pipeline *pipeline,
       else
          pipeline->topology = vk_to_intel_primitive_type[ia_info->topology];
    }
+
+   /* If rasterization is not enabled, ms_info must be ignored. */
+   const bool raster_enabled =
+      !pCreateInfo->pRasterizationState->rasterizerDiscardEnable ||
+      (pipeline->dynamic_states &
+       ANV_CMD_DIRTY_DYNAMIC_RASTERIZER_DISCARD_ENABLE);
+
+   const VkPipelineMultisampleStateCreateInfo *ms_info =
+      raster_enabled ? pCreateInfo->pMultisampleState : NULL;
 
    const VkPipelineRasterizationLineStateCreateInfoEXT *line_info =
       vk_find_struct_const(pCreateInfo->pRasterizationState->pNext,

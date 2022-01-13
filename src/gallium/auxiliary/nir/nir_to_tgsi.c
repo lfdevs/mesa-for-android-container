@@ -2106,7 +2106,7 @@ ntt_emit_texture(struct ntt_compile *c, nir_tex_instr *instr)
    switch (instr->op) {
    case nir_texop_tex:
       if (nir_tex_instr_src_size(instr, nir_tex_instr_src_index(instr, nir_tex_src_backend1)) >
-         instr->coord_components + instr->is_shadow)
+         MAX2(instr->coord_components, 2) + instr->is_shadow)
          tex_opcode = TGSI_OPCODE_TXP;
       else
          tex_opcode = TGSI_OPCODE_TEX;

@@ -1386,10 +1386,10 @@ redirect_sampler_derefs(struct nir_builder *b, nir_instr *instr, void *data)
    int sampler_idx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
    if (sampler_idx == -1) {
       /* No derefs, must be using indices */
-      struct hash_entry *hash_entry = _mesa_hash_table_u64_search(data, tex->sampler_index);
+      nir_variable *bare_sampler = _mesa_hash_table_u64_search(data, tex->sampler_index);
 
       /* Already have a bare sampler here */
-      if (hash_entry)
+      if (bare_sampler)
          return false;
 
       nir_variable *typed_sampler = NULL;
@@ -1408,7 +1408,7 @@ redirect_sampler_derefs(struct nir_builder *b, nir_instr *instr, void *data)
 
       /* Clone the typed sampler to a bare sampler and we're done */
       assert(typed_sampler);
-      nir_variable *bare_sampler = nir_variable_clone(typed_sampler, b->shader);
+      bare_sampler = nir_variable_clone(typed_sampler, b->shader);
       bare_sampler->type = get_bare_samplers_for_type(typed_sampler->type);
       nir_shader_add_variable(b->shader, bare_sampler);
       _mesa_hash_table_u64_insert(data, tex->sampler_index, bare_sampler);
@@ -1428,11 +1428,8 @@ redirect_sampler_derefs(struct nir_builder *b, nir_instr *instr, void *data)
       return false;
    }
 
-   struct hash_entry *hash_entry = _mesa_hash_table_u64_search(data, old_var->data.binding);
-   nir_variable *new_var;
-   if (hash_entry) {
-      new_var = hash_entry->data;
-   } else {
+   nir_variable *new_var = _mesa_hash_table_u64_search(data, old_var->data.binding);
+   if (!new_var) {
       new_var = nir_variable_clone(old_var, b->shader);
       new_var->type = get_bare_samplers_for_type(old_var->type);
       nir_shader_add_variable(b->shader, new_var);

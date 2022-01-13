@@ -187,7 +187,7 @@ can_use_SDWA(chip_class chip, const aco_ptr<Instruction>& instr, bool pre_ra)
    if (!instr->isVALU())
       return false;
 
-   if (chip < GFX8 || instr->isDPP())
+   if (chip < GFX8 || instr->isDPP() || instr->isVOP3P())
       return false;
 
    if (instr->isSDWA())

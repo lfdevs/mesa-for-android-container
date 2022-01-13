@@ -283,7 +283,13 @@ i915_get_shader_param(struct pipe_screen *screen, enum pipe_shader_type shader,
        */
       return 0;
 
+   /* i915 can't do these, and even if gallivm NIR can we call nir_to_tgsi
+    * manually and TGSI can't.
+    */
    case PIPE_SHADER_CAP_INT16:
+   case PIPE_SHADER_CAP_FP16:
+   case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+   case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
       return 0;
 
    case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
@@ -343,9 +349,6 @@ i915_get_shader_param(struct pipe_screen *screen, enum pipe_shader_type shader,
       case PIPE_SHADER_CAP_SUBROUTINES:
          return 0;
       case PIPE_SHADER_CAP_INT64_ATOMICS:
-      case PIPE_SHADER_CAP_FP16:
-      case PIPE_SHADER_CAP_FP16_DERIVATIVES:
-      case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
       case PIPE_SHADER_CAP_INT16:
       case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
          return 0;

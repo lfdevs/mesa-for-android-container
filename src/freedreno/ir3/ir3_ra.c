@@ -968,9 +968,9 @@ compress_regs_left(struct ra_ctx *ctx, struct ra_file *file, unsigned size,
       assert(!interval->frozen);
 
       /* Killed sources don't count because they go at the end and can
-       * overlap the register we're trying to add.
+       * overlap the register we're trying to add, unless it's a source.
        */
-      if (!interval->is_killed && !is_source) {
+      if (!interval->is_killed || is_source) {
          removed_size += interval->physreg_end - interval->physreg_start;
          if (interval->interval.reg->flags & IR3_REG_HALF) {
             removed_half_size += interval->physreg_end -

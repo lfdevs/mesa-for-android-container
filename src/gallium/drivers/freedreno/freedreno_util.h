@@ -106,12 +106,14 @@ extern bool fd_binning_enabled;
 
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/syscall.h>
 
 #define DBG(fmt, ...)                                                          \
    do {                                                                        \
       if (FD_DBG(MSGS))                                                        \
-         mesa_logi("%5d: %s:%d: " fmt, gettid(), __FUNCTION__, __LINE__,       \
-                   ##__VA_ARGS__);                                             \
+         mesa_logi("%5d: %s:%d: " fmt, ((pid_t)syscall(SYS_gettid)),           \
+                                        __FUNCTION__, __LINE__,                \
+                                        ##__VA_ARGS__);                        \
    } while (0)
 
 #define perf_debug_message(debug, type, ...)                                   \

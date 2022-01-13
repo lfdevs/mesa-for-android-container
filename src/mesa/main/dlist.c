@@ -816,6 +816,7 @@ vbo_destroy_vertex_list(struct gl_context *ctx, struct vbo_save_vertex_list *nod
    free(node->cold->current_data);
    node->cold->current_data = NULL;
 
+   free(node->cold->prims);
    free(node->cold);
 }
 

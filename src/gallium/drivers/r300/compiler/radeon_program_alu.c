@@ -1215,12 +1215,6 @@ int radeonTransformDeriv(struct radeon_compiler* c,
  *
  * === OR ===
  *
- * IF Temp[0].x -\
- * KILL         - > KIL -abs(Temp[0].x)
- * ENDIF        -/
- *
- * === OR ===
- *
  * IF Temp[0].x -> IF Temp[0].x
  * ...          -> ...
  * ELSE         -> ELSE
@@ -1265,21 +1259,6 @@ void rc_transform_KILL(struct radeon_compiler * c, void *user)
 			 * block, because -0.0 is considered negative. */
 			inst->U.I.SrcReg[0] =
 				negate(absolute(if_inst->U.I.SrcReg[0]));
-
-			if (inst->Prev->U.I.Opcode != RC_OPCODE_IF
-				&& inst->Next->U.I.Opcode != RC_OPCODE_ENDIF) {
-
-				/* Optimize the special case:
-				 * IF Temp[0].x
-				 * KILP
-				 * ENDIF
-				 */
-
-				/* Remove IF */
-				rc_remove_instruction(inst->Prev);
-				/* Remove ENDIF */
-				rc_remove_instruction(inst->Next);
-			}
 		}
 	}
 }

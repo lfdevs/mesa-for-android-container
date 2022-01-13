@@ -320,6 +320,7 @@ struct radv_instance {
    bool disable_shrink_image_store;
    bool absolute_depth_bias;
    bool report_apu_as_dgpu;
+   bool disable_htile_layers;
 };
 
 VkResult radv_init_wsi(struct radv_physical_device *physical_device);

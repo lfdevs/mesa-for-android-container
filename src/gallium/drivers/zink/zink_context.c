@@ -1111,7 +1111,7 @@ zink_set_constant_buffer(struct pipe_context *pctx,
             update_res_bind_count(ctx, new_res, shader == PIPE_SHADER_COMPUTE, false);
          }
          zink_batch_resource_usage_set(&ctx->batch, new_res, false);
-         zink_fake_buffer_barrier(new_res, VK_ACCESS_UNIFORM_READ_BIT,
+         zink_resource_buffer_barrier(ctx, new_res, VK_ACCESS_UNIFORM_READ_BIT,
                                       zink_pipeline_flags_from_pipe_stage(shader));
       }
       update |= ((index || screen->descriptor_mode == ZINK_DESCRIPTOR_MODE_LAZY) && ctx->ubos[shader][index].buffer_offset != offset) ||
@@ -1206,7 +1206,7 @@ zink_set_shader_buffers(struct pipe_context *pctx,
          ssbo->buffer_size = MIN2(buffers[i].buffer_size, new_res->base.b.width0 - ssbo->buffer_offset);
          util_range_add(&new_res->base.b, &new_res->valid_buffer_range, ssbo->buffer_offset,
                         ssbo->buffer_offset + ssbo->buffer_size);
-         zink_fake_buffer_barrier(new_res, access,
+         zink_resource_buffer_barrier(ctx, new_res, access,
                                       zink_pipeline_flags_from_pipe_stage(p_stage));
          update = true;
          max_slot = MAX2(max_slot, start_slot + i);
@@ -1392,7 +1392,7 @@ zink_set_shader_images(struct pipe_context *pctx,
             image_view->buffer_view = create_image_bufferview(ctx, &images[i]);
             assert(image_view->buffer_view);
             zink_batch_usage_set(&image_view->buffer_view->batch_uses, ctx->batch.state);
-            zink_fake_buffer_barrier(res, access,
+            zink_resource_buffer_barrier(ctx, res, access,
                                          zink_pipeline_flags_from_pipe_stage(p_stage));
          } else {
             image_view->surface = create_image_surface(ctx, &images[i], p_stage == PIPE_SHADER_COMPUTE);
@@ -1485,7 +1485,7 @@ zink_set_sampler_views(struct pipe_context *pctx,
                update = true;
             }
             zink_batch_usage_set(&b->buffer_view->batch_uses, ctx->batch.state);
-            zink_fake_buffer_barrier(res, VK_ACCESS_SHADER_READ_BIT,
+            zink_resource_buffer_barrier(ctx, res, VK_ACCESS_SHADER_READ_BIT,
                                          zink_pipeline_flags_from_pipe_stage(shader_type));
             if (!a || a->buffer_view->buffer_view != b->buffer_view->buffer_view)
                update = true;
@@ -1652,7 +1652,7 @@ zink_make_texture_handle_resident(struct pipe_context *pctx, uint64_t handle, bo
             rebind_bindless_bufferview(ctx, res, ds);
          VkBufferView *bv = &ctx->di.bindless[0].buffer_infos[handle];
          *bv = ds->bufferview->buffer_view;
-         zink_fake_buffer_barrier(res, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+         zink_resource_buffer_barrier(ctx, res, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
       } else {
          VkDescriptorImageInfo *ii = &ctx->di.bindless[0].img_infos[handle];
          ii->sampler = bd->sampler->sampler;
@@ -1771,7 +1771,7 @@ zink_make_image_handle_resident(struct pipe_context *pctx, uint64_t handle, unsi
             rebind_bindless_bufferview(ctx, res, ds);
          VkBufferView *bv = &ctx->di.bindless[1].buffer_infos[handle];
          *bv = ds->bufferview->buffer_view;
-         zink_fake_buffer_barrier(res, access, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+         zink_resource_buffer_barrier(ctx, res, access, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
       } else {
          VkDescriptorImageInfo *ii = &ctx->di.bindless[1].img_infos[handle];
          ii->sampler = VK_NULL_HANDLE;
@@ -2956,13 +2956,6 @@ zink_resource_buffer_needs_barrier(struct zink_resource *res, VkAccessFlags flag
           zink_resource_access_is_write(flags) ||
           ((res->obj->access_stage & pipeline) != pipeline && !(res->obj->access_stage & (pipeline - 1))) ||
           (res->obj->access & flags) != flags;
-}
-
-void
-zink_fake_buffer_barrier(struct zink_resource *res, VkAccessFlags flags, VkPipelineStageFlags pipeline)
-{
-   res->obj->access = flags;
-   res->obj->access_stage = pipeline;
 }
 
 void
