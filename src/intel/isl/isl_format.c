@@ -27,7 +27,7 @@
 #include "isl_priv.h"
 #include "dev/intel_device_info.h"
 
-#include "main/macros.h" /* Needed for MAX3 and MAX2 for format_rgb9e5 */
+#include "util/macros.h" /* Needed for MAX3 and MAX2 for format_rgb9e5 */
 #include "util/format_srgb.h"
 #include "util/format_rgb9e5.h"
 #include "util/format_r11g11b10f.h"
@@ -261,7 +261,7 @@ static const struct surface_format_info format_info[] = {
    SF( 90,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   I8_SINT)
    SF( 45,  45,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   DXT1_RGB_SRGB)
    SF(  Y,   Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   R1_UNORM)
-   SF(  Y,   Y,   x,   Y,   Y,   x,   x,   x,  60,   x,   x,   x,   YCRCB_NORMAL)
+   SF(  Y,   Y,   x,   Y,   Y,   x,   x,   x,  60,   x,   x, 120,   YCRCB_NORMAL)
    SF(  Y,   Y,   x,   Y,   Y,   x,   x,   x,  60,   x,   x,   x,   YCRCB_SWAPUVY)
    SF( 45,  45,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   P2_UNORM_PALETTE0)
    SF( 45,  45,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   P2_UNORM_PALETTE1)
@@ -275,7 +275,7 @@ static const struct surface_format_info format_info[] = {
    SF(  Y,   Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   BC3_UNORM_SRGB)
    SF(  Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   MONO8)
    SF(  Y,   Y,   x,   x,   Y,   x,   x,   x,  60,   x,   x,   x,   YCRCB_SWAPUV)
-   SF(  Y,   Y,   x,   x,   Y,   x,   x,   x,  60,   x,   x,   x,   YCRCB_SWAPY)
+   SF(  Y,   Y,   x,   x,   Y,   x,   x,   x,  60,   x,   x, 120,   YCRCB_SWAPY)
    SF(  Y,   Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   DXT1_RGB)
 /*    smpl filt  shad  CK   RT   AB   VB   SO color TW   TR  ccs_e */
    SF(  Y,   Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,   FXT1)
@@ -603,6 +603,14 @@ isl_format_for_pipe_format(enum pipe_format pf)
       [PIPE_FORMAT_R8G8_R8B8_UNORM]         = ISL_FORMAT_YCRCB_NORMAL,
       [PIPE_FORMAT_G8R8_B8R8_UNORM]         = ISL_FORMAT_YCRCB_SWAPY,
 
+      /* We map these formats to help configure media compression. */
+      [PIPE_FORMAT_YUYV]                    = ISL_FORMAT_YCRCB_NORMAL,
+      [PIPE_FORMAT_UYVY]                    = ISL_FORMAT_YCRCB_SWAPY,
+      [PIPE_FORMAT_NV12]                    = ISL_FORMAT_PLANAR_420_8,
+      [PIPE_FORMAT_P010]                    = ISL_FORMAT_PLANAR_420_10,
+      [PIPE_FORMAT_P012]                    = ISL_FORMAT_PLANAR_420_12,
+      [PIPE_FORMAT_P016]                    = ISL_FORMAT_PLANAR_420_16,
+
       [PIPE_FORMAT_R8G8B8X8_SRGB]           = ISL_FORMAT_R8G8B8X8_UNORM_SRGB,
       [PIPE_FORMAT_B10G10R10X2_UNORM]       = ISL_FORMAT_B10G10R10X2_UNORM,
       [PIPE_FORMAT_R16G16B16X16_UNORM]      = ISL_FORMAT_R16G16B16X16_UNORM,
@@ -713,14 +721,14 @@ isl_format_supports_sampling(const struct intel_device_info *devinfo,
    if (!format_info_exists(format))
       return false;
 
-   if (devinfo->is_baytrail) {
+   if (devinfo->platform == INTEL_PLATFORM_BYT) {
       const struct isl_format_layout *fmtl = isl_format_get_layout(format);
       /* Support for ETC1 and ETC2 exists on Bay Trail even though big-core
        * GPUs didn't get it until Broadwell.
        */
       if (fmtl->txc == ISL_TXC_ETC1 || fmtl->txc == ISL_TXC_ETC2)
          return true;
-   } else if (devinfo->is_cherryview) {
+   } else if (devinfo->platform == INTEL_PLATFORM_CHV) {
       /* Support for ASTC LDR theoretically exists on Cherry View even though
        * big-core GPUs didn't get it until Skylake.  However, it's fairly
        * badly broken and requires some nasty workarounds which no Mesa driver
@@ -774,7 +782,7 @@ isl_format_supports_vertex_fetch(const struct intel_device_info *devinfo,
    /* For vertex fetch, Bay Trail supports the same set of formats as Haswell
     * but is a superset of Ivy Bridge.
     */
-   if (devinfo->is_baytrail)
+   if (devinfo->platform == INTEL_PLATFORM_BYT)
       return 75 >= format_info[format].input_vb;
 
    return devinfo->verx10 >= format_info[format].input_vb;
@@ -835,6 +843,12 @@ isl_format_supports_ccs_d(const struct intel_device_info *devinfo,
 
    const struct isl_format_layout *fmtl = isl_format_get_layout(format);
 
+   /* From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render
+    * Target(s)", beneath the "Fast Color Clear" bullet (p326):
+    *
+    *     - MCS buffer for non-MSRT is supported only for RT formats 32bpp,
+    *       64bpp, and 128bpp.
+    */
    return fmtl->bpb == 32 || fmtl->bpb == 64 || fmtl->bpb == 128;
 }
 
@@ -849,7 +863,7 @@ isl_format_supports_ccs_e(const struct intel_device_info *devinfo,
                           enum isl_format format)
 {
    /* Wa_22011186057: Disable compression on ADL-P A0 */
-   if (devinfo->is_alderlake && devinfo->gt == 2 && devinfo->revision == 0)
+   if (devinfo->platform == INTEL_PLATFORM_ADL && devinfo->gt == 2 && devinfo->revision == 0)
       return false;
 
    if (!format_info_exists(format))
@@ -894,6 +908,21 @@ isl_format_supports_multisampling(const struct intel_device_info *devinfo,
        * is multisampled.  See also isl_surf_get_hiz_surf().
        */
       return devinfo->ver <= 8;
+   } else if (devinfo->ver == 7 && isl_format_has_sint_channel(format)) {
+      /* From the Ivy Bridge PRM, Vol4 Part1 p73 ("Number of Multisamples"):
+       *
+       *   This field must be set to MULTISAMPLECOUNT_1 for SINT MSRTs when
+       *   all RT channels are not written
+       *
+       * From the Ivy Bridge PRM, Vol4 Part1 p77 ("MCS Enable"):
+       *
+       *   This field must be set to 0 for all SINT MSRTs when all RT channels
+       *   are not written
+       *
+       * Disable multisampling support now as we don't handle the case when
+       * one of the render target channels is disabled.
+       */
+      return false;
    } else if (devinfo->ver < 7 && isl_format_get_layout(format)->bpb > 64) {
       return false;
    } else if (isl_format_is_compressed(format)) {

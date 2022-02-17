@@ -23,7 +23,6 @@
 
 #include "v3dv_private.h"
 #include "vk_util.h"
-#include "vk_format_info.h"
 
 #include "drm-uapi/drm_fourcc.h"
 #include "util/format/u_format.h"
@@ -39,6 +38,42 @@ v3dv_get_format_swizzle(struct v3dv_device *device, VkFormat f)
       return fallback;
 
    return vf->swizzle;
+}
+
+bool
+v3dv_format_swizzle_needs_rb_swap(const uint8_t *swizzle)
+{
+   /* Normal case */
+   if (swizzle[0] == PIPE_SWIZZLE_Z)
+      return swizzle[2] == PIPE_SWIZZLE_X;
+
+   /* Format uses reverse flag */
+   if (swizzle[0] == PIPE_SWIZZLE_Y)
+      return swizzle[2] == PIPE_SWIZZLE_W;
+
+   return false;
+}
+
+bool
+v3dv_format_swizzle_needs_reverse(const uint8_t *swizzle)
+{
+   /* Normal case */
+   if (swizzle[0] == PIPE_SWIZZLE_W &&
+       swizzle[1] == PIPE_SWIZZLE_Z &&
+       swizzle[2] == PIPE_SWIZZLE_Y &&
+       swizzle[3] == PIPE_SWIZZLE_X) {
+      return true;
+   }
+
+   /* Format uses RB swap flag */
+   if (swizzle[0] == PIPE_SWIZZLE_Y &&
+       swizzle[1] == PIPE_SWIZZLE_Z &&
+       swizzle[2] == PIPE_SWIZZLE_W &&
+       swizzle[3] == PIPE_SWIZZLE_X) {
+      return true;
+   }
+
+   return false;
 }
 
 uint8_t

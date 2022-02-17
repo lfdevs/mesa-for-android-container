@@ -68,77 +68,10 @@
 
 #include "syncobj.h"
 
-static struct gl_sync_object *
-_mesa_new_sync_object(struct gl_context *ctx)
-{
-   struct gl_sync_object *s = CALLOC_STRUCT(gl_sync_object);
-   (void) ctx;
+#include "api_exec_decl.h"
 
-   return s;
-}
-
-
-static void
-_mesa_delete_sync_object(struct gl_context *ctx, struct gl_sync_object *syncObj)
-{
-   (void) ctx;
-   free(syncObj->Label);
-   free(syncObj);
-}
-
-
-static void
-_mesa_fence_sync(struct gl_context *ctx, struct gl_sync_object *syncObj,
-                 GLenum condition, GLbitfield flags)
-{
-   (void) ctx;
-   (void) condition;
-   (void) flags;
-
-   syncObj->StatusFlag = 1;
-}
-
-
-static void
-_mesa_check_sync(struct gl_context *ctx, struct gl_sync_object *syncObj)
-{
-   (void) ctx;
-   (void) syncObj;
-
-   /* No-op for software rendering.  Hardware drivers will need to determine
-    * whether the state of the sync object has changed.
-    */
-}
-
-
-static void
-_mesa_wait_sync(struct gl_context *ctx, struct gl_sync_object *syncObj,
-                GLbitfield flags, GLuint64 timeout)
-{
-   (void) ctx;
-   (void) syncObj;
-   (void) flags;
-   (void) timeout;
-
-   /* No-op for software rendering.  Hardware drivers will need to wait until
-    * the state of the sync object changes or the timeout expires.
-    */
-}
-
-
-void
-_mesa_init_sync_object_functions(struct dd_function_table *driver)
-{
-   driver->NewSyncObject = _mesa_new_sync_object;
-   driver->FenceSync = _mesa_fence_sync;
-   driver->DeleteSyncObject = _mesa_delete_sync_object;
-   driver->CheckSync = _mesa_check_sync;
-
-   /* Use the same no-op wait function for both.
-    */
-   driver->ClientWaitSync = _mesa_wait_sync;
-   driver->ServerWaitSync = _mesa_wait_sync;
-}
+#include "pipe/p_context.h"
+#include "pipe/p_screen.h"
 
 /**
  * Allocate/init the context state related to sync objects.
@@ -159,6 +92,70 @@ _mesa_free_sync_data(struct gl_context *ctx)
    (void) ctx;
 }
 
+static struct gl_sync_object *
+new_sync_object(struct gl_context *ctx)
+{
+   struct gl_sync_object *so = CALLOC_STRUCT(gl_sync_object);
+
+   simple_mtx_init(&so->mutex, mtx_plain);
+   return so;
+}
+
+static void
+delete_sync_object(struct gl_context *ctx,
+                      struct gl_sync_object *obj)
+{
+   struct pipe_screen *screen = ctx->pipe->screen;
+
+   screen->fence_reference(screen, &obj->fence, NULL);
+   simple_mtx_destroy(&obj->mutex);
+   free(obj->Label);
+   FREE(obj);
+}
+
+static void
+__client_wait_sync(struct gl_context *ctx,
+                   struct gl_sync_object *obj,
+                   GLbitfield flags, GLuint64 timeout)
+{
+   struct pipe_context *pipe = ctx->pipe;
+   struct pipe_screen *screen = pipe->screen;
+   struct pipe_fence_handle *fence = NULL;
+
+   /* If the fence doesn't exist, assume it's signalled. */
+   simple_mtx_lock(&obj->mutex);
+   if (!obj->fence) {
+      simple_mtx_unlock(&obj->mutex);
+      obj->StatusFlag = GL_TRUE;
+      return;
+   }
+
+   /* We need a local copy of the fence pointer, so that we can call
+    * fence_finish unlocked.
+    */
+   screen->fence_reference(screen, &fence, obj->fence);
+   simple_mtx_unlock(&obj->mutex);
+
+   /* Section 4.1.2 of OpenGL 4.5 (Compatibility Profile) says:
+    *    [...] if ClientWaitSync is called and all of the following are true:
+    *    - the SYNC_FLUSH_COMMANDS_BIT bit is set in flags,
+    *    - sync is unsignaled when ClientWaitSync is called,
+    *    - and the calls to ClientWaitSync and FenceSync were issued from
+    *      the same context,
+    *    then the GL will behave as if the equivalent of Flush were inserted
+    *    immediately after the creation of sync.
+    *
+    * Assume GL_SYNC_FLUSH_COMMANDS_BIT is always set, because applications
+    * forget to set it.
+    */
+   if (screen->fence_finish(screen, pipe, fence, timeout)) {
+      simple_mtx_lock(&obj->mutex);
+      screen->fence_reference(screen, &obj->fence, NULL);
+      simple_mtx_unlock(&obj->mutex);
+      obj->StatusFlag = GL_TRUE;
+   }
+   screen->fence_reference(screen, &fence, NULL);
+}
 
 /**
  * Check if the given sync object is:
@@ -206,7 +203,7 @@ _mesa_unref_sync_object(struct gl_context *ctx, struct gl_sync_object *syncObj,
       _mesa_set_remove(ctx->Shared->SyncObjects, entry);
       simple_mtx_unlock(&ctx->Shared->Mutex);
 
-      ctx->Driver.DeleteSyncObject(ctx, syncObj);
+      delete_sync_object(ctx, syncObj);
    } else {
       simple_mtx_unlock(&ctx->Shared->Mutex);
    }
@@ -276,7 +273,7 @@ fence_sync(struct gl_context *ctx, GLenum condition, GLbitfield flags)
 {
    struct gl_sync_object *syncObj;
 
-   syncObj = ctx->Driver.NewSyncObject(ctx);
+   syncObj = new_sync_object(ctx);
    if (syncObj != NULL) {
       /* The name is not currently used, and it is never visible to
        * applications.  If sync support is extended to provide support for
@@ -290,7 +287,11 @@ fence_sync(struct gl_context *ctx, GLenum condition, GLbitfield flags)
       syncObj->Flags = flags;
       syncObj->StatusFlag = 0;
 
-      ctx->Driver.FenceSync(ctx, syncObj, condition, flags);
+      assert(condition == GL_SYNC_GPU_COMMANDS_COMPLETE && flags == 0);
+      assert(syncObj->fence == NULL);
+
+      /* Deferred flush are only allowed when there's a single context. See issue 1430 */
+      ctx->pipe->flush(ctx->pipe, &syncObj->fence, ctx->Shared->RefCount == 1 ? PIPE_FLUSH_DEFERRED : 0);
 
       simple_mtx_lock(&ctx->Shared->Mutex);
       _mesa_set_add(ctx->Shared->SyncObjects, syncObj);
@@ -345,14 +346,14 @@ client_wait_sync(struct gl_context *ctx, struct gl_sync_object *syncObj,
     *    ClientWaitSync was called. ALREADY_SIGNALED will always be returned
     *    if <sync> was signaled, even if the value of <timeout> is zero.
     */
-   ctx->Driver.CheckSync(ctx, syncObj);
+   __client_wait_sync(ctx, syncObj, 0, 0);
    if (syncObj->StatusFlag) {
       ret = GL_ALREADY_SIGNALED;
    } else {
       if (timeout == 0) {
          ret = GL_TIMEOUT_EXPIRED;
       } else {
-         ctx->Driver.ClientWaitSync(ctx, syncObj, flags, timeout);
+         __client_wait_sync(ctx, syncObj, flags, timeout);
 
          ret = syncObj->StatusFlag
             ? GL_CONDITION_SATISFIED : GL_TIMEOUT_EXPIRED;
@@ -402,7 +403,29 @@ static void
 wait_sync(struct gl_context *ctx, struct gl_sync_object *syncObj,
           GLbitfield flags, GLuint64 timeout)
 {
-   ctx->Driver.ServerWaitSync(ctx, syncObj, flags, timeout);
+   struct pipe_context *pipe = ctx->pipe;
+   struct pipe_screen *screen = pipe->screen;
+   struct pipe_fence_handle *fence = NULL;
+
+   /* Nothing needs to be done here if the driver does not support async
+    * flushes. */
+   if (!pipe->fence_server_sync)
+      return;
+
+   /* If the fence doesn't exist, assume it's signalled. */
+   simple_mtx_lock(&syncObj->mutex);
+   if (!syncObj->fence) {
+      simple_mtx_unlock(&syncObj->mutex);
+      syncObj->StatusFlag = GL_TRUE;
+      return;
+   }
+
+   /* We need a local copy of the fence pointer. */
+   screen->fence_reference(screen, &fence, syncObj->fence);
+   simple_mtx_unlock(&syncObj->mutex);
+
+   pipe->fence_server_sync(pipe, fence);
+   screen->fence_reference(screen, &fence, NULL);
    _mesa_unref_sync_object(ctx, syncObj, 1);
 }
 
@@ -477,7 +500,7 @@ _mesa_GetSynciv(GLsync sync, GLenum pname, GLsizei bufSize, GLsizei *length,
        * this call won't block.  It just updates state in the common object
        * data from the current driver state.
        */
-      ctx->Driver.CheckSync(ctx, syncObj);
+      __client_wait_sync(ctx, syncObj, 0, 0);
 
       v[0] = (syncObj->StatusFlag) ? GL_SIGNALED : GL_UNSIGNALED;
       size = 1;

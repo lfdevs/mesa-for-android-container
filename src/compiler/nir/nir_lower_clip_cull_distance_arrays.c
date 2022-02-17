@@ -51,6 +51,11 @@ get_unwrapped_array_length(nir_shader *nir, nir_variable *var)
    if (nir_is_arrayed_io(var, nir->info.stage))
       type = glsl_get_array_element(type);
 
+   if (var->data.per_view) {
+      assert(glsl_type_is_array(type));
+      type = glsl_get_array_element(type);
+   }
+
    assert(glsl_type_is_array(type));
 
    return glsl_get_length(type);
@@ -124,10 +129,12 @@ nir_lower_clip_cull_distance_arrays(nir_shader *nir)
 {
    bool progress = false;
 
-   if (nir->info.stage <= MESA_SHADER_GEOMETRY)
+   if (nir->info.stage <= MESA_SHADER_GEOMETRY ||
+       nir->info.stage == MESA_SHADER_MESH)
       progress |= combine_clip_cull(nir, nir_var_shader_out, true);
 
-   if (nir->info.stage > MESA_SHADER_VERTEX) {
+   if (nir->info.stage > MESA_SHADER_VERTEX &&
+       nir->info.stage <= MESA_SHADER_FRAGMENT) {
       progress |= combine_clip_cull(nir, nir_var_shader_in,
                                     nir->info.stage == MESA_SHADER_FRAGMENT);
    }

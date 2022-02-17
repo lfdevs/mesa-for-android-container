@@ -77,31 +77,40 @@ d3d12_make_passthrough_gs(struct d3d12_context *ctx, struct d3d12_gs_variant_key
 
    /* Copy inputs to outputs. */
    while (varyings) {
-      nir_variable *in, *out;
       char tmp[100];
       const int i = u_bit_scan64(&varyings);
 
-      snprintf(tmp, ARRAY_SIZE(tmp), "in_%d", key->varyings.vars[i].driver_location);
-      in = nir_variable_create(nir,
-                               nir_var_shader_in,
-                               glsl_array_type(key->varyings.vars[i].type, 1, false),
-                               tmp);
-      in->data.location = i;
-      in->data.driver_location = key->varyings.vars[i].driver_location;
-      in->data.interpolation = key->varyings.vars[i].interpolation;
+      unsigned frac_slots = key->varyings.slots[i].location_frac_mask;
+      while (frac_slots) {
+         nir_variable *in, *out;
+         int j = u_bit_scan(&frac_slots);
 
-      snprintf(tmp, ARRAY_SIZE(tmp), "out_%d", key->varyings.vars[i].driver_location);
-      out = nir_variable_create(nir,
-                                nir_var_shader_out,
-                                key->varyings.vars[i].type,
-                                tmp);
-      out->data.location = i;
-      out->data.driver_location = key->varyings.vars[i].driver_location;
-      out->data.interpolation = key->varyings.vars[i].interpolation;
+         snprintf(tmp, ARRAY_SIZE(tmp), "in_%d", key->varyings.slots[i].vars[j].driver_location);
+         in = nir_variable_create(nir,
+                                  nir_var_shader_in,
+                                  glsl_array_type(key->varyings.slots[i].types[j], 1, false),
+                                  tmp);
+         in->data.location = i;
+         in->data.location_frac = j;
+         in->data.driver_location = key->varyings.slots[i].vars[j].driver_location;
+         in->data.interpolation = key->varyings.slots[i].vars[j].interpolation;
+         in->data.compact = key->varyings.slots[i].vars[j].compact;
 
-      nir_deref_instr *in_value = nir_build_deref_array(&b, nir_build_deref_var(&b, in),
-                                                            nir_imm_int(&b, 0));
-      nir_copy_deref(&b, nir_build_deref_var(&b, out), in_value);
+         snprintf(tmp, ARRAY_SIZE(tmp), "out_%d", key->varyings.slots[i].vars[j].driver_location);
+         out = nir_variable_create(nir,
+                                   nir_var_shader_out,
+                                   key->varyings.slots[i].types[j],
+                                   tmp);
+         out->data.location = i;
+         out->data.location_frac = j;
+         out->data.driver_location = key->varyings.slots[i].vars[j].driver_location;
+         out->data.interpolation = key->varyings.slots[i].vars[j].interpolation;
+         out->data.compact = key->varyings.slots[i].vars[j].compact;
+
+         nir_deref_instr *in_value = nir_build_deref_array(&b, nir_build_deref_var(&b, in),
+                                                               nir_imm_int(&b, 0));
+         nir_copy_deref(&b, nir_build_deref_var(&b, out), in_value);
+      }
    }
 
    nir_emit_vertex(&b, 0);
@@ -168,33 +177,41 @@ d3d12_begin_emit_primitives_gs(struct emit_primitives_context *emit_ctx,
       char tmp[100];
       const int i = u_bit_scan64(&varyings);
 
-      snprintf(tmp, ARRAY_SIZE(tmp), "in_%d", emit_ctx->num_vars);
-      emit_ctx->in[emit_ctx->num_vars] = nir_variable_create(nir,
-                                                             nir_var_shader_in,
-                                                             glsl_array_type(key->varyings.vars[i].type, 3, 0),
-                                                             tmp);
-      emit_ctx->in[emit_ctx->num_vars]->data.location = i;
-      emit_ctx->in[emit_ctx->num_vars]->data.driver_location = key->varyings.vars[i].driver_location;
-      emit_ctx->in[emit_ctx->num_vars]->data.interpolation = key->varyings.vars[i].interpolation;
+      unsigned frac_slots = key->varyings.slots[i].location_frac_mask;
+      while (frac_slots) {
+         int j = u_bit_scan(&frac_slots);
+         snprintf(tmp, ARRAY_SIZE(tmp), "in_%d", emit_ctx->num_vars);
+         emit_ctx->in[emit_ctx->num_vars] = nir_variable_create(nir,
+                                                                nir_var_shader_in,
+                                                                glsl_array_type(key->varyings.slots[i].types[j], 3, 0),
+                                                                tmp);
+         emit_ctx->in[emit_ctx->num_vars]->data.location = i;
+         emit_ctx->in[emit_ctx->num_vars]->data.location_frac = j;
+         emit_ctx->in[emit_ctx->num_vars]->data.driver_location = key->varyings.slots[i].vars[j].driver_location;
+         emit_ctx->in[emit_ctx->num_vars]->data.interpolation = key->varyings.slots[i].vars[j].interpolation;
+         emit_ctx->in[emit_ctx->num_vars]->data.compact = key->varyings.slots[i].vars[j].compact;
 
-      /* Don't create an output for the edge flag variable */
-      if (i == VARYING_SLOT_EDGE) {
-         edgeflag_var = emit_ctx->in[emit_ctx->num_vars];
-         continue;
-      } else if (i == VARYING_SLOT_POS) {
-          pos_var = emit_ctx->in[emit_ctx->num_vars];
+         /* Don't create an output for the edge flag variable */
+         if (i == VARYING_SLOT_EDGE) {
+            edgeflag_var = emit_ctx->in[emit_ctx->num_vars];
+            continue;
+         } else if (i == VARYING_SLOT_POS) {
+             pos_var = emit_ctx->in[emit_ctx->num_vars];
+         }
+
+         snprintf(tmp, ARRAY_SIZE(tmp), "out_%d", emit_ctx->num_vars);
+         emit_ctx->out[emit_ctx->num_vars] = nir_variable_create(nir,
+                                                                 nir_var_shader_out,
+                                                                 key->varyings.slots[i].types[j],
+                                                                 tmp);
+         emit_ctx->out[emit_ctx->num_vars]->data.location = i;
+         emit_ctx->out[emit_ctx->num_vars]->data.location_frac = j;
+         emit_ctx->out[emit_ctx->num_vars]->data.driver_location = key->varyings.slots[i].vars[j].driver_location;
+         emit_ctx->out[emit_ctx->num_vars]->data.interpolation = key->varyings.slots[i].vars[j].interpolation;
+         emit_ctx->out[emit_ctx->num_vars]->data.compact = key->varyings.slots[i].vars[j].compact;
+
+         emit_ctx->num_vars++;
       }
-
-      snprintf(tmp, ARRAY_SIZE(tmp), "out_%d", emit_ctx->num_vars);
-      emit_ctx->out[emit_ctx->num_vars] = nir_variable_create(nir,
-                                                              nir_var_shader_out,
-                                                              key->varyings.vars[i].type,
-                                                              tmp);
-      emit_ctx->out[emit_ctx->num_vars]->data.location = i;
-      emit_ctx->out[emit_ctx->num_vars]->data.driver_location = key->varyings.vars[i].driver_location;
-      emit_ctx->out[emit_ctx->num_vars]->data.interpolation = key->varyings.vars[i].interpolation;
-
-      emit_ctx->num_vars++;
    }
 
    if (key->has_front_face) {
@@ -466,7 +483,7 @@ create_geometry_shader_variant(struct d3d12_context *ctx, struct d3d12_gs_varian
       gs = d3d12_emit_lines(ctx, key);
 
    if (gs) {
-      gs->is_gs_variant = true;
+      gs->is_variant = true;
       gs->gs_key = *key;
    }
 

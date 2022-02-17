@@ -78,6 +78,7 @@ files_mesa_util = files(
   'os_misc.h',
   'os_socket.c',
   'os_socket.h',
+  'ptralloc.h',
   'perf/u_trace.h',
   'perf/u_trace.c',
   'perf/u_trace_priv.h',
@@ -145,9 +146,15 @@ files_mesa_util = files(
   'u_cpu_detect.h',
   'u_printf.cpp',
   'u_printf.h',
+  'vl_vlc.h',
+  'vl_rbsp.h',
   'vma.c',
   'vma.h',
   'xxhash.h',
+  'indices/u_indices.h',
+  'indices/u_indices_priv.h',
+  'indices/u_primconvert.c',
+  'indices/u_primconvert.h',
 )
 
 files_drirc = files('00-mesa-defaults.conf')
@@ -225,9 +232,25 @@ endif
 
 u_trace_py = files('perf/u_trace.py')
 
+u_indices_gen_c = custom_target(
+  'u_indices_gen.c',
+  input : 'indices/u_indices_gen.py',
+  output : 'u_indices_gen.c',
+  command : [prog_python, '@INPUT@'],
+  capture : true,
+)
+
+u_unfilled_gen_c = custom_target(
+  'u_unfilled_gen.c',
+  input : 'indices/u_unfilled_gen.py',
+  output : 'u_unfilled_gen.c',
+  command : [prog_python, '@INPUT@'],
+  capture : true,
+)
+
 _libmesa_util = static_library(
   'mesa_util',
-  [files_mesa_util, files_debug_stack, format_srgb],
+  [files_mesa_util, files_debug_stack, format_srgb, u_indices_gen_c, u_unfilled_gen_c],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   dependencies : deps_for_libmesa_util,
   link_with: libmesa_format,
@@ -289,90 +312,71 @@ if with_tests
       env: ['HOME=' + join_paths(meson.current_source_dir(),
                                  'tests', 'drirc_home'),
             'DRIRC_CONFIGDIR=' + join_paths(meson.current_source_dir(),
-                                            'tests', 'drirc_configdir')]
-        )
+                                            'tests', 'drirc_configdir')],
+      protocol : gtest_test_protocol,
+    )
   endif
 
-  test(
-    'u_atomic',
-    executable(
-      'u_atomic_test',
-      files('u_atomic_test.c'),
-      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-      dependencies : idep_mesautil,
-      c_args : [c_msvc_compat_args],
-    ),
-    suite : ['util'],
+  files_util_tests = files(
+    'tests/bitset_test.cpp',
+    'tests/blob_test.cpp',
+    'tests/dag_test.cpp',
+    'tests/fast_idiv_by_const_test.cpp',
+    'tests/fast_urem_by_const_test.cpp',
+    'tests/int_min_max.cpp',
+    'tests/rb_tree_test.cpp',
+    'tests/register_allocate_test.cpp',
+    'tests/roundeven_test.cpp',
+    'tests/set_test.cpp',
+    'tests/sparse_array_test.cpp',
+    'tests/u_atomic_test.cpp',
+    'tests/u_debug_stack_test.cpp',
+    'tests/u_qsort_test.cpp',
+    'tests/vector_test.cpp',
   )
 
-  test(
-    'blob',
-    executable(
-      'blob_test',
-      files('blob_test.c'),
-      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-      dependencies : idep_mesautil,
-      c_args : [c_msvc_compat_args],
-    ),
-    suite : ['util'],
-  )
+  if not (host_machine.system() == 'windows' and cc.get_id() == 'gcc')
+    # FIXME: These tests fail with mingw, but not with msvc.
+    files_util_tests += files(
+      'tests/string_buffer_test.cpp',
+    )
+  endif
 
-  test(
-    'rb_tree',
-    executable(
-      'rb_tree_test',
-      files('rb_tree_test.c'),
-      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-      dependencies : idep_mesautil,
-      c_args : [c_msvc_compat_args],
-    ),
-    suite : ['util'],
-  )
-
-  test(
-    'roundeven',
-    executable(
-      'roundeven_test',
-      files('roundeven_test.c'),
-      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-      c_args : [c_msvc_compat_args],
-      dependencies : [dep_m],
-    ),
-    suite : ['util'],
-    should_fail : meson.get_cross_property('xfail', '').contains('roundeven'),
-  )
+  if cc.has_header('sys/time.h')  # MinGW has this, but Vanilla windows doesn't
+    files_util_tests += files(
+      'tests/timespec_test.cpp'
+    )
+  endif
 
   # FIXME: this test crashes on windows
   if host_machine.system() != 'windows'
-    test(
-      'mesa-sha1',
-      executable(
-        'mesa-sha1_test',
-        files('mesa-sha1_test.c'),
-        include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-        link_with : _libmesa_util,
-        c_args : [c_msvc_compat_args],
-      ),
-      suite : ['util'],
+    files_util_tests += files(
+      'tests/mesa-sha1_test.cpp',
     )
   endif
 
-  foreach t: ['bitset', 'register_allocate', 'u_debug_stack', 'u_qsort']
-    test(
-      t,
-      executable(
-        t + '_test',
-        files(t + '_test.cpp'),
-        include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-        dependencies : [idep_mesautil, idep_gtest],
-      ),
-      suite : ['util'],
+  if with_shader_cache
+    files_util_tests += files(
+      'tests/cache_test.cpp',
     )
-  endforeach
+  endif
+
+  test(
+    'util_tests',
+    executable(
+      'util_tests',
+      files_util_tests,
+      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
+      dependencies : [idep_mesautil, idep_gtest],
+    ),
+    suite : ['util'],
+    protocol : gtest_test_protocol,
+    timeout : 180,
+  )
 
   process_test_exe = executable(
     'process_test',
-    files('process_test.c'),
+    files('tests/process_test.c'),
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
     dependencies : idep_mesautil,
     c_args : [c_msvc_compat_args],
@@ -396,40 +400,7 @@ if with_tests
     env: ['BUILD_FULL_PATH='+process_test_exe_full_path]
   )
 
-  test('int_min_max',
-    executable('int_min_max_test',
-    files('tests/int_min_max.cpp'),
-      include_directories : [inc_include, inc_src],
-      dependencies : [idep_mesautil, idep_gtest],
-    ),
-    suite : ['util'],
-  )
-
-  test(
-    'dag',
-    executable(
-      'dag_test',
-      'tests/dag_test.cpp',
-      dependencies : [idep_mesautil, idep_gtest],
-      include_directories : [inc_include, inc_src],
-    ),
-    suite : ['util'],
-  )
-
-  subdir('tests/cache')
-  subdir('tests/fast_idiv_by_const')
-  subdir('tests/fast_urem_by_const')
   subdir('tests/hash_table')
-  if not (host_machine.system() == 'windows' and cc.get_id() == 'gcc')
-    # FIXME: These tests fail with mingw, but not with msvc.
-    subdir('tests/string_buffer')
-  endif
-  if cc.has_header('sys/time.h')  # MinGW has this, but Vanilla windows doesn't
-    subdir('tests/timespec')
-  endif
   subdir('tests/vma')
-  subdir('tests/set')
-  subdir('tests/sparse_array')
   subdir('tests/format')
-  subdir('tests/vector')
 endif

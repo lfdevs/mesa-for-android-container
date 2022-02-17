@@ -23,6 +23,7 @@
  */
 
 #include "util/ralloc.h"
+#include "util/u_cpu_detect.h"
 
 #include <err.h>
 #include <stdio.h>
@@ -174,6 +175,9 @@ main(int argc, char **argv)
       printf("Failed to parse mbs!\n");
       return -1;
    }
+
+   /* Needed by _mesa_half_to_float() */
+   util_cpu_detect();
 
    if (is_frag) {
       assert((size & 0x3) == 0);

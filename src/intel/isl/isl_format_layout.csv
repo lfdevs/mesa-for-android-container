@@ -333,6 +333,7 @@ ASTC_HDR_2D_10X10_FLT16     , 128, 10, 10,  1, sf16, sf16, sf16, sf16,     ,    
 ASTC_HDR_2D_12X10_FLT16     , 128, 12, 10,  1, sf16, sf16, sf16, sf16,     ,     ,    ,      , linear,  astc
 ASTC_HDR_2D_12X12_FLT16     , 128, 12, 12,  1, sf16, sf16, sf16, sf16,     ,     ,    ,      , linear,  astc
 HIZ                         , 128,  8,  4,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   hiz
+GFX125_HIZ                  , 128,  8,  8,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   hiz
 MCS_2X                      ,   8,  1,  1,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   mcs
 MCS_4X                      ,   8,  1,  1,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   mcs
 MCS_8X                      ,  32,  1,  1,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   mcs

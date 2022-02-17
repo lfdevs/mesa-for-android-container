@@ -331,23 +331,19 @@ print_instr(struct log_stream *stream, struct ir3_instruction *instr, int lvl)
          print_reg_name(stream, instr, reg, true);
          first = false;
       }
-      foreach_src (reg, instr) {
+      foreach_src_n (reg, n, instr) {
          if (!first)
             mesa_log_stream_printf(stream, ", ");
          print_reg_name(stream, instr, reg, false);
+         if (instr->opc == OPC_END || instr->opc == OPC_CHMASK)
+            mesa_log_stream_printf(stream, " (%u)", instr->end.outidxs[n]);
          first = false;
       }
    }
 
    if (is_tex(instr) && !(instr->flags & IR3_INSTR_S2EN)) {
-      if (!!(instr->flags & IR3_INSTR_B)) {
-         if (!!(instr->flags & IR3_INSTR_A1EN)) {
-            mesa_log_stream_printf(stream, ", s#%d", instr->cat5.samp);
-         } else {
-            mesa_log_stream_printf(stream, ", s#%d, t#%d",
-                                   instr->cat5.samp & 0xf,
-                                   instr->cat5.samp >> 4);
-         }
+      if (!!(instr->flags & IR3_INSTR_B) && !!(instr->flags & IR3_INSTR_A1EN)) {
+         mesa_log_stream_printf(stream, ", s#%d", instr->cat5.samp);
       } else {
          mesa_log_stream_printf(stream, ", s#%d, t#%d", instr->cat5.samp,
                                 instr->cat5.tex);

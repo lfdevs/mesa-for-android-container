@@ -110,7 +110,9 @@ static void validate_monotonic(int32_t **blocks)
 
 static void run_test()
 {
-   struct anv_physical_device physical_device = { };
+   struct anv_physical_device physical_device = {
+      .use_relocations = true,
+   };
    struct anv_device device = {
       .physical = &physical_device,
    };
@@ -141,6 +143,7 @@ static void run_test()
    validate_monotonic(block_ptrs);
 
    anv_block_pool_finish(&pool);
+   anv_bo_cache_finish(&device.bo_cache);
    pthread_mutex_destroy(&device.mutex);
 }
 

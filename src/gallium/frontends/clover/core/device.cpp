@@ -76,13 +76,7 @@ namespace {
           dev.max_const_buffer_size() < 64 * 1024 ||
           dev.max_const_buffers() < 8 ||
           dev.max_mem_local() < 16 * 1024 ||
-          dev.clc_version < CL_MAKE_VERSION(1, 0, 0) ||
-          (supports_images &&
-           (dev.max_images_read() < 128 ||
-            dev.max_images_write() < 8 ||
-            dev.max_image_size() < 8192 ||
-            dev.max_image_size_3d() < 2048 ||
-            dev.max_samplers() < 16))) {
+          dev.clc_version < CL_MAKE_VERSION(1, 0, 0)) {
          return version;
       }
       version = CL_MAKE_VERSION(1, 0, 0);
@@ -221,12 +215,14 @@ device::vendor_id() const {
 
 size_t
 device::max_images_read() const {
-   return PIPE_MAX_SHADER_SAMPLER_VIEWS;
+   return pipe->get_shader_param(pipe, PIPE_SHADER_COMPUTE,
+                                 PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS);
 }
 
 size_t
 device::max_images_write() const {
-   return PIPE_MAX_SHADER_IMAGES;
+   return pipe->get_shader_param(pipe, PIPE_SHADER_COMPUTE,
+                                 PIPE_SHADER_CAP_MAX_SHADER_IMAGES);
 }
 
 size_t
@@ -316,8 +312,23 @@ device::max_printf_buffer_size() const {
 
 bool
 device::image_support() const {
-   return get_compute_param<uint32_t>(pipe, ir_format(),
-                                      PIPE_COMPUTE_CAP_IMAGES_SUPPORTED)[0];
+   bool supports_images = get_compute_param<uint32_t>(pipe, ir_format(),
+                                                      PIPE_COMPUTE_CAP_IMAGES_SUPPORTED)[0];
+   if (!supports_images)
+      return false;
+
+   /* If the gallium driver supports images, but does not support the
+    * minimum requirements for opencl 1.0 images, then don't claim to
+    * support images.
+    */
+   if (max_images_read() < 128 ||
+       max_images_write() < 8 ||
+       max_image_size() < 8192 ||
+       max_image_size_3d() < 2048 ||
+       max_samplers() < 16)
+      return false;
+
+   return true;
 }
 
 bool

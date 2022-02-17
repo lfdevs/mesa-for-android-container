@@ -79,6 +79,9 @@ endif
 if with_any_vk or with_gallium_zink
   subdir('vulkan')
 endif
+if with_any_intel
+  subdir('intel')
+endif
 if with_gallium_radeonsi or with_amd_vk
   subdir('amd')
 endif
@@ -88,7 +91,7 @@ endif
 if with_gallium_etnaviv
   subdir('etnaviv')
 endif
-if with_gallium_freedreno or with_freedreno_vk
+if with_gallium_freedreno or with_freedreno_vk or with_tools.contains('freedreno')
   subdir('freedreno')
 endif
 if with_gallium_panfrost or with_gallium_lima or with_panfrost_vk or with_tools.contains('panfrost')
@@ -96,9 +99,6 @@ if with_gallium_panfrost or with_gallium_lima or with_panfrost_vk or with_tools.
 endif
 if with_gallium_virgl or with_virtio_vk
   subdir('virtio')
-endif
-if with_any_intel
-  subdir('intel')
 endif
 if with_microsoft_clc or with_gallium_d3d12 or with_spirv_to_dxil
   subdir('microsoft')
@@ -109,13 +109,9 @@ endif
 if with_gallium_asahi or with_tools.contains('asahi')
   subdir('asahi')
 endif
-subdir('mesa')
 subdir('loader')
 if with_platform_haiku
   subdir('hgl')
-endif
-if with_glx == 'dri'
-  subdir('glx')
 endif
 if with_gbm
   subdir('gbm')
@@ -123,9 +119,16 @@ else
   inc_gbm = []
 endif
 if with_gallium
+  subdir('mesa')
   subdir('gallium')
+  if with_glx == 'dri'
+     subdir('glx')
+  endif
   # This has to be here since it requires libgallium, and subdir cannot
   # contain ..
+  if with_tests
+    subdir('mesa/main/tests')
+  endif
   if with_tests and with_shared_glapi
     subdir('mesa/state_tracker/tests')
   endif

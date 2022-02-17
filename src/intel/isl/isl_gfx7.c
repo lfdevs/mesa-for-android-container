@@ -237,12 +237,6 @@ isl_gfx6_filter_tiling(const struct isl_device *dev,
       *flags &= ~ISL_TILING_W_BIT;
    }
 
-   /* From the SKL+ PRMs, RENDER_SURFACE_STATE:TileMode,
-    *    If Surface Format is ASTC*, this field must be TILEMODE_YMAJOR.
-    */
-   if (isl_format_get_layout(info->format)->txc == ISL_TXC_ASTC)
-      *flags &= ISL_TILING_Y0_BIT;
-
    /* MCS buffers are always Y-tiled */
    if (isl_format_get_layout(info->format)->txc == ISL_TXC_MCS)
       *flags &= ISL_TILING_Y0_BIT;
@@ -324,7 +318,7 @@ isl_gfx6_filter_tiling(const struct isl_device *dev,
    if (info->width > 16382 && info->samples == 1 &&
        info->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT &&
        (ISL_GFX_VER(dev) == 8 ||
-        (dev->info->is_skylake && dev->info->gt != 4))) {
+        (dev->info->platform == INTEL_PLATFORM_SKL && dev->info->gt != 4))) {
           *flags &= ISL_TILING_LINEAR_BIT;
    }
 }

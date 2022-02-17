@@ -87,30 +87,31 @@ void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 	/* Lists of instruction transformations. */
 	struct radeon_program_transformation force_alpha_to_one[] = {
 		{ &rc_force_output_alpha_to_one, c },
-		{ 0, 0 }
+		{ NULL, NULL }
 	};
 
 	struct radeon_program_transformation rewrite_tex[] = {
 		{ &radeonTransformTEX, c },
-		{ 0, 0 }
+		{ NULL, NULL }
 	};
 
 	struct radeon_program_transformation rewrite_if[] = {
-		{ &r500_transform_IF, 0 },
-		{0, 0}
+		{ &r500_transform_IF, NULL },
+		{ NULL, NULL }
 	};
 
 	struct radeon_program_transformation native_rewrite_r500[] = {
-		{ &radeonTransformALU, 0 },
-		{ &radeonTransformDeriv, 0 },
-		{ &radeonTransformTrigScale, 0 },
-		{ 0, 0 }
+		{ &radeonTransformALU, NULL },
+		{ &radeonTransformDeriv, NULL },
+		{ &radeonTransformTrigScale, NULL },
+		{ NULL, NULL }
 	};
 
 	struct radeon_program_transformation native_rewrite_r300[] = {
-		{ &radeonTransformALU, 0 },
-		{ &r300_transform_trig_simple, 0 },
-		{ 0, 0 }
+		{ &radeonTransformALU, NULL },
+		{ &radeonStubDeriv, NULL },
+		{ &r300_transform_trig_simple, NULL },
+		{ NULL, NULL }
 	};
 
 	/* List of compiler passes. */

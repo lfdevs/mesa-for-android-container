@@ -922,10 +922,10 @@ lp_setup_set_viewports(struct lp_setup_context *setup,
    half_height = fabsf(viewports[0].scale[1]);
    x0 = viewports[0].translate[0] - viewports[0].scale[0];
    y0 = viewports[0].translate[1] - half_height;
-   setup->vpwh.x0 = (int)(x0 + 0.5f);
-   setup->vpwh.x1 = (int)(viewports[0].scale[0] * 2.0f + x0 - 0.5f);
-   setup->vpwh.y0 = (int)(y0 + 0.5f);
-   setup->vpwh.y1 = (int)(half_height * 2.0f + y0 - 0.5f);
+   setup->vpwh.x0 = (int)(x0 + 0.499f);
+   setup->vpwh.x1 = (int)(viewports[0].scale[0] * 2.0f + x0 - 0.501f);
+   setup->vpwh.y0 = (int)(y0 + 0.499f);
+   setup->vpwh.y1 = (int)(half_height * 2.0f + y0 - 0.501f);
    setup->dirty |= LP_SETUP_NEW_SCISSOR;
 
    /*

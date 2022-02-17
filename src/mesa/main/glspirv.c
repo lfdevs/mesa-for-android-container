@@ -32,6 +32,7 @@
 #include "program/program.h"
 
 #include "util/u_atomic.h"
+#include "api_exec_decl.h"
 
 void
 _mesa_spirv_module_reference(struct gl_spirv_module **dest,
@@ -155,8 +156,7 @@ _mesa_spirv_link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
          return;
       }
 
-      _mesa_reference_shader_program_data(ctx,
-                                          &gl_prog->sh.data,
+      _mesa_reference_shader_program_data(&gl_prog->sh.data,
                                           prog->data);
 
       /* Don't use _mesa_reference_program() just take ownership */

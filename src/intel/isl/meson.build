@@ -19,8 +19,10 @@
 # SOFTWARE.
 
 isl_per_hw_ver_files = files(
+  'isl_emit_cpb.c',
   'isl_emit_depth_stencil.c',
   'isl_surface_state.c',
+  'isl_genX_helpers.h',
 )
 
 isl_gfx4_files = files(
@@ -168,5 +170,6 @@ if with_tests
       cpp_args : '-DIN_UNIT_TEST',
     ),
     suite : ['intel'],
+    protocol : gtest_test_protocol,
   )
 endif

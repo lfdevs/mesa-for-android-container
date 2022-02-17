@@ -838,29 +838,14 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
                    0, nir_tex_instr_src_size(instr, i));
 
       switch (instr->src[i].src_type) {
-      case nir_tex_src_coord:
-         validate_assert(state, nir_src_num_components(instr->src[i].src) ==
-                                instr->coord_components);
-         break;
-
-      case nir_tex_src_projector:
-         validate_assert(state, nir_src_num_components(instr->src[i].src) == 1);
-         break;
 
       case nir_tex_src_comparator:
          validate_assert(state, instr->is_shadow);
-         validate_assert(state, nir_src_num_components(instr->src[i].src) == 1);
-         break;
-
-      case nir_tex_src_offset:
-         validate_assert(state, nir_src_num_components(instr->src[i].src) ==
-                                instr->coord_components - instr->is_array);
          break;
 
       case nir_tex_src_bias:
          validate_assert(state, instr->op == nir_texop_txb ||
                                 instr->op == nir_texop_tg4);
-         validate_assert(state, nir_src_num_components(instr->src[i].src) == 1);
          break;
 
       case nir_tex_src_lod:
@@ -868,19 +853,11 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
                                 instr->op != nir_texop_txb &&
                                 instr->op != nir_texop_txd &&
                                 instr->op != nir_texop_lod);
-         validate_assert(state, nir_src_num_components(instr->src[i].src) == 1);
-         break;
-
-      case nir_tex_src_min_lod:
-      case nir_tex_src_ms_index:
-         validate_assert(state, nir_src_num_components(instr->src[i].src) == 1);
          break;
 
       case nir_tex_src_ddx:
       case nir_tex_src_ddy:
          validate_assert(state, instr->op == nir_texop_txd);
-         validate_assert(state, nir_src_num_components(instr->src[i].src) ==
-                                instr->coord_components - instr->is_array);
          break;
 
       case nir_tex_src_texture_deref: {
@@ -889,6 +866,7 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
             break;
 
          validate_assert(state, glsl_type_is_image(deref->type) ||
+                                glsl_type_is_texture(deref->type) ||
                                 glsl_type_is_sampler(deref->type));
          break;
       }
@@ -902,12 +880,14 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
          break;
       }
 
+      case nir_tex_src_coord:
+      case nir_tex_src_projector:
+      case nir_tex_src_offset:
+      case nir_tex_src_min_lod:
+      case nir_tex_src_ms_index:
       case nir_tex_src_texture_offset:
       case nir_tex_src_sampler_offset:
       case nir_tex_src_plane:
-         validate_assert(state, nir_src_num_components(instr->src[i].src) == 1);
-         break;
-
       case nir_tex_src_texture_handle:
       case nir_tex_src_sampler_handle:
          break;
@@ -1498,6 +1478,10 @@ validate_var_decl(nir_variable *var, nir_variable_mode valid_modes,
 
       const struct glsl_type *type = glsl_get_array_element(var->type);
       if (nir_is_arrayed_io(var, state->shader->info.stage)) {
+         if (var->data.per_view) {
+            assert(glsl_type_is_array(type));
+            type = glsl_get_array_element(type);
+         }
          assert(glsl_type_is_array(type));
          assert(glsl_type_is_scalar(glsl_get_array_element(type)));
       } else {
@@ -1517,6 +1501,11 @@ validate_var_decl(nir_variable *var, nir_variable_mode valid_modes,
 
    if (var->constant_initializer)
       validate_constant(var->constant_initializer, var->type, state);
+
+   if (var->data.mode == nir_var_image) {
+      validate_assert(state, !var->data.bindless);
+      validate_assert(state, glsl_type_is_image(glsl_without_array(var->type)));
+   }
 
    /*
     * TODO validate some things ir_validate.cpp does (requires more GLSL type
@@ -1645,7 +1634,7 @@ validate_function_impl(nir_function_impl *impl, validate_state *state)
    static int validate_dominance = -1;
    if (validate_dominance < 0) {
       validate_dominance =
-         env_var_as_boolean("NIR_VALIDATE_SSA_DOMINANCE", false);
+         NIR_DEBUG(VALIDATE_SSA_DOMINANCE);
    }
    if (validate_dominance)
       validate_ssa_dominance(impl, state);
@@ -1722,10 +1711,7 @@ dump_errors(validate_state *state, const char *when)
 void
 nir_validate_shader(nir_shader *shader, const char *when)
 {
-   static int should_validate = -1;
-   if (should_validate < 0)
-      should_validate = env_var_as_boolean("NIR_VALIDATE", true);
-   if (!should_validate)
+   if (NIR_DEBUG(NOVALIDATE))
       return;
 
    validate_state state;
@@ -1747,7 +1733,8 @@ nir_validate_shader(nir_shader *shader, const char *when)
       nir_var_mem_ssbo |
       nir_var_mem_shared |
       nir_var_mem_push_const |
-      nir_var_mem_constant;
+      nir_var_mem_constant |
+      nir_var_image;
 
    if (gl_shader_stage_is_callable(shader->info.stage))
       valid_modes |= nir_var_shader_call_data;
@@ -1775,10 +1762,7 @@ nir_validate_shader(nir_shader *shader, const char *when)
 void
 nir_validate_ssa_dominance(nir_shader *shader, const char *when)
 {
-   static int should_validate = -1;
-   if (should_validate < 0)
-      should_validate = env_var_as_boolean("NIR_VALIDATE", true);
-   if (!should_validate)
+   if (NIR_DEBUG(NOVALIDATE))
       return;
 
    validate_state state;

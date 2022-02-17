@@ -57,7 +57,7 @@ static void radeon_uvd_enc_get_param(struct radeon_uvd_encoder *enc,
    enc->enc_pic.frame_num = pic->frame_num;
    enc->enc_pic.pic_order_cnt = pic->pic_order_cnt;
    enc->enc_pic.pic_order_cnt_type = pic->pic_order_cnt_type;
-   enc->enc_pic.not_referenced = pic->not_referenced;
+   enc->enc_pic.not_referenced = false;
    enc->enc_pic.is_iframe = (pic->picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR) ||
                             (pic->picture_type == PIPE_H2645_ENC_PICTURE_TYPE_I);
 

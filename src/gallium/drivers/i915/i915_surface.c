@@ -255,7 +255,7 @@ i915_blit(struct pipe_context *pipe, const struct pipe_blit_info *blit_info)
    struct i915_context *i915 = i915_context(pipe);
    struct pipe_blit_info info = *blit_info;
 
-   if (util_try_blit_via_copy_region(pipe, &info)) {
+   if (util_try_blit_via_copy_region(pipe, &info, false)) {
       return; /* done */
    }
 

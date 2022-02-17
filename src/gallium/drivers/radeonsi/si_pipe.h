@@ -61,6 +61,15 @@ extern "C" {
 /* Alignment for optimal CP DMA performance. */
 #define SI_CPDMA_ALIGNMENT 32
 
+/* We don't want to evict buffers from VRAM by mapping them for CPU access,
+ * because they might never be moved back again. If a buffer is large enough,
+ * upload data by copying from a temporary GTT buffer. 8K might not seem much,
+ * but there can be 100000 buffers.
+ *
+ * This tweak improves performance for viewperf creo & snx.
+ */
+#define SI_MAX_VRAM_MAP_SIZE     8196
+
 /* Tunables for compute-based clear_buffer and copy_buffer: */
 #define SI_COMPUTE_CLEAR_DW_PER_THREAD 4
 #define SI_COMPUTE_COPY_DW_PER_THREAD  4
@@ -188,6 +197,7 @@ enum
    DBG_GISEL,
    DBG_W32_GE,
    DBG_W32_PS,
+   DBG_W32_PS_DISCARD,
    DBG_W32_CS,
    DBG_W64_GE,
    DBG_W64_PS,
@@ -217,7 +227,6 @@ enum
    DBG_NO_GFX,
    DBG_NO_NGG,
    DBG_ALWAYS_NGG_CULLING_ALL,
-   DBG_ALWAYS_NGG_CULLING_TESS,
    DBG_NO_NGG_CULLING,
    DBG_SWITCH_ON_EOP,
    DBG_NO_OUT_OF_ORDER,
@@ -228,6 +237,7 @@ enum
    DBG_NO_TILING,
    DBG_NO_DISPLAY_TILING,
    DBG_NO_DISPLAY_DCC,
+   DBG_NO_EXPORTED_DCC,
    DBG_NO_DCC,
    DBG_NO_DCC_CLEAR,
    DBG_NO_DCC_STORE,
@@ -273,6 +283,25 @@ enum si_coherency
    SI_COHERENCY_CP,
 };
 
+#define SI_BIND_CONSTANT_BUFFER_SHIFT     0
+#define SI_BIND_SHADER_BUFFER_SHIFT       6
+#define SI_BIND_IMAGE_BUFFER_SHIFT        12
+#define SI_BIND_SAMPLER_BUFFER_SHIFT      18
+#define SI_BIND_OTHER_BUFFER_SHIFT        24
+
+/* Bind masks for all 6 shader stages. */
+#define SI_BIND_CONSTANT_BUFFER_ALL       (0x3f << SI_BIND_CONSTANT_BUFFER_SHIFT)
+#define SI_BIND_SHADER_BUFFER_ALL         (0x3f << SI_BIND_SHADER_BUFFER_SHIFT)
+#define SI_BIND_IMAGE_BUFFER_ALL          (0x3f << SI_BIND_IMAGE_BUFFER_SHIFT)
+#define SI_BIND_SAMPLER_BUFFER_ALL        (0x3f << SI_BIND_SAMPLER_BUFFER_SHIFT)
+
+#define SI_BIND_CONSTANT_BUFFER(shader)   ((1 << (shader)) << SI_BIND_CONSTANT_BUFFER_SHIFT)
+#define SI_BIND_SHADER_BUFFER(shader)     ((1 << (shader)) << SI_BIND_SHADER_BUFFER_SHIFT)
+#define SI_BIND_IMAGE_BUFFER(shader)      ((1 << (shader)) << SI_BIND_IMAGE_BUFFER_SHIFT)
+#define SI_BIND_SAMPLER_BUFFER(shader)    ((1 << (shader)) << SI_BIND_SAMPLER_BUFFER_SHIFT)
+#define SI_BIND_VERTEX_BUFFER             (1 << (SI_BIND_OTHER_BUFFER_SHIFT + 0))
+#define SI_BIND_STREAMOUT_BUFFER          (1 << (SI_BIND_OTHER_BUFFER_SHIFT + 1))
+
 struct si_compute;
 struct si_shader_context;
 struct hash_table;
@@ -294,7 +323,7 @@ struct si_resource {
    uint8_t bo_alignment_log2;
    enum radeon_bo_domain domains:8;
    enum radeon_bo_flag flags:16;
-   unsigned bind_history;
+   unsigned bind_history; /* bitmask of SI_BIND_xxx_BUFFER */
 
    /* The buffer range which is initialized (with a write transfer,
     * streamout, DMA, or as a random access target). The rest of
@@ -361,7 +390,7 @@ struct si_texture {
    uint8_t stencil_clear_value[RADEON_SURF_MAX_LEVELS];
    uint16_t depth_cleared_level_mask_once; /* if it was cleared at least once */
    uint16_t depth_cleared_level_mask;     /* track if it's cleared (can be false negative) */
-   uint16_t stencil_cleared_level_mask; /* if it was cleared at least once */
+   uint16_t stencil_cleared_level_mask_once; /* if it was cleared at least once */
    uint16_t dirty_level_mask;         /* each bit says if that mipmap is compressed */
    uint16_t stencil_dirty_level_mask; /* each bit says if that mipmap is compressed */
    enum pipe_format db_render_format : 16;
@@ -549,6 +578,7 @@ struct si_screen {
 
    struct {
 #define OPT_BOOL(name, dflt, description) bool name : 1;
+#define OPT_INT(name, dflt, description) int name;
 #include "si_debug_options.h"
    } options;
 
@@ -623,7 +653,6 @@ struct si_screen {
    simple_mtx_t shader_parts_mutex;
    struct si_shader_part *vs_prologs;
    struct si_shader_part *tcs_epilogs;
-   struct si_shader_part *gs_prologs;
    struct si_shader_part *ps_prologs;
    struct si_shader_part *ps_epilogs;
 
@@ -660,9 +689,6 @@ struct si_screen {
     * We want to minimize the impact on multithreaded Mesa. */
    struct ac_llvm_compiler compiler_lowp[10];
 
-   unsigned compute_wave_size;
-   unsigned ps_wave_size;
-   unsigned ge_wave_size;
    unsigned ngg_subgroup_size;
 
    struct util_idalloc_mt buffer_ids;
@@ -706,6 +732,7 @@ struct si_samplers {
 
    /* The i-th bit is set if that element is enabled (non-NULL resource). */
    unsigned enabled_mask;
+   uint32_t has_depth_tex_mask;
    uint32_t needs_depth_decompress_mask;
    uint32_t needs_color_decompress_mask;
 };
@@ -806,7 +833,7 @@ struct si_shader_ctx_state {
    struct si_shader_selector *cso;
    struct si_shader *current;
    /* The shader variant key representing the current state. */
-   struct si_shader_key key;
+   union si_shader_key key;
 };
 
 #define SI_NUM_VGT_PARAM_KEY_BITS 12
@@ -872,6 +899,10 @@ struct si_saved_cs {
 
 struct si_small_prim_cull_info {
    float scale[2], translate[2];
+   float scale_no_aa[2], translate_no_aa[2];
+   float clip_half_line_width[2];      /* line_width * 0.5 in clip space in X and Y directions */
+   float small_prim_precision_no_aa;   /* same as the small prim precision, but ignores MSAA */
+   /* The above fields are uploaded to memory. The below fields are passed via user SGPRs. */
    float small_prim_precision;
 };
 
@@ -957,6 +988,7 @@ struct si_context {
    uint16_t prefetch_L2_mask;
 
    bool blitter_running;
+   bool in_update_ps_colorbuf0_slot;
    bool is_noop:1;
    bool has_graphics:1;
    bool gfx_flush_in_progress : 1;
@@ -1046,6 +1078,7 @@ struct si_context {
    unsigned descriptors_dirty;
    unsigned shader_pointers_dirty;
    unsigned shader_needs_decompress_mask;
+   unsigned shader_has_depth_tex;
    struct si_buffer_resources internal_bindings;
    struct si_buffer_resources const_and_shader_buffers[SI_NUM_SHADERS];
    struct si_samplers samplers[SI_NUM_SHADERS];
@@ -1101,7 +1134,7 @@ struct si_context {
 
    /* Emitted draw state. */
    bool ngg : 1;
-   uint8_t ngg_culling;
+   uint16_t ngg_culling;
    unsigned last_index_size;
    int last_base_vertex;
    unsigned last_start_instance;
@@ -1151,6 +1184,8 @@ struct si_context {
    bool need_check_render_feedback;
    bool decompression_enabled;
    bool dpbb_force_off;
+   bool dpbb_force_off_profile_vs;
+   bool dpbb_force_off_profile_ps;
    bool vs_writes_viewport_index;
    bool vs_disables_clipping_viewport;
 
@@ -1289,7 +1324,7 @@ bool si_nir_is_output_const_if_tex_is_const(nir_shader *shader, float *in, float
 
 /* si_buffer.c */
 bool si_cs_is_buffer_referenced(struct si_context *sctx, struct pb_buffer *buf,
-                                enum radeon_bo_usage usage);
+                                unsigned usage);
 void *si_buffer_map(struct si_context *sctx, struct si_resource *resource,
                     unsigned usage);
 void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res, uint64_t size,
@@ -1341,6 +1376,7 @@ void si_init_clear_functions(struct si_context *sctx);
 #define SI_OP_CS_IMAGE                    (1 << 5)
 #define SI_OP_CS_RENDER_COND_ENABLE       (1 << 6)
 #define SI_OP_CPDMA_SKIP_CHECK_CS_SPACE   (1 << 7) /* don't call need_cs_space */
+#define SI_OP_SYNC_GE_BEFORE              (1 << 8) /* only sync VS, TCS, TES, GS */
 
 unsigned si_get_flush_flags(struct si_context *sctx, enum si_coherency coher,
                             enum si_cache_policy cache_policy);
@@ -1519,7 +1555,6 @@ struct pipe_video_buffer *si_video_buffer_create_with_modifiers(struct pipe_cont
                                                                 unsigned int modifiers_count);
 
 /* si_viewport.c */
-void si_get_small_prim_cull_info(struct si_context *sctx, struct si_small_prim_cull_info *out);
 void si_update_vs_viewport_state(struct si_context *ctx);
 void si_init_viewport_functions(struct si_context *ctx);
 
@@ -1532,6 +1567,8 @@ void si_print_texture_info(struct si_screen *sscreen, struct si_texture *tex,
                            struct u_log_context *log);
 struct pipe_resource *si_texture_create(struct pipe_screen *screen,
                                         const struct pipe_resource *templ);
+bool si_texture_commit(struct si_context *ctx, struct si_resource *res, unsigned level,
+                       struct pipe_box *box, bool commit);
 bool vi_dcc_formats_compatible(struct si_screen *sscreen, enum pipe_format format1,
                                enum pipe_format format2);
 bool vi_dcc_formats_are_incompatible(struct pipe_resource *tex, unsigned level,
@@ -1572,9 +1609,6 @@ si_sqtt_describe_barrier_end(struct si_context* sctx, struct radeon_cmdbuf *rcs,
 bool si_init_thread_trace(struct si_context *sctx);
 void si_destroy_thread_trace(struct si_context *sctx);
 void si_handle_thread_trace(struct si_context *sctx, struct radeon_cmdbuf *rcs);
-
-/* si_state_shaders.c */
-struct si_pm4_state *si_build_vgt_shader_config(struct si_screen *screen, union si_vgt_stages_key key);
 
 /*
  * common helpers
@@ -1899,7 +1933,7 @@ static inline void si_need_gfx_cs_space(struct si_context *ctx, unsigned num_dra
    ctx->memory_usage_kb = 0;
 
    if (radeon_cs_memory_below_limit(ctx->screen, &ctx->gfx_cs, kb) &&
-       ctx->ws->cs_check_space(cs, si_get_minimum_num_gfx_cs_dwords(ctx, num_draws), false))
+       ctx->ws->cs_check_space(cs, si_get_minimum_num_gfx_cs_dwords(ctx, num_draws)))
       return;
 
    si_flush_gfx_cs(ctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
@@ -1916,12 +1950,11 @@ static inline void si_need_gfx_cs_space(struct si_context *ctx, unsigned num_dra
  * rebuilt.
  */
 static inline void radeon_add_to_buffer_list(struct si_context *sctx, struct radeon_cmdbuf *cs,
-                                             struct si_resource *bo, enum radeon_bo_usage usage,
-                                             enum radeon_bo_priority priority)
+                                             struct si_resource *bo, unsigned usage)
 {
    assert(usage);
-   sctx->ws->cs_add_buffer(cs, bo->buf, (enum radeon_bo_usage)(usage | RADEON_USAGE_SYNCHRONIZED),
-                           bo->domains, priority);
+   sctx->ws->cs_add_buffer(cs, bo->buf, usage | RADEON_USAGE_SYNCHRONIZED,
+                           bo->domains);
 }
 
 /**
@@ -1941,37 +1974,14 @@ static inline void radeon_add_to_buffer_list(struct si_context *sctx, struct rad
  */
 static inline void radeon_add_to_gfx_buffer_list_check_mem(struct si_context *sctx,
                                                            struct si_resource *bo,
-                                                           enum radeon_bo_usage usage,
-                                                           enum radeon_bo_priority priority,
+                                                           unsigned usage,
                                                            bool check_mem)
 {
    if (check_mem &&
        !radeon_cs_memory_below_limit(sctx->screen, &sctx->gfx_cs, sctx->memory_usage_kb + bo->memory_usage_kb))
       si_flush_gfx_cs(sctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
 
-   radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, bo, usage, priority);
-}
-
-static inline unsigned si_get_wave_size(struct si_screen *sscreen,
-                                        gl_shader_stage stage, bool ngg, bool es)
-{
-   if (stage == MESA_SHADER_COMPUTE)
-      return sscreen->compute_wave_size;
-   else if (stage == MESA_SHADER_FRAGMENT)
-      return sscreen->ps_wave_size;
-   else if ((stage == MESA_SHADER_VERTEX && es && !ngg) ||
-            (stage == MESA_SHADER_TESS_EVAL && es && !ngg) ||
-            (stage == MESA_SHADER_GEOMETRY && !ngg)) /* legacy GS only supports Wave64 */
-      return 64;
-   else
-      return sscreen->ge_wave_size;
-}
-
-static inline unsigned si_get_shader_wave_size(struct si_shader *shader)
-{
-   return si_get_wave_size(shader->selector->screen, shader->selector->info.stage,
-                           shader->key.as_ngg,
-                           shader->key.as_es);
+   radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, bo, usage);
 }
 
 static inline void si_select_draw_vbo(struct si_context *sctx)

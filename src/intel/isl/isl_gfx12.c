@@ -54,6 +54,13 @@ isl_gfx125_filter_tiling(const struct isl_device *dev,
    if (info->usage & ISL_SURF_USAGE_DISPLAY_BIT)
       *flags &= ~ISL_TILING_64_BIT;
 
+   /* From RENDER_SURFACE_STATE::AuxiliarySurfaceMode,
+    *
+    *    MCS tiling format is always Tile4
+    */
+   if (info->usage & ISL_SURF_USAGE_MCS_BIT)
+      *flags &= ISL_TILING_4_BIT;
+
    /* From RENDER_SURFACE_STATE::TileMode,
     *
     *    TILEMODE_XMAJOR is only allowed if Surface Type is SURFTYPE_2D.
@@ -81,6 +88,15 @@ isl_gfx125_filter_tiling(const struct isl_device *dev,
    /* Tile64 is not defined for format sizes that are 24, 48, and 96 bpb. */
    if (isl_format_get_layout(info->format)->bpb % 3 == 0)
       *flags &= ~ISL_TILING_64_BIT;
+
+   /* BSpec 46962: 3DSTATE_CPSIZE_CONTROL_BUFFER::Tiled Mode : TILE4 & TILE64
+    * are the only 2 valid values.
+    *
+    * TODO: For now we only TILE64 as we need to figure out potential
+    *       additional requirements for TILE4.
+    */
+   if (info->usage & ISL_SURF_USAGE_CPB_BIT)
+      *flags &= ISL_TILING_64_BIT;
 }
 
 void
@@ -91,6 +107,9 @@ isl_gfx125_choose_image_alignment_el(const struct isl_device *dev,
                                      enum isl_msaa_layout msaa_layout,
                                      struct isl_extent3d *image_align_el)
 {
+   /* Handled by isl_choose_image_alignment_el */
+   assert(info->format != ISL_FORMAT_GFX125_HIZ);
+
    const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
 
    if (tiling == ISL_TILING_64) {

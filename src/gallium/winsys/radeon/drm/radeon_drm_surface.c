@@ -348,7 +348,7 @@ static void si_compute_htile(const struct radeon_info *info,
 
 static int radeon_winsys_surface_init(struct radeon_winsys *rws,
                                       const struct pipe_resource *tex,
-                                      unsigned flags, unsigned bpe,
+                                      uint64_t flags, unsigned bpe,
                                       enum radeon_surf_mode mode,
                                       struct radeon_surf *surf_ws)
 {

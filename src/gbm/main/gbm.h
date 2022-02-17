@@ -100,6 +100,10 @@ enum gbm_bo_format {
 /* 16 bpp RG */
 #define GBM_FORMAT_GR88		__gbm_fourcc_code('G', 'R', '8', '8') /* [15:0] G:R 8:8 little endian */
 
+/* 32 bpp RG */
+#define GBM_FORMAT_RG1616	__gbm_fourcc_code('R', 'G', '3', '2') /* [31:0] R:G 16:16 little endian */
+#define GBM_FORMAT_GR1616	__gbm_fourcc_code('G', 'R', '3', '2') /* [31:0] G:R 16:16 little endian */
+
 /* 8 bpp RGB */
 #define GBM_FORMAT_RGB332	__gbm_fourcc_code('R', 'G', 'B', '8') /* [7:0] R:G:B 3:3:2 */
 #define GBM_FORMAT_BGR233	__gbm_fourcc_code('B', 'G', 'R', '8') /* [7:0] B:G:R 2:3:3 */

@@ -38,7 +38,6 @@
 #include "util/u_framebuffer.h"
 #include "pan_util.h"
 #include "decode.h"
-#include "panfrost-quirks.h"
 
 #define foreach_batch(ctx, idx) \
         BITSET_FOREACH_SET(idx, ctx->batches.active, PAN_MAX_BATCHES)
@@ -900,4 +899,18 @@ panfrost_batch_union_scissor(struct panfrost_batch *batch,
         batch->miny = MIN2(batch->miny, miny);
         batch->maxx = MAX2(batch->maxx, maxx);
         batch->maxy = MAX2(batch->maxy, maxy);
+}
+
+/**
+ * Checks if rasterization should be skipped. If not, a TILER job must be
+ * created for each draw, or the IDVS flow must be used.
+ */
+bool
+panfrost_batch_skip_rasterization(struct panfrost_batch *batch)
+{
+        struct panfrost_context *ctx = batch->ctx;
+        struct pipe_rasterizer_state *rast = (void *) ctx->rasterizer;
+
+        return (rast->rasterizer_discard ||
+                batch->scissor_culls_everything);
 }

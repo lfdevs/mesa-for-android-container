@@ -41,6 +41,7 @@
 #include "state_tracker/st_context.h"
 
 #include "util/u_memory.h"
+#include "util/debug.h"
 
 GLboolean
 dri_create_context(gl_api api, const struct gl_config * visual,
@@ -155,8 +156,15 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    ctx->cPriv = cPriv;
    ctx->sPriv = sPriv;
 
-   if (driQueryOptionb(&screen->dev->option_cache, "mesa_no_error"))
-      attribs.flags |= ST_CONTEXT_FLAG_NO_ERROR;
+   /* KHR_no_error is likely to crash, overflow memory, etc if an application
+    * has errors so don't enable it for setuid processes.
+    */
+   if (env_var_as_boolean("MESA_NO_ERROR", false) ||
+       driQueryOptionb(&screen->dev->option_cache, "mesa_no_error"))
+#if !defined(_WIN32)
+      if (geteuid() == getuid())
+#endif
+         attribs.flags |= ST_CONTEXT_FLAG_NO_ERROR;
 
    attribs.options = screen->options;
    dri_fill_st_visual(&attribs.visual, screen, visual);

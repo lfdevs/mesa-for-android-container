@@ -34,10 +34,6 @@ anv_GetAccelerationStructureBuildSizesKHR(
    assert(pSizeInfo->sType ==
           VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR);
 
-   uint64_t max_prim_count = 0;
-   for (uint32_t i = 0; i < pBuildInfo->geometryCount; i++)
-      max_prim_count += pMaxPrimitiveCounts[i];
-
    pSizeInfo->accelerationStructureSize = 0; /* TODO */
 
    uint64_t cpu_build_scratch_size = 0; /* TODO */
@@ -121,7 +117,7 @@ anv_GetAccelerationStructureDeviceAddressKHR(
                    pInfo->accelerationStructure);
 
    assert(!anv_address_is_null(accel->address));
-   assert(accel->address.bo->flags & EXEC_OBJECT_PINNED);
+   assert(anv_bo_is_pinned(accel->address.bo));
 
    return anv_address_physical(accel->address);
 }

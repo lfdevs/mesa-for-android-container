@@ -32,8 +32,8 @@
 #include <string.h>
 
 #include "util/macros.h"
-#include "main/macros.h"
-
+#include "util/u_math.h"
+#include "util/rounding.h"
 #include "isl_priv.h"
 
 #if defined(__SSSE3__)

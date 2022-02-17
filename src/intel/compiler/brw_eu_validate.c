@@ -862,7 +862,8 @@ general_restrictions_based_on_operand_types(const struct intel_device_info *devi
             ERROR_IF(subreg % 4 != 0,
                      "Conversions between integer and half-float must be "
                      "aligned to a DWord on the destination");
-         } else if ((devinfo->is_cherryview || devinfo->ver >= 9) &&
+         } else if ((devinfo->platform == INTEL_PLATFORM_CHV ||
+                     devinfo->ver >= 9) &&
                     dst_type == BRW_REGISTER_TYPE_HF) {
             unsigned subreg = brw_inst_dst_da1_subreg_nr(devinfo, inst);
             ERROR_IF(dst_stride != 2 &&
@@ -881,7 +882,7 @@ general_restrictions_based_on_operand_types(const struct intel_device_info *devi
     */
    bool validate_dst_size_and_exec_size_ratio =
       !is_mixed_float(devinfo, inst) ||
-      !(devinfo->is_cherryview || devinfo->ver >= 9);
+      !(devinfo->platform == INTEL_PLATFORM_CHV || devinfo->ver >= 9);
 
    if (validate_dst_size_and_exec_size_ratio &&
        exec_type_size > dst_type_size) {
@@ -900,7 +901,7 @@ general_restrictions_based_on_operand_types(const struct intel_device_info *devi
           *    Implementation Restriction: The relaxed alignment rule for byte
           *    destination (#10.5) is not supported.
           */
-         if ((devinfo->ver > 4 || devinfo->is_g4x) && dst_type_is_byte) {
+         if (devinfo->verx10 >= 45 && dst_type_is_byte) {
             ERROR_IF(subreg % exec_type_size != 0 &&
                      subreg % exec_type_size != 1,
                      "Destination subreg must be aligned to the size of the "
@@ -1820,7 +1821,7 @@ special_requirements_for_handling_double_precision_data_types(
        */
       if (is_double_precision &&
           brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1 &&
-          (devinfo->is_cherryview || intel_device_info_is_9lp(devinfo))) {
+          (devinfo->platform == INTEL_PLATFORM_CHV || intel_device_info_is_9lp(devinfo))) {
          ERROR_IF(!is_scalar_region &&
                   (src_stride % 8 != 0 ||
                    dst_stride % 8 != 0 ||
@@ -1845,7 +1846,7 @@ special_requirements_for_handling_double_precision_data_types(
        * We assume that the restriction applies to GLK as well.
        */
       if (is_double_precision &&
-          (devinfo->is_cherryview || intel_device_info_is_9lp(devinfo))) {
+          (devinfo->platform == INTEL_PLATFORM_CHV || intel_device_info_is_9lp(devinfo))) {
          ERROR_IF(BRW_ADDRESS_REGISTER_INDIRECT_REGISTER == address_mode ||
                   BRW_ADDRESS_REGISTER_INDIRECT_REGISTER == dst_address_mode,
                   "Indirect addressing is not allowed when the execution type "
@@ -1862,7 +1863,8 @@ special_requirements_for_handling_double_precision_data_types(
        * We assume that the restriction does not apply to the null register.
        */
       if (is_double_precision &&
-          (devinfo->is_cherryview || intel_device_info_is_9lp(devinfo))) {
+          (devinfo->platform == INTEL_PLATFORM_CHV ||
+           intel_device_info_is_9lp(devinfo))) {
          ERROR_IF(brw_inst_opcode(devinfo, inst) == BRW_OPCODE_MAC ||
                   brw_inst_acc_wr_control(devinfo, inst) ||
                   (BRW_ARCHITECTURE_REGISTER_FILE == file &&
@@ -1949,7 +1951,7 @@ special_requirements_for_handling_double_precision_data_types(
     * We assume that the restriction applies to GLK as well.
     */
    if (is_double_precision &&
-       (devinfo->is_cherryview || intel_device_info_is_9lp(devinfo))) {
+       (devinfo->platform == INTEL_PLATFORM_CHV || intel_device_info_is_9lp(devinfo))) {
       ERROR_IF(brw_inst_no_dd_check(devinfo, inst) ||
                brw_inst_no_dd_clear(devinfo, inst),
                "DepCtrl is not allowed when the execution type is 64-bit");

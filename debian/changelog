@@ -1,3 +1,11 @@
+mesa (22.0.0~rc2-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * path_max.diff: Refreshed.
+  * rules: Drop classic drivers (r100, r200, nouveau_vieux, i915, i965).
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 17 Feb 2022 22:04:03 +0200
+
 mesa (21.3.4-1) unstable; urgency=medium
 
   * New upstream release.

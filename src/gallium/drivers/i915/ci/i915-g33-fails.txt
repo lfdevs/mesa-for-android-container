@@ -277,7 +277,6 @@ spec@!opengl 1.1@texwrap formats bordercolor@GL_RGBA2- border color only,Fail
 spec@!opengl 1.1@texwrap formats bordercolor@GL_RGBA4- border color only,Fail
 spec@!opengl 1.1@texwrap formats bordercolor@GL_RGBA8- border color only,Fail
 
-spec@!opengl 1.1@windowoverlap,Fail
 spec@!opengl 1.2@levelclamp,Fail
 
 spec@!opengl 1.2@texwrap 3d,Fail
@@ -363,6 +362,7 @@ spec@arb_depth_texture@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT24 NPOT,Fail
 spec@arb_depth_texture@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT32,Fail
 spec@arb_depth_texture@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT32 NPOT,Fail
 spec@arb_depth_texture@texdepth,Fail
+spec@arb_draw_buffers@fbo-mrt-alphatest,Fail
 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4985
 spec@arb_depth_texture@texwrap formats bordercolor,Fail
@@ -373,6 +373,9 @@ spec@arb_depth_texture@texwrap formats bordercolor@GL_DEPTH_COMPONENT32- border 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4985
 spec@arb_es2_compatibility@texwrap formats bordercolor,Fail
 spec@arb_es2_compatibility@texwrap formats bordercolor@GL_RGB565- border color only,Fail
+
+# GL_RGB10_A2 dest failures
+spec@arb_framebuffer_object@fbo-mipmap-copypix,Fail
 
 # fails at 4 samples (for our 4 supported indirections) because the 1D coordinate workaround
 # causes an extra texture indirection phase.
@@ -405,6 +408,8 @@ spec@arb_internalformat_query2@all internalformat_<x>_type pname checks,Timeout
 spec@arb_occlusion_query2@render,Fail
 spec@arb_occlusion_query@occlusion_query,Fail
 spec@arb_occlusion_query@occlusion_query_conform,Fail
+spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi1,Fail
+spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi2,Fail
 spec@arb_occlusion_query@occlusion_query_meta_fragments,Fail
 spec@arb_occlusion_query@occlusion_query_meta_no_fragments,Fail
 spec@arb_occlusion_query@occlusion_query_meta_save,Fail
@@ -459,6 +464,7 @@ spec@arb_texture_rectangle@texwrap rect proj bordercolor@GL_RGBA8- projected- bo
 # PIGLIT: {"subtest": {"2D mipmap rendering " : "fail"}}"
 spec@arb_texture_storage@texture-storage,Fail
 spec@arb_texture_storage@texture-storage@2D mipmap rendering ,Fail
+spec@arb_texture_storage@texture-storage@2D mipmap rendering (EXT_dsa),Fail
 
 # test checks for required ext (which we don't have) after compiling the shader
 # that uses dynamic loops
@@ -476,9 +482,6 @@ spec@egl_ext_protected_content@conformance,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
-
-# "Mesa: User error: GL_INVALID_OPERATION in unsupported function called (unsupported extension or deprecated function?)"
-spec@ext_draw_instanced@ext_draw_instanced-drawarrays,Fail
 
 spec@ext_external_objects@vk-buf-exchange,Fail
 spec@ext_external_objects@vk-depth-display,Fail
@@ -842,6 +845,7 @@ spec@glsl-1.10@execution@fs-frontfacing-ternary-0.0-neg-1.0,Fail
 spec@glsl-1.10@execution@fs-frontfacing-ternary-1-neg-1,Fail
 spec@glsl-1.10@execution@fs-frontfacing-ternary-1.0-neg-1.0,Fail
 spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0,Fail
+spec@glsl-1.10@execution@fs-frontfacing-ternary-vec4-neg-1.0-1.0,Fail
 
 spec@glsl-1.10@execution@fs-loop-bounds-unrolled,Fail
 spec@glsl-1.10@execution@fs-notequal-of-expression,Fail

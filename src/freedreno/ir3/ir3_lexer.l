@@ -72,16 +72,6 @@ static int parse_reg(const char *str)
 	return num;
 }
 
-static int parse_w(const char *str)
-{
-	str++;
-	unsigned num = strtol(str, NULL, 10);
-	if ((num % 32) != 0)
-		yy_fatal_error("w# must be multiple of 32");
-	if (num < 32)
-		yy_fatal_error("w# must be at least 32");
-	return num / 32;
-}
 %}
 
 %option noyywrap
@@ -139,7 +129,7 @@ static int parse_w(const char *str)
 "a0.x"                            return T_A0;
 "a1.x"                            return T_A1;
 "p0."[xyzw]                       ir3_yylval.num = parse_reg(yytext); return T_P0;
-"w"[0-9]+                         ir3_yylval.num = parse_w(yytext);   return T_W;
+"w"[0-9]+                         ir3_yylval.num = strtol(yytext+1, NULL, 10); return T_W;
 "s#"[0-9]+                        ir3_yylval.num = strtol(yytext+2, NULL, 10); return T_SAMP;
 "t#"[0-9]+                        ir3_yylval.num = strtol(yytext+2, NULL, 10); return T_TEX;
 
@@ -167,6 +157,7 @@ static int parse_w(const char *str)
 "stkr"                            return TOKEN(T_OP_STKR);
 "xset"                            return TOKEN(T_OP_XSET);
 "xclr"                            return TOKEN(T_OP_XCLR);
+"getlast"                         return TOKEN(T_OP_GETLAST);
 "getone"                          return TOKEN(T_OP_GETONE);
 "dbg"                             return TOKEN(T_OP_DBG);
 "shps"                            return TOKEN(T_OP_SHPS);
@@ -228,6 +219,7 @@ static int parse_w(const char *str)
 "shr.b"                           return TOKEN(T_OP_SHR_B);
 "ashr.b"                          return TOKEN(T_OP_ASHR_B);
 "bary.f"                          return TOKEN(T_OP_BARY_F);
+"flat.b"                          return TOKEN(T_OP_FLAT_B);
 "mgen.b"                          return TOKEN(T_OP_MGEN_B);
 "getbit.b"                        return TOKEN(T_OP_GETBIT_B);
 "setrm"                           return TOKEN(T_OP_SETRM);
@@ -252,7 +244,15 @@ static int parse_w(const char *str)
 "sel.f32"                         return TOKEN(T_OP_SEL_F32);
 "sad.s16"                         return TOKEN(T_OP_SAD_S16);
 "sad.s32"                         return TOKEN(T_OP_SAD_S32);
-"shlg.b16"                        return TOKEN(T_OP_SHLG_B16);
+"shrm"                            return TOKEN(T_OP_SHRM);
+"shlm"                            return TOKEN(T_OP_SHLM);
+"shrg"                            return TOKEN(T_OP_SHRG);
+"shlg"                            return TOKEN(T_OP_SHLG);
+"andg"                            return TOKEN(T_OP_ANDG);
+"dp2acc"                          return TOKEN(T_OP_DP2ACC);
+"dp4acc"                          return TOKEN(T_OP_DP4ACC);
+"wmm"                             return TOKEN(T_OP_WMM);
+"wmm.accu"                        return TOKEN(T_OP_WMM_ACCU);
 
                                   /* category 4: */
 "rcp"                             return TOKEN(T_OP_RCP);
@@ -295,6 +295,11 @@ static int parse_w(const char *str)
 "dsypp.1"                         return TOKEN(T_OP_DSYPP_1);
 "rgetpos"                         return TOKEN(T_OP_RGETPOS);
 "rgetinfo"                        return TOKEN(T_OP_RGETINFO);
+"brcst.active"                    return TOKEN(T_OP_BRCST_A);
+"quad_shuffle.brcst"              return TOKEN(T_OP_QSHUFFLE_BRCST);
+"quad_shuffle.horiz"              return TOKEN(T_OP_QSHUFFLE_H);
+"quad_shuffle.vert"               return TOKEN(T_OP_QSHUFFLE_V);
+"quad_shuffle.diag"               return TOKEN(T_OP_QSHUFFLE_DIAG);
 
                                   /* category 6: */
 "ldg"                             return TOKEN(T_OP_LDG);
@@ -338,6 +343,29 @@ static int parse_w(const char *str)
 "atomic.b.and"                    return TOKEN(T_OP_ATOMIC_B_AND);
 "atomic.b.or"                     return TOKEN(T_OP_ATOMIC_B_OR);
 "atomic.b.xor"                    return TOKEN(T_OP_ATOMIC_B_XOR);
+"atomic.s.add"                    return TOKEN(T_OP_ATOMIC_S_ADD);
+"atomic.s.sub"                    return TOKEN(T_OP_ATOMIC_S_SUB);
+"atomic.s.xchg"                   return TOKEN(T_OP_ATOMIC_S_XCHG);
+"atomic.s.inc"                    return TOKEN(T_OP_ATOMIC_S_INC);
+"atomic.s.dec"                    return TOKEN(T_OP_ATOMIC_S_DEC);
+"atomic.s.cmpxchg"                return TOKEN(T_OP_ATOMIC_S_CMPXCHG);
+"atomic.s.min"                    return TOKEN(T_OP_ATOMIC_S_MIN);
+"atomic.s.max"                    return TOKEN(T_OP_ATOMIC_S_MAX);
+"atomic.s.and"                    return TOKEN(T_OP_ATOMIC_S_AND);
+"atomic.s.or"                     return TOKEN(T_OP_ATOMIC_S_OR);
+"atomic.s.xor"                    return TOKEN(T_OP_ATOMIC_S_XOR);
+"atomic.g.add"                    return TOKEN(T_OP_ATOMIC_G_ADD);
+"atomic.g.sub"                    return TOKEN(T_OP_ATOMIC_G_SUB);
+"atomic.g.xchg"                   return TOKEN(T_OP_ATOMIC_G_XCHG);
+"atomic.g.inc"                    return TOKEN(T_OP_ATOMIC_G_INC);
+"atomic.g.dec"                    return TOKEN(T_OP_ATOMIC_G_DEC);
+"atomic.g.cmpxchg"                return TOKEN(T_OP_ATOMIC_G_CMPXCHG);
+"atomic.g.min"                    return TOKEN(T_OP_ATOMIC_G_MIN);
+"atomic.g.max"                    return TOKEN(T_OP_ATOMIC_G_MAX);
+"atomic.g.and"                    return TOKEN(T_OP_ATOMIC_G_AND);
+"atomic.g.or"                     return TOKEN(T_OP_ATOMIC_G_OR);
+"atomic.g.xor"                    return TOKEN(T_OP_ATOMIC_G_XOR);
+
 "ldgb"                            return TOKEN(T_OP_LDGB);
 "stgb"                            return TOKEN(T_OP_STGB);
 "stib"                            return TOKEN(T_OP_STIB);
@@ -345,6 +373,7 @@ static int parse_w(const char *str)
 "ldlv"                            return TOKEN(T_OP_LDLV);
 "getspid"                         return TOKEN(T_OP_GETSPID);
 "getwid"                          return TOKEN(T_OP_GETWID);
+"getfiberid"                      return TOKEN(T_OP_GETFIBERID);
 
                                   /* category 7: */
 "bar"                             return TOKEN(T_OP_BAR);
@@ -361,6 +390,11 @@ static int parse_w(const char *str)
 
 "untyped"                         return TOKEN(T_UNTYPED);
 "typed"                           return TOKEN(T_TYPED);
+
+"unsigned"                        return TOKEN(T_UNSIGNED);
+"mixed"                           return TOKEN(T_MIXED);
+"low"                             return TOKEN(T_LOW);
+"high"                            return TOKEN(T_HIGH);
 
 "1d"                              return TOKEN(T_1D);
 "2d"                              return TOKEN(T_2D);

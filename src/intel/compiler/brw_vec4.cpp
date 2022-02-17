@@ -150,7 +150,6 @@ bool
 vec4_instruction::is_send_from_grf() const
 {
    switch (opcode) {
-   case SHADER_OPCODE_SHADER_TIME_ADD:
    case VS_OPCODE_PULL_CONSTANT_LOAD_GFX7:
    case VEC4_OPCODE_UNTYPED_ATOMIC:
    case VEC4_OPCODE_UNTYPED_SURFACE_READ:
@@ -207,7 +206,6 @@ unsigned
 vec4_instruction::size_read(unsigned arg) const
 {
    switch (opcode) {
-   case SHADER_OPCODE_SHADER_TIME_ADD:
    case VEC4_OPCODE_UNTYPED_ATOMIC:
    case VEC4_OPCODE_UNTYPED_SURFACE_READ:
    case VEC4_OPCODE_UNTYPED_SURFACE_WRITE:
@@ -360,8 +358,6 @@ vec4_instruction::implied_mrf_writes() const
    case GS_OPCODE_FF_SYNC:
       return 1;
    case TCS_OPCODE_URB_WRITE:
-      return 0;
-   case SHADER_OPCODE_SHADER_TIME_ADD:
       return 0;
    case SHADER_OPCODE_TEX:
    case SHADER_OPCODE_TXL:
@@ -604,194 +600,6 @@ vec4_visitor::split_uniform_registers()
    }
 }
 
-/* This function returns the register number where we placed the uniform */
-static int
-set_push_constant_loc(const int nr_uniforms, int *new_uniform_count,
-                      const int src, const int size, const int channel_size,
-                      int *new_loc, int *new_chan,
-                      int *new_chans_used)
-{
-   int dst;
-   /* Find the lowest place we can slot this uniform in. */
-   for (dst = 0; dst < nr_uniforms; dst++) {
-      if (ALIGN(new_chans_used[dst], channel_size) + size <= 4)
-         break;
-   }
-
-   assert(dst < nr_uniforms);
-
-   new_loc[src] = dst;
-   new_chan[src] = ALIGN(new_chans_used[dst], channel_size);
-   new_chans_used[dst] = ALIGN(new_chans_used[dst], channel_size) + size;
-
-   *new_uniform_count = MAX2(*new_uniform_count, dst + 1);
-   return dst;
-}
-
-void
-vec4_visitor::pack_uniform_registers()
-{
-   if (!compiler->compact_params)
-      return;
-
-   uint8_t chans_used[this->uniforms];
-   int new_loc[this->uniforms];
-   int new_chan[this->uniforms];
-   bool is_aligned_to_dvec4[this->uniforms];
-   int new_chans_used[this->uniforms];
-   int channel_sizes[this->uniforms];
-
-   memset(chans_used, 0, sizeof(chans_used));
-   memset(new_loc, 0, sizeof(new_loc));
-   memset(new_chan, 0, sizeof(new_chan));
-   memset(new_chans_used, 0, sizeof(new_chans_used));
-   memset(is_aligned_to_dvec4, 0, sizeof(is_aligned_to_dvec4));
-   memset(channel_sizes, 0, sizeof(channel_sizes));
-
-   /* Find which uniform vectors are actually used by the program.  We
-    * expect unused vector elements when we've moved array access out
-    * to pull constants, and from some GLSL code generators like wine.
-    */
-   foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
-      unsigned readmask;
-      switch (inst->opcode) {
-      case VEC4_OPCODE_PACK_BYTES:
-      case BRW_OPCODE_DP4:
-      case BRW_OPCODE_DPH:
-         readmask = 0xf;
-         break;
-      case BRW_OPCODE_DP3:
-         readmask = 0x7;
-         break;
-      case BRW_OPCODE_DP2:
-         readmask = 0x3;
-         break;
-      default:
-         readmask = inst->dst.writemask;
-         break;
-      }
-
-      for (int i = 0 ; i < 3; i++) {
-         if (inst->src[i].file != UNIFORM || inst->src[i].nr >= UBO_START)
-            continue;
-
-         assert(type_sz(inst->src[i].type) % 4 == 0);
-         int channel_size = type_sz(inst->src[i].type) / 4;
-
-         int reg = inst->src[i].nr;
-         for (int c = 0; c < 4; c++) {
-            if (!(readmask & (1 << c)))
-               continue;
-
-            unsigned channel = BRW_GET_SWZ(inst->src[i].swizzle, c) + 1;
-            unsigned used = MAX2(chans_used[reg], channel * channel_size);
-            if (used <= 4) {
-               chans_used[reg] = used;
-               channel_sizes[reg] = MAX2(channel_sizes[reg], channel_size);
-            } else {
-               is_aligned_to_dvec4[reg] = true;
-               is_aligned_to_dvec4[reg + 1] = true;
-               chans_used[reg + 1] = used - 4;
-               channel_sizes[reg + 1] = MAX2(channel_sizes[reg + 1], channel_size);
-            }
-         }
-      }
-
-      if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT &&
-          inst->src[0].file == UNIFORM) {
-         assert(inst->src[2].file == BRW_IMMEDIATE_VALUE);
-         assert(inst->src[0].subnr == 0);
-
-         unsigned bytes_read = inst->src[2].ud;
-         assert(bytes_read % 4 == 0);
-         unsigned vec4s_read = DIV_ROUND_UP(bytes_read, 16);
-
-         /* We just mark every register touched by a MOV_INDIRECT as being
-          * fully used.  This ensures that it doesn't broken up piecewise by
-          * the next part of our packing algorithm.
-          */
-         int reg = inst->src[0].nr;
-         int channel_size = type_sz(inst->src[0].type) / 4;
-         for (unsigned i = 0; i < vec4s_read; i++) {
-            chans_used[reg + i] = 4;
-            channel_sizes[reg + i] = MAX2(channel_sizes[reg + i], channel_size);
-         }
-      }
-   }
-
-   int new_uniform_count = 0;
-
-   /* As the uniforms are going to be reordered, take the data from a temporary
-    * copy of the original param[].
-    */
-   uint32_t *param = ralloc_array(NULL, uint32_t, stage_prog_data->nr_params);
-   memcpy(param, stage_prog_data->param,
-          sizeof(uint32_t) * stage_prog_data->nr_params);
-
-   /* Now, figure out a packing of the live uniform vectors into our
-    * push constants. Start with dvec{3,4} because they are aligned to
-    * dvec4 size (2 vec4).
-    */
-   for (int src = 0; src < uniforms; src++) {
-      int size = chans_used[src];
-
-      if (size == 0 || !is_aligned_to_dvec4[src])
-         continue;
-
-      /* dvec3 are aligned to dvec4 size, apply the alignment of the size
-       * to 4 to avoid moving last component of a dvec3 to the available
-       * location at the end of a previous dvec3. These available locations
-       * could be filled by smaller variables in next loop.
-       */
-      size = ALIGN(size, 4);
-      int dst = set_push_constant_loc(uniforms, &new_uniform_count,
-                                      src, size, channel_sizes[src],
-                                      new_loc, new_chan,
-                                      new_chans_used);
-      /* Move the references to the data */
-      for (int j = 0; j < size; j++) {
-         stage_prog_data->param[dst * 4 + new_chan[src] + j] =
-            param[src * 4 + j];
-      }
-   }
-
-   /* Continue with the rest of data, which is aligned to vec4. */
-   for (int src = 0; src < uniforms; src++) {
-      int size = chans_used[src];
-
-      if (size == 0 || is_aligned_to_dvec4[src])
-         continue;
-
-      int dst = set_push_constant_loc(uniforms, &new_uniform_count,
-                                      src, size, channel_sizes[src],
-                                      new_loc, new_chan,
-                                      new_chans_used);
-      /* Move the references to the data */
-      for (int j = 0; j < size; j++) {
-         stage_prog_data->param[dst * 4 + new_chan[src] + j] =
-            param[src * 4 + j];
-      }
-   }
-
-   ralloc_free(param);
-   this->uniforms = new_uniform_count;
-   stage_prog_data->nr_params = new_uniform_count * 4;
-
-   /* Now, update the instructions for our repacked uniforms. */
-   foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
-      for (int i = 0 ; i < 3; i++) {
-         int src = inst->src[i].nr;
-
-         if (inst->src[i].file != UNIFORM || inst->src[i].nr >= UBO_START)
-            continue;
-
-         int chan = new_chan[src] / channel_sizes[src];
-         inst->src[i].nr = new_loc[src];
-         inst->src[i].swizzle += BRW_SWIZZLE4(chan, chan, chan, chan);
-      }
-   }
-}
-
 /**
  * Does algebraic optimizations (0 * a = 0, 1 * a = a, a + 0 = a).
  *
@@ -908,97 +716,6 @@ vec4_visitor::opt_algebraic()
                           DEPENDENCY_INSTRUCTION_DETAIL);
 
    return progress;
-}
-
-/**
- * Only a limited number of hardware registers may be used for push
- * constants, so this turns access to the overflowed constants into
- * pull constants.
- */
-void
-vec4_visitor::move_push_constants_to_pull_constants()
-{
-   int pull_constant_loc[this->uniforms];
-
-   const int max_uniform_components = push_length * 8;
-
-   if (this->uniforms * 4 <= max_uniform_components)
-      return;
-
-   assert(compiler->supports_pull_constants);
-   assert(compiler->compact_params);
-
-   /* If we got here, we also can't have any push ranges */
-   for (unsigned i = 0; i < 4; i++)
-      assert(prog_data->base.ubo_ranges[i].length == 0);
-
-   /* Make some sort of choice as to which uniforms get sent to pull
-    * constants.  We could potentially do something clever here like
-    * look for the most infrequently used uniform vec4s, but leave
-    * that for later.
-    */
-   for (int i = 0; i < this->uniforms * 4; i += 4) {
-      pull_constant_loc[i / 4] = -1;
-
-      if (i >= max_uniform_components) {
-         uint32_t *values = &stage_prog_data->param[i];
-
-         /* Try to find an existing copy of this uniform in the pull
-          * constants if it was part of an array access already.
-          */
-         for (unsigned int j = 0; j < stage_prog_data->nr_pull_params; j += 4) {
-            int matches;
-
-            for (matches = 0; matches < 4; matches++) {
-               if (stage_prog_data->pull_param[j + matches] != values[matches])
-                  break;
-            }
-
-            if (matches == 4) {
-               pull_constant_loc[i / 4] = j / 4;
-               break;
-            }
-         }
-
-         if (pull_constant_loc[i / 4] == -1) {
-            assert(stage_prog_data->nr_pull_params % 4 == 0);
-            pull_constant_loc[i / 4] = stage_prog_data->nr_pull_params / 4;
-
-            for (int j = 0; j < 4; j++) {
-               stage_prog_data->pull_param[stage_prog_data->nr_pull_params++] =
-                  values[j];
-            }
-         }
-      }
-   }
-
-   /* Now actually rewrite usage of the things we've moved to pull
-    * constants.
-    */
-   foreach_block_and_inst_safe(block, vec4_instruction, inst, cfg) {
-      for (int i = 0 ; i < 3; i++) {
-         if (inst->src[i].file != UNIFORM || inst->src[i].nr >= UBO_START ||
-             pull_constant_loc[inst->src[i].nr] == -1)
-            continue;
-
-         int uniform = inst->src[i].nr;
-
-         const glsl_type *temp_type = type_sz(inst->src[i].type) == 8 ?
-            glsl_type::dvec4_type : glsl_type::vec4_type;
-         dst_reg temp = dst_reg(this, temp_type);
-
-         emit_pull_constant_load(block, inst, temp, inst->src[i],
-                                 pull_constant_loc[uniform], src_reg());
-
-         inst->src[i].file = temp.file;
-         inst->src[i].nr = temp.nr;
-         inst->src[i].offset %= 16;
-         inst->src[i].reladdr = NULL;
-      }
-   }
-
-   /* Repack push constants to remove the now-unused ones. */
-   pack_uniform_registers();
 }
 
 /* Conditions for which we want to avoid setting the dependency control bits */
@@ -1842,15 +1559,13 @@ vec4_visitor::setup_uniforms(int reg)
    /* It's possible that uniform compaction will shrink further than expected
     * so we re-compute the layout and set up our UBO push starts.
     */
-   const unsigned old_push_length = push_length;
+   ASSERTED const unsigned old_push_length = push_length;
    push_length = DIV_ROUND_UP(prog_data->base.nr_params, 8);
    for (unsigned i = 0; i < 4; i++) {
       ubo_push_start[i] = push_length;
       push_length += stage_prog_data->ubo_ranges[i].length;
    }
-   assert(push_length <= old_push_length);
-   if (push_length < old_push_length)
-      assert(compiler->compact_params);
+   assert(push_length == old_push_length);
 
    /* The pre-gfx6 VS requires that some push constants get loaded no
     * matter what, or the GPU would hang.
@@ -1952,70 +1667,6 @@ vec4_visitor::get_timestamp()
    mov->force_writemask_all = true;
 
    return src_reg(dst);
-}
-
-void
-vec4_visitor::emit_shader_time_begin()
-{
-   current_annotation = "shader time start";
-   shader_start_time = get_timestamp();
-}
-
-void
-vec4_visitor::emit_shader_time_end()
-{
-   current_annotation = "shader time end";
-   src_reg shader_end_time = get_timestamp();
-
-
-   /* Check that there weren't any timestamp reset events (assuming these
-    * were the only two timestamp reads that happened).
-    */
-   src_reg reset_end = shader_end_time;
-   reset_end.swizzle = BRW_SWIZZLE_ZZZZ;
-   vec4_instruction *test = emit(AND(dst_null_ud(), reset_end, brw_imm_ud(1u)));
-   test->conditional_mod = BRW_CONDITIONAL_Z;
-
-   emit(IF(BRW_PREDICATE_NORMAL));
-
-   /* Take the current timestamp and get the delta. */
-   shader_start_time.negate = true;
-   dst_reg diff = dst_reg(this, glsl_type::uint_type);
-   emit(ADD(diff, shader_start_time, shader_end_time));
-
-   /* If there were no instructions between the two timestamp gets, the diff
-    * is 2 cycles.  Remove that overhead, so I can forget about that when
-    * trying to determine the time taken for single instructions.
-    */
-   emit(ADD(diff, src_reg(diff), brw_imm_ud(-2u)));
-
-   emit_shader_time_write(0, src_reg(diff));
-   emit_shader_time_write(1, brw_imm_ud(1u));
-   emit(BRW_OPCODE_ELSE);
-   emit_shader_time_write(2, brw_imm_ud(1u));
-   emit(BRW_OPCODE_ENDIF);
-}
-
-void
-vec4_visitor::emit_shader_time_write(int shader_time_subindex, src_reg value)
-{
-   dst_reg dst =
-      dst_reg(this, glsl_type::get_array_instance(glsl_type::vec4_type, 2));
-
-   dst_reg offset = dst;
-   dst_reg time = dst;
-   time.offset += REG_SIZE;
-
-   offset.type = BRW_REGISTER_TYPE_UD;
-   int index = shader_time_index * 3 + shader_time_subindex;
-   emit(MOV(offset, brw_imm_d(index * BRW_SHADER_TIME_STRIDE)));
-
-   time.type = BRW_REGISTER_TYPE_UD;
-   emit(MOV(time, value));
-
-   vec4_instruction *inst =
-      emit(SHADER_OPCODE_SHADER_TIME_ADD, dst_reg(), src_reg(dst));
-   inst->mlen = 2;
 }
 
 static bool
@@ -2701,9 +2352,6 @@ vec4_visitor::invalidate_analysis(brw::analysis_dependency_class c)
 bool
 vec4_visitor::run()
 {
-   if (shader_time_index >= 0)
-      emit_shader_time_begin();
-
    setup_push_ranges();
 
    if (prog_data->base.zero_push_reg) {
@@ -2738,10 +2386,8 @@ vec4_visitor::run()
     * often do repeated subexpressions for those.
     */
    move_grf_array_access_to_scratch();
-   move_uniform_array_access_to_pull_constants();
+   split_uniform_registers();
 
-   pack_uniform_registers();
-   move_push_constants_to_pull_constants();
    split_virtual_grfs();
 
 #define OPT(pass, args...) ({                                          \
@@ -2988,7 +2634,6 @@ brw_compile_vs(const struct brw_compiler *compiler,
 
       fs_visitor v(compiler, params->log_data, mem_ctx, &key->base,
                    &prog_data->base.base, nir, 8,
-                   params->shader_time ? params->shader_time_index : -1,
                    debug_enabled);
       if (!v.run_vs()) {
          params->error_str = ralloc_strdup(mem_ctx, v.fail_msg);
@@ -3020,7 +2665,6 @@ brw_compile_vs(const struct brw_compiler *compiler,
 
       vec4_vs_visitor v(compiler, params->log_data, key, prog_data,
                         nir, mem_ctx,
-                        params->shader_time ? params->shader_time_index : -1,
                         debug_enabled);
       if (!v.run()) {
          params->error_str = ralloc_strdup(mem_ctx, v.fail_msg);

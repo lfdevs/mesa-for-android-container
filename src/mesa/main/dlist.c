@@ -29,54 +29,37 @@
  * Display lists management functions.
  */
 
-#include "c99_math.h"
-#include "glheader.h"
-
+#include "api_save.h"
 #include "api_arrayelt.h"
-#include "api_exec.h"
 #include "draw_validate.h"
-#include "atifragshader.h"
-#include "config.h"
-#include "bufferobj.h"
 #include "arrayobj.h"
-#include "context.h"
-#include "dlist.h"
 #include "enums.h"
 #include "eval.h"
-#include "fbobject.h"
-#include "framebuffer.h"
-#include "glapi/glapi.h"
-#include "glformats.h"
 #include "hash.h"
 #include "image.h"
 #include "light.h"
-#include "macros.h"
 #include "pack.h"
 #include "pbo.h"
-#include "queryobj.h"
-#include "samplerobj.h"
-#include "shaderapi.h"
-#include "syncobj.h"
 #include "teximage.h"
-#include "texstorage.h"
-#include "mtypes.h"
+#include "texobj.h"
 #include "varray.h"
-#include "arbprogram.h"
-#include "transformfeedback.h"
 #include "glthread_marshal.h"
-
-#include "math/m_matrix.h"
 
 #include "main/dispatch.h"
 
-#include "vbo/vbo.h"
-#include "vbo/vbo_util.h"
 #include "vbo/vbo_save.h"
-#include "util/format_r11g11b10f.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
+#include "api_exec_decl.h"
+
+#include "state_tracker/st_cb_texture.h"
+#include "state_tracker/st_cb_bitmap.h"
 
 #define USE_BITMAP_ATLAS 1
+
+static bool
+_mesa_glthread_should_execute_list(struct gl_context *ctx,
+                                   struct gl_display_list *dlist);
 
 /**
  * Flush vertices.
@@ -636,49 +619,8 @@ typedef enum
    /* The following three are meta instructions */
    OPCODE_ERROR,                /* raise compiled-in error */
    OPCODE_CONTINUE,
-   OPCODE_NOP,                  /* No-op (used for 8-byte alignment */
    OPCODE_END_OF_LIST
 } OpCode;
-
-
-
-/**
- * Display list node.
- *
- * Display list instructions are stored as sequences of "nodes".  Nodes
- * are allocated in blocks.  Each block has BLOCK_SIZE nodes.  Blocks
- * are linked together with a pointer.
- *
- * Each instruction in the display list is stored as a sequence of
- * contiguous nodes in memory.
- * Each node is the union of a variety of data types.
- *
- * Note, all of these members should be 4 bytes in size or less for the
- * sake of compact display lists.  We store 8-byte pointers in a pair of
- * these nodes using the save/get_pointer() functions below.
- */
-union gl_dlist_node
-{
-   struct {
-#if !DETECT_OS_WINDOWS
-      OpCode opcode:16;
-#else
-      /* sizeof(Node) is 8 with MSVC/mingw, so use an explicit 16 bits type. */
-      uint16_t opcode;
-#endif
-      uint16_t InstSize;
-   };
-   GLboolean b;
-   GLbitfield bf;
-   GLubyte ub;
-   GLshort s;
-   GLushort us;
-   GLint i;
-   GLuint ui;
-   GLenum e;
-   GLfloat f;
-   GLsizei si;
-};
 
 
 typedef union gl_dlist_node Node;
@@ -798,18 +740,18 @@ static void
 vbo_destroy_vertex_list(struct gl_context *ctx, struct vbo_save_vertex_list *node)
 {
    for (gl_vertex_processing_mode mode = VP_MODE_FF; mode < VP_MODE_MAX; ++mode) {
-      _mesa_reference_vao(ctx, &node->VAO[mode], NULL);
-      if (node->merged.gallium.private_refcount[mode]) {
-         assert(node->merged.gallium.private_refcount[mode] > 0);
-         p_atomic_add(&node->merged.gallium.state[mode]->reference.count,
-                      -node->merged.gallium.private_refcount[mode]);
+      _mesa_reference_vao(ctx, &node->cold->VAO[mode], NULL);
+      if (node->private_refcount[mode]) {
+         assert(node->private_refcount[mode] > 0);
+         p_atomic_add(&node->state[mode]->reference.count,
+                      -node->private_refcount[mode]);
       }
-      pipe_vertex_state_reference(&node->merged.gallium.state[mode], NULL);
+      pipe_vertex_state_reference(&node->state[mode], NULL);
    }
 
-   if (node->merged.mode) {
-      free(node->merged.mode);
-      free(node->merged.start_counts);
+   if (node->modes) {
+      free(node->modes);
+      free(node->start_counts);
    }
 
    _mesa_reference_buffer_object(ctx, &node->cold->ib.obj, NULL);
@@ -824,7 +766,7 @@ static void
 vbo_print_vertex_list(struct gl_context *ctx, struct vbo_save_vertex_list *node, OpCode op, FILE *f)
 {
    GLuint i;
-   struct gl_buffer_object *buffer = node->VAO[0]->BufferBinding[0].BufferObj;
+   struct gl_buffer_object *buffer = node->cold->VAO[0]->BufferBinding[0].BufferObj;
    const GLuint vertex_size = _vbo_save_get_stride(node)/sizeof(GLfloat);
    (void) ctx;
 
@@ -894,7 +836,7 @@ void
 _mesa_delete_bitmap_atlas(struct gl_context *ctx, struct gl_bitmap_atlas *atlas)
 {
    if (atlas->texObj) {
-      ctx->Driver.DeleteTexture(ctx, atlas->texObj);
+      _mesa_delete_texture_object(ctx, atlas->texObj);
    }
    free(atlas->glyphs);
    free(atlas);
@@ -1038,7 +980,7 @@ build_bitmap_atlas(struct gl_context *ctx, struct gl_bitmap_atlas *atlas,
    }
 
    /* Create atlas texture (texture ID is irrelevant) */
-   atlas->texObj = ctx->Driver.NewTextureObject(ctx, 999, GL_TEXTURE_RECTANGLE);
+   atlas->texObj = _mesa_new_texture_object(ctx, 999, GL_TEXTURE_RECTANGLE);
    if (!atlas->texObj) {
       goto out_of_memory;
    }
@@ -1067,14 +1009,14 @@ build_bitmap_atlas(struct gl_context *ctx, struct gl_bitmap_atlas *atlas,
                                  GL_ALPHA, MESA_FORMAT_A_UNORM8);
 
    /* alloc image storage */
-   if (!ctx->Driver.AllocTextureImageBuffer(ctx, atlas->texImage)) {
+   if (!st_AllocTextureImageBuffer(ctx, atlas->texImage)) {
       goto out_of_memory;
    }
 
    /* map teximage, load with bitmap glyphs */
-   ctx->Driver.MapTextureImage(ctx, atlas->texImage, 0,
-                               0, 0, atlas->texWidth, atlas->texHeight,
-                               GL_MAP_WRITE_BIT, &map, &map_stride);
+   st_MapTextureImage(ctx, atlas->texImage, 0,
+                      0, 0, atlas->texWidth, atlas->texHeight,
+                      GL_MAP_WRITE_BIT, &map, &map_stride);
    if (!map) {
       goto out_of_memory;
    }
@@ -1107,7 +1049,7 @@ build_bitmap_atlas(struct gl_context *ctx, struct gl_bitmap_atlas *atlas,
       }
    }
 
-   ctx->Driver.UnmapTextureImage(ctx, atlas->texImage, 0);
+   st_UnmapTextureImage(ctx, atlas->texImage, 0);
 
    atlas->complete = true;
 
@@ -1117,7 +1059,7 @@ out_of_memory:
    _mesa_error(ctx, GL_OUT_OF_MEMORY, "Display list bitmap atlas");
 fail:
    if (atlas->texObj) {
-      ctx->Driver.DeleteTexture(ctx, atlas->texObj);
+      _mesa_delete_texture_object(ctx, atlas->texObj);
    }
    free(atlas->glyphs);
    atlas->glyphs = NULL;
@@ -1164,7 +1106,7 @@ _mesa_delete_list(struct gl_context *ctx, struct gl_display_list *dlist)
 
    if (!n) {
       free(dlist->Label);
-      free(dlist);
+      FREE(dlist);
       return;
    }
 
@@ -1380,7 +1322,7 @@ _mesa_delete_list(struct gl_context *ctx, struct gl_display_list *dlist)
          case OPCODE_VERTEX_LIST:
          case OPCODE_VERTEX_LIST_LOOPBACK:
          case OPCODE_VERTEX_LIST_COPY_CURRENT:
-            vbo_destroy_vertex_list(ctx, (struct vbo_save_vertex_list *) &n[1]);
+            vbo_destroy_vertex_list(ctx, (struct vbo_save_vertex_list *) &n[0]);
             break;
          case OPCODE_CONTINUE:
             n = (Node *) get_pointer(&n[1]);
@@ -1390,8 +1332,7 @@ _mesa_delete_list(struct gl_context *ctx, struct gl_display_list *dlist)
             continue;
          case OPCODE_END_OF_LIST:
             if (dlist->small_list) {
-               unsigned start = dlist->begins_with_a_nop ? dlist->start - 1 :
-                                                           dlist->start;
+               unsigned start = dlist->start;
                for (int i = 0; i < dlist->count; i++) {
                   util_idalloc_free(&ctx->Shared->small_dlist_store.free_idx,
                                     start + i);
@@ -1450,7 +1391,7 @@ destroy_list(struct gl_context *ctx, GLuint list)
    if (list == 0)
       return;
 
-   dlist = _mesa_lookup_list(ctx, list, false);
+   dlist = _mesa_lookup_list(ctx, list, true);
    if (!dlist)
       return;
 
@@ -1464,10 +1405,8 @@ destroy_list(struct gl_context *ctx, GLuint list)
                      check_atlas_for_deleted_list, &list);
    }
 
-   _mesa_HashLockMutex(ctx->Shared->DisplayList);
    _mesa_delete_list(ctx, dlist);
    _mesa_HashRemoveLocked(ctx->Shared->DisplayList, list);
-   _mesa_HashUnlockMutex(ctx->Shared->DisplayList);
 }
 
 
@@ -1511,9 +1450,9 @@ unpack_image(struct gl_context *ctx, GLuint dimensions,
       GLvoid *image;
 
       map = (GLubyte *)
-         ctx->Driver.MapBufferRange(ctx, 0, unpack->BufferObj->Size,
-                                    GL_MAP_READ_BIT, unpack->BufferObj,
-                                    MAP_INTERNAL);
+         _mesa_bufferobj_map_range(ctx, 0, unpack->BufferObj->Size,
+                                   GL_MAP_READ_BIT, unpack->BufferObj,
+                                   MAP_INTERNAL);
       if (!map) {
          /* unable to map src buffer! */
          _mesa_error(ctx, GL_INVALID_OPERATION, "unable to map PBO");
@@ -1524,7 +1463,7 @@ unpack_image(struct gl_context *ctx, GLuint dimensions,
       image = _mesa_unpack_image(dimensions, width, height, depth,
                                  format, type, src, unpack);
 
-      ctx->Driver.UnmapBuffer(ctx, unpack->BufferObj, MAP_INTERNAL);
+      _mesa_bufferobj_unmap(ctx, unpack->BufferObj, MAP_INTERNAL);
 
       if (!image) {
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "display list construction");
@@ -1562,28 +1501,22 @@ dlist_alloc(struct gl_context *ctx, OpCode opcode, GLuint bytes, bool align8)
 {
    const GLuint numNodes = 1 + (bytes + sizeof(Node) - 1) / sizeof(Node);
    const GLuint contNodes = 1 + POINTER_DWORDS;  /* size of continue info */
-   GLuint nopNode;
-   Node *n;
 
    assert(bytes <= BLOCK_SIZE * sizeof(Node));
 
-   if (sizeof(void *) > sizeof(Node) && align8
-       && ctx->ListState.CurrentPos % 2 == 0) {
-      /* The opcode would get placed at node[0] and the payload would start
-       * at node[1].  But the payload needs to be at an even offset (8-byte
-       * multiple).
-       */
-      nopNode = 1;
-   }
-   else {
-      nopNode = 0;
+   /* If this node needs to start on an 8-byte boundary, pad the last node. */
+   if (sizeof(void *) == 8 && align8 &&
+       ctx->ListState.CurrentPos % 2 == 1) {
+      Node *last = ctx->ListState.CurrentBlock + ctx->ListState.CurrentPos -
+                   ctx->ListState.LastInstSize;
+      last->InstSize++;
+      ctx->ListState.CurrentPos++;
    }
 
-   if (ctx->ListState.CurrentPos + nopNode + numNodes + contNodes
-       > BLOCK_SIZE) {
+   if (ctx->ListState.CurrentPos + numNodes + contNodes > BLOCK_SIZE) {
       /* This block is full.  Allocate a new block and chain to it */
       Node *newblock;
-      n = ctx->ListState.CurrentBlock + ctx->ListState.CurrentPos;
+      Node *n = ctx->ListState.CurrentBlock + ctx->ListState.CurrentPos;
       n[0].opcode = OPCODE_CONTINUE;
       newblock = malloc(sizeof(Node) * BLOCK_SIZE);
       if (!newblock) {
@@ -1597,31 +1530,14 @@ dlist_alloc(struct gl_context *ctx, OpCode opcode, GLuint bytes, bool align8)
       save_pointer(&n[1], newblock);
       ctx->ListState.CurrentBlock = newblock;
       ctx->ListState.CurrentPos = 0;
-
-      /* Display list nodes are always 4 bytes.  If we need 8-byte alignment
-       * we have to insert a NOP so that the payload of the real opcode lands
-       * on an even location:
-       *   node[0] = OPCODE_NOP
-       *   node[1] = OPCODE_x;
-       *   node[2] = start of payload
-       */
-      nopNode = sizeof(void *) > sizeof(Node) && align8;
    }
 
-   n = ctx->ListState.CurrentBlock + ctx->ListState.CurrentPos;
-   if (nopNode) {
-      assert(ctx->ListState.CurrentPos % 2 == 0); /* even value */
-      n[0].opcode = OPCODE_NOP;
-      n[0].InstSize = 1;
-      n++;
-      /* The "real" opcode will now be at an odd location and the payload
-       * will be at an even location.
-       */
-   }
-   ctx->ListState.CurrentPos += nopNode + numNodes;
+   Node *n = ctx->ListState.CurrentBlock + ctx->ListState.CurrentPos;
+   ctx->ListState.CurrentPos += numNodes;
 
    n[0].opcode = opcode;
    n[0].InstSize = numNodes;
+   ctx->ListState.LastInstSize = numNodes;
 
    return n;
 }
@@ -1633,12 +1549,14 @@ _mesa_dlist_alloc_vertex_list(struct gl_context *ctx, bool copy_to_current)
    Node *n =  dlist_alloc(ctx,
                           copy_to_current ? OPCODE_VERTEX_LIST_COPY_CURRENT :
                                             OPCODE_VERTEX_LIST,
-                          sizeof(struct vbo_save_vertex_list),
+                          sizeof(struct vbo_save_vertex_list) - sizeof(Node),
                           true);
-   if (n)
-      return n + 1;  /* return pointer to payload area, after opcode */
-   else
+   if (!n)
       return NULL;
+
+   /* Clear all nodes except the header */
+   memset(n + 1, 0, sizeof(struct vbo_save_vertex_list) - sizeof(Node));
+   return n;
 }
 
 
@@ -1661,7 +1579,7 @@ alloc_instruction(struct gl_context *ctx, OpCode opcode, GLuint nparams)
 /*
  * Display List compilation functions
  */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Accum(GLenum op, GLfloat value)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -1678,7 +1596,7 @@ save_Accum(GLenum op, GLfloat value)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_AlphaFunc(GLenum func, GLclampf ref)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -1695,7 +1613,7 @@ save_AlphaFunc(GLenum func, GLclampf ref)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BindTexture(GLenum target, GLuint texture)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -1712,7 +1630,7 @@ save_BindTexture(GLenum target, GLuint texture)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Bitmap(GLsizei width, GLsizei height,
             GLfloat xorig, GLfloat yorig,
             GLfloat xmove, GLfloat ymove, const GLubyte * pixels)
@@ -1739,7 +1657,7 @@ save_Bitmap(GLsizei width, GLsizei height,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BlendEquation(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -1755,8 +1673,8 @@ save_BlendEquation(GLenum mode)
 }
 
 
-static void GLAPIENTRY
-save_BlendEquationSeparateEXT(GLenum modeRGB, GLenum modeA)
+void GLAPIENTRY
+save_BlendEquationSeparate(GLenum modeRGB, GLenum modeA)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -1772,8 +1690,8 @@ save_BlendEquationSeparateEXT(GLenum modeRGB, GLenum modeA)
 }
 
 
-static void GLAPIENTRY
-save_BlendFuncSeparateEXT(GLenum sfactorRGB, GLenum dfactorRGB,
+void GLAPIENTRY
+save_BlendFuncSeparate(GLenum sfactorRGB, GLenum dfactorRGB,
                           GLenum sfactorA, GLenum dfactorA)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -1793,14 +1711,14 @@ save_BlendFuncSeparateEXT(GLenum sfactorRGB, GLenum dfactorRGB,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BlendFunc(GLenum srcfactor, GLenum dstfactor)
 {
-   save_BlendFuncSeparateEXT(srcfactor, dstfactor, srcfactor, dstfactor);
+   save_BlendFuncSeparate(srcfactor, dstfactor, srcfactor, dstfactor);
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BlendColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -1819,8 +1737,8 @@ save_BlendColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 }
 
 /* GL_ARB_draw_buffers_blend */
-static void GLAPIENTRY
-save_BlendFuncSeparatei(GLuint buf, GLenum sfactorRGB, GLenum dfactorRGB,
+void GLAPIENTRY
+save_BlendFuncSeparateiARB(GLuint buf, GLenum sfactorRGB, GLenum dfactorRGB,
                         GLenum sfactorA, GLenum dfactorA)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -1841,8 +1759,8 @@ save_BlendFuncSeparatei(GLuint buf, GLenum sfactorRGB, GLenum dfactorRGB,
 }
 
 /* GL_ARB_draw_buffers_blend */
-static void GLAPIENTRY
-save_BlendFunci(GLuint buf, GLenum sfactor, GLenum dfactor)
+void GLAPIENTRY
+save_BlendFunciARB(GLuint buf, GLenum sfactor, GLenum dfactor)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -1859,8 +1777,8 @@ save_BlendFunci(GLuint buf, GLenum sfactor, GLenum dfactor)
 }
 
 /* GL_ARB_draw_buffers_blend */
-static void GLAPIENTRY
-save_BlendEquationi(GLuint buf, GLenum mode)
+void GLAPIENTRY
+save_BlendEquationiARB(GLuint buf, GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -1876,8 +1794,8 @@ save_BlendEquationi(GLuint buf, GLenum mode)
 }
 
 /* GL_ARB_draw_buffers_blend */
-static void GLAPIENTRY
-save_BlendEquationSeparatei(GLuint buf, GLenum modeRGB, GLenum modeA)
+void GLAPIENTRY
+save_BlendEquationSeparateiARB(GLuint buf, GLenum modeRGB, GLenum modeA)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -1895,7 +1813,7 @@ save_BlendEquationSeparatei(GLuint buf, GLenum modeRGB, GLenum modeA)
 
 
 /* GL_ARB_draw_instanced. */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DrawArraysInstancedARB(UNUSED GLenum mode,
                             UNUSED GLint first,
                             UNUSED GLsizei count,
@@ -1906,7 +1824,7 @@ save_DrawArraysInstancedARB(UNUSED GLenum mode,
                "glDrawArraysInstanced() during display list compile");
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DrawElementsInstancedARB(UNUSED GLenum mode,
                               UNUSED GLsizei count,
                               UNUSED GLenum type,
@@ -1918,8 +1836,8 @@ save_DrawElementsInstancedARB(UNUSED GLenum mode,
                "glDrawElementsInstanced() during display list compile");
 }
 
-static void GLAPIENTRY
-save_DrawElementsInstancedBaseVertexARB(UNUSED GLenum mode,
+void GLAPIENTRY
+save_DrawElementsInstancedBaseVertex(UNUSED GLenum mode,
                                         UNUSED GLsizei count,
                                         UNUSED GLenum type,
                                         UNUSED const GLvoid *indices,
@@ -1932,7 +1850,7 @@ save_DrawElementsInstancedBaseVertexARB(UNUSED GLenum mode,
 }
 
 /* GL_ARB_base_instance. */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DrawArraysInstancedBaseInstance(UNUSED GLenum mode,
                                      UNUSED GLint first,
                                      UNUSED GLsizei count,
@@ -1944,7 +1862,7 @@ save_DrawArraysInstancedBaseInstance(UNUSED GLenum mode,
                "glDrawArraysInstancedBaseInstance() during display list compile");
 }
 
-static void APIENTRY
+void GLAPIENTRY
 save_DrawElementsInstancedBaseInstance(UNUSED GLenum mode,
                                        UNUSED GLsizei count,
                                        UNUSED GLenum type,
@@ -1957,7 +1875,7 @@ save_DrawElementsInstancedBaseInstance(UNUSED GLenum mode,
                "glDrawElementsInstancedBaseInstance() during display list compile");
 }
 
-static void APIENTRY
+void GLAPIENTRY
 save_DrawElementsInstancedBaseVertexBaseInstance(UNUSED GLenum mode,
                                                  UNUSED GLsizei count,
                                                  UNUSED GLenum type,
@@ -1971,7 +1889,7 @@ save_DrawElementsInstancedBaseVertexBaseInstance(UNUSED GLenum mode,
                "glDrawElementsInstancedBaseVertexBaseInstance() during display list compile");
 }
 
-static void APIENTRY
+void GLAPIENTRY
 save_DrawArraysIndirect(UNUSED GLenum mode,
                         UNUSED const void *indirect)
 {
@@ -1980,7 +1898,7 @@ save_DrawArraysIndirect(UNUSED GLenum mode,
                "glDrawArraysIndirect() during display list compile");
 }
 
-static void APIENTRY
+void GLAPIENTRY
 save_DrawElementsIndirect(UNUSED GLenum mode,
                           UNUSED GLenum type,
                           UNUSED const void *indirect)
@@ -1990,7 +1908,7 @@ save_DrawElementsIndirect(UNUSED GLenum mode,
                "glDrawElementsIndirect() during display list compile");
 }
 
-static void APIENTRY
+void GLAPIENTRY
 save_MultiDrawArraysIndirect(UNUSED GLenum mode,
                              UNUSED const void *indirect,
                              UNUSED GLsizei primcount,
@@ -2001,7 +1919,7 @@ save_MultiDrawArraysIndirect(UNUSED GLenum mode,
                "glMultiDrawArraysIndirect() during display list compile");
 }
 
-static void APIENTRY
+void GLAPIENTRY
 save_MultiDrawElementsIndirect(UNUSED GLenum mode,
                                UNUSED GLenum type,
                                UNUSED const void *indirect,
@@ -2119,7 +2037,7 @@ save_CallLists(GLsizei num, GLenum type, const GLvoid * lists)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Clear(GLbitfield mask)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2135,7 +2053,7 @@ save_Clear(GLbitfield mask)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClearBufferiv(GLenum buffer, GLint drawbuffer, const GLint *value)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2163,7 +2081,7 @@ save_ClearBufferiv(GLenum buffer, GLint drawbuffer, const GLint *value)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClearBufferuiv(GLenum buffer, GLint drawbuffer, const GLuint *value)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2191,7 +2109,7 @@ save_ClearBufferuiv(GLenum buffer, GLint drawbuffer, const GLuint *value)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat *value)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2219,7 +2137,7 @@ save_ClearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat *value)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClearBufferfi(GLenum buffer, GLint drawbuffer,
                    GLfloat depth, GLint stencil)
 {
@@ -2239,7 +2157,7 @@ save_ClearBufferfi(GLenum buffer, GLint drawbuffer,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClearAccum(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2258,7 +2176,7 @@ save_ClearAccum(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClearColor(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2277,7 +2195,7 @@ save_ClearColor(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClearDepth(GLclampd depth)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2293,7 +2211,7 @@ save_ClearDepth(GLclampd depth)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClearIndex(GLfloat c)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2309,7 +2227,7 @@ save_ClearIndex(GLfloat c)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClearStencil(GLint s)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2325,7 +2243,7 @@ save_ClearStencil(GLint s)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClipPlane(GLenum plane, const GLdouble * equ)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2346,7 +2264,7 @@ save_ClipPlane(GLenum plane, const GLdouble * equ)
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ColorMask(GLboolean red, GLboolean green,
                GLboolean blue, GLboolean alpha)
 {
@@ -2366,8 +2284,8 @@ save_ColorMask(GLboolean red, GLboolean green,
 }
 
 
-static void GLAPIENTRY
-save_ColorMaskIndexed(GLuint buf, GLboolean red, GLboolean green,
+void GLAPIENTRY
+save_ColorMaski(GLuint buf, GLboolean red, GLboolean green,
                       GLboolean blue, GLboolean alpha)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2387,7 +2305,7 @@ save_ColorMaskIndexed(GLuint buf, GLboolean red, GLboolean green,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ColorMaterial(GLenum face, GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2405,7 +2323,7 @@ save_ColorMaterial(GLenum face, GLenum mode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum type)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2426,7 +2344,7 @@ save_CopyPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum type)
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTexImage1D(GLenum target, GLint level, GLenum internalformat,
                     GLint x, GLint y, GLsizei width, GLint border)
 {
@@ -2450,7 +2368,7 @@ save_CopyTexImage1D(GLenum target, GLint level, GLenum internalformat,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTexImage2D(GLenum target, GLint level,
                     GLenum internalformat,
                     GLint x, GLint y, GLsizei width,
@@ -2478,7 +2396,7 @@ save_CopyTexImage2D(GLenum target, GLint level,
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTexSubImage1D(GLenum target, GLint level,
                        GLint xoffset, GLint x, GLint y, GLsizei width)
 {
@@ -2501,7 +2419,7 @@ save_CopyTexSubImage1D(GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTexSubImage2D(GLenum target, GLint level,
                        GLint xoffset, GLint yoffset,
                        GLint x, GLint y, GLsizei width, GLint height)
@@ -2527,7 +2445,7 @@ save_CopyTexSubImage2D(GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTexSubImage3D(GLenum target, GLint level,
                        GLint xoffset, GLint yoffset, GLint zoffset,
                        GLint x, GLint y, GLsizei width, GLint height)
@@ -2555,7 +2473,7 @@ save_CopyTexSubImage3D(GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CullFace(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2571,7 +2489,7 @@ save_CullFace(GLenum mode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DepthFunc(GLenum func)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2587,7 +2505,7 @@ save_DepthFunc(GLenum func)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DepthMask(GLboolean mask)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2603,7 +2521,7 @@ save_DepthMask(GLboolean mask)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DepthRange(GLclampd nearval, GLclampd farval)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2620,7 +2538,7 @@ save_DepthRange(GLclampd nearval, GLclampd farval)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Disable(GLenum cap)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2636,8 +2554,8 @@ save_Disable(GLenum cap)
 }
 
 
-static void GLAPIENTRY
-save_DisableIndexed(GLuint index, GLenum cap)
+void GLAPIENTRY
+save_Disablei(GLuint index, GLenum cap)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -2653,7 +2571,7 @@ save_DisableIndexed(GLuint index, GLenum cap)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DrawBuffer(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2669,7 +2587,7 @@ save_DrawBuffer(GLenum mode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DrawPixels(GLsizei width, GLsizei height,
                 GLenum format, GLenum type, const GLvoid * pixels)
 {
@@ -2695,7 +2613,7 @@ save_DrawPixels(GLsizei width, GLsizei height,
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Enable(GLenum cap)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2712,8 +2630,8 @@ save_Enable(GLenum cap)
 
 
 
-static void GLAPIENTRY
-save_EnableIndexed(GLuint index, GLenum cap)
+void GLAPIENTRY
+save_Enablei(GLuint index, GLenum cap)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -2730,7 +2648,7 @@ save_EnableIndexed(GLuint index, GLenum cap)
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_EvalMesh1(GLenum mode, GLint i1, GLint i2)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2748,7 +2666,7 @@ save_EvalMesh1(GLenum mode, GLint i1, GLint i2)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_EvalMesh2(GLenum mode, GLint i1, GLint i2, GLint j1, GLint j2)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2770,7 +2688,7 @@ save_EvalMesh2(GLenum mode, GLint i1, GLint i2, GLint j1, GLint j2)
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Fogfv(GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2790,7 +2708,7 @@ save_Fogfv(GLenum pname, const GLfloat *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Fogf(GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -2800,7 +2718,7 @@ save_Fogf(GLenum pname, GLfloat param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Fogiv(GLenum pname, const GLint *params)
 {
    GLfloat p[4];
@@ -2830,7 +2748,7 @@ save_Fogiv(GLenum pname, const GLint *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Fogi(GLenum pname, GLint param)
 {
    GLint parray[4];
@@ -2840,7 +2758,7 @@ save_Fogi(GLenum pname, GLint param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_FrontFace(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2856,7 +2774,7 @@ save_FrontFace(GLenum mode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Frustum(GLdouble left, GLdouble right,
              GLdouble bottom, GLdouble top, GLdouble nearval, GLdouble farval)
 {
@@ -2878,7 +2796,7 @@ save_Frustum(GLdouble left, GLdouble right,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Hint(GLenum target, GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2895,7 +2813,7 @@ save_Hint(GLenum target, GLenum mode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_IndexMask(GLuint mask)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2911,7 +2829,7 @@ save_IndexMask(GLuint mask)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_InitNames(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2923,7 +2841,7 @@ save_InitNames(void)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Lightfv(GLenum light, GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -2978,7 +2896,7 @@ save_Lightfv(GLenum light, GLenum pname, const GLfloat *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Lightf(GLenum light, GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -2988,7 +2906,7 @@ save_Lightf(GLenum light, GLenum pname, GLfloat param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Lightiv(GLenum light, GLenum pname, const GLint *params)
 {
    GLfloat fparam[4];
@@ -3027,7 +2945,7 @@ save_Lightiv(GLenum light, GLenum pname, const GLint *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Lighti(GLenum light, GLenum pname, GLint param)
 {
    GLint parray[4];
@@ -3037,7 +2955,7 @@ save_Lighti(GLenum light, GLenum pname, GLint param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LightModelfv(GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3057,7 +2975,7 @@ save_LightModelfv(GLenum pname, const GLfloat *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LightModelf(GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -3067,7 +2985,7 @@ save_LightModelf(GLenum pname, GLfloat param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LightModeliv(GLenum pname, const GLint *params)
 {
    GLfloat fparam[4];
@@ -3094,7 +3012,7 @@ save_LightModeliv(GLenum pname, const GLint *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LightModeli(GLenum pname, GLint param)
 {
    GLint parray[4];
@@ -3104,7 +3022,7 @@ save_LightModeli(GLenum pname, GLint param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LineStipple(GLint factor, GLushort pattern)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3121,7 +3039,7 @@ save_LineStipple(GLint factor, GLushort pattern)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LineWidth(GLfloat width)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3137,7 +3055,7 @@ save_LineWidth(GLfloat width)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ListBase(GLuint base)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3153,7 +3071,7 @@ save_ListBase(GLuint base)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LoadIdentity(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3165,7 +3083,7 @@ save_LoadIdentity(void)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LoadMatrixf(const GLfloat * m)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3184,7 +3102,7 @@ save_LoadMatrixf(const GLfloat * m)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LoadMatrixd(const GLdouble * m)
 {
    GLfloat f[16];
@@ -3196,7 +3114,7 @@ save_LoadMatrixd(const GLdouble * m)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LoadName(GLuint name)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3212,7 +3130,7 @@ save_LoadName(GLuint name)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_LogicOp(GLenum opcode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3228,7 +3146,7 @@ save_LogicOp(GLenum opcode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Map1d(GLenum target, GLdouble u1, GLdouble u2, GLint stride,
            GLint order, const GLdouble * points)
 {
@@ -3250,7 +3168,7 @@ save_Map1d(GLenum target, GLdouble u1, GLdouble u2, GLint stride,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Map1f(GLenum target, GLfloat u1, GLfloat u2, GLint stride,
            GLint order, const GLfloat * points)
 {
@@ -3273,7 +3191,7 @@ save_Map1f(GLenum target, GLfloat u1, GLfloat u2, GLint stride,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Map2d(GLenum target,
            GLdouble u1, GLdouble u2, GLint ustride, GLint uorder,
            GLdouble v1, GLdouble v2, GLint vstride, GLint vorder,
@@ -3306,7 +3224,7 @@ save_Map2d(GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Map2f(GLenum target,
            GLfloat u1, GLfloat u2, GLint ustride, GLint uorder,
            GLfloat v1, GLfloat v2, GLint vstride, GLint vorder,
@@ -3338,7 +3256,7 @@ save_Map2f(GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MapGrid1f(GLint un, GLfloat u1, GLfloat u2)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3356,14 +3274,14 @@ save_MapGrid1f(GLint un, GLfloat u1, GLfloat u2)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MapGrid1d(GLint un, GLdouble u1, GLdouble u2)
 {
    save_MapGrid1f(un, (GLfloat) u1, (GLfloat) u2);
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MapGrid2f(GLint un, GLfloat u1, GLfloat u2,
                GLint vn, GLfloat v1, GLfloat v2)
 {
@@ -3386,7 +3304,7 @@ save_MapGrid2f(GLint un, GLfloat u1, GLfloat u2,
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MapGrid2d(GLint un, GLdouble u1, GLdouble u2,
                GLint vn, GLdouble v1, GLdouble v2)
 {
@@ -3395,7 +3313,7 @@ save_MapGrid2d(GLint un, GLdouble u1, GLdouble u2,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixMode(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3411,7 +3329,7 @@ save_MatrixMode(GLenum mode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultMatrixf(const GLfloat * m)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3430,7 +3348,7 @@ save_MultMatrixf(const GLfloat * m)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultMatrixd(const GLdouble * m)
 {
    GLfloat f[16];
@@ -3442,7 +3360,7 @@ save_MultMatrixd(const GLdouble * m)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_NewList(GLuint name, GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3454,7 +3372,7 @@ save_NewList(GLuint name, GLenum mode)
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Ortho(GLdouble left, GLdouble right,
            GLdouble bottom, GLdouble top, GLdouble nearval, GLdouble farval)
 {
@@ -3476,7 +3394,7 @@ save_Ortho(GLdouble left, GLdouble right,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PatchParameteri(GLenum pname, const GLint value)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3493,7 +3411,7 @@ save_PatchParameteri(GLenum pname, const GLint value)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PatchParameterfv(GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3524,7 +3442,7 @@ save_PatchParameterfv(GLenum pname, const GLfloat *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PixelMapfv(GLenum map, GLint mapsize, const GLfloat *values)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3542,7 +3460,7 @@ save_PixelMapfv(GLenum map, GLint mapsize, const GLfloat *values)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PixelMapuiv(GLenum map, GLint mapsize, const GLuint *values)
 {
    GLfloat fvalues[MAX_PIXEL_MAP_TABLE];
@@ -3561,7 +3479,7 @@ save_PixelMapuiv(GLenum map, GLint mapsize, const GLuint *values)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PixelMapusv(GLenum map, GLint mapsize, const GLushort *values)
 {
    GLfloat fvalues[MAX_PIXEL_MAP_TABLE];
@@ -3580,7 +3498,7 @@ save_PixelMapusv(GLenum map, GLint mapsize, const GLushort *values)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PixelTransferf(GLenum pname, GLfloat param)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3597,14 +3515,14 @@ save_PixelTransferf(GLenum pname, GLfloat param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PixelTransferi(GLenum pname, GLint param)
 {
    save_PixelTransferf(pname, (GLfloat) param);
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PixelZoom(GLfloat xfactor, GLfloat yfactor)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3621,8 +3539,8 @@ save_PixelZoom(GLfloat xfactor, GLfloat yfactor)
 }
 
 
-static void GLAPIENTRY
-save_PointParameterfvEXT(GLenum pname, const GLfloat *params)
+void GLAPIENTRY
+save_PointParameterfv(GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -3640,35 +3558,35 @@ save_PointParameterfvEXT(GLenum pname, const GLfloat *params)
 }
 
 
-static void GLAPIENTRY
-save_PointParameterfEXT(GLenum pname, GLfloat param)
+void GLAPIENTRY
+save_PointParameterf(GLenum pname, GLfloat param)
 {
    GLfloat parray[3];
    parray[0] = param;
    parray[1] = parray[2] = 0.0F;
-   save_PointParameterfvEXT(pname, parray);
+   save_PointParameterfv(pname, parray);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PointParameteri(GLenum pname, GLint param)
 {
    GLfloat parray[3];
    parray[0] = (GLfloat) param;
    parray[1] = parray[2] = 0.0F;
-   save_PointParameterfvEXT(pname, parray);
+   save_PointParameterfv(pname, parray);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PointParameteriv(GLenum pname, const GLint * param)
 {
    GLfloat parray[3];
    parray[0] = (GLfloat) param[0];
    parray[1] = parray[2] = 0.0F;
-   save_PointParameterfvEXT(pname, parray);
+   save_PointParameterfv(pname, parray);
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PointSize(GLfloat size)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3684,7 +3602,7 @@ save_PointSize(GLfloat size)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PolygonMode(GLenum face, GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3701,7 +3619,7 @@ save_PolygonMode(GLenum face, GLenum mode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PolygonStipple(const GLubyte * pattern)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3721,7 +3639,7 @@ save_PolygonStipple(const GLubyte * pattern)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PolygonOffset(GLfloat factor, GLfloat units)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3738,7 +3656,7 @@ save_PolygonOffset(GLfloat factor, GLfloat units)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PolygonOffsetClampEXT(GLfloat factor, GLfloat units, GLfloat clamp)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3755,7 +3673,7 @@ save_PolygonOffsetClampEXT(GLfloat factor, GLfloat units, GLfloat clamp)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PopAttrib(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3767,7 +3685,7 @@ save_PopAttrib(void)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PopMatrix(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3779,7 +3697,7 @@ save_PopMatrix(void)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PopName(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3791,7 +3709,7 @@ save_PopName(void)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PrioritizeTextures(GLsizei num, const GLuint * textures,
                         const GLclampf * priorities)
 {
@@ -3813,7 +3731,7 @@ save_PrioritizeTextures(GLsizei num, const GLuint * textures,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PushAttrib(GLbitfield mask)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3829,7 +3747,7 @@ save_PushAttrib(GLbitfield mask)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PushMatrix(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3841,7 +3759,7 @@ save_PushMatrix(void)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PushName(GLuint name)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3857,7 +3775,7 @@ save_PushName(GLuint name)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -3875,148 +3793,148 @@ save_RasterPos4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos2d(GLdouble x, GLdouble y)
 {
    save_RasterPos4f((GLfloat) x, (GLfloat) y, 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos2f(GLfloat x, GLfloat y)
 {
    save_RasterPos4f(x, y, 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos2i(GLint x, GLint y)
 {
    save_RasterPos4f((GLfloat) x, (GLfloat) y, 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos2s(GLshort x, GLshort y)
 {
    save_RasterPos4f(x, y, 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos3d(GLdouble x, GLdouble y, GLdouble z)
 {
    save_RasterPos4f((GLfloat) x, (GLfloat) y, (GLfloat) z, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos3f(GLfloat x, GLfloat y, GLfloat z)
 {
    save_RasterPos4f(x, y, z, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos3i(GLint x, GLint y, GLint z)
 {
    save_RasterPos4f((GLfloat) x, (GLfloat) y, (GLfloat) z, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos3s(GLshort x, GLshort y, GLshort z)
 {
    save_RasterPos4f(x, y, z, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos4d(GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
    save_RasterPos4f((GLfloat) x, (GLfloat) y, (GLfloat) z, (GLfloat) w);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos4i(GLint x, GLint y, GLint z, GLint w)
 {
    save_RasterPos4f((GLfloat) x, (GLfloat) y, (GLfloat) z, (GLfloat) w);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos4s(GLshort x, GLshort y, GLshort z, GLshort w)
 {
    save_RasterPos4f(x, y, z, w);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos2dv(const GLdouble * v)
 {
    save_RasterPos4f((GLfloat) v[0], (GLfloat) v[1], 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos2fv(const GLfloat * v)
 {
    save_RasterPos4f(v[0], v[1], 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos2iv(const GLint * v)
 {
    save_RasterPos4f((GLfloat) v[0], (GLfloat) v[1], 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos2sv(const GLshort * v)
 {
    save_RasterPos4f(v[0], v[1], 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos3dv(const GLdouble * v)
 {
    save_RasterPos4f((GLfloat) v[0], (GLfloat) v[1], (GLfloat) v[2], 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos3fv(const GLfloat * v)
 {
    save_RasterPos4f(v[0], v[1], v[2], 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos3iv(const GLint * v)
 {
    save_RasterPos4f((GLfloat) v[0], (GLfloat) v[1], (GLfloat) v[2], 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos3sv(const GLshort * v)
 {
    save_RasterPos4f(v[0], v[1], v[2], 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos4dv(const GLdouble * v)
 {
    save_RasterPos4f((GLfloat) v[0], (GLfloat) v[1],
                     (GLfloat) v[2], (GLfloat) v[3]);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos4fv(const GLfloat * v)
 {
    save_RasterPos4f(v[0], v[1], v[2], v[3]);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos4iv(const GLint * v)
 {
    save_RasterPos4f((GLfloat) v[0], (GLfloat) v[1],
                     (GLfloat) v[2], (GLfloat) v[3]);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_RasterPos4sv(const GLshort * v)
 {
    save_RasterPos4f(v[0], v[1], v[2], v[3]);
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PassThrough(GLfloat token)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4032,7 +3950,7 @@ save_PassThrough(GLfloat token)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ReadBuffer(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4048,7 +3966,7 @@ save_ReadBuffer(GLenum mode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Rotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4067,14 +3985,14 @@ save_Rotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Rotated(GLdouble angle, GLdouble x, GLdouble y, GLdouble z)
 {
    save_Rotatef((GLfloat) angle, (GLfloat) x, (GLfloat) y, (GLfloat) z);
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Scalef(GLfloat x, GLfloat y, GLfloat z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4092,14 +4010,14 @@ save_Scalef(GLfloat x, GLfloat y, GLfloat z)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Scaled(GLdouble x, GLdouble y, GLdouble z)
 {
    save_Scalef((GLfloat) x, (GLfloat) y, (GLfloat) z);
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Scissor(GLint x, GLint y, GLsizei width, GLsizei height)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4118,7 +4036,7 @@ save_Scissor(GLint x, GLint y, GLsizei width, GLsizei height)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ShadeModel(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4147,7 +4065,7 @@ save_ShadeModel(GLenum mode)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_StencilFunc(GLenum func, GLint ref, GLuint mask)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4165,7 +4083,7 @@ save_StencilFunc(GLenum func, GLint ref, GLuint mask)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_StencilMask(GLuint mask)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4181,7 +4099,7 @@ save_StencilMask(GLuint mask)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_StencilOp(GLenum fail, GLenum zfail, GLenum zpass)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4199,7 +4117,7 @@ save_StencilOp(GLenum fail, GLenum zfail, GLenum zpass)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_StencilFuncSeparate(GLenum face, GLenum func, GLint ref, GLuint mask)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4218,7 +4136,7 @@ save_StencilFuncSeparate(GLenum face, GLenum func, GLint ref, GLuint mask)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_StencilFuncSeparateATI(GLenum frontfunc, GLenum backfunc, GLint ref,
                             GLuint mask)
 {
@@ -4248,7 +4166,7 @@ save_StencilFuncSeparateATI(GLenum frontfunc, GLenum backfunc, GLint ref,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_StencilMaskSeparate(GLenum face, GLuint mask)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4265,7 +4183,7 @@ save_StencilMaskSeparate(GLenum face, GLuint mask)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_StencilOpSeparate(GLenum face, GLenum fail, GLenum zfail, GLenum zpass)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4284,7 +4202,7 @@ save_StencilOpSeparate(GLenum face, GLenum fail, GLenum zfail, GLenum zpass)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexEnvfv(GLenum target, GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4311,7 +4229,7 @@ save_TexEnvfv(GLenum target, GLenum pname, const GLfloat *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexEnvf(GLenum target, GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -4321,7 +4239,7 @@ save_TexEnvf(GLenum target, GLenum pname, GLfloat param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexEnvi(GLenum target, GLenum pname, GLint param)
 {
    GLfloat p[4];
@@ -4331,7 +4249,7 @@ save_TexEnvi(GLenum target, GLenum pname, GLint param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexEnviv(GLenum target, GLenum pname, const GLint * param)
 {
    GLfloat p[4];
@@ -4349,7 +4267,7 @@ save_TexEnviv(GLenum target, GLenum pname, const GLint * param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexGenfv(GLenum coord, GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4370,7 +4288,7 @@ save_TexGenfv(GLenum coord, GLenum pname, const GLfloat *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexGeniv(GLenum coord, GLenum pname, const GLint *params)
 {
    GLfloat p[4];
@@ -4382,7 +4300,7 @@ save_TexGeniv(GLenum coord, GLenum pname, const GLint *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexGend(GLenum coord, GLenum pname, GLdouble param)
 {
    GLfloat parray[4];
@@ -4392,7 +4310,7 @@ save_TexGend(GLenum coord, GLenum pname, GLdouble param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexGendv(GLenum coord, GLenum pname, const GLdouble *params)
 {
    GLfloat p[4];
@@ -4404,7 +4322,7 @@ save_TexGendv(GLenum coord, GLenum pname, const GLdouble *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexGenf(GLenum coord, GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -4414,7 +4332,7 @@ save_TexGenf(GLenum coord, GLenum pname, GLfloat param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexGeni(GLenum coord, GLenum pname, GLint param)
 {
    GLint parray[4];
@@ -4424,7 +4342,7 @@ save_TexGeni(GLenum coord, GLenum pname, GLint param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexParameterfv(GLenum target, GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4445,7 +4363,7 @@ save_TexParameterfv(GLenum target, GLenum pname, const GLfloat *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexParameterf(GLenum target, GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -4455,7 +4373,7 @@ save_TexParameterf(GLenum target, GLenum pname, GLfloat param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexParameteri(GLenum target, GLenum pname, GLint param)
 {
    GLfloat fparam[4];
@@ -4465,7 +4383,7 @@ save_TexParameteri(GLenum target, GLenum pname, GLint param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexParameteriv(GLenum target, GLenum pname, const GLint *params)
 {
    GLfloat fparam[4];
@@ -4475,7 +4393,7 @@ save_TexParameteriv(GLenum target, GLenum pname, const GLint *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexImage1D(GLenum target,
                 GLint level, GLint components,
                 GLsizei width, GLint border,
@@ -4511,7 +4429,7 @@ save_TexImage1D(GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexImage2D(GLenum target,
                 GLint level, GLint components,
                 GLsizei width, GLsizei height, GLint border,
@@ -4548,7 +4466,7 @@ save_TexImage2D(GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexImage3D(GLenum target,
                 GLint level, GLint internalFormat,
                 GLsizei width, GLsizei height, GLsizei depth,
@@ -4589,7 +4507,7 @@ save_TexImage3D(GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexSubImage1D(GLenum target, GLint level, GLint xoffset,
                    GLsizei width, GLenum format, GLenum type,
                    const GLvoid * pixels)
@@ -4618,7 +4536,7 @@ save_TexSubImage1D(GLenum target, GLint level, GLint xoffset,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexSubImage2D(GLenum target, GLint level,
                    GLint xoffset, GLint yoffset,
                    GLsizei width, GLsizei height,
@@ -4650,7 +4568,7 @@ save_TexSubImage2D(GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexSubImage3D(GLenum target, GLint level,
                    GLint xoffset, GLint yoffset, GLint zoffset,
                    GLsizei width, GLsizei height, GLsizei depth,
@@ -4686,7 +4604,7 @@ save_TexSubImage3D(GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Translatef(GLfloat x, GLfloat y, GLfloat z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4704,7 +4622,7 @@ save_Translatef(GLfloat x, GLfloat y, GLfloat z)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Translated(GLdouble x, GLdouble y, GLdouble z)
 {
    save_Translatef((GLfloat) x, (GLfloat) y, (GLfloat) z);
@@ -4712,7 +4630,7 @@ save_Translated(GLdouble x, GLdouble y, GLdouble z)
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Viewport(GLint x, GLint y, GLsizei width, GLsizei height)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4730,7 +4648,7 @@ save_Viewport(GLint x, GLint y, GLsizei width, GLsizei height)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ViewportIndexedf(GLuint index, GLfloat x, GLfloat y, GLfloat width,
                       GLfloat height)
 {
@@ -4750,7 +4668,7 @@ save_ViewportIndexedf(GLuint index, GLfloat x, GLfloat y, GLfloat width,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ViewportIndexedfv(GLuint index, const GLfloat *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4769,7 +4687,7 @@ save_ViewportIndexedfv(GLuint index, const GLfloat *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ViewportArrayv(GLuint first, GLsizei count, const GLfloat *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4786,7 +4704,7 @@ save_ViewportArrayv(GLuint first, GLsizei count, const GLfloat *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ScissorIndexed(GLuint index, GLint left, GLint bottom, GLsizei width,
                     GLsizei height)
 {
@@ -4806,7 +4724,7 @@ save_ScissorIndexed(GLuint index, GLint left, GLint bottom, GLsizei width,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ScissorIndexedv(GLuint index, const GLint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4825,7 +4743,7 @@ save_ScissorIndexedv(GLuint index, const GLint *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ScissorArrayv(GLuint first, GLsizei count, const GLint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4842,7 +4760,7 @@ save_ScissorArrayv(GLuint first, GLsizei count, const GLint *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DepthRangeIndexed(GLuint index, GLclampd n, GLclampd f)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4862,7 +4780,7 @@ save_DepthRangeIndexed(GLuint index, GLclampd n, GLclampd f)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DepthRangeArrayv(GLuint first, GLsizei count, const GLclampd *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4879,7 +4797,7 @@ save_DepthRangeArrayv(GLuint first, GLsizei count, const GLclampd *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WindowPos4fMESA(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -4897,141 +4815,141 @@ save_WindowPos4fMESA(GLfloat x, GLfloat y, GLfloat z, GLfloat w)
    }
 }
 
-static void GLAPIENTRY
-save_WindowPos2dMESA(GLdouble x, GLdouble y)
+void GLAPIENTRY
+save_WindowPos2d(GLdouble x, GLdouble y)
 {
    save_WindowPos4fMESA((GLfloat) x, (GLfloat) y, 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos2fMESA(GLfloat x, GLfloat y)
+void GLAPIENTRY
+save_WindowPos2f(GLfloat x, GLfloat y)
 {
    save_WindowPos4fMESA(x, y, 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos2iMESA(GLint x, GLint y)
+void GLAPIENTRY
+save_WindowPos2i(GLint x, GLint y)
 {
    save_WindowPos4fMESA((GLfloat) x, (GLfloat) y, 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos2sMESA(GLshort x, GLshort y)
+void GLAPIENTRY
+save_WindowPos2s(GLshort x, GLshort y)
 {
    save_WindowPos4fMESA(x, y, 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos3dMESA(GLdouble x, GLdouble y, GLdouble z)
+void GLAPIENTRY
+save_WindowPos3d(GLdouble x, GLdouble y, GLdouble z)
 {
    save_WindowPos4fMESA((GLfloat) x, (GLfloat) y, (GLfloat) z, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos3fMESA(GLfloat x, GLfloat y, GLfloat z)
+void GLAPIENTRY
+save_WindowPos3f(GLfloat x, GLfloat y, GLfloat z)
 {
    save_WindowPos4fMESA(x, y, z, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos3iMESA(GLint x, GLint y, GLint z)
+void GLAPIENTRY
+save_WindowPos3i(GLint x, GLint y, GLint z)
 {
    save_WindowPos4fMESA((GLfloat) x, (GLfloat) y, (GLfloat) z, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos3sMESA(GLshort x, GLshort y, GLshort z)
+void GLAPIENTRY
+save_WindowPos3s(GLshort x, GLshort y, GLshort z)
 {
    save_WindowPos4fMESA(x, y, z, 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WindowPos4dMESA(GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
    save_WindowPos4fMESA((GLfloat) x, (GLfloat) y, (GLfloat) z, (GLfloat) w);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WindowPos4iMESA(GLint x, GLint y, GLint z, GLint w)
 {
    save_WindowPos4fMESA((GLfloat) x, (GLfloat) y, (GLfloat) z, (GLfloat) w);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WindowPos4sMESA(GLshort x, GLshort y, GLshort z, GLshort w)
 {
    save_WindowPos4fMESA(x, y, z, w);
 }
 
-static void GLAPIENTRY
-save_WindowPos2dvMESA(const GLdouble * v)
+void GLAPIENTRY
+save_WindowPos2dv(const GLdouble * v)
 {
    save_WindowPos4fMESA((GLfloat) v[0], (GLfloat) v[1], 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos2fvMESA(const GLfloat * v)
+void GLAPIENTRY
+save_WindowPos2fv(const GLfloat * v)
 {
    save_WindowPos4fMESA(v[0], v[1], 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos2ivMESA(const GLint * v)
+void GLAPIENTRY
+save_WindowPos2iv(const GLint * v)
 {
    save_WindowPos4fMESA((GLfloat) v[0], (GLfloat) v[1], 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos2svMESA(const GLshort * v)
+void GLAPIENTRY
+save_WindowPos2sv(const GLshort * v)
 {
    save_WindowPos4fMESA(v[0], v[1], 0.0F, 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos3dvMESA(const GLdouble * v)
+void GLAPIENTRY
+save_WindowPos3dv(const GLdouble * v)
 {
    save_WindowPos4fMESA((GLfloat) v[0], (GLfloat) v[1], (GLfloat) v[2], 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos3fvMESA(const GLfloat * v)
+void GLAPIENTRY
+save_WindowPos3fv(const GLfloat * v)
 {
    save_WindowPos4fMESA(v[0], v[1], v[2], 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos3ivMESA(const GLint * v)
+void GLAPIENTRY
+save_WindowPos3iv(const GLint * v)
 {
    save_WindowPos4fMESA((GLfloat) v[0], (GLfloat) v[1], (GLfloat) v[2], 1.0F);
 }
 
-static void GLAPIENTRY
-save_WindowPos3svMESA(const GLshort * v)
+void GLAPIENTRY
+save_WindowPos3sv(const GLshort * v)
 {
    save_WindowPos4fMESA(v[0], v[1], v[2], 1.0F);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WindowPos4dvMESA(const GLdouble * v)
 {
    save_WindowPos4fMESA((GLfloat) v[0], (GLfloat) v[1],
                         (GLfloat) v[2], (GLfloat) v[3]);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WindowPos4fvMESA(const GLfloat * v)
 {
    save_WindowPos4fMESA(v[0], v[1], v[2], v[3]);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WindowPos4ivMESA(const GLint * v)
 {
    save_WindowPos4fMESA((GLfloat) v[0], (GLfloat) v[1],
                         (GLfloat) v[2], (GLfloat) v[3]);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WindowPos4svMESA(const GLshort * v)
 {
    save_WindowPos4fMESA(v[0], v[1], v[2], v[3]);
@@ -5040,8 +4958,8 @@ save_WindowPos4svMESA(const GLshort * v)
 
 
 /* GL_ARB_multitexture */
-static void GLAPIENTRY
-save_ActiveTextureARB(GLenum target)
+void GLAPIENTRY
+save_ActiveTexture(GLenum target)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -5058,8 +4976,8 @@ save_ActiveTextureARB(GLenum target)
 
 /* GL_ARB_transpose_matrix */
 
-static void GLAPIENTRY
-save_LoadTransposeMatrixdARB(const GLdouble m[16])
+void GLAPIENTRY
+save_LoadTransposeMatrixd(const GLdouble *m)
 {
    GLfloat tm[16];
    _math_transposefd(tm, m);
@@ -5067,8 +4985,8 @@ save_LoadTransposeMatrixdARB(const GLdouble m[16])
 }
 
 
-static void GLAPIENTRY
-save_LoadTransposeMatrixfARB(const GLfloat m[16])
+void GLAPIENTRY
+save_LoadTransposeMatrixf(const GLfloat *m)
 {
    GLfloat tm[16];
    _math_transposef(tm, m);
@@ -5076,8 +4994,8 @@ save_LoadTransposeMatrixfARB(const GLfloat m[16])
 }
 
 
-static void GLAPIENTRY
-save_MultTransposeMatrixdARB(const GLdouble m[16])
+void GLAPIENTRY
+save_MultTransposeMatrixd(const GLdouble *m)
 {
    GLfloat tm[16];
    _math_transposefd(tm, m);
@@ -5085,8 +5003,8 @@ save_MultTransposeMatrixdARB(const GLdouble m[16])
 }
 
 
-static void GLAPIENTRY
-save_MultTransposeMatrixfARB(const GLfloat m[16])
+void GLAPIENTRY
+save_MultTransposeMatrixf(const GLfloat *m)
 {
    GLfloat tm[16];
    _math_transposef(tm, m);
@@ -5113,8 +5031,8 @@ static GLvoid *copy_data(const GLvoid *data, GLsizei size, const char *func)
 
 
 /* GL_ARB_texture_compression */
-static void GLAPIENTRY
-save_CompressedTexImage1DARB(GLenum target, GLint level,
+void GLAPIENTRY
+save_CompressedTexImage1D(GLenum target, GLint level,
                              GLenum internalFormat, GLsizei width,
                              GLint border, GLsizei imageSize,
                              const GLvoid * data)
@@ -5151,8 +5069,8 @@ save_CompressedTexImage1DARB(GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
-save_CompressedTexImage2DARB(GLenum target, GLint level,
+void GLAPIENTRY
+save_CompressedTexImage2D(GLenum target, GLint level,
                              GLenum internalFormat, GLsizei width,
                              GLsizei height, GLint border, GLsizei imageSize,
                              const GLvoid * data)
@@ -5190,8 +5108,8 @@ save_CompressedTexImage2DARB(GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
-save_CompressedTexImage3DARB(GLenum target, GLint level,
+void GLAPIENTRY
+save_CompressedTexImage3D(GLenum target, GLint level,
                              GLenum internalFormat, GLsizei width,
                              GLsizei height, GLsizei depth, GLint border,
                              GLsizei imageSize, const GLvoid * data)
@@ -5231,8 +5149,8 @@ save_CompressedTexImage3DARB(GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
-save_CompressedTexSubImage1DARB(GLenum target, GLint level, GLint xoffset,
+void GLAPIENTRY
+save_CompressedTexSubImage1D(GLenum target, GLint level, GLint xoffset,
                                 GLsizei width, GLenum format,
                                 GLsizei imageSize, const GLvoid * data)
 {
@@ -5260,8 +5178,8 @@ save_CompressedTexSubImage1DARB(GLenum target, GLint level, GLint xoffset,
 }
 
 
-static void GLAPIENTRY
-save_CompressedTexSubImage2DARB(GLenum target, GLint level, GLint xoffset,
+void GLAPIENTRY
+save_CompressedTexSubImage2D(GLenum target, GLint level, GLint xoffset,
                                 GLint yoffset, GLsizei width, GLsizei height,
                                 GLenum format, GLsizei imageSize,
                                 const GLvoid * data)
@@ -5292,8 +5210,8 @@ save_CompressedTexSubImage2DARB(GLenum target, GLint level, GLint xoffset,
 }
 
 
-static void GLAPIENTRY
-save_CompressedTexSubImage3DARB(GLenum target, GLint level, GLint xoffset,
+void GLAPIENTRY
+save_CompressedTexSubImage3D(GLenum target, GLint level, GLint xoffset,
                                 GLint yoffset, GLint zoffset, GLsizei width,
                                 GLsizei height, GLsizei depth, GLenum format,
                                 GLsizei imageSize, const GLvoid * data)
@@ -5328,8 +5246,8 @@ save_CompressedTexSubImage3DARB(GLenum target, GLint level, GLint xoffset,
 
 
 /* GL_ARB_multisample */
-static void GLAPIENTRY
-save_SampleCoverageARB(GLclampf value, GLboolean invert)
+void GLAPIENTRY
+save_SampleCoverage(GLclampf value, GLboolean invert)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -5348,7 +5266,7 @@ save_SampleCoverageARB(GLclampf value, GLboolean invert)
 /*
  * GL_ARB_vertex_program
  */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BindProgramARB(GLenum target, GLuint id)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5364,7 +5282,7 @@ save_BindProgramARB(GLenum target, GLuint id)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramEnvParameter4fARB(GLenum target, GLuint index,
                               GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
@@ -5386,7 +5304,7 @@ save_ProgramEnvParameter4fARB(GLenum target, GLuint index,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramEnvParameter4fvARB(GLenum target, GLuint index,
                                const GLfloat *params)
 {
@@ -5395,7 +5313,7 @@ save_ProgramEnvParameter4fvARB(GLenum target, GLuint index,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramEnvParameters4fvEXT(GLenum target, GLuint index, GLsizei count,
                                 const GLfloat * params)
 {
@@ -5427,7 +5345,7 @@ save_ProgramEnvParameters4fvEXT(GLenum target, GLuint index, GLsizei count,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramEnvParameter4dARB(GLenum target, GLuint index,
                               GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
@@ -5437,7 +5355,7 @@ save_ProgramEnvParameter4dARB(GLenum target, GLuint index,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramEnvParameter4dvARB(GLenum target, GLuint index,
                                const GLdouble *params)
 {
@@ -5448,7 +5366,7 @@ save_ProgramEnvParameter4dvARB(GLenum target, GLuint index,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramLocalParameter4fARB(GLenum target, GLuint index,
                                 GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
@@ -5470,7 +5388,7 @@ save_ProgramLocalParameter4fARB(GLenum target, GLuint index,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramLocalParameter4fvARB(GLenum target, GLuint index,
                                  const GLfloat *params)
 {
@@ -5492,7 +5410,7 @@ save_ProgramLocalParameter4fvARB(GLenum target, GLuint index,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramLocalParameters4fvEXT(GLenum target, GLuint index, GLsizei count,
                                   const GLfloat *params)
 {
@@ -5524,7 +5442,7 @@ save_ProgramLocalParameters4fvEXT(GLenum target, GLuint index, GLsizei count,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramLocalParameter4dARB(GLenum target, GLuint index,
                                 GLdouble x, GLdouble y,
                                 GLdouble z, GLdouble w)
@@ -5547,7 +5465,7 @@ save_ProgramLocalParameter4dARB(GLenum target, GLuint index,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramLocalParameter4dvARB(GLenum target, GLuint index,
                                  const GLdouble *params)
 {
@@ -5570,7 +5488,7 @@ save_ProgramLocalParameter4dvARB(GLenum target, GLuint index,
 
 
 /* GL_EXT_stencil_two_side */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ActiveStencilFaceEXT(GLenum face)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5587,7 +5505,7 @@ save_ActiveStencilFaceEXT(GLenum face)
 
 
 /* GL_EXT_depth_bounds_test */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DepthBoundsEXT(GLclampd zmin, GLclampd zmax)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5605,7 +5523,7 @@ save_DepthBoundsEXT(GLclampd zmin, GLclampd zmax)
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramStringARB(GLenum target, GLenum format, GLsizei len,
                       const GLvoid * string)
 {
@@ -5633,8 +5551,8 @@ save_ProgramStringARB(GLenum target, GLenum format, GLsizei len,
 }
 
 
-static void GLAPIENTRY
-save_BeginQueryARB(GLenum target, GLuint id)
+void GLAPIENTRY
+save_BeginQuery(GLenum target, GLuint id)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -5649,8 +5567,8 @@ save_BeginQueryARB(GLenum target, GLuint id)
    }
 }
 
-static void GLAPIENTRY
-save_EndQueryARB(GLenum target)
+void GLAPIENTRY
+save_EndQuery(GLenum target)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -5664,7 +5582,7 @@ save_EndQueryARB(GLenum target)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_QueryCounter(GLuint id, GLenum target)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5680,7 +5598,7 @@ save_QueryCounter(GLuint id, GLenum target)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BeginQueryIndexed(GLenum target, GLuint index, GLuint id)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5697,7 +5615,7 @@ save_BeginQueryIndexed(GLenum target, GLuint index, GLuint id)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_EndQueryIndexed(GLenum target, GLuint index)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5714,8 +5632,8 @@ save_EndQueryIndexed(GLenum target, GLuint index)
 }
 
 
-static void GLAPIENTRY
-save_DrawBuffersARB(GLsizei count, const GLenum * buffers)
+void GLAPIENTRY
+save_DrawBuffers(GLsizei count, const GLenum * buffers)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -5735,7 +5653,7 @@ save_DrawBuffersARB(GLsizei count, const GLenum * buffers)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BindFragmentShaderATI(GLuint id)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5750,7 +5668,7 @@ save_BindFragmentShaderATI(GLuint id)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_SetFragmentShaderConstantATI(GLuint dst, const GLfloat *value)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5981,8 +5899,8 @@ save_PrimitiveRestartNV(void)
 }
 
 
-static void GLAPIENTRY
-save_BlitFramebufferEXT(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
+void GLAPIENTRY
+save_BlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                         GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                         GLbitfield mask, GLenum filter)
 {
@@ -6011,8 +5929,8 @@ save_BlitFramebufferEXT(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
 
 
 /** GL_EXT_provoking_vertex */
-static void GLAPIENTRY
-save_ProvokingVertexEXT(GLenum mode)
+void GLAPIENTRY
+save_ProvokingVertex(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6029,7 +5947,7 @@ save_ProvokingVertexEXT(GLenum mode)
 
 
 /** GL_EXT_transform_feedback */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BeginTransformFeedback(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6046,7 +5964,7 @@ save_BeginTransformFeedback(GLenum mode)
 
 
 /** GL_EXT_transform_feedback */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_EndTransformFeedback(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6057,7 +5975,7 @@ save_EndTransformFeedback(void)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BindTransformFeedback(GLenum target, GLuint name)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6073,7 +5991,7 @@ save_BindTransformFeedback(GLenum target, GLuint name)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PauseTransformFeedback(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6084,7 +6002,7 @@ save_PauseTransformFeedback(void)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ResumeTransformFeedback(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6095,7 +6013,7 @@ save_ResumeTransformFeedback(void)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DrawTransformFeedback(GLenum mode, GLuint name)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6111,7 +6029,7 @@ save_DrawTransformFeedback(GLenum mode, GLuint name)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DrawTransformFeedbackStream(GLenum mode, GLuint name, GLuint stream)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6128,7 +6046,7 @@ save_DrawTransformFeedbackStream(GLenum mode, GLuint name, GLuint stream)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DrawTransformFeedbackInstanced(GLenum mode, GLuint name,
                                     GLsizei primcount)
 {
@@ -6146,7 +6064,7 @@ save_DrawTransformFeedbackInstanced(GLenum mode, GLuint name,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DrawTransformFeedbackStreamInstanced(GLenum mode, GLuint name,
                                           GLuint stream, GLsizei primcount)
 {
@@ -6166,7 +6084,7 @@ save_DrawTransformFeedbackStreamInstanced(GLenum mode, GLuint name,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DispatchCompute(GLuint num_groups_x, GLuint num_groups_y,
                      GLuint num_groups_z)
 {
@@ -6185,7 +6103,7 @@ save_DispatchCompute(GLuint num_groups_x, GLuint num_groups_y,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_DispatchComputeIndirect(GLintptr indirect)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6358,7 +6276,7 @@ do {                                                                    \
 
 #include "vbo/vbo_attrib_tmp.h"
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UseProgram(GLuint program)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6374,8 +6292,8 @@ save_UseProgram(GLuint program)
 }
 
 
-static void GLAPIENTRY
-save_Uniform1fARB(GLint location, GLfloat x)
+void GLAPIENTRY
+save_Uniform1f(GLint location, GLfloat x)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6391,8 +6309,8 @@ save_Uniform1fARB(GLint location, GLfloat x)
 }
 
 
-static void GLAPIENTRY
-save_Uniform2fARB(GLint location, GLfloat x, GLfloat y)
+void GLAPIENTRY
+save_Uniform2f(GLint location, GLfloat x, GLfloat y)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6409,8 +6327,8 @@ save_Uniform2fARB(GLint location, GLfloat x, GLfloat y)
 }
 
 
-static void GLAPIENTRY
-save_Uniform3fARB(GLint location, GLfloat x, GLfloat y, GLfloat z)
+void GLAPIENTRY
+save_Uniform3f(GLint location, GLfloat x, GLfloat y, GLfloat z)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6428,8 +6346,8 @@ save_Uniform3fARB(GLint location, GLfloat x, GLfloat y, GLfloat z)
 }
 
 
-static void GLAPIENTRY
-save_Uniform4fARB(GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
+void GLAPIENTRY
+save_Uniform4f(GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6448,8 +6366,8 @@ save_Uniform4fARB(GLint location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 }
 
 
-static void GLAPIENTRY
-save_Uniform1fvARB(GLint location, GLsizei count, const GLfloat *v)
+void GLAPIENTRY
+save_Uniform1fv(GLint location, GLsizei count, const GLfloat *v)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6465,8 +6383,8 @@ save_Uniform1fvARB(GLint location, GLsizei count, const GLfloat *v)
    }
 }
 
-static void GLAPIENTRY
-save_Uniform2fvARB(GLint location, GLsizei count, const GLfloat *v)
+void GLAPIENTRY
+save_Uniform2fv(GLint location, GLsizei count, const GLfloat *v)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6482,8 +6400,8 @@ save_Uniform2fvARB(GLint location, GLsizei count, const GLfloat *v)
    }
 }
 
-static void GLAPIENTRY
-save_Uniform3fvARB(GLint location, GLsizei count, const GLfloat *v)
+void GLAPIENTRY
+save_Uniform3fv(GLint location, GLsizei count, const GLfloat *v)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6499,8 +6417,8 @@ save_Uniform3fvARB(GLint location, GLsizei count, const GLfloat *v)
    }
 }
 
-static void GLAPIENTRY
-save_Uniform4fvARB(GLint location, GLsizei count, const GLfloat *v)
+void GLAPIENTRY
+save_Uniform4fv(GLint location, GLsizei count, const GLfloat *v)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6517,7 +6435,7 @@ save_Uniform4fvARB(GLint location, GLsizei count, const GLfloat *v)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform1d(GLint location, GLdouble x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6534,7 +6452,7 @@ save_Uniform1d(GLint location, GLdouble x)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform2d(GLint location, GLdouble x, GLdouble y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6552,7 +6470,7 @@ save_Uniform2d(GLint location, GLdouble x, GLdouble y)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform3d(GLint location, GLdouble x, GLdouble y, GLdouble z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6571,7 +6489,7 @@ save_Uniform3d(GLint location, GLdouble x, GLdouble y, GLdouble z)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform4d(GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6591,7 +6509,7 @@ save_Uniform4d(GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform1dv(GLint location, GLsizei count, const GLdouble *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6609,7 +6527,7 @@ save_Uniform1dv(GLint location, GLsizei count, const GLdouble *v)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform2dv(GLint location, GLsizei count, const GLdouble *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6627,7 +6545,7 @@ save_Uniform2dv(GLint location, GLsizei count, const GLdouble *v)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform3dv(GLint location, GLsizei count, const GLdouble *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6645,7 +6563,7 @@ save_Uniform3dv(GLint location, GLsizei count, const GLdouble *v)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform4dv(GLint location, GLsizei count, const GLdouble *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6663,8 +6581,8 @@ save_Uniform4dv(GLint location, GLsizei count, const GLdouble *v)
 }
 
 
-static void GLAPIENTRY
-save_Uniform1iARB(GLint location, GLint x)
+void GLAPIENTRY
+save_Uniform1i(GLint location, GLint x)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6679,8 +6597,8 @@ save_Uniform1iARB(GLint location, GLint x)
    }
 }
 
-static void GLAPIENTRY
-save_Uniform2iARB(GLint location, GLint x, GLint y)
+void GLAPIENTRY
+save_Uniform2i(GLint location, GLint x, GLint y)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6696,8 +6614,8 @@ save_Uniform2iARB(GLint location, GLint x, GLint y)
    }
 }
 
-static void GLAPIENTRY
-save_Uniform3iARB(GLint location, GLint x, GLint y, GLint z)
+void GLAPIENTRY
+save_Uniform3i(GLint location, GLint x, GLint y, GLint z)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6714,8 +6632,8 @@ save_Uniform3iARB(GLint location, GLint x, GLint y, GLint z)
    }
 }
 
-static void GLAPIENTRY
-save_Uniform4iARB(GLint location, GLint x, GLint y, GLint z, GLint w)
+void GLAPIENTRY
+save_Uniform4i(GLint location, GLint x, GLint y, GLint z, GLint w)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6735,8 +6653,8 @@ save_Uniform4iARB(GLint location, GLint x, GLint y, GLint z, GLint w)
 
 
 
-static void GLAPIENTRY
-save_Uniform1ivARB(GLint location, GLsizei count, const GLint *v)
+void GLAPIENTRY
+save_Uniform1iv(GLint location, GLsizei count, const GLint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6752,8 +6670,8 @@ save_Uniform1ivARB(GLint location, GLsizei count, const GLint *v)
    }
 }
 
-static void GLAPIENTRY
-save_Uniform2ivARB(GLint location, GLsizei count, const GLint *v)
+void GLAPIENTRY
+save_Uniform2iv(GLint location, GLsizei count, const GLint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6769,8 +6687,8 @@ save_Uniform2ivARB(GLint location, GLsizei count, const GLint *v)
    }
 }
 
-static void GLAPIENTRY
-save_Uniform3ivARB(GLint location, GLsizei count, const GLint *v)
+void GLAPIENTRY
+save_Uniform3iv(GLint location, GLsizei count, const GLint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6786,8 +6704,8 @@ save_Uniform3ivARB(GLint location, GLsizei count, const GLint *v)
    }
 }
 
-static void GLAPIENTRY
-save_Uniform4ivARB(GLint location, GLsizei count, const GLint *v)
+void GLAPIENTRY
+save_Uniform4iv(GLint location, GLsizei count, const GLint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -6805,7 +6723,7 @@ save_Uniform4ivARB(GLint location, GLsizei count, const GLint *v)
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform1ui(GLint location, GLuint x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6821,7 +6739,7 @@ save_Uniform1ui(GLint location, GLuint x)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform2ui(GLint location, GLuint x, GLuint y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6838,7 +6756,7 @@ save_Uniform2ui(GLint location, GLuint x, GLuint y)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform3ui(GLint location, GLuint x, GLuint y, GLuint z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6856,7 +6774,7 @@ save_Uniform3ui(GLint location, GLuint x, GLuint y, GLuint z)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform4ui(GLint location, GLuint x, GLuint y, GLuint z, GLuint w)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6877,7 +6795,7 @@ save_Uniform4ui(GLint location, GLuint x, GLuint y, GLuint z, GLuint w)
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform1uiv(GLint location, GLsizei count, const GLuint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6894,7 +6812,7 @@ save_Uniform1uiv(GLint location, GLsizei count, const GLuint *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform2uiv(GLint location, GLsizei count, const GLuint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6911,7 +6829,7 @@ save_Uniform2uiv(GLint location, GLsizei count, const GLuint *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform3uiv(GLint location, GLsizei count, const GLuint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6928,7 +6846,7 @@ save_Uniform3uiv(GLint location, GLsizei count, const GLuint *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform4uiv(GLint location, GLsizei count, const GLuint *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6947,8 +6865,8 @@ save_Uniform4uiv(GLint location, GLsizei count, const GLuint *v)
 
 
 
-static void GLAPIENTRY
-save_UniformMatrix2fvARB(GLint location, GLsizei count, GLboolean transpose,
+void GLAPIENTRY
+save_UniformMatrix2fv(GLint location, GLsizei count, GLboolean transpose,
                          const GLfloat *m)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6966,8 +6884,8 @@ save_UniformMatrix2fvARB(GLint location, GLsizei count, GLboolean transpose,
    }
 }
 
-static void GLAPIENTRY
-save_UniformMatrix3fvARB(GLint location, GLsizei count, GLboolean transpose,
+void GLAPIENTRY
+save_UniformMatrix3fv(GLint location, GLsizei count, GLboolean transpose,
                          const GLfloat *m)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -6985,8 +6903,8 @@ save_UniformMatrix3fvARB(GLint location, GLsizei count, GLboolean transpose,
    }
 }
 
-static void GLAPIENTRY
-save_UniformMatrix4fvARB(GLint location, GLsizei count, GLboolean transpose,
+void GLAPIENTRY
+save_UniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose,
                          const GLfloat *m)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7005,7 +6923,7 @@ save_UniformMatrix4fvARB(GLint location, GLsizei count, GLboolean transpose,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix2x3fv(GLint location, GLsizei count, GLboolean transpose,
                         const GLfloat *m)
 {
@@ -7024,7 +6942,7 @@ save_UniformMatrix2x3fv(GLint location, GLsizei count, GLboolean transpose,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix3x2fv(GLint location, GLsizei count, GLboolean transpose,
                         const GLfloat *m)
 {
@@ -7044,7 +6962,7 @@ save_UniformMatrix3x2fv(GLint location, GLsizei count, GLboolean transpose,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix2x4fv(GLint location, GLsizei count, GLboolean transpose,
                         const GLfloat *m)
 {
@@ -7063,7 +6981,7 @@ save_UniformMatrix2x4fv(GLint location, GLsizei count, GLboolean transpose,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix4x2fv(GLint location, GLsizei count, GLboolean transpose,
                         const GLfloat *m)
 {
@@ -7083,7 +7001,7 @@ save_UniformMatrix4x2fv(GLint location, GLsizei count, GLboolean transpose,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix3x4fv(GLint location, GLsizei count, GLboolean transpose,
                         const GLfloat *m)
 {
@@ -7102,7 +7020,7 @@ save_UniformMatrix3x4fv(GLint location, GLsizei count, GLboolean transpose,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix4x3fv(GLint location, GLsizei count, GLboolean transpose,
                         const GLfloat *m)
 {
@@ -7122,7 +7040,7 @@ save_UniformMatrix4x3fv(GLint location, GLsizei count, GLboolean transpose,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix2dv(GLint location, GLsizei count, GLboolean transpose,
                       const GLdouble *m)
 {
@@ -7141,7 +7059,7 @@ save_UniformMatrix2dv(GLint location, GLsizei count, GLboolean transpose,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix3dv(GLint location, GLsizei count, GLboolean transpose,
                       const GLdouble *m)
 {
@@ -7160,7 +7078,7 @@ save_UniformMatrix3dv(GLint location, GLsizei count, GLboolean transpose,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix4dv(GLint location, GLsizei count, GLboolean transpose,
                       const GLdouble *m)
 {
@@ -7180,7 +7098,7 @@ save_UniformMatrix4dv(GLint location, GLsizei count, GLboolean transpose,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix2x3dv(GLint location, GLsizei count, GLboolean transpose,
                         const GLdouble *m)
 {
@@ -7200,7 +7118,7 @@ save_UniformMatrix2x3dv(GLint location, GLsizei count, GLboolean transpose,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix3x2dv(GLint location, GLsizei count, GLboolean transpose,
                         const GLdouble *m)
 {
@@ -7220,7 +7138,7 @@ save_UniformMatrix3x2dv(GLint location, GLsizei count, GLboolean transpose,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix2x4dv(GLint location, GLsizei count, GLboolean transpose,
                         const GLdouble *m)
 {
@@ -7239,7 +7157,7 @@ save_UniformMatrix2x4dv(GLint location, GLsizei count, GLboolean transpose,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix4x2dv(GLint location, GLsizei count, GLboolean transpose,
                         const GLdouble *m)
 {
@@ -7259,7 +7177,7 @@ save_UniformMatrix4x2dv(GLint location, GLsizei count, GLboolean transpose,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix3x4dv(GLint location, GLsizei count, GLboolean transpose,
                         const GLdouble *m)
 {
@@ -7279,7 +7197,7 @@ save_UniformMatrix3x4dv(GLint location, GLsizei count, GLboolean transpose,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformMatrix4x3dv(GLint location, GLsizei count, GLboolean transpose,
                         const GLdouble *m)
 {
@@ -7298,7 +7216,7 @@ save_UniformMatrix4x3dv(GLint location, GLsizei count, GLboolean transpose,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform1i64ARB(GLint location, GLint64 x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7314,7 +7232,7 @@ save_Uniform1i64ARB(GLint location, GLint64 x)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform2i64ARB(GLint location, GLint64 x, GLint64 y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7331,7 +7249,7 @@ save_Uniform2i64ARB(GLint location, GLint64 x, GLint64 y)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform3i64ARB(GLint location, GLint64 x, GLint64 y, GLint64 z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7349,7 +7267,7 @@ save_Uniform3i64ARB(GLint location, GLint64 x, GLint64 y, GLint64 z)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform4i64ARB(GLint location, GLint64 x, GLint64 y, GLint64 z, GLint64 w)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7368,7 +7286,7 @@ save_Uniform4i64ARB(GLint location, GLint64 x, GLint64 y, GLint64 z, GLint64 w)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform1i64vARB(GLint location, GLsizei count, const GLint64 *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7385,7 +7303,7 @@ save_Uniform1i64vARB(GLint location, GLsizei count, const GLint64 *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform2i64vARB(GLint location, GLsizei count, const GLint64 *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7402,7 +7320,7 @@ save_Uniform2i64vARB(GLint location, GLsizei count, const GLint64 *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform3i64vARB(GLint location, GLsizei count, const GLint64 *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7419,7 +7337,7 @@ save_Uniform3i64vARB(GLint location, GLsizei count, const GLint64 *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform4i64vARB(GLint location, GLsizei count, const GLint64 *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7436,7 +7354,7 @@ save_Uniform4i64vARB(GLint location, GLsizei count, const GLint64 *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform1ui64ARB(GLint location, GLuint64 x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7452,7 +7370,7 @@ save_Uniform1ui64ARB(GLint location, GLuint64 x)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform2ui64ARB(GLint location, GLuint64 x, GLuint64 y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7469,7 +7387,7 @@ save_Uniform2ui64ARB(GLint location, GLuint64 x, GLuint64 y)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform3ui64ARB(GLint location, GLuint64 x, GLuint64 y, GLuint64 z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7487,7 +7405,7 @@ save_Uniform3ui64ARB(GLint location, GLuint64 x, GLuint64 y, GLuint64 z)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform4ui64ARB(GLint location, GLuint64 x, GLuint64 y, GLuint64 z, GLuint64 w)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7506,7 +7424,7 @@ save_Uniform4ui64ARB(GLint location, GLuint64 x, GLuint64 y, GLuint64 z, GLuint6
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform1ui64vARB(GLint location, GLsizei count, const GLuint64 *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7523,7 +7441,7 @@ save_Uniform1ui64vARB(GLint location, GLsizei count, const GLuint64 *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform2ui64vARB(GLint location, GLsizei count, const GLuint64 *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7540,7 +7458,7 @@ save_Uniform2ui64vARB(GLint location, GLsizei count, const GLuint64 *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform3ui64vARB(GLint location, GLsizei count, const GLuint64 *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7557,7 +7475,7 @@ save_Uniform3ui64vARB(GLint location, GLsizei count, const GLuint64 *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_Uniform4ui64vARB(GLint location, GLsizei count, const GLuint64 *v)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7574,7 +7492,7 @@ save_Uniform4ui64vARB(GLint location, GLsizei count, const GLuint64 *v)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1i64ARB(GLuint program, GLint location, GLint64 x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7591,7 +7509,7 @@ save_ProgramUniform1i64ARB(GLuint program, GLint location, GLint64 x)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2i64ARB(GLuint program, GLint location, GLint64 x,
                            GLint64 y)
 {
@@ -7610,7 +7528,7 @@ save_ProgramUniform2i64ARB(GLuint program, GLint location, GLint64 x,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3i64ARB(GLuint program, GLint location, GLint64 x,
                            GLint64 y, GLint64 z)
 {
@@ -7630,7 +7548,7 @@ save_ProgramUniform3i64ARB(GLuint program, GLint location, GLint64 x,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4i64ARB(GLuint program, GLint location, GLint64 x,
                            GLint64 y, GLint64 z, GLint64 w)
 {
@@ -7651,7 +7569,7 @@ save_ProgramUniform4i64ARB(GLuint program, GLint location, GLint64 x,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1i64vARB(GLuint program, GLint location, GLsizei count,
                             const GLint64 *v)
 {
@@ -7670,7 +7588,7 @@ save_ProgramUniform1i64vARB(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2i64vARB(GLuint program, GLint location, GLsizei count,
                             const GLint64 *v)
 {
@@ -7689,7 +7607,7 @@ save_ProgramUniform2i64vARB(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3i64vARB(GLuint program, GLint location, GLsizei count,
                             const GLint64 *v)
 {
@@ -7708,7 +7626,7 @@ save_ProgramUniform3i64vARB(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4i64vARB(GLuint program, GLint location, GLsizei count,
                             const GLint64 *v)
 {
@@ -7727,7 +7645,7 @@ save_ProgramUniform4i64vARB(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1ui64ARB(GLuint program, GLint location, GLuint64 x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7744,7 +7662,7 @@ save_ProgramUniform1ui64ARB(GLuint program, GLint location, GLuint64 x)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2ui64ARB(GLuint program, GLint location, GLuint64 x,
                             GLuint64 y)
 {
@@ -7763,7 +7681,7 @@ save_ProgramUniform2ui64ARB(GLuint program, GLint location, GLuint64 x,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3ui64ARB(GLuint program, GLint location, GLuint64 x,
                             GLuint64 y, GLuint64 z)
 {
@@ -7783,7 +7701,7 @@ save_ProgramUniform3ui64ARB(GLuint program, GLint location, GLuint64 x,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4ui64ARB(GLuint program, GLint location, GLuint64 x,
                             GLuint64 y, GLuint64 z, GLuint64 w)
 {
@@ -7804,7 +7722,7 @@ save_ProgramUniform4ui64ARB(GLuint program, GLint location, GLuint64 x,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1ui64vARB(GLuint program, GLint location, GLsizei count,
                              const GLuint64 *v)
 {
@@ -7824,7 +7742,7 @@ save_ProgramUniform1ui64vARB(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2ui64vARB(GLuint program, GLint location, GLsizei count,
                             const GLuint64 *v)
 {
@@ -7844,7 +7762,7 @@ save_ProgramUniform2ui64vARB(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3ui64vARB(GLuint program, GLint location, GLsizei count,
                              const GLuint64 *v)
 {
@@ -7864,7 +7782,7 @@ save_ProgramUniform3ui64vARB(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4ui64vARB(GLuint program, GLint location, GLsizei count,
                              const GLuint64 *v)
 {
@@ -7885,7 +7803,7 @@ save_ProgramUniform4ui64vARB(GLuint program, GLint location, GLsizei count,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7902,7 +7820,7 @@ save_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1f(GLuint program, GLint location, GLfloat x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7919,7 +7837,7 @@ save_ProgramUniform1f(GLuint program, GLint location, GLfloat x)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2f(GLuint program, GLint location, GLfloat x, GLfloat y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -7937,7 +7855,7 @@ save_ProgramUniform2f(GLuint program, GLint location, GLfloat x, GLfloat y)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3f(GLuint program, GLint location,
                       GLfloat x, GLfloat y, GLfloat z)
 {
@@ -7957,7 +7875,7 @@ save_ProgramUniform3f(GLuint program, GLint location,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4f(GLuint program, GLint location,
                       GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
@@ -7978,7 +7896,7 @@ save_ProgramUniform4f(GLuint program, GLint location,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1fv(GLuint program, GLint location, GLsizei count,
                        const GLfloat *v)
 {
@@ -7997,7 +7915,7 @@ save_ProgramUniform1fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2fv(GLuint program, GLint location, GLsizei count,
                        const GLfloat *v)
 {
@@ -8016,7 +7934,7 @@ save_ProgramUniform2fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3fv(GLuint program, GLint location, GLsizei count,
                        const GLfloat *v)
 {
@@ -8035,7 +7953,7 @@ save_ProgramUniform3fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4fv(GLuint program, GLint location, GLsizei count,
                        const GLfloat *v)
 {
@@ -8054,7 +7972,7 @@ save_ProgramUniform4fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1d(GLuint program, GLint location, GLdouble x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -8071,7 +7989,7 @@ save_ProgramUniform1d(GLuint program, GLint location, GLdouble x)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2d(GLuint program, GLint location, GLdouble x, GLdouble y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -8089,7 +8007,7 @@ save_ProgramUniform2d(GLuint program, GLint location, GLdouble x, GLdouble y)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3d(GLuint program, GLint location,
                       GLdouble x, GLdouble y, GLdouble z)
 {
@@ -8109,7 +8027,7 @@ save_ProgramUniform3d(GLuint program, GLint location,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4d(GLuint program, GLint location,
                       GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 {
@@ -8130,7 +8048,7 @@ save_ProgramUniform4d(GLuint program, GLint location,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1dv(GLuint program, GLint location, GLsizei count,
                        const GLdouble *v)
 {
@@ -8149,7 +8067,7 @@ save_ProgramUniform1dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2dv(GLuint program, GLint location, GLsizei count,
                        const GLdouble *v)
 {
@@ -8168,7 +8086,7 @@ save_ProgramUniform2dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3dv(GLuint program, GLint location, GLsizei count,
                        const GLdouble *v)
 {
@@ -8187,7 +8105,7 @@ save_ProgramUniform3dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4dv(GLuint program, GLint location, GLsizei count,
                        const GLdouble *v)
 {
@@ -8206,7 +8124,7 @@ save_ProgramUniform4dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1i(GLuint program, GLint location, GLint x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -8223,7 +8141,7 @@ save_ProgramUniform1i(GLuint program, GLint location, GLint x)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2i(GLuint program, GLint location, GLint x, GLint y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -8241,7 +8159,7 @@ save_ProgramUniform2i(GLuint program, GLint location, GLint x, GLint y)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3i(GLuint program, GLint location,
                       GLint x, GLint y, GLint z)
 {
@@ -8261,7 +8179,7 @@ save_ProgramUniform3i(GLuint program, GLint location,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4i(GLuint program, GLint location,
                       GLint x, GLint y, GLint z, GLint w)
 {
@@ -8282,7 +8200,7 @@ save_ProgramUniform4i(GLuint program, GLint location,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1iv(GLuint program, GLint location, GLsizei count,
                        const GLint *v)
 {
@@ -8301,7 +8219,7 @@ save_ProgramUniform1iv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2iv(GLuint program, GLint location, GLsizei count,
                        const GLint *v)
 {
@@ -8320,7 +8238,7 @@ save_ProgramUniform2iv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3iv(GLuint program, GLint location, GLsizei count,
                        const GLint *v)
 {
@@ -8339,7 +8257,7 @@ save_ProgramUniform3iv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4iv(GLuint program, GLint location, GLsizei count,
                        const GLint *v)
 {
@@ -8358,7 +8276,7 @@ save_ProgramUniform4iv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1ui(GLuint program, GLint location, GLuint x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -8375,7 +8293,7 @@ save_ProgramUniform1ui(GLuint program, GLint location, GLuint x)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2ui(GLuint program, GLint location, GLuint x, GLuint y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -8393,7 +8311,7 @@ save_ProgramUniform2ui(GLuint program, GLint location, GLuint x, GLuint y)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3ui(GLuint program, GLint location,
                        GLuint x, GLuint y, GLuint z)
 {
@@ -8413,7 +8331,7 @@ save_ProgramUniform3ui(GLuint program, GLint location,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4ui(GLuint program, GLint location,
                        GLuint x, GLuint y, GLuint z, GLuint w)
 {
@@ -8434,7 +8352,7 @@ save_ProgramUniform4ui(GLuint program, GLint location,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform1uiv(GLuint program, GLint location, GLsizei count,
                         const GLuint *v)
 {
@@ -8453,7 +8371,7 @@ save_ProgramUniform1uiv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform2uiv(GLuint program, GLint location, GLsizei count,
                         const GLuint *v)
 {
@@ -8472,7 +8390,7 @@ save_ProgramUniform2uiv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform3uiv(GLuint program, GLint location, GLsizei count,
                         const GLuint *v)
 {
@@ -8491,7 +8409,7 @@ save_ProgramUniform3uiv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniform4uiv(GLuint program, GLint location, GLsizei count,
                         const GLuint *v)
 {
@@ -8510,7 +8428,7 @@ save_ProgramUniform4uiv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix2fv(GLuint program, GLint location, GLsizei count,
                              GLboolean transpose, const GLfloat *v)
 {
@@ -8532,7 +8450,7 @@ save_ProgramUniformMatrix2fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix2x3fv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLfloat *v)
 {
@@ -8554,7 +8472,7 @@ save_ProgramUniformMatrix2x3fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix2x4fv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLfloat *v)
 {
@@ -8576,7 +8494,7 @@ save_ProgramUniformMatrix2x4fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix3x2fv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLfloat *v)
 {
@@ -8598,7 +8516,7 @@ save_ProgramUniformMatrix3x2fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix3fv(GLuint program, GLint location, GLsizei count,
                              GLboolean transpose, const GLfloat *v)
 {
@@ -8620,7 +8538,7 @@ save_ProgramUniformMatrix3fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix3x4fv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLfloat *v)
 {
@@ -8642,7 +8560,7 @@ save_ProgramUniformMatrix3x4fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix4x2fv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLfloat *v)
 {
@@ -8664,7 +8582,7 @@ save_ProgramUniformMatrix4x2fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix4x3fv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLfloat *v)
 {
@@ -8686,7 +8604,7 @@ save_ProgramUniformMatrix4x3fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix4fv(GLuint program, GLint location, GLsizei count,
                              GLboolean transpose, const GLfloat *v)
 {
@@ -8708,7 +8626,7 @@ save_ProgramUniformMatrix4fv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix2dv(GLuint program, GLint location, GLsizei count,
                              GLboolean transpose, const GLdouble *v)
 {
@@ -8730,7 +8648,7 @@ save_ProgramUniformMatrix2dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix2x3dv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLdouble *v)
 {
@@ -8752,7 +8670,7 @@ save_ProgramUniformMatrix2x3dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix2x4dv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLdouble *v)
 {
@@ -8774,7 +8692,7 @@ save_ProgramUniformMatrix2x4dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix3x2dv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLdouble *v)
 {
@@ -8796,7 +8714,7 @@ save_ProgramUniformMatrix3x2dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix3dv(GLuint program, GLint location, GLsizei count,
                              GLboolean transpose, const GLdouble *v)
 {
@@ -8818,7 +8736,7 @@ save_ProgramUniformMatrix3dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix3x4dv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLdouble *v)
 {
@@ -8840,7 +8758,7 @@ save_ProgramUniformMatrix3x4dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix4x2dv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLdouble *v)
 {
@@ -8862,7 +8780,7 @@ save_ProgramUniformMatrix4x2dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix4x3dv(GLuint program, GLint location, GLsizei count,
                                GLboolean transpose, const GLdouble *v)
 {
@@ -8884,7 +8802,7 @@ save_ProgramUniformMatrix4x3dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ProgramUniformMatrix4dv(GLuint program, GLint location, GLsizei count,
                              GLboolean transpose, const GLdouble *v)
 {
@@ -8906,7 +8824,7 @@ save_ProgramUniformMatrix4dv(GLuint program, GLint location, GLsizei count,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ClipControl(GLenum origin, GLenum depth)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -8922,8 +8840,8 @@ save_ClipControl(GLenum origin, GLenum depth)
    }
 }
 
-static void GLAPIENTRY
-save_ClampColorARB(GLenum target, GLenum clamp)
+void GLAPIENTRY
+save_ClampColor(GLenum target, GLenum clamp)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -8939,8 +8857,8 @@ save_ClampColorARB(GLenum target, GLenum clamp)
 }
 
 /** GL_EXT_texture_integer */
-static void GLAPIENTRY
-save_ClearColorIi(GLint red, GLint green, GLint blue, GLint alpha)
+void GLAPIENTRY
+save_ClearColorIiEXT(GLint red, GLint green, GLint blue, GLint alpha)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -8958,8 +8876,8 @@ save_ClearColorIi(GLint red, GLint green, GLint blue, GLint alpha)
 }
 
 /** GL_EXT_texture_integer */
-static void GLAPIENTRY
-save_ClearColorIui(GLuint red, GLuint green, GLuint blue, GLuint alpha)
+void GLAPIENTRY
+save_ClearColorIuiEXT(GLuint red, GLuint green, GLuint blue, GLuint alpha)
 {
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
@@ -8977,7 +8895,7 @@ save_ClearColorIui(GLuint red, GLuint green, GLuint blue, GLuint alpha)
 }
 
 /** GL_EXT_texture_integer */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexParameterIiv(GLenum target, GLenum pname, const GLint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -8998,7 +8916,7 @@ save_TexParameterIiv(GLenum target, GLenum pname, const GLint *params)
 }
 
 /** GL_EXT_texture_integer */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TexParameterIuiv(GLenum target, GLenum pname, const GLuint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9019,7 +8937,7 @@ save_TexParameterIuiv(GLenum target, GLenum pname, const GLuint *params)
 }
 
 /* GL_ARB_instanced_arrays */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_VertexAttribDivisor(GLuint index, GLuint divisor)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9037,7 +8955,7 @@ save_VertexAttribDivisor(GLuint index, GLuint divisor)
 
 
 /* GL_NV_texture_barrier */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureBarrierNV(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9050,7 +8968,7 @@ save_TextureBarrierNV(void)
 
 
 /* GL_ARB_sampler_objects */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BindSampler(GLuint unit, GLuint sampler)
 {
    Node *n;
@@ -9066,7 +8984,7 @@ save_BindSampler(GLuint unit, GLuint sampler)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_SamplerParameteriv(GLuint sampler, GLenum pname, const GLint *params)
 {
    Node *n;
@@ -9091,7 +9009,7 @@ save_SamplerParameteriv(GLuint sampler, GLenum pname, const GLint *params)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_SamplerParameteri(GLuint sampler, GLenum pname, GLint param)
 {
    GLint parray[4];
@@ -9100,7 +9018,7 @@ save_SamplerParameteri(GLuint sampler, GLenum pname, GLint param)
    save_SamplerParameteriv(sampler, pname, parray);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_SamplerParameterfv(GLuint sampler, GLenum pname, const GLfloat *params)
 {
    Node *n;
@@ -9125,7 +9043,7 @@ save_SamplerParameterfv(GLuint sampler, GLenum pname, const GLfloat *params)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_SamplerParameterf(GLuint sampler, GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -9134,7 +9052,7 @@ save_SamplerParameterf(GLuint sampler, GLenum pname, GLfloat param)
    save_SamplerParameterfv(sampler, pname, parray);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_SamplerParameterIiv(GLuint sampler, GLenum pname, const GLint *params)
 {
    Node *n;
@@ -9159,7 +9077,7 @@ save_SamplerParameterIiv(GLuint sampler, GLenum pname, const GLint *params)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_SamplerParameterIuiv(GLuint sampler, GLenum pname, const GLuint *params)
 {
    Node *n;
@@ -9184,7 +9102,7 @@ save_SamplerParameterIuiv(GLuint sampler, GLenum pname, const GLuint *params)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout)
 {
    Node *n;
@@ -9206,7 +9124,7 @@ save_WaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout)
 
 
 /** GL_NV_conditional_render */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BeginConditionalRender(GLuint queryId, GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9222,7 +9140,7 @@ save_BeginConditionalRender(GLuint queryId, GLenum mode)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_EndConditionalRender(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9233,7 +9151,7 @@ save_EndConditionalRender(void)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformBlockBinding(GLuint prog, GLuint index, GLuint binding)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9250,7 +9168,7 @@ save_UniformBlockBinding(GLuint prog, GLuint index, GLuint binding)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_UniformSubroutinesuiv(GLenum shadertype, GLsizei count,
                            const GLuint *indices)
 {
@@ -9273,7 +9191,7 @@ save_UniformSubroutinesuiv(GLenum shadertype, GLsizei count,
 }
 
 /** GL_EXT_window_rectangles */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_WindowRectanglesEXT(GLenum mode, GLsizei count, const GLint *box)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9296,7 +9214,7 @@ save_WindowRectanglesEXT(GLenum mode, GLsizei count, const GLint *box)
 
 
 /** GL_NV_conservative_raster */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_SubpixelPrecisionBiasNV(GLuint xbits, GLuint ybits)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9313,7 +9231,7 @@ save_SubpixelPrecisionBiasNV(GLuint xbits, GLuint ybits)
 }
 
 /** GL_NV_conservative_raster_dilate */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ConservativeRasterParameterfNV(GLenum pname, GLfloat param)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9330,7 +9248,7 @@ save_ConservativeRasterParameterfNV(GLenum pname, GLfloat param)
 }
 
 /** GL_NV_conservative_raster_pre_snap_triangles */
-static void GLAPIENTRY
+void GLAPIENTRY
 save_ConservativeRasterParameteriNV(GLenum pname, GLint param)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9348,7 +9266,7 @@ save_ConservativeRasterParameteriNV(GLenum pname, GLint param)
 
 /** GL_EXT_direct_state_access */
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixLoadfEXT(GLenum matrixMode, const GLfloat *m)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9366,7 +9284,7 @@ save_MatrixLoadfEXT(GLenum matrixMode, const GLfloat *m)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixLoaddEXT(GLenum matrixMode, const GLdouble *m)
 {
    GLfloat f[16];
@@ -9376,7 +9294,7 @@ save_MatrixLoaddEXT(GLenum matrixMode, const GLdouble *m)
    save_MatrixLoadfEXT(matrixMode, f);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixMultfEXT(GLenum matrixMode, const GLfloat * m)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9394,7 +9312,7 @@ save_MatrixMultfEXT(GLenum matrixMode, const GLfloat * m)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixMultdEXT(GLenum matrixMode, const GLdouble * m)
 {
    GLfloat f[16];
@@ -9404,7 +9322,7 @@ save_MatrixMultdEXT(GLenum matrixMode, const GLdouble * m)
    save_MatrixMultfEXT(matrixMode, f);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixRotatefEXT(GLenum matrixMode, GLfloat angle, GLfloat x, GLfloat y, GLfloat z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9423,13 +9341,13 @@ save_MatrixRotatefEXT(GLenum matrixMode, GLfloat angle, GLfloat x, GLfloat y, GL
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixRotatedEXT(GLenum matrixMode, GLdouble angle, GLdouble x, GLdouble y, GLdouble z)
 {
    save_MatrixRotatefEXT(matrixMode, (GLfloat) angle, (GLfloat) x, (GLfloat) y, (GLfloat) z);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixScalefEXT(GLenum matrixMode, GLfloat x, GLfloat y, GLfloat z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9447,13 +9365,13 @@ save_MatrixScalefEXT(GLenum matrixMode, GLfloat x, GLfloat y, GLfloat z)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixScaledEXT(GLenum matrixMode, GLdouble x, GLdouble y, GLdouble z)
 {
    save_MatrixScalefEXT(matrixMode, (GLfloat) x, (GLfloat) y, (GLfloat) z);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixTranslatefEXT(GLenum matrixMode, GLfloat x, GLfloat y, GLfloat z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9471,13 +9389,13 @@ save_MatrixTranslatefEXT(GLenum matrixMode, GLfloat x, GLfloat y, GLfloat z)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixTranslatedEXT(GLenum matrixMode, GLdouble x, GLdouble y, GLdouble z)
 {
    save_MatrixTranslatefEXT(matrixMode, (GLfloat) x, (GLfloat) y, (GLfloat) z);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixLoadIdentityEXT(GLenum matrixMode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9492,7 +9410,7 @@ save_MatrixLoadIdentityEXT(GLenum matrixMode)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixOrthoEXT(GLenum matrixMode, GLdouble left, GLdouble right,
                     GLdouble bottom, GLdouble top, GLdouble nearval, GLdouble farval)
 {
@@ -9515,7 +9433,7 @@ save_MatrixOrthoEXT(GLenum matrixMode, GLdouble left, GLdouble right,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixFrustumEXT(GLenum matrixMode, GLdouble left, GLdouble right,
                       GLdouble bottom, GLdouble top, GLdouble nearval, GLdouble farval)
 {
@@ -9537,7 +9455,7 @@ save_MatrixFrustumEXT(GLenum matrixMode, GLdouble left, GLdouble right,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixPushEXT(GLenum matrixMode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9552,7 +9470,7 @@ save_MatrixPushEXT(GLenum matrixMode)
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MatrixPopEXT(GLenum matrixMode)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9567,39 +9485,39 @@ save_MatrixPopEXT(GLenum matrixMode)
    }
 }
 
-static void GLAPIENTRY
-save_MatrixLoadTransposefEXT(GLenum matrixMode, const GLfloat m[16])
+void GLAPIENTRY
+save_MatrixLoadTransposefEXT(GLenum matrixMode, const GLfloat *m)
 {
    GLfloat tm[16];
    _math_transposef(tm, m);
    save_MatrixLoadfEXT(matrixMode, tm);
 }
 
-static void GLAPIENTRY
-save_MatrixLoadTransposedEXT(GLenum matrixMode, const GLdouble m[16])
+void GLAPIENTRY
+save_MatrixLoadTransposedEXT(GLenum matrixMode, const GLdouble *m)
 {
    GLfloat tm[16];
    _math_transposefd(tm, m);
    save_MatrixLoadfEXT(matrixMode, tm);
 }
 
-static void GLAPIENTRY
-save_MatrixMultTransposefEXT(GLenum matrixMode, const GLfloat m[16])
+void GLAPIENTRY
+save_MatrixMultTransposefEXT(GLenum matrixMode, const GLfloat *m)
 {
    GLfloat tm[16];
    _math_transposef(tm, m);
    save_MatrixMultfEXT(matrixMode, tm);
 }
 
-static void GLAPIENTRY
-save_MatrixMultTransposedEXT(GLenum matrixMode, const GLdouble m[16])
+void GLAPIENTRY
+save_MatrixMultTransposedEXT(GLenum matrixMode, const GLdouble *m)
 {
    GLfloat tm[16];
    _math_transposefd(tm, m);
    save_MatrixMultfEXT(matrixMode, tm);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureParameterfvEXT(GLuint texture, GLenum target, GLenum pname,
                            const GLfloat *params)
 {
@@ -9622,7 +9540,7 @@ save_TextureParameterfvEXT(GLuint texture, GLenum target, GLenum pname,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureParameterfEXT(GLuint texture, GLenum target, GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -9631,7 +9549,7 @@ save_TextureParameterfEXT(GLuint texture, GLenum target, GLenum pname, GLfloat p
    save_TextureParameterfvEXT(texture, target, pname, parray);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureParameterivEXT(GLuint texture, GLenum target, GLenum pname, const GLint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9652,7 +9570,7 @@ save_TextureParameterivEXT(GLuint texture, GLenum target, GLenum pname, const GL
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureParameteriEXT(GLuint texture, GLenum target, GLenum pname, GLint param)
 {
    GLint fparam[4];
@@ -9661,7 +9579,7 @@ save_TextureParameteriEXT(GLuint texture, GLenum target, GLenum pname, GLint par
    save_TextureParameterivEXT(texture, target, pname, fparam);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureParameterIivEXT(GLuint texture, GLenum target, GLenum pname, const GLint* params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9682,7 +9600,7 @@ save_TextureParameterIivEXT(GLuint texture, GLenum target, GLenum pname, const G
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureParameterIuivEXT(GLuint texture, GLenum target, GLenum pname, const GLuint* params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -9704,7 +9622,7 @@ save_TextureParameterIuivEXT(GLuint texture, GLenum target, GLenum pname, const 
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureImage1DEXT(GLuint texture, GLenum target,
                        GLint level, GLint components,
                        GLsizei width, GLint border,
@@ -9741,7 +9659,7 @@ save_TextureImage1DEXT(GLuint texture, GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureImage2DEXT(GLuint texture, GLenum target,
                        GLint level, GLint components,
                        GLsizei width, GLsizei height, GLint border,
@@ -9779,7 +9697,7 @@ save_TextureImage2DEXT(GLuint texture, GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureImage3DEXT(GLuint texture, GLenum target,
                        GLint level, GLint internalFormat,
                        GLsizei width, GLsizei height, GLsizei depth,
@@ -9821,7 +9739,7 @@ save_TextureImage3DEXT(GLuint texture, GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureSubImage1DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
                    GLsizei width, GLenum format, GLenum type,
                    const GLvoid * pixels)
@@ -9851,7 +9769,7 @@ save_TextureSubImage1DEXT(GLuint texture, GLenum target, GLint level, GLint xoff
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureSubImage2DEXT(GLuint texture, GLenum target, GLint level,
                           GLint xoffset, GLint yoffset,
                           GLsizei width, GLsizei height,
@@ -9884,7 +9802,7 @@ save_TextureSubImage2DEXT(GLuint texture, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_TextureSubImage3DEXT(GLuint texture, GLenum target, GLint level,
                           GLint xoffset, GLint yoffset, GLint zoffset,
                           GLsizei width, GLsizei height, GLsizei depth,
@@ -9920,7 +9838,7 @@ save_TextureSubImage3DEXT(GLuint texture, GLenum target, GLint level,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTextureImage1DEXT(GLuint texture, GLenum target, GLint level,
                            GLenum internalformat, GLint x, GLint y,
                            GLsizei width, GLint border)
@@ -9946,7 +9864,7 @@ save_CopyTextureImage1DEXT(GLuint texture, GLenum target, GLint level,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTextureImage2DEXT(GLuint texture, GLenum target, GLint level,
                            GLenum internalformat,
                            GLint x, GLint y, GLsizei width,
@@ -9974,7 +9892,7 @@ save_CopyTextureImage2DEXT(GLuint texture, GLenum target, GLint level,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTextureSubImage1DEXT(GLuint texture, GLenum target, GLint level,
                               GLint xoffset, GLint x, GLint y, GLsizei width)
 {
@@ -9997,7 +9915,7 @@ save_CopyTextureSubImage1DEXT(GLuint texture, GLenum target, GLint level,
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTextureSubImage2DEXT(GLuint texture, GLenum target, GLint level,
                               GLint xoffset, GLint yoffset,
                               GLint x, GLint y, GLsizei width, GLint height)
@@ -10025,7 +9943,7 @@ save_CopyTextureSubImage2DEXT(GLuint texture, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyTextureSubImage3DEXT(GLuint texture, GLenum target, GLint level,
                               GLint xoffset, GLint yoffset, GLint zoffset,
                               GLint x, GLint y, GLsizei width, GLint height)
@@ -10054,7 +9972,7 @@ save_CopyTextureSubImage3DEXT(GLuint texture, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_BindMultiTextureEXT(GLenum texunit, GLenum target, GLuint texture)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -10072,7 +9990,7 @@ save_BindMultiTextureEXT(GLenum texunit, GLenum target, GLuint texture)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexParameterfvEXT(GLenum texunit, GLenum target, GLenum pname,
                            const GLfloat *params)
 {
@@ -10095,7 +10013,7 @@ save_MultiTexParameterfvEXT(GLenum texunit, GLenum target, GLenum pname,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexParameterfEXT(GLenum texunit, GLenum target, GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -10104,7 +10022,7 @@ save_MultiTexParameterfEXT(GLenum texunit, GLenum target, GLenum pname, GLfloat 
    save_MultiTexParameterfvEXT(texunit, target, pname, parray);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexParameterivEXT(GLenum texunit, GLenum target, GLenum pname, const GLint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -10125,7 +10043,7 @@ save_MultiTexParameterivEXT(GLenum texunit, GLenum target, GLenum pname, const G
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexParameterIivEXT(GLenum texunit, GLenum target, GLenum pname, const GLint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -10146,7 +10064,7 @@ save_MultiTexParameterIivEXT(GLenum texunit, GLenum target, GLenum pname, const 
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexParameterIuivEXT(GLenum texunit, GLenum target, GLenum pname, const GLuint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -10167,7 +10085,7 @@ save_MultiTexParameterIuivEXT(GLenum texunit, GLenum target, GLenum pname, const
    }
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexParameteriEXT(GLenum texunit, GLenum target, GLenum pname, GLint param)
 {
    GLint fparam[4];
@@ -10177,7 +10095,7 @@ save_MultiTexParameteriEXT(GLenum texunit, GLenum target, GLenum pname, GLint pa
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexImage1DEXT(GLenum texunit, GLenum target,
                         GLint level, GLint components,
                         GLsizei width, GLint border,
@@ -10214,7 +10132,7 @@ save_MultiTexImage1DEXT(GLenum texunit, GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexImage2DEXT(GLenum texunit, GLenum target,
                        GLint level, GLint components,
                        GLsizei width, GLsizei height, GLint border,
@@ -10252,7 +10170,7 @@ save_MultiTexImage2DEXT(GLenum texunit, GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexImage3DEXT(GLenum texunit, GLenum target,
                        GLint level, GLint internalFormat,
                        GLsizei width, GLsizei height, GLsizei depth,
@@ -10294,7 +10212,7 @@ save_MultiTexImage3DEXT(GLenum texunit, GLenum target,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexSubImage1DEXT(GLenum texunit, GLenum target, GLint level, GLint xoffset,
                    GLsizei width, GLenum format, GLenum type,
                    const GLvoid * pixels)
@@ -10324,7 +10242,7 @@ save_MultiTexSubImage1DEXT(GLenum texunit, GLenum target, GLint level, GLint xof
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexSubImage2DEXT(GLenum texunit, GLenum target, GLint level,
                           GLint xoffset, GLint yoffset,
                           GLsizei width, GLsizei height,
@@ -10357,7 +10275,7 @@ save_MultiTexSubImage2DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexSubImage3DEXT(GLenum texunit, GLenum target, GLint level,
                           GLint xoffset, GLint yoffset, GLint zoffset,
                           GLsizei width, GLsizei height, GLsizei depth,
@@ -10394,7 +10312,7 @@ save_MultiTexSubImage3DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyMultiTexImage1DEXT(GLenum texunit, GLenum target, GLint level,
                            GLenum internalformat, GLint x, GLint y,
                            GLsizei width, GLint border)
@@ -10421,7 +10339,7 @@ save_CopyMultiTexImage1DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyMultiTexImage2DEXT(GLenum texunit, GLenum target, GLint level,
                            GLenum internalformat,
                            GLint x, GLint y, GLsizei width,
@@ -10450,7 +10368,7 @@ save_CopyMultiTexImage2DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyMultiTexSubImage1DEXT(GLenum texunit, GLenum target, GLint level,
                               GLint xoffset, GLint x, GLint y, GLsizei width)
 {
@@ -10474,7 +10392,7 @@ save_CopyMultiTexSubImage1DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyMultiTexSubImage2DEXT(GLenum texunit, GLenum target, GLint level,
                               GLint xoffset, GLint yoffset,
                               GLint x, GLint y, GLsizei width, GLint height)
@@ -10502,7 +10420,7 @@ save_CopyMultiTexSubImage2DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CopyMultiTexSubImage3DEXT(GLenum texunit, GLenum target, GLint level,
                               GLint xoffset, GLint yoffset, GLint zoffset,
                               GLint x, GLint y, GLsizei width, GLint height)
@@ -10531,7 +10449,7 @@ save_CopyMultiTexSubImage3DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexEnvfvEXT(GLenum texunit, GLenum target, GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -10559,7 +10477,7 @@ save_MultiTexEnvfvEXT(GLenum texunit, GLenum target, GLenum pname, const GLfloat
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexEnvfEXT(GLenum texunit, GLenum target, GLenum pname, GLfloat param)
 {
    GLfloat parray[4];
@@ -10569,7 +10487,7 @@ save_MultiTexEnvfEXT(GLenum texunit, GLenum target, GLenum pname, GLfloat param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexEnviEXT(GLenum texunit, GLenum target, GLenum pname, GLint param)
 {
    GLfloat p[4];
@@ -10579,7 +10497,7 @@ save_MultiTexEnviEXT(GLenum texunit, GLenum target, GLenum pname, GLint param)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_MultiTexEnvivEXT(GLenum texunit, GLenum target, GLenum pname, const GLint * param)
 {
    GLfloat p[4];
@@ -10597,7 +10515,7 @@ save_MultiTexEnvivEXT(GLenum texunit, GLenum target, GLenum pname, const GLint *
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedTextureImage1DEXT(GLuint texture, GLenum target, GLint level,
                                  GLenum internalFormat, GLsizei width,
                                  GLint border, GLsizei imageSize,
@@ -10637,7 +10555,7 @@ save_CompressedTextureImage1DEXT(GLuint texture, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedTextureImage2DEXT(GLuint texture, GLenum target, GLint level,
                                  GLenum internalFormat, GLsizei width,
                                  GLsizei height, GLint border, GLsizei imageSize,
@@ -10677,7 +10595,7 @@ save_CompressedTextureImage2DEXT(GLuint texture, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedTextureImage3DEXT(GLuint texture, GLenum target, GLint level,
                                  GLenum internalFormat, GLsizei width,
                                  GLsizei height, GLsizei depth, GLint border,
@@ -10720,7 +10638,7 @@ save_CompressedTextureImage3DEXT(GLuint texture, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedTextureSubImage1DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
                                     GLsizei width, GLenum format,
                                     GLsizei imageSize, const GLvoid * data)
@@ -10749,7 +10667,7 @@ save_CompressedTextureSubImage1DEXT(GLuint texture, GLenum target, GLint level, 
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedTextureSubImage2DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
                                     GLint yoffset, GLsizei width, GLsizei height,
                                     GLenum format, GLsizei imageSize,
@@ -10782,7 +10700,7 @@ save_CompressedTextureSubImage2DEXT(GLuint texture, GLenum target, GLint level, 
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedTextureSubImage3DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
                                     GLint yoffset, GLint zoffset, GLsizei width,
                                     GLsizei height, GLsizei depth, GLenum format,
@@ -10818,7 +10736,7 @@ save_CompressedTextureSubImage3DEXT(GLuint texture, GLenum target, GLint level, 
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedMultiTexImage1DEXT(GLenum texunit, GLenum target, GLint level,
                                   GLenum internalFormat, GLsizei width,
                                   GLint border, GLsizei imageSize,
@@ -10858,7 +10776,7 @@ save_CompressedMultiTexImage1DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedMultiTexImage2DEXT(GLenum texunit, GLenum target, GLint level,
                                   GLenum internalFormat, GLsizei width,
                                   GLsizei height, GLint border, GLsizei imageSize,
@@ -10898,7 +10816,7 @@ save_CompressedMultiTexImage2DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedMultiTexImage3DEXT(GLenum texunit, GLenum target, GLint level,
                                   GLenum internalFormat, GLsizei width,
                                   GLsizei height, GLsizei depth, GLint border,
@@ -10941,7 +10859,7 @@ save_CompressedMultiTexImage3DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedMultiTexSubImage1DEXT(GLenum texunit, GLenum target, GLint level, GLint xoffset,
                                      GLsizei width, GLenum format,
                                      GLsizei imageSize, const GLvoid * data)
@@ -10970,7 +10888,7 @@ save_CompressedMultiTexSubImage1DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedMultiTexSubImage2DEXT(GLenum texunit, GLenum target, GLint level, GLint xoffset,
                                      GLint yoffset, GLsizei width, GLsizei height,
                                      GLenum format, GLsizei imageSize,
@@ -11003,7 +10921,7 @@ save_CompressedMultiTexSubImage2DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_CompressedMultiTexSubImage3DEXT(GLenum texunit, GLenum target, GLint level, GLint xoffset,
                                      GLint yoffset, GLint zoffset, GLsizei width,
                                      GLsizei height, GLsizei depth, GLenum format,
@@ -11039,7 +10957,7 @@ save_CompressedMultiTexSubImage3DEXT(GLenum texunit, GLenum target, GLint level,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_NamedProgramStringEXT(GLuint program, GLenum target, GLenum format, GLsizei len,
                            const GLvoid * string)
 {
@@ -11068,7 +10986,7 @@ save_NamedProgramStringEXT(GLuint program, GLenum target, GLenum format, GLsizei
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_NamedProgramLocalParameter4fEXT(GLuint program, GLenum target, GLuint index,
                                      GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
@@ -11091,7 +11009,7 @@ save_NamedProgramLocalParameter4fEXT(GLuint program, GLenum target, GLuint index
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_NamedProgramLocalParameter4fvEXT(GLuint program, GLenum target, GLuint index,
                                       const GLfloat *params)
 {
@@ -11100,7 +11018,7 @@ save_NamedProgramLocalParameter4fvEXT(GLuint program, GLenum target, GLuint inde
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_NamedProgramLocalParameter4dEXT(GLuint program, GLenum target, GLuint index,
                                     GLdouble x, GLdouble y,
                                     GLdouble z, GLdouble w)
@@ -11110,7 +11028,7 @@ save_NamedProgramLocalParameter4dEXT(GLuint program, GLenum target, GLuint index
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_NamedProgramLocalParameter4dvEXT(GLuint program, GLenum target, GLuint index,
                                       const GLdouble *params)
 {
@@ -11119,7 +11037,7 @@ save_NamedProgramLocalParameter4dvEXT(GLuint program, GLenum target, GLuint inde
                                         (GLfloat) params[3]);
 }
 
-static void GLAPIENTRY
+void GLAPIENTRY
 save_PrimitiveBoundingBox(float minX, float minY, float minZ, float minW,
                           float maxX, float maxY, float maxZ, float maxW)
 {
@@ -13403,23 +13321,20 @@ execute_list(struct gl_context *ctx, GLuint list)
                                        n[5].f, n[6].f, n[7].f, n[8].f));
             break;
          case OPCODE_VERTEX_LIST:
-            vbo_save_playback_vertex_list(ctx, &n[1], false);
+            vbo_save_playback_vertex_list(ctx, &n[0], false);
             break;
 
          case OPCODE_VERTEX_LIST_COPY_CURRENT:
-            vbo_save_playback_vertex_list(ctx, &n[1], true);
+            vbo_save_playback_vertex_list(ctx, &n[0], true);
             break;
 
          case OPCODE_VERTEX_LIST_LOOPBACK:
-            vbo_save_playback_vertex_list_loopback(ctx, &n[1]);
+            vbo_save_playback_vertex_list_loopback(ctx, &n[0]);
             break;
 
          case OPCODE_CONTINUE:
             n = (Node *) get_pointer(&n[1]);
             continue;
-         case OPCODE_NOP:
-            /* no-op */
-            break;
          default:
             {
                char msg[1000];
@@ -13484,9 +13399,11 @@ _mesa_DeleteLists(GLuint list, GLsizei range)
       }
    }
 
+   _mesa_HashLockMutex(ctx->Shared->DisplayList);
    for (i = list; i < list + range; i++) {
       destroy_list(ctx, i);
    }
+   _mesa_HashUnlockMutex(ctx->Shared->DisplayList);
 }
 
 
@@ -13526,8 +13443,7 @@ _mesa_GenLists(GLsizei range)
    }
 
    if (USE_BITMAP_ATLAS &&
-       range > 16 &&
-       ctx->Driver.DrawAtlasBitmaps) {
+       range > 16) {
       /* "range > 16" is a rough heuristic to guess when glGenLists might be
        * used to allocate display lists for glXUseXFont or wglUseFontBitmaps.
        * Create the empty atlas now.
@@ -13590,13 +13506,14 @@ _mesa_NewList(GLuint name, GLenum mode)
    ctx->ListState.CurrentList = make_list(name, BLOCK_SIZE);
    ctx->ListState.CurrentBlock = ctx->ListState.CurrentList->Head;
    ctx->ListState.CurrentPos = 0;
+   ctx->ListState.LastInstSize = 0;
    ctx->ListState.Current.UseLoopback = false;
 
    vbo_save_NewList(ctx, name, mode);
 
    ctx->CurrentServerDispatch = ctx->Save;
    _glapi_set_dispatch(ctx->CurrentServerDispatch);
-   if (ctx->MarshalExec == NULL) {
+   if (!ctx->GLThread.enabled) {
       ctx->CurrentClientDispatch = ctx->CurrentServerDispatch;
    }
 }
@@ -13744,6 +13661,9 @@ _mesa_EndList(void)
       replace_op_vertex_list_recursively(ctx, ctx->ListState.CurrentList);
 
    struct gl_dlist_state *list = &ctx->ListState;
+   list->CurrentList->execute_glthread =
+      _mesa_glthread_should_execute_list(ctx, list->CurrentList);
+   ctx->Shared->DisplayListsAffectGLThread |= list->CurrentList->execute_glthread;
 
    if ((list->CurrentList->Head == list->CurrentBlock) &&
        (list->CurrentPos < BLOCK_SIZE)) {
@@ -13777,22 +13697,11 @@ _mesa_EndList(void)
 
       assert (ctx->Shared->small_dlist_store.ptr[start + list->CurrentList->count - 1].opcode == OPCODE_END_OF_LIST);
 
-      /* If the first opcode is a NOP, adjust start */
-      if (ctx->Shared->small_dlist_store.ptr[start].opcode == OPCODE_NOP) {
-         list->CurrentList->start++;
-         list->CurrentList->begins_with_a_nop = true;
-      } else {
-         list->CurrentList->begins_with_a_nop = false;
-      }
-
       free(list->CurrentBlock);
    } else {
       /* Keep the mallocated storage */
       list->CurrentList->small_list = false;
-      list->CurrentList->begins_with_a_nop = false;
    }
-
-   _mesa_HashUnlockMutex(ctx->Shared->DisplayList);
 
    /* Destroy old list, if any */
    destroy_list(ctx, ctx->ListState.CurrentList->Name);
@@ -13802,19 +13711,21 @@ _mesa_EndList(void)
                           ctx->ListState.CurrentList->Name,
                           ctx->ListState.CurrentList, true);
 
-
    if (MESA_VERBOSE & VERBOSE_DISPLAY_LIST)
       mesa_print_display_list(ctx->ListState.CurrentList->Name);
+
+   _mesa_HashUnlockMutex(ctx->Shared->DisplayList);
 
    ctx->ListState.CurrentList = NULL;
    ctx->ListState.CurrentBlock = NULL;
    ctx->ListState.CurrentPos = 0;
+   ctx->ListState.LastInstSize = 0;
    ctx->ExecuteFlag = GL_TRUE;
    ctx->CompileFlag = GL_FALSE;
 
    ctx->CurrentServerDispatch = ctx->Exec;
    _glapi_set_dispatch(ctx->CurrentServerDispatch);
-   if (ctx->MarshalExec == NULL) {
+   if (!ctx->GLThread.enabled) {
       ctx->CurrentClientDispatch = ctx->CurrentServerDispatch;
    }
 }
@@ -13856,7 +13767,7 @@ _mesa_CallList(GLuint list)
    if (save_compile_flag) {
       ctx->CurrentServerDispatch = ctx->Save;
        _glapi_set_dispatch(ctx->CurrentServerDispatch);
-      if (ctx->MarshalExec == NULL) {
+      if (!ctx->GLThread.enabled) {
          ctx->CurrentClientDispatch = ctx->CurrentServerDispatch;
       }
    }
@@ -13878,8 +13789,7 @@ render_bitmap_atlas(struct gl_context *ctx, GLsizei n, GLenum type,
    if (!USE_BITMAP_ATLAS ||
        !ctx->Current.RasterPosValid ||
        ctx->List.ListBase == 0 ||
-       type != GL_UNSIGNED_BYTE ||
-       !ctx->Driver.DrawAtlasBitmaps) {
+       type != GL_UNSIGNED_BYTE) {
       /* unsupported */
       return false;
    }
@@ -13916,7 +13826,7 @@ render_bitmap_atlas(struct gl_context *ctx, GLsizei n, GLenum type,
       }
    }
 
-   ctx->Driver.DrawAtlasBitmaps(ctx, atlas, n, (const GLubyte *) lists);
+   st_DrawAtlasBitmaps(ctx, atlas, n, (const GLubyte *) lists);
 
    return true;
 }
@@ -14043,7 +13953,7 @@ _mesa_CallLists(GLsizei n, GLenum type, const GLvoid * lists)
    if (save_compile_flag) {
       ctx->CurrentServerDispatch = ctx->Save;
       _glapi_set_dispatch(ctx->CurrentServerDispatch);
-      if (ctx->MarshalExec == NULL) {
+      if (!ctx->GLThread.enabled) {
          ctx->CurrentClientDispatch = ctx->CurrentServerDispatch;
       }
    }
@@ -14082,636 +13992,7 @@ _mesa_initialize_save_table(const struct gl_context *ctx)
     */
    memcpy(table, ctx->Exec, numEntries * sizeof(_glapi_proc));
 
-   /* VBO functions */
-   vbo_initialize_save_dispatch(ctx, table);
-
-   /* GL 1.0 */
-   SET_Accum(table, save_Accum);
-   SET_AlphaFunc(table, save_AlphaFunc);
-   SET_Bitmap(table, save_Bitmap);
-   SET_BlendFunc(table, save_BlendFunc);
-   SET_CallList(table, save_CallList);
-   SET_CallLists(table, save_CallLists);
-   SET_Clear(table, save_Clear);
-   SET_ClearAccum(table, save_ClearAccum);
-   SET_ClearColor(table, save_ClearColor);
-   SET_ClearDepth(table, save_ClearDepth);
-   SET_ClearIndex(table, save_ClearIndex);
-   SET_ClearStencil(table, save_ClearStencil);
-   SET_ClipPlane(table, save_ClipPlane);
-   SET_ColorMask(table, save_ColorMask);
-   SET_ColorMaski(table, save_ColorMaskIndexed);
-   SET_ColorMaterial(table, save_ColorMaterial);
-   SET_CopyPixels(table, save_CopyPixels);
-   SET_CullFace(table, save_CullFace);
-   SET_DepthFunc(table, save_DepthFunc);
-   SET_DepthMask(table, save_DepthMask);
-   SET_DepthRange(table, save_DepthRange);
-   SET_Disable(table, save_Disable);
-   SET_Disablei(table, save_DisableIndexed);
-   SET_DrawBuffer(table, save_DrawBuffer);
-   SET_DrawPixels(table, save_DrawPixels);
-   SET_Enable(table, save_Enable);
-   SET_Enablei(table, save_EnableIndexed);
-   SET_EvalMesh1(table, save_EvalMesh1);
-   SET_EvalMesh2(table, save_EvalMesh2);
-   SET_Fogf(table, save_Fogf);
-   SET_Fogfv(table, save_Fogfv);
-   SET_Fogi(table, save_Fogi);
-   SET_Fogiv(table, save_Fogiv);
-   SET_FrontFace(table, save_FrontFace);
-   SET_Frustum(table, save_Frustum);
-   SET_Hint(table, save_Hint);
-   SET_IndexMask(table, save_IndexMask);
-   SET_InitNames(table, save_InitNames);
-   SET_LightModelf(table, save_LightModelf);
-   SET_LightModelfv(table, save_LightModelfv);
-   SET_LightModeli(table, save_LightModeli);
-   SET_LightModeliv(table, save_LightModeliv);
-   SET_Lightf(table, save_Lightf);
-   SET_Lightfv(table, save_Lightfv);
-   SET_Lighti(table, save_Lighti);
-   SET_Lightiv(table, save_Lightiv);
-   SET_LineStipple(table, save_LineStipple);
-   SET_LineWidth(table, save_LineWidth);
-   SET_ListBase(table, save_ListBase);
-   SET_LoadIdentity(table, save_LoadIdentity);
-   SET_LoadMatrixd(table, save_LoadMatrixd);
-   SET_LoadMatrixf(table, save_LoadMatrixf);
-   SET_LoadName(table, save_LoadName);
-   SET_LogicOp(table, save_LogicOp);
-   SET_Map1d(table, save_Map1d);
-   SET_Map1f(table, save_Map1f);
-   SET_Map2d(table, save_Map2d);
-   SET_Map2f(table, save_Map2f);
-   SET_MapGrid1d(table, save_MapGrid1d);
-   SET_MapGrid1f(table, save_MapGrid1f);
-   SET_MapGrid2d(table, save_MapGrid2d);
-   SET_MapGrid2f(table, save_MapGrid2f);
-   SET_MatrixMode(table, save_MatrixMode);
-   SET_MultMatrixd(table, save_MultMatrixd);
-   SET_MultMatrixf(table, save_MultMatrixf);
-   SET_NewList(table, save_NewList);
-   SET_Ortho(table, save_Ortho);
-   SET_PassThrough(table, save_PassThrough);
-   SET_PixelMapfv(table, save_PixelMapfv);
-   SET_PixelMapuiv(table, save_PixelMapuiv);
-   SET_PixelMapusv(table, save_PixelMapusv);
-   SET_PixelTransferf(table, save_PixelTransferf);
-   SET_PixelTransferi(table, save_PixelTransferi);
-   SET_PixelZoom(table, save_PixelZoom);
-   SET_PointSize(table, save_PointSize);
-   SET_PolygonMode(table, save_PolygonMode);
-   SET_PolygonOffset(table, save_PolygonOffset);
-   SET_PolygonStipple(table, save_PolygonStipple);
-   SET_PopAttrib(table, save_PopAttrib);
-   SET_PopMatrix(table, save_PopMatrix);
-   SET_PopName(table, save_PopName);
-   SET_PushAttrib(table, save_PushAttrib);
-   SET_PushMatrix(table, save_PushMatrix);
-   SET_PushName(table, save_PushName);
-   SET_RasterPos2d(table, save_RasterPos2d);
-   SET_RasterPos2dv(table, save_RasterPos2dv);
-   SET_RasterPos2f(table, save_RasterPos2f);
-   SET_RasterPos2fv(table, save_RasterPos2fv);
-   SET_RasterPos2i(table, save_RasterPos2i);
-   SET_RasterPos2iv(table, save_RasterPos2iv);
-   SET_RasterPos2s(table, save_RasterPos2s);
-   SET_RasterPos2sv(table, save_RasterPos2sv);
-   SET_RasterPos3d(table, save_RasterPos3d);
-   SET_RasterPos3dv(table, save_RasterPos3dv);
-   SET_RasterPos3f(table, save_RasterPos3f);
-   SET_RasterPos3fv(table, save_RasterPos3fv);
-   SET_RasterPos3i(table, save_RasterPos3i);
-   SET_RasterPos3iv(table, save_RasterPos3iv);
-   SET_RasterPos3s(table, save_RasterPos3s);
-   SET_RasterPos3sv(table, save_RasterPos3sv);
-   SET_RasterPos4d(table, save_RasterPos4d);
-   SET_RasterPos4dv(table, save_RasterPos4dv);
-   SET_RasterPos4f(table, save_RasterPos4f);
-   SET_RasterPos4fv(table, save_RasterPos4fv);
-   SET_RasterPos4i(table, save_RasterPos4i);
-   SET_RasterPos4iv(table, save_RasterPos4iv);
-   SET_RasterPos4s(table, save_RasterPos4s);
-   SET_RasterPos4sv(table, save_RasterPos4sv);
-   SET_ReadBuffer(table, save_ReadBuffer);
-   SET_Rotated(table, save_Rotated);
-   SET_Rotatef(table, save_Rotatef);
-   SET_Scaled(table, save_Scaled);
-   SET_Scalef(table, save_Scalef);
-   SET_Scissor(table, save_Scissor);
-   SET_ShadeModel(table, save_ShadeModel);
-   SET_StencilFunc(table, save_StencilFunc);
-   SET_StencilMask(table, save_StencilMask);
-   SET_StencilOp(table, save_StencilOp);
-   SET_TexEnvf(table, save_TexEnvf);
-   SET_TexEnvfv(table, save_TexEnvfv);
-   SET_TexEnvi(table, save_TexEnvi);
-   SET_TexEnviv(table, save_TexEnviv);
-   SET_TexGend(table, save_TexGend);
-   SET_TexGendv(table, save_TexGendv);
-   SET_TexGenf(table, save_TexGenf);
-   SET_TexGenfv(table, save_TexGenfv);
-   SET_TexGeni(table, save_TexGeni);
-   SET_TexGeniv(table, save_TexGeniv);
-   SET_TexImage1D(table, save_TexImage1D);
-   SET_TexImage2D(table, save_TexImage2D);
-   SET_TexParameterf(table, save_TexParameterf);
-   SET_TexParameterfv(table, save_TexParameterfv);
-   SET_TexParameteri(table, save_TexParameteri);
-   SET_TexParameteriv(table, save_TexParameteriv);
-   SET_Translated(table, save_Translated);
-   SET_Translatef(table, save_Translatef);
-   SET_Viewport(table, save_Viewport);
-
-   /* GL 1.1 */
-   SET_BindTexture(table, save_BindTexture);
-   SET_CopyTexImage1D(table, save_CopyTexImage1D);
-   SET_CopyTexImage2D(table, save_CopyTexImage2D);
-   SET_CopyTexSubImage1D(table, save_CopyTexSubImage1D);
-   SET_CopyTexSubImage2D(table, save_CopyTexSubImage2D);
-   SET_PrioritizeTextures(table, save_PrioritizeTextures);
-   SET_TexSubImage1D(table, save_TexSubImage1D);
-   SET_TexSubImage2D(table, save_TexSubImage2D);
-
-   /* GL 1.2 */
-   SET_CopyTexSubImage3D(table, save_CopyTexSubImage3D);
-   SET_TexImage3D(table, save_TexImage3D);
-   SET_TexSubImage3D(table, save_TexSubImage3D);
-
-   /* GL 2.0 */
-   SET_StencilFuncSeparate(table, save_StencilFuncSeparate);
-   SET_StencilMaskSeparate(table, save_StencilMaskSeparate);
-   SET_StencilOpSeparate(table, save_StencilOpSeparate);
-
-   /* ATI_separate_stencil */
-   SET_StencilFuncSeparateATI(table, save_StencilFuncSeparateATI);
-
-   /* GL_ARB_imaging */
-   /* Not all are supported */
-   SET_BlendColor(table, save_BlendColor);
-   SET_BlendEquation(table, save_BlendEquation);
-
-   /* 2. GL_EXT_blend_color */
-#if 0
-   SET_BlendColorEXT(table, save_BlendColorEXT);
-#endif
-
-   /* 6. GL_EXT_texture3d */
-#if 0
-   SET_CopyTexSubImage3DEXT(table, save_CopyTexSubImage3D);
-   SET_TexImage3DEXT(table, save_TexImage3DEXT);
-   SET_TexSubImage3DEXT(table, save_TexSubImage3D);
-#endif
-
-   /* 37. GL_EXT_blend_minmax */
-#if 0
-   SET_BlendEquationEXT(table, save_BlendEquationEXT);
-#endif
-
-   /* 54. GL_EXT_point_parameters */
-   SET_PointParameterf(table, save_PointParameterfEXT);
-   SET_PointParameterfv(table, save_PointParameterfvEXT);
-
-   /* 91. GL_ARB_tessellation_shader */
-   SET_PatchParameteri(table, save_PatchParameteri);
-   SET_PatchParameterfv(table, save_PatchParameterfv);
-
-   /* 100. ARB_viewport_array */
-   SET_ViewportArrayv(table, save_ViewportArrayv);
-   SET_ViewportIndexedf(table, save_ViewportIndexedf);
-   SET_ViewportIndexedfv(table, save_ViewportIndexedfv);
-   SET_ScissorArrayv(table, save_ScissorArrayv);
-   SET_ScissorIndexed(table, save_ScissorIndexed);
-   SET_ScissorIndexedv(table, save_ScissorIndexedv);
-   SET_DepthRangeArrayv(table, save_DepthRangeArrayv);
-   SET_DepthRangeIndexed(table, save_DepthRangeIndexed);
-
-   /* 122. ARB_compute_shader */
-   SET_DispatchCompute(table, save_DispatchCompute);
-   SET_DispatchComputeIndirect(table, save_DispatchComputeIndirect);
-
-   /* 173. GL_EXT_blend_func_separate */
-   SET_BlendFuncSeparate(table, save_BlendFuncSeparateEXT);
-
-   /* 197. GL_MESA_window_pos */
-   SET_WindowPos2d(table, save_WindowPos2dMESA);
-   SET_WindowPos2dv(table, save_WindowPos2dvMESA);
-   SET_WindowPos2f(table, save_WindowPos2fMESA);
-   SET_WindowPos2fv(table, save_WindowPos2fvMESA);
-   SET_WindowPos2i(table, save_WindowPos2iMESA);
-   SET_WindowPos2iv(table, save_WindowPos2ivMESA);
-   SET_WindowPos2s(table, save_WindowPos2sMESA);
-   SET_WindowPos2sv(table, save_WindowPos2svMESA);
-   SET_WindowPos3d(table, save_WindowPos3dMESA);
-   SET_WindowPos3dv(table, save_WindowPos3dvMESA);
-   SET_WindowPos3f(table, save_WindowPos3fMESA);
-   SET_WindowPos3fv(table, save_WindowPos3fvMESA);
-   SET_WindowPos3i(table, save_WindowPos3iMESA);
-   SET_WindowPos3iv(table, save_WindowPos3ivMESA);
-   SET_WindowPos3s(table, save_WindowPos3sMESA);
-   SET_WindowPos3sv(table, save_WindowPos3svMESA);
-   SET_WindowPos4dMESA(table, save_WindowPos4dMESA);
-   SET_WindowPos4dvMESA(table, save_WindowPos4dvMESA);
-   SET_WindowPos4fMESA(table, save_WindowPos4fMESA);
-   SET_WindowPos4fvMESA(table, save_WindowPos4fvMESA);
-   SET_WindowPos4iMESA(table, save_WindowPos4iMESA);
-   SET_WindowPos4ivMESA(table, save_WindowPos4ivMESA);
-   SET_WindowPos4sMESA(table, save_WindowPos4sMESA);
-   SET_WindowPos4svMESA(table, save_WindowPos4svMESA);
-
-   /* 245. GL_ATI_fragment_shader */
-   SET_BindFragmentShaderATI(table, save_BindFragmentShaderATI);
-   SET_SetFragmentShaderConstantATI(table, save_SetFragmentShaderConstantATI);
-
-   /* 262. GL_ARB_point_sprite */
-   SET_PointParameteri(table, save_PointParameteri);
-   SET_PointParameteriv(table, save_PointParameteriv);
-
-   /* 268. GL_EXT_stencil_two_side */
-   SET_ActiveStencilFaceEXT(table, save_ActiveStencilFaceEXT);
-
-   /* ???. GL_EXT_depth_bounds_test */
-   SET_DepthBoundsEXT(table, save_DepthBoundsEXT);
-
-   /* ARB 1. GL_ARB_multitexture */
-   SET_ActiveTexture(table, save_ActiveTextureARB);
-
-   /* ARB 3. GL_ARB_transpose_matrix */
-   SET_LoadTransposeMatrixd(table, save_LoadTransposeMatrixdARB);
-   SET_LoadTransposeMatrixf(table, save_LoadTransposeMatrixfARB);
-   SET_MultTransposeMatrixd(table, save_MultTransposeMatrixdARB);
-   SET_MultTransposeMatrixf(table, save_MultTransposeMatrixfARB);
-
-   /* ARB 5. GL_ARB_multisample */
-   SET_SampleCoverage(table, save_SampleCoverageARB);
-
-   /* ARB 12. GL_ARB_texture_compression */
-   SET_CompressedTexImage3D(table, save_CompressedTexImage3DARB);
-   SET_CompressedTexImage2D(table, save_CompressedTexImage2DARB);
-   SET_CompressedTexImage1D(table, save_CompressedTexImage1DARB);
-   SET_CompressedTexSubImage3D(table, save_CompressedTexSubImage3DARB);
-   SET_CompressedTexSubImage2D(table, save_CompressedTexSubImage2DARB);
-   SET_CompressedTexSubImage1D(table, save_CompressedTexSubImage1DARB);
-
-   /* ARB 14. GL_ARB_point_parameters */
-   /* aliased with EXT_point_parameters functions */
-
-   /* ARB 25. GL_ARB_window_pos */
-   /* aliased with MESA_window_pos functions */
-
-   /* ARB 26. GL_ARB_vertex_program */
-   /* ARB 27. GL_ARB_fragment_program */
-   /* glVertexAttrib* functions alias the NV ones, handled elsewhere */
-   SET_ProgramStringARB(table, save_ProgramStringARB);
-   SET_BindProgramARB(table, save_BindProgramARB);
-   SET_ProgramEnvParameter4dARB(table, save_ProgramEnvParameter4dARB);
-   SET_ProgramEnvParameter4dvARB(table, save_ProgramEnvParameter4dvARB);
-   SET_ProgramEnvParameter4fARB(table, save_ProgramEnvParameter4fARB);
-   SET_ProgramEnvParameter4fvARB(table, save_ProgramEnvParameter4fvARB);
-   SET_ProgramLocalParameter4dARB(table, save_ProgramLocalParameter4dARB);
-   SET_ProgramLocalParameter4dvARB(table, save_ProgramLocalParameter4dvARB);
-   SET_ProgramLocalParameter4fARB(table, save_ProgramLocalParameter4fARB);
-   SET_ProgramLocalParameter4fvARB(table, save_ProgramLocalParameter4fvARB);
-
-   SET_BeginQuery(table, save_BeginQueryARB);
-   SET_EndQuery(table, save_EndQueryARB);
-   SET_QueryCounter(table, save_QueryCounter);
-
-   SET_DrawBuffers(table, save_DrawBuffersARB);
-
-   SET_BlitFramebuffer(table, save_BlitFramebufferEXT);
-
-   SET_UseProgram(table, save_UseProgram);
-   SET_Uniform1f(table, save_Uniform1fARB);
-   SET_Uniform2f(table, save_Uniform2fARB);
-   SET_Uniform3f(table, save_Uniform3fARB);
-   SET_Uniform4f(table, save_Uniform4fARB);
-   SET_Uniform1fv(table, save_Uniform1fvARB);
-   SET_Uniform2fv(table, save_Uniform2fvARB);
-   SET_Uniform3fv(table, save_Uniform3fvARB);
-   SET_Uniform4fv(table, save_Uniform4fvARB);
-   SET_Uniform1i(table, save_Uniform1iARB);
-   SET_Uniform2i(table, save_Uniform2iARB);
-   SET_Uniform3i(table, save_Uniform3iARB);
-   SET_Uniform4i(table, save_Uniform4iARB);
-   SET_Uniform1iv(table, save_Uniform1ivARB);
-   SET_Uniform2iv(table, save_Uniform2ivARB);
-   SET_Uniform3iv(table, save_Uniform3ivARB);
-   SET_Uniform4iv(table, save_Uniform4ivARB);
-   SET_UniformMatrix2fv(table, save_UniformMatrix2fvARB);
-   SET_UniformMatrix3fv(table, save_UniformMatrix3fvARB);
-   SET_UniformMatrix4fv(table, save_UniformMatrix4fvARB);
-   SET_UniformMatrix2x3fv(table, save_UniformMatrix2x3fv);
-   SET_UniformMatrix3x2fv(table, save_UniformMatrix3x2fv);
-   SET_UniformMatrix2x4fv(table, save_UniformMatrix2x4fv);
-   SET_UniformMatrix4x2fv(table, save_UniformMatrix4x2fv);
-   SET_UniformMatrix3x4fv(table, save_UniformMatrix3x4fv);
-   SET_UniformMatrix4x3fv(table, save_UniformMatrix4x3fv);
-
-   /* 299. GL_EXT_blend_equation_separate */
-   SET_BlendEquationSeparate(table, save_BlendEquationSeparateEXT);
-
-   /* GL_EXT_gpu_program_parameters */
-   SET_ProgramEnvParameters4fvEXT(table, save_ProgramEnvParameters4fvEXT);
-   SET_ProgramLocalParameters4fvEXT(table, save_ProgramLocalParameters4fvEXT);
-
-   /* 364. GL_EXT_provoking_vertex */
-   SET_ProvokingVertex(table, save_ProvokingVertexEXT);
-
-   /* GL_EXT_texture_integer */
-   SET_ClearColorIiEXT(table, save_ClearColorIi);
-   SET_ClearColorIuiEXT(table, save_ClearColorIui);
-   SET_TexParameterIiv(table, save_TexParameterIiv);
-   SET_TexParameterIuiv(table, save_TexParameterIuiv);
-
-   /* GL_ARB_clip_control */
-   SET_ClipControl(table, save_ClipControl);
-
-   /* GL_ARB_color_buffer_float */
-   SET_ClampColor(table, save_ClampColorARB);
-
-   /* GL 3.0 */
-   SET_ClearBufferiv(table, save_ClearBufferiv);
-   SET_ClearBufferuiv(table, save_ClearBufferuiv);
-   SET_ClearBufferfv(table, save_ClearBufferfv);
-   SET_ClearBufferfi(table, save_ClearBufferfi);
-   SET_Uniform1ui(table, save_Uniform1ui);
-   SET_Uniform2ui(table, save_Uniform2ui);
-   SET_Uniform3ui(table, save_Uniform3ui);
-   SET_Uniform4ui(table, save_Uniform4ui);
-   SET_Uniform1uiv(table, save_Uniform1uiv);
-   SET_Uniform2uiv(table, save_Uniform2uiv);
-   SET_Uniform3uiv(table, save_Uniform3uiv);
-   SET_Uniform4uiv(table, save_Uniform4uiv);
-
-   /* GL_ARB_gpu_shader_fp64 */
-   SET_Uniform1d(table, save_Uniform1d);
-   SET_Uniform2d(table, save_Uniform2d);
-   SET_Uniform3d(table, save_Uniform3d);
-   SET_Uniform4d(table, save_Uniform4d);
-   SET_Uniform1dv(table, save_Uniform1dv);
-   SET_Uniform2dv(table, save_Uniform2dv);
-   SET_Uniform3dv(table, save_Uniform3dv);
-   SET_Uniform4dv(table, save_Uniform4dv);
-   SET_UniformMatrix2dv(table, save_UniformMatrix2dv);
-   SET_UniformMatrix3dv(table, save_UniformMatrix3dv);
-   SET_UniformMatrix4dv(table, save_UniformMatrix4dv);
-   SET_UniformMatrix2x3dv(table, save_UniformMatrix2x3dv);
-   SET_UniformMatrix3x2dv(table, save_UniformMatrix3x2dv);
-   SET_UniformMatrix2x4dv(table, save_UniformMatrix2x4dv);
-   SET_UniformMatrix4x2dv(table, save_UniformMatrix4x2dv);
-   SET_UniformMatrix3x4dv(table, save_UniformMatrix3x4dv);
-   SET_UniformMatrix4x3dv(table, save_UniformMatrix4x3dv);
-
-   /* GL_ARB_gpu_shader_int64 */
-   SET_Uniform1i64ARB(table, save_Uniform1i64ARB);
-   SET_Uniform2i64ARB(table, save_Uniform2i64ARB);
-   SET_Uniform3i64ARB(table, save_Uniform3i64ARB);
-   SET_Uniform4i64ARB(table, save_Uniform4i64ARB);
-   SET_Uniform1i64vARB(table, save_Uniform1i64vARB);
-   SET_Uniform2i64vARB(table, save_Uniform2i64vARB);
-   SET_Uniform3i64vARB(table, save_Uniform3i64vARB);
-   SET_Uniform4i64vARB(table, save_Uniform4i64vARB);
-   SET_Uniform1ui64ARB(table, save_Uniform1ui64ARB);
-   SET_Uniform2ui64ARB(table, save_Uniform2ui64ARB);
-   SET_Uniform3ui64ARB(table, save_Uniform3ui64ARB);
-   SET_Uniform4ui64ARB(table, save_Uniform4ui64ARB);
-   SET_Uniform1ui64vARB(table, save_Uniform1ui64vARB);
-   SET_Uniform2ui64vARB(table, save_Uniform2ui64vARB);
-   SET_Uniform3ui64vARB(table, save_Uniform3ui64vARB);
-   SET_Uniform4ui64vARB(table, save_Uniform4ui64vARB);
-
-   SET_ProgramUniform1i64ARB(table, save_ProgramUniform1i64ARB);
-   SET_ProgramUniform2i64ARB(table, save_ProgramUniform2i64ARB);
-   SET_ProgramUniform3i64ARB(table, save_ProgramUniform3i64ARB);
-   SET_ProgramUniform4i64ARB(table, save_ProgramUniform4i64ARB);
-   SET_ProgramUniform1i64vARB(table, save_ProgramUniform1i64vARB);
-   SET_ProgramUniform2i64vARB(table, save_ProgramUniform2i64vARB);
-   SET_ProgramUniform3i64vARB(table, save_ProgramUniform3i64vARB);
-   SET_ProgramUniform4i64vARB(table, save_ProgramUniform4i64vARB);
-   SET_ProgramUniform1ui64ARB(table, save_ProgramUniform1ui64ARB);
-   SET_ProgramUniform2ui64ARB(table, save_ProgramUniform2ui64ARB);
-   SET_ProgramUniform3ui64ARB(table, save_ProgramUniform3ui64ARB);
-   SET_ProgramUniform4ui64ARB(table, save_ProgramUniform4ui64ARB);
-   SET_ProgramUniform1ui64vARB(table, save_ProgramUniform1ui64vARB);
-   SET_ProgramUniform2ui64vARB(table, save_ProgramUniform2ui64vARB);
-   SET_ProgramUniform3ui64vARB(table, save_ProgramUniform3ui64vARB);
-   SET_ProgramUniform4ui64vARB(table, save_ProgramUniform4ui64vARB);
-
-   /* These are: */
-   SET_BeginTransformFeedback(table, save_BeginTransformFeedback);
-   SET_EndTransformFeedback(table, save_EndTransformFeedback);
-   SET_BindTransformFeedback(table, save_BindTransformFeedback);
-   SET_PauseTransformFeedback(table, save_PauseTransformFeedback);
-   SET_ResumeTransformFeedback(table, save_ResumeTransformFeedback);
-   SET_DrawTransformFeedback(table, save_DrawTransformFeedback);
-   SET_DrawTransformFeedbackStream(table, save_DrawTransformFeedbackStream);
-   SET_DrawTransformFeedbackInstanced(table,
-                                      save_DrawTransformFeedbackInstanced);
-   SET_DrawTransformFeedbackStreamInstanced(table,
-                                save_DrawTransformFeedbackStreamInstanced);
-   SET_BeginQueryIndexed(table, save_BeginQueryIndexed);
-   SET_EndQueryIndexed(table, save_EndQueryIndexed);
-
-   /* GL_ARB_instanced_arrays */
-   SET_VertexAttribDivisor(table, save_VertexAttribDivisor);
-
-   /* GL_NV_texture_barrier */
-   SET_TextureBarrierNV(table, save_TextureBarrierNV);
-
-   SET_BindSampler(table, save_BindSampler);
-   SET_SamplerParameteri(table, save_SamplerParameteri);
-   SET_SamplerParameterf(table, save_SamplerParameterf);
-   SET_SamplerParameteriv(table, save_SamplerParameteriv);
-   SET_SamplerParameterfv(table, save_SamplerParameterfv);
-   SET_SamplerParameterIiv(table, save_SamplerParameterIiv);
-   SET_SamplerParameterIuiv(table, save_SamplerParameterIuiv);
-
-   /* GL_ARB_draw_buffer_blend */
-   SET_BlendFunciARB(table, save_BlendFunci);
-   SET_BlendFuncSeparateiARB(table, save_BlendFuncSeparatei);
-   SET_BlendEquationiARB(table, save_BlendEquationi);
-   SET_BlendEquationSeparateiARB(table, save_BlendEquationSeparatei);
-
-   /* GL_NV_conditional_render */
-   SET_BeginConditionalRender(table, save_BeginConditionalRender);
-   SET_EndConditionalRender(table, save_EndConditionalRender);
-
-   /* GL_ARB_sync */
-   SET_WaitSync(table, save_WaitSync);
-
-   /* GL_ARB_uniform_buffer_object */
-   SET_UniformBlockBinding(table, save_UniformBlockBinding);
-
-   /* GL_ARB_shader_subroutines */
-   SET_UniformSubroutinesuiv(table, save_UniformSubroutinesuiv);
-
-   /* GL_ARB_draw_instanced */
-   SET_DrawArraysInstancedARB(table, save_DrawArraysInstancedARB);
-   SET_DrawElementsInstancedARB(table, save_DrawElementsInstancedARB);
-
-   /* GL_ARB_draw_elements_base_vertex */
-   SET_DrawElementsInstancedBaseVertex(table, save_DrawElementsInstancedBaseVertexARB);
-
-   /* GL_ARB_base_instance */
-   SET_DrawArraysInstancedBaseInstance(table, save_DrawArraysInstancedBaseInstance);
-   SET_DrawElementsInstancedBaseInstance(table, save_DrawElementsInstancedBaseInstance);
-   SET_DrawElementsInstancedBaseVertexBaseInstance(table, save_DrawElementsInstancedBaseVertexBaseInstance);
-
-   /* GL_ARB_draw_indirect / GL_ARB_multi_draw_indirect */
-   SET_DrawArraysIndirect(table, save_DrawArraysIndirect);
-   SET_DrawElementsIndirect(table, save_DrawElementsIndirect);
-   SET_MultiDrawArraysIndirect(table, save_MultiDrawArraysIndirect);
-   SET_MultiDrawElementsIndirect(table, save_MultiDrawElementsIndirect);
-
-   /* OpenGL 4.2 / GL_ARB_separate_shader_objects */
-   SET_UseProgramStages(table, save_UseProgramStages);
-   SET_ProgramUniform1f(table, save_ProgramUniform1f);
-   SET_ProgramUniform2f(table, save_ProgramUniform2f);
-   SET_ProgramUniform3f(table, save_ProgramUniform3f);
-   SET_ProgramUniform4f(table, save_ProgramUniform4f);
-   SET_ProgramUniform1fv(table, save_ProgramUniform1fv);
-   SET_ProgramUniform2fv(table, save_ProgramUniform2fv);
-   SET_ProgramUniform3fv(table, save_ProgramUniform3fv);
-   SET_ProgramUniform4fv(table, save_ProgramUniform4fv);
-   SET_ProgramUniform1d(table, save_ProgramUniform1d);
-   SET_ProgramUniform2d(table, save_ProgramUniform2d);
-   SET_ProgramUniform3d(table, save_ProgramUniform3d);
-   SET_ProgramUniform4d(table, save_ProgramUniform4d);
-   SET_ProgramUniform1dv(table, save_ProgramUniform1dv);
-   SET_ProgramUniform2dv(table, save_ProgramUniform2dv);
-   SET_ProgramUniform3dv(table, save_ProgramUniform3dv);
-   SET_ProgramUniform4dv(table, save_ProgramUniform4dv);
-   SET_ProgramUniform1i(table, save_ProgramUniform1i);
-   SET_ProgramUniform2i(table, save_ProgramUniform2i);
-   SET_ProgramUniform3i(table, save_ProgramUniform3i);
-   SET_ProgramUniform4i(table, save_ProgramUniform4i);
-   SET_ProgramUniform1iv(table, save_ProgramUniform1iv);
-   SET_ProgramUniform2iv(table, save_ProgramUniform2iv);
-   SET_ProgramUniform3iv(table, save_ProgramUniform3iv);
-   SET_ProgramUniform4iv(table, save_ProgramUniform4iv);
-   SET_ProgramUniform1ui(table, save_ProgramUniform1ui);
-   SET_ProgramUniform2ui(table, save_ProgramUniform2ui);
-   SET_ProgramUniform3ui(table, save_ProgramUniform3ui);
-   SET_ProgramUniform4ui(table, save_ProgramUniform4ui);
-   SET_ProgramUniform1uiv(table, save_ProgramUniform1uiv);
-   SET_ProgramUniform2uiv(table, save_ProgramUniform2uiv);
-   SET_ProgramUniform3uiv(table, save_ProgramUniform3uiv);
-   SET_ProgramUniform4uiv(table, save_ProgramUniform4uiv);
-   SET_ProgramUniformMatrix2fv(table, save_ProgramUniformMatrix2fv);
-   SET_ProgramUniformMatrix3fv(table, save_ProgramUniformMatrix3fv);
-   SET_ProgramUniformMatrix4fv(table, save_ProgramUniformMatrix4fv);
-   SET_ProgramUniformMatrix2x3fv(table, save_ProgramUniformMatrix2x3fv);
-   SET_ProgramUniformMatrix3x2fv(table, save_ProgramUniformMatrix3x2fv);
-   SET_ProgramUniformMatrix2x4fv(table, save_ProgramUniformMatrix2x4fv);
-   SET_ProgramUniformMatrix4x2fv(table, save_ProgramUniformMatrix4x2fv);
-   SET_ProgramUniformMatrix3x4fv(table, save_ProgramUniformMatrix3x4fv);
-   SET_ProgramUniformMatrix4x3fv(table, save_ProgramUniformMatrix4x3fv);
-   SET_ProgramUniformMatrix2dv(table, save_ProgramUniformMatrix2dv);
-   SET_ProgramUniformMatrix3dv(table, save_ProgramUniformMatrix3dv);
-   SET_ProgramUniformMatrix4dv(table, save_ProgramUniformMatrix4dv);
-   SET_ProgramUniformMatrix2x3dv(table, save_ProgramUniformMatrix2x3dv);
-   SET_ProgramUniformMatrix3x2dv(table, save_ProgramUniformMatrix3x2dv);
-   SET_ProgramUniformMatrix2x4dv(table, save_ProgramUniformMatrix2x4dv);
-   SET_ProgramUniformMatrix4x2dv(table, save_ProgramUniformMatrix4x2dv);
-   SET_ProgramUniformMatrix3x4dv(table, save_ProgramUniformMatrix3x4dv);
-   SET_ProgramUniformMatrix4x3dv(table, save_ProgramUniformMatrix4x3dv);
-
-   /* GL_{ARB,EXT}_polygon_offset_clamp */
-   SET_PolygonOffsetClampEXT(table, save_PolygonOffsetClampEXT);
-
-   /* GL_EXT_window_rectangles */
-   SET_WindowRectanglesEXT(table, save_WindowRectanglesEXT);
-
-   /* GL_NV_conservative_raster */
-   SET_SubpixelPrecisionBiasNV(table, save_SubpixelPrecisionBiasNV);
-
-   /* GL_NV_conservative_raster_dilate */
-   SET_ConservativeRasterParameterfNV(table, save_ConservativeRasterParameterfNV);
-
-   /* GL_NV_conservative_raster_pre_snap_triangles */
-   SET_ConservativeRasterParameteriNV(table, save_ConservativeRasterParameteriNV);
-
-   /* GL_EXT_direct_state_access */
-   SET_MatrixLoadfEXT(table, save_MatrixLoadfEXT);
-   SET_MatrixLoaddEXT(table, save_MatrixLoaddEXT);
-   SET_MatrixMultfEXT(table, save_MatrixMultfEXT);
-   SET_MatrixMultdEXT(table, save_MatrixMultdEXT);
-   SET_MatrixRotatefEXT(table, save_MatrixRotatefEXT);
-   SET_MatrixRotatedEXT(table, save_MatrixRotatedEXT);
-   SET_MatrixScalefEXT(table, save_MatrixScalefEXT);
-   SET_MatrixScaledEXT(table, save_MatrixScaledEXT);
-   SET_MatrixTranslatefEXT(table, save_MatrixTranslatefEXT);
-   SET_MatrixTranslatedEXT(table, save_MatrixTranslatedEXT);
-   SET_MatrixLoadIdentityEXT(table, save_MatrixLoadIdentityEXT);
-   SET_MatrixOrthoEXT(table, save_MatrixOrthoEXT);
-   SET_MatrixFrustumEXT(table, save_MatrixFrustumEXT);
-   SET_MatrixPushEXT(table, save_MatrixPushEXT);
-   SET_MatrixPopEXT(table, save_MatrixPopEXT);
-   SET_MatrixLoadTransposefEXT(table, save_MatrixLoadTransposefEXT);
-   SET_MatrixLoadTransposedEXT(table, save_MatrixLoadTransposedEXT);
-   SET_MatrixMultTransposefEXT(table, save_MatrixMultTransposefEXT);
-   SET_MatrixMultTransposedEXT(table, save_MatrixMultTransposedEXT);
-   SET_TextureParameteriEXT(table, save_TextureParameteriEXT);
-   SET_TextureParameterivEXT(table, save_TextureParameterivEXT);
-   SET_TextureParameterfEXT(table, save_TextureParameterfEXT);
-   SET_TextureParameterfvEXT(table, save_TextureParameterfvEXT);
-   SET_TextureParameterIivEXT(table, save_TextureParameterIivEXT);
-   SET_TextureParameterIuivEXT(table, save_TextureParameterIuivEXT);
-   SET_TextureImage1DEXT(table, save_TextureImage1DEXT);
-   SET_TextureImage2DEXT(table, save_TextureImage2DEXT);
-   SET_TextureImage3DEXT(table, save_TextureImage3DEXT);
-   SET_TextureSubImage1DEXT(table, save_TextureSubImage1DEXT);
-   SET_TextureSubImage2DEXT(table, save_TextureSubImage2DEXT);
-   SET_TextureSubImage3DEXT(table, save_TextureSubImage3DEXT);
-   SET_CopyTextureImage1DEXT(table, save_CopyTextureImage1DEXT);
-   SET_CopyTextureImage2DEXT(table, save_CopyTextureImage2DEXT);
-   SET_CopyTextureSubImage1DEXT(table, save_CopyTextureSubImage1DEXT);
-   SET_CopyTextureSubImage2DEXT(table, save_CopyTextureSubImage2DEXT);
-   SET_CopyTextureSubImage3DEXT(table, save_CopyTextureSubImage3DEXT);
-   SET_BindMultiTextureEXT(table, save_BindMultiTextureEXT);
-   SET_MultiTexParameteriEXT(table, save_MultiTexParameteriEXT);
-   SET_MultiTexParameterivEXT(table, save_MultiTexParameterivEXT);
-   SET_MultiTexParameterIivEXT(table, save_MultiTexParameterIivEXT);
-   SET_MultiTexParameterIuivEXT(table, save_MultiTexParameterIuivEXT);
-   SET_MultiTexParameterfEXT(table, save_MultiTexParameterfEXT);
-   SET_MultiTexParameterfvEXT(table, save_MultiTexParameterfvEXT);
-   SET_MultiTexImage1DEXT(table, save_MultiTexImage1DEXT);
-   SET_MultiTexImage2DEXT(table, save_MultiTexImage2DEXT);
-   SET_MultiTexImage3DEXT(table, save_MultiTexImage3DEXT);
-   SET_MultiTexSubImage1DEXT(table, save_MultiTexSubImage1DEXT);
-   SET_MultiTexSubImage2DEXT(table, save_MultiTexSubImage2DEXT);
-   SET_MultiTexSubImage3DEXT(table, save_MultiTexSubImage3DEXT);
-   SET_CopyMultiTexImage1DEXT(table, save_CopyMultiTexImage1DEXT);
-   SET_CopyMultiTexImage2DEXT(table, save_CopyMultiTexImage2DEXT);
-   SET_CopyMultiTexSubImage1DEXT(table, save_CopyMultiTexSubImage1DEXT);
-   SET_CopyMultiTexSubImage2DEXT(table, save_CopyMultiTexSubImage2DEXT);
-   SET_CopyMultiTexSubImage3DEXT(table, save_CopyMultiTexSubImage3DEXT);
-   SET_MultiTexEnvfEXT(table, save_MultiTexEnvfEXT);
-   SET_MultiTexEnvfvEXT(table, save_MultiTexEnvfvEXT);
-   SET_MultiTexEnviEXT(table, save_MultiTexEnviEXT);
-   SET_MultiTexEnvivEXT(table, save_MultiTexEnvivEXT);
-   SET_CompressedTextureImage1DEXT(table, save_CompressedTextureImage1DEXT);
-   SET_CompressedTextureImage2DEXT(table, save_CompressedTextureImage2DEXT);
-   SET_CompressedTextureImage3DEXT(table, save_CompressedTextureImage3DEXT);
-   SET_CompressedTextureSubImage1DEXT(table, save_CompressedTextureSubImage1DEXT);
-   SET_CompressedTextureSubImage2DEXT(table, save_CompressedTextureSubImage2DEXT);
-   SET_CompressedTextureSubImage3DEXT(table, save_CompressedTextureSubImage3DEXT);
-   SET_CompressedMultiTexImage1DEXT(table, save_CompressedMultiTexImage1DEXT);
-   SET_CompressedMultiTexImage2DEXT(table, save_CompressedMultiTexImage2DEXT);
-   SET_CompressedMultiTexImage3DEXT(table, save_CompressedMultiTexImage3DEXT);
-   SET_CompressedMultiTexSubImage1DEXT(table, save_CompressedMultiTexSubImage1DEXT);
-   SET_CompressedMultiTexSubImage2DEXT(table, save_CompressedMultiTexSubImage2DEXT);
-   SET_CompressedMultiTexSubImage3DEXT(table, save_CompressedMultiTexSubImage3DEXT);
-   SET_NamedProgramStringEXT(table, save_NamedProgramStringEXT);
-   SET_NamedProgramLocalParameter4dEXT(table, save_NamedProgramLocalParameter4dEXT);
-   SET_NamedProgramLocalParameter4dvEXT(table, save_NamedProgramLocalParameter4dvEXT);
-   SET_NamedProgramLocalParameter4fEXT(table, save_NamedProgramLocalParameter4fEXT);
-   SET_NamedProgramLocalParameter4fvEXT(table, save_NamedProgramLocalParameter4fvEXT);
-
-   /* GL_ARB_ES3_2_compatibility */
-   SET_PrimitiveBoundingBox(table, save_PrimitiveBoundingBox);
+#include "api_save_init.h"
 }
 
 
@@ -14728,7 +14009,7 @@ enum_string(GLenum k)
  * TODO: many commands aren't handled yet.
  * \param fname  filename to write display list to.  If null, use stdout.
  */
-static void GLAPIENTRY
+static void
 print_list(struct gl_context *ctx, GLuint list, const char *fname)
 {
    struct gl_display_list *dlist;
@@ -14997,13 +14278,10 @@ print_list(struct gl_context *ctx, GLuint list, const char *fname)
             fprintf(f, "DISPLAY-LIST-CONTINUE\n");
             n = (Node *) get_pointer(&n[1]);
             continue;
-         case OPCODE_NOP:
-            fprintf(f, "NOP\n");
-            break;
          case OPCODE_VERTEX_LIST:
          case OPCODE_VERTEX_LIST_LOOPBACK:
          case OPCODE_VERTEX_LIST_COPY_CURRENT:
-            vbo_print_vertex_list(ctx, (struct vbo_save_vertex_list *) &n[1], opcode, f);
+            vbo_print_vertex_list(ctx, (struct vbo_save_vertex_list *) &n[0], opcode, f);
             break;
          default:
             if (opcode < 0 || opcode > OPCODE_END_OF_LIST) {
@@ -15037,7 +14315,8 @@ _mesa_glthread_execute_list(struct gl_context *ctx, GLuint list)
    struct gl_display_list *dlist;
 
    if (list == 0 ||
-       !_mesa_get_list(ctx, list, &dlist, true))
+       !_mesa_get_list(ctx, list, &dlist, true) ||
+       !dlist->execute_glthread)
       return;
 
    Node *n = get_list_head(ctx, dlist);
@@ -15111,6 +14390,47 @@ _mesa_glthread_execute_list(struct gl_context *ctx, GLuint list)
    }
 }
 
+static bool
+_mesa_glthread_should_execute_list(struct gl_context *ctx,
+                                   struct gl_display_list *dlist)
+{
+   Node *n = get_list_head(ctx, dlist);
+
+   while (1) {
+      const OpCode opcode = n[0].opcode;
+
+      switch (opcode) {
+      case OPCODE_CALL_LIST:
+      case OPCODE_CALL_LISTS:
+      case OPCODE_DISABLE:
+      case OPCODE_ENABLE:
+      case OPCODE_LIST_BASE:
+      case OPCODE_MATRIX_MODE:
+      case OPCODE_POP_ATTRIB:
+      case OPCODE_POP_MATRIX:
+      case OPCODE_PUSH_ATTRIB:
+      case OPCODE_PUSH_MATRIX:
+      case OPCODE_ACTIVE_TEXTURE:   /* GL_ARB_multitexture */
+      case OPCODE_MATRIX_PUSH:
+      case OPCODE_MATRIX_POP:
+         return true;
+      case OPCODE_CONTINUE:
+         n = (Node *)get_pointer(&n[1]);
+         continue;
+      case OPCODE_END_OF_LIST:
+         return false;
+      default:
+         /* ignore */
+         break;
+      }
+
+      /* increment n to point to next compiled command */
+      assert(n[0].InstSize > 0);
+      n += n[0].InstSize;
+   }
+   return false;
+}
+
 
 /**
  * Clients may call this function to help debug display list problems.
@@ -15129,37 +14449,35 @@ mesa_print_display_list(GLuint list)
 /*****                      Initialization                        *****/
 /**********************************************************************/
 
-void
-_mesa_install_dlist_vtxfmt(struct _glapi_table *disp,
-                           const GLvertexformat *vfmt)
-{
-   SET_CallList(disp, vfmt->CallList);
-   SET_CallLists(disp, vfmt->CallLists);
-}
-
-
 /**
  * Initialize display list state for given context.
  */
 void
 _mesa_init_display_list(struct gl_context *ctx)
 {
-   GLvertexformat *vfmt = &ctx->ListState.ListVtxfmt;
-
    /* Display list */
    ctx->ListState.CallDepth = 1;
    ctx->ExecuteFlag = GL_TRUE;
    ctx->CompileFlag = GL_FALSE;
    ctx->ListState.CurrentBlock = NULL;
    ctx->ListState.CurrentPos = 0;
+   ctx->ListState.LastInstSize = 0;
 
    /* Display List group */
    ctx->List.ListBase = 0;
+}
 
-#define NAME_AE(x) _ae_##x
+
+void
+_mesa_install_save_vtxfmt(struct gl_context *ctx)
+{
+   struct _glapi_table *tab = ctx->Save;
+   assert(ctx->API == API_OPENGL_COMPAT);
+
+#define NAME_AE(x) _mesa_##x
 #define NAME_CALLLIST(x) save_##x
 #define NAME(x) save_##x
-#define NAME_ES(x) save_##x##ARB
+#define NAME_ES(x) save_##x
 
-#include "vbo/vbo_init_tmp.h"
+   #include "api_vtxfmt_init.h"
 }

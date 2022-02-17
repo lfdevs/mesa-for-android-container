@@ -33,6 +33,7 @@
 #include "macros.h"
 #include "points.h"
 #include "mtypes.h"
+#include "api_exec_decl.h"
 
 
 /**
@@ -53,9 +54,6 @@ point_size(struct gl_context *ctx, GLfloat size, bool no_error)
 
    FLUSH_VERTICES(ctx, _NEW_POINT, GL_POINT_BIT);
    ctx->Point.Size = size;
-
-   if (ctx->Driver.PointSize)
-      ctx->Driver.PointSize(ctx, size);
 }
 
 
@@ -112,19 +110,6 @@ void GLAPIENTRY
 _mesa_PointParameterfv( GLenum pname, const GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
-
-   /* Drivers that support point sprites must also support point parameters.
-    * If point parameters aren't supported, then this function shouldn't even
-    * exist.
-    */
-   assert(!ctx->Extensions.ARB_point_sprite ||
-          ctx->Extensions.EXT_point_parameters);
-
-   if (!ctx->Extensions.EXT_point_parameters) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "unsupported function called (unsupported extension)");
-      return;
-   }
 
    switch (pname) {
       case GL_DISTANCE_ATTENUATION_EXT:
@@ -198,9 +183,6 @@ _mesa_PointParameterfv( GLenum pname, const GLfloat *params)
                       "glPointParameterf[v]{EXT,ARB}(pname)" );
          return;
    }
-
-   if (ctx->Driver.PointParameterfv)
-      ctx->Driver.PointParameterfv(ctx, pname, params);
 }
 
 

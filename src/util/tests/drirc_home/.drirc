@@ -6,6 +6,7 @@
    <!ELEMENT application  (option+)>
    <!ATTLIST application  name CDATA #REQUIRED
                           executable CDATA #IMPLIED
+                          executable_regexp CDATA #IMPLIED
                           sha1 CDATA #IMPLIED
                           application_name_match CDATA #IMPLIED
                           application_versions CDATA #IMPLIED>

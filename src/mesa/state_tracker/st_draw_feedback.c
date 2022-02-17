@@ -36,7 +36,6 @@
 #include "st_context.h"
 #include "st_atom.h"
 #include "st_cb_bitmap.h"
-#include "st_cb_bufferobjects.h"
 #include "st_draw.h"
 #include "st_program.h"
 #include "st_util.h"
@@ -108,7 +107,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    struct st_context *st = st_context(ctx);
    struct pipe_context *pipe = st->pipe;
    struct draw_context *draw = st_get_draw_context(st);
-   const struct st_vertex_program *vp;
+   const struct gl_vertex_program *vp;
    struct st_common_variant *vp_variant;
    struct pipe_vertex_buffer vbuffers[PIPE_MAX_SHADER_INPUTS];
    unsigned num_vbuffers = 0;
@@ -145,7 +144,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    memcpy(&key, &st->vp_variant->key, sizeof(key));
    key.is_draw_shader = true;
 
-   vp = (struct st_vertex_program *)st->vp;
+   vp = (struct gl_vertex_program *)st->vp;
    vp_variant = st_get_common_variant(st, st->vp, &key);
 
    /*
@@ -196,10 +195,8 @@ st_feedback_draw_vbo(struct gl_context *ctx,
          goto out_unref_vertex;
 
       if (bufobj && bufobj->Name) {
-         struct st_buffer_object *stobj = st_buffer_object(bufobj);
-
          start = pointer_to_offset(ib->ptr) >> ib->index_size_shift;
-         mapped_indices = pipe_buffer_map(pipe, stobj->buffer,
+         mapped_indices = pipe_buffer_map(pipe, bufobj->buffer,
                                           PIPE_MAP_READ, &ib_transfer);
       }
       else {
@@ -225,7 +222,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    }
 
    /* set constant buffer 0 */
-   struct gl_program_parameter_list *params = st->vp->Base.Parameters;
+   struct gl_program_parameter_list *params = st->vp->Parameters;
 
    /* Update the constants which come from fixed-function state, such as
     * transformation matrices, fog factors, etc.
@@ -242,14 +239,14 @@ st_feedback_draw_vbo(struct gl_context *ctx,
                                    params->NumParameterValues * 4);
 
    /* set uniform buffers */
-   const struct gl_program *prog = &vp->Base.Base;
+   const struct gl_program *prog = &vp->Base;
    struct pipe_transfer *ubo_transfer[PIPE_MAX_CONSTANT_BUFFERS] = {0};
    assert(prog->info.num_ubos <= ARRAY_SIZE(ubo_transfer));
 
    for (unsigned i = 0; i < prog->sh.NumUniformBlocks; i++) {
       struct gl_buffer_binding *binding =
          &st->ctx->UniformBufferBindings[prog->sh.UniformBlocks[i]->Binding];
-      struct st_buffer_object *st_obj = st_buffer_object(binding->BufferObject);
+      struct gl_buffer_object *st_obj = binding->BufferObject;
       struct pipe_resource *buf = st_obj->buffer;
 
       if (!buf)
@@ -279,7 +276,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
       struct gl_buffer_binding *binding =
          &st->ctx->ShaderStorageBufferBindings[
             prog->sh.ShaderStorageBlocks[i]->Binding];
-      struct st_buffer_object *st_obj = st_buffer_object(binding->BufferObject);
+      struct gl_buffer_object *st_obj = binding->BufferObject;
       struct pipe_resource *buf = st_obj->buffer;
 
       if (!buf)

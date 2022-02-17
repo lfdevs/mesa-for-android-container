@@ -164,6 +164,7 @@ typedef struct rvcn_enc_session_init_s {
    uint32_t padding_height;
    uint32_t pre_encode_mode;
    uint32_t pre_encode_chroma_enabled;
+   uint32_t display_remote;
 } rvcn_enc_session_init_t;
 
 typedef struct rvcn_enc_layer_control_s {
@@ -329,6 +330,12 @@ typedef struct rvcn_enc_reconstructed_picture_s {
    uint32_t chroma_offset;
 } rvcn_enc_reconstructed_picture_t;
 
+typedef struct rvcn_enc_picture_info_s
+{
+   bool in_use;
+   uint32_t frame_num;
+} rvcn_enc_picture_info_t;
+
 typedef struct rvcn_enc_pre_encode_input_picture_s {
    union {
       struct {
@@ -356,6 +363,7 @@ typedef struct rvcn_enc_encode_context_buffer_s {
    rvcn_enc_reconstructed_picture_t
       pre_encode_reconstructed_pictures[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
    rvcn_enc_reconstructed_picture_t pre_encode_input_picture;
+   uint32_t two_pass_search_center_map_offset;
 } rvcn_enc_encode_context_buffer_t;
 
 typedef struct rvcn_enc_video_bitstream_buffer_s {
@@ -479,6 +487,7 @@ struct radeon_encoder {
    struct pipe_video_codec base;
 
    void (*begin)(struct radeon_encoder *enc);
+   void (*before_encode)(struct radeon_encoder *enc);
    void (*encode)(struct radeon_encoder *enc);
    void (*destroy)(struct radeon_encoder *enc);
    void (*session_info)(struct radeon_encoder *enc);
@@ -551,10 +560,12 @@ struct radeon_encoder {
 
    bool emulation_prevention;
    bool need_feedback;
+   unsigned dpb_size;
+   rvcn_enc_picture_info_t dpb[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
 };
 
 void radeon_enc_add_buffer(struct radeon_encoder *enc, struct pb_buffer *buf,
-                           enum radeon_bo_usage usage, enum radeon_bo_domain domain, signed offset);
+                           unsigned usage, enum radeon_bo_domain domain, signed offset);
 
 void radeon_enc_set_emulation_prevention(struct radeon_encoder *enc, bool set);
 

@@ -522,28 +522,13 @@ anv_image_init_from_gralloc(struct anv_device *device,
                        "failed to import dma-buf from VkNativeBufferANDROID");
    }
 
-   int i915_tiling = anv_gem_get_tiling(device, bo->gem_handle);
-   switch (i915_tiling) {
-   case I915_TILING_NONE:
-      anv_info.isl_tiling_flags = ISL_TILING_LINEAR_BIT;
-      break;
-   case I915_TILING_X:
-      anv_info.isl_tiling_flags = ISL_TILING_X_BIT;
-      break;
-   case I915_TILING_Y:
-      anv_info.isl_tiling_flags = ISL_TILING_Y0_BIT;
-      break;
-   case -1:
-      result = vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,
-                         "DRM_IOCTL_I915_GEM_GET_TILING failed for "
-                         "VkNativeBufferANDROID");
-      goto fail_tiling;
-   default:
-      result = vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,
-                         "DRM_IOCTL_I915_GEM_GET_TILING returned unknown "
-                         "tiling %d for VkNativeBufferANDROID", i915_tiling);
-      goto fail_tiling;
+   enum isl_tiling tiling;
+   result = anv_device_get_bo_tiling(device, bo, &tiling);
+   if (result != VK_SUCCESS) {
+      return vk_errorf(device, result,
+                       "failed to get tiling from VkNativeBufferANDROID");
    }
+   anv_info.isl_tiling_flags = 1u << tiling;
 
    enum isl_format format = anv_get_isl_format(&device->info,
                                                base_info->format,
@@ -588,7 +573,6 @@ anv_image_init_from_gralloc(struct anv_device *device,
  fail_size:
    anv_image_finish(image);
  fail_init:
- fail_tiling:
    anv_device_release_bo(device, bo);
 
    return result;
@@ -805,120 +789,4 @@ VkResult anv_GetSwapchainGrallocUsageANDROID(
       return result;
 
    return setup_gralloc0_usage(device, format, imageUsage, grallocUsage);
-}
-
-VkResult
-anv_AcquireImageANDROID(
-      VkDevice            device_h,
-      VkImage             image_h,
-      int                 nativeFenceFd,
-      VkSemaphore         semaphore_h,
-      VkFence             fence_h)
-{
-   ANV_FROM_HANDLE(anv_device, device, device_h);
-   VkResult result = VK_SUCCESS;
-
-   /* From https://source.android.com/devices/graphics/implement-vulkan :
-    *
-    *    "The driver takes ownership of the fence file descriptor and closes
-    *    the fence file descriptor when no longer needed. The driver must do
-    *    so even if neither a semaphore or fence object is provided, or even
-    *    if vkAcquireImageANDROID fails and returns an error."
-    *
-    * The Vulkan spec for VkImportFence/SemaphoreFdKHR(), however, requires
-    * the file descriptor to be left alone on failure.
-    */
-   int semaphore_fd = -1, fence_fd = -1;
-   if (nativeFenceFd >= 0) {
-      if (semaphore_h != VK_NULL_HANDLE && fence_h != VK_NULL_HANDLE) {
-         /* We have both so we have to import the sync file twice. One of
-          * them needs to be a dup.
-          */
-         semaphore_fd = nativeFenceFd;
-         fence_fd = dup(nativeFenceFd);
-         if (fence_fd < 0) {
-            VkResult err = (errno == EMFILE) ? VK_ERROR_TOO_MANY_OBJECTS :
-                                               VK_ERROR_OUT_OF_HOST_MEMORY;
-            close(nativeFenceFd);
-            return vk_error(device, err);
-         }
-      } else if (semaphore_h != VK_NULL_HANDLE) {
-         semaphore_fd = nativeFenceFd;
-      } else if (fence_h != VK_NULL_HANDLE) {
-         fence_fd = nativeFenceFd;
-      } else {
-         /* Nothing to import into so we have to close the file */
-         close(nativeFenceFd);
-      }
-   }
-
-   if (semaphore_h != VK_NULL_HANDLE) {
-      const VkImportSemaphoreFdInfoKHR info = {
-         .sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR,
-         .semaphore = semaphore_h,
-         .flags = VK_SEMAPHORE_IMPORT_TEMPORARY_BIT,
-         .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
-         .fd = semaphore_fd,
-      };
-      result = anv_ImportSemaphoreFdKHR(device_h, &info);
-      if (result == VK_SUCCESS)
-         semaphore_fd = -1; /* ANV took ownership */
-   }
-
-   if (result == VK_SUCCESS && fence_h != VK_NULL_HANDLE) {
-      const VkImportFenceFdInfoKHR info = {
-         .sType = VK_STRUCTURE_TYPE_IMPORT_FENCE_FD_INFO_KHR,
-         .fence = fence_h,
-         .flags = VK_FENCE_IMPORT_TEMPORARY_BIT,
-         .handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
-         .fd = fence_fd,
-      };
-      result = anv_ImportFenceFdKHR(device_h, &info);
-      if (result == VK_SUCCESS)
-         fence_fd = -1; /* ANV took ownership */
-   }
-
-   if (semaphore_fd >= 0)
-      close(semaphore_fd);
-   if (fence_fd >= 0)
-      close(fence_fd);
-
-   return result;
-}
-
-VkResult
-anv_QueueSignalReleaseImageANDROID(
-      VkQueue             queue,
-      uint32_t            waitSemaphoreCount,
-      const VkSemaphore*  pWaitSemaphores,
-      VkImage             image,
-      int*                pNativeFenceFd)
-{
-   VkResult result;
-
-   if (waitSemaphoreCount == 0)
-      goto done;
-
-   result = vk_common_QueueSubmit(queue, 1,
-      &(VkSubmitInfo) {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = pWaitSemaphores,
-            .pWaitDstStageMask = &(VkPipelineStageFlags) {
-               VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
-            },
-      },
-      (VkFence) VK_NULL_HANDLE);
-   if (result != VK_SUCCESS)
-      return result;
-
- done:
-   if (pNativeFenceFd) {
-      /* We can rely implicit on sync because above we submitted all
-       * semaphores to the queue.
-       */
-      *pNativeFenceFd = -1;
-   }
-
-   return VK_SUCCESS;
 }

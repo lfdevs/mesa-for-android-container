@@ -36,8 +36,12 @@
 
 #include "main/glheader.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct st_context;
-struct st_vertex_program;
+struct gl_vertex_program;
 struct st_common_variant;
 struct pipe_vertex_buffer;
 struct pipe_vertex_element;
@@ -62,7 +66,7 @@ void st_update_edgeflags(struct st_context *st, bool per_vertex_edgeflags);
 
 void
 st_setup_arrays(struct st_context *st,
-                const struct st_vertex_program *vp,
+                const struct gl_vertex_program *vp,
                 const struct st_common_variant *vp_variant,
                 struct cso_velems_state *velements,
                 struct pipe_vertex_buffer *vbuffer, unsigned *num_vbuffers,
@@ -70,10 +74,13 @@ st_setup_arrays(struct st_context *st,
 
 void
 st_setup_current_user(struct st_context *st,
-                      const struct st_vertex_program *vp,
+                      const struct gl_vertex_program *vp,
                       const struct st_common_variant *vp_variant,
                       struct cso_velems_state *velements,
                       struct pipe_vertex_buffer *vbuffer, unsigned *num_vbuffers);
+
+void
+st_update_array_with_popcnt(struct st_context *st);
 
 struct pipe_vertex_state *
 st_create_gallium_vertex_state(struct gl_context *ctx,
@@ -86,6 +93,7 @@ enum {
 #define ST_STATE(FLAG, st_update) FLAG##_INDEX,
 #include "st_atom_list.h"
 #undef ST_STATE
+   ST_NUM_ATOMS,
 };
 
 /* Define ST_NEW_xxx values as static const uint64_t values.
@@ -180,5 +188,9 @@ enum {
 
 #define ST_ALL_STATES_MASK (ST_PIPELINE_RENDER_STATE_MASK | \
                             ST_PIPELINE_COMPUTE_STATE_MASK)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

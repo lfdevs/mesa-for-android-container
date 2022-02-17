@@ -212,9 +212,9 @@ add_dep(nir_deps_state *state,
    assert(before != after);
 
    if (state->dir == F)
-      dag_add_edge(&before->dag, &after->dag, NULL);
+      dag_add_edge(&before->dag, &after->dag, 0);
    else
-      dag_add_edge(&after->dag, &before->dag, NULL);
+      dag_add_edge(&after->dag, &before->dag, 0);
 }
 
 
@@ -408,6 +408,18 @@ nir_schedule_intrinsic_deps(nir_deps_state *state,
       /* Serialize against ssbos/atomics/etc. */
       add_write_dep(state, &state->unknown_intrinsic, n);
       break;
+
+   case nir_intrinsic_scoped_barrier: {
+      const nir_variable_mode modes = nir_intrinsic_memory_modes(instr);
+
+      if (modes & nir_var_mem_shared)
+         add_write_dep(state, &state->store_shared, n);
+
+      /* Serialize against other categories. */
+      add_write_dep(state, &state->unknown_intrinsic, n);
+
+      break;
+   }
 
    default:
       /* Attempt to handle other intrinsics that we haven't individually

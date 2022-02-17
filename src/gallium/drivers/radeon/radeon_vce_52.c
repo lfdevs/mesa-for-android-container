@@ -101,7 +101,7 @@ static void get_pic_control_param(struct rvce_encoder *enc, struct pipe_h264_enc
    }
    enc->enc_pic.pc.enc_num_mbs_per_slice = encNumMBsPerSlice;
    enc->enc_pic.pc.enc_b_pic_pattern = MAX2(enc->base.max_references, 1) - 1;
-   enc->enc_pic.pc.enc_number_of_reference_frames = MIN2(enc->base.max_references, 2);
+   enc->enc_pic.pc.enc_number_of_reference_frames = MIN2(enc->base.max_references, 1);
    enc->enc_pic.pc.enc_max_num_ref_frames = enc->base.max_references + 1;
    enc->enc_pic.pc.enc_num_default_active_ref_l0 = 0x00000001;
    enc->enc_pic.pc.enc_num_default_active_ref_l1 = 0x00000001;
@@ -169,7 +169,7 @@ void si_vce_52_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_
    enc->enc_pic.pic_order_cnt = pic->pic_order_cnt;
    enc->enc_pic.ref_idx_l0 = pic->ref_idx_l0;
    enc->enc_pic.ref_idx_l1 = pic->ref_idx_l1;
-   enc->enc_pic.not_referenced = pic->not_referenced;
+   enc->enc_pic.not_referenced = false;
    if (enc->dual_inst)
       enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = 0x00000201;
    else

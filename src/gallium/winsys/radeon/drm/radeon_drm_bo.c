@@ -131,7 +131,7 @@ static void radeon_bo_wait_idle(struct radeon_bo *bo)
 
 static bool radeon_bo_wait(struct radeon_winsys *rws,
                            struct pb_buffer *_buf, uint64_t timeout,
-                           enum radeon_bo_usage usage)
+                           unsigned usage)
 {
    struct radeon_bo *bo = radeon_bo(_buf);
    int64_t abs_timeout;
@@ -1185,7 +1185,8 @@ static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
 
 static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
                                                       struct winsys_handle *whandle,
-                                                      unsigned vm_alignment)
+                                                      unsigned vm_alignment,
+                                                      bool is_dri_prime_linear_buffer)
 {
    struct radeon_drm_winsys *ws = radeon_drm_winsys(rws);
    struct radeon_bo *bo;

@@ -2,7 +2,7 @@
 #define VULKAN_FUCHSIA_H_ 1
 
 /*
-** Copyright 2015-2021 The Khronos Group Inc.
+** Copyright 2015-2022 The Khronos Group Inc.
 **
 ** SPDX-License-Identifier: Apache-2.0
 */
@@ -119,10 +119,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreZirconHandleFUCHSIA(
 VK_DEFINE_NON_DISPATCHABLE_HANDLE(VkBufferCollectionFUCHSIA)
 #define VK_FUCHSIA_BUFFER_COLLECTION_SPEC_VERSION 2
 #define VK_FUCHSIA_BUFFER_COLLECTION_EXTENSION_NAME "VK_FUCHSIA_buffer_collection"
-
-typedef enum VkImageFormatConstraintsFlagBitsFUCHSIA {
-    VK_IMAGE_FORMAT_CONSTRAINTS_FLAG_BITS_MAX_ENUM_FUCHSIA = 0x7FFFFFFF
-} VkImageFormatConstraintsFlagBitsFUCHSIA;
 typedef VkFlags VkImageFormatConstraintsFlagsFUCHSIA;
 
 typedef enum VkImageConstraintsInfoFlagBitsFUCHSIA {

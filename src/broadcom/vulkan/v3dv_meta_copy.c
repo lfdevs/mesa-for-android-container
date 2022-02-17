@@ -25,9 +25,8 @@
 #include "v3dv_meta_common.h"
 
 #include "compiler/nir/nir_builder.h"
-#include "vk_format_info.h"
 #include "util/u_pack_color.h"
-#include "vulkan/util/vk_common_entrypoints.h"
+#include "vulkan/runtime/vk_common_entrypoints.h"
 
 static uint32_t
 meta_blit_key_hash(const void *key)
@@ -850,10 +849,31 @@ copy_image_tfu(struct v3dv_cmd_buffer *cmd_buffer,
    const uint32_t base_dst_layer = dst->vk.image_type != VK_IMAGE_TYPE_3D ?
       region->dstSubresource.baseArrayLayer : region->dstOffset.z;
    for (uint32_t i = 0; i < layer_count; i++) {
-      v3dv_X(cmd_buffer->device, meta_emit_tfu_job)
-         (cmd_buffer, dst, dst_mip_level, base_dst_layer + i,
-          src, src_mip_level, base_src_layer + i,
-          width, height, format);
+      const uint32_t dst_offset =
+         dst->mem->bo->offset +
+         v3dv_layer_offset(dst, dst_mip_level, base_dst_layer + i);
+      const uint32_t src_offset =
+         src->mem->bo->offset +
+         v3dv_layer_offset(src, src_mip_level, base_src_layer + i);
+
+      const struct v3d_resource_slice *dst_slice = &dst->slices[dst_mip_level];
+      const struct v3d_resource_slice *src_slice = &src->slices[src_mip_level];
+
+      v3dv_X(cmd_buffer->device, meta_emit_tfu_job)(
+         cmd_buffer,
+         dst->mem->bo->handle,
+         dst_offset,
+         dst_slice->tiling,
+         dst_slice->tiling == V3D_TILING_RASTER ?
+                              dst_slice->stride : dst_slice->padded_height,
+         dst->cpp,
+         src->mem->bo->handle,
+         src_offset,
+         src_slice->tiling,
+         src_slice->tiling == V3D_TILING_RASTER ?
+                              src_slice->stride : src_slice->padded_height,
+         src->cpp,
+         width, height, format);
    }
 
    return true;
@@ -1338,46 +1358,28 @@ copy_buffer_to_image_tfu(struct v3dv_cmd_buffer *cmd_buffer,
       else
          layer = region->imageOffset.z + i;
 
-      struct drm_v3d_submit_tfu tfu = {
-         .ios = (height << 16) | width,
-         .bo_handles = {
-            dst_bo->handle,
-            src_bo->handle != dst_bo->handle ? src_bo->handle : 0
-         },
-      };
-
       const uint32_t buffer_offset =
          buffer->mem_offset + region->bufferOffset +
          height * buffer_stride * i;
-
       const uint32_t src_offset = src_bo->offset + buffer_offset;
-      tfu.iia |= src_offset;
-      tfu.icfg |= V3D_TFU_ICFG_FORMAT_RASTER << V3D_TFU_ICFG_FORMAT_SHIFT;
-      tfu.iis |= width;
 
       const uint32_t dst_offset =
          dst_bo->offset + v3dv_layer_offset(image, mip_level, layer);
-      tfu.ioa |= dst_offset;
 
-      tfu.ioa |= (V3D_TFU_IOA_FORMAT_LINEARTILE +
-                  (slice->tiling - V3D_TILING_LINEARTILE)) <<
-                   V3D_TFU_IOA_FORMAT_SHIFT;
-      tfu.icfg |= format->tex_type << V3D_TFU_ICFG_TTYPE_SHIFT;
-
-      /* If we're writing level 0 (!IOA_DIMTW), then we need to supply the
-       * OPAD field for the destination (how many extra UIF blocks beyond
-       * those necessary to cover the height).
-       */
-      if (slice->tiling == V3D_TILING_UIF_NO_XOR ||
-          slice->tiling == V3D_TILING_UIF_XOR) {
-         uint32_t uif_block_h = 2 * v3d_utile_height(image->cpp);
-         uint32_t implicit_padded_height = align(height, uif_block_h);
-         uint32_t icfg =
-            (slice->padded_height - implicit_padded_height) / uif_block_h;
-         tfu.icfg |= icfg << V3D_TFU_ICFG_OPAD_SHIFT;
-      }
-
-      v3dv_cmd_buffer_add_tfu_job(cmd_buffer, &tfu);
+      v3dv_X(cmd_buffer->device, meta_emit_tfu_job)(
+             cmd_buffer,
+             dst_bo->handle,
+             dst_offset,
+             slice->tiling,
+             slice->tiling == V3D_TILING_RASTER ?
+                              slice->stride : slice->padded_height,
+             image->cpp,
+             src_bo->handle,
+             src_offset,
+             V3D_TILING_RASTER,
+             width,
+             1,
+             width, height, format);
    }
 
    return true;
@@ -1618,8 +1620,8 @@ get_texel_buffer_copy_gs()
    nir->info.inputs_read = 1ull << VARYING_SLOT_POS;
    nir->info.outputs_written = (1ull << VARYING_SLOT_POS) |
                                (1ull << VARYING_SLOT_LAYER);
-   nir->info.gs.input_primitive = GL_TRIANGLES;
-   nir->info.gs.output_primitive = GL_TRIANGLE_STRIP;
+   nir->info.gs.input_primitive = SHADER_PRIM_TRIANGLES;
+   nir->info.gs.output_primitive = SHADER_PRIM_TRIANGLE_STRIP;
    nir->info.gs.vertices_in = 3;
    nir->info.gs.vertices_out = 3;
    nir->info.gs.invocations = 1;
@@ -2173,7 +2175,12 @@ texel_buffer_shader_copy(struct v3dv_cmd_buffer *cmd_buffer,
          .clearValueCount = 0,
       };
 
-      v3dv_CmdBeginRenderPass(_cmd_buffer, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
+      VkSubpassBeginInfo sp_info = {
+         .sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO,
+         .contents = VK_SUBPASS_CONTENTS_INLINE,
+      };
+
+      v3dv_CmdBeginRenderPass2(_cmd_buffer, &rp_info, &sp_info);
       struct v3dv_job *job = cmd_buffer->state.job;
       if (!job)
          goto fail;
@@ -2240,7 +2247,11 @@ texel_buffer_shader_copy(struct v3dv_cmd_buffer *cmd_buffer,
          v3dv_CmdDraw(_cmd_buffer, 4, 1, 0, 0);
       } /* For each region */
 
-      v3dv_CmdEndRenderPass(_cmd_buffer);
+      VkSubpassEndInfo sp_end_info = {
+         .sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO,
+      };
+
+      v3dv_CmdEndRenderPass2(_cmd_buffer, &sp_end_info);
    } /* For each layer */
 
 fail:
@@ -2871,10 +2882,30 @@ blit_tfu(struct v3dv_cmd_buffer *cmd_buffer,
          dst_mirror_z ? max_dst_layer - i - 1: min_dst_layer + i;
       const uint32_t src_layer =
          src_mirror_z ? max_src_layer - i - 1: min_src_layer + i;
-      v3dv_X(cmd_buffer->device, meta_emit_tfu_job)
-         (cmd_buffer, dst, dst_mip_level, dst_layer,
-          src, src_mip_level, src_layer,
-          dst_width, dst_height, format);
+
+      const uint32_t dst_offset =
+         dst->mem->bo->offset + v3dv_layer_offset(dst, dst_mip_level, dst_layer);
+      const uint32_t src_offset =
+         src->mem->bo->offset + v3dv_layer_offset(src, src_mip_level, src_layer);
+
+      const struct v3d_resource_slice *dst_slice = &dst->slices[dst_mip_level];
+      const struct v3d_resource_slice *src_slice = &src->slices[src_mip_level];
+
+      v3dv_X(cmd_buffer->device, meta_emit_tfu_job)(
+         cmd_buffer,
+         dst->mem->bo->handle,
+         dst_offset,
+         dst_slice->tiling,
+         dst_slice->tiling == V3D_TILING_RASTER ?
+                              dst_slice->stride : dst_slice->padded_height,
+         dst->cpp,
+         src->mem->bo->handle,
+         src_offset,
+         src_slice->tiling,
+         src_slice->tiling == V3D_TILING_RASTER ?
+                              src_slice->stride : src_slice->padded_height,
+         src->cpp,
+         dst_width, dst_height, format);
    }
 
    return true;
@@ -2941,7 +2972,8 @@ create_blit_render_pass(struct v3dv_device *device,
    const bool is_color_blit = vk_format_is_color(dst_format);
 
    /* Attachment load operation is specified below */
-   VkAttachmentDescription att = {
+   VkAttachmentDescription2 att = {
+      .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
       .format = dst_format,
       .samples = VK_SAMPLE_COUNT_1_BIT,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -2949,12 +2981,14 @@ create_blit_render_pass(struct v3dv_device *device,
       .finalLayout = VK_IMAGE_LAYOUT_GENERAL,
    };
 
-   VkAttachmentReference att_ref = {
+   VkAttachmentReference2 att_ref = {
+      .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
       .attachment = 0,
       .layout = VK_IMAGE_LAYOUT_GENERAL,
    };
 
-   VkSubpassDescription subpass = {
+   VkSubpassDescription2 subpass = {
+      .sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2,
       .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
       .inputAttachmentCount = 0,
       .colorAttachmentCount = is_color_blit ? 1 : 0,
@@ -2965,8 +2999,8 @@ create_blit_render_pass(struct v3dv_device *device,
       .pPreserveAttachments = NULL,
    };
 
-   VkRenderPassCreateInfo info = {
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+   VkRenderPassCreateInfo2 info = {
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2,
       .attachmentCount = 1,
       .pAttachments = &att,
       .subpassCount = 1,
@@ -2977,14 +3011,14 @@ create_blit_render_pass(struct v3dv_device *device,
 
    VkResult result;
    att.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-   result = v3dv_CreateRenderPass(v3dv_device_to_handle(device),
-                                  &info, &device->vk.alloc, pass_load);
+   result = v3dv_CreateRenderPass2(v3dv_device_to_handle(device),
+                                   &info, &device->vk.alloc, pass_load);
    if (result != VK_SUCCESS)
       return false;
 
    att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-   result = v3dv_CreateRenderPass(v3dv_device_to_handle(device),
-                                  &info, &device->vk.alloc, pass_no_load);
+   result = v3dv_CreateRenderPass2(v3dv_device_to_handle(device),
+                                   &info, &device->vk.alloc, pass_no_load);
    return result == VK_SUCCESS;
 }
 
@@ -4146,7 +4180,12 @@ blit_shader(struct v3dv_cmd_buffer *cmd_buffer,
          .clearValueCount = 0,
       };
 
-      v3dv_CmdBeginRenderPass(_cmd_buffer, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
+      VkSubpassBeginInfo sp_info = {
+         .sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO,
+         .contents = VK_SUBPASS_CONTENTS_INLINE,
+      };
+
+      v3dv_CmdBeginRenderPass2(_cmd_buffer, &rp_info, &sp_info);
       struct v3dv_job *job = cmd_buffer->state.job;
       if (!job)
          goto fail;
@@ -4170,7 +4209,11 @@ blit_shader(struct v3dv_cmd_buffer *cmd_buffer,
 
       v3dv_CmdDraw(_cmd_buffer, 4, 1, 0, 0);
 
-      v3dv_CmdEndRenderPass(_cmd_buffer);
+      VkSubpassEndInfo sp_end_info = {
+         .sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO,
+      };
+
+      v3dv_CmdEndRenderPass2(_cmd_buffer, &sp_end_info);
       dirty_dynamic_state = V3DV_CMD_DIRTY_VIEWPORT | V3DV_CMD_DIRTY_SCISSOR;
    }
 

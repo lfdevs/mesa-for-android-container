@@ -15,40 +15,13 @@
   tags:
     - mesa-ci-x86-64-lava-hp-11A-G6-EE-grunt
 
-.radeonsi-stoney-deqp:amd64:
+radeonsi-stoney-gl:amd64:
   extends:
     - .lava-test:amd64
     - .radeonsi-stoney-test:amd64
-
-radeonsi-stoney-gles2:amd64:
-  extends:
-    - .radeonsi-stoney-deqp:amd64
+  parallel: 5
   variables:
-    DEQP_VER: gles2
-
-# Run two jobs in parallel each running 1/4th of the test suite
-radeonsi-stoney-gles3:amd64:
-  extends:
-    - .radeonsi-stoney-deqp:amd64
-  parallel: 2
-  variables:
-    DEQP_VER: gles3
-    FDO_CI_CONCURRENT: 4
-    DEQP_EXPECTED_RENDERER: STONEY
-    DEQP_FRACTION: 2
-
-
-# Run two jobs in parallel each running 1/4th of the test suite
-radeonsi-stoney-gles31:amd64:
-  extends:
-    - .radeonsi-stoney-deqp:amd64
-  parallel: 2
-  variables:
-    DEQP_VER: gles31
-    FDO_CI_CONCURRENT: 4
-    DEQP_EXPECTED_RENDERER: STONEY
-    DEQP_FRACTION: 2
-
+    DEQP_SUITE: radeonsi-stoney
 
 radeonsi-stoney-traces:amd64:
   extends:
@@ -56,8 +29,6 @@ radeonsi-stoney-traces:amd64:
     - .radeonsi-stoney-test:amd64
   variables:
     EGL_PLATFORM: surfaceless
-    PIGLIT_PROFILES: replay
-    PIGLIT_JUNIT_RESULTS: 1
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-radeonsi.yml"
     PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
   tags:
@@ -71,7 +42,6 @@ radeonsi-stoney-piglit-gl:amd64:
     PIGLIT_FRACTION: 4
     PIGLIT_PLATFORM: mixed_glx_egl
     PIGLIT_PROFILES: quick_gl
-    PIGLIT_JUNIT_RESULTS: 1
     HWCI_START_XORG: 1
 
 radeonsi-stoney-va:amd64:

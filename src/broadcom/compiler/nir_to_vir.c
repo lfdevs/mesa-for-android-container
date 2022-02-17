@@ -342,6 +342,7 @@ emit_tmu_general_store_writes(struct v3d_compile *c,
                               uint32_t base_const_offset,
                               uint32_t *writemask,
                               uint32_t *const_offset,
+                              uint32_t *type_size,
                               uint32_t *tmu_writes)
 {
         struct qreg tmud = vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_TMUD);
@@ -371,7 +372,9 @@ emit_tmu_general_store_writes(struct v3d_compile *c,
                 /* Update the offset for the TMU write based on the
                  * the first component we are writing.
                  */
-                *const_offset = base_const_offset + first_component * 4;
+                *type_size = nir_src_bit_size(instr->src[0]) / 8;
+                *const_offset =
+                        base_const_offset + first_component * (*type_size);
 
                 /* Clear these components from the writemask */
                 uint32_t written_mask =
@@ -588,16 +591,21 @@ ntq_emit_tmu_general(struct v3d_compile *c, nir_intrinsic_instr *instr,
         for (enum emit_mode mode = MODE_COUNT; mode != MODE_LAST; mode++) {
                 assert(mode == MODE_COUNT || tmu_writes > 0);
 
+                uint32_t type_size = 4;
+
                 if (is_store) {
                         emit_tmu_general_store_writes(c, mode, instr,
                                                       base_const_offset,
                                                       &writemask,
                                                       &const_offset,
+                                                      &type_size,
                                                       &tmu_writes);
                 } else if (!is_load && !atomic_add_replaced) {
-                         emit_tmu_general_atomic_writes(c, mode, instr,
-                                                        tmu_op, has_index,
-                                                        &tmu_writes);
+                        emit_tmu_general_atomic_writes(c, mode, instr,
+                                                       tmu_op, has_index,
+                                                       &tmu_writes);
+                } else if (is_load) {
+                        type_size = nir_dest_bit_size(instr->dest) / 8;
                 }
 
                 /* For atomics we use 32bit except for CMPXCHG, that we need
@@ -627,8 +635,21 @@ ntq_emit_tmu_general(struct v3d_compile *c, nir_intrinsic_instr *instr,
                         if (tmu_op == V3D_TMU_OP_WRITE_CMPXCHG_READ_FLUSH) {
                                 config |= GENERAL_TMU_LOOKUP_TYPE_VEC2;
                         } else if (is_atomic || num_components == 1) {
-                                config |= GENERAL_TMU_LOOKUP_TYPE_32BIT_UI;
+                                switch (type_size) {
+                                case 4:
+                                        config |= GENERAL_TMU_LOOKUP_TYPE_32BIT_UI;
+                                        break;
+                                case 2:
+                                        config |= GENERAL_TMU_LOOKUP_TYPE_16BIT_UI;
+                                        break;
+                                case 1:
+                                        config |= GENERAL_TMU_LOOKUP_TYPE_8BIT_UI;
+                                        break;
+                                default:
+                                        unreachable("Unsupported bitsize");
+                                }
                         } else {
+                                assert(type_size == 4);
                                 config |= GENERAL_TMU_LOOKUP_TYPE_VEC2 +
                                           num_components - 2;
                         }
@@ -1242,6 +1263,125 @@ ntq_emit_cond_to_bool(struct v3d_compile *c, enum v3d_qpu_cond cond)
         return result;
 }
 
+static struct qreg
+f2f16_rtz(struct v3d_compile *c, struct qreg f32)
+{
+        /* The GPU doesn't provide a mechanism to modify the f32->f16 rounding
+         * method and seems to be using RTE by default, so we need to implement
+         * RTZ rounding in software :-(
+         *
+         * The implementation identifies the cases where RTZ applies and
+         * returns the correct result and for everything else, it just uses
+         * the default RTE conversion.
+         */
+        static bool _first = true;
+        if (_first && unlikely(V3D_DEBUG & V3D_DEBUG_PERF)) {
+                fprintf(stderr, "Shader uses round-toward-zero f32->f16 "
+                        "conversion which is not supported in hardware.\n");
+                _first = false;
+        }
+
+        struct qinst *inst;
+        struct qreg tmp;
+
+        struct qreg result = vir_get_temp(c);
+
+        struct qreg mantissa32 = vir_AND(c, f32, vir_uniform_ui(c, 0x007fffff));
+
+        /* Compute sign bit of result */
+        struct qreg sign = vir_AND(c, vir_SHR(c, f32, vir_uniform_ui(c, 16)),
+                                   vir_uniform_ui(c, 0x8000));
+
+        /* Check the cases were RTZ rounding is relevant based on exponent */
+        struct qreg exp32 = vir_AND(c, vir_SHR(c, f32, vir_uniform_ui(c, 23)),
+                                    vir_uniform_ui(c, 0xff));
+        struct qreg exp16 = vir_ADD(c, exp32, vir_uniform_ui(c, -127 + 15));
+
+        /* if (exp16 > 30) */
+        inst = vir_MIN_dest(c, vir_nop_reg(), exp16, vir_uniform_ui(c, 30));
+        vir_set_pf(c, inst, V3D_QPU_PF_PUSHC);
+        inst = vir_OR_dest(c, result, sign, vir_uniform_ui(c, 0x7bff));
+        vir_set_cond(inst, V3D_QPU_COND_IFA);
+
+        /* if (exp16 <= 30) */
+        inst = vir_OR_dest(c, result,
+                           vir_OR(c, sign,
+                                  vir_SHL(c, exp16, vir_uniform_ui(c, 10))),
+                           vir_SHR(c, mantissa32, vir_uniform_ui(c, 13)));
+        vir_set_cond(inst, V3D_QPU_COND_IFNA);
+
+        /* if (exp16 <= 0) */
+        inst = vir_MIN_dest(c, vir_nop_reg(), exp16, vir_uniform_ui(c, 0));
+        vir_set_pf(c, inst, V3D_QPU_PF_PUSHC);
+
+        tmp = vir_OR(c, mantissa32, vir_uniform_ui(c, 0x800000));
+        tmp = vir_SHR(c, tmp, vir_SUB(c, vir_uniform_ui(c, 14), exp16));
+        inst = vir_OR_dest(c, result, sign, tmp);
+        vir_set_cond(inst, V3D_QPU_COND_IFNA);
+
+        /* Cases where RTZ mode is not relevant: use default RTE conversion.
+         *
+         * The cases that are not affected by RTZ are:
+         *
+         *  exp16 < - 10 || exp32 == 0 || exp32 == 0xff
+         *
+         * In V3D we can implement this condition as:
+         *
+         * !((exp16 >= -10) && !(exp32 == 0) && !(exp32 == 0xff)))
+         */
+
+        /* exp16 >= -10 */
+        inst = vir_MIN_dest(c, vir_nop_reg(), exp16, vir_uniform_ui(c, -10));
+        vir_set_pf(c, inst, V3D_QPU_PF_PUSHC);
+
+        /* && !(exp32 == 0) */
+        inst = vir_MOV_dest(c, vir_nop_reg(), exp32);
+        vir_set_uf(c, inst, V3D_QPU_UF_ANDNZ);
+
+        /* && !(exp32 == 0xff) */
+        inst = vir_XOR_dest(c, vir_nop_reg(), exp32, vir_uniform_ui(c, 0xff));
+        vir_set_uf(c, inst, V3D_QPU_UF_ANDNZ);
+
+        /* Use regular RTE conversion if condition is False */
+        inst = vir_FMOV_dest(c, result, f32);
+        vir_set_pack(inst, V3D_QPU_PACK_L);
+        vir_set_cond(inst, V3D_QPU_COND_IFNA);
+
+        return vir_MOV(c, result);
+}
+
+/**
+ * Takes the result value of a signed integer width conversion from a smaller
+ * type to a larger type and if needed, it applies sign extension to it.
+ */
+static struct qreg
+sign_extend(struct v3d_compile *c,
+            struct qreg value,
+            uint32_t src_bit_size,
+            uint32_t dst_bit_size)
+{
+        assert(src_bit_size < dst_bit_size);
+
+        struct qreg tmp = vir_MOV(c, value);
+
+        /* Do we need to sign-extend? */
+        uint32_t sign_mask = 1 << (src_bit_size - 1);
+        struct qinst *sign_check =
+                vir_AND_dest(c, vir_nop_reg(),
+                             tmp, vir_uniform_ui(c, sign_mask));
+        vir_set_pf(c, sign_check, V3D_QPU_PF_PUSHZ);
+
+        /* If so, fill in leading sign bits */
+        uint32_t extend_bits = ~(((1 << src_bit_size) - 1)) &
+                               ((1ull << dst_bit_size) - 1);
+        struct qinst *extend_inst =
+                vir_OR_dest(c, tmp, tmp,
+                            vir_uniform_ui(c, extend_bits));
+        vir_set_cond(extend_inst, V3D_QPU_COND_IFNA);
+
+        return tmp;
+}
+
 static void
 ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
 {
@@ -1326,6 +1466,94 @@ ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
         case nir_op_b2i32:
                 result = vir_AND(c, src[0], vir_uniform_ui(c, 1));
                 break;
+
+        case nir_op_f2f16:
+        case nir_op_f2f16_rtne:
+                assert(nir_src_bit_size(instr->src[0].src) == 32);
+                result = vir_FMOV(c, src[0]);
+                vir_set_pack(c->defs[result.index], V3D_QPU_PACK_L);
+                break;
+
+        case nir_op_f2f16_rtz:
+                assert(nir_src_bit_size(instr->src[0].src) == 32);
+                result = f2f16_rtz(c, src[0]);
+                break;
+
+        case nir_op_f2f32:
+                assert(nir_src_bit_size(instr->src[0].src) == 16);
+                result = vir_FMOV(c, src[0]);
+                vir_set_unpack(c->defs[result.index], 0, V3D_QPU_UNPACK_L);
+                break;
+
+        case nir_op_i2i16: {
+                uint32_t bit_size = nir_src_bit_size(instr->src[0].src);
+                assert(bit_size == 32 || bit_size == 8);
+                if (bit_size == 32) {
+                        /* We don't have integer pack/unpack methods for
+                         * converting between 16-bit and 32-bit, so we implement
+                         * the conversion manually by truncating the src.
+                         */
+                        result = vir_AND(c, src[0], vir_uniform_ui(c, 0xffff));
+                } else {
+                        struct qreg tmp = vir_AND(c, src[0],
+                                                  vir_uniform_ui(c, 0xff));
+                        result = vir_MOV(c, sign_extend(c, tmp, bit_size, 16));
+                }
+                break;
+        }
+
+        case nir_op_u2u16: {
+                uint32_t bit_size = nir_src_bit_size(instr->src[0].src);
+                assert(bit_size == 32 || bit_size == 8);
+
+                /* We don't have integer pack/unpack methods for converting
+                 * between 16-bit and 32-bit, so we implement the conversion
+                 * manually by truncating the src. For the 8-bit case, we
+                 * want to make sure we don't copy garbage from any of the
+                 * 24 MSB bits.
+                 */
+                if (bit_size == 32)
+                        result = vir_AND(c, src[0], vir_uniform_ui(c, 0xffff));
+                else
+                        result = vir_AND(c, src[0], vir_uniform_ui(c, 0xff));
+                break;
+        }
+
+        case nir_op_i2i8:
+        case nir_op_u2u8:
+                assert(nir_src_bit_size(instr->src[0].src) == 32 ||
+                       nir_src_bit_size(instr->src[0].src) == 16);
+                /* We don't have integer pack/unpack methods for converting
+                 * between 8-bit and 32-bit, so we implement the conversion
+                 * manually by truncating the src.
+                 */
+                result = vir_AND(c, src[0], vir_uniform_ui(c, 0xff));
+                break;
+
+        case nir_op_u2u32: {
+                uint32_t bit_size = nir_src_bit_size(instr->src[0].src);
+                assert(bit_size == 16 || bit_size == 8);
+
+                /* we don't have a native 8-bit/16-bit MOV so we copy all 32-bit
+                 * from the src but we make sure to clear any garbage bits that
+                 * may be present in the invalid src bits.
+                 */
+                uint32_t mask = (1 << bit_size) - 1;
+                result = vir_AND(c, src[0], vir_uniform_ui(c, mask));
+                break;
+        }
+
+        case nir_op_i2i32: {
+                uint32_t bit_size = nir_src_bit_size(instr->src[0].src);
+                assert(bit_size == 16 || bit_size == 8);
+
+                uint32_t mask = (1 << bit_size) - 1;
+                struct qreg tmp = vir_AND(c, src[0],
+                                          vir_uniform_ui(c, mask));
+
+                result = vir_MOV(c, sign_extend(c, tmp, bit_size, 32));
+                break;
+        }
 
         case nir_op_iadd:
                 result = vir_ADD(c, src[0], src[1]);
@@ -1670,15 +1898,6 @@ vir_emit_tlb_color_write(struct v3d_compile *c, unsigned rt)
 static void
 emit_frag_end(struct v3d_compile *c)
 {
-        /* If the shader has no non-TLB side effects and doesn't write Z
-         * we can promote it to enabling early_fragment_tests even
-         * if the user didn't.
-         */
-        if (c->output_position_index == -1 &&
-            !(c->s->info.num_images || c->s->info.num_ssbos)) {
-                c->s->info.fs.early_fragment_tests = true;
-        }
-
         if (c->output_sample_mask_index != -1) {
                 vir_SETMSF_dest(c, vir_nop_reg(),
                                 vir_AND(c,
@@ -1703,55 +1922,82 @@ emit_frag_end(struct v3d_compile *c)
         }
 
         struct qreg tlbu_reg = vir_magic_reg(V3D_QPU_WADDR_TLBU);
-        if (c->output_position_index != -1 &&
-            !c->s->info.fs.early_fragment_tests) {
-                struct qinst *inst = vir_MOV_dest(c, tlbu_reg,
-                                                  c->outputs[c->output_position_index]);
-                uint8_t tlb_specifier = TLB_TYPE_DEPTH;
 
-                if (c->devinfo->ver >= 42) {
-                        tlb_specifier |= (TLB_V42_DEPTH_TYPE_PER_PIXEL |
-                                          TLB_SAMPLE_MODE_PER_PIXEL);
-                } else
-                        tlb_specifier |= TLB_DEPTH_TYPE_PER_PIXEL;
+        /* If the shader has no non-TLB side effects and doesn't write Z
+         * we can promote it to enabling early_fragment_tests even
+         * if the user didn't.
+         */
+        if (c->output_position_index == -1 &&
+            !(c->s->info.num_images || c->s->info.num_ssbos) &&
+            !c->s->info.fs.uses_discard &&
+            !c->fs_key->sample_alpha_to_coverage &&
+            has_any_tlb_color_write) {
+                c->s->info.fs.early_fragment_tests = true;
+        }
+
+        /* By default, Z buffer writes are implicit using the Z values produced
+         * from FEP (Z value produced from rasterization). When this is not
+         * desirable (shader writes Z explicitly, has discards, etc) we need
+         * to let the hardware know by setting c->writes_z to true, in which
+         * case we always need to write a Z value from the QPU, even if it is
+         * just the passthrough Z value produced from FEP.
+         *
+         * Also, from the V3D 4.2 spec:
+         *
+         * "If a shader performs a Z read the “Fragment shader does Z writes”
+         *  bit in the shader record must be enabled to ensure deterministic
+         *  results"
+         *
+         * So if c->reads_z is set we always need to write Z, even if it is
+         * a passthrough from the Z value produced from FEP.
+         */
+        if (!c->s->info.fs.early_fragment_tests || c->reads_z) {
+                c->writes_z = true;
+                uint8_t tlb_specifier = TLB_TYPE_DEPTH;
+                struct qinst *inst;
+
+                if (c->output_position_index != -1) {
+                        /* Shader writes to gl_FragDepth, use that */
+                        inst = vir_MOV_dest(c, tlbu_reg,
+                                            c->outputs[c->output_position_index]);
+
+                        if (c->devinfo->ver >= 42) {
+                                tlb_specifier |= (TLB_V42_DEPTH_TYPE_PER_PIXEL |
+                                                  TLB_SAMPLE_MODE_PER_PIXEL);
+                        } else {
+                                tlb_specifier |= TLB_DEPTH_TYPE_PER_PIXEL;
+                        }
+                } else {
+                        /* Shader doesn't write to gl_FragDepth, take Z from
+                         * FEP.
+                         */
+                        c->writes_z_from_fep = true;
+                        inst = vir_MOV_dest(c, tlbu_reg, vir_nop_reg());
+
+                        if (c->devinfo->ver >= 42) {
+                                /* The spec says the PER_PIXEL flag is ignored
+                                 * for invariant writes, but the simulator
+                                 * demands it.
+                                 */
+                                tlb_specifier |= (TLB_V42_DEPTH_TYPE_INVARIANT |
+                                                  TLB_SAMPLE_MODE_PER_PIXEL);
+                        } else {
+                                tlb_specifier |= TLB_DEPTH_TYPE_INVARIANT;
+                        }
+
+                        /* Since (single-threaded) fragment shaders always need
+                         * a TLB write, if we dond't have any we emit a
+                         * passthrouh Z and flag us as potentially discarding,
+                         * so that we can use Z as the required TLB write.
+                         */
+                        if (!has_any_tlb_color_write)
+                                c->s->info.fs.uses_discard = true;
+                }
 
                 inst->uniform = vir_get_uniform_index(c, QUNIFORM_CONSTANT,
                                                       tlb_specifier |
                                                       0xffffff00);
-                c->writes_z = true;
-        } else if (c->s->info.fs.uses_discard ||
-                   !c->s->info.fs.early_fragment_tests ||
-                   c->fs_key->sample_alpha_to_coverage ||
-                   !has_any_tlb_color_write) {
-                /* Emit passthrough Z if it needed to be delayed until shader
-                 * end due to potential discards.
-                 *
-                 * Since (single-threaded) fragment shaders always need a TLB
-                 * write, emit passthrouh Z if we didn't have any color
-                 * buffers and flag us as potentially discarding, so that we
-                 * can use Z as the TLB write.
-                 */
-                c->s->info.fs.uses_discard = true;
-
-                struct qinst *inst = vir_MOV_dest(c, tlbu_reg,
-                                                  vir_nop_reg());
-                uint8_t tlb_specifier = TLB_TYPE_DEPTH;
-
-                if (c->devinfo->ver >= 42) {
-                        /* The spec says the PER_PIXEL flag is ignored for
-                         * invariant writes, but the simulator demands it.
-                         */
-                        tlb_specifier |= (TLB_V42_DEPTH_TYPE_INVARIANT |
-                                          TLB_SAMPLE_MODE_PER_PIXEL);
-                } else {
-                        tlb_specifier |= TLB_DEPTH_TYPE_INVARIANT;
-                }
-
-                inst->uniform = vir_get_uniform_index(c,
-                                                      QUNIFORM_CONSTANT,
-                                                      tlb_specifier |
-                                                      0xffffff00);
-                c->writes_z = true;
+                inst->is_tlb_z_write = true;
         }
 
         /* XXX: Performance improvement: Merge Z write and color writes TLB
@@ -1812,8 +2058,11 @@ mem_vectorize_callback(unsigned align_mul, unsigned align_offset,
                        nir_intrinsic_instr *high,
                        void *data)
 {
-        /* Our backend is 32-bit only at present */
-        if (bit_size != 32)
+        /* TMU general access only supports 32-bit vectors */
+        if (bit_size > 32)
+                return false;
+
+        if ((bit_size == 8 || bit_size == 16) && num_components > 1)
                 return false;
 
         if (align_mul % 4 != 0 || align_offset % 4 != 0)
@@ -1855,6 +2104,13 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                 NIR_PASS(progress, s, nir_opt_algebraic);
                 NIR_PASS(progress, s, nir_opt_constant_folding);
 
+                /* Note that vectorization may undo the load/store scalarization
+                 * pass we run for non 32-bit TMU general load/store by
+                 * converting, for example, 2 consecutive 16-bit loads into a
+                 * single 32-bit load. This is fine (and desirable) as long as
+                 * the resulting 32-bit load meets 32-bit alignment requirements,
+                 * which mem_vectorize_callback() should be enforcing.
+                 */
                 nir_load_store_vectorize_options vectorize_opts = {
                         .modes = nir_var_mem_ssbo | nir_var_mem_ubo |
                                  nir_var_mem_push_const | nir_var_mem_shared |
@@ -1862,7 +2118,14 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                         .callback = mem_vectorize_callback,
                         .robust_modes = 0,
                 };
-                NIR_PASS(progress, s, nir_opt_load_store_vectorize, &vectorize_opts);
+                bool vectorize_progress = false;
+                NIR_PASS(vectorize_progress, s, nir_opt_load_store_vectorize,
+                         &vectorize_opts);
+                if (vectorize_progress) {
+                        NIR_PASS(progress, s, nir_lower_alu_to_scalar, NULL, NULL);
+                        NIR_PASS(progress, s, nir_lower_pack);
+                        progress = true;
+                }
 
                 if (lower_flrp != 0) {
                         bool lower_flrp_progress = false;
@@ -2058,14 +2321,14 @@ ntq_setup_gs_inputs(struct v3d_compile *c)
                  */
                 assert(glsl_type_is_array(var->type));
                 const struct glsl_type *type = glsl_get_array_element(var->type);
-                unsigned array_len = MAX2(glsl_get_length(type), 1);
+                unsigned var_len = glsl_count_vec4_slots(type, false, false);
                 unsigned loc = var->data.driver_location;
 
                 resize_qreg_array(c, &c->inputs, &c->inputs_array_size,
-                                  (loc + array_len) * 4);
+                                  (loc + var_len) * 4);
 
                 if (var->data.compact) {
-                        for (unsigned j = 0; j < array_len; j++) {
+                        for (unsigned j = 0; j < var_len; j++) {
                                 unsigned input_idx = c->num_inputs++;
                                 unsigned loc_frac = var->data.location_frac + j;
                                 unsigned loc = var->data.location + loc_frac / 4;
@@ -2076,8 +2339,10 @@ ntq_setup_gs_inputs(struct v3d_compile *c)
                        continue;
                 }
 
-                for (unsigned j = 0; j < array_len; j++) {
-                        unsigned num_elements = glsl_get_vector_elements(type);
+                for (unsigned j = 0; j < var_len; j++) {
+                        unsigned num_elements =
+                                glsl_type_is_struct(glsl_without_array(type)) ?
+                                4 : glsl_get_vector_elements(type);
                         for (unsigned k = 0; k < num_elements; k++) {
                                 unsigned chan = var->data.location_frac + k;
                                 unsigned input_idx = c->num_inputs++;
@@ -2124,7 +2389,7 @@ ntq_setup_fs_inputs(struct v3d_compile *c)
                 } else if (var->data.compact) {
                         for (int j = 0; j < var_len; j++)
                                 emit_compact_fragment_input(c, loc, var, j);
-                } else if (glsl_type_is_struct(var->type)) {
+                } else if (glsl_type_is_struct(glsl_without_array(var->type))) {
                         for (int j = 0; j < var_len; j++) {
                            emit_fragment_input(c, loc, var, j, 4);
                         }
@@ -2381,17 +2646,40 @@ ntq_emit_load_uniform(struct v3d_compile *c, nir_intrinsic_instr *instr)
         if (nir_src_is_const(instr->src[0])) {
                 int offset = (nir_intrinsic_base(instr) +
                              nir_src_as_uint(instr->src[0]));
-                assert(offset % 4 == 0);
-                /* We need dwords */
-                offset = offset / 4;
-                for (int i = 0; i < instr->num_components; i++) {
-                        ntq_store_dest(c, &instr->dest, i,
-                                       vir_uniform(c, QUNIFORM_UNIFORM,
-                                                   offset + i));
+
+                /* Even though ldunif is strictly 32-bit we can still use it
+                 * to load scalar 8-bit/16-bit uniforms so long as their offset
+                 * is * 32-bit aligned. In this case, ldunif would still load
+                 * 32-bit into the destination with the 8-bit/16-bit uniform
+                 * data in the LSB and garbage in the MSB, but that is fine
+                 * because we should only be accessing the valid bits of the
+                 * destination.
+                 *
+                 * FIXME: if in the future we improve our register allocator to
+                 * pack 2 16-bit variables in the MSB and LSB of the same
+                 * register then this optimization would not be valid as is,
+                 * since the load clobbers the MSB.
+                 */
+                if (offset % 4 == 0) {
+                        /* We need dwords */
+                        offset = offset / 4;
+
+                        /* We scalarize general TMU access for anything that
+                         * is not 32-bit.
+                         */
+                        assert(nir_dest_bit_size(instr->dest) == 32 ||
+                               instr->num_components == 1);
+
+                        for (int i = 0; i < instr->num_components; i++) {
+                                ntq_store_dest(c, &instr->dest, i,
+                                               vir_uniform(c, QUNIFORM_UNIFORM,
+                                                           offset + i));
+                        }
+                        return;
                 }
-        } else {
-               ntq_emit_tmu_general(c, instr, false);
         }
+
+        ntq_emit_tmu_general(c, instr, false);
 }
 
 static void
@@ -2444,8 +2732,14 @@ ntq_emit_load_input(struct v3d_compile *c, nir_intrinsic_instr *instr)
         } else {
                 for (int i = 0; i < instr->num_components; i++) {
                         int comp = nir_intrinsic_component(instr) + i;
-                        ntq_store_dest(c, &instr->dest, i,
-                                       vir_MOV(c, c->inputs[offset * 4 + comp]));
+                        struct qreg input = c->inputs[offset * 4 + comp];
+                        ntq_store_dest(c, &instr->dest, i, vir_MOV(c, input));
+
+                        if (c->s->info.stage == MESA_SHADER_FRAGMENT &&
+                            input.file == c->payload_z.file &&
+                            input.index == c->payload_z.index) {
+                                c->reads_z = true;
+                        }
                 }
         }
 }
@@ -2708,7 +3002,7 @@ emit_ldunifa(struct v3d_compile *c, struct qreg *result)
         c->current_unifa_offset += 4;
 }
 
-static void
+static bool
 ntq_emit_load_ubo_unifa(struct v3d_compile *c, nir_intrinsic_instr *instr)
 {
         /* Every ldunifa auto-increments the unifa address by 4 bytes, so our
@@ -2717,9 +3011,36 @@ ntq_emit_load_ubo_unifa(struct v3d_compile *c, nir_intrinsic_instr *instr)
         static const int32_t max_unifa_skip_dist =
                 MAX_UNIFA_SKIP_DISTANCE - 4;
 
+        /* We can only use unifa if the offset is uniform */
+        if (nir_src_is_divergent(instr->src[1]))
+                return false;
+
+        /* ldunifa is a 32-bit load instruction so we can only use it with
+         * 32-bit aligned addresses. We always produce 32-bit aligned addresses
+         * except for types smaller than 32-bit, so in these cases we can only
+         * use ldunifa if we can verify alignment, which we can only do for
+         * loads with a constant offset.
+         */
+        uint32_t bit_size = nir_dest_bit_size(instr->dest);
         bool dynamic_src = !nir_src_is_const(instr->src[1]);
         uint32_t const_offset =
                 dynamic_src ? 0 : nir_src_as_uint(instr->src[1]);
+        uint32_t value_skips = 0;
+        if (bit_size < 32) {
+                if (dynamic_src) {
+                        return false;
+                } else if (const_offset % 4 != 0) {
+                        /* If we are loading from an unaligned offset, fix
+                         * alignment and skip over unused elements in result.
+                         */
+                        value_skips = (const_offset % 4) / (bit_size / 8);
+                        const_offset &= ~0x3;
+                }
+        }
+
+        assert((bit_size == 32 && value_skips == 0) ||
+               (bit_size == 16 && value_skips <= 1) ||
+               (bit_size == 8  && value_skips <= 3));
 
         /* On OpenGL QUNIFORM_UBO_ADDR takes a UBO index
          * shifted up by 1 (0 is gallium's constant buffer 0).
@@ -2767,11 +3088,57 @@ ntq_emit_load_ubo_unifa(struct v3d_compile *c, nir_intrinsic_instr *instr)
                         emit_ldunifa(c, NULL);
         }
 
-        for (uint32_t i = 0; i < nir_intrinsic_dest_components(instr); i++) {
+        uint32_t num_components = nir_intrinsic_dest_components(instr);
+        for (uint32_t i = 0; i < num_components; ) {
                 struct qreg data;
                 emit_ldunifa(c, &data);
-                ntq_store_dest(c, &instr->dest, i, vir_MOV(c, data));
+
+                if (bit_size == 32) {
+                        assert(value_skips == 0);
+                        ntq_store_dest(c, &instr->dest, i, vir_MOV(c, data));
+                        i++;
+                } else {
+                        assert((bit_size == 16 && value_skips <= 1) ||
+                               (bit_size ==  8 && value_skips <= 3));
+
+                        /* If we have any values to skip, shift to the first
+                         * valid value in the ldunifa result.
+                         */
+                        if (value_skips > 0) {
+                                data = vir_SHR(c, data,
+                                               vir_uniform_ui(c, bit_size *
+                                                                 value_skips));
+                        }
+
+                        /* Check how many valid components we have discounting
+                         * read components to skip.
+                         */
+                        uint32_t valid_count = (32 / bit_size) - value_skips;
+                        assert((bit_size == 16 && valid_count <= 2) ||
+                               (bit_size ==  8 && valid_count <= 4));
+                        assert(valid_count > 0);
+
+                        /* Process the valid components */
+                        do {
+                                struct qreg tmp;
+                                uint32_t mask = (1 << bit_size) - 1;
+                                tmp = vir_AND(c, vir_MOV(c, data),
+                                              vir_uniform_ui(c, mask));
+                                ntq_store_dest(c, &instr->dest, i,
+                                               vir_MOV(c, tmp));
+                                i++;
+                                valid_count--;
+
+                                /* Shift to next component */
+                                if (i < num_components && valid_count > 0) {
+                                        data = vir_SHR(c, data,
+                                                       vir_uniform_ui(c, bit_size));
+                                }
+                        } while (i < num_components && valid_count > 0);
+                }
         }
+
+        return true;
 }
 
 static inline struct qreg
@@ -2818,9 +3185,7 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 break;
 
         case nir_intrinsic_load_ubo:
-                if (!nir_src_is_divergent(instr->src[1]))
-                        ntq_emit_load_ubo_unifa(c, instr);
-                else
+                if (!ntq_emit_load_ubo_unifa(c, instr))
                         ntq_emit_tmu_general(c, instr, false);
                 break;
 

@@ -25,7 +25,7 @@
 /* based on pieces from si_pipe.c and radeon_llvm_emit.c */
 #include "ac_llvm_build.h"
 
-#include "ac_exp_param.h"
+#include "ac_nir.h"
 #include "ac_llvm_util.h"
 #include "ac_shader_util.h"
 #include "c11/threads.h"
@@ -50,6 +50,12 @@ struct ac_llvm_flow {
    LLVMBasicBlockRef next_block;
    LLVMBasicBlockRef loop_entry_block;
 };
+
+static void ac_build_tbuffer_store(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
+                                   LLVMValueRef vdata, LLVMValueRef vindex, LLVMValueRef voffset,
+                                   LLVMValueRef soffset, LLVMValueRef immoffset,
+                                   unsigned num_channels, unsigned dfmt, unsigned nfmt,
+                                   unsigned cache_policy, bool structurized);
 
 /* Initialize module-independent parts of the context.
  *
@@ -1150,15 +1156,14 @@ void ac_build_buffer_store_format(struct ac_llvm_context *ctx, LLVMValueRef rsrc
    ac_build_buffer_store_common(ctx, rsrc, data, vindex, voffset, NULL, cache_policy, true, true);
 }
 
-/* TBUFFER_STORE_FORMAT_{X,XY,XYZ,XYZW} <- the suffix is selected by num_channels=1..4.
- * The type of vdata must be one of i32 (num_channels=1), v2i32 (num_channels=2),
- * or v4i32 (num_channels=3,4).
- */
+/* buffer_store_dword(,x2,x3,x4) <- the suffix is selected by the type of vdata. */
 void ac_build_buffer_store_dword(struct ac_llvm_context *ctx, LLVMValueRef rsrc, LLVMValueRef vdata,
-                                 unsigned num_channels, LLVMValueRef voffset, LLVMValueRef soffset,
+                                 LLVMValueRef vindex, LLVMValueRef voffset, LLVMValueRef soffset,
                                  unsigned inst_offset, unsigned cache_policy)
 {
-   /* Split 3 channel stores. */
+   unsigned num_channels = ac_get_llvm_num_components(vdata);
+
+   /* Split 3 channel stores if unsupported. */
    if (num_channels == 3 && !ac_has_vec3_support(ctx->chip_class, false)) {
       LLVMValueRef v[3], v01;
 
@@ -1167,8 +1172,8 @@ void ac_build_buffer_store_dword(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
       }
       v01 = ac_build_gather_values(ctx, v, 2);
 
-      ac_build_buffer_store_dword(ctx, rsrc, v01, 2, voffset, soffset, inst_offset, cache_policy);
-      ac_build_buffer_store_dword(ctx, rsrc, v[2], 1, voffset, soffset, inst_offset + 8,
+      ac_build_buffer_store_dword(ctx, rsrc, v01, vindex, voffset, soffset, inst_offset, cache_policy);
+      ac_build_buffer_store_dword(ctx, rsrc, v[2], vindex, voffset, soffset, inst_offset + 8,
                                   cache_policy);
       return;
    }
@@ -1183,7 +1188,7 @@ void ac_build_buffer_store_dword(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
       if (inst_offset)
          offset = LLVMBuildAdd(ctx->builder, offset, LLVMConstInt(ctx->i32, inst_offset, 0), "");
 
-      ac_build_buffer_store_common(ctx, rsrc, ac_to_float(ctx, vdata), ctx->i32_0, voffset, offset,
+      ac_build_buffer_store_common(ctx, rsrc, ac_to_float(ctx, vdata), vindex, voffset, offset,
                                    cache_policy, false, false);
       return;
    }
@@ -1195,8 +1200,8 @@ void ac_build_buffer_store_dword(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
    unsigned nfmt = V_008F0C_BUF_NUM_FORMAT_UINT;
    LLVMValueRef immoffset = LLVMConstInt(ctx->i32, inst_offset, 0);
 
-   ac_build_raw_tbuffer_store(ctx, rsrc, vdata, voffset, soffset, immoffset, num_channels, dfmt,
-                              nfmt, cache_policy);
+   ac_build_tbuffer_store(ctx, rsrc, vdata, vindex, voffset, soffset, immoffset, num_channels, dfmt,
+                          nfmt, cache_policy, false);
 }
 
 static LLVMValueRef ac_build_buffer_load_common(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
@@ -4488,7 +4493,7 @@ LLVMValueRef ac_build_call(struct ac_llvm_context *ctx, LLVMValueRef func, LLVMV
 }
 
 void ac_export_mrt_z(struct ac_llvm_context *ctx, LLVMValueRef depth, LLVMValueRef stencil,
-                     LLVMValueRef samplemask, struct ac_export_args *args)
+                     LLVMValueRef samplemask, bool is_last, struct ac_export_args *args)
 {
    unsigned mask = 0;
    unsigned format = ac_get_spi_shader_z_format(depth != NULL, stencil != NULL, samplemask != NULL);
@@ -4497,8 +4502,10 @@ void ac_export_mrt_z(struct ac_llvm_context *ctx, LLVMValueRef depth, LLVMValueR
 
    memset(args, 0, sizeof(*args));
 
-   args->valid_mask = 1; /* whether the EXEC mask is valid */
-   args->done = 1;       /* DONE bit */
+   if (is_last) {
+      args->valid_mask = 1; /* whether the EXEC mask is valid */
+      args->done = 1;       /* DONE bit */
+   }
 
    /* Specify the target we are exporting */
    args->target = V_008DFC_SQ_EXP_MRTZ;
@@ -4775,4 +4782,14 @@ void ac_build_triangle_strip_indices_to_triangle(struct ac_llvm_context *ctx, LL
    out[2] = LLVMBuildSelect(builder, flatshade_first,
                             LLVMBuildSelect(builder, is_odd, index[1], index[2], ""), index[2], "");
    memcpy(index, out, sizeof(out));
+}
+
+LLVMValueRef ac_build_is_inf_or_nan(struct ac_llvm_context *ctx, LLVMValueRef a)
+{
+   LLVMValueRef args[2] = {
+      a,
+      LLVMConstInt(ctx->i32, S_NAN | Q_NAN | N_INFINITY | P_INFINITY, 0),
+   };
+   return ac_build_intrinsic(ctx, "llvm.amdgcn.class.f32", ctx->i1, args, 2,
+                             AC_FUNC_ATTR_READNONE);
 }

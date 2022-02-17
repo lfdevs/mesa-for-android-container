@@ -85,6 +85,7 @@ v3dv_deps = [
   idep_nir,
   idep_nir_headers,
   idep_vulkan_util,
+  idep_vulkan_runtime,
   idep_vulkan_wsi,
 ]
 
@@ -95,6 +96,12 @@ endif
 if with_platform_wayland
   v3dv_deps += [dep_wayland_client, dep_wl_protocols]
   libv3dv_files += [wayland_drm_client_protocol_h, wayland_drm_protocol_c]
+endif
+
+if with_platform_android
+  v3dv_deps += dep_android
+  v3dv_flags += '-DVK_USE_PLATFORM_ANDROID_KHR'
+  libv3dv_files += files('v3dv_android.c')
 endif
 
 per_version_libs = []
@@ -149,7 +156,7 @@ broadcom_icd = custom_target(
   output : 'broadcom_icd.@0@.json'.format(host_machine.cpu()),
   command : [
     prog_python, '@INPUT0@',
-    '--api-version', '1.0', '--xml', '@INPUT1@',
+    '--api-version', '1.1', '--xml', '@INPUT1@',
     '--lib-path', join_paths(get_option('prefix'), get_option('libdir'),
     		  	     'libvulkan_broadcom.so'),
     '--out', '@OUTPUT@',

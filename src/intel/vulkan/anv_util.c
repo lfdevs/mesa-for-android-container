@@ -81,6 +81,8 @@ anv_dump_pipe_bits(enum anv_pipe_bits bits)
       fputs("+ic_inval ", stderr);
    if (bits & ANV_PIPE_STALL_AT_SCOREBOARD_BIT)
       fputs("+pb_stall ", stderr);
+   if (bits & ANV_PIPE_PSS_STALL_SYNC_BIT)
+      fputs("+pss_stall ", stderr);
    if (bits & ANV_PIPE_DEPTH_STALL_BIT)
       fputs("+depth_stall ", stderr);
    if (bits & ANV_PIPE_CS_STALL_BIT)

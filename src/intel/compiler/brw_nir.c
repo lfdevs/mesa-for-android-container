@@ -30,33 +30,33 @@
 
 static bool
 remap_tess_levels(nir_builder *b, nir_intrinsic_instr *intr,
-                  GLenum primitive_mode)
+                  enum tess_primitive_mode _primitive_mode)
 {
    const int location = nir_intrinsic_base(intr);
    const unsigned component = nir_intrinsic_component(intr);
    bool out_of_bounds;
 
    if (location == VARYING_SLOT_TESS_LEVEL_INNER) {
-      switch (primitive_mode) {
-      case GL_QUADS:
+      switch (_primitive_mode) {
+      case TESS_PRIMITIVE_QUADS:
          /* gl_TessLevelInner[0..1] lives at DWords 3-2 (reversed). */
          nir_intrinsic_set_base(intr, 0);
          nir_intrinsic_set_component(intr, 3 - component);
          out_of_bounds = false;
          break;
-      case GL_TRIANGLES:
+      case TESS_PRIMITIVE_TRIANGLES:
          /* gl_TessLevelInner[0] lives at DWord 4. */
          nir_intrinsic_set_base(intr, 1);
          out_of_bounds = component > 0;
          break;
-      case GL_ISOLINES:
+      case TESS_PRIMITIVE_ISOLINES:
          out_of_bounds = true;
          break;
       default:
          unreachable("Bogus tessellation domain");
       }
    } else if (location == VARYING_SLOT_TESS_LEVEL_OUTER) {
-      if (primitive_mode == GL_ISOLINES) {
+      if (_primitive_mode == TESS_PRIMITIVE_ISOLINES) {
          /* gl_TessLevelOuter[0..1] lives at DWords 6-7 (in order). */
          nir_intrinsic_set_base(intr, 1);
          nir_intrinsic_set_component(intr, 2 + nir_intrinsic_component(intr));
@@ -65,7 +65,7 @@ remap_tess_levels(nir_builder *b, nir_intrinsic_instr *intr,
          /* Triangles use DWords 7-5 (reversed); Quads use 7-4 (reversed) */
          nir_intrinsic_set_base(intr, 1);
          nir_intrinsic_set_component(intr, 3 - nir_intrinsic_component(intr));
-         out_of_bounds = component == 3 && primitive_mode == GL_TRIANGLES;
+         out_of_bounds = component == 3 && _primitive_mode == TESS_PRIMITIVE_TRIANGLES;
       }
    } else {
       return false;
@@ -104,7 +104,7 @@ is_output(nir_intrinsic_instr *intrin)
 static bool
 remap_patch_urb_offsets(nir_block *block, nir_builder *b,
                         const struct brw_vue_map *vue_map,
-                        GLenum tes_primitive_mode)
+                        enum tess_primitive_mode tes_primitive_mode)
 {
    const bool is_passthrough_tcs = b->shader->info.name &&
       strcmp(b->shader->info.name, "passthrough TCS") == 0;
@@ -128,7 +128,7 @@ remap_patch_urb_offsets(nir_block *block, nir_builder *b,
          assert(vue_slot != -1);
          intrin->const_index[0] = vue_slot;
 
-         nir_src *vertex = nir_get_io_vertex_index_src(intrin);
+         nir_src *vertex = nir_get_io_arrayed_index_src(intrin);
          if (vertex) {
             if (nir_src_is_const(*vertex)) {
                intrin->const_index[0] += nir_src_as_uint(*vertex) *
@@ -366,7 +366,7 @@ brw_nir_lower_tes_inputs(nir_shader *nir, const struct brw_vue_map *vue_map)
          nir_builder_init(&b, function->impl);
          nir_foreach_block(block, function->impl) {
             remap_patch_urb_offsets(block, &b, vue_map,
-                                    nir->info.tess.primitive_mode);
+                                    nir->info.tess._primitive_mode);
          }
       }
    }
@@ -475,7 +475,7 @@ brw_nir_lower_vue_outputs(nir_shader *nir)
 
 void
 brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue_map,
-                          GLenum tes_primitive_mode)
+                          enum tess_primitive_mode tes_primitive_mode)
 {
    nir_foreach_shader_out_variable(var, nir) {
       var->data.driver_location = var->data.location;
@@ -746,6 +746,34 @@ lower_bit_size_callback(const nir_instr *instr, UNUSED void *data)
    }
 }
 
+/* On gfx12.5+, if the offsets are not both constant and in the {-8,7} range,
+ * we will have nir_lower_tex() lower the source offset by returning true from
+ * this filter function.
+ */
+static bool
+lower_xehp_tg4_offset_filter(const nir_instr *instr, UNUSED const void *data)
+{
+   if (instr->type != nir_instr_type_tex)
+      return false;
+
+   nir_tex_instr *tex = nir_instr_as_tex(instr);
+
+   if (tex->op != nir_texop_tg4)
+      return false;
+
+   int offset_index = nir_tex_instr_src_index(tex, nir_tex_src_offset);
+   if (offset_index < 0)
+      return false;
+
+   if (!nir_src_is_const(tex->src[offset_index].src))
+      return true;
+
+   int64_t offset_x = nir_src_comp_as_int(tex->src[offset_index].src, 0);
+   int64_t offset_y = nir_src_comp_as_int(tex->src[offset_index].src, 1);
+
+   return offset_x < -8 || offset_x > 7 || offset_y < -8 || offset_y > 7;
+}
+
 /* Does some simple lowering and runs the standard suite of optimizations
  *
  * This is intended to be called more-or-less directly after you get the
@@ -775,7 +803,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
 
    /* See also brw_nir_trig_workarounds.py */
    if (compiler->precise_trig &&
-       !(devinfo->ver >= 10 || devinfo->is_kabylake))
+       !(devinfo->ver >= 10 || devinfo->platform == INTEL_PLATFORM_KBL))
       OPT(brw_nir_apply_trig_workarounds);
 
    if (devinfo->ver >= 12)
@@ -792,6 +820,8 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
       .lower_txd_offset_clamp = true,
       .lower_tg4_offsets = true,
       .lower_txs_lod = true, /* Wa_14012320009 */
+      .lower_offset_filter =
+         devinfo->verx10 >= 125 ? lower_xehp_tg4_offset_filter : NULL,
    };
 
    OPT(nir_lower_tex, &tex_options);
@@ -831,7 +861,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
       .ballot_components = 1,
       .lower_to_scalar = true,
       .lower_vote_trivial = !is_scalar,
-      .lower_shuffle = true,
+      .lower_relative_shuffle = true,
       .lower_quad_broadcast_dynamic = true,
       .lower_elect = true,
    };
@@ -921,12 +951,18 @@ brw_nir_link_shaders(const struct brw_compiler *compiler,
    NIR_PASS_V(producer, nir_opt_combine_stores, nir_var_shader_out);
    NIR_PASS_V(consumer, nir_lower_io_to_vector, nir_var_shader_in);
 
-   if (producer->info.stage != MESA_SHADER_TESS_CTRL) {
+   if (producer->info.stage != MESA_SHADER_TESS_CTRL &&
+       producer->info.stage != MESA_SHADER_MESH &&
+       producer->info.stage != MESA_SHADER_TASK) {
       /* Calling lower_io_to_vector creates output variable writes with
        * write-masks.  On non-TCS outputs, the back-end can't handle it and we
        * need to call nir_lower_io_to_temporaries to get rid of them.  This,
        * in turn, creates temporary variables and extra copy_deref intrinsics
        * that we need to clean up.
+       *
+       * Note Mesh/Task don't support I/O as temporaries (I/O is shared
+       * between whole workgroup, possibly using multiple HW threads). For
+       * those write-mask in output is handled by I/O lowering.
        */
       NIR_PASS_V(producer, nir_lower_io_to_temporaries,
                  nir_shader_get_entrypoint(producer), true, false);
@@ -1074,6 +1110,9 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_lower_idiv, &options);
    }
 
+   if (gl_shader_stage_can_set_fragment_shading_rate(nir->info.stage))
+      brw_nir_lower_shading_rate_output(nir);
+
    brw_nir_optimize(nir, compiler, is_scalar, false);
 
    if (is_scalar && nir_shader_has_local_variables(nir)) {
@@ -1219,16 +1258,6 @@ brw_nir_apply_sampler_key(nir_shader *nir,
       tex_options.saturate_r = key_tex->gl_clamp_mask[2];
    }
 
-   /* Prior to Haswell, we have to fake texture swizzle */
-   for (unsigned s = 0; s < MAX_SAMPLERS; s++) {
-      if (key_tex->swizzles[s] == SWIZZLE_NOOP)
-         continue;
-
-      tex_options.swizzle_result |= BITFIELD_BIT(s);
-      for (unsigned c = 0; c < 4; c++)
-         tex_options.swizzles[s][c] = GET_SWZ(key_tex->swizzles[s], c);
-   }
-
    /* Prior to Haswell, we have to lower gradients on shadow samplers */
    tex_options.lower_txd_shadow = devinfo->verx10 <= 70;
 
@@ -1285,7 +1314,7 @@ get_subgroup_size(gl_shader_stage stage,
    case BRW_SUBGROUP_SIZE_REQUIRE_8:
    case BRW_SUBGROUP_SIZE_REQUIRE_16:
    case BRW_SUBGROUP_SIZE_REQUIRE_32:
-      assert(stage == MESA_SHADER_COMPUTE);
+      assert(gl_shader_stage_uses_workgroup(stage));
       /* These enum values are expressly chosen to be equal to the subgroup
        * size that they require.
        */
@@ -1528,4 +1557,50 @@ brw_nir_create_passthrough_tcs(void *mem_ctx, const struct brw_compiler *compile
    brw_preprocess_nir(compiler, nir, NULL);
 
    return nir;
+}
+
+nir_ssa_def *
+brw_nir_load_global_const(nir_builder *b, nir_intrinsic_instr *load_uniform,
+      nir_ssa_def *base_addr, unsigned off)
+{
+   assert(load_uniform->intrinsic == nir_intrinsic_load_uniform);
+   assert(load_uniform->dest.is_ssa);
+   assert(load_uniform->src[0].is_ssa);
+
+   unsigned bit_size = load_uniform->dest.ssa.bit_size;
+   assert(bit_size >= 8 && bit_size % 8 == 0);
+   unsigned byte_size = bit_size / 8;
+   nir_ssa_def *sysval;
+
+   if (nir_src_is_const(load_uniform->src[0])) {
+      uint64_t offset = off +
+                        nir_intrinsic_base(load_uniform) +
+                        nir_src_as_uint(load_uniform->src[0]);
+
+      /* Things should be component-aligned. */
+      assert(offset % byte_size == 0);
+
+      unsigned suboffset = offset % 64;
+      uint64_t aligned_offset = offset - suboffset;
+
+      /* Load two just in case we go over a 64B boundary */
+      nir_ssa_def *data[2];
+      for (unsigned i = 0; i < 2; i++) {
+         nir_ssa_def *addr = nir_iadd_imm(b, base_addr, aligned_offset + i * 64);
+         data[i] = nir_load_global_const_block_intel(b, 16, addr,
+                                                     nir_imm_true(b));
+      }
+
+      sysval = nir_extract_bits(b, data, 2, suboffset * 8,
+                                load_uniform->num_components, bit_size);
+   } else {
+      nir_ssa_def *offset32 =
+         nir_iadd_imm(b, load_uniform->src[0].ssa,
+                         off + nir_intrinsic_base(load_uniform));
+      nir_ssa_def *addr = nir_iadd(b, base_addr, nir_u2u64(b, offset32));
+      sysval = nir_load_global_constant(b, addr, byte_size,
+                                        load_uniform->num_components, bit_size);
+   }
+
+   return sysval;
 }

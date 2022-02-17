@@ -91,6 +91,8 @@ bi_count_read_registers(const bi_instr *ins, unsigned s)
                 return 1;
         else if (s == 0 && bi_opcode_props[ins->op].sr_read)
                 return bi_count_staging_registers(ins);
+        else if (s == 4 && ins->op == BI_OPCODE_BLEND)
+                return ins->sr_count_2; /* Dual source blending */
         else
                 return 1;
 }
@@ -107,6 +109,8 @@ bi_count_write_registers(const bi_instr *ins, unsigned d)
                         return bi_count_staging_registers(ins);
         } else if (ins->op == BI_OPCODE_SEG_ADD_I64) {
                 return 2;
+        } else if (ins->op == BI_OPCODE_TEXC && d == 1) {
+                return ins->sr_count_2;
         }
 
         return 1;

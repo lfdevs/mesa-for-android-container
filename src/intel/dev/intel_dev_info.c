@@ -70,11 +70,18 @@ main(int argc, char *argv[])
       if (!success)
          continue;
 
+      fprintf(stdout, "devinfo struct size = %zu\n", sizeof(devinfo));
+
       fprintf(stdout, "%s:\n", path);
 
       fprintf(stdout, "   name: %s\n", devinfo.name);
       fprintf(stdout, "   gen: %u\n", devinfo.ver);
-      fprintf(stdout, "   PCI id: 0x%x\n", devinfo.chipset_id);
+      fprintf(stdout, "   PCI device id: 0x%x\n", devinfo.pci_device_id);
+      fprintf(stdout, "   PCI domain: 0x%x\n", devinfo.pci_domain);
+      fprintf(stdout, "   PCI bus: 0x%x\n", devinfo.pci_bus);
+      fprintf(stdout, "   PCI dev: 0x%x\n", devinfo.pci_dev);
+      fprintf(stdout, "   PCI function: 0x%x\n", devinfo.pci_func);
+      fprintf(stdout, "   PCI revision id: 0x%x\n", devinfo.pci_revision_id);
       fprintf(stdout, "   revision: %u\n", devinfo.revision);
 
       const char *subslice_name = devinfo.ver >= 12 ? "dualsubslice" : "subslice";
@@ -85,7 +92,7 @@ main(int argc, char *argv[])
             fprintf(stdout, "   slice%u.%s%u: ", s, subslice_name, ss);
             if (intel_device_info_subslice_available(&devinfo, s, ss)) {
                n_ss++;
-               for (unsigned eu = 0; eu < devinfo.max_eu_per_subslice; eu++) {
+               for (unsigned eu = 0; eu < devinfo.max_eus_per_subslice; eu++) {
                   n_eus += intel_device_info_eu_available(&devinfo, s, ss, eu) ? 1 : 0;
                   fprintf(stdout, "%s", intel_device_info_eu_available(&devinfo, s, ss, eu) ? "1" : "0");
                }
@@ -95,14 +102,19 @@ main(int argc, char *argv[])
             fprintf(stdout, "\n");
          }
       }
+      for (uint32_t pp = 0; pp < ARRAY_SIZE(devinfo.ppipe_subslices); pp++) {
+         fprintf(stdout, "   pixel pipe %02u: %u\n",
+                 pp, devinfo.ppipe_subslices[pp]);
+      }
+
       fprintf(stdout, "   slices: %u\n", n_s);
       fprintf(stdout, "   %s: %u\n", subslice_name, n_ss);
-      fprintf(stdout, "   EU per %s: %u\n", subslice_name, devinfo.num_eu_per_subslice);
       fprintf(stdout, "   EUs: %u\n", n_eus);
       fprintf(stdout, "   EU threads: %u\n", n_eus * devinfo.num_thread_per_eu);
 
       fprintf(stdout, "   LLC: %u\n", devinfo.has_llc);
       fprintf(stdout, "   threads per EU: %u\n", devinfo.num_thread_per_eu);
+      fprintf(stdout, "   URB size: %u\n", devinfo.urb.size);
       fprintf(stdout, "   L3 banks: %u\n", devinfo.l3_banks);
       fprintf(stdout, "   max VS  threads: %u\n", devinfo.max_vs_threads);
       fprintf(stdout, "   max TCS threads: %u\n", devinfo.max_tcs_threads);
@@ -110,7 +122,8 @@ main(int argc, char *argv[])
       fprintf(stdout, "   max GS  threads: %u\n", devinfo.max_gs_threads);
       fprintf(stdout, "   max WM  threads: %u\n", devinfo.max_wm_threads);
       fprintf(stdout, "   max CS  threads: %u\n", devinfo.max_cs_threads);
-      fprintf(stdout, "   timestamp frequency: %" PRIu64 "\n", devinfo.timestamp_frequency);
+      fprintf(stdout, "   timestamp frequency: %" PRIu64 " / %.4f ns\n",
+              devinfo.timestamp_frequency, 1000000000.0 / devinfo.timestamp_frequency);
    }
 
    return EXIT_SUCCESS;

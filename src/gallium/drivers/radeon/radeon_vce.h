@@ -432,7 +432,7 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 
 bool si_vce_is_fw_version_supported(struct si_screen *sscreen);
 
-void si_vce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf, enum radeon_bo_usage usage,
+void si_vce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf, unsigned usage,
                        enum radeon_bo_domain domain, signed offset);
 
 /* init vce fw 40.2.2 specific callbacks */

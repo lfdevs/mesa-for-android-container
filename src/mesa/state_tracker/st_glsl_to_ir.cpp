@@ -31,6 +31,7 @@
 #include "st_nir.h"
 #include "st_shader_cache.h"
 #include "st_glsl_to_tgsi.h"
+#include "st_program.h"
 
 #include "tgsi/tgsi_from_mesa.h"
 
@@ -45,7 +46,10 @@ extern "C" {
 GLboolean
 st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 {
-   struct pipe_screen *pscreen = st_context(ctx)->screen;
+   GLboolean ret;
+   struct st_context *sctx = st_context(ctx);
+   struct pipe_context *pctx = sctx->pipe;
+   struct pipe_screen *pscreen = sctx->screen;
 
    enum pipe_shader_ir preferred_ir = (enum pipe_shader_ir)
       pscreen->get_shader_param(pscreen, PIPE_SHADER_VERTEX,
@@ -166,12 +170,32 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       validate_ir_tree(ir);
    }
 
-   build_program_resource_list(ctx, prog, use_nir);
+   build_program_resource_list(&ctx->Const, prog, use_nir);
 
    if (use_nir)
-      return st_link_nir(ctx, prog);
+      ret = st_link_nir(ctx, prog);
    else
-      return st_link_tgsi(ctx, prog);
+      ret = st_link_tgsi(ctx, prog);
+
+   if (pctx->link_shader) {
+      void *driver_handles[PIPE_SHADER_TYPES];
+      memset(driver_handles, 0, sizeof(driver_handles));
+
+      for (uint32_t i = 0; i < MESA_SHADER_STAGES; ++i) {
+         struct gl_linked_shader *shader = prog->_LinkedShaders[i];
+         if (shader) {
+            struct gl_program *p = shader->Program;
+            if (p && p->variants) {
+               enum pipe_shader_type type = pipe_shader_type_from_mesa(shader->Stage);
+               driver_handles[type] = p->variants->driver_shader;
+            }
+         }
+      }
+
+      pctx->link_shader(pctx, driver_handles);
+   }
+
+   return ret;
 }
 
 } /* extern "C" */

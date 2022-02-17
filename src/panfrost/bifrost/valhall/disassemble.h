@@ -35,7 +35,7 @@ va_print_dest(FILE *fp, uint8_t dest, bool can_mask)
 void va_disasm_instr(FILE *fp, uint64_t instr);
 
 static inline void
-disassemble_valhall(FILE *fp, const uint64_t *code, unsigned size)
+disassemble_valhall(FILE *fp, const uint64_t *code, unsigned size, bool verbose)
 {
    assert((size & 7) == 0);
 
@@ -47,11 +47,13 @@ disassemble_valhall(FILE *fp, const uint64_t *code, unsigned size)
       if (instr == 0)
          return;
 
-      /* Print byte pattern */
-      for (unsigned j = 0; j < 8; ++j)
-         fprintf(fp, "%02x ", (uint8_t) (instr >> (j * 8)));
+      if (verbose) {
+         /* Print byte pattern */
+         for (unsigned j = 0; j < 8; ++j)
+            fprintf(fp, "%02x ", (uint8_t) (instr >> (j * 8)));
 
-      fprintf(fp, "   ");
+         fprintf(fp, "   ");
+      }
 
       va_disasm_instr(fp, instr);
       fprintf(fp, "\n");

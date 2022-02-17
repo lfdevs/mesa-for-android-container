@@ -92,7 +92,7 @@ void r600_gfx_write_event_eop(struct r600_common_context *ctx,
 	radeon_emit(cs, 0); /* unused */
 
 	if (buf)
-		r600_emit_reloc(ctx, &ctx->gfx, buf, RADEON_USAGE_WRITE,
+		r600_emit_reloc(ctx, &ctx->gfx, buf, RADEON_USAGE_WRITE |
 				RADEON_PRIO_QUERY);
 }
 
@@ -121,7 +121,7 @@ void r600_gfx_wait_fence(struct r600_common_context *ctx,
 	radeon_emit(cs, 4); /* poll interval */
 
 	if (buf)
-		r600_emit_reloc(ctx, &ctx->gfx, buf, RADEON_USAGE_READ,
+		r600_emit_reloc(ctx, &ctx->gfx, buf, RADEON_USAGE_READ |
 				RADEON_PRIO_QUERY);
 }
 
@@ -263,7 +263,7 @@ void r600_need_dma_space(struct r600_common_context *ctx, unsigned num_dw,
 	 * engine busy while uploads are being submitted.
 	 */
 	num_dw++; /* for emit_wait_idle below */
-	if (!ctx->ws->cs_check_space(&ctx->dma.cs, num_dw, false) ||
+	if (!ctx->ws->cs_check_space(&ctx->dma.cs, num_dw) ||
 	    ctx->dma.cs.used_vram_kb + ctx->dma.cs.used_gart_kb > 64 * 1024 ||
 	    !radeon_cs_memory_below_limit(ctx->screen, &ctx->dma.cs, vram, gtt)) {
 		ctx->dma.flush(ctx, PIPE_FLUSH_ASYNC, NULL);
@@ -287,10 +287,10 @@ void r600_need_dma_space(struct r600_common_context *ctx, unsigned num_dw,
 	if (ctx->screen->info.r600_has_virtual_memory) {
 		if (dst)
 			radeon_add_to_buffer_list(ctx, &ctx->dma, dst,
-						  RADEON_USAGE_WRITE, 0);
+						  RADEON_USAGE_WRITE);
 		if (src)
 			radeon_add_to_buffer_list(ctx, &ctx->dma, src,
-						  RADEON_USAGE_READ, 0);
+						  RADEON_USAGE_READ);
 	}
 
 	/* this function is called before all DMA calls, so increment this. */
@@ -807,10 +807,20 @@ static float r600_get_paramf(struct pipe_screen* pscreen,
 			     enum pipe_capf param)
 {
 	switch (param) {
+	case PIPE_CAPF_MIN_LINE_WIDTH:
+	case PIPE_CAPF_MIN_LINE_WIDTH_AA:
+	case PIPE_CAPF_MIN_POINT_SIZE:
+	case PIPE_CAPF_MIN_POINT_SIZE_AA:
+		return 1;
+
+	case PIPE_CAPF_POINT_SIZE_GRANULARITY:
+	case PIPE_CAPF_LINE_WIDTH_GRANULARITY:
+		return 0.1;
+
 	case PIPE_CAPF_MAX_LINE_WIDTH:
 	case PIPE_CAPF_MAX_LINE_WIDTH_AA:
-	case PIPE_CAPF_MAX_POINT_WIDTH:
-	case PIPE_CAPF_MAX_POINT_WIDTH_AA:
+	case PIPE_CAPF_MAX_POINT_SIZE:
+	case PIPE_CAPF_MAX_POINT_SIZE_AA:
          return 8191.0f;
 	case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
 		return 16.0f;

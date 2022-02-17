@@ -47,6 +47,7 @@
 #include <GL/gl.h>
 #include <GL/internal/dri_interface.h>
 #include "loader.h"
+#include "util/os_file.h"
 
 #ifdef HAVE_LIBDRM
 #include <xf86drm.h>
@@ -175,6 +176,26 @@ loader_open_render_node(const char *name)
       return -ENOENT;
 
    return fd;
+}
+
+char *
+loader_get_render_node(dev_t device)
+{
+   char *render_node = NULL;
+   drmDevicePtr dev_ptr;
+
+   if (drmGetDeviceFromDevId(device, 0, &dev_ptr) < 0)
+      return NULL;
+
+   if (dev_ptr->available_nodes & (1 << DRM_NODE_RENDER)) {
+      render_node = strdup(dev_ptr->nodes[DRM_NODE_RENDER]);
+      if (!render_node)
+         log_(_LOADER_DEBUG, "MESA-LOADER: failed to allocate memory for render node\n");
+   }
+
+   drmFreeDevice(&dev_ptr);
+
+   return render_node;
 }
 
 #ifdef USE_DRICONF
@@ -375,6 +396,12 @@ loader_open_render_node(const char *name)
    return -1;
 }
 
+char *
+loader_get_render_node(dev_t device)
+{
+   return NULL;
+}
+
 int loader_get_user_preferred_fd(int default_fd, bool *different_device)
 {
    *different_device = false;
@@ -407,10 +434,52 @@ drm_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
 }
 #endif
 
+#ifdef __linux__
+static int loader_get_linux_pci_field(int maj, int min, const char *field)
+{
+   char path[PATH_MAX + 1];
+   snprintf(path, sizeof(path), "/sys/dev/char/%d:%d/device/%s", maj, min, field);
+
+   char *field_str = os_read_file(path, NULL);
+   if (!field_str) {
+      /* Probably non-PCI device. */
+      return 0;
+   }
+
+   int value = (int)strtoll(field_str, NULL, 16);
+   free(field_str);
+
+   return value;
+}
+
+static bool
+loader_get_linux_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
+{
+   struct stat sbuf;
+   if (fstat(fd, &sbuf) != 0) {
+      log_(_LOADER_DEBUG, "MESA-LOADER: failed to fstat fd\n");
+      return false;
+   }
+
+   int maj = major(sbuf.st_rdev);
+   int min = minor(sbuf.st_rdev);
+
+   *vendor_id = loader_get_linux_pci_field(maj, min, "vendor");
+   *chip_id = loader_get_linux_pci_field(maj, min, "device");
+
+   return *vendor_id && *chip_id;
+}
+#endif /* __linux__ */
 
 bool
 loader_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
 {
+#ifdef __linux__
+   /* Implementation without causing full enumeration of DRM devices. */
+   if (loader_get_linux_pci_id_for_fd(fd, vendor_id, chip_id))
+      return true;
+#endif
+
 #if HAVE_LIBDRM
    return drm_get_pci_id_for_fd(fd, vendor_id, chip_id);
 #endif

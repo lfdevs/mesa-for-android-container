@@ -53,7 +53,10 @@ fs_visitor::emit_nir_code()
 void
 fs_visitor::nir_setup_outputs()
 {
-   if (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_FRAGMENT)
+   if (stage == MESA_SHADER_TESS_CTRL ||
+       stage == MESA_SHADER_TASK ||
+       stage == MESA_SHADER_MESH ||
+       stage == MESA_SHADER_FRAGMENT)
       return;
 
    unsigned vec4s[VARYING_SLOT_TESS_MAX] = { 0, };
@@ -100,10 +103,8 @@ void
 fs_visitor::nir_setup_uniforms()
 {
    /* Only the first compile gets to set up uniforms. */
-   if (push_constant_loc) {
-      assert(pull_constant_loc);
+   if (push_constant_loc)
       return;
-   }
 
    uniforms = nir->num_uniforms / 4;
 
@@ -152,8 +153,16 @@ emit_system_values_block(nir_block *block, fs_visitor *v)
       case nir_intrinsic_load_first_vertex:
       case nir_intrinsic_load_instance_id:
       case nir_intrinsic_load_base_instance:
-      case nir_intrinsic_load_draw_id:
          unreachable("should be lowered by brw_nir_lower_vs_inputs().");
+         break;
+
+      case nir_intrinsic_load_draw_id:
+         /* For Task/Mesh, draw_id will be handled later in
+          * nir_emit_mesh_task_intrinsic().
+          */
+         if (!gl_shader_stage_is_mesh(v->stage))
+            unreachable("should be lowered by brw_nir_lower_vs_inputs().");
+         break;
 
       case nir_intrinsic_load_invocation_id:
          if (v->stage == MESA_SHADER_TESS_CTRL)
@@ -170,17 +179,18 @@ emit_system_values_block(nir_block *block, fs_visitor *v)
          break;
 
       case nir_intrinsic_load_sample_pos:
+      case nir_intrinsic_load_sample_pos_or_center:
          assert(v->stage == MESA_SHADER_FRAGMENT);
          reg = &v->nir_system_values[SYSTEM_VALUE_SAMPLE_POS];
          if (reg->file == BAD_FILE)
-            *reg = *v->emit_samplepos_setup();
+            *reg = v->emit_samplepos_setup();
          break;
 
       case nir_intrinsic_load_sample_id:
          assert(v->stage == MESA_SHADER_FRAGMENT);
          reg = &v->nir_system_values[SYSTEM_VALUE_SAMPLE_ID];
          if (reg->file == BAD_FILE)
-            *reg = *v->emit_sampleid_setup();
+            *reg = v->emit_sampleid_setup();
          break;
 
       case nir_intrinsic_load_sample_mask_in:
@@ -188,15 +198,14 @@ emit_system_values_block(nir_block *block, fs_visitor *v)
          assert(v->devinfo->ver >= 7);
          reg = &v->nir_system_values[SYSTEM_VALUE_SAMPLE_MASK_IN];
          if (reg->file == BAD_FILE)
-            *reg = *v->emit_samplemaskin_setup();
+            *reg = v->emit_samplemaskin_setup();
          break;
 
       case nir_intrinsic_load_workgroup_id:
-         assert(v->stage == MESA_SHADER_COMPUTE ||
-                v->stage == MESA_SHADER_KERNEL);
+         assert(gl_shader_stage_uses_workgroup(v->stage));
          reg = &v->nir_system_values[SYSTEM_VALUE_WORKGROUP_ID];
          if (reg->file == BAD_FILE)
-            *reg = *v->emit_cs_work_group_id_setup();
+            *reg = v->emit_work_group_id_setup();
          break;
 
       case nir_intrinsic_load_helper_invocation:
@@ -257,7 +266,7 @@ emit_system_values_block(nir_block *block, fs_visitor *v)
       case nir_intrinsic_load_frag_shading_rate:
          reg = &v->nir_system_values[SYSTEM_VALUE_FRAG_SHADING_RATE];
          if (reg->file == BAD_FILE)
-            *reg = *v->emit_shading_rate_setup();
+            *reg = v->emit_shading_rate_setup();
          break;
 
       default:
@@ -451,6 +460,12 @@ fs_visitor::nir_emit_instr(nir_instr *instr)
       case MESA_SHADER_CALLABLE:
          nir_emit_bs_intrinsic(abld, nir_instr_as_intrinsic(instr));
          break;
+      case MESA_SHADER_TASK:
+         nir_emit_task_intrinsic(abld, nir_instr_as_intrinsic(instr));
+         break;
+      case MESA_SHADER_MESH:
+         nir_emit_mesh_intrinsic(abld, nir_instr_as_intrinsic(instr));
+         break;
       default:
          unreachable("unsupported shader stage");
       }
@@ -547,17 +562,16 @@ fs_visitor::optimize_frontfacing_ternary(nir_alu_instr *instr,
 
       /* For (gl_FrontFacing ? 1.0 : -1.0), emit:
        *
-       *    or(8)  tmp.1<2>W  g0.0<0,1,0>W  0x00003f80W
+       *    or(8)  tmp.1<2>W  g1.1<0,1,0>W  0x00003f80W
        *    and(8) dst<1>D    tmp<8,8,1>D   0xbf800000D
        *
-       * and negate the result for (gl_FrontFacing ? -1.0 : 1.0).
+       * and negate g1.1<0,1,0>W for (gl_FrontFacing ? -1.0 : 1.0).
        */
+      if (value1 == -1.0f)
+         g1.negate = true;
+
       bld.OR(subscript(tmp, BRW_REGISTER_TYPE_W, 1),
              g1, brw_imm_uw(0x3f80));
-
-      if (value1 == -1.0f)
-         bld.MOV(tmp, negate(tmp));
-
    } else if (devinfo->ver >= 6) {
       /* Bit 15 of g0.0 is 0 if the polygon is front facing. */
       fs_reg g0 = fs_reg(retype(brw_vec1_grf(0, 0), BRW_REGISTER_TYPE_W));
@@ -957,7 +971,6 @@ void
 fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
                          bool need_dest)
 {
-   struct brw_wm_prog_key *fs_key = (struct brw_wm_prog_key *) this->key;
    fs_inst *inst;
    unsigned execution_mode =
       bld.shader->nir->info.float_controls_execution_mode;
@@ -1214,29 +1227,17 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       inst = bld.emit(SHADER_OPCODE_COS, result, op[0]);
       break;
 
-   case nir_op_fddx:
-      if (fs_key->high_quality_derivatives) {
-         inst = bld.emit(FS_OPCODE_DDX_FINE, result, op[0]);
-      } else {
-         inst = bld.emit(FS_OPCODE_DDX_COARSE, result, op[0]);
-      }
-      break;
    case nir_op_fddx_fine:
       inst = bld.emit(FS_OPCODE_DDX_FINE, result, op[0]);
       break;
+   case nir_op_fddx:
    case nir_op_fddx_coarse:
       inst = bld.emit(FS_OPCODE_DDX_COARSE, result, op[0]);
-      break;
-   case nir_op_fddy:
-      if (fs_key->high_quality_derivatives) {
-         inst = bld.emit(FS_OPCODE_DDY_FINE, result, op[0]);
-      } else {
-         inst = bld.emit(FS_OPCODE_DDY_COARSE, result, op[0]);
-      }
       break;
    case nir_op_fddy_fine:
       inst = bld.emit(FS_OPCODE_DDY_FINE, result, op[0]);
       break;
+   case nir_op_fddy:
    case nir_op_fddy_coarse:
       inst = bld.emit(FS_OPCODE_DDY_COARSE, result, op[0]);
       break;
@@ -1655,7 +1656,8 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       fs_reg zero = bld.vgrf(BRW_REGISTER_TYPE_F);
 
       /* The destination stride must be at least as big as the source stride. */
-      tmp16.type = BRW_REGISTER_TYPE_W;
+      tmp16.type = devinfo->ver > 7
+         ? BRW_REGISTER_TYPE_HF : BRW_REGISTER_TYPE_W;
       tmp16.stride = 2;
 
       /* Check for denormal */
@@ -3301,15 +3303,6 @@ fs_visitor::emit_non_coherent_fb_read(const fs_builder &bld, const fs_reg &dst,
    const brw_wm_prog_key *wm_key =
       reinterpret_cast<const brw_wm_prog_key *>(key);
    assert(!wm_key->coherent_fb_fetch);
-   const struct brw_wm_prog_data *wm_prog_data =
-      brw_wm_prog_data(stage_prog_data);
-
-   /* Calculate the surface index relative to the start of the texture binding
-    * table block, since that's what the texturing messages expect.
-    */
-   const unsigned surface = target +
-      wm_prog_data->binding_table.render_target_read_start -
-      wm_prog_data->base.binding_table.texture_start;
 
    /* Calculate the fragment coordinates. */
    const fs_reg coords = bld.vgrf(BRW_REGISTER_TYPE_UD, 3);
@@ -3324,20 +3317,34 @@ fs_visitor::emit_non_coherent_fb_read(const fs_builder &bld, const fs_reg &dst,
     */
    if (wm_key->multisample_fbo &&
        nir_system_values[SYSTEM_VALUE_SAMPLE_ID].file == BAD_FILE)
-      nir_system_values[SYSTEM_VALUE_SAMPLE_ID] = *emit_sampleid_setup();
+      nir_system_values[SYSTEM_VALUE_SAMPLE_ID] = emit_sampleid_setup();
 
    const fs_reg sample = nir_system_values[SYSTEM_VALUE_SAMPLE_ID];
    const fs_reg mcs = wm_key->multisample_fbo ?
-      emit_mcs_fetch(coords, 3, brw_imm_ud(surface), fs_reg()) : fs_reg();
+      emit_mcs_fetch(coords, 3, brw_imm_ud(target), fs_reg()) : fs_reg();
 
    /* Use either a normal or a CMS texel fetch message depending on whether
     * the framebuffer is single or multisample.  On SKL+ use the wide CMS
     * message just in case the framebuffer uses 16x multisampling, it should
     * be equivalent to the normal CMS fetch for lower multisampling modes.
     */
-   const opcode op = !wm_key->multisample_fbo ? SHADER_OPCODE_TXF_LOGICAL :
-                     devinfo->ver >= 9 ? SHADER_OPCODE_TXF_CMS_W_LOGICAL :
-                     SHADER_OPCODE_TXF_CMS_LOGICAL;
+   opcode op;
+   if (wm_key->multisample_fbo) {
+      /* On SKL+ use the wide CMS message just in case the framebuffer uses 16x
+       * multisampling, it should be equivalent to the normal CMS fetch for
+       * lower multisampling modes.
+       *
+       * On Gfx12HP, there is only CMS_W variant available.
+       */
+      if (devinfo->verx10 >= 125)
+         op = SHADER_OPCODE_TXF_CMS_W_GFX12_LOGICAL;
+      else if (devinfo->ver >= 9)
+         op = SHADER_OPCODE_TXF_CMS_W_LOGICAL;
+      else
+         op = SHADER_OPCODE_TXF_CMS_LOGICAL;
+   } else {
+      op = SHADER_OPCODE_TXF_LOGICAL;
+   }
 
    /* Emit the instruction. */
    fs_reg srcs[TEX_LOGICAL_NUM_SRCS];
@@ -3345,7 +3352,7 @@ fs_visitor::emit_non_coherent_fb_read(const fs_builder &bld, const fs_reg &dst,
    srcs[TEX_LOGICAL_SRC_LOD]              = brw_imm_ud(0);
    srcs[TEX_LOGICAL_SRC_SAMPLE_INDEX]     = sample;
    srcs[TEX_LOGICAL_SRC_MCS]              = mcs;
-   srcs[TEX_LOGICAL_SRC_SURFACE]          = brw_imm_ud(surface);
+   srcs[TEX_LOGICAL_SRC_SURFACE]          = brw_imm_ud(target);
    srcs[TEX_LOGICAL_SRC_SAMPLER]          = brw_imm_ud(0);
    srcs[TEX_LOGICAL_SRC_COORD_COMPONENTS] = brw_imm_ud(3);
    srcs[TEX_LOGICAL_SRC_GRAD_COMPONENTS]  = brw_imm_ud(0);
@@ -3434,10 +3441,11 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
    switch (instr->intrinsic) {
    case nir_intrinsic_load_front_face:
       bld.MOV(retype(dest, BRW_REGISTER_TYPE_D),
-              *emit_frontfacing_interpolation());
+              emit_frontfacing_interpolation());
       break;
 
-   case nir_intrinsic_load_sample_pos: {
+   case nir_intrinsic_load_sample_pos:
+   case nir_intrinsic_load_sample_pos_or_center: {
       fs_reg sample_pos = nir_system_values[SYSTEM_VALUE_SAMPLE_POS];
       assert(sample_pos.file != BAD_FILE);
       dest.type = sample_pos.type;
@@ -3607,11 +3615,15 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
    }
 
    case nir_intrinsic_load_input: {
-      /* load_input is only used for flat inputs */
+      /* In Fragment Shaders load_input is used either for flat inputs or
+       * per-primitive inputs.
+       */
       assert(nir_dest_bit_size(instr->dest) == 32);
       unsigned base = nir_intrinsic_base(instr);
       unsigned comp = nir_intrinsic_component(instr);
       unsigned num_components = instr->num_components;
+
+      /* TODO(mesh): Multiview. Verify and handle these special cases for Mesh. */
 
       /* Special case fields in the VUE header */
       if (base == VARYING_SLOT_LAYER)
@@ -3619,9 +3631,17 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
       else if (base == VARYING_SLOT_VIEWPORT)
          comp = 2;
 
-      for (unsigned int i = 0; i < num_components; i++) {
-         bld.MOV(offset(dest, bld, i),
-                 retype(component(interp_reg(base, comp + i), 3), dest.type));
+      if (BITFIELD64_BIT(base) & nir->info.per_primitive_inputs) {
+         assert(base != VARYING_SLOT_PRIMITIVE_INDICES);
+         for (unsigned int i = 0; i < num_components; i++) {
+            bld.MOV(offset(dest, bld, i),
+                    retype(component(per_primitive_reg(base), comp + i), dest.type));
+         }
+      } else {
+         for (unsigned int i = 0; i < num_components; i++) {
+            bld.MOV(offset(dest, bld, i),
+                    retype(component(interp_reg(base, comp + i), 3), dest.type));
+         }
       }
       break;
    }
@@ -3802,7 +3822,7 @@ void
 fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
                                   nir_intrinsic_instr *instr)
 {
-   assert(stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_KERNEL);
+   assert(gl_shader_stage_uses_workgroup(stage));
    struct brw_cs_prog_data *cs_prog_data = brw_cs_prog_data(prog_data);
 
    fs_reg dest;
@@ -3847,13 +3867,11 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
 
    case nir_intrinsic_load_num_workgroups: {
       assert(nir_dest_bit_size(instr->dest) == 32);
-      const unsigned surface =
-         cs_prog_data->binding_table.work_groups_start;
 
       cs_prog_data->uses_num_work_groups = true;
 
       fs_reg srcs[SURFACE_LOGICAL_NUM_SRCS];
-      srcs[SURFACE_LOGICAL_SRC_SURFACE] = brw_imm_ud(surface);
+      srcs[SURFACE_LOGICAL_SRC_SURFACE] = brw_imm_ud(0);
       srcs[SURFACE_LOGICAL_SRC_IMM_DIMS] = brw_imm_ud(1);
       srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(3); /* num components */
       srcs[SURFACE_LOGICAL_SRC_ADDRESS] = brw_imm_ud(0);
@@ -3885,7 +3903,6 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
 
    case nir_intrinsic_load_shared: {
       assert(devinfo->ver >= 7);
-      assert(stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_KERNEL);
 
       const unsigned bit_size = nir_dest_bit_size(instr->dest);
       fs_reg srcs[SURFACE_LOGICAL_NUM_SRCS];
@@ -3922,14 +3939,16 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
 
    case nir_intrinsic_store_shared: {
       assert(devinfo->ver >= 7);
-      assert(stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_KERNEL);
 
       const unsigned bit_size = nir_src_bit_size(instr->src[0]);
       fs_reg srcs[SURFACE_LOGICAL_NUM_SRCS];
       srcs[SURFACE_LOGICAL_SRC_SURFACE] = brw_imm_ud(GFX7_BTI_SLM);
       srcs[SURFACE_LOGICAL_SRC_ADDRESS] = get_nir_src(instr->src[1]);
       srcs[SURFACE_LOGICAL_SRC_IMM_DIMS] = brw_imm_ud(1);
-      srcs[SURFACE_LOGICAL_SRC_ALLOW_SAMPLE_MASK] = brw_imm_ud(1);
+      /* No point in masking with sample mask, here we're handling compute
+       * intrinsics.
+       */
+      srcs[SURFACE_LOGICAL_SRC_ALLOW_SAMPLE_MASK] = brw_imm_ud(0);
 
       fs_reg data = get_nir_src(instr->src[0]);
       data.type = brw_reg_type_from_bit_size(bit_size, BRW_REGISTER_TYPE_UD);
@@ -3959,8 +3978,12 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
    }
 
    case nir_intrinsic_load_workgroup_size: {
-      assert(compiler->lower_variable_group_size);
+      /* For non-variable case, this should've been lowered already. */
       assert(nir->info.workgroup_size_variable);
+
+      assert(compiler->lower_variable_group_size);
+      assert(gl_shader_stage_is_compute(stage));
+
       for (unsigned i = 0; i < 3; i++) {
          bld.MOV(retype(offset(dest, bld, i), BRW_REGISTER_TYPE_UD),
             group_size[i]);
@@ -4098,17 +4121,6 @@ fs_visitor::get_nir_image_intrinsic_image(const brw::fs_builder &bld,
    fs_reg image = retype(get_nir_src_imm(instr->src[0]), BRW_REGISTER_TYPE_UD);
    fs_reg surf_index = image;
 
-   if (stage_prog_data->binding_table.image_start > 0) {
-      if (image.file == BRW_IMMEDIATE_VALUE) {
-         surf_index =
-            brw_imm_ud(image.d + stage_prog_data->binding_table.image_start);
-      } else {
-         surf_index = vgrf(glsl_type::uint_type);
-         bld.ADD(surf_index, image,
-                 brw_imm_d(stage_prog_data->binding_table.image_start));
-      }
-   }
-
    return bld.emit_uniformize(surf_index);
 }
 
@@ -4123,14 +4135,9 @@ fs_visitor::get_nir_ssbo_intrinsic_index(const brw::fs_builder &bld,
    const unsigned src = is_store ? 1 : 0;
 
    if (nir_src_is_const(instr->src[src])) {
-      unsigned index = stage_prog_data->binding_table.ssbo_start +
-                       nir_src_as_uint(instr->src[src]);
-      return brw_imm_ud(index);
+      return brw_imm_ud(nir_src_as_uint(instr->src[src]));
    } else {
-      fs_reg surf_index = vgrf(glsl_type::uint_type);
-      bld.ADD(surf_index, get_nir_src(instr->src[src]),
-              brw_imm_ud(stage_prog_data->binding_table.ssbo_start));
-      return bld.emit_uniformize(surf_index);
+      return bld.emit_uniformize(get_nir_src(instr->src[src]));
    }
 }
 
@@ -4436,7 +4443,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
          nir_variable_mode modes = nir_intrinsic_memory_modes(instr);
          ugm_fence = modes & (nir_var_mem_ssbo | nir_var_mem_global);
          slm_fence = modes & nir_var_mem_shared;
-         tgm_fence = modes & nir_var_mem_ssbo;
+         tgm_fence = modes & nir_var_image;
          urb_fence = modes & nir_var_shader_out;
          break;
       }
@@ -4657,7 +4664,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
             (instr->num_components - 1) * type_sz(dest.type);
 
          bool supports_64bit_indirects =
-            !devinfo->is_cherryview && !intel_device_info_is_9lp(devinfo);
+            devinfo->platform != INTEL_PLATFORM_CHV && !intel_device_info_is_9lp(devinfo);
 
          if (type_sz(dest.type) != 8 || supports_64bit_indirects) {
             for (unsigned j = 0; j < instr->num_components; j++) {
@@ -4689,8 +4696,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
    case nir_intrinsic_load_ubo: {
       fs_reg surf_index;
       if (nir_src_is_const(instr->src[0])) {
-         const unsigned index = stage_prog_data->binding_table.ubo_start +
-                                nir_src_as_uint(instr->src[0]);
+         const unsigned index = nir_src_as_uint(instr->src[0]);
          surf_index = brw_imm_ud(index);
       } else {
          /* The block index is not a constant. Evaluate the index expression
@@ -4698,8 +4704,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
           * from any live channel.
           */
          surf_index = vgrf(glsl_type::uint_type);
-         bld.ADD(surf_index, get_nir_src(instr->src[0]),
-                 brw_imm_ud(stage_prog_data->binding_table.ubo_start));
+         bld.MOV(surf_index, get_nir_src(instr->src[0]));
          surf_index = bld.emit_uniformize(surf_index);
       }
 
@@ -5048,7 +5053,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       /* Set LOD = 0 */
       ubld.MOV(src_payload, brw_imm_d(0));
 
-      const unsigned index = prog_data->binding_table.ssbo_start + ssbo_index;
+      const unsigned index = ssbo_index;
       fs_inst *inst = ubld.emit(SHADER_OPCODE_GET_BUFFER_SIZE, ret_payload,
                                 src_payload, brw_imm_ud(index));
       inst->header_size = 0;
@@ -6105,6 +6110,11 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
          if (brw_texture_offset(instr, i, &offset_bits)) {
             header_bits |= offset_bits;
          } else {
+            /* On gfx12.5+, if the offsets are not both constant and in the
+             * {-8,7} range, nir_lower_tex() will have already lowered the
+             * source offset. So we should never reach this point.
+             */
+            assert(devinfo->verx10 < 125);
             srcs[TEX_LOGICAL_SRC_TG4_OFFSET] =
                retype(src, BRW_REGISTER_TYPE_D);
          }
@@ -6147,17 +6157,6 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
          srcs[TEX_LOGICAL_SRC_MCS] = retype(src, BRW_REGISTER_TYPE_D);
          break;
 
-      case nir_tex_src_plane: {
-         const uint32_t plane = nir_src_as_uint(instr->src[i].src);
-         const uint32_t texture_index =
-            instr->texture_index +
-            stage_prog_data->binding_table.plane_start[plane] -
-            stage_prog_data->binding_table.texture_start;
-
-         srcs[TEX_LOGICAL_SRC_SURFACE] = brw_imm_ud(texture_index);
-         break;
-      }
-
       default:
          unreachable("unknown texture source");
       }
@@ -6199,7 +6198,14 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
       opcode = SHADER_OPCODE_TXF_LOGICAL;
       break;
    case nir_texop_txf_ms:
-      if ((key_tex->msaa_16 & (1 << sampler)))
+      /* On Gfx12HP there is only CMS_W available. From the Bspec: Shared
+       * Functions - 3D Sampler - Messages - Message Format:
+       *
+       *   ld2dms REMOVEDBY(GEN:HAS:1406788836)
+       */
+      if (devinfo->verx10 >= 125)
+         opcode = SHADER_OPCODE_TXF_CMS_W_GFX12_LOGICAL;
+      else if ((key_tex->msaa_16 & (1 << sampler)))
          opcode = SHADER_OPCODE_TXF_CMS_W_LOGICAL;
       else
          opcode = SHADER_OPCODE_TXF_CMS_LOGICAL;
@@ -6277,9 +6283,6 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
 
    if (srcs[TEX_LOGICAL_SRC_SHADOW_C].file != BAD_FILE)
       inst->shadow_compare = true;
-
-   if (instr->op == nir_texop_tg4 && devinfo->ver == 6)
-      emit_gfx6_gather_wa(key_tex->gfx6_gather_wa[texture], dst);
 
    fs_reg nir_dest[5];
    for (unsigned i = 0; i < dest_size; i++)
@@ -6466,7 +6469,7 @@ setup_imm_df(const fs_builder &bld, double v)
    /* gfx7.5 does not support DF immediates straighforward but the DIM
     * instruction allows to set the 64-bit immediate value.
     */
-   if (devinfo->is_haswell) {
+   if (devinfo->platform == INTEL_PLATFORM_HSW) {
       const fs_builder ubld = bld.exec_all().group(1, 0);
       fs_reg dst = ubld.vgrf(BRW_REGISTER_TYPE_DF, 1);
       ubld.DIM(dst, brw_imm_df(v));

@@ -93,7 +93,7 @@ brw_inst_##name(const struct intel_device_info *devinfo,      \
       high = hi6;  low = lo6;                                                \
    } else if (devinfo->ver >= 5) {                                           \
       high = hi5;  low = lo5;                                                \
-   } else if (devinfo->is_g4x) {                                             \
+   } else if (devinfo->verx10 >= 45) {                                       \
       high = hi45; low = lo45;                                               \
    } else {                                                                  \
       high = hi4;  low = lo4;                                                \
@@ -299,7 +299,8 @@ F(debug_control,       /* 4+ */ 30,  30,  /* 12+ */ 30, 30)
 F(cmpt_control,        /* 4+ */ 29,  29,  /* 12+ */ 29, 29)
 FC(branch_control,     /* 4+ */ 28,  28,  /* 12+ */ 33, 33, devinfo->ver >= 8)
 FC(acc_wr_control,     /* 4+ */ 28,  28,  /* 12+ */ 33, 33, devinfo->ver >= 6)
-FC(mask_control_ex,    /* 4+ */ 28,  28,  /* 12+ */ -1, -1, devinfo->is_g4x || devinfo->ver == 5)
+FC(mask_control_ex,    /* 4+ */ 28,  28,  /* 12+ */ -1, -1, devinfo->verx10 == 45 ||
+                                                            devinfo->ver == 5)
 F(cond_modifier,       /* 4+ */ 27,  24,  /* 12+ */ 95, 92)
 FC(math_function,      /* 4+ */ 27,  24,  /* 12+ */ 95, 92, devinfo->ver >= 6)
 F(exec_size,           /* 4+ */ 23,  21,  /* 12+ */ 18, 16)
@@ -916,7 +917,7 @@ FF(sampler_msg_type,
    /* 7:   */ MD(16), MD(12),
    /* 8:   */ MD(16), MD(12),
    /* 12:  */ MD12(16), MD12(12))
-FC(sampler_return_format, /* 4+ */ MD(13), MD(12), /* 12+ */ -1, -1, devinfo->ver == 4 && !devinfo->is_g4x)
+FC(sampler_return_format, /* 4+ */ MD(13), MD(12), /* 12+ */ -1, -1, devinfo->verx10 == 40)
 FD(sampler,
    /* 4:   */ MD(11), MD(8),
    /* 4.5: */ MD(11), MD(8),
@@ -1395,7 +1396,7 @@ F(cmpt_control,     /* 4+ */ 29, 29, /* 12+ */ 29, 29) /* Same location as brw_i
 FC(flag_subreg_nr,  /* 4+ */ 28, 28, /* 12+ */ -1, -1, devinfo->ver <= 6)
 F(cond_modifier,    /* 4+ */ 27, 24, /* 12+ */ -1, -1) /* Same location as brw_inst */
 FC(acc_wr_control,  /* 4+ */ 23, 23, /* 12+ */ -1, -1, devinfo->ver >= 6)
-FC(mask_control_ex, /* 4+ */ 23, 23, /* 12+ */ -1, -1, devinfo->is_g4x || devinfo->ver == 5)
+FC(mask_control_ex, /* 4+ */ 23, 23, /* 12+ */ -1, -1, devinfo->verx10 == 45 || devinfo->ver == 5)
 F(subreg_index,     /* 4+ */ 22, 18, /* 12+ */ 39, 35)
 F(datatype_index,   /* 4+ */ 17, 13, /* 12+ */ 34, 30)
 F(control_index,    /* 4+ */ 12,  8, /* 12+ */ 28, 24)

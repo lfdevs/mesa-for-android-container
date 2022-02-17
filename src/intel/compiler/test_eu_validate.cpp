@@ -1234,7 +1234,7 @@ TEST_P(validation_test, byte_destination_relaxed_alignment)
    brw_inst_set_dst_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_2);
    brw_inst_set_dst_da1_subreg_nr(&devinfo, last_inst, 1);
 
-   if (devinfo.ver > 4 || devinfo.is_g4x) {
+   if (devinfo.verx10 >= 45) {
       EXPECT_TRUE(validate(p));
    } else {
       EXPECT_FALSE(validate(p));
@@ -1416,7 +1416,7 @@ TEST_P(validation_test, half_float_conversion)
          brw_inst_set_src0_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_1);
       }
 
-      if (devinfo.is_cherryview || devinfo.ver >= 9)
+      if (devinfo.platform == INTEL_PLATFORM_CHV || devinfo.ver >= 9)
          EXPECT_EQ(inst[i].expected_result_chv_gfx9, validate(p));
       else
          EXPECT_EQ(inst[i].expected_result_bdw, validate(p));
@@ -1603,7 +1603,7 @@ TEST_P(validation_test, mixed_float_align1_packed_fp16_dst_acc_read_offset_0)
 
       brw_inst_set_src0_da1_subreg_nr(&devinfo, last_inst, inst[i].subnr);
 
-      if (devinfo.is_cherryview || devinfo.ver >= 9)
+      if (devinfo.platform == INTEL_PLATFORM_CHV || devinfo.ver >= 9)
          EXPECT_EQ(inst[i].expected_result_chv_skl, validate(p));
       else
          EXPECT_EQ(inst[i].expected_result_bdw, validate(p));
@@ -1686,7 +1686,7 @@ TEST_P(validation_test, mixed_float_fp16_dest_with_acc)
 
       brw_inst_set_dst_hstride(&devinfo, last_inst, inst[i].dst_stride);
 
-      if (devinfo.is_cherryview || devinfo.ver >= 9)
+      if (devinfo.platform == INTEL_PLATFORM_CHV || devinfo.ver >= 9)
          EXPECT_EQ(inst[i].expected_result_chv_skl, validate(p));
       else
          EXPECT_EQ(inst[i].expected_result_bdw, validate(p));
@@ -1830,7 +1830,7 @@ TEST_P(validation_test, mixed_float_align1_packed_fp16_dst)
 
       brw_inst_set_exec_size(&devinfo, last_inst, inst[i].exec_size);
 
-      if (devinfo.is_cherryview || devinfo.ver >= 9)
+      if (devinfo.platform == INTEL_PLATFORM_CHV || devinfo.ver >= 9)
          EXPECT_EQ(inst[i].expected_result_chv_skl, validate(p));
       else
          EXPECT_EQ(inst[i].expected_result_bdw, validate(p));
@@ -2312,7 +2312,8 @@ TEST_P(validation_test, qword_low_power_align1_regioning_restrictions)
       brw_inst_set_src0_width(&devinfo, last_inst, inst[i].src_width);
       brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].src_hstride);
 
-      if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
+      if (devinfo.platform == INTEL_PLATFORM_CHV ||
+          intel_device_info_is_9lp(&devinfo)) {
          EXPECT_EQ(inst[i].expected_result, validate(p));
       } else {
          EXPECT_TRUE(validate(p));
@@ -2444,7 +2445,8 @@ TEST_P(validation_test, qword_low_power_no_indirect_addressing)
       brw_inst_set_src0_width(&devinfo, last_inst, inst[i].src_width);
       brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].src_hstride);
 
-      if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
+      if (devinfo.platform == INTEL_PLATFORM_CHV ||
+          intel_device_info_is_9lp(&devinfo)) {
          EXPECT_EQ(inst[i].expected_result, validate(p));
       } else {
          EXPECT_TRUE(validate(p));
@@ -2591,7 +2593,8 @@ TEST_P(validation_test, qword_low_power_no_64bit_arf)
       brw_inst_set_src0_width(&devinfo, last_inst, inst[i].src_width);
       brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].src_hstride);
 
-      if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
+      if (devinfo.platform == INTEL_PLATFORM_CHV ||
+          intel_device_info_is_9lp(&devinfo)) {
          EXPECT_EQ(inst[i].expected_result, validate(p));
       } else {
          EXPECT_TRUE(validate(p));
@@ -2607,7 +2610,8 @@ TEST_P(validation_test, qword_low_power_no_64bit_arf)
    brw_MAC(p, retype(g0, BRW_REGISTER_TYPE_DF),
               retype(stride(g0, 4, 4, 1), BRW_REGISTER_TYPE_DF),
               retype(stride(g0, 4, 4, 1), BRW_REGISTER_TYPE_DF));
-   if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
+   if (devinfo.platform == INTEL_PLATFORM_CHV ||
+       intel_device_info_is_9lp(&devinfo)) {
       EXPECT_FALSE(validate(p));
    } else {
       EXPECT_TRUE(validate(p));
@@ -2809,7 +2813,8 @@ TEST_P(validation_test, qword_low_power_no_depctrl)
       brw_inst_set_no_dd_check(&devinfo, last_inst, inst[i].no_dd_check);
       brw_inst_set_no_dd_clear(&devinfo, last_inst, inst[i].no_dd_clear);
 
-      if (devinfo.is_cherryview || intel_device_info_is_9lp(&devinfo)) {
+      if (devinfo.platform == INTEL_PLATFORM_CHV ||
+          intel_device_info_is_9lp(&devinfo)) {
          EXPECT_EQ(inst[i].expected_result, validate(p));
       } else {
          EXPECT_TRUE(validate(p));

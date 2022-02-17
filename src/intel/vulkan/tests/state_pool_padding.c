@@ -75,4 +75,6 @@ int main(void)
    ASSERT(state.offset == pool_size);
 
    anv_state_pool_finish(&state_pool);
+   anv_bo_cache_finish(&device.bo_cache);
+   pthread_mutex_destroy(&device.mutex);
 }

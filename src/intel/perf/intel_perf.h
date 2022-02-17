@@ -169,6 +169,11 @@ struct intel_perf_query_result {
    uint64_t begin_timestamp;
 
    /**
+    * Timestamp of the query.
+    */
+   uint64_t end_timestamp;
+
+   /**
     * Whether the query was interrupted by another workload (aka preemption).
     */
    bool query_disjoint;
@@ -453,6 +458,11 @@ void intel_perf_query_result_accumulate(struct intel_perf_query_result *result,
                                         const struct intel_device_info *devinfo,
                                         const uint32_t *start,
                                         const uint32_t *end);
+
+/** Read the timestamp value in a report.
+ */
+uint64_t intel_perf_report_timestamp(const struct intel_perf_query_info *query,
+                                     const uint32_t *report);
 
 /** Accumulate the delta between 2 snapshots of OA perf registers (layout
  * should match description specified through intel_perf_query_register_layout).

@@ -560,6 +560,14 @@ display_field(struct decode_scope *scope, const char *field_name)
 		num_align = atoi(value);
 	}
 
+	/* Special case ':algin=' should only do alignment */
+	if (field_name == align) {
+		while (scope->state->line_column < num_align)
+			print(state, " ");
+
+		return;
+	}
+
 	/* Special case 'NAME' maps to instruction/bitset name: */
 	if (!strncmp("NAME", field_name, field_name_len)) {
 		if (options->field_cb) {
@@ -757,6 +765,7 @@ void
 isa_decode(void *bin, int sz, FILE *out, const struct isa_decode_options *options)
 {
 	const struct isa_decode_options default_options = {
+		.gpu_id = options ? options->gpu_id : 0,
 		.branch_labels = options ? options->branch_labels : false
 	};
 	struct decode_state *state;

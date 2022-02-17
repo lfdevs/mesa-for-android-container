@@ -45,7 +45,6 @@
 #include "drm-uapi/i915_drm.h"
 
 #include "intel/common/intel_gem.h"
-#include "main/macros.h"
 #include "util/hash_table.h"
 #include "util/set.h"
 #include "util/u_upload_mgr.h"
@@ -67,7 +66,7 @@
  * or 12 bytes for MI_BATCH_BUFFER_START (when chaining).  Plus, we may
  * need an extra 4 bytes to pad out to the nearest QWord.  So reserve 16.
  */
-#define BATCH_RESERVED(devinfo) ((devinfo)->is_haswell ? 32 : 16)
+#define BATCH_RESERVED(devinfo) ((devinfo)->platform == INTEL_PLATFORM_HSW ? 32 : 16)
 
 static void crocus_batch_reset(struct crocus_batch *batch);
 
@@ -264,21 +263,30 @@ crocus_init_batch(struct crocus_context *ice,
    crocus_batch_reset(batch);
 }
 
-static struct drm_i915_gem_exec_object2 *
-find_validation_entry(struct crocus_batch *batch, struct crocus_bo *bo)
+static int
+find_exec_index(struct crocus_batch *batch, struct crocus_bo *bo)
 {
    unsigned index = READ_ONCE(bo->index);
 
    if (index < batch->exec_count && batch->exec_bos[index] == bo)
-      return &batch->validation_list[index];
+      return index;
 
    /* May have been shared between multiple active batches */
    for (index = 0; index < batch->exec_count; index++) {
       if (batch->exec_bos[index] == bo)
-         return &batch->validation_list[index];
+	 return index;
    }
+   return -1;
+}
 
-   return NULL;
+static struct drm_i915_gem_exec_object2 *
+find_validation_entry(struct crocus_batch *batch, struct crocus_bo *bo)
+{
+   int index = find_exec_index(batch, bo);
+
+   if (index == -1)
+      return NULL;
+   return &batch->validation_list[index];
 }
 
 static void
@@ -410,7 +418,7 @@ emit_reloc(struct crocus_batch *batch,
       (struct drm_i915_gem_relocation_entry) {
          .offset = offset,
          .delta = target_offset,
-         .target_handle = target->index,
+         .target_handle = find_exec_index(batch, target),
          .presumed_offset = entry->offset,
       };
 

@@ -356,6 +356,7 @@ enum opcode {
    SHADER_OPCODE_TXF_CMS_LOGICAL,
    SHADER_OPCODE_TXF_CMS_W,
    SHADER_OPCODE_TXF_CMS_W_LOGICAL,
+   SHADER_OPCODE_TXF_CMS_W_GFX12_LOGICAL,
    SHADER_OPCODE_TXF_UMS,
    SHADER_OPCODE_TXF_UMS_LOGICAL,
    SHADER_OPCODE_TXF_MCS,
@@ -393,8 +394,6 @@ enum opcode {
     * bits.
     */
    FS_OPCODE_PACK,
-
-   SHADER_OPCODE_SHADER_TIME_ADD,
 
    /**
     * Typed and untyped surface access opcodes.
@@ -1301,6 +1300,9 @@ enum brw_message_target {
 #define BRW_SAMPLER_RETURN_FORMAT_UINT32      2
 #define BRW_SAMPLER_RETURN_FORMAT_SINT32      3
 
+#define GFX8_SAMPLER_RETURN_FORMAT_32BITS    0
+#define GFX8_SAMPLER_RETURN_FORMAT_16BITS    1
+
 #define BRW_SAMPLER_MESSAGE_SIMD8_SAMPLE              0
 #define BRW_SAMPLER_MESSAGE_SIMD16_SAMPLE             0
 #define BRW_SAMPLER_MESSAGE_SIMD16_SAMPLE_BIAS        0
@@ -1349,6 +1351,9 @@ enum brw_message_target {
 #define BRW_SAMPLER_SIMD_MODE_SIMD8                     1
 #define BRW_SAMPLER_SIMD_MODE_SIMD16                    2
 #define BRW_SAMPLER_SIMD_MODE_SIMD32_64                 3
+
+#define GFX10_SAMPLER_SIMD_MODE_SIMD8H                  5
+#define GFX10_SAMPLER_SIMD_MODE_SIMD16H                 6
 
 /* GFX9 changes SIMD mode 0 to mean SIMD8D, but lets us get the SIMD4x2
  * behavior by setting bit 22 of dword 2 in the message header. */

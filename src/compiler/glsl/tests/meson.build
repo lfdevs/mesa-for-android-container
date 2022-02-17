@@ -33,6 +33,7 @@ test(
     dependencies : [dep_clock, dep_thread, idep_gtest, idep_mesautil],
   ),
   suite : ['compiler', 'glsl'],
+  protocol : gtest_test_protocol,
 )
 
 test(
@@ -49,6 +50,7 @@ test(
     dependencies : [dep_thread, idep_gtest, idep_mesautil],
   ),
   suite : ['compiler', 'glsl'],
+  protocol : gtest_test_protocol,
 )
 
 test(
@@ -63,6 +65,7 @@ test(
     dependencies : [dep_thread, idep_gtest, idep_mesautil],
   ),
   suite : ['compiler', 'glsl'],
+  protocol : gtest_test_protocol,
 )
 
 test(
@@ -77,6 +80,7 @@ test(
     dependencies : [dep_thread, idep_gtest],
   ),
   suite : ['compiler', 'glsl'],
+  protocol : gtest_test_protocol,
 )
 
 # Meson can't auto-skip these on cross builds because of the python wrapper

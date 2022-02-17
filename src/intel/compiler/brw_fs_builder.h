@@ -771,9 +771,8 @@ namespace brw {
          inst->header_size = header_size;
          inst->size_written = header_size * REG_SIZE;
          for (unsigned i = header_size; i < sources; i++) {
-            inst->size_written +=
-               ALIGN(dispatch_width() * type_sz(src[i].type) * dst.stride,
-                     REG_SIZE);
+            inst->size_written += dispatch_width() * type_sz(src[i].type) *
+                                  dst.stride;
          }
 
          return inst;

@@ -53,6 +53,7 @@ struct wl_registry;
 struct wl_shm;
 struct wl_surface;
 struct zwp_linux_dmabuf_v1;
+struct zwp_linux_dmabuf_feedback_v1;
 #endif
 
 #include <GL/gl.h>
@@ -87,9 +88,8 @@ struct zwp_linux_dmabuf_v1;
 #include "eglsync.h"
 
 #include "util/u_vector.h"
+#include "util/u_dynarray.h"
 #include "util/bitset.h"
-
-#define EGL_DRI2_MAX_FORMATS 11
 
 struct wl_buffer;
 
@@ -173,26 +173,60 @@ struct dri2_egl_display_vtbl {
                                   bool mode);
 };
 
+#ifdef HAVE_WAYLAND_PLATFORM
+struct dri2_wl_formats {
+   unsigned int num_formats;
+
+   /* Bitmap referencing dri2_wl_visuals */
+   unsigned int *formats_bitmap;
+
+   /* Array of vectors. Contains one modifier vector per format */
+   struct u_vector *modifiers;
+};
+
+struct dmabuf_feedback_format_table {
+   unsigned int size;
+   struct {
+      uint32_t format;
+      uint32_t padding; /* unused */
+      uint64_t modifier;
+   } *data;
+};
+
+struct dmabuf_feedback_tranche {
+   dev_t target_device;
+   uint32_t flags;
+   struct dri2_wl_formats formats;
+};
+
+struct dmabuf_feedback {
+   dev_t main_device;
+   struct dmabuf_feedback_format_table format_table;
+   struct util_dynarray tranches;
+   struct dmabuf_feedback_tranche pending_tranche;
+};
+#endif
+
 struct dri2_egl_display
 {
    const struct dri2_egl_display_vtbl *vtbl;
 
-   int                       dri2_major;
-   int                       dri2_minor;
-   __DRIscreen              *dri_screen;
-   bool                      own_dri_screen;
-   const __DRIconfig       **driver_configs;
-   void                     *driver;
-   const __DRIcoreExtension       *core;
+   int dri2_major;
+   int dri2_minor;
+   __DRIscreen *dri_screen;
+   bool own_dri_screen;
+   const __DRIconfig **driver_configs;
+   void *driver;
+   const __DRIcoreExtension *core;
    const __DRIimageDriverExtension *image_driver;
-   const __DRIdri2Extension       *dri2;
-   const __DRIswrastExtension     *swrast;
-   const __DRI2flushExtension     *flush;
+   const __DRIdri2Extension *dri2;
+   const __DRIswrastExtension *swrast;
+   const __DRI2flushExtension *flush;
    const __DRI2flushControlExtension *flush_control;
-   const __DRItexBufferExtension  *tex_buffer;
-   const __DRIimageExtension      *image;
+   const __DRItexBufferExtension *tex_buffer;
+   const __DRIimageExtension *image;
    const __DRIrobustnessExtension *robustness;
-   const __DRInoErrorExtension    *no_error;
+   const __DRInoErrorExtension *no_error;
    const __DRI2configQueryExtension *config;
    const __DRI2fenceExtension *fence;
    const __DRI2bufferDamageExtension *buffer_damage;
@@ -201,54 +235,55 @@ struct dri2_egl_display
    const __DRI2interopExtension *interop;
    const __DRIconfigOptionsExtension *configOptions;
    const __DRImutableRenderBufferDriverExtension *mutable_render_buffer;
-   int                       fd;
+   int fd;
 
    /* dri2_initialize/dri2_terminate increment/decrement this count, so does
     * dri2_make_current (tracks if there are active contexts/surfaces). */
-   int                       ref_count;
+   int ref_count;
 
-   bool                      own_device;
-   bool                      invalidate_available;
-   int                       min_swap_interval;
-   int                       max_swap_interval;
-   int                       default_swap_interval;
+   bool own_device;
+   bool invalidate_available;
+   int min_swap_interval;
+   int max_swap_interval;
+   int default_swap_interval;
 #ifdef HAVE_DRM_PLATFORM
-   struct gbm_dri_device    *gbm_dri;
+   struct gbm_dri_device *gbm_dri;
 #endif
 
-   char                     *driver_name;
+   char *driver_name;
 
-   const __DRIextension    **loader_extensions;
-   const __DRIextension    **driver_extensions;
+   const __DRIextension **loader_extensions;
+   const __DRIextension **driver_extensions;
 
 #ifdef HAVE_X11_PLATFORM
-   xcb_connection_t         *conn;
-   xcb_screen_t             *screen;
-   bool                     swap_available;
+   xcb_connection_t *conn;
+   xcb_screen_t *screen;
+   bool swap_available;
 #ifdef HAVE_DRI3
-   bool                     multibuffers_available;
-   int                      dri3_major_version;
-   int                      dri3_minor_version;
-   int                      present_major_version;
-   int                      present_minor_version;
+   bool multibuffers_available;
+   int dri3_major_version;
+   int dri3_minor_version;
+   int present_major_version;
+   int present_minor_version;
    struct loader_dri3_extensions loader_dri3_ext;
 #endif
 #endif
 
 #ifdef HAVE_WAYLAND_PLATFORM
-   struct wl_display        *wl_dpy;
-   struct wl_display        *wl_dpy_wrapper;
-   struct wl_registry       *wl_registry;
-   struct wl_drm            *wl_server_drm;
-   struct wl_drm            *wl_drm;
-   struct wl_shm            *wl_shm;
-   struct wl_event_queue    *wl_queue;
+   struct wl_display *wl_dpy;
+   struct wl_display *wl_dpy_wrapper;
+   struct wl_registry *wl_registry;
+   struct wl_drm *wl_server_drm;
+   struct wl_drm *wl_drm;
+   uint32_t wl_drm_version, wl_drm_name;
+   struct wl_shm *wl_shm;
+   struct wl_event_queue *wl_queue;
    struct zwp_linux_dmabuf_v1 *wl_dmabuf;
-   struct u_vector          *wl_modifiers;
-   bool                      authenticated;
-   BITSET_DECLARE(formats, EGL_DRI2_MAX_FORMATS);
-   uint32_t                  capabilities;
-   char                     *device_name;
+   struct dri2_wl_formats formats;
+   struct zwp_linux_dmabuf_feedback_v1 *wl_dmabuf_feedback;
+   struct dmabuf_feedback_format_table format_table;
+   bool authenticated;
+   char *device_name;
 #endif
 
 #ifdef HAVE_ANDROID_PLATFORM
@@ -257,52 +292,47 @@ struct dri2_egl_display
    uint32_t front_rendering_usage;
 #endif
 
-   bool                      is_render_node;
-   bool                      is_different_gpu;
+   bool is_render_node;
+   bool is_different_gpu;
 };
 
 struct dri2_egl_context
 {
-   _EGLContext   base;
+   _EGLContext base;
    __DRIcontext *dri_context;
 };
 
-#ifdef HAVE_WAYLAND_PLATFORM
-enum wayland_buffer_type {
-   WL_BUFFER_FRONT,
-   WL_BUFFER_BACK,
-   WL_BUFFER_THIRD,
-   WL_BUFFER_COUNT
-};
-#endif
-
 struct dri2_egl_surface
 {
-   _EGLSurface          base;
-   __DRIdrawable       *dri_drawable;
-   __DRIbuffer          buffers[5];
-   bool                 have_fake_front;
+   _EGLSurface base;
+   __DRIdrawable *dri_drawable;
+   __DRIbuffer buffers[5];
+   bool have_fake_front;
 
 #ifdef HAVE_X11_PLATFORM
-   xcb_drawable_t       drawable;
-   xcb_xfixes_region_t  region;
-   int                  depth;
-   int                  bytes_per_pixel;
-   xcb_gcontext_t       gc;
-   xcb_gcontext_t       swapgc;
+   xcb_drawable_t drawable;
+   xcb_xfixes_region_t region;
+   int depth;
+   int bytes_per_pixel;
+   xcb_gcontext_t gc;
+   xcb_gcontext_t swapgc;
 #endif
 
 #ifdef HAVE_WAYLAND_PLATFORM
-   struct wl_egl_window  *wl_win;
-   int                    dx;
-   int                    dy;
+   struct wl_egl_window *wl_win;
+   int dx;
+   int dy;
    struct wl_event_queue *wl_queue;
-   struct wl_surface     *wl_surface_wrapper;
-   struct wl_display     *wl_dpy_wrapper;
-   struct wl_drm         *wl_drm_wrapper;
-   struct wl_callback    *throttle_callback;
-   int                    format;
-   bool                   resized;
+   struct wl_surface *wl_surface_wrapper;
+   struct wl_display *wl_dpy_wrapper;
+   struct wl_drm *wl_drm_wrapper;
+   struct wl_callback *throttle_callback;
+   struct zwp_linux_dmabuf_feedback_v1 *wl_dmabuf_feedback;
+   struct dmabuf_feedback dmabuf_feedback, pending_dmabuf_feedback;
+   bool compositor_using_another_device;
+   int format;
+   bool resized;
+   bool received_dmabuf_feedback;
 #endif
 
 #ifdef HAVE_DRM_PLATFORM
@@ -310,25 +340,25 @@ struct dri2_egl_surface
 #endif
 
    /* EGL-owned buffers */
-   __DRIbuffer           *local_buffers[__DRI_BUFFER_COUNT];
+   __DRIbuffer *local_buffers[__DRI_BUFFER_COUNT];
 
 #if defined(HAVE_WAYLAND_PLATFORM) || defined(HAVE_DRM_PLATFORM)
    struct {
 #ifdef HAVE_WAYLAND_PLATFORM
-      struct wl_buffer   *wl_buffer;
-      bool                wl_release;
-      __DRIimage         *dri_image;
+      struct wl_buffer *wl_buffer;
+      bool wl_release;
+      __DRIimage *dri_image;
       /* for is_different_gpu case. NULL else */
-      __DRIimage         *linear_copy;
+      __DRIimage *linear_copy;
       /* for swrast */
       void *data;
       int data_size;
 #endif
 #ifdef HAVE_DRM_PLATFORM
-      struct gbm_bo       *bo;
+      struct gbm_bo *bo;
 #endif
-      bool                locked;
-      int                 age;
+      bool locked;
+      int age;
    } color_buffers[4], *back, *current;
 #endif
 
@@ -351,8 +381,8 @@ struct dri2_egl_surface
 #endif
 
    /* surfaceless and device */
-   __DRIimage           *front;
-   unsigned int         visual;
+   __DRIimage *front;
+   unsigned int visual;
 
    int out_fence_fd;
    EGLBoolean enable_out_fence;
@@ -363,13 +393,13 @@ struct dri2_egl_surface
 
 struct dri2_egl_config
 {
-   _EGLConfig         base;
+   _EGLConfig base;
    const __DRIconfig *dri_config[2][2];
 };
 
 struct dri2_egl_image
 {
-   _EGLImage   base;
+   _EGLImage base;
    __DRIimage *dri_image;
 };
 

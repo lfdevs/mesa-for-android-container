@@ -243,7 +243,7 @@ copy_buffer_to_image(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *buf
    radv_meta_restore(&saved_state, cmd_buffer);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 radv_CmdCopyBufferToImage2KHR(VkCommandBuffer commandBuffer,
                               const VkCopyBufferToImageInfo2KHR *pCopyBufferToImageInfo)
 {
@@ -256,6 +256,21 @@ radv_CmdCopyBufferToImage2KHR(VkCommandBuffer commandBuffer,
                            pCopyBufferToImageInfo->dstImageLayout,
                            &pCopyBufferToImageInfo->pRegions[r]);
    }
+
+   if (cmd_buffer->device->physical_device->emulate_etc2 &&
+       vk_format_description(dst_image->vk_format)->layout == UTIL_FORMAT_LAYOUT_ETC) {
+      cmd_buffer->state.flush_bits |=
+         RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
+         radv_src_access_flush(cmd_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, dst_image) |
+         radv_dst_access_flush(
+            cmd_buffer, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, dst_image);
+      for (unsigned r = 0; r < pCopyBufferToImageInfo->regionCount; r++) {
+         radv_meta_decode_etc(cmd_buffer, dst_image, pCopyBufferToImageInfo->dstImageLayout,
+                              &pCopyBufferToImageInfo->pRegions[r].imageSubresource,
+                              pCopyBufferToImageInfo->pRegions[r].imageOffset,
+                              pCopyBufferToImageInfo->pRegions[r].imageExtent);
+      }
+   }
 }
 
 static void
@@ -263,6 +278,19 @@ copy_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *buf
                      struct radv_image *image, VkImageLayout layout,
                      const VkBufferImageCopy2KHR *region)
 {
+   if (cmd_buffer->pool->queue_family_index == RADV_QUEUE_TRANSFER) {
+      /* RADV_QUEUE_TRANSFER should only be used for the prime blit */
+      assert(!region->imageOffset.x && !region->imageOffset.y && !region->imageOffset.z);
+      assert(image->type == VK_IMAGE_TYPE_2D);
+      assert(image->info.width == region->imageExtent.width);
+      assert(image->info.height == region->imageExtent.height);
+      ASSERTED bool res = radv_sdma_copy_image(cmd_buffer, image, buffer, region);
+      assert(res);
+      radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, image->bo);
+      radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, buffer->bo);
+      return;
+   }
+
    struct radv_meta_saved_state saved_state;
    bool old_predicating;
 
@@ -361,7 +389,7 @@ copy_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *buf
    radv_meta_restore(&saved_state, cmd_buffer);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 radv_CmdCopyImageToBuffer2KHR(VkCommandBuffer commandBuffer,
                               const VkCopyImageToBufferInfo2KHR *pCopyImageToBufferInfo)
 {
@@ -535,7 +563,11 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
          if (cs) {
             radv_meta_image_to_image_cs(cmd_buffer, &b_src, &b_dst, 1, &rect);
          } else {
-            radv_meta_blit2d(cmd_buffer, &b_src, NULL, &b_dst, 1, &rect);
+            if (radv_can_use_fmask_copy(cmd_buffer, b_src.image, b_dst.image, 1, &rect)) {
+               radv_fmask_copy(cmd_buffer, &b_src, &b_dst);
+            } else {
+               radv_meta_blit2d(cmd_buffer, &b_src, NULL, &b_dst, 1, &rect);
+            }
          }
 
          b_src.layer++;
@@ -577,7 +609,7 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
    radv_meta_restore(&saved_state, cmd_buffer);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 radv_CmdCopyImage2KHR(VkCommandBuffer commandBuffer, const VkCopyImageInfo2KHR *pCopyImageInfo)
 {
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
@@ -587,5 +619,20 @@ radv_CmdCopyImage2KHR(VkCommandBuffer commandBuffer, const VkCopyImageInfo2KHR *
    for (unsigned r = 0; r < pCopyImageInfo->regionCount; r++) {
       copy_image(cmd_buffer, src_image, pCopyImageInfo->srcImageLayout, dst_image,
                  pCopyImageInfo->dstImageLayout, &pCopyImageInfo->pRegions[r]);
+   }
+
+   if (cmd_buffer->device->physical_device->emulate_etc2 &&
+       vk_format_description(dst_image->vk_format)->layout == UTIL_FORMAT_LAYOUT_ETC) {
+      cmd_buffer->state.flush_bits |=
+         RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
+         radv_src_access_flush(cmd_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, dst_image) |
+         radv_dst_access_flush(
+            cmd_buffer, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, dst_image);
+      for (unsigned r = 0; r < pCopyImageInfo->regionCount; r++) {
+         radv_meta_decode_etc(cmd_buffer, dst_image, pCopyImageInfo->dstImageLayout,
+                              &pCopyImageInfo->pRegions[r].dstSubresource,
+                              pCopyImageInfo->pRegions[r].dstOffset,
+                              pCopyImageInfo->pRegions[r].extent);
+      }
    }
 }

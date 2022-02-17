@@ -344,11 +344,13 @@ const struct nv50_format nv50_format_table[PIPE_FORMAT_COUNT] =
    F2(A, R8G8_SNORM, RG8_SNORM, R, G, xx, xx, SNORM, G8R8, IC),
    I2(A, R8G8_SINT, RG8_SINT, R, G, xx, xx, SINT, G8R8, IR),
    I2(A, R8G8_UINT, RG8_UINT, R, G, xx, xx, UINT, G8R8, IR),
+   F2(A, R8G8_SRGB, NONE, R, G, xx, xx, UNORM, G8R8, T),
 
    F1(A, R8_UNORM, R8_UNORM, R, xx, xx, xx, UNORM, R8, IB),
    F1(A, R8_SNORM, R8_SNORM, R, xx, xx, xx, SNORM, R8, IC),
    I1(A, R8_SINT, R8_SINT, R, xx, xx, xx, SINT, R8, IR),
    I1(A, R8_UINT, R8_UINT, R, xx, xx, xx, UINT, R8, IR),
+   F1(A, R8_SRGB, NONE, R, xx, xx, xx, UNORM, R8, T),
 
    F3(A, R8G8_B8G8_UNORM, NONE, R, G, B, xx, UNORM, G8B8G8R8, T),
    F3(A, G8R8_B8R8_UNORM, NONE, G, R, B, xx, UNORM, G8B8G8R8, T),

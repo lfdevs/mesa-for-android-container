@@ -38,6 +38,8 @@
 #include "freedreno_texture.h"
 #include "freedreno_util.h"
 
+#define get_safe(ptr, field) ((ptr) ? (ptr)->field : 0)
+
 /* All the generic state handling.. In case of CSO's that are specific
  * to the GPU version, when the bind and the delete are common they can
  * go in here.
@@ -434,7 +436,8 @@ fd_rasterizer_state_bind(struct pipe_context *pctx, void *hwcso) in_dt
 {
    struct fd_context *ctx = fd_context(pctx);
    struct pipe_scissor_state *old_scissor = fd_context_get_scissor(ctx);
-   bool discard = ctx->rasterizer && ctx->rasterizer->rasterizer_discard;
+   bool discard = get_safe(ctx->rasterizer, rasterizer_discard);
+   unsigned clip_plane_enable = get_safe(ctx->rasterizer, clip_plane_enable);
 
    ctx->rasterizer = hwcso;
    fd_context_dirty(ctx, FD_DIRTY_RASTERIZER);
@@ -453,8 +456,11 @@ fd_rasterizer_state_bind(struct pipe_context *pctx, void *hwcso) in_dt
    if (old_scissor != fd_context_get_scissor(ctx))
       fd_context_dirty(ctx, FD_DIRTY_SCISSOR);
 
-   if (ctx->rasterizer && (discard != ctx->rasterizer->rasterizer_discard))
+   if (discard != get_safe(ctx->rasterizer, rasterizer_discard))
       fd_context_dirty(ctx, FD_DIRTY_RASTERIZER_DISCARD);
+
+   if (clip_plane_enable != get_safe(ctx->rasterizer, clip_plane_enable))
+      fd_context_dirty(ctx, FD_DIRTY_RASTERIZER_CLIP_PLANE_ENABLE);
 }
 
 static void
@@ -606,11 +612,36 @@ fd_bind_compute_state(struct pipe_context *pctx, void *state) in_dt
    ctx->dirty_shader[PIPE_SHADER_COMPUTE] |= FD_DIRTY_SHADER_PROG;
 }
 
+/* TODO pipe_context::set_compute_resources() should DIAF and clover
+ * should be updated to use pipe_context::set_constant_buffer() and
+ * pipe_context::set_shader_images().  Until then just directly frob
+ * the UBO/image state to avoid the rest of the driver needing to
+ * know about this bastard api..
+ */
 static void
 fd_set_compute_resources(struct pipe_context *pctx, unsigned start,
                          unsigned count, struct pipe_surface **prscs) in_dt
 {
-   // TODO
+   struct fd_context *ctx = fd_context(pctx);
+   struct fd_constbuf_stateobj *so = &ctx->constbuf[PIPE_SHADER_COMPUTE];
+
+   for (unsigned i = 0; i < count; i++) {
+      const uint32_t index = i + start + 1;   /* UBOs start at index 1 */
+
+      if (!prscs) {
+         util_copy_constant_buffer(&so->cb[index], NULL, false);
+         so->enabled_mask &= ~(1 << index);
+      } else if (prscs[i]->format == PIPE_FORMAT_NONE) {
+         struct pipe_constant_buffer cb = {
+               .buffer = prscs[i]->texture,
+         };
+         util_copy_constant_buffer(&so->cb[index], &cb, false);
+         so->enabled_mask |= (1 << index);
+      } else {
+         // TODO images
+         unreachable("finishme");
+      }
+   }
 }
 
 /* used by clover to bind global objects, returning the bo address
@@ -634,9 +665,11 @@ fd_set_global_binding(struct pipe_context *pctx, unsigned first, unsigned count,
 
          if (so->buf[n]) {
             struct fd_resource *rsc = fd_resource(so->buf[n]);
-            uint64_t iova = fd_bo_get_iova(rsc->bo);
-            // TODO need to scream if iova > 32b or fix gallium API..
-            *handles[i] += iova;
+            uint32_t offset = *handles[i];
+            uint64_t iova = fd_bo_get_iova(rsc->bo) + offset;
+
+            /* Yes, really, despite what the type implies: */
+            memcpy(handles[i], &iova, sizeof(iova));
          }
 
          if (prscs[i])

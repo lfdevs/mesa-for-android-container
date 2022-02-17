@@ -158,7 +158,7 @@ lookup_shader(struct st_context *st,
 }
 
 
-static void
+void
 st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
            GLfloat width, GLfloat height)
 {
@@ -321,7 +321,7 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
    /* viewport state: viewport matching window dims */
    {
       const struct gl_framebuffer *fb = ctx->DrawBuffer;
-      const GLboolean invert = (st_fb_orientation(fb) == Y_0_TOP);
+      const GLboolean invert = (_mesa_fb_orientation(fb) == Y_0_TOP);
       const GLfloat width = (GLfloat)_mesa_geometric_width(fb);
       const GLfloat height = (GLfloat)_mesa_geometric_height(fb);
       struct pipe_viewport_state vp;
@@ -349,16 +349,9 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
 
    /* restore state */
    cso_restore_state(cso, 0);
+   ctx->Array.NewVertexElements = true;
    st->dirty |= ST_NEW_VERTEX_ARRAYS;
 }
-
-
-void
-st_init_drawtex_functions(struct dd_function_table *functions)
-{
-   functions->DrawTex = st_DrawTex;
-}
-
 
 /**
  * Free any cached shaders

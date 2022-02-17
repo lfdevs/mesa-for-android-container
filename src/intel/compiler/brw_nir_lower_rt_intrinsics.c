@@ -140,47 +140,10 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
             if (stage == MESA_SHADER_COMPUTE)
                break;
 
-            assert(intrin->dest.is_ssa);
-            assert(intrin->src[0].is_ssa);
+            sysval = brw_nir_load_global_const(b, intrin,
+                        nir_load_btd_global_arg_addr_intel(b),
+                        BRW_RT_PUSH_CONST_OFFSET);
 
-            unsigned bit_size = intrin->dest.ssa.bit_size;
-            assert(bit_size >= 8 && bit_size % 8 == 0);
-            unsigned byte_size = bit_size / 8;
-
-            if (nir_src_is_const(intrin->src[0])) {
-               uint64_t offset = BRW_RT_PUSH_CONST_OFFSET +
-                                 nir_intrinsic_base(intrin) +
-                                 nir_src_as_uint(intrin->src[0]);
-
-               /* Things should be component-aligned. */
-               assert(offset % byte_size == 0);
-
-               unsigned suboffset = offset % 64;
-               uint64_t aligned_offset = offset - suboffset;
-
-               /* Load two just in case we go over a 64B boundary */
-               nir_ssa_def *data[2];
-               for (unsigned i = 0; i < 2; i++) {
-                  nir_ssa_def *addr =
-                     nir_iadd_imm(b, nir_load_btd_global_arg_addr_intel(b),
-                                     aligned_offset + i * 64);
-                  data[i] = nir_load_global_const_block_intel(b, 16, addr,
-                                                              nir_imm_true(b));
-               }
-
-               sysval = nir_extract_bits(b, data, 2, suboffset * 8,
-                                         intrin->num_components, bit_size);
-            } else {
-               nir_ssa_def *offset32 =
-                  nir_iadd_imm(b, intrin->src[0].ssa,
-                                  BRW_RT_PUSH_CONST_OFFSET +
-                                  nir_intrinsic_base(intrin));
-               nir_ssa_def *addr =
-                  nir_iadd(b, nir_load_btd_global_arg_addr_intel(b),
-                              nir_u2u64(b, offset32));
-               sysval = nir_load_global_constant(b, addr, byte_size,
-                                                 intrin->num_components, bit_size);
-            }
             break;
          }
 

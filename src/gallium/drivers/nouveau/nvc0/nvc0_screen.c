@@ -312,9 +312,14 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_PACKED_STREAM_OUTPUT:
    case PIPE_CAP_CLEAR_SCISSORED:
    case PIPE_CAP_GL_CLAMP:
+   case PIPE_CAP_IMAGE_STORE_FORMATTED:
+   case PIPE_CAP_TEXRECT:
+   case PIPE_CAP_ALLOW_DYNAMIC_VAO_FASTPATH:
+   case PIPE_CAP_SHAREABLE_SHADERS:
+   case PIPE_CAP_PREFER_BACK_BUFFER_REUSE:
       return 1;
-   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
-      return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? 1 : 0;
+   case PIPE_CAP_TEXTURE_TRANSFER_MODES:
+      return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? PIPE_TEXTURE_TRANSFER_BLIT : 0;
    case PIPE_CAP_FBFETCH:
       return class_3d >= NVE4_3D_CLASS ? 1 : 0; /* needs testing on fermi */
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
@@ -362,6 +367,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
+   case PIPE_CAP_VERTEX_ATTRIB_ELEMENT_ALIGNED_ONLY:
    case PIPE_CAP_FAKE_SW_MSAA:
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_VERTEXID_NOBASE:
@@ -383,7 +389,6 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
    case PIPE_CAP_MEMOBJ:
    case PIPE_CAP_LOAD_CONSTBUF:
-   case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
    case PIPE_CAP_TILE_RASTER_ORDER:
    case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
    case PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS:
@@ -426,6 +431,14 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_NO_CLIP_ON_COPY_TEX:
    case PIPE_CAP_DEVICE_PROTECTED_CONTENT:
    case PIPE_CAP_SAMPLER_REDUCTION_MINMAX_ARB:
+   case PIPE_CAP_DRAW_VERTEX_STATE:
+   case PIPE_CAP_PREFER_POT_ALIGNED_VARYINGS:
+   case PIPE_CAP_MAX_SPARSE_TEXTURE_SIZE:
+   case PIPE_CAP_MAX_SPARSE_3D_TEXTURE_SIZE:
+   case PIPE_CAP_MAX_SPARSE_ARRAY_TEXTURE_LAYERS:
+   case PIPE_CAP_SPARSE_TEXTURE_FULL_ARRAY_CUBE_MIPMAPS:
+   case PIPE_CAP_QUERY_SPARSE_TEXTURE_RESIDENCY:
+   case PIPE_CAP_CLAMP_SPARSE_TEXTURE_LOD:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -573,12 +586,20 @@ nvc0_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
    const uint16_t class_3d = nouveau_screen(pscreen)->class_3d;
 
    switch (param) {
+   case PIPE_CAPF_MIN_LINE_WIDTH:
+   case PIPE_CAPF_MIN_LINE_WIDTH_AA:
+   case PIPE_CAPF_MIN_POINT_SIZE:
+   case PIPE_CAPF_MIN_POINT_SIZE_AA:
+      return 1;
+   case PIPE_CAPF_POINT_SIZE_GRANULARITY:
+   case PIPE_CAPF_LINE_WIDTH_GRANULARITY:
+      return 0.1;
    case PIPE_CAPF_MAX_LINE_WIDTH:
    case PIPE_CAPF_MAX_LINE_WIDTH_AA:
       return 10.0f;
-   case PIPE_CAPF_MAX_POINT_WIDTH:
+   case PIPE_CAPF_MAX_POINT_SIZE:
       return 63.0f;
-   case PIPE_CAPF_MAX_POINT_WIDTH_AA:
+   case PIPE_CAPF_MAX_POINT_SIZE_AA:
       return 63.375f;
    case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
       return 16.0f;

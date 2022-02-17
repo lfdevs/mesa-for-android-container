@@ -24,8 +24,9 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "util/debug.h"
 #include "util/macros.h"
-#include "main/macros.h"
+#include "util/u_math.h"
 #include "compiler/shader_enums.h"
 
 #include "intel_l3_config.h"
@@ -70,7 +71,7 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
 {
    unsigned urb_size_kB = intel_get_l3_config_urb_size(devinfo, l3_cfg);
 
-   /* RCU_MODE register for Gfx12+ in BSpec says:
+   /* RCU_MODE register for Gfx12LP in BSpec says:
     *
     *    "HW reserves 4KB of URB space per bank for Compute Engine out of the
     *    total storage available in L3. SW must consider that 4KB of storage
@@ -84,8 +85,10 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
     *    only 124KB (per bank). More detailed descripton available in "L3
     *    Cache" section of the B-Spec."
     */
-   if (devinfo->ver >= 12)
+   if (devinfo->verx10 == 120) {
+      assert(devinfo->num_slices == 1);
       urb_size_kB -= 4 * devinfo->l3_banks;
+   }
 
    const unsigned push_constant_kB = devinfo->max_constant_urb_size_kb;
 
@@ -272,3 +275,88 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
       }
    }
 }
+
+struct intel_mesh_urb_allocation
+intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
+                          const struct intel_l3_config *l3_cfg,
+                          unsigned tue_size_dw, unsigned mue_size_dw)
+{
+   struct intel_mesh_urb_allocation r = {0};
+
+   /* Allocation Size must be aligned to 64B. */
+   r.task_entry_size_64b = DIV_ROUND_UP(tue_size_dw * 4, 64);
+   r.mesh_entry_size_64b = DIV_ROUND_UP(mue_size_dw * 4, 64);
+
+   assert(r.task_entry_size_64b <= 1024);
+   assert(r.mesh_entry_size_64b <= 1024);
+
+   /* Per-slice URB size. */
+   unsigned total_urb_kb = intel_get_l3_config_urb_size(devinfo, l3_cfg);
+
+   /* Programming Note in bspec requires all the slice to have the same number
+    * of entries, so we need to discount the space for constants for all of
+    * them.  See 3DSTATE_URB_ALLOC_MESH and 3DSTATE_URB_ALLOC_TASK.
+    */
+   const unsigned push_constant_kb = devinfo->max_constant_urb_size_kb;
+   total_urb_kb -= push_constant_kb;
+
+   /* TODO(mesh): Take push constant size as parameter instead of considering always
+    * the max? */
+
+   float task_urb_share = 0.0f;
+   if (r.task_entry_size_64b > 0) {
+      /* By default, assign 10% to TASK and 90% to MESH, since we expect MESH
+       * to use larger URB entries since it contains all the vertex and
+       * primitive data.  Environment variable allow us to tweak it.
+       *
+       * TODO(mesh): Re-evaluate if this is a good default once there are more
+       * workloads.
+       */
+      static int task_urb_share_percentage = -1;
+      if (task_urb_share_percentage < 0) {
+         task_urb_share_percentage =
+            MIN2(env_var_as_unsigned("INTEL_MESH_TASK_URB_SHARE", 10), 100);
+      }
+      task_urb_share = task_urb_share_percentage / 100.0f;
+   }
+
+   const unsigned task_urb_kb = ALIGN(total_urb_kb * task_urb_share, 8);
+   const unsigned mesh_urb_kb = total_urb_kb - task_urb_kb;
+
+   /* TODO(mesh): Could we avoid allocating URB for Mesh if rasterization is
+    * disabled? */
+
+   unsigned next_address_8kb = DIV_ROUND_UP(push_constant_kb, 8);
+
+   if (r.task_entry_size_64b > 0) {
+      r.task_entries = MIN2((task_urb_kb * 16) / r.task_entry_size_64b, 1548);
+
+      /* 3DSTATE_URB_ALLOC_TASK_BODY says
+       *
+       *   TASK Number of URB Entries must be divisible by 8 if the TASK URB
+       *   Entry Allocation Size is less than 9 512-bit URB entries.
+       */
+      if (r.task_entry_size_64b < 9)
+         r.task_entries = ROUND_DOWN_TO(r.task_entries, 8);
+
+      r.task_starting_address_8kb = next_address_8kb;
+
+      assert(task_urb_kb % 8 == 0);
+      next_address_8kb += task_urb_kb / 8;
+   }
+
+   r.mesh_entries = MIN2((mesh_urb_kb * 16) / r.mesh_entry_size_64b, 1548);
+
+   /* Similar restriction to TASK. */
+   if (r.mesh_entry_size_64b < 9)
+      r.mesh_entries = ROUND_DOWN_TO(r.mesh_entries, 8);
+
+   r.mesh_starting_address_8kb = next_address_8kb;
+
+   r.deref_block_size = r.mesh_entries > 32 ?
+      INTEL_URB_DEREF_BLOCK_SIZE_MESH :
+      INTEL_URB_DEREF_BLOCK_SIZE_PER_POLY;
+
+   return r;
+}
+

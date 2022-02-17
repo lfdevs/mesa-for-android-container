@@ -25,13 +25,15 @@ files_libintel_dev = files(
   'intel_debug.h',
   'intel_device_info.c',
   'intel_device_info.h',
+  'intel_hwconfig.c',
+  'intel_hwconfig.h',
 )
 
 libintel_dev = static_library(
   ['intel_dev'],
   [files_libintel_dev, sha1_h],
   include_directories : [inc_include, inc_src, inc_intel],
-  dependencies : idep_mesautil,
+  dependencies : [dep_libdrm, idep_mesautil],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
 )

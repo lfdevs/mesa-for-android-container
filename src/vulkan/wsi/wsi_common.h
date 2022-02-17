@@ -37,6 +37,8 @@ extern const struct vk_physical_device_entrypoint_table wsi_physical_device_entr
 extern const struct vk_device_entrypoint_table wsi_device_entrypoints;
 #endif
 
+#include <util/list.h>
+
 /* This is guaranteed to not collide with anything because it's in the
  * VK_KHR_swapchain namespace but not actually used by the extension.
  */
@@ -80,15 +82,6 @@ struct wsi_memory_signal_submit_info {
     VkDeviceMemory memory;
 };
 
-struct wsi_fence {
-   VkDevice                     device;
-   const struct wsi_device      *wsi_device;
-   VkDisplayKHR                 display;
-   const VkAllocationCallbacks  *alloc;
-   VkResult                     (*wait)(struct wsi_fence *fence, uint64_t abs_timeout);
-   void                         (*destroy)(struct wsi_fence *fence);
-};
-
 struct wsi_interface;
 
 struct driOptionCache;
@@ -113,6 +106,9 @@ struct wsi_device {
    /* Whether to enable adaptive sync for a swapchain if implemented and
     * available. Not all window systems might support this. */
    bool enable_adaptive_sync;
+
+   /* List of fences to signal when hotplug event happens. */
+   struct list_head hotplug_fences;
 
    struct {
       /* Override the minimum number of images on the swapchain.
@@ -139,19 +135,18 @@ struct wsi_device {
 
    /* Signals the semaphore such that any wait on the semaphore will wait on
     * any reads or writes on the give memory object.  This is used to
-    * implement the semaphore signal operation in vkAcquireNextImage.
+    * implement the semaphore signal operation in vkAcquireNextImage.  This
+    * requires the driver to implement vk_device::create_sync_for_memory.
     */
-   void (*signal_semaphore_for_memory)(VkDevice device,
-                                       VkSemaphore semaphore,
-                                       VkDeviceMemory memory);
+   bool signal_semaphore_with_memory;
 
    /* Signals the fence such that any wait on the fence will wait on any reads
     * or writes on the give memory object.  This is used to implement the
-    * semaphore signal operation in vkAcquireNextImage.
+    * semaphore signal operation in vkAcquireNextImage.  This requires the
+    * driver to implement vk_device::create_sync_for_memory.  The resulting
+    * vk_sync must support CPU waits.
     */
-   void (*signal_fence_for_memory)(VkDevice device,
-                                   VkFence fence,
-                                   VkDeviceMemory memory);
+   bool signal_fence_with_memory;
 
    /*
     * This sets the ownership for a WSI memory object:
@@ -175,6 +170,12 @@ struct wsi_device {
     */
    bool (*can_present_on_device)(VkPhysicalDevice pdevice, int fd);
 
+   /*
+    * A driver can implement this callback to return a special queue to execute
+    * prime blits.
+    */
+   VkQueue (*get_prime_blit_queue)(VkDevice device);
+
 #define WSI_CB(cb) PFN_vk##cb cb
    WSI_CB(AllocateMemory);
    WSI_CB(AllocateCommandBuffers);
@@ -186,10 +187,12 @@ struct wsi_device {
    WSI_CB(CreateCommandPool);
    WSI_CB(CreateFence);
    WSI_CB(CreateImage);
+   WSI_CB(CreateSemaphore);
    WSI_CB(DestroyBuffer);
    WSI_CB(DestroyCommandPool);
    WSI_CB(DestroyFence);
    WSI_CB(DestroyImage);
+   WSI_CB(DestroySemaphore);
    WSI_CB(EndCommandBuffer);
    WSI_CB(FreeMemory);
    WSI_CB(FreeCommandBuffers);
@@ -226,6 +229,11 @@ void
 wsi_device_finish(struct wsi_device *wsi,
                   const VkAllocationCallbacks *alloc);
 
+/* Setup file descriptor to be used with imported sync_fd's in wsi fences. */
+void
+wsi_device_setup_syncobj_fd(struct wsi_device *wsi_device,
+                            int fd);
+
 #define ICD_DEFINE_NONDISP_HANDLE_CASTS(__VkIcdType, __VkType)             \
                                                                            \
    static inline __VkIcdType *                                             \
@@ -250,6 +258,9 @@ wsi_common_get_images(VkSwapchainKHR _swapchain,
                       uint32_t *pSwapchainImageCount,
                       VkImage *pSwapchainImages);
 
+VkImage
+wsi_common_get_image(VkSwapchainKHR _swapchain, uint32_t index);
+
 VkResult
 wsi_common_acquire_next_image2(const struct wsi_device *wsi,
                                VkDevice device,
@@ -263,7 +274,15 @@ wsi_common_queue_present(const struct wsi_device *wsi,
                          int queue_family_index,
                          const VkPresentInfoKHR *pPresentInfo);
 
-uint64_t
-wsi_common_get_current_time(void);
+VkResult
+wsi_common_create_swapchain_image(const struct wsi_device *wsi,
+                                  const VkImageCreateInfo *pCreateInfo,
+                                  VkSwapchainKHR _swapchain,
+                                  VkImage *pImage);
+VkResult
+wsi_common_bind_swapchain_image(const struct wsi_device *wsi,
+                                VkImage vk_image,
+                                VkSwapchainKHR _swapchain,
+                                uint32_t image_idx);
 
 #endif

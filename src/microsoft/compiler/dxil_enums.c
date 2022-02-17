@@ -54,7 +54,7 @@ enum dxil_component_type dxil_get_comp_type(const struct glsl_type *type)
    type = glsl_without_array(type);
 
    enum glsl_base_type base_type = glsl_get_base_type(type);
-   if (glsl_type_is_sampler(type) || glsl_type_is_image(type))
+   if (glsl_type_is_texture(type) || glsl_type_is_image(type))
       base_type = glsl_get_sampler_result_type(type);
    switch (base_type) {
    case GLSL_TYPE_UINT: return DXIL_COMP_TYPE_U32;
@@ -82,12 +82,14 @@ enum dxil_resource_kind dxil_get_resource_kind(const struct glsl_type *type)
     * an array, key is the first refers to sampler[] and the second to samplerArray */
    bool is_array = glsl_sampler_type_is_array(type);
 
-   if (glsl_type_is_sampler(type) || glsl_type_is_image(type)) {
+   if (glsl_type_is_texture(type) || glsl_type_is_image(type)) {
       switch (glsl_get_sampler_dim(type)) {
          case GLSL_SAMPLER_DIM_1D:
             return is_array ? DXIL_RESOURCE_KIND_TEXTURE1D_ARRAY
                             : DXIL_RESOURCE_KIND_TEXTURE1D;
          case GLSL_SAMPLER_DIM_2D:
+         case GLSL_SAMPLER_DIM_EXTERNAL:
+         case GLSL_SAMPLER_DIM_SUBPASS:
             return is_array ? DXIL_RESOURCE_KIND_TEXTURE2D_ARRAY
                             : DXIL_RESOURCE_KIND_TEXTURE2D;
          case GLSL_SAMPLER_DIM_3D:
@@ -100,6 +102,7 @@ enum dxil_resource_kind dxil_get_resource_kind(const struct glsl_type *type)
          case GLSL_SAMPLER_DIM_BUF:
             return DXIL_RESOURCE_KIND_TYPED_BUFFER;
          case GLSL_SAMPLER_DIM_MS:
+         case GLSL_SAMPLER_DIM_SUBPASS_MS:
             return is_array ? DXIL_RESOURCE_KIND_TEXTURE2DMS_ARRAY
                             : DXIL_RESOURCE_KIND_TEXTURE2DMS;
 
@@ -113,34 +116,34 @@ enum dxil_resource_kind dxil_get_resource_kind(const struct glsl_type *type)
    unreachable("unexpected glsl type");
 }
 
-enum dxil_input_primitive dxil_get_input_primitive(unsigned primitive)
+enum dxil_input_primitive dxil_get_input_primitive(enum shader_prim primitive)
 {
    switch (primitive) {
-   case GL_POINTS:
+   case SHADER_PRIM_POINTS:
       return DXIL_INPUT_PRIMITIVE_POINT;
-   case GL_LINES:
+   case SHADER_PRIM_LINES:
       return DXIL_INPUT_PRIMITIVE_LINE;
-   case GL_LINES_ADJACENCY:
+   case SHADER_PRIM_LINES_ADJACENCY:
       return DXIL_INPUT_PRIMITIVE_LINES_ADJENCY;
-   case GL_TRIANGLES:
+   case SHADER_PRIM_TRIANGLES:
       return DXIL_INPUT_PRIMITIVE_TRIANGLE;
-   case GL_TRIANGLES_ADJACENCY:
+   case SHADER_PRIM_TRIANGLES_ADJACENCY:
       return DXIL_INPUT_PRIMITIVE_TRIANGLES_ADJENCY;
    default:
       unreachable("unhandled primitive topology");
    }
 }
 
-enum dxil_primitive_topology dxil_get_primitive_topology(unsigned topology)
+enum dxil_primitive_topology dxil_get_primitive_topology(enum shader_prim topology)
 {
    switch (topology) {
-   case GL_POINTS:
+   case SHADER_PRIM_POINTS:
       return DXIL_PRIMITIVE_TOPOLOGY_POINT_LIST;
-   case GL_LINES:
+   case SHADER_PRIM_LINES:
       return DXIL_PRIMITIVE_TOPOLOGY_LINE_LIST;
-   case GL_LINE_STRIP:
+   case SHADER_PRIM_LINE_STRIP:
       return DXIL_PRIMITIVE_TOPOLOGY_LINE_STRIP;
-   case GL_TRIANGLE_STRIP:
+   case SHADER_PRIM_TRIANGLE_STRIP:
       return DXIL_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
    default:
       unreachable("unhandled primitive topology");

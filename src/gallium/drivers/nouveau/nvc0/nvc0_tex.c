@@ -1136,7 +1136,7 @@ nvc0_validate_suf(struct nvc0_context *nvc0, int s)
 
    for (int i = 0; i < NVC0_MAX_IMAGES; ++i) {
       struct pipe_image_view *view = &nvc0->images[s][i];
-      int width, height, depth;
+      int width = 0, height = 0, depth = 0;
       uint64_t address = 0;
 
       if (s == 5)

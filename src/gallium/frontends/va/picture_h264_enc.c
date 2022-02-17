@@ -37,7 +37,7 @@ vlVaHandleVAEncPictureParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *cont
 
    h264 = buf->data;
    context->desc.h264enc.frame_num = h264->frame_num;
-   context->desc.h264enc.not_referenced = false;
+   context->desc.h264enc.not_referenced = !h264->pic_fields.bits.reference_pic_flag;
    context->desc.h264enc.pic_order_cnt = h264->CurrPic.TopFieldOrderCnt;
    if (context->desc.h264enc.gop_cnt == 0)
       context->desc.h264enc.i_remain = context->gop_coeff;
@@ -211,13 +211,13 @@ vlVaHandleVAEncMiscParameterTypeTemporalLayerH264(vlVaContext *context, VAEncMis
 void getEncParamPresetH264(vlVaContext *context)
 {
    //motion estimation preset
-   context->desc.h264enc.motion_est.motion_est_quarter_pixel = 0x00000001;
-   context->desc.h264enc.motion_est.lsmvert = 0x00000002;
-   context->desc.h264enc.motion_est.enc_disable_sub_mode = 0x00000078;
-   context->desc.h264enc.motion_est.enc_en_ime_overw_dis_subm = 0x00000001;
-   context->desc.h264enc.motion_est.enc_ime_overw_dis_subm_no = 0x00000001;
-   context->desc.h264enc.motion_est.enc_ime2_search_range_x = 0x00000004;
-   context->desc.h264enc.motion_est.enc_ime2_search_range_y = 0x00000004;
+   context->desc.h264enc.motion_est.motion_est_quarter_pixel = 0;
+   context->desc.h264enc.motion_est.lsmvert = 0;
+   context->desc.h264enc.motion_est.enc_disable_sub_mode = 254;
+   context->desc.h264enc.motion_est.enc_en_ime_overw_dis_subm = 0;
+   context->desc.h264enc.motion_est.enc_ime_overw_dis_subm_no = 0;
+   context->desc.h264enc.motion_est.enc_ime2_search_range_x = 1;
+   context->desc.h264enc.motion_est.enc_ime2_search_range_y = 1;
 
    //pic control preset
    context->desc.h264enc.pic_ctrl.enc_cabac_enable = 0x00000001;

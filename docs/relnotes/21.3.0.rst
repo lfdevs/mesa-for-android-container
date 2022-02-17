@@ -1499,8 +1499,8 @@ Emma Anholt (233):
 - ci/deqp-runner: Don't start GPU hang detection for making junit results.
 - ci/deqp-runner: Move more non-suite logic under the non-suite 'if'.
 - ci/piglit-runner: Fix funny indentation of the piglit-runner command.
-- ci/deqp-runner: Rename the deqp-drivername-\*.txt files to drivername-*.txt
-- ci/piglit-runner: Merge piglit-driver-\*.txt files into driver-*.txt.
+- ci/deqp-runner: Rename the deqp-drivername-\*.txt files to drivername-\*.txt
+- ci/piglit-runner: Merge piglit-driver-\*.txt files into driver-\*.txt.
 - ci: Enable testing radeonsi's libva using libva-util unit tests.
 - freedreno: Fix gmem invalidating the depth or stencil of packed d/s.
 - freedreno/a6xx: Fix partial z/s clears with sysmem.

@@ -360,9 +360,8 @@ static int radeon_lookup_or_add_slab_buffer(struct radeon_drm_cs *cs,
 
 static unsigned radeon_drm_cs_add_buffer(struct radeon_cmdbuf *rcs,
                                          struct pb_buffer *buf,
-                                         enum radeon_bo_usage usage,
-                                         enum radeon_bo_domain domains,
-                                         enum radeon_bo_priority priority)
+                                         unsigned usage,
+                                         enum radeon_bo_domain domains)
 {
    struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
    struct radeon_bo *bo = (struct radeon_bo*)buf;
@@ -394,8 +393,12 @@ static unsigned radeon_drm_cs_add_buffer(struct radeon_cmdbuf *rcs,
    added_domains = (rd | wd) & ~(reloc->read_domains | reloc->write_domain);
    reloc->read_domains |= rd;
    reloc->write_domain |= wd;
-   reloc->flags = MAX2(reloc->flags, priority);
-   cs->csc->relocs_bo[index].u.real.priority_usage |= 1u << priority;
+
+   /* The priority must be in [0, 15]. It's used by the kernel memory management. */
+   unsigned priority = usage & RADEON_ALL_PRIORITIES;
+   unsigned bo_priority = util_last_bit(priority) / 2;
+   reloc->flags = MAX2(reloc->flags, bo_priority);
+   cs->csc->relocs_bo[index].u.real.priority_usage |= priority;
 
    if (added_domains & RADEON_DOMAIN_VRAM)
       rcs->used_vram_kb += bo->base.size / 1024;
@@ -452,8 +455,7 @@ static bool radeon_drm_cs_validate(struct radeon_cmdbuf *rcs)
    return status;
 }
 
-static bool radeon_drm_cs_check_space(struct radeon_cmdbuf *rcs, unsigned dw,
-                                      bool force_chaining)
+static bool radeon_drm_cs_check_space(struct radeon_cmdbuf *rcs, unsigned dw)
 {
    assert(rcs->current.cdw <= rcs->current.max_dw);
    return rcs->current.max_dw - rcs->current.cdw >= dw;
@@ -749,7 +751,7 @@ static void radeon_drm_cs_destroy(struct radeon_cmdbuf *rcs)
 
 static bool radeon_bo_is_referenced(struct radeon_cmdbuf *rcs,
                                     struct pb_buffer *_buf,
-                                    enum radeon_bo_usage usage)
+                                    unsigned usage)
 {
    struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
    struct radeon_bo *bo = (struct radeon_bo*)_buf;
@@ -790,8 +792,7 @@ static struct pipe_fence_handle *radeon_cs_create_fence(struct radeon_cmdbuf *rc
 
    /* Add the fence as a dummy relocation. */
    cs->ws->base.cs_add_buffer(rcs, fence,
-                              RADEON_USAGE_READWRITE, RADEON_DOMAIN_GTT,
-                              RADEON_PRIO_FENCE);
+                              RADEON_USAGE_READWRITE | RADEON_PRIO_FENCE_TRACE, RADEON_DOMAIN_GTT);
    return (struct pipe_fence_handle*)fence;
 }
 

@@ -1798,7 +1798,7 @@ to upconvert to 32b float internally?
 		<bitfield name="FRAGCOORDSAMPLEMODE" low="1" high="2" type="a6xx_fragcoord_sample_mode"/>
 	</reg32>
 
-	<reg32 offset="0x8102" name="GRAS_2D_BLIT_INFO">
+	<reg32 offset="0x8102" name="GRAS_LRZ_MRT_BUF_INFO_0">
 		<bitfield name="COLOR_FORMAT" low="0" high="7" type="a6xx_format"/>
 	</reg32>
 	<reg64 offset="0x8103" name="GRAS_LRZ_BUFFER_BASE" align="256" type="waddress"/>
@@ -3753,8 +3753,13 @@ to upconvert to 32b float internally?
 		<bitfield name="LOD_BIAS" low="19" high="31" type="fixed" radix="8"/><!-- no idea how many bits for real -->
 	</reg32>
 	<reg32 offset="1" name="1">
-		<!-- bit 0 always set with vulkan? -->
-		<bitfield name="UNK0" pos="0" type="boolean"/>
+		<bitfield name="CLAMPENABLE" pos="0" type="boolean">
+			<doc>
+				clamp result to [0, 1] if the format is unorm or
+				[-1, 1] if the format is snorm, *after*
+				filtering. Has no effect for other formats.
+			</doc>
+		</bitfield>
 		<bitfield name="COMPARE_FUNC" low="1" high="3" type="adreno_compare_func"/>
 		<bitfield name="CUBEMAPSEAMLESSFILTOFF" pos="4" type="boolean"/>
 		<bitfield name="UNNORM_COORDS" pos="5" type="boolean"/>
@@ -3785,6 +3790,7 @@ to upconvert to 32b float internally?
 		<value name="A6XX_TEX_2D" value="1"/>
 		<value name="A6XX_TEX_CUBE" value="2"/>
 		<value name="A6XX_TEX_3D" value="3"/>
+		<value name="A6XX_TEX_BUFFER" value="4"/>
 	</enum>
 	<reg32 offset="0" name="0">
 		<bitfield name="TILE_MODE" low="0" high="1" type="a6xx_tile_mode"/>
@@ -3813,13 +3819,12 @@ to upconvert to 32b float internally?
 		b31 is probably the 'BUFFER' bit.. it is the one that changes
 		behavior of texture in dEQP-GLES31.functional.texture.texture_buffer.render.as_fragment_texture.buffer_size_131071
 		 -->
-		<bitfield name="UNK4" pos="4" type="boolean"/>
+		<bitfield name="BUFFER" pos="4" type="boolean"/>
                 <!-- minimum pitch (for mipmap levels): log2(pitchalign / 64) -->
 		<bitfield name="PITCHALIGN" low="0" high="3" type="uint"/>
 		<doc>Pitch in bytes (so actually stride)</doc>
 		<bitfield name="PITCH" low="7" high="28" type="uint"/>
-		<bitfield name="TYPE" low="29" high="30" type="a6xx_tex_type"/>
-		<bitfield name="UNK31" pos="31" type="boolean"/>
+		<bitfield name="TYPE" low="29" high="31" type="a6xx_tex_type"/>
 	</reg32>
 	<reg32 offset="3" name="3">
 		<!--

@@ -25,7 +25,7 @@
 #include "linker.h"
 #include "ir_uniform.h"
 #include "string_to_uint_map.h"
-#include "main/mtypes.h"
+#include "main/shader_types.h"
 
 /* These functions are put in a "private" namespace instead of being marked
  * static so that the unit tests can access them.  See
@@ -74,6 +74,7 @@ copy_constant_to_storage(union gl_constant_value *storage,
          break;
       case GLSL_TYPE_ARRAY:
       case GLSL_TYPE_STRUCT:
+      case GLSL_TYPE_TEXTURE:
       case GLSL_TYPE_IMAGE:
       case GLSL_TYPE_ATOMIC_UINT:
       case GLSL_TYPE_INTERFACE:

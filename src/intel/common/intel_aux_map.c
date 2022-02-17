@@ -84,7 +84,7 @@
 #include "util/list.h"
 #include "util/ralloc.h"
 #include "util/u_atomic.h"
-#include "main/macros.h"
+#include "util/u_math.h"
 
 #include <inttypes.h>
 #include <stdlib.h>

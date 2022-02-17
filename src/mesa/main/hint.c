@@ -30,8 +30,9 @@
 #include "hint.h"
 
 #include "mtypes.h"
+#include "api_exec_decl.h"
 
-
+#include "pipe/p_screen.h"
 
 void GLAPIENTRY
 _mesa_Hint( GLenum target, GLenum mode )
@@ -138,8 +139,9 @@ _mesa_MaxShaderCompilerThreadsKHR(GLuint count)
 
    ctx->Hint.MaxShaderCompilerThreads = count;
 
-   if (ctx->Driver.SetMaxShaderCompilerThreads)
-      ctx->Driver.SetMaxShaderCompilerThreads(ctx, count);
+   struct pipe_screen *screen = ctx->screen;
+   if (screen->set_max_shader_compiler_threads)
+      screen->set_max_shader_compiler_threads(screen, count);
 }
 
 /**********************************************************************/

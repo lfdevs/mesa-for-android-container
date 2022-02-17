@@ -130,7 +130,7 @@ generate_tex(struct brw_codegen *p,
       case SHADER_OPCODE_TXD:
          if (inst->shadow_compare) {
             /* Gfx7.5+.  Otherwise, lowered by brw_lower_texture_gradients(). */
-            assert(devinfo->is_haswell);
+            assert(devinfo->verx10 == 75);
             msg_type = HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE;
          } else {
             msg_type = GFX5_SAMPLER_MESSAGE_SAMPLE_DERIVS;
@@ -271,11 +271,6 @@ generate_tex(struct brw_codegen *p,
    if (inst->opcode == SHADER_OPCODE_TXS)
       return_format = BRW_SAMPLER_RETURN_FORMAT_UINT32;
 
-   uint32_t base_binding_table_index = (inst->opcode == SHADER_OPCODE_TG4 ||
-         inst->opcode == SHADER_OPCODE_TG4_OFFSET)
-         ? prog_data->base.binding_table.gather_texture_start
-         : prog_data->base.binding_table.texture_start;
-
    if (surface_index.file == BRW_IMMEDIATE_VALUE &&
        sampler_index.file == BRW_IMMEDIATE_VALUE) {
       uint32_t surface = surface_index.ud;
@@ -285,7 +280,7 @@ generate_tex(struct brw_codegen *p,
                  dst,
                  inst->base_mrf,
                  src,
-                 surface + base_binding_table_index,
+                 surface,
                  sampler % 16,
                  msg_type,
                  1, /* response length */
@@ -314,8 +309,6 @@ generate_tex(struct brw_codegen *p,
             brw_OR(p, addr, addr, surface_reg);
          }
       }
-      if (base_binding_table_index)
-         brw_ADD(p, addr, addr, brw_imm_ud(base_binding_table_index));
       brw_AND(p, addr, addr, brw_imm_ud(0xfff));
 
       brw_pop_insn_state(p);
@@ -738,7 +731,8 @@ static void
 generate_tcs_get_instance_id(struct brw_codegen *p, struct brw_reg dst)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   const bool ivb = devinfo->is_ivybridge || devinfo->is_baytrail;
+   const bool ivb = devinfo->platform == INTEL_PLATFORM_IVB ||
+                    devinfo->platform == INTEL_PLATFORM_BYT;
 
    /* "Instance Count" comes as part of the payload in r0.2 bits 23:17.
     *
@@ -1058,7 +1052,8 @@ generate_tcs_create_barrier_header(struct brw_codegen *p,
                                    struct brw_reg dst)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   const bool ivb = devinfo->is_ivybridge || devinfo->is_baytrail;
+   const bool ivb = devinfo->platform == INTEL_PLATFORM_IVB ||
+                    devinfo->platform == INTEL_PLATFORM_BYT;
    struct brw_reg m0_2 = get_element_ud(dst, 2);
    unsigned instances = ((struct brw_tcs_prog_data *) prog_data)->instances;
 
@@ -1158,7 +1153,7 @@ generate_scratch_read(struct brw_codegen *p,
 
    if (devinfo->ver >= 6)
       msg_type = GFX6_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
-   else if (devinfo->ver == 5 || devinfo->is_g4x)
+   else if (devinfo->verx10 >= 45)
       msg_type = G45_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
    else
       msg_type = BRW_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
@@ -1301,7 +1296,7 @@ generate_pull_constant_load(struct brw_codegen *p,
 
    if (devinfo->ver >= 6)
       msg_type = GFX6_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
-   else if (devinfo->ver == 5 || devinfo->is_g4x)
+   else if (devinfo->verx10 >= 45)
       msg_type = G45_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
    else
       msg_type = BRW_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
@@ -1906,12 +1901,6 @@ generate_code(struct brw_codegen *p,
          generate_gs_get_instance_id(p, dst);
          break;
 
-      case SHADER_OPCODE_SHADER_TIME_ADD:
-         brw_shader_time_add(p, src[0],
-                             prog_data->base.binding_table.shader_time_start);
-         send_count++;
-         break;
-
       case VEC4_OPCODE_UNTYPED_ATOMIC:
          assert(src[2].file == BRW_IMMEDIATE_VALUE);
          brw_untyped_atomic(p, dst, src[0], src[1], src[2].ud, inst->mlen,
@@ -2188,7 +2177,7 @@ generate_code(struct brw_codegen *p,
          break;
 
       case BRW_OPCODE_DIM:
-         assert(devinfo->is_haswell);
+         assert(devinfo->verx10 == 75);
          assert(src[0].type == BRW_REGISTER_TYPE_DF);
          assert(dst.type == BRW_REGISTER_TYPE_DF);
          brw_DIM(p, dst, retype(src[0], BRW_REGISTER_TYPE_F));

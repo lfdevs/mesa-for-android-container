@@ -59,6 +59,8 @@ _mesa_glthread_allocate_command(struct gl_context *ctx,
    struct glthread_state *glthread = &ctx->GLThread;
    const unsigned num_elements = align(size, 8) / 8;
 
+   assert (num_elements <= MARSHAL_MAX_CMD_SIZE / 8);
+
    if (unlikely(glthread->used + num_elements > MARSHAL_MAX_CMD_SIZE / 8))
       _mesa_glthread_flush_batch(ctx);
 
@@ -132,8 +134,8 @@ _mesa_glthread_has_non_vbo_vertices_or_indices_or_indirect(const struct gl_conte
 }
 
 
-struct _glapi_table *
-_mesa_create_marshal_table(const struct gl_context *ctx);
+bool
+_mesa_create_marshal_tables(struct gl_context *ctx);
 
 static inline unsigned
 _mesa_buffer_enum_to_count(GLenum buffer)
@@ -442,11 +444,18 @@ _mesa_glthread_Enable(struct gl_context *ctx, GLenum cap)
    if (ctx->GLThread.ListMode == GL_COMPILE)
       return;
 
-   if (cap == GL_PRIMITIVE_RESTART ||
-       cap == GL_PRIMITIVE_RESTART_FIXED_INDEX)
+   switch (cap) {
+   case GL_PRIMITIVE_RESTART:
+   case GL_PRIMITIVE_RESTART_FIXED_INDEX:
       _mesa_glthread_set_prim_restart(ctx, cap, true);
-   else if (cap == GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB)
-      _mesa_glthread_disable(ctx, "Enable(DEBUG_OUTPUT_SYNCHRONOUS)");
+      break;
+   case GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB:
+      _mesa_glthread_destroy(ctx, "Enable(DEBUG_OUTPUT_SYNCHRONOUS)");
+      break;
+   case GL_CULL_FACE:
+      ctx->GLThread.CullFace = true;
+      break;
+   }
 }
 
 static inline void
@@ -455,9 +464,35 @@ _mesa_glthread_Disable(struct gl_context *ctx, GLenum cap)
    if (ctx->GLThread.ListMode == GL_COMPILE)
       return;
 
-   if (cap == GL_PRIMITIVE_RESTART ||
-       cap == GL_PRIMITIVE_RESTART_FIXED_INDEX)
+   switch (cap) {
+   case GL_PRIMITIVE_RESTART:
+   case GL_PRIMITIVE_RESTART_FIXED_INDEX:
       _mesa_glthread_set_prim_restart(ctx, cap, false);
+      break;
+   case GL_CULL_FACE:
+      ctx->GLThread.CullFace = false;
+      break;
+   }
+}
+
+static inline int
+_mesa_glthread_IsEnabled(struct gl_context *ctx, GLenum cap)
+{
+   switch (cap) {
+   case GL_CULL_FACE:
+      return ctx->GLThread.CullFace;
+   case GL_VERTEX_ARRAY:
+      return !!(ctx->GLThread.CurrentVAO->UserEnabled & VERT_BIT_POS);
+   case GL_NORMAL_ARRAY:
+      return !!(ctx->GLThread.CurrentVAO->UserEnabled & VERT_BIT_NORMAL);
+   case GL_COLOR_ARRAY:
+      return !!(ctx->GLThread.CurrentVAO->UserEnabled & VERT_BIT_COLOR0);
+   case GL_TEXTURE_COORD_ARRAY:
+      return !!(ctx->GLThread.CurrentVAO->UserEnabled &
+                (1 << VERT_ATTRIB_TEX(ctx->GLThread.ClientActiveTexture)));
+   default:
+      return -1; /* sync and call _mesa_IsEnabled. */
+   }
 }
 
 static inline void
@@ -578,6 +613,9 @@ _mesa_glthread_CallList(struct gl_context *ctx, GLuint list)
       util_queue_fence_wait(&ctx->GLThread.batches[batch].fence);
       p_atomic_set(&ctx->GLThread.LastDListChangeBatchIndex, -1);
    }
+
+   if (!ctx->Shared->DisplayListsAffectGLThread)
+      return;
 
    /* Clear GL_COMPILE_AND_EXECUTE if needed. We only execute here. */
    unsigned saved_mode = ctx->GLThread.ListMode;

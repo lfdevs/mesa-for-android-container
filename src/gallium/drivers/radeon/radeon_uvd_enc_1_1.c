@@ -54,10 +54,10 @@
 static const unsigned index_to_shifts[4] = {24, 16, 8, 0};
 
 static void radeon_uvd_enc_add_buffer(struct radeon_uvd_encoder *enc, struct pb_buffer *buf,
-                                      enum radeon_bo_usage usage, enum radeon_bo_domain domain,
+                                      unsigned usage, enum radeon_bo_domain domain,
                                       signed offset)
 {
-   enc->ws->cs_add_buffer(&enc->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain, 0);
+   enc->ws->cs_add_buffer(&enc->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain);
    uint64_t addr;
    addr = enc->ws->buffer_get_virtual_address(buf);
    addr = addr + offset;

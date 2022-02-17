@@ -78,31 +78,6 @@ enum radeon_bo_flag
   RADEON_FLAG_DRIVER_INTERNAL = (1 << 9),
 };
 
-enum radeon_dependency_flag
-{
-   /* Instead of waiting for a job to finish execution, the dependency will
-    * be signaled when the job starts execution.
-    */
-   RADEON_DEPENDENCY_START_FENCE = 1 << 1,
-};
-
-enum radeon_bo_usage
-{ /* bitfield */
-  RADEON_USAGE_READ = 2,
-  RADEON_USAGE_WRITE = 4,
-  RADEON_USAGE_READWRITE = RADEON_USAGE_READ | RADEON_USAGE_WRITE,
-
-  /* The winsys ensures that the CS submission will be scheduled after
-   * previously flushed CSs referencing this BO in a conflicting way.
-   */
-  RADEON_USAGE_SYNCHRONIZED = 8,
-
-  /* When used, an implicit sync is done to make sure a compute shader
-   * will read the written values from a previous draw.
-   */
-  RADEON_USAGE_NEEDS_IMPLICIT_SYNC = 16,
-};
-
 enum radeon_map_flags
 {
    /* Indicates that the caller will unmap the buffer.
@@ -142,53 +117,59 @@ enum radeon_value_id
    RADEON_CS_THREAD_TIME,
 };
 
-enum radeon_bo_priority
-{
-   /* Each group of two has the same priority. */
-   RADEON_PRIO_FENCE = 0,
-   RADEON_PRIO_TRACE,
+/* Each group of two has the same priority. */
+#define RADEON_PRIO_FENCE_TRACE (1 << 0)
+#define RADEON_PRIO_SO_FILLED_SIZE (1 << 1)
 
-   RADEON_PRIO_SO_FILLED_SIZE = 2,
-   RADEON_PRIO_QUERY,
+#define RADEON_PRIO_QUERY (1 << 2)
+#define RADEON_PRIO_IB (1 << 3)
 
-   RADEON_PRIO_IB1 = 4, /* main IB submitted to the kernel */
-   RADEON_PRIO_IB2,     /* IB executed with INDIRECT_BUFFER */
+#define RADEON_PRIO_DRAW_INDIRECT (1 << 4)
+#define RADEON_PRIO_INDEX_BUFFER (1 << 5)
 
-   RADEON_PRIO_DRAW_INDIRECT = 6,
-   RADEON_PRIO_INDEX_BUFFER,
+#define RADEON_PRIO_CP_DMA (1 << 6)
+#define RADEON_PRIO_BORDER_COLORS (1 << 7)
 
-   RADEON_PRIO_CP_DMA = 8,
-   RADEON_PRIO_BORDER_COLORS,
+#define RADEON_PRIO_CONST_BUFFER (1 << 8)
+#define RADEON_PRIO_DESCRIPTORS (1 << 9)
 
-   RADEON_PRIO_CONST_BUFFER = 10,
-   RADEON_PRIO_DESCRIPTORS,
+#define RADEON_PRIO_SAMPLER_BUFFER (1 << 10)
+#define RADEON_PRIO_VERTEX_BUFFER (1 << 11)
 
-   RADEON_PRIO_SAMPLER_BUFFER = 12,
-   RADEON_PRIO_VERTEX_BUFFER,
+#define RADEON_PRIO_SHADER_RW_BUFFER (1 << 12)
+#define RADEON_PRIO_SAMPLER_TEXTURE (1 << 13)
 
-   RADEON_PRIO_SHADER_RW_BUFFER = 14,
-   RADEON_PRIO_COMPUTE_GLOBAL,
+#define RADEON_PRIO_SHADER_RW_IMAGE (1 << 14)
+#define RADEON_PRIO_SAMPLER_TEXTURE_MSAA (1 << 15)
 
-   RADEON_PRIO_SAMPLER_TEXTURE = 16,
-   RADEON_PRIO_SHADER_RW_IMAGE,
+#define RADEON_PRIO_COLOR_BUFFER (1 << 16)
+#define RADEON_PRIO_DEPTH_BUFFER (1 << 17)
 
-   RADEON_PRIO_SAMPLER_TEXTURE_MSAA = 18,
-   RADEON_PRIO_COLOR_BUFFER,
+#define RADEON_PRIO_COLOR_BUFFER_MSAA (1 << 18)
+#define RADEON_PRIO_DEPTH_BUFFER_MSAA (1 << 19)
 
-   RADEON_PRIO_DEPTH_BUFFER = 20,
+#define RADEON_PRIO_SEPARATE_META (1 << 20)
+#define RADEON_PRIO_SHADER_BINARY (1 << 21) /* the hw can't hide instruction cache misses */
 
-   RADEON_PRIO_COLOR_BUFFER_MSAA = 22,
+#define RADEON_PRIO_SHADER_RINGS (1 << 22)
+#define RADEON_PRIO_SCRATCH_BUFFER (1 << 23)
 
-   RADEON_PRIO_DEPTH_BUFFER_MSAA = 24,
+#define RADEON_ALL_PRIORITIES (RADEON_USAGE_READ - 1)
 
-   RADEON_PRIO_SEPARATE_META = 26,
-   RADEON_PRIO_SHADER_BINARY, /* the hw can't hide instruction cache misses */
+/* Upper bits of priorities are used by usage flags. */
+#define RADEON_USAGE_READ (1 << 28)
+#define RADEON_USAGE_WRITE (1 << 29)
+#define RADEON_USAGE_READWRITE (RADEON_USAGE_READ | RADEON_USAGE_WRITE)
 
-   RADEON_PRIO_SHADER_RINGS = 28,
+/* The winsys ensures that the CS submission will be scheduled after
+ * previously flushed CSs referencing this BO in a conflicting way.
+ */
+#define RADEON_USAGE_SYNCHRONIZED (1 << 30)
 
-   RADEON_PRIO_SCRATCH_BUFFER = 30,
-   /* 31 is the maximum value */
-};
+/* When used, an implicit sync is done to make sure a compute shader
+ * will read the written values from a previous draw.
+ */
+#define RADEON_USAGE_NEEDS_IMPLICIT_SYNC (1u << 31)
 
 struct winsys_handle;
 struct radeon_winsys_ctx;
@@ -213,6 +194,7 @@ struct radeon_cmdbuf {
 
    /* Private winsys data. */
    void *priv;
+   void *csc; /* amdgpu_cs_context */
 };
 
 /* Tiling info for display code, DRI sharing, and other data. */
@@ -352,7 +334,7 @@ struct radeon_winsys {
     * is idle.
     */
    bool (*buffer_wait)(struct radeon_winsys *ws, struct pb_buffer *buf,
-                       uint64_t timeout, enum radeon_bo_usage usage);
+                       uint64_t timeout, unsigned usage);
 
    /**
     * Return buffer metadata.
@@ -383,7 +365,7 @@ struct radeon_winsys {
     *                  tracker.
     */
    struct pb_buffer *(*buffer_from_handle)(struct radeon_winsys *ws, struct winsys_handle *whandle,
-                                           unsigned vm_alignment);
+                                           unsigned vm_alignment, bool is_prime_linear_buffer);
 
    /**
     * Get a winsys buffer from a user pointer. The resulting buffer can't
@@ -531,15 +513,12 @@ struct radeon_winsys {
     *
     * \param cs      Command stream
     * \param buf     Buffer
-    * \param usage   Whether the buffer is used for read and/or write.
+    * \param usage   Usage
     * \param domain  Bitmask of the RADEON_DOMAIN_* flags.
-    * \param priority  A higher number means a greater chance of being
-    *                  placed in the requested domain. 15 is the maximum.
     * \return Buffer index.
     */
    unsigned (*cs_add_buffer)(struct radeon_cmdbuf *cs, struct pb_buffer *buf,
-                             enum radeon_bo_usage usage, enum radeon_bo_domain domain,
-                             enum radeon_bo_priority priority);
+                             unsigned usage, enum radeon_bo_domain domain);
 
    /**
     * Return the index of an already-added buffer.
@@ -569,11 +548,9 @@ struct radeon_winsys {
     *
     * \param cs        A command stream.
     * \param dw        Number of CS dwords requested by the caller.
-    * \param force_chaining  Chain the IB into a new buffer now to discard
-    *                        the CP prefetch cache (to emulate PKT3_REWIND)
     * \return true if there is enough space
     */
-   bool (*cs_check_space)(struct radeon_cmdbuf *cs, unsigned dw, bool force_chaining);
+   bool (*cs_check_space)(struct radeon_cmdbuf *cs, unsigned dw);
 
    /**
     * Return the buffer list.
@@ -615,7 +592,7 @@ struct radeon_winsys {
     * \param buf       A winsys buffer.
     */
    bool (*cs_is_buffer_referenced)(struct radeon_cmdbuf *cs, struct pb_buffer *buf,
-                                   enum radeon_bo_usage usage);
+                                   unsigned usage);
 
    /**
     * Request access to a feature for a command stream.
@@ -689,7 +666,7 @@ struct radeon_winsys {
     * \param mode      Preferred tile mode. (linear, 1D, or 2D)
     * \param surf      Output structure
     */
-   int (*surface_init)(struct radeon_winsys *ws, const struct pipe_resource *tex, unsigned flags,
+   int (*surface_init)(struct radeon_winsys *ws, const struct pipe_resource *tex, uint64_t flags,
                        unsigned bpe, enum radeon_surf_mode mode, struct radeon_surf *surf);
 
    uint64_t (*query_value)(struct radeon_winsys *ws, enum radeon_value_id value);

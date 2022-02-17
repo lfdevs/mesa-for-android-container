@@ -1,6 +1,5 @@
 glx@glx-make-current,Crash
 glx@glx-multi-window-single-context,Fail
-glx@glx-query-drawable-glx_fbconfig_id-window,Fail
 glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
@@ -52,13 +51,11 @@ spec@!opengl 1.1@teximage-colors gl_rgba16_snorm@GL_RGBA16_SNORM texture with GL
 spec@!opengl 1.1@teximage-colors gl_rgba16_snorm@GL_RGBA16_SNORM texture with GL_BLUE and GL_BYTE,Fail
 spec@!opengl 1.1@teximage-colors gl_rgba16_snorm@GL_RGBA16_SNORM texture with GL_GREEN and GL_BYTE,Fail
 spec@!opengl 1.1@teximage-colors gl_rgba16_snorm@GL_RGBA16_SNORM texture with GL_RGB and GL_BYTE,Fail
-spec@!opengl 1.1@windowoverlap,Fail
 spec@arb_bindless_texture@compiler@images@arith-bound-image.frag,Crash
 spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
 spec@arb_bindless_texture@illegal,Fail
 spec@arb_bindless_texture@illegal@Call glCopyTexImage* when a texture handle is referenced,Fail
 spec@arb_bindless_texture@illegal@Call glTexImage* when a texture handle is referenced,Fail
-spec@arb_direct_state_access@gettextureimage-formats,Crash
 spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.frag,Fail
 spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.vert,Fail
 spec@arb_gl_spirv@execution@ssbo@aoa,Fail
@@ -196,7 +193,6 @@ spec@arb_sparse_buffer@buffer-data,Fail
 spec@arb_sparse_buffer@commit,Fail
 spec@arb_texture_float@multisample-formats 2 gl_arb_texture_float,Fail
 spec@arb_texture_rg@multisample-formats 2 gl_arb_texture_rg-float,Fail
-spec@egl 1.4@egl-copy-buffers,Crash
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@egl_ext_protected_content@conformance,Fail
@@ -207,7 +203,6 @@ spec@ext_framebuffer_multisample@turn-on-off 6,Fail
 spec@ext_framebuffer_multisample@turn-on-off 8,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv,Fail
-spec@ext_texture_integer@fbo-integer,Fail
 spec@ext_texture_snorm@multisample-formats 2 gl_ext_texture_snorm,Fail
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency ffs,Fail

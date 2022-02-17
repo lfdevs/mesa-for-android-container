@@ -40,14 +40,6 @@
 #ifndef DRI_INTERFACE_H
 #define DRI_INTERFACE_H
 
-#ifdef HAVE_LIBDRM
-#include <drm.h>
-#else
-typedef unsigned int drm_context_t;
-typedef unsigned int drm_drawable_t;
-typedef struct drm_clip_rect drm_clip_rect_t;
-#endif
-
 #include <stdint.h>
 
 /**
@@ -528,36 +520,6 @@ struct __DRIsystemTimeExtensionRec {
 			    void *loaderPrivate);
 };
 
-/**
- * Damage reporting
- */
-#define __DRI_DAMAGE "DRI_Damage"
-#define __DRI_DAMAGE_VERSION 1
-struct __DRIdamageExtensionRec {
-    __DRIextension base;
-
-    /**
-     * Reports areas of the given drawable which have been modified by the
-     * driver.
-     *
-     * \param drawable which the drawing was done to.
-     * \param rects rectangles affected, with the drawable origin as the
-     *	      origin.
-     * \param x X offset of the drawable within the screen (used in the
-     *	      front_buffer case)
-     * \param y Y offset of the drawable within the screen.
-     * \param front_buffer boolean flag for whether the drawing to the
-     * 	      drawable was actually done directly to the front buffer (instead
-     *	      of backing storage, for example)
-     * \param loaderPrivate the data passed in at createNewDrawable time
-     */
-    void (*reportDamage)(__DRIdrawable *draw,
-			 int x, int y,
-			 drm_clip_rect_t *rects, int num_rects,
-			 unsigned char front_buffer,
-			 void *loaderPrivate);
-};
-
 #define __DRI_SWRAST_IMAGE_OP_DRAW	1
 #define __DRI_SWRAST_IMAGE_OP_CLEAR	2
 #define __DRI_SWRAST_IMAGE_OP_SWAP	3
@@ -894,41 +856,6 @@ struct __DRIframebufferRec {
 
 /**
  * This extension provides alternative screen, drawable and context
- * constructors for legacy DRI functionality.  This is used in
- * conjunction with the core extension.
- */
-#define __DRI_LEGACY "DRI_Legacy"
-#define __DRI_LEGACY_VERSION 1
-
-struct __DRIlegacyExtensionRec {
-    __DRIextension base;
-
-    __DRIscreen *(*createNewScreen)(int screen,
-				    const __DRIversion *ddx_version,
-				    const __DRIversion *dri_version,
-				    const __DRIversion *drm_version,
-				    const __DRIframebuffer *frame_buffer,
-				    void *pSAREA, int fd, 
-				    const __DRIextension **extensions,
-				    const __DRIconfig ***driver_configs,
-				    void *loaderPrivate);
-
-    __DRIdrawable *(*createNewDrawable)(__DRIscreen *screen,
-					const __DRIconfig *config,
-					drm_drawable_t hwDrawable,
-					int renderType, const int *attrs,
-					void *loaderPrivate);
-
-    __DRIcontext *(*createNewContext)(__DRIscreen *screen,
-				      const __DRIconfig *config,
-				      int render_type,
-				      __DRIcontext *shared,
-				      drm_context_t hwContext,
-				      void *loaderPrivate);
-};
-
-/**
- * This extension provides alternative screen, drawable and context
  * constructors for swrast DRI functionality.  This is used in
  * conjunction with the core extension.
  */
@@ -1237,7 +1164,7 @@ struct __DRIdri2ExtensionRec {
  * extensions.
  */
 #define __DRI_IMAGE "DRI_IMAGE"
-#define __DRI_IMAGE_VERSION 19
+#define __DRI_IMAGE_VERSION 20
 
 /**
  * These formats correspond to the similarly named MESA_FORMAT_*
@@ -1408,9 +1335,10 @@ enum __DRIChromaSiting {
 #define __BLIT_FLAG_FINISH		0x0002
 
 /**
- * Flags for createImageFromDmaBufs3
+ * Flags for createImageFromDmaBufs3 and createImageFromFds2
  */
 #define __DRI_IMAGE_PROTECTED_CONTENT_FLAG 0x00000001
+#define __DRI_IMAGE_PRIME_LINEAR_BUFFER    0x00000002
 
 /**
  * queryDmaBufFormatModifierAttribs attributes
@@ -1738,6 +1666,20 @@ struct __DRIimageExtensionRec {
                                             const unsigned int modifier_count,
                                             unsigned int use,
                                             void *loaderPrivate);
+
+   /**
+    * Like createImageFromFds, but with an added flag parameter.
+    *
+    * See __DRI_IMAGE_*_FLAG for valid definitions of flags.
+    *
+    * \since 20
+    */
+   __DRIimage *(*createImageFromFds2)(__DRIscreen *screen,
+                                      int width, int height, int fourcc,
+                                      int *fds, int num_fds,
+                                      uint32_t flags,
+                                      int *strides, int *offsets,
+                                      void *loaderPrivate);
 };
 
 

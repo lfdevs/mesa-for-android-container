@@ -719,6 +719,7 @@ static LLVMValueRef do_alu_action(struct lp_build_nir_context *bld_base,
       result = lp_build_sub(flt_bld, src[0], tmp);
       break;
    }
+   case nir_op_fge:
    case nir_op_fge32:
       result = fcmp32(bld_base, PIPE_FUNC_GEQUAL, src_bit_size[0], src);
       break;
@@ -1043,6 +1044,26 @@ static LLVMValueRef do_alu_action(struct lp_build_nir_context *bld_base,
       src[1] = lp_build_and(uint_bld, src[1], lp_build_const_int_vec(gallivm, uint_bld->type, (src_bit_size[0] - 1)));
       result = lp_build_shr(uint_bld, src[0], src[1]);
       break;
+   }
+   case nir_op_bcsel: {
+      LLVMTypeRef src1_type = LLVMTypeOf(src[1]);
+      LLVMTypeRef src2_type = LLVMTypeOf(src[2]);
+
+      if (LLVMGetTypeKind(src1_type) == LLVMPointerTypeKind &&
+          LLVMGetTypeKind(src2_type) != LLVMPointerTypeKind) {
+         src[2] = LLVMBuildIntToPtr(builder, src[2], src1_type, "");
+      } else if (LLVMGetTypeKind(src2_type) == LLVMPointerTypeKind &&
+                 LLVMGetTypeKind(src1_type) != LLVMPointerTypeKind) {
+         src[1] = LLVMBuildIntToPtr(builder, src[1], src2_type, "");
+      }
+
+      for (int i = 1; i <= 2; i++) {
+         LLVMTypeRef type = LLVMTypeOf(src[i]);
+         if (LLVMGetTypeKind(type) == LLVMPointerTypeKind)
+            break;
+         src[i] = LLVMBuildBitCast(builder, src[i], get_int_bld(bld_base, true, src_bit_size[i])->vec_type, "");
+      }
+      return LLVMBuildSelect(builder, src[0], src[1], src[2], "");
    }
    default:
       assert(0);

@@ -137,7 +137,16 @@ enum iris_mmap_mode {
    IRIS_MMAP_WB, /**< Write-back mapping with CPU caches enabled */
 };
 
-#define IRIS_BATCH_COUNT 2
+enum iris_heap {
+   IRIS_HEAP_SYSTEM_MEMORY,
+   IRIS_HEAP_DEVICE_LOCAL,
+   IRIS_HEAP_DEVICE_LOCAL_PREFERRED,
+   IRIS_HEAP_MAX,
+};
+
+extern const char *iris_heap_to_string[];
+
+#define IRIS_BATCH_COUNT 3
 
 struct iris_bo_screen_deps {
    struct iris_syncobj *write_syncobjs[IRIS_BATCH_COUNT];
@@ -244,6 +253,9 @@ struct iris_bo {
          /** The mmap coherency mode selected at BO allocation time */
          enum iris_mmap_mode mmap_mode;
 
+         /** The heap selected at BO allocation time */
+         enum iris_heap heap;
+
          /** Was this buffer imported from an external client? */
          bool imported;
 
@@ -255,9 +267,6 @@ struct iris_bo {
 
          /** Boolean of whether this buffer points into user memory */
          bool userptr;
-
-         /** Boolean of whether this was allocated from local memory */
-         bool local;
       } real;
       struct {
          struct pb_slab_entry entry;
@@ -271,6 +280,7 @@ struct iris_bo {
 #define BO_ALLOC_SMEM        (1<<2)
 #define BO_ALLOC_SCANOUT     (1<<3)
 #define BO_ALLOC_NO_SUBALLOC (1<<4)
+#define BO_ALLOC_LMEM        (1<<5)
 
 /**
  * Allocate a buffer object.
@@ -404,6 +414,23 @@ iris_bo_is_exported(const struct iris_bo *bo)
    return bo->real.exported;
 }
 
+/**
+ * True if the BO prefers to reside in device-local memory.
+ *
+ * We don't consider eviction here; this is meant to be a performance hint.
+ * It will return true for BOs allocated from the LMEM or LMEM+SMEM heaps,
+ * even if the buffer has been temporarily evicted to system memory.
+ */
+static inline bool
+iris_bo_likely_local(const struct iris_bo *bo)
+{
+   if (!bo)
+      return false;
+
+   bo = iris_get_backing_bo((struct iris_bo *) bo);
+   return bo->real.heap != IRIS_HEAP_SYSTEM_MEMORY;
+}
+
 static inline enum iris_mmap_mode
 iris_bo_mmap_mode(const struct iris_bo *bo)
 {
@@ -450,15 +477,18 @@ int iris_bo_wait(struct iris_bo *bo, int64_t timeout_ns);
 
 uint32_t iris_create_hw_context(struct iris_bufmgr *bufmgr);
 uint32_t iris_clone_hw_context(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
+int iris_kernel_context_get_priority(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
 
 #define IRIS_CONTEXT_LOW_PRIORITY    ((I915_CONTEXT_MIN_USER_PRIORITY-1)/2)
 #define IRIS_CONTEXT_MEDIUM_PRIORITY (I915_CONTEXT_DEFAULT_PRIORITY)
 #define IRIS_CONTEXT_HIGH_PRIORITY   ((I915_CONTEXT_MAX_USER_PRIORITY+1)/2)
 
+void iris_hw_context_set_unrecoverable(struct iris_bufmgr *bufmgr,
+                                       uint32_t ctx_id);
 int iris_hw_context_set_priority(struct iris_bufmgr *bufmgr,
                                  uint32_t ctx_id, int priority);
 
-void iris_destroy_hw_context(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
+void iris_destroy_kernel_context(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
 
 int iris_gem_get_tiling(struct iris_bo *bo, uint32_t *tiling);
 int iris_gem_set_tiling(struct iris_bo *bo, const struct isl_surf *surf);

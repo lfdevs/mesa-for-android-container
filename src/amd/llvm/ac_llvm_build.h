@@ -254,7 +254,7 @@ LLVMValueRef ac_build_load_to_sgpr_uint_wraparound(struct ac_llvm_context *ctx,
                                                    LLVMValueRef base_ptr, LLVMValueRef index);
 
 void ac_build_buffer_store_dword(struct ac_llvm_context *ctx, LLVMValueRef rsrc, LLVMValueRef vdata,
-                                 unsigned num_channels, LLVMValueRef voffset, LLVMValueRef soffset,
+                                 LLVMValueRef vindex, LLVMValueRef voffset, LLVMValueRef soffset,
                                  unsigned inst_offset, unsigned cache_policy);
 
 void ac_build_buffer_store_format(struct ac_llvm_context *ctx, LLVMValueRef rsrc, LLVMValueRef data,
@@ -574,7 +574,7 @@ LLVMValueRef ac_build_atomic_cmp_xchg(struct ac_llvm_context *ctx, LLVMValueRef 
                                       LLVMValueRef cmp, LLVMValueRef val, const char *sync_scope);
 
 void ac_export_mrt_z(struct ac_llvm_context *ctx, LLVMValueRef depth, LLVMValueRef stencil,
-                     LLVMValueRef samplemask, struct ac_export_args *args);
+                     LLVMValueRef samplemask, bool is_last, struct ac_export_args *args);
 
 void ac_build_sendmsg_gs_alloc_req(struct ac_llvm_context *ctx, LLVMValueRef wave_id,
                                    LLVMValueRef vtx_cnt, LLVMValueRef prim_cnt);
@@ -615,6 +615,7 @@ void ac_build_s_endpgm(struct ac_llvm_context *ctx);
 void ac_build_triangle_strip_indices_to_triangle(struct ac_llvm_context *ctx, LLVMValueRef is_odd,
                                                  LLVMValueRef flatshade_first,
                                                  LLVMValueRef index[3]);
+LLVMValueRef ac_build_is_inf_or_nan(struct ac_llvm_context *ctx, LLVMValueRef a);
 
 #ifdef __cplusplus
 }

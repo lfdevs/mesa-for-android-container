@@ -236,6 +236,25 @@ agx_pack_cmpsel_src(agx_index src, enum agx_size dest_size)
 }
 
 static unsigned
+agx_pack_sample_mask_src(agx_index src)
+{
+   unsigned value = src.value;
+   unsigned packed_value =
+         (value & BITFIELD_MASK(6)) |
+         (((value >> 6) & BITFIELD_MASK(2)) << 10);
+
+   if (src.type == AGX_INDEX_IMMEDIATE) {
+      assert(value < 0x100);
+      return packed_value | (1 << 7);
+   } else {
+      assert(src.type == AGX_INDEX_REGISTER);
+      assert(!(src.cache && src.discard));
+
+      return packed_value;
+   }
+}
+
+static unsigned
 agx_pack_float_mod(agx_index src)
 {
    return (src.abs ? (1 << 0) : 0)
@@ -406,6 +425,21 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups, agx
          ((uint64_t) (mask) << 36) |
          ((uint64_t) 0x0380FC << 40) |
          (((uint64_t) (D >> 8)) << 60);
+
+      unsigned size = 8;
+      memcpy(util_dynarray_grow_bytes(emission, 1, size), &raw, size);
+      break;
+   }
+
+   case AGX_OPCODE_SAMPLE_MASK:
+   {
+      unsigned S = agx_pack_sample_mask_src(I->src[0]);
+      uint64_t raw =
+         0x7fc1 |
+         ((S & 0xff) << 16) |
+         (0x3 << 24) |
+         ((S >> 8) << 26) |
+         (0x158ull << 32);
 
       unsigned size = 8;
       memcpy(util_dynarray_grow_bytes(emission, 1, size), &raw, size);

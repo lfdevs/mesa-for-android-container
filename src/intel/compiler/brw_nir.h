@@ -27,6 +27,7 @@
 #include "brw_reg.h"
 #include "compiler/nir/nir.h"
 #include "brw_compiler.h"
+#include "nir_builder.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -101,9 +102,6 @@ brw_nir_link_shaders(const struct brw_compiler *compiler,
 
 bool brw_nir_lower_cs_intrinsics(nir_shader *nir);
 bool brw_nir_lower_alpha_to_coverage(nir_shader *shader);
-void brw_nir_lower_legacy_clipping(nir_shader *nir,
-                                   int nr_userclip_plane_consts,
-                                   struct brw_stage_prog_data *prog_data);
 void brw_nir_lower_vs_inputs(nir_shader *nir,
                              bool edgeflag_is_last,
                              const uint8_t *vs_attrib_wa_flags);
@@ -115,19 +113,17 @@ void brw_nir_lower_fs_inputs(nir_shader *nir,
                              const struct brw_wm_prog_key *key);
 void brw_nir_lower_vue_outputs(nir_shader *nir);
 void brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue,
-                               GLenum tes_primitive_mode);
+                               enum tess_primitive_mode tes_primitive_mode);
 void brw_nir_lower_fs_outputs(nir_shader *nir);
 
 bool brw_nir_lower_conversions(nir_shader *nir);
 
 bool brw_nir_lower_scoped_barriers(nir_shader *nir);
 
+bool brw_nir_lower_shading_rate_output(nir_shader *nir);
+
 bool brw_nir_lower_storage_image(nir_shader *nir,
                                  const struct intel_device_info *devinfo);
-void brw_nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin,
-                                     nir_ssa_def *index);
-void brw_nir_rewrite_bindless_image_intrinsic(nir_intrinsic_instr *intrin,
-                                              nir_ssa_def *handle);
 
 bool brw_nir_lower_mem_access_bit_sizes(nir_shader *shader,
                                         const struct
@@ -195,10 +191,10 @@ nir_shader *brw_nir_create_passthrough_tcs(void *mem_ctx,
 
 bool brw_nir_move_interpolation_to_top(nir_shader *nir);
 bool brw_nir_demote_sample_qualifiers(nir_shader *nir);
-void brw_nir_populate_wm_prog_data(const nir_shader *shader,
-                                   const struct intel_device_info *devinfo,
-                                   const struct brw_wm_prog_key *key,
-                                   struct brw_wm_prog_data *prog_data);
+nir_ssa_def *brw_nir_load_global_const(nir_builder *b,
+                                       nir_intrinsic_instr *load_uniform,
+                                       nir_ssa_def *base_addr,
+                                       unsigned off);
 
 #ifdef __cplusplus
 }

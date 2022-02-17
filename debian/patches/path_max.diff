@@ -1,6 +1,6 @@
---- a/src/util/tests/cache/cache_test.c
-+++ b/src/util/tests/cache/cache_test.c
-@@ -141,8 +141,8 @@ check_directories_created(const char *ca
+--- a/src/util/tests/cache_test.cpp
++++ b/src/util/tests/cache_test.cpp
+@@ -81,8 +81,8 @@ check_directories_created(void *mem_ctx,
  {
     bool sub_dirs_created = false;
  
@@ -8,19 +8,11 @@
 -   if (getcwd(buf, PATH_MAX)) {
 +   char *buf = getcwd(NULL, 0);
 +   if (buf) {
-       char *full_path = NULL;
-       if (asprintf(&full_path, "%s%s", buf, ++cache_dir) != -1 ) {
-          struct stat sb;
-@@ -151,6 +151,7 @@ check_directories_created(const char *ca
- 
-          free(full_path);
-       }
-+      free(buf);
-    }
- 
-    expect_true(sub_dirs_created, "create sub dirs");
---- a/src/util/process_test.c
-+++ b/src/util/process_test.c
+       char *full_path = ralloc_asprintf(mem_ctx, "%s%s", buf, ++cache_dir);
+       struct stat sb;
+       if (stat(full_path, &sb) != -1 && S_ISDIR(sb.st_mode))
+--- a/src/util/tests/process_test.c
++++ b/src/util/tests/process_test.c
 @@ -36,6 +36,10 @@
  #define PATH_MAX MAX_PATH
  #endif

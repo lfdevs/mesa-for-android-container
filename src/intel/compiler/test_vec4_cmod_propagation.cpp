@@ -31,7 +31,7 @@
 
 using namespace brw;
 
-class cmod_propagation_test : public ::testing::Test {
+class cmod_propagation_vec4_test : public ::testing::Test {
    virtual void SetUp();
    virtual void TearDown();
 
@@ -52,7 +52,7 @@ public:
                                  nir_shader *shader,
                                  struct brw_vue_prog_data *prog_data)
       : vec4_visitor(compiler, NULL, NULL, prog_data, shader, mem_ctx,
-                     false, -1, false)
+                     false, false)
       {
          prog_data->dispatch_mode = DISPATCH_MODE_4X2_DUAL_OBJECT;
       }
@@ -96,7 +96,7 @@ protected:
 };
 
 
-void cmod_propagation_test::SetUp()
+void cmod_propagation_vec4_test::SetUp()
 {
    ctx = ralloc_context(NULL);
    compiler = rzalloc(ctx, struct brw_compiler);
@@ -113,7 +113,7 @@ void cmod_propagation_test::SetUp()
    devinfo->verx10 = devinfo->ver * 10;
 }
 
-void cmod_propagation_test::TearDown()
+void cmod_propagation_vec4_test::TearDown()
 {
    delete v;
    v = NULL;
@@ -152,7 +152,7 @@ cmod_propagation(vec4_visitor *v)
    return ret;
 }
 
-TEST_F(cmod_propagation_test, basic)
+TEST_F(cmod_propagation_vec4_test, basic)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::float_type);
@@ -188,7 +188,7 @@ TEST_F(cmod_propagation_test, basic)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 0)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, basic_different_dst_writemask)
+TEST_F(cmod_propagation_vec4_test, basic_different_dst_writemask)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::float_type);
@@ -225,7 +225,7 @@ TEST_F(cmod_propagation_test, basic_different_dst_writemask)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, andz_one)
+TEST_F(cmod_propagation_vec4_test, andz_one)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::int_type);
@@ -261,7 +261,7 @@ TEST_F(cmod_propagation_test, andz_one)
    EXPECT_EQ(BRW_CONDITIONAL_EQ, instruction(block0, 1)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, non_cmod_instruction)
+TEST_F(cmod_propagation_vec4_test, non_cmod_instruction)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::uint_type);
@@ -294,7 +294,7 @@ TEST_F(cmod_propagation_test, non_cmod_instruction)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, intervening_flag_write)
+TEST_F(cmod_propagation_vec4_test, intervening_flag_write)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::float_type);
@@ -333,7 +333,7 @@ TEST_F(cmod_propagation_test, intervening_flag_write)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 2)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, intervening_flag_read)
+TEST_F(cmod_propagation_vec4_test, intervening_flag_read)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest0 = dst_reg(v, glsl_type::float_type);
@@ -373,7 +373,7 @@ TEST_F(cmod_propagation_test, intervening_flag_read)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 2)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, intervening_dest_write)
+TEST_F(cmod_propagation_vec4_test, intervening_dest_write)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::vec4_type);
@@ -414,7 +414,7 @@ TEST_F(cmod_propagation_test, intervening_dest_write)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 2)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, intervening_flag_read_same_value)
+TEST_F(cmod_propagation_vec4_test, intervening_flag_read_same_value)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest0 = dst_reg(v, glsl_type::float_type);
@@ -456,7 +456,7 @@ TEST_F(cmod_propagation_test, intervening_flag_read_same_value)
    EXPECT_EQ(BRW_PREDICATE_NORMAL, instruction(block0, 1)->predicate);
 }
 
-TEST_F(cmod_propagation_test, negate)
+TEST_F(cmod_propagation_vec4_test, negate)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::float_type);
@@ -492,7 +492,7 @@ TEST_F(cmod_propagation_test, negate)
    EXPECT_EQ(BRW_CONDITIONAL_LE, instruction(block0, 0)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, movnz)
+TEST_F(cmod_propagation_vec4_test, movnz)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::float_type);
@@ -528,7 +528,7 @@ TEST_F(cmod_propagation_test, movnz)
    EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 0)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, different_types_cmod_with_zero)
+TEST_F(cmod_propagation_vec4_test, different_types_cmod_with_zero)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::int_type);
@@ -563,7 +563,7 @@ TEST_F(cmod_propagation_test, different_types_cmod_with_zero)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, andnz_non_one)
+TEST_F(cmod_propagation_vec4_test, andnz_non_one)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::int_type);
@@ -601,7 +601,7 @@ TEST_F(cmod_propagation_test, andnz_non_one)
 
 /* Note that basic is using glsl_type:float types, while this one is using
  * glsl_type::vec4 */
-TEST_F(cmod_propagation_test, basic_vec4)
+TEST_F(cmod_propagation_vec4_test, basic_vec4)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::vec4_type);
@@ -634,7 +634,7 @@ TEST_F(cmod_propagation_test, basic_vec4)
    EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, basic_vec4_different_dst_writemask)
+TEST_F(cmod_propagation_vec4_test, basic_vec4_different_dst_writemask)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::vec4_type);
@@ -671,7 +671,7 @@ TEST_F(cmod_propagation_test, basic_vec4_different_dst_writemask)
    EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 1)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, mad_one_component_vec4)
+TEST_F(cmod_propagation_vec4_test, mad_one_component_vec4)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::vec4_type);
@@ -713,7 +713,7 @@ TEST_F(cmod_propagation_test, mad_one_component_vec4)
    EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 0)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, mad_more_one_component_vec4)
+TEST_F(cmod_propagation_vec4_test, mad_more_one_component_vec4)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::vec4_type);
@@ -756,7 +756,7 @@ TEST_F(cmod_propagation_test, mad_more_one_component_vec4)
    EXPECT_EQ(BRW_CONDITIONAL_L, instruction(block0, 1)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, cmp_mov_vec4)
+TEST_F(cmod_propagation_vec4_test, cmp_mov_vec4)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::ivec4_type);
@@ -797,7 +797,7 @@ TEST_F(cmod_propagation_test, cmp_mov_vec4)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 0)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, mul_cmp_different_channels_vec4)
+TEST_F(cmod_propagation_vec4_test, mul_cmp_different_channels_vec4)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::vec4_type);
@@ -834,7 +834,7 @@ TEST_F(cmod_propagation_test, mul_cmp_different_channels_vec4)
    EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 1)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, add_cmp_same_dst_writemask)
+TEST_F(cmod_propagation_vec4_test, add_cmp_same_dst_writemask)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::vec4_type);
@@ -869,7 +869,7 @@ TEST_F(cmod_propagation_test, add_cmp_same_dst_writemask)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 0)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, add_cmp_different_dst_writemask)
+TEST_F(cmod_propagation_vec4_test, add_cmp_different_dst_writemask)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest = dst_reg(v, glsl_type::float_type);
@@ -906,7 +906,7 @@ TEST_F(cmod_propagation_test, add_cmp_different_dst_writemask)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, prop_across_sel_gfx7)
+TEST_F(cmod_propagation_vec4_test, prop_across_sel_gfx7)
 {
    const vec4_builder bld = vec4_builder(v).at_end();
    dst_reg dest1 = dst_reg(v, glsl_type::float_type);
@@ -951,7 +951,7 @@ TEST_F(cmod_propagation_test, prop_across_sel_gfx7)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, prop_across_sel_gfx5)
+TEST_F(cmod_propagation_vec4_test, prop_across_sel_gfx5)
 {
    devinfo->ver = 5;
    devinfo->verx10 = devinfo->ver * 10;
@@ -1005,7 +1005,7 @@ TEST_F(cmod_propagation_test, prop_across_sel_gfx5)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 2)->conditional_mod);
 }
 
-TEST_F(cmod_propagation_test, prop_into_sel_gfx5)
+TEST_F(cmod_propagation_vec4_test, prop_into_sel_gfx5)
 {
    devinfo->ver = 5;
    devinfo->verx10 = devinfo->ver * 10;

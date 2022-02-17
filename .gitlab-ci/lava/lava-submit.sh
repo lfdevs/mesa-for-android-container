@@ -14,15 +14,12 @@ fi
 rm -rf results
 mkdir -p results/job-rootfs-overlay/
 
-# LAVA always uploads to MinIO when necessary as we don't have direct upload
-# from the DUT
-export PIGLIT_REPLAY_UPLOAD_TO_MINIO=1
 cp artifacts/ci-common/capture-devcoredump.sh results/job-rootfs-overlay/
 cp artifacts/ci-common/init-*.sh results/job-rootfs-overlay/
 artifacts/ci-common/generate-env.sh > results/job-rootfs-overlay/set-job-env-vars.sh
 
 tar zcf job-rootfs-overlay.tar.gz -C results/job-rootfs-overlay/ .
-ci-fairy minio login "${CI_JOB_JWT}"
+ci-fairy minio login --token-file "${CI_JOB_JWT_FILE}"
 ci-fairy minio cp job-rootfs-overlay.tar.gz "minio://${JOB_ROOTFS_OVERLAY_PATH}"
 
 touch results/lava.log
@@ -39,7 +36,7 @@ artifacts/lava/lava_job_submitter.py \
 	--ci-project-dir ${CI_PROJECT_DIR} \
 	--device-type ${DEVICE_TYPE} \
 	--dtb ${DTB} \
-	--jwt "${CI_JOB_JWT}" \
+	--jwt-file "${CI_JOB_JWT_FILE}" \
 	--kernel-image-name ${KERNEL_IMAGE_NAME} \
 	--kernel-image-type "${KERNEL_IMAGE_TYPE}" \
 	--boot-method ${BOOT_METHOD} \

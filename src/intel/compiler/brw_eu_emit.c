@@ -1262,10 +1262,12 @@ brw_F32TO16(struct brw_codegen *p, struct brw_reg dst, struct brw_reg src)
    if (align16) {
       assert(dst.type == BRW_REGISTER_TYPE_UD);
    } else {
-      assert(dst.type == BRW_REGISTER_TYPE_UD ||
-             dst.type == BRW_REGISTER_TYPE_W ||
-             dst.type == BRW_REGISTER_TYPE_UW ||
-             dst.type == BRW_REGISTER_TYPE_HF);
+      if (devinfo->ver <= 7) {
+         assert(dst.type == BRW_REGISTER_TYPE_W ||
+                dst.type == BRW_REGISTER_TYPE_UW);
+      } else {
+         assert(dst.type == BRW_REGISTER_TYPE_HF);
+      }
    }
 
    brw_push_insn_state(p);
@@ -2990,9 +2992,9 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
       brw_inst *insn = store + offset;
       assert(brw_inst_cmpt_control(devinfo, insn) == 0);
 
-      int block_end_offset = brw_find_next_block_end(p, offset);
       switch (brw_inst_opcode(devinfo, insn)) {
-      case BRW_OPCODE_BREAK:
+      case BRW_OPCODE_BREAK: {
+         int block_end_offset = brw_find_next_block_end(p, offset);
          assert(block_end_offset != 0);
          brw_inst_set_jip(devinfo, insn, (block_end_offset - offset) / scale);
 	 /* Gfx7 UIP points to WHILE; Gfx6 points just after it */
@@ -3000,7 +3002,10 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
 	    (brw_find_loop_end(p, offset) - offset +
              (devinfo->ver == 6 ? 16 : 0)) / scale);
 	 break;
-      case BRW_OPCODE_CONTINUE:
+      }
+
+      case BRW_OPCODE_CONTINUE: {
+         int block_end_offset = brw_find_next_block_end(p, offset);
          assert(block_end_offset != 0);
          brw_inst_set_jip(devinfo, insn, (block_end_offset - offset) / scale);
          brw_inst_set_uip(devinfo, insn,
@@ -3009,8 +3014,10 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
          assert(brw_inst_uip(devinfo, insn) != 0);
          assert(brw_inst_jip(devinfo, insn) != 0);
 	 break;
+      }
 
       case BRW_OPCODE_ENDIF: {
+         int block_end_offset = brw_find_next_block_end(p, offset);
          int32_t jump = (block_end_offset == 0) ?
                         1 * br : (block_end_offset - offset) / scale;
          if (devinfo->ver >= 7)
@@ -3020,7 +3027,7 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
 	 break;
       }
 
-      case BRW_OPCODE_HALT:
+      case BRW_OPCODE_HALT: {
 	 /* From the Sandy Bridge PRM (volume 4, part 2, section 8.3.19):
 	  *
 	  *    "In case of the halt instruction not inside any conditional
@@ -3032,6 +3039,7 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
 	  * The uip will have already been set by whoever set up the
 	  * instruction.
 	  */
+         int block_end_offset = brw_find_next_block_end(p, offset);
 	 if (block_end_offset == 0) {
             brw_inst_set_jip(devinfo, insn, brw_inst_uip(devinfo, insn));
 	 } else {
@@ -3040,6 +3048,7 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
          assert(brw_inst_uip(devinfo, insn) != 0);
          assert(brw_inst_jip(devinfo, insn) != 0);
 	 break;
+      }
 
       default:
          break;
@@ -3544,7 +3553,7 @@ brw_broadcast(struct brw_codegen *p,
 
          /* Use indirect addressing to fetch the specified component. */
          if (type_sz(src.type) > 4 &&
-             (devinfo->is_cherryview || intel_device_info_is_9lp(devinfo) ||
+             (devinfo->platform == INTEL_PLATFORM_CHV || intel_device_info_is_9lp(devinfo) ||
               !devinfo->has_64bit_float)) {
             /* From the Cherryview PRM Vol 7. "Register Region Restrictions":
              *
@@ -3588,55 +3597,6 @@ brw_broadcast(struct brw_codegen *p,
          brw_inst_set_flag_reg_nr(devinfo, inst, 1);
       }
    }
-
-   brw_pop_insn_state(p);
-}
-
-/**
- * This instruction is generated as a single-channel align1 instruction by
- * both the VS and FS stages when using INTEL_DEBUG=shader_time.
- *
- * We can't use the typed atomic op in the FS because that has the execution
- * mask ANDed with the pixel mask, but we just want to write the one dword for
- * all the pixels.
- *
- * We don't use the SIMD4x2 atomic ops in the VS because want to just write
- * one u32.  So we use the same untyped atomic write message as the pixel
- * shader.
- *
- * The untyped atomic operation requires a BUFFER surface type with RAW
- * format, and is only accessible through the legacy DATA_CACHE dataport
- * messages.
- */
-void brw_shader_time_add(struct brw_codegen *p,
-                         struct brw_reg payload,
-                         uint32_t surf_index)
-{
-   const struct intel_device_info *devinfo = p->devinfo;
-   const unsigned sfid = (devinfo->verx10 >= 75 ?
-                          HSW_SFID_DATAPORT_DATA_CACHE_1 :
-                          GFX7_SFID_DATAPORT_DATA_CACHE);
-   assert(devinfo->ver >= 7);
-
-   brw_push_insn_state(p);
-   brw_set_default_access_mode(p, BRW_ALIGN_1);
-   brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-   brw_set_default_compression_control(p, BRW_COMPRESSION_NONE);
-   brw_inst *send = brw_next_insn(p, BRW_OPCODE_SEND);
-
-   /* We use brw_vec1_reg and unmasked because we want to increment the given
-    * offset only once.
-    */
-   brw_set_dest(p, send, brw_vec1_reg(BRW_ARCHITECTURE_REGISTER_FILE,
-                                      BRW_ARF_NULL, 0));
-   brw_set_src0(p, send, brw_vec1_reg(payload.file,
-                                      payload.nr, 0));
-   brw_set_desc(p, send, (brw_message_desc(devinfo, 2, 0, false) |
-                          brw_dp_untyped_atomic_desc(devinfo, 1, BRW_AOP_ADD,
-                                                     false)));
-
-   brw_inst_set_sfid(devinfo, send, sfid);
-   brw_inst_set_binding_table_index(devinfo, send, surf_index);
 
    brw_pop_insn_state(p);
 }

@@ -612,6 +612,9 @@ __glXInitializeVisualConfigFromTags(struct glx_config * config, int count,
          if (fbconfig_style_tags)
             bp++;
          break;
+      case GLX_FLOAT_COMPONENTS_NV:
+         config->floatComponentsNV = *bp++;
+         break;
       case None:
          i = count;
          break;

@@ -99,6 +99,9 @@ struct glx_config {
 
     /* EXT_framebuffer_sRGB */
     GLint sRGBCapable;
+
+    /* NV_float_buffer */
+    GLint floatComponentsNV;
 };
 
 extern GLint _gl_convert_from_x_visual_type(int visualType);

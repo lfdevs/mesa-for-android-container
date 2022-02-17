@@ -66,6 +66,10 @@ _mesa_debug( const struct gl_context *ctx, const char *fmtString, ... ) PRINTFLI
 extern void
 _mesa_log(const char *fmtString, ...) PRINTFLIKE(1, 2);
 
+extern void
+_mesa_log_direct(const char *string);
+
+
 extern FILE *
 _mesa_get_log_file(void);
 
@@ -108,9 +112,6 @@ _mesa_gl_debug(struct gl_context *ctx,
                       __VA_ARGS__);                                       \
    }                                                                      \
 } while (0)
-
-void GLAPIENTRY
-_mesa_InternalSetError(GLenum error);
 
 #ifdef __cplusplus
 }

@@ -487,11 +487,12 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
    debug_assert(!batch->flushed);
 
    fd_batch_unlock_submit(batch);
-   fd_batch_check_size(batch);
 
    if (fallback) {
       fd_blitter_clear(pctx, buffers, color, depth, stencil);
    }
+
+   fd_batch_check_size(batch);
 
    fd_batch_reference(&batch, NULL);
 }

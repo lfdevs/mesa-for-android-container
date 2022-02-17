@@ -51,6 +51,8 @@ gfx7_cmd_buffer_emit_scissor(struct anv_cmd_buffer *cmd_buffer)
    struct anv_framebuffer *fb = cmd_buffer->state.framebuffer;
    uint32_t count = cmd_buffer->state.gfx.dynamic.scissor.count;
    const VkRect2D *scissors = cmd_buffer->state.gfx.dynamic.scissor.scissors;
+   const VkViewport *viewports =
+      cmd_buffer->state.gfx.dynamic.viewport.viewports;
 
    /* Wa_1409725701:
     *    "The viewport-specific state used by the SF unit (SCISSOR_RECT) is
@@ -64,6 +66,7 @@ gfx7_cmd_buffer_emit_scissor(struct anv_cmd_buffer *cmd_buffer)
 
    for (uint32_t i = 0; i < count; i++) {
       const VkRect2D *s = &scissors[i];
+      const VkViewport *vp = &viewports[i];
 
       /* Since xmax and ymax are inclusive, we have to have xmax < xmin or
        * ymax < ymin for empty clips.  In case clip x, y, width height are all
@@ -79,10 +82,12 @@ gfx7_cmd_buffer_emit_scissor(struct anv_cmd_buffer *cmd_buffer)
 
       const int max = 0xffff;
 
-      uint32_t y_min = s->offset.y;
-      uint32_t x_min = s->offset.x;
-      uint32_t y_max = s->offset.y + s->extent.height - 1;
-      uint32_t x_max = s->offset.x + s->extent.width - 1;
+      uint32_t y_min = MAX2(s->offset.y, MIN2(vp->y, vp->y + vp->height));
+      uint32_t x_min = MAX2(s->offset.x, vp->x);
+      uint32_t y_max = MIN2(s->offset.y + s->extent.height - 1,
+                       MAX2(vp->y, vp->y + vp->height) - 1);
+      uint32_t x_max = MIN2(s->offset.x + s->extent.width - 1,
+                       vp->x + vp->width - 1);
 
       /* Do this math using int64_t so overflow gets clamped correctly. */
       if (cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_PRIMARY) {

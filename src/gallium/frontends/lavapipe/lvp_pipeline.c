@@ -279,6 +279,7 @@ deep_copy_graphics_create_info(void *mem_ctx,
    VkPipelineVertexInputStateCreateInfo *vertex_input;
    VkPipelineRasterizationStateCreateInfo *rasterization_state;
    LVP_FROM_HANDLE(lvp_render_pass, pass, src->renderPass);
+   const VkPipelineRenderingCreateInfoKHR *rp_info = vk_find_struct_const(src->pNext, PIPELINE_RENDERING_CREATE_INFO_KHR);
 
    dst->sType = src->sType;
    dst->pNext = NULL;
@@ -367,7 +368,8 @@ deep_copy_graphics_create_info(void *mem_ctx,
       dst->pMultisampleState = NULL;
 
    /* pDepthStencilState */
-   if (src->pDepthStencilState && !rasterization_disabled && pass->has_zs_attachment) {
+   if (src->pDepthStencilState && !rasterization_disabled &&
+       (pass ? pass->has_zs_attachment : (rp_info->depthAttachmentFormat || rp_info->stencilAttachmentFormat))) {
       LVP_PIPELINE_DUP(dst->pDepthStencilState,
                        src->pDepthStencilState,
                        VkPipelineDepthStencilStateCreateInfo,
@@ -376,7 +378,8 @@ deep_copy_graphics_create_info(void *mem_ctx,
       dst->pDepthStencilState = NULL;
 
    /* pColorBlendState */
-   if (src->pColorBlendState && !rasterization_disabled && pass->has_color_attachment) {
+   if (src->pColorBlendState && !rasterization_disabled &&
+       (pass ? pass->has_color_attachment : rp_info->colorAttachmentCount)) {
       VkPipelineColorBlendStateCreateInfo*    cb_state;
 
       cb_state = ralloc(mem_ctx, VkPipelineColorBlendStateCreateInfo);
@@ -560,7 +563,8 @@ lvp_shader_compile_to_ir(struct lvp_pipeline *pipeline,
    NIR_PASS_V(nir, nir_lower_compute_system_values, NULL);
 
    NIR_PASS_V(nir, nir_lower_clip_cull_distance_arrays);
-   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_uniform, NULL);
+   NIR_PASS_V(nir, nir_remove_dead_variables,
+              nir_var_uniform | nir_var_image, NULL);
 
    lvp_lower_pipeline_layout(pipeline->device, pipeline->layout, nir);
 
@@ -690,10 +694,10 @@ merge_tess_info(struct shader_info *tes_info,
           tcs_info->tess.spacing == tes_info->tess.spacing);
    tes_info->tess.spacing |= tcs_info->tess.spacing;
 
-   assert(tcs_info->tess.primitive_mode == 0 ||
-          tes_info->tess.primitive_mode == 0 ||
-          tcs_info->tess.primitive_mode == tes_info->tess.primitive_mode);
-   tes_info->tess.primitive_mode |= tcs_info->tess.primitive_mode;
+   assert(tcs_info->tess._primitive_mode == 0 ||
+          tes_info->tess._primitive_mode == 0 ||
+          tcs_info->tess._primitive_mode == tes_info->tess._primitive_mode);
+   tes_info->tess._primitive_mode |= tcs_info->tess._primitive_mode;
    tes_info->tess.ccw |= tcs_info->tess.ccw;
    tes_info->tess.point_mode |= tcs_info->tess.point_mode;
 }
@@ -841,12 +845,12 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
 
    bool rasterization_disabled = !dynamic_state_contains(pipeline->graphics_create_info.pDynamicState, VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT) &&
       pipeline->graphics_create_info.pRasterizationState->rasterizerDiscardEnable;
-   LVP_FROM_HANDLE(lvp_render_pass, pass, pipeline->graphics_create_info.renderPass);
    if (!dynamic_state_contains(pipeline->graphics_create_info.pDynamicState, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT) &&
-       !rasterization_disabled && pass->has_color_attachment) {
+       !rasterization_disabled) {
       const VkPipelineColorWriteCreateInfoEXT *cw_state =
          vk_find_struct_const(pCreateInfo->pColorBlendState, PIPELINE_COLOR_WRITE_CREATE_INFO_EXT);
       if (cw_state) {
+         assert(cw_state->attachmentCount <= pipeline->graphics_create_info.pColorBlendState->attachmentCount);
          for (unsigned i = 0; i < cw_state->attachmentCount; i++)
             if (!cw_state->pColorWriteEnables[i]) {
                VkPipelineColorBlendAttachmentState *att = (void*)&pipeline->graphics_create_info.pColorBlendState->pAttachments[i];
@@ -885,7 +889,7 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
    }
 
    pipeline->gs_output_lines = pipeline->pipeline_nir[MESA_SHADER_GEOMETRY] &&
-                               pipeline->pipeline_nir[MESA_SHADER_GEOMETRY]->info.gs.output_primitive == GL_LINES;
+                               pipeline->pipeline_nir[MESA_SHADER_GEOMETRY]->info.gs.output_primitive == SHADER_PRIM_LINES;
 
 
    bool has_fragment_shader = false;

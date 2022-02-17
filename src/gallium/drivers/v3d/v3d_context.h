@@ -280,7 +280,7 @@ struct v3d_ssbo_stateobj {
 
 /* Hash table key for v3d->jobs */
 struct v3d_job_key {
-        struct pipe_surface *cbufs[4];
+        struct pipe_surface *cbufs[V3D_MAX_DRAW_BUFFERS];
         struct pipe_surface *zsbuf;
         struct pipe_surface *bbuf;
 };
@@ -358,7 +358,7 @@ struct v3d_job {
          * the destination surface.
          */
         uint32_t nr_cbufs;
-        struct pipe_surface *cbufs[4];
+        struct pipe_surface *cbufs[V3D_MAX_DRAW_BUFFERS];
         struct pipe_surface *zsbuf;
         struct pipe_surface *bbuf;
         /** @} */
@@ -426,9 +426,12 @@ struct v3d_job {
          * (either clears or draws) and should be stored.
          */
         uint32_t store;
-        uint32_t clear_color[4][4];
+        uint32_t clear_color[V3D_MAX_DRAW_BUFFERS][4];
         float clear_z;
         uint8_t clear_s;
+
+        /* If TLB double-buffering is enabled for this job */
+        bool double_buffer;
 
         /**
          * Set if some drawing (triangles, blits, or just a glClear()) has
@@ -777,6 +780,7 @@ void v3d_create_texture_shader_state_bo(struct v3d_context *v3d,
                                         struct v3d_sampler_view *so);
 
 void v3d_get_tile_buffer_size(bool is_msaa,
+                              bool double_buffer,
                               uint32_t nr_cbufs,
                               struct pipe_surface **cbufs,
                               struct pipe_surface *bbuf,

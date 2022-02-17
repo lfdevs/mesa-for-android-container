@@ -420,6 +420,13 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
    struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
    struct anv_dynamic_state *d = &cmd_buffer->state.gfx.dynamic;
 
+#if GFX_VER >= 11
+   if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_SHADING_RATE) {
+      genX(emit_shading_rate)(&cmd_buffer->batch, pipeline,
+                              &cmd_buffer->state.gfx.dynamic);
+   }
+#endif /* GFX_VER >= 11 */
+
    if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY) {
       uint32_t topology;
       if (anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL))
@@ -441,7 +448,7 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          GENX(3DSTATE_SF_header),
       };
 #if GFX_VER == 8
-      if (cmd_buffer->device->info.is_cherryview) {
+      if (cmd_buffer->device->info.platform == INTEL_PLATFORM_CHV) {
          sf.CHVLineWidth = d->line_width;
       } else {
          sf.LineWidth = d->line_width;
@@ -678,10 +685,44 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
                                       ANV_CMD_DIRTY_INDEX_BUFFER |
                                       ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_RESTART_ENABLE)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF), vf) {
+#if GFX_VERx10 >= 125
+         vf.GeometryDistributionEnable = true;
+#endif
          vf.IndexedDrawCutIndexEnable  = d->primitive_restart_enable;
          vf.CutIndex                   = cmd_buffer->state.restart_index;
       }
    }
+
+#if GFX_VERx10 >= 125
+   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
+                                      ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_RESTART_ENABLE)) {
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VFG), vfg) {
+         /* If 3DSTATE_TE: TE Enable == 1 then RR_STRICT else RR_FREE*/
+         vfg.DistributionMode =
+            anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL) ? RR_STRICT :
+                                                                      RR_FREE;
+         vfg.DistributionGranularity = BatchLevelGranularity;
+         /* Wa_14014890652 */
+         if (intel_device_info_is_dg2(&cmd_buffer->device->info))
+            vfg.GranularityThresholdDisable = 1;
+         vfg.ListCutIndexEnable = d->primitive_restart_enable;
+         /* 192 vertices for TRILIST_ADJ */
+         vfg.ListNBatchSizeScale = 0;
+         /* Batch size of 384 vertices */
+         vfg.List3BatchSizeScale = 2;
+         /* Batch size of 128 vertices */
+         vfg.List2BatchSizeScale = 1;
+         /* Batch size of 128 vertices */
+         vfg.List1BatchSizeScale = 2;
+         /* Batch size of 256 vertices for STRIP topologies */
+         vfg.StripBatchSizeScale = 3;
+         /* 192 control points for PATCHLIST_3 */
+         vfg.PatchBatchSizeScale = 1;
+         /* 192 control points for PATCHLIST_3 */
+         vfg.PatchBatchSizeMultiplier = 31;
+      }
+   }
+#endif
 
    if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS) {
       genX(emit_sample_pattern)(&cmd_buffer->batch,
@@ -768,23 +809,6 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          bsp.BlendStatePointerValid = true;
       }
    }
-
-#if GFX_VER >= 11
-   if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_SHADING_RATE) {
-      struct anv_state cps_states = ANV_STATE_NULL;
-
-#if GFX_VER >= 12
-      uint32_t count = cmd_buffer->state.gfx.dynamic.viewport.count;
-      cps_states =
-         anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
-                                            GENX(CPS_STATE_length) * 4 * count,
-                                            32);
-#endif /* GFX_VER >= 12 */
-
-      genX(emit_shading_rate)(&cmd_buffer->batch, pipeline, cps_states,
-                              &cmd_buffer->state.gfx.dynamic);
-   }
-#endif /* GFX_VER >= 11 */
 
    cmd_buffer->state.gfx.dirty = 0;
 }

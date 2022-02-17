@@ -339,6 +339,14 @@ CreateContext(Display *dpy, int generic_id, struct glx_config *config,
    if (generic_id == None)
       return NULL;
 
+   /* Some application may request an indirect context but we may want to force a direct
+    * one because Xorg only allows indirect contexts if they were enabled.
+    */
+   if (!allowDirect &&
+       psc->force_direct_context) {
+      allowDirect = 1;
+   }
+
    gc = NULL;
 #ifdef GLX_USE_APPLEGL
    gc = applegl_create_context(psc, config, shareList, renderType);
@@ -754,7 +762,7 @@ glXCreateGLXPixmap(Display * dpy, XVisualInfo * vis, Pixmap pixmap)
          return xid;
 
       config = glx_config_find_visual(psc->visuals, vis->visualid);
-      pdraw = psc->driScreen->createDrawable(psc, pixmap, xid, config);
+      pdraw = psc->driScreen->createDrawable(psc, pixmap, xid, GLX_PIXMAP_BIT, config);
       if (pdraw == NULL) {
          fprintf(stderr, "failed to create pixmap\n");
          xid = None;
@@ -1027,6 +1035,7 @@ fbconfigs_compatible(const struct glx_config * const a,
    MATCH_MASK(drawableType);
    MATCH_MASK(renderType);
    MATCH_DONT_CARE(sRGBCapable);
+   MATCH_DONT_CARE(floatComponentsNV);
 
    /* There is a bug in a few of the XFree86 DDX drivers.  They contain
     * visuals with a "transparent type" of 0 when they really mean GLX_NONE.

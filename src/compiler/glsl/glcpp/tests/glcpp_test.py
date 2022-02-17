@@ -45,7 +45,6 @@ def arg_parser():
     parser.add_argument('--windows', action='store_true', help='Run tests for Windows/Dos style newlines')
     parser.add_argument('--oldmac', action='store_true', help='Run tests for Old Mac (pre-OSX) style newlines')
     parser.add_argument('--bizarro', action='store_true', help='Run tests for Bizarro world style newlines')
-    parser.add_argument('--valgrind', action='store_true', help='Run with valgrind for errors')
     return parser.parse_args()
 
 
@@ -86,23 +85,6 @@ def test_output(glcpp, contents, expfile, nl_format='\n'):
     if actual == expected:
         return (True, [])
     return (False, difflib.unified_diff(actual.splitlines(), expected.splitlines()))
-
-
-def _valgrind(glcpp, filename):
-    """Run valgrind and report any warnings."""
-    with open(filename, 'rb') as f:
-        contents = f.read()
-    extra_args = parse_test_file(contents, nl_format='\n')
-
-    proc = subprocess.Popen(
-        ['valgrind', '--error-exitcode=126'] + glcpp + extra_args,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.PIPE)
-    _, errors = proc.communicate(contents)
-    if proc.returncode != 126:
-        return (True, [])
-    return (False, errors.decode('utf-8'))
 
 
 def test_unix(args):
@@ -190,32 +172,6 @@ def test_bizarro(args):
     return _replace_test(args, '\n\r')
 
 
-def test_valgrind(args):
-    total = 0
-    passed = 0
-
-    print('============= Testing for Valgrind Warnings =============')
-    for filename in os.listdir(args.testdir):
-        if not filename.endswith('.c'):
-            continue
-
-        print(   '{}:'.format(os.path.splitext(filename)[0]), end=' ')
-        total += 1
-        valid, log = _valgrind(args.glcpp, os.path.join(args.testdir, filename))
-        if valid:
-            passed += 1
-            print('PASS')
-        else:
-            print('FAIL')
-            print(log, file=sys.stderr)
-
-    if not total:
-        raise Exception('Could not find any tests.')
-
-    print('{}/{}'.format(passed, total), 'tests returned correct results')
-    return total == passed
-
-
 def main():
     args = arg_parser()
 
@@ -235,8 +191,6 @@ def main():
             success = success and test_oldmac(args)
         if args.bizarro:
             success = success and test_bizarro(args)
-        if args.valgrind:
-            success = success and test_valgrind(args)
     except OSError as e:
         if e.errno == errno.ENOEXEC:
             print('Skipping due to inability to run host binaries.',

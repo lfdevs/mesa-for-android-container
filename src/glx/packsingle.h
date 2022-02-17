@@ -58,7 +58,7 @@
 #define __GLX_SINGLE_LOAD_VARIABLES()           \
    pc = gc->pc;                                 \
    /* Muffle compilers */                       \
-   pixelHeaderPC = 0;  (void)pixelHeaderPC;     \
+   pixelHeaderPC = NULL;  (void)pixelHeaderPC;     \
    compsize = 0;       (void)compsize;          \
    cmdlen = 0;         (void)cmdlen
 

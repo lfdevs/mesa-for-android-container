@@ -8,6 +8,7 @@
     - anholt-g33
   variables:
     GPU_VERSION: i915-g33
+    FLAKES_CHANNEL: "#intel-ci"
 
 i915-g33-deqp:
   extends:
@@ -23,13 +24,6 @@ i915-g33-piglit:
   variables:
     PIGLIT_PROFILES: gpu
     PIGLIT_PLATFORM: gbm
-  artifacts:
-    paths:
-      - results/
-    reports:
-      junit: results/junit.xml
-  script:
-    - install/piglit/piglit-runner.sh
 
 i915-g33-traces:
   extends:

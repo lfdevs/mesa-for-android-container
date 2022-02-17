@@ -46,6 +46,8 @@ struct i915_device {
 
 struct i915_bo {
    struct shim_bo base;
+   uint32_t tiling_mode;
+   uint32_t stride;
 };
 
 static struct i915_device i915 = {};
@@ -55,6 +57,39 @@ bool drm_shim_driver_prefers_first_render_node = true;
 static int
 i915_ioctl_noop(int fd, unsigned long request, void *arg)
 {
+   return 0;
+}
+
+static int
+i915_ioctl_gem_set_tiling(int fd, unsigned long request, void *arg)
+{
+   struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
+   struct drm_i915_gem_set_tiling *tiling_arg = arg;
+   struct i915_bo *bo = (struct i915_bo *) drm_shim_bo_lookup(shim_fd, tiling_arg->handle);
+
+   if (!bo)
+      return -1;
+
+   bo->tiling_mode = tiling_arg->tiling_mode;
+   bo->stride = tiling_arg->stride;
+
+   return 0;
+}
+
+static int
+i915_ioctl_gem_get_tiling(int fd, unsigned long request, void *arg)
+{
+   struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
+   struct drm_i915_gem_get_tiling *tiling_arg = arg;
+   struct i915_bo *bo = (struct i915_bo *) drm_shim_bo_lookup(shim_fd, tiling_arg->handle);
+
+   if (!bo)
+      return -1;
+
+   tiling_arg->tiling_mode = bo->tiling_mode;
+   tiling_arg->swizzle_mode = I915_BIT_6_SWIZZLE_NONE;
+   tiling_arg->phys_swizzle_mode = I915_BIT_6_SWIZZLE_NONE;
+
    return 0;
 }
 
@@ -124,7 +159,7 @@ i915_ioctl_gem_context_getparam(int fd, unsigned long request, void *arg)
    struct drm_i915_gem_context_param *param = arg;
 
    if (param->param ==  I915_CONTEXT_PARAM_GTT_SIZE) {
-      if (i915.devinfo.ver >= 8 && !i915.devinfo.is_cherryview)
+      if (i915.devinfo.ver >= 8 && i915.devinfo.platform != INTEL_PLATFORM_CHV)
          param->value = 1ull << 48;
       else
          param->value = 1ull << 31;
@@ -207,10 +242,13 @@ i915_ioctl_get_param(int fd, unsigned long request, void *arg)
    case I915_PARAM_EU_TOTAL:
       *gp->value = 0;
       for (uint32_t s = 0; s < i915.devinfo.num_slices; s++)
-         *gp->value += i915.devinfo.num_subslices[s] * i915.devinfo.num_eu_per_subslice;
+         *gp->value += i915.devinfo.num_subslices[s] * i915.devinfo.max_eus_per_subslice;
       return 0;
    case I915_PARAM_PERF_REVISION:
       *gp->value = 3;
+      return 0;
+   case I915_PARAM_HAS_USERPTR_PROBE:
+      *gp->value = 0;
       return 0;
    default:
       break;
@@ -230,7 +268,7 @@ query_write_topology(struct drm_i915_query_item *item)
       DIV_ROUND_UP(i915.devinfo.num_slices, 8) +
       i915.devinfo.num_slices * DIV_ROUND_UP(i915.devinfo.num_subslices[0], 8) +
       i915.devinfo.num_slices * i915.devinfo.num_subslices[0] *
-      DIV_ROUND_UP(i915.devinfo.num_eu_per_subslice, 8);
+      DIV_ROUND_UP(i915.devinfo.max_eus_per_subslice, 8);
 
    if (item->length == 0) {
       item->length = length;
@@ -249,7 +287,7 @@ query_write_topology(struct drm_i915_query_item *item)
 
    info->max_slices = i915.devinfo.num_slices;
    info->max_subslices = i915.devinfo.num_subslices[0];
-   info->max_eus_per_subslice = i915.devinfo.num_eu_per_subslice;
+   info->max_eus_per_subslice = i915.devinfo.max_eus_per_subslice;
 
    info->subslice_offset = DIV_ROUND_UP(i915.devinfo.num_slices, 8);
    info->subslice_stride = DIV_ROUND_UP(i915.devinfo.num_subslices[0], 8);
@@ -303,6 +341,89 @@ i915_ioctl_query(int fd, unsigned long request, void *arg)
          break;
       }
 
+      case DRM_I915_QUERY_ENGINE_INFO: {
+         uint32_t num_copy = 1;
+         uint32_t num_render = 1;
+         uint32_t num_engines = num_copy + num_render;
+
+         struct drm_i915_query_engine_info *info =
+            (struct drm_i915_query_engine_info*)(uintptr_t)item->data_ptr;
+
+         int32_t data_length =
+            sizeof(*info) +
+               num_engines * sizeof(info->engines[0]);
+
+         if (item->length == 0) {
+            item->length = data_length;
+            return 0;
+         } else if (item->length < data_length) {
+            item->length = -EINVAL;
+            return -1;
+         } else {
+            memset(info, 0, data_length);
+
+            for (uint32_t e = 0; e < num_render; e++, info->num_engines++) {
+               info->engines[info->num_engines].engine.engine_class =
+                  I915_ENGINE_CLASS_RENDER;
+               info->engines[info->num_engines].engine.engine_instance = e;
+            }
+
+            for (uint32_t e = 0; e < num_copy; e++, info->num_engines++) {
+               info->engines[info->num_engines].engine.engine_class =
+                  I915_ENGINE_CLASS_COPY;
+               info->engines[info->num_engines].engine.engine_instance = e;
+            }
+
+            assert(info->num_engines == num_engines);
+
+            if (item->length > data_length)
+               item->length = data_length;
+
+            return 0;
+         }
+      }
+
+      case DRM_I915_QUERY_PERF_CONFIG:
+         /* This is known but not supported by the shim.  Handling this here
+          * suppresses some spurious warning messages in shader-db runs.
+          */
+         item->length = -EINVAL;
+         break;
+
+      case DRM_I915_QUERY_MEMORY_REGIONS: {
+         uint32_t num_regions = i915.devinfo.has_local_mem ? 2 : 1;
+         struct drm_i915_query_memory_regions *info =
+            (struct drm_i915_query_memory_regions*)(uintptr_t)item->data_ptr;
+         size_t data_length = sizeof(struct drm_i915_query_memory_regions) +
+            num_regions * sizeof(struct drm_i915_memory_region_info);
+
+         if (item->length == 0) {
+            item->length = data_length;
+            return 0;
+         } else if (item->length < (int32_t)data_length) {
+            item->length = -EINVAL;
+            return -1;
+         } else {
+            memset(info, 0, data_length);
+            info->num_regions = num_regions;
+            info->regions[0].region.memory_class = I915_MEMORY_CLASS_SYSTEM;
+            info->regions[0].region.memory_instance = 0;
+            /* Report 4Gb even if it's not actually true, it looks more like a
+             * real device.
+             */
+            info->regions[0].probed_size = 4ull * 1024 * 1024 * 1024;
+            info->regions[0].unallocated_size = -1ll;
+            if (i915.devinfo.has_local_mem) {
+               info->regions[1].region.memory_class = I915_MEMORY_CLASS_DEVICE;
+               info->regions[1].region.memory_instance = 0;
+               info->regions[1].probed_size = 4ull * 1024 * 1024 * 1024;
+               info->regions[1].unallocated_size = -1ll;
+            }
+            return 0;
+         }
+         break;
+      }
+
       default:
          fprintf(stderr, "Unknown drm_i915_query_item id=%lli\n", item->query_id);
          item->length = -EINVAL;
@@ -319,7 +440,7 @@ i915_gem_get_aperture(int fd, unsigned long request, void *arg)
    struct drm_i915_gem_get_aperture *aperture = arg;
 
    if (i915.devinfo.ver >= 8 &&
-       !i915.devinfo.is_cherryview) {
+       i915.devinfo.platform != INTEL_PLATFORM_CHV) {
       aperture->aper_size = 1ull << 48;
       aperture->aper_available_size = 1ull << 48;
    } else {
@@ -338,7 +459,7 @@ static ioctl_fn_t driver_ioctls[] = {
 
    [DRM_I915_GEM_CREATE] = i915_ioctl_gem_create,
    [DRM_I915_GEM_MMAP] = i915_ioctl_gem_mmap,
-   [DRM_I915_GEM_SET_TILING] = i915_ioctl_noop,
+   [DRM_I915_GEM_SET_TILING] = i915_ioctl_gem_set_tiling,
    [DRM_I915_GEM_CONTEXT_CREATE] = i915_ioctl_gem_context_create,
    [DRM_I915_GEM_CONTEXT_DESTROY] = i915_ioctl_noop,
    [DRM_I915_GEM_CONTEXT_GETPARAM] = i915_ioctl_gem_context_getparam,
@@ -356,7 +477,7 @@ static ioctl_fn_t driver_ioctls[] = {
    [DRM_I915_GEM_SET_DOMAIN] = i915_ioctl_noop,
    [DRM_I915_GEM_GET_CACHING] = i915_ioctl_noop,
    [DRM_I915_GEM_SET_CACHING] = i915_ioctl_noop,
-   [DRM_I915_GEM_GET_TILING] = i915_ioctl_noop,
+   [DRM_I915_GEM_GET_TILING] = i915_ioctl_gem_get_tiling,
    [DRM_I915_GEM_MADVISE] = i915_ioctl_noop,
    [DRM_I915_GEM_WAIT] = i915_ioctl_noop,
    [DRM_I915_GEM_BUSY] = i915_ioctl_noop,

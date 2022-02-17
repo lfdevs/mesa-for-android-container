@@ -235,7 +235,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 134217728;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
       return 16;
-   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+   case PIPE_CAP_TEXTURE_TRANSFER_MODES:
       return 0;
    case PIPE_CAP_MAX_VIEWPORTS:
       return PIPE_MAX_VIEWPORTS;
@@ -315,7 +315,6 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_FBFETCH:
       return 8;
    case PIPE_CAP_FBFETCH_COHERENT:
-      return 0;
    case PIPE_CAP_MULTI_DRAW_INDIRECT:
    case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
       return 1;
@@ -348,6 +347,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_TG4_COMPONENT_IN_SWIZZLE:
    case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
+   case PIPE_CAP_IMAGE_STORE_FORMATTED:
       return 1;
 #ifdef PIPE_MEMORY_FD
    case PIPE_CAP_MEMOBJ:
@@ -433,13 +433,21 @@ static float
 llvmpipe_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
 {
    switch (param) {
+   case PIPE_CAPF_MIN_LINE_WIDTH:
+   case PIPE_CAPF_MIN_LINE_WIDTH_AA:
+   case PIPE_CAPF_MIN_POINT_SIZE:
+   case PIPE_CAPF_MIN_POINT_SIZE_AA:
+      return 1;
+   case PIPE_CAPF_POINT_SIZE_GRANULARITY:
+   case PIPE_CAPF_LINE_WIDTH_GRANULARITY:
+      return 0.1;
    case PIPE_CAPF_MAX_LINE_WIDTH:
       FALLTHROUGH;
    case PIPE_CAPF_MAX_LINE_WIDTH_AA:
       return 255.0; /* arbitrary */
-   case PIPE_CAPF_MAX_POINT_WIDTH:
+   case PIPE_CAPF_MAX_POINT_SIZE:
       FALLTHROUGH;
-   case PIPE_CAPF_MAX_POINT_WIDTH_AA:
+   case PIPE_CAPF_MAX_POINT_SIZE_AA:
       return LP_MAX_POINT_WIDTH; /* arbitrary */
    case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
       return 16.0; /* not actually signficant at this time */
@@ -558,6 +566,18 @@ llvmpipe_get_compute_param(struct pipe_screen *_screen,
       return sizeof(uint32_t);
    }
    return 0;
+}
+
+static void
+llvmpipe_get_driver_uuid(struct pipe_screen *pscreen, char *uuid)
+{
+   memset(uuid, 0, PIPE_UUID_SIZE);
+}
+
+static void
+llvmpipe_get_device_uuid(struct pipe_screen *pscreen, char *uuid)
+{
+   memset(uuid, 0, PIPE_UUID_SIZE);
 }
 
 static const struct nir_shader_compiler_options gallivm_nir_options = {
@@ -728,6 +748,7 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
          case PIPE_FORMAT_R8G8_SNORM:
          case PIPE_FORMAT_R16_SNORM:
          case PIPE_FORMAT_R8_SNORM:
+         case PIPE_FORMAT_B8G8R8A8_UNORM:
             break;
 
          default:
@@ -1039,6 +1060,9 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    screen->base.fence_finish = llvmpipe_fence_finish;
 
    screen->base.get_timestamp = llvmpipe_get_timestamp;
+
+   screen->base.get_driver_uuid = llvmpipe_get_driver_uuid;
+   screen->base.get_device_uuid = llvmpipe_get_device_uuid;
 
    screen->base.finalize_nir = llvmpipe_finalize_nir;
 

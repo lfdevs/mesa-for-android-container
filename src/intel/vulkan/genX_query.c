@@ -29,6 +29,8 @@
 
 #include "anv_private.h"
 
+#include "util/os_time.h"
+
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 
@@ -415,17 +417,17 @@ static VkResult
 wait_for_available(struct anv_device *device,
                    struct anv_query_pool *pool, uint32_t query)
 {
-   uint64_t abs_timeout = anv_get_absolute_timeout(2 * NSEC_PER_SEC);
+   uint64_t abs_timeout_ns = os_time_get_absolute_timeout(2 * NSEC_PER_SEC);
 
-   while (anv_gettime_ns() < abs_timeout) {
+   while (os_time_get_nano() < abs_timeout_ns) {
       if (query_is_available(pool, query))
          return VK_SUCCESS;
-      VkResult status = anv_device_query_status(device);
+      VkResult status = vk_device_check_status(&device->vk);
       if (status != VK_SUCCESS)
          return status;
    }
 
-   return anv_device_set_lost(device, "query timeout");
+   return vk_device_set_lost(&device->vk, "query timeout");
 }
 
 VkResult genX(GetQueryPoolResults)(
@@ -448,7 +450,7 @@ VkResult genX(GetQueryPoolResults)(
           pool->type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR ||
           pool->type == VK_QUERY_TYPE_PERFORMANCE_QUERY_INTEL);
 
-   if (anv_device_is_lost(device))
+   if (vk_device_is_lost(&device->vk))
       return VK_ERROR_DEVICE_LOST;
 
    if (pData == NULL)
@@ -514,7 +516,7 @@ VkResult genX(GetQueryPoolResults)(
                uint64_t result = slot[idx * 2 + 2] - slot[idx * 2 + 1];
 
                /* WaDividePSInvocationCountBy4:HSW,BDW */
-               if ((device->info.ver == 8 || device->info.is_haswell) &&
+               if ((device->info.ver == 8 || device->info.verx10 == 75) &&
                    (1 << stat) == VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT)
                   result >>= 2;
 
@@ -1417,7 +1419,7 @@ void genX(CmdCopyQueryPoolResults)(
 
             /* WaDividePSInvocationCountBy4:HSW,BDW */
             if ((cmd_buffer->device->info.ver == 8 ||
-                 cmd_buffer->device->info.is_haswell) &&
+                 cmd_buffer->device->info.verx10 == 75) &&
                 (1 << stat) == VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT) {
                result = mi_ushr32_imm(&b, result, 2);
             }

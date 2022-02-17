@@ -1200,6 +1200,9 @@ crocus_compile_vs(struct crocus_context *ice,
       nir_shader_gather_info(nir, impl);
    }
 
+   if (key->clamp_pointsize)
+      nir_lower_point_size(nir, 1.0, 255.0);
+
    prog_data->use_alt_mode = nir->info.is_arb_asm;
 
    crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
@@ -1396,7 +1399,7 @@ crocus_compile_tcs(struct crocus_context *ice,
    struct crocus_screen *screen = (struct crocus_screen *)ice->ctx.screen;
    const struct brw_compiler *compiler = screen->compiler;
    const struct nir_shader_compiler_options *options =
-      compiler->glsl_compiler_options[MESA_SHADER_TESS_CTRL].NirOptions;
+      compiler->nir_options[MESA_SHADER_TESS_CTRL];
    void *mem_ctx = ralloc_context(NULL);
    struct brw_tcs_prog_data *tcs_prog_data =
       rzalloc(mem_ctx, struct brw_tcs_prog_data);
@@ -1433,19 +1436,19 @@ crocus_compile_tcs(struct crocus_context *ice,
       prog_data->param = rzalloc_array(mem_ctx, uint32_t, num_system_values);
       prog_data->nr_params = num_system_values;
 
-      if (key->tes_primitive_mode == GL_QUADS) {
+      if (key->_tes_primitive_mode == TESS_PRIMITIVE_QUADS) {
          for (int i = 0; i < 4; i++)
             system_values[7 - i] = BRW_PARAM_BUILTIN_TESS_LEVEL_OUTER_X + i;
 
          system_values[3] = BRW_PARAM_BUILTIN_TESS_LEVEL_INNER_X;
          system_values[2] = BRW_PARAM_BUILTIN_TESS_LEVEL_INNER_Y;
-      } else if (key->tes_primitive_mode == GL_TRIANGLES) {
+      } else if (key->_tes_primitive_mode == TESS_PRIMITIVE_TRIANGLES) {
          for (int i = 0; i < 3; i++)
             system_values[7 - i] = BRW_PARAM_BUILTIN_TESS_LEVEL_OUTER_X + i;
 
          system_values[4] = BRW_PARAM_BUILTIN_TESS_LEVEL_INNER_X;
       } else {
-         assert(key->tes_primitive_mode == GL_ISOLINES);
+         assert(key->_tes_primitive_mode == TESS_PRIMITIVE_ISOLINES);
          system_values[7] = BRW_PARAM_BUILTIN_TESS_LEVEL_OUTER_Y;
          system_values[6] = BRW_PARAM_BUILTIN_TESS_LEVEL_OUTER_X;
       }
@@ -1461,12 +1464,17 @@ crocus_compile_tcs(struct crocus_context *ice,
 
    struct brw_tcs_prog_key key_clean = *key;
    crocus_sanitize_tex_key(&key_clean.base.tex);
-   char *error_str = NULL;
-   const unsigned *program =
-      brw_compile_tcs(compiler, &ice->dbg, mem_ctx, &key_clean, tcs_prog_data, nir,
-                      -1, NULL, &error_str);
+
+   struct brw_compile_tcs_params params = {
+      .nir = nir,
+      .key = &key_clean,
+      .prog_data = tcs_prog_data,
+      .log_data = &ice->dbg,
+   };
+
+   const unsigned *program = brw_compile_tcs(compiler, mem_ctx, &params);
    if (program == NULL) {
-      dbg_printf("Failed to compile control shader: %s\n", error_str);
+      dbg_printf("Failed to compile control shader: %s\n", params.error_str);
       ralloc_free(mem_ctx);
       return false;
    }
@@ -1514,9 +1522,9 @@ crocus_update_compiled_tcs(struct crocus_context *ice)
    struct brw_tcs_prog_key key = {
       KEY_INIT_NO_ID(),
       .base.program_string_id = tcs ? tcs->program_id : 0,
-      .tes_primitive_mode = tes_info->tess.primitive_mode,
+      ._tes_primitive_mode = tes_info->tess._primitive_mode,
       .input_vertices = ice->state.vertices_per_patch,
-      .quads_workaround = tes_info->tess.primitive_mode == GL_QUADS &&
+      .quads_workaround = tes_info->tess._primitive_mode == TESS_PRIMITIVE_QUADS &&
                           tes_info->tess.spacing == TESS_SPACING_EQUAL,
    };
 
@@ -1578,6 +1586,9 @@ crocus_compile_tes(struct crocus_context *ice,
       nir_shader_gather_info(nir, impl);
    }
 
+   if (key->clamp_pointsize)
+      nir_lower_point_size(nir, 1.0, 255.0);
+
    crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
                          &num_system_values, &num_cbufs);
    crocus_lower_swizzles(nir, &key->base.tex);
@@ -1594,12 +1605,18 @@ crocus_compile_tes(struct crocus_context *ice,
 
    struct brw_tes_prog_key key_clean = *key;
    crocus_sanitize_tex_key(&key_clean.base.tex);
-   char *error_str = NULL;
-   const unsigned *program =
-      brw_compile_tes(compiler, &ice->dbg, mem_ctx, &key_clean, &input_vue_map,
-                      tes_prog_data, nir, -1, NULL, &error_str);
+
+   struct brw_compile_tes_params params = {
+      .nir = nir,
+      .key = &key_clean,
+      .prog_data = tes_prog_data,
+      .input_vue_map = &input_vue_map,
+      .log_data = &ice->dbg,
+   };
+
+   const unsigned *program = brw_compile_tes(compiler, mem_ctx, &params);
    if (program == NULL) {
-      dbg_printf("Failed to compile evaluation shader: %s\n", error_str);
+      dbg_printf("Failed to compile evaluation shader: %s\n", params.error_str);
       ralloc_free(mem_ctx);
       return false;
    }
@@ -1709,6 +1726,9 @@ crocus_compile_gs(struct crocus_context *ice,
       nir_shader_gather_info(nir, impl);
    }
 
+   if (key->clamp_pointsize)
+      nir_lower_point_size(nir, 1.0, 255.0);
+
    crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
                          &num_system_values, &num_cbufs);
    crocus_lower_swizzles(nir, &key->base.tex);
@@ -1728,12 +1748,16 @@ crocus_compile_gs(struct crocus_context *ice,
    struct brw_gs_prog_key key_clean = *key;
    crocus_sanitize_tex_key(&key_clean.base.tex);
 
-   char *error_str = NULL;
-   const unsigned *program =
-      brw_compile_gs(compiler, &ice->dbg, mem_ctx, &key_clean, gs_prog_data, nir,
-                     -1, NULL, &error_str);
+   struct brw_compile_gs_params params = {
+      .nir = nir,
+      .key = &key_clean,
+      .prog_data = gs_prog_data,
+      .log_data = &ice->dbg,
+   };
+
+   const unsigned *program = brw_compile_gs(compiler, mem_ctx, &params);
    if (program == NULL) {
-      dbg_printf("Failed to compile geometry shader: %s\n", error_str);
+      dbg_printf("Failed to compile geometry shader: %s\n", params.error_str);
       ralloc_free(mem_ctx);
       return false;
    }
@@ -2231,17 +2255,17 @@ crocus_update_compiled_sf(struct crocus_context *ice)
    key.attrs = ice->shaders.last_vue_map->slots_valid;
 
    switch (ice->state.reduced_prim_mode) {
-   case GL_TRIANGLES:
+   case PIPE_PRIM_TRIANGLES:
    default:
       if (key.attrs & BITFIELD64_BIT(VARYING_SLOT_EDGE))
          key.primitive = BRW_SF_PRIM_UNFILLED_TRIS;
       else
          key.primitive = BRW_SF_PRIM_TRIANGLES;
       break;
-   case GL_LINES:
+   case PIPE_PRIM_LINES:
       key.primitive = BRW_SF_PRIM_LINES;
       break;
-   case GL_POINTS:
+   case PIPE_PRIM_POINTS:
       key.primitive = BRW_SF_PRIM_POINTS;
       break;
    }
@@ -2763,13 +2787,12 @@ crocus_create_tcs_state(struct pipe_context *ctx,
 
    ish->nos |= (1ull << CROCUS_NOS_TEXTURES);
    if (screen->precompile) {
-      const unsigned _GL_TRIANGLES = 0x0004;
       struct brw_tcs_prog_key key = {
          KEY_INIT(),
          // XXX: make sure the linker fills this out from the TES...
-         .tes_primitive_mode =
-            info->tess.primitive_mode ? info->tess.primitive_mode
-                                      : _GL_TRIANGLES,
+         ._tes_primitive_mode =
+            info->tess._primitive_mode ? info->tess._primitive_mode
+                                      : TESS_PRIMITIVE_TRIANGLES,
          .outputs_written = info->outputs_written,
          .patch_outputs_written = info->patch_outputs_written,
       };

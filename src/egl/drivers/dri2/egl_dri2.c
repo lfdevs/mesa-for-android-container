@@ -1783,16 +1783,17 @@ dri2_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
    if (!_eglBindContext(ctx, dsurf, rsurf, &old_ctx, &old_dsurf, &old_rsurf))
       return EGL_FALSE;
 
+   if (old_ctx == ctx && old_dsurf == dsurf && old_rsurf == rsurf) {
+      _eglPutSurface(old_dsurf);
+      _eglPutSurface(old_rsurf);
+      _eglPutContext(old_ctx);
+      return EGL_TRUE;
+   }
+
    if (old_ctx) {
       __DRIcontext *old_cctx = dri2_egl_context(old_ctx)->dri_context;
       old_disp = old_ctx->Resource.Display;
       old_dri2_dpy = dri2_egl_display(old_disp);
-
-      /* flush before context switch */
-      dri2_gl_flush();
-
-      if (old_dsurf)
-         dri2_surf_update_fence_fd(old_ctx, disp, old_dsurf);
 
       /* Disable shared buffer mode */
       if (old_dsurf && _eglSurfaceInSharedBufferMode(old_dsurf) &&
@@ -1801,6 +1802,9 @@ dri2_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
       }
 
       dri2_dpy->core->unbindContext(old_cctx);
+
+      if (old_dsurf)
+         dri2_surf_update_fence_fd(old_ctx, disp, old_dsurf);
    }
 
    ddraw = (dsurf) ? dri2_dpy->vtbl->get_dri_drawable(dsurf) : NULL;
@@ -3598,7 +3602,7 @@ dri2_client_wait_sync(_EGLDisplay *disp, _EGLSync *sync,
             ret = cnd_timedwait(&dri2_sync->cond, &dri2_sync->mutex, &expire);
             mtx_unlock(&dri2_sync->mutex);
 
-            if (ret == thrd_busy) {
+            if (ret == thrd_timedout) {
                if (dri2_sync->base.SyncStatus == EGL_UNSIGNALED_KHR) {
                   ret = EGL_TIMEOUT_EXPIRED_KHR;
                } else {

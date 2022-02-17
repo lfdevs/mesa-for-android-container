@@ -22,18 +22,20 @@
  */
 
 #include "nir.h"
+#include "nir_gl_types.h"
 #include "nir_xfb_info.h"
 #include "gl_nir_linker.h"
 #include "linker_util.h"
-#include "main/context.h"
 #include "util/u_math.h"
+#include "main/shader_types.h"
+#include "main/consts_exts.h"
 
 /**
  * This file does the linking of GLSL transform feedback using NIR.
  */
 
 void
-gl_nir_link_assign_xfb_resources(struct gl_context *ctx,
+gl_nir_link_assign_xfb_resources(const struct gl_constants *consts,
                                  struct gl_shader_program *prog)
 {
    /*
@@ -151,7 +153,8 @@ gl_nir_link_assign_xfb_resources(struct gl_context *ctx,
          linked_xfb->Varyings + i;
 
       /* ARB_gl_spirv: see above. */
-      varying->Name = NULL;
+      varying->name.string = NULL;
+      resource_name_updated(&varying->name);
       varying->Type = glsl_get_gl_type(xfb_varying->type);
       varying->BufferIndex = buffer_index;
       varying->Size = glsl_type_is_array(xfb_varying->type) ?
@@ -177,7 +180,7 @@ gl_nir_link_assign_xfb_resources(struct gl_context *ctx,
     * tracking the number of buffers doesn't overflow.
     */
    unsigned buffers = 0;
-   assert(ctx->Const.MaxTransformFeedbackBuffers <= sizeof(buffers) * 8);
+   assert(consts->MaxTransformFeedbackBuffers <= sizeof(buffers) * 8);
 
    for (unsigned buf = 0; buf < MAX_FEEDBACK_BUFFERS; buf++) {
       if (xfb_info->buffers[buf].stride > 0) {

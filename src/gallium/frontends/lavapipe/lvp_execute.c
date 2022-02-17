@@ -41,6 +41,7 @@
 #include "util/u_prim.h"
 #include "util/u_prim_restart.h"
 #include "util/format/u_format_zs.h"
+#include "util/ptralloc.h"
 
 #include "vk_util.h"
 
@@ -140,7 +141,7 @@ struct rendering_state {
    uint8_t push_constants[128 * 4];
 
    const struct lvp_render_pass *pass;
-   uint32_t subpass;
+   struct lvp_subpass *subpass;
    const struct lvp_framebuffer *vk_framebuffer;
    VkRect2D render_area;
 
@@ -288,7 +289,7 @@ static void emit_state(struct rendering_state *state)
    }
 
    if (state->vb_dirty) {
-      cso_set_vertex_buffers(state->cso, state->start_vb, state->num_vb, state->vb);
+      cso_set_vertex_buffers(state->cso, state->start_vb, state->num_vb, 0, false, state->vb);
       state->vb_dirty = false;
    }
 
@@ -879,7 +880,7 @@ static void handle_vertex_buffers(struct vk_cmd_queue_entry *cmd,
 static void handle_vertex_buffers2(struct vk_cmd_queue_entry *cmd,
                                    struct rendering_state *state)
 {
-   struct vk_cmd_bind_vertex_buffers2_ext *vcb = &cmd->u.bind_vertex_buffers2_ext;
+   struct vk_cmd_bind_vertex_buffers2 *vcb = &cmd->u.bind_vertex_buffers2;
 
    vertex_buffers(vcb->first_binding,
                   vcb->binding_count,
@@ -1285,6 +1286,12 @@ static void handle_descriptor_sets(struct vk_cmd_queue_entry *cmd,
 
    for (i = 0; i < bds->descriptor_set_count; i++) {
       const struct lvp_descriptor_set *set = lvp_descriptor_set_from_handle(bds->descriptor_sets[i]);
+      /* verify that there's enough total offsets */
+      assert(set->layout->dynamic_offset_count <= dyn_info.dynamic_offset_count);
+      /* verify there's either no offsets... */
+      assert(!dyn_info.dynamic_offset_count ||
+             /* or that the total number of offsets required is <= the number remaining */
+             set->layout->dynamic_offset_count <= dyn_info.dynamic_offset_count - dyn_info.dyn_index);
 
       if (set->layout->shader_stages & VK_SHADER_STAGE_VERTEX_BIT)
          handle_set_stage(state, &dyn_info, set, MESA_SHADER_VERTEX, PIPE_SHADER_VERTEX);
@@ -1355,10 +1362,9 @@ static inline bool
 attachment_needs_clear(struct rendering_state *state,
                        uint32_t a)
 {
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    uint32_t view_mask = subpass->view_mask;
-   return (a != VK_ATTACHMENT_UNUSED &&
-           state->pending_clear_aspects[a] &&
+   return (state->pending_clear_aspects[a] &&
            (!view_mask || (view_mask & ~state->cleared_views[a])));
 }
 
@@ -1366,14 +1372,16 @@ static bool
 subpass_needs_clear(struct rendering_state *state)
 {
    uint32_t a;
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    for (uint32_t i = 0; i < subpass->color_count; i++) {
-      a = subpass->color_attachments[i].attachment;
+      if (!subpass->color_attachments[i])
+         continue;
+      a = subpass->color_attachments[i]->attachment;
       if (attachment_needs_clear(state, a))
          return true;
    }
-   if (subpass->depth_stencil_attachment) {
-      a = subpass->depth_stencil_attachment->attachment;
+   if (subpass->depth_stencil_attachment && *subpass->depth_stencil_attachment) {
+      a = subpass->depth_stencil_attachment[0]->attachment;
       if (attachment_needs_clear(state, a))
          return true;
    }
@@ -1426,10 +1434,12 @@ get_attachment(struct rendering_state *state,
 
 static void render_subpass_clear(struct rendering_state *state)
 {
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
 
    for (unsigned i = 0; i < subpass->color_count; i++) {
-      uint32_t a = subpass->color_attachments[i].attachment;
+      if (!subpass->color_attachments[i])
+         continue;
+      uint32_t a = subpass->color_attachments[i]->attachment;
 
       if (!attachment_needs_clear(state, a))
          continue;
@@ -1461,13 +1471,13 @@ static void render_subpass_clear(struct rendering_state *state)
       }
    }
 
-   if (subpass->depth_stencil_attachment) {
-      uint32_t ds = subpass->depth_stencil_attachment->attachment;
+   if (subpass->depth_stencil_attachment && subpass->depth_stencil_attachment[0]) {
+      uint32_t ds = subpass->depth_stencil_attachment[0]->attachment;
 
       if (!attachment_needs_clear(state, ds))
          return;
 
-      struct lvp_render_pass_attachment *att = &state->pass->attachments[ds];
+      struct lvp_render_pass_attachment *att = subpass->depth_stencil_attachment[0];
       struct lvp_image_view *imgv = get_attachment(state, ds);
 
       assert (util_format_is_depth_or_stencil(imgv->surface->format));
@@ -1516,7 +1526,7 @@ static void render_subpass_clear(struct rendering_state *state)
 static void render_subpass_clear_fast(struct rendering_state *state)
 {
    /* attempt to use the clear interface first, then fallback to per-attchment clears */
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    bool has_color_value = false;
    uint32_t buffers = 0;
    VkClearValue color_value = {0};
@@ -1538,7 +1548,9 @@ static void render_subpass_clear_fast(struct rendering_state *state)
    if (subpass->view_mask)
       goto slow_clear;
    for (unsigned i = 0; i < subpass->color_count; i++) {
-      uint32_t a = subpass->color_attachments[i].attachment;
+      if (!subpass->color_attachments[i])
+         continue;
+      uint32_t a = subpass->color_attachments[i]->attachment;
 
       if (!attachment_needs_clear(state, a))
          continue;
@@ -1553,7 +1565,9 @@ static void render_subpass_clear_fast(struct rendering_state *state)
    }
 
    for (unsigned i = 0; i < subpass->color_count; i++) {
-      uint32_t a = subpass->color_attachments[i].attachment;
+      if (!subpass->color_attachments[i])
+         continue;
+      uint32_t a = subpass->color_attachments[i]->attachment;
 
       if (!attachment_needs_clear(state, a))
          continue;
@@ -1561,11 +1575,11 @@ static void render_subpass_clear_fast(struct rendering_state *state)
       state->pending_clear_aspects[a] = 0;
    }
 
-   if (subpass->depth_stencil_attachment &&
-       attachment_needs_clear(state, subpass->depth_stencil_attachment->attachment)) {
-      uint32_t ds = subpass->depth_stencil_attachment->attachment;
+   if (subpass->depth_stencil_attachment && *subpass->depth_stencil_attachment &&
+       attachment_needs_clear(state, subpass->depth_stencil_attachment[0]->attachment)) {
+      uint32_t ds = subpass->depth_stencil_attachment[0]->attachment;
 
-      struct lvp_render_pass_attachment *att = &state->pass->attachments[ds];
+      struct lvp_render_pass_attachment *att = subpass->depth_stencil_attachment[0];
       struct lvp_image_view *imgv = get_attachment(state, ds);
       const struct util_format_description *desc = util_format_description(imgv->surface->format);
 
@@ -1595,72 +1609,71 @@ slow_clear:
 
 static void render_pass_resolve(struct rendering_state *state)
 {
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
 
-   if (subpass->depth_stencil_attachment && subpass->ds_resolve_attachment) {
-      struct lvp_subpass_attachment src_att = *subpass->depth_stencil_attachment;
-      struct lvp_subpass_attachment dst_att = *subpass->ds_resolve_attachment;
-      if (dst_att.attachment != VK_ATTACHMENT_UNUSED) {
-         int num_blits = 1;
-         if (subpass->depth_resolve_mode != subpass->stencil_resolve_mode)
-            num_blits = 2;
+   if (subpass->depth_stencil_attachment && *subpass->depth_stencil_attachment &&
+       subpass->ds_resolve_attachment && *subpass->ds_resolve_attachment) {
+      struct lvp_render_pass_attachment *src_att = *subpass->depth_stencil_attachment;
+      struct lvp_render_pass_attachment *dst_att = *subpass->ds_resolve_attachment;
+      int num_blits = 1;
+      if (subpass->depth_resolve_mode != subpass->stencil_resolve_mode)
+         num_blits = 2;
 
-         for (unsigned i = 0; i < num_blits; i++) {
+      for (unsigned i = 0; i < num_blits; i++) {
 
-            if (i == 0 && subpass->depth_resolve_mode == VK_RESOLVE_MODE_NONE)
-               continue;
+         if (i == 0 && subpass->depth_resolve_mode == VK_RESOLVE_MODE_NONE)
+            continue;
 
-            if (i == 1 && subpass->stencil_resolve_mode == VK_RESOLVE_MODE_NONE)
-               continue;
+         if (i == 1 && subpass->stencil_resolve_mode == VK_RESOLVE_MODE_NONE)
+            continue;
 
-            struct lvp_image_view *src_imgv = get_attachment(state, src_att.attachment);
-            struct lvp_image_view *dst_imgv = get_attachment(state, dst_att.attachment);
+         struct lvp_image_view *src_imgv = get_attachment(state, src_att->attachment);
+         struct lvp_image_view *dst_imgv = get_attachment(state, dst_att->attachment);
 
-            struct pipe_blit_info info;
-            memset(&info, 0, sizeof(info));
+         struct pipe_blit_info info;
+         memset(&info, 0, sizeof(info));
 
-            info.src.resource = src_imgv->image->bo;
-            info.dst.resource = dst_imgv->image->bo;
-            info.src.format = src_imgv->pformat;
-            info.dst.format = dst_imgv->pformat;
-            info.filter = PIPE_TEX_FILTER_NEAREST;
+         info.src.resource = src_imgv->image->bo;
+         info.dst.resource = dst_imgv->image->bo;
+         info.src.format = src_imgv->pformat;
+         info.dst.format = dst_imgv->pformat;
+         info.filter = PIPE_TEX_FILTER_NEAREST;
 
-            if (num_blits == 1)
-               info.mask = PIPE_MASK_ZS;
-            else if (i == 0)
-               info.mask = PIPE_MASK_Z;
-            else
-               info.mask = PIPE_MASK_S;
+         if (num_blits == 1)
+            info.mask = PIPE_MASK_ZS;
+         else if (i == 0)
+            info.mask = PIPE_MASK_Z;
+         else
+            info.mask = PIPE_MASK_S;
 
-            if (i == 0 && subpass->depth_resolve_mode == VK_RESOLVE_MODE_SAMPLE_ZERO_BIT)
-               info.sample0_only = true;
-            if (i == 1 && subpass->stencil_resolve_mode == VK_RESOLVE_MODE_SAMPLE_ZERO_BIT)
-               info.sample0_only = true;
+         if (i == 0 && subpass->depth_resolve_mode == VK_RESOLVE_MODE_SAMPLE_ZERO_BIT)
+            info.sample0_only = true;
+         if (i == 1 && subpass->stencil_resolve_mode == VK_RESOLVE_MODE_SAMPLE_ZERO_BIT)
+            info.sample0_only = true;
 
-            info.src.box.x = state->render_area.offset.x;
-            info.src.box.y = state->render_area.offset.y;
-            info.src.box.width = state->render_area.extent.width;
-            info.src.box.height = state->render_area.extent.height;
-            info.src.box.depth = state->vk_framebuffer->layers;
+         info.src.box.x = state->render_area.offset.x;
+         info.src.box.y = state->render_area.offset.y;
+         info.src.box.width = state->render_area.extent.width;
+         info.src.box.height = state->render_area.extent.height;
+         info.src.box.depth = state->vk_framebuffer->layers;
 
-            info.dst.box = info.src.box;
+         info.dst.box = info.src.box;
 
-            state->pctx->blit(state->pctx, &info);
-         }
+         state->pctx->blit(state->pctx, &info);
       }
    }
 
    if (!subpass->has_color_resolve)
       return;
    for (uint32_t i = 0; i < subpass->color_count; i++) {
-      struct lvp_subpass_attachment src_att = subpass->color_attachments[i];
-      struct lvp_subpass_attachment dst_att = subpass->resolve_attachments[i];
+      struct lvp_render_pass_attachment *src_att = subpass->color_attachments[i];
+      struct lvp_render_pass_attachment *dst_att = subpass->resolve_attachments[i];
 
-      if (dst_att.attachment == VK_ATTACHMENT_UNUSED)
+      if (!src_att || !dst_att)
          continue;
 
-      struct lvp_image_view *src_imgv = get_attachment(state, src_att.attachment);
-      struct lvp_image_view *dst_imgv = get_attachment(state, dst_att.attachment);
+      struct lvp_image_view *src_imgv = get_attachment(state, src_att->attachment);
+      struct lvp_image_view *dst_imgv = get_attachment(state, dst_att->attachment);
 
       struct pipe_blit_info info;
       memset(&info, 0, sizeof(info));
@@ -1675,7 +1688,7 @@ static void render_pass_resolve(struct rendering_state *state)
       info.src.box.y = state->render_area.offset.y;
       info.src.box.width = state->render_area.extent.width;
       info.src.box.height = state->render_area.extent.height;
-      info.src.box.depth = state->vk_framebuffer->layers;
+      info.src.box.depth = state->framebuffer.layers;
 
       info.dst.box = info.src.box;
 
@@ -1687,18 +1700,16 @@ static void render_pass_resolve(struct rendering_state *state)
 }
 
 static void begin_render_subpass(struct rendering_state *state,
-                                 int subpass_idx)
+                                 const struct lvp_subpass *subpass)
 {
-   state->subpass = subpass_idx;
-
+   state->subpass = (void*)subpass;
    state->framebuffer.nr_cbufs = 0;
 
-   const struct lvp_subpass *subpass = &state->pass->subpasses[subpass_idx];
    for (unsigned i = 0; i < subpass->color_count; i++) {
-      struct lvp_subpass_attachment *color_att = &subpass->color_attachments[i];
-      if (color_att->attachment != VK_ATTACHMENT_UNUSED) {
+      struct lvp_render_pass_attachment *color_att = subpass->color_attachments[i];
+      if (color_att) {
          struct lvp_image_view *imgv = get_attachment(state, color_att->attachment);
-         add_img_view_surface(state, imgv, state->pass->attachments[color_att->attachment].format, state->framebuffer.width, state->framebuffer.height);
+         add_img_view_surface(state, imgv, color_att->format, state->framebuffer.width, state->framebuffer.height);
          state->framebuffer.cbufs[state->framebuffer.nr_cbufs] = imgv->surface;
       } else
          state->framebuffer.cbufs[state->framebuffer.nr_cbufs] = NULL;
@@ -1706,11 +1717,11 @@ static void begin_render_subpass(struct rendering_state *state,
    }
 
    if (subpass->depth_stencil_attachment) {
-      struct lvp_subpass_attachment *ds_att = subpass->depth_stencil_attachment;
+      struct lvp_render_pass_attachment *ds_att = *subpass->depth_stencil_attachment;
 
-      if (ds_att->attachment != VK_ATTACHMENT_UNUSED) {
+      if (ds_att) {
          struct lvp_image_view *imgv = get_attachment(state, ds_att->attachment);
-         add_img_view_surface(state, imgv, state->pass->attachments[ds_att->attachment].format, state->framebuffer.width, state->framebuffer.height);
+         add_img_view_surface(state, imgv, ds_att->format, state->framebuffer.width, state->framebuffer.height);
          state->framebuffer.zsbuf = imgv->surface;
       }
    }
@@ -1734,25 +1745,28 @@ static void begin_render_pass(const VkRenderPassBeginInfo *render_pass_begin,
    state->pass = pass;
    state->vk_framebuffer = framebuffer;
    state->render_area = render_pass_begin->renderArea;
+   unsigned attachment_count;
 
    if (attachment_info) {
       state->imageless_views = realloc(state->imageless_views, sizeof(*state->imageless_views) * attachment_info->attachmentCount);
       for (unsigned i = 0; i < attachment_info->attachmentCount; i++)
          state->imageless_views[i] = lvp_image_view_from_handle(attachment_info->pAttachments[i]);
-   }
+      attachment_count = attachment_info->attachmentCount;
+   } else
+      attachment_count = framebuffer->attachment_count;
 
    state->framebuffer.width = state->vk_framebuffer->width;
    state->framebuffer.height = state->vk_framebuffer->height;
    state->framebuffer.layers = state->vk_framebuffer->layers;
 
-   if (state->num_pending_aspects < state->pass->attachment_count) {
-      state->pending_clear_aspects = realloc(state->pending_clear_aspects, sizeof(VkImageAspectFlags) * state->pass->attachment_count);
-      state->cleared_views = realloc(state->cleared_views, sizeof(uint32_t) * state->pass->attachment_count);
-      state->num_pending_aspects = state->pass->attachment_count;
+   if (state->num_pending_aspects < attachment_count) {
+      state->pending_clear_aspects = realloc(state->pending_clear_aspects, sizeof(VkImageAspectFlags) * attachment_count);
+      state->cleared_views = realloc(state->cleared_views, sizeof(uint32_t) * attachment_count);
+      state->num_pending_aspects = attachment_count;
    }
 
-   state->attachments = realloc(state->attachments, sizeof(*state->attachments) * pass->attachment_count);
-   for (unsigned i = 0; i < state->pass->attachment_count; i++) {
+   state->attachments = realloc(state->attachments, sizeof(*state->attachments) * attachment_count);
+   for (unsigned i = 0; i < attachment_count; i++) {
       struct lvp_render_pass_attachment *att = &pass->attachments[i];
       VkImageAspectFlags att_aspects = vk_format_aspects(att->format);
       VkImageAspectFlags clear_aspects = 0;
@@ -1782,7 +1796,7 @@ static void begin_render_pass(const VkRenderPassBeginInfo *render_pass_begin,
       state->pending_clear_aspects[i] = state->attachments[i].pending_clear_aspects;
       state->cleared_views[i] = 0;
    }
-   begin_render_subpass(state, 0);
+   begin_render_subpass(state, state->pass->subpasses);
 }
 
 
@@ -1798,8 +1812,174 @@ static void handle_begin_render_pass2(struct vk_cmd_queue_entry *cmd,
    begin_render_pass(cmd->u.begin_render_pass2.render_pass_begin, state);
 }
 
-static void handle_end_render_pass2(struct vk_cmd_queue_entry *cmd,
-                                    struct rendering_state *state)
+static VkAttachmentLoadOp
+get_load_op(VkAttachmentLoadOp op, bool resuming)
+{
+   if (!resuming)
+      return op;
+   if (op == VK_ATTACHMENT_LOAD_OP_CLEAR)
+      return VK_ATTACHMENT_LOAD_OP_LOAD;
+   return op;
+}
+
+static void handle_begin_rendering(struct vk_cmd_queue_entry *cmd,
+                                   struct rendering_state *state)
+{
+   const VkRenderingInfo *info = cmd->u.begin_rendering.rendering_info;
+   bool resuming = (info->flags & VK_RENDERING_RESUMING_BIT_KHR) == VK_RENDERING_RESUMING_BIT_KHR;
+   bool suspending = (info->flags & VK_RENDERING_SUSPENDING_BIT_KHR) == VK_RENDERING_SUSPENDING_BIT_KHR;
+   assert(!state->pass);
+   state->vk_framebuffer = NULL;
+   state->render_area = info->renderArea;
+
+   unsigned num_attachments = info->colorAttachmentCount + (info->pDepthAttachment || info->pStencilAttachment);
+   unsigned i, color_resolves = 0;
+   for (i = 0; i < info->colorAttachmentCount; i++) {
+      if (info->pColorAttachments[i].resolveImageView)
+         color_resolves++;
+   }
+   bool zresolve = info->pDepthAttachment && info->pDepthAttachment->resolveImageView;
+   bool sresolve = info->pStencilAttachment && info->pStencilAttachment->resolveImageView;
+   unsigned num_resolves = color_resolves + (zresolve || sresolve);
+   unsigned attachment_count = num_attachments + num_resolves;
+   state->imageless_views = realloc(state->imageless_views, sizeof(*state->imageless_views) * attachment_count);
+
+   state->render_area = info->renderArea;
+   state->framebuffer.width = info->renderArea.offset.x + info->renderArea.extent.width;
+   state->framebuffer.height = info->renderArea.offset.y + info->renderArea.extent.height;
+   state->framebuffer.layers = info->layerCount;
+
+   if (state->num_pending_aspects < attachment_count) {
+      state->pending_clear_aspects = realloc(state->pending_clear_aspects, sizeof(VkImageAspectFlags) * attachment_count);
+      state->cleared_views = realloc(state->cleared_views, sizeof(uint32_t) * attachment_count);
+      state->num_pending_aspects = attachment_count;
+   }
+   state->attachments = realloc(state->attachments, sizeof(*state->attachments) * attachment_count);
+
+   struct lvp_render_pass_attachment *attachments;
+   struct lvp_render_pass_attachment **attachment_refs;
+   /* [lvp_subpass] [attachment_count * lvp_render_pass_attachment] [attachment_count * lvp_render_pass_attachment*] */
+   size_t sizes[] = {attachment_count * sizeof(struct lvp_render_pass_attachment), attachment_count * sizeof(struct lvp_render_pass_attachment*)};
+   void **ptrs[] = {(void**)&attachments, (void**)&attachment_refs};
+   struct lvp_subpass *subpass = ptrzalloc(sizeof(struct lvp_subpass), 2, sizes, ptrs);
+   if (!subpass) {
+      mesa_loge("lavapipe: out of memory!");
+      return;
+   }
+   bool has_ds = !!info->pDepthAttachment + !!info->pStencilAttachment;
+   struct lvp_render_pass_attachment *resolve_attachments = num_resolves ? &attachments[subpass->color_count + has_ds] : NULL;
+   struct lvp_render_pass_attachment **resolve_attachment_refs = num_resolves ? &attachment_refs[subpass->color_count + has_ds] : NULL;
+   subpass->color_count = info->colorAttachmentCount;
+
+   subpass->view_mask = info->viewMask;
+   subpass->has_color_resolve = color_resolves > 0;
+   if (info->colorAttachmentCount)
+      subpass->color_attachments = attachment_refs;
+   if (has_ds)
+      subpass->depth_stencil_attachment = &attachment_refs[info->colorAttachmentCount];
+   if (color_resolves)
+      subpass->resolve_attachments = resolve_attachment_refs;
+   if (zresolve || sresolve)
+      subpass->ds_resolve_attachment = &resolve_attachment_refs[color_resolves];
+
+   unsigned resolve_idx = 0;
+   for (i = 0; i < info->colorAttachmentCount; i++) {
+      if (!info->pColorAttachments[i].imageView)
+         continue;
+      struct lvp_render_pass_attachment *att = &attachments[i];
+
+      att->attachment = i;
+      att->load_op = get_load_op(info->pColorAttachments[i].loadOp, resuming);
+      if (att->load_op == VK_ATTACHMENT_LOAD_OP_CLEAR) {
+         state->attachments[i].pending_clear_aspects = VK_IMAGE_ASPECT_COLOR_BIT;
+         state->attachments[i].clear_value = info->pColorAttachments[i].clearValue;
+      } else
+         state->attachments[i].pending_clear_aspects = 0;
+
+      state->pending_clear_aspects[i] = state->attachments[i].pending_clear_aspects;
+      state->cleared_views[i] = 0;
+
+      state->imageless_views[i] = lvp_image_view_from_handle(info->pColorAttachments[i].imageView);
+      att->format = state->imageless_views[i]->format;
+      att->samples = state->imageless_views[i]->image->bo->nr_samples;
+      attachment_refs[i] = att;
+      if (!suspending && info->pColorAttachments[i].resolveImageView) {
+         struct lvp_render_pass_attachment *resolve_att = &resolve_attachments[resolve_idx];
+         resolve_att->attachment = num_attachments + resolve_idx;
+         resolve_att->load_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+         state->imageless_views[num_attachments + resolve_idx] = lvp_image_view_from_handle(info->pColorAttachments[i].resolveImageView);
+         resolve_att->format = state->imageless_views[num_attachments + resolve_idx]->format;
+         resolve_att->samples = state->imageless_views[num_attachments + resolve_idx]->image->bo->nr_samples;
+         resolve_attachment_refs[resolve_idx] = resolve_att;
+         resolve_idx++;
+      }
+   }
+   if (info->pDepthAttachment && info->pDepthAttachment->imageView) {
+      struct lvp_render_pass_attachment *att = &attachments[i];
+
+      att->attachment = i;
+      att->load_op = get_load_op(info->pDepthAttachment->loadOp, resuming);
+      att->stencil_load_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      if (att->load_op == VK_ATTACHMENT_LOAD_OP_CLEAR) {
+         state->attachments[i].pending_clear_aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
+         state->attachments[i].clear_value = info->pDepthAttachment->clearValue;
+      } else
+         state->attachments[i].pending_clear_aspects = 0;
+
+      state->pending_clear_aspects[i] = state->attachments[i].pending_clear_aspects;
+      state->cleared_views[i] = 0;
+
+      state->imageless_views[i] = lvp_image_view_from_handle(info->pDepthAttachment->imageView);
+      att->format = state->imageless_views[i]->format;
+      att->samples = state->imageless_views[i]->image->bo->nr_samples;
+      attachment_refs[i] = att;
+      if (!suspending && info->pDepthAttachment->resolveImageView) {
+         struct lvp_render_pass_attachment *resolve_att = &resolve_attachments[resolve_idx];
+         resolve_att->attachment = num_attachments + resolve_idx;
+         resolve_att->load_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+         state->imageless_views[num_attachments + resolve_idx] = lvp_image_view_from_handle(info->pDepthAttachment->resolveImageView);
+         resolve_att->format = state->imageless_views[num_attachments + resolve_idx]->format;
+         resolve_att->samples = state->imageless_views[num_attachments + resolve_idx]->image->bo->nr_samples;
+         resolve_attachment_refs[resolve_idx] = resolve_att;
+      }
+   }
+   if (info->pStencilAttachment && info->pStencilAttachment->imageView) {
+      struct lvp_render_pass_attachment *att = &attachments[i];
+
+      att->attachment = i;
+      if (!info->pDepthAttachment)
+         att->load_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      att->stencil_load_op = get_load_op(info->pStencilAttachment->loadOp, resuming);
+      if (!info->pDepthAttachment)
+         state->attachments[i].pending_clear_aspects = 0;
+      if (att->stencil_load_op == VK_ATTACHMENT_LOAD_OP_CLEAR) {
+         state->attachments[i].pending_clear_aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
+         state->attachments[i].clear_value.depthStencil.stencil = info->pStencilAttachment->clearValue.depthStencil.stencil;
+      }
+
+      state->pending_clear_aspects[i] |= state->attachments[i].pending_clear_aspects;
+      state->cleared_views[i] = 0;
+
+      state->imageless_views[i] = lvp_image_view_from_handle(info->pStencilAttachment->imageView);
+      att->format = state->imageless_views[i]->format;
+      att->samples = state->imageless_views[i]->image->bo->nr_samples;
+      attachment_refs[i] = att;
+      if (!suspending && info->pStencilAttachment->resolveImageView) {
+         struct lvp_render_pass_attachment *resolve_att = &resolve_attachments[resolve_idx];
+         resolve_att->attachment = num_attachments + resolve_idx;
+         resolve_att->load_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+         state->imageless_views[num_attachments + resolve_idx] = lvp_image_view_from_handle(info->pStencilAttachment->resolveImageView);
+         resolve_att->format = state->imageless_views[num_attachments + resolve_idx]->format;
+         resolve_att->samples = state->imageless_views[num_attachments + resolve_idx]->image->bo->nr_samples;
+         resolve_attachment_refs[resolve_idx] = resolve_att;
+      }
+   }
+
+   begin_render_subpass(state, subpass);
+}
+
+static void
+end_rendering(struct rendering_state *state)
 {
    state->pctx->flush(state->pctx, NULL, 0);
 
@@ -1808,7 +1988,21 @@ static void handle_end_render_pass2(struct vk_cmd_queue_entry *cmd,
    free(state->attachments);
    state->attachments = NULL;
    state->pass = NULL;
-   state->subpass = 0;
+}
+
+static void handle_end_rendering(struct vk_cmd_queue_entry *cmd,
+                                 struct rendering_state *state)
+{
+   end_rendering(state);
+   free(state->subpass);
+   state->subpass = NULL;
+}
+
+static void handle_end_render_pass2(struct vk_cmd_queue_entry *cmd,
+                                    struct rendering_state *state)
+{
+   end_rendering(state);
+   state->subpass = NULL;
 }
 
 static void handle_next_subpass2(struct vk_cmd_queue_entry *cmd,
@@ -1823,7 +2017,7 @@ static void handle_next_subpass2(struct vk_cmd_queue_entry *cmd,
 static void handle_draw(struct vk_cmd_queue_entry *cmd,
                         struct rendering_state *state)
 {
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    struct pipe_draw_start_count_bias draw;
 
    state->info.index_size = 0;
@@ -1842,7 +2036,7 @@ static void handle_draw(struct vk_cmd_queue_entry *cmd,
 static void handle_draw_multi(struct vk_cmd_queue_entry *cmd,
                               struct rendering_state *state)
 {
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    struct pipe_draw_start_count_bias *draws = calloc(cmd->u.draw_multi_ext.draw_count,
                                                      sizeof(*draws));
 
@@ -1900,8 +2094,8 @@ static void handle_set_viewport_with_count(struct vk_cmd_queue_entry *cmd,
                                            struct rendering_state *state)
 {
    set_viewport(UINT32_MAX,
-                cmd->u.set_viewport_with_count_ext.viewport_count,
-                cmd->u.set_viewport_with_count_ext.viewports,
+                cmd->u.set_viewport_with_count.viewport_count,
+                cmd->u.set_viewport_with_count.viewports,
                 state);
 }
 
@@ -1941,8 +2135,8 @@ static void handle_set_scissor_with_count(struct vk_cmd_queue_entry *cmd,
                                           struct rendering_state *state)
 {
    set_scissor(UINT32_MAX,
-               cmd->u.set_scissor_with_count_ext.scissor_count,
-               cmd->u.set_scissor_with_count_ext.scissors,
+               cmd->u.set_scissor_with_count.scissor_count,
+               cmd->u.set_scissor_with_count.scissors,
                state);
 }
 
@@ -2118,11 +2312,11 @@ copy_depth_box(ubyte *dst,
    }
 }
 
-static void handle_copy_image_to_buffer2_khr(struct vk_cmd_queue_entry *cmd,
+static void handle_copy_image_to_buffer2(struct vk_cmd_queue_entry *cmd,
                                              struct rendering_state *state)
 {
    int i;
-   struct VkCopyImageToBufferInfo2KHR *copycmd = cmd->u.copy_image_to_buffer2_khr.copy_image_to_buffer_info;
+   struct VkCopyImageToBufferInfo2 *copycmd = cmd->u.copy_image_to_buffer2.copy_image_to_buffer_info;
    LVP_FROM_HANDLE(lvp_image, src_image, copycmd->srcImage);
    struct pipe_box box, dbox;
    struct pipe_transfer *src_t, *dst_t;
@@ -2203,7 +2397,7 @@ static void handle_copy_buffer_to_image(struct vk_cmd_queue_entry *cmd,
                                         struct rendering_state *state)
 {
    int i;
-   struct VkCopyBufferToImageInfo2KHR *copycmd = cmd->u.copy_buffer_to_image2_khr.copy_buffer_to_image_info;
+   struct VkCopyBufferToImageInfo2 *copycmd = cmd->u.copy_buffer_to_image2.copy_buffer_to_image_info;
    LVP_FROM_HANDLE(lvp_image, dst_image, copycmd->dstImage);
    struct pipe_box box, sbox;
    struct pipe_transfer *src_t, *dst_t;
@@ -2287,7 +2481,7 @@ static void handle_copy_image(struct vk_cmd_queue_entry *cmd,
                               struct rendering_state *state)
 {
    int i;
-   struct VkCopyImageInfo2KHR *copycmd = cmd->u.copy_image2_khr.copy_image_info;
+   struct VkCopyImageInfo2 *copycmd = cmd->u.copy_image2.copy_image_info;
    LVP_FROM_HANDLE(lvp_image, src_image, copycmd->srcImage);
    LVP_FROM_HANDLE(lvp_image, dst_image, copycmd->dstImage);
 
@@ -2325,7 +2519,7 @@ static void handle_copy_buffer(struct vk_cmd_queue_entry *cmd,
                                struct rendering_state *state)
 {
    int i;
-   struct VkCopyBufferInfo2KHR *copycmd = cmd->u.copy_buffer2_khr.copy_buffer_info;
+   VkCopyBufferInfo2 *copycmd = cmd->u.copy_buffer2.copy_buffer_info;
 
    for (i = 0; i < copycmd->regionCount; i++) {
       struct pipe_box box = { 0 };
@@ -2340,7 +2534,7 @@ static void handle_blit_image(struct vk_cmd_queue_entry *cmd,
                               struct rendering_state *state)
 {
    int i;
-   struct VkBlitImageInfo2KHR *blitcmd = cmd->u.blit_image2_khr.blit_image_info;
+   VkBlitImageInfo2 *blitcmd = cmd->u.blit_image2.blit_image_info;
    LVP_FROM_HANDLE(lvp_image, src_image, blitcmd->srcImage);
    LVP_FROM_HANDLE(lvp_image, dst_image, blitcmd->dstImage);
    struct pipe_blit_info info;
@@ -2465,7 +2659,7 @@ static void handle_update_buffer(struct vk_cmd_queue_entry *cmd,
 static void handle_draw_indexed(struct vk_cmd_queue_entry *cmd,
                                 struct rendering_state *state)
 {
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    struct pipe_draw_start_count_bias draw = {0};
 
    state->info.index_bounds_valid = false;
@@ -2493,7 +2687,7 @@ static void handle_draw_indexed(struct vk_cmd_queue_entry *cmd,
 static void handle_draw_multi_indexed(struct vk_cmd_queue_entry *cmd,
                                       struct rendering_state *state)
 {
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    struct pipe_draw_start_count_bias *draws = calloc(cmd->u.draw_multi_indexed_ext.draw_count,
                                                      sizeof(*draws));
 
@@ -2535,7 +2729,7 @@ static void handle_draw_multi_indexed(struct vk_cmd_queue_entry *cmd,
 static void handle_draw_indirect(struct vk_cmd_queue_entry *cmd,
                                  struct rendering_state *state, bool indexed)
 {
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    struct pipe_draw_start_count_bias draw = {0};
    if (indexed) {
       state->info.index_bounds_valid = false;
@@ -2955,17 +3149,17 @@ static void handle_clear_attachments(struct vk_cmd_queue_entry *cmd,
 {
    for (uint32_t a = 0; a < cmd->u.clear_attachments.attachment_count; a++) {
       VkClearAttachment *att = &cmd->u.clear_attachments.attachments[a];
-      const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+      const struct lvp_subpass *subpass = state->subpass;
       struct lvp_image_view *imgv;
 
       if (att->aspectMask == VK_IMAGE_ASPECT_COLOR_BIT) {
-         struct lvp_subpass_attachment *color_att = &subpass->color_attachments[att->colorAttachment];
-         if (!color_att || color_att->attachment == VK_ATTACHMENT_UNUSED)
+         struct lvp_render_pass_attachment *color_att = subpass->color_attachments[att->colorAttachment];
+         if (!color_att)
             continue;
          imgv = get_attachment(state, color_att->attachment);
       } else {
-         struct lvp_subpass_attachment *ds_att = subpass->depth_stencil_attachment;
-         if (!ds_att || ds_att->attachment == VK_ATTACHMENT_UNUSED)
+         struct lvp_render_pass_attachment *ds_att = *subpass->depth_stencil_attachment;
+         if (!ds_att)
             continue;
          imgv = get_attachment(state, ds_att->attachment);
       }
@@ -2989,6 +3183,9 @@ static void handle_clear_attachments(struct vk_cmd_queue_entry *cmd,
       for (uint32_t r = 0; r < cmd->u.clear_attachments.rect_count; r++) {
 
          VkClearRect *rect = &cmd->u.clear_attachments.rects[r];
+         /* avoid crashing on spec violations */
+         rect->rect.extent.width = MIN2(rect->rect.extent.width, state->framebuffer.width - rect->rect.offset.x);
+         rect->rect.extent.height = MIN2(rect->rect.extent.height, state->framebuffer.height - rect->rect.offset.y);
          if (subpass->view_mask) {
             u_foreach_bit(i, subpass->view_mask)
                clear_attachment_layers(state, imgv, &rect->rect,
@@ -3008,7 +3205,7 @@ static void handle_resolve_image(struct vk_cmd_queue_entry *cmd,
                                  struct rendering_state *state)
 {
    int i;
-   struct VkResolveImageInfo2KHR *resolvecmd = cmd->u.resolve_image2_khr.resolve_image_info;
+   VkResolveImageInfo2 *resolvecmd = cmd->u.resolve_image2.resolve_image_info;
    LVP_FROM_HANDLE(lvp_image, src_image, resolvecmd->srcImage);
    LVP_FROM_HANDLE(lvp_image, dst_image, resolvecmd->dstImage);
    struct pipe_blit_info info;
@@ -3058,7 +3255,7 @@ static void handle_resolve_image(struct vk_cmd_queue_entry *cmd,
 static void handle_draw_indirect_count(struct vk_cmd_queue_entry *cmd,
                                        struct rendering_state *state, bool indexed)
 {
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    struct pipe_draw_start_count_bias draw = {0};
    if (indexed) {
       state->info.index_bounds_valid = false;
@@ -3115,16 +3312,19 @@ static struct lvp_cmd_push_descriptor_set *create_push_descriptor_set(struct vk_
    LVP_FROM_HANDLE(lvp_pipeline_layout, layout, in_cmd->layout);
    struct lvp_cmd_push_descriptor_set *out_cmd;
    int count_descriptors = 0;
-   int cmd_size = sizeof(*out_cmd);
 
    for (unsigned i = 0; i < in_cmd->descriptor_write_count; i++) {
       count_descriptors += in_cmd->descriptor_writes[i].descriptorCount;
    }
-   cmd_size += count_descriptors * sizeof(union lvp_descriptor_info);
 
-   cmd_size += in_cmd->descriptor_write_count * sizeof(struct lvp_write_descriptor);
-
-   out_cmd = calloc(1, cmd_size);
+   void *descriptors;
+   void *infos;
+   void **ptrs[] = {&descriptors, &infos};
+   size_t sizes[] = {
+      in_cmd->descriptor_write_count * sizeof(struct lvp_write_descriptor),
+      count_descriptors * sizeof(union lvp_descriptor_info),
+   };
+   out_cmd = ptrzalloc(sizeof(struct lvp_cmd_push_descriptor_set), 2, sizes, ptrs);
    if (!out_cmd)
       return NULL;
 
@@ -3132,8 +3332,8 @@ static struct lvp_cmd_push_descriptor_set *create_push_descriptor_set(struct vk_
    out_cmd->layout = layout;
    out_cmd->set = in_cmd->set;
    out_cmd->descriptor_write_count = in_cmd->descriptor_write_count;
-   out_cmd->descriptors = (struct lvp_write_descriptor *)(out_cmd + 1);
-   out_cmd->infos = (union lvp_descriptor_info *)(out_cmd->descriptors + in_cmd->descriptor_write_count);
+   out_cmd->descriptors = descriptors;
+   out_cmd->infos = infos;
 
    unsigned descriptor_index = 0;
 
@@ -3416,7 +3616,7 @@ static void handle_draw_indirect_byte_count(struct vk_cmd_queue_entry *cmd,
                                             struct rendering_state *state)
 {
    struct vk_cmd_draw_indirect_byte_count_ext *dibc = &cmd->u.draw_indirect_byte_count_ext;
-   const struct lvp_subpass *subpass = &state->pass->subpasses[state->subpass];
+   const struct lvp_subpass *subpass = state->subpass;
    struct pipe_draw_start_count_bias draw = {0};
 
    pipe_buffer_read(state->pctx,
@@ -3496,21 +3696,21 @@ static void handle_set_vertex_input(struct vk_cmd_queue_entry *cmd,
 static void handle_set_cull_mode(struct vk_cmd_queue_entry *cmd,
                                  struct rendering_state *state)
 {
-   state->rs_state.cull_face = vk_cull_to_pipe(cmd->u.set_cull_mode_ext.cull_mode);
+   state->rs_state.cull_face = vk_cull_to_pipe(cmd->u.set_cull_mode.cull_mode);
    state->rs_dirty = true;
 }
 
 static void handle_set_front_face(struct vk_cmd_queue_entry *cmd,
                                   struct rendering_state *state)
 {
-   state->rs_state.front_ccw = (cmd->u.set_front_face_ext.front_face == VK_FRONT_FACE_COUNTER_CLOCKWISE);
+   state->rs_state.front_ccw = (cmd->u.set_front_face.front_face == VK_FRONT_FACE_COUNTER_CLOCKWISE);
    state->rs_dirty = true;
 }
 
 static void handle_set_primitive_topology(struct vk_cmd_queue_entry *cmd,
                                           struct rendering_state *state)
 {
-   state->info.mode = vk_conv_topology(cmd->u.set_primitive_topology_ext.primitive_topology);
+   state->info.mode = vk_conv_topology(cmd->u.set_primitive_topology.primitive_topology);
    state->rs_dirty = true;
 }
 
@@ -3518,55 +3718,55 @@ static void handle_set_primitive_topology(struct vk_cmd_queue_entry *cmd,
 static void handle_set_depth_test_enable(struct vk_cmd_queue_entry *cmd,
                                          struct rendering_state *state)
 {
-   state->dsa_dirty |= state->dsa_state.depth_enabled != cmd->u.set_depth_test_enable_ext.depth_test_enable;
-   state->dsa_state.depth_enabled = cmd->u.set_depth_test_enable_ext.depth_test_enable;
+   state->dsa_dirty |= state->dsa_state.depth_enabled != cmd->u.set_depth_test_enable.depth_test_enable;
+   state->dsa_state.depth_enabled = cmd->u.set_depth_test_enable.depth_test_enable;
 }
 
 static void handle_set_depth_write_enable(struct vk_cmd_queue_entry *cmd,
                                           struct rendering_state *state)
 {
-   state->dsa_dirty |= state->dsa_state.depth_writemask != cmd->u.set_depth_write_enable_ext.depth_write_enable;
-   state->dsa_state.depth_writemask = cmd->u.set_depth_write_enable_ext.depth_write_enable;
+   state->dsa_dirty |= state->dsa_state.depth_writemask != cmd->u.set_depth_write_enable.depth_write_enable;
+   state->dsa_state.depth_writemask = cmd->u.set_depth_write_enable.depth_write_enable;
 }
 
 static void handle_set_depth_compare_op(struct vk_cmd_queue_entry *cmd,
                                         struct rendering_state *state)
 {
-   state->dsa_dirty |= state->dsa_state.depth_func != cmd->u.set_depth_compare_op_ext.depth_compare_op;
-   state->dsa_state.depth_func = cmd->u.set_depth_compare_op_ext.depth_compare_op;
+   state->dsa_dirty |= state->dsa_state.depth_func != cmd->u.set_depth_compare_op.depth_compare_op;
+   state->dsa_state.depth_func = cmd->u.set_depth_compare_op.depth_compare_op;
 }
 
 static void handle_set_depth_bounds_test_enable(struct vk_cmd_queue_entry *cmd,
                                                 struct rendering_state *state)
 {
-   state->dsa_dirty |= state->dsa_state.depth_bounds_test != cmd->u.set_depth_bounds_test_enable_ext.depth_bounds_test_enable;
-   state->dsa_state.depth_bounds_test = cmd->u.set_depth_bounds_test_enable_ext.depth_bounds_test_enable;
+   state->dsa_dirty |= state->dsa_state.depth_bounds_test != cmd->u.set_depth_bounds_test_enable.depth_bounds_test_enable;
+   state->dsa_state.depth_bounds_test = cmd->u.set_depth_bounds_test_enable.depth_bounds_test_enable;
 }
 
 static void handle_set_stencil_test_enable(struct vk_cmd_queue_entry *cmd,
                                            struct rendering_state *state)
 {
-   state->dsa_dirty |= state->dsa_state.stencil[0].enabled != cmd->u.set_stencil_test_enable_ext.stencil_test_enable ||
-                       state->dsa_state.stencil[1].enabled != cmd->u.set_stencil_test_enable_ext.stencil_test_enable;
-   state->dsa_state.stencil[0].enabled = cmd->u.set_stencil_test_enable_ext.stencil_test_enable;
-   state->dsa_state.stencil[1].enabled = cmd->u.set_stencil_test_enable_ext.stencil_test_enable;
+   state->dsa_dirty |= state->dsa_state.stencil[0].enabled != cmd->u.set_stencil_test_enable.stencil_test_enable ||
+                       state->dsa_state.stencil[1].enabled != cmd->u.set_stencil_test_enable.stencil_test_enable;
+   state->dsa_state.stencil[0].enabled = cmd->u.set_stencil_test_enable.stencil_test_enable;
+   state->dsa_state.stencil[1].enabled = cmd->u.set_stencil_test_enable.stencil_test_enable;
 }
 
 static void handle_set_stencil_op(struct vk_cmd_queue_entry *cmd,
                                   struct rendering_state *state)
 {
-   if (cmd->u.set_stencil_op_ext.face_mask & VK_STENCIL_FACE_FRONT_BIT) {
-      state->dsa_state.stencil[0].func = cmd->u.set_stencil_op_ext.compare_op;
-      state->dsa_state.stencil[0].fail_op = vk_conv_stencil_op(cmd->u.set_stencil_op_ext.fail_op);
-      state->dsa_state.stencil[0].zpass_op = vk_conv_stencil_op(cmd->u.set_stencil_op_ext.pass_op);
-      state->dsa_state.stencil[0].zfail_op = vk_conv_stencil_op(cmd->u.set_stencil_op_ext.depth_fail_op);
+   if (cmd->u.set_stencil_op.face_mask & VK_STENCIL_FACE_FRONT_BIT) {
+      state->dsa_state.stencil[0].func = cmd->u.set_stencil_op.compare_op;
+      state->dsa_state.stencil[0].fail_op = vk_conv_stencil_op(cmd->u.set_stencil_op.fail_op);
+      state->dsa_state.stencil[0].zpass_op = vk_conv_stencil_op(cmd->u.set_stencil_op.pass_op);
+      state->dsa_state.stencil[0].zfail_op = vk_conv_stencil_op(cmd->u.set_stencil_op.depth_fail_op);
    }
 
-   if (cmd->u.set_stencil_op_ext.face_mask & VK_STENCIL_FACE_BACK_BIT) {
-      state->dsa_state.stencil[1].func = cmd->u.set_stencil_op_ext.compare_op;
-      state->dsa_state.stencil[1].fail_op = vk_conv_stencil_op(cmd->u.set_stencil_op_ext.fail_op);
-      state->dsa_state.stencil[1].zpass_op = vk_conv_stencil_op(cmd->u.set_stencil_op_ext.pass_op);
-      state->dsa_state.stencil[1].zfail_op = vk_conv_stencil_op(cmd->u.set_stencil_op_ext.depth_fail_op);
+   if (cmd->u.set_stencil_op.face_mask & VK_STENCIL_FACE_BACK_BIT) {
+      state->dsa_state.stencil[1].func = cmd->u.set_stencil_op.compare_op;
+      state->dsa_state.stencil[1].fail_op = vk_conv_stencil_op(cmd->u.set_stencil_op.fail_op);
+      state->dsa_state.stencil[1].zpass_op = vk_conv_stencil_op(cmd->u.set_stencil_op.pass_op);
+      state->dsa_state.stencil[1].zfail_op = vk_conv_stencil_op(cmd->u.set_stencil_op.depth_fail_op);
    }
    state->dsa_dirty = true;
 }
@@ -3582,8 +3782,8 @@ static void handle_set_line_stipple(struct vk_cmd_queue_entry *cmd,
 static void handle_set_depth_bias_enable(struct vk_cmd_queue_entry *cmd,
                                          struct rendering_state *state)
 {
-   state->rs_dirty |= state->depth_bias.enabled != cmd->u.set_depth_bias_enable_ext.depth_bias_enable;
-   state->depth_bias.enabled = cmd->u.set_depth_bias_enable_ext.depth_bias_enable;
+   state->rs_dirty |= state->depth_bias.enabled != cmd->u.set_depth_bias_enable.depth_bias_enable;
+   state->depth_bias.enabled = cmd->u.set_depth_bias_enable.depth_bias_enable;
 }
 
 static void handle_set_logic_op(struct vk_cmd_queue_entry *cmd,
@@ -3603,14 +3803,14 @@ static void handle_set_patch_control_points(struct vk_cmd_queue_entry *cmd,
 static void handle_set_primitive_restart_enable(struct vk_cmd_queue_entry *cmd,
                                                 struct rendering_state *state)
 {
-   state->info.primitive_restart = cmd->u.set_primitive_restart_enable_ext.primitive_restart_enable;
+   state->info.primitive_restart = cmd->u.set_primitive_restart_enable.primitive_restart_enable;
 }
 
 static void handle_set_rasterizer_discard_enable(struct vk_cmd_queue_entry *cmd,
                                                  struct rendering_state *state)
 {
-   state->rs_dirty |= state->rs_state.rasterizer_discard != cmd->u.set_rasterizer_discard_enable_ext.rasterizer_discard_enable;
-   state->rs_state.rasterizer_discard = cmd->u.set_rasterizer_discard_enable_ext.rasterizer_discard_enable;
+   state->rs_dirty |= state->rs_state.rasterizer_discard != cmd->u.set_rasterizer_discard_enable.rasterizer_discard_enable;
+   state->rs_state.rasterizer_discard = cmd->u.set_rasterizer_discard_enable.rasterizer_discard_enable;
 }
 
 static void handle_set_color_write_enable(struct vk_cmd_queue_entry *cmd,
@@ -3645,13 +3845,13 @@ static void lvp_execute_cmd_buffer(struct lvp_cmd_buffer *cmd_buffer,
       case VK_CMD_SET_VIEWPORT:
          handle_set_viewport(cmd, state);
          break;
-      case VK_CMD_SET_VIEWPORT_WITH_COUNT_EXT:
+      case VK_CMD_SET_VIEWPORT_WITH_COUNT:
          handle_set_viewport_with_count(cmd, state);
          break;
       case VK_CMD_SET_SCISSOR:
          handle_set_scissor(cmd, state);
          break;
-      case VK_CMD_SET_SCISSOR_WITH_COUNT_EXT:
+      case VK_CMD_SET_SCISSOR_WITH_COUNT:
          handle_set_scissor_with_count(cmd, state);
          break;
       case VK_CMD_SET_LINE_WIDTH:
@@ -3684,7 +3884,7 @@ static void lvp_execute_cmd_buffer(struct lvp_cmd_buffer *cmd_buffer,
       case VK_CMD_BIND_VERTEX_BUFFERS:
          handle_vertex_buffers(cmd, state);
          break;
-      case VK_CMD_BIND_VERTEX_BUFFERS2_EXT:
+      case VK_CMD_BIND_VERTEX_BUFFERS2:
          handle_vertex_buffers2(cmd, state);
          break;
       case VK_CMD_DRAW:
@@ -3723,20 +3923,20 @@ static void lvp_execute_cmd_buffer(struct lvp_cmd_buffer *cmd_buffer,
          emit_compute_state(state);
          handle_dispatch_indirect(cmd, state);
          break;
-      case VK_CMD_COPY_BUFFER2_KHR:
+      case VK_CMD_COPY_BUFFER2:
          handle_copy_buffer(cmd, state);
          break;
-      case VK_CMD_COPY_IMAGE2_KHR:
+      case VK_CMD_COPY_IMAGE2:
          handle_copy_image(cmd, state);
          break;
-      case VK_CMD_BLIT_IMAGE2_KHR:
+      case VK_CMD_BLIT_IMAGE2:
          handle_blit_image(cmd, state);
          break;
-      case VK_CMD_COPY_BUFFER_TO_IMAGE2_KHR:
+      case VK_CMD_COPY_BUFFER_TO_IMAGE2:
          handle_copy_buffer_to_image(cmd, state);
          break;
-      case VK_CMD_COPY_IMAGE_TO_BUFFER2_KHR:
-         handle_copy_image_to_buffer2_khr(cmd, state);
+      case VK_CMD_COPY_IMAGE_TO_BUFFER2:
+         handle_copy_image_to_buffer2(cmd, state);
          break;
       case VK_CMD_UPDATE_BUFFER:
          handle_update_buffer(cmd, state);
@@ -3753,7 +3953,7 @@ static void lvp_execute_cmd_buffer(struct lvp_cmd_buffer *cmd_buffer,
       case VK_CMD_CLEAR_ATTACHMENTS:
          handle_clear_attachments(cmd, state);
          break;
-      case VK_CMD_RESOLVE_IMAGE2_KHR:
+      case VK_CMD_RESOLVE_IMAGE2:
          handle_resolve_image(cmd, state);
          break;
       case VK_CMD_SET_EVENT:
@@ -3851,37 +4051,37 @@ static void lvp_execute_cmd_buffer(struct lvp_cmd_buffer *cmd_buffer,
       case VK_CMD_SET_VERTEX_INPUT_EXT:
          handle_set_vertex_input(cmd, state);
          break;
-      case VK_CMD_SET_CULL_MODE_EXT:
+      case VK_CMD_SET_CULL_MODE:
          handle_set_cull_mode(cmd, state);
          break;
-      case VK_CMD_SET_FRONT_FACE_EXT:
+      case VK_CMD_SET_FRONT_FACE:
          handle_set_front_face(cmd, state);
          break;
-      case VK_CMD_SET_PRIMITIVE_TOPOLOGY_EXT:
+      case VK_CMD_SET_PRIMITIVE_TOPOLOGY:
          handle_set_primitive_topology(cmd, state);
          break;
-      case VK_CMD_SET_DEPTH_TEST_ENABLE_EXT:
+      case VK_CMD_SET_DEPTH_TEST_ENABLE:
          handle_set_depth_test_enable(cmd, state);
          break;
-      case VK_CMD_SET_DEPTH_WRITE_ENABLE_EXT:
+      case VK_CMD_SET_DEPTH_WRITE_ENABLE:
          handle_set_depth_write_enable(cmd, state);
          break;
-      case VK_CMD_SET_DEPTH_COMPARE_OP_EXT:
+      case VK_CMD_SET_DEPTH_COMPARE_OP:
          handle_set_depth_compare_op(cmd, state);
          break;
-      case VK_CMD_SET_DEPTH_BOUNDS_TEST_ENABLE_EXT:
+      case VK_CMD_SET_DEPTH_BOUNDS_TEST_ENABLE:
          handle_set_depth_bounds_test_enable(cmd, state);
          break;
-      case VK_CMD_SET_STENCIL_TEST_ENABLE_EXT:
+      case VK_CMD_SET_STENCIL_TEST_ENABLE:
          handle_set_stencil_test_enable(cmd, state);
          break;
-      case VK_CMD_SET_STENCIL_OP_EXT:
+      case VK_CMD_SET_STENCIL_OP:
          handle_set_stencil_op(cmd, state);
          break;
       case VK_CMD_SET_LINE_STIPPLE_EXT:
          handle_set_line_stipple(cmd, state);
          break;
-      case VK_CMD_SET_DEPTH_BIAS_ENABLE_EXT:
+      case VK_CMD_SET_DEPTH_BIAS_ENABLE:
          handle_set_depth_bias_enable(cmd, state);
          break;
       case VK_CMD_SET_LOGIC_OP_EXT:
@@ -3890,14 +4090,20 @@ static void lvp_execute_cmd_buffer(struct lvp_cmd_buffer *cmd_buffer,
       case VK_CMD_SET_PATCH_CONTROL_POINTS_EXT:
          handle_set_patch_control_points(cmd, state);
          break;
-      case VK_CMD_SET_PRIMITIVE_RESTART_ENABLE_EXT:
+      case VK_CMD_SET_PRIMITIVE_RESTART_ENABLE:
          handle_set_primitive_restart_enable(cmd, state);
          break;
-      case VK_CMD_SET_RASTERIZER_DISCARD_ENABLE_EXT:
+      case VK_CMD_SET_RASTERIZER_DISCARD_ENABLE:
          handle_set_rasterizer_discard_enable(cmd, state);
          break;
       case VK_CMD_SET_COLOR_WRITE_ENABLE_EXT:
          handle_set_color_write_enable(cmd, state);
+         break;
+      case VK_CMD_BEGIN_RENDERING:
+         handle_begin_rendering(cmd, state);
+         break;
+      case VK_CMD_END_RENDERING:
+         handle_end_rendering(cmd, state);
          break;
       case VK_CMD_SET_DEVICE_MASK:
          /* no-op */

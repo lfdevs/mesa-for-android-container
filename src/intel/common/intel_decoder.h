@@ -159,6 +159,7 @@ struct intel_type {
       INTEL_TYPE_UFIXED,
       INTEL_TYPE_SFIXED,
       INTEL_TYPE_MBO,
+      INTEL_TYPE_MBZ,
       INTEL_TYPE_ENUM
    } kind;
 

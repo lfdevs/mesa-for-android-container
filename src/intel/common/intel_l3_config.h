@@ -96,6 +96,7 @@ enum intel_urb_deref_block_size {
    INTEL_URB_DEREF_BLOCK_SIZE_32         = 0,
    INTEL_URB_DEREF_BLOCK_SIZE_PER_POLY   = 1,
    INTEL_URB_DEREF_BLOCK_SIZE_8          = 2,
+   INTEL_URB_DEREF_BLOCK_SIZE_MESH       = 3,
 };
 
 void intel_get_urb_config(const struct intel_device_info *devinfo,
@@ -105,5 +106,22 @@ void intel_get_urb_config(const struct intel_device_info *devinfo,
                           unsigned entries[4], unsigned start[4],
                           enum intel_urb_deref_block_size *deref_block_size,
                           bool *constrained);
+
+struct intel_mesh_urb_allocation {
+   unsigned task_entries;
+   unsigned task_entry_size_64b;
+   unsigned task_starting_address_8kb;
+
+   unsigned mesh_entries;
+   unsigned mesh_entry_size_64b;
+   unsigned mesh_starting_address_8kb;
+
+   enum intel_urb_deref_block_size deref_block_size;
+};
+
+struct intel_mesh_urb_allocation
+intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
+                          const struct intel_l3_config *l3_cfg,
+                          unsigned tue_size_dw, unsigned mue_size_dw);
 
 #endif /* INTEL_L3_CONFIG_H */

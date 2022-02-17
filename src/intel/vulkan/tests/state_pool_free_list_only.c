@@ -64,5 +64,6 @@ int main(void)
    run_state_pool_test(&state_pool);
 
    anv_state_pool_finish(&state_pool);
+   anv_bo_cache_finish(&device.bo_cache);
    pthread_mutex_destroy(&device.mutex);
 }

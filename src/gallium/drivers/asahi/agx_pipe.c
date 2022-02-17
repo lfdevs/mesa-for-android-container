@@ -760,6 +760,7 @@ agx_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
    case PIPE_CAP_SURFACE_SAMPLE_COUNT:
+   case PIPE_CAP_SAMPLE_SHADING:
       return is_deqp;
 
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
@@ -781,9 +782,9 @@ agx_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
    case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
-      return 130;
+      return is_deqp ? 330 : 130;
    case PIPE_CAP_ESSL_FEATURE_LEVEL:
-      return 120;
+      return is_deqp ? 320 : 120;
 
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 16;
@@ -821,7 +822,7 @@ agx_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_VERTEX_ELEMENT_SRC_OFFSET:
       return 0xffff;
 
-   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+   case PIPE_CAP_TEXTURE_TRANSFER_MODES:
       return 0;
 
    case PIPE_CAP_ENDIANNESS:
@@ -862,12 +863,22 @@ agx_get_paramf(struct pipe_screen* pscreen,
                enum pipe_capf param)
 {
    switch (param) {
+   case PIPE_CAPF_MIN_LINE_WIDTH:
+   case PIPE_CAPF_MIN_LINE_WIDTH_AA:
+   case PIPE_CAPF_MIN_POINT_SIZE:
+   case PIPE_CAPF_MIN_POINT_SIZE_AA:
+      return 1;
+
+   case PIPE_CAPF_POINT_SIZE_GRANULARITY:
+   case PIPE_CAPF_LINE_WIDTH_GRANULARITY:
+      return 0.1;
+
    case PIPE_CAPF_MAX_LINE_WIDTH:
    case PIPE_CAPF_MAX_LINE_WIDTH_AA:
       return 16.0; /* Off-by-one fixed point 4:4 encoding */
 
-   case PIPE_CAPF_MAX_POINT_WIDTH:
-   case PIPE_CAPF_MAX_POINT_WIDTH_AA:
+   case PIPE_CAPF_MAX_POINT_SIZE:
+   case PIPE_CAPF_MAX_POINT_SIZE_AA:
       return 511.95f;
 
    case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
@@ -1114,6 +1125,19 @@ agx_screen_create(struct sw_winsys *winsys)
    if (!agx_open_device(screen, &agx_screen->dev)) {
       ralloc_free(agx_screen);
       return NULL;
+   }
+
+   if (agx_screen->dev.debug & AGX_DBG_DEQP) {
+      /* You're on your own. */
+      static bool warned_about_hacks = false;
+
+      if (!warned_about_hacks) {
+         fprintf(stderr, "\n------------------\n"
+                         "Unsupported debug parameter set. Expect breakage.\n"
+                         "Do not report bugs.\n"
+                         "------------------\n\n");
+         warned_about_hacks = true;
+      }
    }
 
    screen->destroy = agx_destroy_screen;

@@ -208,7 +208,7 @@ static uint32_t bo2idx(struct etna_cmd_stream *stream, struct etna_bo *bo,
 }
 
 void etna_cmd_stream_flush(struct etna_cmd_stream *stream, int in_fence_fd,
-		int *out_fence_fd)
+		int *out_fence_fd, bool is_noop)
 {
 	struct etna_cmd_stream_priv *priv = etna_cmd_stream_priv(stream);
 	int ret, id = priv->pipe->id;
@@ -238,8 +238,11 @@ void etna_cmd_stream_flush(struct etna_cmd_stream *stream, int in_fence_fd,
 	if (gpu->dev->use_softpin)
 		req.flags |= ETNA_SUBMIT_SOFTPIN;
 
-	ret = drmCommandWriteRead(gpu->dev->fd, DRM_ETNAVIV_GEM_SUBMIT,
-			&req, sizeof(req));
+	if (unlikely(is_noop))
+		ret = 0;
+	else
+		ret = drmCommandWriteRead(gpu->dev->fd, DRM_ETNAVIV_GEM_SUBMIT,
+				&req, sizeof(req));
 
 	if (ret)
 		ERROR_MSG("submit failed: %d (%s)", ret, strerror(errno));

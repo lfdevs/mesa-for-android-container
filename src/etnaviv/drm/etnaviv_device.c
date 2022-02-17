@@ -30,6 +30,9 @@
 #include "etnaviv_priv.h"
 #include "etnaviv_drmif.h"
 
+/* Declare symbol in case we don't link with etnaviv's gallium driver */
+int etna_mesa_debug __attribute__((weak)) = 0;
+
 struct etna_device *etna_device_new(int fd)
 {
 	struct etna_device *dev;
@@ -69,6 +72,7 @@ out:
 	if (!ret && req.value != ~0ULL) {
 		const uint64_t _4GB = 1ull << 32;
 
+		list_inithead(&dev->zombie_list);
 		util_vma_heap_init(&dev->address_space, req.value, _4GB - req.value);
 		dev->use_softpin = 1;
 	}
@@ -102,8 +106,10 @@ static void etna_device_del_impl(struct etna_device *dev)
 {
 	etna_bo_cache_cleanup(&dev->bo_cache, 0);
 
-	if (dev->use_softpin)
+	if (dev->use_softpin) {
+		etna_bo_kill_zombies(dev);
 		util_vma_heap_finish(&dev->address_space);
+	}
 
 	_mesa_hash_table_destroy(dev->handle_table, NULL);
 	_mesa_hash_table_destroy(dev->name_table, NULL);

@@ -132,8 +132,10 @@ gallivm_get_shader_param(enum pipe_shader_cap param)
       return 1;
    case PIPE_SHADER_CAP_FP16:
    case PIPE_SHADER_CAP_FP16_DERIVATIVES:
-   case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
       return lp_has_fp16();
+   //enabling this breaks GTF-GL46.gtf21.GL2Tests.glGetUniform.glGetUniform
+   case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
+      return 0;
    case PIPE_SHADER_CAP_INT64_ATOMICS:
       return 0;
    case PIPE_SHADER_CAP_INT16:

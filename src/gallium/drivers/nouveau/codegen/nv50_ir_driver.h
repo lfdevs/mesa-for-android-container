@@ -73,6 +73,7 @@ struct nv50_ir_prog_symbol
    uint32_t offset;
 };
 
+#define NVISA_G80_CHIPSET      0x50
 #define NVISA_GF100_CHIPSET    0xc0
 #define NVISA_GK104_CHIPSET    0xe0
 #define NVISA_GK20A_CHIPSET    0xea

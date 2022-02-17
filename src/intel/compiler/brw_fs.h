@@ -97,14 +97,12 @@ public:
               struct brw_stage_prog_data *prog_data,
               const nir_shader *shader,
               unsigned dispatch_width,
-              int shader_time_index,
               bool debug_enabled);
    fs_visitor(const struct brw_compiler *compiler, void *log_data,
               void *mem_ctx,
               struct brw_gs_compile *gs_compile,
               struct brw_gs_prog_data *prog_data,
               const nir_shader *shader,
-              int shader_time_index,
               bool debug_enabled);
    void init();
    ~fs_visitor();
@@ -127,6 +125,8 @@ public:
    bool run_gs();
    bool run_cs(bool allow_spilling);
    bool run_bs(bool allow_spilling);
+   bool run_task(bool allow_spilling);
+   bool run_mesh(bool allow_spilling);
    void optimize();
    void allocate_registers(bool allow_spilling);
    void setup_fs_payload_gfx4();
@@ -148,7 +148,7 @@ public:
    void assign_regs_trivial();
    void calculate_payload_ranges(int payload_node_count,
                                  int *payload_last_use_ip) const;
-   void split_virtual_grfs();
+   bool split_virtual_grfs();
    bool compact_virtual_grfs();
    void assign_constant_locations();
    bool get_pull_locs(const fs_reg &src, unsigned *out_surf_index,
@@ -202,18 +202,16 @@ public:
    void emit_dummy_fs();
    void emit_repclear_shader();
    void emit_fragcoord_interpolation(fs_reg wpos);
-   fs_reg *emit_frontfacing_interpolation();
-   fs_reg *emit_samplepos_setup();
-   fs_reg *emit_sampleid_setup();
-   fs_reg *emit_samplemaskin_setup();
-   fs_reg *emit_shading_rate_setup();
+   fs_reg emit_frontfacing_interpolation();
+   fs_reg emit_samplepos_setup();
+   fs_reg emit_sampleid_setup();
+   fs_reg emit_samplemaskin_setup();
+   fs_reg emit_shading_rate_setup();
    void emit_interpolation_setup_gfx4();
    void emit_interpolation_setup_gfx6();
-   void compute_sample_position(fs_reg dst, fs_reg int_sample_pos);
    fs_reg emit_mcs_fetch(const fs_reg &coordinate, unsigned components,
                          const fs_reg &texture,
                          const fs_reg &texture_handle);
-   void emit_gfx6_gather_wa(uint8_t wa, fs_reg dst);
    fs_reg resolve_source_modifiers(const fs_reg &src);
    void emit_fsign(const class brw::fs_builder &, const nir_alu_instr *instr,
                    fs_reg result, fs_reg *op, unsigned fsign_src);
@@ -254,6 +252,12 @@ public:
                               nir_intrinsic_instr *instr);
    void nir_emit_bs_intrinsic(const brw::fs_builder &bld,
                               nir_intrinsic_instr *instr);
+   void nir_emit_task_intrinsic(const brw::fs_builder &bld,
+                                nir_intrinsic_instr *instr);
+   void nir_emit_mesh_intrinsic(const brw::fs_builder &bld,
+                                nir_intrinsic_instr *instr);
+   void nir_emit_task_mesh_intrinsic(const brw::fs_builder &bld,
+                                     nir_intrinsic_instr *instr);
    fs_reg get_nir_image_intrinsic_image(const brw::fs_builder &bld,
                                         nir_intrinsic_instr *instr);
    fs_reg get_nir_ssbo_intrinsic_index(const brw::fs_builder &bld,
@@ -319,19 +323,19 @@ public:
                            unsigned base_offset, const nir_src &offset_src,
                            unsigned num_components, unsigned first_component);
    void emit_cs_terminate();
-   fs_reg *emit_cs_work_group_id_setup();
+   fs_reg emit_work_group_id_setup();
+
+   void emit_task_mesh_store(const brw::fs_builder &bld,
+                             nir_intrinsic_instr *instr);
+   void emit_task_mesh_load(const brw::fs_builder &bld,
+                            nir_intrinsic_instr *instr);
 
    void emit_barrier();
-
-   void emit_shader_time_begin();
-   void emit_shader_time_end();
-   void SHADER_TIME_ADD(const brw::fs_builder &bld,
-                        int shader_time_subindex,
-                        fs_reg value);
 
    fs_reg get_timestamp(const brw::fs_builder &bld);
 
    fs_reg interp_reg(int location, int channel);
+   fs_reg per_primitive_reg(int location);
 
    virtual void dump_instructions() const;
    virtual void dump_instructions(const char *name) const;
@@ -354,12 +358,6 @@ public:
 
    /** Byte-offset for the next available spot in the scratch space buffer. */
    unsigned last_scratch;
-
-   /**
-    * Array mapping UNIFORM register numbers to the pull parameter index,
-    * or -1 if this uniform register isn't being uploaded as a pull constant.
-    */
-   int *pull_constant_loc;
 
    /**
     * Array mapping UNIFORM register numbers to the push parameter index,
@@ -422,8 +420,6 @@ public:
 
    const unsigned dispatch_width; /**< 8, 16 or 32 */
    unsigned max_dispatch_width;
-
-   int shader_time_index;
 
    struct shader_stats shader_stats;
 
@@ -545,11 +541,6 @@ private:
                                       struct brw_reg x,
                                       struct brw_reg y);
 
-   void generate_shader_time_add(fs_inst *inst,
-                                 struct brw_reg payload,
-                                 struct brw_reg offset,
-                                 struct brw_reg value);
-
    void generate_mov_indirect(fs_inst *inst,
                               struct brw_reg dst,
                               struct brw_reg reg,
@@ -660,5 +651,7 @@ uint32_t brw_fb_write_msg_control(const fs_inst *inst,
                                   const struct brw_wm_prog_data *prog_data);
 
 void brw_compute_urb_setup_index(struct brw_wm_prog_data *wm_prog_data);
+
+void brw_nir_lower_simd(nir_shader *nir, unsigned dispatch_width);
 
 #endif /* BRW_FS_H */

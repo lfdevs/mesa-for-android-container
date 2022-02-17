@@ -200,7 +200,7 @@ image_address(nir_builder *b, const struct intel_device_info *devinfo,
       /* Multiply by the Bpp value. */
       addr = nir_imul(b, idx, nir_channel(b, stride, 0));
 
-      if (devinfo->ver < 8 && !devinfo->is_baytrail) {
+      if (devinfo->ver < 8 && devinfo->platform != INTEL_PLATFORM_BYT) {
          /* Take into account the two dynamically specified shifts.  Both are
           * used to implement swizzling of X-tiled surfaces.  For Y-tiled
           * surfaces only one bit needs to be XOR-ed with bit 6 of the memory

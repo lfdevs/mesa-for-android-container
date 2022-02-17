@@ -1109,7 +1109,7 @@ alloc_resource_struct(struct pipe_screen *pscreen,
 
    pipe_reference_init(&rsc->track->reference, 1);
 
-   threaded_resource_init(prsc);
+   threaded_resource_init(prsc, false, 0);
 
    if (tmpl->target == PIPE_BUFFER)
       rsc->b.buffer_id_unique = util_idalloc_mt_alloc(&screen->buffer_ids);
@@ -1382,6 +1382,7 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
    fd_resource_set_bo(rsc, bo);
 
    rsc->internal_format = tmpl->format;
+   rsc->layout.layer_first = true;
    rsc->layout.pitch0 = handle->stride;
    slice->offset = handle->offset;
    slice->size0 = handle->stride * prsc->height0;

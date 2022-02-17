@@ -88,6 +88,7 @@
 #include "intel/common/intel_l3_config.h"
 #include "intel/common/intel_sample_positions.h"
 #include "intel/compiler/brw_compiler.h"
+#include "compiler/shader_info.h"
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
@@ -111,6 +112,7 @@
 
 #include "crocus_genx_macros.h"
 #include "intel/common/intel_guardband.h"
+#include "main/macros.h" /* UNCLAMPED_* */
 
 /**
  * Statically assert that PIPE_* enums match the hardware packets.
@@ -426,7 +428,7 @@ flush_before_state_base_change(struct crocus_batch *batch)
     * rendering.  It's a bit of a big hammer but it appears to work.
     */
    const unsigned dc_flush =
-      batch->screen->devinfo.ver >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
+      GFX_VER >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
    crocus_emit_end_of_pipe_sync(batch,
                                 "change STATE_BASE_ADDRESS (flushes)",
                                 PIPE_CONTROL_RENDER_TARGET_FLUSH |
@@ -698,7 +700,6 @@ static bool
 crocus_calculate_urb_fence(struct crocus_batch *batch, unsigned csize,
                            unsigned vsize, unsigned sfsize)
 {
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
    struct crocus_context *ice = batch->ice;
    if (csize < limits[URB_CS].min_entry_size)
       csize = limits[URB_CS].min_entry_size;
@@ -729,7 +730,7 @@ crocus_calculate_urb_fence(struct crocus_batch *batch, unsigned csize,
 
       ice->urb.constrained = 0;
 
-      if (devinfo->ver == 5) {
+      if (GFX_VER == 5) {
          ice->urb.nr_vs_entries = 128;
          ice->urb.nr_sf_entries = 48;
          if (check_urb_layout(ice)) {
@@ -739,7 +740,7 @@ crocus_calculate_urb_fence(struct crocus_batch *batch, unsigned csize,
             ice->urb.nr_vs_entries = limits[URB_VS].preferred_nr_entries;
             ice->urb.nr_sf_entries = limits[URB_SF].preferred_nr_entries;
          }
-      } else if (devinfo->is_g4x) {
+      } else if (GFX_VERx10 == 45) {
          ice->urb.nr_vs_entries = 64;
          if (check_urb_layout(ice)) {
             goto done;
@@ -1126,11 +1127,11 @@ setup_l3_config(struct crocus_batch *batch, const struct intel_l3_config *cfg)
     * client (URB for all validated configurations) set to the
     * lower-bandwidth 2-bank address hashing mode.
     */
-   const bool urb_low_bw = has_slm && !devinfo->is_baytrail;
+   const bool urb_low_bw = has_slm && devinfo->platform != INTEL_PLATFORM_BYT;
    assert(!urb_low_bw || cfg->n[INTEL_L3P_URB] == cfg->n[INTEL_L3P_SLM]);
 
    /* Minimum number of ways that can be allocated to the URB. */
-   const unsigned n0_urb = (devinfo->is_baytrail ? 32 : 0);
+   const unsigned n0_urb = (devinfo->platform == INTEL_PLATFORM_BYT ? 32 : 0);
    assert(cfg->n[INTEL_L3P_URB] >= n0_urb);
 
    uint32_t l3sqcr1, l3cr2, l3cr3;
@@ -1144,7 +1145,7 @@ setup_l3_config(struct crocus_batch *batch, const struct intel_l3_config *cfg)
       reg.L3SQGeneralPriorityCreditInitialization = SQGPCI_DEFAULT;
 #else
       reg.L3SQGeneralPriorityCreditInitialization =
-         devinfo->is_baytrail ? BYT_SQGPCI_DEFAULT : SQGPCI_DEFAULT;
+         devinfo->platform == INTEL_PLATFORM_BYT ? BYT_SQGPCI_DEFAULT : SQGPCI_DEFAULT;
 #endif
       reg.L3SQHighPriorityCreditInitialization = SQHPCI_DEFAULT;
    };
@@ -1246,7 +1247,7 @@ emit_pipeline_select(struct crocus_batch *batch, uint32_t pipeline)
     *     MI_PIPELINE_SELECT command to change the Pipeline Select Mode."
     */
    const unsigned dc_flush =
-      batch->screen->devinfo.ver >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
+      GFX_VER >= 7 ? PIPE_CONTROL_DATA_CACHE_FLUSH : 0;
    crocus_emit_pipe_control_flush(batch,
                                   "workaround: PIPELINE_SELECT flushes (1/2)",
                                   PIPE_CONTROL_RENDER_TARGET_FLUSH |
@@ -1349,7 +1350,7 @@ crocus_alloc_push_constants(struct crocus_batch *batch)
     *
     * No such restriction exists for Haswell or Baytrail.
     */
-   if (!(GFX_VERx10 == 75) && !batch->screen->devinfo.is_baytrail)
+   if (batch->screen->devinfo.platform == INTEL_PLATFORM_IVB)
       gen7_emit_cs_stall_flush(batch);
 }
 #endif
@@ -2026,7 +2027,7 @@ crocus_create_rasterizer_state(struct pipe_context *ctx,
 #endif
 #if GFX_VER == 8
       struct crocus_screen *screen = (struct crocus_screen *)ctx->screen;
-      if (screen->devinfo.is_cherryview)
+      if (screen->devinfo.platform == INTEL_PLATFORM_CHV)
          sf.CHVLineWidth = line_width;
       else
          sf.LineWidth = line_width;
@@ -2694,7 +2695,7 @@ crocus_create_sampler_view(struct pipe_context *ctx,
       tex = util_format_has_depth(desc) ? &zres->base.b : &sres->base.b;
 
       if (tex->format == PIPE_FORMAT_S8_UINT)
-         if (devinfo->ver == 7 && sres->shadow)
+         if (GFX_VER == 7 && sres->shadow)
             tex = &sres->shadow->base.b;
    }
 
@@ -2713,7 +2714,7 @@ crocus_create_sampler_view(struct pipe_context *ctx,
    crocus_combine_swizzle(isv->swizzle, fmt.swizzles, vswz);
 
    /* hardcode stencil swizzles - hw returns 0G01, we want GGGG */
-   if (devinfo->ver < 6 &&
+   if (GFX_VER < 6 &&
        (tmpl->format == PIPE_FORMAT_X32_S8X24_UINT ||
         tmpl->format == PIPE_FORMAT_X24S8_UINT)) {
       isv->swizzle[0] = tmpl->swizzle_g;
@@ -3664,7 +3665,7 @@ crocus_set_vertex_buffers(struct pipe_context *ctx,
    struct crocus_context *ice = (struct crocus_context *) ctx;
    struct crocus_screen *screen = (struct crocus_screen *) ctx->screen;
    const unsigned padding =
-      (GFX_VERx10 < 75 && !screen->devinfo.is_baytrail) * 2;
+      (GFX_VERx10 < 75 && screen->devinfo.platform != INTEL_PLATFORM_BYT) * 2;
    ice->state.bound_vertex_buffers &=
       ~u_bit_consecutive64(start_slot, count + unbind_num_trailing_slots);
 
@@ -4688,6 +4689,10 @@ crocus_populate_vs_key(const struct crocus_context *ice,
        last_stage == MESA_SHADER_VERTEX)
       key->nr_userclip_plane_consts = cso_rast->num_clip_plane_consts;
 
+   if (last_stage == MESA_SHADER_VERTEX &&
+       info->outputs_written & (VARYING_BIT_PSIZ))
+      key->clamp_pointsize = 1;
+
 #if GFX_VER <= 5
    key->copy_edgeflag = (cso_rast->cso.fill_back != PIPE_POLYGON_MODE_FILL ||
                          cso_rast->cso.fill_front != PIPE_POLYGON_MODE_FILL);
@@ -4731,6 +4736,10 @@ crocus_populate_tes_key(const struct crocus_context *ice,
        (info->outputs_written & (VARYING_BIT_POS | VARYING_BIT_CLIP_VERTEX)) &&
        last_stage == MESA_SHADER_TESS_EVAL)
       key->nr_userclip_plane_consts = cso_rast->num_clip_plane_consts;
+
+   if (last_stage == MESA_SHADER_TESS_EVAL &&
+       info->outputs_written & (VARYING_BIT_PSIZ))
+      key->clamp_pointsize = 1;
 }
 
 /**
@@ -4748,22 +4757,10 @@ crocus_populate_gs_key(const struct crocus_context *ice,
        (info->outputs_written & (VARYING_BIT_POS | VARYING_BIT_CLIP_VERTEX)) &&
        last_stage == MESA_SHADER_GEOMETRY)
       key->nr_userclip_plane_consts = cso_rast->num_clip_plane_consts;
-}
 
-static inline GLenum
-compare_func_to_gl(enum pipe_compare_func pipe_func)
-{
-   static const unsigned map[] = {
-      [PIPE_FUNC_NEVER]    = GL_NEVER,
-      [PIPE_FUNC_LESS]     = GL_LESS,
-      [PIPE_FUNC_EQUAL]    = GL_EQUAL,
-      [PIPE_FUNC_LEQUAL]   = GL_LEQUAL,
-      [PIPE_FUNC_GREATER]  = GL_GREATER,
-      [PIPE_FUNC_NOTEQUAL] = GL_NOTEQUAL,
-      [PIPE_FUNC_GEQUAL]   = GL_GEQUAL,
-      [PIPE_FUNC_ALWAYS]   = GL_ALWAYS,
-   };
-   return map[pipe_func];
+   if (last_stage == MESA_SHADER_GEOMETRY &&
+       info->outputs_written & (VARYING_BIT_PSIZ))
+      key->clamp_pointsize = 1;
 }
 
 /**
@@ -4848,11 +4845,10 @@ crocus_populate_fs_key(const struct crocus_context *ice,
       screen->driconf.dual_color_blend_by_location &&
       (blend->blend_enables & 1) && blend->dual_color_blending;
 
-   /* TODO: Respect glHint for key->high_quality_derivatives */
-
 #if GFX_VER <= 5
    if (fb->nr_cbufs > 1 && zsa->cso.alpha_enabled) {
-      key->alpha_test_func = compare_func_to_gl(zsa->cso.alpha_func);
+      key->emit_alpha_test = true;
+      key->alpha_test_func = zsa->cso.alpha_func;
       key->alpha_test_ref = zsa->cso.alpha_ref_value;
    }
 #endif
@@ -4980,7 +4976,6 @@ emit_surface_state(struct crocus_batch *batch,
                    uint32_t *surf_state,
                    uint32_t addr_offset)
 {
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
    struct isl_device *isl_dev = &batch->screen->isl_dev;
    uint32_t reloc = RELOC_32BIT;
    uint64_t offset_B = res->offset;
@@ -5000,7 +4995,7 @@ emit_surface_state(struct crocus_batch *batch,
                                  &tile_x_sa, &tile_y_sa);
          view.base_array_layer = 0;
          view.base_level = 0;
-      } else if (res->base.b.target == PIPE_TEXTURE_CUBE && devinfo->ver == 4) {
+      } else if (res->base.b.target == PIPE_TEXTURE_CUBE && GFX_VER == 4) {
          isl_surf_get_image_surf(isl_dev, in_surf,
                                  view.base_level, view.base_array_layer,
                                  0,
@@ -5054,7 +5049,7 @@ emit_surface_state(struct crocus_batch *batch,
        *
        * FIXME: move to the point of assignment.
        */
-      if (devinfo->ver == 8) {
+      if (GFX_VER == 8) {
          uint64_t *aux_addr = (uint64_t *)(surf_state + (isl_dev->ss.aux_addr_offset / 4));
          *aux_addr = crocus_state_reloc(batch,
                                         addr_offset + isl_dev->ss.aux_addr_offset,
@@ -5078,7 +5073,6 @@ emit_surface(struct crocus_batch *batch,
              bool blend_enable,
              uint32_t write_disables)
 {
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
    struct isl_device *isl_dev = &batch->screen->isl_dev;
    struct crocus_resource *res = (struct crocus_resource *)surf->base.texture;
    struct isl_view *view = &surf->view;
@@ -5086,7 +5080,7 @@ emit_surface(struct crocus_batch *batch,
    enum pipe_texture_target target = res->base.b.target;
    bool adjust_surf = false;
 
-   if (devinfo->ver == 4 && target == PIPE_TEXTURE_CUBE)
+   if (GFX_VER == 4 && target == PIPE_TEXTURE_CUBE)
       adjust_surf = true;
 
    if (surf->align_res)
@@ -5523,47 +5517,32 @@ crocus_update_surface_base_address(struct crocus_batch *batch)
 {
    if (batch->state_base_address_emitted)
       return;
-#if GFX_VER >= 6
-   uint32_t mocs = batch->screen->isl_dev.mocs.internal;
-#endif
+
+   UNUSED uint32_t mocs = batch->screen->isl_dev.mocs.internal;
+
    flush_before_state_base_change(batch);
 
    crocus_emit_cmd(batch, GENX(STATE_BASE_ADDRESS), sba) {
+      /* Set base addresses */
+      sba.GeneralStateBaseAddressModifyEnable = true;
+
+#if GFX_VER >= 6
+      sba.DynamicStateBaseAddressModifyEnable = true;
+      sba.DynamicStateBaseAddress = ro_bo(batch->state.bo, 0);
+#endif
 
       sba.SurfaceStateBaseAddressModifyEnable = true;
       sba.SurfaceStateBaseAddress = ro_bo(batch->state.bo, 0);
 
+      sba.IndirectObjectBaseAddressModifyEnable = true;
+
 #if GFX_VER >= 5
+      sba.InstructionBaseAddressModifyEnable = true;
       sba.InstructionBaseAddress = ro_bo(batch->ice->shaders.cache_bo, 0); // TODO!
 #endif
 
-      sba.GeneralStateBaseAddressModifyEnable   = true;
-      sba.IndirectObjectBaseAddressModifyEnable = true;
-#if GFX_VER >= 5
-      sba.InstructionBaseAddressModifyEnable    = true;
-#endif
-
-#if GFX_VER < 8
-      sba.GeneralStateAccessUpperBoundModifyEnable = true;
-#endif
-#if GFX_VER >= 5 && GFX_VER < 8
-      sba.IndirectObjectAccessUpperBoundModifyEnable = true;
-      sba.InstructionAccessUpperBoundModifyEnable = true;
-#endif
-#if GFX_VER <= 5
-      sba.GeneralStateAccessUpperBound = ro_bo(NULL, 0xfffff000);
-#endif
-#if GFX_VER >= 6
-      /* The hardware appears to pay attention to the MOCS fields even
-       * if you don't set the "Address Modify Enable" bit for the base.
-       */
-      sba.GeneralStateMOCS            = mocs;
-      sba.StatelessDataPortAccessMOCS = mocs;
+      /* Set buffer sizes on Gen8+ or upper bounds on Gen4-7 */
 #if GFX_VER == 8
-      sba.DynamicStateMOCS            = mocs;
-      sba.IndirectObjectMOCS          = mocs;
-      sba.InstructionMOCS             = mocs;
-      sba.SurfaceStateMOCS            = mocs;
       sba.GeneralStateBufferSize   = 0xfffff;
       sba.IndirectObjectBufferSize = 0xfffff;
       sba.InstructionBufferSize    = 0xfffff;
@@ -5573,22 +5552,38 @@ crocus_update_surface_base_address(struct crocus_batch *batch)
       sba.DynamicStateBufferSizeModifyEnable    = true;
       sba.IndirectObjectBufferSizeModifyEnable  = true;
       sba.InstructionBuffersizeModifyEnable     = true;
+#else
+      sba.GeneralStateAccessUpperBoundModifyEnable = true;
+      sba.IndirectObjectAccessUpperBoundModifyEnable = true;
+
+#if GFX_VER >= 5
+      sba.InstructionAccessUpperBoundModifyEnable = true;
 #endif
 
-      sba.DynamicStateBaseAddressModifyEnable   = true;
-
-      sba.DynamicStateBaseAddress = ro_bo(batch->state.bo, 0);
-
+#if GFX_VER >= 6
       /* Dynamic state upper bound.  Although the documentation says that
        * programming it to zero will cause it to be ignored, that is a lie.
        * If this isn't programmed to a real bound, the sampler border color
        * pointer is rejected, causing border color to mysteriously fail.
        */
-#if GFX_VER < 8
-      sba.DynamicStateAccessUpperBoundModifyEnable = true;
       sba.DynamicStateAccessUpperBound = ro_bo(NULL, 0xfffff000);
+      sba.DynamicStateAccessUpperBoundModifyEnable = true;
+#else
+      /* Same idea but using General State Base Address on Gen4-5 */
+      sba.GeneralStateAccessUpperBound = ro_bo(NULL, 0xfffff000);
+#endif
 #endif
 
+#if GFX_VER >= 6
+      /* The hardware appears to pay attention to the MOCS fields even
+       * if you don't set the "Address Modify Enable" bit for the base.
+       */
+      sba.GeneralStateMOCS            = mocs;
+      sba.StatelessDataPortAccessMOCS = mocs;
+      sba.DynamicStateMOCS            = mocs;
+      sba.IndirectObjectMOCS          = mocs;
+      sba.InstructionMOCS             = mocs;
+      sba.SurfaceStateMOCS            = mocs;
 #endif
    }
 
@@ -5701,9 +5696,6 @@ setup_constant_buffers(struct crocus_context *ice,
 static void
 gen7_emit_vs_workaround_flush(struct crocus_batch *batch)
 {
-   ASSERTED const struct intel_device_info *devinfo = &batch->screen->devinfo;
-
-   assert(devinfo->ver == 7);
    crocus_emit_pipe_control_write(batch,
                                   "vs workaround",
                                   PIPE_CONTROL_WRITE_IMMEDIATE
@@ -5721,16 +5713,22 @@ emit_push_constant_packets(struct crocus_context *ice,
 {
    struct crocus_compiled_shader *shader = ice->shaders.prog[stage];
    struct brw_stage_prog_data *prog_data = shader ? (void *) shader->prog_data : NULL;
+   UNUSED uint32_t mocs = crocus_mocs(NULL, &batch->screen->isl_dev);
 
 #if GFX_VER == 7
    if (stage == MESA_SHADER_VERTEX) {
-      if (!(GFX_VERx10 == 75) && !batch->screen->devinfo.is_baytrail)
+      if (batch->screen->devinfo.platform == INTEL_PLATFORM_IVB)
          gen7_emit_vs_workaround_flush(batch);
    }
 #endif
    crocus_emit_cmd(batch, GENX(3DSTATE_CONSTANT_VS), pkt) {
       pkt._3DCommandSubOpcode = push_constant_opcodes[stage];
 #if GFX_VER >= 7
+#if GFX_VER != 8
+      /* MOCS is MBZ on Gen8 so we skip it there */
+      pkt.ConstantBody.MOCS = mocs;
+#endif
+
       if (prog_data) {
          /* The Skylake PRM contains the following restriction:
           *
@@ -6103,7 +6101,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
                               entries, start, NULL, &constrained);
 
 #if GFX_VER == 7
-         if (GFX_VERx10 < 75 && !devinfo->is_baytrail)
+         if (devinfo->platform == INTEL_PLATFORM_IVB)
             gen7_emit_vs_workaround_flush(batch);
 #endif
          for (int i = MESA_SHADER_VERTEX; i <= MESA_SHADER_GEOMETRY; i++) {
@@ -6466,7 +6464,8 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
          ps.BindingTableEntryCount = shader->bt.size_bytes / 4;
          ps.FloatingPointMode = prog_data->use_alt_mode;
 #if GFX_VER >= 8
-         ps.MaximumNumberofThreadsPerPSD = 64 - 2;
+         ps.MaximumNumberofThreadsPerPSD =
+            batch->screen->devinfo.max_threads_per_psd - 2;
 #else
          ps.MaximumNumberofThreads = batch->screen->devinfo.max_wm_threads - 1;
 #endif
@@ -6564,6 +6563,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
             if (!tgt) {
                crocus_emit_cmd(batch, GENX(3DSTATE_SO_BUFFER), sob) {
                   sob.SOBufferIndex = i;
+                  sob.MOCS = crocus_mocs(NULL, &batch->screen->isl_dev);
                }
                continue;
             }
@@ -6576,6 +6576,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
                sob.SOBufferIndex = i;
 
                sob.SurfaceBaseAddress = rw_bo(res->bo, start);
+               sob.MOCS = crocus_mocs(res->bo, &batch->screen->isl_dev);
 #if GFX_VER < 8
                sob.SurfacePitch = tgt->stride;
                sob.SurfaceEndAddress = rw_bo(res->bo, end);
@@ -6583,7 +6584,6 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
                sob.SOBufferEnable = true;
                sob.StreamOffsetWriteEnable = true;
                sob.StreamOutputBufferOffsetAddressEnable = true;
-               sob.MOCS = crocus_mocs(res->bo, &batch->screen->isl_dev);
 
                sob.SurfaceSize = MAX2(tgt->base.buffer_size / 4, 1) - 1;
                sob.StreamOutputBufferOffsetAddress =
@@ -6745,7 +6745,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
       const struct brw_vue_prog_data *vue_prog_data = brw_vue_prog_data(shader->prog_data);
       const struct brw_stage_prog_data *prog_data = &vue_prog_data->base;
 #if GFX_VER == 7
-      if (batch->screen->devinfo.is_ivybridge)
+      if (batch->screen->devinfo.platform == INTEL_PLATFORM_IVB)
          gen7_emit_vs_workaround_flush(batch);
 #endif
 
@@ -7451,7 +7451,10 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
                               .array_len = 1,
                               .swizzle = ISL_SWIZZLE_IDENTITY,
       };
-      struct isl_depth_stencil_hiz_emit_info info = { .view = &view };
+      struct isl_depth_stencil_hiz_emit_info info = {
+         .view = &view,
+         .mocs = crocus_mocs(NULL, isl_dev),
+      };
 
       if (cso->zsbuf) {
          crocus_get_depth_stencil_resources(&batch->screen->devinfo, cso->zsbuf->texture, &zres, &sres);
@@ -7841,10 +7844,12 @@ crocus_upload_render_state(struct crocus_context *ice,
             ib.IndexFormat = draw->index_size >> 1;
             ib.BufferStartingAddress = ro_bo(bo, offset);
 #if GFX_VER >= 8
-            ib.MOCS = crocus_mocs(bo, &batch->screen->isl_dev);
             ib.BufferSize = bo->size - offset;
 #else
             ib.BufferEndingAddress = ro_bo(bo, offset + size - 1);
+#endif
+#if GFX_VER >= 6
+            ib.MOCS = crocus_mocs(bo, &batch->screen->isl_dev);
 #endif
          }
          ice->state.index_buffer.size = size;
@@ -9177,6 +9182,7 @@ void
 genX(crocus_init_screen_state)(struct crocus_screen *screen)
 {
    assert(screen->devinfo.verx10 == GFX_VERx10);
+   assert(screen->devinfo.ver == GFX_VER);
    screen->vtbl.destroy_state = crocus_destroy_state;
    screen->vtbl.init_render_context = crocus_init_render_context;
    screen->vtbl.upload_render_state = crocus_upload_render_state;

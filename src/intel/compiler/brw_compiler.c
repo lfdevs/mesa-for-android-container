@@ -156,21 +156,9 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
 
    /* We want the GLSL compiler to emit code that uses condition codes */
    for (int i = 0; i < MESA_ALL_SHADER_STAGES; i++) {
-      compiler->glsl_compiler_options[i].MaxUnrollIterations = 0;
-      compiler->glsl_compiler_options[i].MaxIfDepth =
-         devinfo->ver < 6 ? 16 : UINT_MAX;
-
-      /* We handle this in NIR */
-      compiler->glsl_compiler_options[i].EmitNoIndirectInput = false;
-      compiler->glsl_compiler_options[i].EmitNoIndirectOutput = false;
-      compiler->glsl_compiler_options[i].EmitNoIndirectUniform = false;
-      compiler->glsl_compiler_options[i].EmitNoIndirectTemp = false;
-
-      bool is_scalar = compiler->scalar_stage[i];
-      compiler->glsl_compiler_options[i].OptimizeForAOS = !is_scalar;
-
       struct nir_shader_compiler_options *nir_options =
          rzalloc(compiler, struct nir_shader_compiler_options);
+      bool is_scalar = compiler->scalar_stage[i];
       if (is_scalar) {
          *nir_options = scalar_nir_options;
       } else {
@@ -190,7 +178,8 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_options->lower_bitfield_reverse = devinfo->ver < 7;
       nir_options->has_iadd3 = devinfo->verx10 >= 125;
 
-      nir_options->has_dot_4x8 = devinfo->ver >= 12;
+      nir_options->has_sdot_4x8 = devinfo->ver >= 12;
+      nir_options->has_udot_4x8 = devinfo->ver >= 12;
       nir_options->has_sudot_4x8 = devinfo->ver >= 12;
 
       nir_options->lower_int64_options = int64_options;
@@ -201,9 +190,7 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_options->force_indirect_unrolling |=
          brw_nir_no_indirect_mask(compiler, i);
 
-      compiler->glsl_compiler_options[i].NirOptions = nir_options;
-
-      compiler->glsl_compiler_options[i].ClampBlockIndicesToArrayBounds = true;
+      compiler->nir_options[i] = nir_options;
    }
 
    return compiler;
@@ -220,12 +207,7 @@ brw_get_compiler_config_value(const struct brw_compiler *compiler)
 {
    uint64_t config = 0;
    insert_u64_bit(&config, compiler->precise_trig);
-   if (compiler->devinfo->ver >= 8 && compiler->devinfo->ver < 10) {
-      insert_u64_bit(&config, compiler->scalar_stage[MESA_SHADER_VERTEX]);
-      insert_u64_bit(&config, compiler->scalar_stage[MESA_SHADER_TESS_CTRL]);
-      insert_u64_bit(&config, compiler->scalar_stage[MESA_SHADER_TESS_EVAL]);
-      insert_u64_bit(&config, compiler->scalar_stage[MESA_SHADER_GEOMETRY]);
-   }
+
    uint64_t mask = DEBUG_DISK_CACHE_MASK;
    while (mask != 0) {
       const uint64_t bit = 1ULL << (ffsll(mask) - 1);
@@ -245,6 +227,8 @@ brw_prog_data_size(gl_shader_stage stage)
       [MESA_SHADER_GEOMETRY]     = sizeof(struct brw_gs_prog_data),
       [MESA_SHADER_FRAGMENT]     = sizeof(struct brw_wm_prog_data),
       [MESA_SHADER_COMPUTE]      = sizeof(struct brw_cs_prog_data),
+      [MESA_SHADER_TASK]         = sizeof(struct brw_task_prog_data),
+      [MESA_SHADER_MESH]         = sizeof(struct brw_mesh_prog_data),
       [MESA_SHADER_RAYGEN]       = sizeof(struct brw_bs_prog_data),
       [MESA_SHADER_ANY_HIT]      = sizeof(struct brw_bs_prog_data),
       [MESA_SHADER_CLOSEST_HIT]  = sizeof(struct brw_bs_prog_data),
@@ -267,6 +251,8 @@ brw_prog_key_size(gl_shader_stage stage)
       [MESA_SHADER_GEOMETRY]     = sizeof(struct brw_gs_prog_key),
       [MESA_SHADER_FRAGMENT]     = sizeof(struct brw_wm_prog_key),
       [MESA_SHADER_COMPUTE]      = sizeof(struct brw_cs_prog_key),
+      [MESA_SHADER_TASK]         = sizeof(struct brw_task_prog_key),
+      [MESA_SHADER_MESH]         = sizeof(struct brw_mesh_prog_key),
       [MESA_SHADER_RAYGEN]       = sizeof(struct brw_bs_prog_key),
       [MESA_SHADER_ANY_HIT]      = sizeof(struct brw_bs_prog_key),
       [MESA_SHADER_CLOSEST_HIT]  = sizeof(struct brw_bs_prog_key),

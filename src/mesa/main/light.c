@@ -33,6 +33,7 @@
 #include "mtypes.h"
 #include "math/m_matrix.h"
 #include "util/bitscan.h"
+#include "api_exec_decl.h"
 
 
 void GLAPIENTRY
@@ -53,9 +54,6 @@ _mesa_ShadeModel( GLenum mode )
 
    FLUSH_VERTICES(ctx, _NEW_LIGHT_STATE, GL_LIGHTING_BIT);
    ctx->Light.ShadeModel = mode;
-
-   if (ctx->Driver.ShadeModel)
-      ctx->Driver.ShadeModel( ctx, mode );
 }
 
 
@@ -96,8 +94,8 @@ _mesa_ProvokingVertex(GLenum mode)
  * will have already been transformed by the modelview matrix!
  * Also, all error checking should have already been done.
  */
-void
-_mesa_light(struct gl_context *ctx, GLuint lnum, GLenum pname, const GLfloat *params)
+static void
+do_light(struct gl_context *ctx, GLuint lnum, GLenum pname, const GLfloat *params)
 {
    struct gl_light *light;
 
@@ -247,11 +245,8 @@ _mesa_light(struct gl_context *ctx, GLuint lnum, GLenum pname, const GLfloat *pa
       break;
    }
    default:
-      unreachable("Unexpected pname in _mesa_light()");
+      unreachable("Unexpected pname in do_light()");
    }
-
-   if (ctx->Driver.Lightfv)
-      ctx->Driver.Lightfv( ctx, GL_LIGHT0 + lnum, pname, params );
 }
 
 
@@ -322,7 +317,7 @@ _mesa_Lightfv( GLenum light, GLenum pname, const GLfloat *params )
       return;
    }
 
-   _mesa_light(ctx, i, pname, params);
+   do_light(ctx, i, pname, params);
 }
 
 
@@ -549,9 +544,6 @@ _mesa_LightModelfv( GLenum pname, const GLfloat *params )
       default:
          goto invalid_pname;
    }
-
-   if (ctx->Driver.LightModelfv)
-      ctx->Driver.LightModelfv( ctx, pname, params );
 
    return;
 
@@ -823,9 +815,6 @@ _mesa_ColorMaterial( GLenum face, GLenum mode )
       FLUSH_CURRENT(ctx, _NEW_FF_VERT_PROGRAM);
       _mesa_update_color_material(ctx,ctx->Current.Attrib[VERT_ATTRIB_COLOR0]);
    }
-
-   if (ctx->Driver.ColorMaterial)
-      ctx->Driver.ColorMaterial( ctx, face, mode );
 }
 
 
@@ -1142,8 +1131,7 @@ _mesa_update_tnl_spaces( struct gl_context *ctx, GLuint new_state )
    (void) new_state;
    ctx->_NeedEyeCoords = GL_FALSE;
 
-   if (ctx->_ForceEyeCoords ||
-       (ctx->Texture._GenFlags & TEXGEN_NEED_EYE_COORD) ||
+   if ((ctx->Texture._GenFlags & TEXGEN_NEED_EYE_COORD) ||
        ctx->Point._Attenuated ||
        ctx->Light._NeedEyeCoords)
       ctx->_NeedEyeCoords = GL_TRUE;
@@ -1161,8 +1149,6 @@ _mesa_update_tnl_spaces( struct gl_context *ctx, GLuint new_state )
       update_modelview_scale(ctx);
       compute_light_positions( ctx );
 
-      if (ctx->Driver.LightingSpaceChange)
-	 ctx->Driver.LightingSpaceChange( ctx );
       return true;
    }
    else {
@@ -1180,19 +1166,6 @@ _mesa_update_tnl_spaces( struct gl_context *ctx, GLuint new_state )
       return false;
    }
 }
-
-
-/**
- * Drivers may need this if the hardware tnl unit doesn't support the
- * light-in-modelspace optimization.  It's also useful for debugging.
- */
-void
-_mesa_allow_light_in_model( struct gl_context *ctx, GLboolean flag )
-{
-   ctx->_ForceEyeCoords = !flag;
-   ctx->NewState |= _NEW_TNL_SPACES;
-}
-
 
 
 /**********************************************************************/
@@ -1302,7 +1275,6 @@ _mesa_init_lighting( struct gl_context *ctx )
    /* Miscellaneous */
    ctx->Light._NeedEyeCoords = GL_FALSE;
    ctx->_NeedEyeCoords = GL_FALSE;
-   ctx->_ForceEyeCoords = GL_FALSE;
    ctx->_ModelViewInvScale = 1.0;
    ctx->_ModelViewInvScaleEyespace = 1.0;
 }

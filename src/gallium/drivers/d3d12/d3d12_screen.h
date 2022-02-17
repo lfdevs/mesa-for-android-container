@@ -73,6 +73,7 @@ struct d3d12_screen {
    struct d3d12_descriptor_pool *view_pool;
 
    struct d3d12_descriptor_handle null_srvs[RESOURCE_DIMENSION_COUNT];
+   struct d3d12_descriptor_handle null_uavs[RESOURCE_DIMENSION_COUNT];
    struct d3d12_descriptor_handle null_rtv;
 
    /* capabilities */
@@ -88,6 +89,7 @@ struct d3d12_screen {
    uint64_t memory_size_megabytes;
    double timestamp_multiplier;
    bool have_load_at_vertex;
+   bool support_shader_images;
 };
 
 static inline struct d3d12_screen *

@@ -65,7 +65,6 @@ gfx10_format_table_c = custom_target(
 amd_common_files = files(
   'ac_binary.c',
   'ac_binary.h',
-  'ac_exp_param.h',
   'ac_shader_args.c',
   'ac_shader_args.h',
   'ac_shader_util.c',
@@ -80,6 +79,8 @@ amd_common_files = files(
   'ac_debug.h',
   'ac_shadowed_regs.c',
   'ac_shadowed_regs.h',
+  'ac_spm.c',
+  'ac_spm.h',
   'ac_sqtt.c',
   'ac_sqtt.h',
   'ac_rgp.c',
@@ -109,6 +110,7 @@ libamd_common = static_library(
     idep_mesautil, idep_nir_headers, idep_nir
   ],
   gnu_symbol_visibility : 'hidden',
+  c_args : ['-DADDR_FASTCALL=']
 )
 
 idep_amdgfxregs_h = declare_dependency(sources : [amdgfxregs_h])

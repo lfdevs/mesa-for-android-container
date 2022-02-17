@@ -32,7 +32,7 @@ test(
     ['st_format.c'],
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
     link_with : [
-      libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
+      libmesa_st_test_common, libmesa, libglapi, libgallium,
     ],
     dependencies : idep_mesautil,
   ),
@@ -46,11 +46,12 @@ test(
     ['test_glsl_to_tgsi_lifetime.cpp', ir_expression_operation_h],
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
     link_with : [
-      libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
+      libmesa_st_test_common, libmesa, libglapi, libgallium,
     ],
     dependencies : [idep_mesautil, idep_gtest],
   ),
   suite : ['st_mesa'],
+  protocol : gtest_test_protocol,
 )
 
 test(
@@ -60,9 +61,10 @@ test(
     ['test_glsl_to_tgsi_array_merge.cpp', ir_expression_operation_h],
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
     link_with : [
-      libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
+      libmesa_st_test_common, libmesa, libglapi, libgallium,
     ],
     dependencies : [idep_mesautil, idep_gtest],
   ),
   suite : ['st_mesa'],
+  protocol : gtest_test_protocol,
 )

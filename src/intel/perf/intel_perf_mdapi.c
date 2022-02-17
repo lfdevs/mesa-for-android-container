@@ -44,7 +44,7 @@ intel_perf_query_result_write_mdapi(void *data, uint32_t data_size,
       if (data_size < sizeof(*mdapi_data))
          return 0;
 
-      assert(devinfo->is_haswell);
+      assert(devinfo->platform == INTEL_PLATFORM_HSW);
 
       for (int i = 0; i < ARRAY_SIZE(mdapi_data->ACounters); i++)
          mdapi_data->ACounters[i] = result->accumulator[1 + i];
@@ -164,7 +164,7 @@ intel_perf_register_mdapi_statistic_query(struct intel_perf_config *perf_cfg,
                                      "N primitives entering clipping");
    intel_perf_query_add_basic_stat_reg(query, CL_PRIMITIVES_COUNT,
                                      "N primitives leaving clipping");
-   if (devinfo->is_haswell || devinfo->ver == 8) {
+   if (devinfo->verx10 == 75 || devinfo->ver == 8) {
       intel_perf_query_add_stat_reg(query, PS_INVOCATION_COUNT, 1, 4,
                                   "N fragment shader invocations",
                                   "N fragment shader invocations");

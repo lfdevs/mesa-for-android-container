@@ -57,7 +57,8 @@ and create a window, you must do the following to use the X/Mesa interface:
 #define XM_API_H
 
 
-#include "main/mtypes.h" /* for gl_config */
+#include <stdbool.h>
+#include "main/glconfig.h" /* for gl_config */
 #include "frontend/api.h"
 #include "os/os_thread.h"
 

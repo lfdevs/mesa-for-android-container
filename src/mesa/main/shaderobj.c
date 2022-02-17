@@ -103,8 +103,8 @@ _mesa_init_shader(struct gl_shader *shader)
 {
    shader->RefCount = 1;
    shader->info.Geom.VerticesOut = -1;
-   shader->info.Geom.InputType = GL_TRIANGLES;
-   shader->info.Geom.OutputType = GL_TRIANGLE_STRIP;
+   shader->info.Geom.InputType = SHADER_PRIM_TRIANGLES;
+   shader->info.Geom.OutputType = SHADER_PRIM_TRIANGLE_STRIP;
 }
 
 /**
@@ -118,9 +118,6 @@ _mesa_new_shader(GLuint name, gl_shader_stage stage)
    if (shader) {
       shader->Stage = stage;
       shader->Name = name;
-#ifdef DEBUG
-      shader->SourceChecksum = 0xa110c; /* alloc */
-#endif
       _mesa_init_shader(shader);
    }
    return shader;
@@ -208,8 +205,7 @@ _mesa_lookup_shader_err(struct gl_context *ctx, GLuint name, const char *caller)
 /**********************************************************************/
 
 void
-_mesa_reference_shader_program_data(struct gl_context *ctx,
-                                    struct gl_shader_program_data **ptr,
+_mesa_reference_shader_program_data(struct gl_shader_program_data **ptr,
                                     struct gl_shader_program_data *data)
 {
    if (*ptr == data)
@@ -221,7 +217,6 @@ _mesa_reference_shader_program_data(struct gl_context *ctx,
       assert(oldData->RefCount > 0);
 
       if (p_atomic_dec_zero(&oldData->RefCount)) {
-         assert(ctx);
          assert(oldData->NumUniformStorage == 0 ||
                 oldData->UniformStorage);
 
@@ -357,12 +352,10 @@ _mesa_clear_shader_program_data(struct gl_context *ctx,
       shProg->UniformHash = NULL;
    }
 
-   if (shProg->data && shProg->data->ProgramResourceHash) {
-      _mesa_hash_table_u64_destroy(shProg->data->ProgramResourceHash);
-      shProg->data->ProgramResourceHash = NULL;
-   }
+   if (shProg->data)
+      _mesa_program_resource_hash_destroy(shProg);
 
-   _mesa_reference_shader_program_data(ctx, &shProg->data, NULL);
+   _mesa_reference_shader_program_data(&shProg->data, NULL);
 }
 
 
@@ -487,11 +480,4 @@ _mesa_lookup_shader_program_err(struct gl_context *ctx, GLuint name,
                                 const char *caller)
 {
    return _mesa_lookup_shader_program_err_glthread(ctx, name, false, caller);
-}
-
-
-void
-_mesa_init_shader_object_functions(struct dd_function_table *driver)
-{
-   driver->LinkShader = _mesa_ir_link_shader;
 }

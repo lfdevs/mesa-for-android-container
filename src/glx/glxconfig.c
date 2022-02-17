@@ -186,9 +186,11 @@ glx_config_get(struct glx_config * mode, int attribute, int *value_return)
    case GLX_Y_INVERTED_EXT:
       *value_return = mode->yInverted;
       return 0;
-
    case GLX_FRAMEBUFFER_SRGB_CAPABLE_EXT:
       *value_return = mode->sRGBCapable;
+      return 0;
+   case GLX_FLOAT_COMPONENTS_NV:
+      *value_return = mode->floatComponentsNV;
       return 0;
 
       /* Applications are NOT allowed to query GLX_VISUAL_SELECT_GROUP_SGIX.

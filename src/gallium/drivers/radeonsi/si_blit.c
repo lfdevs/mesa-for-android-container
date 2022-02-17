@@ -56,7 +56,7 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
       util_blitter_save_depth_stencil_alpha(sctx->blitter, sctx->queued.named.dsa);
       util_blitter_save_stencil_ref(sctx->blitter, &sctx->stencil_ref.state);
       util_blitter_save_fragment_shader(sctx->blitter, sctx->shader.ps.cso);
-      util_blitter_save_sample_mask(sctx->blitter, sctx->sample_mask);
+      util_blitter_save_sample_mask(sctx->blitter, sctx->sample_mask, sctx->ps_iter_samples);
       util_blitter_save_scissor(sctx->blitter, &sctx->scissors[0]);
       util_blitter_save_window_rectangles(sctx->blitter, sctx->window_rectangles_include,
                                           sctx->num_window_rectangles, sctx->window_rectangles);
@@ -98,6 +98,10 @@ void si_blitter_end(struct si_context *sctx)
    /* Restore shader pointers because the VS blit shader changed all
     * non-global VS user SGPRs. */
    sctx->shader_pointers_dirty |= SI_DESCS_SHADER_MASK(VERTEX);
+
+   /* Reset SI_SGPR_SMALL_PRIM_CULL_INFO: */
+   if (sctx->screen->use_ngg_culling)
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.ngg_cull_state);
 
    unsigned num_vbos_in_user_sgprs = si_num_vbos_in_user_sgprs(sctx->screen);
    sctx->vertex_buffer_pointer_dirty = sctx->vb_descriptors_buffer != NULL &&
@@ -1230,7 +1234,7 @@ static void si_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
       return;
    }
 
-   if (info->is_dri_blit_image && sdst->surface.is_linear &&
+   if ((info->dst.resource->bind & PIPE_BIND_DRI_PRIME) && sdst->surface.is_linear &&
        sctx->chip_class >= GFX7 && sdst->surface.flags & RADEON_SURF_IMPORTED) {
       struct si_texture *ssrc = (struct si_texture *)info->src.resource;
       /* Use SDMA or async compute when copying to a DRI_PRIME imported linear surface. */
@@ -1239,10 +1243,10 @@ static void si_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
                         info->dst.level == 0 && info->src.level == 0 &&
                         info->src.box.width == info->dst.resource->width0 &&
                         info->src.box.height == info->dst.resource->height0 &&
-                        info->src.box.depth == 1 && util_can_blit_via_copy_region(info, true);
+                        info->src.box.depth == 1 &&
+                        util_can_blit_via_copy_region(info, true, sctx->render_cond != NULL);
       /* Try SDMA first... */
-      /* TODO: figure out why SDMA copies are slow on GFX10_3 */
-      if (async_copy && sctx->chip_class < GFX10_3 && si_sdma_copy_image(sctx, sdst, ssrc))
+      if (async_copy && si_sdma_copy_image(sctx, sdst, ssrc))
          return;
 
       /* ... and use async compute as the fallback. */
@@ -1272,7 +1276,7 @@ static void si_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
    /* Using compute for copying to a linear texture in GTT is much faster than
     * going through RBs (render backends). This improves DRI PRIME performance.
     */
-   if (util_can_blit_via_copy_region(info, false)) {
+   if (util_can_blit_via_copy_region(info, false, sctx->render_cond != NULL)) {
       si_resource_copy_region(ctx, info->dst.resource, info->dst.level,
                               info->dst.box.x, info->dst.box.y, info->dst.box.z,
                               info->src.resource, info->src.level, &info->src.box);

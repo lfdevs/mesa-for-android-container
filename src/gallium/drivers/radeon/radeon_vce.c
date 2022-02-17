@@ -536,12 +536,12 @@ bool si_vce_is_fw_version_supported(struct si_screen *sscreen)
 /**
  * Add the buffer as relocation to the current command submission
  */
-void si_vce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf, enum radeon_bo_usage usage,
+void si_vce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf, unsigned usage,
                        enum radeon_bo_domain domain, signed offset)
 {
    int reloc_idx;
 
-   reloc_idx = enc->ws->cs_add_buffer(&enc->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain, 0);
+   reloc_idx = enc->ws->cs_add_buffer(&enc->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain);
    if (enc->use_vm) {
       uint64_t addr;
       addr = enc->ws->buffer_get_virtual_address(buf);

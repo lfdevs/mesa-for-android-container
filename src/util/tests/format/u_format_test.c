@@ -827,6 +827,22 @@ test_all(void)
             success = FALSE;
       }
 
+      if (util_format_is_snorm(format)) {
+         enum pipe_format unorm = util_format_snorm_to_unorm(format);
+
+         if (format == PIPE_FORMAT_R8G8Bx_SNORM) {
+            /* no unorm equivalent for this one */
+         } else if (unorm == format) {
+            fprintf(stderr, "%s missing from util_format_snorm_to_unorm().\n",
+                    util_format_name(format));
+            success = FALSE;
+         } else if (!util_format_is_unorm(unorm)) {
+            fprintf(stderr, "util_format_snorm_to_unorm(%s) returned non-unorm %s.\n",
+                    util_format_name(format), util_format_name(unorm));
+            success = FALSE;
+         }
+      }
+
       TEST_ONE_PACK_FUNC(pack_rgba_float);
       TEST_ONE_UNPACK_RECT_FUNC(unpack_rgba);
       TEST_ONE_PACK_FUNC(pack_rgba_8unorm);

@@ -26,6 +26,7 @@
 #define SHADER_INFO_H
 
 #include "util/bitset.h"
+#include "util/sha1/sha1.h"
 #include "shader_enums.h"
 #include <stdint.h>
 
@@ -74,6 +75,7 @@ struct spirv_supported_capabilities {
    bool mesh_shading_nv;
    bool min_lod;
    bool multiview;
+   bool per_view_attributes_nv;
    bool physical_storage_buffer_address;
    bool post_depth_coverage;
    bool printf;
@@ -84,6 +86,7 @@ struct spirv_supported_capabilities {
    bool float_controls;
    bool shader_clock;
    bool shader_viewport_index_layer;
+   bool shader_viewport_mask_nv;
    bool sparse_residency;
    bool stencil_export;
    bool storage_8bit;
@@ -122,8 +125,11 @@ typedef struct shader_info {
    /* Descriptive name provided by the client; may be NULL */
    const char *label;
 
-   /* Shader is internal, and should be ignored by things like NIR_PRINT */
+   /* Shader is internal, and should be ignored by things like NIR_DEBUG=print */
    bool internal;
+
+   /* SHA1 of the original source, used by shader detection in drivers. */
+   uint8_t source_sha1[SHA1_DIGEST_LENGTH];
 
    /** The shader stage, such as MESA_SHADER_VERTEX. */
    gl_shader_stage stage:8;
@@ -208,6 +214,12 @@ typedef struct shader_info {
     * Size of shared variables accessed by compute/task/mesh shaders.
     */
    unsigned shared_size;
+
+   /**
+    * Number of ray tracing queries in the shader (counts all elements of all
+    * variables).
+    */
+   unsigned ray_queries;
 
    /**
     * Local workgroup size used by compute/task/mesh shaders.
@@ -305,10 +317,10 @@ typedef struct shader_info {
       } vs;
 
       struct {
-         /** The output primitive type (GL enum value) */
+         /** The output primitive type */
          uint16_t output_primitive;
 
-         /** The input primitive type (GL enum value) */
+         /** The input primitive type */
          uint16_t input_primitive;
 
          /** The maximum number of vertices the geometry shader might write. */
@@ -454,11 +466,11 @@ typedef struct shader_info {
 
       /* Applies to both TCS and TES. */
       struct {
-         uint16_t primitive_mode; /* GL_TRIANGLES, GL_QUADS or GL_ISOLINES */
+	 enum tess_primitive_mode _primitive_mode;
 
          /** The number of vertices in the TCS output patch. */
          uint8_t tcs_vertices_out;
-         enum gl_tess_spacing spacing:2;
+         unsigned spacing:2; /*gl_tess_spacing*/
 
          /** Is the vertex order counterclockwise? */
          bool ccw:1;

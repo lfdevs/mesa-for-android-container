@@ -1,49 +1,58 @@
 #!/bin/sh
 
-set -x
+set -ex
 
-ln -sf $CI_PROJECT_DIR/install /install
+# This script can be called concurrently, pass arguments and env in a
+# per-instance tmp dir
+DEQP_TEMP_DIR=$(mktemp -d /tmp.XXXXXXXXXX)
+export DEQP_TEMP_DIR
 
-export LD_LIBRARY_PATH=$CI_PROJECT_DIR/install/lib/
-export EGL_PLATFORM=surfaceless
+# The dEQP binary needs to run from the directory it's in
+if [ -n "${1##*.sh}" ] && [ -z "${1##*"deqp"*}" ]; then
+  DEQP_BIN_DIR=$(dirname "$1")
+  export DEQP_BIN_DIR
+fi
 
-export -p > /crosvm-env.sh
-export GALLIUM_DRIVER="$CROSVM_GALLIUM_DRIVER"
-export GALLIVM_PERF="nopt"
-export LIBGL_ALWAYS_SOFTWARE="true"
+# Securely pass the current variables to the crosvm environment
+CI_COMMON="$CI_PROJECT_DIR"/install/common
+echo "Variables passed through:"
+"${CI_COMMON}"/generate-env.sh | tee ${DEQP_TEMP_DIR}/crosvm-env.sh
 
-CROSVM_KERNEL_ARGS="root=my_root rw rootfstype=virtiofs loglevel=3 init=$CI_PROJECT_DIR/install/crosvm-init.sh ip=192.168.30.2::192.168.30.1:255.255.255.0:crosvm:eth0"
+CROSVM_KERNEL_ARGS="quiet console=null root=my_root rw rootfstype=virtiofs init=$CI_PROJECT_DIR/install/crosvm-init.sh ip=192.168.30.2::192.168.30.1:255.255.255.0:crosvm:eth0 -- $DEQP_TEMP_DIR"
 
-# Temporary results dir because from the guest we cannot write to /
-mkdir -p /results
-mount -t tmpfs tmpfs /results
-
-mkdir -p /piglit/.gitlab-ci/piglit
-mount -t tmpfs tmpfs /piglit/.gitlab-ci/piglit
+# Set the crosvm-script as the arguments of the current script.
+echo "$@" > $DEQP_TEMP_DIR/crosvm-script.sh
 
 unset DISPLAY
 unset XDG_RUNTIME_DIR
 
-/usr/sbin/iptables-legacy  -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+/usr/sbin/iptables-legacy -w -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 echo 1 > /proc/sys/net/ipv4/ip_forward
 
-# Crosvm wants this
-syslogd > /dev/null
+# Send output from guest to host
+touch $DEQP_TEMP_DIR/stderr $DEQP_TEMP_DIR/stdout
+tail -f $DEQP_TEMP_DIR/stderr >> /dev/stderr &
+ERR_TAIL_PID=$!
+tail -f $DEQP_TEMP_DIR/stdout >> /dev/stdout &
+OUT_TAIL_PID=$!
+
+trap "exit \$exit_code" INT TERM
+trap "exit_code=\$?; kill $ERR_TAIL_PID $OUT_TAIL_PID; rm -rf $DEQP_TEMP_DIR" EXIT
 
 # We aren't testing LLVMPipe here, so we don't need to validate NIR on the host
-export NIR_VALIDATE=0
-
-crosvm run \
+NIR_DEBUG="novalidate" LIBGL_ALWAYS_SOFTWARE="true" GALLIUM_DRIVER="$CROSVM_GALLIUM_DRIVER" crosvm run \
   --gpu "$CROSVM_GPU_ARGS" \
   -m 4096 \
-  -c $((FDO_CI_CONCURRENT > 1 ? FDO_CI_CONCURRENT - 1 : 1)) \
+  -c 2 \
   --disable-sandbox \
   --shared-dir /:my_root:type=fs:writeback=true:timeout=60:cache=always \
   --host_ip=192.168.30.1 --netmask=255.255.255.0 --mac "AA:BB:CC:00:00:12" \
   -p "$CROSVM_KERNEL_ARGS" \
-  /lava-files/bzImage
+  /lava-files/bzImage > $DEQP_TEMP_DIR/crosvm 2>&1
 
-mkdir -p $CI_PROJECT_DIR/results
-mv /results/* $CI_PROJECT_DIR/results/.
+RET=$(cat $DEQP_TEMP_DIR/exit_code || true)
 
-test -f $CI_PROJECT_DIR/results/success
+# Got no exit code from the script, show crosvm output to help with debugging
+[ -n "$RET" ] || cat $DEQP_TEMP_DIR/crosvm || true
+
+exit ${RET:-1}

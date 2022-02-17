@@ -46,12 +46,28 @@ blorp_shader_type_to_name(enum blorp_shader_type type)
    return shader_name[type];
 }
 
+const char *
+blorp_shader_pipeline_to_name(enum blorp_shader_pipeline pipe)
+{
+   static const char *pipeline_name[] = {
+      [BLORP_SHADER_PIPELINE_RENDER]  = "render",
+      [BLORP_SHADER_PIPELINE_COMPUTE] = "compute",
+   };
+   assert(pipe < ARRAY_SIZE(pipeline_name));
+
+   return pipeline_name[pipe];
+}
+
 void
 blorp_init(struct blorp_context *blorp, void *driver_ctx,
-           struct isl_device *isl_dev)
+           struct isl_device *isl_dev, const struct blorp_config *config)
 {
+   memset(blorp, 0, sizeof(*blorp));
+
    blorp->driver_ctx = driver_ctx;
    blorp->isl_dev = isl_dev;
+   if (config)
+      blorp->config = *config;
 }
 
 void
@@ -215,19 +231,12 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
 {
    const struct brw_compiler *compiler = blorp->compiler;
 
-   nir->options =
-      compiler->glsl_compiler_options[MESA_SHADER_FRAGMENT].NirOptions;
+   nir->options = compiler->nir_options[MESA_SHADER_FRAGMENT];
 
    memset(wm_prog_data, 0, sizeof(*wm_prog_data));
 
    wm_prog_data->base.nr_params = 0;
    wm_prog_data->base.param = NULL;
-
-   /* BLORP always uses the first two binding table entries:
-    * - Surface 0 is the render target (which always start from 0)
-    * - Surface 1 is the source texture
-    */
-   wm_prog_data->base.binding_table.texture_start = BLORP_TEXTURE_BT_INDEX;
 
    brw_preprocess_nir(compiler, nir, NULL);
    nir_remove_dead_variables(nir, nir_var_shader_in, NULL);
@@ -261,8 +270,7 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
 {
    const struct brw_compiler *compiler = blorp->compiler;
 
-   nir->options =
-      compiler->glsl_compiler_options[MESA_SHADER_VERTEX].NirOptions;
+   nir->options = compiler->nir_options[MESA_SHADER_VERTEX];
 
    brw_preprocess_nir(compiler, nir, NULL);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
@@ -297,16 +305,9 @@ blorp_compile_cs(struct blorp_context *blorp, void *mem_ctx,
 {
    const struct brw_compiler *compiler = blorp->compiler;
 
-   nir->options =
-      compiler->glsl_compiler_options[MESA_SHADER_COMPUTE].NirOptions;
+   nir->options = compiler->nir_options[MESA_SHADER_COMPUTE];
 
    memset(cs_prog_data, 0, sizeof(*cs_prog_data));
-
-   /* BLORP always uses the first two binding table entries:
-    * - Surface 0 is the destination image (which always start from 0)
-    * - Surface 1 is the source texture
-    */
-   cs_prog_data->base.binding_table.texture_start = BLORP_TEXTURE_BT_INDEX;
 
    brw_preprocess_nir(compiler, nir, NULL);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
@@ -461,10 +462,10 @@ blorp_hiz_op(struct blorp_batch *batch, struct blorp_surf *surf,
        * surfaces, not 8. But commit 1f112cc increased the alignment from 4 to
        * 8, which prevents the clobbering.
        */
-      params.x1 = minify(params.depth.surf.logical_level0_px.width,
-                         params.depth.view.base_level);
-      params.y1 = minify(params.depth.surf.logical_level0_px.height,
-                         params.depth.view.base_level);
+      params.x1 = u_minify(params.depth.surf.logical_level0_px.width,
+                           params.depth.view.base_level);
+      params.y1 = u_minify(params.depth.surf.logical_level0_px.height,
+                           params.depth.view.base_level);
       params.x1 = ALIGN(params.x1, 8);
       params.y1 = ALIGN(params.y1, 4);
 
@@ -503,10 +504,10 @@ blorp_hiz_op(struct blorp_batch *batch, struct blorp_surf *surf,
           * the base LOD extent. Just assert that the caller is accessing an
           * LOD that satisfies this requirement.
           */
-         assert(minify(params.depth.surf.logical_level0_px.width,
-                       params.depth.view.base_level) == params.x1);
-         assert(minify(params.depth.surf.logical_level0_px.height,
-                       params.depth.view.base_level) == params.y1);
+         assert(u_minify(params.depth.surf.logical_level0_px.width,
+                         params.depth.view.base_level) == params.x1);
+         assert(u_minify(params.depth.surf.logical_level0_px.height,
+                         params.depth.view.base_level) == params.y1);
       }
 
       params.dst.surf.samples = params.depth.surf.samples;

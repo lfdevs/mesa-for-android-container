@@ -73,10 +73,10 @@ static const struct debug_named_value fd_debug_options[] = {
    {"ddraw",     FD_DBG_DDRAW,    "Mark all state dirty after draw"},
    {"noscis",    FD_DBG_NOSCIS,   "Disable scissor optimization"},
    {"direct",    FD_DBG_DIRECT,   "Force inline (SS_DIRECT) state loads"},
-   {"nobypass",  FD_DBG_NOBYPASS, "Disable GMEM bypass"},
+   {"gmem",      FD_DBG_GMEM,     "Use gmem rendering when it is permitted"},
    {"perf",      FD_DBG_PERF,     "Enable performance warnings"},
    {"nobin",     FD_DBG_NOBIN,    "Disable hw binning"},
-   {"nogmem",    FD_DBG_NOGMEM,   "Disable GMEM rendering (bypass only)"},
+   {"sysmem",    FD_DBG_SYSMEM,   "Use sysmem only rendering (no tiling)"},
    {"serialc",   FD_DBG_SERIALC,"Disable asynchronous shader compile"},
    {"shaderdb",  FD_DBG_SHADERDB, "Enable shaderdb output"},
    {"flush",     FD_DBG_FLUSH,    "Force flush after every draw"},
@@ -143,6 +143,9 @@ static void
 fd_screen_destroy(struct pipe_screen *pscreen)
 {
    struct fd_screen *screen = fd_screen(pscreen);
+
+   if (screen->tess_bo)
+      fd_bo_del(screen->tess_bo);
 
    if (screen->pipe)
       fd_pipe_del(screen->pipe);
@@ -232,7 +235,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_COMPUTE:
       return has_compute(screen);
 
-   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+   case PIPE_CAP_TEXTURE_TRANSFER_MODES:
    case PIPE_CAP_PCI_GROUP:
    case PIPE_CAP_PCI_BUS:
    case PIPE_CAP_PCI_DEVICE:
@@ -265,6 +268,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return !fd_screen_get_param(pscreen, PIPE_CAP_TEXTURE_MULTISAMPLE);
 
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
+   case PIPE_CAP_IMAGE_STORE_FORMATTED:
       return is_a5xx(screen) || is_a6xx(screen);
 
    case PIPE_CAP_SURFACE_SAMPLE_COUNT:
@@ -285,9 +289,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
       if (is_a3xx(screen))
          return 16;
-      if (is_a4xx(screen))
-         return 32;
-      if (is_a5xx(screen) || is_a6xx(screen))
+      if (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen))
          return 64;
       return 0;
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
@@ -296,14 +298,12 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
        */
       if (is_a3xx(screen))
          return 8192;
-      if (is_a4xx(screen))
-         return 16384;
 
       /* Note that the Vulkan blob on a540 and 640 report a
        * maxTexelBufferElements of just 65536 (the GLES3.2 and Vulkan
        * minimum).
        */
-      if (is_a5xx(screen) || is_a6xx(screen))
+      if (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen))
          return 1 << 27;
       return 0;
 
@@ -334,11 +334,8 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
          return 120;
 
    case PIPE_CAP_ESSL_FEATURE_LEVEL:
-      /* we can probably enable 320 for a5xx too, but need to test: */
-      if (is_a6xx(screen))
+      if (is_a5xx(screen) || is_a6xx(screen))
          return 320;
-      if (is_a5xx(screen))
-         return 310;
       if (is_ir3(screen))
          return 300;
       return 120;
@@ -478,8 +475,11 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
          return 15;
       else
          return 14;
+
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-      return 11;
+      if (is_a3xx(screen))
+         return 11;
+      return 12;
 
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
       return (is_a3xx(screen) || is_a4xx(screen) || is_a5xx(screen) ||
@@ -509,9 +509,16 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 0xFFFFFFFF;
    case PIPE_CAP_ACCELERATED:
       return 1;
-   case PIPE_CAP_VIDEO_MEMORY:
-      DBG("FINISHME: The value returned is incorrect\n");
-      return 10;
+
+   case PIPE_CAP_VIDEO_MEMORY: {
+      uint64_t system_memory;
+
+      if (!os_get_total_physical_memory(&system_memory))
+         return 0;
+
+      return (int)(system_memory >> 20);
+   }
+
    case PIPE_CAP_UMA:
       return 1;
    case PIPE_CAP_MEMOBJ:
@@ -535,6 +542,14 @@ static float
 fd_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 {
    switch (param) {
+   case PIPE_CAPF_MIN_LINE_WIDTH:
+   case PIPE_CAPF_MIN_LINE_WIDTH_AA:
+   case PIPE_CAPF_MIN_POINT_SIZE:
+   case PIPE_CAPF_MIN_POINT_SIZE_AA:
+      return 1;
+   case PIPE_CAPF_POINT_SIZE_GRANULARITY:
+   case PIPE_CAPF_LINE_WIDTH_GRANULARITY:
+      return 0.1f;
    case PIPE_CAPF_MAX_LINE_WIDTH:
    case PIPE_CAPF_MAX_LINE_WIDTH_AA:
       /* NOTE: actual value is 127.0f, but this is working around a deqp
@@ -547,8 +562,8 @@ fd_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
       if (FD_DBG(DEQP))
          return 48.0f;
       return 127.0f;
-   case PIPE_CAPF_MAX_POINT_WIDTH:
-   case PIPE_CAPF_MAX_POINT_WIDTH_AA:
+   case PIPE_CAPF_MAX_POINT_SIZE:
+   case PIPE_CAPF_MAX_POINT_SIZE_AA:
       return 4092.0f;
    case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
       return 16.0f;
@@ -658,7 +673,10 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_PREFERRED_IR:
       return PIPE_SHADER_IR_NIR;
    case PIPE_SHADER_CAP_SUPPORTED_IRS:
-      return (1 << PIPE_SHADER_IR_NIR) | (1 << PIPE_SHADER_IR_TGSI);
+      return (1 << PIPE_SHADER_IR_NIR) |
+             COND(has_compute(screen) && (shader == PIPE_SHADER_COMPUTE),
+                  (1 << PIPE_SHADER_IR_NIR_SERIALIZED)) |
+             (1 << PIPE_SHADER_IR_TGSI);
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32;
    case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
@@ -713,6 +731,8 @@ fd_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
    if (!has_compute(screen))
       return 0;
 
+   struct ir3_compiler *compiler = screen->compiler;
+
 #define RET(x)                                                                 \
    do {                                                                        \
       if (ret)                                                                 \
@@ -722,11 +742,8 @@ fd_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
 
    switch (param) {
    case PIPE_COMPUTE_CAP_ADDRESS_BITS:
-      // don't expose 64b pointer support yet, until ir3 supports 64b
-      // math, otherwise spir64 target is used and we get 64b pointer
-      // calculations that we can't do yet
-      //		if (is_a5xx(screen))
-      //			RET((uint32_t []){ 64 });
+      if (screen->gen >= 5)
+         RET((uint32_t[]){64});
       RET((uint32_t[]){32});
 
    case PIPE_COMPUTE_CAP_IR_TARGET:
@@ -772,7 +789,7 @@ fd_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
       RET((uint32_t[]){32}); // TODO
 
    case PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK:
-      RET((uint64_t[]){1024}); // TODO
+      RET((uint64_t[]){ compiler->max_variable_workgroup_size });
    }
 
    return 0;

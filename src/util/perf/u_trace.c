@@ -38,6 +38,8 @@
 #define TIMESTAMP_BUF_SIZE 0x1000
 #define TRACES_PER_CHUNK   (TIMESTAMP_BUF_SIZE / sizeof(uint64_t))
 
+bool ut_trace_instrument;
+
 #ifdef HAVE_PERFETTO
 int ut_perfetto_enabled;
 
@@ -217,6 +219,7 @@ get_chunk(struct u_trace *ut, size_t payload_size)
    return chunk;
 }
 
+DEBUG_GET_ONCE_BOOL_OPTION(trace_instrument, "GPU_TRACE_INSTRUMENT", false)
 DEBUG_GET_ONCE_BOOL_OPTION(trace, "GPU_TRACE", false)
 DEBUG_GET_ONCE_FILE_OPTION(trace_file, "GPU_TRACEFILE", NULL, "w")
 
@@ -231,6 +234,8 @@ get_tracefile(void)
       if (!tracefile && debug_get_option_trace()) {
          tracefile = stdout;
       }
+
+      ut_trace_instrument = debug_get_option_trace_instrument();
 
       firsttime = false;
    }
@@ -281,7 +286,7 @@ u_trace_context_init(struct u_trace_context *utctx,
    list_add(&utctx->node, &ctx_list);
 #endif
 
-   if (!u_trace_context_tracing(utctx))
+   if (!u_trace_context_actively_tracing(utctx))
       return;
 
    queue_init(utctx);
@@ -425,7 +430,7 @@ u_trace_init(struct u_trace *ut, struct u_trace_context *utctx)
 {
    ut->utctx = utctx;
    list_inithead(&ut->trace_chunks);
-   ut->enabled = u_trace_context_tracing(utctx);
+   ut->enabled = u_trace_context_instrumenting(utctx);
 }
 
 void
@@ -555,6 +560,7 @@ void *
 u_trace_append(struct u_trace *ut, void *cs, const struct u_tracepoint *tp)
 {
    struct u_trace_chunk *chunk = get_chunk(ut, tp->payload_sz);
+   unsigned tp_idx = chunk->num_traces++;
 
    assert(tp->payload_sz == ALIGN_NPOT(tp->payload_sz, 8));
 
@@ -566,14 +572,12 @@ u_trace_append(struct u_trace *ut, void *cs, const struct u_tracepoint *tp)
    }
 
    /* record a timestamp for the trace: */
-   ut->utctx->record_timestamp(ut, cs, chunk->timestamps, chunk->num_traces);
+   ut->utctx->record_timestamp(ut, cs, chunk->timestamps, tp_idx, tp->end_of_pipe);
 
-   chunk->traces[chunk->num_traces] = (struct u_trace_event) {
+   chunk->traces[tp_idx] = (struct u_trace_event) {
          .tp = tp,
          .payload = payload,
    };
-
-   chunk->num_traces++;
 
    return payload;
 }

@@ -688,7 +688,7 @@ fd_gmem_render_tiles(struct fd_batch *batch)
    }
 
    if (ctx->emit_sysmem_prep && !batch->nondraw) {
-      if (fd_autotune_use_bypass(&ctx->autotune, batch) && !FD_DBG(NOBYPASS)) {
+      if (fd_autotune_use_bypass(&ctx->autotune, batch) && !FD_DBG(GMEM)) {
          sysmem = true;
       }
 
@@ -698,7 +698,7 @@ fd_gmem_render_tiles(struct fd_batch *batch)
       }
    }
 
-   if (FD_DBG(NOGMEM))
+   if (FD_DBG(SYSMEM))
       sysmem = true;
 
    /* Layered rendering always needs bypass. */
@@ -709,6 +709,8 @@ fd_gmem_render_tiles(struct fd_batch *batch)
       if (psurf->u.tex.first_layer < psurf->u.tex.last_layer)
          sysmem = true;
    }
+   if (pfb->zsbuf && pfb->zsbuf->u.tex.first_layer < pfb->zsbuf->u.tex.last_layer)
+      sysmem = true;
 
    /* Tessellation doesn't seem to support tiled rendering so fall back to
     * bypass.

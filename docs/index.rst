@@ -83,11 +83,11 @@ Linux, FreeBSD, and other operating systems.
    :caption: Drivers
    :hidden:
 
+   drivers/anv
    drivers/d3d12
    drivers/freedreno
    drivers/lima
    drivers/llvmpipe
-   drivers/openswr
    drivers/panfrost
    drivers/svga3d
    drivers/v3d

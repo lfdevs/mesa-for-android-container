@@ -38,6 +38,9 @@
 #include <limits.h>
 #include "glxextensions.h"
 
+#include <X11/Xlib-xcb.h>
+#include <xcb/xproto.h>
+
 #ifdef GLX_USE_APPLEGL
 #include <pthread.h>
 #include "apple/apple_glx_drawable.h"
@@ -168,7 +171,7 @@ determineTextureFormat(const int *attribs, int numAttribs)
 
 static GLboolean
 CreateDRIDrawable(Display *dpy, struct glx_config *config,
-		  XID drawable, XID glxdrawable,
+		  XID drawable, XID glxdrawable, int type,
 		  const int *attrib_list, size_t num_attribs)
 {
 #ifdef GLX_DIRECT_RENDERING
@@ -185,8 +188,8 @@ CreateDRIDrawable(Display *dpy, struct glx_config *config,
    if (psc->driScreen == NULL)
       return GL_TRUE;
 
-   pdraw = psc->driScreen->createDrawable(psc, drawable,
-					  glxdrawable, config);
+   pdraw = psc->driScreen->createDrawable(psc, drawable, glxdrawable,
+                                          type, config);
    if (pdraw == NULL) {
       fprintf(stderr, "failed to create drawable\n");
       return GL_FALSE;
@@ -205,19 +208,15 @@ CreateDRIDrawable(Display *dpy, struct glx_config *config,
 }
 
 static void
-DestroyDRIDrawable(Display *dpy, GLXDrawable drawable, int destroy_xdrawable)
+DestroyDRIDrawable(Display *dpy, GLXDrawable drawable)
 {
 #ifdef GLX_DIRECT_RENDERING
    struct glx_display *const priv = __glXInitialize(dpy);
    __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, drawable);
-   XID xid;
 
    if (priv != NULL && pdraw != NULL) {
-      xid = pdraw->xDrawable;
       (*pdraw->destroyDrawable) (pdraw);
       __glxHashDelete(priv->drawHash, drawable);
-      if (destroy_xdrawable)
-         XFreePixmap(priv->dpy, xid);
    }
 #endif
 }
@@ -391,7 +390,51 @@ __glXGetDrawableAttribute(Display * dpy, GLXDrawable drawable,
    UnlockDisplay(dpy);
    SyncHandle();
 
+#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+   if (pdraw && attribute == GLX_FBCONFIG_ID && !found && priv && priv->screens != NULL) {
+      /* If we failed to lookup the GLX_FBCONFIG_ID, it may be because the drawable is
+       * a bare Window, so try differently by first figure out its visual, then GLX
+       * visual like driInferDrawableConfig does.
+       */
+      xcb_get_window_attributes_cookie_t cookie = { 0 };
+      xcb_get_window_attributes_reply_t *attr = NULL;
+
+      xcb_connection_t *conn = XGetXCBConnection(dpy);
+
+      if (conn) {
+         cookie = xcb_get_window_attributes(conn, drawable);
+         attr = xcb_get_window_attributes_reply(conn, cookie, NULL);
+         if (attr) {
+            /* Find the Window's GLX Visual */
+            struct glx_config *conf = glx_config_find_visual(pdraw->psc->visuals, attr->visual);
+            free(attr);
+
+            if (conf && conf->screen >= 0 && conf->screen < ScreenCount(dpy)) {
+               /* Then find the GLXFBConfig of the GLX Visual */
+               struct glx_config *c;
+               for (c = priv->screens[conf->screen]->configs; c != NULL;
+                    c = c->next) {
+                  if (!c->visualID)
+                     continue;
+                  if (c->visualID == conf->visualID) {
+                     *value = c->fbconfigID;
+                     found = 1;
+                     break;
+                  }
+               }
+            }
+         }
+      }
+   }
+#endif
+
    return found;
+}
+
+static int dummyErrorHandler(Display *display, xError *err, XExtCodes *codes,
+                             int *ret_code)
+{
+    return 1; /* do nothing */
 }
 
 static void
@@ -413,6 +456,19 @@ protocolDestroyDrawable(Display *dpy, GLXDrawable drawable, CARD32 glxCode)
 
    UnlockDisplay(dpy);
    SyncHandle();
+
+   /* Viewperf2020/Sw calls XDestroyWindow(win) and then glXDestroyWindow(win),
+    * causing an X error and abort. This is the workaround.
+    */
+   struct glx_display *priv = __glXInitialize(dpy);
+
+   if (priv->screens[0] &&
+       priv->screens[0]->allow_invalid_glx_destroy_window) {
+      void *old = XESetError(priv->dpy, priv->codes.extension,
+                             dummyErrorHandler);
+      XSync(dpy, false);
+      XESetError(priv->dpy, priv->codes.extension, old);
+   }
 }
 
 /**
@@ -420,7 +476,7 @@ protocolDestroyDrawable(Display *dpy, GLXDrawable drawable, CARD32 glxCode)
  */
 static GLXDrawable
 CreateDrawable(Display *dpy, struct glx_config *config,
-               Drawable drawable, const int *attrib_list, CARD8 glxCode)
+               Drawable drawable, int type, const int *attrib_list)
 {
    xGLXCreateWindowReq *req;
    struct glx_drawable *glxDraw;
@@ -451,12 +507,16 @@ CreateDrawable(Display *dpy, struct glx_config *config,
    data = (CARD32 *) (req + 1);
 
    req->reqType = opcode;
-   req->glxCode = glxCode;
    req->screen = config->screen;
    req->fbconfig = config->fbconfigID;
    req->window = drawable;
    req->glxwindow = xid = XAllocID(dpy);
    req->numAttribs = i;
+
+   if (type == GLX_WINDOW_BIT)
+      req->glxCode = X_GLXCreateWindow;
+   else
+      req->glxCode = X_GLXCreatePixmap;
 
    if (attrib_list)
       memcpy(data, attrib_list, 8 * i);
@@ -469,8 +529,9 @@ CreateDrawable(Display *dpy, struct glx_config *config,
       return None;
    }
 
-   if (!CreateDRIDrawable(dpy, config, drawable, xid, attrib_list, i)) {
-      if (glxCode == X_GLXCreatePixmap)
+   if (!CreateDRIDrawable(dpy, config, drawable, xid, type, attrib_list, i)) {
+      CARD8 glxCode;
+      if (type == GLX_PIXMAP_BIT)
          glxCode = X_GLXDestroyPixmap;
       else
          glxCode = X_GLXDestroyWindow;
@@ -495,7 +556,7 @@ DestroyDrawable(Display * dpy, GLXDrawable drawable, CARD32 glxCode)
    protocolDestroyDrawable(dpy, drawable, glxCode);
 
    DestroyGLXDrawable(dpy, drawable);
-   DestroyDRIDrawable(dpy, drawable, GL_FALSE);
+   DestroyDRIDrawable(dpy, drawable);
 
    return;
 }
@@ -521,9 +582,7 @@ CreatePbuffer(Display * dpy, struct glx_config *config,
    CARD32 *data;
    CARD8 opcode;
    unsigned int i;
-   Pixmap pixmap;
    GLboolean glx_1_3 = GL_FALSE;
-   int depth = config->rgbBits;
 
    if (priv == NULL)
       return None;
@@ -588,15 +647,9 @@ CreatePbuffer(Display * dpy, struct glx_config *config,
    UnlockDisplay(dpy);
    SyncHandle();
 
-   if (depth == 30)
-      depth = 32;
-
-   pixmap = XCreatePixmap(dpy, RootWindow(dpy, config->screen),
-			  width, height, depth);
-
-   if (!CreateDRIDrawable(dpy, config, pixmap, id, attrib_list, i)) {
+   /* xserver created a pixmap with the same id as pbuffer */
+   if (!CreateDRIDrawable(dpy, config, id, id, GLX_PBUFFER_BIT, attrib_list, i)) {
       CARD32 o = glx_1_3 ? X_GLXDestroyPbuffer : X_GLXvop_DestroyGLXPbufferSGIX;
-      XFreePixmap(dpy, pixmap);
       protocolDestroyDrawable(dpy, id, o);
       id = None;
    }
@@ -655,7 +708,7 @@ DestroyPbuffer(Display * dpy, GLXDrawable drawable)
    UnlockDisplay(dpy);
    SyncHandle();
 
-   DestroyDRIDrawable(dpy, drawable, GL_TRUE);
+   DestroyDRIDrawable(dpy, drawable);
 
    return;
 }
@@ -909,7 +962,7 @@ glXCreatePixmap(Display * dpy, GLXFBConfig config, Pixmap pixmap,
    return pixmap;
 #else
    return CreateDrawable(dpy, (struct glx_config *) config,
-                         (Drawable) pixmap, attrib_list, X_GLXCreatePixmap);
+                         (Drawable) pixmap, GLX_PIXMAP_BIT, attrib_list);
 #endif
 }
 
@@ -943,7 +996,7 @@ glXCreateWindow(Display * dpy, GLXFBConfig config, Window win,
    return win;
 #else
    return CreateDrawable(dpy, (struct glx_config *) config,
-                         (Drawable) win, attrib_list, X_GLXCreateWindow);
+                         (Drawable) win, GLX_WINDOW_BIT, attrib_list);
 #endif
 }
 

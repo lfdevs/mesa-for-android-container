@@ -48,17 +48,17 @@ create_solid_vertexbuf(struct pipe_context *pctx)
    /* clang-format off */
    static const float init_shader_const[] = {
       /* for clear/gmem2mem/mem2gmem (vertices): */
-      -1.000000, +1.000000, +1.000000,
-      +1.000000, +1.000000, +1.000000,
-      -1.000000, -1.000000, +1.000000,
+      -1.000000f, +1.000000f, +1.000000f,
+      +1.000000f, +1.000000f, +1.000000f,
+      -1.000000f, -1.000000f, +1.000000f,
       /* for mem2gmem: (tex coords) */
-      +0.000000, +0.000000,
-      +1.000000, +0.000000,
-      +0.000000, +1.000000,
+      +0.000000f, +0.000000f,
+      +1.000000f, +0.000000f,
+      +0.000000f, +1.000000f,
       /* SCREEN_SCISSOR_BR value (must be at 60 byte offset in page) */
-      0.0,
+      0.0f,
       /* zero indices dummy draw workaround (3 16-bit zeros) */
-      0.0, 0.0,
+      0.0f, 0.0f,
    };
    /* clang-format on */
 
@@ -83,6 +83,7 @@ fd2_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    pctx = &fd2_ctx->base.base;
    pctx->screen = pscreen;
 
+   fd2_ctx->base.flags = flags;
    fd2_ctx->base.dev = fd_device_ref(screen->dev);
    fd2_ctx->base.screen = fd_screen(pscreen);
 

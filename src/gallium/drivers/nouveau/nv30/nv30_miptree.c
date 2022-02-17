@@ -229,7 +229,7 @@ nv30_blit(struct pipe_context *pipe,
       return;
    }
 
-   if (util_try_blit_via_copy_region(pipe, &info)) {
+   if (util_try_blit_via_copy_region(pipe, &info, nv30->render_cond_query != NULL)) {
       return; /* done */
    }
 
@@ -258,7 +258,7 @@ nv30_blit(struct pipe_context *pipe,
    util_blitter_save_depth_stencil_alpha(nv30->blitter,
                                          nv30->zsa);
    util_blitter_save_stencil_ref(nv30->blitter, &nv30->stencil_ref);
-   util_blitter_save_sample_mask(nv30->blitter, nv30->sample_mask);
+   util_blitter_save_sample_mask(nv30->blitter, nv30->sample_mask, 0);
    util_blitter_save_framebuffer(nv30->blitter, &nv30->framebuffer);
    util_blitter_save_fragment_sampler_states(nv30->blitter,
                      nv30->fragprog.num_samplers,

@@ -99,7 +99,7 @@ clear_pad_bits(const struct intel_device_info *devinfo, brw_inst *inst)
       brw_inst_set_bits(inst, 127, 111, 0);
    }
 
-   if (devinfo->ver == 8 && !devinfo->is_cherryview &&
+   if (devinfo->ver == 8 && devinfo->platform != INTEL_PLATFORM_CHV &&
        is_3src(devinfo, brw_inst_opcode(devinfo, inst))) {
       brw_inst_set_bits(inst, 105, 105, 0);
       brw_inst_set_bits(inst, 84, 84, 0);
@@ -119,7 +119,7 @@ skip_bit(const struct intel_device_info *devinfo, brw_inst *src, int bit)
       return true;
 
    if (is_3src(devinfo, brw_inst_opcode(devinfo, src))) {
-      if (devinfo->ver >= 9 || devinfo->is_cherryview) {
+      if (devinfo->ver >= 9 || devinfo->platform == INTEL_PLATFORM_CHV) {
          if (bit == 127)
             return true;
       } else {

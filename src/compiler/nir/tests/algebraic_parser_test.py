@@ -26,7 +26,7 @@ import sys
 import os
 sys.path.insert(1, os.path.join(sys.path[0], '..'))
 
-from nir_algebraic import SearchAndReplace
+from nir_algebraic import SearchAndReplace, AlgebraicPass
 
 # These tests check that the bitsize validator correctly rejects various
 # different kinds of malformed expressions, and documents what the error
@@ -40,9 +40,11 @@ class ValidatorTests(unittest.TestCase):
     pattern = ()
     message = ''
 
+    algebraic_pass = AlgebraicPass("test", [])
+
     def common(self, pattern, message):
         with self.assertRaises(AssertionError) as context:
-            SearchAndReplace(pattern)
+            SearchAndReplace(pattern, self.algebraic_pass)
 
         self.assertEqual(message, str(context.exception))
 

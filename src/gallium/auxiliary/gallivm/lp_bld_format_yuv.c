@@ -335,7 +335,6 @@ rgb_to_rgba_aos(struct gallivm_state *gallivm,
     */
 
 #if UTIL_ARCH_LITTLE_ENDIAN
-   r = r;
    g = LLVMBuildShl(builder, g, lp_build_const_int_vec(gallivm, type, 8), "");
    b = LLVMBuildShl(builder, b, lp_build_const_int_vec(gallivm, type, 16), "");
    a = lp_build_const_int_vec(gallivm, type, 0xff000000);

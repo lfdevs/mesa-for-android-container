@@ -498,42 +498,36 @@ void si_log_hw_flush(struct si_context *sctx)
    }
 }
 
-static const char *priority_to_string(enum radeon_bo_priority priority)
+static const char *priority_to_string(unsigned priority)
 {
-#define ITEM(x) [RADEON_PRIO_##x] = #x
-   static const char *table[64] = {
-      ITEM(FENCE),
-      ITEM(TRACE),
-      ITEM(SO_FILLED_SIZE),
-      ITEM(QUERY),
-      ITEM(IB1),
-      ITEM(IB2),
-      ITEM(DRAW_INDIRECT),
-      ITEM(INDEX_BUFFER),
-      ITEM(CP_DMA),
-      ITEM(CONST_BUFFER),
-      ITEM(DESCRIPTORS),
-      ITEM(BORDER_COLORS),
-      ITEM(SAMPLER_BUFFER),
-      ITEM(VERTEX_BUFFER),
-      ITEM(SHADER_RW_BUFFER),
-      ITEM(COMPUTE_GLOBAL),
-      ITEM(SAMPLER_TEXTURE),
-      ITEM(SHADER_RW_IMAGE),
-      ITEM(SAMPLER_TEXTURE_MSAA),
-      ITEM(COLOR_BUFFER),
-      ITEM(DEPTH_BUFFER),
-      ITEM(COLOR_BUFFER_MSAA),
-      ITEM(DEPTH_BUFFER_MSAA),
-      ITEM(SEPARATE_META),
-      ITEM(SHADER_BINARY),
-      ITEM(SHADER_RINGS),
-      ITEM(SCRATCH_BUFFER),
-   };
+#define ITEM(x) if (priority == RADEON_PRIO_##x) return #x
+   ITEM(FENCE_TRACE);
+   ITEM(SO_FILLED_SIZE);
+   ITEM(QUERY);
+   ITEM(IB);
+   ITEM(DRAW_INDIRECT);
+   ITEM(INDEX_BUFFER);
+   ITEM(CP_DMA);
+   ITEM(BORDER_COLORS);
+   ITEM(CONST_BUFFER);
+   ITEM(DESCRIPTORS);
+   ITEM(SAMPLER_BUFFER);
+   ITEM(VERTEX_BUFFER);
+   ITEM(SHADER_RW_BUFFER);
+   ITEM(SAMPLER_TEXTURE);
+   ITEM(SHADER_RW_IMAGE);
+   ITEM(SAMPLER_TEXTURE_MSAA);
+   ITEM(COLOR_BUFFER);
+   ITEM(DEPTH_BUFFER);
+   ITEM(COLOR_BUFFER_MSAA);
+   ITEM(DEPTH_BUFFER_MSAA);
+   ITEM(SEPARATE_META);
+   ITEM(SHADER_BINARY);
+   ITEM(SHADER_RINGS);
+   ITEM(SCRATCH_BUFFER);
 #undef ITEM
 
-   assert(priority < ARRAY_SIZE(table));
-   return table[priority];
+   return "";
 }
 
 static int bo_list_compare_va(const struct radeon_bo_list_item *a,
@@ -582,7 +576,7 @@ static void si_dump_bo_list(struct si_context *sctx, const struct radeon_saved_c
          if (!(saved->bo_list[i].priority_usage & (1u << j)))
             continue;
 
-         fprintf(f, "%s%s", !hit ? "" : ", ", priority_to_string(j));
+         fprintf(f, "%s%s", !hit ? "" : ", ", priority_to_string(1u << j));
          hit = true;
       }
       fprintf(f, "\n");
@@ -925,28 +919,23 @@ static void si_print_annotated_shader(struct si_shader *shader, struct ac_wave_i
     */
    unsigned num_inst = 0;
    uint64_t inst_addr = start_addr;
-   unsigned wave_size = si_get_shader_wave_size(shader);
    struct ac_rtld_binary rtld_binaries[5] = {};
    struct si_shader_inst *instructions =
       calloc(shader->bo->b.b.width0 / 4, sizeof(struct si_shader_inst));
 
    if (shader->prolog) {
       si_add_split_disasm(screen, &rtld_binaries[0], &shader->prolog->binary, &inst_addr, &num_inst,
-                          instructions, stage, wave_size);
+                          instructions, stage, shader->wave_size);
    }
    if (shader->previous_stage) {
       si_add_split_disasm(screen, &rtld_binaries[1], &shader->previous_stage->binary, &inst_addr,
-                          &num_inst, instructions, stage, wave_size);
-   }
-   if (shader->prolog2) {
-      si_add_split_disasm(screen, &rtld_binaries[2], &shader->prolog2->binary, &inst_addr,
-                          &num_inst, instructions, stage, wave_size);
+                          &num_inst, instructions, stage, shader->wave_size);
    }
    si_add_split_disasm(screen, &rtld_binaries[3], &shader->binary, &inst_addr, &num_inst,
-                       instructions, stage, wave_size);
+                       instructions, stage, shader->wave_size);
    if (shader->epilog) {
       si_add_split_disasm(screen, &rtld_binaries[4], &shader->epilog->binary, &inst_addr, &num_inst,
-                          instructions, stage, wave_size);
+                          instructions, stage, shader->wave_size);
    }
 
    fprintf(f, COLOR_YELLOW "%s - annotated disassembly:" COLOR_RESET "\n",

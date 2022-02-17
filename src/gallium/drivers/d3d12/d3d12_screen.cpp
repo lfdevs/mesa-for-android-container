@@ -133,37 +133,19 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_MAX_RENDER_TARGETS:
-      if (screen->max_feature_level >= D3D_FEATURE_LEVEL_10_0)
-         return 8;
-      else if (screen->max_feature_level == D3D_FEATURE_LEVEL_9_3)
-         return 4;
-      return 1;
+      return D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
 
    case PIPE_CAP_TEXTURE_SWIZZLE:
       return 1;
 
    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
-      if (screen->max_feature_level >= D3D_FEATURE_LEVEL_11_0)
-         return 16384;
-      else if (screen->max_feature_level >= D3D_FEATURE_LEVEL_10_0)
-         return 8192;
-      else if (screen->max_feature_level >= D3D_FEATURE_LEVEL_9_3)
-         return 4096;
-      return 2048;
+      return D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
 
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-      if (screen->max_feature_level >= D3D_FEATURE_LEVEL_10_0)
-         return 11;
-      return 9;
+      return 11; // D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION == 2^10
 
    case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
-      if (screen->max_feature_level >= D3D_FEATURE_LEVEL_11_0)
-         return 14;
-      else if (screen->max_feature_level >= D3D_FEATURE_LEVEL_10_0)
-         return 13;
-      else if (screen->max_feature_level == D3D_FEATURE_LEVEL_9_3)
-         return 12;
-      return 9;
+      return D3D12_REQ_MIP_LEVELS;
 
    case PIPE_CAP_PRIMITIVE_RESTART:
    case PIPE_CAP_INDEP_BLEND_ENABLE:
@@ -174,24 +156,25 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND:
+   case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
       return 1;
 
    /* We need to do some lowering that requires a link to the sampler */
    case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
       return 1;
 
+   case PIPE_CAP_NIR_IMAGES_AS_DEREF:
+      return 1;
+
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-      if (screen->max_feature_level >= D3D_FEATURE_LEVEL_11_0)
-         return 1 << 14;
-      else if (screen->max_feature_level >= D3D_FEATURE_LEVEL_10_0)
-         return 1 << 13;
-      return 0;
+      /* Divide by 6 because this also applies to cubemaps */
+      return D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION / 6;
 
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
       return 1;
 
    case PIPE_CAP_TGSI_TEXCOORD:
-      return 0;
+      return 1;
 
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
       return 1;
@@ -200,42 +183,38 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
-      return 330;
+      return 400;
    case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
-      return 140;
+      return 400;
+   case PIPE_CAP_ESSL_FEATURE_LEVEL:
+      return 310;
 
-#if 0 /* TODO: Enable me */
    case PIPE_CAP_COMPUTE:
-      return 0;
-#endif
+      return 1;
 
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
       return 1;
 
-#if 0 /* TODO: Enable me */
    case PIPE_CAP_CUBE_MAP_ARRAY:
-      return screen->max_feature_level >= D3D_FEATURE_LEVEL_10_1;
-#endif
+      return 1;
 
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 1;
 
-   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+   case PIPE_CAP_TEXTURE_TRANSFER_MODES:
       return 0; /* unsure */
 
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_NATIVE; /* unsure */
 
    case PIPE_CAP_MAX_VIEWPORTS:
-      return 1; /* probably wrong */
+      return D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
 
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
       return 1;
 
-#if 0 /* TODO: Enable me. Enables ARB_texture_gather */
    case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
       return 4;
-#endif
 
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
@@ -260,13 +239,11 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
       return 1;
 
-#if 0 /* TODO: Enable me. Enables GL_ARB_shader_storage_buffer_object */
    case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
-      return screen->max_feature_level >= D3D_FEATURE_LEVEL_10_0;
-#endif
+      return D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT;
 
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
-      return 256;
+      return D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
 
    case PIPE_CAP_PCI_GROUP:
    case PIPE_CAP_PCI_BUS:
@@ -296,29 +273,57 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_PSIZ_CLAMPED:
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_CONDITIONAL_RENDER:
+   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_QUERY_TIMESTAMP:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
+   case PIPE_CAP_IMAGE_STORE_FORMATTED:
+   case PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS:
       return 1;
 
    case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
-      return 4;
+      return D3D12_SO_BUFFER_SLOT_COUNT;
 
    case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
-      return 16 * 4;
+      return D3D12_SO_OUTPUT_COMPONENT_COUNT;
 
    /* Geometry shader output. */
    case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
-      return 256;
+      return D3D12_GS_MAX_OUTPUT_VERTEX_COUNT_ACROSS_INSTANCES;
    case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
-      return 256 * 4;
+      return D3D12_REQ_GS_INVOCATION_32BIT_OUTPUT_COMPONENT_LIMIT;
 
    case PIPE_CAP_MAX_VARYINGS:
-      return 32;
+      return D3D12_PS_INPUT_REGISTER_COUNT;
 
    case PIPE_CAP_NIR_COMPACT_ARRAYS:
       return 1;
+
+   case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
+      if (screen->max_feature_level <= D3D_FEATURE_LEVEL_11_0)
+         return D3D12_PS_CS_UAV_REGISTER_COUNT;
+      if (screen->opts.ResourceBindingTier <= D3D12_RESOURCE_BINDING_TIER_2)
+         return D3D12_UAV_SLOT_COUNT;
+      return 0;
+
+   case PIPE_CAP_START_INSTANCE:
+   case PIPE_CAP_DRAW_PARAMETERS:
+   case PIPE_CAP_DRAW_INDIRECT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT:
+   case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
+   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+   case PIPE_CAP_SAMPLE_SHADING:
+   case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
+   case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
+      return 1;
+
+   case PIPE_CAP_MAX_VERTEX_STREAMS:
+      return D3D12_SO_BUFFER_SLOT_COUNT;
+
+   case PIPE_CAP_MAX_SHADER_PATCH_VARYINGS:
+      /* This is asking about varyings, not total registers, so remove the 2 tess factor registers. */
+      return D3D12_HS_OUTPUT_PATCH_CONSTANT_REGISTER_COUNT - 2;
 
    default:
       return u_pipe_screen_get_param_defaults(pscreen, param);
@@ -331,12 +336,22 @@ d3d12_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
    struct d3d12_screen *screen = d3d12_screen(pscreen);
 
    switch (param) {
+   case PIPE_CAPF_MIN_LINE_WIDTH:
+   case PIPE_CAPF_MIN_LINE_WIDTH_AA:
+   case PIPE_CAPF_MIN_POINT_SIZE:
+   case PIPE_CAPF_MIN_POINT_SIZE_AA:
+      return 1;
+
+   case PIPE_CAPF_POINT_SIZE_GRANULARITY:
+   case PIPE_CAPF_LINE_WIDTH_GRANULARITY:
+      return 0.1;
+
    case PIPE_CAPF_MAX_LINE_WIDTH:
    case PIPE_CAPF_MAX_LINE_WIDTH_AA:
       return 1.0f; /* no clue */
 
-   case PIPE_CAPF_MAX_POINT_WIDTH:
-   case PIPE_CAPF_MAX_POINT_WIDTH_AA:
+   case PIPE_CAPF_MAX_POINT_SIZE:
+   case PIPE_CAPF_MAX_POINT_SIZE_AA:
       return D3D12_MAX_POINT_SIZE;
 
    case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
@@ -370,9 +385,6 @@ d3d12_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
    case PIPE_SHADER_CAP_MAX_TEX_INDIRECTIONS:
    case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
-      if (shader == PIPE_SHADER_VERTEX ||
-          shader == PIPE_SHADER_FRAGMENT ||
-          shader == PIPE_SHADER_GEOMETRY)
          return INT_MAX;
       return 0;
 
@@ -425,9 +437,10 @@ d3d12_get_shader_param(struct pipe_screen *pscreen,
       return 0; /* not implemented */
 
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
-      if (screen->opts.ResourceBindingTier == D3D12_RESOURCE_BINDING_TIER_1)
-         return 128;
-      return PIPE_MAX_SHADER_SAMPLER_VIEWS;
+      /* Note: This is wrong, but this is the max value that
+       * TC can support to avoid overflowing an array.
+       */
+      return PIPE_MAX_SAMPLERS;
 
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
@@ -440,16 +453,22 @@ d3d12_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32; /* arbitrary */
 
-#if 0
    case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
-      return 8; /* no clue */
-#endif
+      return
+         (screen->max_feature_level >= D3D_FEATURE_LEVEL_11_1 ||
+          screen->opts.ResourceBindingTier >= D3D12_RESOURCE_BINDING_TIER_3) ?
+         PIPE_MAX_SHADER_BUFFERS : D3D12_PS_CS_UAV_REGISTER_COUNT;
 
    case PIPE_SHADER_CAP_SUPPORTED_IRS:
       return 1 << PIPE_SHADER_IR_NIR;
 
    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
-      return 0; /* TODO: enable me */
+      if (!screen->support_shader_images)
+         return 0;
+      return
+         (screen->max_feature_level >= D3D_FEATURE_LEVEL_11_1 ||
+          screen->opts.ResourceBindingTier >= D3D12_RESOURCE_BINDING_TIER_3) ?
+         PIPE_MAX_SHADER_IMAGES : D3D12_PS_CS_UAV_REGISTER_COUNT;
 
    case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
    case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
@@ -463,6 +482,37 @@ d3d12_get_shader_param(struct pipe_screen *pscreen,
 
    /* should only get here on unhandled cases */
    default: return 0;
+   }
+}
+
+static int
+d3d12_get_compute_param(struct pipe_screen *pscreen,
+                        enum pipe_shader_ir ir,
+                        enum pipe_compute_cap cap,
+                        void *ret)
+{
+   switch (cap) {
+   case PIPE_COMPUTE_CAP_MAX_GRID_SIZE: {
+      uint64_t *grid = (uint64_t *)ret;
+      grid[0] = grid[1] = grid[2] = D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION;
+      return sizeof(uint64_t) * 3;
+   }
+   case PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE: {
+      uint64_t *block = (uint64_t *)ret;
+      block[0] = D3D12_CS_THREAD_GROUP_MAX_X;
+      block[1] = D3D12_CS_THREAD_GROUP_MAX_Y;
+      block[2] = D3D12_CS_THREAD_GROUP_MAX_Z;
+      return sizeof(uint64_t) * 3;
+   }
+   case PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK:
+   case PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK:
+      *(uint64_t *)ret = D3D12_CS_THREAD_GROUP_MAX_THREADS_PER_GROUP;
+      return sizeof(uint64_t);
+   case PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE:
+      *(uint64_t *)ret = D3D12_CS_TGSM_REGISTER_COUNT /*DWORDs*/ * 4;
+      return sizeof(uint64_t);
+   default:
+      return 0;
    }
 }
 
@@ -492,11 +542,27 @@ d3d12_is_format_supported(struct pipe_screen *pscreen,
 
    /* Don't advertise alpha/luminance_alpha formats because they can't be used
     * for render targets (except A8_UNORM) and can't be emulated by R/RG formats.
-    * Let the state tracker choose an RGBA format instead. */
+    * Let the state tracker choose an RGBA format instead. For YUV formats, we
+    * want the state tracker to lower these to individual planes. */
    if (format != PIPE_FORMAT_A8_UNORM &&
        (util_format_is_alpha(format) ||
-        util_format_is_luminance_alpha(format)))
+        util_format_is_luminance_alpha(format) ||
+        util_format_is_yuv(format)))
       return false;
+
+   if (format == PIPE_FORMAT_NONE) {
+      /* For UAV-only rendering, aka ARB_framebuffer_no_attachments */
+      switch (sample_count) {
+      case 0:
+      case 1:
+      case 4:
+      case 8:
+      case 16:
+         return true;
+      default:
+         return false;
+      }
+   }
 
    DXGI_FORMAT dxgi_format = d3d12_get_format(format);
    if (dxgi_format == DXGI_FORMAT_UNKNOWN)
@@ -560,6 +626,11 @@ d3d12_is_format_supported(struct pipe_screen *pscreen,
          !(fmt_info.Support1 & D3D12_FORMAT_SUPPORT1_BLENDABLE))
          return false;
 
+      if (bind & PIPE_BIND_SHADER_IMAGE &&
+         (fmt_info.Support2 & (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD | D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE)) !=
+            (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD | D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE))
+         return false;
+
       D3D12_FEATURE_DATA_FORMAT_SUPPORT fmt_info_sv;
       if (util_format_is_depth_or_stencil(format)) {
          fmt_info_sv.Format = d3d12_get_resource_srv_format(format, target);
@@ -587,6 +658,9 @@ d3d12_is_format_supported(struct pipe_screen *pscreen,
             return false;
 
          if (!util_is_power_of_two_nonzero(sample_count))
+            return false;
+
+         if (bind & PIPE_BIND_SHADER_IMAGE)
             return false;
 
          D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS ms_info = {};
@@ -637,6 +711,7 @@ d3d12_flush_frontbuffer(struct pipe_screen * pscreen,
    void *map = winsys->displaytarget_map(winsys, res->dt, 0);
 
    if (map) {
+      pctx = threaded_context_unwrap_sync(pctx);
       pipe_transfer *transfer = nullptr;
       void *res_map = pipe_texture_map(pctx, pres, level, layer, PIPE_MAP_READ, 0, 0,
                                         u_minify(pres->width0, level),
@@ -766,6 +841,49 @@ can_attribute_at_vertex(struct d3d12_screen *screen)
    }
 }
 
+static bool
+can_shader_image_load_all_formats(struct d3d12_screen *screen)
+{
+   if (!screen->opts.TypedUAVLoadAdditionalFormats)
+      return false;
+
+   /* All of these are required by ARB_shader_image_load_store */
+   static const DXGI_FORMAT additional_formats[] = {
+      DXGI_FORMAT_R16G16B16A16_UNORM,
+      DXGI_FORMAT_R16G16B16A16_SNORM,
+      DXGI_FORMAT_R32G32_FLOAT,
+      DXGI_FORMAT_R32G32_UINT,
+      DXGI_FORMAT_R32G32_SINT,
+      DXGI_FORMAT_R10G10B10A2_UNORM,
+      DXGI_FORMAT_R10G10B10A2_UINT,
+      DXGI_FORMAT_R11G11B10_FLOAT,
+      DXGI_FORMAT_R8G8B8A8_SNORM,
+      DXGI_FORMAT_R16G16_FLOAT,
+      DXGI_FORMAT_R16G16_UNORM,
+      DXGI_FORMAT_R16G16_UINT,
+      DXGI_FORMAT_R16G16_SNORM,
+      DXGI_FORMAT_R16G16_SINT,
+      DXGI_FORMAT_R8G8_UNORM,
+      DXGI_FORMAT_R8G8_UINT,
+      DXGI_FORMAT_R8G8_SNORM,
+      DXGI_FORMAT_R8G8_SINT,
+      DXGI_FORMAT_R16_UNORM,
+      DXGI_FORMAT_R16_SNORM,
+      DXGI_FORMAT_R8_SNORM,
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(additional_formats); ++i) {
+      D3D12_FEATURE_DATA_FORMAT_SUPPORT support = { additional_formats[i] };
+      if (FAILED(screen->dev->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support))) ||
+         (support.Support1 & D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW) == D3D12_FORMAT_SUPPORT1_NONE ||
+         (support.Support2 & (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD | D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE)) !=
+            (D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD | D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE))
+         return false;
+   }
+
+   return true;
+}
+
 static void
 d3d12_init_null_srvs(struct d3d12_screen *screen)
 {
@@ -852,6 +970,66 @@ d3d12_init_null_srvs(struct d3d12_screen *screen)
 }
 
 static void
+d3d12_init_null_uavs(struct d3d12_screen *screen)
+{
+   for (unsigned i = 0; i < RESOURCE_DIMENSION_COUNT; ++i) {
+      D3D12_UNORDERED_ACCESS_VIEW_DESC uav = {};
+
+      uav.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+      switch (i) {
+      case RESOURCE_DIMENSION_BUFFER:
+      case RESOURCE_DIMENSION_UNKNOWN:
+         uav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+         uav.Buffer.FirstElement = 0;
+         uav.Buffer.NumElements = 0;
+         uav.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+         uav.Buffer.StructureByteStride = 0;
+         uav.Buffer.CounterOffsetInBytes = 0;
+         break;
+      case RESOURCE_DIMENSION_TEXTURE1D:
+         uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1D;
+         uav.Texture1D.MipSlice = 0;
+         break;
+      case RESOURCE_DIMENSION_TEXTURE1DARRAY:
+         uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
+         uav.Texture1DArray.MipSlice = 0;
+         uav.Texture1DArray.ArraySize = 1;
+         uav.Texture1DArray.FirstArraySlice = 0;
+         break;
+      case RESOURCE_DIMENSION_TEXTURE2D:
+         uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+         uav.Texture2D.MipSlice = 0;
+         uav.Texture2D.PlaneSlice = 0;
+         break;
+      case RESOURCE_DIMENSION_TEXTURE2DARRAY:
+      case RESOURCE_DIMENSION_TEXTURECUBE:
+      case RESOURCE_DIMENSION_TEXTURECUBEARRAY:
+         uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+         uav.Texture2DArray.MipSlice = 0;
+         uav.Texture2DArray.ArraySize = 1;
+         uav.Texture2DArray.FirstArraySlice = 0;
+         uav.Texture2DArray.PlaneSlice = 0;
+         break;
+      case RESOURCE_DIMENSION_TEXTURE2DMS:
+      case RESOURCE_DIMENSION_TEXTURE2DMSARRAY:
+         break;
+      case RESOURCE_DIMENSION_TEXTURE3D:
+         uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+         uav.Texture3D.MipSlice = 0;
+         uav.Texture3D.FirstWSlice = 0;
+         uav.Texture3D.WSize = 1;
+         break;
+      }
+
+      if (uav.ViewDimension != D3D12_UAV_DIMENSION_UNKNOWN)
+      {
+         d3d12_descriptor_pool_alloc_handle(screen->view_pool, &screen->null_uavs[i]);
+         screen->dev->CreateUnorderedAccessView(NULL, NULL, &uav, screen->null_uavs[i].cpu_handle);
+      }
+   }
+}
+
+static void
 d3d12_init_null_rtv(struct d3d12_screen *screen)
 {
    D3D12_RENDER_TARGET_VIEW_DESC rtv = {};
@@ -876,6 +1054,7 @@ d3d12_init_screen(struct d3d12_screen *screen, struct sw_winsys *winsys, IUnknow
    screen->base.get_param = d3d12_get_param;
    screen->base.get_paramf = d3d12_get_paramf;
    screen->base.get_shader_param = d3d12_get_shader_param;
+   screen->base.get_compute_param = d3d12_get_compute_param;
    screen->base.is_format_supported = d3d12_is_format_supported;
    screen->base.get_compiler_options = d3d12_get_compiler_options;
    screen->base.context_create = d3d12_context_create;
@@ -1019,9 +1198,11 @@ d3d12_init_screen(struct d3d12_screen *screen, struct sw_winsys *winsys, IUnknow
                                                  1024);
 
    d3d12_init_null_srvs(screen);
+   d3d12_init_null_uavs(screen);
    d3d12_init_null_rtv(screen);
 
    screen->have_load_at_vertex = can_attribute_at_vertex(screen);
+   screen->support_shader_images = can_shader_image_load_all_formats(screen);
    return true;
 
 failed:

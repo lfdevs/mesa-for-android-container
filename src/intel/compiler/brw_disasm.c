@@ -613,11 +613,13 @@ static const char *const gfx5_sampler_msg_type[] = {
    [GFX7_SAMPLER_MESSAGE_SAMPLE_LD2DSS]       = "ld2dss",
 };
 
-static const char *const gfx5_sampler_simd_mode[4] = {
+static const char *const gfx5_sampler_simd_mode[7] = {
    [BRW_SAMPLER_SIMD_MODE_SIMD4X2]   = "SIMD4x2",
    [BRW_SAMPLER_SIMD_MODE_SIMD8]     = "SIMD8",
    [BRW_SAMPLER_SIMD_MODE_SIMD16]    = "SIMD16",
    [BRW_SAMPLER_SIMD_MODE_SIMD32_64] = "SIMD32/64",
+   [GFX10_SAMPLER_SIMD_MODE_SIMD8H]  = "SIMD8H",
+   [GFX10_SAMPLER_SIMD_MODE_SIMD16H] = "SIMD16H",
 };
 
 static const char *const sampler_target_format[4] = {
@@ -2092,6 +2094,10 @@ brw_disassemble_inst(FILE *file, const struct intel_device_info *devinfo,
                err |= control(file, "sampler simd mode", gfx5_sampler_simd_mode,
                               brw_sampler_desc_simd_mode(devinfo, imm_desc),
                               &space);
+               if (devinfo->ver >= 8 &&
+                   brw_sampler_desc_return_format(devinfo, imm_desc)) {
+                  string(file, " HP");
+               }
                format(file, " Surface = %u Sampler = %u",
                       brw_sampler_desc_binding_table_index(devinfo, imm_desc),
                       brw_sampler_desc_sampler(devinfo, imm_desc));
@@ -2100,7 +2106,7 @@ brw_disassemble_inst(FILE *file, const struct intel_device_info *devinfo,
                       brw_sampler_desc_binding_table_index(devinfo, imm_desc),
                       brw_sampler_desc_sampler(devinfo, imm_desc),
                       brw_sampler_desc_msg_type(devinfo, imm_desc));
-               if (!devinfo->is_g4x) {
+               if (devinfo->verx10 != 45) {
                   err |= control(file, "sampler target format",
                                  sampler_target_format,
                                  brw_sampler_desc_return_format(devinfo, imm_desc),
@@ -2120,7 +2126,7 @@ brw_disassemble_inst(FILE *file, const struct intel_device_info *devinfo,
                       devinfo->ver >= 7 ? 0u :
                       brw_dp_write_desc_write_commit(devinfo, imm_desc));
             } else {
-               bool is_965 = devinfo->ver == 4 && !devinfo->is_g4x;
+               bool is_965 = devinfo->verx10 == 40;
                err |= control(file, "DP read message type",
                               is_965 ? gfx4_dp_read_port_msg_type :
                                        g45_dp_read_port_msg_type,

@@ -545,12 +545,15 @@ tu6_emit_xs(struct tu_cs *cs,
    tu_cs_emit_pkt4(cs, cfg->reg_sp_xs_pvt_mem_hw_stack_offset, 1);
    tu_cs_emit(cs, A6XX_SP_VS_PVT_MEM_HW_STACK_OFFSET_OFFSET(pvtmem->per_sp_size));
 
+   uint32_t shader_preload_size =
+      MIN2(xs->instrlen, cs->device->physical_device->info->a6xx.instr_cache_size);
+
    tu_cs_emit_pkt7(cs, tu6_stage2opcode(stage), 3);
    tu_cs_emit(cs, CP_LOAD_STATE6_0_DST_OFF(0) |
                   CP_LOAD_STATE6_0_STATE_TYPE(ST6_SHADER) |
                   CP_LOAD_STATE6_0_STATE_SRC(SS6_INDIRECT) |
                   CP_LOAD_STATE6_0_STATE_BLOCK(tu6_stage2shadersb(stage)) |
-                  CP_LOAD_STATE6_0_NUM_UNIT(xs->instrlen));
+                  CP_LOAD_STATE6_0_NUM_UNIT(shader_preload_size));
    tu_cs_emit_qw(cs, binary_iova);
 
    /* emit immediates */
@@ -612,6 +615,30 @@ tu6_emit_xs(struct tu_cs *cs,
                     CP_LOAD_STATE6_0_STATE_BLOCK(tu6_stage2shadersb(stage)) |
                     CP_LOAD_STATE6_0_NUM_UNIT(size / 16));
          tu_cs_emit_qw(cs, iova + start);
+      }
+   }
+
+   /* emit FS driver param */
+   if (stage == MESA_SHADER_FRAGMENT && const_state->num_driver_params > 0) {
+      uint32_t base = const_state->offsets.driver_param;
+      int32_t size = DIV_ROUND_UP(const_state->num_driver_params, 4);
+      size = MAX2(MIN2(size + base, xs->constlen) - base, 0);
+
+      if (size > 0) {
+         tu_cs_emit_pkt7(cs, tu6_stage2opcode(stage), 3 + size * 4);
+         tu_cs_emit(cs, CP_LOAD_STATE6_0_DST_OFF(base) |
+                    CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
+                    CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
+                    CP_LOAD_STATE6_0_STATE_BLOCK(tu6_stage2shadersb(stage)) |
+                    CP_LOAD_STATE6_0_NUM_UNIT(size));
+         tu_cs_emit(cs, CP_LOAD_STATE6_1_EXT_SRC_ADDR(0));
+         tu_cs_emit(cs, CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI(0));
+
+         assert(size == 1);
+         tu_cs_emit(cs, xs->info.double_threadsize ? 128 : 64);
+         tu_cs_emit(cs, 0);
+         tu_cs_emit(cs, 0);
+         tu_cs_emit(cs, 0);
       }
    }
 }
@@ -774,7 +801,7 @@ tu6_setup_streamout(struct tu_cs *cs,
        * a bit less ideal here..
        */
       for (idx = 0; idx < l->cnt; idx++)
-         if (l->var[idx].regid == v->outputs[k].regid)
+         if (l->var[idx].slot == v->outputs[k].slot)
             break;
 
       debug_assert(idx < l->cnt);
@@ -874,13 +901,13 @@ tu6_emit_link_map(struct tu_cs *cs,
 }
 
 static uint16_t
-gl_primitive_to_tess(uint16_t primitive) {
+primitive_to_tess(enum shader_prim primitive) {
    switch (primitive) {
-   case GL_POINTS:
+   case SHADER_PRIM_POINTS:
       return TESS_POINTS;
-   case GL_LINE_STRIP:
+   case SHADER_PRIM_LINE_STRIP:
       return TESS_LINES;
-   case GL_TRIANGLE_STRIP:
+   case SHADER_PRIM_TRIANGLE_STRIP:
       return TESS_CW_TRIS;
    default:
       unreachable("");
@@ -1006,12 +1033,12 @@ tu6_emit_vpc(struct tu_cs *cs,
 
    if (layer_regid != regid(63, 0)) {
       layer_loc = linkage.max_loc;
-      ir3_link_add(&linkage, layer_regid, 0x1, linkage.max_loc);
+      ir3_link_add(&linkage, VARYING_SLOT_LAYER, layer_regid, 0x1, linkage.max_loc);
    }
 
    if (view_regid != regid(63, 0)) {
       view_loc = linkage.max_loc;
-      ir3_link_add(&linkage, view_regid, 0x1, linkage.max_loc);
+      ir3_link_add(&linkage, VARYING_SLOT_VIEWPORT, view_regid, 0x1, linkage.max_loc);
    }
 
    unsigned extra_pos = 0;
@@ -1023,14 +1050,15 @@ tu6_emit_vpc(struct tu_cs *cs,
       if (position_loc == 0xff)
          position_loc = linkage.max_loc;
 
-      ir3_link_add(&linkage, last_shader->outputs[i].regid,
+      ir3_link_add(&linkage, last_shader->outputs[i].slot,
+                   last_shader->outputs[i].regid,
                    0xf, position_loc + 4 * last_shader->outputs[i].view);
       extra_pos = MAX2(extra_pos, last_shader->outputs[i].view);
    }
 
    if (pointsize_regid != regid(63, 0)) {
       pointsize_loc = linkage.max_loc;
-      ir3_link_add(&linkage, pointsize_regid, 0x1, linkage.max_loc);
+      ir3_link_add(&linkage, VARYING_SLOT_PSIZ, pointsize_regid, 0x1, linkage.max_loc);
    }
 
    uint8_t clip_cull_mask = last_shader->clip_mask | last_shader->cull_mask;
@@ -1039,11 +1067,13 @@ tu6_emit_vpc(struct tu_cs *cs,
    uint32_t clip0_loc = linkage.clip0_loc, clip1_loc = linkage.clip1_loc;
    if (clip0_loc == 0xff && clip0_regid != regid(63, 0)) {
       clip0_loc = linkage.max_loc;
-      ir3_link_add(&linkage, clip0_regid, clip_cull_mask & 0xf, linkage.max_loc);
+      ir3_link_add(&linkage, VARYING_SLOT_CLIP_DIST0, clip0_regid,
+                   clip_cull_mask & 0xf, linkage.max_loc);
    }
    if (clip1_loc == 0xff && clip1_regid != regid(63, 0)) {
       clip1_loc = linkage.max_loc;
-      ir3_link_add(&linkage, clip1_regid, clip_cull_mask >> 4, linkage.max_loc);
+      ir3_link_add(&linkage, VARYING_SLOT_CLIP_DIST1, clip1_regid,
+                   clip_cull_mask >> 4, linkage.max_loc);
    }
 
    tu6_setup_streamout(cs, last_shader, &linkage);
@@ -1054,7 +1084,7 @@ tu6_emit_vpc(struct tu_cs *cs,
     * any unused code and make sure that optimizations don't remove it.
     */
    if (linkage.cnt == 0)
-      ir3_link_add(&linkage, 0, 0x1, linkage.max_loc);
+      ir3_link_add(&linkage, 0, 0, 0x1, linkage.max_loc);
 
    /* map outputs of the last shader to VPC */
    assert(linkage.cnt <= 32);
@@ -1172,7 +1202,7 @@ tu6_emit_vpc(struct tu_cs *cs,
       uint32_t output;
       if (tess_info->tess.point_mode)
          output = TESS_POINTS;
-      else if (tess_info->tess.primitive_mode == GL_ISOLINES)
+      else if (tess_info->tess._primitive_mode == TESS_PRIMITIVE_ISOLINES)
          output = TESS_LINES;
       else if (tess_info->tess.ccw)
          output = TESS_CCW_TRIS;
@@ -1214,7 +1244,7 @@ tu6_emit_vpc(struct tu_cs *cs,
             tu6_emit_link_map(cs, vs, gs, SB6_GS_SHADER);
          }
          vertices_out = gs->shader->nir->info.gs.vertices_out - 1;
-         output = gl_primitive_to_tess(gs->shader->nir->info.gs.output_primitive);
+         output = primitive_to_tess(gs->shader->nir->info.gs.output_primitive);
          invocations = gs->shader->nir->info.gs.invocations - 1;
          /* Size of per-primitive alloction in ldlw memory in vec4s. */
          vec4_size = gs->shader->nir->info.gs.vertices_in *
@@ -1546,6 +1576,9 @@ tu6_emit_fs_outputs(struct tu_cs *cs,
           (fs->no_earlyz || fs->has_kill || fs->writes_pos || fs->writes_stencilref || no_earlyz || fs->writes_smask)) {
          pipeline->lrz.force_late_z = true;
       }
+
+      pipeline->drawcall_base_cost +=
+         util_bitcount(fs_render_components) / util_bitcount(0xf);
    }
 }
 
@@ -1557,6 +1590,8 @@ tu6_emit_geom_tess_consts(struct tu_cs *cs,
                           const struct ir3_shader_variant *gs,
                           uint32_t cps_per_patch)
 {
+   struct tu_device *dev = cs->device;
+
    uint32_t num_vertices =
          hs ? cps_per_patch : gs->shader->nir->info.gs.vertices_in;
 
@@ -1572,29 +1607,49 @@ tu6_emit_geom_tess_consts(struct tu_cs *cs,
 
    if (hs) {
       assert(ds->type != MESA_SHADER_NONE);
-      uint32_t hs_params[4] = {
+
+      /* Create the shared tess factor BO the first time tess is used on the device. */
+      mtx_lock(&dev->mutex);
+      if (!dev->tess_bo.size)
+         tu_bo_init_new(dev, &dev->tess_bo, TU_TESS_BO_SIZE, TU_BO_ALLOC_NO_FLAGS);
+      mtx_unlock(&dev->mutex);
+
+      uint64_t tess_factor_iova = dev->tess_bo.iova;
+      uint64_t tess_param_iova = tess_factor_iova + TU_TESS_FACTOR_SIZE;
+
+      uint32_t hs_params[8] = {
          vs->output_size * num_vertices * 4,  /* hs primitive stride */
          vs->output_size * 4,                 /* hs vertex stride */
          hs->output_size,
          cps_per_patch,
+         tess_param_iova,
+         tess_param_iova >> 32,
+         tess_factor_iova,
+         tess_factor_iova >> 32,
       };
 
       uint32_t hs_base = hs->const_state->offsets.primitive_param;
+      uint32_t hs_param_dwords = MIN2((hs->constlen - hs_base) * 4, ARRAY_SIZE(hs_params));
       tu6_emit_const(cs, CP_LOAD_STATE6_GEOM, hs_base, SB6_HS_SHADER, 0,
-                     ARRAY_SIZE(hs_params), hs_params);
+                     hs_param_dwords, hs_params);
       if (gs)
          num_vertices = gs->shader->nir->info.gs.vertices_in;
 
-      uint32_t ds_params[4] = {
+      uint32_t ds_params[8] = {
          ds->output_size * num_vertices * 4,  /* ds primitive stride */
          ds->output_size * 4,                 /* ds vertex stride */
          hs->output_size,                     /* hs vertex stride (dwords) */
-         hs->shader->nir->info.tess.tcs_vertices_out
+         hs->shader->nir->info.tess.tcs_vertices_out,
+         tess_param_iova,
+         tess_param_iova >> 32,
+         tess_factor_iova,
+         tess_factor_iova >> 32,
       };
 
       uint32_t ds_base = ds->const_state->offsets.primitive_param;
+      uint32_t ds_param_dwords = MIN2((ds->constlen - ds_base) * 4, ARRAY_SIZE(ds_params));
       tu6_emit_const(cs, CP_LOAD_STATE6_GEOM, ds_base, SB6_DS_SHADER, 0,
-                     ARRAY_SIZE(ds_params), ds_params);
+                     ds_param_dwords, ds_params);
    }
 
    if (gs) {
@@ -2257,15 +2312,15 @@ tu_pipeline_shader_key_init(struct ir3_shader_key *key,
 static uint32_t
 tu6_get_tessmode(struct tu_shader* shader)
 {
-   uint32_t primitive_mode = shader->ir3_shader->nir->info.tess.primitive_mode;
+   enum tess_primitive_mode primitive_mode = shader->ir3_shader->nir->info.tess._primitive_mode;
    switch (primitive_mode) {
-   case GL_ISOLINES:
+   case TESS_PRIMITIVE_ISOLINES:
       return IR3_TESS_ISOLINES;
-   case GL_TRIANGLES:
+   case TESS_PRIMITIVE_TRIANGLES:
       return IR3_TESS_TRIANGLES;
-   case GL_QUADS:
+   case TESS_PRIMITIVE_QUADS:
       return IR3_TESS_QUADS;
-   case GL_NONE:
+   case TESS_PRIMITIVE_UNSPECIFIED:
       return IR3_TESS_NONE;
    default:
       unreachable("bad tessmode");
@@ -2308,6 +2363,47 @@ tu_append_executable(struct tu_pipeline *pipeline, struct ir3_shader_variant *va
    };
 
    util_dynarray_append(&pipeline->executables, struct tu_pipeline_executable, exe);
+}
+
+static void
+tu_link_shaders(struct tu_pipeline_builder *builder,
+                nir_shader **shaders, unsigned shaders_count)
+{
+   nir_shader *consumer = NULL;
+   for (gl_shader_stage stage = shaders_count - 1;
+        stage >= MESA_SHADER_VERTEX; stage--) {
+      if (!shaders[stage])
+         continue;
+
+      nir_shader *producer = shaders[stage];
+      if (!consumer) {
+         consumer = producer;
+         continue;
+      }
+
+      if (nir_link_opt_varyings(producer, consumer)) {
+         NIR_PASS_V(consumer, nir_opt_constant_folding);
+         NIR_PASS_V(consumer, nir_opt_algebraic);
+         NIR_PASS_V(consumer, nir_opt_dce);
+      }
+
+      NIR_PASS_V(producer, nir_remove_dead_variables, nir_var_shader_out, NULL);
+      NIR_PASS_V(consumer, nir_remove_dead_variables, nir_var_shader_in, NULL);
+
+      bool progress = nir_remove_unused_varyings(producer, consumer);
+
+      nir_compact_varyings(producer, consumer, true);
+      if (progress) {
+         if (nir_lower_global_vars_to_local(producer)) {
+            /* Remove dead writes, which can remove input loads */
+            NIR_PASS_V(producer, nir_remove_dead_variables, nir_var_shader_temp, NULL);
+            NIR_PASS_V(producer, nir_opt_dce);
+         }
+         nir_lower_global_vars_to_local(consumer);
+      }
+
+      consumer = producer;
+   }
 }
 
 static VkResult
@@ -2365,7 +2461,7 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
       }
    }
 
-   /* TODO do intra-stage linking here */
+   tu_link_shaders(builder, nir, ARRAY_SIZE(nir));
 
    uint32_t desc_sets = 0;
    for (gl_shader_stage stage = MESA_SHADER_VERTEX;
@@ -2374,7 +2470,7 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
          continue;
 
       struct tu_shader *shader =
-         tu_shader_create(builder->device, nir[stage],
+         tu_shader_create(builder->device, nir[stage], stage_infos[stage],
                           builder->multiview_mask, builder->layout,
                           builder->alloc);
       if (!shader)
@@ -2713,10 +2809,7 @@ tu_pipeline_builder_parse_tessellation(struct tu_pipeline_builder *builder,
    pipeline->tess.upper_left_domain_origin = !domain_info ||
          domain_info->domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
    const struct ir3_shader_variant *hs = builder->variants[MESA_SHADER_TESS_CTRL];
-   const struct ir3_shader_variant *ds = builder->variants[MESA_SHADER_TESS_EVAL];
    pipeline->tess.param_stride = hs->output_size * 4;
-   pipeline->tess.hs_bo_regid = hs->const_state->offsets.primitive_param + 1;
-   pipeline->tess.ds_bo_regid = ds->const_state->offsets.primitive_param + 1;
 }
 
 static void
@@ -3031,6 +3124,10 @@ tu_pipeline_builder_parse_multisample_and_color_blend(
          if (blendAttachment.blendEnable || blendAttachment.colorWriteMask != 0xf) {
             pipeline->lrz.force_disable_mask |= TU_LRZ_FORCE_DISABLE_WRITE;
          }
+
+         if (blendAttachment.blendEnable) {
+            pipeline->drawcall_base_cost++;
+         }
       }
    }
 
@@ -3318,7 +3415,7 @@ tu_compute_pipeline_create(VkDevice device,
       nir_shader_as_str(nir, pipeline->executables_mem_ctx) : NULL;
 
    struct tu_shader *shader =
-      tu_shader_create(dev, nir, 0, layout, pAllocator);
+      tu_shader_create(dev, nir, stage_info, 0, layout, pAllocator);
    if (!shader) {
       result = VK_ERROR_OUT_OF_HOST_MEMORY;
       goto fail;
@@ -3489,6 +3586,15 @@ tu_GetPipelineExecutableStatisticsKHR(
    }
 
    vk_outarray_append(&out, stat) {
+      WRITE_STR(stat->name, "Code size");
+      WRITE_STR(stat->description,
+                "Total number of dwords in the final generated "
+                "shader executable.");
+      stat->format = VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR;
+      stat->value.u64 = exe->stats.sizedwords;
+   }
+
+   vk_outarray_append(&out, stat) {
       WRITE_STR(stat->name, "NOPs Count");
       WRITE_STR(stat->description,
                 "Number of NOP instructions in the final generated "
@@ -3557,6 +3663,14 @@ tu_GetPipelineExecutableStatisticsKHR(
                 "A better metric to estimate the impact of SS syncs.");
       stat->format = VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR;
       stat->value.u64 = exe->stats.sstall;
+   }
+
+   vk_outarray_append(&out, stat) {
+      WRITE_STR(stat->name, "Estimated cycles stalled on SY");
+      WRITE_STR(stat->description,
+                "A better metric to estimate the impact of SY syncs.");
+      stat->format = VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR;
+      stat->value.u64 = exe->stats.systall;
    }
 
    for (int i = 0; i < ARRAY_SIZE(exe->stats.instrs_per_cat); i++) {

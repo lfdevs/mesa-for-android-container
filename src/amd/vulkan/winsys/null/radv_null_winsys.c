@@ -26,8 +26,10 @@
  */
 #include "radv_null_winsys_public.h"
 
+#include "util/u_string.h"
 #include "radv_null_bo.h"
 #include "radv_null_cs.h"
+#include "vk_sync_dummy.h"
 
 /* Hardcode some GPU info that are needed for the driver or for some tools. */
 static const struct {
@@ -62,7 +64,7 @@ static const struct {
    [CHIP_NAVI10] = {0x7310, 16, true},
    [CHIP_NAVI12] = {0x7360, 8, true},
    [CHIP_NAVI14] = {0x7340, 8, true},
-   [CHIP_SIENNA_CICHLID] = {0x73A0, 8, true},
+   [CHIP_SIENNA_CICHLID] = {0x73A0, 16, true},
    [CHIP_VANGOGH] = {0x163F, 8, false},
    [CHIP_NAVY_FLOUNDER] = {0x73C0, 8, true},
    [CHIP_DIMGREY_CAVEFISH] = {0x73E0, 8, true},
@@ -78,10 +80,10 @@ radv_null_winsys_query_info(struct radeon_winsys *rws, struct radeon_info *info)
    info->family = CHIP_UNKNOWN;
 
    for (i = CHIP_TAHITI; i < CHIP_LAST; i++) {
-      if (!strcmp(family, ac_get_family_name(i))) {
+      if (!strcasecmp(family, ac_get_family_name(i))) {
          /* Override family and chip_class. */
          info->family = i;
-         info->name = "OVERRIDDEN";
+         info->name = ac_get_family_name(i);
 
          if (i >= CHIP_SIENNA_CICHLID)
             info->chip_class = GFX10_3;
@@ -156,6 +158,18 @@ radv_null_winsys_destroy(struct radeon_winsys *rws)
    FREE(rws);
 }
 
+static int
+radv_null_winsys_get_fd(struct radeon_winsys *rws)
+{
+   return -1;
+}
+
+static const struct vk_sync_type *const *
+radv_null_winsys_get_sync_types(struct radeon_winsys *rws)
+{
+   return radv_null_winsys(rws)->sync_types;
+}
+
 struct radeon_winsys *
 radv_null_winsys_create()
 {
@@ -167,8 +181,12 @@ radv_null_winsys_create()
 
    ws->base.destroy = radv_null_winsys_destroy;
    ws->base.query_info = radv_null_winsys_query_info;
+   ws->base.get_fd = radv_null_winsys_get_fd;
+   ws->base.get_sync_types = radv_null_winsys_get_sync_types;
    radv_null_bo_init_functions(ws);
    radv_null_cs_init_functions(ws);
 
+   ws->sync_types[0] = &vk_sync_dummy_type;
+   ws->sync_types[1] = NULL;
    return &ws->base;
 }

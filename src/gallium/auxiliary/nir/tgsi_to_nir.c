@@ -1280,7 +1280,7 @@ get_image_var(struct ttn_compile *c, int binding,
    if (!var) {
       const struct glsl_type *type = glsl_image_type(dim, is_array, base_type);
 
-      var = nir_variable_create(c->build.shader, nir_var_uniform, type, "image");
+      var = nir_variable_create(c->build.shader, nir_var_image, type, "image");
       var->data.binding = binding;
       var->data.explicit_binding = true;
       var->data.access = access;
@@ -2563,7 +2563,6 @@ tgsi_to_nir(const void *tgsi_tokens,
    struct nir_shader *s = NULL;
    uint8_t key[CACHE_KEY_SIZE];
    unsigned processor;
-   bool debug = env_var_as_boolean("TGSI_TO_NIR_DEBUG", false);
 
    if (allow_disk_cache)
       cache = screen->get_disk_shader_cache(screen);
@@ -2581,7 +2580,11 @@ tgsi_to_nir(const void *tgsi_tokens,
    if (s)
       return s;
 
-   if (debug) {
+#ifndef NDEBUG
+   nir_process_debug_variable();
+#endif
+
+   if (NIR_DEBUG(TGSI)) {
       fprintf(stderr, "TGSI before translation to NIR:\n");
       tgsi_dump(tgsi_tokens, 0);
    }
@@ -2593,7 +2596,7 @@ tgsi_to_nir(const void *tgsi_tokens,
    ttn_finalize_nir(c, screen);
    ralloc_free(c);
 
-   if (debug) {
+   if (NIR_DEBUG(TGSI)) {
       mesa_logi("NIR after translation from TGSI:\n");
       nir_log_shaderi(s);
    }

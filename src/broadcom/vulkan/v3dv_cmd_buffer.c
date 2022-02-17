@@ -23,40 +23,7 @@
 
 #include "v3dv_private.h"
 #include "util/u_pack_color.h"
-#include "vk_format_info.h"
 #include "vk_util.h"
-
-const struct v3dv_dynamic_state default_dynamic_state = {
-   .viewport = {
-      .count = 0,
-   },
-   .scissor = {
-      .count = 0,
-   },
-   .stencil_compare_mask =
-   {
-     .front = ~0u,
-     .back = ~0u,
-   },
-   .stencil_write_mask =
-   {
-     .front = ~0u,
-     .back = ~0u,
-   },
-   .stencil_reference =
-   {
-     .front = 0u,
-     .back = 0u,
-   },
-   .blend_constants = { 0.0f, 0.0f, 0.0f, 0.0f },
-   .depth_bias = {
-      .constant_factor = 0.0f,
-      .depth_bias_clamp = 0.0f,
-      .slope_factor = 0.0f,
-   },
-   .line_width = 1.0f,
-   .color_write_enable = (1ull << (4 * V3D_MAX_DRAW_BUFFERS)) - 1,
-};
 
 void
 v3dv_job_add_bo(struct v3dv_job *job, struct v3dv_bo *bo)
@@ -443,10 +410,13 @@ cmd_buffer_can_merge_subpass(struct v3dv_cmd_buffer *cmd_buffer,
    /* FIXME: Since some attachment formats can't be resolved using the TLB we
     * need to emit separate resolve jobs for them and that would not be
     * compatible with subpass merges. We could fix that by testing if any of
-    * the attachments to resolve doesn't suppotr TLB resolves.
+    * the attachments to resolve doesn't support TLB resolves.
     */
-   if (prev_subpass->resolve_attachments || subpass->resolve_attachments)
+   if (prev_subpass->resolve_attachments || subpass->resolve_attachments ||
+       prev_subpass->resolve_depth || prev_subpass->resolve_stencil ||
+       subpass->resolve_depth || subpass->resolve_stencil) {
       return false;
+   }
 
    return true;
 }
@@ -464,16 +434,6 @@ job_compute_frame_tiling(struct v3dv_job *job,
                          uint8_t max_internal_bpp,
                          bool msaa)
 {
-   static const uint8_t tile_sizes[] = {
-      64, 64,
-      64, 32,
-      32, 32,
-      32, 16,
-      16, 16,
-      16,  8,
-       8,  8
-   };
-
    assert(job);
    struct v3dv_frame_tiling *tiling = &job->frame_tiling;
 
@@ -482,23 +442,24 @@ job_compute_frame_tiling(struct v3dv_job *job,
    tiling->layers = layers;
    tiling->render_target_count = render_target_count;
    tiling->msaa = msaa;
-
-   uint32_t tile_size_index = 0;
-
-   if (render_target_count > 2)
-      tile_size_index += 2;
-   else if (render_target_count > 1)
-      tile_size_index += 1;
-
-   if (msaa)
-      tile_size_index += 2;
-
    tiling->internal_bpp = max_internal_bpp;
-   tile_size_index += tiling->internal_bpp;
-   assert(tile_size_index < ARRAY_SIZE(tile_sizes) / 2);
 
-   tiling->tile_width = tile_sizes[tile_size_index * 2];
-   tiling->tile_height = tile_sizes[tile_size_index * 2 + 1];
+   /* We can use double-buffer when MSAA is disabled to reduce tile store
+    * overhead.
+    *
+    * FIXME: if we are emitting any tile loads the hardware will serialize
+    * loads and stores across tiles effectivley disabling double buffering,
+    * so we would want to check for that and not enable it in that case to
+    * avoid reducing the tile size.
+    */
+   tiling->double_buffer =
+      unlikely(V3D_DEBUG & V3D_DEBUG_DOUBLE_BUFFER) && !msaa;
+
+   assert(!tiling->msaa || !tiling->double_buffer);
+
+   v3d_choose_tile_size(render_target_count, max_internal_bpp,
+                        tiling->msaa, tiling->double_buffer,
+                        &tiling->tile_width, &tiling->tile_height);
 
    tiling->draw_tiles_x = DIV_ROUND_UP(width, tiling->tile_width);
    tiling->draw_tiles_y = DIV_ROUND_UP(height, tiling->tile_height);
@@ -729,8 +690,8 @@ v3dv_cmd_buffer_finish_job(struct v3dv_cmd_buffer *cmd_buffer)
    }
 }
 
-static bool
-job_type_is_gpu(struct v3dv_job *job)
+bool
+v3dv_job_type_is_gpu(struct v3dv_job *job)
 {
    switch (job->type) {
    case V3DV_JOB_TYPE_GPU_CL:
@@ -755,7 +716,7 @@ cmd_buffer_serialize_job_if_needed(struct v3dv_cmd_buffer *cmd_buffer,
    /* Serialization only affects GPU jobs, CPU jobs are always automatically
     * serialized.
     */
-   if (!job_type_is_gpu(job))
+   if (!v3dv_job_type_is_gpu(job))
       return;
 
    job->serialize = true;
@@ -983,8 +944,6 @@ cmd_buffer_subpass_handle_pending_resolves(struct v3dv_cmd_buffer *cmd_buffer)
    if (!subpass->resolve_attachments)
       return;
 
-   struct v3dv_framebuffer *fb = cmd_buffer->state.framebuffer;
-
    /* At this point we have already ended the current subpass and now we are
     * about to emit vkCmdResolveImage calls to get the resolves we can't handle
     * handle in the subpass RCL.
@@ -1011,16 +970,22 @@ cmd_buffer_subpass_handle_pending_resolves(struct v3dv_cmd_buffer *cmd_buffer)
       if (src_attachment_idx == VK_ATTACHMENT_UNUSED)
          continue;
 
-      if (pass->attachments[src_attachment_idx].use_tlb_resolve)
+      /* Skip if this attachment doesn't have a resolve or if it was already
+       * implemented as a TLB resolve.
+       */
+      if (!cmd_buffer->state.attachments[src_attachment_idx].has_resolve ||
+          cmd_buffer->state.attachments[src_attachment_idx].use_tlb_resolve) {
          continue;
+      }
 
       const uint32_t dst_attachment_idx =
          subpass->resolve_attachments[i].attachment;
-      if (dst_attachment_idx == VK_ATTACHMENT_UNUSED)
-         continue;
+      assert(dst_attachment_idx != VK_ATTACHMENT_UNUSED);
 
-      struct v3dv_image_view *src_iview = fb->attachments[src_attachment_idx];
-      struct v3dv_image_view *dst_iview = fb->attachments[dst_attachment_idx];
+      struct v3dv_image_view *src_iview =
+         cmd_buffer->state.attachments[src_attachment_idx].image_view;
+      struct v3dv_image_view *dst_iview =
+         cmd_buffer->state.attachments[dst_attachment_idx].image_view;
 
       VkImageResolve2KHR region = {
          .sType = VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2_KHR,
@@ -1202,6 +1167,48 @@ cmd_buffer_update_tile_alignment(struct v3dv_cmd_buffer *cmd_buffer)
 }
 
 static void
+cmd_buffer_update_attachment_resolve_state(struct v3dv_cmd_buffer *cmd_buffer)
+{
+   /* NOTE: This should be called after cmd_buffer_update_tile_alignment()
+    * since it relies on up-to-date information about subpass tile alignment.
+    */
+   const struct v3dv_cmd_buffer_state *state = &cmd_buffer->state;
+   const struct v3dv_render_pass *pass = state->pass;
+   const struct v3dv_subpass *subpass = &pass->subpasses[state->subpass_idx];
+
+   for (uint32_t i = 0; i < subpass->color_count; i++) {
+      const uint32_t attachment_idx = subpass->color_attachments[i].attachment;
+      if (attachment_idx == VK_ATTACHMENT_UNUSED)
+         continue;
+
+      state->attachments[attachment_idx].has_resolve =
+         subpass->resolve_attachments &&
+         subpass->resolve_attachments[i].attachment != VK_ATTACHMENT_UNUSED;
+
+      state->attachments[attachment_idx].use_tlb_resolve =
+         state->attachments[attachment_idx].has_resolve &&
+         state->tile_aligned_render_area &&
+         pass->attachments[attachment_idx].try_tlb_resolve;
+   }
+
+   uint32_t ds_attachment_idx = subpass->ds_attachment.attachment;
+   if (ds_attachment_idx != VK_ATTACHMENT_UNUSED) {
+      uint32_t ds_resolve_attachment_idx =
+         subpass->ds_resolve_attachment.attachment;
+      state->attachments[ds_attachment_idx].has_resolve =
+         ds_resolve_attachment_idx != VK_ATTACHMENT_UNUSED;
+
+      assert(!state->attachments[ds_attachment_idx].has_resolve ||
+             (subpass->resolve_depth || subpass->resolve_stencil));
+
+      state->attachments[ds_attachment_idx].use_tlb_resolve =
+         state->attachments[ds_attachment_idx].has_resolve &&
+         state->tile_aligned_render_area &&
+         pass->attachments[ds_attachment_idx].try_tlb_resolve;
+   }
+}
+
+static void
 cmd_buffer_state_set_attachment_clear_color(struct v3dv_cmd_buffer *cmd_buffer,
                                             uint32_t attachment_idx,
                                             const VkClearColorValue *color)
@@ -1284,12 +1291,39 @@ cmd_buffer_state_set_clear_values(struct v3dv_cmd_buffer *cmd_buffer,
 }
 
 static void
+cmd_buffer_state_set_attachments(struct v3dv_cmd_buffer *cmd_buffer,
+                                 const VkRenderPassBeginInfo *pRenderPassBegin)
+{
+   V3DV_FROM_HANDLE(v3dv_render_pass, pass, pRenderPassBegin->renderPass);
+   V3DV_FROM_HANDLE(v3dv_framebuffer, framebuffer, pRenderPassBegin->framebuffer);
+
+   const VkRenderPassAttachmentBeginInfoKHR *attach_begin =
+      vk_find_struct_const(pRenderPassBegin, RENDER_PASS_ATTACHMENT_BEGIN_INFO_KHR);
+
+   struct v3dv_cmd_buffer_state *state = &cmd_buffer->state;
+
+   for (uint32_t i = 0; i < pass->attachment_count; i++) {
+      if (attach_begin && attach_begin->attachmentCount != 0) {
+         state->attachments[i].image_view =
+            v3dv_image_view_from_handle(attach_begin->pAttachments[i]);
+      } else if (framebuffer) {
+         state->attachments[i].image_view = framebuffer->attachments[i];
+      } else {
+         assert(cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+         state->attachments[i].image_view = NULL;
+      }
+   }
+}
+
+static void
 cmd_buffer_init_render_pass_attachment_state(struct v3dv_cmd_buffer *cmd_buffer,
                                              const VkRenderPassBeginInfo *pRenderPassBegin)
 {
    cmd_buffer_state_set_clear_values(cmd_buffer,
                                      pRenderPassBegin->clearValueCount,
                                      pRenderPassBegin->pClearValues);
+
+   cmd_buffer_state_set_attachments(cmd_buffer, pRenderPassBegin);
 }
 
 static void
@@ -1319,9 +1353,9 @@ cmd_buffer_ensure_render_pass_attachment_state(struct v3dv_cmd_buffer *cmd_buffe
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdBeginRenderPass(VkCommandBuffer commandBuffer,
-                        const VkRenderPassBeginInfo *pRenderPassBegin,
-                        VkSubpassContents contents)
+v3dv_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
+                         const VkRenderPassBeginInfo *pRenderPassBegin,
+                         const VkSubpassBeginInfo *pSubpassBeginInfo)
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
    V3DV_FROM_HANDLE(v3dv_render_pass, pass, pRenderPassBegin->renderPass);
@@ -1359,7 +1393,9 @@ v3dv_CmdBeginRenderPass(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents)
+v3dv_CmdNextSubpass2(VkCommandBuffer commandBuffer,
+                     const VkSubpassBeginInfo *pSubpassBeginInfo,
+                     const VkSubpassEndInfo *pSubpassEndInfo)
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
 
@@ -1516,7 +1552,7 @@ cmd_buffer_subpass_create_job(struct v3dv_cmd_buffer *cmd_buffer,
       uint8_t internal_bpp;
       bool msaa;
       v3dv_X(job->device, framebuffer_compute_internal_bpp_msaa)
-         (framebuffer, subpass, &internal_bpp, &msaa);
+         (framebuffer, state->attachments, subpass, &internal_bpp, &msaa);
 
       /* From the Vulkan spec:
        *
@@ -1565,6 +1601,8 @@ v3dv_cmd_buffer_subpass_start(struct v3dv_cmd_buffer *cmd_buffer,
     * and with that the tile size selected by the hardware can change too.
     */
    cmd_buffer_update_tile_alignment(cmd_buffer);
+
+   cmd_buffer_update_attachment_resolve_state(cmd_buffer);
 
    /* If we can't use TLB clears then we need to emit draw clears for any
     * LOAD_OP_CLEAR attachments in this subpass now. We might also need to emit
@@ -1622,7 +1660,8 @@ v3dv_cmd_buffer_subpass_finish(struct v3dv_cmd_buffer *cmd_buffer)
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdEndRenderPass(VkCommandBuffer commandBuffer)
+v3dv_CmdEndRenderPass2(VkCommandBuffer commandBuffer,
+                       const VkSubpassEndInfo *pSubpassEndInfo)
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
 

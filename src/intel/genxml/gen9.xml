@@ -342,7 +342,7 @@
   </struct>
 
   <struct name="MEMORYADDRESSATTRIBUTES" length="1">
-    <field name="MOCS" start="1" end="6" type="uint"/>
+    <field name="MOCS" start="1" end="6" type="uint" nonzero="true"/>
     <field name="Arbitration Priority Control" start="7" end="8" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -648,7 +648,7 @@
     </field>
     <field name="Surface QPitch" start="32" end="46" type="uint"/>
     <field name="Base Mip Level" start="51" end="55" type="u4.1"/>
-    <field name="MOCS" start="56" end="62" type="uint"/>
+    <field name="MOCS" start="56" end="62" type="uint" nonzero="true"/>
     <field name="Width" start="64" end="77" type="uint"/>
     <field name="Height" start="80" end="93" type="uint"/>
     <field name="Surface Pitch" start="96" end="113" type="uint"/>
@@ -1045,7 +1045,7 @@
   </struct>
 
   <struct name="VDENC_SURFACE_CONTROL_BITS" length="1">
-    <field name="MOCS" start="1" end="6" type="uint"/>
+    <field name="MOCS" start="1" end="6" type="uint" nonzero="true"/>
     <field name="Arbitration Priority Control" start="7" end="8" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -1098,7 +1098,7 @@
     <field name="Buffer Pitch" start="0" end="11" type="uint"/>
     <field name="Null Vertex Buffer" start="13" end="13" type="bool"/>
     <field name="Address Modify Enable" start="14" end="14" type="bool"/>
-    <field name="MOCS" start="16" end="22" type="uint"/>
+    <field name="MOCS" start="16" end="22" type="uint" nonzero="true"/>
     <field name="Vertex Buffer Index" start="26" end="31" type="uint"/>
     <field name="Buffer Starting Address" start="32" end="95" type="address"/>
     <field name="Buffer Size" start="96" end="127" type="uint"/>
@@ -1290,7 +1290,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="MOCS" start="32" end="38" type="uint"/>
+    <field name="MOCS" start="32" end="38" type="uint" nonzero="true"/>
     <field name="Binding Table Pool Enable" start="43" end="43" type="bool"/>
     <field name="Binding Table Pool Base Address" start="44" end="95" type="address"/>
     <field name="Binding Table Pool Buffer Size" start="108" end="127" type="uint">
@@ -1381,7 +1381,7 @@
 
   <instruction name="3DSTATE_CONSTANT_DS" bias="2" length="11" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="9"/>
-    <field name="MOCS" start="8" end="14" type="uint"/>
+    <field name="MOCS" start="8" end="14" type="uint" nonzero="true"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="26"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
@@ -1391,7 +1391,7 @@
 
   <instruction name="3DSTATE_CONSTANT_GS" bias="2" length="11" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="9"/>
-    <field name="MOCS" start="8" end="14" type="uint"/>
+    <field name="MOCS" start="8" end="14" type="uint" nonzero="true"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="22"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
@@ -1401,7 +1401,7 @@
 
   <instruction name="3DSTATE_CONSTANT_HS" bias="2" length="11" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="9"/>
-    <field name="MOCS" start="8" end="14" type="uint"/>
+    <field name="MOCS" start="8" end="14" type="uint" nonzero="true"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="25"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
@@ -1411,7 +1411,7 @@
 
   <instruction name="3DSTATE_CONSTANT_PS" bias="2" length="11" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="9"/>
-    <field name="MOCS" start="8" end="14" type="uint"/>
+    <field name="MOCS" start="8" end="14" type="uint" nonzero="true"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="23"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
@@ -1421,7 +1421,7 @@
 
   <instruction name="3DSTATE_CONSTANT_VS" bias="2" length="11" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="9"/>
-    <field name="MOCS" start="8" end="14" type="uint"/>
+    <field name="MOCS" start="8" end="14" type="uint" nonzero="true"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="21"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
@@ -1453,7 +1453,7 @@
     <field name="LOD" start="128" end="131" type="uint"/>
     <field name="Width" start="132" end="145" type="uint"/>
     <field name="Height" start="146" end="159" type="uint"/>
-    <field name="MOCS" start="160" end="166" type="uint"/>
+    <field name="MOCS" start="160" end="166" type="uint" nonzero="true"/>
     <field name="Minimum Array Element" start="170" end="180" type="uint"/>
     <field name="Depth" start="181" end="191" type="uint"/>
     <field name="Mip Tail Start LOD" start="218" end="221" type="uint"/>
@@ -1663,7 +1663,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="MOCS" start="32" end="38" type="uint"/>
+    <field name="MOCS" start="32" end="38" type="uint" nonzero="true"/>
     <field name="Gather Pool Enable" start="43" end="43" type="bool"/>
     <field name="Gather Pool Base Address" start="44" end="95" type="address"/>
     <field name="Gather Pool Buffer Size" start="108" end="127" type="uint"/>
@@ -1745,7 +1745,7 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Surface Pitch" start="32" end="48" type="uint"/>
-    <field name="MOCS" start="57" end="63" type="uint"/>
+    <field name="MOCS" start="57" end="63" type="uint" nonzero="true"/>
     <field name="Surface Base Address" start="64" end="127" type="address"/>
     <field name="Surface QPitch" start="128" end="142" type="uint"/>
   </instruction>
@@ -1802,7 +1802,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="MOCS" start="32" end="38" type="uint"/>
+    <field name="MOCS" start="32" end="38" type="uint" nonzero="true"/>
     <field name="Index Format" start="40" end="41" type="uint" prefix="INDEX">
       <value name="BYTE" value="0"/>
       <value name="WORD" value="1"/>
@@ -2360,7 +2360,7 @@
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Stream Output Buffer Offset Address Enable" start="52" end="52" type="bool"/>
     <field name="Stream Offset Write Enable" start="53" end="53" type="bool"/>
-    <field name="MOCS" start="54" end="60" type="uint"/>
+    <field name="MOCS" start="54" end="60" type="uint" nonzero="true"/>
     <field name="SO Buffer Index" start="61" end="62" type="uint"/>
     <field name="SO Buffer Enable" start="63" end="63" type="bool"/>
     <field name="Surface Base Address" start="66" end="111" type="address"/>
@@ -2395,7 +2395,7 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Surface Pitch" start="32" end="48" type="uint"/>
-    <field name="MOCS" start="54" end="60" type="uint"/>
+    <field name="MOCS" start="54" end="60" type="uint" nonzero="true"/>
     <field name="Stencil Buffer Enable" start="63" end="63" type="bool"/>
     <field name="Surface Base Address" start="64" end="127" type="address"/>
     <field name="Surface QPitch" start="128" end="142" type="uint"/>
@@ -2879,7 +2879,7 @@
       <value name="Intra" value="0"/>
       <value name="Inter" value="1"/>
     </field>
-    <field name="SizeID" start="33" end="34" type="uint">
+    <field name="SizeID" start="33" end="34" type="uint" prefix="SZ">
       <value name="4x4" value="0"/>
       <value name="8x8" value="1"/>
       <value name="16x16" value="2"/>
@@ -3153,7 +3153,7 @@
       <value name="Intra" value="0"/>
       <value name="Inter" value="1"/>
     </field>
-    <field name="SizeID" start="33" end="34" type="uint">
+    <field name="SizeID" start="33" end="34" type="uint" prefix="SZ">
       <value name="4x4" value="0"/>
       <value name="8x8" value="1"/>
       <value name="16x16" value="2"/>
@@ -4121,7 +4121,7 @@
       <value name="Field Picture with Top Field First" value="2"/>
       <value name="Field Picture with Bottom Field First" value="3"/>
     </field>
-    <field name="Picure Type" start="122" end="124" type="uint"/>
+    <field name="Picture Type" start="122" end="124" type="uint"/>
     <field name="CONDOVER" start="125" end="126" type="uint"/>
     <field name="PQ Uniform" start="128" end="128" type="bool"/>
     <field name="Half QP" start="129" end="129" type="bool"/>
@@ -4315,7 +4315,7 @@
     <field name="Rho Domain Rate Control Enable" start="109" end="109" type="bool"/>
     <field name="First Chroma QP Offset" start="112" end="116" type="uint"/>
     <field name="Second Chroma QP Offset" start="120" end="124" type="uint"/>
-    <field name="Field Picure" start="128" end="128" type="bool"/>
+    <field name="Field Picture" start="128" end="128" type="bool"/>
     <field name="MBAFF Mode" start="129" end="129" type="bool"/>
     <field name="Frame MB Only" start="130" end="130" type="bool"/>
     <field name="8x8 IDCT Transform Mode" start="131" end="131" type="bool"/>
@@ -4554,7 +4554,7 @@
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Pre Deblocking Source - Address" start="38" end="79" type="address"/>
-    <field name="Pre Deblocking Source - MOCS" start="97" end="102" type="uint"/>
+    <field name="Pre Deblocking Source - MOCS" start="97" end="102" type="uint" nonzero="true"/>
     <field name="Pre Deblocking Source - Arbitration Priority Control" start="103" end="104" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -4569,7 +4569,7 @@
       <value name="TRMODE_TILEYS" value="2"/>
     </field>
     <field name="Deblocking Control - Address" start="134" end="175" type="address"/>
-    <field name="Deblocking Control - MOCS" start="193" end="198" type="uint"/>
+    <field name="Deblocking Control - MOCS" start="193" end="198" type="uint" nonzero="true"/>
     <field name="Deblocking Control - Arbitration Priority Control" start="199" end="200" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -4584,7 +4584,7 @@
       <value name="TRMODE_TILEYS" value="2"/>
     </field>
     <field name="Deblocking Destination - Address High" start="230" end="271" type="address"/>
-    <field name="Deblocking Destination - MOCS" start="289" end="294" type="uint"/>
+    <field name="Deblocking Destination - MOCS" start="289" end="294" type="uint" nonzero="true"/>
     <field name="Deblocking Destination - Arbitration Priority Control" start="295" end="296" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -4599,7 +4599,7 @@
       <value name="TRMODE_TILEYS" value="2"/>
     </field>
     <field name="Deblock Row Store - Address" start="326" end="367" type="address"/>
-    <field name="CoeffProbability Stream-In - MOCS" start="385" end="390" type="uint"/>
+    <field name="CoeffProbability Stream-In - MOCS" start="385" end="390" type="uint" nonzero="true"/>
     <field name="Deblock Row Store - Arbitration Priority Control" start="391" end="392" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -4951,7 +4951,7 @@
       <value name="VDEnc Mode" value="1"/>
     </field>
     <field name="Standalone VDEnc Mode Enable" start="46" end="46" type="bool"/>
-    <field name="Decoder Mode select" start="47" end="48" type="uint">
+    <field name="Decoder Mode Select" start="47" end="48" type="uint">
       <value name="VLD Mode" value="0"/>
       <value name="IT Mode" value="1"/>
       <value name="Deblocker Mode" value="2"/>
@@ -4988,7 +4988,7 @@
       <value name="JPEG_Chroma_Cr_QUANTIZER_MATRIX (or B)" value="2"/>
     </field>
     <group count="64" start="64" size="8">
-      <field name="Forward Quantizer 8x8" start="0" end="7" type="uint"/>
+      <field name="Forward Quantizer Matrix" start="0" end="7" type="uint"/>
     </group>
   </instruction>
 
@@ -5305,7 +5305,7 @@
     <field name="Quantizer Value [3][Y2DC]" start="480" end="488" type="uint"/>
     <field name="Quantizer Value [3][Y2AC]" start="496" end="504" type="uint"/>
     <field name="CoeffProbability Stream-In - Address" start="518" end="559" type="uint"/>
-    <field name="CoeffProbability Stream-In - MOCS (Encoder only)" start="577" end="582" type="uint"/>
+    <field name="CoeffProbability Stream-In - MOCS (Encoder only)" start="577" end="582" type="uint" nonzero="true"/>
     <field name="CoeffProbability Stream-In - Arbitration Priority Control" start="583" end="584" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -5380,7 +5380,7 @@
     <field name="ModeLFDelta2" start="1104" end="1110" type="int"/>
     <field name="ModeLFDelta3" start="1112" end="1118" type="int"/>
     <field name="Segmentation ID Stream - Address" start="1120" end="1167" type="uint"/>
-    <field name="CoeffProbability Stream-In - MOCS" start="1185" end="1190" type="uint"/>
+    <field name="CoeffProbability Stream-In - MOCS" start="1185" end="1190" type="uint" nonzero="true"/>
     <field name="Segmentation ID Stream - Arbitration Priority Control" start="1191" end="1192" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -6044,7 +6044,7 @@
     <field name="Scaling Factor Height" start="448" end="468" type="u4.17"/>
     <field name="Scaling Factor Width" start="480" end="500" type="u4.17"/>
     <field name="Output Frame - Address" start="556" end="591" type="uint"/>
-    <field name="Output Frame - MOCS" start="609" end="614" type="uint"/>
+    <field name="Output Frame - MOCS" start="609" end="614" type="uint" nonzero="true"/>
     <field name="Output Frame - Arbitration Priority Control" start="615" end="616" type="HEVC_ARBITRATION_PRIORITY"/>
     <field name="Output Frame - Memory Compression Enable" start="617" end="617" type="bool"/>
     <field name="Output Frame - Memory Compression Mode" start="618" end="618" type="uint"/>
@@ -6055,7 +6055,7 @@
       <value name="TRMODE_TILEYS" value="2"/>
     </field>
     <field name="AVS Line Buffer - Address" start="652" end="687" type="uint"/>
-    <field name="AVS Line Buffer - MOCS" start="705" end="710" type="uint"/>
+    <field name="AVS Line Buffer - MOCS" start="705" end="710" type="uint" nonzero="true"/>
     <field name="AVS Line Buffer - Arbitration Priority Control" start="711" end="712" type="HEVC_ARBITRATION_PRIORITY"/>
     <field name="AVS Line Buffer - Memory Compression Enable" start="713" end="713" type="bool"/>
     <field name="AVS Line Buffer - Memory Compression Mode" start="714" end="714" type="uint">
@@ -6070,7 +6070,7 @@
       <value name="TRMODE_TILEYS" value="2"/>
     </field>
     <field name="IEF Line Buffer - Address" start="748" end="783" type="uint"/>
-    <field name="IEF Line Buffer - MOCS" start="801" end="806" type="uint"/>
+    <field name="IEF Line Buffer - MOCS" start="801" end="806" type="uint" nonzero="true"/>
     <field name="IEF Line Buffer - Arbitration Priority Control" start="807" end="808" type="HEVC_ARBITRATION_PRIORITY"/>
     <field name="IEF Line Buffer - Memory Compression Enable" start="809" end="809" type="bool"/>
     <field name="IEF Line Buffer - Memory Compression Mode" start="810" end="810" type="uint"/>
@@ -6102,20 +6102,20 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="General State Base Address Modify Enable" start="32" end="32" type="bool"/>
-    <field name="General State MOCS" start="36" end="42" type="uint"/>
+    <field name="General State MOCS" start="36" end="42" type="uint" nonzero="true"/>
     <field name="General State Base Address" start="44" end="95" type="address"/>
-    <field name="Stateless Data Port Access MOCS" start="112" end="118" type="uint"/>
+    <field name="Stateless Data Port Access MOCS" start="112" end="118" type="uint" nonzero="true"/>
     <field name="Surface State Base Address Modify Enable" start="128" end="128" type="bool"/>
-    <field name="Surface State MOCS" start="132" end="138" type="uint"/>
+    <field name="Surface State MOCS" start="132" end="138" type="uint" nonzero="true"/>
     <field name="Surface State Base Address" start="140" end="191" type="address"/>
     <field name="Dynamic State Base Address Modify Enable" start="192" end="192" type="bool"/>
-    <field name="Dynamic State MOCS" start="196" end="202" type="uint"/>
+    <field name="Dynamic State MOCS" start="196" end="202" type="uint" nonzero="true"/>
     <field name="Dynamic State Base Address" start="204" end="255" type="address"/>
     <field name="Indirect Object Base Address Modify Enable" start="256" end="256" type="bool"/>
-    <field name="Indirect Object MOCS" start="260" end="266" type="uint"/>
+    <field name="Indirect Object MOCS" start="260" end="266" type="uint" nonzero="true"/>
     <field name="Indirect Object Base Address" start="268" end="319" type="address"/>
     <field name="Instruction Base Address Modify Enable" start="320" end="320" type="bool"/>
-    <field name="Instruction MOCS" start="324" end="330" type="uint"/>
+    <field name="Instruction MOCS" start="324" end="330" type="uint" nonzero="true"/>
     <field name="Instruction Base Address" start="332" end="383" type="address"/>
     <field name="General State Buffer Size Modify Enable" start="384" end="384" type="bool"/>
     <field name="General State Buffer Size" start="396" end="415" type="uint"/>
@@ -6126,7 +6126,7 @@
     <field name="Instruction Buffer size Modify Enable" start="480" end="480" type="bool"/>
     <field name="Instruction Buffer Size" start="492" end="511" type="uint"/>
     <field name="Bindless Surface State Base Address Modify Enable" start="512" end="512" type="bool"/>
-    <field name="Bindless Surface State MOCS" start="516" end="522" type="uint"/>
+    <field name="Bindless Surface State MOCS" start="516" end="522" type="uint" nonzero="true"/>
     <field name="Bindless Surface State Base Address" start="524" end="575" type="address"/>
     <field name="Bindless Surface State Size" start="588" end="607" type="uint"/>
   </instruction>
@@ -6192,11 +6192,11 @@
     <field name="Sub-Pel Mode" start="140" end="141" type="uint"/>
     <field name="Forward Transform Skip Check Enable" start="145" end="145" type="bool"/>
     <field name="Block-Based Skip Enable" start="147" end="147" type="bool"/>
-    <field name="Inter SAD Measure Adjustment" start="148" end="149" type="uint">
+    <field name="Inter SAD Measure Adjustment" start="148" end="149" type="uint" prefix="ISMA">
       <value name="None" value="0"/>
       <value name="Haar Transform Adjusted" value="2"/>
     </field>
-    <field name="Intra SAD Measure Adjustment" start="150" end="151" type="uint">
+    <field name="Intra SAD Measure Adjustment" start="150" end="151" type="uint" prefix="ISMA">
       <value name="None" value="0"/>
       <value name="Haar Transform Adjusted" value="2"/>
     </field>
@@ -6207,7 +6207,7 @@
     <field name="HME Ref1 Disable" start="177" end="177" type="bool"/>
     <field name="MB Slice Threshold Value" start="178" end="181" type="uint"/>
     <field name="Constrained Intra Prediction" start="186" end="186" type="bool"/>
-    <field name="Picture Type" start="189" end="190" type="uint">
+    <field name="Picture Type" start="189" end="190" type="uint" prefix="PI">
       <value name="I" value="0"/>
       <value name="P" value="1"/>
     </field>
@@ -6322,7 +6322,7 @@
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="1"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="Standard Select" start="32" end="35" type="uint">
+    <field name="Standard Select" start="32" end="35" type="uint" prefix="SS">
       <value name="AVC" value="2"/>
     </field>
     <field name="Frame Statistics Stream-Out Enable" start="37" end="37" type="bool"/>

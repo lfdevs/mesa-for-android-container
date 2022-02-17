@@ -99,7 +99,7 @@ nouveau_screen_bo_from_handle(struct pipe_screen *pscreen,
                               unsigned *out_stride)
 {
    struct nouveau_device *dev = nouveau_screen(pscreen)->device;
-   struct nouveau_bo *bo = 0;
+   struct nouveau_bo *bo = NULL;
    int ret;
 
    if (whandle->offset != 0) {

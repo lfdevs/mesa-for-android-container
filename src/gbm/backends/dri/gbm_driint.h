@@ -176,7 +176,7 @@ gbm_dri_bo_map_dumb(struct gbm_dri_bo *bo)
    if (ret)
       return NULL;
 
-   bo->map = mmap(0, bo->size, PROT_WRITE,
+   bo->map = mmap(NULL, bo->size, PROT_WRITE,
                   MAP_SHARED, bo->base.gbm->v0.fd, map_arg.offset);
    if (bo->map == MAP_FAILED) {
       bo->map = NULL;

@@ -92,9 +92,16 @@ struct zink_compute_pipeline_state {
    /* Pre-hashed value for table lookup, invalid when zero.
     * Members after this point are not included in pipeline state hash key */
    uint32_t hash;
+   uint32_t final_hash;
    bool dirty;
    bool use_local_size;
    uint32_t local_size[3];
+
+   uint32_t module_hash;
+   VkShaderModule module;
+   bool module_changed;
+
+   struct zink_shader_key key;
 
    VkPipeline pipeline;
 };
@@ -103,6 +110,7 @@ VkPipeline
 zink_create_gfx_pipeline(struct zink_screen *screen,
                          struct zink_gfx_program *prog,
                          struct zink_gfx_pipeline_state *state,
+                         const uint8_t *binding_map,
                          VkPrimitiveTopology primitive_topology);
 
 VkPipeline

@@ -106,6 +106,7 @@ i915_get_name(struct pipe_screen *screen)
 }
 
 static const nir_shader_compiler_options i915_compiler_options = {
+   .fdot_replicates = true,
    .fuse_ffma32 = true,
    .lower_bitops = true, /* required for !CAP_INTEGERS nir_to_tgsi */
    .lower_extract_byte = true,
@@ -122,6 +123,7 @@ static const nir_shader_compiler_options i915_compiler_options = {
 };
 
 static const struct nir_shader_compiler_options gallivm_nir_options = {
+   .fdot_replicates = true,
    .lower_bitops = true, /* required for !CAP_INTEGERS nir_to_tgsi */
    .lower_scmp = true,
    .lower_flrp32 = true,
@@ -402,7 +404,7 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_TGSI_TEXCOORD:
       return 1;
 
-   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+   case PIPE_CAP_TEXTURE_TRANSFER_MODES:
    case PIPE_CAP_PCI_GROUP:
    case PIPE_CAP_PCI_BUS:
    case PIPE_CAP_PCI_DEVICE:
@@ -437,10 +439,6 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
 
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 16;
-
-   /* Features we can lie about (boolean caps). */
-   case PIPE_CAP_OCCLUSION_QUERY:
-      return is->debug.lie ? 1 : 0;
 
    /* Texturing. */
    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
@@ -501,14 +499,24 @@ static float
 i915_get_paramf(struct pipe_screen *screen, enum pipe_capf cap)
 {
    switch (cap) {
+   case PIPE_CAPF_MIN_LINE_WIDTH:
+   case PIPE_CAPF_MIN_LINE_WIDTH_AA:
+   case PIPE_CAPF_MIN_POINT_SIZE:
+   case PIPE_CAPF_MIN_POINT_SIZE_AA:
+      return 1;
+
+   case PIPE_CAPF_POINT_SIZE_GRANULARITY:
+   case PIPE_CAPF_LINE_WIDTH_GRANULARITY:
+      return 0.1;
+
    case PIPE_CAPF_MAX_LINE_WIDTH:
       FALLTHROUGH;
    case PIPE_CAPF_MAX_LINE_WIDTH_AA:
       return 7.5;
 
-   case PIPE_CAPF_MAX_POINT_WIDTH:
+   case PIPE_CAPF_MAX_POINT_SIZE:
       FALLTHROUGH;
-   case PIPE_CAPF_MAX_POINT_WIDTH_AA:
+   case PIPE_CAPF_MAX_POINT_SIZE_AA:
       return 255.0;
 
    case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:

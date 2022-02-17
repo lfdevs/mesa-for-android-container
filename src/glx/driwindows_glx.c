@@ -258,7 +258,8 @@ driwindowsDestroyDrawable(__GLXDRIdrawable * pdraw)
 
 static __GLXDRIdrawable *
 driwindowsCreateDrawable(struct glx_screen *base, XID xDrawable,
-                         GLXDrawable drawable, struct glx_config *modes)
+                         GLXDrawable drawable, int type,
+                         struct glx_config *modes)
 {
    struct driwindows_drawable *pdp;
    struct driwindows_screen *psc = (struct driwindows_screen *) base;

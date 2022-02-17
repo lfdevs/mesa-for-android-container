@@ -16,3 +16,7 @@ dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_16_64_6.samples_8.d32_sfloat_
 dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_16_64_6.samples_8.d32_sfloat_s8_uint_separate_layouts.stencil_max,Fail
 dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_16_64_6.samples_8.d32_sfloat_s8_uint_separate_layouts.stencil_min,Fail
 dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_16_64_6.samples_8.d32_sfloat_s8_uint_separate_layouts.stencil_zero,Fail
+
+# While waiting for vkCTS 1.3
+dEQP-VK.api.version_check.version,Fail
+dEQP-VK.info.device_properties,Fail

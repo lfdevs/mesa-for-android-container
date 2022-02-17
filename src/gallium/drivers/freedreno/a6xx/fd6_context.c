@@ -151,7 +151,8 @@ setup_state_map(struct fd_context *ctx)
                       BIT(FD6_GROUP_ZSA));
    fd_context_add_map(ctx, FD_DIRTY_ZSA | FD_DIRTY_BLEND | FD_DIRTY_PROG,
                       BIT(FD6_GROUP_LRZ) | BIT(FD6_GROUP_LRZ_BINNING));
-   fd_context_add_map(ctx, FD_DIRTY_PROG, BIT(FD6_GROUP_PROG));
+   fd_context_add_map(ctx, FD_DIRTY_PROG | FD_DIRTY_RASTERIZER_CLIP_PLANE_ENABLE,
+                      BIT(FD6_GROUP_PROG));
    fd_context_add_map(ctx, FD_DIRTY_RASTERIZER, BIT(FD6_GROUP_RASTERIZER));
    fd_context_add_map(ctx,
                       FD_DIRTY_FRAMEBUFFER | FD_DIRTY_RASTERIZER_DISCARD |
@@ -210,6 +211,7 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    pctx = &fd6_ctx->base.base;
    pctx->screen = pscreen;
 
+   fd6_ctx->base.flags = flags;
    fd6_ctx->base.dev = fd_device_ref(screen->dev);
    fd6_ctx->base.screen = fd_screen(pscreen);
    fd6_ctx->base.last.key = &fd6_ctx->last_key;

@@ -49,7 +49,7 @@ void crocus_blitter_begin(struct crocus_context *ice, enum crocus_blitter_op op,
       util_blitter_save_depth_stencil_alpha(ice->blitter, ice->state.cso_zsa);
       util_blitter_save_stencil_ref(ice->blitter, &ice->state.stencil_ref);
       util_blitter_save_fragment_shader(ice->blitter, ice->shaders.uncompiled[MESA_SHADER_FRAGMENT]);
-      util_blitter_save_sample_mask(ice->blitter, ice->state.sample_mask);
+      util_blitter_save_sample_mask(ice->blitter, ice->state.sample_mask, 0);
       util_blitter_save_rasterizer(ice->blitter, ice->state.cso_rast);
       util_blitter_save_scissor(ice->blitter, &ice->state.scissors[0]);
       util_blitter_save_viewport(ice->blitter, &ice->state.viewports[0]);
@@ -708,9 +708,11 @@ crocus_copy_region(struct blorp_context *blorp,
    if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
       struct blorp_address src_addr = {
          .buffer = crocus_resource_bo(src), .offset = src_box->x,
+         .mocs = crocus_mocs(src_res->bo, &screen->isl_dev),
       };
       struct blorp_address dst_addr = {
          .buffer = crocus_resource_bo(dst), .offset = dstx,
+         .mocs = crocus_mocs(dst_res->bo, &screen->isl_dev),
          .reloc_flags = EXEC_OBJECT_WRITE,
       };
 
@@ -754,20 +756,6 @@ crocus_copy_region(struct blorp_context *blorp,
    tex_cache_flush_hack(batch, ISL_FORMAT_UNSUPPORTED, src_res->surf.format);
 }
 
-static struct crocus_batch *
-get_preferred_batch(struct crocus_context *ice, struct crocus_bo *bo)
-{
-   /* If the compute batch is already using this buffer, we'd prefer to
-    * continue queueing in the compute batch.
-    */
-   if (crocus_batch_references(&ice->batches[CROCUS_BATCH_COMPUTE], bo))
-      return &ice->batches[CROCUS_BATCH_COMPUTE];
-
-   /* Otherwise default to the render batch. */
-   return &ice->batches[CROCUS_BATCH_RENDER];
-}
-
-
 /**
  * The pipe->resource_copy_region() driver hook.
  *
@@ -794,21 +782,6 @@ crocus_resource_copy_region(struct pipe_context *ctx,
       crocus_resource_finish_aux_import(ctx->screen, src);
    if (crocus_resource_unfinished_aux_import(dst))
       crocus_resource_finish_aux_import(ctx->screen, dst);
-
-   /* Use MI_COPY_MEM_MEM for tiny (<= 16 byte, % 4) buffer copies. */
-   if (p_src->target == PIPE_BUFFER && p_dst->target == PIPE_BUFFER &&
-       (src_box->width % 4 == 0) && src_box->width <= 16 &&
-       screen->vtbl.copy_mem_mem) {
-      struct crocus_bo *dst_bo = crocus_resource_bo(p_dst);
-      batch = get_preferred_batch(ice, dst_bo);
-      crocus_batch_maybe_flush(batch, 24 + 5 * (src_box->width / 4));
-      crocus_emit_pipe_control_flush(batch,
-                                     "stall for MI_COPY_MEM_MEM copy_region",
-                                     PIPE_CONTROL_CS_STALL);
-      screen->vtbl.copy_mem_mem(batch, dst_bo, dstx, crocus_resource_bo(p_src),
-                                src_box->x, src_box->width);
-      return;
-   }
 
    if (devinfo->ver < 6 && util_format_is_depth_or_stencil(p_dst->format)) {
       util_resource_copy_region(ctx, p_dst, dst_level, dstx, dsty, dstz,

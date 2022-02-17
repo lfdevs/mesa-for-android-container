@@ -33,7 +33,7 @@ extern "C" {
 #endif
 
 void intel_uuid_compute_device_id(uint8_t *uuid,
-                                  const struct isl_device *isldev,
+                                  const struct intel_device_info *devinfo,
                                   size_t size);
 
 void intel_uuid_compute_driver_id(uint8_t *uuid,

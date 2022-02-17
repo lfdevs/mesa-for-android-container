@@ -42,12 +42,12 @@ BEGIN_TEST(isel.interp.simple)
       void main() {
          //>> v1: %a_tmp = v_interp_p1_f32 %bx, %pm:m0 attr0.w
          //! v1: %a = v_interp_p2_f32 %by, %pm:m0, (kill)%a_tmp attr0.w
-         //! v1: %b_tmp = v_interp_p1_f32 %bx, %pm:m0 attr0.z
-         //! v1: %b = v_interp_p2_f32 %by, %pm:m0, (kill)%b_tmp attr0.z
+         //! v1: %r_tmp = v_interp_p1_f32 %bx, %pm:m0 attr0.x
+         //! v1: %r = v_interp_p2_f32 %by, %pm:m0, (kill)%r_tmp attr0.x
          //! v1: %g_tmp = v_interp_p1_f32 %bx, %pm:m0 attr0.y
          //! v1: %g = v_interp_p2_f32 %by, %pm:m0, (kill)%g_tmp attr0.y
-         //! v1: %r_tmp = v_interp_p1_f32 (kill)%bx, %pm:m0 attr0.x
-         //! v1: %r = v_interp_p2_f32 (kill)%by, (kill)%pm:m0, (kill)%r_tmp attr0.x
+         //! v1: %b_tmp = v_interp_p1_f32 (kill)%bx, %pm:m0 attr0.z
+         //! v1: %b = v_interp_p2_f32 (kill)%by, (kill)%pm:m0, (kill)%b_tmp attr0.z
          //! exp (kill)%r, (kill)%g, (kill)%b, (kill)%a mrt0
          out_color = in_color;
       }

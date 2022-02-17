@@ -76,7 +76,7 @@ static const struct isa_enum ${enum.get_c_name()} = {
 static uint64_t
 ${expr.get_c_name()}(struct decode_scope *scope)
 {
-%   for fieldname in expr.fieldnames:
+%   for fieldname in sorted(expr.fieldnames):
     int64_t ${fieldname} = isa_decode_field(scope, "${fieldname}");
 %   endfor
     return ${expr.expr};
@@ -159,8 +159,8 @@ static const struct isa_bitset bitset_${bitset.get_c_name()} = {
 %   endif
        .name     = "${name}",
        .gen      = {
-           .min  = ${bitset.gen_min},
-           .max  = ${bitset.gen_max},
+           .min  = ${bitset.get_gen_min()},
+           .max  = ${bitset.get_gen_max()},
        },
        .match.bitset    = { ${', '.join(isa.split_bits(pattern.match))} },
        .dontcare.bitset = { ${', '.join(isa.split_bits(pattern.dontcare))} },

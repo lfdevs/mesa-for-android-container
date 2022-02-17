@@ -51,90 +51,27 @@ gcd_pow2_u64(uint64_t a, uint64_t b)
    return 1 << MIN2(a_log2, b_log2);
 }
 
-void
-genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
-                           struct anv_address dst, struct anv_address src,
-                           uint32_t size)
+static void
+emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
+                      const struct intel_l3_config *l3_config)
 {
-   if (size == 0)
-      return;
-
-   /* The maximum copy block size is 4 32-bit components at a time. */
-   assert(size % 4 == 0);
-   unsigned bs = gcd_pow2_u64(16, size);
-
-   enum isl_format format;
-   switch (bs) {
-   case 4:  format = ISL_FORMAT_R32_UINT;          break;
-   case 8:  format = ISL_FORMAT_R32G32_UINT;       break;
-   case 16: format = ISL_FORMAT_R32G32B32A32_UINT; break;
-   default:
-      unreachable("Invalid size");
-   }
-
-   if (!cmd_buffer->state.current_l3_config) {
-      const struct intel_l3_config *cfg =
-         intel_get_default_l3_config(&cmd_buffer->device->info);
-      genX(cmd_buffer_config_l3)(cmd_buffer, cfg);
-   }
-
-   genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(cmd_buffer, 32, src, size);
-   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
-
-   genX(flush_pipeline_select_3d)(cmd_buffer);
-
-   uint32_t *dw;
-   dw = anv_batch_emitn(&cmd_buffer->batch, 5, GENX(3DSTATE_VERTEX_BUFFERS));
-   GENX(VERTEX_BUFFER_STATE_pack)(&cmd_buffer->batch, dw + 1,
-      &(struct GENX(VERTEX_BUFFER_STATE)) {
-         .VertexBufferIndex = 32, /* Reserved for this */
-         .AddressModifyEnable = true,
-         .BufferStartingAddress = src,
-         .BufferPitch = bs,
-         .MOCS = anv_mocs(cmd_buffer->device, src.bo, 0),
-#if GFX_VER >= 12
-         .L3BypassDisable = true,
-#endif
-#if (GFX_VER >= 8)
-         .BufferSize = size,
-#else
-         .EndAddress = anv_address_add(src, size - 1),
-#endif
-      });
-
-   dw = anv_batch_emitn(&cmd_buffer->batch, 3, GENX(3DSTATE_VERTEX_ELEMENTS));
-   GENX(VERTEX_ELEMENT_STATE_pack)(&cmd_buffer->batch, dw + 1,
-      &(struct GENX(VERTEX_ELEMENT_STATE)) {
-         .VertexBufferIndex = 32,
-         .Valid = true,
-         .SourceElementFormat = format,
-         .SourceElementOffset = 0,
-         .Component0Control = (bs >= 4) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
-         .Component1Control = (bs >= 8) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
-         .Component2Control = (bs >= 12) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
-         .Component3Control = (bs >= 16) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
-      });
-
 #if GFX_VER >= 8
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_INSTANCING), vfi) {
+   anv_batch_emit(batch, GENX(3DSTATE_VF_INSTANCING), vfi) {
       vfi.InstancingEnable = false;
       vfi.VertexElementIndex = 0;
    }
-#endif
-
-#if GFX_VER >= 8
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_SGVS), sgvs);
+   anv_batch_emit(batch, GENX(3DSTATE_VF_SGVS), sgvs);
 #endif
 
    /* Disable all shader stages */
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VS), vs);
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_HS), hs);
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_TE), te);
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_DS), DS);
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_GS), gs);
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_PS), gs);
+   anv_batch_emit(batch, GENX(3DSTATE_VS), vs);
+   anv_batch_emit(batch, GENX(3DSTATE_HS), hs);
+   anv_batch_emit(batch, GENX(3DSTATE_TE), te);
+   anv_batch_emit(batch, GENX(3DSTATE_DS), DS);
+   anv_batch_emit(batch, GENX(3DSTATE_GS), gs);
+   anv_batch_emit(batch, GENX(3DSTATE_PS), gs);
 
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SBE), sbe) {
+   anv_batch_emit(batch, GENX(3DSTATE_SBE), sbe) {
       sbe.VertexURBEntryReadOffset = 1;
       sbe.NumberofSFOutputAttributes = 1;
       sbe.VertexURBEntryReadLength = 1;
@@ -155,18 +92,84 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
     */
    const unsigned entry_size[4] = { DIV_ROUND_UP(32, 64), 1, 1, 1 };
 
-   genX(emit_urb_setup)(cmd_buffer->device, &cmd_buffer->batch,
-                        cmd_buffer->state.current_l3_config,
+   genX(emit_urb_setup)(device, batch, l3_config,
                         VK_SHADER_STAGE_VERTEX_BIT, entry_size, NULL);
 
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER), sob) {
+#if GFX_VER >= 12
+   /* Disable Primitive Replication. */
+   anv_batch_emit(batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
+#endif
+
+#if GFX_VER >= 8
+   anv_batch_emit(batch, GENX(3DSTATE_VF_TOPOLOGY), topo) {
+      topo.PrimitiveTopologyType = _3DPRIM_POINTLIST;
+   }
+#endif
+
+   anv_batch_emit(batch, GENX(3DSTATE_VF_STATISTICS), vf) {
+      vf.StatisticsEnable = false;
+   }
+}
+
+static void
+emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
+               struct anv_address dst, struct anv_address src,
+               uint32_t size)
+{
+   /* The maximum copy block size is 4 32-bit components at a time. */
+   assert(size % 4 == 0);
+   unsigned bs = gcd_pow2_u64(16, size);
+
+   enum isl_format format;
+   switch (bs) {
+   case 4:  format = ISL_FORMAT_R32_UINT;          break;
+   case 8:  format = ISL_FORMAT_R32G32_UINT;       break;
+   case 16: format = ISL_FORMAT_R32G32B32A32_UINT; break;
+   default:
+      unreachable("Invalid size");
+   }
+
+   uint32_t *dw;
+   dw = anv_batch_emitn(batch, 5, GENX(3DSTATE_VERTEX_BUFFERS));
+   GENX(VERTEX_BUFFER_STATE_pack)(batch, dw + 1,
+      &(struct GENX(VERTEX_BUFFER_STATE)) {
+         .VertexBufferIndex = 32, /* Reserved for this */
+         .AddressModifyEnable = true,
+         .BufferStartingAddress = src,
+         .BufferPitch = bs,
+         .MOCS = anv_mocs(device, src.bo, 0),
+#if GFX_VER >= 12
+         .L3BypassDisable = true,
+#endif
+#if (GFX_VER >= 8)
+         .BufferSize = size,
+#else
+         .EndAddress = anv_address_add(src, size - 1),
+#endif
+      });
+
+   dw = anv_batch_emitn(batch, 3, GENX(3DSTATE_VERTEX_ELEMENTS));
+   GENX(VERTEX_ELEMENT_STATE_pack)(batch, dw + 1,
+      &(struct GENX(VERTEX_ELEMENT_STATE)) {
+         .VertexBufferIndex = 32,
+         .Valid = true,
+         .SourceElementFormat = format,
+         .SourceElementOffset = 0,
+         .Component0Control = (bs >= 4) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
+         .Component1Control = (bs >= 8) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
+         .Component2Control = (bs >= 12) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
+         .Component3Control = (bs >= 16) ? VFCOMP_STORE_SRC : VFCOMP_STORE_0,
+      });
+
+
+   anv_batch_emit(batch, GENX(3DSTATE_SO_BUFFER), sob) {
 #if GFX_VER < 12
       sob.SOBufferIndex = 0;
 #else
       sob._3DCommandOpcode = 0;
       sob._3DCommandSubOpcode = SO_BUFFER_INDEX_0_CMD;
 #endif
-      sob.MOCS = anv_mocs(cmd_buffer->device, dst.bo, 0),
+      sob.MOCS = anv_mocs(device, dst.bo, 0),
       sob.SurfaceBaseAddress = dst;
 
 #if GFX_VER >= 8
@@ -190,16 +193,16 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
 
 #if GFX_VER <= 7
    /* The hardware can do this for us on BDW+ (see above) */
-   anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_IMM), load) {
+   anv_batch_emit(batch, GENX(MI_LOAD_REGISTER_IMM), load) {
       load.RegisterOffset = GENX(SO_WRITE_OFFSET0_num);
       load.DataDWord = 0;
    }
 #endif
 
-   dw = anv_batch_emitn(&cmd_buffer->batch, 5, GENX(3DSTATE_SO_DECL_LIST),
+   dw = anv_batch_emitn(batch, 5, GENX(3DSTATE_SO_DECL_LIST),
                         .StreamtoBufferSelects0 = (1 << 0),
                         .NumEntries0 = 1);
-   GENX(SO_DECL_ENTRY_pack)(&cmd_buffer->batch, dw + 3,
+   GENX(SO_DECL_ENTRY_pack)(batch, dw + 3,
       &(struct GENX(SO_DECL_ENTRY)) {
          .Stream0Decl = {
             .OutputBufferSlot = 0,
@@ -208,7 +211,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
          },
       });
 
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_STREAMOUT), so) {
+   anv_batch_emit(batch, GENX(3DSTATE_STREAMOUT), so) {
       so.SOFunctionEnable = true;
       so.RenderingDisable = true;
       so.Stream0VertexReadOffset = 0;
@@ -220,22 +223,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
 #endif
    }
 
-#if GFX_VER >= 8
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_TOPOLOGY), topo) {
-      topo.PrimitiveTopologyType = _3DPRIM_POINTLIST;
-   }
-#endif
-
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_STATISTICS), vf) {
-      vf.StatisticsEnable = false;
-   }
-
-#if GFX_VER >= 12
-   /* Disable Primitive Replication. */
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
-#endif
-
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
+   anv_batch_emit(batch, GENX(3DPRIMITIVE), prim) {
       prim.VertexAccessType         = SEQUENTIAL;
       prim.PrimitiveTopologyType    = _3DPRIM_POINTLIST;
       prim.VertexCountPerInstance   = size / bs;
@@ -244,6 +232,85 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       prim.StartInstanceLocation    = 0;
       prim.BaseVertexLocation       = 0;
    }
+}
+
+void
+genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
+                          struct anv_device *device,
+                          struct anv_batch *batch)
+{
+   memset(state, 0, sizeof(*state));
+
+   state->batch = batch;
+   state->device = device;
+
+   const struct intel_l3_config *cfg = intel_get_default_l3_config(&device->info);
+   genX(emit_l3_config)(batch, device, cfg);
+
+   anv_batch_emit(batch, GENX(PIPELINE_SELECT), ps) {
+#if GFX_VER >= 9
+      ps.MaskBits = GFX_VER >= 12 ? 0x13 : 3;
+      ps.MediaSamplerDOPClockGateEnable = GFX_VER >= 12;
+#endif
+      ps.PipelineSelection = _3D;
+   }
+
+   emit_common_so_memcpy(batch, device, device->l3_config);
+}
+
+void
+genX(emit_so_memcpy_fini)(struct anv_memcpy_state *state)
+{
+   genX(emit_apply_pipe_flushes)(state->batch, state->device, _3D,
+                                 ANV_PIPE_END_OF_PIPE_SYNC_BIT);
+
+   anv_batch_emit(state->batch, GENX(MI_BATCH_BUFFER_END), end);
+
+   if ((state->batch->next - state->batch->start) & 4)
+      anv_batch_emit(state->batch, GENX(MI_NOOP), noop);
+}
+
+void
+genX(emit_so_memcpy)(struct anv_memcpy_state *state,
+                     struct anv_address dst, struct anv_address src,
+                     uint32_t size)
+{
+   if (GFX_VER >= 8 && GFX_VER <= 9 &&
+       !anv_use_relocations(state->device->physical) &&
+       anv_gfx8_9_vb_cache_range_needs_workaround(&state->vb_bound,
+                                                  &state->vb_dirty,
+                                                  src, size)) {
+      genX(emit_apply_pipe_flushes)(state->batch, state->device, _3D,
+                                    ANV_PIPE_CS_STALL_BIT |
+                                    ANV_PIPE_VF_CACHE_INVALIDATE_BIT);
+      memset(&state->vb_dirty, 0, sizeof(state->vb_dirty));
+   }
+
+   emit_so_memcpy(state->batch, state->device, dst, src, size);
+}
+
+void
+genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
+                           struct anv_address dst, struct anv_address src,
+                           uint32_t size)
+{
+   if (size == 0)
+      return;
+
+   if (!cmd_buffer->state.current_l3_config) {
+      const struct intel_l3_config *cfg =
+         intel_get_default_l3_config(&cmd_buffer->device->info);
+      genX(cmd_buffer_config_l3)(cmd_buffer, cfg);
+   }
+
+   genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(cmd_buffer, 32, src, size);
+   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
+   genX(flush_pipeline_select_3d)(cmd_buffer);
+
+   emit_common_so_memcpy(&cmd_buffer->batch, cmd_buffer->device,
+                         cmd_buffer->state.current_l3_config);
+   emit_so_memcpy(&cmd_buffer->batch, cmd_buffer->device, dst, src, size);
 
    genX(cmd_buffer_update_dirty_vbs_for_gfx8_vb_flush)(cmd_buffer, SEQUENTIAL,
                                                        1ull << 32);

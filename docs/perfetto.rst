@@ -80,6 +80,46 @@ To capture a trace with perfetto you need to take the following steps:
 8. Alternatively you can open the trace in `AGI <https://gpuinspector.dev/>`__
    (which despite the name can be used to view non-android traces).
 
+To be a bit more explicit, here is a listing of commands reproducing
+the steps above :
+
+.. code-block:: console
+
+   # Configure Mesa with perfetto
+   mesa $ meson . build -Dperfetto=true -Dvulkan-drivers=intel,broadcom -Dgallium-drivers=
+   # Build mesa
+   mesa $ ninja -C build
+
+   # Within the Mesa repo, build perfetto
+   mesa $ cd subprojects/perfetto
+   perfetto $ ./tools/install-build-deps
+   perfetto $ ./tools/gn gen --args='is_debug=false' out/linux
+   perfetto $ ./tools/ninja -C out/linux
+
+   # Start perfetto
+   perfetto $ CONFIG=../../src/tool/pps/cfg/gpu.cfg OUT=out/linux/ ./tools/tmux -n
+
+   # In parallel from the Mesa repo, start the PPS producer
+   mesa $ ./build/src/tool/pps/pps-producer
+
+   # Back in the perfetto tmux, press enter to start the capture
+
+Vulkan data sources
+~~~~~~~~~~~~~~~~~~~
+
+The Vulkan API gives the application control over recording of command
+buffers as well as when they are submitted to the hardware. As a
+consequence, we need to ensure command buffers are properly
+instrumented for the perfetto driver data sources prior to Perfetto
+actually collecting traces.
+
+This can be achieved by setting the ``GPU_TRACE_INSTRUMENT``
+environment variable before starting a Vulkan application :
+
+.. code-block:: console
+
+   GPU_TRACE_INSTRUMENT=1 ./build/my_vulkan_app
+
 Driver Specifics
 ~~~~~~~~~~~~~~~~
 
@@ -113,6 +153,21 @@ Another option to enable access wide data without root permissions would be runn
    sudo sysctl dev.i915.perf_stream_paranoid=0
 
 Alternatively using the ``CAP_PERFMON`` permission on the binary should work too.
+
+A particular metric set can also be selected to capture a different
+set of HW counters :
+
+.. code-block:: console
+
+   INTEL_PERFETTO_METRIC_SET=RasterizerAndPixelBackend ./build/src/tool/pps/pps-producer
+
+Vulkan applications can also be instrumented to be Perfetto producers.
+To enable this for given application, set the environment variable as
+follow :
+
+.. code-block:: console
+
+   PERFETTO_TRACE=1 my_vulkan_app
 
 Panfrost
 ^^^^^^^^

@@ -38,10 +38,52 @@ extern "C" {
 struct drm_i915_query_topology_info;
 
 #define INTEL_DEVICE_MAX_NAME_SIZE        64
-#define INTEL_DEVICE_MAX_SLICES           (6)  /* Maximum on gfx10 */
+#define INTEL_DEVICE_MAX_SLICES           8
 #define INTEL_DEVICE_MAX_SUBSLICES        (8)  /* Maximum on gfx11 */
 #define INTEL_DEVICE_MAX_EUS_PER_SUBSLICE (16) /* Maximum on gfx12 */
-#define INTEL_DEVICE_MAX_PIXEL_PIPES      (3)  /* Maximum on gfx12 */
+#define INTEL_DEVICE_MAX_PIXEL_PIPES      (16) /* Maximum on DG2 */
+
+#define INTEL_PLATFORM_GROUP_START(group, new_enum) \
+   new_enum, INTEL_PLATFORM_ ## group ## _START = new_enum
+#define INTEL_PLATFORM_GROUP_END(group, new_enum) \
+   new_enum, INTEL_PLATFORM_ ## group ## _END = new_enum
+
+enum intel_platform {
+   INTEL_PLATFORM_GFX3 = 1,
+   INTEL_PLATFORM_I965,
+   INTEL_PLATFORM_ILK,
+   INTEL_PLATFORM_G4X,
+   INTEL_PLATFORM_SNB,
+   INTEL_PLATFORM_IVB,
+   INTEL_PLATFORM_BYT,
+   INTEL_PLATFORM_HSW,
+   INTEL_PLATFORM_BDW,
+   INTEL_PLATFORM_CHV,
+   INTEL_PLATFORM_SKL,
+   INTEL_PLATFORM_BXT,
+   INTEL_PLATFORM_KBL,
+   INTEL_PLATFORM_GLK,
+   INTEL_PLATFORM_CFL,
+   INTEL_PLATFORM_ICL,
+   INTEL_PLATFORM_EHL,
+   INTEL_PLATFORM_TGL,
+   INTEL_PLATFORM_RKL,
+   INTEL_PLATFORM_DG1,
+   INTEL_PLATFORM_ADL,
+   INTEL_PLATFORM_RPL,
+   INTEL_PLATFORM_GROUP_START(DG2, INTEL_PLATFORM_DG2_G10),
+   INTEL_PLATFORM_GROUP_END(DG2, INTEL_PLATFORM_DG2_G11),
+};
+
+#undef INTEL_PLATFORM_GROUP_START
+#undef INTEL_PLATFORM_GROUP_END
+
+#define intel_platform_in_range(platform, platform_range) \
+   (((platform) >= INTEL_PLATFORM_ ## platform_range ## _START) && \
+    ((platform) <= INTEL_PLATFORM_ ## platform_range ## _END))
+
+#define intel_device_info_is_dg2(devinfo) \
+   intel_platform_in_range((devinfo)->platform, DG2)
 
 /**
  * Intel hardware information and quirks
@@ -52,30 +94,29 @@ struct intel_device_info
    int ver;
    int verx10;
    int display_ver;
+
+   /**
+    * This revision is from ioctl (I915_PARAM_REVISION) unlike
+    * pci_revision_id from drm device. Its value is not always
+    * same as the pci_revision_id.
+    */
    int revision;
    int gt;
 
-   bool is_g4x;
-   bool is_ivybridge;
-   bool is_baytrail;
-   bool is_haswell;
-   bool is_broadwell;
-   bool is_cherryview;
-   bool is_skylake;
-   bool is_broxton;
-   bool is_kabylake;
-   bool is_geminilake;
-   bool is_coffeelake;
-   bool is_elkhartlake;
-   bool is_tigerlake;
-   bool is_rocketlake;
-   bool is_dg1;
-   bool is_alderlake;
-   bool is_dg2;
+   /* PCI info */
+   uint16_t pci_domain;
+   uint8_t pci_bus;
+   uint8_t pci_dev;
+   uint8_t pci_func;
+   uint16_t pci_device_id;
+   uint8_t pci_revision_id;
+
+   enum intel_platform platform;
 
    bool has_hiz_and_separate_stencil;
    bool must_use_separate_stencil;
    bool has_sample_with_hiz;
+   bool has_bit6_swizzle;
    bool has_llc;
 
    bool has_pln;
@@ -86,17 +127,30 @@ struct intel_device_info
    bool has_surface_tile_offset;
    bool supports_simd16_3src;
    bool disable_ccs_repack;
+
+   /**
+    * True if CCS uses a flat virtual address translation to a memory
+    * carve-out, rather than aux map translations, or additional surfaces.
+    */
+   bool has_flat_ccs;
    bool has_aux_map;
    bool has_tiling_uapi;
    bool has_ray_tracing;
    bool has_local_mem;
    bool has_lsc;
+   bool has_mesh_shading;
 
    /**
     * \name Intel hardware quirks
     *  @{
     */
    bool has_negative_rhw_bug;
+
+   /**
+    * Whether this platform supports fragment shading rate controlled by a
+    * primitive in geometry shaders and by a control buffer.
+    */
+   bool has_coarse_pixel_primitive_and_cb;
 
    /**
     * Some versions of Gen hardware don't do centroid interpolation correctly
@@ -144,7 +198,7 @@ struct intel_device_info
    /**
     * Number of subslices for each slice (used to be uniform until CNL).
     */
-   unsigned num_subslices[INTEL_DEVICE_MAX_SUBSLICES];
+   unsigned num_subslices[INTEL_DEVICE_MAX_SLICES];
 
    /**
     * Maximum number of subslices per slice present on this device (can be
@@ -159,17 +213,9 @@ struct intel_device_info
    unsigned ppipe_subslices[INTEL_DEVICE_MAX_PIXEL_PIPES];
 
    /**
-    * Upper bound of number of EU per subslice (some SKUs might have just 1 EU
-    * fused across all subslices, like 47 EUs, in which case this number won't
-    * be acurate for one subslice).
+    * Maximum number of EUs per subslice (some EUs can be fused off).
     */
-   unsigned num_eu_per_subslice;
-
-   /**
-    * Maximum number of EUs per subslice (can be more than num_eu_per_subslice
-    * if some EUs are fused off).
-    */
-   unsigned max_eu_per_subslice;
+   unsigned max_eus_per_subslice;
 
    /**
     * Number of threads per eu, varies between 4 and 8 between generations.
@@ -234,6 +280,8 @@ struct intel_device_info
     * - For max_wm_threads, the total should be PSD threads * #PSDs.
     */
    unsigned max_wm_threads;
+
+   unsigned max_threads_per_psd;
 
    /**
     * Maximum Compute Shader threads.
@@ -320,6 +368,7 @@ struct intel_device_info
    uint64_t timestamp_frequency;
 
    uint64_t aperture_bytes;
+   uint64_t gtt_size;
 
    /**
     * ID to put into the .aub files.
@@ -327,33 +376,43 @@ struct intel_device_info
    int simulator_id;
 
    /**
-    * holds the pci device id
-    */
-   uint32_t chipset_id;
-
-   /**
     * holds the name of the device
     */
    char name[INTEL_DEVICE_MAX_NAME_SIZE];
 
    /**
-    * no_hw is true when the chipset_id pci device id has been overridden
+    * no_hw is true when the pci_device_id has been overridden
     */
    bool no_hw;
+
+   /**
+    * apply_hwconfig is true when the platform should apply hwconfig values
+    */
+   bool apply_hwconfig;
    /** @} */
 };
 
 #ifdef GFX_VER
 
 #define intel_device_info_is_9lp(devinfo) \
-   (GFX_VER == 9 && ((devinfo)->is_broxton || (devinfo)->is_geminilake))
+   (GFX_VER == 9 && ((devinfo)->platform == INTEL_PLATFORM_BXT || \
+                     (devinfo)->platform == INTEL_PLATFORM_GLK))
 
 #else
 
 #define intel_device_info_is_9lp(devinfo) \
-   ((devinfo)->is_broxton || (devinfo)->is_geminilake)
+   ((devinfo)->platform == INTEL_PLATFORM_BXT || \
+    (devinfo)->platform == INTEL_PLATFORM_GLK)
 
 #endif
+
+static inline bool
+intel_device_info_slice_available(const struct intel_device_info *devinfo,
+                                  int slice)
+{
+   assert(slice < INTEL_DEVICE_MAX_SLICES);
+   return (devinfo->slice_masks & (1U << slice)) != 0;
+}
 
 static inline bool
 intel_device_info_subslice_available(const struct intel_device_info *devinfo,
@@ -390,7 +449,7 @@ intel_device_info_eu_total(const struct intel_device_info *devinfo)
 {
    uint32_t total = 0;
 
-   for (uint32_t i = 0; i < ARRAY_SIZE(devinfo->eu_masks); i++)
+   for (size_t i = 0; i < ARRAY_SIZE(devinfo->eu_masks); i++)
       total += __builtin_popcount(devinfo->eu_masks[i]);
 
    return total;
@@ -409,13 +468,17 @@ static inline uint64_t
 intel_device_info_timebase_scale(const struct intel_device_info *devinfo,
                                  uint64_t gpu_timestamp)
 {
-   return (1000000000ull * gpu_timestamp) / devinfo->timestamp_frequency;
+   /* Try to avoid going over the 64bits when doing the scaling */
+   uint64_t upper_ts = gpu_timestamp >> 32;
+   uint64_t lower_ts = gpu_timestamp & 0xffffffff;
+   uint64_t upper_scaled_ts = upper_ts * 1000000000ull / devinfo->timestamp_frequency;
+   uint64_t lower_scaled_ts = lower_ts * 1000000000ull / devinfo->timestamp_frequency;
+   return (upper_scaled_ts << 32) + lower_scaled_ts;
 }
 
 bool intel_get_device_info_from_fd(int fh, struct intel_device_info *devinfo);
 bool intel_get_device_info_from_pci_id(int pci_id,
                                        struct intel_device_info *devinfo);
-int intel_get_aperture_size(int fd, uint64_t *size);
 
 #ifdef __cplusplus
 }

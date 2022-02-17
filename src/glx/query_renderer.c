@@ -143,20 +143,20 @@ glXQueryRendererStringMESA(Display *dpy, int screen,
    struct glx_screen *psc;
 
    if (dpy == NULL)
-      return False;
+      return NULL;
 
    /* This probably means the caller passed the wrong display pointer or
     * screen number.
     */
    psc = GetGLXScreenConfigs(dpy, screen);
    if (psc == NULL)
-      return False;
+      return NULL;
 
    /* Right now only a single renderer per display / screen combination is
     * supported.
     */
    if (renderer != 0)
-      return False;
+      return NULL;
 
    return __glXQueryRendererString(psc, attribute);
 }
@@ -167,7 +167,7 @@ glXQueryCurrentRendererStringMESA(int attribute)
    struct glx_context *gc = __glXGetCurrentContext();
 
    if (gc == &dummyContext)
-      return False;
+      return NULL;
 
    return __glXQueryRendererString(gc->psc, attribute);
 }

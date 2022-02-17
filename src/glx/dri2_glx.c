@@ -309,7 +309,8 @@ dri2DestroyDrawable(__GLXDRIdrawable *base)
 
 static __GLXDRIdrawable *
 dri2CreateDrawable(struct glx_screen *base, XID xDrawable,
-		   GLXDrawable drawable, struct glx_config *config_base)
+                   GLXDrawable drawable, int type,
+                   struct glx_config *config_base)
 {
    struct dri2_drawable *pdraw;
    struct dri2_screen *psc = (struct dri2_screen *) base;
@@ -709,7 +710,7 @@ static void show_fps(struct dri2_drawable *draw)
    struct timeval tv;
    uint64_t current_time;
 
-   gettimeofday(&tv, 0);
+   gettimeofday(&tv, NULL);
    current_time = (uint64_t)tv.tv_sec*1000000 + (uint64_t)tv.tv_usec;
 
    draw->frames++;
@@ -1279,6 +1280,21 @@ dri2CreateScreen(int screen, struct glx_display * priv)
                                     "indirect_gl_extension_override",
                                     &tmp) == 0)
       __IndirectGlParseExtensionOverride(&psc->base, tmp);
+
+   if (psc->config->base.version > 1) {
+      uint8_t force = false;
+      if (psc->config->configQueryb(psc->driScreen, "force_direct_glx_context",
+                                    &force) == 0) {
+         psc->base.force_direct_context = force;
+      }
+
+      uint8_t invalid_glx_destroy_window = false;
+      if (psc->config->configQueryb(psc->driScreen,
+                                    "allow_invalid_glx_destroy_window",
+                                    &invalid_glx_destroy_window) == 0) {
+         psc->base.allow_invalid_glx_destroy_window = invalid_glx_destroy_window;
+      }
+   }
 
    /* DRI2 supports SubBuffer through DRI2CopyRegion, so it's always
     * available.*/

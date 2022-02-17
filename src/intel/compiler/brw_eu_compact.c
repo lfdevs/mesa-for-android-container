@@ -1331,7 +1331,7 @@ set_3src_control_index(const struct intel_device_info *devinfo,
          (brw_inst_bits(src, 34, 32) << 21) |  /*  3b */
          (brw_inst_bits(src, 28,  8));         /* 21b */
 
-      if (devinfo->ver >= 9 || devinfo->is_cherryview) {
+      if (devinfo->ver >= 9 || devinfo->platform == INTEL_PLATFORM_CHV) {
          uncompacted |=
             brw_inst_bits(src, 36, 35) << 24;  /*  2b */
       }
@@ -1392,7 +1392,7 @@ set_3src_source_index(const struct intel_device_info *devinfo,
          (brw_inst_bits(src,  72,  65) << 19) |   /*  8b */
          (brw_inst_bits(src,  55,  37));          /* 19b */
 
-      if (devinfo->ver >= 9 || devinfo->is_cherryview) {
+      if (devinfo->ver >= 9 || devinfo->platform == INTEL_PLATFORM_CHV) {
          uncompacted |=
             (brw_inst_bits(src, 126, 125) << 47) | /* 2b */
             (brw_inst_bits(src, 105, 104) << 45) | /* 2b */
@@ -1480,7 +1480,7 @@ has_3src_unmapped_bits(const struct intel_device_info *devinfo,
     */
    if (devinfo->ver >= 12) {
       assert(!brw_inst_bits(src, 7, 7));
-   } else if (devinfo->ver >= 9 || devinfo->is_cherryview) {
+   } else if (devinfo->ver >= 9 || devinfo->platform == INTEL_PLATFORM_CHV) {
       assert(!brw_inst_bits(src, 127, 127) &&
              !brw_inst_bits(src, 7,  7));
    } else {
@@ -1728,7 +1728,7 @@ precompact(const struct intel_device_info *devinfo, brw_inst inst)
     * immediate we set.
     */
    if (devinfo->ver >= 6 &&
-       !(devinfo->is_haswell &&
+       !(devinfo->platform == INTEL_PLATFORM_HSW &&
          brw_inst_opcode(devinfo, &inst) == BRW_OPCODE_DIM) &&
        !(devinfo->ver >= 8 &&
          (brw_inst_src0_type(devinfo, &inst) == BRW_REGISTER_TYPE_DF ||
@@ -2082,7 +2082,7 @@ set_uncompacted_3src_control_index(const struct compaction_state *c,
       brw_inst_set_bits(dst, 34, 32, (uncompacted >> 21) & 0x7);
       brw_inst_set_bits(dst, 28,  8, (uncompacted >>  0) & 0x1fffff);
 
-      if (devinfo->ver >= 9 || devinfo->is_cherryview)
+      if (devinfo->ver >= 9 || devinfo->platform == INTEL_PLATFORM_CHV)
          brw_inst_set_bits(dst, 36, 35, (uncompacted >> 24) & 0x3);
    }
 }
@@ -2125,7 +2125,7 @@ set_uncompacted_3src_source_index(const struct intel_device_info *devinfo,
       brw_inst_set_bits(dst,  72,  65, (uncompacted >> 19) & 0xff);
       brw_inst_set_bits(dst,  55,  37, (uncompacted >>  0) & 0x7ffff);
 
-      if (devinfo->ver >= 9 || devinfo->is_cherryview) {
+      if (devinfo->ver >= 9 || devinfo->platform == INTEL_PLATFORM_CHV) {
          brw_inst_set_bits(dst, 126, 125, (uncompacted >> 47) & 0x3);
          brw_inst_set_bits(dst, 105, 104, (uncompacted >> 45) & 0x3);
          brw_inst_set_bits(dst,  84,  84, (uncompacted >> 44) & 0x1);
@@ -2339,13 +2339,13 @@ static void
 update_gfx4_jump_count(const struct intel_device_info *devinfo, brw_inst *insn,
                        int this_old_ip, int *compacted_counts)
 {
-   assert(devinfo->ver == 5 || devinfo->is_g4x);
+   assert(devinfo->ver == 5 || devinfo->platform == INTEL_PLATFORM_G4X);
 
    /* Jump Count is in units of:
     *    - uncompacted instructions on G45; and
     *    - compacted instructions on Gfx5.
     */
-   int shift = devinfo->is_g4x ? 1 : 0;
+   int shift = devinfo->platform == INTEL_PLATFORM_G4X ? 1 : 0;
 
    int jump_count_compacted = brw_inst_gfx4_jump_count(devinfo, insn) << shift;
 
@@ -2462,7 +2462,7 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
     */
    int old_ip[(p->next_insn_offset - start_offset) / sizeof(brw_compact_inst) + 1];
 
-   if (devinfo->ver == 4 && !devinfo->is_g4x)
+   if (devinfo->ver == 4 && devinfo->platform != INTEL_PLATFORM_G4X)
       return;
 
    struct compaction_state c;
@@ -2495,7 +2495,8 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
          offset += sizeof(brw_compact_inst);
       } else {
          /* All uncompacted instructions need to be aligned on G45. */
-         if ((offset & sizeof(brw_compact_inst)) != 0 && devinfo->is_g4x){
+         if ((offset & sizeof(brw_compact_inst)) != 0 &&
+             devinfo->platform == INTEL_PLATFORM_G4X) {
             brw_compact_inst *align = store + offset;
             memset(align, 0, sizeof(*align));
             brw_compact_inst_set_hw_opcode(

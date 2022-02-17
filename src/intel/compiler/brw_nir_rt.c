@@ -417,7 +417,7 @@ brw_nir_create_raygen_trampoline(const struct brw_compiler *compiler,
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    const nir_shader_compiler_options *nir_options =
-      compiler->glsl_compiler_options[MESA_SHADER_COMPUTE].NirOptions;
+      compiler->nir_options[MESA_SHADER_COMPUTE];
 
    STATIC_ASSERT(sizeof(struct brw_rt_raygen_trampoline_params) == 32);
 

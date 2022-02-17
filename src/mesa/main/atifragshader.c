@@ -32,6 +32,9 @@
 #include "program/program.h"
 #include "program/prog_instruction.h"
 #include "util/u_memory.h"
+#include "api_exec_decl.h"
+
+#include "state_tracker/st_program.h"
 
 #define MESA_DEBUG_ATI_FS 0
 
@@ -53,6 +56,17 @@ _mesa_new_ati_fragment_shader(struct gl_context *ctx, GLuint id)
    return s;
 }
 
+static struct gl_program *
+new_ati_fs(struct gl_context *ctx, struct ati_fragment_shader *curProg)
+{
+   struct gl_program *prog = rzalloc(NULL, struct gl_program);
+   if (!prog)
+      return NULL;
+
+   _mesa_init_gl_program(prog, MESA_SHADER_FRAGMENT, curProg->Id, true);
+   prog->ati_fs = curProg;
+   return prog;
+}
 
 /**
  * Delete the given ati fragment shader
@@ -70,7 +84,7 @@ _mesa_delete_ati_fragment_shader(struct gl_context *ctx, struct ati_fragment_sha
       free(s->SetupInst[i]);
    }
    _mesa_reference_program(ctx, &s->Program, NULL);
-   free(s);
+   FREE(s);
 }
 
 
@@ -412,17 +426,15 @@ _mesa_EndFragmentShaderATI(void)
    }
 #endif
 
-   if (ctx->Driver.NewATIfs) {
-      struct gl_program *prog = ctx->Driver.NewATIfs(ctx,
-                                                     ctx->ATIFragmentShader.Current);
-      _mesa_reference_program(ctx, &ctx->ATIFragmentShader.Current->Program,
-                                   NULL);
-      /* Don't use _mesa_reference_program(), just take ownership */
-      ctx->ATIFragmentShader.Current->Program = prog;
-   }
+   struct gl_program *prog = new_ati_fs(ctx,
+                                        ctx->ATIFragmentShader.Current);
+   _mesa_reference_program(ctx, &ctx->ATIFragmentShader.Current->Program,
+                           NULL);
+   /* Don't use _mesa_reference_program(), just take ownership */
+   ctx->ATIFragmentShader.Current->Program = prog;
 
-   if (!ctx->Driver.ProgramStringNotify(ctx, GL_FRAGMENT_SHADER_ATI,
-                                        curProg->Program)) {
+   if (!st_program_string_notify(ctx, GL_FRAGMENT_SHADER_ATI,
+                                 curProg->Program)) {
       ctx->ATIFragmentShader.Current->isValid = GL_FALSE;
       /* XXX is this the right error? */
       _mesa_error(ctx, GL_INVALID_OPERATION,

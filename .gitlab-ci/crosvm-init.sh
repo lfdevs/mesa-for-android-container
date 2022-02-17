@@ -1,27 +1,38 @@
 #!/bin/sh
 
-set -ex
+set -e
+
+export DEQP_TEMP_DIR="$1"
 
 mount -t proc none /proc
 mount -t sysfs none /sys
-mount -t devtmpfs none /dev || echo possibly already mounted
 mkdir -p /dev/pts
 mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /tmp
 
-. /crosvm-env.sh
+. $DEQP_TEMP_DIR/crosvm-env.sh
 
-# / is ro
-export PIGLIT_REPLAY_EXTRA_ARGS="$PIGLIT_REPLAY_EXTRA_ARGS --db-path /tmp/replayer-db"
+# .gitlab-ci.yml script variable is using relative paths to install directory,
+# so change to that dir before running `crosvm-script`
+cd "${CI_PROJECT_DIR}"
 
-if sh $CROSVM_TEST_SCRIPT; then
-    touch /results/success
+# The exception is the dEQP binary, since it needs to run from the directory
+# it's in
+if [ -d "${DEQP_BIN_DIR}" ]
+then
+    cd "${DEQP_BIN_DIR}"
 fi
 
-sleep 5   # Leave some time to get the last output flushed out
+dmesg --level crit,err,warn -w >> $DEQP_TEMP_DIR/stderr &
+
+set +e
+stdbuf -oL sh $DEQP_TEMP_DIR/crosvm-script.sh 2>> $DEQP_TEMP_DIR/stderr >> $DEQP_TEMP_DIR/stdout
+echo $? > $DEQP_TEMP_DIR/exit_code
+set -e
+
+sync
+sleep 1
 
 poweroff -d -n -f || true
 
-sleep 10   # Just in case init would exit before the kernel shuts down the VM
-
-exit 1
+sleep 1   # Just in case init would exit before the kernel shuts down the VM

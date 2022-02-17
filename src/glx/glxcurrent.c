@@ -204,7 +204,7 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
    if (oldGC != &dummyContext) {
       if (--oldGC->thread_refcount == 0) {
 	 oldGC->vtable->unbind(oldGC, gc);
-	 oldGC->currentDpy = 0;
+	 oldGC->currentDpy = NULL;
       }
    }
 

@@ -319,7 +319,7 @@ BEGIN_TEST(optimizer_postRA.dpp)
    //! v1: %res3:v[2] = v_add_f32 -%a:v[0], %b:v[1] row_mirror bound_ctrl:1
    //! p_unit_test 3, %res3:v[2]
    auto tmp3 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
-   tmp3.instr->dpp().neg[0] = true;
+   tmp3.instr->dpp16().neg[0] = true;
    Temp res3 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp3, reg_v2), b);
    writeout(3, Operand(res3, reg_v2));
 
@@ -341,7 +341,7 @@ BEGIN_TEST(optimizer_postRA.dpp)
    //! v1: %res6:v[2] = v_add_f32 |%a:v[0]|, %b:v[1] row_mirror bound_ctrl:1
    //! p_unit_test 6, %res6:v[2]
    auto tmp6 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
-   tmp6.instr->dpp().neg[0] = true;
+   tmp6.instr->dpp16().neg[0] = true;
    auto res6 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp6, reg_v2), b);
    res6.instr->vop3().abs[0] = true;
    writeout(6, Operand(res6, reg_v2));

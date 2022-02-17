@@ -569,6 +569,8 @@ struct pipe_resource
     */
    unsigned nr_storage_samples:8;
 
+   unsigned nr_sparse_levels:8; /**< Mipmap levels support partial resident */
+
    unsigned usage:8;         /**< PIPE_USAGE_x (not a bitmask) */
    unsigned bind;            /**< bitmask of PIPE_BIND_x */
    unsigned flags;           /**< bitmask of PIPE_RESOURCE_FLAG_x */
@@ -903,7 +905,6 @@ struct pipe_blit_info
    bool render_condition_enable; /**< whether the blit should honor the
                                  current render condition */
    bool alpha_blend; /* dst.rgb = src.rgb * src.a + dst.rgb * (1 - src.a) */
-   bool is_dri_blit_image;
 };
 
 /**

@@ -161,7 +161,7 @@
     <group count="4" start="0" size="16">
       <field name="Read Length" start="0" end="15" type="uint"/>
     </group>
-    <field name="MOCS" start="64" end="68" type="uint"/>
+    <field name="MOCS" start="64" end="68" type="uint" nonzero="true"/>
     <group count="4" start="64" size="32">
       <field name="Buffer" start="5" end="31" type="address"/>
     </group>
@@ -500,7 +500,7 @@
     </field>
     <field name="MIP Count / LOD" start="160" end="163" type="uint"/>
     <field name="Surface Min LOD" start="164" end="167" type="uint"/>
-    <field name="MOCS" start="176" end="179" type="uint"/>
+    <field name="MOCS" start="176" end="179" type="uint" nonzero="true"/>
     <field name="Y Offset" start="180" end="183" type="uint"/>
     <field name="X Offset" start="185" end="191" type="uint"/>
     <field name="MCS Enable" start="192" end="192" type="bool"/>
@@ -684,7 +684,7 @@
     <field name="Vertex Fetch Invalidate" start="12" end="12" type="bool" default="0"/>
     <field name="Null Vertex Buffer" start="13" end="13" type="bool"/>
     <field name="Address Modify Enable" start="14" end="14" type="bool"/>
-    <field name="MOCS" start="16" end="19" type="uint"/>
+    <field name="MOCS" start="16" end="19" type="uint" nonzero="true"/>
     <field name="Buffer Access Type" start="20" end="20" type="uint">
       <value name="VERTEXDATA" value="0"/>
       <value name="INSTANCEDATA" value="1"/>
@@ -877,7 +877,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="MOCS" start="39" end="42" type="uint"/>
+    <field name="MOCS" start="39" end="42" type="uint" nonzero="true"/>
     <field name="Binding Table Pool Enable" start="43" end="43" type="bool"/>
     <field name="Binding Table Pool Base Address" start="44" end="63" type="address"/>
     <field name="Binding Table Pool Upper Bound" start="76" end="95" type="address"/>
@@ -1048,7 +1048,7 @@
     <field name="LOD" start="96" end="99" type="uint"/>
     <field name="Width" start="100" end="113" type="uint"/>
     <field name="Height" start="114" end="127" type="uint"/>
-    <field name="MOCS" start="128" end="131" type="uint"/>
+    <field name="MOCS" start="128" end="131" type="uint" nonzero="true"/>
     <field name="Minimum Array Element" start="138" end="148" type="uint"/>
     <field name="Depth" start="149" end="159" type="uint">
       <value name="SURFTYPE_CUBE (must be zero)" value="0"/>
@@ -1209,7 +1209,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="MOCS" start="32" end="35" type="uint"/>
+    <field name="MOCS" start="32" end="35" type="uint" nonzero="true"/>
     <field start="36" end="37" type="mbo"/>
     <field name="Gather Pool Enable" start="43" end="43" type="bool"/>
     <field name="Gather Pool Base Address" start="44" end="63" type="address"/>
@@ -1286,7 +1286,7 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Surface Pitch" start="32" end="48" type="uint"/>
-    <field name="MOCS" start="57" end="60" type="uint"/>
+    <field name="MOCS" start="57" end="60" type="uint" nonzero="true"/>
     <field name="Surface Base Address" start="64" end="95" type="address"/>
   </instruction>
 
@@ -1337,7 +1337,7 @@
       <value name="WORD" value="1"/>
       <value name="DWORD" value="2"/>
     </field>
-    <field name="MOCS" start="12" end="15" type="uint"/>
+    <field name="MOCS" start="12" end="15" type="uint" nonzero="true"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="10"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
@@ -1789,7 +1789,7 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Surface Pitch" start="32" end="43" type="uint"/>
-    <field name="MOCS" start="57" end="60" type="uint"/>
+    <field name="MOCS" start="57" end="60" type="uint" nonzero="true"/>
     <field name="SO Buffer Index" start="61" end="62" type="uint"/>
     <field name="Surface Base Address" start="66" end="95" type="address"/>
     <field name="Surface End Address" start="98" end="127" type="address"/>
@@ -1821,7 +1821,7 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Surface Pitch" start="32" end="48" type="uint"/>
-    <field name="MOCS" start="57" end="60" type="uint"/>
+    <field name="MOCS" start="57" end="60" type="uint" nonzero="true"/>
     <field name="Stencil Buffer Enable" start="63" end="63" type="bool"/>
     <field name="Surface Base Address" start="64" end="95" type="address"/>
   </instruction>
@@ -2608,7 +2608,7 @@
       <value name="Field Picture with Top Field First" value="2"/>
       <value name="Field Picture with Bottom Field First" value="3"/>
     </field>
-    <field name="Picure Type" start="122" end="124" type="uint"/>
+    <field name="Picture Type" start="122" end="124" type="uint"/>
     <field name="CONDOVER" start="125" end="126" type="uint"/>
     <field name="PQ Uniform" start="128" end="128" type="bool"/>
     <field name="Half QP" start="129" end="129" type="bool"/>
@@ -2725,6 +2725,10 @@
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <group count="16" start="32" size="64">
+      <field name="Direct MV Buffer - Address" start="0" end="63" type="address"/>
+    </group>
+    <field name="Direct MV Buffer (Write) - Address" start="1088" end="1151" type="address"/>
     <group count="34" start="1184" size="32">
       <field name="POC List" start="0" end="31" type="uint"/>
     </group>
@@ -2754,7 +2758,7 @@
     <field name="Weighted Prediction Enable" start="108" end="108" type="bool"/>
     <field name="First Chroma QP Offset" start="112" end="116" type="uint"/>
     <field name="Second Chroma QP Offset" start="120" end="124" type="uint"/>
-    <field name="Field Picure" start="128" end="128" type="bool"/>
+    <field name="Field Picture" start="128" end="128" type="bool"/>
     <field name="MBAFF Mode" start="129" end="129" type="bool"/>
     <field name="Frame MB Only" start="130" end="130" type="bool"/>
     <field name="8x8 IDCT Transform Mode" start="131" end="131" type="bool"/>
@@ -2975,23 +2979,23 @@
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="BSD/MPC Row Store Scratch Buffer - MOCS" start="32" end="35" type="uint"/>
+    <field name="BSD/MPC Row Store Scratch Buffer - MOCS" start="32" end="35" type="uint" nonzero="true"/>
     <field name="BSD/MPC Row Store Scratch Buffer - Arbitration Priority Control" start="36" end="37" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second Highest priority" value="1"/>
       <value name="Third Highest Priority" value="2"/>
       <value name="Lowest Priority" value="3"/>
     </field>
-    <field name="BSD/MPC Row Store Scratch Buffer - Address" start="38" end="63" type="uint"/>
-    <field name="MPR Row Store Scratch Buffer - MOCS" start="128" end="131" type="uint"/>
+    <field name="BSD/MPC Row Store Scratch Buffer - Address" start="38" end="63" type="address"/>
+    <field name="MPR Row Store Scratch Buffer - MOCS" start="128" end="131" type="uint" nonzero="true"/>
     <field name="MPR Row Store Scratch Buffer - Arbitration Priority Control" start="132" end="133" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
       <value name="Third highest priority" value="2"/>
       <value name="Lowest priority" value="3"/>
     </field>
-    <field name="MPR Row Store Scratch Buffer - Address" start="134" end="159" type="uint"/>
-    <field name="Bitplane Read Buffer - MOCS" start="224" end="227" type="uint"/>
+    <field name="MPR Row Store Scratch Buffer - Address" start="134" end="159" type="address"/>
+    <field name="Bitplane Read Buffer - MOCS" start="224" end="227" type="uint" nonzero="true"/>
     <field name="Bitplane Read Buffer - Arbitration Priority Control" start="228" end="229" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3008,7 +3012,7 @@
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="Pre Deblocking Source - MOCS" start="32" end="35" type="uint"/>
+    <field name="Pre Deblocking Source - MOCS" start="32" end="35" type="uint" nonzero="true"/>
     <field name="Pre Deblocking Source - Arbitration Priority Control" start="36" end="37" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3016,7 +3020,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="Pre Deblocking Source - Address" start="38" end="63" type="address"/>
-    <field name="Deblocking Control - MOCS" start="128" end="131" type="uint"/>
+    <field name="Deblocking Control - MOCS" start="128" end="131" type="uint" nonzero="true"/>
     <field name="Deblocking Control - Arbitration Priority Control" start="132" end="133" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3024,7 +3028,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="Deblocking Control - Address" start="134" end="159" type="address"/>
-    <field name="Deblocking Destination - MOCS" start="224" end="227" type="uint"/>
+    <field name="Deblocking Destination - MOCS" start="224" end="227" type="uint" nonzero="true"/>
     <field name="Deblocking Destination - Arbitration Priority Control" start="228" end="229" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3032,7 +3036,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="Deblocking Destination - Address" start="230" end="255" type="address"/>
-    <field name="Deblock Row Store - MOCS" start="320" end="323" type="uint"/>
+    <field name="Deblock Row Store - MOCS" start="320" end="323" type="uint" nonzero="true"/>
     <field name="Deblock Row Store - Arbitration Priority Control" start="324" end="325" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3069,7 +3073,7 @@
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="MFX Indirect Bitstream Object - MOCS" start="32" end="35" type="uint"/>
+    <field name="MFX Indirect Bitstream Object - MOCS" start="32" end="35" type="uint" nonzero="true"/>
     <field name="MFX Indirect Bitstream Object - Arbitration Priority Control" start="36" end="37" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3078,7 +3082,7 @@
     </field>
     <field name="MFX Indirect Bitstream Object - Address" start="44" end="63" type="address"/>
     <field name="MFX Indirect Bitstream Object - Access Upper Bound" start="140" end="159" type="address"/>
-    <field name="MFX Indirect MV Object - MOCS" start="192" end="195" type="uint"/>
+    <field name="MFX Indirect MV Object - MOCS" start="192" end="195" type="uint" nonzero="true"/>
     <field name="MFX Indirect MV Object - Arbitration Priority Control" start="196" end="197" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3087,7 +3091,7 @@
     </field>
     <field name="MFX Indirect MV Object - Address" start="204" end="223" type="address"/>
     <field name="MFX Indirect MV Object - Access Upper Bound" start="300" end="319" type="address"/>
-    <field name="MFD Indirect IT-COEFF Object - MOCS" start="352" end="355" type="uint"/>
+    <field name="MFD Indirect IT-COEFF Object - MOCS" start="352" end="355" type="uint" nonzero="true"/>
     <field name="MFD Indirect IT-COEFF Object - Arbitration Priority Control" start="356" end="357" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3096,7 +3100,7 @@
     </field>
     <field name="MFD Indirect IT-COEFF Object - Address" start="364" end="383" type="address"/>
     <field name="MFD Indirect IT-COEFF Object - Access Upper Bound" start="460" end="479" type="address"/>
-    <field name="MFD Indirect IT-DBLK Object - MOCS" start="512" end="515" type="uint"/>
+    <field name="MFD Indirect IT-DBLK Object - MOCS" start="512" end="515" type="uint" nonzero="true"/>
     <field name="MFD Indirect IT-DBLK Object - Arbitration Priority Control" start="516" end="517" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3105,7 +3109,7 @@
     </field>
     <field name="MFD Indirect IT-DBLK Object - Address" start="524" end="543" type="address"/>
     <field name="MFD Indirect IT-DBLK Object - Access Upper Bound" start="620" end="639" type="address"/>
-    <field name="MFC Indirect PAK-BSE Object - MOCS" start="672" end="675" type="uint"/>
+    <field name="MFC Indirect PAK-BSE Object - MOCS" start="672" end="675" type="uint" nonzero="true"/>
     <field name="MFC Indirect PAK-BSE Object - Arbitration Priority Control" start="676" end="677" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3295,7 +3299,7 @@
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="Pre Deblocking Destination - MOCS" start="32" end="35" type="uint"/>
+    <field name="Pre Deblocking Destination - MOCS" start="32" end="35" type="uint" nonzero="true"/>
     <field name="Pre Deblocking Destination - Arbitration Priority Control" start="36" end="37" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3303,7 +3307,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="Pre Deblocking Destination - Address" start="38" end="63" type="address"/>
-    <field name="Post Deblocking Destination - MOCS" start="128" end="131" type="uint"/>
+    <field name="Post Deblocking Destination - MOCS" start="128" end="131" type="uint" nonzero="true"/>
     <field name="Post Deblocking Destination - Arbitration Priority Control" start="132" end="133" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3311,7 +3315,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="Post Deblocking Destination - Address" start="134" end="159" type="address"/>
-    <field name="Original Uncompressed Picture Source - MOCS" start="224" end="227" type="uint"/>
+    <field name="Original Uncompressed Picture Source - MOCS" start="224" end="227" type="uint" nonzero="true"/>
     <field name="Original Uncompressed Picture Source - Arbitration Priority Control" start="228" end="229" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3319,7 +3323,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="Original Uncompressed Picture Source - Address" start="230" end="255" type="address"/>
-    <field name="Stream-Out Data Destination - MOCS" start="320" end="323" type="uint"/>
+    <field name="Stream-Out Data Destination - MOCS" start="320" end="323" type="uint" nonzero="true"/>
     <field name="Stream-Out Data Destination - Arbitration Priority Control" start="324" end="325" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3327,7 +3331,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="Stream-Out Data Destination - Address" start="326" end="351" type="address"/>
-    <field name="Intra Row Store Scratch Buffer - MOCS" start="416" end="419" type="uint"/>
+    <field name="Intra Row Store Scratch Buffer - MOCS" start="416" end="419" type="uint" nonzero="true"/>
     <field name="Intra Row Store Scratch Buffer - Arbitration Priority Control" start="420" end="421" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3335,7 +3339,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="Intra Row Store Scratch Buffer - Address" start="422" end="447" type="address"/>
-    <field name="Deblocking Filter Row Store Scratch - MOCS" start="512" end="515" type="uint"/>
+    <field name="Deblocking Filter Row Store Scratch - MOCS" start="512" end="515" type="uint" nonzero="true"/>
     <field name="Deblocking Filter Row Store Scratch - Arbitration Priority Control" start="516" end="517" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3346,7 +3350,7 @@
     <group count="16" start="608" size="64">
       <field name="Reference Picture - Address" start="0" end="63" type="address"/>
     </group>
-    <field name="MB Status Buffer - MOCS" start="1664" end="1667" type="uint"/>
+    <field name="MB Status Buffer - MOCS" start="1664" end="1667" type="uint" nonzero="true"/>
     <field name="MB Status Buffer - Arbitration Priority Control" start="1668" end="1669" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3354,7 +3358,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="MB Status Buffer - Address" start="1670" end="1695" type="address"/>
-    <field name="MB ILDB Stream-Out Buffer - MOCS" start="1760" end="1763" type="uint"/>
+    <field name="MB ILDB Stream-Out Buffer - MOCS" start="1760" end="1763" type="uint" nonzero="true"/>
     <field name="MB ILDB Stream-Out Buffer - Arbitration Priority Control" start="1764" end="1765" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3394,7 +3398,7 @@
     <field name="Stream-Out Enable" start="42" end="42" type="bool"/>
     <field name="Pic Error/Status Report Enable" start="43" end="43" type="bool"/>
     <field name="Deblocker Stream-Out Enable" start="44" end="44" type="bool"/>
-    <field name="Decoder Mode select" start="47" end="48" type="uint">
+    <field name="Decoder Mode Select" start="47" end="48" type="uint">
       <value name="VLD Mode" value="0"/>
       <value name="IT Mode" value="1"/>
       <value name="Deblocker Mode" value="2"/>
@@ -3425,7 +3429,9 @@
       <value name="MPEG_INTRA_QUANTIZER_MATRIX" value="0"/>
       <value name="MPEG_NON_INTRA_QUANTIZER_MATRIX" value="1"/>
     </field>
-    <field name="Forward Quantizer Matrix" start="64" end="1087" type="uint"/>
+    <group count="64" start="64" size="8">
+      <field name="Forward Quantizer Matrix" start="0" end="7" type="uint"/>
+    </group>
   </instruction>
 
   <instruction name="MFX_STATE_POINTER" bias="2" length="2" engine="video">
@@ -3503,7 +3509,7 @@
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="2"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="Direct MV Write Buffer - MOCS" start="32" end="35" type="uint"/>
+    <field name="Direct MV Write Buffer - MOCS" start="32" end="35" type="uint" nonzero="true"/>
     <field name="Direct MV Write Buffer - Arbitration Priority Control" start="36" end="37" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3511,7 +3517,7 @@
       <value name="Lowest priority" value="3"/>
     </field>
     <field name="Direct MV Write Buffer - Address" start="38" end="63" type="address"/>
-    <field name="Direct MV Read Buffer - MOCS" start="128" end="131" type="uint"/>
+    <field name="Direct MV Read Buffer - MOCS" start="128" end="131" type="uint" nonzero="true"/>
     <field name="Direct MV Read Buffer - Arbitration Priority Control" start="132" end="133" type="uint">
       <value name="Highest priority" value="0"/>
       <value name="Second highest priority" value="1"/>
@@ -3988,20 +3994,20 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="General State Base Address Modify Enable" start="32" end="32" type="bool"/>
-    <field name="Stateless Data Port Access MOCS" start="36" end="39" type="uint"/>
-    <field name="General State MOCS" start="40" end="43" type="uint"/>
+    <field name="Stateless Data Port Access MOCS" start="36" end="39" type="uint" nonzero="true"/>
+    <field name="General State MOCS" start="40" end="43" type="uint" nonzero="true"/>
     <field name="General State Base Address" start="44" end="63" type="address"/>
     <field name="Surface State Base Address Modify Enable" start="64" end="64" type="bool"/>
-    <field name="Surface State MOCS" start="72" end="75" type="uint"/>
+    <field name="Surface State MOCS" start="72" end="75" type="uint" nonzero="true"/>
     <field name="Surface State Base Address" start="76" end="95" type="address"/>
     <field name="Dynamic State Base Address Modify Enable" start="96" end="96" type="bool"/>
-    <field name="Dynamic State MOCS" start="104" end="107" type="uint"/>
+    <field name="Dynamic State MOCS" start="104" end="107" type="uint" nonzero="true"/>
     <field name="Dynamic State Base Address" start="108" end="127" type="address"/>
     <field name="Indirect Object Base Address Modify Enable" start="128" end="128" type="bool"/>
-    <field name="Indirect Object MOCS" start="136" end="139" type="uint"/>
+    <field name="Indirect Object MOCS" start="136" end="139" type="uint" nonzero="true"/>
     <field name="Indirect Object Base Address" start="140" end="159" type="address"/>
     <field name="Instruction Base Address Modify Enable" start="160" end="160" type="bool"/>
-    <field name="Instruction MOCS" start="168" end="171" type="uint"/>
+    <field name="Instruction MOCS" start="168" end="171" type="uint" nonzero="true"/>
     <field name="Instruction Base Address" start="172" end="191" type="address"/>
     <field name="General State Access Upper Bound Modify Enable" start="192" end="192" type="bool"/>
     <field name="General State Access Upper Bound" start="204" end="223" type="address"/>
@@ -4038,7 +4044,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <field name="SW Tessellation MOCS" start="40" end="43" type="uint"/>
+    <field name="SW Tessellation MOCS" start="40" end="43" type="uint" nonzero="true"/>
     <field name="SW Tessellation Base Address" start="44" end="63" type="address"/>
   </instruction>
 

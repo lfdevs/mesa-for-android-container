@@ -283,12 +283,7 @@ v3d_resource_transfer_map(struct pipe_context *pctx,
         *pptrans = ptrans;
 
         /* Our load/store routines work on entire compressed blocks. */
-        ptrans->box.x /= util_format_get_blockwidth(format);
-        ptrans->box.y /= util_format_get_blockheight(format);
-        ptrans->box.width = DIV_ROUND_UP(ptrans->box.width,
-                                         util_format_get_blockwidth(format));
-        ptrans->box.height = DIV_ROUND_UP(ptrans->box.height,
-                                          util_format_get_blockheight(format));
+        u_box_pixels_to_blocks(&ptrans->box, &ptrans->box, format);
 
         struct v3d_resource_slice *slice = &rsc->slices[level];
         if (rsc->tiled) {
@@ -764,7 +759,11 @@ v3d_resource_create_with_modifiers(struct pipe_screen *pscreen,
         /* Use a tiled layout if we can, for better 3D performance. */
         bool should_tile = true;
 
-        /* VBOs/PBOs are untiled (and 1 height). */
+        assert(tmpl->target != PIPE_BUFFER ||
+               (tmpl->format == PIPE_FORMAT_NONE ||
+                util_format_get_blocksize(tmpl->format) == 1));
+
+        /* VBOs/PBOs/Texture Buffer Objects are untiled (and 1 height). */
         if (tmpl->target == PIPE_BUFFER)
                 should_tile = false;
 
@@ -810,16 +809,7 @@ v3d_resource_create_with_modifiers(struct pipe_screen *pscreen,
 
         v3d_setup_slices(rsc, 0, tmpl->bind & PIPE_BIND_SHARED);
 
-        /* If we're in a renderonly setup, use the other device to perform our
-         * allocation and just import it to v3d.  The other device may be
-         * using CMA, and V3D can import from CMA but doesn't do CMA
-         * allocations on its own.
-         *
-         * We always allocate this way for SHARED, because get_handle will
-         * need a resource on the display fd.
-         */
-        if (screen->ro && (tmpl->bind & (PIPE_BIND_SCANOUT |
-                                         PIPE_BIND_SHARED))) {
+        if (screen->ro && (tmpl->bind & PIPE_BIND_SCANOUT)) {
                 struct winsys_handle handle;
                 struct pipe_resource scanout_tmpl = {
                         .target = prsc->target,

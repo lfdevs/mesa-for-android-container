@@ -62,9 +62,9 @@
    gc = __glXGetCurrentContext();  \
    pc = gc->pc;                    \
    /* Muffle compilers */                  \
-   cmdlen = 0;         (void)cmdlen;          \
-   compsize = 0;       (void)compsize;        \
-   pixelHeaderPC = 0;  (void)pixelHeaderPC
+   cmdlen = 0;           (void)cmdlen;          \
+   compsize = 0;         (void)compsize;        \
+   pixelHeaderPC = NULL; (void)pixelHeaderPC
 
 /*
 ** Variable sized command support macro.  This macro is used by calls

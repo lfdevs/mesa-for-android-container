@@ -31,7 +31,6 @@
 #include "util/u_inlines.h"
 #include "util/format/u_format.h"
 #include "st_cb_eglimage.h"
-#include "st_cb_fbo.h"
 #include "st_context.h"
 #include "st_texture.h"
 #include "st_format.h"
@@ -226,12 +225,11 @@ st_pipe_format_to_base_format(enum pipe_format format)
    return base_format;
 }
 
-static void
+void
 st_egl_image_target_renderbuffer_storage(struct gl_context *ctx,
-					 struct gl_renderbuffer *rb,
-					 GLeglImageOES image_handle)
+                                         struct gl_renderbuffer *rb,
+                                         GLeglImageOES image_handle)
 {
-   struct st_renderbuffer *strb = st_renderbuffer(rb);
    struct st_egl_image stimg;
    bool native_supported;
 
@@ -252,11 +250,11 @@ st_egl_image_target_renderbuffer_storage(struct gl_context *ctx,
       if (!ps)
          return;
 
-      strb->Base.Format = st_pipe_format_to_mesa_format(ps->format);
-      strb->Base._BaseFormat = st_pipe_format_to_base_format(ps->format);
-      strb->Base.InternalFormat = strb->Base._BaseFormat;
+      rb->Format = st_pipe_format_to_mesa_format(ps->format);
+      rb->_BaseFormat = st_pipe_format_to_base_format(ps->format);
+      rb->InternalFormat = rb->_BaseFormat;
 
-      st_set_ws_renderbuffer_surface(strb, ps);
+      st_set_ws_renderbuffer_surface(rb, ps);
       pipe_surface_reference(&ps, NULL);
    }
 }
@@ -270,8 +268,6 @@ st_bind_egl_image(struct gl_context *ctx,
                   bool native_supported)
 {
    struct st_context *st = st_context(ctx);
-   struct st_texture_object *stObj;
-   struct st_texture_image *stImage;
    GLenum internalFormat;
    mesa_format texFormat;
 
@@ -282,13 +278,10 @@ st_bind_egl_image(struct gl_context *ctx,
    else
       internalFormat = GL_RGB;
 
-   stObj = st_texture_object(texObj);
-   stImage = st_texture_image(texImage);
-
    /* switch to surface based */
-   if (!stObj->surface_based) {
+   if (!texObj->surface_based) {
       _mesa_clear_texture_object(ctx, texObj, NULL);
-      stObj->surface_based = GL_TRUE;
+      texObj->surface_based = GL_TRUE;
    }
 
    /* TODO RequiredTextureImageUnits should probably be reset back
@@ -382,24 +375,24 @@ st_bind_egl_image(struct gl_context *ctx,
    _mesa_init_teximage_fields(ctx, texImage, width, height,
                               1, 0, internalFormat, texFormat);
 
-   pipe_resource_reference(&stObj->pt, stimg->texture);
-   st_texture_release_all_sampler_views(st, stObj);
-   pipe_resource_reference(&stImage->pt, stObj->pt);
+   pipe_resource_reference(&texObj->pt, stimg->texture);
+   st_texture_release_all_sampler_views(st, texObj);
+   pipe_resource_reference(&texImage->pt, texObj->pt);
    if (st->screen->resource_changed)
-      st->screen->resource_changed(st->screen, stImage->pt);
+      st->screen->resource_changed(st->screen, texImage->pt);
 
-   stObj->surface_format = stimg->format;
-   stObj->level_override = stimg->level;
-   stObj->layer_override = stimg->layer;
+   texObj->surface_format = stimg->format;
+   texObj->level_override = stimg->level;
+   texObj->layer_override = stimg->layer;
 
    _mesa_dirty_texobj(ctx, texObj);
 }
 
-static void
+void
 st_egl_image_target_texture_2d(struct gl_context *ctx, GLenum target,
-			       struct gl_texture_object *texObj,
-			       struct gl_texture_image *texImage,
-			       GLeglImageOES image_handle)
+                               struct gl_texture_object *texObj,
+                               struct gl_texture_image *texImage,
+                               GLeglImageOES image_handle)
 {
    struct st_egl_image stimg;
    bool native_supported;
@@ -415,7 +408,7 @@ st_egl_image_target_texture_2d(struct gl_context *ctx, GLenum target,
    pipe_resource_reference(&stimg.texture, NULL);
 }
 
-static void
+void
 st_egl_image_target_tex_storage(struct gl_context *ctx, GLenum target,
                                 struct gl_texture_object *texObj,
                                 struct gl_texture_image *texImage,
@@ -447,10 +440,6 @@ void
 st_init_eglimage_functions(struct dd_function_table *functions,
                            bool has_egl_image_validate)
 {
-   functions->EGLImageTargetTexture2D = st_egl_image_target_texture_2d;
-   functions->EGLImageTargetTexStorage = st_egl_image_target_tex_storage;
-   functions->EGLImageTargetRenderbufferStorage = st_egl_image_target_renderbuffer_storage;
-
    if (has_egl_image_validate)
       functions->ValidateEGLImage = st_validate_egl_image;
 }

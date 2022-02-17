@@ -45,22 +45,6 @@
 #define FB_BUFFER_SIZE               2048
 #define IT_SCALING_TABLE_SIZE        992
 #define VP9_PROBS_TABLE_SIZE         (RDECODE_VP9_PROBS_DATA_SIZE + 256)
-#define RDECODE_SESSION_CONTEXT_SIZE (128 * 1024)
-
-#define RDECODE_VCN1_GPCOM_VCPU_CMD   0x2070c
-#define RDECODE_VCN1_GPCOM_VCPU_DATA0 0x20710
-#define RDECODE_VCN1_GPCOM_VCPU_DATA1 0x20714
-#define RDECODE_VCN1_ENGINE_CNTL      0x20718
-
-#define RDECODE_VCN2_GPCOM_VCPU_CMD   (0x503 << 2)
-#define RDECODE_VCN2_GPCOM_VCPU_DATA0 (0x504 << 2)
-#define RDECODE_VCN2_GPCOM_VCPU_DATA1 (0x505 << 2)
-#define RDECODE_VCN2_ENGINE_CNTL      (0x506 << 2)
-
-#define RDECODE_VCN2_5_GPCOM_VCPU_CMD   0x3c
-#define RDECODE_VCN2_5_GPCOM_VCPU_DATA0 0x40
-#define RDECODE_VCN2_5_GPCOM_VCPU_DATA1 0x44
-#define RDECODE_VCN2_5_ENGINE_CNTL      0x9b4
 
 #define NUM_MPEG2_REFS 6
 #define NUM_H264_REFS  17
@@ -75,10 +59,18 @@ static unsigned calc_ctx_size_h265_main(struct radeon_decoder *dec);
 static unsigned calc_ctx_size_h265_main10(struct radeon_decoder *dec,
                                           struct pipe_h265_picture_desc *pic);
 
+static void radeon_dec_destroy_associated_data(void *data)
+{
+   /* NOOP, since we only use an intptr */
+}
+
 static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
+                                           struct pipe_video_buffer *target,
                                            struct pipe_h264_picture_desc *pic)
 {
    rvcn_dec_message_avc_t result;
+   struct h264_private *private;
+   unsigned i, j, k;
 
    memset(&result, 0, sizeof(result));
    switch (pic->base.profile) {
@@ -107,7 +99,8 @@ static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
    result.sps_info_flags |= pic->pps->sps->mb_adaptive_frame_field_flag << 1;
    result.sps_info_flags |= pic->pps->sps->frame_mbs_only_flag << 2;
    result.sps_info_flags |= pic->pps->sps->delta_pic_order_always_zero_flag << 3;
-   result.sps_info_flags |= 1 << RDECODE_SPS_INFO_H264_EXTENSION_SUPPORT_FLAG_SHIFT;
+   result.sps_info_flags |= ((dec->dpb_type == DPB_DYNAMIC_TIER_2) ? 0 : 1)
+                              << RDECODE_SPS_INFO_H264_EXTENSION_SUPPORT_FLAG_SHIFT;
 
    result.bit_depth_luma_minus8 = pic->pps->sps->bit_depth_luma_minus8;
    result.bit_depth_chroma_minus8 = pic->pps->sps->bit_depth_chroma_minus8;
@@ -165,15 +158,135 @@ static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
    result.curr_field_order_cnt_list[0] = pic->field_order_cnt[0];
    result.curr_field_order_cnt_list[1] = pic->field_order_cnt[1];
    memcpy(result.field_order_cnt_list, pic->field_order_cnt_list, 4 * 16 * 2);
+   result.non_existing_frame_flags = 0;
+   result.used_for_reference_flags = 0;
 
-   result.decoded_pic_idx = pic->frame_num;
+   if (dec->dpb_type != DPB_DYNAMIC_TIER_2) {
+      result.decoded_pic_idx = pic->frame_num;
+      goto end;
+   }
 
+   private = pic->private;
+   for (i = 0; i < ARRAY_SIZE(private->past_ref); i++) {
+      for (k = 0; private->past_ref[i] && (k < ARRAY_SIZE(pic->ref)); k++)
+         if (pic->ref[k] && (private->past_ref[i] == pic->ref[k]))
+            break;
+
+      for (j = 0; private->past_ref[i]
+                     && (k == ARRAY_SIZE(pic->ref))
+                     && (j < ARRAY_SIZE(dec->render_pic_list)); j++) {
+         if (dec->render_pic_list[j]
+                  && (dec->render_pic_list[j] == private->past_ref[i])) {
+            dec->render_pic_list[j] = pic->ref[i];
+            vl_video_buffer_set_associated_data(pic->ref[i], &dec->base,
+                   (void *)(uintptr_t)j, &radeon_dec_destroy_associated_data);
+            break;
+         }
+      }
+   }
+
+   for (i = 0; i < ARRAY_SIZE(dec->render_pic_list); i++) {
+      for (j = 0; (pic->ref[j] != NULL) && (j < ARRAY_SIZE(dec->render_pic_list)); j++) {
+         if (dec->render_pic_list[i] == pic->ref[j])
+            break;
+         if (j == ARRAY_SIZE(dec->render_pic_list) - 1)
+            dec->render_pic_list[i] = NULL;
+         else if (pic->ref[j + 1] == NULL)
+            dec->render_pic_list[i] = NULL;
+      }
+   }
+   for (i = 0; i < ARRAY_SIZE(dec->render_pic_list); ++i) {
+      if (dec->render_pic_list[i] && dec->render_pic_list[i] == target) {
+         if (target->codec != NULL){
+            result.decoded_pic_idx =
+               (uintptr_t)vl_video_buffer_get_associated_data(target, &dec->base);
+         } else {
+            result.decoded_pic_idx = i;
+            vl_video_buffer_set_associated_data(target, &dec->base, (void *)(uintptr_t)i,
+                  &radeon_dec_destroy_associated_data);
+         }
+         break;
+      }
+   }
+   if (i == ARRAY_SIZE(dec->render_pic_list)) {
+      for (i = 0; i < ARRAY_SIZE(dec->render_pic_list); ++i) {
+         if (!dec->render_pic_list[i]) {
+            dec->render_pic_list[i] = target;
+            result.decoded_pic_idx = i;
+            vl_video_buffer_set_associated_data(target, &dec->base, (void *)(uintptr_t)i,
+                  &radeon_dec_destroy_associated_data);
+            break;
+         }
+      }
+   }
+   for (i = 0; i < ARRAY_SIZE(result.ref_frame_list); i++) {
+      result.ref_frame_list[i] = pic->ref[i] ?
+              (uintptr_t)vl_video_buffer_get_associated_data(pic->ref[i], &dec->base) : 0xff;
+
+      if (result.ref_frame_list[i] != 0xff) {
+         if (pic->top_is_reference[i])
+            result.used_for_reference_flags |= (1 << (2 * i));
+         if (pic->bottom_is_reference[i])
+            result.used_for_reference_flags |= (1 << (2 * i + 1));
+
+         if (pic->is_long_term[i])
+            result.ref_frame_list[i] |= 0x80;
+
+         result.curr_pic_ref_frame_num++;
+
+         for (j = 0; j < ARRAY_SIZE(dec->h264_valid_ref_num); j++) {
+            if ((dec->h264_valid_ref_num[j] != (unsigned)-1)
+                && (dec->h264_valid_ref_num[j] == result.frame_num_list[i]))
+               break;
+         }
+
+         for (k = 0; k < ARRAY_SIZE(dec->h264_valid_poc_num); k++) {
+            if ((dec->h264_valid_poc_num[k] != (unsigned)-1)
+                  && ((dec->h264_valid_poc_num[k] == result.field_order_cnt_list[i][0])
+                    || dec->h264_valid_poc_num[k] == result.field_order_cnt_list[i][1]))
+               break;
+         }
+      }
+      if (result.ref_frame_list[i] != 0xff && (j == ARRAY_SIZE(dec->h264_valid_ref_num))
+                                           && (k == ARRAY_SIZE(dec->h264_valid_poc_num))) {
+         result.non_existing_frame_flags |= 1 << i;
+         result.curr_pic_ref_frame_num--;
+         result.ref_frame_list[i] = 0xff;
+      }
+   }
+
+   for (i = 0; i < ARRAY_SIZE(result.ref_frame_list); i++) {
+      if (result.ref_frame_list[i] != 0xff) {
+         dec->h264_valid_ref_num[i]         = result.frame_num_list[i];
+         dec->h264_valid_poc_num[2 * i]     = pic->top_is_reference[i] ?
+                      result.field_order_cnt_list[i][0] : (unsigned) -1;
+         dec->h264_valid_poc_num[2 * i + 1] = pic->bottom_is_reference[i] ?
+                      result.field_order_cnt_list[i][1] : (unsigned) -1;
+      } else {
+         dec->h264_valid_ref_num[i]         =
+         dec->h264_valid_poc_num[2 * i]     =
+         dec->h264_valid_poc_num[2 * i + 1] = (unsigned) -1;
+      }
+   }
+
+   dec->h264_valid_ref_num[ARRAY_SIZE(dec->h264_valid_ref_num) - 1] = result.frame_num;
+   dec->h264_valid_poc_num[ARRAY_SIZE(dec->h264_valid_poc_num) - 2] =
+                     pic->field_pic_flag && pic->bottom_field_flag ?
+                     (unsigned) -1 : result.curr_field_order_cnt_list[0];
+   dec->h264_valid_poc_num[ARRAY_SIZE(dec->h264_valid_poc_num) - 1] =
+                     pic->field_pic_flag && !pic->bottom_field_flag ?
+                     (unsigned) -1 : result.curr_field_order_cnt_list[1];
+
+   if (dec->dpb_type == DPB_DYNAMIC_TIER_2) {
+      dec->ref_codec.bts = CODEC_8_BITS;
+      dec->ref_codec.index = result.decoded_pic_idx;
+      dec->ref_codec.ref_size = 16;
+      memset(dec->ref_codec.ref_list, 0xff, sizeof(dec->ref_codec.ref_list));
+      memcpy(dec->ref_codec.ref_list, result.ref_frame_list, sizeof(result.ref_frame_list));
+   }
+
+end:
    return result;
-}
-
-static void radeon_dec_destroy_associated_data(void *data)
-{
-   /* NOOP, since we only use an intptr */
 }
 
 static rvcn_dec_message_hevc_t get_h265_msg(struct radeon_decoder *dec,
@@ -351,6 +464,14 @@ static rvcn_dec_message_hevc_t get_h265_msg(struct radeon_decoder *dec,
       }
    }
 
+   if (dec->dpb_type == DPB_DYNAMIC_TIER_2) {
+      dec->ref_codec.bts = (pic->base.profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10) ?
+         CODEC_10_BITS : CODEC_8_BITS;
+      dec->ref_codec.index = result.curr_idx;
+      dec->ref_codec.ref_size = 15;
+      memset(dec->ref_codec.ref_list, 0x7f, sizeof(dec->ref_codec.ref_list));
+      memcpy(dec->ref_codec.ref_list, result.ref_pic_list, sizeof(result.ref_pic_list));
+   }
    return result;
 }
 
@@ -1337,7 +1458,7 @@ static void rvcn_dec_message_create(struct radeon_decoder *dec)
 }
 
 static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn_dec_message_decode_t *decode,
-      rvcn_dec_message_dynamic_dpb_t2_t *dynamic_dpb_t2)
+      rvcn_dec_message_dynamic_dpb_t2_t *dynamic_dpb_t2, bool encrypted)
 {
    struct rvcn_dec_dynamic_dpb_t2 *dpb = NULL, *dummy = NULL;
    unsigned width, height, size;
@@ -1352,7 +1473,7 @@ static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn
 
    list_for_each_entry_safe(struct rvcn_dec_dynamic_dpb_t2, d, &dec->dpb_ref_list, list) {
       for (i = 0; i < dec->ref_codec.ref_size; ++i) {
-         if ((dec->ref_codec.ref_list[i] != 0x7f) && (d->index == (dec->ref_codec.ref_list[i] & 0x7f))) {
+         if (((dec->ref_codec.ref_list[i] & 0x7f) != 0x7f) && (d->index == (dec->ref_codec.ref_list[i] & 0x7f))) {
             if (!dummy)
                dummy = d;
 
@@ -1401,11 +1522,18 @@ static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn
    }
 
    if (!dpb) {
+      bool r;
       dpb = CALLOC_STRUCT(rvcn_dec_dynamic_dpb_t2);
       if (!dpb)
          return 1;
       dpb->index = dec->ref_codec.index;
-      if (!si_vid_create_buffer(dec->screen, &dpb->dpb, size, PIPE_USAGE_DEFAULT)) {
+      if (encrypted)
+         r = si_vid_create_tmz_buffer(dec->screen, &dpb->dpb, size, PIPE_USAGE_DEFAULT);
+      else
+         r = si_vid_create_buffer(dec->screen, &dpb->dpb, size, PIPE_USAGE_DEFAULT);
+      assert(encrypted == (bool)(dpb->dpb.res->flags & RADEON_FLAG_ENCRYPTED));
+
+      if (!r) {
          RVID_ERR("Can't allocated dpb buffer.\n");
          FREE(dpb);
          return 1;
@@ -1414,7 +1542,7 @@ static unsigned rvcn_dec_dynamic_dpb_t2_message(struct radeon_decoder *dec, rvcn
    }
 
    dec->ws->cs_add_buffer(&dec->cs, dpb->dpb.res->buf,
-      RADEON_USAGE_READWRITE | RADEON_USAGE_SYNCHRONIZED, RADEON_DOMAIN_VRAM, 0);
+      RADEON_USAGE_READWRITE | RADEON_USAGE_SYNCHRONIZED, RADEON_DOMAIN_VRAM);
    addr = dec->ws->buffer_get_virtual_address(dpb->dpb.res->buf);
    dynamic_dpb_t2->dpbCurrLo = addr;
    dynamic_dpb_t2->dpbCurrHi = addr >> 32;
@@ -1716,7 +1844,7 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 
    switch (u_reduce_video_profile(picture->profile)) {
    case PIPE_VIDEO_FORMAT_MPEG4_AVC: {
-      rvcn_dec_message_avc_t avc = get_h264_msg(dec, (struct pipe_h264_picture_desc *)picture);
+      rvcn_dec_message_avc_t avc = get_h264_msg(dec, target, (struct pipe_h264_picture_desc *)picture);
       memcpy(codec, (void *)&avc, sizeof(rvcn_dec_message_avc_t));
       index_codec->message_id = RDECODE_MESSAGE_AVC;
       break;
@@ -1820,7 +1948,7 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
       decode->hw_ctxt_size = dec->ctx.res->buf->size;
 
    if (dec->dpb_type == DPB_DYNAMIC_TIER_2)
-      if (rvcn_dec_dynamic_dpb_t2_message(dec, decode, dynamic_dpb_t2))
+      if (rvcn_dec_dynamic_dpb_t2_message(dec, decode, dynamic_dpb_t2, encrypted))
          return NULL;
 
    return luma->buffer.buf;
@@ -1863,11 +1991,11 @@ static void set_reg(struct radeon_decoder *dec, unsigned reg, uint32_t val)
 
 /* send a command to the VCPU through the GPCOM registers */
 static void send_cmd(struct radeon_decoder *dec, unsigned cmd, struct pb_buffer *buf, uint32_t off,
-                     enum radeon_bo_usage usage, enum radeon_bo_domain domain)
+                     unsigned usage, enum radeon_bo_domain domain)
 {
    uint64_t addr;
 
-   dec->ws->cs_add_buffer(&dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain, 0);
+   dec->ws->cs_add_buffer(&dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain);
    addr = dec->ws->buffer_get_virtual_address(buf);
    addr = addr + off;
 
@@ -2189,7 +2317,8 @@ static void radeon_dec_begin_frame(struct pipe_video_codec *decoder,
    assert(decoder);
 
    frame = ++dec->frame_number;
-   if (dec->stream_type != RDECODE_CODEC_VP9 && dec->stream_type != RDECODE_CODEC_AV1)
+   if (dec->stream_type != RDECODE_CODEC_VP9 && dec->stream_type != RDECODE_CODEC_AV1
+                                             && dec->stream_type != RDECODE_CODEC_H264_PERF)
       vl_video_buffer_set_associated_data(target, decoder, (void *)frame,
                                           &radeon_dec_destroy_associated_data);
 
@@ -2398,6 +2527,14 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 
    for (i = 0; i < ARRAY_SIZE(dec->render_pic_list); i++)
       dec->render_pic_list[i] = NULL;
+
+   if (sctx->family >= CHIP_SIENNA_CICHLID && (stream_type == RDECODE_CODEC_H264_PERF)) {
+      for (i = 0; i < ARRAY_SIZE(dec->h264_valid_ref_num); i++)
+         dec->h264_valid_ref_num[i] = (unsigned) -1;
+      for (i = 0; i < ARRAY_SIZE(dec->h264_valid_poc_num); i++)
+         dec->h264_valid_poc_num[i] = (unsigned) -1;
+   }
+
    bs_buf_size = width * height * (512 / (16 * 16));
    for (i = 0; i < NUM_BUFFERS; ++i) {
       unsigned msg_fb_it_probs_size = FB_BUFFER_OFFSET + FB_BUFFER_SIZE;
@@ -2438,7 +2575,10 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
    }
 
    if (sctx->family >= CHIP_SIENNA_CICHLID &&
-       (stream_type == RDECODE_CODEC_VP9 || stream_type == RDECODE_CODEC_AV1))
+         (stream_type == RDECODE_CODEC_VP9 ||
+          stream_type == RDECODE_CODEC_AV1 ||
+        ((stream_type == RDECODE_CODEC_H265) && templ->expect_chunked_decode) ||
+        ((stream_type == RDECODE_CODEC_H264_PERF) && templ->expect_chunked_decode)))
       dec->dpb_type = DPB_DYNAMIC_TIER_2;
    else if (sctx->family <= CHIP_NAVI14 && stream_type == RDECODE_CODEC_VP9)
       dec->dpb_type = DPB_DYNAMIC_TIER_1;

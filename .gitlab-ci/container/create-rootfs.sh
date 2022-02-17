@@ -3,7 +3,11 @@
 set -ex
 
 if [ $DEBIAN_ARCH = arm64 ]; then
-    ARCH_PACKAGES="firmware-qcom-media"
+    ARCH_PACKAGES="firmware-qcom-media
+                   libfontconfig1
+                   libgl1
+                   libglu1-mesa
+    "
 elif [ $DEBIAN_ARCH = amd64 ]; then
     ARCH_PACKAGES="firmware-amd-graphics
                    libelf1
@@ -71,7 +75,7 @@ apt-get -y install --no-install-recommends \
 
 # Needed for ci-fairy, this revision is able to upload files to
 # MinIO and doesn't depend on git
-pip3 install git+http://gitlab.freedesktop.org/freedesktop/ci-templates@0f1abc24c043e63894085a6bd12f14263e8b29eb
+pip3 install git+http://gitlab.freedesktop.org/freedesktop/ci-templates@34f4ade99434043f88e164933f570301fd18b125
 
 apt-get purge -y \
         $INSTALL_CI_FAIRY_PACKAGES
@@ -145,6 +149,8 @@ rm -rf usr/lib/*/gconv/
 rm -rf usr/sbin/update-usbids
 rm -rf var/lib/usbutils/usb.ids
 rm -rf usr/share/misc/usb.ids
+
+rm -rf /root/.pip
 
 #######################################################################
 # Crush into a minimal production image to be deployed via some type of image

@@ -21,7 +21,6 @@
  * DEALINGS IN THE SOFTWARE.
  */
 #include <gtest/gtest.h>
-#include "main/mtypes.h"
 #include "main/macros.h"
 #include "util/ralloc.h"
 #include "uniform_initializer_utils.h"
@@ -84,6 +83,7 @@ generate_data_element(void *mem_ctx, const glsl_type *type,
       case GLSL_TYPE_UINT:
       case GLSL_TYPE_INT:
       case GLSL_TYPE_SAMPLER:
+      case GLSL_TYPE_TEXTURE:
       case GLSL_TYPE_IMAGE:
 	 data.i[i] = values[idx];
 	 break;
@@ -129,6 +129,7 @@ generate_data_element(void *mem_ctx, const glsl_type *type,
       case GLSL_TYPE_UINT:
       case GLSL_TYPE_INT:
       case GLSL_TYPE_SAMPLER:
+      case GLSL_TYPE_TEXTURE:
       case GLSL_TYPE_IMAGE:
 	 ASSERT_EQ(data.i[i], val->value.i[i]);
 	 break;
@@ -262,6 +263,7 @@ verify_data(gl_constant_value *storage, unsigned storage_array_size,
 	 case GLSL_TYPE_UINT:
 	 case GLSL_TYPE_INT:
 	 case GLSL_TYPE_SAMPLER:
+	 case GLSL_TYPE_TEXTURE:
 	 case GLSL_TYPE_IMAGE:
 	    EXPECT_EQ(val->value.i[i], storage[i].i);
 	    break;

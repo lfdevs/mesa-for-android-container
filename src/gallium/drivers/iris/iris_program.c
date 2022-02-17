@@ -90,7 +90,6 @@ iris_finalize_program(struct iris_compiled_shader *shader,
    ralloc_steal(shader, shader->prog_data);
    ralloc_steal(shader->prog_data, (void *)prog_data->relocs);
    ralloc_steal(shader->prog_data, prog_data->param);
-   ralloc_steal(shader->prog_data, prog_data->pull_param);
    ralloc_steal(shader, shader->streamout);
    ralloc_steal(shader, shader->system_values);
 }
@@ -115,7 +114,7 @@ iris_to_brw_tcs_key(const struct intel_device_info *devinfo,
 {
    return (struct brw_tcs_prog_key) {
       BRW_KEY_INIT(devinfo->ver, key->vue.base.program_string_id),
-      .tes_primitive_mode = key->tes_primitive_mode,
+      ._tes_primitive_mode = key->_tes_primitive_mode,
       .input_vertices = key->input_vertices,
       .patch_outputs_written = key->patch_outputs_written,
       .outputs_written = key->outputs_written,
@@ -1486,7 +1485,7 @@ iris_compile_tcs(struct iris_screen *screen,
 {
    const struct brw_compiler *compiler = screen->compiler;
    const struct nir_shader_compiler_options *options =
-      compiler->glsl_compiler_options[MESA_SHADER_TESS_CTRL].NirOptions;
+      compiler->nir_options[MESA_SHADER_TESS_CTRL];
    void *mem_ctx = ralloc_context(NULL);
    struct brw_tcs_prog_data *tcs_prog_data =
       rzalloc(mem_ctx, struct brw_tcs_prog_data);
@@ -1524,19 +1523,19 @@ iris_compile_tcs(struct iris_screen *screen,
       prog_data->param = rzalloc_array(mem_ctx, uint32_t, num_system_values);
       prog_data->nr_params = num_system_values;
 
-      if (key->tes_primitive_mode == GL_QUADS) {
+      if (key->_tes_primitive_mode == TESS_PRIMITIVE_QUADS) {
          for (int i = 0; i < 4; i++)
             system_values[7 - i] = BRW_PARAM_BUILTIN_TESS_LEVEL_OUTER_X + i;
 
          system_values[3] = BRW_PARAM_BUILTIN_TESS_LEVEL_INNER_X;
          system_values[2] = BRW_PARAM_BUILTIN_TESS_LEVEL_INNER_Y;
-      } else if (key->tes_primitive_mode == GL_TRIANGLES) {
+      } else if (key->_tes_primitive_mode == TESS_PRIMITIVE_TRIANGLES) {
          for (int i = 0; i < 3; i++)
             system_values[7 - i] = BRW_PARAM_BUILTIN_TESS_LEVEL_OUTER_X + i;
 
          system_values[4] = BRW_PARAM_BUILTIN_TESS_LEVEL_INNER_X;
       } else {
-         assert(key->tes_primitive_mode == GL_ISOLINES);
+         assert(key->_tes_primitive_mode == TESS_PRIMITIVE_ISOLINES);
          system_values[7] = BRW_PARAM_BUILTIN_TESS_LEVEL_OUTER_Y;
          system_values[6] = BRW_PARAM_BUILTIN_TESS_LEVEL_OUTER_X;
       }
@@ -1550,12 +1549,16 @@ iris_compile_tcs(struct iris_screen *screen,
       prog_data->ubo_ranges[0].length = 1;
    }
 
-   char *error_str = NULL;
-   const unsigned *program =
-      brw_compile_tcs(compiler, dbg, mem_ctx, &brw_key, tcs_prog_data,
-                      nir, -1, NULL, &error_str);
+   struct brw_compile_tcs_params params = {
+      .nir = nir,
+      .key = &brw_key,
+      .prog_data = tcs_prog_data,
+      .log_data = dbg,
+   };
+
+   const unsigned *program = brw_compile_tcs(compiler, mem_ctx, &params);
    if (program == NULL) {
-      dbg_printf("Failed to compile control shader: %s\n", error_str);
+      dbg_printf("Failed to compile control shader: %s\n", params.error_str);
       ralloc_free(mem_ctx);
 
       shader->compilation_failed = true;
@@ -1600,11 +1603,11 @@ iris_update_compiled_tcs(struct iris_context *ice)
       iris_get_shader_info(ice, MESA_SHADER_TESS_EVAL);
    struct iris_tcs_prog_key key = {
       .vue.base.program_string_id = tcs ? tcs->program_id : 0,
-      .tes_primitive_mode = tes_info->tess.primitive_mode,
+      ._tes_primitive_mode = tes_info->tess._primitive_mode,
       .input_vertices =
          !tcs || compiler->use_tcs_8_patch ? ice->state.vertices_per_patch : 0,
       .quads_workaround = devinfo->ver < 9 &&
-                          tes_info->tess.primitive_mode == GL_QUADS &&
+                          tes_info->tess._primitive_mode == TESS_PRIMITIVE_QUADS &&
                           tes_info->tess.spacing == TESS_SPACING_EQUAL,
    };
    get_unified_tess_slots(ice, &key.outputs_written,
@@ -1708,12 +1711,17 @@ iris_compile_tes(struct iris_screen *screen,
 
    struct brw_tes_prog_key brw_key = iris_to_brw_tes_key(devinfo, key);
 
-   char *error_str = NULL;
-   const unsigned *program =
-      brw_compile_tes(compiler, dbg, mem_ctx, &brw_key, &input_vue_map,
-                      tes_prog_data, nir, -1, NULL, &error_str);
+   struct brw_compile_tes_params params = {
+      .nir = nir,
+      .key = &brw_key,
+      .prog_data = tes_prog_data,
+      .input_vue_map = &input_vue_map,
+      .log_data = dbg,
+   };
+
+   const unsigned *program = brw_compile_tes(compiler, mem_ctx, &params);
    if (program == NULL) {
-      dbg_printf("Failed to compile evaluation shader: %s\n", error_str);
+      dbg_printf("Failed to compile evaluation shader: %s\n", params.error_str);
       ralloc_free(mem_ctx);
 
       shader->compilation_failed = true;
@@ -1842,12 +1850,16 @@ iris_compile_gs(struct iris_screen *screen,
 
    struct brw_gs_prog_key brw_key = iris_to_brw_gs_key(devinfo, key);
 
-   char *error_str = NULL;
-   const unsigned *program =
-      brw_compile_gs(compiler, dbg, mem_ctx, &brw_key, gs_prog_data,
-                     nir, -1, NULL, &error_str);
+   struct brw_compile_gs_params params = {
+      .nir = nir,
+      .key = &brw_key,
+      .prog_data = gs_prog_data,
+      .log_data = dbg,
+   };
+
+   const unsigned *program = brw_compile_gs(compiler, mem_ctx, &params);
    if (program == NULL) {
-      dbg_printf("Failed to compile geometry shader: %s\n", error_str);
+      dbg_printf("Failed to compile geometry shader: %s\n", params.error_str);
       ralloc_free(mem_ctx);
 
       shader->compilation_failed = true;
@@ -2471,7 +2483,7 @@ iris_create_compute_state(struct pipe_context *ctx,
    struct iris_screen *screen = (void *) ctx->screen;
    struct u_upload_mgr *uploader = ice->shaders.uploader_unsync;
    const nir_shader_compiler_options *options =
-      screen->compiler->glsl_compiler_options[MESA_SHADER_COMPUTE].NirOptions;
+      screen->compiler->nir_options[MESA_SHADER_COMPUTE];
 
    nir_shader *nir;
    switch (state->ir_type) {
@@ -2592,14 +2604,12 @@ iris_create_shader_state(struct pipe_context *ctx,
       break;
 
    case MESA_SHADER_TESS_CTRL: {
-      const unsigned _GL_TRIANGLES = 0x0004;
-
       key.tcs = (struct iris_tcs_prog_key) {
          KEY_ID(vue.base),
          // XXX: make sure the linker fills this out from the TES...
-         .tes_primitive_mode =
-         info->tess.primitive_mode ? info->tess.primitive_mode
-                                   : _GL_TRIANGLES,
+         ._tes_primitive_mode =
+         info->tess._primitive_mode ? info->tess._primitive_mode
+                                   : TESS_PRIMITIVE_TRIANGLES,
          .outputs_written = info->outputs_written,
          .patch_outputs_written = info->patch_outputs_written,
       };
@@ -2844,10 +2854,13 @@ static void
 iris_bind_tes_state(struct pipe_context *ctx, void *state)
 {
    struct iris_context *ice = (struct iris_context *)ctx;
+   struct iris_screen *screen = (struct iris_screen *) ctx->screen;
+   const struct intel_device_info *devinfo = &screen->devinfo;
 
    /* Enabling/disabling optional stages requires a URB reconfiguration. */
    if (!!state != !!ice->shaders.uncompiled[MESA_SHADER_TESS_EVAL])
-      ice->state.dirty |= IRIS_DIRTY_URB;
+      ice->state.dirty |= IRIS_DIRTY_URB | (devinfo->verx10 >= 125 ?
+                                            IRIS_DIRTY_VFG : 0);
 
    bind_shader_state((void *) ctx, state, MESA_SHADER_TESS_EVAL);
 }

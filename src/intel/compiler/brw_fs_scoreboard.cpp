@@ -125,9 +125,11 @@ namespace {
       else if (inst->opcode == FS_OPCODE_PACK_HALF_2x16_SPLIT)
          return TGL_PIPE_FLOAT;
       else if (type_sz(inst->dst.type) >= 8 || type_sz(t) >= 8 ||
-               is_dword_multiply)
+               is_dword_multiply) {
+         assert(devinfo->has_64bit_float || devinfo->has_64bit_int ||
+                devinfo->has_integer_dword_mul);
          return TGL_PIPE_LONG;
-      else if (brw_reg_type_is_floating_point(inst->dst.type))
+      } else if (brw_reg_type_is_floating_point(inst->dst.type))
          return TGL_PIPE_FLOAT;
       else
          return TGL_PIPE_INT;
@@ -494,7 +496,7 @@ namespace {
    };
 
    const dependency dependency::done =
-        dependency(TGL_REGDIST_SRC, ordered_address(), false);
+        dependency(TGL_REGDIST_DST, ordered_address(), false);
 
    /**
     * Return whether \p dep contains any dependency information.
@@ -541,7 +543,36 @@ namespace {
    dependency
    shadow(const dependency &dep0, const dependency &dep1)
    {
-      return is_valid(dep1) ? dep1 : dep0;
+      if (dep0.ordered == TGL_REGDIST_SRC &&
+          is_valid(dep1) && !(dep1.unordered & TGL_SBID_DST) &&
+                            !(dep1.ordered & TGL_REGDIST_DST)) {
+         /* As an optimization (see dependency_for_read()),
+          * instructions with a RaR dependency don't synchronize
+          * against a previous in-order read, so we need to pass
+          * through both ordered dependencies instead of simply
+          * dropping the first one.  Otherwise we could encounter a
+          * WaR data hazard between OP0 and OP2 in cases like:
+          *
+          *   OP0 r1:f r0:d
+          *   OP1 r2:d r0:d
+          *   OP2 r0:d r3:d
+          *
+          * since only the integer-pipeline r0 dependency from OP1
+          * would be visible to OP2, even though OP0 could technically
+          * execute after OP1 due to the floating-point and integer
+          * pipelines being asynchronous on Gfx12.5+ platforms, so
+          * synchronizing OP2 against OP1 would be insufficient.
+          */
+         dependency dep = dep1;
+
+         dep.ordered |= dep0.ordered;
+         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+               dep.jp.jp[p] = MAX2(dep.jp.jp[p], dep0.jp.jp[p]);
+
+         return dep;
+      } else {
+         return is_valid(dep1) ? dep1 : dep0;
+      }
    }
 
    /**
@@ -980,8 +1011,10 @@ namespace {
                dependency(TGL_REGDIST_SRC, jp, exec_all) :
             dependency::done;
 
-         for (unsigned j = 0; j < regs_read(inst, i); j++)
-            sb.set(byte_offset(inst->src[i], REG_SIZE * j), rd_dep);
+         for (unsigned j = 0; j < regs_read(inst, i); j++) {
+            const fs_reg r = byte_offset(inst->src[i], REG_SIZE * j);
+            sb.set(r, shadow(sb.get(r), rd_dep));
+         }
       }
 
       if (inst->reads_accumulator_implicitly())

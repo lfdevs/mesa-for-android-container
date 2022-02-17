@@ -46,12 +46,6 @@ vec4_vs_visitor::emit_urb_write_header(int mrf)
 vec4_instruction *
 vec4_vs_visitor::emit_urb_write_opcode(bool complete)
 {
-   /* For VS, the URB writes end the thread. */
-   if (complete) {
-      if (INTEL_DEBUG(DEBUG_SHADER_TIME))
-         emit_shader_time_end();
-   }
-
    vec4_instruction *inst = emit(VS_OPCODE_URB_WRITE);
    inst->urb_write_flags = complete ?
       BRW_URB_WRITE_EOT_COMPLETE : BRW_URB_WRITE_NO_FLAGS;
@@ -103,11 +97,9 @@ vec4_vs_visitor::vec4_vs_visitor(const struct brw_compiler *compiler,
                                  struct brw_vs_prog_data *vs_prog_data,
                                  const nir_shader *shader,
                                  void *mem_ctx,
-                                 int shader_time_index,
                                  bool debug_enabled)
    : vec4_visitor(compiler, log_data, &key->base.tex, &vs_prog_data->base,
-                  shader, mem_ctx, false /* no_spills */, shader_time_index,
-                  debug_enabled),
+                  shader, mem_ctx, false /* no_spills */, debug_enabled),
      key(key),
      vs_prog_data(vs_prog_data)
 {

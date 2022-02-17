@@ -411,7 +411,7 @@ DRI2GetBuffers(Display * dpy, XID drawable,
    CARD32 *p;
    int i;
 
-   XextCheckExtension(dpy, info, dri2ExtensionName, False);
+   XextCheckExtension(dpy, info, dri2ExtensionName, NULL);
 
    LockDisplay(dpy);
    GetReqExtra(DRI2GetBuffers, count * 4, req);
@@ -470,7 +470,7 @@ DRI2GetBuffersWithFormat(Display * dpy, XID drawable,
    CARD32 *p;
    int i;
 
-   XextCheckExtension(dpy, info, dri2ExtensionName, False);
+   XextCheckExtension(dpy, info, dri2ExtensionName, NULL);
 
    LockDisplay(dpy);
    GetReqExtra(DRI2GetBuffers, count * (4 * 2), req);

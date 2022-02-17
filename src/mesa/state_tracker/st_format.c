@@ -1207,26 +1207,6 @@ success:
 
 
 /**
- * Called by FBO code to choose a PIPE_FORMAT_ for drawing surfaces.
- */
-enum pipe_format
-st_choose_renderbuffer_format(struct st_context *st,
-                              GLenum internalFormat, unsigned sample_count,
-                              unsigned storage_sample_count)
-{
-   unsigned bindings;
-   if (_mesa_is_depth_or_stencil_format(internalFormat))
-      bindings = PIPE_BIND_DEPTH_STENCIL;
-   else
-      bindings = PIPE_BIND_RENDER_TARGET;
-   return st_choose_format(st, internalFormat, GL_NONE, GL_NONE,
-                           PIPE_TEXTURE_2D, sample_count,
-                           storage_sample_count, bindings,
-                           false, false);
-}
-
-
-/**
  * Given an OpenGL user-requested format and type, and swapBytes state,
  * return the format which exactly matches those parameters, so that
  * a memcpy-based transfer can be done.
@@ -1508,6 +1488,33 @@ st_QueryInternalFormat(struct gl_context *ctx, GLenum target,
       params[0] = pformat != PIPE_FORMAT_NONE &&
                   screen->is_format_supported(screen, pformat, PIPE_TEXTURE_2D,
                                               0, 0, PIPE_BIND_SAMPLER_REDUCTION_MINMAX);
+      break;
+   }
+   case GL_NUM_VIRTUAL_PAGE_SIZES_ARB:
+   case GL_VIRTUAL_PAGE_SIZE_X_ARB:
+   case GL_VIRTUAL_PAGE_SIZE_Y_ARB:
+   case GL_VIRTUAL_PAGE_SIZE_Z_ARB: {
+      mesa_format format = st_ChooseTextureFormat(ctx, target, internalFormat, GL_NONE, GL_NONE);
+      enum pipe_format pformat = st_mesa_format_to_pipe_format(st, format);
+
+      if (pformat != PIPE_FORMAT_NONE) {
+         struct pipe_screen *screen = st->screen;
+         enum pipe_texture_target ptarget = gl_target_to_pipe(target);
+         bool multi_sample = _mesa_is_multisample_target(target);
+
+         if (pname == GL_NUM_VIRTUAL_PAGE_SIZES_ARB)
+            params[0] = screen->get_sparse_texture_virtual_page_size(
+               screen, ptarget, multi_sample, pformat, 0, 0, NULL, NULL, NULL);
+         else {
+            int *args[3] = {0};
+            args[pname - GL_VIRTUAL_PAGE_SIZE_X_ARB] = params;
+
+            /* 16 comes from the caller _mesa_GetInternalformativ() */
+            screen->get_sparse_texture_virtual_page_size(
+               screen, ptarget, multi_sample, pformat, 0, 16,
+               args[0], args[1], args[2]);
+         }
+      }
       break;
    }
    default:

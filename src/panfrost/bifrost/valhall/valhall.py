@@ -98,12 +98,13 @@ def Flag(name, start):
 
 # Model a single instruction
 class Source:
-    def __init__(self, index, size, is_float = False, swizzle = False, widen = False, lanes = False, lane = None, absneg = False, notted = False, name = ""):
+    def __init__(self, index, size, is_float = False, swizzle = False, halfswizzle = False, widen = False, lanes = False, lane = None, absneg = False, notted = False, name = ""):
         self.is_float = is_float or absneg
         self.size = size
         self.absneg = absneg
         self.notted = notted
         self.swizzle = swizzle
+        self.halfswizzle = halfswizzle
         self.widen = widen
         self.lanes = lanes
         self.lane = lane
@@ -119,7 +120,7 @@ class Source:
         if notted:
             self.offset['not'] = 35
             self.bits['not'] = 1
-        if widen or lanes:
+        if widen or lanes or halfswizzle:
             self.offset['widen'] = 26 if index == 1 else 36
             self.bits['widen'] = 4 # XXX: too much?
         if lane:
@@ -188,7 +189,7 @@ class Instruction:
         if opcode == 0x90:
             # XXX: XMLify this, but disambiguates sign of conversions
             self.secondary_mask |= 0x10
-        if name.startswith("LOAD.i") or name.startswith("STORE.i"):
+        if name.startswith("LOAD.i") or name.startswith("STORE.i") or name.startswith("LD_BUFFER.i"):
             self.secondary_shift = 27 # Alias with memory_size
             self.secondary_mask = 0x7
 
@@ -210,6 +211,7 @@ def build_source(el, i, size):
             absneg = el.get('absneg', False),
             is_float = el.get('float', False),
             swizzle = el.get('swizzle', False),
+            halfswizzle = el.get('halfswizzle', False),
             widen = el.get('widen', False),
             lanes = el.get('lanes', False),
             lane = lane,
@@ -350,6 +352,8 @@ MODIFIERS = {
     "sr_count": Modifier("staging_register_count", 33, 3, implied = True),
 
     "subgroup": Modifier("subgroup_size", 36, 2),
+    "update": Modifier("update_mode", 36, 2),
+    "sample": Modifier("sample_mode", 38, 2),
 }
 
 # Parse the ISA

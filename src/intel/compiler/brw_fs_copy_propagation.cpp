@@ -901,6 +901,7 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
       case FS_OPCODE_TXB_LOGICAL:
       case SHADER_OPCODE_TXF_CMS_LOGICAL:
       case SHADER_OPCODE_TXF_CMS_W_LOGICAL:
+      case SHADER_OPCODE_TXF_CMS_W_GFX12_LOGICAL:
       case SHADER_OPCODE_TXF_UMS_LOGICAL:
       case SHADER_OPCODE_TXF_MCS_LOGICAL:
       case SHADER_OPCODE_LOD_LOGICAL:
@@ -1026,7 +1027,6 @@ fs_visitor::opt_copy_propagation_local(void *copy_prop_ctx, bblock_t *block,
          int offset = 0;
          for (int i = 0; i < inst->sources; i++) {
             int effective_width = i < inst->header_size ? 8 : inst->exec_size;
-            assert(effective_width * type_sz(inst->src[i].type) % REG_SIZE == 0);
             const unsigned size_written = effective_width *
                                           type_sz(inst->src[i].type);
             if (inst->src[i].file == VGRF ||

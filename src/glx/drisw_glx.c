@@ -575,7 +575,7 @@ drisw_create_context_attribs(struct glx_screen *base,
    pcp->driContext =
       (*psc->swrast->createContextAttribs) (psc->driScreen,
 					    dca.api,
-					    config ? config->driConfig : 0,
+					    config ? config->driConfig : NULL,
 					    shared,
 					    num_ctx_attribs / 2,
 					    ctx_attribs,
@@ -605,7 +605,8 @@ driswDestroyDrawable(__GLXDRIdrawable * pdraw)
 
 static __GLXDRIdrawable *
 driswCreateDrawable(struct glx_screen *base, XID xDrawable,
-		    GLXDrawable drawable, struct glx_config *modes)
+                    GLXDrawable drawable, int type,
+                    struct glx_config *modes)
 {
    struct drisw_drawable *pdp;
    __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) modes;

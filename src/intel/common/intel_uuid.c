@@ -27,26 +27,35 @@
 
 void
 intel_uuid_compute_device_id(uint8_t *uuid,
-                             const struct isl_device *isldev,
+                             const struct intel_device_info *devinfo,
                              size_t size)
 {
    struct mesa_sha1 sha1_ctx;
    uint8_t sha1[20];
-   const struct intel_device_info *devinfo = isldev->info;
-
+   const char *vendor = "INTEL";
    assert(size <= sizeof(sha1));
 
-   /* The device UUID uniquely identifies the given device within the machine.
-    * Since we never have more than one device, this doesn't need to be a real
-    * UUID.  However, on the off-chance that someone tries to use this to
-    * cache pre-tiled images or something of the like, we use the PCI ID and
-    * some bits of ISL info to ensure that this is safe.
+   /* The device UUID uniquely identifies the given device within the
+    * machine. We use the device information along with PCI information
+    * to make sure we have different UUIDs on a system with multiple
+    * identical (discrete) GPUs.
     */
    _mesa_sha1_init(&sha1_ctx);
-   _mesa_sha1_update(&sha1_ctx, &devinfo->chipset_id,
-                     sizeof(devinfo->chipset_id));
-   _mesa_sha1_update(&sha1_ctx, &isldev->has_bit6_swizzling,
-                     sizeof(isldev->has_bit6_swizzling));
+   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_domain,
+                     sizeof(devinfo->pci_domain));
+   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_bus,
+                     sizeof(devinfo->pci_bus));
+   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_dev,
+                     sizeof(devinfo->pci_dev));
+   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_func,
+                     sizeof(devinfo->pci_func));
+   _mesa_sha1_update(&sha1_ctx, vendor, strlen(vendor));
+   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_device_id,
+                     sizeof(devinfo->pci_device_id));
+   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_revision_id,
+                     sizeof(devinfo->pci_revision_id));
+   _mesa_sha1_update(&sha1_ctx, &devinfo->revision,
+                     sizeof(devinfo->revision));
    _mesa_sha1_final(&sha1_ctx, sha1);
    memcpy(uuid, sha1, size);
 }
@@ -69,7 +78,9 @@ intel_uuid_compute_driver_id(uint8_t *uuid,
     * UUID.
     */
    _mesa_sha1_init(&sha1_ctx);
-   _mesa_sha1_update(&sha1_ctx, intelDriver, strlen(intelDriver) * sizeof(char));
+   _mesa_sha1_update(&sha1_ctx, intelDriver, strlen(intelDriver));
+   _mesa_sha1_update(&sha1_ctx, &devinfo->has_bit6_swizzle,
+                     sizeof(devinfo->has_bit6_swizzle));
    _mesa_sha1_final(&sha1_ctx, sha1);
    memcpy(uuid, sha1, size);
 }

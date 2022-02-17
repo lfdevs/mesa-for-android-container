@@ -424,7 +424,7 @@ void brw_clip_init_clipmask( struct brw_clip_compile *c )
       /* Rearrange userclip outcodes so that they come directly after
        * the fixed plane bits.
        */
-      if (p->devinfo->ver == 5 || p->devinfo->is_g4x)
+      if (p->devinfo->ver == 5 || p->devinfo->verx10 == 45)
          brw_AND(p, tmp, incoming, brw_imm_ud(0xff<<14));
       else
          brw_AND(p, tmp, incoming, brw_imm_ud(0x3f<<14));

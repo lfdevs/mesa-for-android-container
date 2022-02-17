@@ -1,4 +1,3 @@
-# coding=utf-8
 COPYRIGHT=u"""
 /* Copyright © 2015-2021 Intel Corporation
  * Copyright © 2021 Collabora, Ltd.
@@ -34,13 +33,15 @@ from mako.template import Template
 
 # Mesa-local imports must be declared in meson variable
 # '{file_without_suffix}_depend_files'.
-from vk_dispatch_table_gen import get_entrypoints_from_xml, EntrypointParam
+from vk_entrypoints import get_entrypoints_from_xml, EntrypointParam
 
 MANUAL_COMMANDS = ['CmdPushDescriptorSetKHR',             # This script doesn't know how to copy arrays in structs in arrays
                    'CmdPushDescriptorSetWithTemplateKHR', # pData's size cannot be calculated from the xml
                    'CmdDrawMultiEXT',                     # The size of the elements is specified in a stride param
                    'CmdDrawMultiIndexedEXT',              # The size of the elements is specified in a stride param
                    'CmdBindDescriptorSets',               # The VkPipelineLayout object could be released before the command is executed
+                   'CmdBeginRendering',               # The VkPipelineLayout object could be released before the command is executed
+                   'CmdBeginRenderingKHR',               # The VkPipelineLayout object could be released before the command is executed
                   ]
 
 TEMPLATE_H = Template(COPYRIGHT + """\
@@ -216,11 +217,12 @@ vk_free_queue(struct vk_cmd_queue *queue)
 #ifdef ${c.guard}
 % endif
       case ${to_enum_name(c.name)}:
+         vk_free(queue->alloc, cmd->driver_data);
 % for p in c.params[1:]:
 % if p.len:
-   vk_free(queue->alloc, (${remove_suffix(p.decl.replace("const", ""), p.name)})cmd->u.${to_struct_field_name(c.name)}.${to_field_name(p.name)});
+         vk_free(queue->alloc, (${remove_suffix(p.decl.replace("const", ""), p.name)})cmd->u.${to_struct_field_name(c.name)}.${to_field_name(p.name)});
 % elif '*' in p.decl:
-   ${get_struct_free(c, p, types)}
+         ${get_struct_free(c, p, types)}
 % endif
 % endfor
          break;
@@ -334,7 +336,6 @@ def get_struct_copy(dst, src_name, src_type, size, types, level=0):
 def get_struct_free(command, param, types):
     field_name = "cmd->u.%s.%s" % (to_struct_field_name(command.name), to_field_name(param.name))
     const_cast = remove_suffix(param.decl.replace("const", ""), param.name)
-    driver_data_free = "vk_free(queue->alloc, cmd->driver_data);\n"
     struct_free = "vk_free(queue->alloc, (%s)%s);" % (const_cast, field_name)
     member_frees = ""
     if (param.type in types):
@@ -343,7 +344,7 @@ def get_struct_free(command, param, types):
                 member_name = "cmd->u.%s.%s->%s" % (to_struct_field_name(command.name), to_field_name(param.name), member.name)
                 const_cast = remove_suffix(member.decl.replace("const", ""), member.name)
                 member_frees += "vk_free(queue->alloc, (%s)%s);\n" % (const_cast, member_name)
-    return "%s      %s      %s\n" % (member_frees, driver_data_free, struct_free)
+    return "%s      %s\n" % (member_frees, struct_free)
 
 EntrypointType = namedtuple('EntrypointType', 'name enum members extended_by')
 
@@ -435,12 +436,10 @@ def main():
         # to print a useful stack trace and prints it, then exits with
         # status 1, if python is run with debug; otherwise it just raises
         # the exception
-        if __debug__:
-            import sys
-            from mako import exceptions
-            sys.stderr.write(exceptions.text_error_template().render() + '\n')
-            sys.exit(1)
-        raise
+        import sys
+        from mako import exceptions
+        print(exceptions.text_error_template().render(), file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

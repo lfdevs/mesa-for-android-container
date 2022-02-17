@@ -76,8 +76,9 @@ struct si_state_rasterizer {
    unsigned pa_cl_clip_cntl;
    float line_width;
    float max_point_size;
-   unsigned ngg_cull_flags : 8;
-   unsigned ngg_cull_flags_y_inverted : 8;
+   unsigned ngg_cull_flags_tris : 16;
+   unsigned ngg_cull_flags_tris_y_inverted : 16;
+   unsigned ngg_cull_flags_lines : 16;
    unsigned sprite_coord_enable : 8;
    unsigned clip_plane_enable : 8;
    unsigned half_pixel_center : 1;
@@ -98,6 +99,7 @@ struct si_state_rasterizer {
    unsigned clip_halfz : 1;
    unsigned polygon_mode_is_lines : 1;
    unsigned polygon_mode_is_points : 1;
+   unsigned perpendicular_end_caps : 1;
 };
 
 struct si_dsa_stencil_ref_part {
@@ -352,21 +354,10 @@ struct si_tracked_regs {
 /* Private read-write buffer slots. */
 enum
 {
-   SI_ES_RING_ESGS,
-   SI_GS_RING_ESGS,
-
-   SI_RING_GSVS,
-
    SI_VS_STREAMOUT_BUF0,
    SI_VS_STREAMOUT_BUF1,
    SI_VS_STREAMOUT_BUF2,
    SI_VS_STREAMOUT_BUF3,
-
-   SI_HS_CONST_DEFAULT_TESS_LEVELS,
-   SI_VS_CONST_INSTANCE_DIVISORS,
-   SI_VS_CONST_CLIP_PLANES,
-   SI_PS_CONST_POLY_STIPPLE,
-   SI_PS_CONST_SAMPLE_POSITIONS,
 
    /* Image descriptor of color buffer 0 for KHR_blend_equation_advanced. */
    SI_PS_IMAGE_COLORBUF0,
@@ -374,9 +365,20 @@ enum
    SI_PS_IMAGE_COLORBUF0_FMASK,
    SI_PS_IMAGE_COLORBUF0_FMASK_HI,
 
-   GFX10_GS_QUERY_BUF,
+   /* Internal constant buffers. */
+   SI_HS_CONST_DEFAULT_TESS_LEVELS,
+   SI_VS_CONST_INSTANCE_DIVISORS,
+   SI_VS_CONST_CLIP_PLANES,
+   SI_PS_CONST_POLY_STIPPLE,
+   SI_PS_CONST_SAMPLE_POSITIONS,
+
+   SI_RING_ESGS,                       /* gfx6-8 */
+   SI_RING_GSVS,
 
    SI_NUM_INTERNAL_BINDINGS,
+
+   /* Aliases to reuse slots that are unused on other generations. */
+   SI_GS_QUERY_BUF = SI_RING_ESGS,     /* gfx10+ */
 };
 
 /* Indices into sctx->descriptors, laid out so that gfx and compute pipelines
@@ -454,8 +456,8 @@ struct si_buffer_resources {
    struct pipe_resource **buffers; /* this has num_buffers elements */
    unsigned *offsets;              /* this has num_buffers elements */
 
-   enum radeon_bo_priority priority : 6;
-   enum radeon_bo_priority priority_constbuf : 6;
+   unsigned priority;
+   unsigned priority_constbuf;
 
    /* The i-th bit is set if that element is enabled (non-NULL resource). */
    uint64_t enabled_mask;
@@ -478,6 +480,8 @@ struct si_buffer_resources {
    } while (0)
 
 /* si_descriptors.c */
+void si_get_inline_uniform_state(union si_shader_key *key, enum pipe_shader_type shader,
+                                 bool *inline_uniforms, uint32_t **inlined_values);
 void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture *tex,
                                     const struct legacy_surf_level *base_level_info,
                                     unsigned base_level, unsigned first_level, unsigned block_width,
@@ -487,6 +491,10 @@ void si_update_ps_colorbuf0_slot(struct si_context *sctx);
 void si_invalidate_inlinable_uniforms(struct si_context *sctx, enum pipe_shader_type shader);
 void si_get_pipe_constant_buffer(struct si_context *sctx, uint shader, uint slot,
                                  struct pipe_constant_buffer *cbuf);
+void si_set_shader_buffers(struct pipe_context *ctx, enum pipe_shader_type shader,
+                           unsigned start_slot, unsigned count,
+                           const struct pipe_shader_buffer *sbuffers,
+                           unsigned writable_bitmask, bool internal_blit);
 void si_get_shader_buffers(struct si_context *sctx, enum pipe_shader_type shader, uint start_slot,
                            uint count, struct pipe_shader_buffer *sbuf);
 void si_set_ring_buffer(struct si_context *sctx, uint slot, struct pipe_resource *buffer,
@@ -533,6 +541,7 @@ struct pipe_sampler_view *si_create_sampler_view_custom(struct pipe_context *ctx
                                                         const struct pipe_sampler_view *state,
                                                         unsigned width0, unsigned height0,
                                                         unsigned force_level);
+void si_set_sampler_depth_decompress_mask(struct si_context *sctx, struct si_texture *tex);
 void si_update_fb_dirtiness_after_rendering(struct si_context *sctx);
 void si_mark_display_dcc_dirty(struct si_context *sctx, struct si_texture *tex);
 void si_update_ps_iter_samples(struct si_context *sctx);
@@ -553,9 +562,10 @@ struct si_fast_udiv_info32 si_compute_fast_udiv_info32(uint32_t D, unsigned num_
 /* si_state_binning.c */
 void si_emit_dpbb_state(struct si_context *sctx);
 
-/* si_state_shaders.c */
+/* si_state_shaders.cpp */
+struct si_pm4_state *si_build_vgt_shader_config(struct si_screen *screen, union si_vgt_stages_key key);
 void si_get_ir_cache_key(struct si_shader_selector *sel, bool ngg, bool es,
-                         unsigned char ir_sha1_cache_key[20]);
+                         unsigned wave_size, unsigned char ir_sha1_cache_key[20]);
 bool si_shader_cache_load_shader(struct si_screen *sscreen, unsigned char ir_sha1_cache_key[20],
                                  struct si_shader *shader);
 void si_shader_cache_insert_shader(struct si_screen *sscreen, unsigned char ir_sha1_cache_key[20],
@@ -571,17 +581,14 @@ void si_schedule_initial_compile(struct si_context *sctx, gl_shader_stage stage,
                                  util_queue_execute_func execute);
 void si_get_active_slot_masks(const struct si_shader_info *info, uint64_t *const_and_shader_buffers,
                               uint64_t *samplers_and_images);
-int si_shader_select_with_key(struct si_context *sctx, struct si_shader_ctx_state *state,
-                              const struct si_shader_key *key, int thread_index,
-                              bool optimized_or_none);
 int si_shader_select(struct pipe_context *ctx, struct si_shader_ctx_state *state);
 void si_vs_key_update_inputs(struct si_context *sctx);
-void si_get_vs_key_inputs(struct si_context *sctx, struct si_shader_key *key,
+void si_get_vs_key_inputs(struct si_context *sctx, union si_shader_key *key,
                           struct si_vs_prolog_bits *prolog_key);
 void si_update_ps_inputs_read_or_disabled(struct si_context *sctx);
 void si_update_ps_kill_enable(struct si_context *sctx);
 void si_update_vrs_flat_shading(struct si_context *sctx);
-unsigned si_get_input_prim(const struct si_shader_selector *gs, const struct si_shader_key *key);
+unsigned si_get_input_prim(const struct si_shader_selector *gs, const union si_shader_key *key);
 bool si_update_ngg(struct si_context *sctx);
 void si_ps_key_update_framebuffer(struct si_context *sctx);
 void si_ps_key_update_framebuffer_blend(struct si_context *sctx);

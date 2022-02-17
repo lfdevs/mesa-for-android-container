@@ -121,7 +121,7 @@ static unsigned char * get_used_ptr(struct deadcode_state *s, rc_register_file f
 	if (file == RC_FILE_OUTPUT || file == RC_FILE_TEMPORARY) {
 		if (index >= RC_REGISTER_MAX_INDEX) {
 			rc_error(s->C, "%s: index %i is out of bounds for file %i\n", __FUNCTION__, index, file);
-			return 0;
+			return NULL;
 		}
 
 		if (file == RC_FILE_OUTPUT)
@@ -133,13 +133,13 @@ static unsigned char * get_used_ptr(struct deadcode_state *s, rc_register_file f
 	} else if (file == RC_FILE_SPECIAL) {
 		if (index >= RC_NUM_SPECIAL_REGISTERS) {
 			rc_error(s->C, "%s: special file index %i out of bounds\n", __FUNCTION__, index);
-			return 0;
+			return NULL;
 		}
 
 		return &s->R.Special[index];
 	}
 
-	return 0;
+	return NULL;
 }
 
 static void mark_used(struct deadcode_state * s, rc_register_file file, unsigned int index, unsigned int mask)

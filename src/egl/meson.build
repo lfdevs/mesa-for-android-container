@@ -31,6 +31,8 @@ files_egl = files(
   'main/eglapi.c',
   'main/eglarray.c',
   'main/eglarray.h',
+  'main/eglconfigdebug.c',
+  'main/eglconfigdebug.h',
   'main/eglconfig.c',
   'main/eglconfig.h',
   'main/eglcontext.c',

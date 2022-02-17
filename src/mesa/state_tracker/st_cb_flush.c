@@ -38,7 +38,6 @@
 #include "st_cb_bitmap.h"
 #include "st_cb_flush.h"
 #include "st_cb_clear.h"
-#include "st_cb_fbo.h"
 #include "st_context.h"
 #include "st_manager.h"
 #include "pipe/p_context.h"
@@ -82,11 +81,7 @@ st_finish(struct st_context *st)
 }
 
 
-
-/**
- * Called via ctx->Driver.Flush()
- */
-static void
+void
 st_glFlush(struct gl_context *ctx, unsigned gallium_flush_flags)
 {
    struct st_context *st = st_context(ctx);
@@ -101,11 +96,7 @@ st_glFlush(struct gl_context *ctx, unsigned gallium_flush_flags)
    st_manager_flush_frontbuffer(st);
 }
 
-
-/**
- * Called via ctx->Driver.Finish()
- */
-static void
+void
 st_glFinish(struct gl_context *ctx)
 {
    struct st_context *st = st_context(ctx);
@@ -187,9 +178,6 @@ void
 st_init_flush_functions(struct pipe_screen *screen,
                         struct dd_function_table *functions)
 {
-   functions->Flush = st_glFlush;
-   functions->Finish = st_glFinish;
-
    if (screen->get_param(screen, PIPE_CAP_DEVICE_RESET_STATUS_QUERY))
       functions->GetGraphicsResetStatus = st_get_graphics_reset_status;
 }

@@ -605,20 +605,15 @@ static void evergreen_emit_dispatch(struct r600_context *rctx,
 	unsigned num_pipes = rctx->screen->b.info.r600_max_quad_pipes;
 	unsigned wave_divisor = (16 * num_pipes);
 	int group_size = 1;
-	int grid_size = 1;
 	unsigned lds_size = shader->local_size / 4;
 
 	if (shader->ir_type != PIPE_SHADER_IR_TGSI &&
 	    shader->ir_type != PIPE_SHADER_IR_NIR)
 		lds_size += shader->bc.nlds_dw;
 	
-	/* Calculate group_size/grid_size */
+	/* Calculate group_size */
 	for (i = 0; i < 3; i++) {
 		group_size *= info->block[i];
-	}
-
-	for (i = 0; i < 3; i++)	{
-		grid_size *= info->grid[i];
 	}
 
 	/* num_waves = ceil((tg_size.x * tg_size.y, tg_size.z) / (16 * num_pipes)) */
@@ -687,7 +682,7 @@ static void compute_setup_cbs(struct r600_context *rctx)
 		struct r600_surface *cb = (struct r600_surface*)rctx->framebuffer.state.cbufs[i];
 		unsigned reloc = radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx,
 						       (struct r600_resource*)cb->base.texture,
-						       RADEON_USAGE_READWRITE,
+						       RADEON_USAGE_READWRITE |
 						       RADEON_PRIO_SHADER_RW_BUFFER);
 
 		radeon_compute_set_context_reg_seq(cs, R_028C60_CB_COLOR0_BASE + i * 0x3C, 7);
@@ -918,7 +913,7 @@ void evergreen_emit_cs_shader(struct r600_context *rctx,
 
 	radeon_emit(cs, PKT3C(PKT3_NOP, 0, 0));
 	radeon_emit(cs, radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx,
-					      code_bo, RADEON_USAGE_READ,
+					      code_bo, RADEON_USAGE_READ |
 					      RADEON_PRIO_SHADER_BINARY));
 }
 

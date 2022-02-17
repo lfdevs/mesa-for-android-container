@@ -40,12 +40,6 @@ struct gl_renderbuffer;
 extern void
 _mesa_init_renderbuffer(struct gl_renderbuffer *rb, GLuint name);
 
-extern struct gl_renderbuffer *
-_mesa_new_renderbuffer(struct gl_context *ctx, GLuint name);
-
-extern void
-_mesa_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb);
-
 extern void
 _mesa_attach_and_own_rb(struct gl_framebuffer *fb,
                         gl_buffer_index bufferName,
@@ -71,7 +65,25 @@ _mesa_reference_renderbuffer(struct gl_renderbuffer **ptr,
    if (*ptr != rb)
       _mesa_reference_renderbuffer_(ptr, rb);
 }
-      
+
+void
+_mesa_map_renderbuffer(struct gl_context *ctx,
+                       struct gl_renderbuffer *rb,
+                       GLuint x, GLuint y, GLuint w, GLuint h,
+                       GLbitfield mode,
+                       GLubyte **mapOut, GLint *rowStrideOut,
+                       bool flip_y);
+
+void
+_mesa_unmap_renderbuffer(struct gl_context *ctx,
+                         struct gl_renderbuffer *rb);
+
+void
+_mesa_regen_renderbuffer_surface(struct gl_context *ctx,
+                                 struct gl_renderbuffer *rb);
+void
+_mesa_update_renderbuffer_surface(struct gl_context *ctx,
+                                  struct gl_renderbuffer *rb);
 #ifdef __cplusplus
 }
 #endif

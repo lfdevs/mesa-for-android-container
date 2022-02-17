@@ -88,7 +88,7 @@ MESON_GEN_NINJA := \
 	-Ddri-search-path=/vendor/$(MESA3D_LIB_DIR)/dri                              \
 	-Dplatforms=android                                                          \
 	-Dplatform-sdk-version=$(PLATFORM_SDK_VERSION)                               \
-	-Ddri-drivers=$(subst $(space),$(comma),$(BOARD_MESA3D_CLASSIC_DRIVERS))     \
+	-Ddri-drivers=                                                               \
 	-Dgallium-drivers=$(subst $(space),$(comma),$(BOARD_MESA3D_GALLIUM_DRIVERS)) \
 	-Dvulkan-drivers=$(subst $(space),$(comma),$(subst radeon,amd,$(BOARD_MESA3D_VULKAN_DRIVERS)))   \
 	-Dgbm=enabled                                                                \
@@ -257,8 +257,7 @@ ifneq ($(MESON_GEN_LLVM_STUB),)
 	mkdir -p $(dir $@)/subprojects/llvm/
 	echo -e "project('llvm', 'cpp', version : '$(MESON_LLVM_VERSION)')\n" \
 		"dep_llvm = declare_dependency()\n"                           \
-		"has_rtti = false\n"                                          \
-		"irbuilder_h = files('$(AOSP_ABSOLUTE_PATH)/$(MESON_LLVM_IRBUILDER_PATH)')" > $(dir $@)/subprojects/llvm/meson.build
+		"has_rtti = false\n" > $(dir $@)/subprojects/llvm/meson.build
 endif
 	$(MESON_GEN_NINJA)
 	$(MESON_BUILD)
@@ -289,17 +288,13 @@ endef
 
 $(foreach driver,$(BOARD_MESA3D_VULKAN_DRIVERS), $(eval $(call vulkan_target,$(driver))))
 
-$($(M_TARGET_PREFIX)TARGET_OUT_VENDOR_SHARED_LIBRARIES)/dri/.targets.timestamp: MESA3D_GALLIUM_DRI_DIR:=$(MESA3D_GALLIUM_DRI_DIR)
-$($(M_TARGET_PREFIX)TARGET_OUT_VENDOR_SHARED_LIBRARIES)/dri/.targets.timestamp: $(MESON_OUT_DIR)/install/.install.timestamp
+$($(M_TARGET_PREFIX)TARGET_OUT_VENDOR_SHARED_LIBRARIES)/dri/.symlinks.timestamp: MESA3D_GALLIUM_DRI_DIR:=$(MESA3D_GALLIUM_DRI_DIR)
+$($(M_TARGET_PREFIX)TARGET_OUT_VENDOR_SHARED_LIBRARIES)/dri/.symlinks.timestamp: $(MESON_OUT_DIR)/install/.install.timestamp
+	# Create Symlinks
 	mkdir -p $(dir $@)
-	# Create Symlinks for gallium and kmsro drivers
 	ls -1 $(MESA3D_GALLIUM_DRI_DIR)/ | PATH=/usr/bin:$$PATH xargs -I{} ln -s -f libgallium_dri.so $(dir $@)/{}
-	# Remove unwanted Symlinks created for classic dri drivers
-	$(foreach d,$(BOARD_MESA3D_CLASSIC_DRIVERS), rm $(dir $@)/$(d)_dri.so;)
-	# Copy classic dri drivers
-	$(foreach d,$(BOARD_MESA3D_CLASSIC_DRIVERS), cp $(MESA3D_GALLIUM_DRI_DIR)/$(d)_dri.so $(dir $@)/$(d)_dri.so;)
 	touch $@
 
-$($(M_TARGET_PREFIX)MESA3D_GALLIUM_DRI_BIN): $(TARGET_OUT_VENDOR)/$(MESA3D_LIB_DIR)/dri/.targets.timestamp
+$($(M_TARGET_PREFIX)MESA3D_GALLIUM_DRI_BIN): $(TARGET_OUT_VENDOR)/$(MESA3D_LIB_DIR)/dri/.symlinks.timestamp
 	echo "Build $@"
 	touch $@

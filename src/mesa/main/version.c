@@ -34,6 +34,8 @@
 #include "version.h"
 #include "git_sha1.h"
 
+#include "state_tracker/st_context.h"
+
 static simple_mtx_t override_lock = _SIMPLE_MTX_INITIALIZER_NP;
 
 /**
@@ -249,18 +251,7 @@ compute_version(const struct gl_extensions *extensions,
 {
    GLuint major, minor, version;
 
-   const bool ver_1_3 = (extensions->ARB_texture_border_clamp &&
-                         extensions->ARB_texture_cube_map &&
-                         extensions->ARB_texture_env_combine &&
-                         extensions->ARB_texture_env_dot3);
-   const bool ver_1_4 = (ver_1_3 &&
-                         extensions->ARB_depth_texture &&
-                         extensions->ARB_shadow &&
-                         extensions->ARB_texture_env_crossbar &&
-                         extensions->EXT_blend_color &&
-                         extensions->EXT_blend_func_separate &&
-                         extensions->EXT_blend_minmax &&
-                         extensions->EXT_point_parameters);
+   const bool ver_1_4 = (extensions->ARB_shadow);
    const bool ver_1_5 = (ver_1_4 &&
                          extensions->ARB_occlusion_query);
    const bool ver_2_0 = (ver_1_5 &&
@@ -473,13 +464,9 @@ compute_version(const struct gl_extensions *extensions,
       major = 1;
       minor = 4;
    }
-   else if (ver_1_3) {
-      major = 1;
-      minor = 3;
-   }
    else {
       major = 1;
-      minor = 2;
+      minor = 3;
    }
 
    version = major * 10 + minor;
@@ -491,34 +478,11 @@ compute_version(const struct gl_extensions *extensions,
 }
 
 static GLuint
-compute_version_es1(const struct gl_extensions *extensions)
-{
-   /* OpenGL ES 1.0 is derived from OpenGL 1.3 */
-   const bool ver_1_0 = (extensions->ARB_texture_env_combine &&
-                         extensions->ARB_texture_env_dot3);
-   /* OpenGL ES 1.1 is derived from OpenGL 1.5 */
-   const bool ver_1_1 = (ver_1_0 &&
-                         extensions->EXT_point_parameters);
-
-   if (ver_1_1) {
-      return 11;
-   } else if (ver_1_0) {
-      return 10;
-   } else {
-      return 0;
-   }
-}
-
-static GLuint
 compute_version_es2(const struct gl_extensions *extensions,
                     const struct gl_constants *consts)
 {
    /* OpenGL ES 2.0 is derived from OpenGL 2.0 */
-   const bool ver_2_0 = (extensions->ARB_texture_cube_map &&
-                         extensions->EXT_blend_color &&
-                         extensions->EXT_blend_func_separate &&
-                         extensions->EXT_blend_minmax &&
-                         extensions->ARB_vertex_shader &&
+   const bool ver_2_0 = (extensions->ARB_vertex_shader &&
                          extensions->ARB_fragment_shader &&
                          extensions->ARB_texture_non_power_of_two &&
                          extensions->EXT_blend_equation_separate);
@@ -585,7 +549,6 @@ compute_version_es2(const struct gl_extensions *extensions,
                          extensions->OES_primitive_bounding_box &&
                          extensions->OES_sample_variables &&
                          extensions->ARB_tessellation_shader &&
-                         extensions->ARB_texture_border_clamp &&
                          extensions->OES_texture_buffer &&
                          extensions->OES_texture_cube_map_array &&
                          extensions->ARB_texture_stencil8);
@@ -618,7 +581,7 @@ _mesa_get_version(const struct gl_extensions *extensions,
    case API_OPENGL_CORE:
       return compute_version(extensions, consts, api);
    case API_OPENGLES:
-      return compute_version_es1(extensions);
+      return 11;
    case API_OPENGLES2:
       return compute_version_es2(extensions, consts);
    }
@@ -726,13 +689,19 @@ done:
 void
 _mesa_get_driver_uuid(struct gl_context *ctx, GLint *uuid)
 {
-   ctx->Driver.GetDriverUuid(ctx, (char*) uuid);
+   struct pipe_screen *screen = ctx->pipe->screen;
+   assert(GL_UUID_SIZE_EXT >= PIPE_UUID_SIZE);
+   memset(uuid, 0, GL_UUID_SIZE_EXT);
+   screen->get_driver_uuid(screen, (char *)uuid);
 }
 
 void
 _mesa_get_device_uuid(struct gl_context *ctx, GLint *uuid)
 {
-   ctx->Driver.GetDeviceUuid(ctx, (char*) uuid);
+   struct pipe_screen *screen = ctx->pipe->screen;
+   assert(GL_UUID_SIZE_EXT >= PIPE_UUID_SIZE);
+   memset(uuid, 0, GL_UUID_SIZE_EXT);
+   screen->get_device_uuid(screen, (char *)uuid);
 }
 
 /**

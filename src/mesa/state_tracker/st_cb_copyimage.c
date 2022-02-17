@@ -25,7 +25,7 @@
 #include "state_tracker/st_context.h"
 #include "state_tracker/st_cb_bitmap.h"
 #include "state_tracker/st_cb_copyimage.h"
-#include "state_tracker/st_cb_fbo.h"
+#include "state_tracker/st_cb_texture.h"
 #include "state_tracker/st_texture.h"
 #include "state_tracker/st_util.h"
 
@@ -579,7 +579,7 @@ fallback_copy_image(struct st_context *st,
       line_bytes = _mesa_format_row_stride(dst_image->TexFormat, dst_w);
 
    if (dst_image) {
-      st->ctx->Driver.MapTextureImage(
+      st_MapTextureImage(
             st->ctx, dst_image, dst_z,
             dst_x, dst_y, dst_w, dst_h,
             GL_MAP_WRITE_BIT, &dst, &dst_stride);
@@ -592,7 +592,7 @@ fallback_copy_image(struct st_context *st,
    }
 
    if (src_image) {
-      st->ctx->Driver.MapTextureImage(
+      st_MapTextureImage(
             st->ctx, src_image, src_z,
             src_x, src_y, src_w, src_h,
             GL_MAP_READ_BIT, &src, &src_stride);
@@ -611,19 +611,19 @@ fallback_copy_image(struct st_context *st,
    }
 
    if (dst_image) {
-      st->ctx->Driver.UnmapTextureImage(st->ctx, dst_image, dst_z);
+      st_UnmapTextureImage(st->ctx, dst_image, dst_z);
    } else {
       pipe_texture_unmap(st->pipe, dst_transfer);
    }
 
    if (src_image) {
-      st->ctx->Driver.UnmapTextureImage(st->ctx, src_image, src_z);
+      st_UnmapTextureImage(st->ctx, src_image, src_z);
    } else {
       pipe_texture_unmap(st->pipe, src_transfer);
    }
 }
 
-static void
+void
 st_CopyImageSubData(struct gl_context *ctx,
                     struct gl_texture_image *src_image,
                     struct gl_renderbuffer *src_renderbuffer,
@@ -644,8 +644,8 @@ st_CopyImageSubData(struct gl_context *ctx,
    st_invalidate_readpix_cache(st);
 
    if (src_image) {
-      struct st_texture_image *src = st_texture_image(src_image);
-      struct st_texture_object *stObj = st_texture_object(src_image->TexObject);
+      struct gl_texture_image *src = src_image;
+      struct gl_texture_object *stObj = src_image->TexObject;
       src_res = src->pt;
       src_level = stObj->pt != src_res ? 0 : src_image->Level;
       src_z += src_image->Face;
@@ -654,14 +654,13 @@ st_CopyImageSubData(struct gl_context *ctx,
          src_z += src_image->TexObject->Attrib.MinLayer;
       }
    } else {
-      struct st_renderbuffer *src = st_renderbuffer(src_renderbuffer);
-      src_res = src->texture;
+      src_res = src_renderbuffer->texture;
       src_level = 0;
    }
 
    if (dst_image) {
-      struct st_texture_image *dst = st_texture_image(dst_image);
-      struct st_texture_object *stObj = st_texture_object(dst_image->TexObject);
+      struct gl_texture_image *dst = dst_image;
+      struct gl_texture_object *stObj = dst_image->TexObject;
       dst_res = dst->pt;
       dst_level = stObj->pt != dst_res ? 0 : dst_image->Level;
       dst_z += dst_image->Face;
@@ -670,8 +669,7 @@ st_CopyImageSubData(struct gl_context *ctx,
          dst_z += dst_image->TexObject->Attrib.MinLayer;
       }
    } else {
-      struct st_renderbuffer *dst = st_renderbuffer(dst_renderbuffer);
-      dst_res = dst->texture;
+      dst_res = dst_renderbuffer->texture;
       dst_level = 0;
    }
 
@@ -686,10 +684,4 @@ st_CopyImageSubData(struct gl_context *ctx,
       copy_image(pipe, dst_res, dst_level, dst_x, dst_y, dst_z,
                  src_res, src_level, &box);
    }
-}
-
-void
-st_init_copy_image_functions(struct dd_function_table *functions)
-{
-   functions->CopyImageSubData = st_CopyImageSubData;
 }

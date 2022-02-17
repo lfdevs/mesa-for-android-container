@@ -31,6 +31,7 @@ tu_entrypoints = custom_target(
 
 
 libtu_files = files(
+  'tu_autotune.c',
   'tu_clear_blit.c',
   'tu_cmd_buffer.c',
   'tu_cs.c',
@@ -142,6 +143,7 @@ libvulkan_freedreno = shared_library(
     idep_nir,
     tu_deps,
     idep_vulkan_util,
+    idep_vulkan_runtime,
     idep_vulkan_wsi,
     idep_mesautil,
   ],

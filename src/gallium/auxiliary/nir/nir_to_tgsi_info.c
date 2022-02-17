@@ -29,6 +29,7 @@
 
 #include "nir_to_tgsi_info.h"
 #include "util/u_math.h"
+#include "util/u_prim.h"
 #include "nir.h"
 #include "nir_deref.h"
 #include "tgsi/tgsi_scan.h"
@@ -433,10 +434,7 @@ void nir_tgsi_scan_shader(const struct nir_shader *nir,
    }
 
    if (nir->info.stage == MESA_SHADER_TESS_EVAL) {
-      if (nir->info.tess.primitive_mode == GL_ISOLINES)
-         info->properties[TGSI_PROPERTY_TES_PRIM_MODE] = PIPE_PRIM_LINES;
-      else
-         info->properties[TGSI_PROPERTY_TES_PRIM_MODE] = nir->info.tess.primitive_mode;
+      info->properties[TGSI_PROPERTY_TES_PRIM_MODE] = u_tess_prim_from_shader(nir->info.tess._primitive_mode);
 
       STATIC_ASSERT((TESS_SPACING_EQUAL + 1) % 3 == PIPE_TESS_SPACING_EQUAL);
       STATIC_ASSERT((TESS_SPACING_FRACTIONAL_ODD + 1) % 3 ==
@@ -460,6 +458,7 @@ void nir_tgsi_scan_shader(const struct nir_shader *nir,
       info->properties[TGSI_PROPERTY_FS_EARLY_DEPTH_STENCIL] =
          nir->info.fs.early_fragment_tests | nir->info.fs.post_depth_coverage;
       info->properties[TGSI_PROPERTY_FS_POST_DEPTH_COVERAGE] = nir->info.fs.post_depth_coverage;
+      info->uses_fbfetch = nir->info.fs.uses_fbfetch_output;
 
       if (nir->info.fs.pixel_center_integer) {
          info->properties[TGSI_PROPERTY_FS_COORD_PIXEL_CENTER] =
@@ -784,11 +783,15 @@ void nir_tgsi_scan_shader(const struct nir_shader *nir,
          info->indirect_files |= 1 << TGSI_FILE_OUTPUT;
    }
 
-   uint32_t sampler_mask = 0, image_mask = 0;
+   uint32_t sampler_mask = 0;
    nir_foreach_uniform_variable(var, nir) {
-      uint32_t sampler_count = glsl_type_get_sampler_count(var->type);
-      uint32_t image_count = glsl_type_get_image_count(var->type);
+      uint32_t sampler_count = glsl_type_get_sampler_count(var->type) +
+                               glsl_type_get_texture_count(var->type);
       sampler_mask |= ((1ull << sampler_count) - 1) << var->data.binding;
+   }
+   uint32_t image_mask = 0;
+   nir_foreach_image_variable(var, nir) {
+      uint32_t image_count = glsl_type_get_image_count(var->type);
       image_mask |= ((1ull << image_count) - 1) << var->data.binding;
    }
    info->num_outputs = num_outputs;

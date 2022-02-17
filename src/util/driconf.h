@@ -196,6 +196,10 @@
    DRI_CONF_OPT_B(allow_higher_compat_version, def, \
                   "Allow a higher compat profile (version 3.1+) for apps that request it")
 
+#define DRI_CONF_ALLOW_GLSL_COMPAT_SHADERS(def) \
+   DRI_CONF_OPT_B(allow_glsl_compat_shaders, def, \
+                  "Allow in GLSL: #version xxx compatibility")
+
 #define DRI_CONF_FORCE_GLSL_ABS_SQRT(def) \
    DRI_CONF_OPT_B(force_glsl_abs_sqrt, def,                             \
                   "Force computing the absolute value for sqrt() and inversesqrt()")
@@ -212,9 +216,17 @@
    DRI_CONF_OPT_B(allow_glsl_cross_stage_interpolation_mismatch, def,   \
                   "Allow interpolation qualifier mismatch across shader stages")
 
+#define DRI_CONF_DO_DCE_BEFORE_CLIP_CULL_ANALYSIS(def) \
+   DRI_CONF_OPT_B(do_dce_before_clip_cull_analysis, def,   \
+                  "Use dead code elimitation before checking for invalid Clip*/CullDistance variables usage.")
+
 #define DRI_CONF_ALLOW_DRAW_OUT_OF_ORDER(def) \
    DRI_CONF_OPT_B(allow_draw_out_of_order, def, \
                   "Allow out-of-order draw optimizations. Set when Z fighting doesn't have to be accurate.")
+
+#define DRI_CONF_GLTHREAD_NOP_CHECK_FRAMEBUFFER_STATUS(def) \
+   DRI_CONF_OPT_B(glthread_nop_check_framebuffer_status, def, \
+                  "glthread always returns GL_FRAMEBUFFER_COMPLETE to prevent synchronization.")
 
 #define DRI_CONF_FORCE_GL_VENDOR() \
    DRI_CONF_OPT_S_NODEF(force_gl_vendor, "Override GPU vendor string.")
@@ -225,6 +237,18 @@
 #define DRI_CONF_FORCE_COMPAT_PROFILE(def) \
    DRI_CONF_OPT_B(force_compat_profile, def, \
                   "Force an OpenGL compatibility context")
+
+#define DRI_CONF_FORCE_COMPAT_SHADERS(def) \
+   DRI_CONF_OPT_B(force_compat_shaders, def, \
+                  "Force OpenGL compatibility shaders")
+
+#define DRI_CONF_FORCE_DIRECT_GLX_CONTEXT(def) \
+   DRI_CONF_OPT_B(force_direct_glx_context, def, \
+                  "Force direct GLX context (even if indirect is requested)")
+
+#define DRI_CONF_ALLOW_INVALID_GLX_DESTROY_WINDOW(def) \
+   DRI_CONF_OPT_B(allow_invalid_glx_destroy_window, def, \
+                  "Allow passing an invalid window into glXDestroyWindow")
 
 #define DRI_CONF_OVERRIDE_VRAM_SIZE() \
    DRI_CONF_OPT_I(override_vram_size, -1, -1, 2147483647, \
@@ -238,6 +262,10 @@
 
 #define DRI_CONF_TRANSCODE_ASTC(def) \
    DRI_CONF_OPT_B(transcode_astc, def, "Transcode ASTC formats to DXTC if unsupported")
+
+#define DRI_CONF_MESA_EXTENSION_OVERRIDE() \
+   DRI_CONF_OPT_S_NODEF(mesa_extension_override, \
+                  "Allow enabling/disabling a list of extensions")
 
 #define DRI_CONF_GLX_EXTENSION_OVERRIDE() \
    DRI_CONF_OPT_S_NODEF(glx_extension_override, \
@@ -254,6 +282,10 @@
 #define DRI_CONF_IGNORE_MAP_UNSYNCHRONIZED(def) \
    DRI_CONF_OPT_B(ignore_map_unsynchronized, def, \
                   "Ignore GL_MAP_UNSYNCHRONIZED_BIT, workaround for games that use it incorrectly")
+
+#define DRI_CONF_VK_DONT_CARE_AS_LOAD(def) \
+   DRI_CONF_OPT_B(vk_dont_care_as_load, def, \
+                  "Treat VK_ATTACHMENT_LOAD_OP_DONT_CARE as LOAD_OP_LOAD, workaround on tiler GPUs for games that confuse these two load ops")
 
 /**
  * \brief Image quality-related options
@@ -468,6 +500,10 @@
    DRI_CONF_OPT_I(gles_samples_passed_value, def, minimum, maximum, \
                   "GL_SAMPLES_PASSED value when emulated by GL_ANY_SAMPLES_PASSED")
 
+#define DRI_CONF_FORMAT_L8_SRGB_ENABLE_READBACK(def) \
+   DRI_CONF_OPT_B(format_l8_srgb_enable_readback, def, \
+                  "Force-enable reading back L8_SRGB textures")
+
 /**
  * \brief RADV specific configuration options
  */
@@ -508,6 +544,10 @@
    DRI_CONF_OPT_B(radv_invariant_geom, def, \
                   "Mark geometry-affecting outputs as invariant")
 
+#define DRI_CONF_RADV_SPLIT_FMA(def) \
+   DRI_CONF_OPT_B(radv_split_fma, def, \
+                  "Split application-provided fused multiply-add in geometry stages")
+
 #define DRI_CONF_RADV_DISABLE_TC_COMPAT_HTILE_GENERAL(def) \
    DRI_CONF_OPT_B(radv_disable_tc_compat_htile_general, def, \
                   "Disable TC-compat HTILE in GENERAL layout")
@@ -520,8 +560,16 @@
    DRI_CONF_OPT_B(radv_report_apu_as_dgpu, def, \
                   "Report APUs as discrete GPUs instead of integrated GPUs")
 
+#define DRI_CONF_RADV_REQUIRE_ETC2(def)                                        \
+  DRI_CONF_OPT_B(radv_require_etc2, def,                                       \
+                 "Implement emulated ETC2 on HW that does not support it")
+
 #define DRI_CONF_RADV_DISABLE_HTILE_LAYERS(def) \
    DRI_CONF_OPT_B(radv_disable_htile_layers, def, \
                   "Disable HTILE for layered depth/stencil formats")
+
+#define DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(def) \
+  DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
+                 "Disable anisotropic filtering for single level images")
 
 #endif

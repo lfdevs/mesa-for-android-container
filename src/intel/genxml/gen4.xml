@@ -936,8 +936,8 @@
     <field name="Indirect Object Base Address" start="108" end="127" type="address"/>
     <field name="General State Access Upper Bound Modify Enable" start="128" end="128" type="bool"/>
     <field name="General State Access Upper Bound" start="140" end="159" type="address"/>
-    <field name="Instruction Access Upper Bound Modify Enable" start="160" end="160" type="bool"/>
-    <field name="Instruction Access Upper Bound" start="172" end="191" type="address"/>
+    <field name="Indirect Object Access Upper Bound Modify Enable" start="160" end="160" type="bool"/>
+    <field name="Indirect Object Access Upper Bound" start="172" end="191" type="address"/>
   </instruction>
 
   <instruction name="STATE_SIP" bias="2" length="2" engine="render">

@@ -32,7 +32,6 @@
 #include "anv_private.h"
 #include "common/intel_defines.h"
 #include "common/intel_gem.h"
-#include "drm-uapi/sync_file.h"
 
 /**
  * Wrapper around DRM_IOCTL_I915_GEM_CREATE.
@@ -319,77 +318,11 @@ anv_gem_get_param(int fd, uint32_t param)
    return 0;
 }
 
-uint64_t
-anv_gem_get_drm_cap(int fd, uint32_t capability)
-{
-   struct drm_get_cap cap = {
-      .capability = capability,
-   };
-
-   intel_ioctl(fd, DRM_IOCTL_GET_CAP, &cap);
-   return cap.value;
-}
-
 bool
-anv_gem_get_bit6_swizzle(int fd, uint32_t tiling)
-{
-   struct drm_gem_close close;
-   int ret;
-
-   struct drm_i915_gem_create gem_create = {
-      .size = 4096,
-   };
-
-   if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_CREATE, &gem_create)) {
-      assert(!"Failed to create GEM BO");
-      return false;
-   }
-
-   bool swizzled = false;
-
-   /* set_tiling overwrites the input on the error path, so we have to open
-    * code intel_ioctl.
-    */
-   do {
-      struct drm_i915_gem_set_tiling set_tiling = {
-         .handle = gem_create.handle,
-         .tiling_mode = tiling,
-         .stride = tiling == I915_TILING_X ? 512 : 128,
-      };
-
-      ret = ioctl(fd, DRM_IOCTL_I915_GEM_SET_TILING, &set_tiling);
-   } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
-
-   if (ret != 0) {
-      assert(!"Failed to set BO tiling");
-      goto close_and_return;
-   }
-
-   struct drm_i915_gem_get_tiling get_tiling = {
-      .handle = gem_create.handle,
-   };
-
-   if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling)) {
-      assert(!"Failed to get BO tiling");
-      goto close_and_return;
-   }
-
-   swizzled = get_tiling.swizzle_mode != I915_BIT_6_SWIZZLE_NONE;
-
-close_and_return:
-
-   memset(&close, 0, sizeof(close));
-   close.handle = gem_create.handle;
-   intel_ioctl(fd, DRM_IOCTL_GEM_CLOSE, &close);
-
-   return swizzled;
-}
-
-bool
-anv_gem_has_context_priority(int fd)
+anv_gem_has_context_priority(int fd, int priority)
 {
    return !anv_gem_set_context_param(fd, 0, I915_CONTEXT_PARAM_PRIORITY,
-                                     INTEL_CONTEXT_MEDIUM_PRIORITY);
+                                     priority);
 }
 
 int
@@ -398,90 +331,6 @@ anv_gem_create_context(struct anv_device *device)
    struct drm_i915_gem_context_create create = { 0 };
 
    int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE, &create);
-   if (ret == -1)
-      return -1;
-
-   return create.ctx_id;
-}
-
-int
-anv_gem_create_context_engines(struct anv_device *device,
-                               const struct drm_i915_query_engine_info *info,
-                               int num_engines, uint16_t *engine_classes)
-{
-   const size_t engine_inst_sz = 2 * sizeof(__u16); /* 1 class, 1 instance */
-   const size_t engines_param_size =
-      sizeof(__u64) /* extensions */ + num_engines * engine_inst_sz;
-
-   void *engines_param = malloc(engines_param_size);
-   assert(engines_param);
-   *(__u64*)engines_param = 0;
-   __u16 *class_inst_ptr = (__u16*)(((__u64*)engines_param) + 1);
-
-   /* For each type of drm_i915_gem_engine_class of interest, we keep track of
-    * the previous engine instance used.
-    */
-   int last_engine_idx[] = {
-      [I915_ENGINE_CLASS_RENDER] = -1,
-   };
-
-   int i915_engine_counts[] = {
-      [I915_ENGINE_CLASS_RENDER] =
-         anv_gem_count_engines(info, I915_ENGINE_CLASS_RENDER),
-   };
-
-   /* For each queue, we look for the next instance that matches the class we
-    * need.
-    */
-   for (int i = 0; i < num_engines; i++) {
-      uint16_t engine_class = engine_classes[i];
-      if (i915_engine_counts[engine_class] <= 0) {
-         free(engines_param);
-         return -1;
-      }
-
-      /* Run through the engines reported by the kernel looking for the next
-       * matching instance. We loop in case we want to create multiple
-       * contexts on an engine instance.
-       */
-      int engine_instance = -1;
-      for (int i = 0; i < info->num_engines; i++) {
-         int *idx = &last_engine_idx[engine_class];
-         if (++(*idx) >= info->num_engines)
-            *idx = 0;
-         if (info->engines[*idx].engine.engine_class == engine_class) {
-            engine_instance = info->engines[*idx].engine.engine_instance;
-            break;
-         }
-      }
-      if (engine_instance < 0) {
-         free(engines_param);
-         return -1;
-      }
-
-      *class_inst_ptr++ = engine_class;
-      *class_inst_ptr++ = engine_instance;
-   }
-
-   assert((uintptr_t)engines_param + engines_param_size ==
-          (uintptr_t)class_inst_ptr);
-
-   struct drm_i915_gem_context_create_ext_setparam set_engines = {
-      .base = {
-         .name = I915_CONTEXT_CREATE_EXT_SETPARAM,
-      },
-      .param = {
-	 .param = I915_CONTEXT_PARAM_ENGINES,
-         .value = (uintptr_t)engines_param,
-         .size = engines_param_size,
-      }
-   };
-   struct drm_i915_gem_context_create_ext create = {
-      .flags = I915_CONTEXT_CREATE_FLAGS_USE_EXTENSIONS,
-      .extensions = (uintptr_t)&set_engines,
-   };
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE_EXT, &create);
-   free(engines_param);
    if (ret == -1)
       return -1;
 
@@ -511,22 +360,6 @@ anv_gem_set_context_param(int fd, int context, uint32_t param, uint64_t value)
    if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM, &p))
       err = -errno;
    return err;
-}
-
-int
-anv_gem_get_context_param(int fd, int context, uint32_t param, uint64_t *value)
-{
-   struct drm_i915_gem_context_param gp = {
-      .ctx_id = context,
-      .param = param,
-   };
-
-   int ret = intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_GETPARAM, &gp);
-   if (ret == -1)
-      return -1;
-
-   *value = gp.value;
-   return 0;
 }
 
 int
@@ -588,207 +421,8 @@ anv_gem_reg_read(int fd, uint32_t offset, uint64_t *result)
    return ret;
 }
 
-int
-anv_gem_sync_file_merge(struct anv_device *device, int fd1, int fd2)
-{
-   struct sync_merge_data args = {
-      .name = "anv merge fence",
-      .fd2 = fd2,
-      .fence = -1,
-   };
-
-   int ret = intel_ioctl(fd1, SYNC_IOC_MERGE, &args);
-   if (ret == -1)
-      return -1;
-
-   return args.fence;
-}
-
-uint32_t
-anv_gem_syncobj_create(struct anv_device *device, uint32_t flags)
-{
-   struct drm_syncobj_create args = {
-      .flags = flags,
-   };
-
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_CREATE, &args);
-   if (ret)
-      return 0;
-
-   return args.handle;
-}
-
-void
-anv_gem_syncobj_destroy(struct anv_device *device, uint32_t handle)
-{
-   struct drm_syncobj_destroy args = {
-      .handle = handle,
-   };
-
-   intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_DESTROY, &args);
-}
-
-int
-anv_gem_syncobj_handle_to_fd(struct anv_device *device, uint32_t handle)
-{
-   struct drm_syncobj_handle args = {
-      .handle = handle,
-   };
-
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &args);
-   if (ret)
-      return -1;
-
-   return args.fd;
-}
-
-uint32_t
-anv_gem_syncobj_fd_to_handle(struct anv_device *device, int fd)
-{
-   struct drm_syncobj_handle args = {
-      .fd = fd,
-   };
-
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &args);
-   if (ret)
-      return 0;
-
-   return args.handle;
-}
-
-int
-anv_gem_syncobj_export_sync_file(struct anv_device *device, uint32_t handle)
-{
-   struct drm_syncobj_handle args = {
-      .handle = handle,
-      .flags = DRM_SYNCOBJ_HANDLE_TO_FD_FLAGS_EXPORT_SYNC_FILE,
-   };
-
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &args);
-   if (ret)
-      return -1;
-
-   return args.fd;
-}
-
-int
-anv_gem_syncobj_import_sync_file(struct anv_device *device,
-                                 uint32_t handle, int fd)
-{
-   struct drm_syncobj_handle args = {
-      .handle = handle,
-      .fd = fd,
-      .flags = DRM_SYNCOBJ_FD_TO_HANDLE_FLAGS_IMPORT_SYNC_FILE,
-   };
-
-   return intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &args);
-}
-
-void
-anv_gem_syncobj_reset(struct anv_device *device, uint32_t handle)
-{
-   struct drm_syncobj_array args = {
-      .handles = (uint64_t)(uintptr_t)&handle,
-      .count_handles = 1,
-   };
-
-   intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_RESET, &args);
-}
-
-bool
-anv_gem_supports_syncobj_wait(int fd)
-{
-   return intel_gem_supports_syncobj_wait(fd);
-}
-
-int
-anv_gem_syncobj_wait(struct anv_device *device,
-                     const uint32_t *handles, uint32_t num_handles,
-                     int64_t abs_timeout_ns, bool wait_all)
-{
-   struct drm_syncobj_wait args = {
-      .handles = (uint64_t)(uintptr_t)handles,
-      .count_handles = num_handles,
-      .timeout_nsec = abs_timeout_ns,
-      .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT,
-   };
-
-   if (wait_all)
-      args.flags |= DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL;
-
-   return intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_WAIT, &args);
-}
-
-int
-anv_gem_syncobj_timeline_wait(struct anv_device *device,
-                              const uint32_t *handles, const uint64_t *points,
-                              uint32_t num_items, int64_t abs_timeout_ns,
-                              bool wait_all, bool wait_materialize)
-{
-   assert(device->physical->has_syncobj_wait_available);
-
-   struct drm_syncobj_timeline_wait args = {
-      .handles = (uint64_t)(uintptr_t)handles,
-      .points = (uint64_t)(uintptr_t)points,
-      .count_handles = num_items,
-      .timeout_nsec = abs_timeout_ns,
-      .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT,
-   };
-
-   if (wait_all)
-      args.flags |= DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL;
-   if (wait_materialize)
-      args.flags |= DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE;
-
-   return intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT, &args);
-}
-
-int
-anv_gem_syncobj_timeline_signal(struct anv_device *device,
-                                const uint32_t *handles, const uint64_t *points,
-                                uint32_t num_items)
-{
-   assert(device->physical->has_syncobj_wait_available);
-
-   struct drm_syncobj_timeline_array args = {
-      .handles = (uint64_t)(uintptr_t)handles,
-      .points = (uint64_t)(uintptr_t)points,
-      .count_handles = num_items,
-   };
-
-   return intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_TIMELINE_SIGNAL, &args);
-}
-
-int
-anv_gem_syncobj_timeline_query(struct anv_device *device,
-                               const uint32_t *handles, uint64_t *points,
-                               uint32_t num_items)
-{
-   assert(device->physical->has_syncobj_wait_available);
-
-   struct drm_syncobj_timeline_array args = {
-      .handles = (uint64_t)(uintptr_t)handles,
-      .points = (uint64_t)(uintptr_t)points,
-      .count_handles = num_items,
-   };
-
-   return intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_QUERY, &args);
-}
-
 struct drm_i915_query_engine_info *
 anv_gem_get_engine_info(int fd)
 {
-   return intel_i915_query_alloc(fd, DRM_I915_QUERY_ENGINE_INFO);
-}
-
-int
-anv_gem_count_engines(const struct drm_i915_query_engine_info *info,
-                      uint16_t engine_class)
-{
-   int count = 0;
-   for (int i = 0; i < info->num_engines; i++) {
-      if (info->engines[i].engine.engine_class == engine_class)
-         count++;
-   }
-   return count;
+   return intel_i915_query_alloc(fd, DRM_I915_QUERY_ENGINE_INFO, NULL);
 }

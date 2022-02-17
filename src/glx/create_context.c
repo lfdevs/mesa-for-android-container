@@ -92,6 +92,15 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
 
    assert(screen == psc->scr);
 
+   /* Some application may request an indirect context but we may want to force a direct
+    * one because Xorg only allows indirect contexts if they were enabled.
+    */
+   if (!direct &&
+       psc->force_direct_context) {
+      direct = true;
+   }
+
+
    if (direct && psc->vtable->create_context_attribs) {
       /* GLX drops the error returned by the driver.  The expectation is that
        * an error will also be returned by the server.  The server's error

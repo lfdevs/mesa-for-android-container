@@ -31,6 +31,8 @@ struct test {
    bool reads_dest;
    bool opaque;
    bool fixed_function;
+   bool alpha_zero_nop;
+   bool alpha_one_store;
    uint32_t hardware;
 };
 
@@ -49,6 +51,8 @@ static const struct test blend_tests[] = {
       .reads_dest = false,
       .opaque = true,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xF0122122
    },
    {
@@ -66,6 +70,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = true,
+      .alpha_one_store = true,
       .hardware = 0xF0503503
    },
    {
@@ -84,6 +90,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xF0932932 /* equivalently 0xF0923923 */
    },
    {
@@ -101,6 +109,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = true,
+      .alpha_one_store = false,
       .hardware = 0xF0523523
    },
    {
@@ -119,6 +129,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xF09B29B2 /* equivalently 0xF09A39A3 */
    },
    {
@@ -136,6 +148,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xF052B52b /* equivalently 0xF05A35A3 */
    },
    {
@@ -152,6 +166,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xF0231231 /* equivalently 0xF0321321 */
    },
    {
@@ -164,6 +180,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0x30122122
    },
    {
@@ -180,6 +198,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xA0231231 /* equivalently 0xA0321321 */
    },
    {
@@ -196,6 +216,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xF0431431 /* 0 + dest * (2*src) */
    },
    {
@@ -217,6 +239,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xC0431132 /* 0 + dest * (2*src); equivalent 0xC0431122 */
    },
    {
@@ -238,6 +262,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xC0431132 /* 0 + dest * (2*src); equivalent 0xC0431122 */
    },
    {
@@ -259,6 +285,8 @@ static const struct test blend_tests[] = {
       .reads_dest = true,
       .opaque = false,
       .fixed_function = true,
+      .alpha_zero_nop = false,
+      .alpha_one_store = false,
       .hardware = 0xC0431132 /* 0 + dest * (2*src); equivalent 0xC0431122 */
    }
 };
@@ -283,6 +311,8 @@ int main(int argc, const char **argv)
       ASSERT_EQ(T.reads_dest, pan_blend_reads_dest(T.eq));
       ASSERT_EQ(T.opaque, pan_blend_is_opaque(T.eq));
       ASSERT_EQ(T.fixed_function, pan_blend_can_fixed_function(T.eq, true));
+      ASSERT_EQ(T.alpha_zero_nop, pan_blend_alpha_zero_nop(T.eq));
+      ASSERT_EQ(T.alpha_one_store, pan_blend_alpha_one_store(T.eq));
 
       if (pan_blend_can_fixed_function(T.eq, true)) {
          ASSERT_EQ(T.hardware, pan_pack_blend(T.eq));

@@ -44,6 +44,10 @@ extern "C" {
 #define _EGL_DEBUG   3   /* useful info for debugging */
 
 
+extern EGLint
+_eglGetLogLevel(void);
+
+
 extern void
 _eglLog(EGLint level, const char *fmtStr, ...);
 

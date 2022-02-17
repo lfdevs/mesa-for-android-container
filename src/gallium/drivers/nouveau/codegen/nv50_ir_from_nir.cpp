@@ -25,6 +25,7 @@
 #include "compiler/nir/nir.h"
 
 #include "util/u_debug.h"
+#include "util/u_prim.h"
 
 #include "codegen/nv50_ir.h"
 #include "codegen/nv50_ir_from_common.h"
@@ -64,11 +65,15 @@ function_temp_type_info(const struct glsl_type *type, unsigned *size, unsigned *
 {
    assert(glsl_type_is_vector_or_scalar(type));
 
-   unsigned comp_size = glsl_type_is_boolean(type) ? 4 : glsl_get_bit_size(type) / 8;
-   unsigned length = glsl_get_vector_elements(type);
+   if (glsl_type_is_scalar(type)) {
+      glsl_get_natural_size_align_bytes(type, size, align);
+   } else {
+      unsigned comp_size = glsl_type_is_boolean(type) ? 4 : glsl_get_bit_size(type) / 8;
+      unsigned length = glsl_get_vector_elements(type);
 
-   *size = comp_size * length;
-   *align = 0x10;
+      *size = comp_size * length;
+      *align = 0x10;
+   }
 }
 
 class Converter : public ConverterCommon
@@ -1321,10 +1326,7 @@ Converter::parseNIR()
       break;
    case Program::TYPE_TESSELLATION_CONTROL:
    case Program::TYPE_TESSELLATION_EVAL:
-      if (nir->info.tess.primitive_mode == GL_ISOLINES)
-         info_out->prop.tp.domain = GL_LINES;
-      else
-         info_out->prop.tp.domain = nir->info.tess.primitive_mode;
+      info_out->prop.tp.domain = u_tess_prim_from_shader(nir->info.tess._primitive_mode);
       info_out->prop.tp.outputPatchSize = nir->info.tess.tcs_vertices_out;
       info_out->prop.tp.outputPrim =
          nir->info.tess.point_mode ? PIPE_PRIM_POINTS : PIPE_PRIM_TRIANGLES;
@@ -2297,6 +2299,8 @@ Converter::visit(nir_intrinsic_instr *insn)
       DataType sType = getSType(insn->src[0], false, false);
       Value *indirectOffset;
       uint32_t offset = getIndirect(&insn->src[1], 0, indirectOffset);
+      if (indirectOffset)
+         indirectOffset = mkOp1v(OP_MOV, TYPE_U32, getSSA(4, FILE_ADDRESS), indirectOffset);
 
       for (uint8_t i = 0u; i < nir_intrinsic_src_components(insn, 0); ++i) {
          if (!((1u << i) & nir_intrinsic_write_mask(insn)))
@@ -2313,6 +2317,8 @@ Converter::visit(nir_intrinsic_instr *insn)
       LValues &newDefs = convert(&insn->dest);
       Value *indirectOffset;
       uint32_t offset = getIndirect(&insn->src[0], 0, indirectOffset);
+      if (indirectOffset)
+         indirectOffset = mkOp1v(OP_MOV, TYPE_U32, getSSA(4, FILE_ADDRESS), indirectOffset);
 
       for (uint8_t i = 0u; i < dest_components; ++i)
          loadFrom(getFile(op), 0, dType, newDefs[i], offset, i, indirectOffset);
@@ -3164,6 +3170,7 @@ Converter::run()
       NIR_PASS(progress, nir, nir_copy_prop);
       NIR_PASS(progress, nir, nir_opt_dce);
       NIR_PASS(progress, nir, nir_opt_dead_cf);
+      NIR_PASS(progress, nir, nir_lower_64bit_phis);
    } while (progress);
 
    NIR_PASS_V(nir, nir_lower_bool_to_int32);
@@ -3325,6 +3332,8 @@ nvir_nir_shader_compiler_options(int chipset)
    return op;
 }
 
+static const nir_shader_compiler_options g80_nir_shader_compiler_options =
+nvir_nir_shader_compiler_options(NVISA_G80_CHIPSET);
 static const nir_shader_compiler_options gf100_nir_shader_compiler_options =
 nvir_nir_shader_compiler_options(NVISA_GF100_CHIPSET);
 static const nir_shader_compiler_options gm107_nir_shader_compiler_options =
@@ -3339,5 +3348,7 @@ nv50_ir_nir_shader_compiler_options(int chipset)
       return &gv100_nir_shader_compiler_options;
    if (chipset >= NVISA_GM107_CHIPSET)
       return &gm107_nir_shader_compiler_options;
-   return &gf100_nir_shader_compiler_options;
+   if (chipset >= NVISA_GF100_CHIPSET)
+      return &gf100_nir_shader_compiler_options;
+   return &g80_nir_shader_compiler_options;
 }

@@ -45,7 +45,6 @@ public:
                     struct brw_tcs_prog_data *prog_data,
                     const nir_shader *nir,
                     void *mem_ctx,
-                    int shader_time_index,
                     bool debug_enabled);
 
 protected:

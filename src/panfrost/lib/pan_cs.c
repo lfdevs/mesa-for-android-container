@@ -27,7 +27,6 @@
 
 #include "util/macros.h"
 
-#include "panfrost-quirks.h"
 
 #include "pan_cs.h"
 #include "pan_encoder.h"
@@ -431,11 +430,7 @@ pan_prepare_rt(const struct pan_fb_info *fb, unsigned idx,
 
         pan_rt_init_format(rt, cfg);
 
-#if PAN_ARCH <= 5
         cfg->writeback_block_format = mod_to_block_fmt(rt->image->layout.modifier);
-#else
-        cfg->writeback_block_format = mod_to_block_fmt(rt->image->layout.modifier);
-#endif
 
         struct pan_surface surf;
         pan_iview_get_surface(rt, 0, 0, 0, &surf);
@@ -502,7 +497,7 @@ pan_emit_midgard_tiler(const struct panfrost_device *dev,
                        const struct pan_tiler_context *tiler_ctx,
                        void *out)
 {
-        bool hierarchy = !(dev->quirks & MIDGARD_NO_HIER_TILING);
+        bool hierarchy = !dev->model->quirks.no_hierarchical_tiling;
 
         assert(tiler_ctx->midgard.polygon_list->ptr.gpu);
 

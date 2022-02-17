@@ -43,29 +43,21 @@ uint64_t intel_debug = 0;
 
 static const struct debug_control debug_control[] = {
    { "tex",         DEBUG_TEXTURE},
-   { "state",       DEBUG_STATE},
    { "blit",        DEBUG_BLIT},
-   { "mip",         DEBUG_MIPTREE},
    { "fall",        DEBUG_PERF},
    { "perf",        DEBUG_PERF},
    { "perfmon",     DEBUG_PERFMON},
    { "bat",         DEBUG_BATCH},
-   { "pix",         DEBUG_PIXEL},
    { "buf",         DEBUG_BUFMGR},
-   { "fbo",         DEBUG_FBO},
    { "fs",          DEBUG_WM },
    { "gs",          DEBUG_GS},
    { "sync",        DEBUG_SYNC},
-   { "prim",        DEBUG_PRIMS },
-   { "vert",        DEBUG_VERTS },
-   { "dri",         DEBUG_DRI },
    { "sf",          DEBUG_SF },
    { "submit",      DEBUG_SUBMIT },
    { "wm",          DEBUG_WM },
    { "urb",         DEBUG_URB },
    { "vs",          DEBUG_VS },
    { "clip",        DEBUG_CLIP },
-   { "shader_time", DEBUG_SHADER_TIME },
    { "no16",        DEBUG_NO16 },
    { "blorp",       DEBUG_BLORP },
    { "nodualobj",   DEBUG_NO_DUAL_OBJECT_GS },
@@ -96,8 +88,10 @@ static const struct debug_control debug_control[] = {
    { "no32",        DEBUG_NO32 },
    { "shaders",     DEBUG_WM | DEBUG_VS | DEBUG_TCS |
                     DEBUG_TES | DEBUG_GS | DEBUG_CS |
-                    DEBUG_RT },
+                    DEBUG_RT | DEBUG_TASK | DEBUG_MESH },
    { "rt",          DEBUG_RT },
+   { "task",        DEBUG_TASK },
+   { "mesh",        DEBUG_MESH },
    { NULL,    0 }
 };
 
@@ -111,6 +105,9 @@ intel_debug_flag_for_shader_stage(gl_shader_stage stage)
       [MESA_SHADER_GEOMETRY] = DEBUG_GS,
       [MESA_SHADER_FRAGMENT] = DEBUG_WM,
       [MESA_SHADER_COMPUTE] = DEBUG_CS,
+
+      [MESA_SHADER_TASK]         = DEBUG_TASK,
+      [MESA_SHADER_MESH]         = DEBUG_MESH,
 
       [MESA_SHADER_RAYGEN]       = DEBUG_RT,
       [MESA_SHADER_ANY_HIT]      = DEBUG_RT,

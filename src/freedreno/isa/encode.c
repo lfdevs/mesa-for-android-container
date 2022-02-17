@@ -22,6 +22,7 @@
  */
 
 #include "util/log.h"
+#include "util/u_math.h"
 
 #include "ir3/ir3.h"
 #include "ir3/ir3_shader.h"
@@ -113,9 +114,6 @@ __instruction_case(struct encode_state *s, struct ir3_instruction *instr)
 		}
 	} else if (instr->opc == OPC_DEMOTE) {
 		return OPC_KILL;
-	} else if ((instr->block->shader->compiler->gen >= 6) &&
-			is_atomic(instr->opc) && (instr->flags & IR3_INSTR_G)) {
-		return instr->opc - OPC_ATOMIC_ADD + OPC_ATOMIC_B_ADD;
 	} else if (s->compiler->gen >= 6) {
 		if (instr->opc == OPC_RESINFO) {
 			return OPC_RESINFO_B;
@@ -143,6 +141,20 @@ extract_ABSNEG(struct ir3_register *reg)
 	} else {
 		return 0;
 	}
+}
+
+static inline int32_t
+extract_reg_iim(struct ir3_register *reg)
+{
+   assert(reg->flags & IR3_REG_IMMED);
+   return reg->iim_val;
+}
+
+static inline uint32_t
+extract_reg_uim(struct ir3_register *reg)
+{
+   assert(reg->flags & IR3_REG_IMMED);
+   return reg->uim_val;
 }
 
 /**
@@ -190,12 +202,10 @@ extract_cat5_DESC_MODE(struct ir3_instruction *instr)
 				return CAT5_BINDLESS_UNIFORM;
 			}
 		} else {
-			/* TODO: This should probably be CAT5_UNIFORM, at least on a6xx,
-			 * as this is what the blob does and it is presumably faster, but
-			 * first we should confirm it is actually nonuniform and figure
-			 * out when the whole descriptor mode mechanism was introduced.
-			 */
-			return CAT5_NONUNIFORM;
+			if (instr->flags & IR3_INSTR_NONUNIF)
+				return CAT5_NONUNIFORM;
+			else
+				return CAT5_UNIFORM;
 		}
 		assert(!(instr->cat5.samp | instr->cat5.tex));
 	} else if (instr->flags & IR3_INSTR_B) {
@@ -231,7 +241,7 @@ extract_cat6_DESC_MODE(struct ir3_instruction *instr)
 static inline struct ir3_register *
 extract_cat6_SRC(struct ir3_instruction *instr, unsigned n)
 {
-	if (instr->flags & IR3_INSTR_G) {
+	if (is_global_a3xx_atomic(instr->opc)) {
 		n++;
 	}
 	assert(n < instr->srcs_count);

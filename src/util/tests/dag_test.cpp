@@ -53,8 +53,18 @@ struct node: public dag_node {
    /* Overload >> to make describing our test case graphs easier to read */
    struct node &operator>>(struct node &child) {
       dag_add_edge(static_cast<struct dag_node *>(this),
-                   static_cast<struct dag_node *>(&child), NULL);
+                   static_cast<struct dag_node *>(&child), 0);
       return child;
+   }
+
+   void add_edge(struct node &child, uintptr_t data) {
+      dag_add_edge(static_cast<struct dag_node *>(this),
+                   static_cast<struct dag_node *>(&child), data);
+   }
+
+   void add_edge_max_data(struct node &child, uintptr_t data) {
+      dag_add_edge_max_data(static_cast<struct dag_node *>(this),
+                            static_cast<struct dag_node *>(&child), data);
    }
 };
 
@@ -144,6 +154,49 @@ TEST_F(dag_test, simple)
    node[0] >> node[2];
 
    /* Expected traversal order: [1, 2, 0] */
+   SET_EXPECTED(1, 2, 0);
+
+   dag_traverse_bottom_up(dag, output_cb, &actual);
+
+   TEST_CHECK();
+}
+
+TEST_F(dag_test, duplicate_edge)
+{
+   INIT_NODES(3);
+
+   node[0].add_edge(node[1], 0);
+   node[0].add_edge(node[1], 1);
+   node[0].add_edge(node[2], 0);
+
+   EXPECT_EQ(util_dynarray_num_elements(&node[0].edges, struct dag_edge), 3);
+
+   SET_EXPECTED(1, 2, 0);
+
+   dag_traverse_bottom_up(dag, output_cb, &actual);
+
+   TEST_CHECK();
+}
+
+TEST_F(dag_test, duplicate_edge_max_data)
+{
+   INIT_NODES(3);
+
+   node[0].add_edge_max_data(node[1], 0);
+   node[0].add_edge_max_data(node[1], 1);
+   node[0].add_edge_max_data(node[2], 0);
+
+   EXPECT_EQ(util_dynarray_num_elements(&node[0].edges, struct dag_edge), 2);
+
+   util_dynarray_foreach (&node[0].edges, struct dag_edge, edge) {
+      if (edge->child == &node[1]) {
+         EXPECT_EQ(edge->data, 1);
+      } else {
+         EXPECT_EQ(edge->child, &node[2]);
+         EXPECT_EQ(edge->data, 0);
+      }
+   }
+
    SET_EXPECTED(1, 2, 0);
 
    dag_traverse_bottom_up(dag, output_cb, &actual);

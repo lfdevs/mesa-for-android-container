@@ -647,7 +647,7 @@ __indirect_glGetString(GLenum name)
    GLubyte *s = NULL;
 
    if (!dpy)
-      return 0;
+      return NULL;
 
    /*
     ** Return the cached copy if the string has already been fetched
@@ -671,7 +671,7 @@ __indirect_glGetString(GLenum name)
       break;
    default:
       __glXSetError(gc, GL_INVALID_ENUM);
-      return 0;
+      return NULL;
    }
 
    /*

@@ -389,6 +389,39 @@ static void radeon_enc_get_feedback(struct pipe_video_codec *encoder, void *feed
    FREE(fb);
 }
 
+static int setup_dpb(struct radeon_encoder *enc, enum pipe_format buffer_format)
+{
+   uint32_t aligned_width = align(enc->base.width, 16);
+   uint32_t aligned_height = align(enc->base.height, 16);
+   uint32_t rec_luma_pitch = align(aligned_width, enc->alignment);
+
+   int luma_size = rec_luma_pitch * align(aligned_height, enc->alignment);
+   if (buffer_format == PIPE_FORMAT_P010)
+      luma_size *= 2;
+   int chroma_size = align(luma_size / 2, enc->alignment);
+   int offset = 0;
+
+   uint32_t num_reconstructed_pictures = enc->base.max_references + 1;
+   assert(num_reconstructed_pictures <= RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES);
+
+   int i;
+   for (i = 0; i < num_reconstructed_pictures; i++) {
+      enc->enc_pic.ctx_buf.reconstructed_pictures[i].luma_offset = offset;
+      offset += luma_size;
+      enc->enc_pic.ctx_buf.reconstructed_pictures[i].chroma_offset = offset;
+      offset += chroma_size;
+   }
+   for (; i < RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES; i++) {
+      enc->enc_pic.ctx_buf.reconstructed_pictures[i].luma_offset = 0;
+      enc->enc_pic.ctx_buf.reconstructed_pictures[i].chroma_offset = 0;
+   }
+
+   enc->enc_pic.ctx_buf.num_reconstructed_pictures = num_reconstructed_pictures;
+   enc->dpb_size = offset;
+
+   return offset;
+}
+
 struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
                                                const struct pipe_video_codec *templ,
                                                struct radeon_winsys *ws,
@@ -454,6 +487,8 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
    cpb_size = cpb_size * enc->cpb_num;
    tmp_buf->destroy(tmp_buf);
 
+   cpb_size += setup_dpb(enc, templat.buffer_format);
+
    if (!si_vid_create_buffer(enc->screen, &enc->cpb, cpb_size, PIPE_USAGE_DEFAULT)) {
       RVID_ERR("Can't create CPB buffer.\n");
       goto error;
@@ -478,9 +513,9 @@ error:
 }
 
 void radeon_enc_add_buffer(struct radeon_encoder *enc, struct pb_buffer *buf,
-                           enum radeon_bo_usage usage, enum radeon_bo_domain domain, signed offset)
+                           unsigned usage, enum radeon_bo_domain domain, signed offset)
 {
-   enc->ws->cs_add_buffer(&enc->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain, 0);
+   enc->ws->cs_add_buffer(&enc->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED, domain);
    uint64_t addr;
    addr = enc->ws->buffer_get_virtual_address(buf);
    addr = addr + offset;

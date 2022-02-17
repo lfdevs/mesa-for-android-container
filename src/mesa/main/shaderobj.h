@@ -29,7 +29,7 @@
 
 #include "main/glheader.h"
 #include "compiler/shader_enums.h"
-#include "program/ir_to_mesa.h"
+#include "program/link_program.h"
 #include "util/macros.h"
 
 
@@ -71,8 +71,7 @@ _mesa_reference_shader_program_(struct gl_context *ctx,
                                struct gl_shader_program *shProg);
 
 void
-_mesa_reference_shader_program_data(struct gl_context *ctx,
-                                    struct gl_shader_program_data **ptr,
+_mesa_reference_shader_program_data(struct gl_shader_program_data **ptr,
                                     struct gl_shader_program_data *data);
 
 static inline void
@@ -122,10 +121,6 @@ _mesa_free_shader_program_data(struct gl_context *ctx,
 extern void
 _mesa_delete_shader_program(struct gl_context *ctx,
                             struct gl_shader_program *shProg);
-
-
-extern void
-_mesa_init_shader_object_functions(struct dd_function_table *driver);
 
 static inline gl_shader_stage
 _mesa_shader_enum_to_shader_stage(GLenum v)

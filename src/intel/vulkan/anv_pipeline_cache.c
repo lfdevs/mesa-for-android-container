@@ -521,7 +521,7 @@ anv_pipeline_cache_load(struct anv_pipeline_cache *cache,
       return;
    if (header.vendor_id != 0x8086)
       return;
-   if (header.device_id != device->info.chipset_id)
+   if (header.device_id != device->info.pci_device_id)
       return;
    if (memcmp(header.uuid, pdevice->pipeline_cache_uuid, VK_UUID_SIZE) != 0)
       return;
@@ -602,7 +602,7 @@ VkResult anv_GetPipelineCacheData(
       .header_size = sizeof(struct vk_pipeline_cache_header),
       .header_version = VK_PIPELINE_CACHE_HEADER_VERSION_ONE,
       .vendor_id = 0x8086,
-      .device_id = device->info.chipset_id,
+      .device_id = device->info.pci_device_id,
    };
    memcpy(header.uuid, device->physical->pipeline_cache_uuid, VK_UUID_SIZE);
    blob_write_bytes(&blob, &header, sizeof(header));

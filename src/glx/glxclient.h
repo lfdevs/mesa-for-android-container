@@ -117,6 +117,7 @@ struct __GLXDRIscreenRec {
    __GLXDRIdrawable *(*createDrawable)(struct glx_screen *psc,
 				       XID drawable,
 				       GLXDrawable glxDrawable,
+				       int type,
 				       struct glx_config *config);
 
    int64_t (*swapBuffers)(__GLXDRIdrawable *pdraw, int64_t target_msc,
@@ -521,6 +522,8 @@ struct glx_screen
 
    Display *dpy;
    int scr;
+   bool force_direct_context;
+   bool allow_invalid_glx_destroy_window;
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     /**

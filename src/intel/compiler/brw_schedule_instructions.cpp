@@ -975,7 +975,7 @@ schedule_node::schedule_node(backend_instruction *inst,
    if (!sched->post_reg_alloc)
       this->latency = 1;
    else if (devinfo->ver >= 6)
-      set_latency_gfx7(devinfo->is_haswell);
+      set_latency_gfx7(devinfo->verx10 == 75);
    else
       set_latency_gfx4();
 }

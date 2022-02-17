@@ -22,12 +22,14 @@
  */
 
 #include "nir.h"
+#include "nir_gl_types.h"
 #include "nir_deref.h"
 #include "gl_nir_linker.h"
 #include "compiler/glsl/ir_uniform.h" /* for gl_uniform_storage */
 #include "linker_util.h"
-#include "main/context.h"
-#include "main/mtypes.h"
+#include "util/u_dynarray.h"
+#include "main/consts_exts.h"
+#include "main/shader_types.h"
 
 /**
  * This file do the common link for GLSL uniforms, using NIR, instead of IR as
@@ -174,7 +176,7 @@ update_array_sizes(struct gl_shader_program *prog, nir_variable *var,
 }
 
 static void
-nir_setup_uniform_remap_tables(struct gl_context *ctx,
+nir_setup_uniform_remap_tables(const struct gl_constants *consts,
                                struct gl_shader_program *prog)
 {
    unsigned total_entries = prog->NumExplicitUniformLocations;
@@ -296,10 +298,10 @@ nir_setup_uniform_remap_tables(struct gl_context *ctx,
    /* Verify that total amount of entries for explicit and implicit locations
     * is less than MAX_UNIFORM_LOCATIONS.
     */
-   if (total_entries > ctx->Const.MaxUserAssignableUniformLocations) {
+   if (total_entries > consts->MaxUserAssignableUniformLocations) {
       linker_error(prog, "count of uniform locations > MAX_UNIFORM_LOCATIONS"
                    "(%u > %u)", total_entries,
-                   ctx->Const.MaxUserAssignableUniformLocations);
+                   consts->MaxUserAssignableUniformLocations);
    }
 
    /* Reserve all the explicit locations of the active subroutine uniforms. */
@@ -394,7 +396,8 @@ add_var_use_deref(nir_deref_instr *deref, struct hash_table *live,
    if (deref->deref_type != nir_deref_type_var ||
        !nir_deref_mode_is_one_of(deref, nir_var_uniform |
                                         nir_var_mem_ubo |
-                                        nir_var_mem_ssbo)) {
+                                        nir_var_mem_ssbo |
+                                        nir_var_image)) {
       nir_deref_path_finish(&path);
       return;
    }
@@ -634,7 +637,7 @@ struct nir_link_uniforms_state {
 
 static void
 add_parameter(struct gl_uniform_storage *uniform,
-              struct gl_context *ctx,
+              const struct gl_constants *consts,
               struct gl_shader_program *prog,
               const struct glsl_type *type,
               struct nir_link_uniforms_state *state)
@@ -661,7 +664,7 @@ add_parameter(struct gl_uniform_storage *uniform,
    int base_index = params->NumParameters;
    _mesa_reserve_parameter_storage(params, num_params, num_params);
 
-   if (ctx->Const.PackedDriverUniformStorage) {
+   if (consts->PackedDriverUniformStorage) {
       for (unsigned i = 0; i < num_params; i++) {
          unsigned dmul = glsl_type_is_64bit(glsl_without_array(type)) ? 2 : 1;
          unsigned comps = glsl_get_vector_elements(glsl_without_array(type)) * dmul;
@@ -676,12 +679,12 @@ add_parameter(struct gl_uniform_storage *uniform,
          if (glsl_type_is_16bit(glsl_without_array(type)))
             comps = DIV_ROUND_UP(comps, 2);
 
-         _mesa_add_parameter(params, PROGRAM_UNIFORM, uniform->name, comps,
+         _mesa_add_parameter(params, PROGRAM_UNIFORM, uniform->name.string, comps,
                              glsl_get_gl_type(type), NULL, NULL, false);
       }
    } else {
       for (unsigned i = 0; i < num_params; i++) {
-         _mesa_add_parameter(params, PROGRAM_UNIFORM, uniform->name, 4,
+         _mesa_add_parameter(params, PROGRAM_UNIFORM, uniform->name.string, 4,
                              glsl_get_gl_type(type), NULL, NULL, true);
       }
    }
@@ -744,13 +747,20 @@ update_uniforms_shader_info(struct gl_shader_program *prog,
 
    if (glsl_type_is_sampler(type_no_array)) {
       bool init_idx;
-      unsigned *next_index = state->current_var->data.bindless ?
+      /* ARB_bindless_texture spec says:
+       *
+       *    "When used as shader inputs, outputs, uniform block members,
+       *     or temporaries, the value of the sampler is a 64-bit unsigned
+       *     integer handle and never refers to a texture image unit."
+       */
+      bool is_bindless = state->current_var->data.bindless || state->var_is_in_block;
+      unsigned *next_index = is_bindless ?
          &state->next_bindless_sampler_index :
          &state->next_sampler_index;
       int sampler_index = get_next_index(state, uniform, next_index, &init_idx);
       struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
 
-      if (state->current_var->data.bindless) {
+      if (is_bindless) {
          if (init_idx) {
             sh->Program->sh.BindlessSamplers =
                rerzalloc(sh->Program, sh->Program->sh.BindlessSamplers,
@@ -862,7 +872,7 @@ update_uniforms_shader_info(struct gl_shader_program *prog,
 }
 
 static bool
-find_and_update_named_uniform_storage(struct gl_context *ctx,
+find_and_update_named_uniform_storage(const struct gl_constants *consts,
                                       struct gl_shader_program *prog,
                                       struct nir_link_uniforms_state *state,
                                       nir_variable *var, char **name,
@@ -910,7 +920,7 @@ find_and_update_named_uniform_storage(struct gl_context *ctx,
                ralloc_asprintf_rewrite_tail(name, &new_length, "[%u]", i);
          }
 
-         result = find_and_update_named_uniform_storage(ctx, prog, state,
+         result = find_and_update_named_uniform_storage(consts, prog, state,
                                                         var, name, new_length,
                                                         field_type, stage,
                                                         first_element);
@@ -951,7 +961,7 @@ find_and_update_named_uniform_storage(struct gl_context *ctx,
             uniform->active_shader_mask |= 1 << stage;
 
          if (!state->var_is_in_block)
-            add_parameter(uniform, ctx, prog, type, state);
+            add_parameter(uniform, consts, prog, type, state);
 
          return true;
       }
@@ -975,7 +985,7 @@ find_and_update_named_uniform_storage(struct gl_context *ctx,
  *
  */
 static bool
-find_and_update_previous_uniform_storage(struct gl_context *ctx,
+find_and_update_previous_uniform_storage(const struct gl_constants *consts,
                                          struct gl_shader_program *prog,
                                          struct nir_link_uniforms_state *state,
                                          nir_variable *var, char *name,
@@ -985,7 +995,7 @@ find_and_update_previous_uniform_storage(struct gl_context *ctx,
    if (!prog->data->spirv) {
       bool first_element = true;
       char *name_tmp = ralloc_strdup(NULL, name);
-      bool r = find_and_update_named_uniform_storage(ctx, prog, state, var,
+      bool r = find_and_update_named_uniform_storage(consts, prog, state, var,
                                                      &name_tmp,
                                                      strlen(name_tmp), type,
                                                      stage, &first_element);
@@ -1047,7 +1057,7 @@ find_and_update_previous_uniform_storage(struct gl_context *ctx,
 
          struct gl_uniform_storage *uniform = &prog->data->UniformStorage[i];
          var->data.location = uniform - prog->data->UniformStorage;
-         add_parameter(uniform, ctx, prog, var->type, state);
+         add_parameter(uniform, consts, prog, var->type, state);
          return true;
       }
    }
@@ -1113,7 +1123,7 @@ hash_free_uniform_name(struct hash_entry *entry)
 
 static void
 enter_record(struct nir_link_uniforms_state *state,
-             struct gl_context *ctx,
+             const struct gl_constants *consts,
              const struct glsl_type *type,
              bool row_major)
 {
@@ -1121,7 +1131,7 @@ enter_record(struct nir_link_uniforms_state *state,
    if (!state->var_is_in_block)
       return;
 
-   bool use_std430 = ctx->Const.UseSTD430AsDefaultPacking;
+   bool use_std430 = consts->UseSTD430AsDefaultPacking;
    const enum glsl_interface_packing packing =
       glsl_get_internal_ifc_packing(state->current_var->interface_type,
                                     use_std430);
@@ -1136,7 +1146,7 @@ enter_record(struct nir_link_uniforms_state *state,
 
 static void
 leave_record(struct nir_link_uniforms_state *state,
-             struct gl_context *ctx,
+             const struct gl_constants *consts,
              const struct glsl_type *type,
              bool row_major)
 {
@@ -1144,7 +1154,7 @@ leave_record(struct nir_link_uniforms_state *state,
    if (!state->var_is_in_block)
       return;
 
-   bool use_std430 = ctx->Const.UseSTD430AsDefaultPacking;
+   bool use_std430 = consts->UseSTD430AsDefaultPacking;
    const enum glsl_interface_packing packing =
       glsl_get_internal_ifc_packing(state->current_var->interface_type,
                                     use_std430);
@@ -1162,7 +1172,7 @@ leave_record(struct nir_link_uniforms_state *state,
  * the number of locations used or -1 on failure.
  */
 static int
-nir_link_uniform(struct gl_context *ctx,
+nir_link_uniform(const struct gl_constants *consts,
                  struct gl_shader_program *prog,
                  struct gl_program *stage_program,
                  gl_shader_stage stage,
@@ -1213,7 +1223,7 @@ nir_link_uniform(struct gl_context *ctx,
          length = 1;
 
       if (glsl_type_is_struct(type) && !prog->data->spirv)
-         enter_record(state, ctx, type, row_major);
+         enter_record(state, consts, type, row_major);
 
       for (unsigned i = 0; i < length; i++) {
          const struct glsl_type *field_type;
@@ -1267,7 +1277,7 @@ nir_link_uniform(struct gl_context *ctx,
                ralloc_asprintf_rewrite_tail(name, &new_length, "[%u]", i);
          }
 
-         int entries = nir_link_uniform(ctx, prog, stage_program, stage,
+         int entries = nir_link_uniform(consts, prog, stage_program, stage,
                                         field_type, i, location,
                                         state, name, new_length,
                                         field_row_major);
@@ -1284,7 +1294,7 @@ nir_link_uniform(struct gl_context *ctx,
       }
 
       if (glsl_type_is_struct(type) && !prog->data->spirv)
-         leave_record(state, ctx, type, row_major);
+         leave_record(state, consts, type, row_major);
 
       state->current_type = old_type;
 
@@ -1312,8 +1322,9 @@ nir_link_uniform(struct gl_context *ctx,
       /* Initialize its members */
       memset(uniform, 0x00, sizeof(struct gl_uniform_storage));
 
-      uniform->name =
+      uniform->name.string =
          name ? ralloc_strdup(prog->data->UniformStorage, *name) : NULL;
+      resource_name_updated(&uniform->name);
 
       const struct glsl_type *type_no_array = glsl_without_array(type);
       if (glsl_type_is_array(type)) {
@@ -1384,7 +1395,7 @@ nir_link_uniform(struct gl_context *ctx,
          }
 
          if (!prog->data->spirv) {
-            bool use_std430 = ctx->Const.UseSTD430AsDefaultPacking;
+            bool use_std430 = consts->UseSTD430AsDefaultPacking;
             const enum glsl_interface_packing packing =
                glsl_get_internal_ifc_packing(state->current_var->interface_type,
                                              use_std430);
@@ -1422,15 +1433,15 @@ nir_link_uniform(struct gl_context *ctx,
             if (is_interface_array) {
                unsigned l = strlen(ifc_name);
                for (unsigned i = 0; i < num_blocks; i++) {
-                  if (strncmp(ifc_name, blocks[i].Name, l) == 0 &&
-                      blocks[i].Name[l] == '[') {
+                  if (strncmp(ifc_name, blocks[i].name.string, l) == 0 &&
+                      blocks[i].name.string[l] == '[') {
                      buffer_block_index = i;
                      break;
                   }
                }
             } else {
                for (unsigned i = 0; i < num_blocks; i++) {
-                  if (strcmp(ifc_name, blocks[i].Name) == 0) {
+                  if (strcmp(ifc_name, blocks[i].name.string) == 0) {
                      buffer_block_index = i;
                      break;
                   }
@@ -1438,7 +1449,7 @@ nir_link_uniform(struct gl_context *ctx,
             }
 
             /* Compute the next offset. */
-            bool use_std430 = ctx->Const.UseSTD430AsDefaultPacking;
+            bool use_std430 = consts->UseSTD430AsDefaultPacking;
             const enum glsl_interface_packing packing =
                glsl_get_internal_ifc_packing(state->current_var->interface_type,
                                              use_std430);
@@ -1461,7 +1472,7 @@ nir_link_uniform(struct gl_context *ctx,
       }
 
       uniform->block_index = buffer_block_index;
-      uniform->builtin = is_gl_identifier(uniform->name);
+      uniform->builtin = is_gl_identifier(uniform->name.string);
       uniform->atomic_buffer_index = -1;
 
       /* The following are not for features not supported by ARB_gl_spirv */
@@ -1477,7 +1488,7 @@ nir_link_uniform(struct gl_context *ctx,
          state->max_uniform_location = uniform->remap_location + entries;
 
       if (!state->var_is_in_block)
-         add_parameter(uniform, ctx, prog, type, state);
+         add_parameter(uniform, consts, prog, type, state);
 
       if (name) {
          _mesa_hash_table_insert(state->uniform_hash, strdup(*name),
@@ -1485,7 +1496,7 @@ nir_link_uniform(struct gl_context *ctx,
                                     (prog->data->NumUniformStorage - 1));
       }
 
-      if (!is_gl_identifier(uniform->name) && !uniform->is_shader_storage &&
+      if (!is_gl_identifier(uniform->name.string) && !uniform->is_shader_storage &&
           !state->var_is_in_block)
          state->num_values += values;
 
@@ -1494,7 +1505,7 @@ nir_link_uniform(struct gl_context *ctx,
 }
 
 bool
-gl_nir_link_uniforms(struct gl_context *ctx,
+gl_nir_link_uniforms(const struct gl_constants *consts,
                      struct gl_shader_program *prog,
                      bool fill_parameters)
 {
@@ -1682,8 +1693,8 @@ gl_nir_link_uniforms(struct gl_context *ctx,
                 * marked as referenced.
                 */
                for (unsigned i = 0; i < num_blocks; i++) {
-                  if (strncmp(ifc_name, blocks[i].Name, l) == 0 &&
-                      blocks[i].Name[l] == '[') {
+                  if (strncmp(ifc_name, blocks[i].name.string, l) == 0 &&
+                      blocks[i].name.string[l] == '[') {
                      if (buffer_block_index == -1)
                         buffer_block_index = i;
 
@@ -1700,7 +1711,7 @@ gl_nir_link_uniforms(struct gl_context *ctx,
                }
             } else {
                for (unsigned i = 0; i < num_blocks; i++) {
-                  if (strcmp(ifc_name, blocks[i].Name) == 0) {
+                  if (strcmp(ifc_name, blocks[i].name.string) == 0) {
                      buffer_block_index = i;
 
                      struct hash_entry *entry =
@@ -1801,7 +1812,7 @@ gl_nir_link_uniforms(struct gl_context *ctx,
           * other stage. If so, validate they are compatible and update
           * the active stage mask.
           */
-         if (find_and_update_previous_uniform_storage(ctx, prog, &state, var,
+         if (find_and_update_previous_uniform_storage(consts, prog, &state, var,
                                                       name, type, shader_type)) {
             ralloc_free(name);
             free_type_tree(type_tree);
@@ -1816,7 +1827,7 @@ gl_nir_link_uniforms(struct gl_context *ctx,
 
          bool row_major =
             var->data.matrix_layout == GLSL_MATRIX_LAYOUT_ROW_MAJOR;
-         int res = nir_link_uniform(ctx, prog, sh->Program, shader_type, type,
+         int res = nir_link_uniform(consts, prog, sh->Program, shader_type, type,
                                     0, location,
                                     &state,
                                     !prog->data->spirv ? &name : NULL,
@@ -1836,18 +1847,18 @@ gl_nir_link_uniforms(struct gl_context *ctx,
       }
 
       if (state.num_shader_samplers >
-          ctx->Const.Program[shader_type].MaxTextureImageUnits) {
+          consts->Program[shader_type].MaxTextureImageUnits) {
          linker_error(prog, "Too many %s shader texture samplers\n",
                       _mesa_shader_stage_to_string(shader_type));
          continue;
       }
 
       if (state.num_shader_images >
-          ctx->Const.Program[shader_type].MaxImageUniforms) {
+          consts->Program[shader_type].MaxImageUniforms) {
          linker_error(prog, "Too many %s shader image uniforms (%u > %u)\n",
                       _mesa_shader_stage_to_string(shader_type),
                       state.num_shader_images,
-                      ctx->Const.Program[shader_type].MaxImageUniforms);
+                      consts->Program[shader_type].MaxImageUniforms);
          continue;
       }
 
@@ -1869,8 +1880,8 @@ gl_nir_link_uniforms(struct gl_context *ctx,
    if (prog->data->spirv)
       prog->NumUniformRemapTable = state.max_uniform_location;
 
-   nir_setup_uniform_remap_tables(ctx, prog);
-   gl_nir_set_uniform_initializers(ctx, prog);
+   nir_setup_uniform_remap_tables(consts, prog);
+   gl_nir_set_uniform_initializers(consts, prog);
 
    _mesa_hash_table_destroy(state.uniform_hash, hash_free_uniform_name);
 

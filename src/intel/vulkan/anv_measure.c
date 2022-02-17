@@ -158,7 +158,11 @@ anv_measure_start_snapshot(struct anv_cmd_buffer *cmd_buffer,
 
    unsigned index = measure->base.index++;
 
-   (*device->cmd_emit_timestamp)(batch, measure->bo, index * sizeof(uint64_t));
+   (*device->cmd_emit_timestamp)(batch, cmd_buffer->device,
+                                 (struct anv_address) {
+                                    .bo = measure->bo,
+                                    .offset = index * sizeof(uint64_t) },
+                                 true /* end_of_pipe */);
 
    if (event_name == NULL)
       event_name = intel_measure_snapshot_string(type);
@@ -195,7 +199,11 @@ anv_measure_end_snapshot(struct anv_cmd_buffer *cmd_buffer,
    unsigned index = measure->base.index++;
    assert(index % 2 == 1);
 
-   (*device->cmd_emit_timestamp)(batch, measure->bo, index * sizeof(uint64_t));
+   (*device->cmd_emit_timestamp)(batch, cmd_buffer->device,
+                                 (struct anv_address) {
+                                    .bo = measure->bo,
+                                    .offset = index * sizeof(uint64_t) },
+                                 true /* end_of_pipe */);
 
    struct intel_measure_snapshot *snapshot = &(measure->base.snapshots[index]);
    memset(snapshot, 0, sizeof(*snapshot));

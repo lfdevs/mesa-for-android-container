@@ -24,8 +24,8 @@
 #include "nir.h"
 #include "gl_nir_linker.h"
 #include "compiler/glsl/ir_uniform.h" /* for gl_uniform_storage */
-#include "main/context.h"
-#include "main/mtypes.h"
+#include "main/shader_types.h"
+#include "main/consts_exts.h"
 
 struct set_opaque_binding_closure {
    struct gl_shader_program *shader_prog;
@@ -152,6 +152,7 @@ copy_constant_to_storage(union gl_constant_value *storage,
             break;
          case GLSL_TYPE_ARRAY:
          case GLSL_TYPE_STRUCT:
+         case GLSL_TYPE_TEXTURE:
          case GLSL_TYPE_IMAGE:
          case GLSL_TYPE_ATOMIC_UINT:
          case GLSL_TYPE_INTERFACE:
@@ -254,7 +255,7 @@ set_uniform_initializer(struct set_uniform_initializer_closure *data,
 }
 
 void
-gl_nir_set_uniform_initializers(struct gl_context *ctx,
+gl_nir_set_uniform_initializers(const struct gl_constants *consts,
                                 struct gl_shader_program *prog)
 {
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
@@ -272,7 +273,7 @@ gl_nir_set_uniform_initializers(struct gl_context *ctx,
                .prog = sh->Program,
                .var = var,
                .location = var->data.location,
-               .boolean_true = ctx->Const.UniformBooleanTrue
+               .boolean_true = consts->UniformBooleanTrue
             };
             set_uniform_initializer(&data,
                                     var->type,

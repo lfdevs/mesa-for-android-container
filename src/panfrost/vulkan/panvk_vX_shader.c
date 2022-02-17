@@ -34,7 +34,6 @@
 #include "spirv/nir_spirv.h"
 #include "util/mesa-sha1.h"
 
-#include "panfrost-quirks.h"
 #include "pan_shader.h"
 #include "util/pan_lower_framebuffer.h"
 
@@ -469,6 +468,7 @@ panvk_per_arch(shader_create)(struct panvk_device *dev,
    struct panfrost_compile_inputs inputs = {
       .gpu_id = pdev->gpu_id,
       .no_ubo_to_push = true,
+      .no_idvs = true, /* TODO */
       .sysval_ubo = sysval_ubo,
    };
 

@@ -254,6 +254,15 @@ crocus_resource_configure_main(const struct crocus_screen *screen,
    if (!isl_surf_init_s(&screen->isl_dev, &res->surf, &init_info))
       return false;
 
+   /*
+    * Don't create staging surfaces that will use > half the aperture
+    * since staging implies you are sending to another resource,
+    * which there is no way to fit both into aperture.
+    */
+   if (templ->usage == PIPE_USAGE_STAGING)
+      if (res->surf.size_B > screen->aperture_threshold / 2)
+         return false;
+
    res->internal_format = templ->format;
 
    return true;
@@ -356,7 +365,7 @@ crocus_alloc_resource(struct pipe_screen *pscreen,
    res->base.b.screen = pscreen;
    res->orig_screen = crocus_pscreen_ref(pscreen);
    pipe_reference_init(&res->base.b.reference, 1);
-   threaded_resource_init(&res->base.b);
+   threaded_resource_init(&res->base.b, false, 0);
 
    if (templ->target == PIPE_BUFFER)
       util_range_init(&res->valid_buffer_range);
@@ -368,7 +377,7 @@ unsigned
 crocus_get_num_logical_layers(const struct crocus_resource *res, unsigned level)
 {
    if (res->surf.dim == ISL_SURF_DIM_3D)
-      return minify(res->surf.logical_level0_px.depth, level);
+      return u_minify(res->surf.logical_level0_px.depth, level);
    else
       return res->surf.logical_level0_px.array_len;
 }
@@ -1644,7 +1653,7 @@ crocus_transfer_map(struct pipe_context *ctx,
    memset(map, 0, sizeof(*map));
    map->dbg = &ice->dbg;
 
-   map->has_swizzling = ((struct crocus_screen *)ctx->screen)->has_swizzling;
+   map->has_swizzling = screen->devinfo.has_bit6_swizzle;
    pipe_resource_reference(&xfer->resource, resource);
    xfer->level = level;
    xfer->usage = usage;

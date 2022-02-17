@@ -148,26 +148,6 @@ op_commutes(unsigned opcode)
    return op_table[opcode].commutes;
 }
 
-static unsigned
-mask_for_unswizzled(int num_components)
-{
-   unsigned mask = 0;
-   switch (num_components) {
-   case 4:
-      mask |= TGSI_WRITEMASK_W;
-      FALLTHROUGH;
-   case 3:
-      mask |= TGSI_WRITEMASK_Z;
-      FALLTHROUGH;
-   case 2:
-      mask |= TGSI_WRITEMASK_Y;
-      FALLTHROUGH;
-   case 1:
-      mask |= TGSI_WRITEMASK_X;
-   }
-   return mask;
-}
-
 static bool
 is_unswizzled(struct i915_full_src_register *r, unsigned write_mask)
 {
@@ -333,6 +313,7 @@ liveness_analysis(struct i915_optimize_context *ctx,
       case 1:
          dst_reg = &current->FullInstruction.Dst[0];
          liveness_mark_written(ctx, dst_reg, i);
+         FALLTHROUGH;
       case 0:
          break;
       default:
@@ -385,17 +366,8 @@ unused_from(struct i915_optimize_context *ctx,
 static unsigned
 i915_tex_mask(union i915_full_token *instr)
 {
-   unsigned mask;
-
-   /* Get the number of coords */
-   mask = mask_for_unswizzled(
-      i915_num_coords(instr->FullInstruction.Texture.Texture));
-
-   /* Add the W component if projective */
-   if (instr->FullInstruction.Instruction.Opcode == TGSI_OPCODE_TXP)
-      mask |= TGSI_WRITEMASK_W;
-
-   return mask;
+   return i915_coord_mask(instr->FullInstruction.Instruction.Opcode,
+                          instr->FullInstruction.Texture.Texture);
 }
 
 static bool

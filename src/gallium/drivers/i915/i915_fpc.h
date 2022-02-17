@@ -185,7 +185,7 @@ extern void i915_release_utemps(struct i915_fp_compile *p);
 extern uint32_t i915_emit_texld(struct i915_fp_compile *p, uint32_t dest,
                                 uint32_t destmask, uint32_t sampler,
                                 uint32_t coord, uint32_t op,
-                                uint32_t num_coord);
+                                uint32_t coord_mask);
 
 extern uint32_t i915_emit_arith(struct i915_fp_compile *p, uint32_t op,
                                 uint32_t dest, uint32_t mask, uint32_t saturate,
@@ -285,7 +285,7 @@ extern struct i915_token_list *i915_optimize(const struct tgsi_token *tokens);
 
 extern void i915_optimize_free(struct i915_token_list *tokens);
 
-extern uint32_t i915_num_coords(uint32_t tex);
+extern uint32_t i915_coord_mask(enum tgsi_opcode opcode, enum tgsi_texture_type tex);
 
 extern bool i915_nir_lower_sincos(struct nir_shader *s);
 

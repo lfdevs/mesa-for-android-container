@@ -303,6 +303,8 @@ string_to_type(struct parser_context *ctx, const char *s)
       return (struct intel_type) { .kind = INTEL_TYPE_ENUM, .intel_enum = e };
    else if (strcmp(s, "mbo") == 0)
       return (struct intel_type) { .kind = INTEL_TYPE_MBO };
+   else if (strcmp(s, "mbz") == 0)
+      return (struct intel_type) { .kind = INTEL_TYPE_MBZ };
    else
       fail(&ctx->loc, "invalid type: %s", s);
 }
@@ -1058,6 +1060,7 @@ iter_decode_field(struct intel_field_iterator *iter)
       enum_name = intel_get_enum_name(&iter->field->inline_enum, v.qw);
       break;
    }
+   case INTEL_TYPE_MBZ:
    case INTEL_TYPE_UINT: {
       snprintf(iter->value, sizeof(iter->value), "%"PRIu64, v.qw);
       enum_name = intel_get_enum_name(&iter->field->inline_enum, v.qw);

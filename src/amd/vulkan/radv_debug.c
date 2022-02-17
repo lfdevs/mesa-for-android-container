@@ -56,9 +56,10 @@
  * [2-3]: 64-bit GFX ring pipeline pointer
  * [4-5]: 64-bit COMPUTE ring pipeline pointer
  * [6-7]: Vertex descriptors pointer
- * [8-9]: 64-bit descriptor set #0 pointer
+ * [8-9]: 64-bit Vertex prolog pointer
+ * [10-11]: 64-bit descriptor set #0 pointer
  * ...
- * [68-69]: 64-bit descriptor set #31 pointer
+ * [72-73]: 64-bit descriptor set #31 pointer
  */
 
 bool
@@ -245,7 +246,7 @@ radv_dump_descriptors(struct radv_device *device, FILE *f)
 
    fprintf(f, "Descriptors:\n");
    for (i = 0; i < MAX_SETS; i++) {
-      struct radv_descriptor_set *set = *(struct radv_descriptor_set **)(ptr + i + 4);
+      struct radv_descriptor_set *set = *(struct radv_descriptor_set **)(ptr + i + 5);
 
       radv_dump_descriptor_set(device, set, i, f);
    }
@@ -297,7 +298,7 @@ si_add_split_disasm(const char *disasm, uint64_t start_addr, unsigned *num,
 }
 
 static void
-radv_dump_annotated_shader(struct radv_shader_variant *shader, gl_shader_stage stage,
+radv_dump_annotated_shader(struct radv_shader *shader, gl_shader_stage stage,
                            struct ac_wave_info *waves, unsigned num_waves, FILE *f)
 {
    uint64_t start_addr, end_addr;
@@ -306,7 +307,7 @@ radv_dump_annotated_shader(struct radv_shader_variant *shader, gl_shader_stage s
    if (!shader)
       return;
 
-   start_addr = radv_shader_variant_get_va(shader);
+   start_addr = radv_shader_get_va(shader);
    end_addr = start_addr + shader->code_size;
 
    /* See if any wave executes the shader. */
@@ -403,7 +404,7 @@ radv_dump_annotated_shaders(struct radv_pipeline *pipeline, VkShaderStageFlagBit
 }
 
 static void
-radv_dump_spirv(struct radv_shader_variant *shader, const char *sha1, const char *dump_dir)
+radv_dump_spirv(struct radv_shader *shader, const char *sha1, const char *dump_dir)
 {
    char dump_path[512];
    FILE *f;
@@ -418,7 +419,7 @@ radv_dump_spirv(struct radv_shader_variant *shader, const char *sha1, const char
 }
 
 static void
-radv_dump_shader(struct radv_pipeline *pipeline, struct radv_shader_variant *shader,
+radv_dump_shader(struct radv_pipeline *pipeline, struct radv_shader *shader,
                  gl_shader_stage stage, const char *dump_dir, FILE *f)
 {
    if (!shader)
@@ -487,6 +488,26 @@ radv_dump_vertex_descriptors(struct radv_pipeline *pipeline, FILE *f)
    }
 }
 
+static struct radv_shader_prolog *
+radv_get_saved_vs_prolog(struct radv_device *device)
+{
+   uint64_t *ptr = (uint64_t *)device->trace_id_ptr;
+   return *(struct radv_shader_prolog **)(ptr + 4);
+}
+
+static void
+radv_dump_vs_prolog(struct radv_pipeline *pipeline, FILE *f)
+{
+   struct radv_shader_prolog *vs_prolog = radv_get_saved_vs_prolog(pipeline->device);
+   struct radv_shader *vs_shader = radv_get_shader(pipeline, MESA_SHADER_VERTEX);
+
+   if (!vs_prolog || !vs_shader || !vs_shader->info.vs.has_prolog)
+      return;
+
+   fprintf(f, "Vertex prolog:\n\n");
+   fprintf(f, "DISASM:\n%s\n", vs_prolog->disasm_string);
+}
+
 static struct radv_pipeline *
 radv_get_saved_pipeline(struct radv_device *device, enum ring_type ring)
 {
@@ -506,6 +527,7 @@ radv_dump_queue_state(struct radv_queue *queue, const char *dump_dir, FILE *f)
 
    pipeline = radv_get_saved_pipeline(queue->device, ring);
    if (pipeline) {
+      radv_dump_vs_prolog(pipeline, f);
       radv_dump_shaders(pipeline, pipeline->active_stages, dump_dir, f);
       if (!(queue->device->instance->debug_flags & RADV_DEBUG_NO_UMR))
          radv_dump_annotated_shaders(pipeline, pipeline->active_stages, f);
@@ -832,10 +854,6 @@ radv_trap_handler_init(struct radv_device *device)
       return false;
    }
 
-   result = ws->buffer_make_resident(ws, device->trap_handler_shader->bo, true);
-   if (result != VK_SUCCESS)
-      return false;
-
    result = ws->buffer_create(ws, TMA_BO_SIZE, 256, RADEON_DOMAIN_VRAM,
                               RADEON_FLAG_CPU_ACCESS | RADEON_FLAG_NO_INTERPROCESS_SHARING |
                                  RADEON_FLAG_ZERO_VRAM | RADEON_FLAG_32BIT,
@@ -873,8 +891,7 @@ radv_trap_handler_finish(struct radv_device *device)
    struct radeon_winsys *ws = device->ws;
 
    if (unlikely(device->trap_handler_shader)) {
-      ws->buffer_make_resident(ws, device->trap_handler_shader->bo, false);
-      radv_shader_variant_destroy(device, device->trap_handler_shader);
+      radv_shader_destroy(device, device->trap_handler_shader);
    }
 
    if (unlikely(device->tma_bo)) {
@@ -886,15 +903,15 @@ radv_trap_handler_finish(struct radv_device *device)
 static void
 radv_dump_faulty_shader(struct radv_device *device, uint64_t faulty_pc)
 {
-   struct radv_shader_variant *shader;
+   struct radv_shader *shader;
    uint64_t start_addr, end_addr;
    uint32_t instr_offset;
 
-   shader = radv_find_shader_variant(device, faulty_pc);
+   shader = radv_find_shader(device, faulty_pc);
    if (!shader)
       return;
 
-   start_addr = radv_shader_variant_get_va(shader);
+   start_addr = radv_shader_get_va(shader);
    end_addr = start_addr + shader->code_size;
    instr_offset = faulty_pc - start_addr;
 

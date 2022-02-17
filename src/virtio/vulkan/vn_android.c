@@ -515,9 +515,12 @@ vn_android_image_from_anb(struct vn_device *dev,
    if (result != VK_SUCCESS)
       goto fail;
 
-   img->is_wsi = true;
+   img->wsi.is_wsi = true;
+   img->wsi.tiling_override = builder.create.tiling;
+   img->wsi.drm_format_modifier = builder.modifier.drmFormatModifier;
    /* Android WSI image owns the memory */
-   img->private_memory = memory;
+   img->wsi.memory = vn_device_memory_from_handle(memory);
+   img->wsi.memory_owned = true;
    *out_img = img;
 
    return VK_SUCCESS;
@@ -537,6 +540,7 @@ vn_AcquireImageANDROID(VkDevice device,
                        VkSemaphore semaphore,
                        VkFence fence)
 {
+   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    VkResult result = VK_SUCCESS;
 
@@ -626,6 +630,7 @@ vn_QueueSignalReleaseImageANDROID(VkQueue queue,
                                   VkImage image,
                                   int *pNativeFenceFd)
 {
+   VN_TRACE_FUNC();
    struct vn_queue *que = vn_queue_from_handle(queue);
    struct vn_device *dev = que->device;
    const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
@@ -678,6 +683,12 @@ vn_QueueSignalReleaseImageANDROID(VkQueue queue,
       return vn_error(dev->instance, result);
 
    if (dev->instance->experimental.globalFencing == VK_TRUE) {
+      /* XXX With globalFencing, the external queue fence was not passed in the
+       * above vn_QueueSubmit to hint it to be synchronous. So we need to wait
+       * for the ring here before vn_GetFenceFdKHR which is pure kernel ops.
+       */
+      vn_instance_ring_wait(dev->instance);
+
       const VkFenceGetFdInfoKHR fd_info = {
          .sType = VK_STRUCTURE_TYPE_FENCE_GET_FD_INFO_KHR,
          .pNext = NULL,
@@ -935,7 +946,8 @@ vn_android_device_import_ahb(struct vn_device *dev,
                              struct vn_device_memory *mem,
                              const VkMemoryAllocateInfo *alloc_info,
                              const VkAllocationCallbacks *alloc,
-                             struct AHardwareBuffer *ahb)
+                             struct AHardwareBuffer *ahb,
+                             bool internal_ahb)
 {
    VkDevice device = vn_device_to_handle(dev);
    const VkMemoryDedicatedAllocateInfo *dedicated_info =
@@ -945,6 +957,7 @@ vn_android_device_import_ahb(struct vn_device *dev,
    int dup_fd = -1;
    uint64_t alloc_size = 0;
    uint32_t mem_type_bits = 0;
+   uint32_t mem_type_index = alloc_info->memoryTypeIndex;
    bool force_unmappable = false;
    VkResult result = VK_SUCCESS;
 
@@ -957,12 +970,6 @@ vn_android_device_import_ahb(struct vn_device *dev,
                                              &mem_type_bits);
    if (result != VK_SUCCESS)
       return result;
-
-   if (((1 << alloc_info->memoryTypeIndex) & mem_type_bits) == 0) {
-      vn_log(dev->instance, "memoryTypeIndex(%u) mem_type_bits(0x%X)",
-             alloc_info->memoryTypeIndex, mem_type_bits);
-      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-   }
 
    /* If ahb is for an image, finish the deferred image creation first */
    if (dedicated_info && dedicated_info->image != VK_NULL_HANDLE) {
@@ -989,9 +996,27 @@ vn_android_device_import_ahb(struct vn_device *dev,
 
       alloc_size = mem_req.size;
 
+      /* XXX Workaround before spec issue #2762 gets resolved. If importing an
+       * internally allocated AHB from the exportable path, memoryTypeIndex is
+       * undefined while defaulting to zero, which can be incompatible with
+       * the queried memoryTypeBits from the combined memory requirement and
+       * dma_buf fd properties. Thus we override the requested memoryTypeIndex
+       * to an applicable one if existed.
+       */
+      if (internal_ahb) {
+         if ((mem_type_bits & mem_req.memoryTypeBits) == 0) {
+            vn_log(dev->instance, "memoryTypeBits: img(0x%X) fd(0x%X)",
+                   mem_req.memoryTypeBits, mem_type_bits);
+            return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+         }
+
+         mem_type_index = ffs(mem_type_bits & mem_req.memoryTypeBits) - 1;
+      }
+
       /* XXX Workaround before we use cross-domain backend in minigbm. The
-       * blob_mem allocated from virgl backend can have a queried guest mappable
-       * size smaller than the size returned from image memory requirement.
+       * blob_mem allocated from virgl backend can have a queried guest
+       * mappable size smaller than the size returned from image memory
+       * requirement.
        */
       force_unmappable = true;
    }
@@ -1008,7 +1033,11 @@ vn_android_device_import_ahb(struct vn_device *dev,
       }
 
       alloc_size = mem_req.size;
+
+      assert((1 << mem_type_index) & mem_req.memoryTypeBits);
    }
+
+   assert((1 << mem_type_index) & mem_type_bits);
 
    errno = 0;
    dup_fd = os_dupfd_cloexec(dma_buf_fd);
@@ -1031,7 +1060,7 @@ vn_android_device_import_ahb(struct vn_device *dev,
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .pNext = dedicated_info,
       .allocationSize = alloc_size,
-      .memoryTypeIndex = alloc_info->memoryTypeIndex,
+      .memoryTypeIndex = mem_type_index,
    };
    result = vn_device_memory_import_dma_buf(dev, mem, &local_alloc_info,
                                             force_unmappable, dup_fd);
@@ -1091,7 +1120,7 @@ vn_android_device_allocate_ahb(struct vn_device *dev,
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    VkResult result =
-      vn_android_device_import_ahb(dev, mem, alloc_info, alloc, ahb);
+      vn_android_device_import_ahb(dev, mem, alloc_info, alloc, ahb, true);
 
    /* ahb alloc has already acquired a ref and import will acquire another,
     * must release one here to avoid leak.
@@ -1164,7 +1193,8 @@ vn_android_fix_buffer_create_info(
 }
 
 VkResult
-vn_android_init_ahb_buffer_memory_type_bits(struct vn_device *dev)
+vn_android_get_ahb_buffer_memory_type_bits(struct vn_device *dev,
+                                           uint32_t *out_mem_type_bits)
 {
    const uint32_t format = AHARDWAREBUFFER_FORMAT_BLOB;
    /* ensure dma_buf_memory_type_bits covers host visible usage */
@@ -1196,7 +1226,7 @@ vn_android_init_ahb_buffer_memory_type_bits(struct vn_device *dev)
    if (result != VK_SUCCESS)
       return result;
 
-   dev->ahb_buffer_memory_type_bits = mem_type_bits;
+   *out_mem_type_bits = mem_type_bits;
 
    return VK_SUCCESS;
 }
@@ -1219,10 +1249,10 @@ vn_android_buffer_from_ahb(struct vn_device *dev,
     * queried type bits from both buffer memory requirement and dma_buf fd
     * properties.
     */
-   (*out_buf)->memory_requirements.memoryRequirements.memoryTypeBits &=
-      dev->ahb_buffer_memory_type_bits;
+   (*out_buf)->requirements.memory.memoryRequirements.memoryTypeBits &=
+      dev->buffer_cache.ahb_mem_type_bits;
 
-   assert((*out_buf)->memory_requirements.memoryRequirements.memoryTypeBits);
+   assert((*out_buf)->requirements.memory.memoryRequirements.memoryTypeBits);
 
    return VK_SUCCESS;
 }

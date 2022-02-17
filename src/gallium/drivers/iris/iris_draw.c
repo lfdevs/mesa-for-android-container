@@ -38,6 +38,7 @@
 #include "util/u_upload_mgr.h"
 #include "intel/compiler/brw_compiler.h"
 #include "intel/compiler/brw_eu_defines.h"
+#include "compiler/shader_info.h"
 #include "iris_context.h"
 #include "iris_defines.h"
 
@@ -65,6 +66,7 @@ iris_update_draw_info(struct iris_context *ice,
                       const struct pipe_draw_info *info)
 {
    struct iris_screen *screen = (struct iris_screen *)ice->ctx.screen;
+   const struct intel_device_info *devinfo = &screen->devinfo;
    const struct brw_compiler *compiler = screen->compiler;
 
    if (ice->state.prim_mode != info->mode) {
@@ -105,8 +107,11 @@ iris_update_draw_info(struct iris_context *ice,
    if (ice->state.primitive_restart != info->primitive_restart ||
        ice->state.cut_index != cut_index) {
       ice->state.dirty |= IRIS_DIRTY_VF;
-      ice->state.primitive_restart = info->primitive_restart;
       ice->state.cut_index = cut_index;
+      ice->state.dirty |=
+         ((ice->state.primitive_restart != info->primitive_restart) &&
+          devinfo->verx10 >= 125) ? IRIS_DIRTY_VFG : 0;
+      ice->state.primitive_restart = info->primitive_restart;
    }
 }
 

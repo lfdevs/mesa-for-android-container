@@ -137,6 +137,8 @@ lower_shader_calls_instr(struct nir_builder *b, nir_instr *instr, void *data)
 
    switch (call->intrinsic) {
    case nir_intrinsic_rt_trace_ray: {
+      b->cursor = nir_instr_remove(instr);
+
       store_resume_addr(b, call);
 
       nir_ssa_def *as_addr = call->src[0].ssa;
@@ -217,6 +219,8 @@ lower_shader_calls_instr(struct nir_builder *b, nir_instr *instr, void *data)
    }
 
    case nir_intrinsic_rt_execute_callable: {
+      b->cursor = nir_instr_remove(instr);
+
       store_resume_addr(b, call);
 
       nir_ssa_def *sbt_offset32 =
@@ -254,7 +258,7 @@ brw_nir_create_trivial_return_shader(const struct brw_compiler *compiler,
                                      void *mem_ctx)
 {
    const nir_shader_compiler_options *nir_options =
-      compiler->glsl_compiler_options[MESA_SHADER_CALLABLE].NirOptions;
+      compiler->nir_options[MESA_SHADER_CALLABLE];
 
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_CALLABLE,
                                                   nir_options,

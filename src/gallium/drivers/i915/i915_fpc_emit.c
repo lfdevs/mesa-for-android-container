@@ -176,32 +176,21 @@ i915_emit_arith(struct i915_fp_compile *p, uint32_t op, uint32_t dest,
 uint32_t
 i915_emit_texld(struct i915_fp_compile *p, uint32_t dest, uint32_t destmask,
                 uint32_t sampler, uint32_t coord, uint32_t opcode,
-                uint32_t num_coord)
+                uint32_t coord_mask)
 {
    const uint32_t k = UREG(GET_UREG_TYPE(coord), GET_UREG_NR(coord));
 
    int temp = -1;
-   uint32_t ignore = 0;
 
-   /* Eliminate the useless texture coordinates. Otherwise we end up generating
-    * a swizzle for no reason below. */
-   switch (num_coord) {
-   case 1:
-      /* For 1D textures, make sure that the Y coordinate is actually
-       * initialized. It seems that if the channel is never written during the
-       * program, texturing returns undefined results (even if the Y wrap is
-       * REPEAT).
-       */
-      coord = swizzle(coord, X, X, Z, W);
-      FALLTHROUGH;
-   case 2:
-      ignore |= (0xf << UREG_CHANNEL_Z_SHIFT);
-      FALLTHROUGH;
-   case 3:
-      ignore |= (0xf << UREG_CHANNEL_W_SHIFT);
-   }
+   uint32_t coord_used = 0xf << UREG_CHANNEL_X_SHIFT;
+   if (coord_mask & TGSI_WRITEMASK_Y)
+      coord_used |= 0xf << UREG_CHANNEL_Y_SHIFT;
+   if (coord_mask & TGSI_WRITEMASK_Z)
+      coord_used |= 0xf << UREG_CHANNEL_Z_SHIFT;
+   if (coord_mask & TGSI_WRITEMASK_W)
+      coord_used |= 0xf << UREG_CHANNEL_W_SHIFT;
 
-   if ((coord & ~ignore) != (k & ~ignore) ||
+   if ((coord & coord_used) != (k & coord_used) ||
        GET_UREG_TYPE(coord) == REG_TYPE_CONST) {
       /* texcoord is swizzled or negated.  Need to allocate a new temporary
        * register (a utemp / unpreserved temp) won't do.
@@ -226,7 +215,7 @@ i915_emit_texld(struct i915_fp_compile *p, uint32_t dest, uint32_t destmask,
       /* if not writing to XYZW... */
       uint32_t tmp = i915_get_utemp(p);
       i915_emit_texld(p, tmp, A0_DEST_CHANNEL_ALL, sampler, coord, opcode,
-                      num_coord);
+                      coord_mask);
       i915_emit_arith(p, A0_MOV, dest, destmask, 0, tmp, 0, 0);
       /* XXX release utemp here? */
    } else {

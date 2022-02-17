@@ -45,7 +45,6 @@ struct i915_screen {
 
    struct {
       bool tiling;
-      bool lie;
       bool use_blitter;
    } debug;
 };

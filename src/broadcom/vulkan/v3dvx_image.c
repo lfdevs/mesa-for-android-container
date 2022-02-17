@@ -26,8 +26,6 @@
 #include "broadcom/cle/v3dx_pack.h"
 #include "broadcom/compiler/v3d_compiler.h"
 
-#include "vk_format_info.h"
-
 /*
  * This method translates pipe_swizzle to the swizzle values used at the
  * packet TEXTURE_SHADER_STATE
@@ -99,6 +97,8 @@ pack_texture_shader_state_helper(struct v3dv_device *device,
       tex.swizzle_g = translate_swizzle(image_view->swizzle[1]);
       tex.swizzle_b = translate_swizzle(image_view->swizzle[2]);
       tex.swizzle_a = translate_swizzle(image_view->swizzle[3]);
+
+      tex.reverse_standard_border_color = image_view->channel_reverse;
 
       tex.texture_type = image_view->format->tex_type;
 

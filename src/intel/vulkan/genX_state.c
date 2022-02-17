@@ -31,56 +31,20 @@
 
 #include "common/intel_aux_map.h"
 #include "common/intel_sample_positions.h"
+#include "common/intel_pixel_hash.h"
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 
 #include "vk_util.h"
-
-/**
- * Compute an \p n x \p m pixel hashing table usable as slice, subslice or
- * pixel pipe hashing table.  The resulting table is the cyclic repetition of
- * a fixed pattern with periodicity equal to \p period.
- *
- * If \p index is specified to be equal to \p period, a 2-way hashing table
- * will be generated such that indices 0 and 1 are returned for the following
- * fractions of entries respectively:
- *
- *   p_0 = ceil(period / 2) / period
- *   p_1 = floor(period / 2) / period
- *
- * If \p index is even and less than \p period, a 3-way hashing table will be
- * generated such that indices 0, 1 and 2 are returned for the following
- * fractions of entries:
- *
- *   p_0 = (ceil(period / 2) - 1) / period
- *   p_1 = floor(period / 2) / period
- *   p_2 = 1 / period
- *
- * The equations above apply if \p flip is equal to 0, if it is equal to 1 p_0
- * and p_1 will be swapped for the result.  Note that in the context of pixel
- * pipe hashing this can be always 0 on Gfx12 platforms, since the hardware
- * transparently remaps logical indices found on the table to physical pixel
- * pipe indices from the highest to lowest EU count.
- */
-UNUSED static void
-calculate_pixel_hashing_table(unsigned n, unsigned m,
-                              unsigned period, unsigned index, bool flip,
-                              uint32_t *p)
-{
-   for (unsigned i = 0; i < n; i++) {
-      for (unsigned j = 0; j < m; j++) {
-         const unsigned k = (i + j) % period;
-         p[j + m * i] = (k == index ? 2 : (k & 1) ^ flip);
-      }
-   }
-}
 
 static void
 genX(emit_slice_hashing_state)(struct anv_device *device,
                                struct anv_batch *batch)
 {
 #if GFX_VER == 11
-   assert(device->info.ppipe_subslices[2] == 0);
+   /* Gfx11 hardware has two pixel pipes at most. */
+   for (unsigned i = 2; i < ARRAY_SIZE(device->info.ppipe_subslices); i++)
+      assert(device->info.ppipe_subslices[i] == 0);
 
    if (device->info.ppipe_subslices[0] == device->info.ppipe_subslices[1])
      return;
@@ -93,7 +57,7 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
       const bool flip = device->info.ppipe_subslices[0] <
                      device->info.ppipe_subslices[1];
       struct GENX(SLICE_HASH_TABLE) table;
-      calculate_pixel_hashing_table(16, 16, 3, 3, flip, table.Entry[0]);
+      intel_compute_pixel_hash_table_3way(16, 16, 3, 3, flip, table.Entry[0]);
 
       GENX(SLICE_HASH_TABLE_pack)(NULL, device->slice_hash.map, &table);
    }
@@ -113,12 +77,13 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
    unsigned ppipes_of[3] = {};
 
    for (unsigned n = 0; n < ARRAY_SIZE(ppipes_of); n++) {
-      for (unsigned p = 0; p < ARRAY_SIZE(device->info.ppipe_subslices); p++)
+      for (unsigned p = 0; p < 3; p++)
          ppipes_of[n] += (device->info.ppipe_subslices[p] == n);
    }
 
    /* Gfx12 has three pixel pipes. */
-   assert(ppipes_of[0] + ppipes_of[1] + ppipes_of[2] == 3);
+   for (unsigned p = 3; p < ARRAY_SIZE(device->info.ppipe_subslices); p++)
+      assert(device->info.ppipe_subslices[p] == 0);
 
    if (ppipes_of[2] == 3 || ppipes_of[0] == 2) {
       /* All three pixel pipes have the maximum number of active dual
@@ -131,16 +96,16 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
       p.SliceHashControl[0] = TABLE_0;
 
       if (ppipes_of[2] == 2 && ppipes_of[0] == 1)
-         calculate_pixel_hashing_table(8, 16, 2, 2, 0, p.TwoWayTableEntry[0]);
+         intel_compute_pixel_hash_table_3way(8, 16, 2, 2, 0, p.TwoWayTableEntry[0]);
       else if (ppipes_of[2] == 1 && ppipes_of[1] == 1 && ppipes_of[0] == 1)
-         calculate_pixel_hashing_table(8, 16, 3, 3, 0, p.TwoWayTableEntry[0]);
+         intel_compute_pixel_hash_table_3way(8, 16, 3, 3, 0, p.TwoWayTableEntry[0]);
 
       if (ppipes_of[2] == 2 && ppipes_of[1] == 1)
-         calculate_pixel_hashing_table(8, 16, 5, 4, 0, p.ThreeWayTableEntry[0]);
+         intel_compute_pixel_hash_table_3way(8, 16, 5, 4, 0, p.ThreeWayTableEntry[0]);
       else if (ppipes_of[2] == 2 && ppipes_of[0] == 1)
-         calculate_pixel_hashing_table(8, 16, 2, 2, 0, p.ThreeWayTableEntry[0]);
+         intel_compute_pixel_hash_table_3way(8, 16, 2, 2, 0, p.ThreeWayTableEntry[0]);
       else if (ppipes_of[2] == 1 && ppipes_of[1] == 1 && ppipes_of[0] == 1)
-         calculate_pixel_hashing_table(8, 16, 3, 3, 0, p.ThreeWayTableEntry[0]);
+         intel_compute_pixel_hash_table_3way(8, 16, 3, 3, 0, p.ThreeWayTableEntry[0]);
       else
          unreachable("Illegal fusing.");
    }
@@ -148,6 +113,47 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
    anv_batch_emit(batch, GENX(3DSTATE_3D_MODE), p) {
       p.SubsliceHashingTableEnable = true;
       p.SubsliceHashingTableEnableMask = true;
+   }
+#elif GFX_VERx10 == 125
+   uint32_t ppipe_mask = 0;
+   for (unsigned p = 0; p < ARRAY_SIZE(device->info.ppipe_subslices); p++) {
+      if (device->info.ppipe_subslices[p])
+         ppipe_mask |= (1u << p);
+   }
+   assert(ppipe_mask);
+
+   if (!device->slice_hash.alloc_size) {
+      unsigned size = GENX(SLICE_HASH_TABLE_length) * 4;
+      device->slice_hash =
+         anv_state_pool_alloc(&device->dynamic_state_pool, size, 64);
+
+      struct GENX(SLICE_HASH_TABLE) table;
+
+      /* Note that the hardware expects an array with 7 tables, each
+       * table is intended to specify the pixel pipe hashing behavior
+       * for every possible slice count between 2 and 8, however that
+       * doesn't actually work, among other reasons due to hardware
+       * bugs that will cause the GPU to erroneously access the table
+       * at the wrong index in some cases, so in practice all 7 tables
+       * need to be initialized to the same value.
+       */
+      for (unsigned i = 0; i < 7; i++)
+         intel_compute_pixel_hash_table_nway(16, 16, ppipe_mask, table.Entry[i][0]);
+
+      GENX(SLICE_HASH_TABLE_pack)(NULL, device->slice_hash.map, &table);
+   }
+
+   anv_batch_emit(batch, GENX(3DSTATE_SLICE_TABLE_STATE_POINTERS), ptr) {
+      ptr.SliceHashStatePointerValid = true;
+      ptr.SliceHashTableStatePointer = device->slice_hash.offset;
+   }
+
+   anv_batch_emit(batch, GENX(3DSTATE_3D_MODE), mode) {
+      mode.SliceHashingTableEnable = true;
+      mode.SliceHashingTableEnableMask = true;
+      mode.CrossSliceHashingMode = (util_bitcount(ppipe_mask) > 1 ?
+				    hashing32x32 : NormalMode);
+      mode.CrossSliceHashingModeMask = -1;
    }
 #endif
 }
@@ -352,6 +358,111 @@ genX(init_device_state)(struct anv_device *device)
    return res;
 }
 
+#if GFX_VERx10 >= 125
+#define maybe_for_each_shading_rate_op(name) \
+   for (VkFragmentShadingRateCombinerOpKHR name = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR; \
+        name <= VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR; \
+        name++)
+#elif GFX_VER >= 12
+#define maybe_for_each_shading_rate_op(name)
+#endif
+
+/* Rather than reemitting the CPS_STATE structure everything those changes and
+ * for as many viewports as needed, we can just prepare all possible cases and
+ * just pick the right offset from the prepacked states when needed.
+ */
+void
+genX(init_cps_device_state)(struct anv_device *device)
+{
+#if GFX_VER >= 12
+   void *cps_state_ptr = device->cps_states.map;
+
+   /* Disabled CPS mode */
+   for (uint32_t __v = 0; __v < MAX_VIEWPORTS; __v++) {
+      struct GENX(CPS_STATE) cps_state = {
+         .CoarsePixelShadingMode = CPS_MODE_CONSTANT,
+         .MinCPSizeX = 1,
+         .MinCPSizeY = 1,
+#if GFX_VERx10 >= 125
+         .Combiner0OpcodeforCPsize = PASSTHROUGH,
+         .Combiner1OpcodeforCPsize = PASSTHROUGH,
+#endif /* GFX_VERx10 >= 125 */
+
+      };
+
+      GENX(CPS_STATE_pack)(NULL, cps_state_ptr, &cps_state);
+      cps_state_ptr += GENX(CPS_STATE_length) * 4;
+   }
+
+   maybe_for_each_shading_rate_op(op0) {
+      maybe_for_each_shading_rate_op(op1) {
+         for (uint32_t x = 1; x <= 4; x *= 2) {
+            for (uint32_t y = 1; y <= 4; y *= 2) {
+               struct GENX(CPS_STATE) cps_state = {
+                  .CoarsePixelShadingMode = CPS_MODE_CONSTANT,
+                  .MinCPSizeX = x,
+                  .MinCPSizeY = y,
+               };
+
+#if GFX_VERx10 >= 125
+               static const uint32_t combiner_ops[] = {
+                  [VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR]    = PASSTHROUGH,
+                  [VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR] = OVERRIDE,
+                  [VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR]     = HIGH_QUALITY,
+                  [VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR]     = LOW_QUALITY,
+                  [VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR]     = RELATIVE,
+               };
+
+               cps_state.Combiner0OpcodeforCPsize = combiner_ops[op0];
+               cps_state.Combiner1OpcodeforCPsize = combiner_ops[op1];
+#endif /* GFX_VERx10 >= 125 */
+
+               for (uint32_t __v = 0; __v < MAX_VIEWPORTS; __v++) {
+                  GENX(CPS_STATE_pack)(NULL, cps_state_ptr, &cps_state);
+                  cps_state_ptr += GENX(CPS_STATE_length) * 4;
+               }
+            }
+         }
+      }
+   }
+#endif /* GFX_VER >= 12 */
+}
+
+#if GFX_VER >= 12
+static uint32_t
+get_cps_state_offset(struct anv_device *device, bool cps_enabled,
+                     const struct anv_dynamic_state *d)
+{
+   if (!cps_enabled)
+      return device->cps_states.offset;
+
+   uint32_t offset;
+   static const uint32_t size_index[] = {
+      [1] = 0,
+      [2] = 1,
+      [4] = 2,
+   };
+
+#if GFX_VERx10 >= 125
+   offset =
+      1 + /* skip disabled */
+      d->fragment_shading_rate.ops[0] * 5 * 3 * 3 +
+      d->fragment_shading_rate.ops[1] * 3 * 3 +
+      size_index[d->fragment_shading_rate.rate.width] * 3 +
+      size_index[d->fragment_shading_rate.rate.height];
+#else
+   offset =
+      1 + /* skip disabled */
+      size_index[d->fragment_shading_rate.rate.width] * 3 +
+      size_index[d->fragment_shading_rate.rate.height];
+#endif
+
+   offset *= MAX_VIEWPORTS * GENX(CPS_STATE_length) * 4;
+
+   return device->cps_states.offset + offset;
+}
+#endif /* GFX_VER >= 12 */
+
 void
 genX(emit_l3_config)(struct anv_batch *batch,
                      const struct anv_device *device,
@@ -415,11 +526,11 @@ genX(emit_l3_config)(struct anv_batch *batch,
     * client (URB for all validated configurations) set to the
     * lower-bandwidth 2-bank address hashing mode.
     */
-   const bool urb_low_bw = cfg->n[INTEL_L3P_SLM] && !devinfo->is_baytrail;
+   const bool urb_low_bw = cfg->n[INTEL_L3P_SLM] && devinfo->platform != INTEL_PLATFORM_BYT;
    assert(!urb_low_bw || cfg->n[INTEL_L3P_URB] == cfg->n[INTEL_L3P_SLM]);
 
    /* Minimum number of ways that can be allocated to the URB. */
-   const unsigned n0_urb = devinfo->is_baytrail ? 32 : 0;
+   const unsigned n0_urb = devinfo->platform == INTEL_PLATFORM_BYT ? 32 : 0;
    assert(cfg->n[INTEL_L3P_URB] >= n0_urb);
 
    anv_batch_write_reg(batch, GENX(L3SQCREG1), l3sqc) {
@@ -431,7 +542,7 @@ genX(emit_l3_config)(struct anv_batch *batch,
       l3sqc.L3SQGeneralPriorityCreditInitialization = SQGPCI_DEFAULT;
 #else
       l3sqc.L3SQGeneralPriorityCreditInitialization =
-         devinfo->is_baytrail ? BYT_SQGPCI_DEFAULT : SQGPCI_DEFAULT;
+         devinfo->platform == INTEL_PLATFORM_BYT ? BYT_SQGPCI_DEFAULT : SQGPCI_DEFAULT;
 #endif
       l3sqc.L3SQHighPriorityCreditInitialization = SQHPCI_DEFAULT;
    }
@@ -596,7 +707,6 @@ genX(emit_sample_pattern)(struct anv_batch *batch, uint32_t samples,
 void
 genX(emit_shading_rate)(struct anv_batch *batch,
                         const struct anv_graphics_pipeline *pipeline,
-                        struct anv_state cps_states,
                         struct anv_dynamic_state *dynamic_state)
 {
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
@@ -606,28 +716,34 @@ genX(emit_shading_rate)(struct anv_batch *batch,
    anv_batch_emit(batch, GENX(3DSTATE_CPS), cps) {
       cps.CoarsePixelShadingMode = cps_enable ? CPS_MODE_CONSTANT : CPS_MODE_NONE;
       if (cps_enable) {
-         cps.MinCPSizeX = dynamic_state->fragment_shading_rate.width;
-         cps.MinCPSizeY = dynamic_state->fragment_shading_rate.height;
+         cps.MinCPSizeX = dynamic_state->fragment_shading_rate.rate.width;
+         cps.MinCPSizeY = dynamic_state->fragment_shading_rate.rate.height;
       }
    }
-#elif GFX_VER == 12
-   for (uint32_t i = 0; i < dynamic_state->viewport.count; i++) {
-      uint32_t *cps_state_dwords =
-         cps_states.map + GENX(CPS_STATE_length) * 4 * i;
-      struct GENX(CPS_STATE) cps_state = {
-         .CoarsePixelShadingMode = cps_enable ? CPS_MODE_CONSTANT : CPS_MODE_NONE,
-      };
-
-      if (cps_enable) {
-         cps_state.MinCPSizeX = dynamic_state->fragment_shading_rate.width;
-         cps_state.MinCPSizeY = dynamic_state->fragment_shading_rate.height;
-      }
-
-      GENX(CPS_STATE_pack)(NULL, cps_state_dwords, &cps_state);
+#elif GFX_VER >= 12
+   /* TODO: we can optimize this flush in the following cases:
+    *
+    *    In the case where the last geometry shader emits a value that is not
+    *    constant, we can avoid this stall because we can synchronize the
+    *    pixel shader internally with
+    *    3DSTATE_PS::EnablePSDependencyOnCPsizeChange.
+    *
+    *    If we know that the previous pipeline and the current one are using
+    *    the same fragment shading rate.
+    */
+   anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
+#if GFX_VERx10 >= 125
+      pc.PSSStallSyncEnable = true;
+#else
+      pc.PSDSyncEnable = true;
+#endif
    }
 
    anv_batch_emit(batch, GENX(3DSTATE_CPS_POINTERS), cps) {
-      cps.CoarsePixelShadingStateArrayPointer = cps_states.offset;
+      struct anv_device *device = pipeline->base.device;
+
+      cps.CoarsePixelShadingStateArrayPointer =
+         get_cps_state_offset(device, cps_enable, dynamic_state);
    }
 #endif
 }

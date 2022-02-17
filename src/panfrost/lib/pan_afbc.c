@@ -64,7 +64,7 @@
  * and the driver never needs to know the internal data. For edge cases where
  * the driver really does need to read/write from the AFBC resource, we
  * generate a linear staging buffer and use the GPU to blit AFBC<--->linear.
- * TODO: Implement me. */
+ */
 
 #define AFBC_TILE_WIDTH 16
 #define AFBC_TILE_HEIGHT 16

@@ -29,7 +29,8 @@
 #include "string_to_uint_map.h"
 #include "ir_array_refcount.h"
 
-#include "main/mtypes.h"
+#include "main/shader_types.h"
+#include "main/consts_exts.h"
 #include "util/strndup.h"
 
 /**
@@ -139,7 +140,7 @@ get_array_size(struct gl_uniform_storage *uni, const glsl_struct_field *field,
     *     member is an array with no declared size, the value zero is written
     *     to <params>."
     */
-   if (is_top_level_shader_storage_block_member(uni->name,
+   if (is_top_level_shader_storage_block_member(uni->name.string,
                                                 interface_name,
                                                 var_name))
       return  1;
@@ -171,7 +172,7 @@ get_array_stride(struct gl_uniform_storage *uni, const glsl_type *iface,
       bool row_major = matrix_layout == GLSL_MATRIX_LAYOUT_ROW_MAJOR;
       const glsl_type *array_type = field->type->fields.array;
 
-      if (is_top_level_shader_storage_block_member(uni->name,
+      if (is_top_level_shader_storage_block_member(uni->name.string,
                                                    interface_name,
                                                    var_name))
          return 0;
@@ -200,15 +201,15 @@ calculate_array_size_and_stride(struct gl_shader_program *shProg,
    int block_index = uni->block_index;
    int array_size = -1;
    int array_stride = -1;
-   char *var_name = get_top_level_name(uni->name);
+   char *var_name = get_top_level_name(uni->name.string);
    char *interface_name =
       get_top_level_name(uni->is_shader_storage ?
-                         shProg->data->ShaderStorageBlocks[block_index].Name :
-                         shProg->data->UniformBlocks[block_index].Name);
+                         shProg->data->ShaderStorageBlocks[block_index].name.string :
+                         shProg->data->UniformBlocks[block_index].name.string);
 
    if (strcmp(var_name, interface_name) == 0) {
       /* Deal with instanced array of SSBOs */
-      char *temp_name = get_var_name(uni->name);
+      char *temp_name = get_var_name(uni->name.string);
       if (!temp_name) {
          linker_error(shProg, "Out of memory during linking.\n");
          goto write_top_level_array_size_and_stride;
@@ -758,15 +759,15 @@ public:
             unsigned l = strlen(var->get_interface_type()->name);
 
             for (unsigned i = 0; i < num_blks; i++) {
-               if (strncmp(var->get_interface_type()->name, blks[i].Name, l)
-                   == 0 && blks[i].Name[l] == '[') {
+               if (strncmp(var->get_interface_type()->name, blks[i].name.string, l)
+                   == 0 && blks[i].name.string[l] == '[') {
                   buffer_block_index = i;
                   break;
                }
             }
          } else {
             for (unsigned i = 0; i < num_blks; i++) {
-               if (strcmp(var->get_interface_type()->name, blks[i].Name) == 0) {
+               if (strcmp(var->get_interface_type()->name, blks[i].name.string) == 0) {
                   buffer_block_index = i;
                   break;
                }
@@ -1114,7 +1115,8 @@ private:
          this->uniforms[id].remap_location = UNMAPPED_UNIFORM_LOC;
       }
 
-      this->uniforms[id].name = ralloc_strdup(this->uniforms, name);
+      this->uniforms[id].name.string = ralloc_strdup(this->uniforms, name);
+      resource_name_updated(&this->uniforms[id].name);
       this->uniforms[id].type = base_type;
       this->uniforms[id].num_driver_storage = 0;
       this->uniforms[id].driver_storage = NULL;
@@ -1335,7 +1337,7 @@ link_update_uniform_buffer_variables(struct gl_linked_shader *shader,
 
             const ptrdiff_t len = strlen(var->get_interface_type()->name);
             for (unsigned i = 0; i < num_blocks; i++) {
-               const char *const begin = blks[i]->Name;
+               const char *const begin = blks[i]->name.string;
                const char *const end = strchr(begin, sentinel);
 
                if (end == NULL)
@@ -1422,7 +1424,7 @@ assign_hidden_uniform_slot_id(const char *name, unsigned hidden_id,
 }
 
 static void
-link_setup_uniform_remap_tables(struct gl_context *ctx,
+link_setup_uniform_remap_tables(const struct gl_constants *consts,
                                 struct gl_shader_program *prog)
 {
    unsigned total_entries = prog->NumExplicitUniformLocations;
@@ -1511,10 +1513,10 @@ link_setup_uniform_remap_tables(struct gl_context *ctx,
     * is less than MAX_UNIFORM_LOCATIONS.
     */
 
-   if (total_entries > ctx->Const.MaxUserAssignableUniformLocations) {
+   if (total_entries > consts->MaxUserAssignableUniformLocations) {
       linker_error(prog, "count of uniform locations > MAX_UNIFORM_LOCATIONS"
                    "(%u > %u)", total_entries,
-                   ctx->Const.MaxUserAssignableUniformLocations);
+                   consts->MaxUserAssignableUniformLocations);
    }
 
    /* Reserve all the explicit locations of the active subroutine uniforms. */
@@ -1587,7 +1589,7 @@ link_setup_uniform_remap_tables(struct gl_context *ctx,
 }
 
 static void
-link_assign_uniform_storage(struct gl_context *ctx,
+link_assign_uniform_storage(const struct gl_constants *consts,
                             struct gl_shader_program *prog,
                             const unsigned num_data_slots)
 {
@@ -1596,7 +1598,7 @@ link_assign_uniform_storage(struct gl_context *ctx,
    if (prog->data->NumUniformStorage == 0)
       return;
 
-   unsigned int boolean_true = ctx->Const.UniformBooleanTrue;
+   unsigned int boolean_true = consts->UniformBooleanTrue;
 
    union gl_constant_value *data;
    if (prog->data->UniformStorage == NULL) {
@@ -1618,7 +1620,7 @@ link_assign_uniform_storage(struct gl_context *ctx,
 
    parcel_out_uniform_storage parcel(prog, prog->UniformHash,
                                      prog->data->UniformStorage, data,
-                                     ctx->Const.UseSTD430AsDefaultPacking);
+                                     consts->UseSTD430AsDefaultPacking);
 
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       struct gl_linked_shader *shader = prog->_LinkedShaders[i];
@@ -1682,7 +1684,7 @@ link_assign_uniform_storage(struct gl_context *ctx,
    assert(parcel.values == data_end);
 #endif
 
-   link_setup_uniform_remap_tables(ctx, prog);
+   link_setup_uniform_remap_tables(consts, prog);
 
    /* Set shader cache fields */
    prog->data->NumUniformDataSlots = num_data_slots;
@@ -1693,7 +1695,7 @@ link_assign_uniform_storage(struct gl_context *ctx,
 
 void
 link_assign_uniform_locations(struct gl_shader_program *prog,
-                              struct gl_context *ctx)
+                              const struct gl_constants *consts)
 {
    ralloc_free(prog->data->UniformStorage);
    prog->data->UniformStorage = NULL;
@@ -1714,7 +1716,7 @@ link_assign_uniform_locations(struct gl_shader_program *prog,
     */
    struct string_to_uint_map *hiddenUniforms = new string_to_uint_map;
    count_uniform_size uniform_size(prog->UniformHash, hiddenUniforms,
-                                   ctx->Const.UseSTD430AsDefaultPacking);
+                                   consts->UseSTD430AsDefaultPacking);
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       struct gl_linked_shader *sh = prog->_LinkedShaders[i];
 
@@ -1738,18 +1740,18 @@ link_assign_uniform_locations(struct gl_shader_program *prog,
       }
 
       if (uniform_size.num_shader_samplers >
-          ctx->Const.Program[i].MaxTextureImageUnits) {
+          consts->Program[i].MaxTextureImageUnits) {
          linker_error(prog, "Too many %s shader texture samplers\n",
                       _mesa_shader_stage_to_string(i));
          continue;
       }
 
       if (uniform_size.num_shader_images >
-          ctx->Const.Program[i].MaxImageUniforms) {
+          consts->Program[i].MaxImageUniforms) {
          linker_error(prog, "Too many %s shader image uniforms (%u > %u)\n",
                       _mesa_shader_stage_to_string(i),
                       sh->Program->info.num_images,
-                      ctx->Const.Program[i].MaxImageUniforms);
+                      consts->Program[i].MaxImageUniforms);
          continue;
       }
 
@@ -1776,5 +1778,5 @@ link_assign_uniform_locations(struct gl_shader_program *prog,
    hiddenUniforms->iterate(assign_hidden_uniform_slot_id, &uniform_size);
    delete hiddenUniforms;
 
-   link_assign_uniform_storage(ctx, prog, uniform_size.num_values);
+   link_assign_uniform_storage(consts, prog, uniform_size.num_values);
 }

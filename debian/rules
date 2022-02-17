@@ -36,7 +36,6 @@ else
   endif
 endif
 
-DRI_DRIVERS =
 EGL_PLATFORMS = x11
 GALLIUM_DRIVERS = swrast
 VULKAN_DRIVERS =
@@ -49,7 +48,6 @@ ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	confflags_DIRECT_RENDERING = -Dglx-direct=false
 	confflags_GBM = -Dgbm=disabled
 else
-	DRI_DRIVERS += r100 r200
 	GALLIUM_DRIVERS += r300 r600
 
 	confflags_DIRECT_RENDERING = -Dglx-direct=true
@@ -66,7 +64,6 @@ else
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = -Ddri3=enabled
-	DRI_DRIVERS += nouveau
 	# Gallium drivers which require kernel support, not yet ported to non-Linux
 	GALLIUM_DRIVERS += nouveau virgl
 
@@ -105,7 +102,6 @@ else
 
   # Build intel drivers on archs where libdrm-intel is installed
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32))
-	DRI_DRIVERS += i915 i965
 	GALLIUM_DRIVERS += iris crocus
   endif
 
@@ -139,8 +135,6 @@ endif
 empty:=
 space := $(empty) $(empty)
 comma := ,
-DRI_DRIVERS := $(patsubst %,'%',$(DRI_DRIVERS))
-DRI_DRIVERS_LIST := $(subst $(space),$(comma),$(DRI_DRIVERS))
 GALLIUM_DRIVERS := $(patsubst %,'%',$(GALLIUM_DRIVERS))
 GALLIUM_DRIVERS_LIST := $(subst $(space),$(comma),$(GALLIUM_DRIVERS))
 VULKAN_DRIVERS := $(patsubst %,'%',$(VULKAN_DRIVERS))
@@ -151,7 +145,6 @@ confflags_GLES = -Dgles1=disabled -Dgles2=enabled
 confflags_GALLIUM += -Dgallium-drivers="[$(GALLIUM_DRIVERS_LIST)]"
 
 confflags += \
-	-Ddri-drivers="[$(DRI_DRIVERS_LIST)]" \
 	-Ddri-drivers-path=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
 	-Ddri-search-path='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	-Dvulkan-drivers="[$(VULKAN_DRIVERS_LIST)]" \

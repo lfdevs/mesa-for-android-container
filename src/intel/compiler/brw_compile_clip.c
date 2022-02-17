@@ -63,16 +63,16 @@ brw_compile_clip(const struct brw_compiler *compiler,
     * do all three:
     */
    switch (key->primitive) {
-   case GL_TRIANGLES:
+   case SHADER_PRIM_TRIANGLES:
       if (key->do_unfilled)
 	 brw_emit_unfilled_clip( &c );
       else
 	 brw_emit_tri_clip( &c );
       break;
-   case GL_LINES:
+   case SHADER_PRIM_LINES:
       brw_emit_line_clip( &c );
       break;
-   case GL_POINTS:
+   case SHADER_PRIM_POINTS:
       brw_emit_point_clip( &c );
       break;
    default:

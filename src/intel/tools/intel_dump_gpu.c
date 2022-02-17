@@ -123,7 +123,7 @@ ensure_device_info(int fd)
    if (device == 0) {
       fail_if(!intel_get_device_info_from_fd(fd, &devinfo),
               "failed to identify chipset.\n");
-      device = devinfo.chipset_id;
+      device = devinfo.pci_device_id;
    } else if (devinfo.ver == 0) {
       fail_if(!intel_get_device_info_from_pci_id(device, &devinfo),
               "failed to identify chipset.\n");
@@ -563,7 +563,7 @@ ioctl(int fd, unsigned long request, ...)
                return 0;
 
             case I915_PARAM_HAS_EXEC_SOFTPIN:
-               *getparam->value = devinfo.ver >= 8 && !devinfo.is_cherryview;
+               *getparam->value = devinfo.ver >= 8 && devinfo.platform != INTEL_PLATFORM_CHV;
                return 0;
 
             default:
@@ -582,9 +582,9 @@ ioctl(int fd, unsigned long request, ...)
          if (device_override) {
             switch (getparam->param) {
             case I915_CONTEXT_PARAM_GTT_SIZE:
-               if (devinfo.is_elkhartlake)
+               if (devinfo.platform == INTEL_PLATFORM_EHL)
                   getparam->value = 1ull << 36;
-               else if (devinfo.ver >= 8 && !devinfo.is_cherryview)
+               else if (devinfo.ver >= 8 && devinfo.platform != INTEL_PLATFORM_CHV)
                   getparam->value = 1ull << 48;
                else
                   getparam->value = 1ull << 31;

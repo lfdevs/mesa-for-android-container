@@ -169,6 +169,9 @@ struct qinst {
          * otherwise.
          */
         int uniform;
+
+        /* If this is a a TLB Z write */
+        bool is_tlb_z_write;
 };
 
 enum quniform_contents {
@@ -419,7 +422,7 @@ struct v3d_fs_key {
          */
         struct {
                 enum pipe_format format;
-                const uint8_t *swizzle;
+                uint8_t swizzle[4];
         } color_fmt[V3D_MAX_DRAW_BUFFERS];
 
         uint8_t logicop_func;
@@ -652,6 +655,8 @@ struct v3d_compile {
 
         bool uses_center_w;
         bool writes_z;
+        bool writes_z_from_fep;
+        bool reads_z;
         bool uses_implicit_point_line_varyings;
 
         /* True if a fragment shader reads gl_PrimitiveID */
@@ -799,7 +804,7 @@ struct v3d_compile {
         uint32_t uniform_array_size;
         uint32_t num_uniforms;
         uint32_t output_position_index;
-        nir_variable *output_color_var[4];
+        nir_variable *output_color_var[V3D_MAX_DRAW_BUFFERS];
         uint32_t output_sample_mask_index;
 
         struct qreg undef;
@@ -964,6 +969,7 @@ struct v3d_fs_prog_data {
 
         uint8_t num_inputs;
         bool writes_z;
+        bool writes_z_from_fep;
         bool disable_ez;
         bool uses_center_w;
         bool uses_implicit_point_line_varyings;
@@ -1103,7 +1109,7 @@ void v3d_nir_lower_robust_buffer_access(nir_shader *shader, struct v3d_compile *
 void v3d_nir_lower_scratch(nir_shader *s);
 void v3d_nir_lower_txf_ms(nir_shader *s, struct v3d_compile *c);
 void v3d_nir_lower_image_load_store(nir_shader *s);
-void vir_lower_uniforms(struct v3d_compile *c);
+void v3d_nir_lower_load_store_bitsize(nir_shader *s, struct v3d_compile *c);
 
 void v3d33_vir_vpm_read_setup(struct v3d_compile *c, int num_components);
 void v3d33_vir_vpm_write_setup(struct v3d_compile *c);
@@ -1120,7 +1126,7 @@ bool vir_init_reg_sets(struct v3d_compiler *compiler);
 
 int v3d_shaderdb_dump(struct v3d_compile *c, char **shaderdb_str);
 
-bool v3d_gl_format_is_return_32(GLenum format);
+bool v3d_gl_format_is_return_32(enum pipe_format format);
 
 uint32_t
 v3d_get_op_for_atomic_add(nir_intrinsic_instr *instr, unsigned src);

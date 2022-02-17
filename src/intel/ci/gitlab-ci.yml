@@ -1,0 +1,31 @@
+.anv-test:
+  extends:
+    - .lava-test:amd64
+    - .anv-rules
+  variables:
+    DTB: ""
+    DRIVER_NAME: anv
+    BOOT_METHOD: depthcharge
+    KERNEL_IMAGE_TYPE: ""
+    FLAKES_CHANNEL: "#intel-ci"
+    HWCI_FREQ_MAX: "true"
+
+# 10 boards
+.anv-tgl-test:
+  extends:
+    - .anv-test
+  variables:
+    DEVICE_TYPE: asus-cx9400-volteer
+    GPU_VERSION: anv-tgl
+    FDO_CI_CONCURRENT: 8
+  tags:
+    - mesa-ci-x86-64-lava-asus-cx9400-volteer
+
+anv-tgl-vk:
+  extends:
+    - .anv-tgl-test
+  variables:
+    DEQP_SUITE: anv-tgl-vk
+    DEQP_VER: vk
+    VK_DRIVER: intel
+  parallel: 10

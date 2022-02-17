@@ -76,6 +76,19 @@ intel_ioctl(int fd, unsigned long request, void *arg)
     return ret;
 }
 
+static inline uint64_t
+intel_read_gpu_timestamp(int fd)
+{
+   struct drm_i915_reg_read reg_read = {};
+   const uint64_t render_ring_timestamp = 0x2358;
+   reg_read.offset = render_ring_timestamp | I915_REG_READ_8B_WA;
+
+   if (intel_ioctl(fd, DRM_IOCTL_I915_REG_READ, &reg_read) < 0)
+      return 0;
+
+   return reg_read.val;
+}
+
 /**
  * A wrapper around DRM_IOCTL_I915_QUERY
  *
@@ -122,8 +135,11 @@ intel_i915_query(int fd, uint64_t query_id, void *buffer,
  * The caller is responsible for freeing the returned pointer.
  */
 static inline void *
-intel_i915_query_alloc(int fd, uint64_t query_id)
+intel_i915_query_alloc(int fd, uint64_t query_id, int32_t *query_length)
 {
+   if (query_length)
+      *query_length = 0;
+
    int32_t length = 0;
    int ret = intel_i915_query(fd, query_id, NULL, &length);
    if (ret < 0)
@@ -141,9 +157,18 @@ intel_i915_query_alloc(int fd, uint64_t query_id)
       return NULL;
    }
 
+   if (query_length)
+      *query_length = length;
+
    return data;
 }
 
 bool intel_gem_supports_syncobj_wait(int fd);
+
+int intel_gem_count_engines(const struct drm_i915_query_engine_info *info,
+                            enum drm_i915_gem_engine_class engine_class);
+int intel_gem_create_context_engines(int fd,
+                                     const struct drm_i915_query_engine_info *info,
+                                     int num_engines, uint16_t *engine_classes);
 
 #endif /* INTEL_GEM_H */
