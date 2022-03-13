@@ -2830,7 +2830,8 @@ iris_bind_vs_state(struct pipe_context *ctx, void *state)
 
       if (ice->state.vs_uses_draw_params != uses_draw_params ||
           ice->state.vs_uses_derived_draw_params != uses_derived_draw_params ||
-          ice->state.vs_needs_edge_flag != info->vs.needs_edge_flag) {
+          ice->state.vs_needs_edge_flag != info->vs.needs_edge_flag ||
+          ice->state.vs_needs_sgvs_element != needs_sgvs_element) {
          ice->state.dirty |= IRIS_DIRTY_VERTEX_BUFFERS |
                              IRIS_DIRTY_VERTEX_ELEMENTS;
       }

@@ -42,7 +42,7 @@ dxil_nir_algebraic_c = custom_target(
     '-p', join_paths(meson.source_root(), 'src/compiler/nir/'),
   ],
   capture : true,
-  depend_files : nir_algebraic_py,
+  depend_files : nir_algebraic_depends,
 )
 
 libdxil_compiler = static_library(

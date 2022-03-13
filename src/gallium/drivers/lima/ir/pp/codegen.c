@@ -697,13 +697,13 @@ static int get_instr_encode_size(ppir_instr *instr)
 
 static void bitcopy(void *dst, int dst_offset, void *src, int src_size)
 {
-   int off1 = dst_offset & 0x1f;
-   uint32_t *cpy_dst = dst, *cpy_src = src;
+   unsigned char *cpy_dst = dst, *cpy_src = src;
+   int off1 = dst_offset & 0x07;
 
-   cpy_dst += (dst_offset >> 5);
+   cpy_dst += (dst_offset >> 3);
 
    if (off1) {
-      int off2 = 32 - off1;
+      int off2 = 0x08 - off1;
       int cpy_size = 0;
       while (1) {
          *cpy_dst |= *cpy_src << off1;

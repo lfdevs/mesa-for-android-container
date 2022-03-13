@@ -167,6 +167,7 @@ brw_compile_task(const struct brw_compiler *compiler,
 
    prog_data->base.base.stage = MESA_SHADER_TASK;
    prog_data->base.base.total_shared = nir->info.shared_size;
+   prog_data->base.base.total_scratch = 0;
 
    prog_data->base.local_size[0] = nir->info.workgroup_size[0];
    prog_data->base.local_size[1] = nir->info.workgroup_size[1];
@@ -465,7 +466,7 @@ brw_nir_lower_mue_outputs(nir_shader *nir, const struct brw_mue_map *map)
       var->data.driver_location = map->start_dw[location];
    }
 
-   nir_lower_io(nir, nir_var_shader_out, type_size_vec4,
+   nir_lower_io(nir, nir_var_shader_out, type_size_scalar_dwords,
                 nir_lower_io_lower_64bit_to_32);
 }
 
@@ -547,6 +548,7 @@ brw_compile_mesh(const struct brw_compiler *compiler,
 
    prog_data->base.base.stage = MESA_SHADER_MESH;
    prog_data->base.base.total_shared = nir->info.shared_size;
+   prog_data->base.base.total_scratch = 0;
 
    prog_data->base.local_size[0] = nir->info.workgroup_size[0];
    prog_data->base.local_size[1] = nir->info.workgroup_size[1];

@@ -395,10 +395,6 @@ vma_alloc(struct iris_bufmgr *bufmgr,
    if (memzone == IRIS_MEMZONE_BORDER_COLOR_POOL)
       return IRIS_BORDER_COLOR_POOL_ADDRESS;
 
-   /* The binder handles its own allocations.  Return non-zero here. */
-   if (memzone == IRIS_MEMZONE_BINDER)
-      return IRIS_MEMZONE_BINDER_START;
-
    uint64_t addr =
       util_vma_heap_alloc(&bufmgr->vma_allocator[memzone], size, alignment);
 
@@ -425,10 +421,6 @@ vma_free(struct iris_bufmgr *bufmgr,
       return;
 
    enum iris_memory_zone memzone = iris_memzone_for_address(address);
-
-   /* The binder handles its own allocations. */
-   if (memzone == IRIS_MEMZONE_BINDER)
-      return;
 
    assert(memzone < ARRAY_SIZE(bufmgr->vma_allocator));
 
@@ -1787,10 +1779,8 @@ iris_bufmgr_destroy(struct iris_bufmgr *bufmgr)
    _mesa_hash_table_destroy(bufmgr->name_table, NULL);
    _mesa_hash_table_destroy(bufmgr->handle_table, NULL);
 
-   for (int z = 0; z < IRIS_MEMZONE_COUNT; z++) {
-      if (z != IRIS_MEMZONE_BINDER)
+   for (int z = 0; z < IRIS_MEMZONE_COUNT; z++)
          util_vma_heap_finish(&bufmgr->vma_allocator[z]);
-   }
 
    close(bufmgr->fd);
 
@@ -2386,18 +2376,19 @@ iris_bufmgr_create(struct intel_device_info *devinfo, int fd, bool bo_reuse)
    STATIC_ASSERT(IRIS_MEMZONE_SHADER_START == 0ull);
    const uint64_t _4GB = 1ull << 32;
    const uint64_t _2GB = 1ul << 31;
+   const uint64_t _1GB = 1ul << 30;
 
    /* The STATE_BASE_ADDRESS size field can only hold 1 page shy of 4GB */
    const uint64_t _4GB_minus_1 = _4GB - PAGE_SIZE;
 
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_SHADER],
                       PAGE_SIZE, _4GB_minus_1 - PAGE_SIZE);
+   util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_BINDER],
+                      IRIS_MEMZONE_BINDER_START, _1GB - IRIS_BINDLESS_SIZE);
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_BINDLESS],
                       IRIS_MEMZONE_BINDLESS_START, IRIS_BINDLESS_SIZE);
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_SURFACE],
-                      IRIS_MEMZONE_SURFACE_START,
-                      _4GB_minus_1 - IRIS_MAX_BINDERS * IRIS_BINDER_SIZE -
-                     IRIS_BINDLESS_SIZE);
+                      IRIS_MEMZONE_SURFACE_START, _4GB_minus_1 - _1GB);
    /* TODO: Why does limiting to 2GB help some state items on gfx12?
     *  - CC Viewport Pointer
     *  - Blend State Pointer

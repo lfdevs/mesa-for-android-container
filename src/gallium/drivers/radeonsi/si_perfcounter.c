@@ -158,7 +158,10 @@ static void si_pc_emit_stop(struct si_context *sctx, struct si_resource *buffer,
    radeon_emit(EVENT_TYPE(V_028A90_PERFCOUNTER_STOP) | EVENT_INDEX(0));
    radeon_set_uconfig_reg(
       R_036020_CP_PERFMON_CNTL,
-      S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_STOP_COUNTING) | S_036020_PERFMON_SAMPLE_ENABLE(1));
+      S_036020_PERFMON_STATE(sctx->screen->info.never_stop_sq_perf_counters ?
+                                V_036020_CP_PERFMON_STATE_START_COUNTING :
+                                V_036020_CP_PERFMON_STATE_STOP_COUNTING) |
+      S_036020_PERFMON_SAMPLE_ENABLE(1));
    radeon_end();
 }
 

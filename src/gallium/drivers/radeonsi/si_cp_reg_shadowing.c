@@ -68,7 +68,14 @@ static void si_build_load_reg(struct si_screen *sscreen, struct si_pm4_state *pm
 static struct si_pm4_state *
 si_create_shadowing_ib_preamble(struct si_context *sctx)
 {
-   struct si_pm4_state *pm4 = CALLOC_STRUCT(si_pm4_state);
+   struct si_shadow_preamble {
+      struct si_pm4_state pm4;
+      uint32_t more_pm4[150]; /* Add more space because the command buffer is large. */
+   };
+   struct si_pm4_state *pm4 = (struct si_pm4_state *)CALLOC_STRUCT(si_shadow_preamble);
+
+   /* Add all the space that we allocated. */
+   pm4->max_dw = sizeof(struct si_shadow_preamble) - offsetof(struct si_shadow_preamble, pm4.pm4);
 
    if (sctx->screen->dpbb_allowed) {
       si_pm4_cmd_add(pm4, PKT3(PKT3_EVENT_WRITE, 0, 0));

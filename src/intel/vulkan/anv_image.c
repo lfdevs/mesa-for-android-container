@@ -1215,18 +1215,7 @@ add_all_surfaces_explicit_layout(
       if (result != VK_SUCCESS)
          return result;
 
-      if (!mod_has_aux) {
-         /* Even though the modifier does not support aux, try to create
-          * a driver-private aux to improve performance.
-          */
-         result = add_aux_surface_if_supported(device, image, plane,
-                                               format_plane,
-                                               format_list_info,
-                                               ANV_OFFSET_IMPLICIT, 0,
-                                               isl_extra_usage_flags);
-         if (result != VK_SUCCESS)
-            return result;
-      } else {
+      if (mod_has_aux) {
          const VkSubresourceLayout *aux_layout = &drm_info->pPlaneLayouts[1];
          result = add_aux_surface_if_supported(device, image, plane,
                                                format_plane,
@@ -1444,10 +1433,23 @@ anv_image_init_from_create_info(struct anv_device *device,
       return anv_image_init_from_gralloc(device, image, pCreateInfo,
                                          gralloc_info);
 
-   return anv_image_init(device, image,
-                         &(struct anv_image_create_info) {
-                            .vk_info = pCreateInfo,
-                         });
+   struct anv_image_create_info create_info = {
+      .vk_info = pCreateInfo,
+   };
+
+   /* For dmabuf imports, configure the primary surface without support for
+    * compression if the modifier doesn't specify it. This helps to create
+    * VkImages with memory requirements that are compatible with the buffers
+    * apps provide.
+    */
+   const struct VkImageDrmFormatModifierExplicitCreateInfoEXT *mod_explicit_info =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
+   if (mod_explicit_info &&
+       !isl_drm_modifier_has_aux(mod_explicit_info->drmFormatModifier))
+      create_info.isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+
+   return anv_image_init(device, image, &create_info);
 }
 
 VkResult anv_CreateImage(
@@ -1580,25 +1582,10 @@ anv_image_get_memory_requirements(struct anv_device *device,
     *    supported memory type for the resource. The bit `1<<i` is set if and
     *    only if the memory type `i` in the VkPhysicalDeviceMemoryProperties
     *    structure for the physical device is supported.
+    *
+    * All types are currently supported for images.
     */
-   uint32_t memory_types = 0;
-   for (int i = 0; i < device->physical->memory.type_count; i++) {
-      const uint32_t heap_index = device->physical->memory.types[i].heapIndex;
-
-      bool memory_type_supported = true;
-      u_foreach_bit(b, aspects) {
-         VkImageAspectFlagBits aspect = 1 << b;
-         const uint32_t plane = anv_image_aspect_to_plane(image, aspect);
-
-         if (device->info.verx10 >= 125 &&
-             isl_aux_usage_has_ccs(image->planes[plane].aux_usage) &&
-             !device->physical->memory.heaps[heap_index].is_local_mem)
-            memory_type_supported = false;
-      }
-
-      if (memory_type_supported)
-         memory_types |= 1 << i;
-   }
+   uint32_t memory_types = (1ull << device->physical->memory.type_count) - 1;
 
    vk_foreach_struct(ext, pMemoryRequirements->pNext) {
       switch (ext->sType) {

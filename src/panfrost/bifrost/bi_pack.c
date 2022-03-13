@@ -114,6 +114,12 @@ bi_assign_slots(bi_tuple *now, bi_tuple *prev)
 
         if (now->add) {
                 bi_foreach_src(now->add, src) {
+                        /* This is not a real source, we shouldn't assign a
+                         * slot for it.
+                         */
+                        if (now->add->op == BI_OPCODE_BLEND && src == 4)
+                                continue;
+
                         if (!(src == 0 && read_dreg))
                                 bi_assign_slot_read(&now->regs, (now->add)->src[src]);
                 }

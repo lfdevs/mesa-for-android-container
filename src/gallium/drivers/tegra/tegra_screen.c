@@ -245,6 +245,10 @@ tegra_screen_resource_create(struct pipe_screen *pscreen,
    pipe_reference_init(&resource->base.reference, 1);
    resource->base.screen = &screen->base;
 
+   /* use private reference count for wrapped resources */
+   resource->gpu->reference.count += 100000000;
+   resource->refcount = 100000000;
+
    return &resource->base;
 
 destroy:
@@ -352,6 +356,8 @@ tegra_screen_resource_destroy(struct pipe_screen *pscreen,
 {
    struct tegra_resource *resource = to_tegra_resource(presource);
 
+   /* adjust private reference count */
+   p_atomic_add(&resource->gpu->reference.count, -resource->refcount);
    pipe_resource_reference(&resource->gpu, NULL);
    free(resource);
 }

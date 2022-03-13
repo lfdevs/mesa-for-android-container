@@ -136,7 +136,7 @@ check_os_altivec_support(void)
    int sels[2] = {CTL_MACHDEP, CPU_ALTIVEC};
 #endif
    int has_vu = 0;
-   int len = sizeof (has_vu);
+   size_t len = sizeof (has_vu);
    int err;
 
    err = sysctl(sels, 2, &has_vu, &len, NULL, 0);
@@ -438,6 +438,7 @@ check_os_arm_support(void)
 static void
 check_os_mips64_support(void)
 {
+#if defined(PIPE_OS_LINUX)
     Elf64_auxv_t aux;
     int fd;
 
@@ -453,6 +454,7 @@ check_os_mips64_support(void)
        }
        close (fd);
     }
+#endif /* PIPE_OS_LINUX */
 }
 #endif /* PIPE_ARCH_MIPS64 */
 
@@ -623,7 +625,7 @@ util_cpu_detect_once(void)
    if (available_cpus == 0) {
       const int mib[] = { CTL_HW, HW_NCPUONLINE };
       int ncpu;
-      int len = sizeof(ncpu);
+      size_t len = sizeof(ncpu);
 
       sysctl(mib, 2, &ncpu, &len, NULL, 0);
       available_cpus = ncpu;

@@ -1186,7 +1186,9 @@ static void si_emit_ia_multi_vgt_param(struct si_context *sctx,
           min_vertex_count);
 
    /* Draw state. */
-   if (ia_multi_vgt_param != sctx->last_multi_vgt_param) {
+   if (ia_multi_vgt_param != sctx->last_multi_vgt_param ||
+       /* Workaround for SpecviewPerf13 Catia hang on GFX9. */
+       (GFX_VERSION == GFX9 && prim != sctx->last_prim)) {
       radeon_begin(cs);
 
       if (GFX_VERSION == GFX9)

@@ -143,6 +143,9 @@ def parse_instruction(ins, include_pseudo):
         common['exact'] = parse_exact(ins)
 
     for src in ins.findall('src'):
+        if src.attrib.get('pseudo', False) and not include_pseudo:
+            continue
+
         mask = int(src.attrib['mask'], 0) if ('mask' in src.attrib) else 0xFF
         common['srcs'].append([int(src.attrib['start'], 0), mask])
 

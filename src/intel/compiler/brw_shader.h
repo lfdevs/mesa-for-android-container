@@ -122,7 +122,7 @@ extern const char *const conditional_modifier[16];
 extern const char *const pred_ctrl_align16[16];
 
 /* Per-thread scratch space is a power-of-two multiple of 1KB. */
-static inline int
+static inline unsigned
 brw_get_scratch_size(int size)
 {
    return MAX2(1024, util_next_power_of_two(size));

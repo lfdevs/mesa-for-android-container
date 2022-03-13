@@ -206,7 +206,7 @@ zink_screen_update_pipeline_cache(struct zink_screen *screen, struct zink_progra
    if (!screen->disk_cache)
       return;
 
-   util_queue_add_job(&screen->cache_put_thread, pg, NULL, cache_put_job, NULL, 0);
+   util_queue_add_job(&screen->cache_put_thread, pg, &pg->cache_fence, cache_put_job, NULL, 0);
 }
 
 static void

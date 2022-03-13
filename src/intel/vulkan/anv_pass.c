@@ -675,6 +675,7 @@ anv_dynamic_pass_init_full(struct anv_dynamic_render_pass *dyn_render_pass,
          .usage   = VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR,
       };
 
+      subpass->fsr_attachment = &subpass_attachments[fsr_idx];
       *subpass->fsr_attachment = (struct anv_subpass_attachment) {
          .usage      = VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR,
          .attachment = fsr_idx,

@@ -316,7 +316,7 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
                             draw->rasterizer->clip_halfz,
                             (draw->vs.edgeflag_output ? TRUE : FALSE) );
 
-   draw_pt_so_emit_prepare( fpme->so_emit, gs == NULL );
+   draw_pt_so_emit_prepare( fpme->so_emit, (gs == NULL && tes == NULL));
 
    if (!(opt & PT_PIPELINE)) {
       draw_pt_emit_prepare( fpme->emit, out_prim,

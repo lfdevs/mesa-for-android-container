@@ -366,6 +366,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    const unsigned *assembly;
 
    vue_prog_data->base.stage = MESA_SHADER_TESS_CTRL;
+   prog_data->base.base.total_scratch = 0;
 
    nir->info.outputs_written = key->outputs_written;
    nir->info.patch_outputs_written = key->patch_outputs_written;

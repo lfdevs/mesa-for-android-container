@@ -45,6 +45,7 @@ typedef struct
    nir_variable *prim_exp_arg_var;
    nir_variable *es_accepted_var;
    nir_variable *gs_accepted_var;
+   nir_variable *gs_vtx_indices_vars[3];
 
    struct u_vector saved_uniforms;
 
@@ -338,11 +339,16 @@ emit_pack_ngg_prim_exp_arg(nir_builder *b, unsigned num_vertices_per_primitives,
    return arg;
 }
 
-static nir_ssa_def *
-ngg_input_primitive_vertex_index(nir_builder *b, unsigned vertex)
+static void
+ngg_nogs_init_vertex_indices_vars(nir_builder *b, nir_function_impl *impl, lower_ngg_nogs_state *st)
 {
-   return nir_ubfe(b, nir_load_gs_vertex_offset_amd(b, .base = vertex / 2u),
-                      nir_imm_int(b, (vertex & 1u) * 16u), nir_imm_int(b, 16u));
+   for (unsigned v = 0; v < st->num_vertices_per_primitives; ++v) {
+      st->gs_vtx_indices_vars[v] = nir_local_variable_create(impl, glsl_uint_type(), "gs_vtx_addr");
+
+      nir_ssa_def *vtx = nir_ubfe(b, nir_load_gs_vertex_offset_amd(b, .base = v / 2u),
+                         nir_imm_int(b, (v & 1u) * 16u), nir_imm_int(b, 16u));
+      nir_store_var(b, st->gs_vtx_indices_vars[v], vtx, 0x1);
+   }
 }
 
 static nir_ssa_def *
@@ -354,13 +360,8 @@ emit_ngg_nogs_prim_exp_arg(nir_builder *b, lower_ngg_nogs_state *st)
    } else {
       nir_ssa_def *vtx_idx[3] = {0};
 
-      vtx_idx[0] = ngg_input_primitive_vertex_index(b, 0);
-      vtx_idx[1] = st->num_vertices_per_primitives >= 2
-               ? ngg_input_primitive_vertex_index(b, 1)
-               : nir_imm_zero(b, 1, 32);
-      vtx_idx[2] = st->num_vertices_per_primitives >= 3
-               ? ngg_input_primitive_vertex_index(b, 2)
-               : nir_imm_zero(b, 1, 32);
+      for (unsigned v = 0; v < st->num_vertices_per_primitives; ++v)
+         vtx_idx[v] = nir_load_var(b, st->gs_vtx_indices_vars[v]);
 
       return emit_pack_ngg_prim_exp_arg(b, st->num_vertices_per_primitives, vtx_idx, NULL, st->use_edgeflags);
    }
@@ -379,12 +380,20 @@ emit_ngg_nogs_prim_export(nir_builder *b, lower_ngg_nogs_state *st, nir_ssa_def 
          arg = emit_ngg_nogs_prim_exp_arg(b, st);
 
       if (st->export_prim_id && b->shader->info.stage == MESA_SHADER_VERTEX) {
-         /* Copy Primitive IDs from GS threads to the LDS address corresponding to the ES thread of the provoking vertex. */
-         nir_ssa_def *prim_id = nir_load_primitive_id(b);
-         nir_ssa_def *provoking_vtx_idx = ngg_input_primitive_vertex_index(b, st->provoking_vtx_idx);
-         nir_ssa_def *addr = pervertex_lds_addr(b, provoking_vtx_idx, 4u);
+         nir_ssa_def *prim_valid = nir_ieq_imm(b, nir_ushr_imm(b, arg, 31), 0);
+         nir_if *if_prim_valid = nir_push_if(b, prim_valid);
+         {
+            /* Copy Primitive IDs from GS threads to the LDS address
+             * corresponding to the ES thread of the provoking vertex.
+             * It will be exported as a per-vertex attribute.
+             */
+            nir_ssa_def *prim_id = nir_load_primitive_id(b);
+            nir_ssa_def *provoking_vtx_idx = nir_load_var(b, st->gs_vtx_indices_vars[st->provoking_vtx_idx]);
+            nir_ssa_def *addr = pervertex_lds_addr(b, provoking_vtx_idx, 4u);
 
-         nir_store_shared(b, prim_id, addr);
+            nir_store_shared(b, prim_id, addr);
+         }
+         nir_pop_if(b, if_prim_valid);
       }
 
       nir_export_primitive_amd(b, arg);
@@ -768,6 +777,7 @@ compact_vertices_after_culling(nir_builder *b,
          nir_ssa_def *vtx_addr = nir_load_var(b, gs_vtxaddr_vars[v]);
          nir_ssa_def *exporter_vtx_idx = nir_load_shared(b, 1, 8, vtx_addr, .base = lds_es_exporter_tid);
          exporter_vtx_indices[v] = nir_u2u32(b, exporter_vtx_idx);
+         nir_store_var(b, nogs_state->gs_vtx_indices_vars[v], exporter_vtx_indices[v], 0x1);
       }
 
       nir_ssa_def *prim_exp_arg = emit_pack_ngg_prim_exp_arg(b, 3, exporter_vtx_indices, NULL, nogs_state->use_edgeflags);
@@ -1161,7 +1171,7 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
          /* Load vertex indices from input VGPRs */
          nir_ssa_def *vtx_idx[3] = {0};
          for (unsigned vertex = 0; vertex < 3; ++vertex)
-            vtx_idx[vertex] = ngg_input_primitive_vertex_index(b, vertex);
+            vtx_idx[vertex] = nir_load_var(b, nogs_state->gs_vtx_indices_vars[vertex]);
 
          nir_ssa_def *vtx_addr[3] = {0};
          nir_ssa_def *pos[3][4] = {0};
@@ -1338,6 +1348,8 @@ ac_nir_lower_ngg_nogs(nir_shader *shader,
    nir_cf_list extracted;
    nir_cf_extract(&extracted, nir_before_cf_list(&impl->body), nir_after_cf_list(&impl->body));
    b->cursor = nir_before_cf_list(&impl->body);
+
+   ngg_nogs_init_vertex_indices_vars(b, impl, &state);
 
    if (!can_cull) {
       /* Allocate export space on wave 0 - confirm to the HW that we want to use all possible space */

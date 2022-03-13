@@ -70,8 +70,7 @@ panvk_meta_clear_color_attachment_shader(struct panfrost_device *pdev,
    GENX(pan_shader_compile)(b.shader, &inputs, &binary, shader_info);
 
    /* Make sure UBO words have been upgraded to push constants */
-   assert(shader_info->ubo_count == 1);
-   assert(shader_info->push.count == 4);
+   assert(shader_info->ubo_mask == 0);
 
    mali_ptr shader =
       pan_pool_upload_aligned(bin_pool, binary.data, binary.size,
@@ -138,8 +137,7 @@ panvk_meta_clear_zs_attachment_shader(struct panfrost_device *pdev,
    GENX(pan_shader_compile)(b.shader, &inputs, &binary, shader_info);
 
    /* Make sure UBO words have been upgraded to push constants */
-   assert(shader_info->ubo_count == 1);
-   assert(shader_info->push.count == 2);
+   assert(shader_info->ubo_mask == 0);
 
    mali_ptr shader =
       pan_pool_upload_aligned(bin_pool, binary.data, binary.size,

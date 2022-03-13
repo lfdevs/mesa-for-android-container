@@ -3613,6 +3613,11 @@ zink_set_stream_output_targets(struct pipe_context *pctx,
 {
    struct zink_context *ctx = zink_context(pctx);
 
+   /* always set counter_buffer_valid=false on unbind:
+    * - on resume (indicated by offset==-1), set counter_buffer_valid=true
+    * - otherwise the counter buffer is invalidated
+    */
+
    if (num_targets == 0) {
       for (unsigned i = 0; i < ctx->num_so_targets; i++) {
          if (ctx->so_targets[i]) {
@@ -3632,14 +3637,16 @@ zink_set_stream_output_targets(struct pipe_context *pctx,
          if (!t)
             continue;
          struct zink_resource *res = zink_resource(t->counter_buffer);
-         if (offsets[0] == (unsigned)-1)
+         if (offsets[0] == (unsigned)-1) {
             ctx->xfb_barrier |= zink_resource_buffer_needs_barrier(res,
                                                                    VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT,
                                                                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
-         else
+         } else {
             ctx->xfb_barrier |= zink_resource_buffer_needs_barrier(res,
                                                                    VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT,
                                                                    VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT);
+            t->counter_buffer_valid = false;
+         }
          struct zink_resource *so = zink_resource(ctx->so_targets[i]->buffer);
          if (so) {
             so->so_bind_count++;
@@ -4092,6 +4099,7 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->base.set_patch_vertices = zink_set_patch_vertices;
 
    ctx->base.set_sample_mask = zink_set_sample_mask;
+   ctx->gfx_pipeline_state.sample_mask = UINT32_MAX;
 
    ctx->base.clear = zink_clear;
    ctx->base.clear_texture = zink_clear_texture;

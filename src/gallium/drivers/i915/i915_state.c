@@ -608,7 +608,7 @@ i915_create_vs_state(struct pipe_context *pipe,
 {
    struct i915_context *i915 = i915_context(pipe);
 
-   struct pipe_shader_state from_nir;
+   struct pipe_shader_state from_nir = { PIPE_SHADER_IR_TGSI };
    if (templ->type == PIPE_SHADER_IR_NIR) {
       nir_shader *s = templ->ir.nir;
 
@@ -619,7 +619,6 @@ i915_create_vs_state(struct pipe_context *pipe,
        * per-stage, and i915 FS can't do native integers.  So, convert to TGSI,
        * where the draw path *does* support non-native-integers.
        */
-      from_nir.type = PIPE_SHADER_IR_TGSI;
       from_nir.tokens = nir_to_tgsi(s, pipe->screen);
       templ = &from_nir;
    }

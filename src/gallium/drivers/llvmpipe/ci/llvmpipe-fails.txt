@@ -263,4 +263,3 @@ spec@glsl-4.00@execution@conversion@vert-conversion-explicit-dvec2-vec2,Fail
 spec@glsl-4.00@execution@conversion@vert-conversion-explicit-dvec3-vec3,Fail
 spec@glsl-4.00@execution@conversion@vert-conversion-explicit-dvec4-vec4,Fail
 spec@glsl-4.50@execution@ssbo-atomiccompswap-int,Fail
-spec@glsl-es-1.00@linker@glsl-mismatched-uniform-precision-unused,Fail

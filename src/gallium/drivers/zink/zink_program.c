@@ -124,8 +124,14 @@ get_shader_module_for_stage(struct zink_context *ctx, struct zink_screen *screen
       zm->shader = mod;
       list_inithead(&zm->list);
       zm->num_uniforms = base_size;
-      zm->key_size = key->size;
-      memcpy(zm->key, key, key->size);
+      if (pstage != PIPE_SHADER_TESS_CTRL || zs->is_generated) {
+         /* non-generated tcs won't use the shader key */
+         zm->key_size = key->size;
+         memcpy(zm->key, key, key->size);
+      } else {
+         zm->key_size = 0;
+         memset(zm->key, 0, key->size);
+      }
       if (base_size)
          memcpy(zm->key + key->size, &key->base, base_size * sizeof(uint32_t));
       zm->hash = shader_module_hash(zm);
@@ -643,6 +649,7 @@ zink_destroy_gfx_program(struct zink_context *ctx,
                          struct zink_gfx_program *prog)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
+   util_queue_fence_wait(&prog->base.cache_fence);
    if (prog->base.layout)
       VKSCR(DestroyPipelineLayout)(screen->dev, prog->base.layout, NULL);
 
@@ -688,6 +695,7 @@ zink_destroy_compute_program(struct zink_context *ctx,
                              struct zink_compute_program *comp)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
+   util_queue_fence_wait(&comp->base.cache_fence);
    if (comp->base.layout)
       VKSCR(DestroyPipelineLayout)(screen->dev, comp->base.layout, NULL);
 

@@ -1435,9 +1435,13 @@ spec/arb_shader_atomic_counters/array-indexing: fail
 spec/arb_shader_atomic_counters/max-counters/combined test above maximum number of atomic counter buffers: skip
 spec/arb_shader_atomic_counters/semantics/fragment shader atomic built-in semantics: fail
 spec/arb_shader_atomic_counters/semantics/geometry shader atomic built-in semantics: fail
+spec/arb_shader_atomic_counters/semantics/tessellation control shader atomic built-in semantics: fail
+spec/arb_shader_atomic_counters/semantics/tessellation evaluation shader atomic built-in semantics: fail
 spec/arb_shader_atomic_counters/semantics/vertex shader atomic built-in semantics: fail
 spec/arb_shader_atomic_counters/unused-result/fragment shader atomic built-in semantics: fail
 spec/arb_shader_atomic_counters/unused-result/geometry shader atomic built-in semantics: fail
+spec/arb_shader_atomic_counters/unused-result/tessellation control shader atomic built-in semantics: fail
+spec/arb_shader_atomic_counters/unused-result/tessellation evaluation shader atomic built-in semantics: fail
 spec/arb_shader_atomic_counters/unused-result/vertex shader atomic built-in semantics: fail
 spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image1d/rgba32f: fail
 spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image1darray/rgba32f: fail
@@ -3680,8 +3684,8 @@ wgl/wgl-sanity: skip
 summary:
        name:  results
        ----  --------
-       pass:    17572
-       fail:     2029
+       pass:    17625
+       fail:     2033
       crash:       69
        skip:     1561
     timeout:        0
@@ -3692,4 +3696,4 @@ summary:
     changes:        0
       fixes:        0
 regressions:        0
-      total:    21251
+      total:    21308

@@ -2522,6 +2522,21 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
 #endif
 }
 
+static void
+blorp_exec_blitter(struct blorp_batch *batch,
+                   const struct blorp_params *params)
+{
+   blorp_measure_start(batch, params);
+
+   /* Someday, if we implement clears on the blit enginer, we can
+    * use params->src.enabled to determine which case we're in.
+    */
+   assert(params->src.enabled);
+   blorp_xy_block_copy_blt(batch, params);
+
+   blorp_measure_end(batch, params);
+}
+
 /**
  * \brief Execute a blit or render pass operation.
  *
@@ -2535,11 +2550,7 @@ static void
 blorp_exec(struct blorp_batch *batch, const struct blorp_params *params)
 {
    if (batch->flags & BLORP_BATCH_USE_BLITTER) {
-      /* Someday, if we implement clears on the blit enginer, we can
-       * use params->src.enabled to determine which case we're in.
-       */
-      assert(params->src.enabled);
-      blorp_xy_block_copy_blt(batch, params);
+      blorp_exec_blitter(batch, params);
    } else if (batch->flags & BLORP_BATCH_USE_COMPUTE) {
       blorp_exec_compute(batch, params);
    } else {

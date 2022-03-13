@@ -1087,7 +1087,8 @@ static bool si_try_normal_clear(struct si_context *sctx, struct pipe_surface *ds
        dst->u.tex.first_layer == 0 &&
        dst->u.tex.last_layer == util_max_layer(dst->texture, dst->u.tex.level) &&
        /* pipe->clear honors render_condition, so only use it if it's unset or if it's set and enabled. */
-       (!sctx->render_cond || render_condition_enabled)) {
+       (!sctx->render_cond || render_condition_enabled) &&
+       sctx->has_graphics) {
       struct pipe_context *ctx = &sctx->b;
       struct pipe_framebuffer_state saved_fb = {}, fb = {};
 

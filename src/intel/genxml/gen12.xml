@@ -6450,6 +6450,7 @@
   <instruction name="PIPE_CONTROL" bias="2" length="6" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="4"/>
     <field name="HDC Pipeline Flush Enable" start="9" end="9" type="bool"/>
+    <field name="L3 Read Only Cache Invalidation Enable" start="10" end="10" type="bool"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="0"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="2"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>

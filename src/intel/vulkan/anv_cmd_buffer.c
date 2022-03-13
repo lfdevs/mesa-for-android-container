@@ -277,7 +277,7 @@ static VkResult anv_create_cmd_buffer(
 
    result = vk_command_buffer_init(&cmd_buffer->vk, &device->vk);
    if (result != VK_SUCCESS)
-      goto fail;
+      goto fail_alloc;
 
    cmd_buffer->batch.status = VK_SUCCESS;
 
@@ -287,7 +287,7 @@ static VkResult anv_create_cmd_buffer(
 
    result = anv_cmd_buffer_init_batch_bo_chain(cmd_buffer);
    if (result != VK_SUCCESS)
-      goto fail;
+      goto fail_vk;
 
    anv_state_stream_init(&cmd_buffer->surface_state_stream,
                          &device->surface_state_pool, 4096);
@@ -310,7 +310,9 @@ static VkResult anv_create_cmd_buffer(
 
    return VK_SUCCESS;
 
- fail:
+ fail_vk:
+   vk_command_buffer_finish(&cmd_buffer->vk);
+ fail_alloc:
    vk_free2(&device->vk.alloc, &pool->alloc, cmd_buffer);
 
    return result;

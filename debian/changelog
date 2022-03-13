@@ -1,3 +1,9 @@
+mesa (22.0.0-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sun, 13 Mar 2022 20:46:36 +0200
+
 mesa (22.0.0~rc2-1) experimental; urgency=medium
 
   * New upstream release candidate.

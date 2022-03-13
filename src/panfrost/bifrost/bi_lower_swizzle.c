@@ -50,6 +50,19 @@ bi_lower_swizzle_16(bi_context *ctx, bi_instr *ins, unsigned src)
          * derivatives, which might require swizzle lowering */
         case BI_OPCODE_CLPER_I32:
         case BI_OPCODE_CLPER_V6_I32:
+
+        /* Similarly, CSEL.i32 consumes a boolean as a 32-bit argument. If the
+         * boolean is implemented as a 16-bit integer, the swizzle is needed
+         * for correct operation if the instruction producing the 16-bit
+         * boolean does not replicate to both halves of the containing 32-bit
+         * register. As such, we may need to lower a swizzle.
+         *
+         * This is a silly hack. Ideally, code gen would be smart enough to
+         * avoid this case (by replicating). In practice, silly hardware design
+         * decisions force our hand here.
+         */
+        case BI_OPCODE_MUX_I32:
+        case BI_OPCODE_CSEL_I32:
             break;
 
         case BI_OPCODE_IADD_V2S16:

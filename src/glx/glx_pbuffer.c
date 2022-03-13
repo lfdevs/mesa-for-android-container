@@ -202,6 +202,8 @@ CreateDRIDrawable(Display *dpy, struct glx_config *config,
 
    pdraw->textureTarget = determineTextureTarget(attrib_list, num_attribs);
    pdraw->textureFormat = determineTextureFormat(attrib_list, num_attribs);
+
+   pdraw->refcount = 1;
 #endif
 
    return GL_TRUE;

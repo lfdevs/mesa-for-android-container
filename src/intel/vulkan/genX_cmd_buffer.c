@@ -1423,14 +1423,22 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
       anv_layout_to_aux_usage(devinfo, image, aspect, 0, initial_layout);
    enum isl_aux_usage final_aux_usage =
       anv_layout_to_aux_usage(devinfo, image, aspect, 0, final_layout);
+   enum anv_fast_clear_type initial_fast_clear =
+      anv_layout_to_fast_clear_type(devinfo, image, aspect, initial_layout);
+   enum anv_fast_clear_type final_fast_clear =
+      anv_layout_to_fast_clear_type(devinfo, image, aspect, final_layout);
 
    /* We must override the anv_layout_to_* functions because they are unaware of
     * acquire/release direction.
     */
    if (private_binding_acquire) {
       initial_aux_usage = isl_mod_info->aux_usage;
+      initial_fast_clear = isl_mod_info->supports_clear_color ?
+         initial_fast_clear : ANV_FAST_CLEAR_NONE;
    } else if (private_binding_release) {
       final_aux_usage = isl_mod_info->aux_usage;
+      final_fast_clear = isl_mod_info->supports_clear_color ?
+         final_fast_clear : ANV_FAST_CLEAR_NONE;
    }
 
    /* The current code assumes that there is no mixing of CCS_E and CCS_D.
@@ -1453,10 +1461,6 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
    /* If the initial layout supports more fast clear than the final layout
     * then we need at least a partial resolve.
     */
-   const enum anv_fast_clear_type initial_fast_clear =
-      anv_layout_to_fast_clear_type(devinfo, image, aspect, initial_layout);
-   const enum anv_fast_clear_type final_fast_clear =
-      anv_layout_to_fast_clear_type(devinfo, image, aspect, final_layout);
    if (final_fast_clear < initial_fast_clear)
       resolve_op = ISL_AUX_OP_PARTIAL_RESOLVE;
 
@@ -1723,7 +1727,6 @@ genX(cmd_buffer_alloc_att_surf_states)(struct anv_cmd_buffer *cmd_buffer,
       else
          continue;
 
-      state->attachments[att].color.state = next_state;
       next_state.offset += ss_stride;
       next_state.map += ss_stride;
    }
@@ -1873,7 +1876,7 @@ genX(BeginCommandBuffer)(
             const struct anv_image_view * const iview =
                anv_cmd_buffer_get_depth_stencil_view(cmd_buffer);
 
-            if (iview) {
+            if (iview && (iview->image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT)) {
                VkImageLayout layout =
                   cmd_buffer->state.subpass->depth_stencil_attachment->layout;
 
@@ -2400,6 +2403,13 @@ genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
             bits & ANV_PIPE_STATE_CACHE_INVALIDATE_BIT;
          pipe.ConstantCacheInvalidationEnable =
             bits & ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT;
+#if GFX_VER >= 12
+         /* Invalidates the L3 cache part in which index & vertex data is loaded
+          * when VERTEX_BUFFER_STATE::L3BypassDisable is set.
+          */
+         pipe.L3ReadOnlyCacheInvalidationEnable =
+            bits & ANV_PIPE_VF_CACHE_INVALIDATE_BIT;
+#endif
          pipe.VFCacheInvalidationEnable =
             bits & ANV_PIPE_VF_CACHE_INVALIDATE_BIT;
          pipe.TextureCacheInvalidationEnable =

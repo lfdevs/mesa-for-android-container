@@ -2960,6 +2960,9 @@ radv_generate_graphics_pipeline_key(const struct radv_pipeline *pipeline,
       key.invariant_geom = true;
 
    key.use_ngg = pipeline->device->physical_device->use_ngg;
+   key.adjust_frag_coord_z = pipeline->device->adjust_frag_coord_z;
+   key.disable_aniso_single_level = pipeline->device->instance->disable_aniso_single_level &&
+                                    pipeline->device->physical_device->rad_info.chip_class < GFX8;
 
    return key;
 }
@@ -6233,6 +6236,9 @@ radv_generate_compute_pipeline_key(struct radv_pipeline *pipeline,
    } else if (stage->flags & VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT) {
       key.cs.require_full_subgroups = true;
    }
+
+   key.disable_aniso_single_level = pipeline->device->instance->disable_aniso_single_level &&
+                                    pipeline->device->physical_device->rad_info.chip_class < GFX8;
 
    return key;
 }

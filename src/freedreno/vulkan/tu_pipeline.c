@@ -273,6 +273,8 @@ struct tu_pipeline_builder
    VkFormat depth_attachment_format;
    uint32_t render_components;
    uint32_t multiview_mask;
+
+   bool subpass_feedback_loop_ds;
 };
 
 static bool
@@ -3174,6 +3176,7 @@ tu_pipeline_builder_build(struct tu_pipeline_builder *builder,
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    (*pipeline)->layout = builder->layout;
+   (*pipeline)->subpass_feedback_loop_ds = builder->subpass_feedback_loop_ds;
    (*pipeline)->executables_mem_ctx = ralloc_context(NULL);
    util_dynarray_init(&(*pipeline)->executables, (*pipeline)->executables_mem_ctx);
 
@@ -3286,6 +3289,8 @@ tu_pipeline_builder_init_graphics(
       tu_render_pass_from_handle(create_info->renderPass);
    const struct tu_subpass *subpass =
       &pass->subpasses[create_info->subpass];
+
+   builder->subpass_feedback_loop_ds = subpass->feedback_loop_ds;
 
    builder->multiview_mask = subpass->multiview_mask;
 

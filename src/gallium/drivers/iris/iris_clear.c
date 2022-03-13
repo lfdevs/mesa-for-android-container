@@ -280,7 +280,8 @@ fast_clear_color(struct iris_context *ice,
    iris_blorp_surf_for_resource(&batch->screen->isl_dev, &surf,
                                 p_res, res->aux.usage, level, true);
 
-   blorp_fast_clear(&blorp_batch, &surf, format, ISL_SWIZZLE_IDENTITY,
+   blorp_fast_clear(&blorp_batch, &surf, res->surf.format,
+                    ISL_SWIZZLE_IDENTITY,
                     level, box->z, box->depth,
                     box->x, box->y, box->x + box->width,
                     box->y + box->height);

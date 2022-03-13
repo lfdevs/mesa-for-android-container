@@ -25,6 +25,18 @@
 #include "compiler.h"
 #include "bi_builder.h"
 
+/*
+ * Due to a Bifrost encoding restriction, some instructions cannot have an abs
+ * modifier on both sources. Check if adding a fabs modifier to a given source
+ * of a binary instruction would cause this restriction to be hit.
+ */
+static bool
+bi_would_impact_abs(unsigned arch, bi_instr *I, bi_index repl, unsigned s)
+{
+        return (arch <= 8) && I->src[1 - s].abs &&
+               bi_is_word_equiv(I->src[1 - s], repl);
+}
+
 static bool
 bi_takes_fabs(unsigned arch, bi_instr *I, bi_index repl, unsigned s)
 {
@@ -32,9 +44,15 @@ bi_takes_fabs(unsigned arch, bi_instr *I, bi_index repl, unsigned s)
         case BI_OPCODE_FCMP_V2F16:
         case BI_OPCODE_FMAX_V2F16:
         case BI_OPCODE_FMIN_V2F16:
-                /* Bifrost encoding restriction: can't have both abs if equal sources */
-                return !(arch <= 8 && I->src[1 - s].abs
-                                   && bi_is_word_equiv(I->src[1 - s], repl));
+                return !bi_would_impact_abs(arch, I, repl, s);
+        case BI_OPCODE_FADD_V2F16:
+                /*
+                 * For FADD.v2f16, the FMA pipe has the abs encoding hazard,
+                 * while the FADD pipe cannot encode a clamp. Either case in
+                 * isolation can be worked around in the scheduler, but both
+                 * together is impossible to encode. Avoid the hazard.
+                 */
+                return !(I->clamp && bi_would_impact_abs(arch, I, repl, s));
         case BI_OPCODE_V2F32_TO_V2F16:
                 /* TODO: Needs both match or lower */
                 return false;
@@ -182,6 +200,10 @@ bi_takes_clamp(bi_instr *I)
         case BI_OPCODE_FMA_RSCALE_V2F16:
         case BI_OPCODE_FADD_RSCALE_F32:
                 return false;
+        case BI_OPCODE_FADD_V2F16:
+                /* Encoding restriction */
+                return !(I->src[0].abs && I->src[1].abs &&
+                         bi_is_word_equiv(I->src[0], I->src[1]));
         default:
                 return bi_opcode_props[I->op].clamp;
         }

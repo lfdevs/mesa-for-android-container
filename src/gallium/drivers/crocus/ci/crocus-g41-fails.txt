@@ -96,7 +96,6 @@ spec@!opengl 1.1@windowoverlap,Fail
 spec@!opengl 1.1@depthstencil-default_fb-blit,Fail
 
 spec@!opengl 1.1@line-aa-width,Fail
-spec@!opengl 1.1@line-flat-clip-color,Fail
 spec@!opengl 1.1@linestipple,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
 spec@!opengl 1.1@linestipple@Factor 3x,Fail

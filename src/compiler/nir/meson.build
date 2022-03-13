@@ -20,6 +20,8 @@
 
 nir_depends = files('nir_opcodes.py', 'nir_intrinsics.py')
 
+nir_algebraic_depends = files('nir_opcodes.py', 'nir_algebraic.py')
+
 nir_builder_opcodes_h = custom_target(
   'nir_builder_opcodes.h',
   input : 'nir_builder_opcodes_h.py',
@@ -62,7 +64,7 @@ nir_opt_algebraic_c = custom_target(
   output : 'nir_opt_algebraic.c',
   command : [prog_python, '@INPUT@'],
   capture : true,
-  depend_files : files('nir_algebraic.py'),
+  depend_files : nir_algebraic_depends,
 )
 
 nir_intrinsics_h = custom_target(
@@ -369,8 +371,6 @@ idep_nir = declare_dependency(
   dependencies : [idep_nir_headers, idep_mesautil],
   link_with : _libnir,
 )
-
-nir_algebraic_py = files('nir_algebraic.py')
 
 if with_tests
   test(

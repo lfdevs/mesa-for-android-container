@@ -667,6 +667,8 @@ panfrost_set_shader_buffers(
 
         util_set_shader_buffers_mask(ctx->ssbo[shader], &ctx->ssbo_mask[shader],
                         buffers, start, count);
+
+        ctx->dirty_shader[shader] |= PAN_DIRTY_STAGE_SSBO;
 }
 
 static void

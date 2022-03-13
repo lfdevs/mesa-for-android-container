@@ -1715,6 +1715,7 @@ bool si_init_flushed_depth_texture(struct pipe_context *ctx, struct pipe_resourc
    resource.array_size = texture->array_size;
    resource.last_level = texture->last_level;
    resource.nr_samples = texture->nr_samples;
+   resource.nr_storage_samples = texture->nr_storage_samples;
    resource.usage = PIPE_USAGE_DEFAULT;
    resource.bind = texture->bind & ~PIPE_BIND_DEPTH_STENCIL;
    resource.flags = texture->flags | SI_RESOURCE_FLAG_FLUSHED_DEPTH;

@@ -733,8 +733,7 @@ static LLVMValueRef do_alu_action(struct lp_build_nir_context *bld_base,
       break;
    }
    case nir_op_fisfinite32:
-      result = lp_build_isfinite(get_flt_bld(bld_base, src_bit_size[0]), src[0]);
-      break;
+      unreachable("Should have been lowered in nir_opt_algebraic_late.");
    case nir_op_flog2:
       result = lp_build_log2_safe(get_flt_bld(bld_base, src_bit_size[0]), src[0]);
       break;
@@ -2479,7 +2478,6 @@ void lp_build_opt_nir(struct nir_shader *nir)
       NIR_PASS_V(nir, nir_lower_subgroups, &subgroups_options);
 
    } while (progress);
-   nir_lower_bool_to_int32(nir);
 
    do {
       progress = false;
@@ -2490,4 +2488,9 @@ void lp_build_opt_nir(struct nir_shader *nir)
          NIR_PASS_V(nir, nir_opt_cse);
       }
    } while (progress);
+
+   if (nir_lower_bool_to_int32(nir)) {
+      NIR_PASS_V(nir, nir_copy_prop);
+      NIR_PASS_V(nir, nir_opt_dce);
+   }
 }

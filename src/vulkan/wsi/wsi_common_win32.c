@@ -364,26 +364,6 @@ wsi_configure_win32_image(const struct wsi_swapchain *chain,
    return VK_SUCCESS;
 }
 
-static VkResult
-wsi_create_win32_image(const struct wsi_swapchain *chain,
-                       const VkSwapchainCreateInfoKHR *pCreateInfo,
-                       struct wsi_image *image)
-{
-   const struct wsi_device *wsi = chain->wsi;
-
-   struct wsi_image_info info;
-   VkResult result = wsi_configure_win32_image(chain, pCreateInfo, &info);
-   if (result != VK_SUCCESS)
-      return result;
-
-   result = wsi_create_image(chain, &info, image);
-   if (result != VK_SUCCESS) {
-      wsi_destroy_image_info(chain, &info);
-      return result;
-   }
-
-   return VK_SUCCESS;
-}
 
 static VkResult
 wsi_win32_image_init(VkDevice device_h,

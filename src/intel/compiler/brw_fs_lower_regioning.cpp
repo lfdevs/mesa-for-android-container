@@ -180,7 +180,7 @@ namespace {
               intel_device_info_is_9lp(devinfo)) && type_sz(t) > 4)
             return BRW_REGISTER_TYPE_UD;
          else
-            return t;
+            return brw_int_type(type_sz(t), false);
 
       case SHADER_OPCODE_BROADCAST:
       case SHADER_OPCODE_MOV_INDIRECT:

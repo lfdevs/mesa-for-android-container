@@ -31,7 +31,11 @@
 
 #ifdef __FreeBSD__
 #include <sys/types.h>
-#elif !defined(_WIN32)
+#endif
+#ifdef MAJOR_IN_MKDEV
+#include <sys/mkdev.h>
+#endif
+#ifdef MAJOR_IN_SYSMACROS
 #include <sys/sysmacros.h>
 #endif
 
@@ -4336,7 +4340,7 @@ radv_queue_submit(struct vk_queue *vqueue, struct vk_queue_submit *submission)
 
    result =
       radv_get_preambles(queue, submission->command_buffers, submission->command_buffer_count,
-                         &initial_preamble_cs, &initial_flush_preamble_cs, &continue_preamble_cs);
+                         &initial_flush_preamble_cs, &initial_preamble_cs, &continue_preamble_cs);
    if (result != VK_SUCCESS)
       goto fail;
 

@@ -1592,6 +1592,7 @@ fs_generator::generate_uniform_pull_constant_load_gfx7(fs_inst *inst,
    assert(index.type == BRW_REGISTER_TYPE_UD);
    assert(payload.file == BRW_GENERAL_REGISTER_FILE);
    assert(type_sz(dst.type) == 4);
+   assert(!devinfo->has_lsc);
 
    if (index.file == BRW_IMMEDIATE_VALUE) {
       const uint32_t surf_index = index.ud;

@@ -215,6 +215,8 @@ update_gfx_program(struct zink_context *ctx)
          prog = (struct zink_gfx_program*)entry->data;
          u_foreach_bit(stage, prog->stages_present & ~ctx->dirty_shader_stages)
             ctx->gfx_pipeline_state.modules[stage] = prog->modules[stage]->shader;
+         /* ensure variants are always updated if keys have changed since last use */
+         ctx->dirty_shader_stages |= prog->stages_present;
       } else {
          ctx->dirty_shader_stages |= bits;
          prog = zink_create_gfx_program(ctx, ctx->gfx_stages, ctx->gfx_pipeline_state.vertices_per_patch + 1);

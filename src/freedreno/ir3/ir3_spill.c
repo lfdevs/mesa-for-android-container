@@ -1867,15 +1867,31 @@ simplify_phi_node(struct ir3_instruction *phi)
    return true;
 }
 
+static struct ir3_register *
+simplify_phi_def(struct ir3_register *def)
+{
+   if (def->instr->opc == OPC_META_PHI) {
+      struct ir3_instruction *phi = def->instr;
+
+      /* Note: this function is always called at least once after visiting the
+       * phi, so either there has been a simplified phi in the meantime, in
+       * which case we will set progress=true and visit the definition again, or
+       * phi->data already has the most up-to-date value. Therefore we don't
+       * have to recursively check phi->data.
+       */
+      if (phi->data)
+         return phi->data;
+   }
+
+   return def;
+}
+
 static void
 simplify_phi_srcs(struct ir3_instruction *instr)
 {
    foreach_src (src, instr) {
-      if (src->def && src->def->instr->opc == OPC_META_PHI) {
-         struct ir3_instruction *phi = src->def->instr;
-         if (phi->data)
-            src->def = phi->data;
-      }
+      if (src->def)
+         src->def = simplify_phi_def(src->def);
    }
 }
 
@@ -1905,6 +1921,10 @@ simplify_phi_nodes(struct ir3 *ir)
             simplify_phi_srcs(instr);
          }
 
+         /* Visit phi nodes in the sucessors to make sure that phi sources are
+          * always visited at least once after visiting the definition they
+          * point to. See note in simplify_phi_def() for why this is necessary.
+          */
          for (unsigned i = 0; i < 2; i++) {
             struct ir3_block *succ = block->successors[i];
             if (!succ)
@@ -1912,11 +1932,13 @@ simplify_phi_nodes(struct ir3 *ir)
             foreach_instr (instr, &succ->instr_list) {
                if (instr->opc != OPC_META_PHI)
                   break;
-               if (instr->flags & IR3_INSTR_UNUSED)
-                  continue;
-
-               simplify_phi_srcs(instr);
-               progress |= simplify_phi_node(instr);
+               if (instr->flags & IR3_INSTR_UNUSED) {
+                  if (instr->data)
+                     instr->data = simplify_phi_def(instr->data);
+               } else {
+                  simplify_phi_srcs(instr);
+                  progress |= simplify_phi_node(instr);
+               }
             }
          }
       }

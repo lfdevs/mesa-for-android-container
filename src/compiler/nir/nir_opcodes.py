@@ -844,10 +844,10 @@ binop_reduce("fany_nequal", 1, tfloat32, tfloat32, "{src0} != {src1}",
 # These comparisons for integer-less hardware return 1.0 and 0.0 for true
 # and false respectively
 
-binop("slt", tfloat32, "", "(src0 < src1) ? 1.0f : 0.0f") # Set on Less Than
+binop("slt", tfloat, "", "(src0 < src1) ? 1.0f : 0.0f") # Set on Less Than
 binop("sge", tfloat, "", "(src0 >= src1) ? 1.0f : 0.0f") # Set on Greater or Equal
-binop("seq", tfloat32, _2src_commutative, "(src0 == src1) ? 1.0f : 0.0f") # Set on Equal
-binop("sne", tfloat32, _2src_commutative, "(src0 != src1) ? 1.0f : 0.0f") # Set on Not Equal
+binop("seq", tfloat, _2src_commutative, "(src0 == src1) ? 1.0f : 0.0f") # Set on Equal
+binop("sne", tfloat, _2src_commutative, "(src0 != src1) ? 1.0f : 0.0f") # Set on Not Equal
 
 # SPIRV shifts are undefined for shift-operands >= bitsize,
 # but SM5 shifts are defined to use only the least significant bits.

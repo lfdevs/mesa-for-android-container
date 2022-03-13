@@ -3041,43 +3041,13 @@ static void handle_copy_query_pool_results(struct vk_cmd_queue_entry *cmd,
    }
 }
 
-static void pack_clear_color(enum pipe_format pformat, VkClearColorValue *in_val, uint32_t col_val[4])
-{
-   const struct util_format_description *desc = util_format_description(pformat);
-   col_val[0] = col_val[1] = col_val[2] = col_val[3] = 0;
-   for (unsigned c = 0; c < 4; c++) {
-      if (desc->swizzle[c] >= 4)
-         continue;
-      const struct util_format_channel_description *channel = &desc->channel[desc->swizzle[c]];
-      if (channel->size == 32) {
-         col_val[c] = in_val->uint32[c];
-         continue;
-      }
-      if (channel->pure_integer) {
-         uint64_t v = in_val->uint32[c] & ((1u << channel->size) - 1);
-         switch (channel->size) {
-         case 2:
-         case 8:
-         case 10:
-            col_val[0] |= (v << channel->shift);
-            break;
-         case 16:
-            col_val[c / 2] |= (v << (16 * (c % 2)));
-            break;
-         }
-      } else {
-         util_pack_color(in_val->float32, pformat, (union util_color *)col_val);
-         break;
-      }
-   }
-}
-
 static void handle_clear_color_image(struct vk_cmd_queue_entry *cmd,
                                      struct rendering_state *state)
 {
    LVP_FROM_HANDLE(lvp_image, image, cmd->u.clear_color_image.image);
-   uint32_t col_val[4];
-   pack_clear_color(image->bo->format, cmd->u.clear_color_image.color, col_val);
+   union util_color uc;
+   uint32_t *col_val = uc.ui;
+   util_pack_color_union(image->bo->format, &uc, (void*)cmd->u.clear_color_image.color);
    for (unsigned i = 0; i < cmd->u.clear_color_image.range_count; i++) {
       VkImageSubresourceRange *range = &cmd->u.clear_color_image.ranges[i];
       struct pipe_box box;
@@ -4144,6 +4114,18 @@ VkResult lvp_execute_cmds(struct lvp_device *device,
       if (state.so_targets[i]) {
          state.pctx->stream_output_target_destroy(state.pctx, state.so_targets[i]);
       }
+   }
+
+   for (enum pipe_shader_type s = PIPE_SHADER_VERTEX; s < PIPE_SHADER_TYPES; s++) {
+      for (unsigned i = 0; i < PIPE_MAX_SAMPLERS; i++) {
+         if (state.sv[s][i])
+            pipe_sampler_view_reference(&state.sv[s][i], NULL);
+      }
+   }
+
+   for (unsigned i = 0; i < PIPE_MAX_SAMPLERS; i++) {
+      if (state.cso_ss_ptr[PIPE_SHADER_COMPUTE][i])
+         state.pctx->delete_sampler_state(state.pctx, state.ss_cso[PIPE_SHADER_COMPUTE][i]);
    }
 
    free(state.imageless_views);

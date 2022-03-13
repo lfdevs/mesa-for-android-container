@@ -223,7 +223,7 @@ struct gfx9_meta_equation {
        * The gfx10 HTILE equation is chip-specific, it requires 64KB_Z_X, and it varies with:
        * - number of samples
        */
-      uint16_t gfx10_bits[60];
+      uint16_t gfx10_bits[64];
    } u;
 };
 

@@ -5607,6 +5607,11 @@ radv_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCou
          allow_ib2 = false;
       }
 
+      if (secondary->queue_family_index == RADV_QUEUE_COMPUTE) {
+         /* IB2 packets are not supported on compute queues according to PAL. */
+         allow_ib2 = false;
+      }
+
       primary->scratch_size_per_wave_needed =
          MAX2(primary->scratch_size_per_wave_needed, secondary->scratch_size_per_wave_needed);
       primary->scratch_waves_wanted =

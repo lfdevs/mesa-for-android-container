@@ -27,7 +27,7 @@ ir3_nir_trig_c = custom_target(
     '-p', join_paths(meson.source_root(), 'src/compiler/nir/'),
   ],
   capture : true,
-  depend_files : nir_algebraic_py,
+  depend_files : nir_algebraic_depends,
 )
 
 ir3_nir_imul_c = custom_target(
@@ -39,7 +39,7 @@ ir3_nir_imul_c = custom_target(
     '-p', join_paths(meson.source_root(), 'src/compiler/nir/'),
   ],
   capture : true,
-  depend_files : nir_algebraic_py,
+  depend_files : nir_algebraic_depends,
 )
 
 ir3_parser = custom_target(

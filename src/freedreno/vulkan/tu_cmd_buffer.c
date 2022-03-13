@@ -316,7 +316,7 @@ tu6_emit_mrt(struct tu_cmd_buffer *cmd,
     * setting the SINGLE_PRIM_MODE field to the same value that the blob does
     * for advanced_blend in sysmem mode if a feedback loop is detected.
     */
-   if (subpass->feedback) {
+   if (subpass->feedback_loop_color || subpass->feedback_loop_ds) {
       tu_cond_exec_start(cs, CP_COND_EXEC_0_RENDER_MODE_SYSMEM);
       tu_cs_emit_write_reg(cs, REG_A6XX_GRAS_SC_CNTL,
                            A6XX_GRAS_SC_CNTL_CCUSINGLECACHELINESIZE(2) |
@@ -3860,7 +3860,8 @@ tu6_build_depth_plane_z_mode(struct tu_cmd_buffer *cmd)
    bool depth_write = tu6_writes_depth(cmd, depth_test_enable);
    bool stencil_write = tu6_writes_stencil(cmd);
 
-   if (cmd->state.pipeline->lrz.fs_has_kill &&
+   if ((cmd->state.pipeline->lrz.fs_has_kill ||
+        cmd->state.pipeline->subpass_feedback_loop_ds) &&
        (depth_write || stencil_write)) {
       zmode = cmd->state.lrz.valid ? A6XX_EARLY_LRZ_LATE_Z : A6XX_LATE_Z;
    }

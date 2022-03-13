@@ -217,6 +217,20 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
    if (ws) {
       simple_mtx_unlock(&winsys_creation_mutex);
       amdgpu_device_deinitialize(dev);
+
+      /* Check that options don't differ from the existing winsys. */
+      if (((debug_flags & RADV_DEBUG_ALL_BOS) && !ws->debug_all_bos) ||
+          ((debug_flags & RADV_DEBUG_HANG) && !ws->debug_log_bos) ||
+          ((debug_flags & RADV_DEBUG_NO_IBS) && ws->use_ib_bos) ||
+          (perftest_flags != ws->perftest)) {
+         fprintf(stderr, "amdgpu: Found options that differ from the existing winsys.\n");
+         return NULL;
+      }
+
+      /* RADV_DEBUG_ZERO_VRAM is the only option that is allowed to be set again. */
+      if (debug_flags & RADV_DEBUG_ZERO_VRAM)
+         ws->zero_all_vram_allocs = true;
+
       return &ws->base;
    }
 

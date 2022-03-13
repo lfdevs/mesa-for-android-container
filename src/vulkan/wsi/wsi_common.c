@@ -360,16 +360,22 @@ wsi_configure_image(const struct wsi_swapchain *chain,
                     struct wsi_image_info *info)
 {
    memset(info, 0, sizeof(*info));
+   uint32_t *queue_family_indices;
 
-   uint32_t *queue_family_indices =
-      vk_alloc(&chain->alloc,
-               sizeof(*queue_family_indices) *
-               pCreateInfo->queueFamilyIndexCount,
-               8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (!queue_family_indices)
-      goto err_oom;
-   for (uint32_t i = 0; i < pCreateInfo->queueFamilyIndexCount; i++)
-      queue_family_indices[i] = pCreateInfo->pQueueFamilyIndices[i];
+   if (pCreateInfo->imageSharingMode == VK_SHARING_MODE_CONCURRENT) {
+      queue_family_indices =
+         vk_alloc(&chain->alloc,
+                  sizeof(*queue_family_indices) *
+                  pCreateInfo->queueFamilyIndexCount,
+                  8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      if (!queue_family_indices)
+         goto err_oom;
+
+      for (uint32_t i = 0; i < pCreateInfo->queueFamilyIndexCount; i++)
+         queue_family_indices[i] = pCreateInfo->pQueueFamilyIndices[i];
+   } else {
+      queue_family_indices = NULL;
+   }
 
    info->create = (VkImageCreateInfo) {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,

@@ -199,6 +199,7 @@
 #include "pipe/p_state.h"
 #include "util/bitset.h"
 #include "util/u_inlines.h"
+#include "util/u_memory.h"
 #include "util/u_queue.h"
 #include "util/u_range.h"
 #include "util/u_thread.h"
@@ -609,7 +610,7 @@ tc_buffer_disable_cpu_storage(struct pipe_resource *buf)
    struct threaded_resource *tres = threaded_resource(buf);
 
    if (tres->cpu_storage) {
-      free(tres->cpu_storage);
+      align_free(tres->cpu_storage);
       tres->cpu_storage = NULL;
    }
 }

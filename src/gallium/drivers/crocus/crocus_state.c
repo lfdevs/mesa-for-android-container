@@ -1984,9 +1984,9 @@ get_line_width(const struct pipe_rasterizer_state *state)
        * "Grid Intersection Quantization" rules as specified by the
        * "Zero-Width (Cosmetic) Line Rasterization" section of the docs.
        */
-      line_width = 0.0f;
+      /* hack around this for gfx4/5 fps counters in hud. */
+      line_width = GFX_VER < 6 ? 1.5f : 0.0f;
    }
-
    return line_width;
 }
 

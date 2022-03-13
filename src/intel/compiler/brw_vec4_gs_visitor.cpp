@@ -596,6 +596,7 @@ brw_compile_gs(const struct brw_compiler *compiler,
    const bool debug_enabled = INTEL_DEBUG(DEBUG_GS);
 
    prog_data->base.base.stage = MESA_SHADER_GEOMETRY;
+   prog_data->base.base.total_scratch = 0;
 
    /* The GLSL linker will have already matched up GS inputs and the outputs
     * of prior stages.  The driver does extend VS outputs in some cases, but

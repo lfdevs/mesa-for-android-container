@@ -246,6 +246,12 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live, uint6
                                                         bi_writemask(ins, d), i, live[i]);
                                 }
                         }
+
+                        unsigned node_first = bi_get_node(ins->dest[0]);
+                        if (d == 1 && node_first < node_count) {
+                                lcra_add_node_interference(l, node, bi_writemask(ins, 1),
+                                                           node_first, bi_writemask(ins, 0));
+                        }
                 }
 
                 /* Valhall needs >= 64-bit staging reads to be pair-aligned */

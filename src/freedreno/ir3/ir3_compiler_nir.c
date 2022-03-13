@@ -1314,10 +1314,10 @@ get_image_samp_tex_src(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    struct ir3_block *b = ctx->block;
    struct tex_src_info info = {0};
    nir_intrinsic_instr *bindless_tex = ir3_bindless_resource(intr->src[0]);
-   ctx->so->bindless_tex = true;
 
    if (bindless_tex) {
       /* Bindless case */
+      ctx->so->bindless_tex = true;
       info.flags |= IR3_INSTR_B;
 
       /* Gather information required to determine which encoding to
@@ -1396,7 +1396,7 @@ emit_intrinsic_load_image(struct ir3_context *ctx, nir_intrinsic_instr *intr,
    /* If the image can be written, must use LDIB to retrieve data, rather than
     * through ISAM (which uses the texture cache and won't get previous writes).
     */
-   if (!(nir_intrinsic_access(intr) & ACCESS_NON_WRITEABLE) && ctx->compiler->gen >= 5) {
+   if (!(nir_intrinsic_access(intr) & ACCESS_CAN_REORDER) && ctx->compiler->gen >= 5) {
       ctx->funcs->emit_intrinsic_load_image(ctx, intr, dst);
       return;
    }
@@ -1421,11 +1421,20 @@ emit_intrinsic_load_image(struct ir3_context *ctx, nir_intrinsic_instr *intr,
 
    info.flags |= flags;
 
-   for (unsigned i = 0; i < ncoords; i++)
-      coords[i] = src0[i];
-
-   if (ncoords == 1)
-      coords[ncoords++] = create_immed(b, 0);
+   /* hw doesn't do 1d, so we treat it as 2d with height of 1, and patch up the
+    * y coord. Note that the array index must come after the fake y coord.
+    */
+   enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
+   if (dim == GLSL_SAMPLER_DIM_1D || dim == GLSL_SAMPLER_DIM_BUF) {
+      coords[0] = src0[0];
+      coords[1] = create_immed(b, 0);
+      for (unsigned i = 1; i < ncoords; i++)
+         coords[i + 1] = src0[i];
+      ncoords++;
+   } else {
+      for (unsigned i = 0; i < ncoords; i++)
+         coords[i] = src0[i];
+   }
 
    sam = emit_sam(ctx, OPC_ISAM, info, type, 0b1111,
                   ir3_create_collect(b, coords, ncoords), NULL);

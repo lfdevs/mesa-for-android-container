@@ -112,11 +112,17 @@ struct panfrost_sysvals {
         unsigned sysval_count;
 };
 
-/* Technically Midgard could go up to 92 in a pathological case but we don't
- * take advantage of that. Likewise Bifrost's FAU encoding can address 128
- * words but actual implementations (G72, G76) are capped at 64 */
-
-#define PAN_MAX_PUSH 64
+/* Architecturally, Bifrost/Valhall can address 128 FAU slots of 64-bits each.
+ * In practice, the maximum number of FAU slots is limited by implementation.
+ * All known Bifrost and Valhall devices limit to 64 FAU slots. Therefore the
+ * maximum number of 32-bit words is 128, since there are 2 words per FAU slot.
+ *
+ * Midgard can push at most 92 words, so this bound suffices. The Midgard
+ * compiler pushes less than this, as Midgard uses register-mapped uniforms
+ * instead of FAU, preventing large numbers of uniforms to be pushed for
+ * nontrivial programs.
+ */
+#define PAN_MAX_PUSH 128
 
 /* Architectural invariants (Midgard and Bifrost): UBO must be <= 2^16 bytes so
  * an offset to a word must be < 2^16. There are less than 2^8 UBOs */

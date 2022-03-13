@@ -36,7 +36,7 @@
  * binding table entries are full 32-bit pointers.)
  *
  * To handle this, we split a 4GB region of VMA into two memory zones.
- * IRIS_MEMZONE_BINDER is a small region at the bottom able to hold a few
+ * IRIS_MEMZONE_BINDER is a 1GB region at the bottom able to hold a few
  * binder BOs.  IRIS_MEMZONE_SURFACE contains the rest of the 4GB, and is
  * always at a higher address than the binders.  This allows us to program
  * Surface State Base Address to the binder BO's address, and offset the
@@ -71,23 +71,11 @@ binder_realloc(struct iris_context *ice)
    struct iris_bufmgr *bufmgr = screen->bufmgr;
    struct iris_binder *binder = &ice->state.binder;
 
-   uint64_t next_address = IRIS_MEMZONE_BINDER_START;
-
-   if (binder->bo) {
-      /* Place the new binder just after the old binder, unless we've hit the
-       * end of the memory zone...then wrap around to the start again.
-       */
-      next_address = binder->bo->address + IRIS_BINDER_SIZE;
-      if (next_address >= IRIS_MEMZONE_BINDLESS_START)
-         next_address = IRIS_MEMZONE_BINDER_START;
-
+   if (binder->bo)
       iris_bo_unreference(binder->bo);
-   }
-
 
    binder->bo = iris_bo_alloc(bufmgr, "binder", IRIS_BINDER_SIZE, 1,
                               IRIS_MEMZONE_BINDER, 0);
-   binder->bo->address = next_address;
    binder->map = iris_bo_map(NULL, binder->bo, MAP_WRITE);
    binder->insert_point = INIT_INSERT_POINT;
 

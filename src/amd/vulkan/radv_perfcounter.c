@@ -72,5 +72,7 @@ radv_perfcounter_emit_stop(struct radv_device *device, struct radeon_cmdbuf *cs,
    /* Stop SPM counters. */
    radeon_set_uconfig_reg(cs, R_036020_CP_PERFMON_CNTL,
                               S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_DISABLE_AND_RESET) |
-                              S_036020_SPM_PERFMON_STATE(V_036020_STRM_PERFMON_STATE_STOP_COUNTING));
+                              S_036020_SPM_PERFMON_STATE(device->physical_device->rad_info.never_stop_sq_perf_counters ?
+                                                            V_036020_STRM_PERFMON_STATE_START_COUNTING :
+                                                            V_036020_STRM_PERFMON_STATE_STOP_COUNTING));
 }

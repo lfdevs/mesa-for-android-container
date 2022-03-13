@@ -481,7 +481,7 @@ tu_render_pass_check_feedback_loop(struct tu_render_pass *pass)
             continue;
          for (unsigned k = 0; k < subpass->input_count; k++) {
             if (subpass->input_attachments[k].attachment == a) {
-               subpass->feedback = true;
+               subpass->feedback_loop_color = true;
                break;
             }
          }
@@ -491,7 +491,7 @@ tu_render_pass_check_feedback_loop(struct tu_render_pass *pass)
          for (unsigned k = 0; k < subpass->input_count; k++) {
             if (subpass->input_attachments[k].attachment ==
                 subpass->depth_stencil_attachment.attachment) {
-               subpass->feedback = true;
+               subpass->feedback_loop_ds = true;
                break;
             }
          }

@@ -124,7 +124,7 @@ ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
           */
          .uniform_max = (1 << 9) - 1,
 
-         .shared_max = ~0,
+         .shared_max = (1 << 13) - 1,
 
          .buffer_max = ~0,
       };

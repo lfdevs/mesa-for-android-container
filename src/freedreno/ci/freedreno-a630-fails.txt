@@ -231,8 +231,6 @@ spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG32UI- swizzled
 spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG8I- swizzled- border color only,Fail
 spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG8UI- swizzled- border color only,Fail
 
-spec@arb_texture_view@rendering-layers-image,Fail
-spec@arb_texture_view@rendering-layers-image@layers rendering of image1DArray,Fail
 spec@arb_timer_query@timestamp-get,Fail
 
 # "Expected 1 primitives written, got 0"

@@ -234,6 +234,12 @@ anv_shader_compile_to_nir(struct anv_device *device,
     */
    NIR_PASS_V(nir, nir_lower_variable_initializers, ~0);
 
+   const nir_opt_access_options opt_access_options = {
+      .is_vulkan = true,
+      .infer_non_readable = true,
+   };
+   NIR_PASS_V(nir, nir_opt_access, &opt_access_options);
+
    /* Split member structs.  We do this before lower_io_to_temporaries so that
     * it doesn't lower system values to temporaries by accident.
     */
