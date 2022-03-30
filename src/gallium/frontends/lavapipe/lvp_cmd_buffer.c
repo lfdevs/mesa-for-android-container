@@ -265,6 +265,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_TrimCommandPool(
                             &pool->free_cmd_buffers, pool_link) {
       lvp_cmd_buffer_destroy(cmd_buffer);
    }
+   list_inithead(&pool->free_cmd_buffers);
 }
 
 VKAPI_ATTR void VKAPI_CALL lvp_CmdDrawMultiEXT(

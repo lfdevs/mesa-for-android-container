@@ -129,11 +129,17 @@ supported:
 OpenGL 4.1
 ^^^^^^^^^^
 
-For OpenGL 4.1 support, the following additional ``VkPhysicalDeviceLimits``
-are required:
+For OpenGL 4.1 support, the following additional requirements needs to be
+supported:
 
-* ``maxImageDimension2D`` ≥ 16384
-* ``maxViewports`` ≥ 16
+* ``VkPhysicalDeviceFeatures``:
+
+  * ``multiViewport``
+
+* ``VkPhysicalDeviceLimits``
+
+  * ``maxImageDimension2D`` ≥ 16384
+  * ``maxViewports`` ≥ 16
 
 OpenGL 4.2
 ^^^^^^^^^^
@@ -177,7 +183,6 @@ supported:
 * ``VkPhysicalDeviceFeatures``:
 
   * ``robustBufferAccess``
-  * ``multiViewport``
 
 * Formats requiring ``VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT``:
 

@@ -2265,7 +2265,7 @@ trace_context_create(struct trace_screen *tr_scr,
    if (!trace_enabled())
       goto error1;
 
-   tr_ctx = ralloc(NULL, struct trace_context);
+   tr_ctx = rzalloc(NULL, struct trace_context);
    if (!tr_ctx)
       goto error1;
 

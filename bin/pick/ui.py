@@ -66,6 +66,7 @@ class CommitWidget(urwid.Text):
     _selectable = True
 
     def __init__(self, ui: 'UI', commit: 'core.Commit'):
+        assert commit.nomination_type is not None
         reason = commit.nomination_type.name.ljust(6)
         super().__init__(f'{commit.date()} {reason} {commit.sha[:10]} {commit.description}')
         self.ui = ui
@@ -73,10 +74,12 @@ class CommitWidget(urwid.Text):
 
     async def apply(self) -> None:
         async with self.ui.git_lock:
-            result, err = await self.commit.apply(self.ui)
+            result, err = await self.commit.apply()
             if not result:
                 self.ui.chp_failed(self, err)
             else:
+                self.ui.feedback(f'{self.commit.sha} ({self.commit.description}) applied successfully.')
+                self.ui.save()
                 self.ui.remove_commit(self)
 
     async def denominate(self) -> None:
@@ -170,7 +173,7 @@ class UI:
             self.mainloop.widget = o
 
         for commit in reversed(list(itertools.chain(self.new_commits, self.previous_commits))):
-            if commit.nominated and commit.resolution is core.Resolution.UNRESOLVED:
+            if commit.nominated and commit.resolution in {core.Resolution.UNRESOLVED, core.Resolution.MANUAL_RESOLUTION}:
                 b = urwid.AttrMap(CommitWidget(self, commit), None, focus_map='reversed')
                 self.commit_list.append(b)
         self.save()

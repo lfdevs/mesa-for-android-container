@@ -440,8 +440,11 @@ radv_destroy_cmd_buffer(struct radv_cmd_buffer *cmd_buffer)
       cmd_buffer->device->ws->cs_destroy(cmd_buffer->cs);
 
    for (unsigned i = 0; i < MAX_BIND_POINTS; i++) {
-      free(cmd_buffer->descriptors[i].push_set.set.mapped_ptr);
-      vk_object_base_finish(&cmd_buffer->descriptors[i].push_set.set.base);
+      struct radv_descriptor_set_header *set = &cmd_buffer->descriptors[i].push_set.set;
+      free(set->mapped_ptr);
+      if (set->layout)
+         radv_descriptor_set_layout_unref(cmd_buffer->device, set->layout);
+      vk_object_base_finish(&set->base);
    }
 
    vk_object_base_finish(&cmd_buffer->meta_push_descriptors.base);
@@ -4804,7 +4807,13 @@ radv_init_push_descriptor_set(struct radv_cmd_buffer *cmd_buffer, struct radv_de
    struct radv_descriptor_state *descriptors_state =
       radv_get_descriptors_state(cmd_buffer, bind_point);
    set->header.size = layout->size;
-   set->header.layout = layout;
+
+   if (set->header.layout != layout) {
+      if (set->header.layout)
+         radv_descriptor_set_layout_unref(cmd_buffer->device, set->header.layout);
+      radv_descriptor_set_layout_ref(layout);
+      set->header.layout = layout;
+   }
 
    if (descriptors_state->push_set.capacity < set->header.size) {
       size_t new_size = MAX2(set->header.size, 1024);

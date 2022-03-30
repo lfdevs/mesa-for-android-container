@@ -679,6 +679,7 @@ static const char* const lsc_flush_type[] = {
    [LSC_FLUSH_TYPE_DISCARD]    = "discard",
    [LSC_FLUSH_TYPE_CLEAN]      = "clean",
    [LSC_FLUSH_TYPE_L3ONLY]     = "l3only",
+   [LSC_FLUSH_TYPE_NONE_6]     = "none_6",
 };
 
 static const char* const lsc_addr_size[] = {

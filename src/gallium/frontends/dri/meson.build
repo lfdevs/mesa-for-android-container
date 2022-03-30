@@ -68,13 +68,13 @@ libdri = static_library(
 if with_dri
   dri_req_private = []
   if dep_libdrm.found()
-    dir_req_private = ['libdrm >= @0@'.format(_drm_ver)]
+    dri_req_private = ['libdrm >= @0@'.format(_drm_ver)]
   endif
 
   pkg.generate(
     name : 'dri',
     filebase : 'dri',
-    description : 'Direct Rendering Infastructure',
+    description : 'Direct Rendering Infrastructure',
     version : meson.project_version(),
     variables : ['dridriverdir=@0@'.format(dri_drivers_path)],
     requires_private : dri_req_private,

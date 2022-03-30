@@ -429,6 +429,9 @@ bo_alloc_internal(struct crocus_bufmgr *bufmgr,
    bo->index = -1;
    bo->kflags = 0;
 
+   if (flags & BO_ALLOC_SCANOUT)
+      bo->scanout = 1;
+
    if ((flags & BO_ALLOC_COHERENT) && !bo->cache_coherent) {
       struct drm_i915_gem_caching arg = {
          .handle = bo->gem_handle,
@@ -1010,6 +1013,9 @@ crocus_bo_map_gtt(struct pipe_debug_callback *dbg,
 static bool
 can_map_cpu(struct crocus_bo *bo, unsigned flags)
 {
+   if (bo->scanout)
+      return false;
+
    if (bo->cache_coherent)
       return true;
 

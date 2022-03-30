@@ -426,6 +426,21 @@ zink_screen_init_compiler(struct zink_screen *screen)
       screen->nir_options.lower_flrp64 = true;
       screen->nir_options.lower_ffma64 = true;
    }
+
+   /*
+       The OpFRem and OpFMod instructions use cheap approximations of remainder,
+       and the error can be large due to the discontinuity in trunc() and floor().
+       This can produce mathematically unexpected results in some cases, such as
+       FMod(x,x) computing x rather than 0, and can also cause the result to have
+       a different sign than the infinitely precise result.
+
+       -Table 84. Precision of core SPIR-V Instructions
+       * for drivers that are known to have imprecise fmod for doubles, lower dmod
+    */
+   if (screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_RADV ||
+       screen->info.driver_props.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE ||
+       screen->info.driver_props.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
+      screen->nir_options.lower_doubles_options = nir_lower_dmod;
 }
 
 const void *
@@ -582,7 +597,7 @@ update_so_info(struct zink_shader *zs, const struct pipe_stream_output_info *so_
       var->data.explicit_xfb_buffer = 0;
 
    bool inlined[VARYING_SLOT_MAX][4] = {0};
-   uint32_t packed = 0;
+   uint64_t packed = 0;
    uint8_t packed_components[VARYING_SLOT_MAX] = {0};
    uint8_t packed_streams[VARYING_SLOT_MAX] = {0};
    uint8_t packed_buffers[VARYING_SLOT_MAX] = {0};
@@ -611,12 +626,12 @@ update_so_info(struct zink_shader *zs, const struct pipe_stream_output_info *so_
                inlined[slot][output->start_component + j] = true;
          } else {
             /* otherwise store some metadata for later */
-            packed |= BITFIELD_BIT(slot);
-            packed_components[slot]++;
+            packed |= BITFIELD64_BIT(slot);
+            packed_components[slot] += output->num_components;
             packed_streams[slot] |= BITFIELD_BIT(output->stream);
             packed_buffers[slot] |= BITFIELD_BIT(output->output_buffer);
             for (unsigned j = 0; j < output->num_components; j++)
-               packed_offsets[output->register_index][j + output->start_component] = output->dst_offset;
+               packed_offsets[output->register_index][j + output->start_component] = output->dst_offset + j;
          }
       }
    }
@@ -635,7 +650,7 @@ update_so_info(struct zink_shader *zs, const struct pipe_stream_output_info *so_
           * being output with the same stream on the same buffer, this entire variable
           * can be consolidated into a single output to conserve locations
           */
-         if (packed & BITFIELD_BIT(slot) &&
+         if (packed & BITFIELD64_BIT(slot) &&
              glsl_get_components(var->type) == packed_components[slot] &&
              util_bitcount(packed_streams[slot]) == 1 &&
              util_bitcount(packed_buffers[slot]) == 1) {
@@ -657,7 +672,7 @@ update_so_info(struct zink_shader *zs, const struct pipe_stream_output_info *so_
                var->data.stream = output->stream;
                for (unsigned j = 0; j < packed_components[slot]; j++)
                   inlined[slot][j] = true;
-               packed &= ~BITFIELD_BIT(slot);
+               packed &= ~BITFIELD64_BIT(slot);
                continue;
             }
          }

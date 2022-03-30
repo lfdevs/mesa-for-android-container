@@ -230,6 +230,9 @@ static VkResult lvp_get_image_format_properties(struct lvp_physical_device *phys
       break;
    }
 
+   if (info->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT)
+      goto skip_checks;
+
    if (info->usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) {
          goto unsupported;
@@ -273,6 +276,7 @@ static VkResult lvp_get_image_format_properties(struct lvp_physical_device *phys
       }
    }
 
+skip_checks:
    *pImageFormatProperties = (VkImageFormatProperties) {
       .maxExtent = maxExtent,
       .maxMipLevels = maxMipLevels,

@@ -725,13 +725,29 @@ void genX(CmdResetQueryPool)(
 
    switch (pool->type) {
    case VK_QUERY_TYPE_OCCLUSION:
-   case VK_QUERY_TYPE_TIMESTAMP:
       for (uint32_t i = 0; i < queryCount; i++) {
          emit_query_pc_availability(cmd_buffer,
                                     anv_query_address(pool, firstQuery + i),
                                     false);
       }
       break;
+
+   case VK_QUERY_TYPE_TIMESTAMP: {
+      for (uint32_t i = 0; i < queryCount; i++) {
+         emit_query_pc_availability(cmd_buffer,
+                                    anv_query_address(pool, firstQuery + i),
+                                    false);
+      }
+
+      /* Add a CS stall here to make sure the PIPE_CONTROL above has
+       * completed. Otherwise some timestamps written later with MI_STORE_*
+       * commands might race with the PIPE_CONTROL in the loop above.
+       */
+      anv_add_pending_pipe_bits(cmd_buffer, ANV_PIPE_CS_STALL_BIT,
+                                "vkCmdResetQueryPool of timestamps");
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+      break;
+   }
 
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
@@ -1246,6 +1262,7 @@ void genX(CmdWriteTimestamp2KHR)(
    if (stage == VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR) {
       mi_store(&b, mi_mem64(anv_address_add(query_addr, 8)),
                    mi_reg64(TIMESTAMP));
+      emit_query_mi_availability(&b, query_addr, true);
    } else {
       /* Everything else is bottom-of-pipe */
       cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_POST_SYNC_BIT;
@@ -1259,9 +1276,9 @@ void genX(CmdWriteTimestamp2KHR)(
          if (GFX_VER == 9 && cmd_buffer->device->info.gt == 4)
             pc.CommandStreamerStallEnable = true;
       }
+      emit_query_pc_availability(cmd_buffer, query_addr, true);
    }
 
-   emit_query_pc_availability(cmd_buffer, query_addr, true);
 
    /* When multiview is active the spec requires that N consecutive query
     * indices are used, where N is the number of active views in the subpass.
@@ -1363,6 +1380,7 @@ void genX(CmdCopyQueryPoolResults)(
     */
    if (cmd_buffer->state.pending_pipe_bits & ANV_PIPE_RENDER_TARGET_BUFFER_WRITES) {
       anv_add_pending_pipe_bits(cmd_buffer,
+                                ANV_PIPE_TILE_CACHE_FLUSH_BIT |
                                 ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT,
                                 "CopyQueryPoolResults");
    }

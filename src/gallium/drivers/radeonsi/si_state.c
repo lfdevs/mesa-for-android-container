@@ -2788,7 +2788,6 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
    bool old_has_stencil =
       old_has_zsbuf &&
       ((struct si_texture *)sctx->framebuffer.state.zsbuf->texture)->surface.has_stencil;
-   bool unbound = false;
    int i;
 
    /* Reject zero-sized framebuffers due to a hw bug on GFX6 that occurs
@@ -2812,16 +2811,6 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 
       if (!surf->dcc_incompatible)
          continue;
-
-      /* Since the DCC decompression calls back into set_framebuffer-
-       * _state, we need to unbind the framebuffer, so that
-       * vi_separate_dcc_stop_query isn't called twice with the same
-       * color buffer.
-       */
-      if (!unbound) {
-         util_copy_framebuffer_state(&sctx->framebuffer.state, NULL);
-         unbound = true;
-      }
 
       if (vi_dcc_enabled(tex, surf->base.u.tex.level))
          if (!si_texture_disable_dcc(sctx, tex))

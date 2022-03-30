@@ -1926,6 +1926,7 @@ generate_code(struct brw_codegen *p,
       case SHADER_OPCODE_MEMORY_FENCE:
          brw_memory_fence(p, dst, src[0], BRW_OPCODE_SEND,
                           brw_message_target(inst->sfid),
+                          inst->desc,
                           /* commit_enable */ false,
                           /* bti */ 0);
          send_count++;

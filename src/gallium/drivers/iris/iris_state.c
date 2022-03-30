@@ -6193,6 +6193,17 @@ iris_upload_dirty_render_state(struct iris_context *ice,
 
    if (ice->state.streamout_active) {
       if (dirty & IRIS_DIRTY_SO_BUFFERS) {
+         /* Wa_16011411144
+          * SW must insert a PIPE_CONTROL cmd before and after the
+          * 3dstate_so_buffer_index_0/1/2/3 states to ensure so_buffer_index_* state is
+          * not combined with other state changes.
+          */
+         if (intel_device_info_is_dg2(&batch->screen->devinfo)) {
+            iris_emit_pipe_control_flush(batch,
+                                         "SO pre change stall WA",
+                                         PIPE_CONTROL_CS_STALL);
+         }
+
          for (int i = 0; i < 4; i++) {
             struct iris_stream_output_target *tgt =
                (void *) ice->state.so_target[i];
@@ -6221,6 +6232,13 @@ iris_upload_dirty_render_state(struct iris_context *ice,
             } else {
                iris_batch_emit(batch, so_buffers, 4 * dwords);
             }
+         }
+
+         /* Wa_16011411144 */
+         if (intel_device_info_is_dg2(&batch->screen->devinfo)) {
+            iris_emit_pipe_control_flush(batch,
+                                         "SO post change stall WA",
+                                         PIPE_CONTROL_CS_STALL);
          }
       }
 

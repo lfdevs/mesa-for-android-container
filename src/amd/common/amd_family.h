@@ -114,6 +114,7 @@ enum radeon_family
    CHIP_DIMGREY_CAVEFISH,
    CHIP_BEIGE_GOBY,
    CHIP_YELLOW_CARP,
+   CHIP_GFX1036,
    CHIP_LAST,
 };
 

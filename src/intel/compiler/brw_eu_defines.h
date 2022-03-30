@@ -1962,6 +1962,11 @@ enum PACKED lsc_flush_type {
     * Flush "RW" section of the L3 cache, but leave L1 and L2 caches untouched.
     */
    LSC_FLUSH_TYPE_L3ONLY = 5,
+   /*
+    * HW maps this flush type internally to NONE.
+    */
+   LSC_FLUSH_TYPE_NONE_6 = 6,
+
 };
 
 enum PACKED lsc_backup_fence_routing {

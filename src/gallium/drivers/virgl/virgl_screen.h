@@ -74,7 +74,13 @@ virgl_screen(struct pipe_screen *pipe)
 }
 
 bool
-virgl_has_readback_format(struct pipe_screen *screen, enum virgl_formats fmt);
+virgl_has_readback_format(struct pipe_screen *screen, enum virgl_formats fmt,
+                          bool allow_tweak);
+
+bool
+virgl_has_scanout_format(struct virgl_screen *vscreen,
+                         enum pipe_format format,
+                         bool may_emulate_bgra);
 
 /* GL_ARB_map_buffer_alignment requires 64 as the minimum alignment value.  In
  * addition to complying with the extension, a high enough alignment value is

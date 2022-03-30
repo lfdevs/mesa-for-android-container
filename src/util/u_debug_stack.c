@@ -256,10 +256,11 @@ debug_backtrace_capture(struct debug_stack_frame *backtrace,
    const void **frame_pointer = ((const void **)__builtin_frame_address(1));
 #pragma GCC diagnostic pop
 #elif defined(PIPE_CC_MSVC)
+   const void **frame_pointer;
    __asm {
       mov frame_pointer, ebp
    }
-   const void **frame_pointer = (const void **)frame_pointer[0];
+   frame_pointer = (const void **)frame_pointer[0];
 #else
    const void **frame_pointer = NULL;
 #endif

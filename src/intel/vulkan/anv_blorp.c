@@ -1403,7 +1403,6 @@ anv_image_msaa_resolve(struct anv_cmd_buffer *cmd_buffer,
    assert(src_image->vk.samples > 1);
    assert(dst_image->vk.image_type == VK_IMAGE_TYPE_2D);
    assert(dst_image->vk.samples == 1);
-   assert(src_image->n_planes == dst_image->n_planes);
 
    struct blorp_surf src_surf, dst_surf;
    get_blorp_surf_for_anv_image(cmd_buffer->device, src_image, aspect,

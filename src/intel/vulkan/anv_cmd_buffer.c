@@ -1647,7 +1647,7 @@ void anv_CmdSetColorWriteEnableEXT(
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
 
-   assert(attachmentCount < MAX_RTS);
+   assert(attachmentCount <= MAX_RTS);
 
    uint8_t color_writes = 0;
    for (uint32_t i = 0; i < attachmentCount; i++)

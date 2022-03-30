@@ -894,7 +894,7 @@ struct radv_descriptor_range {
 
 struct radv_descriptor_set_header {
    struct vk_object_base base;
-   const struct radv_descriptor_set_layout *layout;
+   struct radv_descriptor_set_layout *layout;
    uint32_t size;
    uint32_t buffer_count;
 
@@ -970,6 +970,25 @@ struct radv_descriptor_update_template {
    VkPipelineBindPoint bind_point;
    struct radv_descriptor_update_template_entry entry[0];
 };
+
+void radv_descriptor_set_layout_destroy(struct radv_device *device,
+                                        struct radv_descriptor_set_layout *set_layout);
+
+static inline void
+radv_descriptor_set_layout_ref(struct radv_descriptor_set_layout *set_layout)
+{
+   assert(set_layout && set_layout->ref_cnt >= 1);
+   p_atomic_inc(&set_layout->ref_cnt);
+}
+
+static inline void
+radv_descriptor_set_layout_unref(struct radv_device *device,
+                                 struct radv_descriptor_set_layout *set_layout)
+{
+   assert(set_layout && set_layout->ref_cnt >= 1);
+   if (p_atomic_dec_zero(&set_layout->ref_cnt))
+      radv_descriptor_set_layout_destroy(device, set_layout);
+}
 
 struct radv_buffer {
    struct vk_object_base base;

@@ -659,14 +659,14 @@ iris_copy_region(struct blorp_context *blorp,
       struct blorp_address src_addr = {
          .buffer = src_res->bo, .offset = src_box->x,
          .mocs = iris_mocs(src_res->bo, &screen->isl_dev,
-                           ISL_SURF_USAGE_RENDER_TARGET_BIT),
+                           ISL_SURF_USAGE_TEXTURE_BIT),
          .local_hint = iris_bo_likely_local(src_res->bo),
       };
       struct blorp_address dst_addr = {
          .buffer = dst_res->bo, .offset = dstx,
          .reloc_flags = EXEC_OBJECT_WRITE,
          .mocs = iris_mocs(dst_res->bo, &screen->isl_dev,
-                           ISL_SURF_USAGE_TEXTURE_BIT),
+                           ISL_SURF_USAGE_RENDER_TARGET_BIT),
          .local_hint = iris_bo_likely_local(dst_res->bo),
       };
 

@@ -1382,6 +1382,8 @@ emulate_x8(enum pipe_format format)
 
    case PIPE_FORMAT_B8G8R8X8_SRGB:
       return PIPE_FORMAT_B8G8R8A8_SRGB;
+   case PIPE_FORMAT_R8G8B8X8_SRGB:
+      return PIPE_FORMAT_R8G8B8A8_SRGB;
 
    case PIPE_FORMAT_R8G8B8X8_SINT:
       return PIPE_FORMAT_R8G8B8A8_SINT;

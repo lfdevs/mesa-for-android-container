@@ -4660,7 +4660,7 @@ lp_build_img_op_soa(const struct lp_static_texture_state *static_texture_state,
       out1 = lp_build_cmp(&int_coord_bld, PIPE_FUNC_GEQUAL, y, height);
       out_of_bounds = lp_build_or(&int_coord_bld, out_of_bounds, out1);
    }
-   if (dims >= 3) {
+   if (dims >= 3 || layer_coord) {
       out1 = lp_build_cmp(&int_coord_bld, PIPE_FUNC_GEQUAL, z, depth);
       out_of_bounds = lp_build_or(&int_coord_bld, out_of_bounds, out1);
    }

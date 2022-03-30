@@ -64,6 +64,9 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroyPipeline(
    if (pipeline->shader_cso[PIPE_SHADER_COMPUTE])
       device->queue.ctx->delete_compute_state(device->queue.ctx, pipeline->shader_cso[PIPE_SHADER_COMPUTE]);
 
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++)
+      ralloc_free(pipeline->pipeline_nir[i]);
+
    ralloc_free(pipeline->mem_ctx);
    vk_object_base_finish(&pipeline->base);
    vk_free2(&device->vk.alloc, pAllocator, pipeline);
@@ -369,7 +372,7 @@ deep_copy_graphics_create_info(void *mem_ctx,
 
    /* pDepthStencilState */
    if (src->pDepthStencilState && !rasterization_disabled &&
-       (pass ? pass->has_zs_attachment : (rp_info->depthAttachmentFormat || rp_info->stencilAttachmentFormat))) {
+       (pass ? pass->subpasses[src->subpass].has_zs_attachment : (rp_info->depthAttachmentFormat || rp_info->stencilAttachmentFormat))) {
       LVP_PIPELINE_DUP(dst->pDepthStencilState,
                        src->pDepthStencilState,
                        VkPipelineDepthStencilStateCreateInfo,
@@ -379,7 +382,7 @@ deep_copy_graphics_create_info(void *mem_ctx,
 
    /* pColorBlendState */
    if (src->pColorBlendState && !rasterization_disabled &&
-       (pass ? pass->has_color_attachment : rp_info->colorAttachmentCount)) {
+       (pass ? pass->subpasses[src->subpass].has_color_attachment : rp_info->colorAttachmentCount)) {
       VkPipelineColorBlendStateCreateInfo*    cb_state;
 
       cb_state = ralloc(mem_ctx, VkPipelineColorBlendStateCreateInfo);
@@ -606,6 +609,8 @@ lvp_shader_compile_to_ir(struct lvp_pipeline *pipeline,
       NIR_PASS(progress, nir, nir_opt_deref);
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
 
+      NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
+
       NIR_PASS(progress, nir, nir_copy_prop);
       NIR_PASS(progress, nir, nir_opt_dce);
       NIR_PASS(progress, nir, nir_opt_peephole_select, 8, true, true);
@@ -660,7 +665,7 @@ lvp_shader_compile_to_ir(struct lvp_pipeline *pipeline,
 static void fill_shader_prog(struct pipe_shader_state *state, gl_shader_stage stage, struct lvp_pipeline *pipeline)
 {
    state->type = PIPE_SHADER_IR_NIR;
-   state->ir.nir = pipeline->pipeline_nir[stage];
+   state->ir.nir = nir_shader_clone(NULL, pipeline->pipeline_nir[stage]);
 }
 
 static void
@@ -732,7 +737,7 @@ lvp_pipeline_compile(struct lvp_pipeline *pipeline,
    device->physical_device->pscreen->finalize_nir(device->physical_device->pscreen, pipeline->pipeline_nir[stage]);
    if (stage == MESA_SHADER_COMPUTE) {
       struct pipe_compute_state shstate = {0};
-      shstate.prog = (void *)pipeline->pipeline_nir[MESA_SHADER_COMPUTE];
+      shstate.prog = (void *)nir_shader_clone(NULL, pipeline->pipeline_nir[MESA_SHADER_COMPUTE]);
       shstate.ir_type = PIPE_SHADER_IR_NIR;
       shstate.req_local_mem = pipeline->pipeline_nir[MESA_SHADER_COMPUTE]->info.shared_size;
       pipeline->shader_cso[PIPE_SHADER_COMPUTE] = device->queue.ctx->create_compute_state(device->queue.ctx, &shstate);
@@ -908,7 +913,7 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
       pipeline->pipeline_nir[MESA_SHADER_FRAGMENT] = b.shader;
       struct pipe_shader_state shstate = {0};
       shstate.type = PIPE_SHADER_IR_NIR;
-      shstate.ir.nir = pipeline->pipeline_nir[MESA_SHADER_FRAGMENT];
+      shstate.ir.nir = nir_shader_clone(NULL, pipeline->pipeline_nir[MESA_SHADER_FRAGMENT]);
       pipeline->shader_cso[PIPE_SHADER_FRAGMENT] = device->queue.ctx->create_fs_state(device->queue.ctx, &shstate);
    }
    return VK_SUCCESS;

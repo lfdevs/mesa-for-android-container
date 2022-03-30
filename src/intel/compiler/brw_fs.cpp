@@ -8548,6 +8548,75 @@ fs_visitor::fixup_3src_null_dest()
                           DEPENDENCY_VARIABLES);
 }
 
+static bool
+needs_dummy_fence(const intel_device_info *devinfo, fs_inst *inst)
+{
+   /* This workaround is about making sure that any instruction writing
+    * through UGM has completed before we hit EOT.
+    *
+    * The workaround talks about UGM writes or atomic message but what is
+    * important is anything that hasn't completed. Usually any SEND
+    * instruction that has a destination register will be read by something
+    * else so we don't need to care about those as they will be synchronized
+    * by other parts of the shader or optimized away. What is left are
+    * instructions that don't have a destination register.
+    */
+   if (inst->sfid != GFX12_SFID_UGM)
+      return false;
+
+   return inst->dst.file == BAD_FILE;
+}
+
+/* Wa_22013689345
+ *
+ * We need to emit UGM fence message before EOT, if shader has any UGM write
+ * or atomic message.
+ *
+ * TODO/FINISHME: According to Curro we could avoid the fence in some cases.
+ *                We probably need a better criteria in needs_dummy_fence().
+ */
+void
+fs_visitor::emit_dummy_memory_fence_before_eot()
+{
+   bool progress = false;
+   bool has_ugm_write_or_atomic = false;
+
+   if (!intel_device_info_is_dg2(devinfo))
+      return;
+
+   foreach_block_and_inst_safe (block, fs_inst, inst, cfg) {
+      if (!inst->eot) {
+         if (needs_dummy_fence(devinfo, inst))
+            has_ugm_write_or_atomic = true;
+         continue;
+      }
+
+      if (!has_ugm_write_or_atomic)
+         break;
+
+      const fs_builder ibld(this, block, inst);
+      const fs_builder ubld = ibld.exec_all().group(1, 0);
+
+      fs_reg dst = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+      fs_inst *dummy_fence = ubld.emit(SHADER_OPCODE_MEMORY_FENCE,
+                                       dst, brw_vec8_grf(0, 0),
+                                       /* commit enable */ brw_imm_ud(1),
+                                       /* bti */ brw_imm_ud(0));
+      dummy_fence->sfid = GFX12_SFID_UGM;
+      dummy_fence->desc = lsc_fence_msg_desc(devinfo, LSC_FENCE_TILE,
+                                             LSC_FLUSH_TYPE_NONE_6, false);
+      ubld.emit(FS_OPCODE_SCHEDULING_FENCE, ubld.null_reg_ud(), dst);
+      progress = true;
+      /* TODO: remove this break if we ever have shader with multiple EOT. */
+      break;
+   }
+
+   if (progress) {
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS |
+                          DEPENDENCY_VARIABLES);
+   }
+}
+
 /**
  * Find the first instruction in the program that might start a region of
  * divergent control flow due to a HALT jump.  There is no
@@ -8857,6 +8926,7 @@ fs_visitor::run_vs()
    assign_vs_urb_setup();
 
    fixup_3src_null_dest();
+   emit_dummy_memory_fence_before_eot();
    allocate_registers(true /* allow_spilling */);
 
    return !failed;
@@ -8979,6 +9049,7 @@ fs_visitor::run_tcs()
    assign_tcs_urb_setup();
 
    fixup_3src_null_dest();
+   emit_dummy_memory_fence_before_eot();
    allocate_registers(true /* allow_spilling */);
 
    return !failed;
@@ -9007,6 +9078,7 @@ fs_visitor::run_tes()
    assign_tes_urb_setup();
 
    fixup_3src_null_dest();
+   emit_dummy_memory_fence_before_eot();
    allocate_registers(true /* allow_spilling */);
 
    return !failed;
@@ -9050,6 +9122,7 @@ fs_visitor::run_gs()
    assign_gs_urb_setup();
 
    fixup_3src_null_dest();
+   emit_dummy_memory_fence_before_eot();
    allocate_registers(true /* allow_spilling */);
 
    return !failed;
@@ -9150,6 +9223,7 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
       assign_urb_setup();
 
       fixup_3src_null_dest();
+      emit_dummy_memory_fence_before_eot();
 
       allocate_registers(allow_spilling);
 
@@ -9188,6 +9262,7 @@ fs_visitor::run_cs(bool allow_spilling)
    assign_curb_setup();
 
    fixup_3src_null_dest();
+   emit_dummy_memory_fence_before_eot();
    allocate_registers(allow_spilling);
 
    if (failed)
@@ -9219,6 +9294,7 @@ fs_visitor::run_bs(bool allow_spilling)
    assign_curb_setup();
 
    fixup_3src_null_dest();
+   emit_dummy_memory_fence_before_eot();
    allocate_registers(allow_spilling);
 
    if (failed)
@@ -9266,6 +9342,7 @@ fs_visitor::run_task(bool allow_spilling)
    assign_curb_setup();
 
    fixup_3src_null_dest();
+   emit_dummy_memory_fence_before_eot();
    allocate_registers(allow_spilling);
 
    if (failed)
@@ -9313,6 +9390,7 @@ fs_visitor::run_mesh(bool allow_spilling)
    assign_curb_setup();
 
    fixup_3src_null_dest();
+   emit_dummy_memory_fence_before_eot();
    allocate_registers(allow_spilling);
 
    if (failed)

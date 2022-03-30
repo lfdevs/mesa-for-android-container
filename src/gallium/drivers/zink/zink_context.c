@@ -73,8 +73,18 @@ debug_describe_zink_buffer_view(char *buf, const struct zink_buffer_view *ptr)
 ALWAYS_INLINE static void
 check_resource_for_batch_ref(struct zink_context *ctx, struct zink_resource *res)
 {
-   if (!zink_resource_has_binds(res))
-      zink_batch_reference_resource(&ctx->batch, res);
+   if (!zink_resource_has_binds(res)) {
+      /* avoid desync between usage and tracking:
+       * - if usage exists, it must be removed before the context is destroyed
+       * - having usage does not imply having tracking
+       * - if tracking will be added here, also reapply usage to avoid dangling usage once tracking is removed
+       * TODO: somehow fix this for perf because it's an extra hash lookup
+       */
+      if (res->obj->bo->reads || res->obj->bo->writes)
+         zink_batch_reference_resource_rw(&ctx->batch, res, !!res->obj->bo->writes);
+      else
+         zink_batch_reference_resource(&ctx->batch, res);
+   }
 }
 
 static void
@@ -759,10 +769,24 @@ zink_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *pres,
       ivci.subresourceRange.aspectMask = sampler_aspect_from_format(state->format);
       /* samplers for stencil aspects of packed formats need to always use stencil swizzle */
       if (ivci.subresourceRange.aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
-         ivci.components.r = zink_component_mapping(clamp_zs_swizzle(sampler_view->base.swizzle_r));
-         ivci.components.g = zink_component_mapping(clamp_zs_swizzle(sampler_view->base.swizzle_g));
-         ivci.components.b = zink_component_mapping(clamp_zs_swizzle(sampler_view->base.swizzle_b));
-         ivci.components.a = zink_component_mapping(clamp_zs_swizzle(sampler_view->base.swizzle_a));
+         if (sampler_view->base.swizzle_r == PIPE_SWIZZLE_0 &&
+             sampler_view->base.swizzle_g == PIPE_SWIZZLE_0 &&
+             sampler_view->base.swizzle_b == PIPE_SWIZZLE_0 &&
+             sampler_view->base.swizzle_a == PIPE_SWIZZLE_X) {
+            /*
+             * When the state tracker asks for 000x swizzles, this is depth mode GL_ALPHA,
+             * however with the single dref fetch this will fail, so just spam all the channels.
+             */
+            ivci.components.r = VK_COMPONENT_SWIZZLE_R;
+            ivci.components.g = VK_COMPONENT_SWIZZLE_R;
+            ivci.components.b = VK_COMPONENT_SWIZZLE_R;
+            ivci.components.a = VK_COMPONENT_SWIZZLE_R;
+         } else {
+            ivci.components.r = zink_component_mapping(clamp_zs_swizzle(sampler_view->base.swizzle_r));
+            ivci.components.g = zink_component_mapping(clamp_zs_swizzle(sampler_view->base.swizzle_g));
+            ivci.components.b = zink_component_mapping(clamp_zs_swizzle(sampler_view->base.swizzle_b));
+            ivci.components.a = zink_component_mapping(clamp_zs_swizzle(sampler_view->base.swizzle_a));
+         }
       } else {
          /* if we have e.g., R8G8B8X8, then we have to ignore alpha since we're just emulating
           * these formats
@@ -3874,7 +3898,8 @@ rebind_buffer(struct zink_context *ctx, struct zink_resource *res, uint32_t rebi
       }
    }
 end:
-   zink_batch_resource_usage_set(&ctx->batch, res, has_write);
+   if (num_rebinds)
+      zink_batch_resource_usage_set(&ctx->batch, res, has_write);
    return num_rebinds;
 }
 

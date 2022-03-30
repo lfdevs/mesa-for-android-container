@@ -1087,7 +1087,24 @@ ChipFamily Gfx10Lib::HwlConvertChipFamily(
             }
 
             break;
-
+        case FAMILY_GC_10_3_6:
+            if (ASICREV_IS_GFX1036(chipRevision))
+            {
+                m_settings.supportRbPlus   = 1;
+                m_settings.dccUnsup3DSwDis = 0;
+            }
+            break;
+        case FAMILY_GC_10_3_7:
+            if (ASICREV_IS_GFX1037(chipRevision))
+            {
+                m_settings.supportRbPlus   = 1;
+                m_settings.dccUnsup3DSwDis = 0;
+            }
+            else
+            {
+                ADDR_ASSERT(!"Unknown chip revision");
+            }
+            break;
         default:
             ADDR_ASSERT(!"Unknown chip family");
             break;

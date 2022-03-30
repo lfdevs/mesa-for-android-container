@@ -47,6 +47,8 @@
 #define FAMILY_NV      0x8F
 #define FAMILY_VGH     0x90
 #define FAMILY_YC      0x92
+#define FAMILY_GC_10_3_6  0x95
+#define FAMILY_GC_10_3_7  0x97
 
 // AMDGPU_FAMILY_IS(familyId, familyName)
 #define FAMILY_IS(f, fn)     (f == FAMILY_##fn)
@@ -111,6 +113,10 @@
 
 #define AMDGPU_YELLOW_CARP_RANGE 0x01, 0xFF
 
+#define AMDGPU_GFX1036_RANGE    0x01, 0xFF
+
+#define AMDGPU_GFX1037_RANGE    0x01, 0xFF
+
 #define AMDGPU_EXPAND_FIX(x) x
 #define AMDGPU_RANGE_HELPER(val, min, max) ((val >= min) && (val < max))
 #define AMDGPU_IN_RANGE(val, ...)   AMDGPU_EXPAND_FIX(AMDGPU_RANGE_HELPER(val, __VA_ARGS__))
@@ -167,5 +173,9 @@
 #define ASICREV_IS_VANGOGH(r)          ASICREV_IS(r, VANGOGH)
 
 #define ASICREV_IS_YELLOW_CARP(r)      ASICREV_IS(r, YELLOW_CARP)
+
+#define ASICREV_IS_GFX1036(r)          ASICREV_IS(r, GFX1036)
+
+#define ASICREV_IS_GFX1037(r)          ASICREV_IS(r, GFX1037)
 
 #endif // _AMDGPU_ASIC_ADDR_H

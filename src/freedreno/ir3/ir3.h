@@ -338,6 +338,7 @@ struct ir3_instruction {
             IR3_SRC_PACKED_LOW = 0,
             IR3_SRC_PACKED_HIGH = 1,
          } packed;
+         bool swapped;
       } cat3;
       struct {
          unsigned samp, tex;

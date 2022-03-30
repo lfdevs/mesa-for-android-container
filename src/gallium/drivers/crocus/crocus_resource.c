@@ -708,6 +708,10 @@ crocus_resource_create_with_modifiers(struct pipe_screen *pscreen,
    if (templ->usage == PIPE_USAGE_STAGING)
       flags |= BO_ALLOC_COHERENT;
 
+   /* Scanout buffers need to be WC. */
+   if (templ->bind & PIPE_BIND_SCANOUT)
+      flags |= BO_ALLOC_SCANOUT;
+
    uint64_t aux_size = 0;
    uint32_t aux_preferred_alloc_flags;
 

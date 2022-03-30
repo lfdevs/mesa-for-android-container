@@ -2382,6 +2382,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 
          brw_memory_fence(p, dst, src[0], send_op,
                           brw_message_target(inst->sfid),
+                          inst->desc,
                           /* commit_enable */ src[1].ud,
                           /* bti */ src[2].ud);
          send_count++;

@@ -85,10 +85,6 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateRenderPass2(
       att->load_op = pCreateInfo->pAttachments[i].loadOp;
       att->stencil_load_op = pCreateInfo->pAttachments[i].stencilLoadOp;
       att->attachment = i;
-
-      bool is_zs = util_format_is_depth_or_stencil(lvp_vk_format_to_pipe_format(att->format));
-      pass->has_zs_attachment |= is_zs;
-      pass->has_color_attachment |= !is_zs;
    }
 
    uint32_t subpass_attachment_idx = 0;
@@ -124,6 +120,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateRenderPass2(
 
          for (uint32_t j = 0; j < desc->colorAttachmentCount; j++) {
             CHECK_UNUSED_ATTACHMENT(pColorAttachments, color_attachments, j);
+            subpass->has_color_attachment |= !!subpass->color_attachments[j];
          }
       }
 
@@ -143,6 +140,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateRenderPass2(
          subpass_attachment_idx++;
 
          CHECK_UNUSED_ATTACHMENT(pDepthStencilAttachment, depth_stencil_attachment, 0);
+         subpass->has_zs_attachment = !!(*subpass->depth_stencil_attachment);
       }
 
       const VkSubpassDescriptionDepthStencilResolve *ds_resolve =

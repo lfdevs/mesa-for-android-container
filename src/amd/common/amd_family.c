@@ -100,6 +100,8 @@ const char *ac_get_family_name(enum radeon_family family)
       return "BEIGE_GOBY";
    case CHIP_YELLOW_CARP:
       return "YELLOW_CARP";
+   case CHIP_GFX1036:
+      return "GFX1036";
    default:
       unreachable("Unknown GPU family");
    }

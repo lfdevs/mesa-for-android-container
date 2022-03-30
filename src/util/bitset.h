@@ -208,7 +208,7 @@ __bitset_shl(BITSET_WORD *x, unsigned amount, unsigned n)
 static inline void
 __bitset_set_range(BITSET_WORD *r, unsigned start, unsigned end)
 {
-   const unsigned size = end - start;
+   const unsigned size = end - start + 1;
    const unsigned start_mod = start % BITSET_WORDBITS;
 
    if (start_mod + size <= BITSET_WORDBITS) {

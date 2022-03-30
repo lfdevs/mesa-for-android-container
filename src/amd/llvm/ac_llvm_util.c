@@ -179,6 +179,7 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
    case CHIP_BEIGE_GOBY:
    case CHIP_VANGOGH:
    case CHIP_YELLOW_CARP:
+   case CHIP_GFX1036:
       return "gfx1030";
    default:
       return "";

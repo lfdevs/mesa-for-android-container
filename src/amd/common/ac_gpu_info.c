@@ -764,6 +764,12 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    case FAMILY_YC:
       identify_chip(YELLOW_CARP);
       break;
+   case FAMILY_GC_10_3_6:
+      identify_chip(GFX1036);
+      break;
+   case FAMILY_GC_10_3_7:
+      identify_chip2(GFX1037, GFX1036);
+      break;
    }
 
    if (!info->name) {
@@ -1189,6 +1195,7 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
          break;
       case CHIP_VANGOGH:
       case CHIP_YELLOW_CARP:
+      case CHIP_GFX1036:
          pc_lines = 256;
          break;
       default:

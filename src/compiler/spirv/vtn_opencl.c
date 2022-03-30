@@ -46,6 +46,7 @@ static int to_llvm_address_space(SpvStorageClass mode)
    case SpvStorageClassUniform:
    case SpvStorageClassUniformConstant: return 2;
    case SpvStorageClassWorkgroup: return 3;
+   case SpvStorageClassGeneric: return 4;
    default: return -1;
    }
 }

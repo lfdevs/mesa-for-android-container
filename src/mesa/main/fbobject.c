@@ -5383,6 +5383,16 @@ static void
 discard_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
                     GLsizei numAttachments, const GLenum *attachments)
 {
+   GLenum depth_att, stencil_att;
+
+   if (_mesa_is_user_fbo(fb)) {
+      depth_att = GL_DEPTH_ATTACHMENT;
+      stencil_att = GL_STENCIL_ATTACHMENT;
+   } else {
+      depth_att = GL_DEPTH;
+      stencil_att = GL_STENCIL;
+   }
+
    for (int i = 0; i < numAttachments; i++) {
       struct gl_renderbuffer_attachment *att =
             get_fb_attachment(ctx, fb, attachments[i]);
@@ -5395,12 +5405,12 @@ discard_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
        * DiscardFramebuffer if the attachments list includes both depth
        * and stencil and they both point at the same renderbuffer.
        */
-      if ((attachments[i] == GL_DEPTH_ATTACHMENT ||
-           attachments[i] == GL_STENCIL_ATTACHMENT) &&
+      if ((attachments[i] == depth_att ||
+           attachments[i] == stencil_att) &&
           (!att->Renderbuffer ||
            att->Renderbuffer->_BaseFormat == GL_DEPTH_STENCIL)) {
-         GLenum other_format = (attachments[i] == GL_DEPTH_ATTACHMENT ?
-                                GL_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT);
+         GLenum other_format = (attachments[i] == depth_att ?
+                                stencil_att : depth_att);
          bool has_both = false;
          for (int j = 0; j < numAttachments; j++) {
             if (attachments[j] == other_format) {
