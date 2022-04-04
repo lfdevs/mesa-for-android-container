@@ -1,3 +1,9 @@
+mesa (22.0.1-2) experimental; urgency=medium
+
+  * Migrate to llvm-14.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 04 Apr 2022 12:40:09 +0300
+
 mesa (22.0.1-1) experimental; urgency=medium
 
   * New upstream release.
