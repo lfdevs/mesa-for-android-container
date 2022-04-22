@@ -263,6 +263,7 @@ a6xx_gen4 = dict(
         storage_16bit = True,
         has_tex_filter_cubic = True,
         has_sample_locations = True,
+        has_ccu_flush_bug = True,
         has_cp_reg_write = False,
         has_8bpp_ubwc = False,
         has_lpac = True,

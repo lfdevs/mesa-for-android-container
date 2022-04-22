@@ -5214,9 +5214,22 @@ lower_sampler_logical_send_gfx7(const fs_builder &bld, fs_inst *inst, opcode op,
 
    if (min_lod.file != BAD_FILE) {
       /* Account for all of the missing coordinate sources */
-      length += 4 - coord_components;
-      if (op == SHADER_OPCODE_TXD)
-         length += (3 - grad_components) * 2;
+      if (op == SHADER_OPCODE_TXD && devinfo->verx10 >= 125) {
+         /* On DG2 and newer platforms, sample_d can only be used with 1D and
+          * 2D surfaces, so the maximum number of gradient components is 2.
+          * In spite of this limitation, the Bspec lists a mysterious R
+          * component before the min_lod, so the maximum coordinate components
+          * is 3.
+          *
+          * Wa_1209978020
+          */
+         length += 3 - coord_components;
+         length += (2 - grad_components) * 2;
+      } else {
+         length += 4 - coord_components;
+         if (op == SHADER_OPCODE_TXD)
+            length += (3 - grad_components) * 2;
+      }
 
       bld.MOV(sources[length++], min_lod);
    }
@@ -5475,6 +5488,33 @@ emit_predicate_on_sample_mask(const fs_builder &bld, fs_inst *inst)
       inst->flag_subreg = subreg;
       inst->predicate = BRW_PREDICATE_NORMAL;
       inst->predicate_inverse = false;
+   }
+}
+
+void
+fs_visitor::emit_is_helper_invocation(fs_reg result)
+{
+   /* Unlike the regular gl_HelperInvocation, that is defined at dispatch,
+    * the helperInvocationEXT() (aka SpvOpIsHelperInvocationEXT) takes into
+    * consideration demoted invocations.
+    */
+   result.type = BRW_REGISTER_TYPE_UD;
+
+   bld.MOV(result, brw_imm_ud(0));
+
+   /* See sample_mask_reg() for why we split SIMD32 into SIMD16 here. */
+   unsigned width = bld.dispatch_width();
+   for (unsigned i = 0; i < DIV_ROUND_UP(width, 16); i++) {
+      const fs_builder b = bld.group(MIN2(width, 16), i);
+
+      fs_inst *mov = b.MOV(offset(result, b, i), brw_imm_ud(~0));
+
+      /* The at() ensures that any code emitted to get the predicate happens
+       * before the mov right above.  This is not an issue elsewhere because
+       * lowering code already set up the builder this way.
+       */
+      emit_predicate_on_sample_mask(b.at(NULL, mov), mov);
+      mov->predicate_inverse = true;
    }
 }
 
@@ -5751,11 +5791,11 @@ lower_surface_logical_send(const fs_builder &bld, fs_inst *inst)
    inst->sfid = sfid;
    setup_surface_descriptors(bld, inst, desc, surface, surface_handle);
 
+   inst->resize_sources(4);
+
    /* Finally, the payload */
    inst->src[2] = payload;
    inst->src[3] = payload2;
-
-   inst->resize_sources(4);
 }
 
 static enum lsc_opcode
@@ -5978,11 +6018,11 @@ lower_lsc_surface_logical_send(const fs_builder &bld, fs_inst *inst)
    inst->send_has_side_effects = has_side_effects;
    inst->send_is_volatile = !has_side_effects;
 
+   inst->resize_sources(4);
+
    /* Finally, the payload */
    inst->src[2] = payload;
    inst->src[3] = payload2;
-
-   inst->resize_sources(4);
 }
 
 static void
@@ -6048,10 +6088,10 @@ lower_surface_block_logical_send(const fs_builder &bld, fs_inst *inst)
                                                     arg.ud, write);
    setup_surface_descriptors(bld, inst, desc, surface, surface_handle);
 
+   inst->resize_sources(4);
+
    inst->src[2] = header;
    inst->src[3] = data;
-
-   inst->resize_sources(4);
 }
 
 static fs_reg
@@ -9639,7 +9679,8 @@ brw_nir_populate_wm_prog_data(const nir_shader *shader,
     * so the shader definitely kills pixels.
     */
    prog_data->uses_kill = shader->info.fs.uses_discard ||
-      key->emit_alpha_test;
+                          shader->info.fs.uses_demote ||
+                          key->emit_alpha_test;
    prog_data->uses_omask = !key->ignore_sample_mask_out &&
       (shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK));
    prog_data->computed_depth_mode = computed_depth_mode(shader);

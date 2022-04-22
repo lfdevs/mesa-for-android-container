@@ -1317,7 +1317,7 @@ Converter::parseNIR()
          BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS);
       info_out->prop.fp.usesDiscard = nir->info.fs.uses_discard || nir->info.fs.uses_demote;
       info_out->prop.fp.usesSampleMaskIn =
-         !BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_MASK_IN);
+         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_MASK_IN);
       break;
    case Program::TYPE_GEOMETRY:
       info_out->prop.gp.instanceCount = nir->info.gs.invocations;

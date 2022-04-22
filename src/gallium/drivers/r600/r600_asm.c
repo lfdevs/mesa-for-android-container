@@ -240,14 +240,48 @@ int r600_bytecode_add_pending_output(struct r600_bytecode *bc,
 	return 0;
 }
 
-void r600_bytecode_need_wait_ack(struct r600_bytecode *bc, boolean need_wait_ack)
+void
+r600_bytecode_add_ack(struct r600_bytecode *bc)
 {
-	bc->need_wait_ack = need_wait_ack;
+	bc->need_wait_ack = true;
 }
 
-boolean r600_bytecode_get_need_wait_ack(struct r600_bytecode *bc)
+int
+r600_bytecode_wait_acks(struct r600_bytecode *bc)
 {
-	return bc->need_wait_ack;
+	/* Store acks are an R700+ feature. */
+	if (bc->chip_class < R700)
+		return 0;
+
+	if (!bc->need_wait_ack)
+		return 0;
+
+	int ret = r600_bytecode_add_cfinst(bc, CF_OP_WAIT_ACK);
+	if (ret != 0)
+		return ret;
+
+	struct r600_bytecode_cf *cf = bc->cf_last;
+	cf->barrier = 1;
+	/* Request a wait if the number of outstanding acks is > 0 */
+	cf->cf_addr = 0;
+
+	return 0;
+}
+
+uint32_t
+r600_bytecode_write_export_ack_type(struct r600_bytecode *bc, bool indirect)
+{
+	if (bc->chip_class >= R700) {
+		if (indirect)
+			return V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_IND_ACK_EG;
+		else
+			return V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_ACK_EG;
+	} else {
+		if (indirect)
+			return V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_IND;
+		else
+			return V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE;
+	}
 }
 
 /* alu instructions that can ony exits once per group */
@@ -1462,6 +1496,12 @@ int r600_bytecode_add_tex(struct r600_bytecode *bc, const struct r600_bytecode_t
 				break;
 			}
 		}
+		/* vtx instrs get inserted after tex, so make sure we aren't moving the tex
+		 * before (say) the instr fetching the texcoord.
+		 */
+		if (!list_is_empty(&bc->cf_last->vtx))
+			bc->force_add_cf = 1;
+
 		/* slight hack to make gradients always go into same cf */
 		if (ntex->op == FETCH_OP_SET_GRADIENTS_H)
 			bc->force_add_cf = 1;
@@ -1530,10 +1570,8 @@ int r600_bytecode_add_cfinst(struct r600_bytecode *bc, unsigned op)
 	int r;
 
 	/* Emit WAIT_ACK before control flow to ensure pending writes are always acked. */
-	if (op != CF_OP_MEM_SCRATCH && bc->need_wait_ack) {
-		bc->need_wait_ack = false;
-		r = r600_bytecode_add_cfinst(bc, CF_OP_WAIT_ACK);
-	}
+	if (op != CF_OP_WAIT_ACK && op != CF_OP_MEM_SCRATCH)
+		r600_bytecode_wait_acks(bc);
 
 	r = r600_bytecode_add_cf(bc);
 	if (r)

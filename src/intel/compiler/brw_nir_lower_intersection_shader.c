@@ -246,6 +246,7 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
          }
       }
    }
+   nir_metadata_preserve(impl, nir_metadata_none);
 
    /* We did some inlining; have to re-index SSA defs */
    nir_index_ssa_defs(impl);

@@ -627,7 +627,14 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
        plane_format.swizzle.a == ISL_CHANNEL_SELECT_ALPHA) {
       flags |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT_KHR;
 
-      if (isl_format_supports_alpha_blending(devinfo, plane_format.isl_format))
+      /* While we can render to swizzled formats, they don't blend correctly
+       * if there are blend constants involved.  The swizzle just remaps the
+       * output of the shader to different channels in the texture.  It
+       * doesn't change the interpretation of the constant blend factors in
+       * COLOR_CALC_STATE.
+       */
+      if (isl_format_supports_alpha_blending(devinfo, plane_format.isl_format) &&
+          isl_swizzle_is_identity(plane_format.swizzle))
          flags |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BLEND_BIT_KHR;
    }
 

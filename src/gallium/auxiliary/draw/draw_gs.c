@@ -36,6 +36,7 @@
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_exec.h"
 #include "nir/nir_to_tgsi_info.h"
+#include "compiler/nir/nir.h"
 #include "pipe/p_shader_tokens.h"
 
 #include "util/u_math.h"
@@ -792,8 +793,16 @@ draw_create_geometry_shader(struct draw_context *draw,
       }
 
       tgsi_scan_shader(state->tokens, &gs->info);
-   } else
+      gs->num_vertex_streams = 1;
+      for (i = 0; i < gs->state.stream_output.num_outputs; i++) {
+         if (gs->state.stream_output.output[i].stream >= gs->num_vertex_streams)
+            gs->num_vertex_streams = gs->state.stream_output.output[i].stream + 1;
+      }
+   } else {
       nir_tgsi_scan_shader(state->ir.nir, &gs->info, true);
+      nir_shader *nir = state->ir.nir;
+      gs->num_vertex_streams = util_last_bit(nir->info.gs.active_stream_mask);
+   }
 
    /* setup the defaults */
    gs->max_out_prims = 0;
@@ -857,12 +866,6 @@ draw_create_geometry_shader(struct draw_context *draw,
       gs->clipvertex_output = gs->position_output;
 
    gs->machine = draw->gs.tgsi.machine;
-
-   gs->num_vertex_streams = 1;
-   for (i = 0; i < gs->state.stream_output.num_outputs; i++) {
-      if (gs->state.stream_output.output[i].stream >= gs->num_vertex_streams)
-         gs->num_vertex_streams = gs->state.stream_output.output[i].stream + 1;
-   }
 
 #ifdef DRAW_LLVM_AVAILABLE
    if (use_llvm) {

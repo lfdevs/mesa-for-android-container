@@ -484,7 +484,7 @@ iris_alloc_resource(struct pipe_screen *pscreen,
    res->base.b.screen = pscreen;
    res->orig_screen = iris_pscreen_ref(pscreen);
    pipe_reference_init(&res->base.b.reference, 1);
-   threaded_resource_init(&res->base.b, false, 0);
+   threaded_resource_init(&res->base.b, false);
 
    res->aux.possible_usages = 1 << ISL_AUX_USAGE_NONE;
    res->aux.sampler_usages = 1 << ISL_AUX_USAGE_NONE;
@@ -2546,6 +2546,9 @@ iris_dirty_for_history(struct iris_context *ice,
 
    if (res->bind_history & PIPE_BIND_VERTEX_BUFFER)
       dirty |= IRIS_DIRTY_VERTEX_BUFFER_FLUSHES;
+
+   if (ice->state.streamout_active && (res->bind_history & PIPE_BIND_STREAM_OUTPUT))
+      dirty |= IRIS_DIRTY_SO_BUFFERS;
 
    ice->state.dirty |= dirty;
    ice->state.stage_dirty |= stage_dirty;

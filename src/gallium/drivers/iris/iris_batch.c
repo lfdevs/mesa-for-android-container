@@ -143,7 +143,7 @@ decode_get_bo(void *v_batch, bool ppgtt, uint64_t address)
          return (struct intel_batch_decode_bo) {
             .addr = bo_address,
             .size = bo->size,
-            .map = iris_bo_map(batch->dbg, bo, MAP_READ),
+            .map = iris_bo_map(batch->dbg, bo, MAP_READ | MAP_ASYNC),
          };
       }
    }

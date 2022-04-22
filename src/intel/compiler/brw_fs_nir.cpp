@@ -1889,7 +1889,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
 
    case nir_op_sdot_4x8_iadd:
    case nir_op_sdot_4x8_iadd_sat:
-      inst = bld.DP4A(result,
+      inst = bld.DP4A(retype(result, BRW_REGISTER_TYPE_D),
                       retype(op[2], BRW_REGISTER_TYPE_D),
                       retype(op[0], BRW_REGISTER_TYPE_D),
                       retype(op[1], BRW_REGISTER_TYPE_D));
@@ -1900,7 +1900,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
 
    case nir_op_udot_4x8_uadd:
    case nir_op_udot_4x8_uadd_sat:
-      inst = bld.DP4A(result,
+      inst = bld.DP4A(retype(result, BRW_REGISTER_TYPE_UD),
                       retype(op[2], BRW_REGISTER_TYPE_UD),
                       retype(op[0], BRW_REGISTER_TYPE_UD),
                       retype(op[1], BRW_REGISTER_TYPE_UD));
@@ -1911,7 +1911,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
 
    case nir_op_sudot_4x8_iadd:
    case nir_op_sudot_4x8_iadd_sat:
-      inst = bld.DP4A(result,
+      inst = bld.DP4A(retype(result, BRW_REGISTER_TYPE_D),
                       retype(op[2], BRW_REGISTER_TYPE_D),
                       retype(op[0], BRW_REGISTER_TYPE_D),
                       retype(op[1], BRW_REGISTER_TYPE_UD));
@@ -3459,22 +3459,9 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
       bld.MOV(dest, fetch_render_target_array_index(bld));
       break;
 
-   case nir_intrinsic_is_helper_invocation: {
-      /* Unlike the regular gl_HelperInvocation, that is defined at dispatch,
-       * the helperInvocationEXT() (aka SpvOpIsHelperInvocationEXT) takes into
-       * consideration demoted invocations.  That information is stored in
-       * f0.1.
-       */
-      dest.type = BRW_REGISTER_TYPE_UD;
-
-      bld.MOV(dest, brw_imm_ud(0));
-
-      fs_inst *mov = bld.MOV(dest, brw_imm_ud(~0));
-      mov->predicate = BRW_PREDICATE_NORMAL;
-      mov->predicate_inverse = true;
-      mov->flag_subreg = sample_mask_flag_subreg(this);
+   case nir_intrinsic_is_helper_invocation:
+      emit_is_helper_invocation(dest);
       break;
-   }
 
    case nir_intrinsic_load_helper_invocation:
    case nir_intrinsic_load_sample_mask_in:

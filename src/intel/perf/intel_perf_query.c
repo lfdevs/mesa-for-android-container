@@ -48,19 +48,6 @@
 
 #define ALIGN(x, y) (((x) + (y)-1) & ~((y)-1))
 
-/* Align to 64bytes, requirement for OA report write address. */
-#define TOTAL_QUERY_DATA_SIZE            \
-   ALIGN(256 /* OA report */ +           \
-         4  /* freq register */ +        \
-         8 + 8 /* perf counter 1 & 2 */, \
-         64)
-
-
-static uint32_t field_offset(bool end, uint32_t offset)
-{
-   return (end ? TOTAL_QUERY_DATA_SIZE : 0) + offset;
-}
-
 #define MAP_READ  (1 << 0)
 #define MAP_WRITE (1 << 1)
 
@@ -1089,8 +1076,8 @@ read_oa_samples_for_query(struct intel_perf_context *perf_ctx,
    if (query->oa.map == NULL)
       query->oa.map = perf_cfg->vtbl.bo_map(perf_ctx->ctx, query->oa.bo, MAP_READ);
 
-   start = last = query->oa.map + field_offset(false, 0);
-   end = query->oa.map + field_offset(true, 0);
+   start = last = query->oa.map;
+   end = query->oa.map + perf_ctx->perf->query_layout.size;
 
    if (start[0] != query->oa.begin_report_id) {
       DBG("Spurious start report id=%"PRIu32"\n", start[0]);
@@ -1280,8 +1267,8 @@ accumulate_oa_reports(struct intel_perf_context *perf_ctx,
 
    assert(query->oa.map != NULL);
 
-   start = last = query->oa.map + field_offset(false, 0);
-   end = query->oa.map + field_offset(true, 0);
+   start = last = query->oa.map;
+   end = query->oa.map + perf_ctx->perf->query_layout.size;
 
    if (start[0] != query->oa.begin_report_id) {
       DBG("Spurious start report id=%"PRIu32"\n", start[0]);

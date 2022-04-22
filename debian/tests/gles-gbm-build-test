@@ -1,0 +1,9 @@
+#!/usr/bin/make -f
+
+CFLAGS=$(shell pkg-config --cflags glesv2 --cflags egl --cflags gbm)
+LIBS=$(shell pkg-config --libs glesv2 --libs egl --libs gbm)
+
+debian/tests/gles-gbm: debian/tests/gles-gbm.c
+	gcc -g -o $@ $(CFLAGS) $< $(LIBS)
+	@echo "Build test of $< succeeded"
+	@rm -f $@

@@ -445,6 +445,10 @@ lp_build_rho(struct lp_build_sample_context *bld,
             }
          }
       }
+
+      LLVMValueRef rho_is_inf = lp_build_is_inf_or_nan(gallivm, coord_bld->type, rho);
+      rho = lp_build_select(coord_bld, rho_is_inf, coord_bld->zero, rho);
+
       if (rho_per_quad) {
          /*
           * rho_vec contains per-pixel rho, convert to scalar per quad.

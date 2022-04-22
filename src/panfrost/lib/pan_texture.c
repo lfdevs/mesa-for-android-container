@@ -202,7 +202,7 @@ pan_image_layout_init(const struct panfrost_device *dev,
 
                 if (should_align) {
                         effective_width = ALIGN_POT(effective_width, tile_w) >> tile_shift;
-                        effective_height = ALIGN_POT(effective_height, tile_h);
+                        effective_height = ALIGN_POT(effective_height, tile_h) >> tile_shift;
 
                         /* We don't need to align depth */
                 }

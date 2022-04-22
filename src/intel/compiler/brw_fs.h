@@ -203,6 +203,7 @@ public:
    void emit_dummy_fs();
    void emit_repclear_shader();
    void emit_fragcoord_interpolation(fs_reg wpos);
+   void emit_is_helper_invocation(fs_reg result);
    fs_reg emit_frontfacing_interpolation();
    fs_reg emit_samplepos_setup();
    fs_reg emit_sampleid_setup();

@@ -2876,13 +2876,16 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
       src->format == VK_FORMAT_D32_SFLOAT_S8_UINT &&
       dst->format == VK_FORMAT_S8_UINT;
 
+   bool store_common = dst->store && !resolve_d32s8_s8;
+   bool store_separate_stencil = dst->store_stencil || resolve_d32s8_s8;
+
    trace_start_gmem_store(&cmd->trace, cs);
 
    /* use fast path when render area is aligned, except for unsupported resolve cases */
    if (!unaligned && (a == gmem_a || blit_can_resolve(dst->format))) {
-      if (dst->store)
-         tu_emit_blit(cmd, cs, iview, src, true, resolve_d32s8_s8);
-      if (dst->store_stencil)
+      if (store_common)
+         tu_emit_blit(cmd, cs, iview, src, true, false);
+      if (store_separate_stencil)
          tu_emit_blit(cmd, cs, iview, src, true, true);
 
       trace_end_gmem_store(&cmd->trace, cs, dst->format, true, false);
@@ -2901,25 +2904,25 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
        * TODO: store a flag somewhere so we don't do this more than once and
        * don't do it after the renderpass when this happens.
        */
-      if (dst->store || dst->store_stencil)
+      if (store_common || store_separate_stencil)
          tu_disable_draw_states(cmd, cs);
 
-      if (dst->store) {
-         store_3d_blit(cmd, cs, iview, dst->samples, resolve_d32s8_s8, format,
+      if (store_common) {
+         store_3d_blit(cmd, cs, iview, dst->samples, false, format,
                        render_area, src->gmem_offset, src->cpp);
       }
-      if (dst->store_stencil) {
+      if (store_separate_stencil) {
          store_3d_blit(cmd, cs, iview, dst->samples, true, PIPE_FORMAT_S8_UINT,
-                       render_area, src->gmem_offset, src->samples);
+                       render_area, src->gmem_offset_stencil, src->samples);
       }
    } else {
       r2d_coords(cs, &render_area->offset, &render_area->offset, &render_area->extent);
 
-      if (dst->store) {
-         store_cp_blit(cmd, cs, iview, src->samples, resolve_d32s8_s8, format,
+      if (store_common) {
+         store_cp_blit(cmd, cs, iview, src->samples, false, format,
                        src->gmem_offset, src->cpp);
       }
-      if (dst->store_stencil) {
+      if (store_separate_stencil) {
          store_cp_blit(cmd, cs, iview, src->samples, true, PIPE_FORMAT_S8_UINT,
                        src->gmem_offset_stencil, src->samples);
       }

@@ -1918,6 +1918,16 @@ static bool r600_update_derived_state(struct r600_context *rctx)
 		rctx->rasterizer->sprite_coord_enable != rctx->ps_shader->current->sprite_coord_enable ||
 		rctx->rasterizer->flatshade != rctx->ps_shader->current->flatshade)) {
 
+		if (unlikely(!ps_dirty && rctx->ps_shader && rctx->rasterizer &&
+				((rctx->rasterizer->sprite_coord_enable != rctx->ps_shader->current->sprite_coord_enable) ||
+						(rctx->rasterizer->flatshade != rctx->ps_shader->current->flatshade)))) {
+
+			if (rctx->b.chip_class >= EVERGREEN)
+				evergreen_update_ps_state(ctx, rctx->ps_shader->current);
+			else
+				r600_update_ps_state(ctx, rctx->ps_shader->current);
+		}
+
 		if (rctx->cb_misc_state.nr_ps_color_outputs != rctx->ps_shader->current->nr_ps_color_outputs ||
 		    rctx->cb_misc_state.ps_color_export_mask != rctx->ps_shader->current->ps_color_export_mask) {
 			rctx->cb_misc_state.nr_ps_color_outputs = rctx->ps_shader->current->nr_ps_color_outputs;
@@ -1932,16 +1942,6 @@ static bool r600_update_derived_state(struct r600_context *rctx)
 				rctx->cb_misc_state.multiwrite = multiwrite;
 				r600_mark_atom_dirty(rctx, &rctx->cb_misc_state.atom);
 			}
-		}
-
-		if (unlikely(!ps_dirty && rctx->ps_shader && rctx->rasterizer &&
-				((rctx->rasterizer->sprite_coord_enable != rctx->ps_shader->current->sprite_coord_enable) ||
-						(rctx->rasterizer->flatshade != rctx->ps_shader->current->flatshade)))) {
-
-			if (rctx->b.chip_class >= EVERGREEN)
-				evergreen_update_ps_state(ctx, rctx->ps_shader->current);
-			else
-				r600_update_ps_state(ctx, rctx->ps_shader->current);
 		}
 
 		r600_mark_atom_dirty(rctx, &rctx->shader_stages.atom);

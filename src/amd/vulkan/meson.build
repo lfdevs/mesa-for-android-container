@@ -92,6 +92,10 @@ libradv_files = files(
   'vk_format.h',
 )
 
+files_drirc = files('00-radv-defaults.conf')
+
+install_data(files_drirc, install_dir : join_paths(get_option('datadir'), 'drirc.d'))
+
 if not with_platform_windows
   libradv_files += files(
     'winsys/amdgpu/radv_amdgpu_bo.c',

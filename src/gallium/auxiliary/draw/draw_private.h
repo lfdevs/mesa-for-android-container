@@ -359,6 +359,7 @@ struct draw_context
 
    struct {
       struct draw_tess_eval_shader *tess_eval_shader;
+      uint num_tes_outputs;  /**< convenience, from tess_eval_shader */
       uint position_output;
       uint clipvertex_output;
 

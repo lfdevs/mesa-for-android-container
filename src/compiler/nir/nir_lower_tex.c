@@ -1328,9 +1328,10 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
       }
 
       if ((tex->sampler_dim == GLSL_SAMPLER_DIM_RECT) && options->lower_rect &&
-          tex->op != nir_texop_txf && !nir_tex_instr_is_query(tex)) {
-
-         if (compiler_options->has_txs)
+          tex->op != nir_texop_txf) {
+         if (nir_tex_instr_is_query(tex))
+            tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
+         else if (compiler_options->has_txs)
             lower_rect(b, tex);
          else
             lower_rect_tex_scale(b, tex);
@@ -1449,7 +1450,8 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
            (options->lower_txd_cube_map &&
             tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE) ||
            (options->lower_txd_3d &&
-            tex->sampler_dim == GLSL_SAMPLER_DIM_3D))) {
+            tex->sampler_dim == GLSL_SAMPLER_DIM_3D) ||
+           (options->lower_txd_array && tex->is_array))) {
          lower_gradient(b, tex);
          progress = true;
          continue;
@@ -1470,8 +1472,10 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
       /* Only fragment and compute (in some cases) support implicit
        * derivatives.  Lower those opcodes which use implicit derivatives to
        * use an explicit LOD of 0.
+       * But don't touch RECT samplers because they don't have mips.
        */
       if (nir_tex_instr_has_implicit_derivative(tex) &&
+          tex->sampler_dim != GLSL_SAMPLER_DIM_RECT &&
           !nir_shader_supports_implicit_lod(b->shader)) {
          lower_zero_lod(b, tex);
          progress = true;

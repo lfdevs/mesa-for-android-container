@@ -1370,7 +1370,7 @@ crocus_bo_export_dmabuf(struct crocus_bo *bo, int *prime_fd)
    crocus_bo_make_external(bo);
 
    if (drmPrimeHandleToFD(bufmgr->fd, bo->gem_handle,
-                          DRM_CLOEXEC, prime_fd) != 0)
+                          DRM_CLOEXEC | DRM_RDWR, prime_fd) != 0)
       return -errno;
 
    return 0;

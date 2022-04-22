@@ -558,13 +558,15 @@ check_psiz(struct nir_shader *s)
 }
 
 static nir_variable *
-find_var_with_location_frac(nir_shader *nir, unsigned location, unsigned location_frac)
+find_var_with_location_frac(nir_shader *nir, unsigned location, unsigned location_frac, bool have_psiz)
 {
    nir_foreach_shader_out_variable(var, nir) {
       if (var->data.location == location &&
           (var->data.location_frac == location_frac ||
-           glsl_get_vector_elements(var->type) >= location_frac + 1))
-         return var;
+           (glsl_type_is_array(var->type) ? glsl_array_size(var->type) : glsl_get_vector_elements(var->type)) >= location_frac + 1)) {
+         if (location != VARYING_SLOT_PSIZ || !have_psiz || var->data.explicit_location)
+            return var;
+      }
    }
    return NULL;
 }
@@ -610,7 +612,7 @@ update_so_info(struct zink_shader *zs, const struct pipe_stream_output_info *so_
       if (zs->nir->info.stage != MESA_SHADER_GEOMETRY || util_bitcount(zs->nir->info.gs.active_stream_mask) == 1) {
          nir_variable *var = NULL;
          while (!var)
-            var = find_var_with_location_frac(zs->nir, slot--, output->start_component);
+            var = find_var_with_location_frac(zs->nir, slot--, output->start_component, have_psiz);
          slot++;
          if (is_inlined(inlined[slot], output))
             continue;
@@ -644,7 +646,7 @@ update_so_info(struct zink_shader *zs, const struct pipe_stream_output_info *so_
       if (zs->nir->info.stage != MESA_SHADER_GEOMETRY || util_bitcount(zs->nir->info.gs.active_stream_mask) == 1) {
          nir_variable *var = NULL;
          while (!var)
-            var = find_var_with_location_frac(zs->nir, slot--, output->start_component);
+            var = find_var_with_location_frac(zs->nir, slot--, output->start_component, have_psiz);
          slot++;
          /* if this was flagged as a packed output before, and if all the components are
           * being output with the same stream on the same buffer, this entire variable
@@ -1357,12 +1359,13 @@ unbreak_bos(nir_shader *shader)
       u_foreach_bit(slot, ssbo_used) {
          char buf[64];
          snprintf(buf, sizeof(buf), "ssbo_slot_%u", slot);
-         if (ssbo_sizes[slot])
+         bool use_runtime = ssbo_sizes[slot] && max_ssbo_size;
+         if (use_runtime)
             fields[1].type = unsized;
          else
             fields[1].type = NULL;
          nir_variable *var = nir_variable_create(shader, nir_var_mem_ssbo,
-                                                 glsl_struct_type(fields, 1 + !!ssbo_sizes[slot], "struct", false), buf);
+                                                 glsl_struct_type(fields, 1 + use_runtime, "struct", false), buf);
          var->interface_type = var->type;
          var->data.driver_location = slot;
       }

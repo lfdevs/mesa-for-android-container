@@ -602,6 +602,7 @@ void draw_bind_tess_eval_shader(struct draw_context *draw,
    draw_do_flush(draw, DRAW_FLUSH_STATE_CHANGE);
    if (dtes) {
       draw->tes.tess_eval_shader = dtes;
+      draw->tes.num_tes_outputs = dtes->info.num_outputs;
       draw->tes.position_output = dtes->position_output;
       draw->tes.clipvertex_output = dtes->clipvertex_output;
    } else {

@@ -2368,15 +2368,15 @@ emit_get_ssbo_size(struct ntv_context *ctx, nir_intrinsic_instr *intr)
    nir_const_value *const_block_index = nir_src_as_const_value(intr->src[0]);
    assert(const_block_index); // no dynamic indexing for now
    nir_variable *var = ctx->ssbo_vars[const_block_index->u32];
+   unsigned last_member_idx = glsl_get_length(var->interface_type) - 1;
    SpvId result = spirv_builder_emit_binop(&ctx->builder, SpvOpArrayLength, uint_type,
-                                             ctx->ssbos[const_block_index->u32][2], 1);
+                                             ctx->ssbos[const_block_index->u32][2], last_member_idx);
    /* this is going to be converted by nir to:
 
       length = (buffer_size - offset) / stride
 
       * so we need to un-convert it to avoid having the calculation performed twice
       */
-   unsigned last_member_idx = glsl_get_length(var->interface_type) - 1;
    const struct glsl_type *last_member = glsl_get_struct_field(var->interface_type, last_member_idx);
    /* multiply by stride */
    result = emit_binop(ctx, SpvOpIMul, uint_type, result, emit_uint_const(ctx, 32, glsl_get_explicit_stride(last_member)));

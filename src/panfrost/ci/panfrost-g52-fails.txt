@@ -593,7 +593,6 @@ spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@!opengl 3.0@gl-3.0-vertexattribipointer,Fail
 spec@!opengl 3.0@required-texture-attachment-formats,Fail
-spec@!opengl 3.0@viewport-clamp,Crash
 spec@!opengl 3.1@primitive-restart-xfb flush,Fail
 spec@!opengl 3.1@primitive-restart-xfb generated,Fail
 spec@!opengl 3.1@primitive-restart-xfb written,Fail

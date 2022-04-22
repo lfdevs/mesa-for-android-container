@@ -240,25 +240,6 @@ update_gfx_program(struct zink_context *ctx)
    ctx->dirty_shader_stages &= ~bits;
 }
 
-static bool
-line_width_needed(enum pipe_prim_type reduced_prim,
-                  unsigned polygon_mode)
-{
-   switch (reduced_prim) {
-   case PIPE_PRIM_POINTS:
-      return false;
-
-   case PIPE_PRIM_LINES:
-      return true;
-
-   case PIPE_PRIM_TRIANGLES:
-      return polygon_mode == VK_POLYGON_MODE_LINE;
-
-   default:
-      unreachable("unexpected reduced prim");
-   }
-}
-
 ALWAYS_INLINE static void
 update_drawid(struct zink_context *ctx, unsigned draw_id)
 {
@@ -532,7 +513,11 @@ zink_draw(struct pipe_context *pctx,
             debug_printf("util_upload_index_buffer() failed\n");
             return;
          }
-         zink_batch_reference_resource_move(batch, zink_resource(index_buffer));
+         /* this will have extra refs from tc */
+         if (screen->threaded)
+            zink_batch_reference_resource_move(batch, zink_resource(index_buffer));
+         else
+            zink_batch_reference_resource(batch, zink_resource(index_buffer));
       } else {
          index_buffer = dinfo->index.resource;
          zink_batch_reference_resource_rw(batch, zink_resource(index_buffer), false);
@@ -737,12 +722,7 @@ zink_draw(struct pipe_context *pctx,
          unreachable("unexpected reduced prim");
       }
 
-      if (line_width_needed(reduced_prim, rast_state->hw_state.polygon_mode)) {
-         if (screen->info.feats.features.wideLines || rast_state->line_width == 1.0f)
-            VKCTX(CmdSetLineWidth)(batch->state->cmdbuf, rast_state->line_width);
-         else
-            debug_printf("BUG: wide lines not supported, needs fallback!");
-      }
+      VKCTX(CmdSetLineWidth)(batch->state->cmdbuf, rast_state->line_width);
       if (depth_bias)
          VKCTX(CmdSetDepthBias)(batch->state->cmdbuf, rast_state->offset_units, rast_state->offset_clamp, rast_state->offset_scale);
       else

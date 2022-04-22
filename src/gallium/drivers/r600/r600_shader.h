@@ -124,6 +124,7 @@ struct r600_shader {
 	boolean                 uses_atomics;
 	boolean			uses_images;
 	boolean			uses_helper_invocation;
+	boolean			uses_interpolate_at_sample;
 	uint8_t                 atomic_base;
 	uint8_t			rat_base;
 	uint8_t                 image_size_const_offset;

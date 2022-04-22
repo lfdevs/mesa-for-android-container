@@ -569,7 +569,7 @@ static struct si_resource *si_alloc_buffer_struct(struct pipe_screen *screen,
    pipe_reference_init(&buf->b.b.reference, 1);
    buf->b.b.screen = screen;
 
-   threaded_resource_init(&buf->b.b, allow_cpu_storage, SI_MAP_BUFFER_ALIGNMENT);
+   threaded_resource_init(&buf->b.b, allow_cpu_storage);
 
    buf->buf = NULL;
    buf->bind_history = 0;

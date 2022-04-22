@@ -2658,14 +2658,14 @@ radv_emit_index_buffer(struct radv_cmd_buffer *cmd_buffer, bool indirect)
 }
 
 void
-radv_set_db_count_control(struct radv_cmd_buffer *cmd_buffer)
+radv_set_db_count_control(struct radv_cmd_buffer *cmd_buffer, bool enable_occlusion_queries)
 {
    bool has_perfect_queries = cmd_buffer->state.perfect_occlusion_queries_enabled;
    struct radv_pipeline *pipeline = cmd_buffer->state.pipeline;
    uint32_t pa_sc_mode_cntl_1 = pipeline ? pipeline->graphics.ms.pa_sc_mode_cntl_1 : 0;
    uint32_t db_count_control;
 
-   if (!cmd_buffer->state.active_occlusion_queries) {
+   if (!enable_occlusion_queries) {
       if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX7) {
          if (G_028A4C_OUT_OF_ORDER_PRIMITIVE_ENABLE(pa_sc_mode_cntl_1) &&
              pipeline->graphics.disable_out_of_order_rast_for_occlusion && has_perfect_queries) {
@@ -5502,7 +5502,7 @@ radv_CmdSetColorWriteEnableEXT(VkCommandBuffer commandBuffer, uint32_t attachmen
    struct radv_cmd_state *state = &cmd_buffer->state;
    uint32_t color_write_enable = 0;
 
-   assert(attachmentCount < MAX_RTS);
+   assert(attachmentCount <= MAX_RTS);
 
    for (uint32_t i = 0; i < attachmentCount; i++) {
       color_write_enable |= pColorWriteEnables[i] ? (0xfu << (i * 4)) : 0;
@@ -7504,6 +7504,17 @@ radv_CmdTraceRaysKHR(VkCommandBuffer commandBuffer,
    radv_rt_dispatch(cmd_buffer, &info);
 }
 
+VKAPI_ATTR void VKAPI_CALL
+radv_CmdTraceRaysIndirectKHR(VkCommandBuffer commandBuffer,
+                             const VkStridedDeviceAddressRegionKHR *pRaygenShaderBindingTable,
+                             const VkStridedDeviceAddressRegionKHR *pMissShaderBindingTable,
+                             const VkStridedDeviceAddressRegionKHR *pHitShaderBindingTable,
+                             const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
+                             VkDeviceAddress indirectDeviceAddress)
+{
+   unreachable("Unimplemented");
+}
+
 static void
 radv_set_rt_stack_size(struct radv_cmd_buffer *cmd_buffer, uint32_t size)
 {
@@ -8525,7 +8536,7 @@ radv_CmdBeginConditionalRenderingEXT(
    bool draw_visible = true;
    uint64_t va;
 
-   va = radv_buffer_get_va(buffer->bo) + pConditionalRenderingBegin->offset;
+   va = radv_buffer_get_va(buffer->bo) + buffer->offset + pConditionalRenderingBegin->offset;
 
    /* By default, if the 32-bit value at offset in buffer memory is zero,
     * then the rendering commands are discarded, otherwise they are
@@ -8692,7 +8703,14 @@ radv_flush_vgt_streamout(struct radv_cmd_buffer *cmd_buffer)
    unsigned reg_strmout_cntl;
 
    /* The register is at different places on different ASICs. */
-   if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX7) {
+   if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX9) {
+      reg_strmout_cntl = R_0300FC_CP_STRMOUT_CNTL;
+      radeon_emit(cs, PKT3(PKT3_WRITE_DATA, 3, 0));
+      radeon_emit(cs, S_370_DST_SEL(V_370_MEM_MAPPED_REGISTER) | S_370_ENGINE_SEL(V_370_ME));
+      radeon_emit(cs, R_0300FC_CP_STRMOUT_CNTL >> 2);
+      radeon_emit(cs, 0);
+      radeon_emit(cs, 0);
+   } else if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX7) {
       reg_strmout_cntl = R_0300FC_CP_STRMOUT_CNTL;
       radeon_set_uconfig_reg(cs, reg_strmout_cntl, 0);
    } else {

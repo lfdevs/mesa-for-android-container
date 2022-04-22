@@ -254,7 +254,7 @@ get_image_usage_for_feats(struct zink_screen *screen, VkFormatFeatureFlags feats
          usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
          if ((bind & (PIPE_BIND_LINEAR | PIPE_BIND_SHARED)) != (PIPE_BIND_LINEAR | PIPE_BIND_SHARED))
             usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-      } else if (templ->nr_samples)
+      } else if (templ->nr_samples || !(feats & VK_FORMAT_FEATURE_BLIT_DST_BIT))
          /* this can't be populated, so we can't do it */
          return 0;
    }
@@ -901,7 +901,7 @@ resource_create(struct pipe_screen *pscreen,
 
    res->base.b = *templ;
 
-   threaded_resource_init(&res->base.b, false, 0);
+   threaded_resource_init(&res->base.b, false);
    pipe_reference_init(&res->base.b.reference, 1);
    res->base.b.screen = pscreen;
 
@@ -1490,6 +1490,15 @@ zink_buffer_map(struct pipe_context *pctx,
          ptr = map_resource(screen, res);
          ptr = ((uint8_t *)ptr) + trans->offset;
       }
+   } else if ((usage & PIPE_MAP_UNSYNCHRONIZED) && !res->obj->host_visible) {
+      trans->offset = box->x % screen->info.props.limits.minMemoryMapAlignment;
+      trans->staging_res = pipe_buffer_create(&screen->base, PIPE_BIND_LINEAR, PIPE_USAGE_STAGING, box->width + trans->offset);
+      if (!trans->staging_res)
+         goto fail;
+      struct zink_resource *staging_res = zink_resource(trans->staging_res);
+      res = staging_res;
+      ptr = map_resource(screen, res);
+      ptr = ((uint8_t *)ptr) + trans->offset;
    }
 
    if (!(usage & PIPE_MAP_UNSYNCHRONIZED)) {
@@ -1809,6 +1818,10 @@ zink_resource_object_init_storage(struct zink_context *ctx, struct zink_resource
       }
       struct zink_resource staging = *res;
       staging.obj = old_obj;
+      staging.all_binds = 0;
+      res->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+      res->obj->access = 0;
+      res->obj->access_stage = 0;
       bool needs_unref = true;
       if (zink_resource_has_usage(res)) {
          zink_batch_reference_resource_move(&ctx->batch, res);

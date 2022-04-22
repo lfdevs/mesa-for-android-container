@@ -2062,3 +2062,13 @@ radv_CmdCopyAccelerationStructureToMemoryKHR(
 
    radv_update_buffer_cp(cmd_buffer, pInfo->dst.deviceAddress, header_data, sizeof(header_data));
 }
+
+VKAPI_ATTR void VKAPI_CALL
+radv_CmdBuildAccelerationStructuresIndirectKHR(
+   VkCommandBuffer commandBuffer, uint32_t infoCount,
+   const VkAccelerationStructureBuildGeometryInfoKHR *pInfos,
+   const VkDeviceAddress *pIndirectDeviceAddresses, const uint32_t *pIndirectStrides,
+   const uint32_t *const *ppMaxPrimitiveCounts)
+{
+   unreachable("Unimplemented");
+}

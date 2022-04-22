@@ -344,8 +344,9 @@ struct threaded_resource {
 
    /* Drivers are required to update this for shared resources and user
     * pointers. */
-   bool	is_shared;
+   bool is_shared;
    bool is_user_ptr;
+   bool allow_cpu_storage;
 
    /* Unique buffer ID. Drivers must set it to non-zero for buffers and it must
     * be unique. Textures must set 0. Low bits are used as a hash of the ID.
@@ -521,8 +522,7 @@ struct threaded_context {
    struct tc_buffer_list buffer_lists[TC_MAX_BUFFER_LISTS];
 };
 
-void threaded_resource_init(struct pipe_resource *res, bool allow_cpu_storage,
-                            unsigned map_buffer_alignment);
+void threaded_resource_init(struct pipe_resource *res, bool allow_cpu_storage);
 void threaded_resource_deinit(struct pipe_resource *res);
 struct pipe_context *threaded_context_unwrap_sync(struct pipe_context *pipe);
 void tc_driver_internal_flush_notify(struct threaded_context *tc);
@@ -613,6 +613,7 @@ tc_buffer_disable_cpu_storage(struct pipe_resource *buf)
       align_free(tres->cpu_storage);
       tres->cpu_storage = NULL;
    }
+   tres->allow_cpu_storage = false;
 }
 
 static inline void

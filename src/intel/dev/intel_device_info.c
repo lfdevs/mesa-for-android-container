@@ -1029,6 +1029,12 @@ static const struct intel_device_info intel_device_info_rpl = {
    .platform = INTEL_PLATFORM_RPL,
 };
 
+static const struct intel_device_info intel_device_info_rpl_p = {
+   GFX12_GT_FEATURES(2),
+   .platform = INTEL_PLATFORM_RPL,
+   .display_ver = 13,
+};
+
 #define GFX12_DG1_SG1_FEATURES                  \
    GFX12_GT_FEATURES(2),                        \
    .platform = INTEL_PLATFORM_DG1,              \

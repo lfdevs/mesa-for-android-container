@@ -1710,6 +1710,8 @@ zink_context_update_descriptor_states(struct zink_context *ctx, struct zink_prog
             first = false;
          }
       }
+      ctx->dd->changed[pg->is_compute][ZINK_DESCRIPTOR_TYPES] |= ctx->dd->push_state[pg->is_compute] != hash;
+      ctx->dd->changed[pg->is_compute][ZINK_DESCRIPTOR_TYPES] |= pg->dd->push_usage != ctx->dd->last_push_usage[pg->is_compute];
       ctx->dd->push_state[pg->is_compute] = hash;
       ctx->dd->push_valid[pg->is_compute] = true;
       ctx->dd->last_push_usage[pg->is_compute] = pg->dd->push_usage;

@@ -151,6 +151,24 @@
 #include "program/prog_instruction.h"
 #include "main/shader_types.h"
 
+static const glsl_type *
+get_varying_type(const ir_variable *var, gl_shader_stage stage)
+{
+   const glsl_type *type = var->type;
+
+   if (!var->data.patch &&
+       ((var->data.mode == ir_var_shader_out &&
+         stage == MESA_SHADER_TESS_CTRL) ||
+        (var->data.mode == ir_var_shader_in &&
+         (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_TESS_EVAL ||
+          stage == MESA_SHADER_GEOMETRY)))) {
+      assert(type->is_array());
+      type = type->fields.array;
+   }
+
+   return type;
+}
+
 using namespace ir_builder;
 
 namespace {
@@ -192,7 +210,7 @@ private:
                                             ir_variable *unpacked_var,
                                             const char *name,
                                             unsigned vertex_index);
-   bool needs_lowering(ir_variable *var);
+   bool needs_lowering(ir_variable *var, gl_shader_stage stage);
 
    /**
     * Memory context used to allocate new instructions for the shader.
@@ -279,7 +297,7 @@ lower_packed_varyings_visitor::run(struct gl_linked_shader *shader)
 
       if (var->data.mode != this->mode ||
           var->data.location < VARYING_SLOT_VAR0 ||
-          !this->needs_lowering(var))
+          !this->needs_lowering(var, shader->Stage))
          continue;
 
       /* This lowering pass is only capable of packing floats and ints
@@ -780,7 +798,8 @@ lower_packed_varyings_visitor::get_packed_varying_deref(
 }
 
 bool
-lower_packed_varyings_visitor::needs_lowering(ir_variable *var)
+lower_packed_varyings_visitor::needs_lowering(ir_variable *var,
+                                              gl_shader_stage stage)
 {
    /* Things composed of vec4's, varyings with explicitly assigned
     * locations or varyings marked as must_be_shader_input (which might be used
@@ -790,6 +809,7 @@ lower_packed_varyings_visitor::needs_lowering(ir_variable *var)
       return false;
 
    const glsl_type *type = var->type;
+   type = get_varying_type(var, stage);
 
    /* Some drivers (e.g. panfrost) don't support packing of transform
     * feedback varyings.

@@ -214,7 +214,7 @@ class UI:
             else:
                 raise RuntimeError(f"Couldn't find {sha}")
 
-            await commit.apply(self)
+            await commit.apply()
 
         q = urwid.Edit("Commit sha\n")
         ok_btn = urwid.Button('Ok')

@@ -120,7 +120,7 @@ static struct pipe_resource *noop_resource_create(struct pipe_screen *screen,
       FREE(nresource);
       return NULL;
    }
-   threaded_resource_init(&nresource->b.b, false, 0);
+   threaded_resource_init(&nresource->b.b, false);
    return &nresource->b.b;
 }
 

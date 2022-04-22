@@ -3224,6 +3224,14 @@ typedef struct nir_shader_compiler_options {
 
    bool lower_ftrunc;
 
+   /** Lowers fround_even to ffract+feq+csel.
+    *
+    * Not correct in that it doesn't correctly handle the "_even" part of the
+    * rounding, but good enough for DX9 array indexing handling on DX9-class
+    * hardware.
+    */
+   bool lower_fround_even;
+
    bool lower_ldexp;
 
    bool lower_pack_half_2x16;
@@ -3497,6 +3505,15 @@ typedef struct nir_shader_compiler_options {
     * into same slot.
     */
    nir_pack_varying_options pack_varying_options;
+
+   /**
+    * Remove varying loaded from uniform, let fragment shader load the
+    * uniform directly. GPU passing varying by memory can benifit from it
+    * for sure; but GPU passing varying by on chip resource may not.
+    * Because it saves on chip resource but may increase memory pressure when
+    * fragment task is far more than vertex one, so better left it disabled.
+    */
+   bool lower_varying_from_uniform;
 } nir_shader_compiler_options;
 
 typedef struct nir_shader {
@@ -4829,6 +4846,11 @@ typedef struct nir_lower_tex_options {
     * If true, lower nir_texop_txd on 3D surfaces with nir_texop_txl.
     */
    bool lower_txd_3d;
+
+   /**
+    * If true, lower nir_texop_txd any array surfaces with nir_texop_txl.
+    */
+   bool lower_txd_array;
 
    /**
     * If true, lower nir_texop_txd on shadow samplers (except cube maps)

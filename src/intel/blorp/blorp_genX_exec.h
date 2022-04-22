@@ -1239,6 +1239,14 @@ blorp_emit_depth_stencil_state(struct blorp_batch *batch,
    }
 #endif
 
+#if GFX_VER >= 12
+   blorp_emit(batch, GENX(3DSTATE_DEPTH_BOUNDS), db) {
+      db.DepthBoundsTestEnable = false;
+      db.DepthBoundsTestMinValue = 0.0;
+      db.DepthBoundsTestMaxValue = 1.0;
+   }
+#endif
+
    return offset;
 }
 

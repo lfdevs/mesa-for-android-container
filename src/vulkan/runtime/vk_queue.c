@@ -293,8 +293,16 @@ vk_queue_submit_final(struct vk_queue *queue,
          continue;
 
       /* Waits on dummy vk_syncs are no-ops */
-      if (vk_sync_type_is_dummy(submit->waits[i].sync->type))
+      if (vk_sync_type_is_dummy(submit->waits[i].sync->type)) {
+         /* We are about to lose track of this wait, if it has a temporary
+          * we need to destroy it now, as vk_queue_submit_cleanup will not
+          * know about it */
+         if (submit->_wait_temps[i] != NULL) {
+            vk_sync_destroy(queue->base.device, submit->_wait_temps[i]);
+            submit->waits[i].sync = NULL;
+         }
          continue;
+      }
 
       /* For emulated timelines, we have a binary vk_sync associated with
        * each time point and pass the binary vk_sync to the driver.

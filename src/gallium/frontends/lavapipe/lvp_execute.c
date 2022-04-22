@@ -2856,7 +2856,7 @@ static void handle_event_set(struct vk_cmd_queue_entry *cmd,
 {
    LVP_FROM_HANDLE(lvp_event, event, cmd->u.set_event.event);
 
-   if (cmd->u.reset_event.stage_mask == VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT)
+   if (cmd->u.set_event.stage_mask == VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT)
       state->pctx->flush(state->pctx, NULL, 0);
    event->event_storage = 1;
 }

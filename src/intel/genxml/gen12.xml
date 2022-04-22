@@ -7201,7 +7201,9 @@
       <value name="Mid-cmdbuffer Preemption" value="0"/>
       <value name="Object Level Preemption" value="1"/>
     </field>
+    <field name="Disable Preemption and High Priority Pausing due to 3DPRIMITIVE Command" start="10" end="10" type="bool"/>
     <field name="Replay Mode Mask" start="16" end="16" type="bool"/>
+    <field name="Disable Preemption and High Priority Pausing due to 3DPRIMITIVE Command Mask" start="26" end="26" type="bool"/>
   </register>
 
   <register name="CS_DEBUG_MODE2" length="1" num="0x20d8">

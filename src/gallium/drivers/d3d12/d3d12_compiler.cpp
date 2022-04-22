@@ -1566,7 +1566,13 @@ bool d3d12_validation_tools::validate_and_sign(struct blob *dxil)
    validator->Validate(&source, DxcValidatorFlags_InPlaceEdit, &result);
    HRESULT validationStatus;
    result->GetStatus(&validationStatus);
-   if (FAILED(validationStatus) && library) {
+   if (FAILED(validationStatus)) {
+      if (!library) {
+         debug_printf("D3D12: validation failed, but lacking "
+                      "IDxcLibrary for proper diagnostics.\n");
+         return false;
+      }
+
       ComPtr<IDxcBlobEncoding> printBlob, printBlobUtf8;
       result->GetErrorBuffer(&printBlob);
       library->GetBlobAsUtf8(printBlob.Get(), printBlobUtf8.GetAddressOf());

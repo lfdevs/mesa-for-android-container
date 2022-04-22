@@ -232,6 +232,11 @@ iris_destroy_context(struct pipe_context *ctx)
    for (unsigned i = 0; i < ARRAY_SIZE(ice->shaders.scratch_surfs); i++)
       pipe_resource_reference(&ice->shaders.scratch_surfs[i].res, NULL);
 
+   for (unsigned i = 0; i < ARRAY_SIZE(ice->shaders.scratch_bos); i++) {
+      for (unsigned j = 0; j < ARRAY_SIZE(ice->shaders.scratch_bos[i]); j++)
+         iris_bo_unreference(ice->shaders.scratch_bos[i][j]);
+   }
+
    iris_destroy_program_cache(ice);
    iris_destroy_border_color_pool(ice);
    if (screen->measure.config)

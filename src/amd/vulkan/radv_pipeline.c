@@ -2935,9 +2935,9 @@ radv_generate_graphics_pipeline_key(const struct radv_pipeline *pipeline,
       key.ps.is_int10 = blend->col_format_is_int10;
    }
 
-   if (pipeline->device->physical_device->rad_info.chip_class >= GFX10) {
-      key.vs.topology = pCreateInfo->pInputAssemblyState ? pCreateInfo->pInputAssemblyState->topology : 0;
+   key.vs.topology = pCreateInfo->pInputAssemblyState ? pCreateInfo->pInputAssemblyState->topology : 0;
 
+   if (pipeline->device->physical_device->rad_info.chip_class >= GFX10) {
       const VkPipelineRasterizationStateCreateInfo *raster_info = pCreateInfo->pRasterizationState;
       const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *provoking_vtx_info =
          vk_find_struct_const(raster_info->pNext,

@@ -371,7 +371,7 @@ async def gather_commits(version: str, previous: typing.List['Commit'],
     return commits
 
 
-async def update_commits() -> None:
+async def update_commits() -> typing.List[Commit]:
     """Gather all new commits and update the on-disk cache.
     """
     commits = load()
@@ -387,7 +387,9 @@ async def update_commits() -> None:
     else:
         collected_commits = []
 
-    save(itertools.chain(collected_commits, commits))
+    all_commits = list(itertools.chain(collected_commits, commits))
+    save(all_commits)
+    return all_commits
 
 
 def load() -> typing.List['Commit']:

@@ -34,6 +34,36 @@
 #endif
 #include <sys/stat.h>
 
+static void
+radv_suspend_queries(struct radv_cmd_buffer *cmd_buffer)
+{
+   /* Pipeline statistics queries. */
+   if (cmd_buffer->state.active_pipeline_queries > 0) {
+      cmd_buffer->state.flush_bits &= ~RADV_CMD_FLAG_START_PIPELINE_STATS;
+      cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_STOP_PIPELINE_STATS;
+   }
+
+   /* Occlusion queries. */
+   if (cmd_buffer->state.active_occlusion_queries > 0) {
+      radv_set_db_count_control(cmd_buffer, false);
+   }
+}
+
+static void
+radv_resume_queries(struct radv_cmd_buffer *cmd_buffer)
+{
+   /* Pipeline statistics queries. */
+   if (cmd_buffer->state.active_pipeline_queries > 0) {
+      cmd_buffer->state.flush_bits &= ~RADV_CMD_FLAG_STOP_PIPELINE_STATS;
+      cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_START_PIPELINE_STATS;
+   }
+
+   /* Occlusion queries. */
+   if (cmd_buffer->state.active_occlusion_queries > 0) {
+      radv_set_db_count_control(cmd_buffer, true);
+   }
+}
+
 void
 radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_buffer,
                uint32_t flags)
@@ -88,6 +118,12 @@ radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_
       state->stencil_op.back.depth_fail_op =
          cmd_buffer->state.dynamic.stencil_op.back.depth_fail_op;
 
+      state->stencil_write_mask.front = cmd_buffer->state.dynamic.stencil_write_mask.front;
+      state->stencil_write_mask.back = cmd_buffer->state.dynamic.stencil_write_mask.back;
+
+      state->stencil_reference.front = cmd_buffer->state.dynamic.stencil_reference.front;
+      state->stencil_reference.back = cmd_buffer->state.dynamic.stencil_reference.back;
+
       state->fragment_shading_rate.size = cmd_buffer->state.dynamic.fragment_shading_rate.size;
       state->fragment_shading_rate.combiner_ops[0] =
          cmd_buffer->state.dynamic.fragment_shading_rate.combiner_ops[0];
@@ -132,6 +168,8 @@ radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_
       state->attachments = cmd_buffer->state.attachments;
       state->render_area = cmd_buffer->state.render_area;
    }
+
+   radv_suspend_queries(cmd_buffer);
 }
 
 void
@@ -182,6 +220,12 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
       cmd_buffer->state.dynamic.stencil_op.back.depth_fail_op =
          state->stencil_op.back.depth_fail_op;
 
+      cmd_buffer->state.dynamic.stencil_write_mask.front = state->stencil_write_mask.front;
+      cmd_buffer->state.dynamic.stencil_write_mask.back = state->stencil_write_mask.back;
+
+      cmd_buffer->state.dynamic.stencil_reference.front = state->stencil_reference.front;
+      cmd_buffer->state.dynamic.stencil_reference.back = state->stencil_reference.back;
+
       cmd_buffer->state.dynamic.fragment_shading_rate.size = state->fragment_shading_rate.size;
       cmd_buffer->state.dynamic.fragment_shading_rate.combiner_ops[0] =
          state->fragment_shading_rate.combiner_ops[0];
@@ -205,6 +249,7 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
          RADV_CMD_DIRTY_DYNAMIC_DEPTH_WRITE_ENABLE | RADV_CMD_DIRTY_DYNAMIC_DEPTH_COMPARE_OP |
          RADV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS_TEST_ENABLE |
          RADV_CMD_DIRTY_DYNAMIC_STENCIL_TEST_ENABLE | RADV_CMD_DIRTY_DYNAMIC_STENCIL_OP |
+         RADV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK | RADV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE |
          RADV_CMD_DIRTY_DYNAMIC_FRAGMENT_SHADING_RATE | RADV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS_ENABLE |
          RADV_CMD_DIRTY_DYNAMIC_PRIMITIVE_RESTART_ENABLE |
          RADV_CMD_DIRTY_DYNAMIC_RASTERIZER_DISCARD_ENABLE | RADV_CMD_DIRTY_DYNAMIC_LOGIC_OP |
@@ -248,6 +293,8 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
       if (state->subpass)
          cmd_buffer->state.dirty |= RADV_CMD_DIRTY_FRAMEBUFFER;
    }
+
+   radv_resume_queries(cmd_buffer);
 }
 
 VkImageViewType

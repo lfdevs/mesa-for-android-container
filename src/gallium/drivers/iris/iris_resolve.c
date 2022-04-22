@@ -413,6 +413,17 @@ iris_predraw_flush_buffers(struct iris_context *ice,
 
    if (ice->state.stage_dirty & (IRIS_STAGE_DIRTY_BINDINGS_VS << stage))
       flush_ssbos(batch, shs);
+
+   if (ice->state.streamout_active &&
+       (ice->state.dirty & IRIS_DIRTY_SO_BUFFERS)) {
+      for (int i = 0; i < 4; i++) {
+         struct iris_stream_output_target *tgt = (void *)ice->state.so_target[i];
+         if (tgt) {
+            struct iris_bo *bo = iris_resource_bo(tgt->base.buffer);
+            iris_emit_buffer_barrier_for(batch, bo, IRIS_DOMAIN_OTHER_WRITE);
+         }
+      }
+   }
 }
 
 static void

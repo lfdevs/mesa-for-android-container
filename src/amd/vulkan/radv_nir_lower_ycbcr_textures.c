@@ -33,7 +33,7 @@ struct ycbcr_state {
    nir_ssa_def *image_size;
    nir_tex_instr *origin_tex;
    nir_deref_instr *tex_deref;
-   const struct radv_sampler_ycbcr_conversion *conversion;
+   const struct radv_sampler_ycbcr_conversion_state *conversion;
    bool unnormalized_coordinates;
 };
 
@@ -80,7 +80,7 @@ static nir_ssa_def *
 implicit_downsampled_coords(struct ycbcr_state *state, nir_ssa_def *old_coords)
 {
    nir_builder *b = state->builder;
-   const struct radv_sampler_ycbcr_conversion *conversion = state->conversion;
+   const struct radv_sampler_ycbcr_conversion_state *conversion = state->conversion;
    nir_ssa_def *image_size = NULL;
    nir_ssa_def *comp[4] = {
       NULL,
@@ -230,7 +230,7 @@ try_lower_tex_ycbcr(const struct radv_pipeline_layout *layout, nir_builder *buil
       layout->set[var->data.descriptor_set].layout;
    const struct radv_descriptor_set_binding_layout *binding =
       &set_layout->binding[var->data.binding];
-   const struct radv_sampler_ycbcr_conversion *ycbcr_samplers =
+   const struct radv_sampler_ycbcr_conversion_state *ycbcr_samplers =
       radv_immutable_ycbcr_samplers(set_layout, var->data.binding);
 
    if (!ycbcr_samplers)
@@ -255,7 +255,7 @@ try_lower_tex_ycbcr(const struct radv_pipeline_layout *layout, nir_builder *buil
       array_index = nir_src_as_uint(deref->arr.index);
       array_index = MIN2(array_index, binding->array_size - 1);
    }
-   const struct radv_sampler_ycbcr_conversion *ycbcr_sampler = ycbcr_samplers + array_index;
+   const struct radv_sampler_ycbcr_conversion_state *ycbcr_sampler = ycbcr_samplers + array_index;
 
    if (ycbcr_sampler->format == VK_FORMAT_UNDEFINED)
       return false;

@@ -145,7 +145,7 @@ static inline struct lp_image_static_state *
 lp_fs_variant_key_images(struct lp_fragment_shader_variant_key *key)
 {
    return (struct lp_image_static_state *)
-      &(lp_fs_variant_key_samplers(key)[key->nr_samplers]);
+      &(lp_fs_variant_key_samplers(key)[MAX2(key->nr_samplers, key->nr_sampler_views)]);
 }
 
 /** doubly-linked list item */

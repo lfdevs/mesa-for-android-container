@@ -1,3 +1,9 @@
+mesa (22.0.2-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 22 Apr 2022 08:50:14 +0300
+
 mesa (22.0.1-2) experimental; urgency=medium
 
   * Migrate to llvm-14.
@@ -26,6 +32,29 @@ mesa (22.0.0~rc2-1) experimental; urgency=medium
   * rules: Drop classic drivers (r100, r200, nouveau_vieux, i915, i965).
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 17 Feb 2022 22:04:03 +0200
+
+mesa (21.3.8-1) unstable; urgency=medium
+
+  * New upstream release.
+  * rules: Drop kmsro option, which was removed upstream.
+  * install: Add radv defaults dri conf.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sun, 10 Apr 2022 10:18:19 +0300
+
+mesa (21.3.7-1) unstable; urgency=medium
+
+  * New upstream release.
+  * rules: Disable sse2 on i386. (Closes: #1002872)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 02 Mar 2022 12:42:09 +0200
+
+mesa (21.3.5-1) unstable; urgency=medium
+
+  * New upstream release.
+  * iris-inter-context-busy-tracking.diff: Fix a regression causing
+    flickering and corruption on Intel. (Closes: #1003987)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 28 Jan 2022 15:49:51 +0200
 
 mesa (21.3.4-1) unstable; urgency=medium
 

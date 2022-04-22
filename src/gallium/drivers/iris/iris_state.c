@@ -6345,6 +6345,8 @@ iris_upload_dirty_render_state(struct iris_context *ice,
             wm.EarlyDepthStencilControl = EDSC_PREPS;
          else if (wm_prog_data->has_side_effects)
             wm.EarlyDepthStencilControl = EDSC_PSEXEC;
+         else
+            wm.EarlyDepthStencilControl = EDSC_NORMAL;
 
          /* We could skip this bit if color writes are enabled. */
          if (wm_prog_data->has_side_effects || wm_prog_data->uses_kill)

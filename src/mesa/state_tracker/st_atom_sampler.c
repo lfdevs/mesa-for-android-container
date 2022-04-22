@@ -72,7 +72,7 @@ st_convert_sampler(const struct st_context *st,
       sampler->mag_img_filter = PIPE_TEX_FILTER_NEAREST;
    }
 
-   if (texobj->Target != GL_TEXTURE_RECTANGLE_ARB)
+   if (texobj->Target != GL_TEXTURE_RECTANGLE_ARB || st->lower_rect_tex)
       sampler->normalized_coords = 1;
 
    sampler->lod_bias += tex_unit_lod_bias;

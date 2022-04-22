@@ -139,8 +139,8 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
       /* Store block of offsets first, followed by the conversion descriptors (padded to the struct
        * alignment) */
       size += num_bindings * sizeof(uint32_t);
-      size = ALIGN(size, alignof(struct radv_sampler_ycbcr_conversion));
-      size += ycbcr_sampler_count * sizeof(struct radv_sampler_ycbcr_conversion);
+      size = ALIGN(size, alignof(struct radv_sampler_ycbcr_conversion_state));
+      size += ycbcr_sampler_count * sizeof(struct radv_sampler_ycbcr_conversion_state);
    }
 
    /* We need to allocate decriptor set layouts off the device allocator with DEVICE scope because
@@ -159,7 +159,7 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
 
    /* We just allocate all the samplers at the end of the struct */
    uint32_t *samplers = (uint32_t *)&set_layout->binding[num_bindings];
-   struct radv_sampler_ycbcr_conversion *ycbcr_samplers = NULL;
+   struct radv_sampler_ycbcr_conversion_state *ycbcr_samplers = NULL;
    uint32_t *ycbcr_sampler_offsets = NULL;
 
    if (ycbcr_sampler_count > 0) {
@@ -169,8 +169,8 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
       uintptr_t first_ycbcr_sampler_offset =
          (uintptr_t)ycbcr_sampler_offsets + sizeof(uint32_t) * num_bindings;
       first_ycbcr_sampler_offset =
-         ALIGN(first_ycbcr_sampler_offset, alignof(struct radv_sampler_ycbcr_conversion));
-      ycbcr_samplers = (struct radv_sampler_ycbcr_conversion *)first_ycbcr_sampler_offset;
+         ALIGN(first_ycbcr_sampler_offset, alignof(struct radv_sampler_ycbcr_conversion_state));
+      ycbcr_samplers = (struct radv_sampler_ycbcr_conversion_state *)first_ycbcr_sampler_offset;
    } else
       set_layout->ycbcr_sampler_offsets_offset = 0;
 
@@ -212,7 +212,7 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
             if (conversion) {
                has_ycbcr_sampler = true;
                max_sampled_image_descriptors = MAX2(max_sampled_image_descriptors,
-                                                    vk_format_get_plane_count(conversion->format));
+                                                    vk_format_get_plane_count(conversion->state.format));
             }
          }
       }
@@ -325,7 +325,7 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
             for (uint32_t i = 0; i < binding->descriptorCount; i++) {
                if (radv_sampler_from_handle(binding->pImmutableSamplers[i])->ycbcr_sampler)
                   ycbcr_samplers[i] =
-                     *radv_sampler_from_handle(binding->pImmutableSamplers[i])->ycbcr_sampler;
+                     radv_sampler_from_handle(binding->pImmutableSamplers[i])->ycbcr_sampler->state;
                else
                   ycbcr_samplers[i].format = VK_FORMAT_UNDEFINED;
             }
@@ -1569,13 +1569,13 @@ radv_CreateSamplerYcbcrConversion(VkDevice _device,
 
    vk_object_base_init(&device->vk, &conversion->base, VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION);
 
-   conversion->format = pCreateInfo->format;
-   conversion->ycbcr_model = pCreateInfo->ycbcrModel;
-   conversion->ycbcr_range = pCreateInfo->ycbcrRange;
-   conversion->components = pCreateInfo->components;
-   conversion->chroma_offsets[0] = pCreateInfo->xChromaOffset;
-   conversion->chroma_offsets[1] = pCreateInfo->yChromaOffset;
-   conversion->chroma_filter = pCreateInfo->chromaFilter;
+   conversion->state.format = pCreateInfo->format;
+   conversion->state.ycbcr_model = pCreateInfo->ycbcrModel;
+   conversion->state.ycbcr_range = pCreateInfo->ycbcrRange;
+   conversion->state.components = pCreateInfo->components;
+   conversion->state.chroma_offsets[0] = pCreateInfo->xChromaOffset;
+   conversion->state.chroma_offsets[1] = pCreateInfo->yChromaOffset;
+   conversion->state.chroma_filter = pCreateInfo->chromaFilter;
 
    *pYcbcrConversion = radv_sampler_ycbcr_conversion_to_handle(conversion);
    return VK_SUCCESS;

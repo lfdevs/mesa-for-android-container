@@ -246,7 +246,7 @@ traces:
   - path: supertuxkart/supertuxkart-mansion-egl-gles.trace
     expectations:
       - device: gl-virgl
-        checksum: c8e5d7c4377b8e484ae41270692914f3
+        checksum: 5e4e0cedd57bedf3eb7f127489a46b12
   - path: xonotic/xonotic-keybench-high.trace
     expectations:
       - device: gl-virgl
@@ -267,7 +267,7 @@ traces:
   - path: valve/portal-2.trace
     expectations:
       - device: gl-virgl
-        checksum: 9f7fecf8df89e105a4d2b4a61468b427
+        checksum: 7489a8412ee2bca45431d208e0006a3e
 # Piglit crashes when trying to run this one
 #  - path: supertuxkart/supertuxkart-antediluvian-abyss.rdc
 #    expectations:

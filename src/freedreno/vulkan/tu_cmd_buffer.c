@@ -2876,6 +2876,9 @@ tu_flush_for_stage(struct tu_cache_state *cache,
     * for any WFI's to finish. This is already done for draw calls, including
     * before indirect param reads, for the most part, so we just need to WFI.
     *
+    * However, some indirect draw opcodes, depending on firmware, don't have
+    * implicit CP_WAIT_FOR_ME so we have to handle it manually.
+    *
     * Transform feedback counters are read via CP_MEM_TO_REG, which implicitly
     * does CP_WAIT_FOR_ME, but we still need a WFI if the GPU writes it.
     *
@@ -2887,8 +2890,11 @@ tu_flush_for_stage(struct tu_cache_state *cache,
     * future, or if CP_DRAW_PRED_SET grows the capability to do 32-bit
     * comparisons, then this will have to be dealt with.
     */
-   if (src_stage > dst_stage)
+   if (src_stage > dst_stage) {
       cache->flush_bits |= TU_CMD_FLAG_WAIT_FOR_IDLE;
+      if (dst_stage == TU_STAGE_CP)
+         cache->pending_flush_bits |= TU_CMD_FLAG_WAIT_FOR_ME;
+   }
 }
 
 static enum tu_cmd_access_mask

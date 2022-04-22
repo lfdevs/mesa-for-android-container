@@ -814,7 +814,8 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
       .lower_txf_offset = true,
       .lower_rect_offset = true,
       .lower_txd_cube_map = true,
-      .lower_txd_3d = devinfo->verx10 >= 125,
+      .lower_txd_3d = devinfo->verx10 >= 125,    /* Wa_1209978020 */
+      .lower_txd_array = devinfo->verx10 >= 125, /* Wa_1209978020 */
       .lower_txb_shadow_clamp = true,
       .lower_txd_shadow_clamp = true,
       .lower_txd_offset_clamp = true,

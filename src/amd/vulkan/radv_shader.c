@@ -1568,18 +1568,27 @@ radv_postprocess_config(const struct radv_device *device, const struct ac_shader
          unreachable("Unexpected ES shader stage");
       }
 
-      bool nggc = info->has_ngg_culling; /* Culling uses GS vertex offsets 0, 1, 2. */
-      bool tes_triangles =
-         stage == MESA_SHADER_TESS_EVAL && info->tes._primitive_mode != TESS_PRIMITIVE_ISOLINES;
+      /* GS vertex offsets in NGG:
+       * - in passthrough mode, they are all packed into VGPR0
+       * - in the default mode: VGPR0: offsets 0, 1; VGPR1: offsets 2, 3
+       *
+       * The vertex offset 2 is always needed when NGG isn't in passthrough mode
+       * and uses triangle input primitives, including with NGG culling.
+       */
+      bool need_gs_vtx_offset2 = !info->is_ngg_passthrough || info->gs.vertices_in >= 3;
+
+      if (stage == MESA_SHADER_TESS_EVAL)
+         need_gs_vtx_offset2 &= info->tes._primitive_mode != TESS_PRIMITIVE_ISOLINES;
+
       if (info->uses_invocation_id) {
          gs_vgpr_comp_cnt = 3; /* VGPR3 contains InvocationID. */
       } else if (info->uses_prim_id || (es_stage == MESA_SHADER_VERTEX &&
                                         info->vs.outinfo.export_prim_id)) {
          gs_vgpr_comp_cnt = 2; /* VGPR2 contains PrimitiveID. */
-      } else if (info->gs.vertices_in >= 3 || tes_triangles || nggc) {
+      } else if (need_gs_vtx_offset2) {
          gs_vgpr_comp_cnt = 1; /* VGPR1 contains offsets 2, 3 */
       } else {
-         gs_vgpr_comp_cnt = 0; /* VGPR0 contains offsets 0, 1 */
+         gs_vgpr_comp_cnt = 0; /* VGPR0 contains offsets 0, 1 (or passthrough prim) */
       }
 
       /* Disable the WGP mode on gfx10.3 because it can hang. (it

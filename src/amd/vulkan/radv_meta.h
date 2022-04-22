@@ -71,6 +71,11 @@ struct radv_meta_saved_state {
    bool stencil_test_enable;
 
    struct {
+      uint32_t front;
+      uint32_t back;
+   } stencil_write_mask;
+
+   struct {
       struct {
          VkStencilOp fail_op;
          VkStencilOp pass_op;
@@ -85,6 +90,11 @@ struct radv_meta_saved_state {
          VkCompareOp compare_op;
       } back;
    } stencil_op;
+
+   struct {
+      uint32_t front;
+      uint32_t back;
+   } stencil_reference;
 
    struct {
       VkExtent2D size;

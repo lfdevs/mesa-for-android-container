@@ -255,13 +255,13 @@ BEGIN_TEST(optimize.sdwa.extract)
                                     Operand::c32(is_signed));
       writeout(12, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), bfe_byte3_b));
 
-      //! v1: %res13 = v_add_i16 %a, %b
-      //! p_unit_test 13, %res13
+      /* VOP3-only instructions can't use SDWA but they can use opsel on GFX9+ instead */
+      //~gfx(9|10).*! v1: %res13 = v_add_i16 %a, %b
+      //~gfx(9|10).*! p_unit_test 13, %res13
       Temp bfe_word0_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::zero(), Operand::c32(16u),
                                     Operand::c32(is_signed));
       writeout(13, bld.vop3(aco_opcode::v_add_i16, bld.def(v1), inputs[0], bfe_word0_b));
 
-      /* VOP3-only instructions can't use SDWA but they can use opsel instead */
       //~gfx(9|10).*! v1: %res14 = v_add_i16 %a, hi(%b)
       //~gfx(9|10).*! p_unit_test 14, %res14
       Temp bfe_word1_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(1u),
@@ -496,21 +496,23 @@ BEGIN_TEST(optimize.sdwa.insert)
       bld.pseudo(ins, bld.def(v1), val, Operand::c32(1u), Operand::c32(16u));
       writeout(10, val);
 
-      //! v1: %res11 = v_sub_i16 %a, %b
-      //! p_unit_test 11, %res11
+      //~gfx8! v1: %tmp11 = v_sub_i16 %a, %b
+      //~gfx8! v1: %res11 = p_insert %tmp11, 0, 16
+      //~gfx(9|10)! v1: %res11 = v_sub_i16 %a, %b
+      //~gfx(8|9|10)! p_unit_test 11, %res11
       val = bld.vop3(aco_opcode::v_sub_i16, bld.def(v1), inputs[0], inputs[1]);
       writeout(11, bld.pseudo(ins, bld.def(v1), val, Operand::zero(), Operand::c32(16u)));
 
-      //~gfx[78]! v1: %tmp12 = v_sub_i16 %a, %b
-      //~gfx[78]! v1: %res12 = p_insert %tmp11, 1, 16
+      //~gfx8! v1: %tmp12 = v_sub_i16 %a, %b
+      //~gfx8! v1: %res12 = p_insert %tmp12, 1, 16
       //~gfx(9|10)! v1: %res12 = v_sub_i16 %a, %b opsel_hi
-      //! p_unit_test 12, %res12
+      //~gfx(8|9|10)! p_unit_test 12, %res12
       val = bld.vop3(aco_opcode::v_sub_i16, bld.def(v1), inputs[0], inputs[1]);
       writeout(12, bld.pseudo(ins, bld.def(v1), val, Operand::c32(1u), Operand::c32(16u)));
 
-      //! v1: %tmp13 = v_sub_i16 %a, %b
-      //! v1: %res13 = p_insert %tmp13, 0, 8
-      //! p_unit_test 13, %res13
+      //~gfx[^7]! v1: %tmp13 = v_sub_i16 %a, %b
+      //~gfx[^7]! v1: %res13 = p_insert %tmp13, 0, 8
+      //~gfx[^7]! p_unit_test 13, %res13
       val = bld.vop3(aco_opcode::v_sub_i16, bld.def(v1), inputs[0], inputs[1]);
       writeout(13, bld.pseudo(ins, bld.def(v1), val, Operand::zero(), Operand::c32(8u)));
 

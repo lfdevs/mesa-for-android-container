@@ -2233,18 +2233,13 @@ tu_pipeline_allocate_cs(struct tu_device *dev,
 
    /* graphics case: */
    if (builder) {
-      uint32_t pvtmem_bytes = 0;
       for (uint32_t i = 0; i < ARRAY_SIZE(builder->variants); i++) {
          if (builder->variants[i]) {
             size += builder->variants[i]->info.size / 4;
-            pvtmem_bytes = MAX2(pvtmem_bytes, builder->variants[i]->pvtmem_size);
          }
       }
 
       size += builder->binning_variant->info.size / 4;
-      pvtmem_bytes = MAX2(pvtmem_bytes, builder->binning_variant->pvtmem_size);
-
-      size += calc_pvtmem_size(dev, NULL, pvtmem_bytes) / 4;
 
       builder->additional_cs_reserve_size = 0;
       for (unsigned i = 0; i < ARRAY_SIZE(builder->variants); i++) {
@@ -2263,7 +2258,6 @@ tu_pipeline_allocate_cs(struct tu_device *dev,
       size += builder->additional_cs_reserve_size;
    } else {
       size += compute->info.size / 4;
-      size += calc_pvtmem_size(dev, NULL, compute->pvtmem_size) / 4;
 
       size += tu_xs_get_additional_cs_size_dwords(compute);
    }

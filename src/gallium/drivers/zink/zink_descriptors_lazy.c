@@ -132,12 +132,12 @@ descriptor_program_num_sizes(VkDescriptorPoolSize *sizes, enum zink_descriptor_t
 {
    switch (type) {
    case ZINK_DESCRIPTOR_TYPE_UBO:
-      return 1;
+      return !!sizes[ZDS_INDEX_UBO].descriptorCount;
    case ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW:
       return !!sizes[ZDS_INDEX_COMBINED_SAMPLER].descriptorCount +
              !!sizes[ZDS_INDEX_UNIFORM_TEXELS].descriptorCount;
    case ZINK_DESCRIPTOR_TYPE_SSBO:
-      return 1;
+      return !!sizes[ZDS_INDEX_STORAGE_BUFFER].descriptorCount;
    case ZINK_DESCRIPTOR_TYPE_IMAGE:
       return !!sizes[ZDS_INDEX_STORAGE_IMAGE].descriptorCount +
              !!sizes[ZDS_INDEX_STORAGE_TEXELS].descriptorCount;
@@ -232,7 +232,7 @@ zink_descriptor_program_init_lazy(struct zink_context *ctx, struct zink_program 
    if (pg->dd->bindless)
       zink_descriptors_init_bindless(ctx);
    pg->dd->binding_usage = has_bindings;
-   if (!has_bindings && !push_count) {
+   if (!has_bindings && !push_count && !pg->dd->bindless) {
       ralloc_free(pg->dd);
       pg->dd = NULL;
 

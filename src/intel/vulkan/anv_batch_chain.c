@@ -298,7 +298,7 @@ anv_batch_emit_dwords(struct anv_batch *batch, int num_dwords)
 struct anv_address
 anv_batch_address(struct anv_batch *batch, void *batch_location)
 {
-   assert(batch->start < batch_location);
+   assert(batch->start <= batch_location);
 
    /* Allow a jump at the current location of the batch. */
    assert(batch->next >= batch_location);
@@ -349,7 +349,7 @@ anv_batch_bo_create(struct anv_cmd_buffer *cmd_buffer,
 {
    VkResult result;
 
-   struct anv_batch_bo *bbo = vk_alloc(&cmd_buffer->pool->alloc, sizeof(*bbo),
+   struct anv_batch_bo *bbo = vk_zalloc(&cmd_buffer->pool->alloc, sizeof(*bbo),
                                         8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (bbo == NULL)
       return vk_error(cmd_buffer, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -1906,8 +1906,8 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
       __builtin_ia32_mfence();
       for (uint32_t i = 0; i < num_cmd_buffers; i++) {
          u_vector_foreach(bbo, &cmd_buffers[i]->seen_bbos) {
-            for (uint32_t i = 0; i < (*bbo)->length; i += CACHELINE_SIZE)
-               __builtin_ia32_clflush((*bbo)->bo->map + i);
+            for (uint32_t l = 0; l < (*bbo)->length; l += CACHELINE_SIZE)
+               __builtin_ia32_clflush((*bbo)->bo->map + l);
          }
       }
    }

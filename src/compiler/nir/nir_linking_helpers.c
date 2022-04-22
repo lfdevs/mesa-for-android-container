@@ -1376,7 +1376,8 @@ nir_link_opt_varyings(nir_shader *producer, nir_shader *consumer)
       nir_ssa_def *ssa = intr->src[1].ssa;
       if (ssa->parent_instr->type == nir_instr_type_load_const) {
          progress |= replace_varying_input_by_constant_load(consumer, intr);
-      } else if (is_direct_uniform_load(ssa, &uni_scalar)) {
+      } else if (consumer->options->lower_varying_from_uniform &&
+                 is_direct_uniform_load(ssa, &uni_scalar)) {
          progress |= replace_varying_input_by_uniform_load(consumer, intr,
                                                            &uni_scalar);
       } else {

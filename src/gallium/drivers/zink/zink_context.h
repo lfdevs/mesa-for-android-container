@@ -293,6 +293,7 @@ struct zink_context {
    struct {
       struct zink_query *query;
       bool inverted;
+      bool active; //this is the internal vk state
    } render_condition;
 
    struct pipe_resource *dummy_vertex_buffer;

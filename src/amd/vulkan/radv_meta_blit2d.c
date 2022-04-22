@@ -399,7 +399,7 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
          if (src_type == BLIT2D_SRC_TYPE_BUFFER)
             radv_buffer_view_finish(&src_temps.bview);
          else
-            radv_image_view_finish(&dst_temps.iview);
+            radv_image_view_finish(&src_temps.iview);
 
          radv_image_view_finish(&dst_temps.iview);
       }

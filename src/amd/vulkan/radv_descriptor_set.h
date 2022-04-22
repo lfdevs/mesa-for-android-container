@@ -121,7 +121,7 @@ radv_combined_image_descriptor_sampler_offset(
    return binding->size - ((!binding->immutable_samplers_equal) ? 16 : 0);
 }
 
-static inline const struct radv_sampler_ycbcr_conversion *
+static inline const struct radv_sampler_ycbcr_conversion_state *
 radv_immutable_ycbcr_samplers(const struct radv_descriptor_set_layout *set, unsigned binding_index)
 {
    if (!set->ycbcr_sampler_offsets_offset)
@@ -132,7 +132,7 @@ radv_immutable_ycbcr_samplers(const struct radv_descriptor_set_layout *set, unsi
 
    if (offsets[binding_index] == 0)
       return NULL;
-   return (const struct radv_sampler_ycbcr_conversion *)((const char *)set +
+   return (const struct radv_sampler_ycbcr_conversion_state *)((const char *)set +
                                                          offsets[binding_index]);
 }
 #endif /* RADV_DESCRIPTOR_SET_H */

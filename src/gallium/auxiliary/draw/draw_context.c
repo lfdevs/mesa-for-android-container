@@ -945,6 +945,8 @@ draw_current_shader_outputs(const struct draw_context *draw)
 {
    if (draw->gs.geometry_shader)
       return draw->gs.num_gs_outputs;
+   if (draw->tes.tess_eval_shader)
+      return draw->tes.num_tes_outputs;
    return draw->vs.num_vs_outputs;
 }
 

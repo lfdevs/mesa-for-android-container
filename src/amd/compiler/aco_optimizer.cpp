@@ -3060,7 +3060,7 @@ apply_insert(opt_ctx& ctx, aco_ptr<Instruction>& instr)
    assert(sel);
 
    if (instr->isVOP3() && sel.size() == 2 && !sel.sign_extend() &&
-       can_use_opsel(ctx.program->chip_class, instr->opcode, 3, sel.offset())) {
+       can_use_opsel(ctx.program->chip_class, instr->opcode, -1, sel.offset())) {
       if (instr->vop3().opsel & (1 << 3))
          return false;
       if (sel.offset())

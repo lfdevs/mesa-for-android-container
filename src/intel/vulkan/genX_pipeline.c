@@ -913,34 +913,28 @@ emit_ms_state(struct anv_graphics_pipeline *pipeline,
               const VkPipelineMultisampleStateCreateInfo *info,
               uint32_t dynamic_states)
 {
-   /* Only lookup locations if the extensions is active, otherwise the default
-    * ones will be used either at device initialization time or through
-    * 3DSTATE_MULTISAMPLE on Gfx7/7.5 by passing NULL locations.
-    */
-   if (pipeline->base.device->vk.enabled_extensions.EXT_sample_locations) {
-      /* If the sample locations are dynamic, 3DSTATE_MULTISAMPLE on Gfx7/7.5
-       * will be emitted dynamically, so skip it here. On Gfx8+
-       * 3DSTATE_SAMPLE_PATTERN will be emitted dynamically, so skip it here.
-       */
-      if (!(dynamic_states & ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS)) {
 #if GFX_VER >= 8
-         genX(emit_sample_pattern)(&pipeline->base.batch,
-                                   pipeline->dynamic_state.sample_locations.samples,
-                                   pipeline->dynamic_state.sample_locations.locations);
+   /* On Gfx8+ 3DSTATE_MULTISAMPLE only holds the number of samples. */
+   genX(emit_multisample)(&pipeline->base.batch,
+                          info ? info->rasterizationSamples : 1,
+                          NULL);
 #endif
-      }
 
+   /* If EXT_sample_locations is enabled and the sample locations are not
+    * dynamic, then we need to emit those position in the pipeline batch. On
+    * Gfx8+ this is part of 3DSTATE_SAMPLE_PATTERN, prior to that this is in
+    * 3DSTATE_MULTISAMPLE.
+    */
+   if (pipeline->base.device->vk.enabled_extensions.EXT_sample_locations &&
+       !(dynamic_states & ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS)) {
+#if GFX_VER >= 8
+      genX(emit_sample_pattern)(&pipeline->base.batch,
+                                pipeline->dynamic_state.sample_locations.samples,
+                                pipeline->dynamic_state.sample_locations.locations);
+#else
       genX(emit_multisample)(&pipeline->base.batch,
                              pipeline->dynamic_state.sample_locations.samples,
                              pipeline->dynamic_state.sample_locations.locations);
-   } else {
-      /* On Gfx8+ 3DSTATE_MULTISAMPLE does not hold anything we need to modify
-       * for sample locations, so we don't have to emit it dynamically.
-       */
-#if GFX_VER >= 8
-      genX(emit_multisample)(&pipeline->base.batch,
-                             info ? info->rasterizationSamples : 1,
-                             NULL);
 #endif
    }
 

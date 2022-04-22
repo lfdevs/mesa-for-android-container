@@ -2628,9 +2628,6 @@ panfrost_update_state_3d(struct panfrost_batch *batch)
 {
         unsigned dirty = batch->ctx->dirty;
 
-        if (dirty & (PAN_DIRTY_VIEWPORT | PAN_DIRTY_SCISSOR))
-                batch->viewport = panfrost_emit_viewport(batch);
-
         if (dirty & PAN_DIRTY_TLS_SIZE)
                 panfrost_batch_adjust_stack_size(batch);
 }
@@ -3133,6 +3130,19 @@ panfrost_draw_vbo(struct pipe_context *pipe,
         /* Do some common setup */
         struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
 
+        /* Don't add too many jobs to a single batch. Hardware has a hard limit
+         * of 65536 jobs, but we choose a smaller soft limit (arbitrary) to
+         * avoid the risk of timeouts. This might not be a good idea. */
+        if (unlikely(batch->scoreboard.job_index > 10000))
+                batch = panfrost_get_fresh_batch_for_fbo(ctx, "Too many draws");
+
+        /* panfrost_batch_skip_rasterization reads
+         * batch->scissor_culls_everything, which is set by
+         * panfrost_emit_viewport, so call that first.
+         */
+        if (ctx->dirty & (PAN_DIRTY_VIEWPORT | PAN_DIRTY_SCISSOR))
+                batch->viewport = panfrost_emit_viewport(batch);
+
         /* If rasterization discard is enabled but the vertex shader does not
          * have side effects (including transform feedback), skip the draw
          * altogether. This is always an optimization. Additionally, this is
@@ -3148,12 +3158,6 @@ panfrost_draw_vbo(struct pipe_context *pipe,
                 if (!vs->info.writes_global)
                         return;
         }
-
-        /* Don't add too many jobs to a single batch. Hardware has a hard limit
-         * of 65536 jobs, but we choose a smaller soft limit (arbitrary) to
-         * avoid the risk of timeouts. This might not be a good idea. */
-        if (unlikely(batch->scoreboard.job_index > 10000))
-                batch = panfrost_get_fresh_batch_for_fbo(ctx, "Too many draws");
 
         unsigned zs_draws = ctx->depth_stencil->draws;
         batch->draws |= zs_draws;

@@ -119,7 +119,6 @@ bool
 anv_nir_lower_ubo_loads(nir_shader *shader)
 {
    return nir_shader_instructions_pass(shader, lower_ubo_load_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
+                                       nir_metadata_none,
                                        NULL);
 }

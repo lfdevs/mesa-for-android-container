@@ -2347,3 +2347,13 @@ radv_GetRayTracingShaderGroupStackSizeKHR(VkDevice device, VkPipeline _pipeline,
    else
       return stack_size->recursive_size;
 }
+
+VKAPI_ATTR VkResult VKAPI_CALL
+radv_GetRayTracingCaptureReplayShaderGroupHandlesKHR(VkDevice _device, VkPipeline pipeline,
+                                                     uint32_t firstGroup, uint32_t groupCount,
+                                                     size_t dataSize, void *pData)
+{
+   RADV_FROM_HANDLE(radv_device, device, _device);
+   unreachable("Unimplemented");
+   return vk_error(device, VK_ERROR_FEATURE_NOT_PRESENT);
+}

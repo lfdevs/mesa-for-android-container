@@ -209,6 +209,13 @@ CHIPSET(0xa783, rpl, "RPL-S", "Intel(R) Graphics")
 CHIPSET(0xa788, rpl, "RPL-S", "Intel(R) Graphics")
 CHIPSET(0xa789, rpl, "RPL-S", "Intel(R) Graphics")
 
+CHIPSET(0xa720, rpl_p, "RPL-P", "Intel(R) Graphics")
+CHIPSET(0xa721, rpl_p, "RPL-P", "Intel(R) Graphics")
+CHIPSET(0xa7a0, rpl_p, "RPL-P", "Intel(R) Graphics")
+CHIPSET(0xa7a1, rpl_p, "RPL-P", "Intel(R) Graphics")
+CHIPSET(0xa7a8, rpl_p, "RPL-P", "Intel(R) Graphics")
+CHIPSET(0xa7a9, rpl_p, "RPL-P", "Intel(R) Graphics")
+
 CHIPSET(0x4905, dg1, "DG1", "Intel(R) Graphics")
 CHIPSET(0x4906, dg1, "DG1", "Intel(R) Graphics")
 CHIPSET(0x4907, sg1, "SG1", "Intel(R) Graphics")
