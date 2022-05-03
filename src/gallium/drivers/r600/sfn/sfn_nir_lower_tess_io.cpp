@@ -244,10 +244,11 @@ emit_store_lds(nir_builder *b, nir_intrinsic_instr *op, nir_ssa_def *addr)
 
    for (int i = 0; i < 2; ++i) {
       unsigned test_mask = (0x3 << 2 * i);
-      if (!(orig_writemask & test_mask))
+      unsigned wmask = orig_writemask & test_mask;
+      if (!(wmask))
          continue;
 
-      uint32_t writemask =  test_mask >> nir_intrinsic_component(op);
+      uint32_t writemask =  wmask >> nir_intrinsic_component(op);
 
       auto store_tcs_out = nir_intrinsic_instr_create(b->shader, nir_intrinsic_store_local_shared_r600);
       nir_intrinsic_set_write_mask(store_tcs_out, writemask);

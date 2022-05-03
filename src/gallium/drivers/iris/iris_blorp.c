@@ -154,7 +154,7 @@ blorp_alloc_binding_table(struct blorp_batch *blorp_batch,
                           unsigned num_entries,
                           unsigned state_size,
                           unsigned state_alignment,
-                          uint32_t *bt_offset,
+                          uint32_t *out_bt_offset,
                           uint32_t *surface_offsets,
                           void **surface_maps)
 {
@@ -162,19 +162,32 @@ blorp_alloc_binding_table(struct blorp_batch *blorp_batch,
    struct iris_binder *binder = &ice->state.binder;
    struct iris_batch *batch = blorp_batch->driver_batch;
 
-   *bt_offset = iris_binder_reserve(ice, num_entries * sizeof(uint32_t));
-   uint32_t *bt_map = binder->map + *bt_offset;
+   unsigned bt_offset =
+      iris_binder_reserve(ice, num_entries * sizeof(uint32_t));
+   uint32_t *bt_map = binder->map + bt_offset;
+
+   uint32_t surf_base_offset = GFX_VER < 11 ? binder->bo->address : 0;
+
+   *out_bt_offset = bt_offset;
 
    for (unsigned i = 0; i < num_entries; i++) {
       surface_maps[i] = stream_state(batch, ice->state.surface_uploader,
                                      state_size, state_alignment,
                                      &surface_offsets[i], NULL);
-      bt_map[i] = surface_offsets[i] - (uint32_t) binder->bo->address;
+      bt_map[i] = surface_offsets[i] - surf_base_offset;
    }
 
    iris_use_pinned_bo(batch, binder->bo, false, IRIS_DOMAIN_NONE);
 
-   batch->screen->vtbl.update_surface_base_address(batch, binder);
+   batch->screen->vtbl.update_binder_address(batch, binder);
+}
+
+static uint32_t
+blorp_binding_table_offset_to_pointer(struct blorp_batch *batch,
+                                      uint32_t offset)
+{
+   /* See IRIS_BT_OFFSET_SHIFT in iris_state.c */
+   return offset >> ((GFX_VER >= 11 && GFX_VERx10 < 125) ? 3 : 0);
 }
 
 static void *
@@ -387,7 +400,7 @@ iris_blorp_exec_render(struct blorp_batch *blorp_batch,
 
    if (params->src.enabled)
       iris_bo_bump_seqno(params->src.addr.buffer, batch->next_seqno,
-                         IRIS_DOMAIN_OTHER_READ);
+                         IRIS_DOMAIN_SAMPLER_READ);
    if (params->dst.enabled)
       iris_bo_bump_seqno(params->dst.addr.buffer, batch->next_seqno,
                          IRIS_DOMAIN_RENDER_WRITE);

@@ -478,8 +478,8 @@ struct svga_shader_emitter_v10
 
    bool register_overflow;  /**< Set if we exceed a VGPU10 register limit */
 
-   /* For pipe_debug_message */
-   struct pipe_debug_callback svga_debug_callback;
+   /* For util_debug_message */
+   struct util_debug_callback svga_debug_callback;
 
    /* current loop depth in shader */
    unsigned current_loop_depth;
@@ -10609,7 +10609,7 @@ emit_barrier(struct svga_shader_emitter_v10 *emit,
        * in shader, don't do anything for this opcode and continue rest
        * of shader translation
        */
-      pipe_debug_message(&emit->svga_debug_callback, INFO,
+      util_debug_message(&emit->svga_debug_callback, INFO,
                          "barrier instruction is not supported in tessellation control shader\n");
       return TRUE;
    }

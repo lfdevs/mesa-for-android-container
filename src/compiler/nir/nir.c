@@ -51,6 +51,8 @@ static const struct debug_named_value nir_debug_control[] = {
      "Disable shader validation at each successful lowering/optimization call" },
    { "validate_ssa_dominance", NIR_DEBUG_VALIDATE_SSA_DOMINANCE,
      "Validate SSA dominance in shader at each successful lowering/optimization call" },
+   { "validate_gc_list", NIR_DEBUG_VALIDATE_GC_LIST,
+     "Validate the instruction GC list at each successful lowering/optimization call" },
    { "tgsi", NIR_DEBUG_TGSI,
      "Dump NIR/TGSI shaders when doing a NIR<->TGSI translation" },
    { "print", NIR_DEBUG_PRINT,
@@ -283,11 +285,9 @@ nir_shader_add_variable(nir_shader *shader, nir_variable *var)
    case nir_var_mem_constant:
    case nir_var_shader_call_data:
    case nir_var_ray_hit_attrib:
-      break;
-
+   case nir_var_mem_task_payload:
    case nir_var_mem_global:
-      assert(!"nir_shader_add_variable cannot be used for global memory");
-      return;
+      break;
 
    default:
       assert(!"invalid mode");
@@ -423,6 +423,7 @@ nir_function_create(nir_shader *shader, const char *name)
    func->params = NULL;
    func->impl = NULL;
    func->is_entrypoint = false;
+   func->is_preamble = false;
 
    return func;
 }
@@ -538,6 +539,7 @@ nir_function_impl_create_bare(nir_shader *shader)
    nir_function_impl *impl = ralloc(shader, nir_function_impl);
 
    impl->function = NULL;
+   impl->preamble = NULL;
 
    cf_init(&impl->cf_node, nir_cf_node_function);
 
@@ -1475,6 +1477,43 @@ nir_instr_ssa_def(nir_instr *instr)
 }
 
 bool
+nir_instr_def_is_register(nir_instr *instr)
+{
+   switch (instr->type) {
+   case nir_instr_type_alu:
+      return !nir_instr_as_alu(instr)->dest.dest.is_ssa;
+
+   case nir_instr_type_deref:
+      return !nir_instr_as_deref(instr)->dest.is_ssa;
+
+   case nir_instr_type_tex:
+      return !nir_instr_as_tex(instr)->dest.is_ssa;
+
+   case nir_instr_type_intrinsic: {
+      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+      return nir_intrinsic_infos[intrin->intrinsic].has_dest &&
+             !intrin->dest.is_ssa;
+   }
+
+   case nir_instr_type_phi:
+      return !nir_instr_as_phi(instr)->dest.is_ssa;
+
+   case nir_instr_type_parallel_copy:
+      unreachable("Parallel copies are unsupported by this function");
+
+   case nir_instr_type_load_const:
+   case nir_instr_type_ssa_undef:
+      return false;
+
+   case nir_instr_type_call:
+   case nir_instr_type_jump:
+      return false;
+   }
+
+   unreachable("Invalid instruction type");
+}
+
+bool
 nir_foreach_phi_src_leaving_block(nir_block *block,
                                   nir_foreach_src_cb cb,
                                   void *state)
@@ -1550,17 +1589,19 @@ nir_src_as_const_value(nir_src src)
 }
 
 /**
- * Returns true if the source is known to be dynamically uniform. Otherwise it
- * returns false which means it may or may not be dynamically uniform but it
- * can't be determined.
+ * Returns true if the source is known to be always uniform. Otherwise it
+ * returns false which means it may or may not be uniform but it can't be
+ * determined.
+ *
+ * For a more precise analysis of uniform values, use nir_divergence_analysis.
  */
 bool
-nir_src_is_dynamically_uniform(nir_src src)
+nir_src_is_always_uniform(nir_src src)
 {
    if (!src.is_ssa)
       return false;
 
-   /* Constants are trivially dynamically uniform */
+   /* Constants are trivially uniform */
    if (src.ssa->parent_instr->type == nir_instr_type_load_const)
       return true;
 
@@ -1568,9 +1609,12 @@ nir_src_is_dynamically_uniform(nir_src src)
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(src.ssa->parent_instr);
       /* As are uniform variables */
       if (intr->intrinsic == nir_intrinsic_load_uniform &&
-          nir_src_is_dynamically_uniform(intr->src[0]))
+          nir_src_is_always_uniform(intr->src[0]))
          return true;
-      /* Push constant loads always use uniform offsets. */
+      /* From the Vulkan specification 15.6.1. Push Constant Interface:
+       * "Any member of a push constant block that is declared as an array must
+       * only be accessed with dynamically uniform indices."
+       */
       if (intr->intrinsic == nir_intrinsic_load_push_constant)
          return true;
       if (intr->intrinsic == nir_intrinsic_load_deref &&
@@ -1578,13 +1622,11 @@ nir_src_is_dynamically_uniform(nir_src src)
          return true;
    }
 
-   /* Operating together dynamically uniform expressions produces a
-    * dynamically uniform result
-    */
+   /* Operating together uniform expressions produces a uniform result */
    if (src.ssa->parent_instr->type == nir_instr_type_alu) {
       nir_alu_instr *alu = nir_instr_as_alu(src.ssa->parent_instr);
       for (int i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
-         if (!nir_src_is_dynamically_uniform(alu->src[i].src))
+         if (!nir_src_is_always_uniform(alu->src[i].src))
             return false;
       }
 
@@ -1592,7 +1634,7 @@ nir_src_is_dynamically_uniform(nir_src src)
    }
 
    /* XXX: this could have many more tests, such as when a sampler function is
-    * called with dynamically uniform arguments.
+    * called with uniform arguments.
     */
    return false;
 }
@@ -2379,6 +2421,8 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_local_invocation_index;
    case SYSTEM_VALUE_WORKGROUP_ID:
       return nir_intrinsic_load_workgroup_id;
+   case SYSTEM_VALUE_WORKGROUP_INDEX:
+      return nir_intrinsic_load_workgroup_index;
    case SYSTEM_VALUE_NUM_WORKGROUPS:
       return nir_intrinsic_load_num_workgroups;
    case SYSTEM_VALUE_PRIMITIVE_ID:
@@ -2516,6 +2560,8 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_NUM_WORKGROUPS;
    case nir_intrinsic_load_workgroup_id:
       return SYSTEM_VALUE_WORKGROUP_ID;
+   case nir_intrinsic_load_workgroup_index:
+      return SYSTEM_VALUE_WORKGROUP_INDEX;
    case nir_intrinsic_load_primitive_id:
       return SYSTEM_VALUE_PRIMITIVE_ID;
    case nir_intrinsic_load_tess_coord:
@@ -3057,22 +3103,34 @@ nir_ssa_alu_instr_src_components(const nir_alu_instr *instr, unsigned src)
    return nir_dest_num_components(instr->dest.dest);
 }
 
+#define CASE_ALL_SIZES(op) \
+   case op: \
+   case op ## 8: \
+   case op ## 16: \
+   case op ## 32: \
+
 bool
 nir_alu_instr_is_comparison(const nir_alu_instr *instr)
 {
    switch (instr->op) {
-   case nir_op_flt:
-   case nir_op_fge:
-   case nir_op_feq:
-   case nir_op_fneu:
-   case nir_op_ilt:
-   case nir_op_ult:
-   case nir_op_ige:
-   case nir_op_uge:
-   case nir_op_ieq:
-   case nir_op_ine:
+   CASE_ALL_SIZES(nir_op_flt)
+   CASE_ALL_SIZES(nir_op_fge)
+   CASE_ALL_SIZES(nir_op_feq)
+   CASE_ALL_SIZES(nir_op_fneu)
+   CASE_ALL_SIZES(nir_op_ilt)
+   CASE_ALL_SIZES(nir_op_ult)
+   CASE_ALL_SIZES(nir_op_ige)
+   CASE_ALL_SIZES(nir_op_uge)
+   CASE_ALL_SIZES(nir_op_ieq)
+   CASE_ALL_SIZES(nir_op_ine)
    case nir_op_i2b1:
+   case nir_op_i2b8:
+   case nir_op_i2b16:
+   case nir_op_i2b32:
    case nir_op_f2b1:
+   case nir_op_f2b8:
+   case nir_op_f2b16:
+   case nir_op_f2b32:
    case nir_op_inot:
       return true;
    default:
@@ -3080,6 +3138,7 @@ nir_alu_instr_is_comparison(const nir_alu_instr *instr)
    }
 }
 
+#undef CASE_ALL_SIZES
 
 unsigned
 nir_intrinsic_src_components(const nir_intrinsic_instr *intr, unsigned srcn)
@@ -3245,6 +3304,8 @@ nir_tex_instr_src_type(const nir_tex_instr *instr, unsigned src)
       case nir_texop_txf_ms_fb:
       case nir_texop_txf_ms_mcs_intel:
       case nir_texop_samples_identical:
+      case nir_texop_fragment_fetch_amd:
+      case nir_texop_fragment_mask_fetch_amd:
          return nir_type_int;
 
       default:
@@ -3256,6 +3317,8 @@ nir_tex_instr_src_type(const nir_tex_instr *instr, unsigned src)
       case nir_texop_txs:
       case nir_texop_txf:
       case nir_texop_txf_ms:
+      case nir_texop_fragment_fetch_amd:
+      case nir_texop_fragment_mask_fetch_amd:
          return nir_type_int;
 
       default:
@@ -3312,13 +3375,8 @@ nir_tex_instr_src_size(const nir_tex_instr *instr, unsigned src)
          return instr->coord_components;
    }
 
-   /* Usual APIs don't allow cube + offset, but we allow it, with 2 coords for
-    * the offset, since a cube maps to a single face.
-    */
    if (instr->src[src].src_type == nir_tex_src_offset) {
-      if (instr->sampler_dim == GLSL_SAMPLER_DIM_CUBE)
-         return 2;
-      else if (instr->is_array)
+      if (instr->is_array)
          return instr->coord_components - 1;
       else
          return instr->coord_components;
@@ -3328,5 +3386,133 @@ nir_tex_instr_src_size(const nir_tex_instr *instr, unsigned src)
        instr->src[src].src_type == nir_tex_src_backend2)
       return nir_src_num_components(instr->src[src].src);
 
+   /* For AMD, this can be a vec8/vec4 image/sampler descriptor. */
+   if (instr->src[src].src_type == nir_tex_src_texture_handle ||
+       instr->src[src].src_type == nir_tex_src_sampler_handle)
+      return 0;
+
    return 1;
+}
+
+/**
+ * Return which components are written into transform feedback buffers.
+ * The result is relative to 0, not "component".
+ */
+unsigned
+nir_instr_xfb_write_mask(nir_intrinsic_instr *instr)
+{
+   unsigned mask = 0;
+
+   if (nir_intrinsic_has_io_xfb(instr)) {
+      unsigned wr_mask = nir_intrinsic_write_mask(instr) <<
+                         nir_intrinsic_component(instr);
+      assert((wr_mask & ~0xf) == 0); /* only 4 components allowed */
+
+      unsigned iter_mask = wr_mask;
+      while (iter_mask) {
+         unsigned i = u_bit_scan(&iter_mask);
+         nir_io_xfb xfb = i < 2 ? nir_intrinsic_io_xfb(instr) :
+                                  nir_intrinsic_io_xfb2(instr);
+         if (xfb.out[i % 2].num_components)
+            mask |= BITFIELD_RANGE(i, xfb.out[i % 2].num_components) & wr_mask;
+      }
+   }
+
+   return mask;
+}
+
+/**
+ * Whether an output slot is consumed by fixed-function logic.
+ */
+bool
+nir_slot_is_sysval_output(gl_varying_slot slot)
+{
+   return slot == VARYING_SLOT_POS ||
+          slot == VARYING_SLOT_PSIZ ||
+          slot == VARYING_SLOT_EDGE ||
+          slot == VARYING_SLOT_CLIP_VERTEX ||
+          slot == VARYING_SLOT_CLIP_DIST0 ||
+          slot == VARYING_SLOT_CLIP_DIST1 ||
+          slot == VARYING_SLOT_CULL_DIST0 ||
+          slot == VARYING_SLOT_CULL_DIST1 ||
+          slot == VARYING_SLOT_LAYER ||
+          slot == VARYING_SLOT_VIEWPORT ||
+          slot == VARYING_SLOT_TESS_LEVEL_OUTER ||
+          slot == VARYING_SLOT_TESS_LEVEL_INNER ||
+          slot == VARYING_SLOT_BOUNDING_BOX0 ||
+          slot == VARYING_SLOT_BOUNDING_BOX1 ||
+          slot == VARYING_SLOT_VIEW_INDEX ||
+          slot == VARYING_SLOT_VIEWPORT_MASK ||
+          slot == VARYING_SLOT_PRIMITIVE_SHADING_RATE ||
+          slot == VARYING_SLOT_PRIMITIVE_COUNT ||
+          slot == VARYING_SLOT_PRIMITIVE_INDICES ||
+          slot == VARYING_SLOT_TASK_COUNT;
+}
+
+/**
+ * Whether an input/output slot is consumed by the next shader stage,
+ * or written by the previous shader stage.
+ */
+bool
+nir_slot_is_varying(gl_varying_slot slot)
+{
+   return slot >= VARYING_SLOT_VAR0 ||
+          slot == VARYING_SLOT_COL0 ||
+          slot == VARYING_SLOT_COL1 ||
+          slot == VARYING_SLOT_BFC0 ||
+          slot == VARYING_SLOT_BFC1 ||
+          slot == VARYING_SLOT_FOGC ||
+          (slot >= VARYING_SLOT_TEX0 && slot <= VARYING_SLOT_TEX7) ||
+          slot == VARYING_SLOT_CLIP_DIST0 ||
+          slot == VARYING_SLOT_CLIP_DIST1 ||
+          slot == VARYING_SLOT_CULL_DIST0 ||
+          slot == VARYING_SLOT_CULL_DIST1 ||
+          slot == VARYING_SLOT_PRIMITIVE_ID ||
+          slot == VARYING_SLOT_LAYER ||
+          slot == VARYING_SLOT_VIEWPORT ||
+          slot == VARYING_SLOT_TESS_LEVEL_OUTER ||
+          slot == VARYING_SLOT_TESS_LEVEL_INNER;
+}
+
+bool
+nir_slot_is_sysval_output_and_varying(gl_varying_slot slot)
+{
+   return nir_slot_is_sysval_output(slot) &&
+          nir_slot_is_varying(slot);
+}
+
+/**
+ * This marks the output store instruction as not feeding the next shader
+ * stage. If the instruction has no other use, it's removed.
+ */
+void nir_remove_varying(nir_intrinsic_instr *intr)
+{
+   nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
+
+   if ((!sem.no_sysval_output && nir_slot_is_sysval_output(sem.location)) ||
+       nir_instr_xfb_write_mask(intr)) {
+      /* Demote the store instruction. */
+      sem.no_varying = true;
+      nir_intrinsic_set_io_semantics(intr, sem);
+   } else {
+      nir_instr_remove(&intr->instr);
+   }
+}
+
+/**
+ * This marks the output store instruction as not feeding fixed-function
+ * logic. If the instruction has no other use, it's removed.
+ */
+void nir_remove_sysval_output(nir_intrinsic_instr *intr)
+{
+   nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
+
+   if ((!sem.no_varying && nir_slot_is_varying(sem.location)) ||
+       nir_instr_xfb_write_mask(intr)) {
+      /* Demote the store instruction. */
+      sem.no_sysval_output = true;
+      nir_intrinsic_set_io_semantics(intr, sem);
+   } else {
+      nir_instr_remove(&intr->instr);
+   }
 }

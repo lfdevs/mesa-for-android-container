@@ -47,7 +47,7 @@ enum agx_selector {
 	AGX_SELECTOR_FREE_NOTIFICATION_QUEUE = 0x12,
 	AGX_SELECTOR_SUBMIT_COMMAND_BUFFERS = 0x1E,
 	AGX_SELECTOR_GET_VERSION = 0x23,
-	AGX_NUM_SELECTORS = 0x30
+	AGX_NUM_SELECTORS = 0x32
 };
 
 static const char *selector_table[AGX_NUM_SELECTORS] = {
@@ -98,7 +98,9 @@ static const char *selector_table[AGX_NUM_SELECTORS] = {
 	"unk2C",
 	"unk2D",
 	"unk2E",
-	"unk2F"
+	"unk2F",
+	"unk30",
+	"unk31"
 };
 
 static inline const char *
@@ -134,6 +136,7 @@ struct agx_submit_cmdbuf_req {
 	uint32_t unk1;
 	uint32_t cmdbuf;
 	uint32_t mappings;
+   uint64_t unk1B; // 0, new in 12.x
 	void *user_0;
 	void *user_1;
 	uint32_t unk2;
@@ -188,10 +191,11 @@ struct agx_command_queue {
 struct agx_map_header {
 	uint64_t cmdbuf_id; // GUID
 	uint32_t unk2; // 01 00 00 00
-	uint32_t unk3; // 28 05 00 80
+	uint32_t unk3; // 28 05 00 80, 12.x: 30 01 00 80
 	uint64_t encoder_id; // GUID
 	uint32_t unk6; // 00 00 00 00
 	uint32_t cmdbuf_size;
+   uint32_t padding[2];
 	uint32_t nr_handles;
 	uint32_t nr_entries;
 } __attribute__((packed));

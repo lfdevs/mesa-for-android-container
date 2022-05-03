@@ -77,6 +77,7 @@ shader_writes_to_memory(nir_shader *shader)
          case nir_intrinsic_ssbo_atomic_exchange:
          case nir_intrinsic_ssbo_atomic_comp_swap:
          case nir_intrinsic_store_shared:
+         case nir_intrinsic_store_shared2_amd:
          case nir_intrinsic_shared_atomic_add:
          case nir_intrinsic_shared_atomic_imin:
          case nir_intrinsic_shared_atomic_umin:

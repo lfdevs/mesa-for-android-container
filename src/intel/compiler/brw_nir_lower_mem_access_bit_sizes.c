@@ -258,12 +258,14 @@ lower_mem_access_bit_sizes_instr(nir_builder *b,
    case nir_intrinsic_load_ssbo:
    case nir_intrinsic_load_shared:
    case nir_intrinsic_load_scratch:
+   case nir_intrinsic_load_task_payload:
       return lower_mem_load_bit_size(b, intrin, devinfo);
 
    case nir_intrinsic_store_global:
    case nir_intrinsic_store_ssbo:
    case nir_intrinsic_store_shared:
    case nir_intrinsic_store_scratch:
+   case nir_intrinsic_store_task_payload:
       return lower_mem_store_bit_size(b, intrin, devinfo);
 
    default:

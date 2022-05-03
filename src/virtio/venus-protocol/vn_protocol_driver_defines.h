@@ -12,8 +12,6 @@
 #include <string.h>
 #include <vulkan/vulkan.h>
 
-#include "vn_protocol_driver_cs.h"
-
 #define VN_SUBMIT_LOCAL_CMD_SIZE 256
 
 /* VkStructureType */
@@ -325,9 +323,16 @@ typedef enum VkCommandTypeEXT {
     VK_COMMAND_TYPE_vkCmdDrawIndirectByteCountEXT_EXT = 186,
     VK_COMMAND_TYPE_vkGetMemoryFdKHR_EXT = 193,
     VK_COMMAND_TYPE_vkGetMemoryFdPropertiesKHR_EXT = 194,
+    VK_COMMAND_TYPE_vkImportFenceFdKHR_EXT = 238,
+    VK_COMMAND_TYPE_vkGetFenceFdKHR_EXT = 239,
+    VK_COMMAND_TYPE_vkCmdBeginConditionalRenderingEXT_EXT = 240,
+    VK_COMMAND_TYPE_vkCmdEndConditionalRenderingEXT_EXT = 241,
     VK_COMMAND_TYPE_vkGetImageDrmFormatModifierPropertiesEXT_EXT = 187,
     VK_COMMAND_TYPE_vkCmdSetPatchControlPointsEXT_EXT = 233,
     VK_COMMAND_TYPE_vkCmdSetLogicOpEXT_EXT = 234,
+    VK_COMMAND_TYPE_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT_EXT = 235,
+    VK_COMMAND_TYPE_vkGetCalibratedTimestampsEXT_EXT = 236,
+    VK_COMMAND_TYPE_vkCmdSetLineStippleEXT_EXT = 237,
     VK_COMMAND_TYPE_vkSetReplyCommandStreamMESA_EXT = 178,
     VK_COMMAND_TYPE_vkSeekReplyCommandStreamMESA_EXT = 179,
     VK_COMMAND_TYPE_vkExecuteCommandStreamsMESA_EXT = 180,

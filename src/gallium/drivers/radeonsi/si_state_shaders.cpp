@@ -96,8 +96,8 @@ unsigned si_determine_wave_size(struct si_screen *sscreen, struct si_shader *sha
     * in some cases. Alpha test in Wave32 is luckily unaffected.
     */
    if (stage == MESA_SHADER_FRAGMENT && info->base.fs.uses_discard &&
-       !(info && info->options & SI_PROFILE_IGNORE_LLVM_DISCARD_BUG) &&
-       LLVM_VERSION_MAJOR >= 13 && !(sscreen->debug_flags & DBG(W32_PS_DISCARD)))
+       !(info && info->options & SI_PROFILE_IGNORE_LLVM13_DISCARD_BUG) &&
+       LLVM_VERSION_MAJOR == 13 && !(sscreen->debug_flags & DBG(W32_PS_DISCARD)))
       return 64;
 
    /* Debug flags except w32psdiscard don't override the discard bug workaround,
@@ -190,8 +190,6 @@ void si_get_ir_cache_key(struct si_shader_selector *sel, bool ngg, bool es,
       shader_variant_flags |= 1 << 7;
    if (sel->screen->options.clamp_div_by_zero)
       shader_variant_flags |= 1 << 8;
-   if (sel->screen->debug_flags & DBG(GISEL))
-      shader_variant_flags |= 1 << 9;
    if ((sel->info.stage == MESA_SHADER_VERTEX ||
         sel->info.stage == MESA_SHADER_TESS_EVAL ||
         sel->info.stage == MESA_SHADER_GEOMETRY) &&
@@ -965,27 +963,29 @@ static void si_emit_shader_gs(struct si_context *sctx)
          ac_set_reg_cu_en(&sctx->gfx_cs, R_00B21C_SPI_SHADER_PGM_RSRC3_GS,
                           shader->ctx_reg.gs.spi_shader_pgm_rsrc3_gs,
                           C_00B21C_CU_EN, 0, &sctx->screen->info,
-                          (void (*)(void*, unsigned, uint32_t))radeon_set_sh_reg_func);
+                          (void (*)(void*, unsigned, uint32_t))
+                          (sctx->chip_class >= GFX10 ? radeon_set_sh_reg_idx3_func : radeon_set_sh_reg_func));
          sctx->tracked_regs.reg_saved &= ~BITFIELD64_BIT(SI_TRACKED_SPI_SHADER_PGM_RSRC3_GS);
       }
       if (sctx->chip_class >= GFX10) {
          ac_set_reg_cu_en(&sctx->gfx_cs, R_00B204_SPI_SHADER_PGM_RSRC4_GS,
                           shader->ctx_reg.gs.spi_shader_pgm_rsrc4_gs,
                           C_00B204_CU_EN, 16, &sctx->screen->info,
-                          (void (*)(void*, unsigned, uint32_t))radeon_set_sh_reg_func);
+                          (void (*)(void*, unsigned, uint32_t))
+                          (sctx->chip_class >= GFX10 ? radeon_set_sh_reg_idx3_func : radeon_set_sh_reg_func));
          sctx->tracked_regs.reg_saved &= ~BITFIELD64_BIT(SI_TRACKED_SPI_SHADER_PGM_RSRC4_GS);
       }
    } else {
       radeon_begin_again(&sctx->gfx_cs);
       if (sctx->chip_class >= GFX7) {
-         radeon_opt_set_sh_reg(sctx, R_00B21C_SPI_SHADER_PGM_RSRC3_GS,
-                               SI_TRACKED_SPI_SHADER_PGM_RSRC3_GS,
-                               shader->ctx_reg.gs.spi_shader_pgm_rsrc3_gs);
+         radeon_opt_set_sh_reg_idx3(sctx, R_00B21C_SPI_SHADER_PGM_RSRC3_GS,
+                                    SI_TRACKED_SPI_SHADER_PGM_RSRC3_GS,
+                                    shader->ctx_reg.gs.spi_shader_pgm_rsrc3_gs);
       }
       if (sctx->chip_class >= GFX10) {
-         radeon_opt_set_sh_reg(sctx, R_00B204_SPI_SHADER_PGM_RSRC4_GS,
-                               SI_TRACKED_SPI_SHADER_PGM_RSRC4_GS,
-                               shader->ctx_reg.gs.spi_shader_pgm_rsrc4_gs);
+         radeon_opt_set_sh_reg_idx3(sctx, R_00B204_SPI_SHADER_PGM_RSRC4_GS,
+                                    SI_TRACKED_SPI_SHADER_PGM_RSRC4_GS,
+                                    shader->ctx_reg.gs.spi_shader_pgm_rsrc4_gs);
       }
       radeon_end();
    }
@@ -1192,20 +1192,22 @@ static void gfx10_emit_shader_ngg_tail(struct si_context *sctx, struct si_shader
       ac_set_reg_cu_en(&sctx->gfx_cs, R_00B21C_SPI_SHADER_PGM_RSRC3_GS,
                        shader->ctx_reg.ngg.spi_shader_pgm_rsrc3_gs,
                        C_00B21C_CU_EN, 0, &sctx->screen->info,
-                       (void (*)(void*, unsigned, uint32_t))radeon_set_sh_reg_func);
+                       (void (*)(void*, unsigned, uint32_t))
+                       (sctx->chip_class >= GFX10 ? radeon_set_sh_reg_idx3_func : radeon_set_sh_reg_func));
       ac_set_reg_cu_en(&sctx->gfx_cs, R_00B204_SPI_SHADER_PGM_RSRC4_GS,
                        shader->ctx_reg.ngg.spi_shader_pgm_rsrc4_gs,
                        C_00B204_CU_EN, 16, &sctx->screen->info,
-                       (void (*)(void*, unsigned, uint32_t))radeon_set_sh_reg_func);
+                       (void (*)(void*, unsigned, uint32_t))
+                       (sctx->chip_class >= GFX10 ? radeon_set_sh_reg_idx3_func : radeon_set_sh_reg_func));
       sctx->tracked_regs.reg_saved &= ~BITFIELD64_BIT(SI_TRACKED_SPI_SHADER_PGM_RSRC4_GS) &
                                       ~BITFIELD64_BIT(SI_TRACKED_SPI_SHADER_PGM_RSRC3_GS);
    } else {
-      radeon_opt_set_sh_reg(sctx, R_00B21C_SPI_SHADER_PGM_RSRC3_GS,
-                            SI_TRACKED_SPI_SHADER_PGM_RSRC3_GS,
-                            shader->ctx_reg.ngg.spi_shader_pgm_rsrc3_gs);
-      radeon_opt_set_sh_reg(sctx, R_00B204_SPI_SHADER_PGM_RSRC4_GS,
-                            SI_TRACKED_SPI_SHADER_PGM_RSRC4_GS,
-                            shader->ctx_reg.ngg.spi_shader_pgm_rsrc4_gs);
+      radeon_opt_set_sh_reg_idx3(sctx, R_00B21C_SPI_SHADER_PGM_RSRC3_GS,
+                                 SI_TRACKED_SPI_SHADER_PGM_RSRC3_GS,
+                                 shader->ctx_reg.ngg.spi_shader_pgm_rsrc3_gs);
+      radeon_opt_set_sh_reg_idx3(sctx, R_00B204_SPI_SHADER_PGM_RSRC4_GS,
+                                 SI_TRACKED_SPI_SHADER_PGM_RSRC4_GS,
+                                 shader->ctx_reg.ngg.spi_shader_pgm_rsrc4_gs);
       radeon_end();
    }
 }
@@ -1674,7 +1676,8 @@ static void si_shader_vs(struct si_screen *sscreen, struct si_shader *shader,
       ac_set_reg_cu_en(pm4, R_00B118_SPI_SHADER_PGM_RSRC3_VS,
                        S_00B118_CU_EN(cu_mask) | S_00B118_WAVE_LIMIT(0x3F),
                        C_00B118_CU_EN, 0, &sscreen->info,
-                       (void (*)(void*, unsigned, uint32_t))si_pm4_set_reg);
+                       (void (*)(void*, unsigned, uint32_t))
+                       (sscreen->info.chip_class >= GFX10 ? si_pm4_set_reg_idx3 : si_pm4_set_reg));
       si_pm4_set_reg(pm4, R_00B11C_SPI_SHADER_LATE_ALLOC_VS, S_00B11C_LIMIT(late_alloc_wave64));
    }
 
@@ -2372,7 +2375,7 @@ static void si_build_shader_variant(struct si_shader *shader, int thread_index, 
    struct si_shader_selector *sel = shader->selector;
    struct si_screen *sscreen = sel->screen;
    struct ac_llvm_compiler *compiler;
-   struct pipe_debug_callback *debug = &shader->compiler_ctx_state.debug;
+   struct util_debug_callback *debug = &shader->compiler_ctx_state.debug;
 
    if (thread_index >= 0) {
       if (low_priority) {
@@ -2822,7 +2825,7 @@ static void si_init_shader_selector_async(void *job, void *gdata, int thread_ind
    struct si_shader_selector *sel = (struct si_shader_selector *)job;
    struct si_screen *sscreen = sel->screen;
    struct ac_llvm_compiler *compiler;
-   struct pipe_debug_callback *debug = &sel->compiler_ctx_state.debug;
+   struct util_debug_callback *debug = &sel->compiler_ctx_state.debug;
 
    assert(!debug->debug_message || debug->async);
    assert(thread_index >= 0);
@@ -3835,7 +3838,7 @@ bool si_update_gs_ring_buffers(struct si_context *sctx)
       pipe_resource_reference(&sctx->esgs_ring, NULL);
       sctx->esgs_ring =
          pipe_aligned_buffer_create(sctx->b.screen,
-                                    SI_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
+                                    PIPE_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
                                     PIPE_USAGE_DEFAULT,
                                     esgs_ring_size, sctx->screen->info.pte_fragment_size);
       if (!sctx->esgs_ring)
@@ -3846,7 +3849,7 @@ bool si_update_gs_ring_buffers(struct si_context *sctx)
       pipe_resource_reference(&sctx->gsvs_ring, NULL);
       sctx->gsvs_ring =
          pipe_aligned_buffer_create(sctx->b.screen,
-                                    SI_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
+                                    PIPE_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
                                     PIPE_USAGE_DEFAULT,
                                     gsvs_ring_size, sctx->screen->info.pte_fragment_size);
       if (!sctx->gsvs_ring)
@@ -4054,23 +4057,11 @@ static bool si_update_scratch_relocs(struct si_context *sctx)
 
 bool si_update_spi_tmpring_size(struct si_context *sctx, unsigned bytes)
 {
-   /* SPI_TMPRING_SIZE.WAVESIZE must be constant for each scratch buffer.
-    * There are 2 cases to handle:
-    *
-    * - If the current needed size is less than the maximum seen size,
-    *   use the maximum seen size, so that WAVESIZE remains the same.
-    *
-    * - If the current needed size is greater than the maximum seen size,
-    *   the scratch buffer is reallocated, so we can increase WAVESIZE.
-    *
-    * Shaders that set SCRATCH_EN=0 don't allocate scratch space.
-    * Otherwise, the number of waves that can use scratch is
-    * SPI_TMPRING_SIZE.WAVES.
-    */
-   sctx->max_seen_scratch_bytes_per_wave = MAX2(sctx->max_seen_scratch_bytes_per_wave, bytes);
+   unsigned spi_tmpring_size;
+   ac_get_scratch_tmpring_size(&sctx->screen->info, sctx->scratch_waves, bytes,
+                               &sctx->max_seen_scratch_bytes_per_wave, &spi_tmpring_size);
 
    unsigned scratch_needed_size = sctx->max_seen_scratch_bytes_per_wave * sctx->scratch_waves;
-   unsigned spi_tmpring_size;
 
    if (scratch_needed_size > 0) {
       if (!sctx->scratch_buffer || scratch_needed_size > sctx->scratch_buffer->b.b.width0) {
@@ -4079,7 +4070,7 @@ bool si_update_spi_tmpring_size(struct si_context *sctx, unsigned bytes)
 
          sctx->scratch_buffer = si_aligned_buffer_create(
             &sctx->screen->b,
-            SI_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
+            PIPE_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
             PIPE_USAGE_DEFAULT, scratch_needed_size,
             sctx->screen->info.pte_fragment_size);
          if (!sctx->scratch_buffer)
@@ -4092,12 +4083,6 @@ bool si_update_spi_tmpring_size(struct si_context *sctx, unsigned bytes)
          return false;
    }
 
-   /* The LLVM shader backend should be reporting aligned scratch_sizes. */
-   assert((scratch_needed_size & ~0x3FF) == scratch_needed_size &&
-          "scratch size should already be aligned correctly.");
-
-   spi_tmpring_size = S_0286E8_WAVES(sctx->scratch_waves) |
-                      S_0286E8_WAVESIZE(sctx->max_seen_scratch_bytes_per_wave >> 10);
    if (spi_tmpring_size != sctx->spi_tmpring_size) {
       sctx->spi_tmpring_size = spi_tmpring_size;
       si_mark_atom_dirty(sctx, &sctx->atoms.s.scratch_state);
@@ -4147,7 +4132,7 @@ void si_init_tess_factor_ring(struct si_context *sctx)
                              S_030938_SIZE(sctx->screen->tess_factor_ring_size / 4));
       radeon_set_uconfig_reg(R_030940_VGT_TF_MEMORY_BASE, factor_va >> 8);
       if (sctx->chip_class >= GFX10) {
-         radeon_set_uconfig_reg(R_030984_VGT_TF_MEMORY_BASE_HI_UMD,
+         radeon_set_uconfig_reg(R_030984_VGT_TF_MEMORY_BASE_HI,
                                 S_030984_BASE_HI(factor_va >> 40));
       } else if (sctx->chip_class == GFX9) {
          radeon_set_uconfig_reg(R_030944_VGT_TF_MEMORY_BASE_HI,
@@ -4168,7 +4153,7 @@ void si_init_tess_factor_ring(struct si_context *sctx)
                      S_030938_SIZE(sctx->screen->tess_factor_ring_size / 4));
       si_pm4_set_reg(sctx->cs_preamble_state, R_030940_VGT_TF_MEMORY_BASE, factor_va >> 8);
       if (sctx->chip_class >= GFX10)
-         si_pm4_set_reg(sctx->cs_preamble_state, R_030984_VGT_TF_MEMORY_BASE_HI_UMD,
+         si_pm4_set_reg(sctx->cs_preamble_state, R_030984_VGT_TF_MEMORY_BASE_HI,
                         S_030984_BASE_HI(factor_va >> 40));
       else if (sctx->chip_class == GFX9)
          si_pm4_set_reg(sctx->cs_preamble_state, R_030944_VGT_TF_MEMORY_BASE_HI,

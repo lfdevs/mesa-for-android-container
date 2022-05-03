@@ -613,7 +613,7 @@ etna_context_force_flush(struct etna_cmd_stream *stream, void *priv)
 
 static void
 etna_set_debug_callback(struct pipe_context *pctx,
-                        const struct pipe_debug_callback *cb)
+                        const struct util_debug_callback *cb)
 {
    struct etna_context *ctx = etna_context(pctx);
 

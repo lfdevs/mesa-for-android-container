@@ -69,9 +69,9 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SHADER_STENCIL_EXPORT:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
-   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+   case PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT:
+   case PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+   case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
    case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
    case PIPE_CAP_VERTEX_SHADER_SATURATE:
@@ -88,21 +88,21 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
    case PIPE_CAP_VERTEX_COLOR_CLAMPED:
    case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
-   case PIPE_CAP_TGSI_INSTANCEID:
+   case PIPE_CAP_VS_INSTANCEID:
    case PIPE_CAP_COMPUTE:
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
-   case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
+   case PIPE_CAP_VS_LAYER_VIEWPORT:
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
    case PIPE_CAP_SAMPLE_SHADING:
    case PIPE_CAP_DRAW_INDIRECT:
    case PIPE_CAP_CLIP_HALFZ:
-   case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
+   case PIPE_CAP_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_POLYGON_OFFSET_CLAMP:
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_TGSI_TEXCOORD:
-   case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
+   case PIPE_CAP_FS_FINE_DERIVATIVE:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
    case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
@@ -110,30 +110,30 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SAMPLER_VIEW_TARGET:
    case PIPE_CAP_TEXTURE_QUERY_LOD:
    case PIPE_CAP_TEXTURE_GATHER_SM5:
-   case PIPE_CAP_TGSI_TXQS:
+   case PIPE_CAP_TEXTURE_QUERY_SAMPLES:
    case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
-   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
-   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+   case PIPE_CAP_FS_POSITION_IS_SYSVAL:
+   case PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL:
    case PIPE_CAP_INVALIDATE_BUFFER:
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
    case PIPE_CAP_QUERY_MEMORY_INFO:
-   case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+   case PIPE_CAP_SHADER_PACK_HALF_FLOAT:
    case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
    case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
    case PIPE_CAP_STRING_MARKER:
    case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_CULL_DISTANCE:
-   case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
-   case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
+   case PIPE_CAP_SHADER_ARRAY_COMPONENTS:
+   case PIPE_CAP_SHADER_CAN_READ_OUTPUTS:
    case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
    case PIPE_CAP_DOUBLES:
    case PIPE_CAP_TGSI_TEX_TXF_LZ:
-   case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
+   case PIPE_CAP_TES_LAYER_VIEWPORT:
    case PIPE_CAP_BINDLESS_TEXTURE:
    case PIPE_CAP_QUERY_TIMESTAMP:
    case PIPE_CAP_QUERY_TIME_ELAPSED:
@@ -142,12 +142,12 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_LOAD_CONSTBUF:
    case PIPE_CAP_INT64:
    case PIPE_CAP_INT64_DIVMOD:
-   case PIPE_CAP_TGSI_CLOCK:
+   case PIPE_CAP_SHADER_CLOCK:
    case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
    case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
-   case PIPE_CAP_TGSI_BALLOT:
-   case PIPE_CAP_TGSI_VOTE:
+   case PIPE_CAP_SHADER_BALLOT:
+   case PIPE_CAP_SHADER_GROUP_VOTE:
    case PIPE_CAP_FBFETCH:
    case PIPE_CAP_COMPUTE_GRID_INFO_LAST_BLOCK:
    case PIPE_CAP_IMAGE_LOAD_FORMATTED:
@@ -164,7 +164,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
    case PIPE_CAP_PREFER_REAL_BUFFER_IN_CONSTBUF0:
    case PIPE_CAP_COMPUTE_SHADER_DERIVATIVES:
-   case PIPE_CAP_TGSI_ATOMINC_WRAP:
+   case PIPE_CAP_IMAGE_ATOMIC_INC_WRAP:
    case PIPE_CAP_IMAGE_STORE_FORMATTED:
       return 1;
 
@@ -234,8 +234,8 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
    case PIPE_CAP_MAX_SHADER_BUFFER_SIZE:
-      /* Align it down to 256 bytes. I've chosen the number randomly. */
-      return ROUND_DOWN_TO(MIN2(sscreen->info.max_alloc_size, INT_MAX), 256);
+      /* Allow max 512 MB to pass CTS with a 32-bit build. */
+      return MIN2(sscreen->info.max_alloc_size, 512 * 1024 * 1024);
    case PIPE_CAP_MAX_TEXTURE_MB:
       return sscreen->info.max_alloc_size / (1024 * 1024);
 
@@ -593,6 +593,10 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
             return 4;
          else
             return 0;
+      case PIPE_VIDEO_CAP_EFC_SUPPORTED:
+         return ((sscreen->info.family >= CHIP_RENOIR) &&
+                 (sscreen->info.family < CHIP_SIENNA_CICHLID) &&
+                 !(sscreen->debug_flags & DBG(NO_EFC)));
       default:
          return 0;
       }
@@ -1085,6 +1089,21 @@ void si_init_screen_get_functions(struct si_screen *sscreen)
          nir_pack_varying_interp_loc_center |
          nir_pack_varying_interp_loc_sample |
          nir_pack_varying_interp_loc_centroid,
+      .lower_io_variables = true,
+      .lower_fs_color_inputs = true,
+      /* HW supports indirect indexing for: | Enabled in driver
+       * -------------------------------------------------------
+       * TCS inputs                         | Yes
+       * TES inputs                         | Yes
+       * GS inputs                          | No
+       * -------------------------------------------------------
+       * VS outputs before TCS              | No
+       * TCS outputs                        | Yes
+       * VS/TES outputs before GS           | No
+       */
+      .support_indirect_inputs = BITFIELD_BIT(MESA_SHADER_TESS_CTRL) |
+                                 BITFIELD_BIT(MESA_SHADER_TESS_EVAL),
+      .support_indirect_outputs = BITFIELD_BIT(MESA_SHADER_TESS_CTRL),
    };
    sscreen->nir_options = nir_options;
 }

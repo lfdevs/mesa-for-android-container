@@ -42,6 +42,7 @@
 #define CONV_FORMAT(f) [PIPE_FORMAT_##f] = VIRGL_FORMAT_##f,
 
 static const enum virgl_formats virgl_formats_conv_table[PIPE_FORMAT_COUNT] = {
+   CONV_FORMAT(NONE)
    CONV_FORMAT(B8G8R8A8_UNORM)
    CONV_FORMAT(B8G8R8X8_UNORM)
    CONV_FORMAT(A8R8G8B8_UNORM)
@@ -52,6 +53,7 @@ static const enum virgl_formats virgl_formats_conv_table[PIPE_FORMAT_COUNT] = {
    CONV_FORMAT(R10G10B10A2_UNORM)
    CONV_FORMAT(L8_UNORM)
    CONV_FORMAT(A8_UNORM)
+   CONV_FORMAT(I8_UNORM)
    CONV_FORMAT(L8A8_UNORM)
    CONV_FORMAT(L16_UNORM)
    CONV_FORMAT(Z16_UNORM)
@@ -171,9 +173,11 @@ static const enum virgl_formats virgl_formats_conv_table[PIPE_FORMAT_COUNT] = {
    CONV_FORMAT(L16_SNORM)
    CONV_FORMAT(L16A16_SNORM)
    CONV_FORMAT(A16_FLOAT)
+   CONV_FORMAT(I16_FLOAT)
    CONV_FORMAT(L16_FLOAT)
    CONV_FORMAT(L16A16_FLOAT)
    CONV_FORMAT(A32_FLOAT)
+   CONV_FORMAT(I32_FLOAT)
    CONV_FORMAT(L32_FLOAT)
    CONV_FORMAT(L32A32_FLOAT)
    CONV_FORMAT(YV12)
@@ -206,21 +210,27 @@ static const enum virgl_formats virgl_formats_conv_table[PIPE_FORMAT_COUNT] = {
    CONV_FORMAT(R32G32B32_SINT)
    CONV_FORMAT(R32G32B32A32_SINT)
    CONV_FORMAT(A8_UINT)
+   CONV_FORMAT(I8_UINT)
    CONV_FORMAT(L8_UINT)
    CONV_FORMAT(L8A8_UINT)
    CONV_FORMAT(A8_SINT)
    CONV_FORMAT(L8_SINT)
+   CONV_FORMAT(I8_SINT)
    CONV_FORMAT(L8A8_SINT)
    CONV_FORMAT(A16_UINT)
+   CONV_FORMAT(I16_UINT)
    CONV_FORMAT(L16_UINT)
    CONV_FORMAT(L16A16_UINT)
    CONV_FORMAT(A16_SINT)
+   CONV_FORMAT(I16_SINT)
    CONV_FORMAT(L16_SINT)
    CONV_FORMAT(L16A16_SINT)
    CONV_FORMAT(A32_UINT)
+   CONV_FORMAT(I32_UINT)
    CONV_FORMAT(L32_UINT)
    CONV_FORMAT(L32A32_UINT)
    CONV_FORMAT(A32_SINT)
+   CONV_FORMAT(I32_SINT)
    CONV_FORMAT(L32_SINT)
    CONV_FORMAT(L32A32_SINT)
    CONV_FORMAT(R10G10B10A2_SSCALED)
@@ -551,6 +561,13 @@ int virgl_encode_shader_state(struct virgl_context *ctx,
 
    if (virgl_debug & VIRGL_DEBUG_TGSI)
       debug_printf("TGSI:\n---8<---\n%s\n---8<---\n", str);
+
+   /* virglrenderer before addbd9c5058dcc9d561b20ab747aed58c53499da mis-counts
+    * the tokens needed for a BARRIER, so ask it to allocate some more space.
+    */
+   const char *barrier = str;
+   while ((barrier = strstr(barrier + 1, "BARRIER")))
+      num_tokens++;
 
    shader_len = strlen(str) + 1;
 
@@ -1516,13 +1533,13 @@ void virgl_encode_copy_transfer(struct virgl_context *ctx,
    uint32_t command;
    struct virgl_screen *vs = virgl_screen(ctx->base.screen);
    // set always synchronized to 1, second bit is used for direction
-   uint32_t direction_and_synchronized = 1;
+   uint32_t direction_and_synchronized = VIRGL_COPY_TRANSFER3D_FLAGS_SYNCHRONIZED;
 
    if (vs->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_COPY_TRANSFER_BOTH_DIRECTIONS) {
       if (trans->direction == VIRGL_TRANSFER_TO_HOST) {
          // do nothing, as 0 means transfer to host
       } else if (trans->direction == VIRGL_TRANSFER_FROM_HOST) {
-         direction_and_synchronized |= 1 << 1;
+         direction_and_synchronized |= VIRGL_COPY_TRANSFER3D_FLAGS_READ_FROM_HOST;
       } else {
          // something wrong happened here
          assert(0);

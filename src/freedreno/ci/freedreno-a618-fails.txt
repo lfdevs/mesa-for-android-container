@@ -1,3 +1,6 @@
 # Fails when TU_DEBUG=forcebin is set
 gmem-dEQP-VK.spirv_assembly.instruction.graphics.variable_pointers.graphics.writes_two_buffers_geom,Fail
 gmem-dEQP-VK.spirv_assembly.instruction.graphics.variable_pointers.graphics.writes_two_buffers_vert,Fail
+
+# VK-GL-CTS 1.3.1.1 uprev
+gmem-dEQP-VK.ray_tracing_pipeline.acceleration_structures.flags.cpu_built.aabbs_aop.identical_instances_aop.nopadding.fasttrace_update_compaction_lowmemory_bothgeneric,Crash

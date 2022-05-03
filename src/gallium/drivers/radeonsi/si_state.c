@@ -5465,8 +5465,10 @@ void si_init_cs_preamble_state(struct si_context *sctx, bool uses_reg_shadowing)
 
    if (sctx->chip_class >= GFX7) {
       ac_set_reg_cu_en(pm4, R_00B01C_SPI_SHADER_PGM_RSRC3_PS,
-                       S_00B01C_CU_EN(cu_mask_ps) | S_00B01C_WAVE_LIMIT(0x3F),
-                       C_00B01C_CU_EN, 0, &sscreen->info, (void*)si_pm4_set_reg);
+                       S_00B01C_CU_EN(cu_mask_ps) |
+                       S_00B01C_WAVE_LIMIT(0x3F),
+                       C_00B01C_CU_EN, 0, &sscreen->info,
+                       (void*)(sctx->chip_class >= GFX10 ? si_pm4_set_reg_idx3 : si_pm4_set_reg));
    }
 
    if (sctx->chip_class <= GFX8) {
@@ -5503,11 +5505,13 @@ void si_init_cs_preamble_state(struct si_context *sctx, bool uses_reg_shadowing)
    if (sctx->chip_class >= GFX7 && sctx->chip_class <= GFX8) {
       ac_set_reg_cu_en(pm4, R_00B51C_SPI_SHADER_PGM_RSRC3_LS,
                        S_00B51C_CU_EN(0xffff) | S_00B51C_WAVE_LIMIT(0x3F),
-                       C_00B51C_CU_EN, 0, &sscreen->info, (void*)si_pm4_set_reg);
+                       C_00B51C_CU_EN, 0, &sscreen->info,
+                       (void*)(sctx->chip_class >= GFX10 ? si_pm4_set_reg_idx3 : si_pm4_set_reg));
       si_pm4_set_reg(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS, S_00B41C_WAVE_LIMIT(0x3F));
       ac_set_reg_cu_en(pm4, R_00B31C_SPI_SHADER_PGM_RSRC3_ES,
                        S_00B31C_CU_EN(0xffff) | S_00B31C_WAVE_LIMIT(0x3F),
-                       C_00B31C_CU_EN, 0, &sscreen->info, (void*)si_pm4_set_reg);
+                       C_00B31C_CU_EN, 0, &sscreen->info,
+                       (void*)(sctx->chip_class >= GFX10 ? si_pm4_set_reg_idx3 : si_pm4_set_reg));
 
       /* If this is 0, Bonaire can hang even if GS isn't being used.
        * Other chips are unaffected. These are suboptimal values,
@@ -5549,10 +5553,11 @@ void si_init_cs_preamble_state(struct si_context *sctx, bool uses_reg_shadowing)
    if (sctx->chip_class >= GFX9) {
       ac_set_reg_cu_en(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS,
                        S_00B41C_CU_EN(0xffff) | S_00B41C_WAVE_LIMIT(0x3F), C_00B41C_CU_EN,
-                       0, &sscreen->info, (void*)si_pm4_set_reg);
+                       0, &sscreen->info,
+                       (void*)(sctx->chip_class >= GFX10 ? si_pm4_set_reg_idx3 : si_pm4_set_reg));
 
       si_pm4_set_reg(pm4, R_028B50_VGT_TESS_DISTRIBUTION,
-                     S_028B50_ACCUM_ISOLINE(40) | S_028B50_ACCUM_TRI(30) | S_028B50_ACCUM_QUAD(24) |
+                     S_028B50_ACCUM_ISOLINE(12) | S_028B50_ACCUM_TRI(30) | S_028B50_ACCUM_QUAD(24) |
                      S_028B50_DONUT_SPLIT_GFX9(24) | S_028B50_TRAP_SPLIT(6));
       si_pm4_set_reg(pm4, R_028C48_PA_SC_BINNER_CNTL_1,
                      S_028C48_MAX_ALLOC_COUNT(sscreen->info.pbb_max_alloc_count - 1) |
@@ -5568,11 +5573,14 @@ void si_init_cs_preamble_state(struct si_context *sctx, bool uses_reg_shadowing)
    if (sctx->chip_class >= GFX10) {
       /* Logical CUs 16 - 31 */
       ac_set_reg_cu_en(pm4, R_00B004_SPI_SHADER_PGM_RSRC4_PS, S_00B004_CU_EN(cu_mask_ps >> 16),
-                       C_00B004_CU_EN, 16, &sscreen->info, (void*)si_pm4_set_reg);
+                       C_00B004_CU_EN, 16, &sscreen->info,
+                       (void*)(sctx->chip_class >= GFX10 ? si_pm4_set_reg_idx3 : si_pm4_set_reg));
       ac_set_reg_cu_en(pm4, R_00B104_SPI_SHADER_PGM_RSRC4_VS, S_00B104_CU_EN(0xffff),
-                       C_00B104_CU_EN, 16, &sscreen->info, (void*)si_pm4_set_reg);
+                       C_00B104_CU_EN, 16, &sscreen->info,
+                       (void*)(sctx->chip_class >= GFX10 ? si_pm4_set_reg_idx3 : si_pm4_set_reg));
       ac_set_reg_cu_en(pm4, R_00B404_SPI_SHADER_PGM_RSRC4_HS, S_00B404_CU_EN(0xffff),
-                       C_00B404_CU_EN, 16, &sscreen->info, (void*)si_pm4_set_reg);
+                       C_00B404_CU_EN, 16, &sscreen->info,
+                       (void*)(sctx->chip_class >= GFX10 ? si_pm4_set_reg_idx3 : si_pm4_set_reg));
 
       si_pm4_set_reg(pm4, R_00B0C8_SPI_SHADER_USER_ACCUM_PS_0, 0);
       si_pm4_set_reg(pm4, R_00B0CC_SPI_SHADER_USER_ACCUM_PS_1, 0);

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021 Alyssa Rosenzweig <alyssa@rosenzweig.io>
+ * Copyright (c) 2019 Collabora, Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -26,9 +27,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "util/macros.h"
 #include "tiling.h"
 
-/* Z-order with 64x64 tiles:
+/* Z-order with square tiles, at most 64x64:
  *
  * 	[y5][x5][y4][x4][y3][x3][y2][x2][y1][x1][y0][x0]
  *
@@ -53,77 +55,107 @@
  * applying the two's complement identity, we are left with (X - mask) & mask
  */
 
-#define TILE_WIDTH 64
-#define TILE_HEIGHT 64
-#define TILE_SHIFT 6
-#define TILE_MASK ((1 << TILE_SHIFT) - 1)
-
 /* mask of bits used for X coordinate in a tile */
 #define SPACE_MASK 0x555 // 0b010101010101
 
-#define MAX2(x, y) (((x) > (y)) ? (x) : (y))
-#define MIN2(x, y) (((x) < (y)) ? (x) : (y))
+typedef struct {
+  uint16_t lo;
+  uint8_t hi;
+} __attribute__((packed)) agx_uint24_t;
+
+typedef struct {
+  uint32_t lo;
+  uint16_t hi;
+} __attribute__((packed)) agx_uint48_t;
+
+typedef struct {
+  uint64_t lo;
+  uint32_t hi;
+} __attribute__((packed)) agx_uint96_t;
+
+typedef struct {
+  uint64_t lo;
+  uint64_t hi;
+} __attribute__((packed)) agx_uint128_t;
 
 static uint32_t
 agx_space_bits(unsigned x)
 {
-   assert(x < TILE_WIDTH);
+   assert(x < 64);
    return ((x & 1) << 0) | ((x & 2) << 1) | ((x & 4) << 2) |
           ((x & 8) << 3) | ((x & 16) << 4) | ((x & 32) << 5);
 }
 
-#define TILED_UNALIGNED_TYPE(pixel_t, is_store) { \
-	unsigned tiles_per_row = (width + TILE_WIDTH - 1) >> TILE_SHIFT;\
-	unsigned y_offs = agx_space_bits(sy & TILE_MASK) << 1;\
-	unsigned x_offs_start = agx_space_bits(sx & TILE_MASK);\
+#define TILED_UNALIGNED_TYPE(pixel_t, is_store, tile_shift) { \
+   unsigned tile_size = (1 << tile_shift);\
+   unsigned pixels_per_tile = tile_size * tile_size;\
+	unsigned tiles_per_row = (width + tile_size - 1) >> tile_shift;\
+	unsigned y_offs = agx_space_bits(sy & (tile_size - 1)) << 1;\
+	unsigned x_offs_start = agx_space_bits(sx & (tile_size - 1));\
+   unsigned space_mask = SPACE_MASK & (pixels_per_tile - 1);\
+\
+   pixel_t *linear = _linear; \
+   pixel_t *tiled = _tiled; \
 \
 	for (unsigned y = sy; y < smaxy; ++y) {\
-		unsigned tile_y = (y >> TILE_SHIFT);\
+		unsigned tile_y = (y >> tile_shift);\
 		unsigned tile_row = tile_y * tiles_per_row;\
 		unsigned x_offs = x_offs_start;\
 \
 		pixel_t *linear_row = linear;\
 		\
 		for (unsigned x = sx; x < smaxx; ++x) {\
-			unsigned tile_x = (x >> TILE_SHIFT);\
+			unsigned tile_x = (x >> tile_shift);\
 			unsigned tile_idx = (tile_row + tile_x);\
-			unsigned tile_base = tile_idx * (TILE_WIDTH * TILE_HEIGHT);\
+			unsigned tile_base = tile_idx * pixels_per_tile;\
 \
 			pixel_t *ptiled = &tiled[tile_base + y_offs + x_offs];\
 			pixel_t *plinear = (linear_row++);\
 			pixel_t *outp = (pixel_t *) (is_store ? ptiled : plinear); \
 			pixel_t *inp = (pixel_t *) (is_store ? plinear : ptiled); \
 			*outp = *inp;\
-			x_offs = (x_offs - SPACE_MASK) & SPACE_MASK;\
+			x_offs = (x_offs - space_mask) & space_mask;\
 		}\
 \
-		y_offs = (((y_offs >> 1) - SPACE_MASK) & SPACE_MASK) << 1;\
+		y_offs = (((y_offs >> 1) - space_mask) & space_mask) << 1;\
 		linear += linear_pitch;\
 	}\
+}
+
+#define TILED_UNALIGNED_TYPES(bpp, store, tile_shift) { \
+   if (bpp == 8) \
+      TILED_UNALIGNED_TYPE(uint8_t, store, tile_shift) \
+   else if (bpp == 16) \
+      TILED_UNALIGNED_TYPE(uint16_t, store, tile_shift) \
+   else if (bpp == 24) \
+      TILED_UNALIGNED_TYPE(agx_uint24_t, store, tile_shift) \
+   else if (bpp == 32) \
+      TILED_UNALIGNED_TYPE(uint32_t, store, tile_shift) \
+   else if (bpp == 48) \
+      TILED_UNALIGNED_TYPE(agx_uint48_t, store, tile_shift) \
+   else if (bpp == 64) \
+      TILED_UNALIGNED_TYPE(uint64_t, store, tile_shift) \
+   else if (bpp == 96) \
+      TILED_UNALIGNED_TYPE(agx_uint96_t, store, tile_shift) \
+   else if (bpp == 128) \
+      TILED_UNALIGNED_TYPE(agx_uint128_t, store, tile_shift) \
+   else \
+      unreachable("Can't tile this bpp\n"); \
 }
 
 void
 agx_detile(void *_tiled, void *_linear,
            unsigned width, unsigned bpp, unsigned linear_pitch,
-           unsigned sx, unsigned sy, unsigned smaxx, unsigned smaxy)
+           unsigned sx, unsigned sy, unsigned smaxx, unsigned smaxy, unsigned tile_shift)
 {
-   /* TODO: parametrize with macro magic */
-   assert(bpp == 32);
-
-   uint32_t *linear = _linear;
-   uint32_t *tiled = _tiled;
-   TILED_UNALIGNED_TYPE(uint32_t, false);
+   TILED_UNALIGNED_TYPES(bpp, false, tile_shift);
 }
 
 void
 agx_tile(void *_tiled, void *_linear,
          unsigned width, unsigned bpp, unsigned linear_pitch,
-         unsigned sx, unsigned sy, unsigned smaxx, unsigned smaxy)
+         unsigned sx, unsigned sy, unsigned smaxx, unsigned smaxy,
+         unsigned tile_shift)
 {
-   /* TODO: parametrize with macro magic */
-   assert(bpp == 32);
-
-   uint32_t *linear = _linear;
-   uint32_t *tiled = _tiled;
-   TILED_UNALIGNED_TYPE(uint32_t, true);
+   TILED_UNALIGNED_TYPES(bpp, true, tile_shift);
 }

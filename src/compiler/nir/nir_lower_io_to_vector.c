@@ -556,18 +556,18 @@ nir_lower_io_to_vector_impl(nir_function_impl *impl, nir_variable_mode modes)
 
             assert(intrin->src[1].is_ssa);
             nir_ssa_def *old_value = intrin->src[1].ssa;
-            nir_ssa_def *comps[4];
+            nir_ssa_scalar comps[4];
             for (unsigned c = 0; c < intrin->num_components; c++) {
                if (new_frac + c >= old_frac &&
                    (old_wrmask & 1 << (new_frac + c - old_frac))) {
-                  comps[c] = nir_channel(&b, old_value,
+                  comps[c] = nir_get_ssa_scalar(old_value,
                                          new_frac + c - old_frac);
                } else {
-                  comps[c] = nir_ssa_undef(&b, old_value->num_components,
-                                               old_value->bit_size);
+                  comps[c] = nir_get_ssa_scalar(nir_ssa_undef(&b, old_value->num_components,
+                                                              old_value->bit_size), 0);
                }
             }
-            nir_ssa_def *new_value = nir_vec(&b, comps, intrin->num_components);
+            nir_ssa_def *new_value = nir_vec_scalars(&b, comps, intrin->num_components);
             nir_instr_rewrite_src(&intrin->instr, &intrin->src[1],
                                   nir_src_for_ssa(new_value));
 

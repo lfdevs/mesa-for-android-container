@@ -3173,6 +3173,14 @@ Converter::run()
       NIR_PASS(progress, nir, nir_lower_64bit_phis);
    } while (progress);
 
+   nir_move_options move_options =
+      (nir_move_options)(nir_move_const_undef |
+                         nir_move_load_ubo |
+                         nir_move_load_uniform |
+                         nir_move_load_input);
+   NIR_PASS_V(nir, nir_opt_sink, move_options);
+   NIR_PASS_V(nir, nir_opt_move, move_options);
+
    NIR_PASS_V(nir, nir_lower_bool_to_int32);
    NIR_PASS_V(nir, nir_convert_from_ssa, true);
 
@@ -3288,8 +3296,8 @@ nvir_nir_shader_compiler_options(int chipset)
    op.lower_base_vertex = false;
    op.lower_helper_invocation = false;
    op.optimize_sample_mask_in = false;
-   op.lower_cs_local_index_from_id = true;
-   op.lower_cs_local_id_from_index = false;
+   op.lower_cs_local_index_to_id = true;
+   op.lower_cs_local_id_to_index = false;
    op.lower_device_index_to_zero = false; // TODO
    op.lower_wpos_pntc = false; // TODO
    op.lower_hadd = true; // TODO

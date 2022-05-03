@@ -53,8 +53,9 @@ traces:
       # Looks like it probably triggers hangcheck on g41
       # - device: crocus-g41
       #   checksum: 346bae885d95f419b750a601e028378b
-      - device: crocus-hsw
-        checksum: 898b89c720f9bddd714633f46553e7a7
+      # Has also intermittently hangchecked on the hsw box.
+      # - device: crocus-hsw
+      #   checksum: 898b89c720f9bddd714633f46553e7a7
   - path: gputest/pixmark-volplosion.trace
     expectations:
       # Different geometry in the explosion from freedreno, neither is obviously wrong.

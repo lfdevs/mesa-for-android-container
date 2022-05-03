@@ -64,3 +64,22 @@ libasahi_decode = static_library(
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
+
+if with_tests
+  test(
+    'libasahi_tests',
+    executable(
+      'libasahi_tests',
+      files(
+        'tests/test-lod-clamps.cpp',
+      ),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      include_directories : [inc_include, inc_src, inc_mesa],
+      dependencies: [idep_gtest, idep_agx_pack],
+      link_with : [],
+    ),
+    suite : ['asahi'],
+    protocol : gtest_test_protocol,
+  )
+endif

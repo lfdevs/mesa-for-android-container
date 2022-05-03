@@ -36,6 +36,7 @@
 
 #include <GL/gl.h> /* dri_interface needs GL types */
 #include "GL/internal/dri_interface.h"
+#include "kopper_interface.h"
 
 struct gbm_dri_surface;
 struct gbm_dri_bo;
@@ -74,6 +75,7 @@ struct gbm_dri_device {
    const __DRI2fenceExtension *fence;
    const __DRIimageExtension  *image;
    const __DRIswrastExtension *swrast;
+   const __DRIkopperExtension *kopper;
    const __DRI2flushExtension *flush;
 
    const __DRIconfig   **driver_configs;

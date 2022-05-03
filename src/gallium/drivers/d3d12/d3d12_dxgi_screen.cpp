@@ -70,10 +70,10 @@ get_dxgi_factory()
    return factory;
 }
 
-static IDXGIAdapter1 *
+static IDXGIAdapter3 *
 choose_dxgi_adapter(IDXGIFactory4 *factory, LUID *adapter)
 {
-   IDXGIAdapter1 *ret;
+   IDXGIAdapter3 *ret;
    if (adapter) {
       if (SUCCEEDED(factory->EnumAdapterByLuid(*adapter,
                                                IID_PPV_ARGS(&ret))))
@@ -90,8 +90,13 @@ choose_dxgi_adapter(IDXGIFactory4 *factory, LUID *adapter)
    }
 
    // The first adapter is the default
-   if (SUCCEEDED(factory->EnumAdapters1(0, &ret)))
-      return ret;
+   IDXGIAdapter1 *adapter1;
+   if (SUCCEEDED(factory->EnumAdapters1(0, &adapter1))) {
+      HRESULT hr = adapter1->QueryInterface(&ret);
+      adapter1->Release();
+      if (SUCCEEDED(hr))
+         return ret;
+   }
 
    return NULL;
 }
@@ -106,6 +111,17 @@ dxgi_get_name(struct pipe_screen *screen)
 
    snprintf(buf, sizeof(buf), "D3D12 (%S)", dxgi_screen->description);
    return buf;
+}
+
+static void
+dxgi_get_memory_info(struct d3d12_screen *screen, struct d3d12_memory_info *output)
+{
+   struct d3d12_dxgi_screen *dxgi_screen = d3d12_dxgi_screen(screen);
+   DXGI_QUERY_VIDEO_MEMORY_INFO local_info, nonlocal_info;
+   dxgi_screen->adapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &local_info);
+   dxgi_screen->adapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &nonlocal_info);
+   output->budget = local_info.Budget + nonlocal_info.Budget;
+   output->usage = local_info.CurrentUsage + nonlocal_info.CurrentUsage;
 }
 
 struct pipe_screen *
@@ -135,6 +151,10 @@ d3d12_create_dxgi_screen(struct sw_winsys *winsys, LUID *adapter_luid)
       return nullptr;
    }
 
+   LARGE_INTEGER driver_version;
+   screen->adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &driver_version);
+   screen->base.driver_version = driver_version.QuadPart;
+
    screen->base.vendor_id = adapter_desc.VendorId;
    // Note: memory sizes in bytes, but stored in size_t, so may be capped at 4GB.
    // In that case, adding before conversion to MB can easily overflow.
@@ -143,6 +163,7 @@ d3d12_create_dxgi_screen(struct sw_winsys *winsys, LUID *adapter_luid)
                                         (adapter_desc.SharedSystemMemory >> 20);
    wcsncpy(screen->description, adapter_desc.Description, ARRAY_SIZE(screen->description));
    screen->base.base.get_name = dxgi_get_name;
+   screen->base.get_memory_info = dxgi_get_memory_info;
 
    if (!d3d12_init_screen(&screen->base, winsys, screen->adapter)) {
       debug_printf("D3D12: failed to initialize DXGI screen\n");

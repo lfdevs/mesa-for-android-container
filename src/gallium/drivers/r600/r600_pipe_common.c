@@ -492,7 +492,7 @@ static enum pipe_reset_status r600_get_reset_status(struct pipe_context *ctx)
 }
 
 static void r600_set_debug_callback(struct pipe_context *ctx,
-				    const struct pipe_debug_callback *cb)
+				    const struct util_debug_callback *cb)
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
 
@@ -689,12 +689,8 @@ static const struct debug_named_value common_debug_options[] = {
 	{ "cs", DBG_CS, "Print compute shaders" },
 	{ "tcs", DBG_TCS, "Print tessellation control shaders" },
 	{ "tes", DBG_TES, "Print tessellation evaluation shaders" },
-	{ "noir", DBG_NO_IR, "Don't print the LLVM IR"},
-	{ "notgsi", DBG_NO_TGSI, "Don't print the TGSI"},
-	{ "noasm", DBG_NO_ASM, "Don't print disassembled shaders"},
 	{ "preoptir", DBG_PREOPT_IR, "Print the LLVM IR before initial optimizations" },
 	{ "checkir", DBG_CHECK_IR, "Enable additional sanity checks on shader IR" },
-	{ "nooptvariant", DBG_NO_OPT_VARIANT, "Disable compiling optimized shader variants." },
 
 	{ "testdma", DBG_TEST_DMA, "Invoke SDMA tests and exit." },
 	{ "testvmfaultcp", DBG_TEST_VMFAULT_CP, "Invoke a CP VM fault test and exit." },
@@ -710,10 +706,8 @@ static const struct debug_named_value common_debug_options[] = {
 	{ "notiling", DBG_NO_TILING, "Disable tiling" },
 	{ "switch_on_eop", DBG_SWITCH_ON_EOP, "Program WD/IA to switch on end-of-packet." },
 	{ "forcedma", DBG_FORCE_DMA, "Use asynchronous DMA for all operations when possible." },
-	{ "precompile", DBG_PRECOMPILE, "Compile one shader variant at shader creation." },
 	{ "nowc", DBG_NO_WC, "Disable GTT write combining" },
 	{ "check_vm", DBG_CHECK_VM, "Check VM faults and dump debug info." },
-	{ "unsafemath", DBG_UNSAFE_MATH, "Enable unsafe math shader optimizations" },
 
 	DEBUG_NAMED_VALUE_END /* must be last */
 };
@@ -781,8 +775,8 @@ static void r600_disk_cache_create(struct r600_common_screen *rscreen)
 	/* These flags affect shader compilation. */
 	uint64_t shader_debug_flags =
 		rscreen->debug_flags &
-		(DBG_FS_CORRECT_DERIVS_AFTER_KILL |
-		 DBG_UNSAFE_MATH);
+		(DBG_NIR |
+		 DBG_NIR_PREFERRED);
 
 	rscreen->disk_shader_cache =
 		disk_cache_create(r600_get_family_name(rscreen),

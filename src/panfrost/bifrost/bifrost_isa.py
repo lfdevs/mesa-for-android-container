@@ -247,6 +247,12 @@ def simplify_to_ir(ins):
             'immediates': [m[0] for m in ins['immediates']]
         }
 
+# Converstions to integers default to rounding-to-zero
+# All other opcodes default to rounding to nearest even
+def default_round_to_zero(name):
+    # 8-bit int to float is exact
+    subs = ['_TO_U', '_TO_S', '_TO_V2U', '_TO_V2S', '_TO_V4U', '_TO_V4S']
+    return any([x in name for x in subs])
 
 def combine_ir_variants(instructions, key):
     seen = [op for op in instructions.keys() if op[1:] == key]
@@ -272,13 +278,15 @@ def combine_ir_variants(instructions, key):
     # Great, we've checked srcs/immediates are consistent and we've summed over
     # modifiers
     return {
+            'key': key,
             'srcs': variants[0]['srcs'],
             'dests': variants[0]['dests'],
             'staging': variants[0]['staging'],
             'immediates': sorted(variants[0]['immediates']),
             'modifiers': modifiers,
             'v': len(variants),
-            'ir': variants
+            'ir': variants,
+            'rtz': default_round_to_zero(key)
         }
 
 # Partition instructions to mnemonics, considering units and variants

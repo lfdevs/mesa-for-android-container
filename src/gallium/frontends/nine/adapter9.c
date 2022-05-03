@@ -339,6 +339,10 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
         bind |= d3d9_get_pipe_depth_format_bindings(CheckFormat);
     }
 
+    if ((Usage & D3DUSAGE_QUERY_VERTEXTEXTURE) &&
+        !screen->get_shader_param(screen, PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS))
+        return D3DERR_NOTAVAILABLE;
+
     /* API hack because setting RT[0] to NULL is forbidden */
     if (CheckFormat == D3DFMT_NULL && bind == PIPE_BIND_RENDER_TARGET &&
         (RType == D3DRTYPE_SURFACE ||
@@ -646,7 +650,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                                D3DPIPECAP(MIXED_COLORBUFFER_FORMATS, D3DPMISCCAPS_MRTINDEPENDENTBITDEPTHS) |
                                D3DPMISCCAPS_MRTPOSTPIXELSHADERBLENDING |
                                D3DPMISCCAPS_FOGVERTEXCLAMPED;
-    if (!screen->get_param(screen, PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION))
+    if (!screen->get_param(screen, PIPE_CAP_VS_WINDOW_SPACE_POSITION))
         pCaps->PrimitiveMiscCaps |= D3DPMISCCAPS_CLIPTLVERTS;
 
     pCaps->RasterCaps =

@@ -17,8 +17,6 @@ glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 shaders@glsl-bug-110796,Fail
-shaders@glsl-uniform-interstage-limits@subdivide 5,Crash
-shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges,Crash
 shaders@point-vertex-id divisor,Fail
 shaders@point-vertex-id gl_instanceid divisor,Fail
 shaders@point-vertex-id gl_instanceid,Fail
@@ -115,14 +113,6 @@ spec@arb_shading_language_420pack@active sampler conflict,Crash
 spec@arb_texture_buffer_object@formats (fs- arb),Crash
 spec@arb_texture_buffer_object@formats (vs- arb),Crash
 spec@arb_texture_buffer_object@render-no-bo,Crash
-spec@arb_texture_cube_map_array@texturesize@fs-texturesize-isamplercubearray,Fail
-spec@arb_texture_cube_map_array@texturesize@fs-texturesize-samplercubearray,Fail
-spec@arb_texture_cube_map_array@texturesize@fs-texturesize-samplercubearrayshadow,Fail
-spec@arb_texture_cube_map_array@texturesize@fs-texturesize-usamplercubearray,Fail
-spec@arb_texture_cube_map_array@texturesize@vs-texturesize-isamplercubearray,Fail
-spec@arb_texture_cube_map_array@texturesize@vs-texturesize-samplercubearray,Fail
-spec@arb_texture_cube_map_array@texturesize@vs-texturesize-samplercubearrayshadow,Fail
-spec@arb_texture_cube_map_array@texturesize@vs-texturesize-usamplercubearray,Fail
 spec@arb_texture_float@arb_texture_float-texture-float-formats,Fail
 spec@arb_texture_float@fbo-alphatest-formats,Crash
 spec@arb_texture_float@fbo-blending-formats,Crash
@@ -599,3 +589,16 @@ spec@!opengl 3.1@primitive-restart-xfb written,Fail
 spec@!opengl 3.1@required-texture-attachment-formats,Fail
 spec@!opengl 3.2@coord-replace-doesnt-eliminate-frag-tex-coords,Fail
 spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail
+
+# VK-GL-CTS 1.3.1.0 uprev, aka when we dropped the custom caselist file.
+dEQP-VK.api.copy_and_blit.core.resolve_image.copy_with_regions_before_resolving.4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.diff_image_size.dst_256_256_11_4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.diff_image_size.dst_256_512_1_4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.diff_image_size.dst_266_256_1_4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.diff_image_size.src_256_256_11_4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.diff_image_size.src_256_512_1_4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.diff_image_size.src_266_256_1_4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.partial.4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.whole.4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.whole_copy_before_resolving_no_cab.4_bit,Crash
+dEQP-VK.api.copy_and_blit.core.resolve_image.with_regions.4_bit,Crash

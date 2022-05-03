@@ -44,6 +44,7 @@ struct zink_rt_attrib {
      bool needs_write;
   };
   bool resolve;
+  bool mixed_zs;
 };
 
 struct zink_render_pass_state {

@@ -328,7 +328,7 @@ iris_fence_await(struct pipe_context *ctx,
     *      actually flushed and the seqno finally passes.
     */
    if (fence->unflushed_ctx) {
-      pipe_debug_message(&ice->dbg, CONFORMANCE, "%s",
+      util_debug_message(&ice->dbg, CONFORMANCE, "%s",
                          "glWaitSync on unflushed fence from another context "
                          "is unlikely to work without kernel 5.8+\n");
    }

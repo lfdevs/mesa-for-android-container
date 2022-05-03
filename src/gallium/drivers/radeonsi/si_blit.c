@@ -1234,8 +1234,8 @@ static void si_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
       return;
    }
 
-   if ((info->dst.resource->bind & PIPE_BIND_DRI_PRIME) && sdst->surface.is_linear &&
-       sctx->chip_class >= GFX7 && sdst->surface.flags & RADEON_SURF_IMPORTED) {
+   if ((info->dst.resource->bind & PIPE_BIND_PRIME_BLIT_DST) && sdst->surface.is_linear &&
+       sctx->chip_class >= GFX7) {
       struct si_texture *ssrc = (struct si_texture *)info->src.resource;
       /* Use SDMA or async compute when copying to a DRI_PRIME imported linear surface. */
       bool async_copy = info->dst.box.x == 0 && info->dst.box.y == 0 && info->dst.box.z == 0 &&
@@ -1337,7 +1337,8 @@ static void si_flush_resource(struct pipe_context *ctx, struct pipe_resource *re
    struct si_context *sctx = (struct si_context *)ctx;
    struct si_texture *tex = (struct si_texture *)res;
 
-   assert(res->target != PIPE_BUFFER);
+   if (res->target == PIPE_BUFFER)
+      return;
 
    if (!tex->is_depth && (tex->cmask_buffer || vi_dcc_enabled(tex, 0))) {
       si_blit_decompress_color(sctx, tex, 0, res->last_level, 0, util_max_layer(res, 0),

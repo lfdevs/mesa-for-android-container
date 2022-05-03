@@ -560,7 +560,7 @@ static bool r600_query_hw_prepare_buffer(struct r600_common_screen *rscreen,
 
 static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
                                               struct r600_query *rquery,
-                                              bool wait,
+                                              enum pipe_query_flags flags,
                                               enum pipe_query_value_type result_type,
                                               int index,
                                               struct pipe_resource *resource,
@@ -1307,7 +1307,7 @@ static bool r600_get_query_result(struct pipe_context *ctx,
 
 static void r600_get_query_result_resource(struct pipe_context *ctx,
                                            struct pipe_query *query,
-                                           bool wait,
+                                           enum pipe_query_flags flags,
                                            enum pipe_query_value_type result_type,
                                            int index,
                                            struct pipe_resource *resource,
@@ -1316,7 +1316,7 @@ static void r600_get_query_result_resource(struct pipe_context *ctx,
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
 	struct r600_query *rquery = (struct r600_query *)query;
 
-	rquery->ops->get_result_resource(rctx, rquery, wait, result_type, index,
+	rquery->ops->get_result_resource(rctx, rquery, flags, result_type, index,
 	                                 resource, offset);
 }
 
@@ -1599,7 +1599,7 @@ static void r600_restore_qbo_state(struct r600_common_context *rctx,
 
 static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
                                               struct r600_query *rquery,
-                                              bool wait,
+                                              enum pipe_query_flags flags,
                                               enum pipe_query_value_type result_type,
                                               int index,
                                               struct pipe_resource *resource,
@@ -1728,7 +1728,7 @@ static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
 
 		rctx->b.set_shader_buffers(&rctx->b, PIPE_SHADER_COMPUTE, 0, 3, ssbo, ~0);
 
-		if (wait && qbuf == &query->buffer) {
+		if ((flags & PIPE_QUERY_WAIT) && qbuf == &query->buffer) {
 			uint64_t va;
 
 			/* Wait for result availability. Wait only for readiness

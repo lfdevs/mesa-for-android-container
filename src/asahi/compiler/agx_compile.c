@@ -784,19 +784,28 @@ agx_tex_dim(enum glsl_sampler_dim dim, bool array)
    }
 }
 
+static enum agx_lod_mode
+agx_lod_mode_for_nir(nir_texop op)
+{
+   switch (op) {
+   case nir_texop_tex: return AGX_LOD_MODE_AUTO_LOD;
+   case nir_texop_txb: return AGX_LOD_MODE_AUTO_LOD_BIAS;
+   case nir_texop_txl: return AGX_LOD_MODE_LOD_MIN;
+   default: unreachable("Unhandled texture op");
+   }
+}
+
 static void
 agx_emit_tex(agx_builder *b, nir_tex_instr *instr)
 {
    switch (instr->op) {
    case nir_texop_tex:
    case nir_texop_txl:
+   case nir_texop_txb:
       break;
    default:
       unreachable("Unhandled texture op");
    }
-
-   enum agx_lod_mode lod_mode = (instr->op == nir_texop_tex) ?
-      AGX_LOD_MODE_AUTO_LOD : AGX_LOD_MODE_LOD_MIN;
 
    agx_index coords = agx_null(),
              texture = agx_immediate(instr->texture_index),
@@ -810,13 +819,51 @@ agx_emit_tex(agx_builder *b, nir_tex_instr *instr)
       switch (instr->src[i].src_type) {
       case nir_tex_src_coord:
          coords = index;
+
+         /* Array textures are indexed by a floating-point in NIR, but by an
+          * integer in AGX. Convert the array index from float-to-int for array
+          * textures. The array index is the last source in NIR. The conversion
+          * is according to the rule from 8.9 ("Texture Functions") of the GLSL
+          * ES 3.20 specification:
+          *
+          *     max(0, min(d - 1, floor(layer + 0.5))) =
+          *     max(0, min(d - 1, f32_to_u32(layer + 0.5))) =
+          *     min(d - 1, f32_to_u32(layer + 0.5))
+          */
+         if (instr->is_array) {
+            unsigned nr = nir_src_num_components(instr->src[i].src);
+            agx_index channels[4] = {};
+
+            for (unsigned i = 0; i < nr; ++i)
+               channels[i] = agx_p_extract(b, index, i);
+
+            agx_index layer = agx_fadd(b, channels[nr - 1],
+                                          agx_immediate_f(0.5f));
+
+            agx_index d1 = agx_indexed_sysval(b->shader,
+                  AGX_PUSH_ARRAY_SIZE_MINUS_1, AGX_SIZE_16,
+                  instr->texture_index, 1);
+
+            layer = agx_convert(b, agx_immediate(AGX_CONVERT_F_TO_U32), layer,
+                                   AGX_ROUND_RTZ);
+            layer = agx_mov(b, AGX_SIZE_16, layer);
+
+            layer = agx_icmpsel(b, layer, d1, layer, d1, AGX_ICOND_ULT);
+            layer = agx_mov(b, AGX_SIZE_32, layer);
+
+            channels[nr - 1] = layer;
+            coords = agx_p_combine(b, channels[0], channels[1], channels[2], channels[3]);
+         } else {
+            coords = index;
+         }
+
          break;
 
       case nir_tex_src_lod:
+      case nir_tex_src_bias:
          lod = index;
          break;
 
-      case nir_tex_src_bias:
       case nir_tex_src_ms_index:
       case nir_tex_src_offset:
       case nir_tex_src_comparator:
@@ -830,7 +877,7 @@ agx_emit_tex(agx_builder *b, nir_tex_instr *instr)
    agx_texture_sample_to(b, agx_dest_index(&instr->dest),
          coords, lod, texture, sampler, offset,
          agx_tex_dim(instr->sampler_dim, instr->is_array),
-         lod_mode,
+         agx_lod_mode_for_nir(instr->op),
          0xF, /* TODO: wrmask */
          0);
 
@@ -1473,13 +1520,17 @@ agx_compile_shader_nir(nir_shader *nir,
    };
 
    nir_tex_src_type_constraints tex_constraints = {
-      [nir_tex_src_lod] = { true, 16 }
+      [nir_tex_src_lod] = { true, 16 },
+      [nir_tex_src_bias] = { true, 16 },
    };
 
    NIR_PASS_V(nir, nir_lower_tex, &lower_tex_options);
    NIR_PASS_V(nir, nir_legalize_16bit_sampler_srcs, tex_constraints);
 
    agx_optimize_nir(nir);
+
+   /* Implement conditional discard with real control flow like Metal */
+   NIR_PASS_V(nir, nir_lower_discard_if);
 
    /* Must be last since NIR passes can remap driver_location freely */
    if (ctx->stage == MESA_SHADER_VERTEX) {

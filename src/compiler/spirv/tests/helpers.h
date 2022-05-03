@@ -53,6 +53,7 @@ protected:
       spirv_options.phys_ssbo_addr_format = nir_address_format_64bit_global;
       spirv_options.push_const_addr_format = nir_address_format_32bit_offset;
       spirv_options.shared_addr_format = nir_address_format_32bit_offset;
+      spirv_options.task_payload_addr_format = nir_address_format_32bit_offset;
 
       nir_shader_compiler_options nir_options;
       memset(&nir_options, 0, sizeof(nir_options));

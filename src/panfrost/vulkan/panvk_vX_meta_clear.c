@@ -43,7 +43,6 @@ panvk_meta_clear_color_attachment_shader(struct panfrost_device *pdev,
                                      "panvk_meta_clear_rt%d_attachment(base_type=%d)",
                                      rt, base_type);
 
-   b.shader->info.internal = true;
    b.shader->info.num_ubos = 1;
 
    const struct glsl_type *out_type = glsl_vector_type(base_type, 4);
@@ -94,7 +93,6 @@ panvk_meta_clear_zs_attachment_shader(struct panfrost_device *pdev,
                                      "panvk_meta_clear_%s%s_attachment()",
                                      clear_z ? "z" : "", clear_s ? "s" : "");
 
-   b.shader->info.internal = true;
    b.shader->info.num_ubos = 1;
 
    unsigned drv_loc = 0;
@@ -165,6 +163,7 @@ panvk_meta_clear_attachments_emit_rsd(struct panfrost_device *pdev,
 
    pan_pack(rsd_ptr.cpu, RENDERER_STATE, cfg) {
       pan_shader_prepare_rsd(shader_info, shader, &cfg);
+      cfg.properties.uniform_buffer_count = 0;
       cfg.properties.depth_source =
          z ?
 	 MALI_DEPTH_SOURCE_SHADER :
@@ -276,35 +275,15 @@ panvk_meta_clear_attachment_emit_push_constants(struct panfrost_device *pdev,
    return pan_pool_upload_aligned(pool, pushvals, sizeof(pushvals), 16);
 }
 
-static mali_ptr
-panvk_meta_clear_attachment_emit_ubo(struct panfrost_device *pdev,
-                                     const struct panfrost_ubo_push *pushmap,
-                                     struct pan_pool *pool,
-                                     const VkClearValue *clear_value)
-{
-   struct panfrost_ptr ubo = pan_pool_alloc_desc(pool, UNIFORM_BUFFER);
-
-   pan_pack(ubo.cpu, UNIFORM_BUFFER, cfg) {
-      cfg.entries = DIV_ROUND_UP(sizeof(*clear_value), 16);
-      cfg.pointer = pan_pool_upload_aligned(pool, clear_value, sizeof(*clear_value), 16);
-   }
-
-   return ubo.gpu;
-}
-
 static void
 panvk_meta_clear_attachment_emit_dcd(struct pan_pool *pool,
-                                     mali_ptr coords,
-                                     mali_ptr ubo, mali_ptr push_constants,
+                                     mali_ptr coords, mali_ptr push_constants,
                                      mali_ptr vpd, mali_ptr tsd, mali_ptr rsd,
                                      void *out)
 {
    pan_pack(out, DRAW, cfg) {
-      cfg.four_components_per_vertex = true;
-      cfg.draw_descriptor_is_64b = true;
       cfg.thread_storage = tsd;
       cfg.state = rsd;
-      cfg.uniform_buffers = ubo;
       cfg.push_uniforms = push_constants;
       cfg.position = coords;
       cfg.viewport = vpd;
@@ -315,7 +294,7 @@ static struct panfrost_ptr
 panvk_meta_clear_attachment_emit_tiler_job(struct pan_pool *desc_pool,
                                            struct pan_scoreboard *scoreboard,
                                            mali_ptr coords,
-                                           mali_ptr ubo, mali_ptr push_constants,
+                                           mali_ptr push_constants,
                                            mali_ptr vpd, mali_ptr rsd,
                                            mali_ptr tsd, mali_ptr tiler)
 {
@@ -324,7 +303,7 @@ panvk_meta_clear_attachment_emit_tiler_job(struct pan_pool *desc_pool,
 
    panvk_meta_clear_attachment_emit_dcd(desc_pool,
                                         coords,
-                                        ubo, push_constants,
+                                        push_constants,
                                         vpd, tsd, rsd,
                                         pan_section_ptr(job.cpu, TILER_JOB, DRAW));
 
@@ -460,11 +439,6 @@ panvk_meta_clear_attachment(struct panvk_cmd_buffer *cmdbuf,
       panvk_meta_clear_attachment_emit_push_constants(pdev, &shader_info->push,
                                                       &cmdbuf->desc_pool.base,
                                                       clear_value);
-   mali_ptr ubo =
-      panvk_meta_clear_attachment_emit_ubo(pdev, &shader_info->push,
-                                           &cmdbuf->desc_pool.base,
-                                           clear_value);
-
    mali_ptr tsd = PAN_ARCH >= 6 ? batch->tls.gpu : batch->fb.desc.gpu;
    mali_ptr tiler = PAN_ARCH >= 6 ? batch->tiler.descs.gpu : 0;
 
@@ -472,8 +446,7 @@ panvk_meta_clear_attachment(struct panvk_cmd_buffer *cmdbuf,
 
    job = panvk_meta_clear_attachment_emit_tiler_job(&cmdbuf->desc_pool.base,
                                                     &batch->scoreboard,
-                                                    coordinates,
-                                                    ubo, pushconsts,
+                                                    coordinates, pushconsts,
                                                     vpd, rsd, tsd, tiler);
 
    util_dynarray_append(&batch->jobs, void *, job.cpu);

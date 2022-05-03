@@ -613,7 +613,8 @@ perform_hazard_query(hazard_query* query, Instruction* instr, bool upwards)
    /* Don't move memory accesses to before control barriers. I don't think
     * this is necessary for the Vulkan memory model, but it might be for GLSL450. */
    unsigned control_classes =
-      storage_buffer | storage_atomic_counter | storage_image | storage_shared;
+      storage_buffer | storage_atomic_counter | storage_image | storage_shared |
+      storage_task_payload;
    if (first->has_control_barrier &&
        ((second->access_atomic | second->access_relaxed) & control_classes))
       return hazard_fail_barrier;

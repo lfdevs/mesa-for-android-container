@@ -136,6 +136,7 @@ struct intel_device_info
    bool has_aux_map;
    bool has_tiling_uapi;
    bool has_ray_tracing;
+   bool has_ray_query;
    bool has_local_mem;
    bool has_lsc;
    bool has_mesh_shading;

@@ -41,7 +41,6 @@
 #define ETNA_MAX_TEMPS (64) /* max temp register count of all Vivante hw */
 #define ETNA_MAX_TOKENS (2048)
 #define ETNA_MAX_IMM (1024) /* max const+imm in 32-bit words */
-#define ETNA_MAX_DECL (2048) /* max declarations */
 #define ETNA_MAX_DEPTH (32)
 #define ETNA_MAX_INSTRUCTIONS (2048)
 
@@ -160,19 +159,10 @@ etna_dump_shader(const struct etna_shader_variant *shader);
 
 bool
 etna_link_shader(struct etna_shader_link_info *info,
-                 const struct etna_shader_variant *vs, const struct etna_shader_variant *fs);
+                 const struct etna_shader_variant *vs,
+                 const struct etna_shader_variant *fs);
 
 void
 etna_destroy_shader(struct etna_shader_variant *shader);
-
-/* NIR compiler */
-
-bool
-etna_compile_shader_nir(struct etna_shader_variant *shader);
-
-bool
-etna_link_shader_nir(struct etna_shader_link_info *info,
-                     const struct etna_shader_variant *vs,
-                     const struct etna_shader_variant *fs);
 
 #endif

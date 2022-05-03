@@ -33,7 +33,6 @@ agx_build_reload_shader(struct agx_device *dev)
 {
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,
          &agx_nir_options, "agx_reload");
-   b.shader->info.internal = true;
 
    nir_variable *out = nir_variable_create(b.shader, nir_var_shader_out,
          glsl_vector_type(GLSL_TYPE_FLOAT, 4), "output");

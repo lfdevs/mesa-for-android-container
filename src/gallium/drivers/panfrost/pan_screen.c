@@ -68,6 +68,7 @@ static const struct debug_named_value panfrost_debug_options[] = {
         {"indirect",  PAN_DBG_INDIRECT, "Use experimental compute kernel for indirect draws"},
         {"linear",    PAN_DBG_LINEAR,   "Force linear textures"},
         {"nocache",   PAN_DBG_NO_CACHE, "Disable BO cache"},
+        {"dump",      PAN_DBG_DUMP,     "Dump all graphics memory"},
         DEBUG_NAMED_VALUE_END
 };
 
@@ -132,7 +133,6 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
                 return 1;
 
         case PIPE_CAP_OCCLUSION_QUERY:
-        case PIPE_CAP_PRIMITIVE_RESTART:
         case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
                 return true;
 
@@ -143,10 +143,10 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
          * work to turn on, since CYCLE_COUNT_START needs to be issued. In
          * kbase, userspace requests this via BASE_JD_REQ_PERMON. There is not
          * yet way to request this with mainline TODO */
-        case PIPE_CAP_TGSI_CLOCK:
+        case PIPE_CAP_SHADER_CLOCK:
                 return 0;
 
-        case PIPE_CAP_TGSI_INSTANCEID:
+        case PIPE_CAP_VS_INSTANCEID:
         case PIPE_CAP_TEXTURE_MULTISAMPLE:
         case PIPE_CAP_SURFACE_SAMPLE_COUNT:
                 return true;
@@ -163,7 +163,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_UMA:
         case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
         case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
-        case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
+        case PIPE_CAP_SHADER_ARRAY_COMPONENTS:
         case PIPE_CAP_CS_DERIVED_SYSTEM_VALUES_SUPPORTED:
         case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
         case PIPE_CAP_TEXTURE_BUFFER_SAMPLER:
@@ -222,21 +222,21 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
                 return MAX_MIP_LEVELS;
 
-        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
-        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+        case PIPE_CAP_FS_COORD_ORIGIN_LOWER_LEFT:
+        case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
                 /* Hardware is upper left. Pixel center at (0.5, 0.5) */
                 return 0;
 
-        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
-        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+        case PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT:
+        case PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
         case PIPE_CAP_TGSI_TEXCOORD:
                 return 1;
 
         /* We would prefer varyings on Midgard, but proper sysvals on Bifrost */
-        case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
-        case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
-        case PIPE_CAP_TGSI_FS_POINT_IS_SYSVAL:
-                return pan_is_bifrost(dev);
+        case PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL:
+        case PIPE_CAP_FS_POSITION_IS_SYSVAL:
+        case PIPE_CAP_FS_POINT_IS_SYSVAL:
+                return dev->arch >= 6;
 
         case PIPE_CAP_SEAMLESS_CUBE_MAP:
         case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
@@ -287,6 +287,12 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
         case PIPE_CAP_ALPHA_TEST:
                 return dev->arch <= 5;
+
+        /* Removed in v9 (Valhall). PRIMTIIVE_RESTART_FIXED_INDEX is of course
+         * still supported as it is core GLES3.0 functionality
+         */
+        case PIPE_CAP_PRIMITIVE_RESTART:
+                return dev->arch <= 7;
 
         case PIPE_CAP_FLATSHADE:
         case PIPE_CAP_TWO_SIDED_COLOR:
@@ -468,19 +474,13 @@ panfrost_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
 
         case PIPE_CAPF_POINT_SIZE_GRANULARITY:
         case PIPE_CAPF_LINE_WIDTH_GRANULARITY:
-           return 0.1;
+           return 0.0625;
 
         case PIPE_CAPF_MAX_LINE_WIDTH:
-
-        FALLTHROUGH;
         case PIPE_CAPF_MAX_LINE_WIDTH_AA:
-                return 255.0; /* arbitrary */
-
         case PIPE_CAPF_MAX_POINT_SIZE:
-
-        FALLTHROUGH;
         case PIPE_CAPF_MAX_POINT_SIZE_AA:
-                return 1024.0;
+                return 4095.9375;
 
         case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
                 return 16.0;
@@ -853,6 +853,12 @@ panfrost_create_screen(int fd, struct renderonly *ro)
         panfrost_open_device(screen, fd, dev);
 
         if (dev->debug & PAN_DBG_NO_AFBC)
+                dev->has_afbc = false;
+
+        /* It's early days for Valhall support... disable AFBC for now to keep
+         * hardware bring-up simple
+         */
+        if (dev->arch >= 9)
                 dev->has_afbc = false;
 
         /* Bail early on unsupported hardware */

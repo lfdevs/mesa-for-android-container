@@ -176,8 +176,14 @@ st_invalidate_state(struct gl_context *ctx)
    }
 
    /* Update the vertex shader if ctx->Point was changed. */
-   if (st->lower_point_size && new_state & _NEW_POINT)
-      st->dirty |= ST_NEW_VS_STATE | ST_NEW_TES_STATE | ST_NEW_GS_STATE;
+   if (st->lower_point_size && new_state & _NEW_POINT) {
+      if (ctx->GeometryProgram._Current)
+         st->dirty |= ST_NEW_GS_STATE | ST_NEW_GS_CONSTANTS;
+      else if (ctx->TessEvalProgram._Current)
+         st->dirty |= ST_NEW_TES_STATE | ST_NEW_TES_CONSTANTS;
+      else
+         st->dirty |= ST_NEW_VS_STATE | ST_NEW_VS_CONSTANTS;
+   }
 
    /* Which shaders are dirty will be determined manually. */
    if (new_state & _NEW_PROGRAM) {
@@ -564,10 +570,20 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
                        screen->is_format_supported(screen, PIPE_FORMAT_DXT1_SRGBA,
                                                    PIPE_TEXTURE_2D, 0, 0,
                                                    PIPE_BIND_SAMPLER_VIEW);
-   st->transcode_astc = options->transcode_astc &&
-                        screen->is_format_supported(screen, PIPE_FORMAT_DXT5_SRGBA,
-                                                    PIPE_TEXTURE_2D, 0, 0,
-                                                    PIPE_BIND_SAMPLER_VIEW);
+   st->transcode_astc_to_bptc = options->transcode_astc &&
+      screen->is_format_supported(screen, PIPE_FORMAT_BPTC_SRGBA,
+                                  PIPE_TEXTURE_2D, 0, 0,
+                                  PIPE_BIND_SAMPLER_VIEW) &&
+      screen->is_format_supported(screen, PIPE_FORMAT_BPTC_RGBA_UNORM,
+                                  PIPE_TEXTURE_2D, 0, 0,
+                                  PIPE_BIND_SAMPLER_VIEW);
+   st->transcode_astc_to_dxt5 = options->transcode_astc &&
+      screen->is_format_supported(screen, PIPE_FORMAT_DXT5_SRGBA,
+                                  PIPE_TEXTURE_2D, 0, 0,
+                                  PIPE_BIND_SAMPLER_VIEW) &&
+      screen->is_format_supported(screen, PIPE_FORMAT_DXT5_RGBA,
+                                  PIPE_TEXTURE_2D, 0, 0,
+                                  PIPE_BIND_SAMPLER_VIEW);
    st->has_astc_2d_ldr =
       screen->is_format_supported(screen, PIPE_FORMAT_ASTC_4x4_SRGB,
                                   PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW);
@@ -592,7 +608,7 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->has_time_elapsed =
       screen->get_param(screen, PIPE_CAP_QUERY_TIME_ELAPSED);
    st->has_half_float_packing =
-      screen->get_param(screen, PIPE_CAP_TGSI_PACK_HALF_FLOAT);
+      screen->get_param(screen, PIPE_CAP_SHADER_PACK_HALF_FLOAT);
    st->has_multi_draw_indirect =
       screen->get_param(screen, PIPE_CAP_MULTI_DRAW_INDIRECT);
    st->has_single_pipe_stat =

@@ -28,6 +28,7 @@ vc4-rpi3-gles:armhf:
 vc4-rpi3-egl:armhf:
   extends:
     - .vc4-rpi3-test:armhf
+    - .test-manual-mr
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     HWCI_START_XORG: 1
@@ -38,7 +39,6 @@ vc4-rpi3-egl:armhf:
   extends:
     - .piglit-test
     - .vc4-rpi3-test:armhf
-    - .test-manual-mr
   variables:
     BM_POE_TIMEOUT: 180
     HWCI_START_XORG: 1

@@ -132,7 +132,7 @@ radv_amdgpu_winsys_bo_virtual_bind(struct radeon_winsys *_ws, struct radeon_wins
    }
 
    if (r) {
-      fprintf(stderr, "amdgpu: Failed to replace a PRT VA region (%d).\n", r);
+      fprintf(stderr, "radv/amdgpu: Failed to replace a PRT VA region (%d).\n", r);
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
    }
 
@@ -321,7 +321,7 @@ radv_amdgpu_winsys_bo_destroy(struct radeon_winsys *_ws, struct radeon_winsys_bo
       /* Clear mappings of this PRT VA region. */
       r = radv_amdgpu_bo_va_op(ws, bo->bo, 0, bo->size, bo->base.va, 0, 0, AMDGPU_VA_OP_CLEAR);
       if (r) {
-         fprintf(stderr, "amdgpu: Failed to clear a PRT VA region (%d).\n", r);
+         fprintf(stderr, "radv/amdgpu: Failed to clear a PRT VA region (%d).\n", r);
       }
 
       free(bo->bos);
@@ -415,7 +415,7 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
       r = radv_amdgpu_bo_va_op(ws, NULL, 0, size, bo->base.va, 0, AMDGPU_VM_PAGE_PRT,
                                AMDGPU_VA_OP_MAP);
       if (r) {
-         fprintf(stderr, "amdgpu: Failed to reserve a PRT VA region (%d).\n", r);
+         fprintf(stderr, "radv/amdgpu: Failed to reserve a PRT VA region (%d).\n", r);
          result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
          goto error_ranges_alloc;
       }
@@ -473,7 +473,6 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
       request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;
    }
 
-   /* this won't do anything on pre 4.9 kernels */
    if (initial_domain & RADEON_DOMAIN_VRAM) {
       if (ws->zero_all_vram_allocs || (flags & RADEON_FLAG_ZERO_VRAM))
          request.flags |= AMDGPU_GEM_CREATE_VRAM_CLEARED;
@@ -481,10 +480,10 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
 
    r = amdgpu_bo_alloc(ws->dev, &request, &buf_handle);
    if (r) {
-      fprintf(stderr, "amdgpu: Failed to allocate a buffer:\n");
-      fprintf(stderr, "amdgpu:    size      : %" PRIu64 " bytes\n", size);
-      fprintf(stderr, "amdgpu:    alignment : %u bytes\n", alignment);
-      fprintf(stderr, "amdgpu:    domains   : %u\n", initial_domain);
+      fprintf(stderr, "radv/amdgpu: Failed to allocate a buffer:\n");
+      fprintf(stderr, "radv/amdgpu:    size      : %" PRIu64 " bytes\n", size);
+      fprintf(stderr, "radv/amdgpu:    alignment : %u bytes\n", alignment);
+      fprintf(stderr, "radv/amdgpu:    domains   : %u\n", initial_domain);
       result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
       goto error_bo_alloc;
    }

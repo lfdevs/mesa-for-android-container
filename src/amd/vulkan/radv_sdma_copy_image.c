@@ -70,7 +70,7 @@ radv_translate_format_to_hw(struct radeon_info *info, VkFormat format, unsigned 
 static bool
 radv_sdma_v4_v5_copy_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                                      struct radv_buffer *buffer,
-                                     const VkBufferImageCopy2KHR *region)
+                                     const VkBufferImageCopy2 *region)
 {
    assert(image->plane_count == 1);
    struct radv_device *device = cmd_buffer->device;
@@ -189,7 +189,7 @@ radv_sdma_v4_v5_copy_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct 
 
 bool
 radv_sdma_copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
-                     struct radv_buffer *buffer, const VkBufferImageCopy2KHR *region)
+                     struct radv_buffer *buffer, const VkBufferImageCopy2 *region)
 {
    assert(cmd_buffer->device->physical_device->rad_info.chip_class >= GFX9);
    return radv_sdma_v4_v5_copy_image_to_buffer(cmd_buffer, image, buffer, region);

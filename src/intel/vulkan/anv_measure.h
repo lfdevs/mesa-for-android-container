@@ -46,7 +46,7 @@ void _anv_measure_endcommandbuffer(struct anv_cmd_buffer *cmd_buffer);
 void _anv_measure_beginrenderpass(struct anv_cmd_buffer *cmd_buffer);
 
 /* tracks frame progression */
-void anv_measure_acquire(struct anv_device *device);
+void _anv_measure_acquire(struct anv_device *device);
 
 /* should be combined with endcommandbuffer */
 void _anv_measure_submit(struct anv_cmd_buffer *cmd_buffer);
@@ -54,6 +54,10 @@ void _anv_measure_submit(struct anv_cmd_buffer *cmd_buffer);
 void
 _anv_measure_add_secondary(struct anv_cmd_buffer *primary,
                            struct anv_cmd_buffer *secondary);
+
+#define anv_measure_acquire(device) \
+   if (unlikely(device->physical->measure_device.config)) \
+      _anv_measure_acquire(device)
 
 #define anv_measure_snapshot(cmd_buffer, type, event_name, count) \
    if (unlikely(cmd_buffer->measure)) \

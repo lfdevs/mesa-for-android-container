@@ -850,14 +850,11 @@ virgl_resource_create_transfer(struct virgl_context *vctx,
    offset += blocksy * metadata->stride[level];
    offset += blocksx * util_format_get_blocksize(format);
 
-   trans = slab_alloc(&vctx->transfer_pool);
+   trans = slab_zalloc(&vctx->transfer_pool);
    if (!trans)
       return NULL;
 
-   /* note that trans is not zero-initialized */
-   trans->base.resource = NULL;
    pipe_resource_reference(&trans->base.resource, pres);
-   trans->hw_res = NULL;
    vws->resource_reference(vws, &trans->hw_res, virgl_resource(pres)->hw_res);
 
    trans->base.level = level;
@@ -867,9 +864,6 @@ virgl_resource_create_transfer(struct virgl_context *vctx,
    trans->base.layer_stride = metadata->layer_stride[level];
    trans->offset = offset;
    util_range_init(&trans->range);
-   trans->copy_src_hw_res = NULL;
-   trans->copy_src_offset = 0;
-   trans->resolve_transfer = NULL;
 
    if (trans->base.resource->target != PIPE_TEXTURE_3D &&
        trans->base.resource->target != PIPE_TEXTURE_CUBE &&

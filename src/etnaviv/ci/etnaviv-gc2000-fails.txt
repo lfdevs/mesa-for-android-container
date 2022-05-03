@@ -1767,7 +1767,6 @@ spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB- borde
 spec@glsl-1.10@execution@clipping@clip-plane-transformation fixed,Fail
 spec@glsl-es-1.00@execution@glsl-no-vertex-attribs,Fail
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
-spec@khr_texture_compression_astc@basic-gles,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb,Fail
 spec@nv_copy_image@nv_copy_image-simple --tex-to-tex,Fail

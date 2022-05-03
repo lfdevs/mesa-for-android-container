@@ -34,14 +34,30 @@ extern "C" {
 struct wsi_device;
 struct vk_sync_type;
 
+/** Base struct for all VkPhysicalDevice implementations
+ */
 struct vk_physical_device {
    struct vk_object_base base;
+
+   /** Instance which is the parent of this physical device */
    struct vk_instance *instance;
 
+   /** Table of all supported device extensions
+    *
+    * This table is initialized from the `supported_extensions` parameter
+    * passed to `vk_physical_device_init()` if not `NULL`.  If a `NULL`
+    * extension table is passed, all extensions are initialized to false and
+    * it's the responsibility of the driver to populate the table.  This may
+    * be useful if the driver's physical device initialization order is such
+    * that extension support cannot be determined until significant physical
+    * device setup work has already been done.
+    */
    struct vk_device_extension_table supported_extensions;
 
+   /** Physical-device-level dispatch table */
    struct vk_physical_device_dispatch_table dispatch_table;
 
+   /** WSI device, or NULL */
    struct wsi_device *wsi_device;
 
    /** A null-terminated array of supported sync types, in priority order
@@ -57,14 +73,27 @@ struct vk_physical_device {
 };
 
 VK_DEFINE_HANDLE_CASTS(vk_physical_device, base, VkPhysicalDevice,
-                       VK_OBJECT_TYPE_PHYSICAL_DEVICE)
+                       VK_OBJECT_TYPE_PHYSICAL_DEVICE);
 
+/** Initialize a vk_physical_device
+ *
+ * @param[out] physical_device      The physical device to initialize
+ * @param[in]  instance             The instance which is the parent of this
+ *                                  physical device
+ * @param[in]  supported_extensions Table of all device extensions supported
+ *                                  by this physical device
+ * @param[in]  dispatch_table       Physical-device-level dispatch table
+ */
 VkResult MUST_CHECK
 vk_physical_device_init(struct vk_physical_device *physical_device,
                         struct vk_instance *instance,
                         const struct vk_device_extension_table *supported_extensions,
                         const struct vk_physical_device_dispatch_table *dispatch_table);
 
+/** Tears down a vk_physical_device
+ *
+ * @param[out] physical_device   The physical device to tear down
+ */
 void
 vk_physical_device_finish(struct vk_physical_device *physical_device);
 

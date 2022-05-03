@@ -58,11 +58,11 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    struct st_context_attribs attribs;
    enum st_context_error ctx_err = 0;
    unsigned allowed_flags = __DRI_CTX_FLAG_DEBUG |
-                            __DRI_CTX_FLAG_FORWARD_COMPATIBLE |
-                            __DRI_CTX_FLAG_NO_ERROR;
+                            __DRI_CTX_FLAG_FORWARD_COMPATIBLE;
    unsigned allowed_attribs =
       __DRIVER_CONTEXT_ATTRIB_PRIORITY |
-      __DRIVER_CONTEXT_ATTRIB_RELEASE_BEHAVIOR;
+      __DRIVER_CONTEXT_ATTRIB_RELEASE_BEHAVIOR |
+      __DRIVER_CONTEXT_ATTRIB_NO_ERROR;
    const __DRIbackgroundCallableExtension *backgroundCallable =
       screen->sPriv->dri2.backgroundCallable;
    const struct driOptionCache *optionCache = &screen->dev->option_cache;
@@ -120,8 +120,8 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       if (ctx_config->reset_strategy != __DRI_CTX_RESET_NO_NOTIFICATION)
          attribs.flags |= ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED;
 
-   if (ctx_config->flags & __DRI_CTX_FLAG_NO_ERROR)
-      attribs.flags |= ST_CONTEXT_FLAG_NO_ERROR;
+   if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_NO_ERROR)
+      attribs.flags |= ctx_config->no_error ? ST_CONTEXT_FLAG_NO_ERROR : 0;
 
    if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_PRIORITY) {
       switch (ctx_config->priority) {

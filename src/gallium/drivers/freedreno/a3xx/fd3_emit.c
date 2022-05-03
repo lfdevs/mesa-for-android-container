@@ -424,15 +424,6 @@ fd3_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd3_emit *emit)
          uint32_t off = vb->buffer_offset + elem->src_offset;
          uint32_t fs = util_format_get_blocksize(pfmt);
 
-#ifdef DEBUG
-         /* see
-          * dEQP-GLES31.stress.vertex_attribute_binding.buffer_bounds.bind_vertex_buffer_offset_near_wrap_10
-          * should mesa/st be protecting us from this?
-          */
-         if (off > fd_bo_size(rsc->bo))
-            continue;
-#endif
-
          debug_assert(fmt != VFMT_NONE);
 
          OUT_PKT0(ring, REG_A3XX_VFD_FETCH(j), 2);

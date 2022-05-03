@@ -570,6 +570,10 @@ ir3_emit_cs_consts(const struct ir3_shader_variant *v,
    emit_common_consts(v, ring, ctx, PIPE_SHADER_COMPUTE);
    emit_kernel_params(ctx, v, ring, info);
 
+   /* a3xx/a4xx can inject these directly */
+   if (ctx->screen->gen <= 4)
+      return;
+
    /* emit compute-shader driver-params: */
    const struct ir3_const_state *const_state = ir3_const_state(v);
    uint32_t offset = const_state->offsets.driver_param;

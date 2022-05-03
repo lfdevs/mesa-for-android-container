@@ -84,6 +84,7 @@ if with_tools.contains('all')
     'nouveau',
     'xvmc',
     'asahi',
+    'imagination',
   ]
 endif
 
@@ -230,6 +231,9 @@ with_gallium_lima = gallium_drivers.contains('lima')
 with_gallium_zink = gallium_drivers.contains('zink')
 with_gallium_d3d12 = gallium_drivers.contains('d3d12')
 with_gallium_asahi = gallium_drivers.contains('asahi')
+foreach gallium_driver : gallium_drivers
+  pre_args += '-DHAVE_@0@'.format(gallium_driver.to_upper())
+endforeach
 
 with_gallium = gallium_drivers.length() != 0
 with_gallium_kmsro = with_gallium_v3d or with_gallium_vc4 or with_gallium_etnaviv or with_gallium_panfrost or with_gallium_lima or with_gallium_freedreno
@@ -271,11 +275,15 @@ with_panfrost_vk = _vulkan_drivers.contains('panfrost')
 with_swrast_vk = _vulkan_drivers.contains('swrast')
 with_virtio_vk = _vulkan_drivers.contains('virtio-experimental')
 with_freedreno_kgsl = get_option('freedreno-kgsl')
+with_freedreno_virtio = get_option('freedreno-virtio')
 with_broadcom_vk = _vulkan_drivers.contains('broadcom')
+with_imagination_vk = _vulkan_drivers.contains('imagination-experimental')
+with_imagination_srv = get_option('imagination-srv')
+with_microsoft_vk = _vulkan_drivers.contains('microsoft-experimental')
 with_any_vk = _vulkan_drivers.length() != 0
 
 with_any_broadcom = with_gallium_vc4 or with_gallium_v3d or with_broadcom_vk
-with_any_intel = with_intel_vk or with_gallium_iris or with_gallium_crocus
+with_any_intel = with_intel_vk or with_gallium_iris or with_gallium_crocus or with_intel_tools
 
 if with_swrast_vk and not with_gallium_softpipe
   error('swrast vulkan requires gallium swrast')
@@ -288,7 +296,8 @@ if with_aco_tests and not with_amd_vk
 endif
 
 with_microsoft_clc = get_option('microsoft-clc').enabled()
-with_clc = with_microsoft_clc
+with_intel_clc = get_option('intel-clc').enabled()
+with_clc = with_microsoft_clc or with_intel_clc
 with_libclc = with_clc
 with_spirv_to_dxil = get_option('spirv-to-dxil')
 
@@ -662,11 +671,11 @@ if with_gallium_zink
 endif
 
 dep_dxheaders = null_dep
-if with_gallium_d3d12 or with_microsoft_clc
+if with_gallium_d3d12 or with_microsoft_clc or with_microsoft_vk
   dep_dxheaders = dependency('directx-headers', required : false)
   if not dep_dxheaders.found()
     dep_dxheaders = dependency('DirectX-Headers', fallback : ['DirectX-Headers', 'dep_dxheaders'],
-      required : with_gallium_d3d12
+      required : with_gallium_d3d12 or with_microsoft_vk
     )
   endif
 endif
@@ -1045,7 +1054,7 @@ endif
 if with_shader_cache
   shader_cache_max_size = get_option('shader-cache-max-size')
   if shader_cache_max_size != ''
-    pre_args += '-DMESA_GLSL_CACHE_MAX_SIZE="@0@"'.format(shader_cache_max_size)
+    pre_args += '-DMESA_SHADER_CACHE_MAX_SIZE="@0@"'.format(shader_cache_max_size)
   endif
 endif
 
@@ -1096,7 +1105,18 @@ elif host_machine.system() == 'windows'
       '-DNOMINMAX',
     ]
   else
-    pre_args += ['-D__MSVCRT_VERSION__=0x0700']
+    # When the target is not mingw/ucrt
+    # NOTE: clang's stddef.h are conflict with mingw/ucrt's stddef.h
+    # So do not include headers that defined in clang for detecting
+    # _UCRT
+    if cc.compiles('''
+      #include <string.h>
+      #if defined(__MINGW32__) && defined(_UCRT)
+      #error
+      #endif
+      int main(void) { return 0; }''')
+      pre_args += ['-D__MSVCRT_VERSION__=0x0700']
+    endif
   endif
 elif host_machine.system() == 'openbsd'
   pre_args += '-D_ISOC11_SOURCE'
@@ -1474,7 +1494,7 @@ if not cc.has_function('dlopen')
   dep_dl = cc.find_library('dl', required : host_machine.system() != 'windows')
 endif
 if cc.has_function('dladdr', dependencies : dep_dl)
-  # This is really only required for megadrivers
+  # This is really only required for util/disk_cache.h
   pre_args += '-DHAVE_DLADDR'
 endif
 
@@ -1567,7 +1587,7 @@ dep_libdrm_radeon = null_dep
 dep_libdrm_nouveau = null_dep
 dep_libdrm_intel = null_dep
 
-_drm_amdgpu_ver = '2.4.109'
+_drm_amdgpu_ver = '2.4.110'
 _drm_radeon_ver = '2.4.71'
 _drm_nouveau_ver = '2.4.102'
 _drm_intel_ver = '2.4.75'
@@ -1783,17 +1803,21 @@ dep_clang = null_dep
 if with_clc
   llvm_libdir = dep_llvm.get_variable(cmake : 'LLVM_LIBRARY_DIR', configtool: 'libdir')
 
-  clang_modules = [
-    'clangBasic', 'clangAST', 'clangCodeGen', 'clangLex',
-    'clangDriver', 'clangFrontend', 'clangFrontendTool',
-    'clangHandleCXX', 'clangHandleLLVM', 'clangSerialization',
-    'clangSema', 'clangParse', 'clangEdit', 'clangAnalysis'
-  ]
+  dep_clang = cpp.find_library('clang-cpp', dirs : llvm_libdir, required : false)
 
-  dep_clang = []
-  foreach m : clang_modules
-    dep_clang += cpp.find_library(m, dirs : llvm_libdir, required : true)
-  endforeach
+  if not dep_clang.found()
+    clang_modules = [
+      'clangBasic', 'clangAST', 'clangCodeGen', 'clangLex',
+      'clangDriver', 'clangFrontend', 'clangFrontendTool',
+      'clangHandleCXX', 'clangHandleLLVM', 'clangSerialization',
+      'clangSema', 'clangParse', 'clangEdit', 'clangAnalysis'
+    ]
+
+    dep_clang = []
+    foreach m : clang_modules
+      dep_clang += cpp.find_library(m, dirs : llvm_libdir, required : true)
+    endforeach
+  endif
 endif
 
 # Be explicit about only using this lib on Windows, to avoid picking
@@ -2167,9 +2191,15 @@ endif
 # as GCC LTO drops them. See: https://bugs.freedesktop.org/show_bug.cgi?id=109391
 gcc_lto_quirk = (cc.get_id() == 'gcc') ? ['-fno-lto'] : []
 
+devenv = environment()
+
 subdir('include')
 subdir('bin')
 subdir('src')
+
+if meson.version().version_compare('>= 0.58')
+  meson.add_devenv(devenv)
+endif
 
 lines = ['',
   'prefix:          ' + get_option('prefix'),

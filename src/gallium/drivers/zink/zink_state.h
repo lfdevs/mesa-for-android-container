@@ -71,13 +71,12 @@ struct zink_rasterizer_hw_state {
    unsigned cull_mode : 2; //VkCullModeFlags
    unsigned line_mode : 2; //VkLineRasterizationModeEXT
    unsigned depth_clamp:1;
-   unsigned rasterizer_discard:1;
    unsigned pv_last:1;
    unsigned line_stipple_enable:1;
    unsigned force_persample_interp:1;
    unsigned clip_halfz:1;
 };
-#define ZINK_RAST_HW_STATE_SIZE 12
+#define ZINK_RAST_HW_STATE_SIZE 11
 
 
 struct zink_rasterizer_state {

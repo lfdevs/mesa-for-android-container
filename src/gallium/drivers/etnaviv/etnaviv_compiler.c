@@ -35,9 +35,6 @@ etna_compiler_create(const char *renderer)
 {
    struct etna_compiler *compiler = rzalloc(NULL, struct etna_compiler);
 
-   if (DBG_ENABLED(ETNA_DBG_TGSI))
-      return compiler;
-
    compiler->regs = etna_ra_setup(compiler);
    if (!compiler->regs) {
       ralloc_free((void *)compiler);

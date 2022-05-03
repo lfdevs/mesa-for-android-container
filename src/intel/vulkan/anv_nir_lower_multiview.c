@@ -170,7 +170,7 @@ anv_nir_lower_multiview(nir_shader *shader,
                         struct anv_graphics_pipeline *pipeline)
 {
    assert(shader->info.stage != MESA_SHADER_COMPUTE);
-   uint32_t view_mask = pipeline->subpass->view_mask;
+   uint32_t view_mask = pipeline->view_mask;
 
    /* If multiview isn't enabled, just lower the ViewIndex builtin to zero. */
    if (view_mask == 0) {
@@ -190,7 +190,7 @@ anv_nir_lower_multiview(nir_shader *shader,
       if (shader->info.stage == MESA_SHADER_FRAGMENT)
          return false;
 
-      bool progress = nir_lower_multiview(shader, pipeline->subpass->view_mask);
+      bool progress = nir_lower_multiview(shader, pipeline->view_mask);
 
       if (progress) {
          nir_builder b;
@@ -315,7 +315,7 @@ anv_check_for_primitive_replication(nir_shader **shaders,
       return false;
    }
 
-   uint32_t view_mask = pipeline->subpass->view_mask;
+   uint32_t view_mask = pipeline->view_mask;
    int view_count = util_bitcount(view_mask);
    if (view_count == 1 || view_count > primitive_replication_max_views)
       return false;

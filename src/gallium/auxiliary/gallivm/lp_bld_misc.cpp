@@ -64,6 +64,9 @@
 #include <llvm/Support/PrettyStackTrace.h>
 #include <llvm/ExecutionEngine/ObjectCache.h>
 #include <llvm/Support/TargetSelect.h>
+#if LLVM_VERSION_MAJOR >= 15
+#include <llvm/Support/MemoryBuffer.h>
+#endif
 
 #if LLVM_VERSION_MAJOR < 11
 #include <llvm/IR/CallSite.h>

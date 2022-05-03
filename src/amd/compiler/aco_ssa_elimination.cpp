@@ -121,6 +121,7 @@ insert_parallelcopies(ssa_elimination_ctx& ctx)
       std::vector<aco_ptr<Instruction>>::iterator it = block.instructions.end();
       --it;
       assert((*it)->isBranch());
+      PhysReg scratch_sgpr = (*it)->definitions[0].physReg();
       aco_ptr<Pseudo_instruction> pc{
          create_instruction<Pseudo_instruction>(aco_opcode::p_parallelcopy, Format::PSEUDO,
                                                 linear_phi_info.size(), linear_phi_info.size())};
@@ -131,7 +132,7 @@ insert_parallelcopies(ssa_elimination_ctx& ctx)
          i++;
       }
       pc->tmp_in_scc = block.scc_live_out;
-      pc->scratch_sgpr = block.scratch_sgpr;
+      pc->scratch_sgpr = scratch_sgpr;
       block.instructions.insert(it, std::move(pc));
    }
 }

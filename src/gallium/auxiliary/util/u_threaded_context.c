@@ -895,7 +895,7 @@ tc_get_query_result(struct pipe_context *_pipe,
 
 struct tc_query_result_resource {
    struct tc_call_base base;
-   bool wait;
+   enum pipe_query_flags flags:8;
    enum pipe_query_value_type result_type:8;
    int8_t index; /* it can be -1 */
    unsigned offset;
@@ -908,7 +908,7 @@ tc_call_get_query_result_resource(struct pipe_context *pipe, void *call, uint64_
 {
    struct tc_query_result_resource *p = to_call(call, tc_query_result_resource);
 
-   pipe->get_query_result_resource(pipe, p->query, p->wait, p->result_type,
+   pipe->get_query_result_resource(pipe, p->query, p->flags, p->result_type,
                                    p->index, p->resource, p->offset);
    tc_drop_resource_reference(p->resource);
    return call_size(tc_query_result_resource);
@@ -916,7 +916,8 @@ tc_call_get_query_result_resource(struct pipe_context *pipe, void *call, uint64_
 
 static void
 tc_get_query_result_resource(struct pipe_context *_pipe,
-                             struct pipe_query *query, bool wait,
+                             struct pipe_query *query,
+                             enum pipe_query_flags flags,
                              enum pipe_query_value_type result_type, int index,
                              struct pipe_resource *resource, unsigned offset)
 {
@@ -928,7 +929,7 @@ tc_get_query_result_resource(struct pipe_context *_pipe,
       tc_add_call(tc, TC_CALL_get_query_result_resource,
                   tc_query_result_resource);
    p->query = query;
-   p->wait = wait;
+   p->flags = flags;
    p->result_type = result_type;
    p->index = index;
    tc_set_resource_reference(&p->resource, resource);
@@ -2013,7 +2014,7 @@ tc_invalidate_buffer(struct threaded_context *tc,
    /* Shared, pinned, and sparse buffers can't be reallocated. */
    if (tbuf->is_shared ||
        tbuf->is_user_ptr ||
-       tbuf->b.flags & PIPE_RESOURCE_FLAG_SPARSE)
+       tbuf->b.flags & (PIPE_RESOURCE_FLAG_SPARSE | PIPE_RESOURCE_FLAG_UNMAPPABLE))
       return false;
 
    /* Allocate a new one. */
@@ -2085,7 +2086,7 @@ tc_improve_map_buffer_flags(struct threaded_context *tc,
     * (fully invalidated). That may just be a radeonsi limitation, but
     * the threaded context must obey it with radeonsi.
     */
-   if (tres->b.flags & PIPE_RESOURCE_FLAG_SPARSE) {
+   if (tres->b.flags & (PIPE_RESOURCE_FLAG_SPARSE | PIPE_RESOURCE_FLAG_UNMAPPABLE)) {
       /* We can use DISCARD_RANGE instead of full discard. This is the only
        * fast path for sparse buffers that doesn't need thread synchronization.
        */
@@ -2768,7 +2769,7 @@ tc_dump_debug_state(struct pipe_context *_pipe, FILE *stream,
 
 static void
 tc_set_debug_callback(struct pipe_context *_pipe,
-                      const struct pipe_debug_callback *cb)
+                      const struct util_debug_callback *cb)
 {
    struct threaded_context *tc = threaded_context(_pipe);
    struct pipe_context *pipe = tc->pipe;

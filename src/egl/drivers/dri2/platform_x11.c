@@ -46,6 +46,7 @@
 
 #include "egl_dri2.h"
 #include "loader.h"
+#include "kopper_interface.h"
 
 #ifdef HAVE_DRI3
 #include "platform_x11_dri3.h"
@@ -286,9 +287,6 @@ dri2_x11_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
       goto cleanup_pixmap;
    }
 
-   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf))
-      goto cleanup_pixmap;
-
    if (type != EGL_PBUFFER_BIT) {
       cookie = xcb_get_geometry (dri2_dpy->conn, dri2_surf->drawable);
       reply = xcb_get_geometry_reply (dri2_dpy->conn, cookie, &error);
@@ -312,6 +310,9 @@ dri2_x11_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
       dri2_surf->depth = reply->depth;
       free(reply);
    }
+
+   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf))
+      goto cleanup_pixmap;
 
    if (dri2_dpy->dri2) {
       xcb_void_cookie_t cookie;
@@ -859,7 +860,10 @@ dri2_copy_region(_EGLDisplay *disp,
    if (draw->Type == EGL_PIXMAP_BIT || draw->Type == EGL_PBUFFER_BIT)
       return EGL_TRUE;
 
-   dri2_dpy->flush->flush(dri2_surf->dri_drawable);
+   if (dri2_dpy->flush)
+      dri2_dpy->flush->flush(dri2_surf->dri_drawable);
+   else
+      dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
 
    if (dri2_surf->have_fake_front)
       render_attachment = XCB_DRI2_ATTACHMENT_BUFFER_FAKE_FRONT_LEFT;
@@ -1007,7 +1011,10 @@ dri2_x11_copy_buffers(_EGLDisplay *disp, _EGLSurface *surf, void *native_pixmap_
    STATIC_ASSERT(sizeof(uintptr_t) == sizeof(native_pixmap_target));
    target = (uintptr_t) native_pixmap_target;
 
-   dri2_dpy->flush->flush(dri2_surf->dri_drawable);
+   if (dri2_dpy->flush)
+      dri2_dpy->flush->flush(dri2_surf->dri_drawable);
+   else
+      dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
 
    gc = xcb_generate_id(dri2_dpy->conn);
    xcb_create_gc(dri2_dpy->conn, gc, target, 0, NULL);
@@ -1170,6 +1177,9 @@ static const struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
    .destroy_surface = dri2_x11_destroy_surface,
    .create_image = dri2_create_image_khr,
    .swap_buffers = dri2_x11_swap_buffers,
+   .swap_buffers_region = dri2_x11_swap_buffers_region,
+   .post_sub_buffer = dri2_x11_post_sub_buffer,
+   .copy_buffers = dri2_x11_copy_buffers,
    /* XXX: should really implement this since X11 has pixmaps */
    .query_surface = dri2_query_surface,
    .get_dri_drawable = dri2_surface_get_dri_drawable,
@@ -1200,9 +1210,32 @@ static const __DRIswrastLoaderExtension swrast_loader_extension = {
    .getImage        = swrastGetImage,
 };
 
+static void
+kopperSetSurfaceCreateInfo(void *_draw, struct kopper_loader_info *ci)
+{
+    struct dri2_egl_surface *dri2_surf = _draw;
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display(dri2_surf->base.Resource.Display);
+
+    if (dri2_surf->base.Type != EGL_WINDOW_BIT)
+       return;
+    ci->xcb.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+    ci->xcb.pNext = NULL;
+    ci->xcb.flags = 0;
+    ci->xcb.connection = dri2_dpy->conn;
+    ci->xcb.window = dri2_surf->drawable;
+    ci->has_alpha = dri2_surf->depth == 32;
+}
+
+static const __DRIkopperLoaderExtension kopper_loader_extension = {
+    .base = { __DRI_KOPPER_LOADER, 1 },
+
+    .SetSurfaceCreateInfo   = kopperSetSurfaceCreateInfo,
+};
+
 static const __DRIextension *swrast_loader_extensions[] = {
    &swrast_loader_extension.base,
    &image_lookup_extension.base,
+   &kopper_loader_extension.base,
    NULL,
 };
 
@@ -1266,6 +1299,28 @@ disconnect:
    return _eglError(EGL_BAD_ALLOC, msg);
 }
 
+static void
+dri2_x11_setup_swap_interval(_EGLDisplay *disp)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   int arbitrary_max_interval = 1000;
+
+   /* default behavior for no SwapBuffers support: no vblank syncing
+    * either.
+    */
+   dri2_dpy->min_swap_interval = 0;
+   dri2_dpy->max_swap_interval = 0;
+   dri2_dpy->default_swap_interval = 0;
+
+   if (!dri2_dpy->swap_available)
+      return;
+
+   /* If we do have swapbuffers, then we can support pretty much any swap
+    * interval.
+    */
+   dri2_setup_swap_interval(disp, arbitrary_max_interval);
+}
+
 static EGLBoolean
 dri2_initialize_x11_swrast(_EGLDisplay *disp)
 {
@@ -1292,7 +1347,7 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
     * Every hardware driver_name is set using strdup. Doing the same in
     * here will allow is to simply free the memory at dri2_terminate().
     */
-   dri2_dpy->driver_name = strdup("swrast");
+   dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");
    if (!dri2_load_driver_swrast(disp))
       goto cleanup;
 
@@ -1305,6 +1360,21 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
       goto cleanup;
 
    dri2_setup_screen(disp);
+
+   if (disp->Options.Zink) {
+#ifdef HAVE_WAYLAND_PLATFORM
+      dri2_dpy->device_name = strdup("zink");
+#endif
+      dri2_x11_setup_swap_interval(disp);
+      if (!dri2_dpy->is_different_gpu)
+         disp->Extensions.KHR_image_pixmap = EGL_TRUE;
+      disp->Extensions.NOK_texture_from_pixmap = EGL_TRUE;
+      disp->Extensions.CHROMIUM_sync_control = EGL_TRUE;
+      disp->Extensions.EXT_buffer_age = EGL_TRUE;
+      disp->Extensions.EXT_swap_buffers_with_damage = EGL_TRUE;
+
+      //dri2_set_WL_bind_wayland_display(disp);
+   }
 
    if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, true))
       goto cleanup;
@@ -1319,28 +1389,6 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
  cleanup:
    dri2_display_destroy(disp);
    return EGL_FALSE;
-}
-
-static void
-dri2_x11_setup_swap_interval(_EGLDisplay *disp)
-{
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   int arbitrary_max_interval = 1000;
-
-   /* default behavior for no SwapBuffers support: no vblank syncing
-    * either.
-    */
-   dri2_dpy->min_swap_interval = 0;
-   dri2_dpy->max_swap_interval = 0;
-   dri2_dpy->default_swap_interval = 0;
-
-   if (!dri2_dpy->swap_available)
-      return;
-
-   /* If we do have swapbuffers, then we can support pretty much any swap
-    * interval.
-    */
-   dri2_setup_swap_interval(disp, arbitrary_max_interval);
 }
 
 #ifdef HAVE_DRI3

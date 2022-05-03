@@ -264,6 +264,7 @@ static void gfx10_emit_streamout_end(struct si_context *sctx)
 
       uint64_t va = t[i]->buf_filled_size->gpu_address + t[i]->buf_filled_size_offset;
 
+      /* TODO: PS_DONE doesn't ensure completion of VS if there are no PS waves. */
       si_cp_release_mem(sctx, &sctx->gfx_cs, V_028A90_PS_DONE, 0, EOP_DST_SEL_TC_L2,
                         EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM, EOP_DATA_SEL_GDS,
                         t[i]->buf_filled_size, va, EOP_DATA_GDS(i, 1), 0);

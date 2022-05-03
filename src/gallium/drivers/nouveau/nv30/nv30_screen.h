@@ -11,6 +11,7 @@
 #include "nouveau_heap.h"
 #include "nv30/nv30_winsys.h"
 #include "nv30/nv30_resource.h"
+#include "compiler/nir/nir.h"
 
 struct nv30_context;
 
@@ -38,6 +39,8 @@ struct nv30_screen {
    /*XXX: nvfx state */
    struct nouveau_heap *vp_exec_heap;
    struct nouveau_heap *vp_data_heap;
+
+   nir_shader_compiler_options fs_compiler_options;
 
    unsigned max_sample_count;
 };

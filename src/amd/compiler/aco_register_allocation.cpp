@@ -48,7 +48,13 @@ void add_subdword_definition(Program* program, aco_ptr<Instruction>& instr, Phys
 struct assignment {
    PhysReg reg;
    RegClass rc;
-   bool assigned = false;
+   union {
+      struct {
+         bool assigned : 1;
+         bool vcc : 1;
+      };
+      uint8_t _ = 0;
+   };
    uint32_t affinity = 0;
    assignment() = default;
    assignment(PhysReg reg_, RegClass rc_) : reg(reg_), rc(rc_), assigned(-1) {}
@@ -71,6 +77,7 @@ struct ra_ctx {
    std::unordered_map<unsigned, Instruction*> vectors;
    std::unordered_map<unsigned, Instruction*> split_vectors;
    aco_ptr<Instruction> pseudo_dummy;
+   aco_ptr<Instruction> phi_dummy;
    uint16_t max_used_sgpr = 0;
    uint16_t max_used_vgpr = 0;
    uint16_t sgpr_limit;
@@ -86,6 +93,8 @@ struct ra_ctx {
    {
       pseudo_dummy.reset(
          create_instruction<Instruction>(aco_opcode::p_parallelcopy, Format::PSEUDO, 0, 0));
+      phi_dummy.reset(
+         create_instruction<Instruction>(aco_opcode::p_linear_phi, Format::PSEUDO, 0, 0));
       sgpr_limit = get_addr_sgpr_from_waves(program, program->min_waves);
       vgpr_limit = get_addr_sgpr_from_waves(program, program->min_waves);
    }
@@ -363,8 +372,8 @@ private:
    }
 };
 
-std::set<std::pair<unsigned, unsigned>> find_vars(ra_ctx& ctx, RegisterFile& reg_file,
-                                                  const PhysRegInterval reg_interval);
+std::vector<unsigned> find_vars(ra_ctx& ctx, RegisterFile& reg_file,
+                                const PhysRegInterval reg_interval);
 
 /* helper function for debugging */
 UNUSED void
@@ -450,9 +459,10 @@ print_regs(ra_ctx& ctx, bool vgprs, RegisterFile& reg_file)
    /* print assignments ordered by registers */
    std::map<PhysReg, std::pair<unsigned, unsigned>>
       regs_to_vars; /* maps to byte size and temp id */
-   for (const auto& size_id : find_vars(ctx, reg_file, regs)) {
-      auto reg = ctx.assignments[size_id.second].reg;
-      ASSERTED auto inserted = regs_to_vars.emplace(reg, size_id);
+   for (unsigned id : find_vars(ctx, reg_file, regs)) {
+      const assignment& var = ctx.assignments[id];
+      PhysReg reg = var.reg;
+      ASSERTED auto inserted = regs_to_vars.emplace(reg, std::make_pair(var.rc.bytes(), id));
       assert(inserted.second);
    }
 
@@ -497,7 +507,7 @@ get_subdword_operand_stride(chip_class chip, const aco_ptr<Instruction>& instr, 
    if (instr->isVALU()) {
       if (can_use_SDWA(chip, instr, false))
          return rc.bytes();
-      if (can_use_opsel(chip, instr->opcode, idx, true))
+      if (can_use_opsel(chip, instr->opcode, idx))
          return 2;
       if (instr->format == Format::VOP3P)
          return 2;
@@ -611,7 +621,7 @@ get_subdword_definition_info(Program* program, const aco_ptr<Instruction>& instr
 
       unsigned stride = 4u;
       if (instr->opcode == aco_opcode::v_fma_mixlo_f16 ||
-          can_use_opsel(chip, instr->opcode, -1, true))
+          can_use_opsel(chip, instr->opcode, -1))
          stride = 2u;
 
       return std::make_pair(stride, bytes_written);
@@ -677,7 +687,7 @@ add_subdword_definition(Program* program, aco_ptr<Instruction>& instr, PhysReg r
       /* check if we can use opsel */
       if (instr->format == Format::VOP3) {
          assert(reg.byte() == 2);
-         assert(can_use_opsel(chip, instr->opcode, -1, true));
+         assert(can_use_opsel(chip, instr->opcode, -1));
          instr->vop3().opsel |= (1 << 3); /* dst in high half */
          return;
       }
@@ -979,56 +989,110 @@ get_reg_simple(ra_ctx& ctx, RegisterFile& reg_file, DefInfo info)
    return {{}, false};
 }
 
-/* collect variables from a register area and clear reg_file */
-std::set<std::pair<unsigned, unsigned>>
+/* collect variables from a register area */
+std::vector<unsigned>
 find_vars(ra_ctx& ctx, RegisterFile& reg_file, const PhysRegInterval reg_interval)
 {
-   std::set<std::pair<unsigned, unsigned>> vars;
+   std::vector<unsigned> vars;
    for (PhysReg j : reg_interval) {
       if (reg_file.is_blocked(j))
          continue;
       if (reg_file[j] == 0xF0000000) {
          for (unsigned k = 0; k < 4; k++) {
             unsigned id = reg_file.subdword_regs[j][k];
-            if (id) {
-               assignment& var = ctx.assignments[id];
-               vars.emplace(var.rc.bytes(), id);
-            }
+            if (id && (vars.empty() || id != vars.back()))
+               vars.emplace_back(id);
          }
-      } else if (reg_file[j] != 0) {
+      } else {
          unsigned id = reg_file[j];
-         assignment& var = ctx.assignments[id];
-         vars.emplace(var.rc.bytes(), id);
+         if (id && (vars.empty() || id != vars.back()))
+            vars.emplace_back(id);
       }
    }
    return vars;
 }
 
-/* collect variables from a register area and clear reg_file */
-std::set<std::pair<unsigned, unsigned>>
+/* collect variables from a register area and clear reg_file
+ * variables are sorted in decreasing size and
+ * increasing assigned register
+ */
+std::vector<unsigned>
 collect_vars(ra_ctx& ctx, RegisterFile& reg_file, const PhysRegInterval reg_interval)
 {
-   std::set<std::pair<unsigned, unsigned>> vars = find_vars(ctx, reg_file, reg_interval);
-   for (std::pair<unsigned, unsigned> size_id : vars) {
-      assignment& var = ctx.assignments[size_id.second];
+   std::vector<unsigned> ids = find_vars(ctx, reg_file, reg_interval);
+   std::sort(ids.begin(), ids.end(),
+             [&](unsigned a, unsigned b)
+             {
+                assignment& var_a = ctx.assignments[a];
+                assignment& var_b = ctx.assignments[b];
+                return var_a.rc.bytes() > var_b.rc.bytes() ||
+                       (var_a.rc.bytes() == var_b.rc.bytes() && var_a.reg < var_b.reg);
+             });
+
+   for (unsigned id : ids) {
+      assignment& var = ctx.assignments[id];
       reg_file.clear(var.reg, var.rc);
    }
-   return vars;
+   return ids;
+}
+
+std::pair<PhysReg, bool>
+get_reg_for_create_vector_copy(ra_ctx& ctx, RegisterFile& reg_file,
+                               std::vector<std::pair<Operand, Definition>>& parallelcopies,
+                               aco_ptr<Instruction>& instr, const PhysRegInterval def_reg,
+                               DefInfo info, unsigned id)
+{
+   PhysReg reg = def_reg.lo();
+   /* dead operand: return position in vector */
+   for (unsigned i = 0; i < instr->operands.size(); i++) {
+      if (instr->operands[i].isTemp() && instr->operands[i].tempId() == id &&
+          instr->operands[i].isKillBeforeDef()) {
+         assert(!reg_file.test(reg, instr->operands[i].bytes()));
+         return {reg, info.rc.is_subdword() || reg.byte() == 0};
+      }
+      reg.reg_b += instr->operands[i].bytes();
+   }
+
+   if (ctx.program->chip_class <= GFX8)
+      return {PhysReg(), false};
+
+   /* check if the previous position was in vector */
+   assignment& var = ctx.assignments[id];
+   if (def_reg.contains(PhysRegInterval{var.reg, info.size})) {
+      reg = def_reg.lo();
+      /* try to use the previous register of the operand */
+      for (unsigned i = 0; i < instr->operands.size(); i++) {
+         if (reg != var.reg) {
+            reg.reg_b += instr->operands[i].bytes();
+            continue;
+         }
+
+         /* check if we can swap positions */
+         if (instr->operands[i].isTemp() && instr->operands[i].isFirstKill() &&
+             instr->operands[i].regClass() == info.rc) {
+            assignment& op = ctx.assignments[instr->operands[i].tempId()];
+            /* if everything matches, create parallelcopy for the killed operand */
+            if (!intersects(def_reg, PhysRegInterval{op.reg, op.rc.size()}) &&
+                reg_file.get_id(op.reg) == instr->operands[i].tempId()) {
+               Definition pc_def = Definition(reg, info.rc);
+               parallelcopies.emplace_back(instr->operands[i], pc_def);
+               return {op.reg, true};
+            }
+         }
+         return {PhysReg(), false};
+      }
+   }
+   return {PhysReg(), false};
 }
 
 bool
 get_regs_for_copies(ra_ctx& ctx, RegisterFile& reg_file,
                     std::vector<std::pair<Operand, Definition>>& parallelcopies,
-                    const std::set<std::pair<unsigned, unsigned>>& vars,
-                    const PhysRegInterval bounds, aco_ptr<Instruction>& instr,
-                    const PhysRegInterval def_reg)
+                    const std::vector<unsigned>& vars, const PhysRegInterval bounds,
+                    aco_ptr<Instruction>& instr, const PhysRegInterval def_reg)
 {
-   /* variables are sorted from small sized to large */
-   /* NOTE: variables are also sorted by ID. this only affects a very small number of shaders
-    * slightly though. */
-   for (std::set<std::pair<unsigned, unsigned>>::const_reverse_iterator it = vars.rbegin();
-        it != vars.rend(); ++it) {
-      unsigned id = it->second;
+   /* Variables are sorted from large to small and with increasing assigned register */
+   for (unsigned id : vars) {
       assignment& var = ctx.assignments[id];
       DefInfo info = DefInfo(ctx, ctx.pseudo_dummy, var.rc, -1);
       uint32_t size = info.size;
@@ -1036,34 +1100,24 @@ get_regs_for_copies(ra_ctx& ctx, RegisterFile& reg_file,
       /* check if this is a dead operand, then we can re-use the space from the definition
        * also use the correct stride for sub-dword operands */
       bool is_dead_operand = false;
-      for (unsigned i = 0; !is_phi(instr) && i < instr->operands.size(); i++) {
-         if (instr->operands[i].isTemp() && instr->operands[i].tempId() == id) {
-            if (instr->operands[i].isKillBeforeDef())
-               is_dead_operand = true;
-            info = DefInfo(ctx, instr, var.rc, i);
-            break;
+      std::pair<PhysReg, bool> res{PhysReg(), false};
+      if (instr->opcode == aco_opcode::p_create_vector) {
+         res =
+            get_reg_for_create_vector_copy(ctx, reg_file, parallelcopies, instr, def_reg, info, id);
+      } else {
+         for (unsigned i = 0; !is_phi(instr) && i < instr->operands.size(); i++) {
+            if (instr->operands[i].isTemp() && instr->operands[i].tempId() == id) {
+               info = DefInfo(ctx, instr, var.rc, i);
+               if (instr->operands[i].isKillBeforeDef()) {
+                  info.bounds = def_reg;
+                  res = get_reg_simple(ctx, reg_file, info);
+                  is_dead_operand = true;
+               }
+               break;
+            }
          }
       }
-
-      std::pair<PhysReg, bool> res;
-      if (is_dead_operand) {
-         if (instr->opcode == aco_opcode::p_create_vector) {
-            PhysReg reg(def_reg.lo());
-            for (unsigned i = 0; i < instr->operands.size(); i++) {
-               if (instr->operands[i].isTemp() && instr->operands[i].tempId() == id) {
-                  res = {reg, (!var.rc.is_subdword() || (reg.byte() % info.stride == 0)) &&
-                                 !reg_file.test(reg, var.rc.bytes())};
-                  break;
-               }
-               reg.reg_b += instr->operands[i].bytes();
-            }
-            if (!res.second)
-               res = {var.reg, !reg_file.test(var.reg, var.rc.bytes())};
-         } else {
-            info.bounds = def_reg;
-            res = get_reg_simple(ctx, reg_file, info);
-         }
-      } else {
+      if (!res.second) {
          /* Try to find space within the bounds but outside of the definition */
          info.bounds = PhysRegInterval::from_until(bounds.lo(), MIN2(def_reg.lo(), bounds.hi()));
          res = get_reg_simple(ctx, reg_file, info);
@@ -1158,7 +1212,7 @@ get_regs_for_copies(ra_ctx& ctx, RegisterFile& reg_file,
       PhysRegInterval reg_win{best_pos, size};
 
       /* collect variables and block reg file */
-      std::set<std::pair<unsigned, unsigned>> new_vars = collect_vars(ctx, reg_file, reg_win);
+      std::vector<unsigned> new_vars = collect_vars(ctx, reg_file, reg_win);
 
       /* mark the area as blocked */
       reg_file.block(reg_win.lo(), var.rc);
@@ -1297,27 +1351,19 @@ get_reg_impl(ra_ctx& ctx, RegisterFile& reg_file,
 
    /* now, we figured the placement for our definition */
    RegisterFile tmp_file(reg_file);
-   std::set<std::pair<unsigned, unsigned>> vars = collect_vars(ctx, tmp_file, best_win);
 
+   /* p_create_vector: also re-place killed operands in the definition space */
    if (instr->opcode == aco_opcode::p_create_vector) {
-      /* move killed operands which aren't yet at the correct position (GFX9+)
-       * or which are in the definition space */
-      PhysReg reg = best_win.lo();
       for (Operand& op : instr->operands) {
-         if (op.isTemp() && op.isFirstKillBeforeDef() && op.getTemp().type() == rc.type()) {
-            if (op.physReg() != reg && (ctx.program->chip_class >= GFX9 ||
-                                        (op.physReg().advance(op.bytes()) > best_win.lo() &&
-                                         op.physReg() < best_win.hi()))) {
-               vars.emplace(op.bytes(), op.tempId());
-               tmp_file.clear(op);
-            } else {
-               tmp_file.fill(op);
-            }
-         }
-         reg.reg_b += op.bytes();
+         if (op.isTemp() && op.isFirstKillBeforeDef())
+            tmp_file.fill(op);
       }
-   } else if (!is_phi(instr)) {
-      /* re-enable killed operands */
+   }
+
+   std::vector<unsigned> vars = collect_vars(ctx, tmp_file, best_win);
+
+   /* re-enable killed operands */
+   if (!is_phi(instr) && instr->opcode != aco_opcode::p_create_vector) {
       for (Operand& op : instr->operands) {
          if (op.isTemp() && op.isFirstKillBeforeDef())
             tmp_file.fill(op);
@@ -1358,7 +1404,7 @@ get_reg_specified(ra_ctx& ctx, RegisterFile& reg_file, RegClass rc, aco_ptr<Inst
    PhysRegInterval bounds = get_reg_bounds(ctx.program, rc.type());
    PhysRegInterval vcc_win = {vcc, 2};
    /* VCC is outside the bounds */
-   bool is_vcc = rc.type() == RegType::sgpr && vcc_win.contains(reg_win);
+   bool is_vcc = rc.type() == RegType::sgpr && vcc_win.contains(reg_win) && ctx.program->needs_vcc;
    bool is_m0 = rc == s1 && reg == m0;
    if (!bounds.contains(reg_win) && !is_vcc && !is_m0)
       return false;
@@ -1584,6 +1630,10 @@ get_reg(ra_ctx& ctx, RegisterFile& reg_file, Temp temp,
             return affinity.reg;
       }
    }
+   if (ctx.assignments[temp.id()].vcc) {
+      if (get_reg_specified(ctx, reg_file, temp.regClass(), instr, vcc))
+         return vcc;
+   }
 
    std::pair<PhysReg, bool> res;
 
@@ -1633,8 +1683,8 @@ get_reg(ra_ctx& ctx, RegisterFile& reg_file, Temp temp,
 
       /* reallocate passthrough variables and non-killed operands */
       std::vector<IDAndRegClass> vars;
-      for (const std::pair<unsigned, unsigned>& var : find_vars(ctx, reg_file, regs))
-         vars.emplace_back(var.second, ctx.assignments[var.second].rc);
+      for (unsigned id : find_vars(ctx, reg_file, regs))
+         vars.emplace_back(id, ctx.assignments[id].rc);
       vars.emplace_back(0xffffffff, RegClass(info.rc.type(), MAX2(def_size, killed_op_size)));
 
       PhysReg space = compact_relocate_vars(ctx, vars, parallelcopies, regs.lo());
@@ -1677,6 +1727,7 @@ get_reg_create_vector(ra_ctx& ctx, RegisterFile& reg_file, Temp temp,
    PhysReg best_pos{0xFFF};
    unsigned num_moves = 0xFF;
    bool best_avoid = true;
+   uint32_t correct_pos_mask = 0;
 
    /* test for each operand which definition placement causes the least shuffle instructions */
    for (unsigned i = 0, offset = 0; i < instr->operands.size();
@@ -1741,13 +1792,14 @@ get_reg_create_vector(ra_ctx& ctx, RegisterFile& reg_file, Temp temp,
          continue;
 
       /* count operands in wrong positions */
+      uint32_t correct_pos_mask_new = 0;
       for (unsigned j = 0, offset2 = 0; j < instr->operands.size();
            offset2 += instr->operands[j].bytes(), j++) {
-         if (j == i || !instr->operands[j].isTemp() ||
-             instr->operands[j].getTemp().type() != rc.type())
-            continue;
-         if (instr->operands[j].physReg().reg_b != reg_win.lo() * 4 + offset2)
-            k += instr->operands[j].bytes();
+         Operand& op = instr->operands[j];
+         if (op.isTemp() && op.physReg().reg_b == reg_win.lo() * 4 + offset2)
+            correct_pos_mask_new |= 1 << j;
+         else
+            k += op.bytes();
       }
       bool aligned = rc == RegClass::v4 && reg_win.lo() % 4 == 0;
       if (k > num_moves || (!aligned && k == num_moves))
@@ -1756,42 +1808,33 @@ get_reg_create_vector(ra_ctx& ctx, RegisterFile& reg_file, Temp temp,
       best_pos = reg_win.lo();
       num_moves = k;
       best_avoid = avoid;
+      correct_pos_mask = correct_pos_mask_new;
    }
 
-   if (num_moves >= bytes)
+   /* too many moves: try the generic get_reg() function */
+   if (num_moves >= 2 * bytes) {
       return get_reg(ctx, reg_file, temp, parallelcopies, instr);
+   } else if (num_moves > bytes) {
+      DefInfo info(ctx, instr, rc, -1);
+      std::pair<PhysReg, bool> res = get_reg_simple(ctx, reg_file, info);
+      if (res.second)
+         return res.first;
+   }
 
    /* re-enable killed operands which are in the wrong position */
    RegisterFile tmp_file(reg_file);
-   for (unsigned i = 0, offset = 0; i < instr->operands.size();
-        offset += instr->operands[i].bytes(), i++) {
-      if (instr->operands[i].isTemp() && instr->operands[i].isFirstKillBeforeDef() &&
-          instr->operands[i].physReg().reg_b != best_pos.reg_b + offset)
-         tmp_file.fill(instr->operands[i]);
+   for (Operand& op : instr->operands) {
+      if (op.isTemp() && op.isFirstKillBeforeDef())
+         tmp_file.fill(op);
+   }
+   for (unsigned i = 0; i < instr->operands.size(); i++) {
+      if ((correct_pos_mask >> i) & 1u && instr->operands[i].isKill())
+         tmp_file.clear(instr->operands[i]);
    }
 
    /* collect variables to be moved */
-   std::set<std::pair<unsigned, unsigned>> vars =
-      collect_vars(ctx, tmp_file, PhysRegInterval{best_pos, size});
+   std::vector<unsigned> vars = collect_vars(ctx, tmp_file, PhysRegInterval{best_pos, size});
 
-   for (unsigned i = 0, offset = 0; i < instr->operands.size();
-        offset += instr->operands[i].bytes(), i++) {
-      if (!instr->operands[i].isTemp() || !instr->operands[i].isFirstKillBeforeDef() ||
-          instr->operands[i].getTemp().type() != rc.type())
-         continue;
-      bool correct_pos = instr->operands[i].physReg().reg_b == best_pos.reg_b + offset;
-      /* GFX9+: move killed operands which aren't yet at the correct position
-       * Moving all killed operands generally leads to more register swaps.
-       * This is only done on GFX9+ because of the cheap v_swap instruction.
-       */
-      if (ctx.program->chip_class >= GFX9 && !correct_pos) {
-         vars.emplace(instr->operands[i].bytes(), instr->operands[i].tempId());
-         tmp_file.clear(instr->operands[i]);
-         /* fill operands which are in the correct position to avoid overwriting */
-      } else if (correct_pos) {
-         tmp_file.fill(instr->operands[i]);
-      }
-   }
    bool success = false;
    std::vector<std::pair<Operand, Definition>> pc;
    success =
@@ -1921,8 +1964,7 @@ get_reg_for_operand(ra_ctx& ctx, RegisterFile& register_file,
 
          RegisterFile tmp_file(register_file);
 
-         std::set<std::pair<unsigned, unsigned>> blocking_vars =
-            collect_vars(ctx, tmp_file, target);
+         std::vector<unsigned> blocking_vars = collect_vars(ctx, tmp_file, target);
 
          tmp_file.clear(src, operand.regClass()); // TODO: try to avoid moving block vars to src
          tmp_file.block(operand.physReg(), operand.regClass());
@@ -1944,6 +1986,66 @@ get_reg_for_operand(ra_ctx& ctx, RegisterFile& register_file,
    Definition pc_def = Definition(dst, pc_op.regClass());
    parallelcopy.emplace_back(pc_op, pc_def);
    update_renames(ctx, register_file, parallelcopy, instr, rename_not_killed_ops | fill_killed_ops);
+}
+
+PhysReg
+get_reg_phi(ra_ctx& ctx, IDSet& live_in, RegisterFile& register_file,
+            std::vector<aco_ptr<Instruction>>& instructions, Block& block,
+            aco_ptr<Instruction>& phi, Temp tmp)
+{
+   std::vector<std::pair<Operand, Definition>> parallelcopy;
+   PhysReg reg = get_reg(ctx, register_file, tmp, parallelcopy, phi);
+   update_renames(ctx, register_file, parallelcopy, phi, rename_not_killed_ops);
+
+   /* process parallelcopy */
+   for (std::pair<Operand, Definition> pc : parallelcopy) {
+      /* see if it's a copy from a different phi */
+      // TODO: prefer moving some previous phis over live-ins
+      // TODO: somehow prevent phis fixed before the RA from being updated (shouldn't be a
+      // problem in practice since they can only be fixed to exec)
+      Instruction* prev_phi = NULL;
+      std::vector<aco_ptr<Instruction>>::iterator phi_it;
+      for (phi_it = instructions.begin(); phi_it != instructions.end(); ++phi_it) {
+         if ((*phi_it)->definitions[0].tempId() == pc.first.tempId())
+            prev_phi = phi_it->get();
+      }
+      if (prev_phi) {
+         /* if so, just update that phi's register */
+         prev_phi->definitions[0].setFixed(pc.second.physReg());
+         ctx.assignments[prev_phi->definitions[0].tempId()] = {pc.second.physReg(),
+                                                               pc.second.regClass()};
+         continue;
+      }
+
+      /* rename */
+      std::unordered_map<unsigned, Temp>::iterator orig_it = ctx.orig_names.find(pc.first.tempId());
+      Temp orig = pc.first.getTemp();
+      if (orig_it != ctx.orig_names.end())
+         orig = orig_it->second;
+      else
+         ctx.orig_names[pc.second.tempId()] = orig;
+      ctx.renames[block.index][orig.id()] = pc.second.getTemp();
+
+      /* otherwise, this is a live-in and we need to create a new phi
+       * to move it in this block's predecessors */
+      aco_opcode opcode =
+         pc.first.getTemp().is_linear() ? aco_opcode::p_linear_phi : aco_opcode::p_phi;
+      std::vector<unsigned>& preds =
+         pc.first.getTemp().is_linear() ? block.linear_preds : block.logical_preds;
+      aco_ptr<Instruction> new_phi{
+         create_instruction<Pseudo_instruction>(opcode, Format::PSEUDO, preds.size(), 1)};
+      new_phi->definitions[0] = pc.second;
+      for (unsigned i = 0; i < preds.size(); i++)
+         new_phi->operands[i] = Operand(pc.first);
+      instructions.emplace_back(std::move(new_phi));
+
+      /* Remove from live_in, because handle_loop_phis() would re-create this phi later if this is
+       * a loop header.
+       */
+      live_in.erase(orig.id());
+   }
+
+   return reg;
 }
 
 void
@@ -2027,57 +2129,8 @@ get_regs_for_phis(ra_ctx& ctx, Block& block, RegisterFile& register_file,
          continue;
       }
 
-      std::vector<std::pair<Operand, Definition>> parallelcopy;
-      definition.setFixed(get_reg(ctx, register_file, definition.getTemp(), parallelcopy, phi));
-      update_renames(ctx, register_file, parallelcopy, phi, rename_not_killed_ops);
-
-      /* process parallelcopy */
-      for (std::pair<Operand, Definition> pc : parallelcopy) {
-         /* see if it's a copy from a different phi */
-         // TODO: prefer moving some previous phis over live-ins
-         // TODO: somehow prevent phis fixed before the RA from being updated (shouldn't be a
-         // problem in practice since they can only be fixed to exec)
-         Instruction* prev_phi = NULL;
-         std::vector<aco_ptr<Instruction>>::iterator phi_it;
-         for (phi_it = instructions.begin(); phi_it != instructions.end(); ++phi_it) {
-            if ((*phi_it)->definitions[0].tempId() == pc.first.tempId())
-               prev_phi = phi_it->get();
-         }
-         if (prev_phi) {
-            /* if so, just update that phi's register */
-            prev_phi->definitions[0].setFixed(pc.second.physReg());
-            ctx.assignments[prev_phi->definitions[0].tempId()].set(pc.second);
-            continue;
-         }
-
-         /* rename */
-         std::unordered_map<unsigned, Temp>::iterator orig_it =
-            ctx.orig_names.find(pc.first.tempId());
-         Temp orig = pc.first.getTemp();
-         if (orig_it != ctx.orig_names.end())
-            orig = orig_it->second;
-         else
-            ctx.orig_names[pc.second.tempId()] = orig;
-         ctx.renames[block.index][orig.id()] = pc.second.getTemp();
-
-         /* otherwise, this is a live-in and we need to create a new phi
-          * to move it in this block's predecessors */
-         aco_opcode opcode =
-            pc.first.getTemp().is_linear() ? aco_opcode::p_linear_phi : aco_opcode::p_phi;
-         std::vector<unsigned>& preds =
-            pc.first.getTemp().is_linear() ? block.linear_preds : block.logical_preds;
-         aco_ptr<Instruction> new_phi{
-            create_instruction<Pseudo_instruction>(opcode, Format::PSEUDO, preds.size(), 1)};
-         new_phi->definitions[0] = pc.second;
-         for (unsigned i = 0; i < preds.size(); i++)
-            new_phi->operands[i] = Operand(pc.first);
-         instructions.emplace_back(std::move(new_phi));
-
-         /* Remove from live_out_per_block (now used for live-in), because handle_loop_phis()
-          * would re-create this phi later if this is a loop header.
-          */
-         live_in.erase(orig.id());
-      }
+      definition.setFixed(
+         get_reg_phi(ctx, live_in, register_file, instructions, block, phi, definition.getTemp()));
 
       register_file.fill(definition);
       ctx.assignments[definition.tempId()].set(definition);
@@ -2337,11 +2390,27 @@ get_affinities(ra_ctx& ctx, std::vector<IDSet>& live_out_per_block)
          } else if (instr->format == Format::MIMG && instr->operands.size() > 4) {
             for (unsigned i = 3; i < instr->operands.size(); i++)
                ctx.vectors[instr->operands[i].tempId()] = instr.get();
-         }
-
-         if (instr->opcode == aco_opcode::p_split_vector &&
-             instr->operands[0].isFirstKillBeforeDef())
+         } else if (instr->opcode == aco_opcode::p_split_vector &&
+                    instr->operands[0].isFirstKillBeforeDef()) {
             ctx.split_vectors[instr->operands[0].tempId()] = instr.get();
+         } else if (instr->isVOPC() && !instr->isVOP3()) {
+            if (!instr->isSDWA() || ctx.program->chip_class == GFX8)
+               ctx.assignments[instr->definitions[0].tempId()].vcc = true;
+         } else if (instr->isVOP2() && !instr->isVOP3()) {
+            if (instr->operands.size() == 3 && instr->operands[2].isTemp() &&
+                instr->operands[2].regClass().type() == RegType::sgpr)
+               ctx.assignments[instr->operands[2].tempId()].vcc = true;
+            if (instr->definitions.size() == 2)
+               ctx.assignments[instr->definitions[1].tempId()].vcc = true;
+         } else if (instr->opcode == aco_opcode::s_and_b32 ||
+                    instr->opcode == aco_opcode::s_and_b64) {
+            /* If SCC is used by a branch, we might be able to use
+             * s_cbranch_vccz/s_cbranch_vccnz if the operand is VCC.
+             */
+            if (!instr->definitions[1].isKill() && instr->operands[0].isTemp() &&
+                instr->operands[1].isFixed() && instr->operands[1].physReg() == exec)
+               ctx.assignments[instr->operands[0].tempId()].vcc = true;
+         }
 
          /* add operands to live variables */
          for (const Operand& op : instr->operands) {
@@ -2481,9 +2550,6 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
    ra_ctx ctx(program, policy);
    get_affinities(ctx, live_out_per_block);
 
-   /* state of register file after phis */
-   std::vector<std::bitset<128>> sgpr_live_in(program->blocks.size());
-
    for (Block& block : program->blocks) {
       ctx.block = &block;
 
@@ -2497,10 +2563,25 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
        * We consider them incomplete phis and only handle the definition. */
       get_regs_for_phis(ctx, block, register_file, instructions, live_out_per_block[block.index]);
 
-      /* fill in sgpr_live_in */
-      for (unsigned i = 0; i <= ctx.max_used_sgpr; i++)
-         sgpr_live_in[block.index][i] = register_file[PhysReg{i}];
-      sgpr_live_in[block.index][127] = register_file[scc];
+      /* If this is a merge block, the state of the register file at the branch instruction of the
+       * predecessors corresponds to the state after phis at the merge block. So, we allocate a
+       * register for the predecessor's branch definitions as if there was a phi.
+       */
+      if (!block.linear_preds.empty() &&
+          (block.linear_preds.size() != 1 ||
+           program->blocks[block.linear_preds[0]].linear_succs.size() == 1)) {
+         PhysReg br_reg = get_reg_phi(ctx, live_out_per_block[block.index], register_file,
+                                      instructions, block, ctx.phi_dummy, Temp(0, s2));
+         for (unsigned pred : block.linear_preds) {
+            program->blocks[pred].scc_live_out = register_file[scc];
+            aco_ptr<Instruction>& br = program->blocks[pred].instructions.back();
+
+            assert(br->definitions.size() == 1 && br->definitions[0].regClass() == s2 &&
+                   br->definitions[0].isKill());
+
+            br->definitions[0].setFixed(br_reg);
+         }
+      }
 
       /* Handle all other instructions of the block */
       auto NonPhi = [](aco_ptr<Instruction>& instr) -> bool { return instr && !is_phi(instr); };
@@ -2540,6 +2621,13 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
             }
             instructions.emplace_back(std::move(instr));
             continue;
+         }
+
+         /* unconditional branches are handled after phis of the target */
+         if (instr->opcode == aco_opcode::p_branch) {
+            /* last instruction of the block */
+            instructions.emplace_back(std::move(instr));
+            break;
          }
 
          std::vector<std::pair<Operand, Definition>> parallelcopy;
@@ -2664,8 +2752,7 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
                const PhysRegInterval def_regs{definition.physReg(), definition.size()};
 
                /* create parallelcopy pair to move blocking vars */
-               std::set<std::pair<unsigned, unsigned>> vars =
-                  collect_vars(ctx, register_file, def_regs);
+               std::vector<unsigned> vars = collect_vars(ctx, register_file, def_regs);
 
                RegisterFile tmp_file(register_file);
                /* re-enable the killed operands, so that we don't move the blocking vars there */
@@ -2699,11 +2786,7 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
                continue;
 
             /* find free reg */
-            if (definition->hasHint() &&
-                get_reg_specified(ctx, register_file, definition->regClass(), instr,
-                                  definition->physReg())) {
-               definition->setFixed(definition->physReg());
-            } else if (instr->opcode == aco_opcode::p_split_vector) {
+            if (instr->opcode == aco_opcode::p_split_vector) {
                PhysReg reg = instr->operands[0].physReg();
                for (unsigned j = 0; j < i; j++)
                   reg.reg_b += instr->definitions[j].bytes();
@@ -2906,30 +2989,6 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
 
       block.instructions = std::move(instructions);
    } /* end for BB */
-
-   /* find scc spill registers which may be needed for parallelcopies created by phis */
-   for (Block& block : program->blocks) {
-      if (block.linear_preds.size() <= 1)
-         continue;
-
-      std::bitset<128> regs = sgpr_live_in[block.index];
-      if (!regs[127])
-         continue;
-
-      /* choose a register */
-      int16_t reg = 0;
-      for (; reg < ctx.program->max_reg_demand.sgpr && regs[reg]; reg++)
-         ;
-      assert(reg < ctx.program->max_reg_demand.sgpr);
-      adjust_max_used_regs(ctx, s1, reg);
-
-      /* update predecessors */
-      for (unsigned& pred_index : block.linear_preds) {
-         Block& pred = program->blocks[pred_index];
-         pred.scc_live_out = true;
-         pred.scratch_sgpr = PhysReg{(uint16_t)reg};
-      }
-   }
 
    /* num_gpr = rnd_up(max_used_gpr + 1) */
    program->config->num_vgprs = get_vgpr_alloc(program, ctx.max_used_vgpr + 1);

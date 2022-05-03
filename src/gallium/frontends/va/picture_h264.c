@@ -131,7 +131,11 @@ void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context,
       h264->pic_fields.bits.field_pic_flag &&
       (h264->CurrPic.flags & VA_PICTURE_H264_BOTTOM_FIELD) != 0;
 
-   if (!context->decoder && context->desc.h264.num_ref_frames > 0)
+   if (context->decoder && (context->templat.max_references != context->desc.h264.num_ref_frames)) {
+      context->templat.max_references = MIN2(context->desc.h264.num_ref_frames, 16);
+      context->decoder->destroy(context->decoder);
+      context->decoder = NULL;
+   } else if (!context->decoder && context->desc.h264.num_ref_frames > 0)
       context->templat.max_references = MIN2(context->desc.h264.num_ref_frames, 16);
 
    for (i = 0; i < context->templat.max_references; ++i) {

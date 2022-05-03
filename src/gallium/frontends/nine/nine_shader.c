@@ -3624,11 +3624,11 @@ tx_ctor(struct shader_translator *tx, struct pipe_screen *screen, struct nine_sh
     tx->native_integers = GET_SHADER_CAP(INTEGERS);
     tx->inline_subroutines = !GET_SHADER_CAP(SUBROUTINES);
     tx->want_texcoord = GET_CAP(TGSI_TEXCOORD);
-    tx->shift_wpos = !GET_CAP(TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
+    tx->shift_wpos = !GET_CAP(FS_COORD_PIXEL_CENTER_INTEGER);
     tx->texcoord_sn = tx->want_texcoord ?
         TGSI_SEMANTIC_TEXCOORD : TGSI_SEMANTIC_GENERIC;
-    tx->wpos_is_sysval = GET_CAP(TGSI_FS_POSITION_IS_SYSVAL);
-    tx->face_is_sysval_integer = GET_CAP(TGSI_FS_FACE_IS_INTEGER_SYSVAL);
+    tx->wpos_is_sysval = GET_CAP(FS_POSITION_IS_SYSVAL);
+    tx->face_is_sysval_integer = GET_CAP(FS_FACE_IS_INTEGER_SYSVAL);
 
     if (IS_VS) {
         tx->num_constf_allowed = NINE_MAX_CONST_F;

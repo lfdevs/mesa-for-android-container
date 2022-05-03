@@ -1,9 +1,9 @@
 /**************************************************************************
- * 
+ *
  * Copyright 1999-2006 Brian Paul
  * Copyright 2008 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
@@ -246,6 +246,7 @@ util_thread_get_time_nano(thrd_t thread)
    clock_gettime(cid, &ts);
    return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
 #else
+   (void)thread;
    return 0;
 #endif
 }

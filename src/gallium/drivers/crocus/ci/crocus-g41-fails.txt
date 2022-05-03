@@ -5,8 +5,6 @@ KHR-GLES2.core.internalformat.texture2d.rgb_float_rgb32f,Fail
 KHR-GLES2.core.internalformat.texture2d.rgb_float_rgb32f_linear,Fail
 KHR-GLES2.core.internalformat.texture2d.rgba_float_rgba32f,Fail
 KHR-GLES2.core.internalformat.texture2d.rgba_float_rgba32f_linear,Fail
-KHR-GLES2.texture_3d.copy_sub_image.negative,Fail
-KHR-GLES2.texture_3d.copy_sub_image.rgba,Fail
 
 # Missing the red triangle
 dEQP-GLES2.functional.clip_control.depth_mode_zero_to_one,Fail
@@ -259,7 +257,7 @@ spec@ext_texture_format_bgra8888@api-errors,Fail
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 
 # "Unexpected GL error: GL_INVALID_ENUM 0x500
-#  (Error at /home/anholt/src/piglit/tests/spec/khr_texture_compression_astc/khr_compressed_astc-basic.c:341)
+#  (Error at tests/spec/khr_texture_compression_astc/khr_compressed_astc-basic.c:349)
 #  Expected GL error: GL_INVALID_OPERATION 0x502"
 spec@khr_texture_compression_astc@basic-gles,Fail
 

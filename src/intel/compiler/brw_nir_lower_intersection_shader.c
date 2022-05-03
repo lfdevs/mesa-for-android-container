@@ -151,7 +151,7 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
 
    b->cursor = nir_before_cf_list(&impl->body);
 
-   nir_ssa_def *t_addr = brw_nir_rt_mem_hit_addr(b, false);
+   nir_ssa_def *t_addr = brw_nir_rt_mem_hit_addr(b, false /* committed */);
    nir_variable *commit =
       nir_local_variable_create(impl, glsl_bool_type(), "ray_commit");
    nir_store_var(b, commit, nir_imm_false(b), 0x1);
@@ -163,7 +163,7 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
       nir_push_if(b, nir_load_var(b, commit));
       {
          /* Set the "valid" bit in mem_hit */
-         nir_ssa_def *ray_addr = brw_nir_rt_mem_hit_addr(b, false);
+         nir_ssa_def *ray_addr = brw_nir_rt_mem_hit_addr(b, false /* committed */);
          nir_ssa_def *flags_dw_addr = nir_iadd_imm(b, ray_addr, 12);
          nir_store_global(b, flags_dw_addr, 4,
             nir_ior(b, nir_load_global(b, flags_dw_addr, 4, 1, 32),

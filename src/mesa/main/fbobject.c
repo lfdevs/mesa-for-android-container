@@ -692,45 +692,6 @@ _mesa_FramebufferRenderbuffer_sw(struct gl_context *ctx,
    simple_mtx_unlock(&fb->Mutex);
 }
 
-
-/**
- * Fallback for ctx->Driver.ValidateFramebuffer()
- * Check if the renderbuffer's formats are supported by the software
- * renderer.
- * Drivers should probably override this.
- */
-void
-_mesa_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
-{
-   gl_buffer_index buf;
-   for (buf = 0; buf < BUFFER_COUNT; buf++) {
-      const struct gl_renderbuffer *rb = fb->Attachment[buf].Renderbuffer;
-      if (rb) {
-         switch (rb->_BaseFormat) {
-         case GL_ALPHA:
-         case GL_LUMINANCE_ALPHA:
-         case GL_LUMINANCE:
-         case GL_INTENSITY:
-         case GL_RED:
-         case GL_RG:
-            fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED;
-            return;
-
-         default:
-            switch (rb->Format) {
-            /* XXX This list is likely incomplete. */
-            case MESA_FORMAT_R9G9B9E5_FLOAT:
-               fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED;
-               return;
-            default:;
-               /* render buffer format is supported by software rendering */
-            }
-         }
-      }
-   }
-}
-
-
 /**
  * Return true if the framebuffer has a combined depth/stencil
  * renderbuffer attached.

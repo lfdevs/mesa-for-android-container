@@ -227,6 +227,10 @@ struct pipe_screen {
    struct pipe_resource * (*resource_create)(struct pipe_screen *,
 					     const struct pipe_resource *templat);
 
+   struct pipe_resource * (*resource_create_drawable)(struct pipe_screen *,
+                                                      const struct pipe_resource *tmpl,
+                                                      const void *loader_private);
+
    struct pipe_resource * (*resource_create_front)(struct pipe_screen *,
                                                    const struct pipe_resource *templat,
                                                    const void *map_front_private);

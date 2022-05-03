@@ -683,6 +683,10 @@ def generate_json(gfx_version, amd_headers_path):
             assert idx < len(base_offsets)
             offset += int(base_offsets[idx], 0) * 4
 
+        # Remove the _UMD suffix because it was mistakenly added to indicate it's for a User-Mode Driver
+        if name[-4:] == '_UMD':
+            name = name[:-4]
+
         # Only accept writeable registers and debug registers
         if register_filter(gfx_version, name, offset, offset in added_offsets):
             regs[name] = {

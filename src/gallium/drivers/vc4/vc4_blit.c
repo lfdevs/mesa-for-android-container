@@ -132,15 +132,6 @@ vc4_tile_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
         struct vc4_job *job = vc4_get_job(vc4, dst_surf, NULL);
         pipe_surface_reference(&job->color_read, src_surf);
 
-        /* If we're resolving from MSAA to single sample, we still need to run
-         * the engine in MSAA mode for the load.
-         */
-        if (!job->msaa && info->src.resource->nr_samples > 1) {
-                job->msaa = true;
-                job->tile_width = 32;
-                job->tile_height = 32;
-        }
-
         job->draw_min_x = info->dst.box.x;
         job->draw_min_y = info->dst.box.y;
         job->draw_max_x = info->dst.box.x + info->dst.box.width;

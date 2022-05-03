@@ -239,6 +239,7 @@ void
 pandecode_close(void)
 {
         rb_tree_foreach_safe(struct pandecode_mapped_memory, it, &mmap_tree, node) {
+                rb_tree_remove(&mmap_tree, &it->node);
                 free(it);
         }
 

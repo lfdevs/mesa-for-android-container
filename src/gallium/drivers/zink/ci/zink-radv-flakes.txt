@@ -1,6 +1,19 @@
+#Invalid default non-QO BO int32 query result value: found [1192893429], expected:[12] or [48], query type:[GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB], GL_PRIMITIVE_RESTART mode:[disabled], draw call type:[glDrawElementsInstancedBaseInstance()], primitive type:[GL_LINES_ADJACENCY].
+#Invalid default non-QO BO int64 query result value: found [1192893429], expected:[12] or [48], query type:[GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB], GL_PRIMITIVE_RESTART mode:[disabled], draw call type:[glDrawElementsInstancedBaseInstance()], primitive type:[GL_LINES_ADJACENCY].
+#Invalid default non-QO BO uint32 query result value: found [1192893429], expected:[12] or [48], query type:[GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB], GL_PRIMITIVE_RESTART mode:[disabled], draw call type:[glDrawElementsInstancedBaseInstance()], primitive type:[GL_LINES_ADJACENCY].
+#Invalid default non-QO BO uint64 query result value: found [1192893429], expected:[12] or [48], query type:[GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB], GL_PRIMITIVE_RESTART mode:[disabled], draw call type:[glDrawElementsInstancedBaseInstance()], primitive type:[GL_LINES_ADJACENCY].
+#Invalid default QO BO int32 query result value: found [1192893429], expected:[12] or [48], query type:[GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB], GL_PRIMITIVE_RESTART mode:[disabled], draw call type:[glDrawElementsInstancedBaseInstance()], primitive type:[GL_LINES_ADJACENCY].
+#Invalid default QO BO int64 query result value: found [1192893429], expected:[12] or [48], query type:[GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB], GL_PRIMITIVE_RESTART mode:[disabled], draw call type:[glDrawElementsInstancedBaseInstance()], primitive type:[GL_LINES_ADJACENCY].
+#Invalid default QO BO uint32 query result value: found [1192893429], expected:[12] or [48], query type:[GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB], GL_PRIMITIVE_RESTART mode:[disabled], draw call type:[glDrawElementsInstancedBaseInstance()], primitive type:[GL_LINES_ADJACENCY].
+#Invalid default QO BO uint64 query result value: found [1192893429], expected:[12] or [48], query type:[GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB], GL_PRIMITIVE_RESTART mode:[disabled], draw call type:[glDrawElementsInstancedBaseInstance()], primitive type:[GL_LINES_ADJACENCY].
+KHR-GL46.pipeline_statistics_query_tests_ARB.functional_geometry_shader_queries
+
 dEQP-GLES31.functional.shaders.builtin_constants.core.max_vertex_image_uniforms
 
 glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero
 glx@glx_arb_sync_control@waitformsc
 spec@arb_timer_query@timestamp-get
 spec@arb_shader_image_load_store@shader-mem-barrier*
+
+# need to handle non-fbfetch feedback loops
+spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader*

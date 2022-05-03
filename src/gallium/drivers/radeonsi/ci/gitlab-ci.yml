@@ -12,8 +12,7 @@
     FDO_CI_CONCURRENT: 4
     DEQP_EXPECTED_RENDERER: STONEY
     HWCI_FREQ_MAX: "true"
-  tags:
-    - mesa-ci-x86-64-lava-hp-11A-G6-EE-grunt
+    RUNNER_TAG: mesa-ci-x86-64-lava-hp-11A-G6-EE-grunt
 
 radeonsi-stoney-gl:amd64:
   extends:
@@ -31,8 +30,7 @@ radeonsi-stoney-traces:amd64:
     EGL_PLATFORM: surfaceless
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-radeonsi.yml"
     PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
-  tags:
-    - mesa-ci-x86-64-lava-hp-11A-G6-EE-grunt
+    RUNNER_TAG: mesa-ci-x86-64-lava-hp-11A-G6-EE-grunt
 
 radeonsi-stoney-piglit-gl:amd64:
   extends:

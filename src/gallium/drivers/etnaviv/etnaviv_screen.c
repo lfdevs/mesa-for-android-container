@@ -72,7 +72,6 @@ static const struct debug_named_value etna_debug_options[] = {
    {"draw_stall",     ETNA_DBG_DRAW_STALL, "Stall FE/PE after each rendered primitive"},
    {"shaderdb",       ETNA_DBG_SHADERDB, "Enable shaderdb output"},
    {"no_singlebuffer",ETNA_DBG_NO_SINGLEBUF, "Disable single buffer feature"},
-   {"tgsi",           ETNA_DBG_TGSI, "use old TGSI compiler"},
    {"deqp",           ETNA_DBG_DEQP, "Hacks to run dEQP GLES3 tests"}, /* needs MESA_GLES_VERSION_OVERRIDE=3.0 */
    {"nocache",        ETNA_DBG_NOCACHE,    "Disable shader cache"},
    DEBUG_NAMED_VALUE_END
@@ -140,8 +139,8 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    /* Supported features (boolean caps). */
    case PIPE_CAP_POINT_SPRITE:
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
-   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+   case PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT:
+   case PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
    case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
    case PIPE_CAP_VERTEX_SHADER_SATURATE:
@@ -159,10 +158,10 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_NATIVE_FENCE_FD:
       return screen->drm_version >= ETNA_DRM_VERSION_FENCE_FD;
-   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
-   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL: /* note: not integer */
-      return !DBG_ENABLED(ETNA_DBG_TGSI);
-   case PIPE_CAP_TGSI_FS_POINT_IS_SYSVAL:
+   case PIPE_CAP_FS_POSITION_IS_SYSVAL:
+   case PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL: /* note: not integer */
+      return 1;
+   case PIPE_CAP_FS_POINT_IS_SYSVAL:
       return 0;
 
    /* Memory */
@@ -182,10 +181,7 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
 
    case PIPE_CAP_ALPHA_TEST:
-      if (!DBG_ENABLED(ETNA_DBG_TGSI))
-         return !VIV_FEATURE(screen, chipMinorFeatures7, PE_NO_ALPHA_TEST);
-      else
-         return 1;
+      return !VIV_FEATURE(screen, chipMinorFeatures7, PE_NO_ALPHA_TEST);
 
    /* Unsupported features. */
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
@@ -213,7 +209,7 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    /* Texturing. */
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
-      return !DBG_ENABLED(ETNA_DBG_TGSI);
+      return 1;
    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS: /* TODO: verify */
       return screen->specs.max_texture_size;
@@ -338,7 +334,7 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
                              enum pipe_shader_cap param)
 {
    struct etna_screen *screen = etna_screen(pscreen);
-   bool ubo_enable = screen->specs.halti >= 2 && !DBG_ENABLED(ETNA_DBG_TGSI);
+   bool ubo_enable = screen->specs.halti >= 2;
 
    if (DBG_ENABLED(ETNA_DBG_DEQP))
       ubo_enable = true;
@@ -397,14 +393,14 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
       return 0;
    case PIPE_SHADER_CAP_INTEGERS:
-      return !DBG_ENABLED(ETNA_DBG_TGSI) && screen->specs.halti >= 2;
+      return screen->specs.halti >= 2;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
       return shader == PIPE_SHADER_FRAGMENT
                 ? screen->specs.fragment_sampler_count
                 : screen->specs.vertex_sampler_count;
    case PIPE_SHADER_CAP_PREFERRED_IR:
-      return !DBG_ENABLED(ETNA_DBG_TGSI) ? PIPE_SHADER_IR_NIR : PIPE_SHADER_IR_TGSI;
+      return PIPE_SHADER_IR_NIR;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
       if (ubo_enable)
          return 16384; /* 16384 so state tracker enables UBOs */
@@ -419,7 +415,7 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
       return false;
    case PIPE_SHADER_CAP_SUPPORTED_IRS:
       return (1 << PIPE_SHADER_IR_TGSI) |
-             (!DBG_ENABLED(ETNA_DBG_TGSI) ? 1 << PIPE_SHADER_IR_NIR : 0);
+             (1 << PIPE_SHADER_IR_NIR);
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32;
    case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:

@@ -25,6 +25,7 @@
 #define BRW_COMPILER_H
 
 #include <stdio.h>
+#include "c11/threads.h"
 #include "dev/intel_device_info.h"
 #include "main/config.h"
 #include "util/ralloc.h"
@@ -44,6 +45,11 @@ typedef struct nir_shader nir_shader;
 
 struct brw_compiler {
    const struct intel_device_info *devinfo;
+
+   /* This lock must be taken if the compiler is to be modified in any way,
+    * including adding something to the ralloc child list.
+    */
+   mtx_t mutex;
 
    struct {
       struct ra_regs *regs;
@@ -109,6 +115,8 @@ struct brw_compiler {
     * constant or data cache, UBOs must use VK_FORMAT_RAW.
     */
    bool indirect_ubos_use_sampler;
+
+   struct nir_shader *clc_shader;
 };
 
 #define brw_shader_debug_log(compiler, data, fmt, ... ) do {    \
@@ -769,6 +777,9 @@ struct brw_stage_prog_data {
    /** Does this program pull from any UBO or other constant buffers? */
    bool has_ubo_pull;
 
+   /** How many ray queries objects in this shader. */
+   unsigned ray_queries;
+
    /**
     * Register where the thread expects to find input data from the URB
     * (typically uniforms, followed by vertex or fragment attributes).
@@ -1401,8 +1412,6 @@ struct brw_clip_prog_data {
 };
 
 struct brw_tue_map {
-   int32_t start_dw[VARYING_SLOT_MAX];
-
    uint32_t size_dw;
 
    uint32_t per_task_data_start_dw;
@@ -2006,6 +2015,24 @@ brw_compute_first_urb_slot_required(uint64_t inputs_read,
 
 #define BRW_TASK_MESH_PUSH_CONSTANTS_SIZE_DW \
    (BRW_TASK_MESH_INLINE_DATA_SIZE_DW - BRW_TASK_MESH_PUSH_CONSTANTS_START_DW)
+
+/**
+ * This enum is used as the base indice of the nir_load_topology_id_intel
+ * intrinsic. This is used to return different values based on some aspect of
+ * the topology of the device.
+ */
+enum brw_topology_id
+{
+   /* A value based of the DSS identifier the shader is currently running on.
+    * Be mindful that the DSS ID can be higher than the total number of DSS on
+    * the device. This is because of the fusing that can occur on different
+    * parts.
+    */
+   BRW_TOPOLOGY_ID_DSS,
+
+   /* A value composed of EU ID, thread ID & SIMD lane ID. */
+   BRW_TOPOLOGY_ID_EU_THREAD_SIMD,
+};
 
 #ifdef __cplusplus
 } /* extern "C" */

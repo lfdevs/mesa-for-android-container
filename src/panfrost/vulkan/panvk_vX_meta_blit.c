@@ -134,21 +134,15 @@ panvk_meta_blit(struct panvk_cmd_buffer *cmdbuf,
 }
 
 void
-panvk_per_arch(CmdBlitImage)(VkCommandBuffer commandBuffer,
-                             VkImage srcImage,
-                             VkImageLayout srcImageLayout,
-                             VkImage destImage,
-                             VkImageLayout destImageLayout,
-                             uint32_t regionCount,
-                             const VkImageBlit *pRegions,
-                             VkFilter filter)
+panvk_per_arch(CmdBlitImage2)(VkCommandBuffer commandBuffer,
+                              const VkBlitImageInfo2 *pBlitImageInfo)
 {
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
-   VK_FROM_HANDLE(panvk_image, src, srcImage);
-   VK_FROM_HANDLE(panvk_image, dst, destImage);
+   VK_FROM_HANDLE(panvk_image, src, pBlitImageInfo->srcImage);
+   VK_FROM_HANDLE(panvk_image, dst, pBlitImageInfo->dstImage);
 
-   for (unsigned i = 0; i < regionCount; i++) {
-      const VkImageBlit *region = &pRegions[i];
+   for (unsigned i = 0; i < pBlitImageInfo->regionCount; i++) {
+      const VkImageBlit2 *region = &pBlitImageInfo->pRegions[i];
       struct pan_blit_info info = {
          .src = {
             .planes[0].image = &src->pimage,
@@ -184,7 +178,7 @@ panvk_per_arch(CmdBlitImage)(VkCommandBuffer commandBuffer,
                region->dstSubresource.baseArrayLayer + region->dstSubresource.layerCount - 1,
             },
          },
-         .nearest = filter == VK_FILTER_NEAREST,
+         .nearest = pBlitImageInfo->filter == VK_FILTER_NEAREST,
       };
 
       if (region->srcSubresource.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
@@ -202,13 +196,8 @@ panvk_per_arch(CmdBlitImage)(VkCommandBuffer commandBuffer,
 }
 
 void
-panvk_per_arch(CmdResolveImage)(VkCommandBuffer commandBuffer,
-                                VkImage srcImage,
-                                VkImageLayout srcImageLayout,
-                                VkImage destImage,
-                                VkImageLayout destImageLayout,
-                                uint32_t regionCount,
-                                const VkImageResolve *pRegions)
+panvk_per_arch(CmdResolveImage2)(VkCommandBuffer commandBuffer,
+                                 const VkResolveImageInfo2* pResolveImageInfo)
 {
    panvk_stub();
 }

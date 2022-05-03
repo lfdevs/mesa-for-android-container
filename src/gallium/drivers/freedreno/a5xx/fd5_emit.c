@@ -487,16 +487,8 @@ fd5_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd5_emit *emit)
          enum a5xx_vtx_fmt fmt = fd5_pipe2vtx(pfmt);
          bool isint = util_format_is_pure_integer(pfmt);
          uint32_t off = vb->buffer_offset + elem->src_offset;
-         uint32_t size = fd_bo_size(rsc->bo) - off;
+         uint32_t size = vb->buffer.resource->width0 - off;
          debug_assert(fmt != VFMT5_NONE);
-
-#ifdef DEBUG
-         /* see
-          * dEQP-GLES31.stress.vertex_attribute_binding.buffer_bounds.bind_vertex_buffer_offset_near_wrap_10
-          */
-         if (off > fd_bo_size(rsc->bo))
-            continue;
-#endif
 
          OUT_PKT4(ring, REG_A5XX_VFD_FETCH(j), 4);
          OUT_RELOC(ring, rsc->bo, off, 0, 0);

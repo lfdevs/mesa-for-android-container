@@ -455,6 +455,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="CP_WAIT_TWO_REGS" value="0x70" varset="chip" variants="A6XX"/>
 	<value name="CP_MEMCPY" value="0x75" varset="chip" variants="A6XX"/>
 	<value name="CP_SET_BIN_DATA5_OFFSET" value="0x2e" varset="chip" variants="A6XX"/>
+	<!-- Note, kgsl calls this CP_SET_AMBLE: -->
 	<value name="CP_SET_CTXSWITCH_IB" value="0x55" varset="chip" variants="A6XX"/>
 
 	<!--
@@ -1703,6 +1704,8 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 				This can only be set by the RB (i.e. the kernel)
 				and executes with protected mode off, but
 				is otherwise similar to SAVE_IB.
+
+				Note, kgsl calls this CP_KMD_AMBLE_TYPE
 			</doc>
 		</value>
 	</enum>

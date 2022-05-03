@@ -105,6 +105,20 @@ tu_format_for_aspect(enum pipe_format format, VkImageAspectFlags aspect_mask)
    }
 }
 
+static bool
+tu_is_r8g8(enum pipe_format format)
+{
+   return (util_format_get_blocksize(format) == 2) &&
+          (util_format_get_nr_components(format) == 2);
+}
+
+static bool
+tu_is_r8g8_compatible(enum pipe_format format)
+{
+   return (util_format_get_blocksize(format) == 2) &&
+          !util_format_is_depth_or_stencil(format);
+}
+
 void
 tu_cs_image_ref(struct tu_cs *cs, const struct fdl6_view *iview, uint32_t layer)
 {
@@ -119,6 +133,14 @@ tu_cs_image_stencil_ref(struct tu_cs *cs, const struct tu_image_view *iview, uin
    tu_cs_emit(cs, iview->stencil_PITCH);
    tu_cs_emit(cs, iview->stencil_layer_size >> 6);
    tu_cs_emit_qw(cs, iview->stencil_base_addr + iview->stencil_layer_size * layer);
+}
+
+void
+tu_cs_image_depth_ref(struct tu_cs *cs, const struct tu_image_view *iview, uint32_t layer)
+{
+   tu_cs_emit(cs, iview->depth_PITCH);
+   tu_cs_emit(cs, iview->depth_layer_size >> 6);
+   tu_cs_emit_qw(cs, iview->depth_base_addr + iview->depth_layer_size * layer);
 }
 
 void
@@ -229,7 +251,13 @@ tu_image_view_init(struct tu_image_view *iview,
    fdl6_view_init(&iview->view, layouts, &args, has_z24uint_s8uint);
 
    if (image->vk_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-      struct fdl_layout *layout = &image->layout[1];
+      struct fdl_layout *layout = &image->layout[0];
+      iview->depth_base_addr = image->iova +
+         fdl_surface_offset(layout, range->baseMipLevel, range->baseArrayLayer);
+      iview->depth_layer_size = fdl_layer_stride(layout, range->baseMipLevel);
+      iview->depth_PITCH = A6XX_RB_DEPTH_BUFFER_PITCH(fdl_pitch(layout, range->baseMipLevel)).value;
+
+      layout = &image->layout[1];
       iview->stencil_base_addr = image->iova +
          fdl_surface_offset(layout, range->baseMipLevel, range->baseArrayLayer);
       iview->stencil_layer_size = fdl_layer_stride(layout, range->baseMipLevel);
@@ -308,62 +336,11 @@ ubwc_possible(VkFormat format, VkImageType type, VkImageUsageFlags usage,
    return true;
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL
-tu_CreateImage(VkDevice _device,
-               const VkImageCreateInfo *pCreateInfo,
-               const VkAllocationCallbacks *alloc,
-               VkImage *pImage)
+static VkResult
+tu_image_init(struct tu_device *device, struct tu_image *image,
+              const VkImageCreateInfo *pCreateInfo, uint64_t modifier,
+              const VkSubresourceLayout *plane_layouts)
 {
-   TU_FROM_HANDLE(tu_device, device, _device);
-   uint64_t modifier = DRM_FORMAT_MOD_INVALID;
-   const VkSubresourceLayout *plane_layouts = NULL;
-   struct tu_image *image;
-
-   if (pCreateInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
-      const VkImageDrmFormatModifierListCreateInfoEXT *mod_info =
-         vk_find_struct_const(pCreateInfo->pNext,
-                              IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT);
-      const VkImageDrmFormatModifierExplicitCreateInfoEXT *drm_explicit_info =
-         vk_find_struct_const(pCreateInfo->pNext,
-                              IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
-
-      assert(mod_info || drm_explicit_info);
-
-      if (mod_info) {
-         modifier = DRM_FORMAT_MOD_LINEAR;
-         for (unsigned i = 0; i < mod_info->drmFormatModifierCount; i++) {
-            if (mod_info->pDrmFormatModifiers[i] == DRM_FORMAT_MOD_QCOM_COMPRESSED)
-               modifier = DRM_FORMAT_MOD_QCOM_COMPRESSED;
-         }
-      } else {
-         modifier = drm_explicit_info->drmFormatModifier;
-         assert(modifier == DRM_FORMAT_MOD_LINEAR ||
-                modifier == DRM_FORMAT_MOD_QCOM_COMPRESSED);
-         plane_layouts = drm_explicit_info->pPlaneLayouts;
-      }
-   } else {
-      const struct wsi_image_create_info *wsi_info =
-         vk_find_struct_const(pCreateInfo->pNext, WSI_IMAGE_CREATE_INFO_MESA);
-      if (wsi_info && wsi_info->scanout)
-         modifier = DRM_FORMAT_MOD_LINEAR;
-   }
-
-#ifdef ANDROID
-   const VkNativeBufferANDROID *gralloc_info =
-      vk_find_struct_const(pCreateInfo->pNext, NATIVE_BUFFER_ANDROID);
-   int dma_buf;
-   if (gralloc_info) {
-      VkResult result = tu_gralloc_info(device, gralloc_info, &dma_buf, &modifier);
-      if (result != VK_SUCCESS)
-         return result;
-   }
-#endif
-
-   image = vk_object_zalloc(&device->vk, alloc, sizeof(*image),
-                            VK_OBJECT_TYPE_IMAGE);
-   if (!image)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
    const VkExternalMemoryImageCreateInfo *external_info =
       vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
    image->shareable = external_info != NULL;
@@ -388,6 +365,17 @@ tu_CreateImage(VkDevice _device,
       ubwc_enabled = false;
    }
 
+   /* No sense in tiling a 1D image, you'd just waste space and cache locality. */
+   if (pCreateInfo->imageType == VK_IMAGE_TYPE_1D) {
+      tile_mode = TILE6_LINEAR;
+      ubwc_enabled = false;
+   }
+
+   enum pipe_format format =
+      tu_vk_format_to_pipe_format(image->vk_format);
+   /* Whether a view of the image with an R8G8 format could be made. */
+   bool has_r8g8 = tu_is_r8g8(format);
+
    /* Mutable images can be reinterpreted as any other compatible format.
     * This is a problem with UBWC (compression for different formats is different),
     * but also tiling ("swap" affects how tiled formats are stored in memory)
@@ -405,17 +393,44 @@ tu_CreateImage(VkDevice _device,
       const VkImageFormatListCreateInfo *fmt_list =
          vk_find_struct_const(pCreateInfo->pNext, IMAGE_FORMAT_LIST_CREATE_INFO);
       bool may_be_swapped = true;
+      /* Whether a view of the image with a non-R8G8 but R8G8 compatible format
+       * could be made.
+       */
+      bool has_r8g8_compatible = false;
       if (fmt_list) {
          may_be_swapped = false;
+         has_r8g8_compatible = !has_r8g8 && tu_is_r8g8_compatible(format);
          for (uint32_t i = 0; i < fmt_list->viewFormatCount; i++) {
-            if (tu6_format_texture(tu_vk_format_to_pipe_format(fmt_list->pViewFormats[i]), TILE6_LINEAR).swap) {
+            enum pipe_format format =
+               tu_vk_format_to_pipe_format(fmt_list->pViewFormats[i]);
+            bool is_r8g8 = tu_is_r8g8(format);
+            has_r8g8 = has_r8g8 || is_r8g8;
+            has_r8g8_compatible = has_r8g8_compatible ||
+                                  (!is_r8g8 && tu_is_r8g8_compatible(format));
+
+            if (tu6_format_texture(format, TILE6_LINEAR).swap) {
                may_be_swapped = true;
                break;
             }
          }
+      } else {
+         /* If there is no format list it could be reinterpreted as
+          * any compatible format.
+          */
+         has_r8g8 = tu_is_r8g8_compatible(format);
+         has_r8g8_compatible = has_r8g8;
       }
+
       if (may_be_swapped)
          tile_mode = TILE6_LINEAR;
+
+      /* R8G8 have a different block width/height and height alignment from other
+       * formats that would normally be compatible (like R16), and so if we are
+       * trying to, for example, sample R16 as R8G8 we need to demote to linear.
+       */
+      if (has_r8g8 && has_r8g8_compatible)
+         tile_mode = TILE6_LINEAR;
+
       ubwc_enabled = false;
    }
 
@@ -429,6 +444,15 @@ tu_CreateImage(VkDevice _device,
 
    /* expect UBWC enabled if we asked for it */
    assert(modifier != DRM_FORMAT_MOD_QCOM_COMPRESSED || ubwc_enabled);
+
+   /* Non-UBWC tiled R8G8 is probably buggy since media formats are always
+    * either linear or UBWC. There is no simple test to reproduce the bug.
+    * However it was observed in the wild leading to an unrecoverable hang
+    * on a650/a660.
+    */
+   if (has_r8g8 && tile_mode == TILE6_3 && !ubwc_enabled) {
+      tile_mode = TILE6_LINEAR;
+   }
 
    for (uint32_t i = 0; i < tu6_plane_count(image->vk_format); i++) {
       struct fdl_layout *layout = &image->layout[i];
@@ -460,7 +484,7 @@ tu_CreateImage(VkDevice _device,
          if (pCreateInfo->mipLevels != 1 ||
             pCreateInfo->arrayLayers != 1 ||
             pCreateInfo->extent.depth != 1)
-            goto invalid_layout;
+            return vk_error(device, VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
 
          plane_layout.offset = plane_layouts[i].offset;
          plane_layout.pitch = plane_layouts[i].rowPitch;
@@ -479,7 +503,7 @@ tu_CreateImage(VkDevice _device,
                        pCreateInfo->imageType == VK_IMAGE_TYPE_3D,
                        plane_layouts ? &plane_layout : NULL)) {
          assert(plane_layouts); /* can only fail with explicit layout */
-         goto invalid_layout;
+         return vk_error(device, VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
       }
 
       /* fdl6_layout can't take explicit offset without explicit pitch
@@ -527,17 +551,80 @@ tu_CreateImage(VkDevice _device,
       image->total_size += lrz_size;
    }
 
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+tu_CreateImage(VkDevice _device,
+               const VkImageCreateInfo *pCreateInfo,
+               const VkAllocationCallbacks *alloc,
+               VkImage *pImage)
+{
+   uint64_t modifier = DRM_FORMAT_MOD_INVALID;
+   const VkSubresourceLayout *plane_layouts = NULL;
+
+   TU_FROM_HANDLE(tu_device, device, _device);
+   struct tu_image *image =
+      vk_object_zalloc(&device->vk, alloc, sizeof(*image), VK_OBJECT_TYPE_IMAGE);
+
+   if (!image)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   if (pCreateInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      const VkImageDrmFormatModifierListCreateInfoEXT *mod_info =
+         vk_find_struct_const(pCreateInfo->pNext,
+                              IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT);
+      const VkImageDrmFormatModifierExplicitCreateInfoEXT *drm_explicit_info =
+         vk_find_struct_const(pCreateInfo->pNext,
+                              IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
+
+      assert(mod_info || drm_explicit_info);
+
+      if (mod_info) {
+         modifier = DRM_FORMAT_MOD_LINEAR;
+         for (unsigned i = 0; i < mod_info->drmFormatModifierCount; i++) {
+            if (mod_info->pDrmFormatModifiers[i] == DRM_FORMAT_MOD_QCOM_COMPRESSED)
+               modifier = DRM_FORMAT_MOD_QCOM_COMPRESSED;
+         }
+      } else {
+         modifier = drm_explicit_info->drmFormatModifier;
+         assert(modifier == DRM_FORMAT_MOD_LINEAR ||
+                modifier == DRM_FORMAT_MOD_QCOM_COMPRESSED);
+         plane_layouts = drm_explicit_info->pPlaneLayouts;
+      }
+   } else {
+      const struct wsi_image_create_info *wsi_info =
+         vk_find_struct_const(pCreateInfo->pNext, WSI_IMAGE_CREATE_INFO_MESA);
+      if (wsi_info && wsi_info->scanout)
+         modifier = DRM_FORMAT_MOD_LINEAR;
+   }
+
+#ifdef ANDROID
+   const VkNativeBufferANDROID *gralloc_info =
+      vk_find_struct_const(pCreateInfo->pNext, NATIVE_BUFFER_ANDROID);
+   int dma_buf;
+   if (gralloc_info) {
+      VkResult result = tu_gralloc_info(device, gralloc_info, &dma_buf, &modifier);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+#endif
+
+   VkResult result = tu_image_init(device, image, pCreateInfo, modifier,
+                                   plane_layouts);
+   if (result != VK_SUCCESS) {
+      vk_object_free(&device->vk, alloc, image);
+      return result;
+   }
+
    *pImage = tu_image_to_handle(image);
 
 #ifdef ANDROID
    if (gralloc_info)
-      return tu_import_memory_from_gralloc_handle(_device, dma_buf, alloc, *pImage);
+      return tu_import_memory_from_gralloc_handle(_device, dma_buf, alloc,
+                                                  *pImage);
 #endif
    return VK_SUCCESS;
-
-invalid_layout:
-   vk_object_free(&device->vk, alloc, image);
-   return vk_error(device, VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -557,6 +644,77 @@ tu_DestroyImage(VkDevice _device,
 #endif
 
    vk_object_free(&device->vk, pAllocator, image);
+}
+
+static void
+tu_get_image_memory_requirements(struct tu_image *image,
+                                 VkMemoryRequirements2 *pMemoryRequirements)
+{
+   pMemoryRequirements->memoryRequirements = (VkMemoryRequirements) {
+      .memoryTypeBits = 1,
+      .alignment = image->layout[0].base_align,
+      .size = image->total_size
+   };
+
+   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
+         VkMemoryDedicatedRequirements *req =
+            (VkMemoryDedicatedRequirements *) ext;
+         req->requiresDedicatedAllocation = image->shareable;
+         req->prefersDedicatedAllocation = req->requiresDedicatedAllocation;
+         break;
+      }
+      default:
+         break;
+      }
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+tu_GetImageMemoryRequirements2(VkDevice device,
+                               const VkImageMemoryRequirementsInfo2 *pInfo,
+                               VkMemoryRequirements2 *pMemoryRequirements)
+{
+   TU_FROM_HANDLE(tu_image, image, pInfo->image);
+
+   tu_get_image_memory_requirements(image, pMemoryRequirements);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+tu_GetImageSparseMemoryRequirements2(
+   VkDevice device,
+   const VkImageSparseMemoryRequirementsInfo2 *pInfo,
+   uint32_t *pSparseMemoryRequirementCount,
+   VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
+{
+   tu_stub();
+}
+
+VKAPI_ATTR void VKAPI_CALL
+tu_GetDeviceImageMemoryRequirements(
+   VkDevice _device,
+   const VkDeviceImageMemoryRequirements *pInfo,
+   VkMemoryRequirements2 *pMemoryRequirements)
+{
+   TU_FROM_HANDLE(tu_device, device, _device);
+
+   struct tu_image image = {0};
+
+   tu_image_init(device, &image, pInfo->pCreateInfo, DRM_FORMAT_MOD_INVALID,
+                 NULL);
+
+   tu_get_image_memory_requirements(&image, pMemoryRequirements);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+tu_GetDeviceImageSparseMemoryRequirements(
+    VkDevice device,
+    const VkDeviceImageMemoryRequirements *pInfo,
+    uint32_t *pSparseMemoryRequirementCount,
+    VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
+{
+   tu_stub();
 }
 
 VKAPI_ATTR void VKAPI_CALL

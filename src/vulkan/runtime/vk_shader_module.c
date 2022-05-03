@@ -22,9 +22,12 @@
  */
 
 #include "vk_shader_module.h"
+
 #include "util/mesa-sha1.h"
 #include "vk_common_entrypoints.h"
 #include "vk_device.h"
+#include "vk_log.h"
+#include "vk_nir.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL
 vk_common_CreateShaderModule(VkDevice _device,
@@ -74,4 +77,57 @@ vk_common_DestroyShaderModule(VkDevice _device,
    assert(module->nir == NULL);
 
    vk_object_free(device, pAllocator, module);
+}
+
+#define SPIR_V_MAGIC_NUMBER 0x07230203
+
+uint32_t
+vk_shader_module_spirv_version(const struct vk_shader_module *mod)
+{
+   if (mod->nir != NULL)
+      return 0;
+
+   return vk_spirv_version((uint32_t *)mod->data, mod->size);
+}
+
+VkResult
+vk_shader_module_to_nir(struct vk_device *device,
+                        const struct vk_shader_module *mod,
+                        gl_shader_stage stage,
+                        const char *entrypoint_name,
+                        const VkSpecializationInfo *spec_info,
+                        const struct spirv_to_nir_options *spirv_options,
+                        const nir_shader_compiler_options *nir_options,
+                        void *mem_ctx, nir_shader **nir_out)
+{
+   if (mod->nir != NULL) {
+      assert(mod->nir->info.stage == stage);
+      assert(exec_list_length(&mod->nir->functions) == 1);
+      ASSERTED const char *nir_name =
+         nir_shader_get_entrypoint(mod->nir)->function->name;
+      assert(strcmp(nir_name, entrypoint_name) == 0);
+
+      nir_validate_shader(mod->nir, "internal shader");
+
+      nir_shader *clone = nir_shader_clone(mem_ctx, mod->nir);
+      if (clone == NULL)
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      assert(clone->options == NULL || clone->options == nir_options);
+      clone->options = nir_options;
+
+      *nir_out = clone;
+      return VK_SUCCESS;
+   } else {
+      nir_shader *nir = vk_spirv_to_nir(device,
+                                        (uint32_t *)mod->data, mod->size,
+                                        stage, entrypoint_name, spec_info,
+                                        spirv_options, nir_options,
+                                        mem_ctx);
+      if (nir == NULL)
+         return vk_errorf(device, VK_ERROR_UNKNOWN, "spirv_to_nir failed");
+
+      *nir_out = nir;
+      return VK_SUCCESS;
+   }
 }

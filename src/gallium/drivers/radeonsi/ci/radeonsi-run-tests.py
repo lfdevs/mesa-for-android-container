@@ -141,8 +141,7 @@ for f in os.listdir("/dev/dri/by-path"):
     available_gpus += [(os.path.join("/dev/dri/by-path", f),
                         f[:idx].replace(':', '_').replace('.', '_'))]
 
-if len(available_gpus) > 1:
-    parser.add_argument('--gpu', type=int, dest="gpu", default=0, help='Select GPU (0..{})'.format(len(available_gpus) - 1))
+parser.add_argument('--gpu', type=int, dest="gpu", default=0, help='Select GPU (0..{})'.format(len(available_gpus) - 1))
 
 args = parser.parse_args(sys.argv[1:])
 piglit_path = args.piglit_path
@@ -190,9 +189,12 @@ env["PIGLIT_PLATFORM"] = "gbm"
 if "DRI_PRIME" in env:
     print("Don't use DRI_PRIME. Instead use --gpu N")
     del env["DRI_PRIME"]
-if "gpu" in args:
-    env["DRI_PRIME"] = available_gpus[args.gpu][1]
-    env["WAFFLE_GBM_DEVICE"] = available_gpus[args.gpu][0]
+
+assert "gpu" in args, "--gpu defaults to 0"
+
+gpu_device = available_gpus[args.gpu][1]
+env["DRI_PRIME"] = gpu_device
+env["WAFFLE_GBM_DEVICE"] = available_gpus[args.gpu][0]
 
 # Use piglit's glinfo to determine the GPU name
 gpu_name = "unknown"
@@ -213,7 +215,7 @@ for line in p.stdout.decode().split("\n"):
         break
 
 output_folder = args.output_folder
-print_green("Tested GPU: '{}' ({})".format(gpu_name_full, gpu_name))
+print_green("Tested GPU: '{}' ({}) {}".format(gpu_name_full, gpu_name, gpu_device))
 print_green("Output folder: '{}'".format(output_folder))
 
 count = 1
@@ -274,10 +276,11 @@ def verify_results(baseline1, baseline2):
     #  - if no baseline, baseline2 will contain the list of failures
     #  - if there's a baseline, baseline2 will contain the diff
     # So in both cases, an empty baseline2 files means a successful run
-    if len(open(baseline2, "r").readlines()) != 0:
-        print_red("New errors. Check {}".format(baseline2))
-        return False
-    return True
+    with open(baseline2) as file:
+        if len(file.readlines()) == 0:
+            return True
+    print_red("New errors. Check {}".format(baseline2))
+    return False
 
 
 def parse_test_filters(include_tests):
@@ -298,10 +301,8 @@ filters_args = parse_test_filters(args.include_tests)
 if args.piglit:
     out = os.path.join(output_folder, "piglit")
     baseline = os.path.join(base, "{}-piglit-quick-fail.csv".format(gpu_name))
-    new_baseline = os.path.join(
-        new_baseline_folder, "{}-piglit-quick-fail.csv".format(gpu_name)
-    )
-    print_yellow("Running piglit tests", args.verbose > 0)
+    new_baseline = os.path.join(new_baseline_folder, "{}-piglit-quick-fail.csv".format(gpu_name))
+    print_yellow("Running piglit tests\n", args.verbose > 0)
     cmd = [
         "piglit-runner",
         "run",
@@ -322,7 +323,13 @@ if args.piglit:
 
     if os.path.exists(baseline):
         cmd += ["--baseline", baseline]
-        print_yellow("[baseline {}]".format(baseline), args.verbose > 0)
+        print_yellow("[baseline {}]\n".format(baseline), args.verbose > 0)
+
+    flakes = os.path.join(base, "{}-piglit-quick-flakes.csv".format(gpu_name))
+    if os.path.exists(flakes):
+        cmd += ["--flakes", flakes]
+        print_yellow("[flakes {}]\n".format(flakes), args.verbose > 0)
+
     run_cmd(cmd, args.verbose)
     shutil.copy(os.path.join(out, "failures.csv"), new_baseline)
     verify_results(baseline, new_baseline)

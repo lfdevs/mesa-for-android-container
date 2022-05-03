@@ -3365,7 +3365,7 @@ brw_pixel_interpolator_query(struct brw_codegen *p,
 
 void
 brw_find_live_channel(struct brw_codegen *p, struct brw_reg dst,
-                      struct brw_reg mask)
+                      struct brw_reg mask, bool last)
 {
    const struct intel_device_info *devinfo = p->devinfo;
    const unsigned exec_size = 1 << brw_get_default_exec_size(p);
@@ -3414,10 +3414,17 @@ brw_find_live_channel(struct brw_codegen *p, struct brw_reg dst,
          }
 
          /* Quarter control has the effect of magically shifting the value of
-          * ce0 so you'll get the first active channel relative to the
+          * ce0 so you'll get the first/last active channel relative to the
           * specified quarter control as result.
           */
-         inst = brw_FBL(p, vec1(dst), exec_mask);
+         if (!last) {
+            inst = brw_FBL(p, vec1(dst), exec_mask);
+         } else {
+            inst = brw_LZD(p, vec1(dst), exec_mask);
+            struct brw_reg neg = vec1(dst);
+            neg.negate = true;
+            inst = brw_ADD(p, vec1(dst), neg, brw_imm_uw(31));
+         }
       } else {
          const struct brw_reg flag = brw_flag_subreg(flag_subreg);
 
@@ -3449,7 +3456,15 @@ brw_find_live_channel(struct brw_codegen *p, struct brw_reg dst,
           */
          const enum brw_reg_type type = brw_int_type(exec_size / 8, false);
          brw_set_default_exec_size(p, BRW_EXECUTE_1);
-         brw_FBL(p, vec1(dst), byte_offset(retype(flag, type), qtr_control));
+         if (!last) {
+            inst = brw_FBL(p, vec1(dst), byte_offset(retype(flag, type), qtr_control));
+         } else {
+            inst = brw_LZD(p, vec1(dst), byte_offset(retype(flag, type), qtr_control));
+            struct brw_reg neg = vec1(dst);
+            neg.negate = true;
+            inst = brw_ADD(p, vec1(dst), neg, brw_imm_uw(31));
+         }
+
       }
    } else {
       brw_set_default_mask_control(p, BRW_MASK_DISABLE);

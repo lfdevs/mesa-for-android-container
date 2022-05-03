@@ -22,6 +22,7 @@
  */
 
 #include "brw_nir.h"
+#include "brw_nir_rt.h"
 #include "brw_shader.h"
 #include "dev/intel_debug.h"
 #include "compiler/glsl_types.h"
@@ -535,6 +536,8 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_split_array_vars, nir_var_function_temp);
       OPT(nir_shrink_vec_array_vars, nir_var_function_temp);
       OPT(nir_opt_deref);
+      if (OPT(nir_opt_memcpy))
+         OPT(nir_split_var_copies);
       OPT(nir_lower_vars_to_ssa);
       if (allow_copies) {
          /* Only run this pass in the first call to brw_nir_optimize.  Later
@@ -547,10 +550,13 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_opt_dead_write_vars);
       OPT(nir_opt_combine_stores, nir_var_all);
 
+      OPT(nir_opt_ray_queries);
+
       if (is_scalar) {
          OPT(nir_lower_alu_to_scalar, NULL, NULL);
       } else {
-         OPT(nir_opt_shrink_vectors, true);
+         OPT(nir_opt_shrink_stores, true);
+         OPT(nir_opt_shrink_vectors);
       }
 
       OPT(nir_copy_prop);
@@ -591,6 +597,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_opt_intrinsics);
       OPT(nir_opt_idiv_const, 32);
       OPT(nir_opt_algebraic);
+      OPT(nir_lower_constant_convert_alu_types);
       OPT(nir_opt_constant_folding);
 
       if (lower_flrp != 0) {
@@ -641,6 +648,21 @@ lower_bit_size_callback(const nir_instr *instr, UNUSED void *data)
    switch (instr->type) {
    case nir_instr_type_alu: {
       nir_alu_instr *alu = nir_instr_as_alu(instr);
+      switch (alu->op) {
+      case nir_op_bit_count:
+      case nir_op_ufind_msb:
+      case nir_op_ifind_msb:
+      case nir_op_find_lsb:
+         /* These are handled specially because the destination is always
+          * 32-bit and so the bit size of the instruction is given by the
+          * source.
+          */
+         assert(alu->src[0].src.is_ssa);
+         return alu->src[0].src.ssa->bit_size == 32 ? 0 : 32;
+      default:
+         break;
+      }
+
       assert(alu->dest.dest.is_ssa);
       if (alu->dest.dest.ssa.bit_size >= 32)
          return 0;
@@ -909,6 +931,25 @@ void
 brw_nir_link_shaders(const struct brw_compiler *compiler,
                      nir_shader *producer, nir_shader *consumer)
 {
+   if (producer->info.stage == MESA_SHADER_MESH &&
+       consumer->info.stage == MESA_SHADER_FRAGMENT) {
+      /* gl_MeshPerPrimitiveNV[].gl_ViewportIndex, gl_PrimitiveID and gl_Layer
+       * are per primitive, but fragment shader does not have them marked as
+       * such. Add the annotation here.
+       */
+      nir_foreach_shader_in_variable(var, consumer) {
+         switch (var->data.location) {
+            case VARYING_SLOT_LAYER:
+            case VARYING_SLOT_PRIMITIVE_ID:
+            case VARYING_SLOT_VIEWPORT:
+               var->data.per_primitive = 1;
+               break;
+            default:
+               continue;
+         }
+      }
+   }
+
    nir_lower_io_arrays_to_elements(producer, consumer);
    nir_validate_shader(producer, "after nir_lower_io_arrays_to_elements");
    nir_validate_shader(consumer, "after nir_lower_io_arrays_to_elements");
@@ -1187,6 +1228,27 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
    OPT(nir_opt_dce);
    OPT(nir_opt_move, nir_move_comparisons);
    OPT(nir_opt_dead_cf);
+
+   NIR_PASS_V(nir, nir_convert_to_lcssa, true, true);
+   NIR_PASS_V(nir, nir_divergence_analysis);
+
+   /* TODO: Enable nir_opt_uniform_atomics on Gfx7.x too.
+    * It currently fails Vulkan tests on Haswell for an unknown reason.
+    */
+   if (devinfo->ver >= 8 && OPT(nir_opt_uniform_atomics)) {
+      const nir_lower_subgroups_options subgroups_options = {
+         .ballot_bit_size = 32,
+         .ballot_components = 1,
+         .lower_elect = true,
+      };
+      OPT(nir_lower_subgroups, &subgroups_options);
+
+      if (OPT(nir_lower_int64))
+         brw_nir_optimize(nir, compiler, is_scalar, false);
+   }
+
+   /* Clean up LCSSA phis */
+   OPT(nir_opt_remove_phis);
 
    OPT(nir_lower_bool_to_int32);
    OPT(nir_copy_prop);

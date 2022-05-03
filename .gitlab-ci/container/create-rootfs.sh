@@ -4,16 +4,25 @@ set -ex
 
 if [ $DEBIAN_ARCH = arm64 ]; then
     ARCH_PACKAGES="firmware-qcom-media
+                   firmware-linux-nonfree
                    libfontconfig1
                    libgl1
                    libglu1-mesa
+                   libvulkan-dev
     "
 elif [ $DEBIAN_ARCH = amd64 ]; then
     ARCH_PACKAGES="firmware-amd-graphics
+                   inetutils-syslogd
+                   iptables
+                   libcap2
                    libelf1
+                   libfdt1
                    libllvm11
                    libva2
                    libva-drm2
+                   socat
+                   spirv-tools
+                   sysvinit-core
                   "
 fi
 
@@ -27,6 +36,8 @@ INSTALL_CI_FAIRY_PACKAGES="git
 apt-get -y install --no-install-recommends \
     $ARCH_PACKAGES \
     $INSTALL_CI_FAIRY_PACKAGES \
+    $EXTRA_LOCAL_PACKAGES \
+    bash \
     ca-certificates \
     firmware-realtek \
     initramfs-tools \
@@ -70,8 +81,7 @@ apt-get -y install --no-install-recommends \
     waffle-utils \
     wget \
     xinit \
-    xserver-xorg-core \
-    xz-utils
+    xserver-xorg-core
 
 # Needed for ci-fairy, this revision is able to upload files to
 # MinIO and doesn't depend on git
@@ -93,10 +103,6 @@ chmod +x  /init
 #######################################################################
 # Strip the image to a small minimal system without removing the debian
 # toolchain.
-
-# xz compress firmware so it doesn't waste RAM at runtime on ramdisk systems
-find /lib/firmware -type f -print0 | \
-    xargs -0r -P4 -n4 xz -T1 -C crc32
 
 # Copy timezone file and remove tzdata package
 rm -rf /etc/localtime
@@ -166,9 +172,7 @@ UNNEEDED_PACKAGES="apt libapt-pkg6.0 "\
 "insserv "\
 "udev "\
 "init-system-helpers "\
-"bash "\
 "cpio "\
-"xz-utils "\
 "passwd "\
 "libsemanage1 libsemanage-common "\
 "libsepol1 "\
@@ -213,7 +217,7 @@ rm -rf var/* opt srv share
 # ca-certificates are in /etc drop the source
 rm -rf usr/share/ca-certificates
 
-# No bash, no need for completions
+# No need for completions
 rm -rf usr/share/bash-completion
 
 # No zsh, no need for comletions

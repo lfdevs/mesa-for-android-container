@@ -108,7 +108,7 @@ modifier_is_supported(const struct intel_device_info *devinfo,
    /* Check remaining requirements. */
    switch (modifier) {
    case I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS:
-      if (INTEL_DEBUG(DEBUG_NO_RBC))
+      if (INTEL_DEBUG(DEBUG_NO_CCS))
          return false;
 
       if (pfmt != PIPE_FORMAT_BGRA8888_UNORM &&
@@ -127,7 +127,7 @@ modifier_is_supported(const struct intel_device_info *devinfo,
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC:
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
    case I915_FORMAT_MOD_Y_TILED_CCS: {
-      if (INTEL_DEBUG(DEBUG_NO_RBC))
+      if (INTEL_DEBUG(DEBUG_NO_CCS))
          return false;
 
       enum isl_format rt_format =
@@ -401,8 +401,6 @@ iris_resource_disable_aux(struct iris_resource *res)
    free(res->aux.state);
 
    res->aux.usage = ISL_AUX_USAGE_NONE;
-   res->aux.possible_usages = 1 << ISL_AUX_USAGE_NONE;
-   res->aux.sampler_usages = 1 << ISL_AUX_USAGE_NONE;
    res->aux.surf.size_B = 0;
    res->aux.bo = NULL;
    res->aux.extra_aux.surf.size_B = 0;
@@ -434,10 +432,7 @@ iris_resource_alloc_flags(const struct iris_screen *screen,
       break;
    }
 
-   /* Scanout and shared buffers need to be WC (shared because they might be
-    * used for scanout)
-    */
-   if (templ->bind & (PIPE_BIND_SCANOUT | PIPE_BIND_SHARED))
+   if (templ->bind & PIPE_BIND_SCANOUT)
       flags |= BO_ALLOC_SCANOUT;
 
    if (templ->flags & (PIPE_RESOURCE_FLAG_MAP_COHERENT |
@@ -485,9 +480,6 @@ iris_alloc_resource(struct pipe_screen *pscreen,
    res->orig_screen = iris_pscreen_ref(pscreen);
    pipe_reference_init(&res->base.b.reference, 1);
    threaded_resource_init(&res->base.b, false);
-
-   res->aux.possible_usages = 1 << ISL_AUX_USAGE_NONE;
-   res->aux.sampler_usages = 1 << ISL_AUX_USAGE_NONE;
 
    if (templ->target == PIPE_BUFFER)
       util_range_init(&res->valid_buffer_range);
@@ -554,7 +546,7 @@ iris_get_aux_clear_color_state_size(struct iris_screen *screen,
     * sampler via render surface state objects.
     */
    if (isl_surf_usage_is_depth(res->surf.usage) &&
-       res->aux.sampler_usages == 1 << ISL_AUX_USAGE_NONE)
+       !iris_sample_with_depth_aux(&screen->devinfo, res))
       return 0;
 
    return screen->isl_dev.ss.clear_color_state_size;
@@ -764,7 +756,7 @@ iris_resource_configure_aux(struct iris_screen *screen,
    const bool has_hiz = !INTEL_DEBUG(DEBUG_NO_HIZ) &&
       isl_surf_get_hiz_surf(&screen->isl_dev, &res->surf, &res->aux.surf);
 
-   const bool has_ccs = !INTEL_DEBUG(DEBUG_NO_RBC) &&
+   const bool has_ccs = !INTEL_DEBUG(DEBUG_NO_CCS) &&
       iris_get_ccs_surf_or_support(&screen->isl_dev, &res->surf,
                                    &res->aux.surf, &res->aux.extra_aux.surf);
 
@@ -772,43 +764,38 @@ iris_resource_configure_aux(struct iris_screen *screen,
       assert(!res->mod_info);
       assert(!has_hiz);
       if (has_ccs) {
-         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_MCS_CCS;
+         res->aux.usage = ISL_AUX_USAGE_MCS_CCS;
       } else {
-         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_MCS;
+         res->aux.usage = ISL_AUX_USAGE_MCS;
       }
    } else if (has_hiz) {
       assert(!res->mod_info);
       assert(!has_mcs);
       if (!has_ccs) {
-         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_HIZ;
+         res->aux.usage = ISL_AUX_USAGE_HIZ;
       } else if (res->surf.samples == 1 &&
                  (res->surf.usage & ISL_SURF_USAGE_TEXTURE_BIT)) {
          /* If this resource is single-sampled and will be used as a texture,
           * put the HiZ surface in write-through mode so that we can sample
           * from it.
           */
-         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_HIZ_CCS_WT;
+         res->aux.usage = ISL_AUX_USAGE_HIZ_CCS_WT;
       } else {
-         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_HIZ_CCS;
+         res->aux.usage = ISL_AUX_USAGE_HIZ_CCS;
       }
    } else if (has_ccs) {
       if (res->mod_info) {
-         res->aux.possible_usages |= 1 << res->mod_info->aux_usage;
+         res->aux.usage = res->mod_info->aux_usage;
       } else if (isl_surf_usage_is_stencil(res->surf.usage)) {
-         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_STC_CCS;
+         res->aux.usage = ISL_AUX_USAGE_STC_CCS;
       } else if (want_ccs_e_for_format(devinfo, res->surf.format)) {
-         res->aux.possible_usages |= devinfo->ver < 12 ?
-            1 << ISL_AUX_USAGE_CCS_E : 1 << ISL_AUX_USAGE_GFX12_CCS_E;
+         res->aux.usage = devinfo->ver < 12 ?
+            ISL_AUX_USAGE_CCS_E : ISL_AUX_USAGE_GFX12_CCS_E;
       } else {
          assert(isl_format_supports_ccs_d(devinfo, res->surf.format));
-         res->aux.possible_usages |= 1 << ISL_AUX_USAGE_CCS_D;
+         res->aux.usage = ISL_AUX_USAGE_CCS_D;
       }
    }
-
-   res->aux.usage = util_last_bit(res->aux.possible_usages) - 1;
-
-   if (!has_hiz || iris_sample_with_depth_aux(devinfo, res))
-      res->aux.sampler_usages = res->aux.possible_usages;
 
    enum isl_aux_state initial_state;
    switch (res->aux.usage) {
@@ -1188,13 +1175,47 @@ iris_resource_from_user_memory(struct pipe_screen *pscreen,
    if (!res)
       return NULL;
 
-   assert(templ->target == PIPE_BUFFER);
+   if (templ->target != PIPE_BUFFER &&
+       templ->target != PIPE_TEXTURE_1D &&
+       templ->target != PIPE_TEXTURE_2D)
+      return NULL;
+
+   if (templ->array_size > 1)
+      return NULL;
+
+   size_t res_size = templ->width0;
+   if (templ->target != PIPE_BUFFER) {
+      const uint32_t row_pitch_B =
+         templ->width0 * util_format_get_blocksize(templ->format);
+      res_size = templ->height0 * row_pitch_B;
+
+      if (!iris_resource_configure_main(screen, res, templ,
+                                        DRM_FORMAT_MOD_LINEAR,
+                                        row_pitch_B)) {
+         iris_resource_destroy(pscreen, &res->base.b);
+         return NULL;
+      }
+      assert(res->surf.size_B <= res_size);
+   }
+
+   /* The userptr ioctl only works on whole pages.  Because we know that
+    * things will exist in memory at a page granularity, we can expand the
+    * range given by the client into the whole number of pages and use an
+    * offset on the resource to make it looks like it starts at the user's
+    * pointer.
+    */
+   size_t page_size = getpagesize();
+   assert(util_is_power_of_two_nonzero(page_size));
+   size_t offset = (uintptr_t)user_memory & (page_size - 1);
+   void *mem_start = (char *)user_memory - offset;
+   size_t mem_size = offset + res_size;
+   mem_size = ALIGN_NPOT(mem_size, page_size);
 
    res->internal_format = templ->format;
    res->base.is_user_ptr = true;
-   res->bo = iris_bo_create_userptr(bufmgr, "user",
-                                    user_memory, templ->width0,
+   res->bo = iris_bo_create_userptr(bufmgr, "user", mem_start, mem_size,
                                     IRIS_MEMZONE_OTHER);
+   res->offset = offset;
    if (!res->bo) {
       iris_resource_destroy(pscreen, &res->base.b);
       return NULL;
@@ -1335,6 +1356,7 @@ iris_resource_from_memobj(struct pipe_screen *pscreen,
    res->bo = memobj->bo;
    res->offset = offset;
    res->external_format = memobj->format;
+   res->internal_format = templ->format;
 
    iris_bo_reference(memobj->bo);
 
@@ -1484,8 +1506,6 @@ iris_reallocate_resource_inplace(struct iris_context *ice,
    old_res->aux.clear_color_bo = new_res->aux.clear_color_bo;
    old_res->aux.clear_color_offset = new_res->aux.clear_color_offset;
    old_res->aux.usage = new_res->aux.usage;
-   old_res->aux.possible_usages = new_res->aux.possible_usages;
-   old_res->aux.sampler_usages = new_res->aux.sampler_usages;
 
    if (new_res->aux.state) {
       assert(old_res->aux.state);
@@ -1916,6 +1936,7 @@ iris_map_copy_region(struct iris_transfer *map)
    if (iris_batch_references(map->batch, staging_bo))
       iris_batch_flush(map->batch);
 
+   assert(((struct iris_resource *)map->staging)->offset == 0);
    map->ptr =
       iris_bo_map(map->dbg, staging_bo, xfer->usage & MAP_FLAGS) + extra;
 
@@ -1992,7 +2013,7 @@ iris_unmap_s8(struct iris_transfer *map)
 
    if (xfer->usage & PIPE_MAP_WRITE) {
       uint8_t *untiled_s8_map = map->ptr;
-      uint8_t *tiled_s8_map =
+      uint8_t *tiled_s8_map = res->offset +
          iris_bo_map(map->dbg, res->bo, (xfer->usage | MAP_RAW) & MAP_FLAGS);
 
       for (int s = 0; s < box->depth; s++) {
@@ -2039,7 +2060,7 @@ iris_map_s8(struct iris_transfer *map)
     */
    if (!(xfer->usage & PIPE_MAP_DISCARD_RANGE)) {
       uint8_t *untiled_s8_map = map->ptr;
-      uint8_t *tiled_s8_map =
+      uint8_t *tiled_s8_map = res->offset +
          iris_bo_map(map->dbg, res->bo, (xfer->usage | MAP_RAW) & MAP_FLAGS);
 
       for (int s = 0; s < box->depth; s++) {
@@ -2097,7 +2118,7 @@ iris_unmap_tiled_memcpy(struct iris_transfer *map)
    const bool has_swizzling = false;
 
    if (xfer->usage & PIPE_MAP_WRITE) {
-      char *dst =
+      char *dst = res->offset +
          iris_bo_map(map->dbg, res->bo, (xfer->usage | MAP_RAW) & MAP_FLAGS);
 
       for (int s = 0; s < box->depth; s++) {
@@ -2141,7 +2162,7 @@ iris_map_tiled_memcpy(struct iris_transfer *map)
    const bool has_swizzling = false;
 
    if (!(xfer->usage & PIPE_MAP_DISCARD_RANGE)) {
-      char *src =
+      char *src = res->offset +
          iris_bo_map(map->dbg, res->bo, (xfer->usage | MAP_RAW) & MAP_FLAGS);
 
       for (int s = 0; s < box->depth; s++) {
@@ -2167,7 +2188,8 @@ iris_map_direct(struct iris_transfer *map)
    struct pipe_box *box = &xfer->box;
    struct iris_resource *res = (struct iris_resource *) xfer->resource;
 
-   void *ptr = iris_bo_map(map->dbg, res->bo, xfer->usage & MAP_FLAGS);
+   void *ptr = res->offset +
+      iris_bo_map(map->dbg, res->bo, xfer->usage & MAP_FLAGS);
 
    if (res->base.b.target == PIPE_BUFFER) {
       xfer->stride = 0;
@@ -2269,16 +2291,15 @@ iris_transfer_map(struct pipe_context *ctx,
    struct iris_transfer *map;
 
    if (usage & TC_TRANSFER_MAP_THREADED_UNSYNC)
-      map = slab_alloc(&ice->transfer_pool_unsync);
+      map = slab_zalloc(&ice->transfer_pool_unsync);
    else
-      map = slab_alloc(&ice->transfer_pool);
+      map = slab_zalloc(&ice->transfer_pool);
 
    if (!map)
       return NULL;
 
    struct pipe_transfer *xfer = &map->base.b;
 
-   memset(map, 0, sizeof(*map));
    map->dbg = &ice->dbg;
 
    pipe_resource_reference(&xfer->resource, resource);
@@ -2370,28 +2391,8 @@ iris_transfer_flush_region(struct pipe_context *ctx,
    if (map->staging)
       iris_flush_staging_region(xfer, box);
 
-   uint32_t history_flush = 0;
-
    if (res->base.b.target == PIPE_BUFFER) {
-      if (map->staging)
-         history_flush |= PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                          PIPE_CONTROL_TILE_CACHE_FLUSH;
-
-      if (map->dest_had_defined_contents)
-         history_flush |= iris_flush_bits_for_history(ice, res);
-
       util_range_add(&res->base.b, &res->valid_buffer_range, box->x, box->x + box->width);
-   }
-
-   if (history_flush & ~PIPE_CONTROL_CS_STALL) {
-      iris_foreach_batch(ice, batch) {
-         if (batch->contains_draw || batch->cache.render->entries) {
-            iris_batch_maybe_flush(batch, 24);
-            iris_emit_pipe_control_flush(batch,
-                                         "cache history: transfer flush",
-                                         history_flush);
-         }
-      }
    }
 
    /* Make sure we flag constants dirty even if there's no need to emit
@@ -2554,54 +2555,6 @@ iris_dirty_for_history(struct iris_context *ice,
    ice->state.stage_dirty |= stage_dirty;
 }
 
-/**
- * Produce a set of PIPE_CONTROL bits which ensure data written to a
- * resource becomes visible, and any stale read cache data is invalidated.
- */
-uint32_t
-iris_flush_bits_for_history(struct iris_context *ice,
-                            struct iris_resource *res)
-{
-   struct iris_screen *screen = (struct iris_screen *) ice->ctx.screen;
-
-   uint32_t flush = PIPE_CONTROL_CS_STALL;
-
-   if (res->bind_history & PIPE_BIND_CONSTANT_BUFFER) {
-      flush |= PIPE_CONTROL_CONST_CACHE_INVALIDATE;
-      flush |= screen->compiler->indirect_ubos_use_sampler ?
-               PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE :
-               PIPE_CONTROL_DATA_CACHE_FLUSH;
-   }
-
-   if (res->bind_history & PIPE_BIND_SAMPLER_VIEW)
-      flush |= PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE;
-
-   if (res->bind_history & (PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_INDEX_BUFFER))
-      flush |= PIPE_CONTROL_VF_CACHE_INVALIDATE;
-
-   if (res->bind_history & (PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SHADER_IMAGE))
-      flush |= PIPE_CONTROL_DATA_CACHE_FLUSH;
-
-   return flush;
-}
-
-void
-iris_flush_and_dirty_for_history(struct iris_context *ice,
-                                 struct iris_batch *batch,
-                                 struct iris_resource *res,
-                                 uint32_t extra_flags,
-                                 const char *reason)
-{
-   if (res->base.b.target != PIPE_BUFFER)
-      return;
-
-   uint32_t flush = iris_flush_bits_for_history(ice, res) | extra_flags;
-
-   iris_emit_pipe_control_flush(batch, reason, flush);
-
-   iris_dirty_for_history(ice, res);
-}
-
 bool
 iris_resource_set_clear_color(struct iris_context *ice,
                               struct iris_resource *res,
@@ -2653,7 +2606,7 @@ iris_init_screen_resource_functions(struct pipe_screen *pscreen)
    pscreen->memobj_create_from_handle = iris_memobj_create_from_handle;
    pscreen->memobj_destroy = iris_memobj_destroy;
    pscreen->transfer_helper =
-      u_transfer_helper_create(&transfer_vtbl, true, true, false, true);
+      u_transfer_helper_create(&transfer_vtbl, true, true, false, true, false);
 }
 
 void

@@ -68,9 +68,9 @@ util_format_rgb_float_to_yuv(float r, float g, float b,
    const int _u = scale * (-(0.148f * _r) - (0.291f * _g) + (0.439f * _b));
    const int _v = scale * ( (0.439f * _r) - (0.368f * _g) - (0.071f * _b));
 
-   *y = _y + 16; 
-   *u = _u + 128; 
-   *v = _v + 128; 
+   *y = _y + 16;
+   *u = _u + 128;
+   *v = _v + 128;
 }
 
 

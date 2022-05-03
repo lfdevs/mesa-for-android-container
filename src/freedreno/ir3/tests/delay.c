@@ -155,7 +155,7 @@ main(int argc, char **argv)
          .gpu_id = 630,
    };
 
-   c = ir3_compiler_create(NULL, &dev_id, false);
+   c = ir3_compiler_create(NULL, &dev_id, &(struct ir3_compiler_options){});
 
    for (int i = 0; i < ARRAY_SIZE(tests); i++) {
       const struct test *test = &tests[i];

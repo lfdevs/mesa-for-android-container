@@ -605,3 +605,41 @@ void ac_set_reg_cu_en(void *cs, unsigned reg_offset, uint32_t value, uint32_t cl
 
    set_sh_reg(cs, reg_offset, new_value);
 }
+
+/* Return the register value and tune bytes_per_wave to increase scratch performance. */
+void ac_get_scratch_tmpring_size(const struct radeon_info *info, unsigned max_scratch_waves,
+                                 unsigned bytes_per_wave, unsigned *max_seen_bytes_per_wave,
+                                 uint32_t *tmpring_size)
+{
+   /* SPI_TMPRING_SIZE and COMPUTE_TMPRING_SIZE are essentially scratch buffer descriptors.
+    * WAVES means NUM_RECORDS. WAVESIZE is the size of each element, meaning STRIDE.
+    * Thus, WAVESIZE must be constant while the scratch buffer is being used by the GPU.
+    *
+    * If you want to increase WAVESIZE without waiting for idle, you need to allocate a new
+    * scratch buffer and use it instead. This will result in multiple scratch buffers being
+    * used at the same time, each with a different WAVESIZE.
+    *
+    * If you want to decrease WAVESIZE, you don't have to. There is no advantage in decreasing
+    * WAVESIZE after it's been increased.
+    *
+    * Shaders with SCRATCH_EN=0 don't allocate scratch space.
+    */
+   const unsigned size_shift = 10;
+   const unsigned min_size_per_wave = BITFIELD_BIT(size_shift);
+
+   /* The LLVM shader backend should be reporting aligned scratch_sizes. */
+   assert((bytes_per_wave & BITFIELD_MASK(size_shift)) == 0 &&
+          "scratch size per wave should be aligned");
+
+   /* Add 1 scratch item to make the number of items odd. This should improve scratch
+    * performance by more randomly distributing scratch waves among memory channels.
+    */
+   if (bytes_per_wave)
+      bytes_per_wave |= min_size_per_wave;
+
+   *max_seen_bytes_per_wave = MAX2(*max_seen_bytes_per_wave, bytes_per_wave);
+
+   /* TODO: We could decrease WAVES to make the whole buffer fit into the infinity cache. */
+   *tmpring_size = S_0286E8_WAVES(max_scratch_waves) |
+                   S_0286E8_WAVESIZE(*max_seen_bytes_per_wave >> size_shift);
+}

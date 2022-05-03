@@ -27,6 +27,7 @@
 #include "util/slab.h"
 #include "util/disk_cache.h"
 #include "virgl_winsys.h"
+#include "compiler/nir/nir.h"
 
 enum virgl_debug_flags {
    VIRGL_DEBUG_VERBOSE              = 1 << 0,
@@ -62,6 +63,8 @@ struct virgl_screen {
    bool tweak_l8_srgb_readback;
    bool no_coherent;
    int32_t tweak_gles_tf3_value;
+
+   nir_shader_compiler_options compiler_options;
 
    struct disk_cache *disk_cache;
 };

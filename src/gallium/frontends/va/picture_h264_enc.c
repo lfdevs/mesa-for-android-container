@@ -36,7 +36,8 @@ vlVaHandleVAEncPictureParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *cont
    vlVaBuffer *coded_buf;
 
    h264 = buf->data;
-   context->desc.h264enc.frame_num = h264->frame_num;
+   if (h264->pic_fields.bits.idr_pic_flag == 1)
+      context->desc.h264enc.frame_num = 0;
    context->desc.h264enc.not_referenced = !h264->pic_fields.bits.reference_pic_flag;
    context->desc.h264enc.pic_order_cnt = h264->CurrPic.TopFieldOrderCnt;
    if (context->desc.h264enc.gop_cnt == 0)
@@ -54,7 +55,7 @@ vlVaHandleVAEncPictureParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *cont
 
    _mesa_hash_table_insert(context->desc.h264enc.frame_idx,
 		       UINT_TO_PTR(h264->CurrPic.picture_id + 1),
-		       UINT_TO_PTR(h264->frame_num));
+		       UINT_TO_PTR(context->desc.h264enc.frame_num));
 
    if (h264->pic_fields.bits.idr_pic_flag == 1)
       context->desc.h264enc.picture_type = PIPE_H2645_ENC_PICTURE_TYPE_IDR;

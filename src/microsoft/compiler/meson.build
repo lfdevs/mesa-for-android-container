@@ -33,6 +33,10 @@ files_libdxil_compiler = files(
   'nir_to_dxil.c',
 )
 
+if host_machine.system() == 'windows'
+  files_libdxil_compiler += files('dxil_validator.cpp')
+endif
+
 dxil_nir_algebraic_c = custom_target(
   'dxil_nir_algebraic.c',
   input : 'dxil_nir_algebraic.py',

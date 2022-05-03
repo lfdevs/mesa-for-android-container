@@ -40,6 +40,7 @@ files_libd3d12 = files(
   'd3d12_nir_passes.c',
   'd3d12_pipeline_state.cpp',
   'd3d12_query.cpp',
+  'd3d12_residency.cpp',
   'd3d12_resource.cpp',
   'd3d12_root_signature.cpp',
   'd3d12_screen.cpp',

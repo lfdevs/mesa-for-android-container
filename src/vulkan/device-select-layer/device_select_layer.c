@@ -234,7 +234,7 @@ static void print_gpu(const struct instance_info *info, unsigned index, VkPhysic
    }
    fprintf(stderr, "  GPU %d: %x:%x \"%s\" %s", index, properties.properties.vendorID,
            properties.properties.deviceID, properties.properties.deviceName, type);
-   if (info->has_pci_bus)
+   if (info->has_vulkan11 && info->has_pci_bus)
       fprintf(stderr, " %04x:%02x:%02x.%x", ext_pci_properties.pciDomain,
               ext_pci_properties.pciBus, ext_pci_properties.pciDevice,
               ext_pci_properties.pciFunction);
@@ -308,6 +308,63 @@ static int device_select_find_dri_prime_tag_default(struct device_pci_info *pci_
    return default_idx;
 }
 
+static int device_select_find_boot_vga_vid_did(struct device_pci_info *pci_infos,
+                                               uint32_t device_count)
+{
+   char path[1024];
+   int fd;
+   int default_idx = -1;
+   uint8_t boot_vga = 0;
+   ssize_t size_ret;
+   #pragma pack(push, 1)
+   struct id {
+      uint16_t vid;
+      uint16_t did;
+   }id;
+   #pragma pack(pop)
+
+   for (unsigned i = 0; i < 64; i++) {
+      snprintf(path, 1023, "/sys/class/drm/card%d/device/boot_vga", i);
+      fd = open(path, O_RDONLY);
+      if (fd != -1) {
+         uint8_t val;
+         size_ret = read(fd, &val, 1);
+         close(fd);
+         if (size_ret == 1 && val == '1')
+            boot_vga = 1;
+      } else {
+         return default_idx;
+      }
+
+      if (boot_vga) {
+         snprintf(path, 1023, "/sys/class/drm/card%d/device/config", i);
+         fd = open(path, O_RDONLY);
+         if (fd != -1) {
+            size_ret = read(fd, &id, 4);
+            close(fd);
+            if (size_ret != 4)
+               return default_idx;
+         } else {
+            return default_idx;
+         }
+         break;
+      }
+   }
+
+   if (!boot_vga)
+      return default_idx;
+
+   for (unsigned i = 0; i < device_count; ++i) {
+      if (id.vid == pci_infos[i].dev_info.vendor_id &&
+          id.did == pci_infos[i].dev_info.device_id) {
+         default_idx = i;
+         break;
+      }
+   }
+
+   return default_idx;
+}
+
 static int device_select_find_boot_vga_default(struct device_pci_info *pci_infos,
                                                uint32_t device_count)
 {
@@ -373,7 +430,7 @@ static uint32_t get_default_device(const struct instance_info *info,
    if (dri_prime && !strcmp(dri_prime, "1"))
       dri_prime_is_one = true;
 
-   if (dri_prime && !dri_prime_is_one && !info->has_pci_bus) {
+   if (dri_prime && !dri_prime_is_one && !info->has_vulkan11 && !info->has_pci_bus) {
       fprintf(stderr, "device-select: cannot correctly use DRI_PRIME tag\n");
    }
 
@@ -387,17 +444,20 @@ static uint32_t get_default_device(const struct instance_info *info,
 
    if (selection)
       default_idx = device_select_find_explicit_default(pci_infos, physical_device_count, selection);
-   if (default_idx == -1 && info->has_pci_bus && dri_prime && !dri_prime_is_one)
+   if (default_idx == -1 && info->has_vulkan11 && info->has_pci_bus && dri_prime && !dri_prime_is_one)
       default_idx = device_select_find_dri_prime_tag_default(pci_infos, physical_device_count, dri_prime);
    if (default_idx == -1 && info->has_wayland)
       default_idx = device_select_find_wayland_pci_default(pci_infos, physical_device_count);
    if (default_idx == -1 && info->has_xcb)
       default_idx = device_select_find_xcb_pci_default(pci_infos, physical_device_count);
-   if (default_idx == -1 && info->has_pci_bus)
-      default_idx = device_select_find_boot_vga_default(pci_infos, physical_device_count);
+   if (default_idx == -1) {
+      if (info->has_vulkan11 && info->has_pci_bus)
+         default_idx = device_select_find_boot_vga_default(pci_infos, physical_device_count);
+      else
+         default_idx = device_select_find_boot_vga_vid_did(pci_infos, physical_device_count);
+   }
    if (default_idx == -1 && cpu_count)
       default_idx = device_select_find_non_cpu(pci_infos, physical_device_count);
-
    /* DRI_PRIME=1 handling - pick any other device than default. */
    if (default_idx != -1 && dri_prime_is_one && physical_device_count > (cpu_count + 1)) {
       if (default_idx == 0 || default_idx == 1)
@@ -416,7 +476,7 @@ static VkResult device_select_EnumeratePhysicalDevices(VkInstance instance,
    uint32_t selected_physical_device_count = 0;
    const char* selection = getenv("MESA_VK_DEVICE_SELECT");
    VkResult result = info->EnumeratePhysicalDevices(instance, &physical_device_count, NULL);
-   VK_OUTARRAY_MAKE(out, pPhysicalDevices, pPhysicalDeviceCount);
+   VK_OUTARRAY_MAKE_TYPED(VkPhysicalDevice, out, pPhysicalDevices, pPhysicalDeviceCount);
    if (result != VK_SUCCESS)
       return result;
 
@@ -469,7 +529,7 @@ static VkResult device_select_EnumeratePhysicalDevices(VkInstance instance,
    assert(result == VK_SUCCESS);
 
    for (unsigned i = 0; i < selected_physical_device_count; i++) {
-      vk_outarray_append(&out, ent) {
+      vk_outarray_append_typed(VkPhysicalDevice, &out, ent) {
          *ent = selected_physical_devices[i];
       }
    }
@@ -488,7 +548,7 @@ static VkResult device_select_EnumeratePhysicalDeviceGroups(VkInstance instance,
    uint32_t physical_device_group_count = 0;
    uint32_t selected_physical_device_group_count = 0;
    VkResult result = info->EnumeratePhysicalDeviceGroups(instance, &physical_device_group_count, NULL);
-   VK_OUTARRAY_MAKE(out, pPhysicalDeviceGroups, pPhysicalDeviceGroupCount);
+   VK_OUTARRAY_MAKE_TYPED(VkPhysicalDeviceGroupProperties, out, pPhysicalDeviceGroups, pPhysicalDeviceGroupCount);
 
    if (result != VK_SUCCESS)
       return result;
@@ -532,7 +592,7 @@ static VkResult device_select_EnumeratePhysicalDeviceGroups(VkInstance instance,
    assert(result == VK_SUCCESS);
 
    for (unsigned i = 0; i < selected_physical_device_group_count; i++) {
-      vk_outarray_append(&out, ent) {
+      vk_outarray_append_typed(VkPhysicalDeviceGroupProperties, &out, ent) {
          *ent = selected_physical_device_groups[i];
       }
    }

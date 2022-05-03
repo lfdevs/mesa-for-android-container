@@ -384,6 +384,8 @@ brw_instruction_name(const struct intel_device_info *devinfo, enum opcode op)
 
    case SHADER_OPCODE_FIND_LIVE_CHANNEL:
       return "find_live_channel";
+   case SHADER_OPCODE_FIND_LAST_LIVE_CHANNEL:
+      return "find_last_live_channel";
    case FS_OPCODE_LOAD_LIVE_CHANNELS:
       return "load_live_channels";
 
@@ -557,12 +559,12 @@ brw_instruction_name(const struct intel_device_info *devinfo, enum opcode op)
       return "rnd_mode";
    case SHADER_OPCODE_FLOAT_CONTROL_MODE:
       return "float_control_mode";
-   case SHADER_OPCODE_GET_DSS_ID:
-      return "get_dss_id";
    case SHADER_OPCODE_BTD_SPAWN_LOGICAL:
       return "btd_spawn_logical";
    case SHADER_OPCODE_BTD_RETIRE_LOGICAL:
       return "btd_retire_logical";
+   case SHADER_OPCODE_READ_SR_REG:
+      return "read_sr_reg";
    }
 
    unreachable("not reached");
@@ -1342,6 +1344,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
    const unsigned *assembly;
 
    prog_data->base.base.stage = MESA_SHADER_TESS_EVAL;
+   prog_data->base.base.ray_queries = nir->info.ray_queries;
 
    nir->info.inputs_read = key->inputs_read;
    nir->info.patch_inputs_read = key->patch_inputs_read;

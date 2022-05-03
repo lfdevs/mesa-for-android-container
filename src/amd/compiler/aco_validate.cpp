@@ -236,6 +236,12 @@ validate_ir(Program* program)
             if (instr->definitions[0].regClass().is_subdword() && !instr->definitions[0].isFixed())
                check((vop3.opsel & (1 << 3)) == 0, "Unexpected opsel for sub-dword definition",
                      instr.get());
+         } else if (instr->opcode == aco_opcode::v_fma_mixlo_f16 ||
+                    instr->opcode == aco_opcode::v_fma_mixhi_f16 ||
+                    instr->opcode == aco_opcode::v_fma_mix_f32) {
+            check(instr->definitions[0].regClass() ==
+                     (instr->opcode == aco_opcode::v_fma_mix_f32 ? v1 : v2b),
+                  "v_fma_mix_f32/v_fma_mix_f16 must have v1/v2b definition", instr.get());
          } else if (instr->isVOP3P()) {
             VOP3P_instruction& vop3p = instr->vop3p();
             for (unsigned i = 0; i < instr->operands.size(); i++) {
@@ -768,10 +774,14 @@ validate_subdword_operand(chip_class chip, const aco_ptr<Instruction>& instr, un
    if (instr->isSDWA())
       return byte + instr->sdwa().sel[index].offset() + instr->sdwa().sel[index].size() <= 4 &&
              byte % instr->sdwa().sel[index].size() == 0;
-   if (instr->isVOP3P())
+   if (instr->isVOP3P()) {
+      bool fma_mix = instr->opcode == aco_opcode::v_fma_mixlo_f16 ||
+                     instr->opcode == aco_opcode::v_fma_mixhi_f16 ||
+                     instr->opcode == aco_opcode::v_fma_mix_f32;
       return ((instr->vop3p().opsel_lo >> index) & 1) == (byte >> 1) &&
-             ((instr->vop3p().opsel_hi >> index) & 1) == (byte >> 1);
-   if (byte == 2 && can_use_opsel(chip, instr->opcode, index, 1))
+             ((instr->vop3p().opsel_hi >> index) & 1) == (fma_mix || (byte >> 1));
+   }
+   if (byte == 2 && can_use_opsel(chip, instr->opcode, index))
       return true;
 
    switch (instr->opcode) {
@@ -824,7 +834,7 @@ validate_subdword_definition(chip_class chip, const aco_ptr<Instruction>& instr)
    if (instr->isSDWA())
       return byte + instr->sdwa().dst_sel.offset() + instr->sdwa().dst_sel.size() <= 4 &&
              byte % instr->sdwa().dst_sel.size() == 0;
-   if (byte == 2 && can_use_opsel(chip, instr->opcode, -1, 1))
+   if (byte == 2 && can_use_opsel(chip, instr->opcode, -1))
       return true;
 
    switch (instr->opcode) {
@@ -900,6 +910,54 @@ get_subdword_bytes_written(Program* program, const aco_ptr<Instruction>& instr, 
    case aco_opcode::tbuffer_load_format_d16_xyz: return program->dev.sram_ecc_enabled ? 8 : 6;
    default: return def.size() * 4;
    }
+}
+
+bool
+validate_instr_defs(Program* program, std::array<unsigned, 2048>& regs,
+                    const std::vector<Assignment>& assignments, const Location& loc,
+                    aco_ptr<Instruction>& instr)
+{
+   bool err = false;
+
+   for (unsigned i = 0; i < instr->definitions.size(); i++) {
+      Definition& def = instr->definitions[i];
+      if (!def.isTemp())
+         continue;
+      Temp tmp = def.getTemp();
+      PhysReg reg = assignments[tmp.id()].reg;
+      for (unsigned j = 0; j < tmp.bytes(); j++) {
+         if (regs[reg.reg_b + j])
+            err |=
+               ra_fail(program, loc, assignments[regs[reg.reg_b + j]].defloc,
+                       "Assignment of element %d of %%%d already taken by %%%d from instruction", i,
+                       tmp.id(), regs[reg.reg_b + j]);
+         regs[reg.reg_b + j] = tmp.id();
+      }
+      if (def.regClass().is_subdword() && def.bytes() < 4) {
+         unsigned written = get_subdword_bytes_written(program, instr, i);
+         /* If written=4, the instruction still might write the upper half. In that case, it's
+          * the lower half that isn't preserved */
+         for (unsigned j = reg.byte() & ~(written - 1); j < written; j++) {
+            unsigned written_reg = reg.reg() * 4u + j;
+            if (regs[written_reg] && regs[written_reg] != def.tempId())
+               err |= ra_fail(program, loc, assignments[regs[written_reg]].defloc,
+                              "Assignment of element %d of %%%d overwrites the full register "
+                              "taken by %%%d from instruction",
+                              i, tmp.id(), regs[written_reg]);
+         }
+      }
+   }
+
+   for (const Definition& def : instr->definitions) {
+      if (!def.isTemp())
+         continue;
+      if (def.isKill()) {
+         for (unsigned j = 0; j < def.getTemp().bytes(); j++)
+            regs[def.physReg().reg_b + j] = 0;
+      }
+   }
+
+   return err;
 }
 
 } /* end namespace */
@@ -1085,45 +1143,10 @@ validate_ra(Program* program)
             }
          }
 
-         for (unsigned i = 0; i < instr->definitions.size(); i++) {
-            Definition& def = instr->definitions[i];
-            if (!def.isTemp())
-               continue;
-            Temp tmp = def.getTemp();
-            PhysReg reg = assignments[tmp.id()].reg;
-            for (unsigned j = 0; j < tmp.bytes(); j++) {
-               if (regs[reg.reg_b + j])
-                  err |= ra_fail(
-                     program, loc, assignments[regs[reg.reg_b + j]].defloc,
-                     "Assignment of element %d of %%%d already taken by %%%d from instruction", i,
-                     tmp.id(), regs[reg.reg_b + j]);
-               regs[reg.reg_b + j] = tmp.id();
-            }
-            if (def.regClass().is_subdword() && def.bytes() < 4) {
-               unsigned written = get_subdword_bytes_written(program, instr, i);
-               /* If written=4, the instruction still might write the upper half. In that case, it's
-                * the lower half that isn't preserved */
-               for (unsigned j = reg.byte() & ~(written - 1); j < written; j++) {
-                  unsigned written_reg = reg.reg() * 4u + j;
-                  if (regs[written_reg] && regs[written_reg] != def.tempId())
-                     err |= ra_fail(program, loc, assignments[regs[written_reg]].defloc,
-                                    "Assignment of element %d of %%%d overwrites the full register "
-                                    "taken by %%%d from instruction",
-                                    i, tmp.id(), regs[written_reg]);
-               }
-            }
-         }
+         if (!instr->isBranch() || block.linear_succs.size() != 1)
+            err |= validate_instr_defs(program, regs, assignments, loc, instr);
 
-         for (const Definition& def : instr->definitions) {
-            if (!def.isTemp())
-               continue;
-            if (def.isKill()) {
-               for (unsigned j = 0; j < def.getTemp().bytes(); j++)
-                  regs[def.physReg().reg_b + j] = 0;
-            }
-         }
-
-         if (instr->opcode != aco_opcode::p_phi && instr->opcode != aco_opcode::p_linear_phi) {
+         if (!is_phi(instr)) {
             for (const Operand& op : instr->operands) {
                if (!op.isTemp())
                   continue;
@@ -1131,6 +1154,13 @@ validate_ra(Program* program)
                   for (unsigned j = 0; j < op.getTemp().bytes(); j++)
                      regs[op.physReg().reg_b + j] = 0;
                }
+            }
+         } else if (block.linear_preds.size() != 1 ||
+                    program->blocks[block.linear_preds[0]].linear_succs.size() == 1) {
+            for (unsigned pred : block.linear_preds) {
+               aco_ptr<Instruction>& br = program->blocks[pred].instructions.back();
+               assert(br->isBranch());
+               err |= validate_instr_defs(program, regs, assignments, loc, br);
             }
          }
       }

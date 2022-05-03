@@ -106,7 +106,7 @@ radv_expand_fmask_image_inplace(struct radv_cmd_buffer *cmd_buffer, struct radv_
                         pipeline);
 
    cmd_buffer->state.flush_bits |= radv_dst_access_flush(
-      cmd_buffer, VK_ACCESS_2_SHADER_READ_BIT_KHR | VK_ACCESS_2_SHADER_WRITE_BIT_KHR, image);
+      cmd_buffer, VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT, image);
 
    radv_image_view_init(&iview, device,
                         &(VkImageViewCreateInfo){
@@ -159,7 +159,7 @@ radv_expand_fmask_image_inplace(struct radv_cmd_buffer *cmd_buffer, struct radv_
 
    cmd_buffer->state.flush_bits |=
       RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-      radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT_KHR, image);
+      radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, image);
 
    /* Re-initialize FMASK in fully expanded mode. */
    cmd_buffer->state.flush_bits |= radv_init_fmask(cmd_buffer, image, subresourceRange);

@@ -556,7 +556,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
 
     This->driver_caps.user_sw_vbufs = This->screen_sw->get_param(This->screen_sw, PIPE_CAP_USER_VERTEX_BUFFERS);
     This->vertex_uploader = This->csmt_active ? This->pipe_secondary->stream_uploader : This->context.pipe->stream_uploader;
-    This->driver_caps.window_space_position_support = GET_PCAP(TGSI_VS_WINDOW_SPACE_POSITION);
+    This->driver_caps.window_space_position_support = GET_PCAP(VS_WINDOW_SPACE_POSITION);
     This->driver_caps.vs_integer = pScreen->get_shader_param(pScreen, PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_INTEGERS);
     This->driver_caps.ps_integer = pScreen->get_shader_param(pScreen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_INTEGERS);
     This->driver_caps.offset_units_unscaled = GET_PCAP(POLYGON_OFFSET_UNITS_UNSCALED);

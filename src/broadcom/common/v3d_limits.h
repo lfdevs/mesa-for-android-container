@@ -64,4 +64,10 @@
 
 #define V3D_MAX_BUFFER_RANGE (1 << 27)
 
+/* Sub-pixel precission bits in the rasterizer */
+#define V3D_COORD_SHIFT 6
+
+/* Size of a cache line */
+#define V3D_NON_COHERENT_ATOM_SIZE 256
+
 #endif /* V3D_LIMITS_H */

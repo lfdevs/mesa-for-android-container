@@ -14,7 +14,7 @@ traces:
   - path: golf-with-your-friends/GolfWithYourFriends-trim--f1070-v20201203.trace
     expectations:
       - device: freedreno-a630
-        checksum: 7b08782ff6a54a3d088729363080c5b6
+        checksum: cd01820de77063f0397f26d6cd747d1c
   - path: hollow-knight/HollowKnight-trim--f2020-v20201203.trace
     expectations:
       - device: freedreno-a630

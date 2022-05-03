@@ -423,7 +423,6 @@ st_tgsi_lower_yuv(const struct tgsi_token *tokens, unsigned free_slots,
                   unsigned lower_nv12, unsigned lower_iyuv)
 {
    struct tgsi_yuv_transform ctx;
-   struct tgsi_token *newtoks;
    int newlen;
 
    assert(!(lower_nv12 & lower_iyuv)); /* bitmasks should be mutually exclusive */
@@ -442,14 +441,6 @@ st_tgsi_lower_yuv(const struct tgsi_token *tokens, unsigned free_slots,
     * this is a pain about tgsi_transform :-/
     */
    newlen = tgsi_num_tokens(tokens) + 300;
-   newtoks = tgsi_alloc_tokens(newlen);
-   if (!newtoks)
-      return NULL;
 
-   tgsi_transform_shader(tokens, newtoks, newlen, &ctx.base);
-
-//   tgsi_dump(newtoks, 0);
-//   debug_printf("\n");
-
-   return newtoks;
+   return tgsi_transform_shader(tokens, newlen, &ctx.base);
 }

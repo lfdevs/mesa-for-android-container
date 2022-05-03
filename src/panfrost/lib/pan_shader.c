@@ -241,7 +241,6 @@ GENX(pan_shader_compile)(nir_shader *s,
                                           info->fs.outputs_read;
 
                 info->fs.can_discard = s->info.fs.uses_discard;
-                info->fs.helper_invocations = s->info.fs.needs_quad_helper_invocations;
                 info->fs.early_fragment_tests = s->info.fs.early_fragment_tests;
 
                 /* List of reasons we need to execute frag shaders when things
@@ -265,6 +264,11 @@ GENX(pan_shader_compile)(nir_shader *s,
                         !info->fs.writes_coverage &&
                         !info->fs.can_discard &&
                         !info->fs.outputs_read;
+
+                /* Requires the same hardware guarantees, so grouped as one bit
+                 * in the hardware.
+                 */
+                info->contains_barrier |= s->info.fs.needs_quad_helper_invocations;
 
                 info->fs.reads_frag_coord =
                         (s->info.inputs_read & (1 << VARYING_SLOT_POS)) ||

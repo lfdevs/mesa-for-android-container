@@ -1,10 +1,22 @@
 glx@glx_arb_create_context_no_error@no error,Fail
 glx@glx_arb_create_context_robustness@invalid reset notification strategy,Fail
+
+glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
 glx@glx_ext_import_context@import context- single process,Fail
+glx@glx_ext_import_context@query context info,Fail
+
 glx@glx-visuals-stencil -pixmap,Crash
+
+spec@!opengl 1.0@rasterpos,Fail
+spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
+spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
+
 spec@arb_direct_state_access@gettextureimage-formats,Crash
+
 spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled,Fail
+spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled@GL_RGB565- swizzled- border color only,Fail
+
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
@@ -66,7 +78,21 @@ spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRE
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA_S3TC_DXT5_EXT- swizzled- border color only,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGB_S3TC_DXT1_EXT- swizzled- border color only,Fail
 spec@ext_texture_integer@fbo-integer,Fail
+
 spec@ext_texture_integer@texwrap formats bordercolor-swizzled,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB16I- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB16UI- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB32I- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB32UI- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB8I- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB8UI- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA16I- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA16UI- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA32I- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA32UI- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA8I- swizzled- border color only,Fail
+spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA8UI- swizzled- border color only,Fail
+
 spec@ext_texture_shared_exponent@texwrap formats bordercolor-swizzled,Fail
 spec@ext_texture_snorm@texwrap formats bordercolor-swizzled,Fail
 spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_R16_SNORM- swizzled- border color only,Fail

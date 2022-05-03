@@ -173,7 +173,8 @@ mark_whole_variable(nir_shader *shader, nir_variable *var,
    if (nir_is_arrayed_io(var, shader->info.stage) ||
        /* For NV_mesh_shader. */
        (shader->info.stage == MESA_SHADER_MESH &&
-        var->data.location == VARYING_SLOT_PRIMITIVE_INDICES)) {
+        var->data.location == VARYING_SLOT_PRIMITIVE_INDICES &&
+        !var->data.per_primitive)) {
       assert(glsl_type_is_array(type));
       type = glsl_get_array_element(type);
    }
@@ -195,6 +196,10 @@ get_io_offset(nir_deref_instr *deref, nir_variable *var, bool is_arrayed,
               bool skip_non_arrayed)
 {
    if (var->data.compact) {
+      if (deref->deref_type == nir_deref_type_var) {
+         assert(glsl_type_is_array(var->type));
+         return 0;
+      }
       assert(deref->deref_type == nir_deref_type_array);
       return nir_src_is_const(deref->arr.index) ?
              (nir_src_as_uint(deref->arr.index) + var->data.location_frac) / 4u :
@@ -404,6 +409,7 @@ nir_intrinsic_writes_external_memory(const nir_intrinsic_instr *instr)
    case nir_intrinsic_ssbo_atomic_xor_ir3:
    case nir_intrinsic_store_global:
    case nir_intrinsic_store_global_ir3:
+   case nir_intrinsic_store_global_amd:
    case nir_intrinsic_store_ssbo:
    case nir_intrinsic_store_ssbo_ir3:
       return true;
@@ -490,7 +496,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_interp_deref_at_offset:
    case nir_intrinsic_interp_deref_at_vertex:
    case nir_intrinsic_load_deref:
-   case nir_intrinsic_store_deref:{
+   case nir_intrinsic_store_deref:
+   case nir_intrinsic_copy_deref:{
       nir_deref_instr *deref = nir_src_as_deref(instr->src[0]);
       if (nir_deref_mode_is_one_of(deref, nir_var_shader_in |
                                           nir_var_shader_out)) {
@@ -639,6 +646,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_load_base_global_invocation_id:
    case nir_intrinsic_load_global_invocation_index:
    case nir_intrinsic_load_workgroup_id:
+   case nir_intrinsic_load_workgroup_index:
    case nir_intrinsic_load_num_workgroups:
    case nir_intrinsic_load_workgroup_size:
    case nir_intrinsic_load_work_dim:

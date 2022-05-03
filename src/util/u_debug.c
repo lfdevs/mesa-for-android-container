@@ -27,11 +27,7 @@
  **************************************************************************/
 
 
-#include "pipe/p_config.h"
-
 #include "util/u_debug.h"
-#include "pipe/p_format.h"
-#include "pipe/p_state.h"
 #include "util/u_string.h"
 #include "util/u_math.h"
 #include <inttypes.h>
@@ -66,9 +62,9 @@ _debug_vprintf(const char *format, va_list ap)
 
 
 void
-_pipe_debug_message(struct pipe_debug_callback *cb,
+_util_debug_message(struct util_debug_callback *cb,
                     unsigned *id,
-                    enum pipe_debug_type type,
+                    enum util_debug_type type,
                     const char *fmt, ...)
 {
    va_list args;
@@ -79,10 +75,10 @@ _pipe_debug_message(struct pipe_debug_callback *cb,
 }
 
 
-void
-debug_disable_error_message_boxes(void)
-{
 #ifdef _WIN32
+void
+debug_disable_win32_error_dialogs(void)
+{
    /* When Windows' error message boxes are disabled for this process (as is
     * typically the case when running tests in an automated fashion) we disable
     * CRT message boxes too.
@@ -101,8 +97,8 @@ debug_disable_error_message_boxes(void)
       _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
    }
-#endif /* _WIN32 */
 }
+#endif /* _WIN32 */
 
 
 #ifdef DEBUG

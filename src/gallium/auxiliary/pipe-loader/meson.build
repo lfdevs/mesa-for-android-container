@@ -45,7 +45,7 @@ libpipe_loader_static = static_library(
   files_pipe_loader,
   include_directories : [
     inc_util, inc_loader, inc_gallium, inc_include, inc_src, inc_gallium_aux,
-    inc_gallium_winsys,
+    inc_gallium_winsys, inc_gallium_drivers,
   ],
   c_args : [libpipe_loader_defines, '-DGALLIUM_STATIC_TARGETS=1'],
   gnu_symbol_visibility : 'hidden',
@@ -59,7 +59,7 @@ libpipe_loader_dynamic = static_library(
   files_pipe_loader,
   include_directories : [
     inc_util, inc_loader, inc_gallium, inc_include, inc_src, inc_gallium_aux,
-    inc_gallium_winsys,
+    inc_gallium_winsys, inc_gallium_drivers,
   ],
   c_args : [
     libpipe_loader_defines,

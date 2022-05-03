@@ -40,6 +40,9 @@
 #include "util/u_vertex_state_cache.h"
 #include "pipebuffer/pb_cache.h"
 #include "pipebuffer/pb_slab.h"
+#include "frontend/sw_winsys.h"
+#include "kopper_interface.h"
+
 #include <vulkan/vulkan.h>
 
 extern uint32_t zink_debug;
@@ -87,9 +90,14 @@ struct zink_screen {
 
    unsigned buffer_rebind_counter;
 
+   struct hash_table dts;
+   simple_mtx_t dt_lock;
+
    bool device_lost;
-   struct sw_winsys *winsys;
    int drm_fd;
+   struct sw_winsys winsys;
+   struct sw_winsys *sw_winsys; // wrapped
+   __DRIkopperLoaderExtension *loader;
 
    struct hash_table framebuffer_cache;
    simple_mtx_t framebuffer_mtx;
@@ -145,9 +153,6 @@ struct zink_screen {
 
    uint32_t cur_custom_border_color_samplers;
 
-   bool needs_mesa_wsi;
-   bool needs_mesa_flush_wsi;
-
    struct vk_dispatch_table vk;
 
    bool (*descriptor_program_init)(struct zink_context *ctx, struct zink_program *pg);
@@ -177,8 +182,12 @@ struct zink_screen {
    } null_descriptor_hashes;
 
    VkExtent2D maxSampleLocationGridSize[5];
-};
 
+   struct {
+      bool color_write_missing;
+      bool depth_clip_control_missing;
+   } driver_workarounds;
+};
 
 /* update last_finished to account for batch_id wrapping */
 static inline void
@@ -277,13 +286,12 @@ zink_screen_init_descriptor_funcs(struct zink_screen *screen, bool fallback);
 void
 zink_stub_function_not_loaded(void);
 
-#define warn_missing_feature(feat) \
+#define warn_missing_feature(warned, feat) \
    do { \
-      static bool warned = false; \
       if (!warned) { \
-         fprintf(stderr, "WARNING: Incorrect rendering will happen, " \
+         mesa_logw("WARNING: Incorrect rendering will happen " \
                          "because the Vulkan device doesn't support " \
-                         "the %s feature\n", feat); \
+                         "the '%s' feature\n", feat); \
          warned = true; \
       } \
    } while (0)

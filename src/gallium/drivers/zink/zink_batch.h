@@ -48,6 +48,36 @@ struct zink_resource;
 struct zink_sampler_view;
 struct zink_surface;
 
+/* zink_batch_usage concepts:
+ * - batch "usage" is an indicator of when and how a BO was accessed
+ * - batch "tracking" is the batch state(s) containing an extra ref for a BO
+ *
+ * - usage prevents a BO from being mapped while it has pending+conflicting access
+ * - usage affects pipeline barrier generation for synchronizing reads and writes
+ * - usage MUST be removed before context destruction to avoid crashing during BO
+ *   reclaiming in suballocator
+ *
+ * - tracking prevents a BO from being destroyed early
+ * - tracking enables usage to be pruned
+ *
+ *
+ * tracking is added:
+ * - any time a BO is used in a "one-off" operation (e.g., blit, index buffer, indirect buffer)
+ * - any time a descriptor is unbound
+ * - when a buffer is replaced (IFF: resource is bound as a descriptor or usage previously existed)
+ *
+ * tracking is removed:
+ * - in zink_reset_batch_state()
+ *
+ * usage is added:
+ * - any time a BO is used in a "one-off" operation (e.g., blit, index buffer, indirect buffer)
+ * - any time a descriptor is bound
+ * - any time a descriptor is unbound (IFF: usage previously existed)
+ * - for all bound descriptors on the first draw/dispatch after a flush (zink_update_descriptor_refs)
+ *
+ * usage is removed:
+ * - when tracking is removed (IFF: BO usage == tracking, i.e., this is the last batch that a BO was active on)
+ */
 struct zink_batch_usage {
    uint32_t usage;
    cnd_t flush;
@@ -73,11 +103,12 @@ struct zink_batch_state {
    struct util_dynarray wait_semaphore_stages; //external wait semaphores
 
    VkQueue queue; //duplicated from batch for threading
-   VkSemaphore sem;
+   VkSemaphore present;
+   struct zink_resource *swapchain;
+   struct util_dynarray acquires;
+   struct util_dynarray dead_swapchains;
 
    struct util_queue_fence flush_completed;
-
-   struct pipe_resource *flush_res;
 
    struct set *programs;
 
@@ -104,13 +135,13 @@ struct zink_batch_state {
    bool is_device_lost;
    bool have_timelines;
    bool has_barriers;
-   bool scanout_flush;
 };
 
 struct zink_batch {
    struct zink_batch_state *state;
 
    struct zink_batch_usage *last_batch_usage;
+   struct zink_resource *swapchain;
 
    unsigned work_count;
 

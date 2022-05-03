@@ -1645,8 +1645,14 @@ SpillCodeInserter::assignSlot(const Interval &livei, const unsigned int size)
    int32_t offset;
    std::list<SpillSlot>::iterator pos = slots.end(), it = slots.begin();
 
-   if (offsetBase % size)
-      offsetBase += size - (offsetBase % size);
+   if (!func->stackPtr) {
+      // Later, we compute the address as (offsetBase + tlsBase)
+      // tlsBase might not be size-aligned, so we add just enough
+      // to give the final address the correct alignment
+      offsetBase = align(offsetBase + func->tlsBase, size) - func->tlsBase;
+   } else {
+      offsetBase = align(offsetBase, size);
+   }
 
    slot.sym = NULL;
 

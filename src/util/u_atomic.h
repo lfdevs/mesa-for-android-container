@@ -82,7 +82,7 @@
 /* Unlocked version for single threaded environments, such as some
  * windows kernel modules.
  */
-#if defined(PIPE_ATOMIC_OS_UNLOCKED) 
+#if defined(PIPE_ATOMIC_OS_UNLOCKED)
 
 #define PIPE_ATOMIC "Unlocked"
 

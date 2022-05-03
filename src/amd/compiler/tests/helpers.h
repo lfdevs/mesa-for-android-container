@@ -91,8 +91,17 @@ void writeout(unsigned i, aco::Builder::Result res);
 void writeout(unsigned i, aco::Operand op);
 void writeout(unsigned i, aco::Operand op0, aco::Operand op1);
 
-aco::Temp fneg(aco::Temp src);
-aco::Temp fabs(aco::Temp src);
+aco::Temp fneg(aco::Temp src, aco::Builder b=bld);
+aco::Temp fabs(aco::Temp src, aco::Builder b=bld);
+aco::Temp f2f32(aco::Temp src, aco::Builder b=bld);
+aco::Temp f2f16(aco::Temp src, aco::Builder b=bld);
+aco::Temp u2u16(aco::Temp src, aco::Builder b=bld);
+aco::Temp fadd(aco::Temp src0, aco::Temp src1, aco::Builder b=bld);
+aco::Temp fmul(aco::Temp src0, aco::Temp src1, aco::Builder b=bld);
+aco::Temp fma(aco::Temp src0, aco::Temp src1, aco::Temp src2, aco::Builder b=bld);
+aco::Temp fsat(aco::Temp src, aco::Builder b=bld);
+aco::Temp ext_ushort(aco::Temp src, unsigned idx, aco::Builder b=bld);
+aco::Temp ext_ubyte(aco::Temp src, unsigned idx, aco::Builder b=bld);
 
 /* vulkan helpers */
 VkDevice get_vk_device(enum chip_class chip_class);

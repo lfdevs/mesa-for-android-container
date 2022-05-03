@@ -161,6 +161,36 @@ ir3_nir_try_propagate_bit_shift(nir_builder *b, nir_ssa_def *offset,
    return new_offset;
 }
 
+/* isam doesn't have an "untyped" field, so it can only load 1 component at a
+ * time because our storage buffer descriptors use a 1-component format.
+ * Therefore we need to scalarize any loads that would use isam.
+ */
+static void
+scalarize_load(nir_intrinsic_instr *intrinsic, nir_builder *b)
+{
+   struct nir_ssa_def *results[NIR_MAX_VEC_COMPONENTS];
+
+   nir_ssa_def *descriptor = intrinsic->src[0].ssa;
+   nir_ssa_def *offset = intrinsic->src[1].ssa;
+   nir_ssa_def *new_offset = intrinsic->src[2].ssa;
+   unsigned comp_size = intrinsic->dest.ssa.bit_size / 8;
+   for (unsigned i = 0; i < intrinsic->dest.ssa.num_components; i++) {
+      results[i] =
+         nir_load_ssbo_ir3(b, 1, intrinsic->dest.ssa.bit_size, descriptor,
+                           nir_iadd(b, offset, nir_imm_int(b, i * comp_size)),
+                           nir_iadd(b, new_offset, nir_imm_int(b, i)),
+                           .access = nir_intrinsic_access(intrinsic),
+                           .align_mul = nir_intrinsic_align_mul(intrinsic),
+                           .align_offset = nir_intrinsic_align_offset(intrinsic));
+   }
+
+   nir_ssa_def *result = nir_vec(b, results, intrinsic->dest.ssa.num_components);
+
+   nir_ssa_def_rewrite_uses(&intrinsic->dest.ssa, result);
+
+   nir_instr_remove(&intrinsic->instr);
+}
+
 static bool
 lower_offset_for_ssbo(nir_intrinsic_instr *intrinsic, nir_builder *b,
                       unsigned ir3_ssbo_opcode, uint8_t offset_src_idx)
@@ -247,6 +277,12 @@ lower_offset_for_ssbo(nir_intrinsic_instr *intrinsic, nir_builder *b,
 
    /* Finally remove the original intrinsic. */
    nir_instr_remove(&intrinsic->instr);
+
+   if (new_intrinsic->intrinsic == nir_intrinsic_load_ssbo_ir3 &&
+       (nir_intrinsic_access(new_intrinsic) & ACCESS_CAN_REORDER) &&
+       ir3_bindless_resource(new_intrinsic->src[0]) &&
+       new_intrinsic->num_components > 1)
+      scalarize_load(new_intrinsic, b);
 
    return true;
 }

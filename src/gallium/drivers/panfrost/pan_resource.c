@@ -153,17 +153,10 @@ panfrost_resource_get_handle(struct pipe_screen *pscreen,
         handle->modifier = rsrc->image.layout.modifier;
         rsrc->modifier_constant = true;
 
-        if (handle->type == WINSYS_HANDLE_TYPE_SHARED) {
-                return false;
+        if (handle->type == WINSYS_HANDLE_TYPE_KMS && dev->ro) {
+                return renderonly_get_handle(scanout, handle);
         } else if (handle->type == WINSYS_HANDLE_TYPE_KMS) {
-                if (dev->ro) {
-                        return renderonly_get_handle(scanout, handle);
-                } else {
-                        handle->handle = rsrc->image.data.bo->gem_handle;
-                        handle->stride = rsrc->image.layout.slices[0].line_stride;
-                        handle->offset = rsrc->image.layout.slices[0].offset;
-                        return true;
-                }
+                handle->handle = rsrc->image.data.bo->gem_handle;
         } else if (handle->type == WINSYS_HANDLE_TYPE_FD) {
                 int fd = panfrost_bo_export(rsrc->image.data.bo);
 
@@ -171,12 +164,14 @@ panfrost_resource_get_handle(struct pipe_screen *pscreen,
                         return false;
 
                 handle->handle = fd;
-                handle->stride = rsrc->image.layout.slices[0].line_stride;
-                handle->offset = rsrc->image.layout.slices[0].offset;
-                return true;
+        } else {
+                /* Other handle types not supported */
+                return false;
         }
 
-        return false;
+        handle->stride = rsrc->image.layout.slices[0].line_stride;
+        handle->offset = rsrc->image.layout.slices[0].offset;
+        return true;
 }
 
 static bool
@@ -1377,7 +1372,7 @@ panfrost_resource_screen_init(struct pipe_screen *pscreen)
         pscreen->resource_get_param = panfrost_resource_get_param;
         pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl,
                                         true, false,
-                                        fake_rgtc, true);
+                                        fake_rgtc, true, false);
 }
 void
 panfrost_resource_screen_destroy(struct pipe_screen *pscreen)

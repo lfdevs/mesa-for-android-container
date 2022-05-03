@@ -25,8 +25,11 @@ vk_physical_device_features_gen_depend_files = [
 
 vulkan_runtime_files = files(
   'vk_cmd_copy.c',
+  'vk_cmd_enqueue.c',
   'vk_command_buffer.c',
   'vk_command_buffer.h',
+  'vk_command_pool.c',
+  'vk_command_pool.h',
   'vk_debug_report.c',
   'vk_debug_report.h',
   'vk_debug_utils.c',
@@ -39,12 +42,16 @@ vulkan_runtime_files = files(
   'vk_device.h',
   'vk_fence.c',
   'vk_fence.h',
+  'vk_framebuffer.c',
+  'vk_framebuffer.h',
   'vk_image.c',
   'vk_image.h',
   'vk_instance.c',
   'vk_instance.h',
   'vk_log.c',
   'vk_log.h',
+  'vk_nir.c',
+  'vk_nir.h',
   'vk_object.c',
   'vk_object.h',
   'vk_physical_device.c',
@@ -106,6 +113,18 @@ vk_cmd_queue = custom_target(
   depend_files : vk_cmd_queue_gen_depend_files,
 )
 
+vk_cmd_enqueue_entrypoints = custom_target(
+  'vk_cmd_enqueue_entrypoints',
+  input : [vk_entrypoints_gen, vk_api_xml],
+  output : ['vk_cmd_enqueue_entrypoints.h', 'vk_cmd_enqueue_entrypoints.c'],
+  command : [
+    prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
+    '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@',
+    '--prefix', 'vk_cmd_enqueue', '--prefix', 'vk_cmd_enqueue_unless_primary',
+  ],
+  depend_files : vk_entrypoints_gen_depend_files,
+)
+
 vk_dispatch_trampolines = custom_target(
   'vk_dispatch_trampolines',
   input : [vk_dispatch_trampolines_gen, vk_api_xml],
@@ -130,7 +149,8 @@ vk_physical_device_features = custom_target(
 
 libvulkan_runtime = static_library(
   'vulkan_runtime',
-  [vulkan_runtime_files, vk_common_entrypoints, vk_cmd_queue,
+  [vulkan_runtime_files, vk_common_entrypoints,
+   vk_cmd_queue, vk_cmd_enqueue_entrypoints,
    vk_dispatch_trampolines, vk_physical_device_features],
   include_directories : [inc_include, inc_src, inc_gallium],
   dependencies : vulkan_runtime_deps,
@@ -142,6 +162,7 @@ libvulkan_runtime = static_library(
 )
 
 idep_vulkan_runtime_headers = declare_dependency(
+  sources : [vk_cmd_queue[1]],
   include_directories : include_directories('.')
 )
 

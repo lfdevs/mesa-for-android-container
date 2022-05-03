@@ -46,13 +46,13 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
       return false;
 
    if (ws->info.drm_minor < 23) {
-      fprintf(stderr, "radv: DRM 3.23+ is required (Linux kernel 4.15+)\n");
+      fprintf(stderr, "radv/amdgpu: DRM 3.23+ is required (Linux kernel 4.15+)\n");
       return false;
    }
 
    ws->addrlib = ac_addrlib_create(&ws->info, &ws->info.max_alignment);
    if (!ws->addrlib) {
-      fprintf(stderr, "amdgpu: Cannot create addrlib.\n");
+      fprintf(stderr, "radv/amdgpu: Cannot create addrlib.\n");
       return false;
    }
 
@@ -198,15 +198,19 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
    struct radv_amdgpu_winsys *ws = NULL;
 
    r = amdgpu_device_initialize(fd, &drm_major, &drm_minor, &dev);
-   if (r)
+   if (r) {
+      fprintf(stderr, "radv/amdgpu: failed to initialize device.\n");
       return NULL;
+   }
 
    /* We have to keep this lock till insertion. */
    simple_mtx_lock(&winsys_creation_mutex);
    if (!winsyses)
       winsyses = _mesa_pointer_hash_table_create(NULL);
-   if (!winsyses)
+   if (!winsyses) {
+      fprintf(stderr, "radv/amdgpu: failed to alloc winsys hash table.\n");
       goto fail;
+   }
 
    struct hash_entry *entry = _mesa_hash_table_search(winsyses, dev);
    if (entry) {
@@ -223,7 +227,7 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
           ((debug_flags & RADV_DEBUG_HANG) && !ws->debug_log_bos) ||
           ((debug_flags & RADV_DEBUG_NO_IBS) && ws->use_ib_bos) ||
           (perftest_flags != ws->perftest)) {
-         fprintf(stderr, "amdgpu: Found options that differ from the existing winsys.\n");
+         fprintf(stderr, "radv/amdgpu: Found options that differ from the existing winsys.\n");
          return NULL;
       }
 
@@ -253,8 +257,10 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
    ws->reserve_vmid = reserve_vmid;
    if (ws->reserve_vmid) {
       r = amdgpu_vm_reserve_vmid(dev, 0);
-      if (r)
+      if (r) {
+         fprintf(stderr, "radv/amdgpu: failed to reserve vmid.\n");
          goto vmid_fail;
+      }
    }
    int num_sync_types = 0;
 

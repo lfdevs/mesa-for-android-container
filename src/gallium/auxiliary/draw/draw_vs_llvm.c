@@ -94,9 +94,7 @@ draw_create_vs_llvm(struct draw_context *draw,
    if (!vs)
       return NULL;
 
-   /* due to some bugs in the feedback state tracker we have to check
-      for ir.nir & PIPE_SHADER_IR_NIR here. */
-   if (state->ir.nir && state->type == PIPE_SHADER_IR_NIR) {
+   if (state->type == PIPE_SHADER_IR_NIR) {
       vs->base.state.ir.nir = state->ir.nir;
       nir_shader *nir = (nir_shader *)state->ir.nir;
       if (!nir->options->lower_uniforms_to_ubo)

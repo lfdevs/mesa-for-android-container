@@ -91,13 +91,6 @@ dEQP-GLES31.functional.layout_binding.ssbo.fragment_binding_array
 dEQP-GLES3.functional.fbo.blit.conversion.rg8i_to_r16i
 dEQP-GLES3.functional.fbo.blit.conversion.rg8_to_r16f
 
-# Could trip hangcheck timeout
-dEQP-VK.api.command_buffers.record_many_draws_primary_2
-dEQP-VK.api.command_buffers.record_many_draws_secondary_2
-
-# "dEQP-VK.wsi.display_control.register_display_event: vkRegisterDisplayEventEXT returned invalid result (Fail)"
-dEQP-VK.wsi.display_control.register_display_event
-
 # First noticed Jun 1 2020 on an innocent branch.
 KHR-GL33.packed_depth_stencil.verify_copy_tex_image.depth32f_stencil8
 
@@ -105,9 +98,6 @@ KHR-GL33.packed_depth_stencil.verify_copy_tex_image.depth32f_stencil8
 KHR-GLES31.core.arrays_of_arrays.InteractionFunctionCalls2
 KHR-GLES31.core.geometry_shader.layered_framebuffer.depth_support
 KHR-GLES31.core.tessellation_shader.tessellation_shader_tc_barriers.barrier_guarded_read_calls
-
-# First flaked on 2021-08-19 with a kernel update.
-KHR-GLES31.core.tessellation_shader.tessellation_control_to_tessellation_evaluation.gl_MaxPatchVertices_Position_PointSize
 
 # edfff331b3241d1c18d5c589fcdf75728089c886 mostly fixed this, but apparently it still flakes.
 dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_scale
@@ -126,6 +116,8 @@ bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.*
 #
 # test does a single point draw in a FS taking the length of the first 7 SSBOs and writing them to
 # ints in SSBO 7, then glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT), then mapping it.
+KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std140-struct
+KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std140-matR
 KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std430-matC-pad
 KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std430-vec
 
@@ -150,6 +142,9 @@ spec@arb_depth_texture@fbo-clear-formats
 # Flaky since 2021-12-02, during piglit uprev with commit
 # 0ef03f824d1833a853d1a20b4be121089bb9246c
 spec@arb_draw_indirect@arb_draw_indirect-transform-feedback
+
+# Flaky since around 2021-05-21, the day after a piglit uprev reshuffled us.
+# *** gpu fault: ttbr0=000000001c941000 iova=000000010066a000 dir=READ type=TRANSLATION source=TP|VFD (0,0,0,1)
 spec@arb_map_buffer_range@map_invalidate_buffer_bit offset=0
 
 # Always been flaky, but didn't show up until the testscase was fixed to not spuriously skip.
@@ -160,16 +155,9 @@ spec@arb_shader_image_load_store@indexing@Fragment shader/dynamically uniform in
 spec@egl_chromium_sync_control@conformance
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
 
-# First appeared on 2021-07-07 in a container uprev, became frequent by
-# 2021-08-04 starting from a pretty clearly unrelated MR
-spec@ext_framebuffer_object@fbo-blending-format-quirks
-
 # Flaky since around 2021-04-21.  First appeared on
 # https://gitlab.freedesktop.org/robclark/mesa/-/jobs/9101752 (fd/go-fast)
 spec@ext_packed_depth_stencil@fbo-clear-formats stencil
-
-# Flaky since around 2021-05-21, the day after a piglit uprev reshuffled us.
-spec@arb_map_buffer_range@map_invalidate_buffer_bit offset=0
 
 # Flaky since around 2021-06-21.
 spec@arb_texture_gather@texturegatheroffset@vs-rgb-blue-uint-2darray

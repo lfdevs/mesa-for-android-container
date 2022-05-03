@@ -121,11 +121,19 @@ disk_cache_create(const char *gpu_name, const char *driver_id,
 
    max_size = 0;
 
-   max_size_str = getenv("MESA_GLSL_CACHE_MAX_SIZE");
-   
-   #ifdef MESA_GLSL_CACHE_MAX_SIZE
+   max_size_str = getenv("MESA_SHADER_CACHE_MAX_SIZE");
+
+   if (!max_size_str) {
+      max_size_str = getenv("MESA_GLSL_CACHE_MAX_SIZE");
+      if (max_size_str)
+         fprintf(stderr,
+                 "*** MESA_GLSL_CACHE_MAX_SIZE is deprecated; "
+                 "use MESA_SHADER_CACHE_MAX_SIZE instead ***\n");
+   }
+
+   #ifdef MESA_SHADER_CACHE_MAX_SIZE
    if( !max_size_str ) {
-      max_size_str = MESA_GLSL_CACHE_MAX_SIZE;
+      max_size_str = MESA_SHADER_CACHE_MAX_SIZE;
    }
    #endif
 

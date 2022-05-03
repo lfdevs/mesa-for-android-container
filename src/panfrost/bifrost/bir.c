@@ -86,9 +86,9 @@ bi_count_staging_registers(const bi_instr *ins)
 unsigned
 bi_count_read_registers(const bi_instr *ins, unsigned s)
 {
-        /* PATOM_C reads 1 but writes 2 */
-        if (s == 0 && ins->op == BI_OPCODE_PATOM_C_I32)
-                return 1;
+        /* ATOM reads 1 but writes 2. Exception for ACMPXCHG */
+        if (s == 0 && ins->op == BI_OPCODE_ATOM_RETURN_I32)
+                return (ins->atom_opc == BI_ATOM_OPC_ACMPXCHG) ? 2 : 1;
         else if (s == 0 && bi_opcode_props[ins->op].sr_read)
                 return bi_count_staging_registers(ins);
         else if (s == 4 && ins->op == BI_OPCODE_BLEND)
@@ -156,12 +156,18 @@ bi_next_clause(bi_context *ctx, bi_block *block, bi_clause *clause)
  * implies no loss of generality */
 
 bool
-bi_side_effects(enum bi_opcode op)
+bi_side_effects(const bi_instr *I)
 {
-        if (bi_opcode_props[op].last)
+        if (bi_opcode_props[I->op].last)
                 return true;
 
-        switch (op) {
+        /* On Valhall, nontrivial flow control acts as a side effect and should
+         * not be dead code eliminated away.
+         */
+        if (I->flow)
+                return true;
+
+        switch (I->op) {
         case BI_OPCODE_DISCARD_F32:
         case BI_OPCODE_DISCARD_B32:
                 return true;
@@ -169,7 +175,7 @@ bi_side_effects(enum bi_opcode op)
                 break;
         }
 
-        switch (bi_opcode_props[op].message) {
+        switch (bi_opcode_props[I->op].message) {
         case BIFROST_MESSAGE_NONE:
         case BIFROST_MESSAGE_VARYING:
         case BIFROST_MESSAGE_ATTRIBUTE:
@@ -189,7 +195,7 @@ bi_side_effects(enum bi_opcode op)
                 return true;
 
         case BIFROST_MESSAGE_TILE:
-                return (op != BI_OPCODE_LD_TILE);
+                return (I->op != BI_OPCODE_LD_TILE);
         }
 
         unreachable("Invalid message type");

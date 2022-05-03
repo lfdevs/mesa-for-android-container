@@ -290,9 +290,10 @@ enum
 
 #define SI_PROFILE_WAVE32                    (1 << 0)
 #define SI_PROFILE_WAVE64                    (1 << 1)
-#define SI_PROFILE_IGNORE_LLVM_DISCARD_BUG   (1 << 2)
+#define SI_PROFILE_IGNORE_LLVM13_DISCARD_BUG (1 << 2)
 #define SI_PROFILE_VS_NO_BINNING             (1 << 3)
 #define SI_PROFILE_PS_NO_BINNING             (1 << 4)
+#define SI_PROFILE_CLAMP_DIV_BY_ZERO         (1 << 5)
 
 /**
  * For VS shader keys, describe any fixups required for vertex fetch.
@@ -323,7 +324,7 @@ struct si_compiler_ctx_state {
    struct ac_llvm_compiler *compiler;
 
    /* Used if thread_index == -1 or if debug.async is true. */
-   struct pipe_debug_callback debug;
+   struct util_debug_callback debug;
 
    /* Used for creating the log string for gallium/ddebug. */
    bool is_debug_context;
@@ -935,18 +936,18 @@ struct si_shader_part {
 /* si_shader.c */
 void si_update_shader_binary_info(struct si_shader *shader, nir_shader *nir);
 bool si_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                       struct si_shader *shader, struct pipe_debug_callback *debug);
+                       struct si_shader *shader, struct util_debug_callback *debug);
 bool si_create_shader_variant(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                              struct si_shader *shader, struct pipe_debug_callback *debug);
+                              struct si_shader *shader, struct util_debug_callback *debug);
 void si_shader_destroy(struct si_shader *shader);
 unsigned si_shader_io_get_unique_index_patch(unsigned semantic);
 unsigned si_shader_io_get_unique_index(unsigned semantic, bool is_varying);
 bool si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader,
                              uint64_t scratch_va);
 void si_shader_dump(struct si_screen *sscreen, struct si_shader *shader,
-                    struct pipe_debug_callback *debug, FILE *f, bool check_debug_option);
+                    struct util_debug_callback *debug, FILE *f, bool check_debug_option);
 void si_shader_dump_stats_for_shader_db(struct si_screen *screen, struct si_shader *shader,
-                                        struct pipe_debug_callback *debug);
+                                        struct util_debug_callback *debug);
 void si_multiwave_lds_size_workaround(struct si_screen *sscreen, unsigned *lds_size);
 const char *si_get_shader_name(const struct si_shader *shader);
 void si_shader_binary_clean(struct si_shader_binary *binary);
@@ -958,7 +959,7 @@ void si_nir_scan_shader(const struct nir_shader *nir, struct si_shader_info *inf
 struct si_shader *si_generate_gs_copy_shader(struct si_screen *sscreen,
                                              struct ac_llvm_compiler *compiler,
                                              struct si_shader_selector *gs_selector,
-                                             struct pipe_debug_callback *debug);
+                                             struct util_debug_callback *debug);
 
 /* si_shader_nir.c */
 void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first);

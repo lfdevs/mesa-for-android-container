@@ -29,6 +29,8 @@
 #include "util/slab.h"
 #include "d3d12_descriptor_pool.h"
 
+#include "nir.h"
+
 #ifndef _WIN32
 #include <wsl/winadapter.h>
 #endif
@@ -54,12 +56,26 @@ enum resource_dimension
    RESOURCE_DIMENSION_COUNT
 };
 
+struct d3d12_memory_info {
+   uint64_t usage;
+   uint64_t budget;
+};
+
 struct d3d12_screen {
    struct pipe_screen base;
    struct sw_winsys *winsys;
 
-   ID3D12Device *dev;
+   ID3D12Device3 *dev;
    ID3D12CommandQueue *cmdqueue;
+   void (*get_memory_info)(struct d3d12_screen *screen, struct d3d12_memory_info *output);
+
+   mtx_t submit_mutex;
+   ID3D12Fence *fence;
+   uint64_t fence_value;
+
+   struct list_head residency_list;
+   ID3D12Fence *residency_fence;
+   uint64_t residency_fence_value;
 
    struct slab_parent_pool transfer_pool;
    struct pb_manager *bufmgr;
@@ -76,20 +92,27 @@ struct d3d12_screen {
    struct d3d12_descriptor_handle null_uavs[RESOURCE_DIMENSION_COUNT];
    struct d3d12_descriptor_handle null_rtv;
 
+   volatile uint32_t ctx_count;
+
    /* capabilities */
    D3D_FEATURE_LEVEL max_feature_level;
    D3D12_FEATURE_DATA_ARCHITECTURE architecture;
    D3D12_FEATURE_DATA_D3D12_OPTIONS opts;
+   D3D12_FEATURE_DATA_D3D12_OPTIONS1 opts1;
    D3D12_FEATURE_DATA_D3D12_OPTIONS2 opts2;
    D3D12_FEATURE_DATA_D3D12_OPTIONS3 opts3;
    D3D12_FEATURE_DATA_D3D12_OPTIONS4 opts4;
 
+   nir_shader_compiler_options nir_options;
+
    /* description */
    uint32_t vendor_id;
+   uint64_t driver_version;
    uint64_t memory_size_megabytes;
    double timestamp_multiplier;
    bool have_load_at_vertex;
    bool support_shader_images;
+   bool support_create_not_resident;
 };
 
 static inline struct d3d12_screen *
@@ -102,7 +125,7 @@ struct d3d12_dxgi_screen {
    struct d3d12_screen base;
 
    struct IDXGIFactory4 *factory;
-   struct IDXGIAdapter1 *adapter;
+   struct IDXGIAdapter3 *adapter;
    wchar_t description[128];
 };
 

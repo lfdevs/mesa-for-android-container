@@ -322,7 +322,7 @@ tgsi_vs_window_space_position(struct pipe_context *ctx)
    static const float red[] = {1, 0, 0, 1};
 
    if (!ctx->screen->get_param(ctx->screen,
-                               PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION)) {
+                               PIPE_CAP_VS_WINDOW_SPACE_POSITION)) {
       util_report_result(SKIP);
       return;
    }

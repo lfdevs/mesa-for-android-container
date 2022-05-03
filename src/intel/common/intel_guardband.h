@@ -24,7 +24,8 @@
 #define INTEL_GUARDBAND_H
 
 static inline void
-intel_calculate_guardband_size(uint32_t fb_width, uint32_t fb_height,
+intel_calculate_guardband_size(uint32_t x_min, uint32_t x_max,
+                               uint32_t y_min, uint32_t y_max,
                                float m00, float m11, float m30, float m31,
                                float *xmin, float *xmax,
                                float *ymin, float *ymax)
@@ -70,7 +71,7 @@ intel_calculate_guardband_size(uint32_t fb_width, uint32_t fb_height,
    /* Workaround: prevent gpu hangs on SandyBridge
     * by disabling guardband clipping for odd dimensions.
     */
-   if (GFX_VER == 6 && (fb_width & 1 || fb_height & 1)) {
+   if (GFX_VER == 6 && (x_min & 1 || x_max & 1 || y_min & 1 || y_max & 1)) {
       *xmin = -1.0f;
       *xmax =  1.0f;
       *ymin = -1.0f;
@@ -80,10 +81,10 @@ intel_calculate_guardband_size(uint32_t fb_width, uint32_t fb_height,
 
    if (m00 != 0 && m11 != 0) {
       /* First, we compute the screen-space render area */
-      const float ss_ra_xmin = MIN3(        0, m30 + m00, m30 - m00);
-      const float ss_ra_xmax = MAX3( fb_width, m30 + m00, m30 - m00);
-      const float ss_ra_ymin = MIN3(        0, m31 + m11, m31 - m11);
-      const float ss_ra_ymax = MAX3(fb_height, m31 + m11, m31 - m11);
+      const float ss_ra_xmin = MIN3(x_min, m30 + m00, m30 - m00);
+      const float ss_ra_xmax = MAX3(x_max, m30 + m00, m30 - m00);
+      const float ss_ra_ymin = MIN3(y_min, m31 + m11, m31 - m11);
+      const float ss_ra_ymax = MAX3(y_max, m31 + m11, m31 - m11);
 
       /* We want the guardband to be centered on that */
       const float ss_gb_xmin = (ss_ra_xmin + ss_ra_xmax) / 2 - gb_size;

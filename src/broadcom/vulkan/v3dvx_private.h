@@ -1,5 +1,5 @@
 /*
- * Copyright © 2021 Raspberry Pi
+ * Copyright © 2021 Raspberry Pi Ltd
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -300,6 +300,7 @@ v3dX(pipeline_pack_state)(struct v3dv_pipeline *pipeline,
                           const VkPipelineDepthStencilStateCreateInfo *ds_info,
                           const VkPipelineRasterizationStateCreateInfo *rs_info,
                           const VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *pv_info,
+                          const VkPipelineRasterizationLineStateCreateInfoEXT *ls_info,
                           const VkPipelineMultisampleStateCreateInfo *ms_info);
 void
 v3dX(pipeline_pack_compile_state)(struct v3dv_pipeline *pipeline,

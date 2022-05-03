@@ -484,16 +484,16 @@ static int is_gpr(unsigned sel)
 /* CB constants start at 512, and get translated to a kcache index when ALU
  * clauses are constructed. Note that we handle kcache constants the same way
  * as (the now gone) cfile constants, is that really required? */
-static int is_cfile(unsigned sel)
+static int is_kcache(unsigned sel)
 {
-	return (sel > 255 && sel < 512) ||
-		(sel > 511 && sel < 4607) || /* Kcache before translation. */
-		(sel > 127 && sel < 192); /* Kcache after translation. */
+   return (sel > 511 && sel < 4607) || /* Kcache before translation. */
+         (sel > 127 && sel < 192) || /* Kcache 0 & 1 after translation. */
+         (sel > 256  && sel < 320);  /* Kcache 2 & 3 after translation (EG). */
 }
 
 static int is_const(int sel)
 {
-	return is_cfile(sel) ||
+   return is_kcache(sel) ||
 		(sel >= V_SQ_ALU_SRC_0 &&
 		sel <= V_SQ_ALU_SRC_LITERAL);
 }
@@ -518,7 +518,7 @@ static int check_vector(const struct r600_bytecode *bc, const struct r600_byteco
 				if (r)
 					return r;
 			}
-		} else if (is_cfile(sel)) {
+      } else if (is_kcache(sel)) {
 			r = reserve_cfile(bc, bs, (alu->src[src].kc_bank<<16) + sel, elem);
 			if (r)
 				return r;
@@ -545,7 +545,7 @@ static int check_scalar(const struct r600_bytecode *bc, const struct r600_byteco
 			else
 				const_count++;
 		}
-		if (is_cfile(sel)) {
+      if (is_kcache(sel)) {
 			r = reserve_cfile(bc, bs, (alu->src[src].kc_bank<<16) + sel, elem);
 			if (r)
 				return r;
@@ -817,6 +817,8 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 		      if (is_alu_once_inst(prev[i]))
 			      return 0;
 
+                      if (prev[i]->op == ALU_OP1_INTERP_LOAD_P0)
+                         interp_xz |= 3;
                       if (prev[i]->op == ALU_OP2_INTERP_X)
                          interp_xz |= 1;
                       if (prev[i]->op == ALU_OP2_INTERP_Z)
@@ -827,6 +829,8 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 				return 0;
 			if (is_alu_once_inst(slots[i]))
 				return 0;
+                        if (slots[i]->op == ALU_OP1_INTERP_LOAD_P0)
+                           interp_xz |= 3;
                         if (slots[i]->op == ALU_OP2_INTERP_X)
                            interp_xz |= 1;
                         if (slots[i]->op == ALU_OP2_INTERP_Z)
@@ -1125,6 +1129,15 @@ static int r600_bytecode_alloc_kcache_lines(struct r600_bytecode *bc,
 
 	if ((r = r600_bytecode_alloc_inst_kcache_lines(bc, kcache, alu))) {
 		/* can't alloc, need to start new clause */
+
+		/* Make sure the CF ends with an "last" instruction when
+		 * we split an ALU group because of a new CF */
+		if (!list_is_empty(&bc->cf_last->alu))  {
+			struct r600_bytecode_alu *last_submitted =
+				list_last_entry(&bc->cf_last->alu, struct r600_bytecode_alu, list);
+				last_submitted->last = 1;
+		}
+
 		if ((r = r600_bytecode_add_cf(bc))) {
 			return r;
 		}
@@ -1152,17 +1165,17 @@ static int r600_bytecode_alloc_kcache_lines(struct r600_bytecode *bc,
 	return 0;
 }
 
-static int insert_nop_r6xx(struct r600_bytecode *bc)
+static int insert_nop_r6xx(struct r600_bytecode *bc, int max_slots)
 {
 	struct r600_bytecode_alu alu;
 	int r, i;
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < max_slots; i++) {
 		memset(&alu, 0, sizeof(alu));
 		alu.op = ALU_OP0_NOP;
-		alu.src[0].chan = i;
-		alu.dst.chan = i;
-		alu.last = (i == 3);
+		alu.src[0].chan = i & 3;
+		alu.dst.chan = i & 3;
+		alu.last = (i == max_slots - 1);
 		r = r600_bytecode_add_alu(bc, &alu);
 		if (r)
 			return r;
@@ -1199,7 +1212,7 @@ static int load_ar_r6xx(struct r600_bytecode *bc)
 }
 
 /* load AR register from gpr (bc->ar_reg) with MOVA_INT */
-static int load_ar(struct r600_bytecode *bc)
+int r600_load_ar(struct r600_bytecode *bc)
 {
 	struct r600_bytecode_alu alu;
 	int r;
@@ -1260,6 +1273,8 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 
 	/* cf can contains only alu or only vtx or only tex */
 	if (bc->cf_last == NULL || bc->force_add_cf) {
+               if (bc->cf_last && bc->cf_last->curr_bs_head)
+                  bc->cf_last->curr_bs_head->last = 1;
 		r = r600_bytecode_add_cf(bc);
 		if (r) {
 			free(nalu);
@@ -1278,10 +1293,10 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 	/* Check AR usage and load it if required */
 	for (i = 0; i < 3; i++)
 		if (nalu->src[i].rel && !bc->ar_loaded)
-			load_ar(bc);
+			r600_load_ar(bc);
 
 	if (nalu->dst.rel && !bc->ar_loaded)
-		load_ar(bc);
+		r600_load_ar(bc);
 
 	/* Setup the kcache for this ALU instruction. This will start a new
 	 * ALU clause if needed. */
@@ -1302,7 +1317,7 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 			r600_bytecode_special_constants(nalu->src[i].value,
 				&nalu->src[i].sel);
 	}
-	if (nalu->dst.sel >= bc->ngpr) {
+	if (nalu->dst.write && nalu->dst.sel >= bc->ngpr) {
 		bc->ngpr = nalu->dst.sel + 1;
 	}
 	list_addtail(&nalu->list, &bc->cf_last->alu);
@@ -1354,10 +1369,16 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 		bc->cf_last->prev2_bs_head = bc->cf_last->prev_bs_head;
 		bc->cf_last->prev_bs_head = bc->cf_last->curr_bs_head;
 		bc->cf_last->curr_bs_head = NULL;
-	}
 
-	if (nalu->dst.rel && bc->r6xx_nop_after_rel_dst)
-		insert_nop_r6xx(bc);
+		if (bc->r6xx_nop_after_rel_dst) {
+			for (int i = 0; i < max_slots; ++i) {
+				if (slots[i] && slots[i]->dst.rel) {
+					insert_nop_r6xx(bc, max_slots);
+					break;
+				}
+			}
+		}
+	}
 
 	/* Might need to insert spill write ops after current clause */
 	if (nalu->last && bc->n_pending_outputs) {

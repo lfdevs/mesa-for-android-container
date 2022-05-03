@@ -60,45 +60,45 @@ has_conflicting_write(struct ir3_instruction *src, struct ir3_instruction *use,
       if (instr == src)
          break;
 
-      /* if we are looking at a RELATIV read, we can't move
-       * it past an a0.x write:
-       */
-      if ((offset < 0) && (dest_regs(instr) > 0) &&
-          (instr->dsts[0]->num == regid(REG_A0, 0)))
-         return true;
+      foreach_dst (dst, instr) {
+         /* if we are looking at a RELATIV read, we can't move
+          * it past an a0.x write:
+          */
+         if (dst->num == regid(REG_A0, 0))
+            return true;
 
-      if (!writes_gpr(instr))
-         continue;
+         if (!is_dest_gpr(dst))
+            continue;
 
-      struct ir3_register *dst = instr->dsts[0];
-      if (!(dst->flags & IR3_REG_ARRAY))
-         continue;
+         if (!(dst->flags & IR3_REG_ARRAY))
+            continue;
 
-      if (dst->array.id != id)
-         continue;
+         if (dst->array.id != id)
+            continue;
 
-      /*
-       * At this point, we have narrowed down an instruction
-       * that writes to the same array.. check if it the write
-       * is to an array element that we care about:
-       */
+         /*
+          * At this point, we have narrowed down an instruction
+          * that writes to the same array.. check if it the write
+          * is to an array element that we care about:
+          */
 
-      /* is write to an unknown array element? */
-      if (dst->flags & IR3_REG_RELATIV)
-         return true;
+         /* is write to an unknown array element? */
+         if (dst->flags & IR3_REG_RELATIV)
+            return true;
 
-      /* is read from an unknown array element? */
-      if (offset < 0)
-         return true;
+         /* is read from an unknown array element? */
+         if (offset < 0)
+            return true;
 
-      /* is write to same array element? */
-      if (dst->array.offset == offset)
-         return true;
+         /* is write to same array element? */
+         if (dst->array.offset == offset)
+            return true;
 
-      if (last_write)
-         *def = dst;
+         if (last_write)
+            *def = dst;
 
-      last_write = false;
+         last_write = false;
+      }
    }
 
    return false;

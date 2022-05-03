@@ -47,7 +47,10 @@ extern "C" {
  */
 
 struct blob {
-   /* The data actually written to the blob. */
+   /* The data actually written to the blob. Never read or write this directly
+    * when serializing, use blob_reserve_* and blob_overwrite_* instead which
+    * check for out_of_memory and handle fixed-size blobs correctly.
+    */
    uint8_t *data;
 
    /** Number of bytes that have been allocated for \c data. */

@@ -1,2 +1,3 @@
 dEQP-VK.api.object_management.multithreaded_per_thread_device.image_2d
 dEQP-VK.api.object_management.multithreaded_per_thread_resources.image_2d
+dEQP-VK.api.object_management.multithreaded_shared_resources.image_2d

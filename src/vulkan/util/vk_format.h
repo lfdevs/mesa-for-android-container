@@ -170,6 +170,18 @@ vk_format_get_nr_components(VkFormat format)
    return util_format_get_nr_components(vk_format_to_pipe_format(format));
 }
 
+static inline bool
+vk_format_has_alpha(VkFormat format)
+{
+   return util_format_has_alpha(vk_format_to_pipe_format(format));
+}
+
+static inline unsigned
+vk_format_get_blocksizebits(VkFormat format)
+{
+   return util_format_get_blocksizebits(vk_format_to_pipe_format(format));
+}
+
 #ifdef __cplusplus
 }
 #endif

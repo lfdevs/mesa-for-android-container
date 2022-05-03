@@ -24,19 +24,17 @@
 #include "d3d12_compute_transforms.h"
 #include "d3d12_nir_passes.h"
 #include "d3d12_query.h"
+#include "d3d12_screen.h"
 
 #include "nir.h"
 #include "nir_builder.h"
 
-#include "nir_to_dxil.h"
-
 #include "util/u_memory.h"
 
 nir_shader *
-get_indirect_draw_base_vertex_transform(const d3d12_compute_transform_key *args)
+get_indirect_draw_base_vertex_transform(const nir_shader_compiler_options *options, const d3d12_compute_transform_key *args)
 {
-   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, 
-      dxil_get_nir_compiler_options(), "TransformIndirectDrawBaseVertex");
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options, "TransformIndirectDrawBaseVertex");
 
    if (args->base_vertex.dynamic_count) {
       nir_variable *count_ubo = nir_variable_create(b.shader, nir_var_mem_ubo,
@@ -103,10 +101,9 @@ get_indirect_draw_base_vertex_transform(const d3d12_compute_transform_key *args)
 }
 
 static struct nir_shader *
-get_fake_so_buffer_copy_back(const d3d12_compute_transform_key *key)
+get_fake_so_buffer_copy_back(const nir_shader_compiler_options *options, const d3d12_compute_transform_key *key)
 {
-   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE,
-      dxil_get_nir_compiler_options(), "FakeSOBufferCopyBack");
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options, "FakeSOBufferCopyBack");
 
    nir_variable *output_so_data_var = nir_variable_create(b.shader, nir_var_mem_ssbo,
       glsl_array_type(glsl_uint_type(), 0, 0), "output_data");
@@ -156,10 +153,9 @@ get_fake_so_buffer_copy_back(const d3d12_compute_transform_key *key)
 }
 
 static struct nir_shader *
-get_fake_so_buffer_vertex_count()
+get_fake_so_buffer_vertex_count(const nir_shader_compiler_options *options)
 {
-   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE,
-      dxil_get_nir_compiler_options(), "FakeSOBufferVertexCount");
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options, "FakeSOBufferVertexCount");
 
    nir_variable_create(b.shader, nir_var_mem_ssbo, glsl_array_type(glsl_uint_type(), 0, 0), "fake_so");
    nir_ssa_def *fake_buffer_filled_size = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, 0), (gl_access_qualifier)0, 4, 0);
@@ -190,10 +186,9 @@ get_fake_so_buffer_vertex_count()
 }
 
 static struct nir_shader *
-get_draw_auto()
+get_draw_auto(const nir_shader_compiler_options *options)
 {
-   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE,
-      dxil_get_nir_compiler_options(), "DrawAuto");
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options, "DrawAuto");
 
    nir_variable_create(b.shader, nir_var_mem_ssbo, glsl_array_type(glsl_uint_type(), 0, 0), "ssbo");
    nir_ssa_def *buffer_filled_size = nir_load_ssbo(&b, 1, 32, nir_imm_int(&b, 0), nir_imm_int(&b, 0), (gl_access_qualifier)0, 4, 0);
@@ -218,17 +213,17 @@ get_draw_auto()
 }
 
 static struct nir_shader *
-create_compute_transform(const d3d12_compute_transform_key *key)
+create_compute_transform(const nir_shader_compiler_options *options, const d3d12_compute_transform_key *key)
 {
    switch (key->type) {
    case d3d12_compute_transform_type::base_vertex:
-      return get_indirect_draw_base_vertex_transform(key);
+      return get_indirect_draw_base_vertex_transform(options, key);
    case d3d12_compute_transform_type::fake_so_buffer_copy_back:
-      return get_fake_so_buffer_copy_back(key);
+      return get_fake_so_buffer_copy_back(options, key);
    case d3d12_compute_transform_type::fake_so_buffer_vertex_count:
-      return get_fake_so_buffer_vertex_count();
+      return get_fake_so_buffer_vertex_count(options);
    case d3d12_compute_transform_type::draw_auto:
-      return get_draw_auto();
+      return get_draw_auto(options);
    default:
       unreachable("Invalid transform");
    }
@@ -248,9 +243,11 @@ d3d12_get_compute_transform(struct d3d12_context *ctx, const d3d12_compute_trans
       compute_transform *data = (compute_transform *)MALLOC(sizeof(compute_transform));
       if (!data)
          return NULL;
+      
+      const nir_shader_compiler_options *options = &d3d12_screen(ctx->base.screen)->nir_options;
 
       memcpy(&data->key, key, sizeof(*key));
-      nir_shader *s = create_compute_transform(key);
+      nir_shader *s = create_compute_transform(options, key);
       if (!s) {
          FREE(data);
          return NULL;

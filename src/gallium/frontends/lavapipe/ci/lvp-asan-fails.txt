@@ -1,21 +1,70 @@
-dEQP-VK.glsl.builtin.precision.pow.highp.vec2,Fail
-dEQP-VK.glsl.texture_functions.query.texturequerylod.sampler2d_fixed_fragment,Fail
+# Direct leak of 496 byte(s) in 1 object(s) allocated from:
+#     #0 0x7fa1e2f1e037 in __interceptor_calloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:154
+#     #1 0x7fa1ddf026ad in llvmpipe_resource_create_all ../src/gallium/drivers/llvmpipe/lp_texture.c:235
+#     #2 0x7fa1ddf02f03 in llvmpipe_resource_create_unbacked ../src/gallium/drivers/llvmpipe/lp_texture.c:329
+#     #3 0x7fa1dd96b1b9 in lvp_image_create ../src/gallium/frontends/lavapipe/lvp_image.c:99
+#     #4 0x7fa1dd96b87e in lvp_CreateImage ../src/gallium/frontends/lavapipe/lvp_image.c:154
+#     #5 0x555648e7e588  (/deqp/external/vulkancts/modules/vulkan/deqp-vk+0x2145588)
+dEQP-VK.image.texel_view_compatible.graphic.basic.3d_image.texture_read.bc3_unorm_block.r32g32b32a32_uint,Fail
+dEQP-VK.renderpass.dedicated_allocation.formats.a2b10g10r10_uint_pack32.input.dont_care.store.clear_draw,Fail
+dEQP-VK.renderpass.dedicated_allocation.formats.d16_unorm.input.load.store.self_dep_clear_draw_use_input_aspect,Fail
+dEQP-VK.renderpass.dedicated_allocation.formats.d16_unorm.input.load.store.self_dep_draw,Fail
+dEQP-VK.renderpass.dedicated_allocation.formats.r8g8b8a8_uint.input.load.store.draw_use_input_aspect,Fail
+dEQP-VK.renderpass.suballocation.attachment_allocation.input_output_chain.47,Fail
+dEQP-VK.renderpass.suballocation.formats.a2r10g10b10_unorm_pack32.input.dont_care.store.clear_draw,Fail
+dEQP-VK.renderpass.suballocation.formats.r32g32b32a32_sint.input.load.store.self_dep_clear_draw_use_input_aspect,Fail
+dEQP-VK.renderpass.suballocation.formats.r32g32b32a32_sint.input.load.store.self_dep_draw,Fail
+dEQP-VK.renderpass.suballocation.formats.r8g8b8a8_unorm.input.load.store.draw_use_input_aspect,Fail
+dEQP-VK.renderpass2.dedicated_allocation.formats.a8b8g8r8_sint_pack32.input.clear.dont_care.clear_draw,Fail
+dEQP-VK.renderpass2.dedicated_allocation.formats.a8b8g8r8_sint_pack32.input.clear.store.draw,Fail
+dEQP-VK.renderpass2.dedicated_allocation.formats.r32_uint.input.load.dont_care.draw,Fail
+dEQP-VK.renderpass2.suballocation.formats.r16g16b16a16_unorm.input.dont_care.dont_care.draw,Fail
+dEQP-VK.renderpass2.suballocation.formats.r8g8b8a8_sint.input.load.dont_care.clear_draw,Fail
+dEQP-VK.memory_model.message_passing.ext.u32.noncoherent.atomic_atomic.atomicwrite.device.payload_local.image.guard_local.image.vert,Fail
+dEQP-VK.memory_model.write_after_read.ext.u32.noncoherent.fence_fence.atomicwrite.device.payload_local.buffer.guard_local.image.vert,Fail
+dEQP-VK.synchronization.op.single_queue.event.write_image_fragment_read_image_tess_eval.image_128x128_r16_uint,Fail
+dEQP-VK.synchronization2.op.single_queue.timeline_semaphore.write_image_geometry_read_copy_image.image_128x128_r8g8b8a8_unorm,Fail
 
-# Memory leaks
-dEQP-VK.image.texel_view_compatible.graphic.extended.3d_image.texture_read.bc6h_ufloat_block.r32g32b32a32_uint,Fail
-dEQP-VK.renderpass.dedicated_allocation.formats.a8b8g8r8_unorm_pack32.input.dont_care.store.self_dep_clear_draw_use_input_aspect,Fail
-dEQP-VK.renderpass.dedicated_allocation.formats.d24_unorm_s8_uint.input.clear.dont_care.clear_draw_depth_read_only,Fail
-dEQP-VK.renderpass.dedicated_allocation.formats.r32_uint.input.load.store.clear_draw_use_input_aspect,Fail
-dEQP-VK.renderpass.suballocation.formats.d16_unorm.input.dont_care.dont_care.draw,Fail
-dEQP-VK.renderpass.suballocation.formats.r16g16b16a16_uint.input.load.store.clear_draw_use_input_aspect,Fail
-dEQP-VK.renderpass.suballocation.formats.r8g8b8a8_uint.input.dont_care.store.self_dep_clear_draw_use_input_aspect,Fail
-dEQP-VK.renderpass.suballocation.multisample.r8g8_uint.samples_4,Fail
-dEQP-VK.renderpass2.dedicated_allocation.formats.r16g16b16a16_unorm.input.load.store.clear_draw,Fail
-dEQP-VK.renderpass2.suballocation.formats.d32_sfloat.input.clear.dont_care.clear_draw,Fail
-dEQP-VK.renderpass2.suballocation.formats.r8g8_unorm.input.dont_care.dont_care.self_dep_clear_draw,Fail
-dEQP-VK.renderpass2.suballocation.multisample_resolve.r32g32b32a32_uint.max_attachments_8_samples_4,Fail
-dEQP-VK.synchronization.op.single_queue.event.write_image_compute_read_image_fragment.image_128x128_r16g16b16a16_uint,Fail
-dEQP-VK.synchronization.op.single_queue.timeline_semaphore.write_image_tess_control_read_image_vertex.image_128x128_r16g16b16a16_uint,Fail
-dEQP-VK.synchronization.timeline_semaphore.device_host.write_copy_buffer_to_image_read_image_fragment.image_128_r32_uint,Fail
-dEQP-VK.synchronization.timeline_semaphore.one_to_n.write_copy_image_to_buffer_read_ssbo_compute.buffer_262144,Fail
-dEQP-VK.synchronization.timeline_semaphore.wait_before_signal.write_copy_image_read_image_tess_control.image_64x64x8_r32_sfloat,Fail
+# Direct leak of 24 byte(s) in 1 object(s) allocated from:
+#     #0 0x7f29a36d1e8f in __interceptor_malloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:145
+#     #1 0x7f299e13c124 in vk_alloc ../src/vulkan/util/vk_alloc.h:48
+#     #2 0x7f299e13c124 in vk_zalloc ../src/vulkan/util/vk_alloc.h:56
+#     #3 0x7f299e13c124 in lvp_CmdPushDescriptorSetKHR ../src/gallium/frontends/lavapipe/lvp_cmd_buffer.c:416
+#     #4 0x55b5f6ae85c0  (/deqp/external/vulkancts/modules/vulkan/deqp-vk+0x75a5c0)
+#     #5 0x55b5f6803edf  (/deqp/external/vulkancts/modules/vulkan/deqp-vk+0x475edf)
+#
+# more vk_cmd_queue_gen.py fail? VK_CMD_PUSH_DESCRIPTOR_SET_KHR just frees descriptor_writes.
+dEQP-VK.pipeline.bind_point.graphics_compute.write_push.setup_cp_gs_gp_cs.cmd_draw_dispatch,Fail
+dEQP-VK.pipeline.push_descriptor.compute.binding1_numcalls2_uniform_buffer,Fail
+
+# Direct leak of 224 byte(s) in 2 object(s) allocated from:
+#     #0 0x7f8f25086037 in __interceptor_calloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:154
+#     #1 0x7f8f20108049 in lp_fence_create ../src/gallium/drivers/llvmpipe/lp_fence.c:48
+#     #2 0x7f8f201378b1 in begin_binning ../src/gallium/drivers/llvmpipe/lp_setup.c:238
+#     #3 0x7f8f201388e7 in set_scene_state ../src/gallium/drivers/llvmpipe/lp_setup.c:356
+#     #4 0x7f8f2013ecef in lp_setup_update_state ../src/gallium/drivers/llvmpipe/lp_setup.c:1516
+#     #5 0x7f8f201544ea in lp_setup_draw_elements ../src/gallium/drivers/llvmpipe/lp_setup_vbuf.c:176
+#     #6 0x7f8f203b7a7b in draw_pt_emit ../src/gallium/auxiliary/draw/draw_pt_emit.c:202
+#     #7 0x7f8f203ac354 in emit ../src/gallium/auxiliary/draw/draw_pt_fetch_shade_pipeline_llvm.c:563
+#     #8 0x7f8f203ac354 in llvm_pipeline_generic ../src/gallium/auxiliary/draw/draw_pt_fetch_shade_pipeline_llvm.c:775
+#     #9 0x7f8f203acec3 in llvm_middle_end_linear_run ../src/gallium/auxiliary/draw/draw_pt_fetch_shade_pipeline_llvm.c:855
+#     #10 0x7f8f20262b07 in vsplit_segment_simple_linear ../src/gallium/auxiliary/draw/draw_pt_vsplit_tmp.h:226
+#     #11 0x7f8f20262b07 in vsplit_run_linear ../src/gallium/auxiliary/draw/draw_split_tmp.h:64
+#     #12 0x7f8f2024e4f3 in draw_pt_arrays ../src/gallium/auxiliary/draw/draw_pt.c:155
+#     #13 0x7f8f2024f355 in draw_instances ../src/gallium/auxiliary/draw/draw_pt.c:484
+#     #14 0x7f8f20250277 in draw_vbo ../src/gallium/auxiliary/draw/draw_pt.c:610
+#     #15 0x7f8f20107bfc in llvmpipe_draw_vbo ../src/gallium/drivers/llvmpipe/lp_draw_arrays.c:149
+#     #16 0x7f8f1fb5bec1 in handle_draw ../src/gallium/frontends/lavapipe/lvp_execute.c:2046
+#     #17 0x7f8f1fb5bec1 in lvp_execute_cmd_buffer ../src/gallium/frontends/lavapipe/lvp_execute.c:3876
+#     #18 0x7f8f1fb6a3ed in lvp_execute_cmds ../src/gallium/frontends/lavapipe/lvp_execute.c:4122
+#     #19 0x7f8f1fb29286 in queue_thread ../src/gallium/frontends/lavapipe/lvp_device.c:1399
+#     #20 0x7f8f1fbd1ce1 in util_queue_thread_func ../src/util/u_queue.c:313
+#     #21 0x7f8f1fbd104b in impl_thrd_routine ../include/c11/threads_posix.h:87
+#     #22 0x7f8f24d53ea6 in start_thread (/lib/x86_64-linux-gnu/libpthread.so.0+0x8ea6)
+dEQP-VK.synchronization.op.single_queue.barrier.write_draw_indexed_read_image_fragment.image_128x128_r16g16b16a16_uint,Fail
+dEQP-VK.synchronization.op.single_queue.binary_semaphore.write_image_fragment_read_image_compute_indirect.image_128x128_r16g16b16a16_uint,Fail
+dEQP-VK.synchronization.op.single_queue.event.write_image_fragment_read_image_tess_control.image_128x128_r8_unorm,Fail
+dEQP-VK.synchronization.op.single_queue.timeline_semaphore.write_image_vertex_read_copy_image.image_128x128_r16_uint,Fail
+dEQP-VK.synchronization.op.single_queue.timeline_semaphore.write_image_vertex_read_copy_image_to_buffer.image_128x128_r8_unorm,Fail
+dEQP-VK.synchronization.timeline_semaphore.wait_before_signal.write_copy_buffer_to_image_read_image_fragment.image_128x128_r16g16b16a16_uint,Fail
+dEQP-VK.synchronization2.op.single_queue.timeline_semaphore.write_image_geometry_read_blit_image.image_128x128_r16g16b16a16_uint,Fail

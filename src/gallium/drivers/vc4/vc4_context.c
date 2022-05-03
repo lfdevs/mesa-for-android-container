@@ -85,7 +85,7 @@ vc4_texture_barrier(struct pipe_context *pctx, unsigned flags)
 
 static void
 vc4_set_debug_callback(struct pipe_context *pctx,
-                       const struct pipe_debug_callback *cb)
+                       const struct util_debug_callback *cb)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
 

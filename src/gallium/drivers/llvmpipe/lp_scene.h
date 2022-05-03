@@ -140,6 +140,7 @@ struct lp_scene_surface {
 struct lp_scene {
    struct pipe_context *pipe;
    struct lp_fence *fence;
+   struct lp_setup_context *setup;
 
    /* The queries still active at end of scene */
    struct llvmpipe_query *active_queries[LP_MAX_ACTIVE_BINNED_QUERIES];
@@ -166,6 +167,9 @@ struct lp_scene {
 
    /** list of resources referenced by the scene commands */
    struct resource_ref *resources;
+
+   /** list of writable resources referenced by the scene commands */
+   struct resource_ref *writeable_resources;
 
    /** list of frag shaders referenced by the scene commands */
    struct shader_ref *frag_shaders;
@@ -199,7 +203,7 @@ struct lp_scene {
 
 
 
-struct lp_scene *lp_scene_create(struct pipe_context *pipe);
+struct lp_scene *lp_scene_create(struct lp_setup_context *setup);
 
 void lp_scene_destroy(struct lp_scene *scene);
 
@@ -214,9 +218,10 @@ struct cmd_block *lp_scene_new_cmd_block( struct lp_scene *scene,
 
 boolean lp_scene_add_resource_reference(struct lp_scene *scene,
                                         struct pipe_resource *resource,
-                                        boolean initializing_scene);
+                                        boolean initializing_scene,
+                                        boolean writeable);
 
-boolean lp_scene_is_resource_referenced(const struct lp_scene *scene,
+unsigned lp_scene_is_resource_referenced(const struct lp_scene *scene,
                                         const struct pipe_resource *resource );
 
 boolean lp_scene_add_frag_shader_reference(struct lp_scene *scene,

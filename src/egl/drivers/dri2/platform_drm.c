@@ -749,6 +749,7 @@ dri2_initialize_drm(_EGLDisplay *disp)
    dri2_dpy->core = dri2_dpy->gbm_dri->core;
    dri2_dpy->dri2 = dri2_dpy->gbm_dri->dri2;
    dri2_dpy->swrast = dri2_dpy->gbm_dri->swrast;
+   dri2_dpy->kopper = dri2_dpy->gbm_dri->kopper;
    dri2_dpy->driver_configs = dri2_dpy->gbm_dri->driver_configs;
 
    dri2_dpy->gbm_dri->lookup_image = dri2_lookup_egl_image;

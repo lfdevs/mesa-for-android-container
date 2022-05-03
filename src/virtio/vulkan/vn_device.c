@@ -432,3 +432,18 @@ vn_DeviceWaitIdle(VkDevice device)
 
    return VK_SUCCESS;
 }
+
+VkResult
+vn_GetCalibratedTimestampsEXT(
+   VkDevice device,
+   uint32_t timestampCount,
+   const VkCalibratedTimestampInfoEXT *pTimestampInfos,
+   uint64_t *pTimestamps,
+   uint64_t *pMaxDeviation)
+{
+   struct vn_device *dev = vn_device_from_handle(device);
+
+   return vn_call_vkGetCalibratedTimestampsEXT(
+      dev->instance, device, timestampCount, pTimestampInfos, pTimestamps,
+      pMaxDeviation);
+}

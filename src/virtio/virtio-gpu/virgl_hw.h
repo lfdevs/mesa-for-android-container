@@ -600,6 +600,7 @@ struct virgl_caps_v2 {
         char renderer[64];
         float max_anisotropy;
         uint32_t max_shader_sampler_views;
+        struct virgl_supported_format_mask supported_multisample_formats;
 };
 
 union virgl_caps {

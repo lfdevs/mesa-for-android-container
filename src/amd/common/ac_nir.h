@@ -136,6 +136,9 @@ ac_nir_cull_triangle(nir_builder *b,
                      nir_ssa_def *initially_accepted,
                      nir_ssa_def *pos[3][4]);
 
+bool
+ac_nir_lower_global_access(nir_shader *shader);
+
 #ifdef __cplusplus
 }
 #endif

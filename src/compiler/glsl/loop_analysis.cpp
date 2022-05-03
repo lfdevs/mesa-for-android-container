@@ -71,7 +71,7 @@ find_initial_value(ir_loop *loop, ir_variable *var)
          ir_variable *assignee = assign->lhs->whole_variable_referenced();
 
          if (assignee == var)
-            return (assign->condition != NULL) ? NULL : assign->rhs;
+            return assign->rhs;
 
          break;
       }
@@ -241,7 +241,6 @@ incremented_before_terminator(ir_loop *loop, ir_variable *var,
          ir_variable *assignee = assign->lhs->whole_variable_referenced();
 
          if (assignee == var) {
-            assert(assign->condition == NULL);
             return true;
          }
 
@@ -275,8 +274,7 @@ loop_variable::record_reference(bool in_assignee,
    if (in_assignee) {
       assert(current_assignment != NULL);
 
-      if (in_conditional_code_or_nested_loop ||
-          current_assignment->condition != NULL) {
+      if (in_conditional_code_or_nested_loop) {
          this->conditional_or_nested_assignment = true;
       }
 

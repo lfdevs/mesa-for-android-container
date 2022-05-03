@@ -344,7 +344,10 @@ const struct nv50_format nv50_format_table[PIPE_FORMAT_COUNT] =
    F2(A, R8G8_SNORM, RG8_SNORM, R, G, xx, xx, SNORM, G8R8, IC),
    I2(A, R8G8_SINT, RG8_SINT, R, G, xx, xx, SINT, G8R8, IR),
    I2(A, R8G8_UINT, RG8_UINT, R, G, xx, xx, UINT, G8R8, IR),
+#if NOUVEAU_DRIVER < 0xc0
+   /* On Fermi+, the green component doesn't get decoding? */
    F2(A, R8G8_SRGB, NONE, R, G, xx, xx, UNORM, G8R8, T),
+#endif
 
    F1(A, R8_UNORM, R8_UNORM, R, xx, xx, xx, UNORM, R8, IB),
    F1(A, R8_SNORM, R8_SNORM, R, xx, xx, xx, SNORM, R8, IC),

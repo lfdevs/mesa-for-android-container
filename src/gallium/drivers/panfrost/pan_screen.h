@@ -51,9 +51,9 @@ struct pan_blend_state;
 /* Virtual table of per-generation (GenXML) functions */
 
 struct panfrost_vtable {
-        /* Prepares the renderer state descriptor for a given compiled shader,
-         * and if desired uploads it as well */
-        void (*prepare_rsd)(struct panfrost_shader_state *,
+        /* Prepares the renderer state descriptor or shader program descriptor
+         * for a given compiled shader, and if desired uploads it as well */
+        void (*prepare_shader)(struct panfrost_shader_state *,
                             struct panfrost_pool *, bool);
 
         /* Emits a thread local storage descriptor */

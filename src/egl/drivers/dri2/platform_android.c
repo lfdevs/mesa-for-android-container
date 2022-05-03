@@ -41,6 +41,7 @@
 
 #include "util/compiler.h"
 #include "util/os_file.h"
+#include "util/libsync.h"
 
 #include "loader.h"
 #include "egl_dri2.h"
@@ -461,6 +462,34 @@ droid_create_image_from_native_buffer(_EGLDisplay *disp,
    return img;
 }
 
+static void
+handle_in_fence_fd(struct dri2_egl_surface *dri2_surf, __DRIimage *img)
+{
+   _EGLDisplay *disp = dri2_surf->base.Resource.Display;
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+
+   if (dri2_surf->in_fence_fd < 0)
+      return;
+
+   validate_fence_fd(dri2_surf->in_fence_fd);
+
+   if (dri2_dpy->image->base.version >= 21 &&
+       dri2_dpy->image->setInFenceFd != NULL) {
+      dri2_dpy->image->setInFenceFd(img, dri2_surf->in_fence_fd);
+   } else {
+      sync_wait(dri2_surf->in_fence_fd, -1);
+   }
+}
+
+static void
+close_in_fence_fd(struct dri2_egl_surface *dri2_surf)
+{
+   validate_fence_fd(dri2_surf->in_fence_fd);
+   if (dri2_surf->in_fence_fd >= 0)
+      close(dri2_surf->in_fence_fd);
+   dri2_surf->in_fence_fd = -1;
+}
+
 static EGLBoolean
 droid_window_dequeue_buffer(struct dri2_egl_surface *dri2_surf)
 {
@@ -470,32 +499,11 @@ droid_window_dequeue_buffer(struct dri2_egl_surface *dri2_surf)
                                    &fence_fd))
       return EGL_FALSE;
 
-   /* If access to the buffer is controlled by a sync fence, then block on the
-    * fence.
-    *
-    * It may be more performant to postpone blocking until there is an
-    * immediate need to write to the buffer. But doing so would require adding
-    * hooks to the DRI2 loader.
-    *
-    * From the ANativeWindow_dequeueBuffer documentation:
-    *
-    *    The libsync fence file descriptor returned in the int pointed to by
-    *    the fenceFd argument will refer to the fence that must signal
-    *    before the dequeued buffer may be written to.  A value of -1
-    *    indicates that the caller may access the buffer immediately without
-    *    waiting on a fence.  If a valid file descriptor is returned (i.e.
-    *    any value except -1) then the caller is responsible for closing the
-    *    file descriptor.
-    */
-    if (fence_fd >= 0) {
-       /* From the SYNC_IOC_WAIT documentation in <linux/sync.h>:
-        *
-        *    Waits indefinitely if timeout < 0.
-        */
-        int timeout = -1;
-        sync_wait(fence_fd, timeout);
-        close(fence_fd);
-   }
+   close_in_fence_fd(dri2_surf);
+
+   validate_fence_fd(fence_fd);
+
+   dri2_surf->in_fence_fd = fence_fd;
 
    /* Record all the buffers created by ANativeWindow and update back buffer
     * for updating buffer's age in swap_buffers.
@@ -579,6 +587,8 @@ droid_window_cancel_buffer(struct dri2_egl_surface *dri2_surf)
       _eglLog(_EGL_WARNING, "ANativeWindow_cancelBuffer failed");
       dri2_surf->base.Lost = EGL_TRUE;
    }
+
+   close_in_fence_fd(dri2_surf);
 }
 
 static bool
@@ -634,6 +644,8 @@ droid_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
       _eglError(EGL_BAD_ALLOC, "droid_create_surface");
       return NULL;
    }
+
+   dri2_surf->in_fence_fd = -1;
 
    if (!dri2_init_surface(&dri2_surf->base, disp, type, conf, attrib_list,
                           true, native_window))
@@ -765,6 +777,7 @@ droid_destroy_surface(_EGLDisplay *disp, _EGLSurface *surf)
 
    dri2_dpy->core->destroyDrawable(dri2_surf->dri_drawable);
 
+   close_in_fence_fd(dri2_surf);
    dri2_fini_surface(surf);
    free(dri2_surf->color_buffers);
    free(dri2_surf);
@@ -865,6 +878,9 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
          _eglLog(_EGL_WARNING, "failed to create DRI image from FD");
          return -1;
       }
+
+      handle_in_fence_fd(dri2_surf, dri2_surf->dri_image_back);
+
    } else if (dri2_surf->base.Type == EGL_PBUFFER_BIT) {
       /* The EGL 1.5 spec states that pbuffers are single-buffered. Specifically,
        * the spec states that they have a back buffer but no front buffer, in
@@ -1437,19 +1453,10 @@ droid_display_shared_buffer(__DRIdrawable *driDrawable, int fence_fd,
       return;
    }
 
-   if (fence_fd < 0)
-      return;
-
-   /* Access to the buffer is controlled by a sync fence. Block on it.
-    *
-    * Ideally, we would submit the fence to the driver, and the driver would
-    * postpone command execution until it signalled. But DRI lacks API for
-    * that (as of 2018-04-11).
-    *
-    *  SYNC_IOC_WAIT waits forever if timeout < 0
-    */
-   sync_wait(fence_fd, -1);
-   close(fence_fd);
+   close_in_fence_fd(dri2_surf);
+   validate_fence_fd(fence_fd);
+   dri2_surf->in_fence_fd = fence_fd;
+   handle_in_fence_fd(dri2_surf, dri2_surf->dri_image_back);
 }
 
 static const __DRImutableRenderBufferLoaderExtension droid_mutable_render_buffer_extension = {

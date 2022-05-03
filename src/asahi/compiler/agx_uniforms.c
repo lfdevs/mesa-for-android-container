@@ -48,6 +48,8 @@ agx_indexed_sysval(agx_context *ctx, enum agx_push_type type,
    /* Otherwise, push */
    assert(ctx->out->push_ranges < AGX_MAX_PUSH_RANGES);
 
+   ctx->push_base = ALIGN_POT(ctx->push_base, agx_size_align_16(size));
+
    unsigned base = ctx->push_base;
    ctx->push_base += length;
 

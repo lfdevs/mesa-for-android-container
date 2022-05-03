@@ -1025,6 +1025,8 @@
       <value name="MINIMUM" value="2"/>
       <value name="MAXIMUM" value="3"/>
     </field>
+    <field name="Allow Low Quality LOD Calculation" start="120" end="120" type="bool"/>
+    <field name="Low Quality Filter" start="122" end="122" type="bool"/>
   </struct>
 
   <struct name="SAMPLER_STATE_8X8_AVS_COEFFICIENTS" length="8">
@@ -6428,6 +6430,7 @@
     <field name="Notify Enable" start="8" end="8" type="bool"/>
     <field name="Flush LLC" start="9" end="9" type="bool"/>
     <field name="Post-Sync Operation" start="14" end="15" type="uint"/>
+    <field name="Flush CCS" start="16" end="16" type="bool"/>
     <field name="TLB Invalidate" start="18" end="18" type="bool"/>
     <field name="Store Data Index" start="21" end="21" type="uint"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="38"/>
@@ -7786,11 +7789,6 @@
     <field name="VMEM SOARB1 Done" start="29" end="29" type="bool"/>
     <field name="VMEM L3REQARB0 Done" start="30" end="30" type="bool"/>
     <field name="VMEM L3REQARB1 Done" start="31" end="31" type="bool"/>
-  </register>
-
-  <register name="SAMPLER_MODE" length="1" num="0x0e18c">
-    <field name="Headerless Message for Pre-emptable Contexts" start="5" end="5" type="bool"/>
-    <field name="Headerless Message for Pre-emptable Contexts Mask" start="21" end="21" type="bool"/>
   </register>
 
   <register name="SC_INSTDONE" length="1" num="0x7100">

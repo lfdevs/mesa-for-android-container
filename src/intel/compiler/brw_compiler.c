@@ -65,12 +65,15 @@
    .lower_unpack_snorm_4x8 = true,                                            \
    .lower_unpack_unorm_2x16 = true,                                           \
    .lower_unpack_unorm_4x8 = true,                                            \
-   .lower_usub_sat64 = true,                                                  \
    .lower_hadd64 = true,                                                      \
    .avoid_ternary_with_two_constants = true,                                  \
    .has_pack_32_4x8 = true,                                                   \
    .max_unroll_iterations = 32,                                               \
-   .force_indirect_unrolling = nir_var_function_temp
+   .force_indirect_unrolling = nir_var_function_temp,                         \
+   .divergence_analysis_options =                                             \
+      (nir_divergence_single_prim_per_subgroup |                              \
+       nir_divergence_single_patch_per_tcs_subgroup |                         \
+       nir_divergence_single_patch_per_tes_subgroup)
 
 static const struct nir_shader_compiler_options scalar_nir_options = {
    COMMON_OPTIONS,
@@ -161,6 +164,7 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       bool is_scalar = compiler->scalar_stage[i];
       if (is_scalar) {
          *nir_options = scalar_nir_options;
+         int64_options |= nir_lower_usub_sat64;
       } else {
          *nir_options = vector_nir_options;
       }
@@ -189,6 +193,12 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
 
       nir_options->force_indirect_unrolling |=
          brw_nir_no_indirect_mask(compiler, i);
+
+      if (compiler->use_tcs_8_patch) {
+         /* TCS 8_PATCH mode has multiple patches per subgroup */
+         nir_options->divergence_analysis_options &=
+            ~nir_divergence_single_patch_per_tcs_subgroup;
+      }
 
       compiler->nir_options[i] = nir_options;
    }

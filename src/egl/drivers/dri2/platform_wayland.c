@@ -45,6 +45,7 @@
 #include "util/u_vector.h"
 #include "util/anon_file.h"
 #include "eglglobals.h"
+#include "kopper_interface.h"
 
 #include <wayland-egl-backend.h>
 #include <wayland-client.h>
@@ -1172,7 +1173,7 @@ dri2_wl_get_buffers_with_format(__DRIdrawable * driDrawable,
    struct dri2_egl_surface *dri2_surf = loaderPrivate;
    int i, j;
 
-   if (update_buffers(dri2_surf) < 0)
+   if (update_buffers_if_needed(dri2_surf) < 0)
       return NULL;
 
    for (i = 0, j = 0; i < 2 * count; i += 2, j++) {
@@ -1251,7 +1252,7 @@ image_get_buffers(__DRIdrawable *driDrawable,
 {
    struct dri2_egl_surface *dri2_surf = loaderPrivate;
 
-   if (update_buffers(dri2_surf) < 0)
+   if (update_buffers_if_needed(dri2_surf) < 0)
       return 0;
 
    buffers->image_mask = __DRI_IMAGE_BUFFER_BACK;
@@ -2045,11 +2046,12 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
+   dri2_dpy->fd = -1;
+   disp->DriverData = (void *) dri2_dpy;
+
    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)
       goto cleanup;
 
-   dri2_dpy->fd = -1;
-   disp->DriverData = (void *) dri2_dpy;
    if (disp->PlatformDisplay == NULL) {
       dri2_dpy->wl_dpy = wl_display_connect(NULL);
       if (dri2_dpy->wl_dpy == NULL)
@@ -2588,9 +2590,29 @@ static const __DRIswrastLoaderExtension swrast_loader_extension = {
    .putImage2       = dri2_wl_swrast_put_image2,
 };
 
+static void
+kopperSetSurfaceCreateInfo(void *_draw, struct kopper_loader_info *out)
+{
+    struct dri2_egl_surface *dri2_surf = _draw;
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display(dri2_surf->base.Resource.Display);
+    VkWaylandSurfaceCreateInfoKHR *wlsci = &out->wl;
+
+    wlsci->sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+    wlsci->pNext = NULL;
+    wlsci->flags = 0;
+    wlsci->display = dri2_dpy->wl_dpy;
+    wlsci->surface = dri2_surf->wl_surface_wrapper;
+}
+
+static const __DRIkopperLoaderExtension kopper_loader_extension = {
+    .base = { __DRI_KOPPER_LOADER, 1 },
+
+    .SetSurfaceCreateInfo   = kopperSetSurfaceCreateInfo,
+};
 static const __DRIextension *swrast_loader_extensions[] = {
    &swrast_loader_extension.base,
    &image_lookup_extension.base,
+   &kopper_loader_extension.base,
    NULL,
 };
 
@@ -2604,11 +2626,12 @@ dri2_initialize_wayland_swrast(_EGLDisplay *disp)
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
+   dri2_dpy->fd = -1;
+   disp->DriverData = (void *) dri2_dpy;
+
    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)
       goto cleanup;
 
-   dri2_dpy->fd = -1;
-   disp->DriverData = (void *) dri2_dpy;
    if (disp->PlatformDisplay == NULL) {
       dri2_dpy->wl_dpy = wl_display_connect(NULL);
       if (dri2_dpy->wl_dpy == NULL)
@@ -2649,7 +2672,7 @@ dri2_initialize_wayland_swrast(_EGLDisplay *disp)
                                                      0, dri2_dpy->formats.num_formats))
       goto cleanup;
 
-   dri2_dpy->driver_name = strdup("swrast");
+   dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");
    if (!dri2_load_driver_swrast(disp))
       goto cleanup;
 

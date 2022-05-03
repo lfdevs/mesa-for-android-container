@@ -35,7 +35,7 @@
 
 struct crocus_batch;
 struct intel_device_info;
-struct pipe_debug_callback;
+struct util_debug_callback;
 
 #define CROCUS_BINDER_SIZE (64 * 1024)
 #define CROCUS_MAX_BINDERS 100
@@ -238,7 +238,7 @@ static inline void crocus_bo_unreference(struct crocus_bo *bo)
  * This function will block waiting for any existing execution on the
  * buffer to complete, first.  The resulting mapping is returned.
  */
-MUST_CHECK void *crocus_bo_map(struct pipe_debug_callback *dbg,
+MUST_CHECK void *crocus_bo_map(struct util_debug_callback *dbg,
                              struct crocus_bo *bo, unsigned flags);
 
 /**

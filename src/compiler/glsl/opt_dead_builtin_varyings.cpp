@@ -489,7 +489,6 @@ public:
    virtual ir_visitor_status visit_leave(ir_assignment *ir)
    {
       handle_rvalue(&ir->rhs);
-      handle_rvalue(&ir->condition);
 
       /* We have to use set_lhs when changing the LHS of an assignment. */
       ir_rvalue *lhs = ir->lhs;

@@ -12,7 +12,7 @@ traces:
   - path: gputest/plot3d.trace
     expectations:
       - device: i915-g33
-        checksum: 4731890d1f782c106dd9c12af77b3607
+        checksum: 6a3f62f1c6cc57c91188f93f37ebf9b4
   - path: gputest/triangle.trace
     expectations:
       # Weird white bar behind Tux's head.

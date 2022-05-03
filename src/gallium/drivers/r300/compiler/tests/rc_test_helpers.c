@@ -99,8 +99,9 @@ static int regex_helper(
 	err_code = regexec(&regex, search_str, num_matches, matches, 0);
 	DBG("Search string: '%s'\n", search_str);
 	for (i = 0; i < num_matches; i++) {
-		DBG("Match %u start = %d end = %d\n", i,
-					matches[i].rm_so, matches[i].rm_eo);
+		DBG("Match %u start = %zu end = %zu\n", i,
+					(size_t)matches[i].rm_so,
+					(size_t)matches[i].rm_eo);
 	}
 	if (err_code) {
 		regerror(err_code, &regex, err_buf, REGEX_ERR_BUF_SIZE);

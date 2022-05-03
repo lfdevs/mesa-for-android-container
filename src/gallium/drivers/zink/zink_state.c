@@ -561,18 +561,6 @@ line_width(float width, float granularity, const float range[2])
    return CLAMP(width, range[0], range[1]);
 }
 
-#define warn_line_feature(feat) \
-   do { \
-      static bool warned = false; \
-      if (!warned) { \
-         fprintf(stderr, "WARNING: Incorrect rendering will happen, " \
-                         "because the Vulkan device doesn't support " \
-                         "the %s feature of " \
-                         "VK_EXT_line_rasterization\n", feat); \
-         warned = true; \
-      } \
-   } while (0)
-
 static void *
 zink_create_rasterizer_state(struct pipe_context *pctx,
                              const struct pipe_rasterizer_state *rs_state)
@@ -589,7 +577,6 @@ zink_create_rasterizer_state(struct pipe_context *pctx,
 
    assert(rs_state->depth_clip_far == rs_state->depth_clip_near);
    state->hw_state.depth_clamp = rs_state->depth_clip_near == 0;
-   state->hw_state.rasterizer_discard = rs_state->rasterizer_discard;
    state->hw_state.force_persample_interp = rs_state->force_persample_interp;
    state->hw_state.pv_last = !rs_state->flatshade_first;
    state->hw_state.clip_halfz = rs_state->clip_halfz;
@@ -604,56 +591,17 @@ zink_create_rasterizer_state(struct pipe_context *pctx,
                        VK_FRONT_FACE_COUNTER_CLOCKWISE :
                        VK_FRONT_FACE_CLOCKWISE;
 
-   VkPhysicalDeviceLineRasterizationFeaturesEXT *line_feats =
-            &screen->info.line_rast_feats;
-   state->hw_state.line_mode =
-      VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT;
-
-   if (rs_state->line_stipple_enable) {
-      if (screen->info.have_EXT_line_rasterization) {
-         if (rs_state->line_rectangular) {
-            if (rs_state->line_smooth) {
-               if (line_feats->stippledSmoothLines)
-                  state->hw_state.line_mode =
-                     VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT;
-               else
-                  warn_line_feature("stippledSmoothLines");
-            } else if (line_feats->stippledRectangularLines)
-               state->hw_state.line_mode =
-                  VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT;
-            else
-               warn_line_feature("stippledRectangularLines");
-         } else if (line_feats->stippledBresenhamLines)
-            state->hw_state.line_mode =
-               VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT;
-         else {
-            warn_line_feature("stippledBresenhamLines");
-
-            /* no suitable mode that supports line stippling */
-            state->base.line_stipple_factor = 0;
-            state->base.line_stipple_pattern = UINT16_MAX;
-         }
-      }
+   state->hw_state.line_mode = VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT;
+   if (rs_state->line_rectangular) {
+      if (rs_state->line_smooth)
+         state->hw_state.line_mode = VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT;
+      else
+         state->hw_state.line_mode = VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT;
    } else {
-      if (screen->info.have_EXT_line_rasterization) {
-         if (rs_state->line_rectangular) {
-            if (rs_state->line_smooth) {
-               if (line_feats->smoothLines)
-                  state->hw_state.line_mode =
-                     VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT;
-               else
-                  warn_line_feature("smoothLines");
-            } else if (line_feats->rectangularLines)
-               state->hw_state.line_mode =
-                  VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT;
-            else
-               warn_line_feature("rectangularLines");
-         } else if (line_feats->bresenhamLines)
-            state->hw_state.line_mode =
-               VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT;
-         else
-            warn_line_feature("bresenhamLines");
-      }
+      state->hw_state.line_mode = VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT;
+   }
+
+   if (!rs_state->line_stipple_enable) {
       state->base.line_stipple_factor = 0;
       state->base.line_stipple_pattern = UINT16_MAX;
    }
@@ -680,6 +628,9 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
    bool point_quad_rasterization = ctx->rast_state ? ctx->rast_state->base.point_quad_rasterization : false;
    bool scissor = ctx->rast_state ? ctx->rast_state->base.scissor : false;
    bool pv_last = ctx->rast_state ? ctx->rast_state->hw_state.pv_last : false;
+   bool force_persample_interp = ctx->rast_state ? ctx->rast_state->hw_state.force_persample_interp : false;
+   bool clip_halfz = ctx->rast_state ? ctx->rast_state->hw_state.clip_halfz : false;
+   bool rasterizer_discard = ctx->rast_state ? ctx->rast_state->base.rasterizer_discard : false;
    ctx->rast_state = cso;
 
    if (ctx->rast_state) {
@@ -695,8 +646,11 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
       ctx->gfx_pipeline_state.dirty = true;
       ctx->rast_state_changed = true;
 
-      if (zink_get_last_vertex_key(ctx)->clip_halfz != ctx->rast_state->base.clip_halfz) {
-         zink_set_last_vertex_key(ctx)->clip_halfz = ctx->rast_state->base.clip_halfz;
+      if (clip_halfz != ctx->rast_state->base.clip_halfz) {
+         if (!screen->driver_workarounds.depth_clip_control_missing)
+            ctx->gfx_pipeline_state.dirty = true;
+         else
+            zink_set_last_vertex_key(ctx)->clip_halfz = ctx->rast_state->base.clip_halfz;
          ctx->vp_state_changed = true;
       }
 
@@ -704,10 +658,18 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
          ctx->gfx_pipeline_state.dyn_state1.front_face = ctx->rast_state->front_face;
          ctx->gfx_pipeline_state.dirty |= !zink_screen(pctx->screen)->info.have_EXT_extended_dynamic_state;
       }
+      if (!ctx->primitives_generated_active)
+         zink_set_rasterizer_discard(ctx, false);
+      else if (rasterizer_discard != ctx->rast_state->base.rasterizer_discard)
+         zink_set_color_write_enables(ctx);
+
       if (ctx->rast_state->base.point_quad_rasterization != point_quad_rasterization)
          zink_set_fs_point_coord_key(ctx);
       if (ctx->rast_state->base.scissor != scissor)
          ctx->scissor_changed = true;
+
+      if (ctx->rast_state->base.force_persample_interp != force_persample_interp)
+         zink_set_fs_key(ctx)->force_persample_interp = ctx->rast_state->base.force_persample_interp;
    }
 }
 

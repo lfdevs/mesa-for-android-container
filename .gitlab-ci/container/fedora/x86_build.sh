@@ -27,6 +27,7 @@ dnf install -y --setopt=install_weak_deps=False \
     gettext \
     kernel-headers \
     llvm-devel \
+    clang-devel \
     meson \
     "pkgconfig(dri2proto)" \
     "pkgconfig(expat)" \
@@ -63,6 +64,8 @@ dnf install -y --setopt=install_weak_deps=False \
     python3-devel \
     python3-mako \
     vulkan-headers \
+    spirv-tools-devel \
+    spirv-llvm-translator-devel \
     $EPHEMERAL
 
 

@@ -27,7 +27,6 @@
 #include "radeon_compiler_util.h"
 #include "radeon_dataflow.h"
 #include "radeon_emulate_branches.h"
-#include "radeon_emulate_loops.h"
 #include "radeon_program_alu.h"
 #include "radeon_program_tex.h"
 #include "radeon_rename_regs.h"
@@ -36,17 +35,6 @@
 #include "r300_fragprog_swizzle.h"
 #include "r500_fragprog.h"
 
-
-static void dataflow_outputs_mark_use(void * userdata, void * data,
-		void (*callback)(void *, unsigned int, unsigned int))
-{
-	struct r300_fragment_program_compiler * c = userdata;
-	callback(data, c->OutputColor[0], RC_MASK_XYZW);
-	callback(data, c->OutputColor[1], RC_MASK_XYZW);
-	callback(data, c->OutputColor[2], RC_MASK_XYZW);
-	callback(data, c->OutputColor[3], RC_MASK_XYZW);
-	callback(data, c->OutputDepth, RC_MASK_W);
-}
 
 static void rc_rewrite_depth_out(struct radeon_compiler *cc, void *user)
 {
@@ -121,15 +109,13 @@ void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 		/* This transformation needs to be done before any of the IF
 		 * instructions are modified. */
 		{"transform KILP",		1, 1,		rc_transform_KILL,		NULL},
-		{"transform loops",		1, !is_r500,	rc_transform_loops,		NULL},
 		{"emulate branches",		1, !is_r500,	rc_emulate_branches,		NULL},
 		{"force alpha to one",		1, alpha2one,	rc_local_transform,		force_alpha_to_one},
 		{"transform TEX",		1, 1,		rc_local_transform,		rewrite_tex},
 		{"transform IF",		1, is_r500,	rc_local_transform,		rewrite_if},
 		{"native rewrite",		1, is_r500,	rc_local_transform,		native_rewrite_r500},
 		{"native rewrite",		1, !is_r500,	rc_local_transform,		native_rewrite_r300},
-		{"deadcode",			1, opt,		rc_dataflow_deadcode,		dataflow_outputs_mark_use},
-		{"emulate loops",		1, !is_r500,	rc_emulate_loops,		NULL},
+		{"deadcode",			1, opt,		rc_dataflow_deadcode,		NULL},
 		{"register rename",		1, !is_r500 || opt,		rc_rename_regs,			NULL},
 		{"dataflow optimize",		1, opt,		rc_optimize,			NULL},
 		{"inline literals",		1, is_r500 && opt,		rc_inline_literals,			NULL},

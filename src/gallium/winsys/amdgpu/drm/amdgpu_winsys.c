@@ -155,7 +155,7 @@ static void do_winsys_deinit(struct amdgpu_winsys *ws)
    FREE(ws);
 }
 
-static void amdgpu_winsys_destroy(struct radeon_winsys *rws)
+static void amdgpu_winsys_destroy_locked(struct radeon_winsys *rws, bool locked)
 {
    struct amdgpu_screen_winsys *sws = amdgpu_screen_winsys(rws);
    struct amdgpu_winsys *ws = sws->aws;
@@ -167,7 +167,8 @@ static void amdgpu_winsys_destroy(struct radeon_winsys *rws)
     * amdgpu_winsys_create in another thread doesn't get the winsys
     * from the table when the counter drops to 0.
     */
-   simple_mtx_lock(&dev_tab_mutex);
+   if (!locked)
+      simple_mtx_lock(&dev_tab_mutex);
 
    destroy = pipe_reference(&ws->reference, NULL);
    if (destroy && dev_tab) {
@@ -178,13 +179,19 @@ static void amdgpu_winsys_destroy(struct radeon_winsys *rws)
       }
    }
 
-   simple_mtx_unlock(&dev_tab_mutex);
+   if (!locked)
+      simple_mtx_unlock(&dev_tab_mutex);
 
    if (destroy)
       do_winsys_deinit(ws);
 
    close(sws->fd);
    FREE(rws);
+}
+
+static void amdgpu_winsys_destroy(struct radeon_winsys *rws)
+{
+   amdgpu_winsys_destroy_locked(rws, false);
 }
 
 static void amdgpu_winsys_query_info(struct radeon_winsys *rws,
@@ -556,7 +563,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
     * and link all drivers into one binary blob. */
    ws->base.screen = screen_create(&ws->base, config);
    if (!ws->base.screen) {
-      amdgpu_winsys_destroy(&ws->base);
+      amdgpu_winsys_destroy_locked(&ws->base, true);
       simple_mtx_unlock(&dev_tab_mutex);
       return NULL;
    }

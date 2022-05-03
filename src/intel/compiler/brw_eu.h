@@ -1799,7 +1799,8 @@ brw_pixel_interpolator_query(struct brw_codegen *p,
 void
 brw_find_live_channel(struct brw_codegen *p,
                       struct brw_reg dst,
-                      struct brw_reg mask);
+                      struct brw_reg mask,
+                      bool last);
 
 void
 brw_broadcast(struct brw_codegen *p,

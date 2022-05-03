@@ -167,7 +167,7 @@ i915_destroy(struct pipe_context *pipe)
 
 static void
 i915_set_debug_callback(struct pipe_context *pipe,
-                        const struct pipe_debug_callback *cb)
+                        const struct util_debug_callback *cb)
 {
    struct i915_context *i915 = i915_context(pipe);
 

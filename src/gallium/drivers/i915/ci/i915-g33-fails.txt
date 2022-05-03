@@ -27,13 +27,10 @@ dEQP-GLES2.functional.shaders.functions.control_flow.mixed_return_break_continue
 dEQP-GLES2.functional.shaders.functions.control_flow.return_after_continue_fragment,Fail
 dEQP-GLES2.functional.shaders.functions.control_flow.return_in_loop_if_fragment,Fail
 dEQP-GLES2.functional.shaders.functions.control_flow.return_in_nested_loop_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.matrix_subscript.mat4_dynamic_write_dynamic_read_fragment,Fail
 dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_read_fragment,Fail
 dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_read_fragment,Fail
 dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_dynamic_read_fragment,Fail
 dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_dynamic_read_fragment,Fail
 
 dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec4_dynamic_subscript_write_static_loop_subscript_read_fragment,Fail
 dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec4_dynamic_subscript_write_component_read_fragment,Fail
@@ -46,20 +43,14 @@ dEQP-GLES2.functional.shaders.loops.for_constant_iterations.conditional_continue
 dEQP-GLES2.functional.shaders.loops.for_constant_iterations.double_continue_fragment,Fail
 dEQP-GLES2.functional.shaders.loops.for_constant_iterations.mixed_break_continue_fragment,Fail
 
-dEQP-GLES2.functional.shaders.random.all_features.fragment.22,Fail
-dEQP-GLES2.functional.shaders.random.all_features.fragment.32,Fail
-dEQP-GLES2.functional.shaders.random.all_features.fragment.34,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.38,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.5,Fail
-dEQP-GLES2.functional.shaders.random.all_features.fragment.53,Fail
-dEQP-GLES2.functional.shaders.random.all_features.fragment.80,Fail
+dEQP-GLES2.functional.shaders.random.all_features.fragment.79,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.86,Fail
-dEQP-GLES2.functional.shaders.random.all_features.fragment.89,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.93,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.97,Fail
 dEQP-GLES2.functional.shaders.random.trigonometric.fragment.15,Fail
 dEQP-GLES2.functional.shaders.random.trigonometric.fragment.26,Fail
-dEQP-GLES2.functional.shaders.random.trigonometric.fragment.4,Fail
 dEQP-GLES2.functional.shaders.random.trigonometric.fragment.42,Fail
 dEQP-GLES2.functional.shaders.random.trigonometric.fragment.45,Fail
 dEQP-GLES2.functional.shaders.random.trigonometric.fragment.52,Fail
@@ -109,11 +100,9 @@ dEQP-GLES2.functional.uniform_api.random.20,Fail
 dEQP-GLES2.functional.uniform_api.random.54,Fail
 dEQP-GLES2.functional.uniform_api.random.71,Fail
 dEQP-GLES2.functional.uniform_api.random.74,Fail
-dEQP-GLES2.functional.uniform_api.random.80,Fail
 dEQP-GLES2.functional.uniform_api.random.81,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.mat4_mat2_both,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.mat4_mat2_fragment,Fail
-dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.sampler2D_samplerCube_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.mat4_both,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.mat4_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_nested_structs_arrays.both,Fail
@@ -121,13 +110,10 @@ dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_nest
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.mat4_mat2_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.mat4_mat2_both,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.mat4_mat2_fragment,Fail
-dEQP-GLES2.functional.uniform_api.value.assigned.by_value.render.array_in_struct.sampler2D_samplerCube_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_value.render.multiple_nested_structs_arrays.both,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_value.render.multiple_nested_structs_arrays.fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_both,Fail
 dEQP-GLES2.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_fragment,Fail
-dEQP-GLES2.functional.uniform_api.value.initial.render.basic_array.mat4_both,Fail
-dEQP-GLES2.functional.uniform_api.value.initial.render.basic_array.mat4_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.both,Fail
 dEQP-GLES2.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.initial.render.nested_structs_arrays.mat4_mat2_fragment,Fail
@@ -143,10 +129,6 @@ KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_com
 # Non-unrolled loops, but they should be unrollable.
 KHR-GLES2.shaders.aggressive_optimizations.sin_vec2_frag,Fail
 KHR-GLES2.shaders.aggressive_optimizations.sin_vec3_frag,Fail
-
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3133
-KHR-GLES2.texture_3d.copy_sub_image.negative,Fail
-KHR-GLES2.texture_3d.copy_sub_image.rgba,Fail
 
 # https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3134
 KHR-GLES2.texture_3d.filtering.combinations.negative,Fail
@@ -181,8 +163,6 @@ shaders@glsl-max-varyings >max_varying_components,Fail
 shaders@glsl-uniform-interstage-limits@520 vs- 1 fs,Fail
 shaders@glsl-uniform-interstage-limits@subdivide 5,Fail
 shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges,Fail
-
-shaders@glsl-predication-on-large-array,Fail
 
 shaders@ssa@fs-if-def-else-break,Fail
 shaders@ssa@fs-lost-copy-problem,Fail
@@ -445,10 +425,6 @@ spec@arb_texture_rectangle@glsl-fs-shadow2drect-08,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drectproj,Fail
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drectshadow,Fail
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drectshadow,Fail
-
-# Too many texture phases and regs, because nir_to_tgsi emits MOV TEMP[n],
-# IN[x].xyxw setting up the TXP coords.
-spec@arb_texture_rectangle@texrect-many,Fail
 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4985
 spec@arb_texture_rectangle@texwrap rect bordercolor,Fail
@@ -845,6 +821,7 @@ spec@glsl-1.10@execution@fs-frontfacing-ternary-0.0-neg-1.0,Fail
 spec@glsl-1.10@execution@fs-frontfacing-ternary-1-neg-1,Fail
 spec@glsl-1.10@execution@fs-frontfacing-ternary-1.0-neg-1.0,Fail
 spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0,Fail
+spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0-alt,Fail
 spec@glsl-1.10@execution@fs-frontfacing-ternary-vec4-neg-1.0-1.0,Fail
 
 spec@glsl-1.10@execution@fs-loop-bounds-unrolled,Fail
@@ -904,7 +881,7 @@ spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-bias,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-clamp-z,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow2dproj,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow2dproj-bias,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-texture2d-dependent-5,Fail
+
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-dst-in-loop,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-dst-in-nested-loop-combined,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-src-in-loop,Fail
@@ -914,13 +891,10 @@ spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-src-in-n
 spec@glsl-1.10@execution@variable-indexing@fs-input-array-vec2-index-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-input-array-vec3-index-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-input-array-vec4-index-rd,Fail
-spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat2-index-col-row-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat3-index-col-row-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat3-index-col-wr,Fail
-spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat3-index-row-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat4-index-col-row-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat4-index-col-wr,Fail
-spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat4-index-row-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-uniform-array-mat4-index-col-row-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-varying-array-mat3-index-col-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-varying-array-mat3-index-col-row-rd,Fail
@@ -1082,13 +1056,9 @@ spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec3-vec4,Fail
 spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec4-vec2,Fail
 spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec4-vec3,Fail
 spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec4-vec4,Fail
-spec@glsl-1.20@execution@fs-const-array-of-struct,Fail
-spec@glsl-1.20@execution@fs-const-array-of-struct-of-array,Fail
 spec@glsl-1.20@execution@fs-function-inout-array-of-structs,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-max,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-min,Fail
-spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-032-elements,Fail
-spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-048-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-064-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-128-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-256-elements,Fail
@@ -1133,13 +1103,10 @@ spec@glsl-1.20@execution@uniform-initializer@fs-mat4,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat4-array,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat4-from-const,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat4-set-by-other-stage,Fail
-spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat2-index-col-row-wr,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat3-index-col-row-wr,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat3-index-col-wr,Fail
-spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat3-index-row-wr,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-index-col-row-wr,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-index-col-wr,Fail
-spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-index-row-wr,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-uniform-array-mat4-index-col-row-rd,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-varying-array-mat3-index-col-rd,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-varying-array-mat3-index-col-row-rd,Fail

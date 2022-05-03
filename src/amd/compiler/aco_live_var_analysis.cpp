@@ -88,6 +88,21 @@ struct PhiInfo {
    uint16_t linear_phi_defs = 0;
 };
 
+bool
+instr_needs_vcc(Instruction* instr)
+{
+   if (instr->isVOPC())
+      return true;
+   if (instr->isVOP2() && !instr->isVOP3()) {
+      if (instr->operands.size() == 3 && instr->operands[2].isTemp() &&
+          instr->operands[2].regClass().type() == RegType::sgpr)
+         return true;
+      if (instr->definitions.size() == 2)
+         return true;
+   }
+   return false;
+}
+
 void
 process_live_temps_per_block(Program* program, live& lives, Block* block, unsigned& worklist,
                              std::vector<PhiInfo>& phi_info)
@@ -111,6 +126,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
       if (is_phi(insn))
          break;
 
+      program->needs_vcc |= instr_needs_vcc(insn);
       register_demand[idx] = RegisterDemand(new_demand.vgpr, new_demand.sgpr);
 
       /* KILL */
@@ -118,7 +134,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
          if (!definition.isTemp()) {
             continue;
          }
-         if ((definition.isFixed() || definition.hasHint()) && definition.physReg() == vcc)
+         if (definition.isFixed() && definition.physReg() == vcc)
             program->needs_vcc = true;
 
          const Temp temp = definition.getTemp();
@@ -189,7 +205,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
          continue;
       }
       Definition& definition = insn->definitions[0];
-      if ((definition.isFixed() || definition.hasHint()) && definition.physReg() == vcc)
+      if (definition.isFixed() && definition.physReg() == vcc)
          program->needs_vcc = true;
       const Temp temp = definition.getTemp();
       const size_t n = live.erase(temp.id());
@@ -421,7 +437,7 @@ live_var_analysis(Program* program)
    std::vector<PhiInfo> phi_info(program->blocks.size());
    RegisterDemand new_demand;
 
-   program->needs_vcc = false;
+   program->needs_vcc = program->chip_class >= GFX10;
 
    /* this implementation assumes that the block idx corresponds to the block's position in
     * program->blocks vector */

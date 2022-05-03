@@ -227,9 +227,13 @@ static const struct test {
    INSTR_6XX(c0060006_01818001, "ldg.u32 r1.z, g[r1.z], 1"),
 
    /* dEQP-GLES3.functional.ubo.random.basic_arrays.0 */
-   INSTR_6XX(c7020020_01800000, "stc c[32], r0.x, 1", .parse_fail=true),
+   INSTR_6XX(c7020020_01800000, "stc.f32 c[32], r0.x, 1"), /* stc c[32], r0.x, 1 */
    /* dEQP-VK.image.image_size.cube_array.readonly_writeonly_1x1x12 */
-   INSTR_6XX(c7060020_03800000, "stc c[32], r0.x, 3", .parse_fail=true),
+   INSTR_6XX(c7060020_03800000, "stc.u32 c[32], r0.x, 3"), /* stc c[32], r0.x, 3 */
+
+   /* custom */
+   INSTR_6XX(c7060100_03800000, "stc.u32 c[a1.x], r0.x, 3"), /* stc c[a1.x], r0.x, 3 */
+   INSTR_6XX(c7060120_03800000, "stc.u32 c[a1.x+32], r0.x, 3"), /* stc c[a1.x+32], r0.x, 3 */
 
    /* dEQP-VK.image.image_size.cube_array.readonly_writeonly_1x1x12 */
    INSTR_6XX(c0260200_03676100, "stib.b.untyped.1d.u32.3.imm.base0 r0.x, r0.w, 1"), /* stib.untyped.u32.1d.3.mode4.base0 r0.x, r0.w, 1 */
@@ -343,6 +347,11 @@ static const struct test {
    INSTR_6XX(c0260000_00478200, "ldc.offset1.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
    INSTR_6XX(c0260000_00478400, "ldc.offset2.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
    INSTR_6XX(c0260000_00478600, "ldc.offset3.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
+
+   /* dEQP-VK.glsl.conditionals.if.if_else_vertex */
+   INSTR_6XX(c0360000_00c78100, "ldc.1.k.imm.base0 c[a1.x], 0, 0"), /* ldc.1.k.mode4.base0 c[a1.x], 0, 0 */
+   /* custom */
+   INSTR_6XX(c0360003_00c78100, "ldc.4.k.imm.base0 c[a1.x], 0, 0"), /* ldc.4.k.mode4.base0 c[a1.x], 0, 0 */
 
    /* dEQP-VK.glsl.struct.local.nested_struct_array_dynamic_index_fragment */
    INSTR_6XX(c1425b50_01803e02, "stp.f32 p[r11.y-176], r0.y, 1"),
@@ -472,7 +481,8 @@ main(int argc, char **argv)
       unsigned gen = test->gpu_id / 100;
       if (!compilers[gen]) {
          dev_ids[gen].gpu_id = test->gpu_id;
-         compilers[gen] = ir3_compiler_create(NULL, &dev_ids[gen], false);
+         compilers[gen] = ir3_compiler_create(NULL, &dev_ids[gen],
+                                              &(struct ir3_compiler_options){});
       }
 
       FILE *fasm =

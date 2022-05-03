@@ -38,7 +38,6 @@ struct vn_instance {
    struct driOptionCache available_dri_options;
 
    struct vn_renderer *renderer;
-   struct vn_renderer_info renderer_info;
 
    struct vn_renderer_shmem_pool reply_shmem_pool;
 

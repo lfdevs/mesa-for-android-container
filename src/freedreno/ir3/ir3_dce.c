@@ -53,8 +53,10 @@ instr_dce(struct ir3_instruction *instr, bool falsedep)
    if (ir3_instr_check_mark(instr))
       return;
 
-   if (writes_gpr(instr))
-      mark_array_use(instr, instr->dsts[0]); /* dst */
+   foreach_dst (dst, instr) {
+      if (is_dest_gpr(dst))
+         mark_array_use(instr, dst);
+   }
 
    foreach_src (reg, instr)
       mark_array_use(instr, reg); /* src */

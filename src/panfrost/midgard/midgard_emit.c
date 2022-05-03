@@ -138,7 +138,6 @@ vector_to_scalar_alu(midgard_vector_alu v, midgard_instruction *ins)
                 .op = v.op,
                 .src1 = packed_src[0],
                 .src2 = packed_src[1],
-                .unknown = 0,
                 .outmod = v.outmod,
                 .output_full = is_full,
                 .output_component = comp
@@ -244,6 +243,12 @@ mir_pack_swizzle(unsigned mask, unsigned *swizzle,
                         bool lo = swizzle[0] >= COMPONENT_Z;
                         bool hi = swizzle[1] >= COMPONENT_Z;
 
+                        assert(!(mask & ~0xf));
+                        assert(!(mask & 0x3) || !(mask & 0xc));
+
+                        if (mask > 3)
+                                mask >>= 2;
+
                         if (mask & 0x1) {
                                 /* We can't mix halves... */
                                 if (mask & 2)
@@ -276,13 +281,13 @@ mir_pack_swizzle(unsigned mask, unsigned *swizzle,
                 for (unsigned c = (dest_up ? 4 : 0); c < (dest_up ? 8 : 4); ++c) {
                         unsigned v = swizzle[c];
 
-                        ASSERTED bool t_upper = v > 3;
+                        ASSERTED bool t_upper = v > (sz == 8 ? 7 : 3);
 
                         /* Ensure we're doing something sane */
 
                         if (mask & (1 << c)) {
                                 assert(t_upper == upper);
-                                assert(v <= 7);
+                                assert(v <= (sz == 8 ? 15 : 7));
                         }
 
                         /* Use the non upper part */
@@ -333,6 +338,12 @@ mir_pack_vector_srcs(midgard_instruction *ins, midgard_vector_alu *alu)
                 unsigned sz = nir_alu_type_get_type_size(ins->src_types[i]);
                 assert((sz == base_size) || (sz == base_size / 2));
 
+                /* Promote 8bit moves to 16bit ones so we can support any swizzles. */
+                if (sz == 8 && base_size == 8 && ins->op == midgard_alu_op_imov) {
+                        ins->outmod = midgard_outmod_keeplo;
+                        base_size = 16;
+                }
+
                 midgard_src_expand_mode expand_mode = midgard_src_passthrough;
                 unsigned swizzle = mir_pack_swizzle(ins->mask, ins->swizzle[i],
                                                     sz, base_size, channeled,
@@ -356,14 +367,24 @@ mir_pack_vector_srcs(midgard_instruction *ins, midgard_vector_alu *alu)
 static void
 mir_pack_swizzle_ldst(midgard_instruction *ins)
 {
-        /* TODO: non-32-bit, non-vec4 */
-        for (unsigned c = 0; c < 4; ++c) {
+        unsigned compsz = OP_IS_STORE(ins->op) ?
+                          nir_alu_type_get_type_size(ins->src_types[0]) :
+                          nir_alu_type_get_type_size(ins->dest_type);
+        unsigned maxcomps = 128 / compsz;
+        unsigned step = DIV_ROUND_UP(32, compsz);
+
+        for (unsigned c = 0; c < maxcomps; c += step) {
                 unsigned v = ins->swizzle[0][c];
 
-                /* Check vec4 */
-                assert(v <= 3);
+                /* Make sure the component index doesn't exceed the maximum
+                 * number of components. */
+                assert(v <= maxcomps);
 
-                ins->load_store.swizzle |= v << (2 * c);
+                if (compsz <= 32)
+                        ins->load_store.swizzle |= (v / step) << (2 * (c / step));
+                else
+                        ins->load_store.swizzle |= ((v / step) << (4 * c)) |
+                                                   (((v / step) + 1) << ((4 * c) + 2));
         }
 
         /* TODO: arg_1/2 */
@@ -446,57 +467,34 @@ mir_pack_tex_ooo(midgard_block *block, midgard_bundle *bundle, midgard_instructi
 
 static unsigned
 midgard_pack_common_store_mask(midgard_instruction *ins) {
-        unsigned comp_sz = nir_alu_type_get_type_size(ins->dest_type);
-        unsigned mask = ins->mask;
+        ASSERTED unsigned comp_sz = nir_alu_type_get_type_size(ins->src_types[0]);
+        unsigned bytemask = mir_bytemask(ins);
         unsigned packed = 0;
-        unsigned nr_comp;
 
         switch (ins->op) {
-                case midgard_op_st_u8:
-                        packed |= mask & 1;
-                        break;
-                case midgard_op_st_u16:
-                        nr_comp = 16 / comp_sz;
-                        for (int i = 0; i < nr_comp; i++) {
-                                if (mask & (1 << i)) {
-                                        if (comp_sz == 16)
-                                                packed |= 0x3;
-                                        else if (comp_sz == 8)
-                                                packed |= 1 << i;
-                                }
-                        }
-                        break;
-                case midgard_op_st_32:
-                case midgard_op_st_64:
-                case midgard_op_st_128: {
-                        unsigned total_sz = 32;
-                        if (ins->op == midgard_op_st_128)
-                                total_sz = 128;
-                        else if (ins->op == midgard_op_st_64)
-                                total_sz = 64;
-
-                        nr_comp = total_sz / comp_sz;
-
-                        /* Each writemask bit masks 1/4th of the value to be stored. */
-                        assert(comp_sz >= total_sz / 4);
-
-                        for (int i = 0; i < nr_comp; i++) {
-                                if (mask & (1 << i)) {
-                                        if (comp_sz == total_sz)
-                                                packed |= 0xF;
-                                        else if (comp_sz == total_sz / 2)
-                                                packed |= 0x3 << (i * 2);
-                                        else if (comp_sz == total_sz / 4)
-                                                packed |= 0x1 << i;
-                                }
-                        }
-                        break;
+        case midgard_op_st_u8:
+                return mir_bytemask(ins) & 1;
+        case midgard_op_st_u16:
+                return mir_bytemask(ins) & 3;
+        case midgard_op_st_32:
+                return mir_bytemask(ins);
+        case midgard_op_st_64:
+                assert(comp_sz >= 16);
+                for (unsigned i = 0; i < 4; i++) {
+                        if (bytemask & (3 << (i * 2)))
+                                packed |= 1 << i;
                 }
-                default:
-                        unreachable("unexpected ldst opcode");
+                return packed;
+        case midgard_op_st_128:
+                assert(comp_sz >= 32);
+                for (unsigned i = 0; i < 4; i++) {
+                        if (bytemask & (0xf << (i * 4)))
+                                packed |= 1 << i;
+                }
+                return packed;
+        default:
+                unreachable("unexpected ldst opcode");
         }
-
-        return packed;
 }
 
 static void
@@ -511,16 +509,18 @@ mir_pack_ldst_mask(midgard_instruction *ins)
                 if (sz == 64) {
                         packed = ((ins->mask & 0x2) ? (0x8 | 0x4) : 0) |
                                 ((ins->mask & 0x1) ? (0x2 | 0x1) : 0);
-                } else if (sz == 16) {
+                } else if (sz < 32) {
+                        unsigned comps_per_32b = 32 / sz;
+
                         packed = 0;
 
                         for (unsigned i = 0; i < 4; ++i) {
-                                /* Make sure we're duplicated */
-                                bool u = (ins->mask & (1 << (2*i + 0))) != 0;
-                                ASSERTED bool v = (ins->mask & (1 << (2*i + 1))) != 0;
-                                assert(u == v);
+                                unsigned submask = (ins->mask >> (i * comps_per_32b)) &
+                                                   BITFIELD_MASK(comps_per_32b);
 
-                                packed |= (u << i);
+                                /* Make sure we're duplicated */
+                                assert(submask == 0 || submask == BITFIELD_MASK(comps_per_32b));
+                                packed |= (submask != 0) << i;
                         }
                 } else {
                         assert(sz == 32);
@@ -812,7 +812,7 @@ emit_branch(midgard_instruction *ins,
                                 .op = op,
                                 .dest_tag = dest_tag,
                                 .offset = quadword_offset,
-                                .unknown = 1
+                                .call_mode = midgard_call_mode_default
                         };
                         assert(branch.offset == quadword_offset);
                         memcpy(util_dynarray_grow_bytes(emission, size, 1), &branch, size);
@@ -1019,10 +1019,10 @@ emit_binary_bundle(compiler_context *ctx,
 
                 ins->texture.type = bundle->tag;
                 ins->texture.next_type = next_tag;
+                ins->texture.exec = MIDGARD_PARTIAL_EXECUTION_NONE; /* default */
 
                 /* Nothing else to pack for barriers */
                 if (ins->op == midgard_tex_op_barrier) {
-                        ins->texture.cont = ins->texture.last = 1;
                         ins->texture.op = ins->op;
                         util_dynarray_append(emission, midgard_texture_word, ins->texture);
                         return;
@@ -1052,10 +1052,10 @@ emit_binary_bundle(compiler_context *ctx,
                 ins->texture.outmod = ins->outmod;
 
                 if (mir_op_computes_derivatives(ctx->stage, ins->op)) {
-                        ins->texture.cont = !ins->helper_terminate;
-                        ins->texture.last = ins->helper_terminate || ins->helper_execute;
-                } else {
-                        ins->texture.cont = ins->texture.last = 1;
+                        if (ins->helper_terminate)
+                                ins->texture.exec = MIDGARD_PARTIAL_EXECUTION_KILL;
+                        else if (!ins->helper_execute)
+                                ins->texture.exec = MIDGARD_PARTIAL_EXECUTION_SKIP;
                 }
 
                 midgard_texture_word texture = texture_word_from_instr(ins);

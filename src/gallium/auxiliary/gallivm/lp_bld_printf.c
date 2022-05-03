@@ -100,7 +100,7 @@ lp_build_print_value(struct gallivm_state *gallivm,
       length = 1;
    }
 
-   if (type_kind == LLVMFloatTypeKind || type_kind == LLVMDoubleTypeKind) {
+   if (type_kind == LLVMFloatTypeKind || type_kind == LLVMDoubleTypeKind || type_kind == LLVMHalfTypeKind) {
       type_fmt[2] = '.';
       type_fmt[3] = '9';
       type_fmt[4] = 'g';

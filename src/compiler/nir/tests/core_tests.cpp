@@ -80,8 +80,7 @@ nir_core_test::shader_contains_def(nir_ssa_def *def)
    nir_foreach_block(block, b->impl) {
       nir_foreach_instr(instr, block) {
          struct contains_def_state state = {
-            .def = def,
-            .found = false,
+            def, false
          };
          nir_foreach_ssa_def(instr, contains_def_cb, &state);
          if (state.found)

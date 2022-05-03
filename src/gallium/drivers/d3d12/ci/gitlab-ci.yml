@@ -12,6 +12,7 @@
   variables:
     GIT_STRATEGY: none # testing doesn't build anything from source
     GALLIUM_DRIVER: d3d12
+    WGL_DISABLE_ERROR_DIALOGS: "true"
 
 .d3d12-test-piglit:
   extends:

@@ -116,7 +116,7 @@ static bool si_alloc_separate_cmask(struct si_screen *sscreen, struct si_texture
       return false;
 
    tex->cmask_buffer =
-      si_aligned_buffer_create(&sscreen->b, SI_RESOURCE_FLAG_UNMAPPABLE, PIPE_USAGE_DEFAULT,
+      si_aligned_buffer_create(&sscreen->b, PIPE_RESOURCE_FLAG_UNMAPPABLE, PIPE_USAGE_DEFAULT,
                                tex->surface.cmask_size, 1 << tex->surface.cmask_alignment_log2);
    if (tex->cmask_buffer == NULL)
       return false;

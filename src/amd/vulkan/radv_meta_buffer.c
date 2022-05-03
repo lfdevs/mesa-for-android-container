@@ -312,12 +312,12 @@ radv_fill_buffer(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *im
 
    if (use_compute) {
       cmd_buffer->state.flush_bits |=
-         radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT_KHR, image);
+         radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, image);
 
       fill_buffer_shader(cmd_buffer, bo, offset, size, value);
 
       flush_bits = RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE |
-                   radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT_KHR, image);
+                   radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, image);
    } else if (size) {
       uint64_t va = radv_buffer_get_va(bo);
       va += offset;
@@ -367,7 +367,7 @@ radv_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSi
 
 static void
 copy_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *src_buffer,
-            struct radv_buffer *dst_buffer, const VkBufferCopy2KHR *region)
+            struct radv_buffer *dst_buffer, const VkBufferCopy2 *region)
 {
    bool old_predicating;
 
@@ -386,7 +386,7 @@ copy_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *src_buffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-radv_CmdCopyBuffer2KHR(VkCommandBuffer commandBuffer, const VkCopyBufferInfo2KHR *pCopyBufferInfo)
+radv_CmdCopyBuffer2(VkCommandBuffer commandBuffer, const VkCopyBufferInfo2 *pCopyBufferInfo)
 {
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    RADV_FROM_HANDLE(radv_buffer, src_buffer, pCopyBufferInfo->srcBuffer);

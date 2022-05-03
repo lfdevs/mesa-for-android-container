@@ -134,6 +134,8 @@ struct radeon_info {
    unsigned ib_alignment; /* both start and size alignment */
    uint32_t me_fw_version;
    uint32_t me_fw_feature;
+   uint32_t mec_fw_version;
+   uint32_t mec_fw_feature;
    uint32_t pfp_fw_version;
    uint32_t pfp_fw_feature;
    uint32_t ce_fw_version;
@@ -188,6 +190,7 @@ struct radeon_info {
    bool has_read_registers_query;
    bool has_gds_ordered_append;
    bool has_scheduled_fence_dependency;
+   bool has_stable_pstate;
    /* Whether SR-IOV is enabled or amdgpu.mcbp=1 was set on the kernel command line. */
    bool mid_command_buffer_preemption_enabled;
    bool has_tmz_support;

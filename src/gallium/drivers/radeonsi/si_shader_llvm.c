@@ -32,7 +32,7 @@
 #include "util/u_memory.h"
 
 struct si_llvm_diagnostics {
-   struct pipe_debug_callback *debug;
+   struct util_debug_callback *debug;
    unsigned retval;
 };
 
@@ -57,7 +57,7 @@ static void si_diagnostic_handler(LLVMDiagnosticInfoRef di, void *context)
 
    char *description = LLVMGetDiagInfoDescription(di);
 
-   pipe_debug_message(diag->debug, SHADER_INFO, "LLVM diagnostic (%s): %s", severity_str,
+   util_debug_message(diag->debug, SHADER_INFO, "LLVM diagnostic (%s): %s", severity_str,
                       description);
 
    if (severity == LLVMDSError) {
@@ -70,7 +70,7 @@ static void si_diagnostic_handler(LLVMDiagnosticInfoRef di, void *context)
 
 bool si_compile_llvm(struct si_screen *sscreen, struct si_shader_binary *binary,
                      struct ac_shader_config *conf, struct ac_llvm_compiler *compiler,
-                     struct ac_llvm_context *ac, struct pipe_debug_callback *debug,
+                     struct ac_llvm_context *ac, struct util_debug_callback *debug,
                      gl_shader_stage stage, const char *name, bool less_optimized)
 {
    unsigned count = p_atomic_inc_return(&sscreen->num_compilations);
@@ -105,7 +105,7 @@ bool si_compile_llvm(struct si_screen *sscreen, struct si_shader_binary *binary,
          diag.retval = 1;
 
       if (diag.retval != 0) {
-         pipe_debug_message(debug, SHADER_INFO, "LLVM compilation failed");
+         util_debug_message(debug, SHADER_INFO, "LLVM compilation failed");
          return false;
       }
    }
@@ -519,9 +519,7 @@ static bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *
    ctx->abi.clamp_shadow_reference = true;
    ctx->abi.robust_buffer_access = true;
    ctx->abi.convert_undef_to_zero = true;
-   ctx->abi.clamp_div_by_zero = ctx->screen->options.clamp_div_by_zero;
-   ctx->abi.adjust_frag_coord_z = false;
-   ctx->abi.disable_aniso_single_level = true;
+   ctx->abi.load_grid_size_from_user_sgpr = true;
 
    const struct si_shader_info *info = &ctx->shader->selector->info;
    for (unsigned i = 0; i < info->num_outputs; i++) {
@@ -535,6 +533,9 @@ static bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *
       for (unsigned j = 0; j < 4; j++)
          ctx->abi.outputs[i * 4 + j] = ac_build_alloca_undef(&ctx->ac, type, "");
    }
+
+   ctx->abi.clamp_div_by_zero = ctx->screen->options.clamp_div_by_zero ||
+                                info->options & SI_PROFILE_CLAMP_DIV_BY_ZERO;
 
    ac_nir_translate(&ctx->ac, &ctx->abi, &ctx->args, nir);
 
@@ -1086,7 +1087,7 @@ static void si_optimize_vs_outputs(struct si_shader_context *ctx)
 }
 
 bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                            struct si_shader *shader, struct pipe_debug_callback *debug,
+                            struct si_shader *shader, struct util_debug_callback *debug,
                             struct nir_shader *nir, bool free_nir)
 {
    struct si_shader_selector *sel = shader->selector;

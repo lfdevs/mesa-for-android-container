@@ -127,9 +127,37 @@ bi_print_clause(bi_clause *clause, FILE *fp)
         fprintf(fp, "\n");
 }
 
+static void
+bi_print_scoreboard_line(unsigned slot, const char *name, uint64_t mask, FILE *fp)
+{
+        if (!mask)
+                return;
+
+        fprintf(fp, "slot %u %s:", slot, name);
+
+        u_foreach_bit64(reg, mask)
+                fprintf(fp, " r%" PRId64, reg);
+
+        fprintf(fp, "\n");
+}
+
+static void
+bi_print_scoreboard(struct bi_scoreboard_state *state, FILE *fp)
+{
+        for (unsigned i = 0; i < BI_NUM_SLOTS; ++i) {
+                bi_print_scoreboard_line(i, "reads", state->read[i], fp);
+                bi_print_scoreboard_line(i, "writes", state->write[i], fp);
+        }
+}
+
 void
 bi_print_block(bi_block *block, FILE *fp)
 {
+        if (block->scheduled) {
+                bi_print_scoreboard(&block->scoreboard_in, fp);
+                fprintf(fp, "\n");
+        }
+
         fprintf(fp, "block%u {\n", block->name);
 
         if (block->scheduled) {
@@ -154,6 +182,11 @@ bi_print_block(bi_block *block, FILE *fp)
 
                 bi_foreach_predecessor(block, pred)
                         fprintf(fp, " block%u", pred->name);
+        }
+
+        if (block->scheduled) {
+                fprintf(fp, "\n");
+                bi_print_scoreboard(&block->scoreboard_out, fp);
         }
 
         fprintf(fp, "\n\n");

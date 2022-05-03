@@ -657,11 +657,10 @@ lima_transfer_map(struct pipe_context *pctx,
    if (!lima_bo_map(bo))
       return NULL;
 
-   trans = slab_alloc(&ctx->transfer_pool);
+   trans = slab_zalloc(&ctx->transfer_pool);
    if (!trans)
       return NULL;
 
-   memset(trans, 0, sizeof(*trans));
    ptrans = &trans->base;
 
    pipe_resource_reference(&ptrans->resource, pres);

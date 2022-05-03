@@ -81,8 +81,6 @@ lp_rast_begin( struct lp_rasterizer *rast,
 static void
 lp_rast_end( struct lp_rasterizer *rast )
 {
-   lp_scene_end_rasterization( rast->curr_scene );
-
    rast->curr_scene = NULL;
 }
 

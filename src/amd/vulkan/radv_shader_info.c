@@ -96,22 +96,19 @@ static void
 gather_push_constant_info(const nir_shader *nir, const nir_intrinsic_instr *instr,
                           struct radv_shader_info *info)
 {
-   int base = nir_intrinsic_base(instr);
+   info->loads_push_constants = true;
 
-   if (!nir_src_is_const(instr->src[0])) {
-      info->has_indirect_push_constants = true;
-   } else {
-      uint32_t min = base + nir_src_as_uint(instr->src[0]);
-      uint32_t max = min + instr->num_components * 4;
+   if (nir_src_is_const(instr->src[0]) && instr->dest.ssa.bit_size >= 32) {
+      uint32_t start = (nir_intrinsic_base(instr) + nir_src_as_uint(instr->src[0])) / 4u;
+      uint32_t size = instr->num_components * (instr->dest.ssa.bit_size / 32u);
 
-      info->max_push_constant_used = MAX2(max, info->max_push_constant_used);
-      info->min_push_constant_used = MIN2(min, info->min_push_constant_used);
+      if (start + size <= (MAX_PUSH_CONSTANTS_SIZE / 4u)) {
+         info->inline_push_constant_mask |= u_bit_consecutive64(start, size);
+         return;
+      }
    }
 
-   if (instr->dest.ssa.bit_size != 32)
-      info->has_only_32bit_push_constants = false;
-
-   info->loads_push_constants = true;
+   info->can_inline_all_push_constants = false;
 }
 
 static void
@@ -297,6 +294,9 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr,
       break;
    case nir_intrinsic_load_sbt_amd:
       info->cs.uses_sbt = true;
+      break;
+   case nir_intrinsic_load_force_vrs_rates_amd:
+      info->force_vrs_per_vertex = true;
       break;
    default:
       break;
@@ -618,9 +618,8 @@ assign_outinfo_params(struct radv_vs_output_info *outinfo, uint64_t mask,
 void
 radv_nir_shader_info_init(struct radv_shader_info *info)
 {
-   /* Assume that shaders only have 32-bit push constants by default. */
-   info->min_push_constant_used = UINT16_MAX;
-   info->has_only_32bit_push_constants = true;
+   /* Assume that shaders can inline all push constants by default. */
+   info->can_inline_all_push_constants = true;
 }
 
 void
@@ -670,23 +669,10 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
 
    struct radv_vs_output_info *outinfo = get_vs_output_info(nir, info);
    if (outinfo) {
-      /* Make sure to export the LayerID if the subpass has multiviews. */
-      if (pipeline_key->has_multiview_view_index) {
-         if (nir->info.stage == MESA_SHADER_MESH)
-            outinfo->writes_layer_per_primitive = true;
-         else
-            outinfo->writes_layer = true;
-      }
-
-      /* VS/TES/GS: shading rate is per-vertex, MS: it's per-primitive. */
-      bool force_vrs_per_vertex =
-         device->force_vrs != RADV_FORCE_VRS_NONE && nir->info.stage != MESA_SHADER_MESH;
-      bool writes_primitive_shading_rate =
-         outinfo->writes_primitive_shading_rate || force_vrs_per_vertex;
       int pos_written = 0x1;
 
       if (outinfo->writes_pointsize || outinfo->writes_viewport_index || outinfo->writes_layer ||
-          writes_primitive_shading_rate)
+          outinfo->writes_primitive_shading_rate)
          pos_written |= 1 << 1;
 
       unsigned num_clip_distances = util_bitcount(outinfo->clip_dist_mask);

@@ -64,6 +64,7 @@ extern uint32_t V3D_DEBUG;
 #define V3D_DEBUG_NO_LOOP_UNROLL    (1 << 20)
 #define V3D_DEBUG_CL_NO_BIN         (1 << 21)
 #define V3D_DEBUG_DOUBLE_BUFFER     (1 << 22)
+#define V3D_DEBUG_CACHE             (1 << 23)
 
 #define V3D_DEBUG_SHADERS           (V3D_DEBUG_TGSI | V3D_DEBUG_NIR | \
                                      V3D_DEBUG_VIR | V3D_DEBUG_QPU | \

@@ -9,7 +9,7 @@ traces:
   - path: glmark2/jellyfish.trace
     expectations:
       - device: gl-virgl
-        checksum: 48a2ad1162bf92301cedbe53edf52a6b
+        checksum: 1873b70a28539825879b530477cf6d27
   - path: glxgears/glxgears-2.trace
     expectations:
       - device: gl-virgl

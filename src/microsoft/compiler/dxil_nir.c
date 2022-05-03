@@ -1310,11 +1310,17 @@ dxil_nir_lower_double_math_instr(nir_builder *b,
    for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; ++i) {
       if (nir_alu_type_get_base_type(nir_op_infos[alu->op].input_types[i]) == nir_type_float &&
           alu->src[i].src.ssa->bit_size == 64) {
-         nir_ssa_def *packed_double = nir_channel(b, alu->src[i].src.ssa, alu->src[i].swizzle[0]);
-         nir_ssa_def *unpacked_double = nir_unpack_64_2x32(b, packed_double);
-         nir_ssa_def *repacked_double = nir_pack_double_2x32_dxil(b, unpacked_double);
-         nir_instr_rewrite_src_ssa(instr, &alu->src[i].src, repacked_double);
-         memset(alu->src[i].swizzle, 0, ARRAY_SIZE(alu->src[i].swizzle));
+         unsigned num_components = nir_op_infos[alu->op].input_sizes[i];
+         if (!num_components)
+            num_components = alu->dest.dest.ssa.num_components;
+         nir_ssa_def *components[NIR_MAX_VEC_COMPONENTS];
+         for (unsigned c = 0; c < num_components; ++c) {
+            nir_ssa_def *packed_double = nir_channel(b, alu->src[i].src.ssa, alu->src[i].swizzle[c]);
+            nir_ssa_def *unpacked_double = nir_unpack_64_2x32(b, packed_double);
+            components[c] = nir_pack_double_2x32_dxil(b, unpacked_double);
+            alu->src[i].swizzle[c] = c;
+         }
+         nir_instr_rewrite_src_ssa(instr, &alu->src[i].src, nir_vec(b, components, num_components));
          progress = true;
       }
    }
@@ -1322,10 +1328,14 @@ dxil_nir_lower_double_math_instr(nir_builder *b,
    if (nir_alu_type_get_base_type(nir_op_infos[alu->op].output_type) == nir_type_float &&
        alu->dest.dest.ssa.bit_size == 64) {
       b->cursor = nir_after_instr(&alu->instr);
-      nir_ssa_def *packed_double = &alu->dest.dest.ssa;
-      nir_ssa_def *unpacked_double = nir_unpack_double_2x32_dxil(b, packed_double);
-      nir_ssa_def *repacked_double = nir_pack_64_2x32(b, unpacked_double);
-      nir_ssa_def_rewrite_uses_after(packed_double, repacked_double, unpacked_double->parent_instr);
+      nir_ssa_def *components[NIR_MAX_VEC_COMPONENTS];
+      for (unsigned c = 0; c < alu->dest.dest.ssa.num_components; ++c) {
+         nir_ssa_def *packed_double = nir_channel(b, &alu->dest.dest.ssa, c);
+         nir_ssa_def *unpacked_double = nir_unpack_double_2x32_dxil(b, packed_double);
+         components[c] = nir_pack_64_2x32(b, unpacked_double);
+      }
+      nir_ssa_def *repacked_dvec = nir_vec(b, components, alu->dest.dest.ssa.num_components);
+      nir_ssa_def_rewrite_uses_after(&alu->dest.dest.ssa, repacked_dvec, repacked_dvec->parent_instr);
       progress = true;
    }
 

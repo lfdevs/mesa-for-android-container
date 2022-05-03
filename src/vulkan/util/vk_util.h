@@ -58,15 +58,16 @@ extern "C" {
  *       uint32_t*                  pQueueFamilyPropertyCount,
  *       VkQueueFamilyProperties*   pQueueFamilyProperties)
  *    {
- *       VK_OUTARRAY_MAKE(props, pQueueFamilyProperties,
- *                         pQueueFamilyPropertyCount);
+ *       VK_OUTARRAY_MAKE_TYPED(VkQueueFamilyProperties, props,
+ *                              pQueueFamilyProperties,
+ *                              pQueueFamilyPropertyCount);
  *
- *       vk_outarray_append(&props, p) {
+ *       vk_outarray_append_typed(VkQueueFamilyProperties, &props, p) {
  *          p->queueFlags = ...;
  *          p->queueCount = ...;
  *       }
  *
- *       vk_outarray_append(&props, p) {
+ *       vk_outarray_append_typed(VkQueueFamilyProperties, &props, p) {
  *          p->queueFlags = ...;
  *          p->queueCount = ...;
  *       }
@@ -151,8 +152,6 @@ __vk_outarray_next(struct __vk_outarray *a, size_t elem_size)
 #define vk_outarray_init(a, data, len) \
    __vk_outarray_init(&(a)->base, (data), (len))
 
-#define VK_OUTARRAY_MAKE(name, data, len) \
-   VK_OUTARRAY_MAKE_TYPED(__typeof__((data)[0]), name, data, len)
 #define VK_OUTARRAY_MAKE_TYPED(type, name, data, len) \
    vk_outarray(type) name; \
    vk_outarray_init(&name, (data), (len))
@@ -171,13 +170,13 @@ __vk_outarray_next(struct __vk_outarray *a, size_t elem_size)
  *
  * This is a block-based macro. For example:
  *
- *    vk_outarray_append(&a, elem) {
+ *    vk_outarray_append_typed(T, &a, elem) {
  *       elem->foo = ...;
  *       elem->bar = ...;
  *    }
  *
  * The array `a` has type `vk_outarray(elem_t) *`. It is usually declared with
- * VK_OUTARRAY_MAKE(). The variable `elem` is block-scoped and has type
+ * VK_OUTARRAY_MAKE_TYPED(). The variable `elem` is block-scoped and has type
  * `elem_t *`.
  *
  * The macro unconditionally increments the array's `wanted_len`. If the array
@@ -185,8 +184,6 @@ __vk_outarray_next(struct __vk_outarray *a, size_t elem_size)
  * executes the block. When the block is executed, `elem` is non-null and
  * points to the newly appended element.
  */
-#define vk_outarray_append(a, elem) \
-   vk_outarray_append_typed(vk_outarray_typeof_elem(a), a, elem)
 #define vk_outarray_append_typed(type, a, elem) \
    for (type *elem = vk_outarray_next_typed(type, a); \
         elem != NULL; elem = NULL)
@@ -281,9 +278,16 @@ vk_spec_info_to_nir_spirv(const VkSpecializationInfo *spec_info,
 
 #define STACK_ARRAY_SIZE 8
 
+#ifdef __cplusplus
+#define STACK_ARRAY_ZERO_INIT {}
+#else
+#define STACK_ARRAY_ZERO_INIT {0}
+#endif
+
 #define STACK_ARRAY(type, name, size) \
-   type _stack_##name[STACK_ARRAY_SIZE] = {0}, *const name = \
-      (size) <= STACK_ARRAY_SIZE ? _stack_##name : malloc((size) * sizeof(type))
+   type _stack_##name[STACK_ARRAY_SIZE] = STACK_ARRAY_ZERO_INIT; \
+   type *const name = \
+     ((size) <= STACK_ARRAY_SIZE ? _stack_##name : (type *)malloc((size) * sizeof(type)))
 
 #define STACK_ARRAY_FINISH(name) \
    if (name != _stack_##name) free(name)

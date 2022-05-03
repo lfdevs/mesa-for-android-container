@@ -1463,7 +1463,7 @@ public:
 
 class ir_assignment : public ir_instruction {
 public:
-   ir_assignment(ir_rvalue *lhs, ir_rvalue *rhs, ir_rvalue *condition = NULL);
+   ir_assignment(ir_rvalue *lhs, ir_rvalue *rhs);
 
    /**
     * Construct an assignment with an explicit write mask
@@ -1472,8 +1472,7 @@ public:
     * Since a write mask is supplied, the LHS must already be a bare
     * \c ir_dereference.  The cannot be any swizzles in the LHS.
     */
-   ir_assignment(ir_dereference *lhs, ir_rvalue *rhs, ir_rvalue *condition,
-		 unsigned write_mask);
+   ir_assignment(ir_dereference *lhs, ir_rvalue *rhs, unsigned write_mask);
 
    virtual ir_assignment *clone(void *mem_ctx, struct hash_table *ht) const;
 
@@ -1518,12 +1517,6 @@ public:
     * Value being assigned
     */
    ir_rvalue *rhs;
-
-   /**
-    * Optional condition for the assignment.
-    */
-   ir_rvalue *condition;
-
 
    /**
     * Component mask written

@@ -15,7 +15,7 @@ struct nouveau_context {
 
    struct nouveau_client *client;
    struct nouveau_pushbuf *pushbuf;
-   struct pipe_debug_callback debug;
+   struct util_debug_callback debug;
 
    bool vbo_dirty;
 

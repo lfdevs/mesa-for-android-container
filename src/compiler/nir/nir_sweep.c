@@ -163,6 +163,11 @@ nir_sweep(nir_shader *nir)
    assert(list_is_empty(&instr_gc_list));
 
    ralloc_steal(nir, nir->constant_data);
+   ralloc_steal(nir, nir->printf_info);
+   for (int i = 0; i < nir->printf_info_count; i++) {
+      ralloc_steal(nir, nir->printf_info[i].arg_sizes);
+      ralloc_steal(nir, nir->printf_info[i].strings);
+   }
 
    /* Free everything we didn't steal back. */
    ralloc_free(rubbish);

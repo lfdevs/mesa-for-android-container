@@ -139,6 +139,28 @@ vk_device_init(struct vk_device *device,
 
    device->timeline_mode = get_timeline_mode(physical_device);
 
+   switch (device->timeline_mode) {
+   case VK_DEVICE_TIMELINE_MODE_NONE:
+   case VK_DEVICE_TIMELINE_MODE_NATIVE:
+      device->submit_mode = VK_QUEUE_SUBMIT_MODE_IMMEDIATE;
+      break;
+
+   case VK_DEVICE_TIMELINE_MODE_EMULATED:
+      device->submit_mode = VK_QUEUE_SUBMIT_MODE_DEFERRED;
+      break;
+
+   case VK_DEVICE_TIMELINE_MODE_ASSISTED:
+      if (env_var_as_boolean("MESA_VK_ENABLE_SUBMIT_THREAD", false)) {
+         device->submit_mode = VK_QUEUE_SUBMIT_MODE_THREADED;
+      } else {
+         device->submit_mode = VK_QUEUE_SUBMIT_MODE_THREADED_ON_DEMAND;
+      }
+      break;
+
+   default:
+      unreachable("Invalid timeline mode");
+   }
+
 #ifdef ANDROID
    mtx_init(&device->swapchain_private_mtx, mtx_plain);
    device->swapchain_private = NULL;
@@ -164,10 +186,35 @@ vk_device_finish(UNUSED struct vk_device *device)
    vk_object_base_finish(&device->base);
 }
 
+void
+vk_device_enable_threaded_submit(struct vk_device *device)
+{
+   /* This must be called before any queues are created */
+   assert(list_is_empty(&device->queues));
+
+   /* In order to use threaded submit, we need every sync type that can be
+    * used as a wait fence for vkQueueSubmit() to support WAIT_PENDING.
+    * It's required for cross-thread/process submit re-ordering.
+    */
+   for (const struct vk_sync_type *const *t =
+        device->physical->supported_sync_types; *t; t++) {
+      if ((*t)->features & VK_SYNC_FEATURE_GPU_WAIT)
+         assert((*t)->features & VK_SYNC_FEATURE_WAIT_PENDING);
+   }
+
+   /* Any binary vk_sync types which will be used as permanent semaphore
+    * payloads also need to support vk_sync_type::move, but that's a lot
+    * harder to assert since it only applies to permanent semaphore payloads.
+    */
+
+   if (device->submit_mode != VK_QUEUE_SUBMIT_MODE_THREADED)
+      device->submit_mode = VK_QUEUE_SUBMIT_MODE_THREADED_ON_DEMAND;
+}
+
 VkResult
 vk_device_flush(struct vk_device *device)
 {
-   if (device->timeline_mode != VK_DEVICE_TIMELINE_MODE_EMULATED)
+   if (device->submit_mode != VK_QUEUE_SUBMIT_MODE_DEFERRED)
       return VK_SUCCESS;
 
    bool progress;

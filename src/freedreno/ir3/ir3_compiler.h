@@ -48,9 +48,6 @@ struct ir3_compiler {
 
    struct nir_shader_compiler_options nir_options;
 
-   /* If true, UBO accesses are assumed to be bounds-checked as defined by
-    * VK_EXT_robustness2 and optimizations may have to be more conservative.
-    */
    bool robust_ubo_access;
 
    /*
@@ -177,12 +174,36 @@ struct ir3_compiler {
 
    /* Type to use for 1b nir bools: */
    type_t bool_type;
+
+   /* Whether compute invocation params are passed in via shared regfile or
+    * constbuf. a5xx+ has the shared regfile.
+    */
+   bool has_shared_regfile;
+
+   /* True if preamble instructions (shps, shpe, etc.) are supported */
+   bool has_preamble;
+
+   bool push_ubo_with_preamble;
+};
+
+struct ir3_compiler_options {
+   /* If true, UBO accesses are assumed to be bounds-checked as defined by
+    * VK_EXT_robustness2 and optimizations may have to be more conservative.
+    */
+   bool robust_ubo_access;
+
+   /* If true, promote UBOs (except for constant data) to constants using ldc.k
+    * in the preamble. The driver should ignore everything in ubo_state except
+    * for the constant data UBO, which is excluded because the command pushing
+    * constants for it can be pre-baked when compiling the shader.
+    */
+   bool push_ubo_with_preamble;
 };
 
 void ir3_compiler_destroy(struct ir3_compiler *compiler);
 struct ir3_compiler *ir3_compiler_create(struct fd_device *dev,
                                          const struct fd_dev_id *dev_id,
-                                         bool robust_ubo_access);
+                                         const struct ir3_compiler_options *options);
 
 void ir3_disk_cache_init(struct ir3_compiler *compiler);
 void ir3_disk_cache_init_shader_key(struct ir3_compiler *compiler,
@@ -219,6 +240,7 @@ enum ir3_shader_debug {
    IR3_DBG_NOFP16 = BITFIELD_BIT(10),
    IR3_DBG_NOCACHE = BITFIELD_BIT(11),
    IR3_DBG_SPILLALL = BITFIELD_BIT(12),
+   IR3_DBG_NOPREAMBLE = BITFIELD_BIT(13),
 
    /* DEBUG-only options: */
    IR3_DBG_SCHEDMSGS = BITFIELD_BIT(20),

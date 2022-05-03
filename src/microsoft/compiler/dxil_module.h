@@ -197,6 +197,7 @@ struct dxil_module {
    struct dxil_signature_record inputs[DXIL_SHADER_MAX_IO_ROWS];
    struct dxil_signature_record outputs[DXIL_SHADER_MAX_IO_ROWS];
    struct dxil_signature_record patch_consts[DXIL_SHADER_MAX_IO_ROWS];
+   unsigned input_mappings[DXIL_SHADER_MAX_IO_ROWS];
 
    struct dxil_psv_signature_element psv_inputs[DXIL_SHADER_MAX_IO_ROWS];
    struct dxil_psv_signature_element psv_outputs[DXIL_SHADER_MAX_IO_ROWS];
@@ -436,8 +437,8 @@ dxil_instr_get_return_value(struct dxil_instr *instr);
 struct dxil_instr *
 dxil_emit_phi(struct dxil_module *m, const struct dxil_type *type);
 
-void
-dxil_phi_set_incoming(struct dxil_instr *instr,
+bool
+dxil_phi_add_incoming(struct dxil_instr *instr,
                       const struct dxil_value *incoming_values[],
                       const unsigned incoming_blocks[],
                       size_t num_incoming);

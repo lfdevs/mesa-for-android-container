@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019 Raspberry Pi
+ * Copyright © 2019 Raspberry Pi Ltd
  *
  * based in part on anv driver which is:
  * Copyright © 2015 Intel Corporation
@@ -43,9 +43,12 @@
 #include "vk_log.h"
 #include "vk_physical_device.h"
 #include "vk_shader_module.h"
+#include "vk_sync.h"
+#include "vk_sync_timeline.h"
 #include "vk_util.h"
 
 #include "vk_command_buffer.h"
+#include "vk_command_pool.h"
 #include "vk_queue.h"
 
 #include <xf86drm.h>
@@ -139,6 +142,10 @@ struct v3dv_physical_device {
    uint8_t device_uuid[VK_UUID_SIZE];
    uint8_t driver_uuid[VK_UUID_SIZE];
 
+   struct vk_sync_type drm_syncobj_type;
+   struct vk_sync_timeline_type sync_timeline_type;
+   const struct vk_sync_type *sync_types[3];
+
    struct disk_cache *disk_cache;
 
    mtx_t mutex;
@@ -218,34 +225,30 @@ struct v3dv_instance {
    bool default_pipeline_cache_enabled;
 };
 
-/* Tracks wait threads spawned from a single vkQueueSubmit call */
-struct v3dv_queue_submit_wait_info {
-   /*  struct vk_object_base base; ?*/
-   struct list_head list_link;
+/* FIXME: In addition to tracking the last job submitted by GPU queue (cl, csd,
+ * tfu), we still need a syncobj to track the last overall job submitted
+ * (V3DV_QUEUE_ANY) for the case we don't support multisync. Someday we can
+ * start expecting multisync to be present and drop the legacy implementation
+ * together with this V3DV_QUEUE_ANY tracker.
+ */
+enum v3dv_queue_type {
+   V3DV_QUEUE_CL = 0,
+   V3DV_QUEUE_CSD,
+   V3DV_QUEUE_TFU,
+   V3DV_QUEUE_ANY,
+   V3DV_QUEUE_COUNT,
+};
 
-   struct v3dv_device *device;
-
-   /* List of wait threads spawned for any command buffers in a particular
-    * call to vkQueueSubmit.
-    */
-   uint32_t wait_thread_count;
-   struct {
-      pthread_t thread;
-      bool finished;
-   } wait_threads[16];
-
-   /* The master wait thread for the entire submit. This will wait for all
-    * other threads in this submit to complete  before processing signal
-    * semaphores and fences.
-    */
-   pthread_t master_wait_thread;
-
-   /* List of semaphores (and fence) to signal after all wait threads completed
-    * and all command buffer jobs in the submission have been sent to the GPU.
-    */
-   uint32_t signal_semaphore_count;
-   VkSemaphore *signal_semaphores;
-   VkFence fence;
+/* For each GPU queue, we use a syncobj to track the last job submitted. We
+ * set the flag `first` to determine when we are starting a new cmd buffer
+ * batch and therefore a job submitted to a given queue will be the first in a
+ * cmd buf batch.
+ */
+struct v3dv_last_job_sync {
+   /* If the job is the first submitted to a GPU queue in a cmd buffer batch */
+   bool first[V3DV_QUEUE_COUNT];
+   /* Array of syncobj to track the last job submitted to a GPU queue */
+   uint32_t syncs[V3DV_QUEUE_COUNT];
 };
 
 struct v3dv_queue {
@@ -253,14 +256,13 @@ struct v3dv_queue {
 
    struct v3dv_device *device;
 
-   /* A list of active v3dv_queue_submit_wait_info */
-   struct list_head submit_wait_list;
-
-   /* A mutex to prevent concurrent access to the list of wait threads */
-   mtx_t mutex;
+   struct v3dv_last_job_sync last_job_syncs;
 
    struct v3dv_job *noop_job;
 };
+
+VkResult v3dv_queue_driver_submit(struct vk_queue *vk_queue,
+                                  struct vk_queue_submit *submit);
 
 #define V3DV_META_BLIT_CACHE_KEY_SIZE              (4 * sizeof(uint32_t))
 #define V3DV_META_TEXEL_BUFFER_COPY_CACHE_KEY_SIZE (3 * sizeof(uint32_t) + \
@@ -434,32 +436,6 @@ struct v3dv_pipeline_cache {
    bool externally_synchronized;
 };
 
-/* FIXME: In addition to tracking the last job submitted by GPU queue (cl, csd,
- * tfu), we still need a syncobj to track the last overall job submitted
- * (V3DV_QUEUE_ANY) for the case we don't support multisync. Someday we can
- * start expecting multisync to be present and drop the legacy implementation
- * together with this V3DV_QUEUE_ANY tracker.
- */
-enum v3dv_queue_type {
-   V3DV_QUEUE_CL = 0,
-   V3DV_QUEUE_CSD,
-   V3DV_QUEUE_TFU,
-   V3DV_QUEUE_ANY,
-   V3DV_QUEUE_COUNT,
-};
-
-/* For each GPU queue, we use a syncobj to track the last job submitted. We
- * set the flag `first` to determine when we are starting a new cmd buffer
- * batch and therefore a job submitted to a given queue will be the first in a
- * cmd buf batch.
- */
-struct v3dv_last_job_sync {
-   /* If the job is the first submitted to a GPU queue in a cmd buffer batch */
-   bool first[V3DV_QUEUE_COUNT];
-   /* Array of syncobj to track the last job submitted to a GPU queue */
-   uint32_t syncs[V3DV_QUEUE_COUNT];
-};
-
 struct v3dv_device {
    struct vk_device vk;
 
@@ -469,11 +445,11 @@ struct v3dv_device {
    struct v3d_device_info devinfo;
    struct v3dv_queue queue;
 
-   /* Syncobjs to track the last job submitted to any GPU queue */
-   struct v3dv_last_job_sync last_job_syncs;
+   /* Guards query->maybe_available and value for timestamps */
+   mtx_t query_mutex;
 
-   /* A mutex to prevent concurrent access to last_job_sync from the queue */
-   mtx_t mutex;
+   /* Signaled whenever a query is ended */
+   cnd_t query_ended;
 
    /* Resources used for meta operations */
    struct {
@@ -815,13 +791,6 @@ v3dv_do_double_initial_tile_clear(const struct v3dv_frame_tiling *tiling)
            tiling->layers > 1);
 }
 
-struct v3dv_cmd_pool {
-   struct vk_object_base base;
-
-   VkAllocationCallbacks alloc;
-   struct list_head cmd_buffers;
-};
-
 enum v3dv_cmd_buffer_status {
    V3DV_CMD_BUFFER_STATUS_NEW           = 0,
    V3DV_CMD_BUFFER_STATUS_INITIALIZED   = 1,
@@ -998,17 +967,14 @@ struct v3dv_copy_query_results_cpu_job_info {
    VkQueryResultFlags flags;
 };
 
-struct v3dv_submit_info_semaphores {
-   /* List of semaphores to wait before running a job */
-   uint32_t wait_sem_count;
-   VkSemaphore *wait_sems;
+struct v3dv_submit_sync_info {
+   /* List of syncs to wait before running a job */
+   uint32_t wait_count;
+   struct vk_sync_wait *waits;
 
-   /* List of semaphores to signal when all jobs complete */
-   uint32_t signal_sem_count;
-   VkSemaphore *signal_sems;
-
-   /* A fence to signal when all jobs complete */
-   VkFence fence;
+   /* List of syncs to signal when all jobs complete */
+   uint32_t signal_count;
+   struct vk_sync_signal *signals;
 };
 
 struct v3dv_event_set_cpu_job_info {
@@ -1119,9 +1085,6 @@ struct v3dv_job {
    /* Whether we need to serialize this job in our command stream */
    bool serialize;
 
-   /* Whether this job is in charge of signalling semaphores */
-   bool do_sem_signal;
-
    /* If this is a CL job, whether we should sync before binning */
    bool needs_bcl_sync;
 
@@ -1153,7 +1116,7 @@ struct v3dv_wait_thread_info {
    struct v3dv_job *job;
 
    /* Semaphores info for any postponed jobs after a wait event */
-   struct v3dv_submit_info_semaphores *sems_info;
+   struct v3dv_submit_sync_info *sync_info;
 };
 
 void v3dv_job_init(struct v3dv_job *job,
@@ -1356,8 +1319,8 @@ struct v3dv_descriptor {
 
       struct {
          struct v3dv_buffer *buffer;
-         uint32_t offset;
-         uint32_t range;
+         size_t offset;
+         size_t range;
       };
 
       struct v3dv_buffer_view *buffer_view;
@@ -1414,9 +1377,6 @@ struct v3dv_cmd_buffer {
 
    struct v3dv_device *device;
 
-   struct v3dv_cmd_pool *pool;
-   struct list_head pool_link;
-
    /* Used at submit time to link command buffers in the submission that have
     * spawned wait threads, so we can then wait on all of them to complete
     * before we process any signal sempahores or fences.
@@ -1424,7 +1384,6 @@ struct v3dv_cmd_buffer {
    struct list_head list_link;
 
    VkCommandBufferUsageFlags usage_flags;
-   VkCommandBufferLevel level;
 
    enum v3dv_cmd_buffer_status status;
 
@@ -1514,26 +1473,6 @@ void v3dv_cmd_buffer_rewrite_indirect_csd_job(struct v3dv_csd_indirect_cpu_job_i
 void v3dv_cmd_buffer_add_private_obj(struct v3dv_cmd_buffer *cmd_buffer,
                                      uint64_t obj,
                                      v3dv_cmd_buffer_private_obj_destroy_cb destroy_cb);
-
-struct v3dv_semaphore {
-   struct vk_object_base base;
-
-   /* A syncobject handle associated with this semaphore */
-   uint32_t sync;
-
-   /* A temporary syncobject handle produced from a vkImportSemaphoreFd. */
-   uint32_t temp_sync;
-};
-
-struct v3dv_fence {
-   struct vk_object_base base;
-
-   /* A syncobject handle associated with this fence */
-   uint32_t sync;
-
-   /* A temporary syncobject handle produced from a vkImportFenceFd. */
-   uint32_t temp_sync;
-};
 
 struct v3dv_event {
    struct vk_object_base base;
@@ -1650,7 +1589,7 @@ struct v3dv_descriptor_set {
 
    struct v3dv_descriptor_pool *pool;
 
-   const struct v3dv_descriptor_set_layout *layout;
+   struct v3dv_descriptor_set_layout *layout;
 
    /* Offset relative to the descriptor pool bo for this set */
    uint32_t base_offset;
@@ -1704,9 +1643,34 @@ struct v3dv_descriptor_set_layout {
    /* Number of dynamic offsets used by this descriptor set */
    uint16_t dynamic_offset_count;
 
+   /* Descriptor set layouts can be destroyed even if they are still being
+    * used.
+    */
+   uint32_t ref_cnt;
+
    /* Bindings in this descriptor set */
    struct v3dv_descriptor_set_binding_layout binding[0];
 };
+
+void
+v3dv_descriptor_set_layout_destroy(struct v3dv_device *device,
+                                   struct v3dv_descriptor_set_layout *set_layout);
+
+static inline void
+v3dv_descriptor_set_layout_ref(struct v3dv_descriptor_set_layout *set_layout)
+{
+   assert(set_layout && set_layout->ref_cnt >= 1);
+   p_atomic_inc(&set_layout->ref_cnt);
+}
+
+static inline void
+v3dv_descriptor_set_layout_unref(struct v3dv_device *device,
+                                 struct v3dv_descriptor_set_layout *set_layout)
+{
+   assert(set_layout && set_layout->ref_cnt >= 1);
+   if (p_atomic_dec_zero(&set_layout->ref_cnt))
+      v3dv_descriptor_set_layout_destroy(device, set_layout);
+}
 
 struct v3dv_pipeline_layout {
    struct vk_object_base base;
@@ -1732,8 +1696,8 @@ struct v3dv_pipeline_layout {
  * FIXME: one alternative would be to allocate the map as big as you need for
  * each descriptor type. That would means more individual allocations.
  */
-#define DESCRIPTOR_MAP_SIZE MAX3(V3D_MAX_TEXTURE_SAMPLERS, \
-                                 MAX_UNIFORM_BUFFERS,      \
+#define DESCRIPTOR_MAP_SIZE MAX3(V3D_MAX_TEXTURE_SAMPLERS,                         \
+                                 MAX_UNIFORM_BUFFERS + MAX_INLINE_UNIFORM_BUFFERS, \
                                  MAX_STORAGE_BUFFERS)
 
 
@@ -1744,6 +1708,7 @@ struct v3dv_descriptor_map {
    int binding[DESCRIPTOR_MAP_SIZE];
    int array_index[DESCRIPTOR_MAP_SIZE];
    int array_size[DESCRIPTOR_MAP_SIZE];
+   bool used[DESCRIPTOR_MAP_SIZE];
 
    /* NOTE: the following is only for sampler, but this is the easier place to
     * put it.
@@ -2078,6 +2043,14 @@ v3dv_descriptor_map_get_descriptor(struct v3dv_descriptor_state *descriptor_stat
                                    uint32_t index,
                                    uint32_t *dynamic_offset);
 
+struct v3dv_cl_reloc
+v3dv_descriptor_map_get_descriptor_bo(struct v3dv_device *device,
+                                      struct v3dv_descriptor_state *descriptor_state,
+                                      struct v3dv_descriptor_map *map,
+                                      struct v3dv_pipeline_layout *pipeline_layout,
+                                      uint32_t index,
+                                      VkDescriptorType *out_type);
+
 const struct v3dv_sampler *
 v3dv_descriptor_map_get_sampler(struct v3dv_descriptor_state *descriptor_state,
                                 struct v3dv_descriptor_map *map,
@@ -2158,8 +2131,6 @@ VK_DEFINE_HANDLE_CASTS(v3dv_physical_device, vk.base, VkPhysicalDevice,
                        VK_OBJECT_TYPE_PHYSICAL_DEVICE)
 VK_DEFINE_HANDLE_CASTS(v3dv_queue, vk.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 
-VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_cmd_pool, base, VkCommandPool,
-                               VK_OBJECT_TYPE_COMMAND_POOL)
 VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_buffer, base, VkBuffer,
                                VK_OBJECT_TYPE_BUFFER)
 VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_buffer_view, base, VkBufferView,
@@ -2177,7 +2148,6 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_descriptor_update_template, base,
                                VkDescriptorUpdateTemplate,
                                VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE)
 VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_event, base, VkEvent, VK_OBJECT_TYPE_EVENT)
-VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_fence, base, VkFence, VK_OBJECT_TYPE_FENCE)
 VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_framebuffer, base, VkFramebuffer,
                                VK_OBJECT_TYPE_FRAMEBUFFER)
 VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_image, vk.base, VkImage,
@@ -2196,8 +2166,6 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_render_pass, base, VkRenderPass,
                                VK_OBJECT_TYPE_RENDER_PASS)
 VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_sampler, base, VkSampler,
                                VK_OBJECT_TYPE_SAMPLER)
-VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_semaphore, base, VkSemaphore,
-                               VK_OBJECT_TYPE_SEMAPHORE)
 
 static inline int
 v3dv_ioctl(int fd, unsigned long request, void *arg)

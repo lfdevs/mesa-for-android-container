@@ -1104,9 +1104,7 @@ is_strided_vector(const struct glsl_type *type)
 }
 
 static bool
-try_vectorize(nir_function_impl *impl, struct vectorize_ctx *ctx,
-              struct entry *low, struct entry *high,
-              struct entry *first, struct entry *second)
+can_vectorize(struct vectorize_ctx *ctx, struct entry *first, struct entry *second)
 {
    if (!(get_variable_mode(first) & ctx->options->modes) ||
        !(get_variable_mode(second) & ctx->options->modes))
@@ -1115,14 +1113,25 @@ try_vectorize(nir_function_impl *impl, struct vectorize_ctx *ctx,
    if (check_for_aliasing(ctx, first, second))
       return false;
 
-   uint64_t diff = high->offset_signed - low->offset_signed;
-   if (check_for_robustness(ctx, low, diff))
-      return false;
-
    /* we can only vectorize non-volatile loads/stores of the same type and with
     * the same access */
    if (first->info != second->info || first->access != second->access ||
        (first->access & ACCESS_VOLATILE) || first->info->is_atomic)
+      return false;
+
+   return true;
+}
+
+static bool
+try_vectorize(nir_function_impl *impl, struct vectorize_ctx *ctx,
+              struct entry *low, struct entry *high,
+              struct entry *first, struct entry *second)
+{
+   if (!can_vectorize(ctx, first, second))
+      return false;
+
+   uint64_t diff = high->offset_signed - low->offset_signed;
+   if (check_for_robustness(ctx, low, diff))
       return false;
 
    /* don't attempt to vectorize accesses of row-major matrix columns */
@@ -1176,6 +1185,76 @@ try_vectorize(nir_function_impl *impl, struct vectorize_ctx *ctx,
 }
 
 static bool
+try_vectorize_shared2(nir_function_impl *impl, struct vectorize_ctx *ctx,
+                      struct entry *low, struct entry *high,
+                      struct entry *first, struct entry *second)
+{
+   if (!can_vectorize(ctx, first, second) || first->deref)
+      return false;
+
+   unsigned low_bit_size = get_bit_size(low);
+   unsigned high_bit_size = get_bit_size(high);
+   unsigned low_size = low->intrin->num_components * low_bit_size / 8;
+   unsigned high_size = high->intrin->num_components * high_bit_size / 8;
+   if ((low_size != 4 && low_size != 8) || (high_size != 4 && high_size != 8))
+      return false;
+   if (low_size != high_size)
+      return false;
+   if (low->align_mul % low_size || low->align_offset % low_size)
+      return false;
+   if (high->align_mul % low_size || high->align_offset % low_size)
+      return false;
+
+   uint64_t diff = high->offset_signed - low->offset_signed;
+   bool st64 = diff % (64 * low_size) == 0;
+   unsigned stride = st64 ? 64 * low_size : low_size;
+   if (diff % stride || diff > 255 * stride)
+      return false;
+
+   /* try to avoid creating accesses we can't combine additions/offsets into */
+   if (high->offset > 255 * stride || (st64 && high->offset % stride))
+      return false;
+
+   if (first->is_store) {
+      if (nir_intrinsic_write_mask(low->intrin) != BITFIELD_MASK(low->intrin->num_components))
+         return false;
+      if (nir_intrinsic_write_mask(high->intrin) != BITFIELD_MASK(high->intrin->num_components))
+         return false;
+   }
+
+   /* vectorize the accesses */
+   nir_builder b;
+   nir_builder_init(&b, impl);
+
+   b.cursor = nir_after_instr(first->is_store ? second->instr : first->instr);
+
+   nir_ssa_def *offset = first->intrin->src[first->is_store].ssa;
+   offset = nir_iadd_imm(&b, offset, nir_intrinsic_base(first->intrin));
+   if (first != low)
+      offset = nir_iadd_imm(&b, offset, -(int)diff);
+
+   if (first->is_store) {
+      nir_ssa_def *low_val = low->intrin->src[low->info->value_src].ssa;
+      nir_ssa_def *high_val = high->intrin->src[high->info->value_src].ssa;
+      nir_ssa_def *val = nir_vec2(&b, nir_bitcast_vector(&b, low_val, low_size * 8u),
+                                      nir_bitcast_vector(&b, high_val, low_size * 8u));
+      nir_store_shared2_amd(&b, val, offset, .offset1=diff/stride, .st64=st64);
+   } else {
+      nir_ssa_def *new_def = nir_load_shared2_amd(&b, low_size * 8u, offset, .offset1=diff/stride,
+                                                  .st64=st64);
+      nir_ssa_def_rewrite_uses(&low->intrin->dest.ssa,
+                               nir_bitcast_vector(&b, nir_channel(&b, new_def, 0), low_bit_size));
+      nir_ssa_def_rewrite_uses(&high->intrin->dest.ssa,
+                               nir_bitcast_vector(&b, nir_channel(&b, new_def, 1), high_bit_size));
+   }
+
+   nir_instr_remove(first->instr);
+   nir_instr_remove(second->instr);
+
+   return true;
+}
+
+static bool
 update_align(struct entry *entry)
 {
    if (nir_intrinsic_has_align_mul(entry->intrin) &&
@@ -1191,35 +1270,46 @@ static bool
 vectorize_sorted_entries(struct vectorize_ctx *ctx, nir_function_impl *impl,
                          struct util_dynarray *arr)
 {
-      unsigned num_entries = util_dynarray_num_elements(arr, struct entry *);
+   unsigned num_entries = util_dynarray_num_elements(arr, struct entry *);
 
    bool progress = false;
-      for (unsigned first_idx = 0; first_idx < num_entries; first_idx++) {
-         struct entry *low = *util_dynarray_element(arr, struct entry *, first_idx);
-         if (!low)
+   for (unsigned first_idx = 0; first_idx < num_entries; first_idx++) {
+      struct entry *low = *util_dynarray_element(arr, struct entry *, first_idx);
+      if (!low)
+         continue;
+
+      for (unsigned second_idx = first_idx + 1; second_idx < num_entries; second_idx++) {
+         struct entry *high = *util_dynarray_element(arr, struct entry *, second_idx);
+         if (!high)
             continue;
 
-         for (unsigned second_idx = first_idx + 1; second_idx < num_entries; second_idx++) {
-            struct entry *high = *util_dynarray_element(arr, struct entry *, second_idx);
-            if (!high)
-               continue;
+         struct entry *first = low->index < high->index ? low : high;
+         struct entry *second = low->index < high->index ? high : low;
 
-            uint64_t diff = high->offset_signed - low->offset_signed;
-            if (diff > get_bit_size(low) / 8u * low->intrin->num_components)
+         uint64_t diff = high->offset_signed - low->offset_signed;
+         bool separate = diff > get_bit_size(low) / 8u * low->intrin->num_components;
+         if (separate) {
+            if (!ctx->options->has_shared2_amd ||
+                get_variable_mode(first) != nir_var_mem_shared)
                break;
 
-            struct entry *first = low->index < high->index ? low : high;
-            struct entry *second = low->index < high->index ? high : low;
-
+            if (try_vectorize_shared2(impl, ctx, low, high, first, second)) {
+               low = NULL;
+               *util_dynarray_element(arr, struct entry *, second_idx) = NULL;
+               progress = true;
+               break;
+            }
+         } else {
             if (try_vectorize(impl, ctx, low, high, first, second)) {
                low = low->is_store ? second : first;
                *util_dynarray_element(arr, struct entry *, second_idx) = NULL;
                progress = true;
             }
          }
-
-         *util_dynarray_element(arr, struct entry *, first_idx) = low;
       }
+
+      *util_dynarray_element(arr, struct entry *, first_idx) = low;
+   }
 
    return progress;
 }

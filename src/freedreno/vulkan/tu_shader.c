@@ -33,6 +33,7 @@
 
 nir_shader *
 tu_spirv_to_nir(struct tu_device *dev,
+                void *mem_ctx,
                 const VkPipelineShaderStageCreateInfo *stage_info,
                 gl_shader_stage stage)
 {
@@ -83,70 +84,36 @@ tu_spirv_to_nir(struct tu_device *dev,
          .subgroup_vote = true,
          .subgroup_quad = true,
          .subgroup_shuffle = true,
+         .subgroup_arithmetic = true,
          .physical_storage_buffer_address = true,
       },
-   };
-
-   const struct nir_lower_compute_system_values_options compute_sysval_options = {
-      .has_base_workgroup_id = true,
    };
 
    const nir_shader_compiler_options *nir_options =
       ir3_get_compiler_options(dev->compiler);
 
-   /* convert VkSpecializationInfo */
-   const VkSpecializationInfo *spec_info = stage_info->pSpecializationInfo;
-   uint32_t num_spec = 0;
-   struct nir_spirv_specialization *spec =
-      vk_spec_info_to_nir_spirv(spec_info, &num_spec);
-
    struct vk_shader_module *module =
       vk_shader_module_from_handle(stage_info->module);
    assert(module->size % 4 == 0);
-   nir_shader *nir =
-      spirv_to_nir((void*)module->data, module->size / 4,
-                   spec, num_spec, stage, stage_info->pName,
-                   &spirv_options, nir_options);
 
-   free(spec);
-
-   assert(nir->info.stage == stage);
-   nir_validate_shader(nir, "after spirv_to_nir");
-
-   const struct nir_lower_sysvals_to_varyings_options sysvals_to_varyings = {
-      .point_coord = true,
-   };
-   NIR_PASS_V(nir, nir_lower_sysvals_to_varyings, &sysvals_to_varyings);
+   nir_shader *nir;
+   VkResult result = vk_shader_module_to_nir(&dev->vk, module,
+                                             stage, stage_info->pName,
+                                             stage_info->pSpecializationInfo,
+                                             &spirv_options, nir_options,
+                                             mem_ctx, &nir);
+   if (result != VK_SUCCESS)
+      return NULL;
 
    if (unlikely(dev->physical_device->instance->debug_flags & TU_DEBUG_NIR)) {
       fprintf(stderr, "translated nir:\n");
       nir_print_shader(nir, stderr);
    }
 
-   /* multi step inlining procedure */
-   NIR_PASS_V(nir, nir_lower_variable_initializers, nir_var_function_temp);
-   NIR_PASS_V(nir, nir_lower_returns);
-   NIR_PASS_V(nir, nir_inline_functions);
-   NIR_PASS_V(nir, nir_copy_prop);
-   NIR_PASS_V(nir, nir_opt_deref);
-   foreach_list_typed_safe(nir_function, func, node, &nir->functions) {
-      if (!func->is_entrypoint)
-         exec_node_remove(&func->node);
-   }
-   assert(exec_list_length(&nir->functions) == 1);
-   NIR_PASS_V(nir, nir_lower_variable_initializers, ~nir_var_function_temp);
-
-   /* Split member structs.  We do this before lower_io_to_temporaries so that
-    * it doesn't lower system values to temporaries by accident.
-    */
-   NIR_PASS_V(nir, nir_split_var_copies);
-   NIR_PASS_V(nir, nir_split_per_member_structs);
-
-   NIR_PASS_V(nir, nir_remove_dead_variables,
-              nir_var_shader_in | nir_var_shader_out | nir_var_system_value | nir_var_mem_shared,
-              NULL);
-
-   NIR_PASS_V(nir, nir_propagate_invariant, false);
+   const struct nir_lower_sysvals_to_varyings_options sysvals_to_varyings = {
+      .point_coord = true,
+   };
+   NIR_PASS_V(nir, nir_lower_sysvals_to_varyings, &sysvals_to_varyings);
 
    NIR_PASS_V(nir, nir_lower_global_vars_to_local);
    NIR_PASS_V(nir, nir_split_var_copies);
@@ -158,7 +125,6 @@ tu_spirv_to_nir(struct tu_device *dev,
    NIR_PASS_V(nir, nir_lower_is_helper_invocation);
 
    NIR_PASS_V(nir, nir_lower_system_values);
-   NIR_PASS_V(nir, nir_lower_compute_system_values, &compute_sysval_options);
 
    NIR_PASS_V(nir, nir_lower_clip_cull_distance_arrays);
 
@@ -207,8 +173,8 @@ lower_vulkan_resource_index(nir_builder *b, nir_intrinsic_instr *instr,
    switch (binding_layout->type) {
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-      base = layout->set[set].dynamic_offset_start +
-         binding_layout->dynamic_offset_offset;
+      base = (layout->set[set].dynamic_offset_start +
+         binding_layout->dynamic_offset_offset) / (4 * A6XX_TEX_CONST_DWORDS);
       set = MAX_SETS;
       break;
    default:
@@ -216,9 +182,13 @@ lower_vulkan_resource_index(nir_builder *b, nir_intrinsic_instr *instr,
       break;
    }
 
+   unsigned stride = binding_layout->size / (4 * A6XX_TEX_CONST_DWORDS);
+   assert(util_is_power_of_two_nonzero(stride));
+   nir_ssa_def *shift = nir_imm_int(b, util_logbase2(stride));
    nir_ssa_def *def = nir_vec3(b, nir_imm_int(b, set),
-                               nir_iadd(b, nir_imm_int(b, base), vulkan_idx),
-                               nir_imm_int(b, 0));
+                               nir_iadd(b, nir_imm_int(b, base),
+                                        nir_ishl(b, vulkan_idx, shift)),
+                               shift);
 
    nir_ssa_def_rewrite_uses(&instr->dest.ssa, def);
    nir_instr_remove(&instr->instr);
@@ -229,28 +199,36 @@ lower_vulkan_resource_reindex(nir_builder *b, nir_intrinsic_instr *instr)
 {
    nir_ssa_def *old_index = instr->src[0].ssa;
    nir_ssa_def *delta = instr->src[1].ssa;
+   nir_ssa_def *shift = nir_channel(b, old_index, 2);
 
    nir_ssa_def *new_index =
       nir_vec3(b, nir_channel(b, old_index, 0),
-               nir_iadd(b, nir_channel(b, old_index, 1), delta),
-               nir_channel(b, old_index, 2));
+               nir_iadd(b, nir_channel(b, old_index, 1),
+                        nir_ishl(b, delta, shift)),
+               shift);
 
    nir_ssa_def_rewrite_uses(&instr->dest.ssa, new_index);
    nir_instr_remove(&instr->instr);
 }
 
 static void
-lower_load_vulkan_descriptor(nir_intrinsic_instr *intrin)
+lower_load_vulkan_descriptor(nir_builder *b, nir_intrinsic_instr *intrin)
 {
+   nir_ssa_def *old_index = intrin->src[0].ssa;
    /* Loading the descriptor happens as part of the load/store instruction so
-    * this is a no-op.
+    * this is a no-op. We just need to turn the shift into an offset of 0.
     */
-   nir_ssa_def_rewrite_uses_src(&intrin->dest.ssa, intrin->src[0]);
+   nir_ssa_def *new_index =
+      nir_vec3(b, nir_channel(b, old_index, 0),
+               nir_channel(b, old_index, 1),
+               nir_imm_int(b, 0));
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, new_index);
    nir_instr_remove(&intrin->instr);
 }
 
 static void
-lower_ssbo_ubo_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
+lower_ssbo_ubo_intrinsic(struct tu_device *dev,
+                         nir_builder *b, nir_intrinsic_instr *intrin)
 {
    const nir_intrinsic_info *info = &nir_intrinsic_infos[intrin->intrinsic];
 
@@ -270,6 +248,16 @@ lower_ssbo_ubo_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
 
    nir_ssa_scalar scalar_idx = nir_ssa_scalar_resolved(intrin->src[buffer_src].ssa, 0);
    nir_ssa_def *descriptor_idx = nir_channel(b, intrin->src[buffer_src].ssa, 1);
+
+   /* For isam, we need to use the appropriate descriptor if 16-bit storage is
+    * enabled. Descriptor 0 is the 16-bit one, descriptor 1 is the 32-bit one.
+    */
+   if (dev->physical_device->info->a6xx.storage_16bit &&
+       intrin->intrinsic == nir_intrinsic_load_ssbo &&
+       (nir_intrinsic_access(intrin) & ACCESS_CAN_REORDER) &&
+       intrin->dest.ssa.bit_size > 16) {
+      descriptor_idx = nir_iadd(b, descriptor_idx, nir_imm_int(b, 1));
+   }
 
    nir_ssa_def *results[MAX_SETS + 1] = { NULL };
 
@@ -402,6 +390,7 @@ lower_image_deref(nir_builder *b,
 
 static bool
 lower_intrinsic(nir_builder *b, nir_intrinsic_instr *instr,
+                struct tu_device *dev,
                 struct tu_shader *shader,
                 const struct tu_pipeline_layout *layout)
 {
@@ -411,7 +400,7 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *instr,
       return true;
 
    case nir_intrinsic_load_vulkan_descriptor:
-      lower_load_vulkan_descriptor(instr);
+      lower_load_vulkan_descriptor(b, instr);
       return true;
 
    case nir_intrinsic_vulkan_resource_index:
@@ -439,7 +428,7 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *instr,
    case nir_intrinsic_ssbo_atomic_fmax:
    case nir_intrinsic_ssbo_atomic_fcomp_swap:
    case nir_intrinsic_get_ssbo_size:
-      lower_ssbo_ubo_intrinsic(b, instr);
+      lower_ssbo_ubo_intrinsic(dev, b, instr);
       return true;
 
    case nir_intrinsic_image_deref_load:
@@ -553,6 +542,7 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
 }
 
 struct lower_instr_params {
+   struct tu_device *dev;
    struct tu_shader *shader;
    const struct tu_pipeline_layout *layout;
 };
@@ -566,7 +556,7 @@ lower_instr(nir_builder *b, nir_instr *instr, void *cb_data)
    case nir_instr_type_tex:
       return lower_tex(b, nir_instr_as_tex(instr), params->shader, params->layout);
    case nir_instr_type_intrinsic:
-      return lower_intrinsic(b, nir_instr_as_intrinsic(instr), params->shader, params->layout);
+      return lower_intrinsic(b, nir_instr_as_intrinsic(instr), params->dev, params->shader, params->layout);
    default:
       return false;
    }
@@ -619,12 +609,14 @@ gather_push_constants(nir_shader *shader, struct tu_shader *tu_shader)
 }
 
 static bool
-tu_lower_io(nir_shader *shader, struct tu_shader *tu_shader,
+tu_lower_io(nir_shader *shader, struct tu_device *dev,
+            struct tu_shader *tu_shader,
             const struct tu_pipeline_layout *layout)
 {
    gather_push_constants(shader, tu_shader);
 
    struct lower_instr_params params = {
+      .dev = dev,
       .shader = tu_shader,
       .layout = layout,
    };
@@ -720,6 +712,11 @@ tu_shader_create(struct tu_device *dev,
    if (!shader)
       return NULL;
 
+   NIR_PASS_V(nir, nir_opt_access, &(nir_opt_access_options) {
+               .is_vulkan = true,
+               .infer_non_readable = true,
+             });
+
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS_V(nir, nir_lower_input_attachments,
                  &(nir_input_attachment_options) {
@@ -763,6 +760,22 @@ tu_shader_create(struct tu_device *dev,
       NIR_PASS_V(nir, nir_lower_explicit_io,
                  nir_var_mem_shared,
                  nir_address_format_32bit_offset);
+
+      if (nir->info.zero_initialize_shared_memory && nir->info.shared_size > 0) {
+         const unsigned chunk_size = 16; /* max single store size */
+         /* Shared memory is allocated in 1024b chunks in HW, but the zero-init
+          * extension only requires us to initialize the memory that the shader
+          * is allocated at the API level, and it's up to the user to ensure
+          * that accesses are limited to those bounds.
+          */
+         const unsigned shared_size = ALIGN(nir->info.shared_size, chunk_size);
+         NIR_PASS_V(nir, nir_zero_initialize_shared_memory, shared_size, chunk_size);
+      }
+
+      const struct nir_lower_compute_system_values_options compute_sysval_options = {
+         .has_base_workgroup_id = true,
+      };
+      NIR_PASS_V(nir, nir_lower_compute_system_values, &compute_sysval_options);
    }
 
    nir_assign_io_var_locations(nir, nir_var_shader_in, &nir->num_inputs, nir->info.stage);
@@ -780,7 +793,7 @@ tu_shader_create(struct tu_device *dev,
          nir->info.stage == MESA_SHADER_GEOMETRY)
       tu_gather_xfb_info(nir, &so_info);
 
-   NIR_PASS_V(nir, tu_lower_io, shader, layout);
+   NIR_PASS_V(nir, tu_lower_io, dev, shader, layout);
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 

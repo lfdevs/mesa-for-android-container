@@ -56,8 +56,6 @@ spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,C
 spec@arb_bindless_texture@illegal,Fail
 spec@arb_bindless_texture@illegal@Call glCopyTexImage* when a texture handle is referenced,Fail
 spec@arb_bindless_texture@illegal@Call glTexImage* when a texture handle is referenced,Fail
-spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.frag,Fail
-spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.vert,Fail
 spec@arb_gl_spirv@execution@ssbo@aoa,Fail
 spec@arb_gl_spirv@execution@ssbo@aoa-2,Fail
 spec@arb_gl_spirv@execution@ssbo@array,Fail

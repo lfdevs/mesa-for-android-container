@@ -104,7 +104,7 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
 
    /* Tiled textures are unmappable. Always put them in VRAM. */
    if ((res->b.b.target != PIPE_BUFFER && !tex->surface.is_linear) ||
-       res->b.b.flags & SI_RESOURCE_FLAG_UNMAPPABLE) {
+       res->b.b.flags & PIPE_RESOURCE_FLAG_UNMAPPABLE) {
       res->domains = RADEON_DOMAIN_VRAM;
       res->flags |= RADEON_FLAG_NO_CPU_ACCESS | RADEON_FLAG_GTT_WC;
    }
@@ -317,21 +317,16 @@ static void *si_buffer_get_transfer(struct pipe_context *ctx, struct pipe_resour
    struct si_transfer *transfer;
 
    if (usage & PIPE_MAP_THREAD_SAFE)
-      transfer = malloc(sizeof(*transfer));
+      transfer = calloc(1, sizeof(*transfer));
    else if (usage & TC_TRANSFER_MAP_THREADED_UNSYNC)
-      transfer = slab_alloc(&sctx->pool_transfers_unsync);
+      transfer = slab_zalloc(&sctx->pool_transfers_unsync);
    else
-      transfer = slab_alloc(&sctx->pool_transfers);
+      transfer = slab_zalloc(&sctx->pool_transfers);
 
-   transfer->b.b.resource = NULL;
    pipe_resource_reference(&transfer->b.b.resource, resource);
-   transfer->b.b.level = 0;
    transfer->b.b.usage = usage;
    transfer->b.b.box = *box;
-   transfer->b.b.stride = 0;
-   transfer->b.b.layer_stride = 0;
    transfer->b.b.offset = offset;
-   transfer->b.staging = NULL;
    transfer->staging = staging;
    *ptransfer = &transfer->b.b;
    return data;
@@ -345,6 +340,7 @@ static void *si_buffer_transfer_map(struct pipe_context *ctx, struct pipe_resour
    struct si_resource *buf = si_resource(resource);
    uint8_t *data;
 
+   assert(resource->target == PIPE_BUFFER);
    assert(box->x + box->width <= resource->width0);
 
    /* From GL_AMD_pinned_memory issues:
@@ -408,7 +404,8 @@ static void *si_buffer_transfer_map(struct pipe_context *ctx, struct pipe_resour
 
       /* Check if mapping this buffer would cause waiting for the GPU.
        */
-      if (buf->flags & RADEON_FLAG_SPARSE || force_discard_range ||
+      if (buf->flags & (RADEON_FLAG_SPARSE | RADEON_FLAG_NO_CPU_ACCESS) ||
+          force_discard_range ||
           si_cs_is_buffer_referenced(sctx, buf->buf, RADEON_USAGE_READWRITE) ||
           !sctx->ws->buffer_wait(sctx->ws, buf->buf, 0, RADEON_USAGE_READWRITE)) {
          /* Do a wait-free write-only transfer using a temporary buffer. */
@@ -444,7 +441,7 @@ static void *si_buffer_transfer_map(struct pipe_context *ctx, struct pipe_resour
    /* Use a staging buffer in cached GTT for reads. */
    else if (((usage & PIPE_MAP_READ) && !(usage & PIPE_MAP_PERSISTENT) &&
              (buf->domains & RADEON_DOMAIN_VRAM || buf->flags & RADEON_FLAG_GTT_WC)) ||
-            (buf->flags & RADEON_FLAG_SPARSE)) {
+            (buf->flags & (RADEON_FLAG_SPARSE | RADEON_FLAG_NO_CPU_ACCESS))) {
       struct si_resource *staging;
 
       assert(!(usage & (TC_TRANSFER_MAP_THREADED_UNSYNC | PIPE_MAP_THREAD_SAFE)));
@@ -587,7 +584,7 @@ static struct pipe_resource *si_buffer_create(struct pipe_screen *screen,
                              templ->width0 <= sscreen->options.tc_max_cpu_storage_size);
 
    if (templ->flags & PIPE_RESOURCE_FLAG_SPARSE)
-      buf->b.b.flags |= SI_RESOURCE_FLAG_UNMAPPABLE;
+      buf->b.b.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
 
    si_init_resource_fields(sscreen, buf, templ->width0, alignment);
 
@@ -656,31 +653,60 @@ static struct pipe_resource *si_buffer_from_user_memory(struct pipe_screen *scre
 struct pipe_resource *si_buffer_from_winsys_buffer(struct pipe_screen *screen,
                                                    const struct pipe_resource *templ,
                                                    struct pb_buffer *imported_buf,
-                                                   bool dedicated)
+                                                   uint64_t offset)
 {
+   if (offset + templ->width0 > imported_buf->size)
+      return NULL;
+
    struct si_screen *sscreen = (struct si_screen *)screen;
    struct si_resource *res = si_alloc_buffer_struct(screen, templ, false);
 
    if (!res)
-      return 0;
+      return NULL;
 
-   res->buf = imported_buf;
-   res->gpu_address = sscreen->ws->buffer_get_virtual_address(res->buf);
-   res->bo_size = imported_buf->size;
-   res->bo_alignment_log2 = imported_buf->alignment_log2;
-   res->domains = sscreen->ws->buffer_get_initial_domain(res->buf);
+   enum radeon_bo_domain domains = sscreen->ws->buffer_get_initial_domain(imported_buf);
 
-   res->memory_usage_kb = MAX2(1, res->bo_size / 1024);
+   /* Get or guess the BO flags. */
+   unsigned flags = RADEON_FLAG_NO_SUBALLOC;
 
    if (sscreen->ws->buffer_get_flags)
-      res->flags = sscreen->ws->buffer_get_flags(res->buf);
+      res->flags |= sscreen->ws->buffer_get_flags(imported_buf);
+   else
+      flags |= RADEON_FLAG_GTT_WC; /* unknown flags, guess them */
 
-   if (templ->flags & PIPE_RESOURCE_FLAG_SPARSE) {
-      res->b.b.flags |= SI_RESOURCE_FLAG_UNMAPPABLE;
-      res->flags |= RADEON_FLAG_SPARSE;
+   /* Deduce the usage. */
+   switch (domains) {
+   case RADEON_DOMAIN_VRAM:
+   case RADEON_DOMAIN_VRAM_GTT:
+      res->b.b.usage = PIPE_USAGE_DEFAULT;
+      break;
+
+   default:
+      /* Other values are interpreted as GTT. */
+      domains = RADEON_DOMAIN_GTT;
+
+      if (flags & RADEON_FLAG_GTT_WC)
+         res->b.b.usage = PIPE_USAGE_STREAM;
+      else
+         res->b.b.usage = PIPE_USAGE_STAGING;
    }
 
+   si_init_resource_fields(sscreen, res, imported_buf->size,
+                           1 << imported_buf->alignment_log2);
+
+   res->b.is_shared = true;
    res->b.buffer_id_unique = util_idalloc_mt_alloc(&sscreen->buffer_ids);
+   res->buf = imported_buf;
+   res->gpu_address = sscreen->ws->buffer_get_virtual_address(res->buf) + offset;
+   res->domains = domains;
+   res->flags = flags;
+
+   if (res->flags & RADEON_FLAG_NO_CPU_ACCESS)
+      res->b.b.flags |= PIPE_RESOURCE_FLAG_UNMAPPABLE;
+
+   util_range_add(&res->b.b, &res->valid_buffer_range, 0, templ->width0);
+   util_range_add(&res->b.b, &res->b.valid_buffer_range, 0, templ->width0);
+
    return &res->b.b;
 }
 

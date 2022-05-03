@@ -125,7 +125,7 @@ store_resume_addr(nir_builder *b, nir_intrinsic_instr *call)
 }
 
 static bool
-lower_shader_calls_instr(struct nir_builder *b, nir_instr *instr, void *data)
+lower_shader_trace_ray_instr(struct nir_builder *b, nir_instr *instr, void *data)
 {
    if (instr->type != nir_instr_type_intrinsic)
       return false;
@@ -134,124 +134,153 @@ lower_shader_calls_instr(struct nir_builder *b, nir_instr *instr, void *data)
     * brw_nir_lower_rt_intrinsics()
     */
    nir_intrinsic_instr *call = nir_instr_as_intrinsic(instr);
-
-   switch (call->intrinsic) {
-   case nir_intrinsic_rt_trace_ray: {
-      b->cursor = nir_instr_remove(instr);
-
-      store_resume_addr(b, call);
-
-      nir_ssa_def *as_addr = call->src[0].ssa;
-      nir_ssa_def *ray_flags = call->src[1].ssa;
-      /* From the SPIR-V spec:
-       *
-       *    "Only the 8 least-significant bits of Cull Mask are used by this
-       *    instruction - other bits are ignored.
-       *
-       *    Only the 4 least-significant bits of SBT Offset and SBT Stride are
-       *    used by this instruction - other bits are ignored.
-       *
-       *    Only the 16 least-significant bits of Miss Index are used by this
-       *    instruction - other bits are ignored."
-       */
-      nir_ssa_def *cull_mask = nir_iand_imm(b, call->src[2].ssa, 0xff);
-      nir_ssa_def *sbt_offset = nir_iand_imm(b, call->src[3].ssa, 0xf);
-      nir_ssa_def *sbt_stride = nir_iand_imm(b, call->src[4].ssa, 0xf);
-      nir_ssa_def *miss_index = nir_iand_imm(b, call->src[5].ssa, 0xffff);
-      nir_ssa_def *ray_orig = call->src[6].ssa;
-      nir_ssa_def *ray_t_min = call->src[7].ssa;
-      nir_ssa_def *ray_dir = call->src[8].ssa;
-      nir_ssa_def *ray_t_max = call->src[9].ssa;
-
-      /* The hardware packet takes the address to the root node in the
-       * acceleration structure, not the acceleration structure itself. To
-       * find that, we have to read the root node offset from the acceleration
-       * structure which is the first QWord.
-       */
-      nir_ssa_def *root_node_ptr =
-         nir_iadd(b, as_addr, nir_load_global(b, as_addr, 256, 1, 64));
-
-      /* The hardware packet requires an address to the first element of the
-       * hit SBT.
-       *
-       * In order to calculate this, we must multiply the "SBT Offset"
-       * provided to OpTraceRay by the SBT stride provided for the hit SBT in
-       * the call to vkCmdTraceRay() and add that to the base address of the
-       * hit SBT. This stride is not to be confused with the "SBT Stride"
-       * provided to OpTraceRay which is in units of this stride. It's a
-       * rather terrible overload of the word "stride". The hardware docs
-       * calls the SPIR-V stride value the "shader index multiplier" which is
-       * a much more sane name.
-       */
-      nir_ssa_def *hit_sbt_stride_B =
-         nir_load_ray_hit_sbt_stride_intel(b);
-      nir_ssa_def *hit_sbt_offset_B =
-         nir_umul_32x16(b, sbt_offset, nir_u2u32(b, hit_sbt_stride_B));
-      nir_ssa_def *hit_sbt_addr =
-         nir_iadd(b, nir_load_ray_hit_sbt_addr_intel(b),
-                     nir_u2u64(b, hit_sbt_offset_B));
-
-      /* The hardware packet takes an address to the miss BSR. */
-      nir_ssa_def *miss_sbt_stride_B =
-         nir_load_ray_miss_sbt_stride_intel(b);
-      nir_ssa_def *miss_sbt_offset_B =
-         nir_umul_32x16(b, miss_index, nir_u2u32(b, miss_sbt_stride_B));
-      nir_ssa_def *miss_sbt_addr =
-         nir_iadd(b, nir_load_ray_miss_sbt_addr_intel(b),
-                     nir_u2u64(b, miss_sbt_offset_B));
-
-      struct brw_nir_rt_mem_ray_defs ray_defs = {
-         .root_node_ptr = root_node_ptr,
-         .ray_flags = nir_u2u16(b, ray_flags),
-         .ray_mask = cull_mask,
-         .hit_group_sr_base_ptr = hit_sbt_addr,
-         .hit_group_sr_stride = nir_u2u16(b, hit_sbt_stride_B),
-         .miss_sr_ptr = miss_sbt_addr,
-         .orig = ray_orig,
-         .t_near = ray_t_min,
-         .dir = ray_dir,
-         .t_far = ray_t_max,
-         .shader_index_multiplier = sbt_stride,
-      };
-      brw_nir_rt_store_mem_ray(b, &ray_defs, BRW_RT_BVH_LEVEL_WORLD);
-      nir_trace_ray_initial_intel(b);
-      return true;
-   }
-
-   case nir_intrinsic_rt_execute_callable: {
-      b->cursor = nir_instr_remove(instr);
-
-      store_resume_addr(b, call);
-
-      nir_ssa_def *sbt_offset32 =
-         nir_imul(b, call->src[0].ssa,
-                     nir_u2u32(b, nir_load_callable_sbt_stride_intel(b)));
-      nir_ssa_def *sbt_addr =
-         nir_iadd(b, nir_load_callable_sbt_addr_intel(b),
-                     nir_u2u64(b, sbt_offset32));
-      brw_nir_btd_spawn(b, sbt_addr);
-      return true;
-   }
-
-   default:
+   if (call->intrinsic != nir_intrinsic_rt_trace_ray)
       return false;
-   }
+
+   b->cursor = nir_instr_remove(instr);
+
+   store_resume_addr(b, call);
+
+   nir_ssa_def *as_addr = call->src[0].ssa;
+   nir_ssa_def *ray_flags = call->src[1].ssa;
+   /* From the SPIR-V spec:
+    *
+    *    "Only the 8 least-significant bits of Cull Mask are used by this
+    *    instruction - other bits are ignored.
+    *
+    *    Only the 4 least-significant bits of SBT Offset and SBT Stride are
+    *    used by this instruction - other bits are ignored.
+    *
+    *    Only the 16 least-significant bits of Miss Index are used by this
+    *    instruction - other bits are ignored."
+    */
+   nir_ssa_def *cull_mask = nir_iand_imm(b, call->src[2].ssa, 0xff);
+   nir_ssa_def *sbt_offset = nir_iand_imm(b, call->src[3].ssa, 0xf);
+   nir_ssa_def *sbt_stride = nir_iand_imm(b, call->src[4].ssa, 0xf);
+   nir_ssa_def *miss_index = nir_iand_imm(b, call->src[5].ssa, 0xffff);
+   nir_ssa_def *ray_orig = call->src[6].ssa;
+   nir_ssa_def *ray_t_min = call->src[7].ssa;
+   nir_ssa_def *ray_dir = call->src[8].ssa;
+   nir_ssa_def *ray_t_max = call->src[9].ssa;
+
+   nir_ssa_def *root_node_ptr =
+      brw_nir_rt_acceleration_structure_to_root_node(b, as_addr);
+
+   /* The hardware packet requires an address to the first element of the
+    * hit SBT.
+    *
+    * In order to calculate this, we must multiply the "SBT Offset"
+    * provided to OpTraceRay by the SBT stride provided for the hit SBT in
+    * the call to vkCmdTraceRay() and add that to the base address of the
+    * hit SBT. This stride is not to be confused with the "SBT Stride"
+    * provided to OpTraceRay which is in units of this stride. It's a
+    * rather terrible overload of the word "stride". The hardware docs
+    * calls the SPIR-V stride value the "shader index multiplier" which is
+    * a much more sane name.
+    */
+   nir_ssa_def *hit_sbt_stride_B =
+      nir_load_ray_hit_sbt_stride_intel(b);
+   nir_ssa_def *hit_sbt_offset_B =
+      nir_umul_32x16(b, sbt_offset, nir_u2u32(b, hit_sbt_stride_B));
+   nir_ssa_def *hit_sbt_addr =
+      nir_iadd(b, nir_load_ray_hit_sbt_addr_intel(b),
+                  nir_u2u64(b, hit_sbt_offset_B));
+
+   /* The hardware packet takes an address to the miss BSR. */
+   nir_ssa_def *miss_sbt_stride_B =
+      nir_load_ray_miss_sbt_stride_intel(b);
+   nir_ssa_def *miss_sbt_offset_B =
+      nir_umul_32x16(b, miss_index, nir_u2u32(b, miss_sbt_stride_B));
+   nir_ssa_def *miss_sbt_addr =
+      nir_iadd(b, nir_load_ray_miss_sbt_addr_intel(b),
+                  nir_u2u64(b, miss_sbt_offset_B));
+
+   struct brw_nir_rt_mem_ray_defs ray_defs = {
+      .root_node_ptr = root_node_ptr,
+      .ray_flags = nir_u2u16(b, ray_flags),
+      .ray_mask = cull_mask,
+      .hit_group_sr_base_ptr = hit_sbt_addr,
+      .hit_group_sr_stride = nir_u2u16(b, hit_sbt_stride_B),
+      .miss_sr_ptr = miss_sbt_addr,
+      .orig = ray_orig,
+      .t_near = ray_t_min,
+      .dir = ray_dir,
+      .t_far = ray_t_max,
+      .shader_index_multiplier = sbt_stride,
+   };
+   brw_nir_rt_store_mem_ray(b, &ray_defs, BRW_RT_BVH_LEVEL_WORLD);
+
+   nir_trace_ray_intel(b,
+                       nir_load_btd_global_arg_addr_intel(b),
+                       nir_imm_int(b, BRW_RT_BVH_LEVEL_WORLD),
+                       nir_imm_int(b, GEN_RT_TRACE_RAY_INITAL),
+                       .synchronous = false);
+   return true;
+}
+
+static bool
+lower_shader_call_instr(struct nir_builder *b, nir_instr *instr, void *data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   /* Leave nir_intrinsic_rt_resume to be lowered by
+    * brw_nir_lower_rt_intrinsics()
+    */
+   nir_intrinsic_instr *call = nir_instr_as_intrinsic(instr);
+   if (call->intrinsic != nir_intrinsic_rt_execute_callable)
+      return false;
+
+   b->cursor = nir_instr_remove(instr);
+
+   store_resume_addr(b, call);
+
+   nir_ssa_def *sbt_offset32 =
+      nir_imul(b, call->src[0].ssa,
+               nir_u2u32(b, nir_load_callable_sbt_stride_intel(b)));
+   nir_ssa_def *sbt_addr =
+      nir_iadd(b, nir_load_callable_sbt_addr_intel(b),
+               nir_u2u64(b, sbt_offset32));
+   brw_nir_btd_spawn(b, sbt_addr);
+   return true;
 }
 
 bool
 brw_nir_lower_shader_calls(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(shader,
-                                       lower_shader_calls_instr,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance,
-                                       NULL);
+   return
+      nir_shader_instructions_pass(shader,
+                                   lower_shader_trace_ray_instr,
+                                   nir_metadata_none,
+                                   NULL) |
+      nir_shader_instructions_pass(shader,
+                                   lower_shader_call_instr,
+                                   nir_metadata_block_index |
+                                   nir_metadata_dominance,
+                                   NULL);
 }
 
 /** Creates a trivial return shader
  *
- * This is a callable shader that doesn't really do anything.  It just loads
- * the resume address from the stack and does a return.
+ * In most cases this shader doesn't actually do anything. It just needs to
+ * return to the caller.
+ *
+ * By default, our HW has the ability to handle the fact that a shader is not
+ * available and will execute the next folowing shader in the tracing call.
+ * For instance, a RAYGEN shader traces a ray, the tracing generates a hit,
+ * but there is no ANYHIT shader available. The HW should follow up by
+ * execution the CLOSESTHIT shader.
+ *
+ * This default behavior can be changed through the RT_CTRL register
+ * (privileged access) and when NULL shader checks are disabled, the HW will
+ * instead call the call stack handler (this shader). This is what i915 is
+ * doing as part of Wa_14013202645.
+ *
+ * In order to ensure the call to the CLOSESTHIT shader, this shader needs to
+ * commit the ray and will not proceed with the BTD return. Similarly when the
+ * same thing happen with the INTERSECTION shader, we should just carry on the
+ * ray traversal with the continue operation.
+ *
  */
 nir_shader *
 brw_nir_create_trivial_return_shader(const struct brw_compiler *compiler,
@@ -260,13 +289,63 @@ brw_nir_create_trivial_return_shader(const struct brw_compiler *compiler,
    const nir_shader_compiler_options *nir_options =
       compiler->nir_options[MESA_SHADER_CALLABLE];
 
-   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_CALLABLE,
-                                                  nir_options,
-                                                  "RT Trivial Return");
-   ralloc_steal(mem_ctx, b.shader);
-   nir_shader *nir = b.shader;
+   nir_builder _b = nir_builder_init_simple_shader(MESA_SHADER_CALLABLE,
+                                                   nir_options,
+                                                   "RT Trivial Return");
+   nir_builder *b = &_b;
 
-   NIR_PASS_V(nir, brw_nir_lower_shader_returns);
+   ralloc_steal(mem_ctx, b->shader);
+   nir_shader *nir = b->shader;
+
+   /* Workaround not needed on DG2-G10-C0+ & DG2-G11-B0+ */
+   if ((compiler->devinfo->platform == INTEL_PLATFORM_DG2_G10 &&
+        compiler->devinfo->revision < 8) ||
+       (compiler->devinfo->platform == INTEL_PLATFORM_DG2_G11 &&
+        compiler->devinfo->revision < 4)) {
+      /* Reserve scratch space at the start of the shader's per-thread scratch
+       * space for the return BINDLESS_SHADER_RECORD address and data payload.
+       * When a shader is called, the calling shader will write the return BSR
+       * address in this region of the callee's scratch space.
+       */
+      nir->scratch_size = BRW_BTD_STACK_CALLEE_DATA_SIZE;
+
+      nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+
+      b->cursor = nir_before_block(nir_start_block(impl));
+
+      nir_ssa_def *shader_type = nir_load_btd_shader_type_intel(b);
+
+      nir_ssa_def *is_intersection_shader =
+         nir_ieq_imm(b, shader_type, GEN_RT_BTD_SHADER_TYPE_INTERSECTION);
+      nir_ssa_def *is_anyhit_shader =
+         nir_ieq_imm(b, shader_type, GEN_RT_BTD_SHADER_TYPE_ANY_HIT);
+
+      nir_ssa_def *needs_commit_or_continue =
+         nir_ior(b, is_intersection_shader, is_anyhit_shader);
+
+      nir_push_if(b, needs_commit_or_continue);
+      {
+         struct brw_nir_rt_mem_hit_defs hit_in = {};
+         brw_nir_rt_load_mem_hit(b, &hit_in, false /* committed */);
+
+         nir_ssa_def *ray_op =
+            nir_bcsel(b, is_intersection_shader,
+                      nir_imm_int(b, GEN_RT_TRACE_RAY_CONTINUE),
+                      nir_imm_int(b, GEN_RT_TRACE_RAY_COMMIT));
+         nir_ssa_def *ray_level = hit_in.bvh_level;
+
+         nir_trace_ray_intel(b,
+                             nir_load_btd_global_arg_addr_intel(b),
+                             ray_level, ray_op);
+      }
+      nir_push_else(b, NULL);
+      {
+         brw_nir_btd_return(b);
+      }
+      nir_pop_if(b, NULL);
+   } else {
+      NIR_PASS_V(nir, brw_nir_lower_shader_returns);
+   }
 
    return nir;
 }

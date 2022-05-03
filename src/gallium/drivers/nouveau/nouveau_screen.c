@@ -383,7 +383,7 @@ nouveau_screen_fini(struct nouveau_screen *screen)
 
 static void
 nouveau_set_debug_callback(struct pipe_context *pipe,
-                           const struct pipe_debug_callback *cb)
+                           const struct util_debug_callback *cb)
 {
    struct nouveau_context *context = nouveau_context(pipe);
 

@@ -130,6 +130,19 @@ dxcore_get_name(struct pipe_screen *screen)
    return buf;
 }
 
+static void
+dxcore_get_memory_info(struct d3d12_screen *screen, struct d3d12_memory_info *output)
+{
+   struct d3d12_dxcore_screen *dxcore_screen = d3d12_dxcore_screen(screen);
+   DXCoreAdapterMemoryBudget local_info, nonlocal_info;
+   DXCoreAdapterMemoryBudgetNodeSegmentGroup local_node_segment = { 0, DXCoreSegmentGroup::Local };
+   DXCoreAdapterMemoryBudgetNodeSegmentGroup nonlocal_node_segment = { 0, DXCoreSegmentGroup::NonLocal };
+   dxcore_screen->adapter->QueryState(DXCoreAdapterState::AdapterMemoryBudget, &local_node_segment, &local_info);
+   dxcore_screen->adapter->QueryState(DXCoreAdapterState::AdapterMemoryBudget, &nonlocal_node_segment, &nonlocal_info);
+   output->budget = local_info.budget + nonlocal_info.budget;
+   output->usage = local_info.currentUsage + nonlocal_info.currentUsage;
+}
+
 struct pipe_screen *
 d3d12_create_dxcore_screen(struct sw_winsys *winsys, LUID *adapter_luid)
 {
@@ -156,6 +169,7 @@ d3d12_create_dxcore_screen(struct sw_winsys *winsys, LUID *adapter_luid)
        FAILED(screen->adapter->GetProperty(DXCoreAdapterProperty::DedicatedAdapterMemory, &dedicated_video_memory)) ||
        FAILED(screen->adapter->GetProperty(DXCoreAdapterProperty::DedicatedSystemMemory, &dedicated_system_memory)) ||
        FAILED(screen->adapter->GetProperty(DXCoreAdapterProperty::SharedSystemMemory, &shared_system_memory)) ||
+       FAILED(screen->adapter->GetProperty(DXCoreAdapterProperty::DriverVersion, &screen->base.driver_version)) ||
        FAILED(screen->adapter->GetProperty(DXCoreAdapterProperty::DriverDescription,
                                            sizeof(screen->description),
                                            screen->description))) {
@@ -167,6 +181,7 @@ d3d12_create_dxcore_screen(struct sw_winsys *winsys, LUID *adapter_luid)
    screen->base.vendor_id = hardware_ids.vendorID;
    screen->base.memory_size_megabytes = (dedicated_video_memory + dedicated_system_memory + shared_system_memory) >> 20;
    screen->base.base.get_name = dxcore_get_name;
+   screen->base.get_memory_info = dxcore_get_memory_info;
 
    if (!d3d12_init_screen(&screen->base, winsys, screen->adapter)) {
       debug_printf("D3D12: failed to initialize DXCore screen\n");

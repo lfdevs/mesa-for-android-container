@@ -54,12 +54,15 @@ enum ir3_driver_param {
    IR3_DP_LOCAL_GROUP_SIZE_Y = 9,
    IR3_DP_LOCAL_GROUP_SIZE_Z = 10,
    IR3_DP_SUBGROUP_ID_SHIFT = 11,
+   IR3_DP_WORKGROUP_ID_X = 12,
+   IR3_DP_WORKGROUP_ID_Y = 13,
+   IR3_DP_WORKGROUP_ID_Z = 14,
    /* NOTE: gl_NumWorkGroups should be vec4 aligned because
     * glDispatchComputeIndirect() needs to load these from
     * the info->indirect buffer.  Keep that in mind when/if
     * adding any addition CS driver params.
     */
-   IR3_DP_CS_COUNT = 12, /* must be aligned to vec4 */
+   IR3_DP_CS_COUNT = 16, /* must be aligned to vec4 */
 
    /* vertex shader driver params: */
    IR3_DP_DRAWID = 0,
@@ -154,6 +157,7 @@ struct ir3_ubo_analysis_state {
  * that pointer size (ubo, etc) changes depending on generation.
  *
  *    user consts
+ *    preamble consts
  *    UBO addresses
  *    SSBO sizes
  *    image dimensions
@@ -205,6 +209,8 @@ struct ir3_const_state {
    unsigned immediates_count;
    unsigned immediates_size;
    uint32_t *immediates;
+
+   unsigned preamble_size;
 
    /* State of ubo access lowered to push consts: */
    struct ir3_ubo_analysis_state ubo_state;
@@ -342,6 +348,10 @@ struct ir3_shader_key {
 
    /* bitmask of samplers which need astc srgb workaround (a4xx): */
    uint16_t vastc_srgb, fastc_srgb;
+
+   /* per-component (3-bit) swizzles of each sampler (a4xx tg4): */
+   uint16_t vsampler_swizzles[16];
+   uint16_t fsampler_swizzles[16];
 };
 
 static inline unsigned
@@ -392,7 +402,9 @@ ir3_shader_key_changes_fs(struct ir3_shader_key *key,
 {
    if (last_key->has_per_samp || key->has_per_samp) {
       if ((last_key->fsamples != key->fsamples) ||
-          (last_key->fastc_srgb != key->fastc_srgb))
+          (last_key->fastc_srgb != key->fastc_srgb) ||
+          memcmp(last_key->fsampler_swizzles, key->fsampler_swizzles,
+                sizeof(key->fsampler_swizzles)))
          return true;
    }
 
@@ -418,7 +430,9 @@ ir3_shader_key_changes_vs(struct ir3_shader_key *key,
 {
    if (last_key->has_per_samp || key->has_per_samp) {
       if ((last_key->vsamples != key->vsamples) ||
-          (last_key->vastc_srgb != key->vastc_srgb))
+          (last_key->vastc_srgb != key->vastc_srgb) ||
+          memcmp(last_key->vsampler_swizzles, key->vsampler_swizzles,
+                sizeof(key->vsampler_swizzles)))
          return true;
    }
 
@@ -699,6 +713,14 @@ struct ir3_shader_variant {
       unsigned orig_idx[16];
    } astc_srgb;
 
+   /* for tg4 workaround, the number/base of additional
+    * unswizzled tex states we need, and index of original tex states
+    */
+   struct {
+      unsigned base, count;
+      unsigned orig_idx[16];
+   } tg4;
+
    /* texture sampler pre-dispatches */
    uint32_t num_sampler_prefetch;
    struct ir3_sampler_prefetch sampler_prefetch[IR3_MAX_SAMPLER_PREFETCH];
@@ -905,8 +927,6 @@ ir3_find_output(const struct ir3_shader_variant *so, gl_varying_slot slot)
    for (j = 0; j < so->outputs_count; j++)
       if (so->outputs[j].slot == slot)
          return j;
-
-   debug_assert(0);
 
    return -1;
 }

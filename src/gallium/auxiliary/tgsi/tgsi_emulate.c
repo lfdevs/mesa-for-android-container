@@ -140,7 +140,6 @@ const struct tgsi_token *
 tgsi_emulate(const struct tgsi_token *tokens, unsigned flags)
 {
    struct tgsi_emulation_context ctx;
-   struct tgsi_token *newtoks;
    int newlen;
 
    if (!(flags & (TGSI_EMU_CLAMP_COLOR_OUTPUTS |
@@ -160,10 +159,6 @@ tgsi_emulate(const struct tgsi_token *tokens, unsigned flags)
       ctx.base.transform_instruction = transform_instr;
 
    newlen = tgsi_num_tokens(tokens) + 20;
-   newtoks = tgsi_alloc_tokens(newlen);
-   if (!newtoks)
-      return NULL;
 
-   tgsi_transform_shader(tokens, newtoks, newlen, &ctx.base);
-   return newtoks;
+   return tgsi_transform_shader(tokens, newlen, &ctx.base);
 }

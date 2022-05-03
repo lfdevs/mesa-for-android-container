@@ -1053,6 +1053,7 @@ static const struct intel_device_info intel_device_info_sg1 = {
 
 #define XEHP_FEATURES(_gt, _slices, _l3)                        \
    GFX12_FEATURES(_gt, _slices, _l3),                           \
+   .num_thread_per_eu = 8 /* BSpec 44472 */,                    \
    .verx10 = 125,                                               \
    .has_llc = false,                                            \
    .has_local_mem = true,                                       \
@@ -1063,6 +1064,7 @@ static const struct intel_device_info intel_device_info_sg1 = {
 #define DG2_FEATURES                                            \
    /* (Sub)slice info comes from the kernel topology info */    \
    XEHP_FEATURES(0, 1, 0),                                      \
+   .revision = 4, /* For offline compiler */                    \
    .num_subslices = dual_subslices(1),                          \
    .has_lsc = true,                                             \
    .apply_hwconfig = true,                                      \
@@ -1870,8 +1872,11 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
    }
 
    /* remaining initializion queries the kernel for device info */
-   if (devinfo->no_hw)
+   if (devinfo->no_hw) {
+      /* Provide some sensible values for NO_HW. */
+      devinfo->gtt_size = 2ull * 1024 * 1024 * 1024;
       return true;
+   }
 
    int timestamp_frequency;
    if (getparam(fd, I915_PARAM_CS_TIMESTAMP_FREQUENCY,

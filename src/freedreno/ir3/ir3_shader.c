@@ -471,12 +471,13 @@ ir3_setup_used_key(struct ir3_shader *shader)
     * ucp_enables to determine whether to lower legacy clip planes to
     * gl_ClipDistance.
     */
-   if (info->stage != MESA_SHADER_FRAGMENT || !shader->compiler->has_clip_cull)
+   if (info->stage != MESA_SHADER_COMPUTE && (info->stage != MESA_SHADER_FRAGMENT || !shader->compiler->has_clip_cull))
       key->ucp_enables = 0xff;
 
    if (info->stage == MESA_SHADER_FRAGMENT) {
       key->fastc_srgb = ~0;
       key->fsamples = ~0;
+      memset(key->fsampler_swizzles, 0xff, sizeof(key->fsampler_swizzles));
 
       if (info->inputs_read & VARYING_BITS_COLOR) {
          key->rasterflat = true;
@@ -500,6 +501,10 @@ ir3_setup_used_key(struct ir3_shader *shader)
                                 SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID) ||
                     BITSET_TEST(info->system_values_read,
                                 SYSTEM_VALUE_BARYCENTRIC_LINEAR_CENTROID)));
+   } else if (info->stage == MESA_SHADER_COMPUTE) {
+      key->fastc_srgb = ~0;
+      key->fsamples = ~0;
+      memset(key->fsampler_swizzles, 0xff, sizeof(key->fsampler_swizzles));
    } else {
       key->tessellation = ~0;
       key->has_gs = true;
@@ -507,6 +512,7 @@ ir3_setup_used_key(struct ir3_shader *shader)
       if (info->stage == MESA_SHADER_VERTEX) {
          key->vastc_srgb = ~0;
          key->vsamples = ~0;
+         memset(key->vsampler_swizzles, 0xff, sizeof(key->vsampler_swizzles));
       }
 
       if (info->stage == MESA_SHADER_TESS_CTRL)

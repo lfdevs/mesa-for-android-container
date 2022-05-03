@@ -387,7 +387,7 @@ nvc0_hw_get_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
 static void
 nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
                                   struct nvc0_query *q,
-                                  bool wait,
+                                  enum pipe_query_flags flags,
                                   enum pipe_query_value_type result_type,
                                   int index,
                                   struct pipe_resource *resource,
@@ -432,7 +432,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    if (hq->state != NVC0_HW_QUERY_STATE_READY)
       nvc0_hw_query_update(nvc0->screen->base.client, q);
 
-   if (wait && hq->state != NVC0_HW_QUERY_STATE_READY)
+   if ((flags & PIPE_QUERY_WAIT) && hq->state != NVC0_HW_QUERY_STATE_READY)
       nvc0_hw_query_fifo_wait(nvc0, q);
 
    nouveau_pushbuf_space(push, 32, 2, 3);
@@ -493,7 +493,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
       PUSH_DATA(push, 0);
    }
 
-   if (wait || hq->state == NVC0_HW_QUERY_STATE_READY) {
+   if ((flags & PIPE_QUERY_WAIT) || hq->state == NVC0_HW_QUERY_STATE_READY) {
       PUSH_DATA(push, 0);
       PUSH_DATA(push, 0);
    } else if (hq->is64bit) {

@@ -218,5 +218,6 @@ panvk_GetRenderAreaGranularity(VkDevice _device,
                                VkRenderPass renderPass,
                                VkExtent2D *pGranularity)
 {
-   panvk_stub();
+   /* TODO: Return the actual tile size for the render pass? */
+   *pGranularity = (VkExtent2D) { 1, 1 };
 }

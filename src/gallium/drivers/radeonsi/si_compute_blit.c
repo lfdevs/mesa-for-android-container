@@ -243,7 +243,7 @@ void si_compute_clear_buffer_rmw(struct si_context *sctx, struct pipe_resource *
    sctx->cs_user_data[1] = ~writebitmask;
 
    if (!sctx->cs_clear_buffer_rmw)
-      sctx->cs_clear_buffer_rmw = si_create_clear_buffer_rmw_cs(&sctx->b);
+      sctx->cs_clear_buffer_rmw = si_create_clear_buffer_rmw_cs(sctx);
 
    si_launch_grid_internal_ssbos(sctx, &info, sctx->cs_clear_buffer_rmw, flags, coher,
                                  1, &sb, 0x1);
@@ -420,7 +420,13 @@ void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
       assert(dst->target == PIPE_BUFFER);
       assert(size < 4);
 
-      pipe_buffer_write(&sctx->b, dst, offset, size, clear_value);
+      sctx->b.buffer_subdata(&sctx->b, dst,
+                             PIPE_MAP_WRITE |
+                             /* TC forbids drivers to invalidate buffers and infer unsychronized mappings,
+                              * so suppress those optimizations. */
+                             (sctx->tc ? TC_TRANSFER_MAP_NO_INFER_UNSYNCHRONIZED |
+                                         TC_TRANSFER_MAP_NO_INVALIDATE : 0),
+                             offset, size, clear_value);
    }
 }
 
@@ -469,6 +475,21 @@ void si_copy_buffer(struct si_context *sctx, struct pipe_resource *dst, struct p
    }
 }
 
+static void
+set_work_size(struct pipe_grid_info *info, unsigned block_x, unsigned block_y, unsigned block_z,
+              unsigned work_x, unsigned work_y, unsigned work_z)
+{
+   info->block[0] = block_x;
+   info->block[1] = block_y;
+   info->block[2] = block_z;
+
+   unsigned work[3] = {work_x, work_y, work_z};
+   for (int i = 0; i < 3; ++i) {
+      info->last_block[i] = work[i] % info->block[i];
+      info->grid[i] = DIV_ROUND_UP(work[i], info->block[i]);
+   }
+}
+
 void si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, unsigned dst_level,
                            struct pipe_resource *src, unsigned src_level, unsigned dstx,
                            unsigned dsty, unsigned dstz, const struct pipe_box *src_box,
@@ -483,6 +504,7 @@ void si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, u
    enum pipe_format src_format = util_format_linear(src->format);
    enum pipe_format dst_format = util_format_linear(dst->format);
    bool is_linear = ssrc->surface.is_linear || sdst->surface.is_linear;
+   bool is_1D = dst->target == PIPE_TEXTURE_1D_ARRAY && src->target == PIPE_TEXTURE_1D_ARRAY;
 
    assert(util_format_is_subsampled_422(src_format) == util_format_is_subsampled_422(dst_format));
 
@@ -573,12 +595,6 @@ void si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, u
 
    ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 2, 0, image);
 
-   if (!is_dcc_decompress) {
-      sctx->cs_user_data[0] = src_box->x | (dstx << 16);
-      sctx->cs_user_data[1] = src_box->y | (dsty << 16);
-      sctx->cs_user_data[2] = src_box->z | (dstz << 16);
-   }
-
    struct pipe_grid_info info = {0};
 
    if (is_dcc_decompress) {
@@ -587,64 +603,56 @@ void si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, u
        * the DCC block size or a multiple thereof. The shader uses a barrier
        * between loads and stores to safely overwrite each DCC block of pixels.
        */
-      unsigned dim[3] = {src_box->width, src_box->height, src_box->depth};
-
       assert(src == dst);
       assert(dst->target != PIPE_TEXTURE_1D && dst->target != PIPE_TEXTURE_1D_ARRAY);
 
       if (!sctx->cs_dcc_decompress)
          sctx->cs_dcc_decompress = si_create_dcc_decompress_cs(ctx);
 
-      info.block[0] = ssrc->surface.u.gfx9.color.dcc_block_width;
-      info.block[1] = ssrc->surface.u.gfx9.color.dcc_block_height;
-      info.block[2] = ssrc->surface.u.gfx9.color.dcc_block_depth;
+      unsigned block_x = ssrc->surface.u.gfx9.color.dcc_block_width;
+      unsigned block_y = ssrc->surface.u.gfx9.color.dcc_block_height;
+      unsigned block_z = ssrc->surface.u.gfx9.color.dcc_block_depth;
 
       unsigned default_wave_size = si_determine_wave_size(sctx->screen, NULL);;
 
       /* Make sure the block size is at least the same as wave size. */
-      while (info.block[0] * info.block[1] * info.block[2] < default_wave_size) {
-         info.block[0] *= 2;
+      while (block_x * block_y * block_z < default_wave_size) {
+         block_x *= 2;
       }
 
-      for (unsigned i = 0; i < 3; i++) {
-         info.last_block[i] = dim[i] % info.block[i];
-         info.grid[i] = DIV_ROUND_UP(dim[i], info.block[i]);
-      }
+      set_work_size(&info, block_x, block_y, block_z, src_box->width, src_box->height, src_box->depth);
 
       si_launch_grid_internal(sctx, &info, sctx->cs_dcc_decompress, flags | SI_OP_CS_IMAGE);
-   } else if (dst->target == PIPE_TEXTURE_1D_ARRAY && src->target == PIPE_TEXTURE_1D_ARRAY) {
-      if (!sctx->cs_copy_image_1d_array)
-         sctx->cs_copy_image_1d_array = si_create_copy_image_compute_shader_1d_array(ctx);
-
-      info.block[0] = 64;
-      info.last_block[0] = width % 64;
-      info.block[1] = 1;
-      info.block[2] = 1;
-      info.grid[0] = DIV_ROUND_UP(width, 64);
-      info.grid[1] = depth;
-      info.grid[2] = 1;
-
-      si_launch_grid_internal(sctx, &info, sctx->cs_copy_image_1d_array, flags | SI_OP_CS_IMAGE);
    } else {
-      if (!sctx->cs_copy_image)
-         sctx->cs_copy_image = si_create_copy_image_compute_shader(ctx);
+      sctx->cs_user_data[0] = src_box->x | (dstx << 16);
 
-      /* This is better for access over PCIe. */
-      if (is_linear) {
-         info.block[0] = 64;
-         info.block[1] = 1;
+      int block_x = is_1D || is_linear ? 64 : 8;
+      int block_y = is_1D || is_linear ? 1 : 8;
+      int block_z = 1;
+
+      if (is_1D) {
+         assert(height == 1); /* height is not used for 1D images */
+         assert(src_box->y == 0 && dsty == 0);
+
+         sctx->cs_user_data[1] = src_box->z | (dstz << 16);
+
+         /* We pass array index in 'y' for 1D images. */
+         height = depth;
+         depth = 1;
       } else {
-         info.block[0] = 8;
-         info.block[1] = 8;
+         sctx->cs_user_data[1] = src_box->y | (dsty << 16);
+         sctx->cs_user_data[2] = src_box->z | (dstz << 16);
       }
-      info.last_block[0] = width % info.block[0];
-      info.last_block[1] = height % info.block[1];
-      info.block[2] = 1;
-      info.grid[0] = DIV_ROUND_UP(width, info.block[0]);
-      info.grid[1] = DIV_ROUND_UP(height, info.block[1]);
-      info.grid[2] = depth;
 
-      si_launch_grid_internal(sctx, &info, sctx->cs_copy_image, flags | SI_OP_CS_IMAGE);
+      set_work_size(&info, block_x, block_y, block_z, width, height, depth);
+
+      void **copy_image_cs_ptr = is_1D ? &sctx->cs_copy_image_1D : &sctx->cs_copy_image_2D;
+      if (!*copy_image_cs_ptr)
+         *copy_image_cs_ptr = si_create_copy_image_cs(sctx, is_1D);
+
+      assert(*copy_image_cs_ptr);
+
+      si_launch_grid_internal(sctx, &info, *copy_image_cs_ptr, flags | SI_OP_CS_IMAGE);
    }
 
    ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 2, 0, saved_image);

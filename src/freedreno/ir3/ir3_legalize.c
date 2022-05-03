@@ -51,6 +51,7 @@ struct ir3_legalize_ctx {
    gl_shader_stage type;
    int max_bary;
    bool early_input_release;
+   bool has_inputs;
 };
 
 struct ir3_legalize_state {
@@ -111,6 +112,17 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
       regmask_or(&state->needs_sy, &state->needs_sy, &pstate->needs_sy);
    }
 
+   /* We need to take phsyical-only edges into account when tracking shared
+    * registers.
+    */
+   for (unsigned i = 0; i < block->physical_predecessors_count; i++) {
+      struct ir3_block *predecessor = block->physical_predecessors[i];
+      struct ir3_legalize_block_data *pbd = predecessor->data;
+      struct ir3_legalize_state *pstate = &pbd->state;
+
+      regmask_or_shared(&state->needs_ss, &state->needs_ss, &pstate->needs_ss);
+   }
+
    unsigned input_count = 0;
 
    foreach_instr (n, &block->instr_list) {
@@ -125,7 +137,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
     * with the end of the program.
     */
    assert(input_count == 0 || !ctx->early_input_release ||
-          block == ir3_start_block(block->shader));
+          block == ir3_after_preamble(block->shader));
 
    /* remove all the instructions from the list, we'll be adding
     * them back in as we go
@@ -150,7 +162,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
          ctx->max_bary = MAX2(ctx->max_bary, inloc->iim_val);
       }
 
-      if (last_n && is_barrier(last_n)) {
+      if ((last_n && is_barrier(last_n)) || n->opc == OPC_SHPE) {
          n->flags |= IR3_INSTR_SS | IR3_INSTR_SY;
          last_input_needs_ss = false;
          regmask_init(&state->needs_ss_war, mergedregs);
@@ -337,7 +349,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 
    assert(inputs_remaining == 0 || !ctx->early_input_release);
 
-   if (has_tex_prefetch && input_count == 0) {
+   if (has_tex_prefetch && !ctx->has_inputs) {
       /* texture prefetch, but *no* inputs.. we need to insert a
        * dummy bary.f at the top of the shader to unblock varying
        * storage:
@@ -735,13 +747,17 @@ block_sched(struct ir3 *ir)
          /* if/else, conditional branches to "then" or "else": */
          struct ir3_instruction *br1, *br2;
 
-         if (block->brtype == IR3_BRANCH_GETONE) {
-            /* getone can't be inverted, and it wouldn't even make sense
+         if (block->brtype == IR3_BRANCH_GETONE ||
+             block->brtype == IR3_BRANCH_SHPS) {
+            /* getone/shps can't be inverted, and it wouldn't even make sense
              * to follow it with an inverted branch, so follow it by an
              * unconditional branch.
              */
             debug_assert(!block->condition);
-            br1 = ir3_GETONE(block);
+            if (block->brtype == IR3_BRANCH_GETONE)
+               br1 = ir3_GETONE(block);
+            else
+               br1 = ir3_SHPS(block);
             br1->cat0.target = block->successors[1];
 
             br2 = ir3_JUMP(block);
@@ -777,6 +793,7 @@ block_sched(struct ir3 *ir)
                br2->cat0.brtype = BRANCH_ANY;
                break;
             case IR3_BRANCH_GETONE:
+            case IR3_BRANCH_SHPS:
                unreachable("can't get here");
             }
          }
@@ -937,12 +954,15 @@ ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary)
     * a5xx and a6xx do automatically release varying storage at the end.
     */
    ctx->early_input_release = true;
-   struct ir3_block *start_block = ir3_start_block(ir);
+   struct ir3_block *start_block = ir3_after_preamble(ir);
    foreach_block (block, &ir->block_list) {
       foreach_instr (instr, &block->instr_list) {
-         if (is_input(instr) && block != start_block) {
-            ctx->early_input_release = false;
-            break;
+         if (is_input(instr)) {
+            ctx->has_inputs = true;
+            if (block != start_block) {
+               ctx->early_input_release = false;
+               break;
+            }
          }
       }
    }

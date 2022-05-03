@@ -86,7 +86,7 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
 
    if (ANV_ALWAYS_SOFTPIN) {
       result = anv_reloc_list_add_bo(&cmd_buffer->surface_relocs,
-                                     &cmd_buffer->pool->alloc,
+                                     &cmd_buffer->vk.pool->alloc,
                                      address.buffer);
       if (unlikely(result != VK_SUCCESS))
          anv_batch_set_error(&cmd_buffer->batch, result);
@@ -95,7 +95,7 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
 
    uint64_t address_u64 = 0;
    result = anv_reloc_list_add(&cmd_buffer->surface_relocs,
-                               &cmd_buffer->pool->alloc,
+                               &cmd_buffer->vk.pool->alloc,
                                ss_offset, address.buffer,
                                address.offset + delta,
                                &address_u64);
@@ -195,6 +195,13 @@ blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
    }
 }
 
+static uint32_t
+blorp_binding_table_offset_to_pointer(struct blorp_batch *batch,
+                                      uint32_t offset)
+{
+   return offset;
+}
+
 static void *
 blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
                           struct blorp_address *addr)
@@ -272,7 +279,7 @@ blorp_exec_on_render(struct blorp_batch *batch,
    assert((batch->flags & BLORP_BATCH_USE_COMPUTE) == 0);
 
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
-   assert(cmd_buffer->pool->queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT);
+   assert(cmd_buffer->queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT);
 
    const unsigned scale = params->fast_clear_op ? UINT_MAX : 1;
    genX(cmd_buffer_emit_hashing_mode)(cmd_buffer, params->x1 - params->x0,
@@ -356,7 +363,7 @@ blorp_exec_on_compute(struct blorp_batch *batch,
    assert(batch->flags & BLORP_BATCH_USE_COMPUTE);
 
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
-   assert(cmd_buffer->pool->queue_family->queueFlags & VK_QUEUE_COMPUTE_BIT);
+   assert(cmd_buffer->queue_family->queueFlags & VK_QUEUE_COMPUTE_BIT);
 
    genX(flush_pipeline_select_gpgpu)(cmd_buffer);
 

@@ -87,7 +87,7 @@ destroy_fence(struct d3d12_fence *fence)
 }
 
 struct d3d12_fence *
-d3d12_create_fence(struct d3d12_screen *screen, struct d3d12_context *ctx)
+d3d12_create_fence(struct d3d12_screen *screen)
 {
    struct d3d12_fence *ret = CALLOC_STRUCT(d3d12_fence);
    if (!ret) {
@@ -95,12 +95,12 @@ d3d12_create_fence(struct d3d12_screen *screen, struct d3d12_context *ctx)
       return NULL;
    }
 
-   ret->cmdqueue_fence = ctx->cmdqueue_fence;
-   ret->value = ++ctx->fence_value;
+   ret->cmdqueue_fence = screen->fence;
+   ret->value = ++screen->fence_value;
    ret->event = create_event(&ret->event_fd);
-   if (FAILED(ctx->cmdqueue_fence->SetEventOnCompletion(ret->value, ret->event)))
+   if (FAILED(screen->fence->SetEventOnCompletion(ret->value, ret->event)))
       goto fail;
-   if (FAILED(screen->cmdqueue->Signal(ctx->cmdqueue_fence, ret->value)))
+   if (FAILED(screen->cmdqueue->Signal(screen->fence, ret->value)))
       goto fail;
 
    pipe_reference_init(&ret->reference, 1);

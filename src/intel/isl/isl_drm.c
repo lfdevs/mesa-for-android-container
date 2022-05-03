@@ -160,7 +160,7 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
       if (devinfo->ver >= 12)
          return 0;
 
-      if (INTEL_DEBUG(DEBUG_NO_RBC))
+      if (INTEL_DEBUG(DEBUG_NO_CCS))
          return 0;
 
       return 4;

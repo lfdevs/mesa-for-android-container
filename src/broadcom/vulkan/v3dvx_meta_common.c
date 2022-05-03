@@ -1,5 +1,5 @@
 /*
- * Copyright © 2021 Raspberry Pi
+ * Copyright © 2021 Raspberry Pi Ltd
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -880,6 +880,9 @@ v3dX(meta_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
    default:
       break;
    }
+
+   /* The TFU can handle raster sources but always produces UIF results */
+   assert(dst_tiling != V3D_TILING_RASTER);
 
    /* If we're writing level 0 (!IOA_DIMTW), then we need to supply the
     * OPAD field for the destination (how many extra UIF blocks beyond

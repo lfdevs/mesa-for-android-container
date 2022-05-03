@@ -439,6 +439,7 @@ static void r300_translate_fragment_shader(
     compiler.Base.has_half_swizzles = TRUE;
     compiler.Base.has_presub = TRUE;
     compiler.Base.has_omod = TRUE;
+    compiler.Base.needs_trig_input_transform = DBG_ON(r300, DBG_USE_TGSI);
     compiler.Base.max_temp_regs =
         compiler.Base.is_r500 ? 128 : (compiler.Base.is_r400 ? 64 : 32);
     compiler.Base.max_constants = compiler.Base.is_r500 ? 256 : 32;

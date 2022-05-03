@@ -60,9 +60,16 @@ struct zink_fs_key {
    bool coord_replace_yinvert;
    bool samples;
    bool force_dual_color_blend;
+   bool force_persample_interp;
+   bool fbfetch_ms;
+};
+
+struct zink_tcs_key {
+   uint8_t patch_vertices;
 };
 
 struct zink_shader_key_base {
+   uint32_t nonseamless_cube_mask;
    uint32_t inlined_uniform_values[MAX_INLINABLE_UNIFORMS];
 };
 
@@ -76,6 +83,7 @@ struct zink_shader_key {
       /* reuse vs key for now with tes/gs since we only use clip_halfz */
       struct zink_vs_key vs;
       struct zink_vs_key_base vs_base;
+      struct zink_tcs_key tcs;
       struct zink_fs_key fs;
    } key;
    struct zink_shader_key_base base;
@@ -101,6 +109,13 @@ zink_vs_key(const struct zink_shader_key *key)
 {
    assert(key);
    return &key->key.vs;
+}
+
+static inline const struct zink_tcs_key *
+zink_tcs_key(const struct zink_shader_key *key)
+{
+   assert(key);
+   return &key->key.tcs;
 }
 
 

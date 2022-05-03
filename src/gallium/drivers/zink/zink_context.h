@@ -80,6 +80,7 @@ struct zink_sampler_state {
    struct zink_descriptor_refs desc_set_refs;
    struct zink_batch_usage *batch_uses;
    bool custom_border_color;
+   bool nonseamless;
 };
 
 struct zink_buffer_view {
@@ -98,6 +99,7 @@ struct zink_sampler_view {
       struct zink_surface *image_view;
       struct zink_buffer_view *buffer_view;
    };
+   struct zink_surface *cube_array;
 };
 
 struct zink_image_view {
@@ -252,6 +254,7 @@ struct zink_context {
    struct set render_pass_state_cache;
    struct hash_table *render_pass_cache;
    bool new_swapchain;
+   VkExtent2D swapchain_size;
    bool fb_changed;
    bool rp_changed;
 
@@ -260,11 +263,12 @@ struct zink_context {
    uint16_t clears_enabled;
    uint16_t rp_clears_enabled;
    uint16_t fbfetch_outputs;
+   struct zink_resource *needs_present;
 
    struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];
    bool vertex_buffers_dirty;
 
-   void *sampler_states[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
+   struct zink_sampler_state *sampler_states[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
    struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
 
    struct zink_viewport_state vp_state;
@@ -287,8 +291,14 @@ struct zink_context {
       float tess_levels[6];
    };
 
+   struct zink_vk_query *curr_xfb_queries[PIPE_MAX_VERTEX_STREAMS];
+
+   struct list_head query_pools;
    struct list_head suspended_queries;
    struct list_head primitives_generated_queries;
+   struct zink_query *vertices_query;
+   bool disable_color_writes;
+   bool primitives_generated_active;
    bool queries_disabled, render_condition_active;
    struct {
       struct zink_query *query;
@@ -314,6 +324,8 @@ struct zink_context {
 
       VkDescriptorImageInfo textures[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
       VkBufferView tbos[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
+      uint32_t nonseamless[PIPE_SHADER_TYPES];
+      uint32_t cubes[PIPE_SHADER_TYPES];
       uint8_t num_samplers[PIPE_SHADER_TYPES];
       uint8_t num_sampler_views[PIPE_SHADER_TYPES];
 
@@ -351,7 +363,6 @@ struct zink_context {
    uint32_t num_so_targets;
    struct pipe_stream_output_target *so_targets[PIPE_MAX_SO_OUTPUTS];
    bool dirty_so_targets;
-   bool xfb_barrier;
    bool first_frame_done;
    bool have_timelines;
 
@@ -364,6 +375,7 @@ struct zink_context {
    bool rast_state_changed : 1;
    bool dsa_state_changed : 1;
    bool stencil_ref_changed : 1;
+   bool rasterizer_discard_changed : 1;
 };
 
 static inline struct zink_context *
@@ -523,7 +535,10 @@ zink_resource_rebind(struct zink_context *ctx, struct zink_resource *res);
 
 void
 zink_rebind_framebuffer(struct zink_context *ctx, struct zink_resource *res);
-
+bool
+zink_use_dummy_attachments(const struct zink_context *ctx);
+void
+zink_set_color_write_enables(struct zink_context *ctx);
 void
 zink_copy_buffer(struct zink_context *ctx, struct zink_resource *dst, struct zink_resource *src,
                  unsigned dst_offset, unsigned src_offset, unsigned size);

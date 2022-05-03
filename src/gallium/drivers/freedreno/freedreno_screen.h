@@ -256,7 +256,7 @@ is_ir3(struct fd_screen *screen)
 static inline bool
 has_compute(struct fd_screen *screen)
 {
-   return is_a5xx(screen) || is_a6xx(screen);
+   return is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen);
 }
 
 #endif /* FREEDRENO_SCREEN_H_ */

@@ -1,0 +1,24 @@
+# Sometimes passes.
+KHR-GLES31.core.shader_atomic_counters.advanced-usage-many-dispatches
+KHR-GLES31.core.shader_atomic_counters.advanced-usage-many-draw-calls2
+
+dEQP-GLES31.functional.compute.basic.ssbo_local_barrier_single_invocation
+dEQP-GLES31.functional.synchronization.inter_invocation.image_overwrite
+dEQP-GLES31.functional.synchronization.inter_invocation.image_read_write
+
+spec@arb_shader_image_load_store@host-mem-barrier@Atomic counter/RaW/full barrier test/16x16
+spec@arb_shader_image_load_store@host-mem-barrier@Element array/RaW/full barrier test/16x16
+spec@arb_shader_image_load_store@host-mem-barrier@Element array/RaW/full barrier test/4x4
+spec@arb_shader_image_load_store@host-mem-barrier@Uniform buffer/RaW/one bit barrier test/64x64
+spec@arb_shader_image_load_store@invalid@
+
+# Unclear if just parallel issues, but GPU timestamps seem to run a bit fast.
+spec@arb_timer_query@timestamp-get
+spec@ext_timer_query@time-elapsed
+
+spec@arb_texture_cube_map_array@texturesize@tes-texturesize-samplercubearrayshadow
+spec@glsl-1.50@execution@texturesize@tes-texturesize-sampler1darrayshadow
+spec@glsl-1.50@execution@texturesize@tes-texturesize-sampler1dshadow
+spec@glsl-1.50@execution@texturesize@tes-texturesize-sampler2darrayshadow
+spec@glsl-1.50@execution@texturesize@tes-texturesize-sampler2dshadow
+spec@glsl-1.50@execution@texturesize@tes-texturesize-samplercubeshadow

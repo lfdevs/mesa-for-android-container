@@ -138,9 +138,10 @@ enum storage_class : uint8_t {
    storage_image = 0x4,
    storage_shared = 0x8,       /* or TCS output */
    storage_vmem_output = 0x10, /* GS or TCS output stores using VMEM */
-   storage_scratch = 0x20,
-   storage_vgpr_spill = 0x40,
-   storage_count = 8,
+   storage_task_payload = 0x20,/* Task-Mesh payload */
+   storage_scratch = 0x40,
+   storage_vgpr_spill = 0x80,
+   storage_count = 8, /* not counting storage_none */
 };
 
 enum memory_semantics : uint8_t {
@@ -894,8 +895,7 @@ private:
 class Definition final {
 public:
    constexpr Definition()
-       : temp(Temp(0, s1)), reg_(0), isFixed_(0), hasHint_(0), isKill_(0), isPrecise_(0), isNUW_(0),
-         isNoCSE_(0)
+       : temp(Temp(0, s1)), reg_(0), isFixed_(0), isKill_(0), isPrecise_(0), isNUW_(0), isNoCSE_(0)
    {}
    Definition(uint32_t index, RegClass type) noexcept : temp(index, type) {}
    explicit Definition(Temp tmp) noexcept : temp(tmp) {}
@@ -931,14 +931,6 @@ public:
       reg_ = reg;
    }
 
-   constexpr void setHint(PhysReg reg) noexcept
-   {
-      hasHint_ = 1;
-      reg_ = reg;
-   }
-
-   constexpr bool hasHint() const noexcept { return hasHint_; }
-
    constexpr void setKill(bool flag) noexcept { isKill_ = flag; }
 
    constexpr bool isKill() const noexcept { return isKill_; }
@@ -962,7 +954,6 @@ private:
    union {
       struct {
          uint8_t isFixed_ : 1;
-         uint8_t hasHint_ : 1;
          uint8_t isKill_ : 1;
          uint8_t isPrecise_ : 1;
          uint8_t isNUW_ : 1;
@@ -1404,7 +1395,7 @@ static_assert(sizeof(VOP3_instruction) == sizeof(Instruction) + 8, "Unexpected p
 
 struct VOP3P_instruction : public Instruction {
    bool neg_lo[3];
-   bool neg_hi[3];
+   bool neg_hi[3]; /* abs modifier, for v_mad_mix/v_fma_mix */
    uint8_t opsel_lo : 3;
    uint8_t opsel_hi : 3;
    bool clamp : 1;
@@ -1524,8 +1515,8 @@ static_assert(sizeof(Interp_instruction) == sizeof(Instruction) + 4, "Unexpected
 struct DS_instruction : public Instruction {
    memory_sync_info sync;
    bool gds;
-   int16_t offset0;
-   int8_t offset1;
+   uint16_t offset0;
+   uint8_t offset1;
    uint8_t padding;
 };
 static_assert(sizeof(DS_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
@@ -1776,7 +1767,7 @@ memory_sync_info get_sync_info(const Instruction* instr);
 
 bool is_dead(const std::vector<uint16_t>& uses, Instruction* instr);
 
-bool can_use_opsel(chip_class chip, aco_opcode op, int idx, bool high);
+bool can_use_opsel(chip_class chip, aco_opcode op, int idx);
 bool instr_is_16bit(chip_class chip, aco_opcode op);
 bool can_use_SDWA(chip_class chip, const aco_ptr<Instruction>& instr, bool pre_ra);
 bool can_use_DPP(const aco_ptr<Instruction>& instr, bool pre_ra, bool dpp8);
@@ -1811,13 +1802,11 @@ enum block_kind {
    block_kind_continue = 1 << 5,
    block_kind_break = 1 << 6,
    block_kind_continue_or_break = 1 << 7,
-   block_kind_discard = 1 << 8,
-   block_kind_branch = 1 << 9,
-   block_kind_merge = 1 << 10,
-   block_kind_invert = 1 << 11,
-   block_kind_uses_discard_if = 1 << 12,
+   block_kind_branch = 1 << 8,
+   block_kind_merge = 1 << 9,
+   block_kind_invert = 1 << 10,
+   block_kind_uses_discard = 1 << 12,
    block_kind_needs_lowering = 1 << 13,
-   block_kind_uses_demote = 1 << 14,
    block_kind_export_end = 1 << 15,
 };
 
@@ -1915,7 +1904,6 @@ struct Block {
    /* this information is needed for predecessors to blocks with phis when
     * moving out of ssa */
    bool scc_live_out = false;
-   PhysReg scratch_sgpr = PhysReg(); /* only needs to be valid if scc_live_out != false */
 
    Block() : index(0) {}
 };
@@ -2048,6 +2036,7 @@ struct DeviceInfo {
    unsigned simd_per_cu;
    bool has_fast_fma32 = false;
    bool has_mac_legacy32 = false;
+   bool fused_mad_mix = false;
    bool xnack_enabled = false;
    bool sram_ecc_enabled = false;
 };

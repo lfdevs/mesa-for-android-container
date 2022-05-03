@@ -934,6 +934,7 @@
       <value name="MINIMUM" value="2"/>
       <value name="MAXIMUM" value="3"/>
     </field>
+    <field name="Allow Low Quality LOD Calculation" start="120" end="120" type="bool"/>
   </struct>
 
   <struct name="SAMPLER_STATE_8X8_AVS_COEFFICIENTS" length="8">
@@ -7121,6 +7122,8 @@
   <register name="SAMPLER_MODE" length="1" num="0x0e18c">
     <field name="Headerless Message for Pre-emptable Contexts" start="5" end="5" type="bool"/>
     <field name="Headerless Message for Pre-emptable Contexts Mask" start="21" end="21" type="bool"/>
+    <field name="Enable Small PL" start="15" end="15" type="bool"/>
+    <field name="Enable Small PL Mask" start="31" end="31" type="bool"/>
   </register>
 
   <register name="SC_INSTDONE" length="1" num="0x7100">

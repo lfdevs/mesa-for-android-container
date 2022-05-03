@@ -343,10 +343,11 @@ agx_create_sampler_state(struct pipe_context *pctx,
    struct agx_bo *bo = agx_bo_create(dev, AGX_SAMPLER_LENGTH,
                                      AGX_MEMORY_TYPE_FRAMEBUFFER);
 
-   assert(state->min_lod == 0 && "todo: lod clamps");
    assert(state->lod_bias == 0 && "todo: lod bias");
 
    agx_pack(bo->ptr.cpu, SAMPLER, cfg) {
+      cfg.minimum_lod = state->min_lod;
+      cfg.maximum_lod = state->max_lod;
       cfg.magnify_linear = (state->mag_img_filter == PIPE_TEX_FILTER_LINEAR);
       cfg.minify_linear = (state->min_img_filter == PIPE_TEX_FILTER_LINEAR);
       cfg.mip_filter = agx_mip_filter_from_pipe(state->min_mip_filter);
@@ -367,8 +368,8 @@ agx_create_sampler_state(struct pipe_context *pctx,
 static void
 agx_delete_sampler_state(struct pipe_context *ctx, void *state)
 {
-   struct agx_bo *bo = state;
-   agx_bo_unreference(bo);
+   struct agx_sampler_state *so = state;
+   agx_bo_unreference(so->desc);
 }
 
 static void
@@ -424,6 +425,8 @@ agx_translate_texture_dimension(enum pipe_texture_target dim)
 {
    switch (dim) {
    case PIPE_TEXTURE_2D: return AGX_TEXTURE_DIMENSION_2D;
+   case PIPE_TEXTURE_2D_ARRAY: return AGX_TEXTURE_DIMENSION_2D_ARRAY;
+   case PIPE_TEXTURE_3D: return AGX_TEXTURE_DIMENSION_3D;
    case PIPE_TEXTURE_CUBE: return AGX_TEXTURE_DIMENSION_CUBE;
    default: unreachable("Unsupported texture dimension");
    }
@@ -461,6 +464,10 @@ agx_create_sampler_view(struct pipe_context *pctx,
    unsigned level = state->u.tex.first_level;
    assert(state->u.tex.first_layer == 0);
 
+   /* Must tile array textures */
+   assert((rsrc->modifier != DRM_FORMAT_MOD_LINEAR) ||
+          (state->u.tex.last_layer == state->u.tex.first_layer));
+
    /* Pack the descriptor into GPU memory */
    agx_pack(so->desc->ptr.cpu, TEXTURE, cfg) {
       cfg.dimension = agx_translate_texture_dimension(state->target);
@@ -474,8 +481,14 @@ agx_create_sampler_view(struct pipe_context *pctx,
       cfg.height = u_minify(texture->height0, level);
       cfg.levels = state->u.tex.last_level - level + 1;
       cfg.srgb = (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB);
-      cfg.address = rsrc->bo->ptr.gpu + rsrc->slices[level].offset;
+      cfg.address = agx_map_texture_gpu(rsrc, level, state->u.tex.first_layer);
+      cfg.unk_mipmapped = rsrc->mipmapped;
       cfg.unk_2 = false;
+
+      if (state->target == PIPE_TEXTURE_3D)
+         cfg.depth = u_minify(texture->depth0, level);
+      else
+         cfg.depth = state->u.tex.last_layer - state->u.tex.first_layer + 1;
 
       cfg.stride = (rsrc->modifier == DRM_FORMAT_MOD_LINEAR) ?
          (rsrc->slices[level].line_stride - 16) :
@@ -722,6 +735,10 @@ agx_set_framebuffer_state(struct pipe_context *pctx,
       struct agx_resource *tex = agx_resource(surf->texture);
       const struct util_format_description *desc =
          util_format_description(surf->format);
+      unsigned level = surf->u.tex.level;
+      unsigned layer = surf->u.tex.first_layer;
+
+      assert(surf->u.tex.last_layer == layer);
 
       agx_pack(ctx->render_target[i], RENDER_TARGET, cfg) {
          cfg.layout = agx_translate_layout(tex->modifier);
@@ -732,10 +749,15 @@ agx_set_framebuffer_state(struct pipe_context *pctx,
          cfg.swizzle_a = agx_channel_from_pipe(desc->swizzle[3]);
          cfg.width = state->width;
          cfg.height = state->height;
-         cfg.buffer = tex->bo->ptr.gpu;
+         cfg.level = surf->u.tex.level;
+         cfg.buffer = agx_map_texture_gpu(tex, 0, layer);
+
+         if (tex->mipmapped)
+            cfg.unk_55 = 0x8;
 
          cfg.stride = (tex->modifier == DRM_FORMAT_MOD_LINEAR) ?
-            (tex->slices[0].line_stride - 4) :
+            (tex->slices[level].line_stride - 4) :
+            tex->mipmapped ? AGX_RT_STRIDE_TILED_MIPMAPPED :
             AGX_RT_STRIDE_TILED;
       };
    }
@@ -867,6 +889,7 @@ agx_create_shader_state(struct pipe_context *pctx,
    return so;
 }
 
+/* Does not take ownership of key. Clones if necessary. */
 static bool
 agx_update_shader(struct agx_context *ctx, struct agx_compiled_shader **out,
                   enum pipe_shader_type stage, struct asahi_shader_key *key)
@@ -945,7 +968,13 @@ agx_update_shader(struct agx_context *ctx, struct agx_compiled_shader **out,
    ralloc_free(nir);
    util_dynarray_fini(&binary);
 
-   he = _mesa_hash_table_insert(so->variants, key, compiled);
+   /* key may be destroyed after we return, so clone it before using it as a
+    * hash table key. The clone is logically owned by the hash table.
+    */
+   struct asahi_shader_key *cloned_key = ralloc(so->variants, struct asahi_shader_key);
+   memcpy(cloned_key, key, sizeof(struct asahi_shader_key));
+
+   he = _mesa_hash_table_insert(so->variants, cloned_key, compiled);
    *out = he->data;
    return true;
 }
@@ -1197,14 +1226,22 @@ agx_build_reload_pipeline(struct agx_context *ctx, uint32_t code, struct pipe_su
       cfg.wrap_r = AGX_WRAP_CLAMP_TO_EDGE;
       cfg.pixel_coordinates = true;
       cfg.compare_func = AGX_COMPARE_FUNC_ALWAYS;
-      cfg.unk_2 = 0;
       cfg.unk_3 = 0;
    }
 
    agx_pack(texture.cpu, TEXTURE, cfg) {
       struct agx_resource *rsrc = agx_resource(surf->texture);
+      unsigned level = surf->u.tex.level;
+      unsigned layer = surf->u.tex.first_layer;
       const struct util_format_description *desc =
          util_format_description(surf->format);
+
+      /* To reduce shader variants, we always use a non-mipmapped 2D texture.
+       * For reloads of arrays, cube maps, etc -- we only logically reload a
+       * single 2D image. This does mean we need to be careful about
+       * width/height and address.
+       */
+      cfg.dimension = AGX_TEXTURE_DIMENSION_2D;
 
       cfg.layout = agx_translate_layout(rsrc->modifier);
       cfg.format = agx_pixel_format[surf->format].hw;
@@ -1212,15 +1249,14 @@ agx_build_reload_pipeline(struct agx_context *ctx, uint32_t code, struct pipe_su
       cfg.swizzle_g = agx_channel_from_pipe(desc->swizzle[1]);
       cfg.swizzle_b = agx_channel_from_pipe(desc->swizzle[2]);
       cfg.swizzle_a = agx_channel_from_pipe(desc->swizzle[3]);
-      cfg.width = surf->width;
-      cfg.height = surf->height;
+      cfg.width = u_minify(surf->width, level);
+      cfg.height = u_minify(surf->height, level);
       cfg.levels = 1;
       cfg.srgb = (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB);
-      cfg.address = rsrc->bo->ptr.gpu;
-      cfg.unk_2 = false;
+      cfg.address = agx_map_texture_gpu(rsrc, level, layer);
 
       cfg.stride = (rsrc->modifier == DRM_FORMAT_MOD_LINEAR) ?
-         (rsrc->slices[0].line_stride - 16) :
+         (rsrc->slices[level].line_stride - 16) :
          AGX_RT_STRIDE_TILED;
    }
 

@@ -132,10 +132,7 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
    }
 #endif
 
-   if (!DBG_ENABLED(ETNA_DBG_TGSI))
-      failed = etna_link_shader_nir(&link, vs, fs);
-   else
-      failed = etna_link_shader(&link, vs, fs);
+   failed = etna_link_shader(&link, vs, fs);
 
    if (failed) {
       /* linking failed: some fs inputs do not have corresponding
@@ -378,12 +375,12 @@ etna_shader_stage(struct etna_shader_variant *shader)
 }
 
 static void
-dump_shader_info(struct etna_shader_variant *v, struct pipe_debug_callback *debug)
+dump_shader_info(struct etna_shader_variant *v, struct util_debug_callback *debug)
 {
    if (!unlikely(etna_mesa_debug & ETNA_DBG_SHADERDB))
       return;
 
-   pipe_debug_message(debug, SHADER_INFO,
+   util_debug_message(debug, SHADER_INFO,
          "%s shader: %u instructions, %u temps, "
          "%u immediates, %u loops",
          etna_shader_stage(v),
@@ -433,7 +430,7 @@ fail:
 
 struct etna_shader_variant *
 etna_shader_variant(struct etna_shader *shader, struct etna_shader_key key,
-                   struct pipe_debug_callback *debug)
+                   struct util_debug_callback *debug)
 {
    struct etna_shader_variant *v;
 
@@ -468,11 +465,8 @@ etna_create_shader_state(struct pipe_context *pctx,
    shader->specs = &screen->specs;
    shader->compiler = screen->compiler;
 
-   if (!DBG_ENABLED(ETNA_DBG_TGSI))
-      shader->nir = (pss->type == PIPE_SHADER_IR_NIR) ? pss->ir.nir :
-                     tgsi_to_nir(pss->tokens, pctx->screen, false);
-   else
-      shader->tokens = tgsi_dup_tokens(pss->tokens);
+   shader->nir = (pss->type == PIPE_SHADER_IR_NIR) ? pss->ir.nir :
+                  tgsi_to_nir(pss->tokens, pctx->screen, false);
 
    etna_disk_cache_init_shader_key(compiler, shader);
 

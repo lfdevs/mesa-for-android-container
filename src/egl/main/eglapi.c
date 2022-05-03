@@ -629,6 +629,10 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
       if (disp->Options.ForceSoftware)
          _eglLog(_EGL_DEBUG, "Found 'LIBGL_ALWAYS_SOFTWARE' set, will use a CPU renderer");
 
+      const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
+      disp->Options.Zink = env && !strcmp(env, "zink");
+      disp->Options.ForceSoftware |= disp->Options.Zink;
+
       /**
        * Initialize the display using the driver's function.
        * If the initialisation fails, try again using only software rendering.

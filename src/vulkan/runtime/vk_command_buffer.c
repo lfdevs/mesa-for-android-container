@@ -23,16 +23,26 @@
 
 #include "vk_command_buffer.h"
 
+#include "vk_command_pool.h"
+#include "vk_common_entrypoints.h"
+#include "vk_device.h"
+
 VkResult
 vk_command_buffer_init(struct vk_command_buffer *command_buffer,
-                       struct vk_device *device)
+                       struct vk_command_pool *pool,
+                       VkCommandBufferLevel level)
 {
    memset(command_buffer, 0, sizeof(*command_buffer));
-   vk_object_base_init(device, &command_buffer->base,
+   vk_object_base_init(pool->base.device, &command_buffer->base,
                        VK_OBJECT_TYPE_COMMAND_BUFFER);
 
+   command_buffer->pool = pool;
+   command_buffer->level = level;
+   vk_cmd_queue_init(&command_buffer->cmd_queue, &pool->alloc);
    util_dynarray_init(&command_buffer->labels, NULL);
    command_buffer->region_begin = true;
+
+   list_add(&command_buffer->pool_link, &pool->command_buffers);
 
    return VK_SUCCESS;
 }
@@ -40,6 +50,8 @@ vk_command_buffer_init(struct vk_command_buffer *command_buffer,
 void
 vk_command_buffer_reset(struct vk_command_buffer *command_buffer)
 {
+   vk_command_buffer_reset_render_pass(command_buffer);
+   vk_cmd_queue_reset(&command_buffer->cmd_queue);
    util_dynarray_clear(&command_buffer->labels);
    command_buffer->region_begin = true;
 }
@@ -47,6 +59,25 @@ vk_command_buffer_reset(struct vk_command_buffer *command_buffer)
 void
 vk_command_buffer_finish(struct vk_command_buffer *command_buffer)
 {
+   list_del(&command_buffer->pool_link);
+   vk_command_buffer_reset_render_pass(command_buffer);
+   vk_cmd_queue_finish(&command_buffer->cmd_queue);
    util_dynarray_fini(&command_buffer->labels);
    vk_object_base_finish(&command_buffer->base);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdExecuteCommands(VkCommandBuffer commandBuffer,
+                             uint32_t commandBufferCount,
+                             const VkCommandBuffer *pCommandBuffers)
+{
+   VK_FROM_HANDLE(vk_command_buffer, primary, commandBuffer);
+   const struct vk_device_dispatch_table *disp =
+      primary->base.device->command_dispatch_table;
+
+   for (uint32_t i = 0; i < commandBufferCount; i++) {
+      VK_FROM_HANDLE(vk_command_buffer, secondary, pCommandBuffers[i]);
+
+      vk_cmd_queue_execute(&secondary->cmd_queue, commandBuffer, disp);
+   }
 }

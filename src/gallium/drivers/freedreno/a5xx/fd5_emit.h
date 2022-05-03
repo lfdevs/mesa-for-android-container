@@ -41,7 +41,7 @@ struct fd_ringbuffer;
 
 /* grouped together emit-state for prog/vertex/state emit: */
 struct fd5_emit {
-   struct pipe_debug_callback *debug;
+   struct util_debug_callback *debug;
    const struct fd_vertex_state *vtx;
    const struct fd5_program_state *prog;
    const struct pipe_draw_info *info;

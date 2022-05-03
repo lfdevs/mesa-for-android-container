@@ -133,11 +133,11 @@ extern "C" {
 #define SI_RESOURCE_FLAG_FLUSHED_DEPTH     (PIPE_RESOURCE_FLAG_DRV_PRIV << 1)
 #define SI_RESOURCE_FLAG_FORCE_MSAA_TILING (PIPE_RESOURCE_FLAG_DRV_PRIV << 2)
 #define SI_RESOURCE_FLAG_DISABLE_DCC       (PIPE_RESOURCE_FLAG_DRV_PRIV << 3)
-#define SI_RESOURCE_FLAG_UNMAPPABLE        (PIPE_RESOURCE_FLAG_DRV_PRIV << 4)
+#define SI_RESOURCE_FLAG_DRIVER_INTERNAL   (PIPE_RESOURCE_FLAG_DRV_PRIV << 4)
 #define SI_RESOURCE_FLAG_READ_ONLY         (PIPE_RESOURCE_FLAG_DRV_PRIV << 5)
 #define SI_RESOURCE_FLAG_32BIT             (PIPE_RESOURCE_FLAG_DRV_PRIV << 6)
 #define SI_RESOURCE_FLAG_CLEAR             (PIPE_RESOURCE_FLAG_DRV_PRIV << 7)
-/* gap */
+#define SI_RESOURCE_AUX_PLANE              (PIPE_RESOURCE_FLAG_DRV_PRIV << 8)
 /* Set a micro tile mode: */
 #define SI_RESOURCE_FLAG_FORCE_MICRO_TILE_MODE (PIPE_RESOURCE_FLAG_DRV_PRIV << 9)
 #define SI_RESOURCE_FLAG_MICRO_TILE_MODE_SHIFT (util_logbase2(PIPE_RESOURCE_FLAG_DRV_PRIV) + 10)
@@ -146,8 +146,6 @@ extern "C" {
 #define SI_RESOURCE_FLAG_MICRO_TILE_MODE_GET(x)                                                    \
    (((x) >> SI_RESOURCE_FLAG_MICRO_TILE_MODE_SHIFT) & 0x3)
 #define SI_RESOURCE_FLAG_UNCACHED          (PIPE_RESOURCE_FLAG_DRV_PRIV << 12)
-#define SI_RESOURCE_FLAG_DRIVER_INTERNAL   (PIPE_RESOURCE_FLAG_DRV_PRIV << 13)
-#define SI_RESOURCE_AUX_PLANE              (PIPE_RESOURCE_FLAG_DRV_PRIV << 14)
 
 enum si_has_gs {
    GS_OFF,
@@ -194,7 +192,6 @@ enum
 
    /* Shader compiler options the shader cache should be aware of: */
    DBG_FS_CORRECT_DERIVS_AFTER_KILL,
-   DBG_GISEL,
    DBG_W32_GE,
    DBG_W32_PS,
    DBG_W32_PS_DISCARD,
@@ -222,6 +219,9 @@ enum
    DBG_RESERVE_VMID,
    DBG_SHADOW_REGS,
    DBG_NO_FAST_DISPLAY_LIST,
+
+   /* Multimedia options: */
+   DBG_NO_EFC,
 
    /* 3D engine options: */
    DBG_NO_GFX,
@@ -969,8 +969,8 @@ struct si_context {
    void *cs_clear_buffer;
    void *cs_clear_buffer_rmw;
    void *cs_copy_buffer;
-   void *cs_copy_image;
-   void *cs_copy_image_1d_array;
+   void *cs_copy_image_1D;
+   void *cs_copy_image_2D;
    void *cs_clear_render_target;
    void *cs_clear_render_target_1d_array;
    void *cs_clear_12bytes_buffer;
@@ -978,7 +978,7 @@ struct si_context {
    void *cs_dcc_retile[32];
    void *cs_fmask_expand[3][2]; /* [log2(samples)-1][is_array] */
    struct si_screen *screen;
-   struct pipe_debug_callback debug;
+   struct util_debug_callback debug;
    struct ac_llvm_compiler compiler; /* only non-threaded compilation */
    struct si_shader_ctx_state fixed_func_tcs_shader;
    /* Offset 0: EOP flush number; Offset 4: GDS prim restart counter */
@@ -1146,7 +1146,6 @@ struct si_context {
    unsigned last_prim;
    unsigned last_multi_vgt_param;
    unsigned last_gs_out_prim;
-   int last_binning_enabled;
    unsigned current_vs_state;
    unsigned last_vs_state;
    enum pipe_prim_type current_rast_prim; /* primitive type after TES, GS */
@@ -1334,6 +1333,10 @@ struct pipe_resource *pipe_aligned_buffer_create(struct pipe_screen *screen, uns
                                                  unsigned usage, unsigned size, unsigned alignment);
 struct si_resource *si_aligned_buffer_create(struct pipe_screen *screen, unsigned flags,
                                              unsigned usage, unsigned size, unsigned alignment);
+struct pipe_resource *si_buffer_from_winsys_buffer(struct pipe_screen *screen,
+                                                   const struct pipe_resource *templ,
+                                                   struct pb_buffer *imported_buf,
+                                                   uint64_t offset);
 void si_replace_buffer_storage(struct pipe_context *ctx, struct pipe_resource *dst,
                                struct pipe_resource *src, unsigned num_rebinds,
                                uint32_t rebind_mask, uint32_t delete_buffer_id);
@@ -1513,6 +1516,7 @@ void si_suspend_queries(struct si_context *sctx);
 void si_resume_queries(struct si_context *sctx);
 
 /* si_shaderlib_nir.c */
+void *si_create_copy_image_cs(struct si_context *sctx, bool is_1D);
 void *si_create_dcc_retile_cs(struct si_context *sctx, struct radeon_surf *surf);
 void *gfx9_create_clear_dcc_msaa_cs(struct si_context *sctx, struct si_texture *tex);
 
@@ -1522,9 +1526,7 @@ void *si_get_blitter_vs(struct si_context *sctx, enum blitter_attrib_type type,
 void *si_create_fixed_func_tcs(struct si_context *sctx);
 void *si_create_dma_compute_shader(struct pipe_context *ctx, unsigned num_dwords_per_thread,
                                    bool dst_stream_cache_policy, bool is_copy);
-void *si_create_clear_buffer_rmw_cs(struct pipe_context *ctx);
-void *si_create_copy_image_compute_shader(struct pipe_context *ctx);
-void *si_create_copy_image_compute_shader_1d_array(struct pipe_context *ctx);
+void *si_create_clear_buffer_rmw_cs(struct si_context *sctx);
 void *si_create_dcc_decompress_cs(struct pipe_context *ctx);
 void *si_clear_render_target_shader(struct pipe_context *ctx);
 void *si_clear_render_target_shader_1d_array(struct pipe_context *ctx);
@@ -2037,11 +2039,6 @@ static inline unsigned si_num_vbos_in_user_sgprs(struct si_screen *sscreen)
 
 #define PRINT_ERR(fmt, args...)                                                                    \
    fprintf(stderr, "EE %s:%d %s - " fmt, __FILE__, __LINE__, __func__, ##args)
-
-struct pipe_resource *si_buffer_from_winsys_buffer(struct pipe_screen *screen,
-                                                   const struct pipe_resource *templ,
-                                                   struct pb_buffer *imported_buf,
-                                                   bool dedicated);
 
 #ifdef __cplusplus
 }

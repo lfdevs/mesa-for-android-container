@@ -196,7 +196,9 @@ realloc_bo(struct fd_resource *rsc, uint32_t size)
    struct pipe_resource *prsc = &rsc->b.b;
    struct fd_screen *screen = fd_screen(rsc->b.b.screen);
    uint32_t flags =
+      COND(rsc->layout.tile_mode, FD_BO_NOMAP) |
       COND(prsc->usage & PIPE_USAGE_STAGING, FD_BO_CACHED_COHERENT) |
+      COND(prsc->bind & PIPE_BIND_SHARED, FD_BO_SHARED) |
       COND(prsc->bind & PIPE_BIND_SCANOUT, FD_BO_SCANOUT);
    /* TODO other flags? */
 
@@ -956,17 +958,15 @@ fd_resource_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
    }
 
    if (usage & TC_TRANSFER_MAP_THREADED_UNSYNC) {
-      ptrans = slab_alloc(&ctx->transfer_pool_unsync);
+      ptrans = slab_zalloc(&ctx->transfer_pool_unsync);
    } else {
-      ptrans = slab_alloc(&ctx->transfer_pool);
+      ptrans = slab_zalloc(&ctx->transfer_pool);
    }
 
    if (!ptrans)
       return NULL;
 
-   /* slab_alloc_st() doesn't zero: */
    trans = fd_transfer(ptrans);
-   memset(trans, 0, sizeof(*trans));
 
    usage = improve_transfer_map_usage(ctx, rsc, usage, box);
 
@@ -1627,7 +1627,7 @@ fd_resource_screen_init(struct pipe_screen *pscreen)
    pscreen->resource_destroy = u_transfer_helper_resource_destroy;
 
    pscreen->transfer_helper =
-      u_transfer_helper_create(&transfer_vtbl, true, false, fake_rgtc, true);
+      u_transfer_helper_create(&transfer_vtbl, true, false, fake_rgtc, true, false);
 
    if (!screen->layout_resource_for_modifier)
       screen->layout_resource_for_modifier = fd_layout_resource_for_modifier;

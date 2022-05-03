@@ -567,7 +567,7 @@ build_vbo_state(struct fd6_emit *emit) assert_dt
          OUT_RING(ring, 0);
       } else {
          uint32_t off = vb->buffer_offset;
-         uint32_t size = fd_bo_size(rsc->bo) - off;
+         uint32_t size = vb->buffer.resource->width0 - off;
 
          OUT_RELOC(ring, rsc->bo, off, 0, 0);
          OUT_RING(ring, size);       /* VFD_FETCH[j].SIZE */

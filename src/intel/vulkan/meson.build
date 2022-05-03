@@ -49,6 +49,24 @@ intel_icd = custom_target(
   install : true,
 )
 
+if meson.version().version_compare('>= 0.58')
+  _dev_icdname = 'intel_devenv_icd.@0@.json'.format(host_machine.cpu())
+  custom_target(
+    'intel_devenv_icd',
+    input : [vk_icd_gen, vk_api_xml],
+    output : _dev_icdname,
+    command : [
+      prog_python, '@INPUT0@',
+      '--api-version', '1.3', '--xml', '@INPUT1@',
+      '--lib-path', meson.current_build_dir() / 'libvulkan_intel.so',
+      '--out', '@OUTPUT@',
+    ],
+    build_by_default : true,
+  )
+
+  devenv.append('VK_ICD_FILENAMES', meson.current_build_dir() / _dev_icdname)
+endif
+
 libanv_per_hw_ver_libs = []
 anv_per_hw_ver_files = files(
   'genX_blorp_exec.c',
@@ -104,7 +122,6 @@ libanv_files = files(
   'anv_nir_lower_multiview.c',
   'anv_nir_lower_ubo_loads.c',
   'anv_nir_lower_ycbcr_textures.c',
-  'anv_pass.c',
   'anv_perf.c',
   'anv_pipeline.c',
   'anv_pipeline_cache.c',

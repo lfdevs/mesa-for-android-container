@@ -46,6 +46,15 @@ if with_dri2
 endif
 
 libdri_c_args = []
+if with_gallium_zink
+  if get_option('glvnd')
+    libdri_c_args += '-DKOPPER_LIB_NAMES="libEGL_@0@ and libGLX_@0@"'.format(get_option('glvnd-vendor-name'))
+  else
+    libdri_c_args += '-DKOPPER_LIB_NAMES="libEGL and libGLX"'
+  endif
+  files_libdri += files('kopper.c')
+endif
+
 if with_gallium_softpipe
   libdri_c_args += '-DGALLIUM_SOFTPIPE'
 endif
@@ -55,7 +64,7 @@ libdri = static_library(
   files_libdri,
   include_directories : [
     inc_include, inc_util, inc_mesa, inc_mapi, inc_src, inc_gallium,
-    inc_gallium_aux, inc_util,
+    inc_gallium_aux, inc_util,  inc_gallium_drivers,
   ],
   c_args : [libdri_c_args],
   gnu_symbol_visibility : 'hidden',

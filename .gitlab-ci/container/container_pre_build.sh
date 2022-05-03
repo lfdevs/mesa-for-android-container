@@ -10,7 +10,7 @@ fi
 
 export CCACHE_COMPILERCHECK=content
 export CCACHE_COMPRESS=true
-export CCACHE_DIR=/cache/mesa/ccache
+export CCACHE_DIR=/cache/$CI_PROJECT_NAME/ccache
 export PATH=$CCACHE_PATH:$PATH
 
 # CMake ignores $PATH, so we have to force CC/GCC to the ccache versions.

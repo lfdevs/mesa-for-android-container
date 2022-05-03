@@ -99,6 +99,8 @@
 
 #define RADV_SHADER_ALLOC_ALIGNMENT      256
 #define RADV_SHADER_ALLOC_MIN_ARENA_SIZE (256 * 1024)
+/* 256 KiB << 5 = 8 MiB */
+#define RADV_SHADER_ALLOC_MAX_ARENA_SIZE_SHIFT 5u
 #define RADV_SHADER_ALLOC_MIN_SIZE_CLASS 8
 #define RADV_SHADER_ALLOC_MAX_SIZE_CLASS 15
 #define RADV_SHADER_ALLOC_NUM_FREE_LISTS                                                           \

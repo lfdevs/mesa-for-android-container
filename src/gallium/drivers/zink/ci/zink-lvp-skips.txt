@@ -33,3 +33,6 @@ spec@arb_compute_shader@local-id-explosion
 KHR-GL46.copy_image.functional
 KHR-GL46.texture_swizzle.smoke
 KHR-GL46.texture_swizzle.functional
+
+# something something crashes in stable ci somehow
+glx@glx-tfp

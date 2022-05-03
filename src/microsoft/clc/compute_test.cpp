@@ -33,7 +33,7 @@
 #include "util/u_debug.h"
 #include "clc_compiler.h"
 #include "compute_test.h"
-#include "dxcapi.h"
+#include "dxil_validator.h"
 
 #include <spirv-tools/libspirv.hpp>
 
@@ -722,59 +722,15 @@ PFN_D3D12_SERIALIZE_VERSIONED_ROOT_SIGNATURE ComputeTest::D3D12SerializeVersione
 bool
 validate_module(const struct clc_dxil_object &dxil)
 {
-   static HMODULE hmod = LoadLibrary("DXIL.DLL");
-   if (!hmod) {
-      /* Enabling experimental shaders allows us to run unsigned shader code,
-       * such as when under the debugger where we can't run the validator. */
-      if (debug_get_option_debug_compute() & COMPUTE_DEBUG_EXPERIMENTAL_SHADERS)
-         return true;
-      else
-         throw runtime_error("failed to load DXIL.DLL");
-   }
+   struct dxil_validator *val = dxil_create_validator(NULL);
+   char *err;
+   bool res = dxil_validate_module(val, dxil.binary.data,
+                                   dxil.binary.size, &err);
+   if (!res && err)
+      fprintf(stderr, "D3D12: validation failed: %s", err);
 
-   DxcCreateInstanceProc pfnDxcCreateInstance =
-      (DxcCreateInstanceProc)GetProcAddress(hmod, "DxcCreateInstance");
-   if (!pfnDxcCreateInstance)
-      throw runtime_error("failed to load DxcCreateInstance");
-
-   struct shader_blob : public IDxcBlob {
-      shader_blob(void *data, size_t size) : data(data), size(size) {}
-      LPVOID STDMETHODCALLTYPE GetBufferPointer() override { return data; }
-      SIZE_T STDMETHODCALLTYPE GetBufferSize() override { return size; }
-      HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **) override { return E_NOINTERFACE; }
-      ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
-      ULONG STDMETHODCALLTYPE Release() override { return 0; }
-      void *data;
-      size_t size;
-   } blob(dxil.binary.data, dxil.binary.size);
-
-   IDxcValidator *validator;
-   if (FAILED(pfnDxcCreateInstance(CLSID_DxcValidator, __uuidof(IDxcValidator),
-                                   (void **)&validator)))
-      throw runtime_error("failed to create IDxcValidator");
-
-   IDxcOperationResult *result;
-   if (FAILED(validator->Validate(&blob, DxcValidatorFlags_InPlaceEdit,
-                                  &result)))
-      throw runtime_error("Validate failed");
-
-   HRESULT hr;
-   if (FAILED(result->GetStatus(&hr)) ||
-       FAILED(hr)) {
-      IDxcBlobEncoding *message;
-      result->GetErrorBuffer(&message);
-      fprintf(stderr, "D3D12: validation failed: %*s\n",
-                   (int)message->GetBufferSize(),
-                   (char *)message->GetBufferPointer());
-      message->Release();
-      validator->Release();
-      result->Release();
-      return false;
-   }
-
-   validator->Release();
-   result->Release();
-   return true;
+   dxil_destroy_validator(val);
+   return res;
 }
 
 static void

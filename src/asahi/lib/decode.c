@@ -441,9 +441,18 @@ agxdecode_cmdstream(unsigned cmdbuf_handle, unsigned map_handle, bool verbose)
    /* Print the IOGPU stuff */
    agx_unpack(agxdecode_dump_stream, cmdbuf->ptr.cpu, IOGPU_HEADER, cmd);
    DUMP_UNPACKED(IOGPU_HEADER, cmd, "IOGPU Header\n");
-   assert(cmd.attachment_offset_1 == cmd.attachment_offset_2);
 
-   uint32_t *attachments = (uint32_t *) ((uint8_t *) cmdbuf->ptr.cpu + cmd.attachment_offset_1);
+   DUMP_CL(IOGPU_INTERNAL_PIPELINES, ((uint32_t *) cmdbuf->ptr.cpu) + 160, "Internal pipelines");
+   DUMP_CL(IOGPU_AUX_FRAMEBUFFER, ((uint32_t *) cmdbuf->ptr.cpu) + 228, "Aux Framebuffer");
+   DUMP_CL(IOGPU_CLEAR_Z_S, ((uint32_t *) cmdbuf->ptr.cpu) + 292, "Clear Z/S");
+
+   /* Guard against changes */
+   uint32_t zeroes[356 - 344] = { 0 };
+   assert(memcmp(((uint32_t *) cmdbuf->ptr.cpu) + 344, zeroes, 4 * (356 - 344)) == 0);
+
+   DUMP_CL(IOGPU_MISC, ((uint32_t *) cmdbuf->ptr.cpu) + 356, "Misc");
+
+   uint32_t *attachments = (uint32_t *) ((uint8_t *) cmdbuf->ptr.cpu + cmd.attachment_offset);
    unsigned attachment_count = attachments[3];
    for (unsigned i = 0; i < attachment_count; ++i) {
       uint32_t *ptr = attachments + 4 + (i * AGX_IOGPU_ATTACHMENT_LENGTH / 4);

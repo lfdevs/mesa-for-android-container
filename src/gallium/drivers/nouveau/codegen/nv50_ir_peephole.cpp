@@ -1835,9 +1835,6 @@ AlgebraicOpt::handleABS(Instruction *abs)
    if (!sub ||
        !prog->getTarget()->isOpSupported(OP_SAD, abs->dType))
       return;
-   // expect not to have mods yet, if we do, bail
-   if (sub->src(0).mod || sub->src(1).mod)
-      return;
    // hidden conversion ?
    ty = intTypeToSigned(sub->dType);
    if (abs->dType != abs->sType || ty != abs->sType)

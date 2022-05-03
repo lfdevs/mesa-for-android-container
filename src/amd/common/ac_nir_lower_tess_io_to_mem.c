@@ -505,7 +505,7 @@ hs_emit_write_tess_factors(nir_shader *shader,
    b->cursor = nir_after_block(last_block);
 
    nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
-                         .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_shader_out|nir_var_mem_shared);
+                         .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_mem_shared);
 
    nir_ssa_def *invocation_id = nir_load_invocation_id(b);
 

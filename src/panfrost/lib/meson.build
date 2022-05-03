@@ -21,7 +21,7 @@
 
 subdir('genxml')
 
-pixel_format_versions = ['6', '7']
+pixel_format_versions = ['6', '7', '9']
 libpanfrost_pixel_format = []
 
 foreach ver : pixel_format_versions

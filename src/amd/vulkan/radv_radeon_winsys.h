@@ -77,6 +77,14 @@ enum radeon_ctx_priority {
    RADEON_CTX_PRIORITY_REALTIME,
 };
 
+enum radeon_ctx_pstate {
+   RADEON_CTX_PSTATE_NONE = 0,
+   RADEON_CTX_PSTATE_STANDARD,
+   RADEON_CTX_PSTATE_MIN_SCLK,
+   RADEON_CTX_PSTATE_MIN_MCLK,
+   RADEON_CTX_PSTATE_PEAK,
+};
+
 enum radeon_value_id {
    RADEON_ALLOCATED_VRAM,
    RADEON_ALLOCATED_VRAM_VIS,
@@ -249,6 +257,8 @@ struct radeon_winsys {
    void (*ctx_destroy)(struct radeon_winsys_ctx *ctx);
 
    bool (*ctx_wait_idle)(struct radeon_winsys_ctx *ctx, enum ring_type ring_type, int ring_index);
+
+   int (*ctx_set_pstate)(struct radeon_winsys_ctx *ctx, uint32_t pstate);
 
    enum radeon_bo_domain (*cs_domain)(const struct radeon_winsys *ws);
 

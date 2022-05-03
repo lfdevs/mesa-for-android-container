@@ -131,12 +131,18 @@ schedule_barrier(compiler_context *ctx)
 
 M_LOAD(ld_attr_32, nir_type_uint32);
 M_LOAD(ld_vary_32, nir_type_uint32);
+M_LOAD(ld_ubo_u8, nir_type_uint32); /* mandatory extension to 32-bit */
+M_LOAD(ld_ubo_u16, nir_type_uint32);
 M_LOAD(ld_ubo_32, nir_type_uint32);
 M_LOAD(ld_ubo_64, nir_type_uint32);
 M_LOAD(ld_ubo_128, nir_type_uint32);
+M_LOAD(ld_u8, nir_type_uint8);
+M_LOAD(ld_u16, nir_type_uint16);
 M_LOAD(ld_32, nir_type_uint32);
 M_LOAD(ld_64, nir_type_uint32);
 M_LOAD(ld_128, nir_type_uint32);
+M_STORE(st_u8, nir_type_uint8);
+M_STORE(st_u16, nir_type_uint16);
 M_STORE(st_32, nir_type_uint32);
 M_STORE(st_64, nir_type_uint32);
 M_STORE(st_128, nir_type_uint32);
@@ -208,45 +214,76 @@ glsl_type_size(const struct glsl_type *type, bool bindless)
         return glsl_count_attribute_slots(type, false);
 }
 
-/* Lower fdot2 to a vector multiplication followed by channel addition  */
 static bool
-midgard_nir_lower_fdot2_instr(nir_builder *b, nir_instr *instr, void *data)
+midgard_nir_lower_global_load_instr(nir_builder *b, nir_instr *instr, void *data)
 {
-        if (instr->type != nir_instr_type_alu)
+        if (instr->type != nir_instr_type_intrinsic)
                 return false;
 
-        nir_alu_instr *alu = nir_instr_as_alu(instr);
-        if (alu->op != nir_op_fdot2)
+        nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+        if (intr->intrinsic != nir_intrinsic_load_global &&
+            intr->intrinsic != nir_intrinsic_load_shared)
                 return false;
 
-        b->cursor = nir_before_instr(&alu->instr);
+        unsigned compsz = nir_dest_bit_size(intr->dest);
+        unsigned totalsz = compsz * nir_dest_num_components(intr->dest);
+        /* 8, 16, 32, 64 and 128 bit loads don't need to be lowered */
+        if (util_bitcount(totalsz) < 2 && totalsz <= 128)
+                return false;
 
-        nir_ssa_def *src0 = nir_ssa_for_alu_src(b, alu, 0);
-        nir_ssa_def *src1 = nir_ssa_for_alu_src(b, alu, 1);
+        b->cursor = nir_before_instr(instr);
 
-        nir_ssa_def *product = nir_fmul(b, src0, src1);
+        assert(intr->src[0].is_ssa);
+        nir_ssa_def *addr = intr->src[0].ssa;
 
-        nir_ssa_def *sum = nir_fadd(b,
-                                    nir_channel(b, product, 0),
-                                    nir_channel(b, product, 1));
+        nir_ssa_def *comps[MIR_VEC_COMPONENTS];
+        unsigned ncomps = 0;
 
-        /* Replace the fdot2 with this sum */
-        nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa, sum);
+        while (totalsz) {
+                unsigned loadsz = MIN2(1 << (util_last_bit(totalsz) - 1), 128);
+                unsigned loadncomps = loadsz / compsz;
+
+                nir_ssa_def *load;
+                if (intr->intrinsic == nir_intrinsic_load_global) {
+                        load = nir_load_global(b, addr, compsz / 8, loadncomps, compsz);
+                } else {
+                        assert(intr->intrinsic == nir_intrinsic_load_shared);
+                        nir_intrinsic_instr *shared_load =
+                                nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_shared);
+                        shared_load->num_components = loadncomps;
+                        shared_load->src[0] = nir_src_for_ssa(addr);
+                        nir_intrinsic_set_align(shared_load, compsz / 8, 0);
+                        nir_intrinsic_set_base(shared_load, nir_intrinsic_base(intr));
+                        nir_ssa_dest_init(&shared_load->instr, &shared_load->dest,
+                                          shared_load->num_components, compsz, NULL);
+                        nir_builder_instr_insert(b, &shared_load->instr);
+                        load = &shared_load->dest.ssa;
+                }
+
+                for (unsigned i = 0; i < loadncomps; i++)
+                        comps[ncomps++] = nir_channel(b, load, i);
+
+                totalsz -= loadsz;
+                addr = nir_iadd(b, addr, nir_imm_intN_t(b, loadsz / 8, addr->bit_size));
+        }
+
+        assert(ncomps == nir_dest_num_components(intr->dest));
+        nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_vec(b, comps, ncomps));
 
         return true;
 }
 
 static bool
-midgard_nir_lower_fdot2(nir_shader *shader)
+midgard_nir_lower_global_load(nir_shader *shader)
 {
         return nir_shader_instructions_pass(shader,
-                                            midgard_nir_lower_fdot2_instr,
+                                            midgard_nir_lower_global_load_instr,
                                             nir_metadata_block_index | nir_metadata_dominance,
                                             NULL);
 }
 
 static bool
-mdg_is_64(const nir_instr *instr, const void *_unused)
+mdg_should_scalarize(const nir_instr *instr, const void *_unused)
 {
         const nir_alu_instr *alu = nir_instr_as_alu(instr);
 
@@ -254,6 +291,7 @@ mdg_is_64(const nir_instr *instr, const void *_unused)
                 return true;
 
         switch (alu->op) {
+        case nir_op_fdot2:
         case nir_op_umul_high:
         case nir_op_imul_high:
                 return true;
@@ -284,11 +322,8 @@ midgard_vectorize_filter(const nir_instr *instr, void *data)
         return true;
 }
 
-
-/* Flushes undefined values to zero */
-
 static void
-optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend)
+optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend, bool is_blit)
 {
         bool progress;
         unsigned lower_flrp =
@@ -313,12 +348,12 @@ optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend)
 
         NIR_PASS(progress, nir, nir_lower_tex, &lower_tex_options);
 
-        /* Must lower fdot2 after tex is lowered */
-        NIR_PASS(progress, nir, midgard_nir_lower_fdot2);
 
-        /* T720 is broken. */
-
-        if (quirks & MIDGARD_BROKEN_LOD)
+        /* TEX_GRAD fails to apply sampler descriptor settings on some
+         * implementations, requiring a lowering. However, blit shaders do not
+         * use the affected settings and should skip the workaround.
+         */
+        if ((quirks & MIDGARD_BROKEN_LOD) && !is_blit)
                 NIR_PASS_V(nir, midgard_nir_lod_errata);
 
         /* Midgard image ops coordinates are 16-bit instead of 32-bit */
@@ -328,6 +363,7 @@ optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend)
         NIR_PASS(progress, nir, pan_lower_sample_pos);
 
         NIR_PASS(progress, nir, midgard_nir_lower_algebraic_early);
+        NIR_PASS_V(nir, nir_lower_alu_to_scalar, mdg_should_scalarize, NULL);
 
         do {
                 progress = false;
@@ -372,7 +408,7 @@ optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend)
                          midgard_vectorize_filter, NULL);
         } while (progress);
 
-        NIR_PASS_V(nir, nir_lower_alu_to_scalar, mdg_is_64, NULL);
+        NIR_PASS_V(nir, nir_lower_alu_to_scalar, mdg_should_scalarize, NULL);
 
         /* Run after opts so it can hit more */
         if (!is_blend)
@@ -1127,10 +1163,13 @@ mir_set_intr_mask(nir_instr *instr, midgard_instruction *ins, bool is_read)
 
         if (is_read) {
                 nir_mask = mask_of(nir_intrinsic_dest_components(intr));
-                dsize = nir_dest_bit_size(intr->dest);
+
+                /* Extension is mandatory for 8/16-bit loads */
+                dsize = nir_dest_bit_size(intr->dest) == 64 ? 64 : 32;
         } else {
                 nir_mask = nir_intrinsic_write_mask(intr);
-                dsize = 32;
+                dsize = OP_IS_COMMON_STORE(ins->op) ?
+                        nir_src_bit_size(intr->src[0]) : 32;
         }
 
         /* Once we have the NIR mask, we need to normalize to work in 32-bit space */
@@ -1161,7 +1200,11 @@ emit_ubo_read(
         unsigned bitsize = dest_size * nr_comps;
 
         /* Pick the smallest intrinsic to avoid out-of-bounds reads */
-        if (bitsize <= 32)
+        if (bitsize <= 8)
+                ins = m_ld_ubo_u8(dest, 0);
+        else if (bitsize <= 16)
+                ins = m_ld_ubo_u16(dest, 0);
+        else if (bitsize <= 32)
                 ins = m_ld_ubo_32(dest, 0);
         else if (bitsize <= 64)
                 ins = m_ld_ubo_64(dest, 0);
@@ -1215,19 +1258,55 @@ emit_global(
                 unsigned bitsize = nir_dest_bit_size(intr->dest) *
                         nir_dest_num_components(intr->dest);
 
-                if (bitsize <= 32)
-                        ins = m_ld_32(srcdest, 0);
-                else if (bitsize <= 64)
-                        ins = m_ld_64(srcdest, 0);
-                else if (bitsize <= 128)
-                        ins = m_ld_128(srcdest, 0);
-                else
-                        unreachable("Invalid global read size");
+                switch (bitsize) {
+                case 8: ins = m_ld_u8(srcdest, 0); break;
+                case 16: ins = m_ld_u16(srcdest, 0); break;
+                case 32: ins = m_ld_32(srcdest, 0); break;
+                case 64: ins = m_ld_64(srcdest, 0); break;
+                case 128: ins = m_ld_128(srcdest, 0); break;
+                default: unreachable("Invalid global read size");
+                }
+
+                mir_set_intr_mask(instr, &ins, is_read);
+
+                /* For anything not aligned on 32bit, make sure we write full
+                 * 32 bits registers. */
+                if (bitsize & 31) {
+                        unsigned comps_per_32b = 32 / nir_dest_bit_size(intr->dest);
+
+                        for (unsigned c = 0; c < 4 * comps_per_32b; c += comps_per_32b) {
+                                if (!(ins.mask & BITFIELD_RANGE(c, comps_per_32b)))
+                                        continue;
+
+                                unsigned base = ~0;
+                                for (unsigned i = 0; i < comps_per_32b; i++) {
+                                        if (ins.mask & BITFIELD_BIT(c + i)) {
+                                                base = ins.swizzle[0][c + i];
+                                                break;
+                                        }
+                                }
+
+                                assert(base != ~0);
+
+                                for (unsigned i = 0; i < comps_per_32b; i++) {
+                                        if (!(ins.mask & BITFIELD_BIT(c + i))) {
+                                                ins.swizzle[0][c + i] = base + i;
+                                                ins.mask |= BITFIELD_BIT(c + i);
+                                        }
+                                        assert(ins.swizzle[0][c + i] == base + i);
+                                }
+                        }
+
+                }
         } else {
                 unsigned bitsize = nir_src_bit_size(intr->src[0]) *
                         nir_src_num_components(intr->src[0]);
 
-                if (bitsize <= 32)
+                if (bitsize == 8)
+                        ins = m_st_u8(srcdest, 0);
+                else if (bitsize == 16)
+                        ins = m_st_u16(srcdest, 0);
+                else if (bitsize <= 32)
                         ins = m_st_32(srcdest, 0);
                 else if (bitsize <= 64)
                         ins = m_st_64(srcdest, 0);
@@ -1235,10 +1314,11 @@ emit_global(
                         ins = m_st_128(srcdest, 0);
                 else
                         unreachable("Invalid global store size");
+
+                mir_set_intr_mask(instr, &ins, is_read);
         }
 
         mir_set_offset(ctx, &ins, offset, seg);
-        mir_set_intr_mask(instr, &ins, is_read);
 
         /* Set a valid swizzle for masked out components */
         assert(ins.mask);
@@ -2326,9 +2406,6 @@ static void
 emit_texop_native(compiler_context *ctx, nir_tex_instr *instr,
                   unsigned midgard_texop)
 {
-        /* TODO */
-        //assert (!instr->sampler);
-
         nir_dest *dest = &instr->dest;
 
         int texture_index = instr->texture_index;
@@ -2460,8 +2537,7 @@ emit_jump(compiler_context *ctx, nir_jump_instr *instr)
         }
 
         default:
-                DBG("Unknown jump type %d\n", instr->type);
-                break;
+                unreachable("Unhandled jump");
         }
 }
 
@@ -3079,7 +3155,7 @@ midgard_compile_shader_nir(nir_shader *nir,
 
         if (ctx->stage == MESA_SHADER_VERTEX) {
                 NIR_PASS_V(nir, nir_lower_viewport_transform);
-                NIR_PASS_V(nir, nir_lower_point_size, 1.0, 1024.0);
+                NIR_PASS_V(nir, nir_lower_point_size, 1.0, 0.0);
         }
 
         NIR_PASS_V(nir, nir_lower_var_copies);
@@ -3101,14 +3177,17 @@ midgard_compile_shader_nir(nir_shader *nir,
 
         NIR_PASS_V(nir, pan_nir_lower_64bit_intrin);
 
+        NIR_PASS_V(nir, midgard_nir_lower_global_load);
+
         /* Optimisation passes */
 
-        optimise_nir(nir, ctx->quirks, inputs->is_blend);
+        optimise_nir(nir, ctx->quirks, inputs->is_blend, inputs->is_blit);
 
-        if ((midgard_debug & MIDGARD_DBG_SHADERS) &&
-            ((midgard_debug & MIDGARD_DBG_INTERNAL) || !nir->info.internal)) {
+        bool skip_internal = nir->info.internal;
+        skip_internal &= !(midgard_debug & MIDGARD_DBG_INTERNAL);
+
+        if (midgard_debug & MIDGARD_DBG_SHADERS && !skip_internal)
                 nir_print_shader(nir, stdout);
-        }
 
         info->tls_size = nir->scratch_size;
 
@@ -3174,9 +3253,15 @@ midgard_compile_shader_nir(nir_shader *nir,
          * pipeline registers which are harder to track */
         mir_analyze_helper_requirements(ctx);
 
+        if (midgard_debug & MIDGARD_DBG_SHADERS && !skip_internal)
+                mir_print_shader(ctx);
+
         /* Schedule! */
         midgard_schedule_program(ctx);
         mir_ra(ctx);
+
+        if (midgard_debug & MIDGARD_DBG_SHADERS && !skip_internal)
+                mir_print_shader(ctx);
 
         /* Analyze after scheduling since this is order-dependent */
         mir_analyze_helper_terminate(ctx);
@@ -3230,8 +3315,7 @@ midgard_compile_shader_nir(nir_shader *nir,
 
         info->ubo_mask = ctx->ubo_mask & ((1 << ctx->nir->info.num_ubos) - 1);
 
-        if ((midgard_debug & MIDGARD_DBG_SHADERS) &&
-            ((midgard_debug & MIDGARD_DBG_INTERNAL) || !nir->info.internal)) {
+        if (midgard_debug & MIDGARD_DBG_SHADERS && !skip_internal) {
                 disassemble_midgard(stdout, binary->data,
                                     binary->size, inputs->gpu_id,
                                     midgard_debug & MIDGARD_DBG_VERBOSE);

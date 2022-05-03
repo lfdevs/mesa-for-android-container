@@ -269,7 +269,7 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
       const char *name = sid_strings + packet3_table[i].name_offset;
 
       if (op == PKT3_SET_CONTEXT_REG || op == PKT3_SET_CONFIG_REG || op == PKT3_SET_UCONFIG_REG ||
-          op == PKT3_SET_UCONFIG_REG_INDEX || op == PKT3_SET_SH_REG)
+          op == PKT3_SET_UCONFIG_REG_INDEX || op == PKT3_SET_SH_REG || op == PKT3_SET_SH_REG_INDEX)
          fprintf(f, "%s%s%s%s:\n", O_COLOR_CYAN, name, predicate, O_COLOR_RESET);
       else
          fprintf(f, "%s%s%s%s:\n", O_COLOR_GREEN, name, predicate, O_COLOR_RESET);
@@ -289,6 +289,7 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
       ac_parse_set_reg_packet(f, count, CIK_UCONFIG_REG_OFFSET, ib);
       break;
    case PKT3_SET_SH_REG:
+   case PKT3_SET_SH_REG_INDEX:
       ac_parse_set_reg_packet(f, count, SI_SH_REG_OFFSET, ib);
       break;
    case PKT3_ACQUIRE_MEM:

@@ -216,10 +216,8 @@ void
 zink_descriptor_util_init_fbfetch(struct zink_context *ctx);
 bool
 zink_descriptor_util_push_layouts_get(struct zink_context *ctx, struct zink_descriptor_layout **dsls, struct zink_descriptor_layout_key **layout_keys);
-void
-zink_descriptor_util_init_null_set(struct zink_context *ctx, VkDescriptorSet desc_set);
 VkImageLayout
-zink_descriptor_util_image_layout_eval(const struct zink_resource *res, bool is_compute);
+zink_descriptor_util_image_layout_eval(const struct zink_context *ctx, const struct zink_resource *res, bool is_compute);
 void
 zink_descriptors_init_bindless(struct zink_context *ctx);
 void

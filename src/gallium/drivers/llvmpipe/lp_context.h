@@ -90,7 +90,7 @@ struct llvmpipe_context {
 
    struct pipe_shader_buffer ssbos[PIPE_SHADER_TYPES][LP_MAX_TGSI_SHADER_BUFFERS];
    struct pipe_image_view images[PIPE_SHADER_TYPES][LP_MAX_TGSI_SHADER_IMAGES];
-
+   uint32_t fs_ssbo_write_mask;
    unsigned num_samplers[PIPE_SHADER_TYPES];
    unsigned num_sampler_views[PIPE_SHADER_TYPES];
    unsigned num_images[PIPE_SHADER_TYPES];

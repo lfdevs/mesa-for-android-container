@@ -23,6 +23,10 @@
 
 #include "lvp_wsi.h"
 
+#include "vk_fence.h"
+#include "vk_semaphore.h"
+#include "vk_sync_dummy.h"
+
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 lvp_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {
@@ -69,11 +73,28 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_AcquireNextImage2KHR(
                                                     pAcquireInfo,
                                                     pImageIndex);
 
-   LVP_FROM_HANDLE(lvp_fence, fence, pAcquireInfo->fence);
+   VK_FROM_HANDLE(vk_fence, fence, pAcquireInfo->fence);
+   VK_FROM_HANDLE(vk_semaphore, sem, pAcquireInfo->semaphore);
+   if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
+      VkResult sync_res;
+      if (fence) {
+         vk_fence_reset_temporary(&device->vk, fence);
+         sync_res = vk_sync_create(&device->vk, &vk_sync_dummy_type,
+                                   0 /* flags */, 0 /* initial_value */,
+                                   &fence->temporary);
+         if (sync_res != VK_SUCCESS)
+            return sync_res;
+      }
 
-   if (fence && (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)) {
-      fence->timeline = p_atomic_inc_return(&device->queue.timeline);
-      util_queue_add_job(&device->queue.queue, fence, &fence->fence, queue_thread_noop, NULL, 0);
+      if (sem) {
+         vk_semaphore_reset_temporary(&device->vk, sem);
+         sync_res = vk_sync_create(&device->vk, &vk_sync_dummy_type,
+                                   0 /* flags */, 0 /* initial_value */,
+                                   &sem->temporary);
+         if (sync_res != VK_SUCCESS)
+            return sync_res;
+      }
    }
+
    return result;
 }

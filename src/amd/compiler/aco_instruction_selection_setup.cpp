@@ -515,6 +515,10 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_op_i2f32:
                case nir_op_i2f64:
                case nir_op_pack_half_2x16_split:
+               case nir_op_pack_unorm_2x16:
+               case nir_op_pack_snorm_2x16:
+               case nir_op_pack_uint_2x16:
+               case nir_op_pack_sint_2x16:
                case nir_op_unpack_half_2x16_split_x:
                case nir_op_unpack_half_2x16_split_y:
                case nir_op_fddx:
@@ -530,7 +534,6 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_op_cube_face_index_amd:
                case nir_op_cube_face_coord_amd:
                case nir_op_sad_u8x4:
-               case nir_op_iadd_sat:
                case nir_op_udot_4x8_uadd:
                case nir_op_sdot_4x8_iadd:
                case nir_op_udot_4x8_uadd_sat:
@@ -554,6 +557,8 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_op_b2f32:
                case nir_op_mov: break;
                case nir_op_iadd:
+               case nir_op_iadd_sat:
+               case nir_op_uadd_sat:
                case nir_op_isub:
                case nir_op_imul:
                case nir_op_imin:
@@ -612,7 +617,7 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_load_ring_tess_offchip_offset_amd:
                case nir_intrinsic_load_ring_esgs_amd:
                case nir_intrinsic_load_ring_es2gs_offset_amd:
-               case nir_intrinsic_image_deref_samples:
+               case nir_intrinsic_bindless_image_samples:
                case nir_intrinsic_has_input_vertex_amd:
                case nir_intrinsic_has_input_primitive_amd:
                case nir_intrinsic_load_workgroup_num_input_vertices_amd:
@@ -626,9 +631,11 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_load_viewport_x_scale:
                case nir_intrinsic_load_viewport_y_scale:
                case nir_intrinsic_load_viewport_x_offset:
-               case nir_intrinsic_load_viewport_y_offset: type = RegType::sgpr; break;
+               case nir_intrinsic_load_viewport_y_offset:
+               case nir_intrinsic_load_force_vrs_rates_amd:
+               case nir_intrinsic_load_scalar_arg_amd:
+               case nir_intrinsic_load_smem_amd: type = RegType::sgpr; break;
                case nir_intrinsic_load_sample_id:
-               case nir_intrinsic_load_sample_mask_in:
                case nir_intrinsic_load_input:
                case nir_intrinsic_load_output:
                case nir_intrinsic_load_input_vertex:
@@ -667,31 +674,31 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_ssbo_atomic_comp_swap:
                case nir_intrinsic_ssbo_atomic_fmin:
                case nir_intrinsic_ssbo_atomic_fmax:
-               case nir_intrinsic_global_atomic_add:
-               case nir_intrinsic_global_atomic_imin:
-               case nir_intrinsic_global_atomic_umin:
-               case nir_intrinsic_global_atomic_imax:
-               case nir_intrinsic_global_atomic_umax:
-               case nir_intrinsic_global_atomic_and:
-               case nir_intrinsic_global_atomic_or:
-               case nir_intrinsic_global_atomic_xor:
-               case nir_intrinsic_global_atomic_exchange:
-               case nir_intrinsic_global_atomic_comp_swap:
-               case nir_intrinsic_global_atomic_fmin:
-               case nir_intrinsic_global_atomic_fmax:
-               case nir_intrinsic_image_deref_atomic_add:
-               case nir_intrinsic_image_deref_atomic_umin:
-               case nir_intrinsic_image_deref_atomic_imin:
-               case nir_intrinsic_image_deref_atomic_umax:
-               case nir_intrinsic_image_deref_atomic_imax:
-               case nir_intrinsic_image_deref_atomic_and:
-               case nir_intrinsic_image_deref_atomic_or:
-               case nir_intrinsic_image_deref_atomic_xor:
-               case nir_intrinsic_image_deref_atomic_exchange:
-               case nir_intrinsic_image_deref_atomic_comp_swap:
-               case nir_intrinsic_image_deref_atomic_fmin:
-               case nir_intrinsic_image_deref_atomic_fmax:
-               case nir_intrinsic_image_deref_size:
+               case nir_intrinsic_global_atomic_add_amd:
+               case nir_intrinsic_global_atomic_imin_amd:
+               case nir_intrinsic_global_atomic_umin_amd:
+               case nir_intrinsic_global_atomic_imax_amd:
+               case nir_intrinsic_global_atomic_umax_amd:
+               case nir_intrinsic_global_atomic_and_amd:
+               case nir_intrinsic_global_atomic_or_amd:
+               case nir_intrinsic_global_atomic_xor_amd:
+               case nir_intrinsic_global_atomic_exchange_amd:
+               case nir_intrinsic_global_atomic_comp_swap_amd:
+               case nir_intrinsic_global_atomic_fmin_amd:
+               case nir_intrinsic_global_atomic_fmax_amd:
+               case nir_intrinsic_bindless_image_atomic_add:
+               case nir_intrinsic_bindless_image_atomic_umin:
+               case nir_intrinsic_bindless_image_atomic_imin:
+               case nir_intrinsic_bindless_image_atomic_umax:
+               case nir_intrinsic_bindless_image_atomic_imax:
+               case nir_intrinsic_bindless_image_atomic_and:
+               case nir_intrinsic_bindless_image_atomic_or:
+               case nir_intrinsic_bindless_image_atomic_xor:
+               case nir_intrinsic_bindless_image_atomic_exchange:
+               case nir_intrinsic_bindless_image_atomic_comp_swap:
+               case nir_intrinsic_bindless_image_atomic_fmin:
+               case nir_intrinsic_bindless_image_atomic_fmax:
+               case nir_intrinsic_bindless_image_size:
                case nir_intrinsic_shared_atomic_add:
                case nir_intrinsic_shared_atomic_imin:
                case nir_intrinsic_shared_atomic_umin:
@@ -715,8 +722,10 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_load_packed_passthrough_primitive_amd:
                case nir_intrinsic_gds_atomic_add_amd:
                case nir_intrinsic_bvh64_intersect_ray_amd:
-               case nir_intrinsic_load_cull_small_prim_precision_amd: type = RegType::vgpr; break;
+               case nir_intrinsic_load_cull_small_prim_precision_amd:
+               case nir_intrinsic_load_vector_arg_amd: type = RegType::vgpr; break;
                case nir_intrinsic_load_shared:
+               case nir_intrinsic_load_shared2_amd:
                   /* When the result of these loads is only used by cross-lane instructions,
                    * it is beneficial to use a VGPR destination. This is because this allows
                    * to put the s_waitcnt further down, which decreases latency.
@@ -739,10 +748,7 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_load_sbt_amd:
                case nir_intrinsic_load_ubo:
                case nir_intrinsic_load_ssbo:
-               case nir_intrinsic_load_global:
-               case nir_intrinsic_load_global_constant:
-               case nir_intrinsic_vulkan_resource_index:
-               case nir_intrinsic_get_ssbo_size:
+               case nir_intrinsic_load_global_amd:
                   type = nir_dest_is_divergent(intrinsic->dest) ? RegType::vgpr : RegType::sgpr;
                   break;
                case nir_intrinsic_load_view_index:

@@ -902,8 +902,10 @@ vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
          if (attrib_list[i].value.type != VAGenericValueTypePointer)
             return VA_STATUS_ERROR_INVALID_PARAMETER;
          modifier_list = attrib_list[i].value.value.p;
-         modifiers = modifier_list->modifiers;
-         modifiers_count = modifier_list->num_modifiers;
+         if (modifier_list != NULL) {
+            modifiers = modifier_list->modifiers;
+            modifiers_count = modifier_list->num_modifiers;
+         }
          break;
 #endif
       case VASurfaceAttribUsageHint:

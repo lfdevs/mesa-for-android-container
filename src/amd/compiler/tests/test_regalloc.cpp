@@ -136,13 +136,13 @@ BEGIN_TEST(regalloc.precolor.vector.collect)
    if (!setup_cs("s2 s1 s1", GFX10))
       return;
 
-   //! s1: %tmp2_2:s[0], s1: %tmp1_2:s[1], s2: %tmp0_2:s[2-3] = p_parallelcopy %tmp2:s[3], %tmp1:s[2], %tmp0:s[0-1]
+   //! s1: %tmp1_2:s[0], s1: %tmp2_2:s[1], s2: %tmp0_2:s[2-3] = p_parallelcopy %tmp1:s[2], %tmp2:s[3], %tmp0:s[0-1]
    //! p_unit_test %tmp0_2:s[2-3]
    Operand op(inputs[0]);
    op.setFixed(PhysReg(2));
    bld.pseudo(aco_opcode::p_unit_test, op);
 
-   //! p_unit_test %tmp1_2:s[1], %tmp2_2:s[0]
+   //! p_unit_test %tmp1_2:s[0], %tmp2_2:s[1]
    bld.pseudo(aco_opcode::p_unit_test, inputs[1], inputs[2]);
 
    finish_ra_test(ra_test_policy());
@@ -283,6 +283,60 @@ BEGIN_TEST(regalloc.linear_vgpr.live_range_split.get_reg_create_vector)
 
    //! p_unit_test %lin_tmp2:v[2]
    bld.pseudo(aco_opcode::p_unit_test, lin_tmp);
+
+   finish_ra_test(ra_test_policy());
+END_TEST
+
+BEGIN_TEST(regalloc.branch_def_phis_at_merge_block)
+   //>> p_startpgm
+   if (!setup_cs("", GFX10))
+      return;
+
+   //! s2: %_:s[2-3] = p_branch
+   bld.branch(aco_opcode::p_branch, bld.def(s2));
+
+   //! BB1
+   //! /* logical preds: / linear preds: BB0, / kind: uniform, */
+   bld.reset(program->create_and_insert_block());
+   program->blocks[1].linear_preds.push_back(0);
+
+   //! s2: %tmp:s[0-1] = p_linear_phi 0
+   Temp tmp = bld.pseudo(aco_opcode::p_linear_phi, bld.def(s2), Operand::c64(0u));
+
+   //! p_unit_test %tmp:s[0-1]
+   bld.pseudo(aco_opcode::p_unit_test, tmp);
+
+   finish_ra_test(ra_test_policy());
+END_TEST
+
+BEGIN_TEST(regalloc.branch_def_phis_at_branch_block)
+   //>> p_startpgm
+   if (!setup_cs("", GFX10))
+      return;
+
+   //! s2: %tmp:s[0-1] = p_unit_test
+   Temp tmp = bld.pseudo(aco_opcode::p_unit_test, bld.def(s2));
+
+   //! s2: %_:s[2-3] = p_cbranch_z %0:scc
+   bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), Operand(scc, s1));
+
+   //! BB1
+   //! /* logical preds: / linear preds: BB0, / kind: */
+   bld.reset(program->create_and_insert_block());
+   program->blocks[1].linear_preds.push_back(0);
+
+   //! p_unit_test %tmp:s[0-1]
+   bld.pseudo(aco_opcode::p_unit_test, tmp);
+   bld.branch(aco_opcode::p_branch, bld.def(s2));
+
+   bld.reset(program->create_and_insert_block());
+   program->blocks[2].linear_preds.push_back(0);
+
+   bld.branch(aco_opcode::p_branch, bld.def(s2));
+
+   bld.reset(program->create_and_insert_block());
+   program->blocks[3].linear_preds.push_back(1);
+   program->blocks[3].linear_preds.push_back(2);
 
    finish_ra_test(ra_test_policy());
 END_TEST

@@ -1,0 +1,7 @@
+# Sometimes crashes, e.g. https://gitlab.freedesktop.org/kusma/mesa/-/jobs/4109419
+dEQP-GLES31.functional.compute.basic.empty
+
+# Take too long to run
+KHR-GL43.texture_swizzle.smoke
+KHR-GL43.texture_swizzle.functional
+KHR-GL43.copy_image.functional

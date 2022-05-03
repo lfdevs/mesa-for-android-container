@@ -98,6 +98,14 @@ meson.build @dbaker @eric
 /src/*/vulkan/*_wsi_display.c @keithp
 
 
+######
+# CI #
+######
+
+# Broadcom
+/src/broadcom/ci/ @jasuarez @chema
+
+
 ###########
 # Drivers #
 ###########
@@ -106,8 +114,18 @@ meson.build @dbaker @eric
 /src/asahi/ @alyssa
 /src/gallium/drivers/asahi/ @alyssa
 
+# Broadcom
+/src/broadcom/ @itoral @apinheiro
+/src/gallium/drivers/v3d/ @itoral @chema @jasuarez
+/src/gallium/drivers/vc4/ @itoral @chema @jasuarez
+
 # Freedreno
 /src/gallium/drivers/freedreno/ @robclark
+
+# Imagination
+/include/drm-uapi/pvr_drm.h @CreativeCylon @frankbinns @rajnesh-kanwal
+/src/imagination/ @CreativeCylon @frankbinns @rajnesh-kanwal
+/src/imagination/rogue/ @simon-perretta-img
 
 # Intel
 /include/drm-uapi/i915_drm.h @kwg @llandwerlin @jekstrand @idr

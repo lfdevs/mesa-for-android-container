@@ -274,7 +274,6 @@ spec@egl_mesa_configless_context@basic,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 spec@ext_framebuffer_object@fbo-alphatest-nocolor,Fail
 spec@ext_framebuffer_object@fbo-alphatest-nocolor-ff,Fail
-spec@ext_framebuffer_object@fbo-blending-format-quirks,Fail
 spec@ext_framebuffer_object@fbo-blending-snorm,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index1-blit,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index1-copypixels,Fail
@@ -306,6 +305,18 @@ spec@ext_render_snorm@render@format 0x8f94 read fail,Fail
 spec@ext_render_snorm@render@format 0x8f95 read fail,Fail
 spec@ext_render_snorm@render@format 0x8f97 read fail,Fail
 spec@ext_transform_feedback2@draw-auto,Fail
+
+# Probably regressed with !14643
+spec@ext_transform_feedback@builtin-varyings gl_clipdistance,Fail
+spec@ext_transform_feedback@builtin-varyings gl_clipdistance[1]-no-subscript,Fail
+spec@ext_transform_feedback@builtin-varyings gl_clipdistance[2]-no-subscript,Fail
+spec@ext_transform_feedback@builtin-varyings gl_clipdistance[3]-no-subscript,Fail
+spec@ext_transform_feedback@builtin-varyings gl_clipdistance[4]-no-subscript,Fail
+spec@ext_transform_feedback@builtin-varyings gl_clipdistance[5]-no-subscript,Fail
+spec@ext_transform_feedback@builtin-varyings gl_clipdistance[6]-no-subscript,Fail
+spec@ext_transform_feedback@builtin-varyings gl_clipdistance[7]-no-subscript,Fail
+spec@ext_transform_feedback@builtin-varyings gl_clipdistance[8]-no-subscript,Fail
+
 spec@ext_transform_feedback@generatemipmap prims_generated,Fail
 spec@ext_transform_feedback@immediate-reuse,Fail
 spec@ext_transform_feedback@immediate-reuse-index-buffer,Fail
@@ -360,6 +371,11 @@ spec@ext_transform_feedback@tessellation triangles wireframe,Fail
 # MESA: error: ir3_ra() failed!
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-giant-temp-array,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-vs-giant-temp-array,Fail
+
+# Probably regressed with !14643
+spec@glsl-1.20@execution@clipping@fixed-clip-enables,Fail
+spec@glsl-1.20@execution@clipping@vs-clip-vertex-enables,Fail
+spec@glsl-1.30@execution@clipping@vs-clip-distance-enables,Fail
 
 spec@glsl-1.30@execution@texelfetch fs sampler3d 1x129x9-98x129x9,Fail
 spec@glsl-1.30@execution@texelfetch fs sampler3d 98x129x1-98x129x9,Fail

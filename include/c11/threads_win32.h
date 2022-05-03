@@ -228,6 +228,7 @@ cnd_broadcast(cnd_t *cond)
 static inline void
 cnd_destroy(cnd_t *cond)
 {
+    (void)cond;
     assert(cond != NULL);
     // do nothing
 }
@@ -456,6 +457,7 @@ thrd_join(thrd_t thr, int *res)
 static inline void
 thrd_sleep(const struct timespec *time_point, struct timespec *remaining)
 {
+    (void)remaining;
     assert(time_point);
     assert(!remaining); /* not implemented */
     Sleep((DWORD)impl_timespec2msec(time_point));

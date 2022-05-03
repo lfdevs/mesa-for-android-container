@@ -15,11 +15,11 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * FELIX KUEHLING, OR ANY OTHER CONTRIBUTORS BE LIABLE FOR ANY CLAIM, 
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR 
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
+ * FELIX KUEHLING, OR ANY OTHER CONTRIBUTORS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
  * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  */
 /**
  * \file driconf.h
@@ -249,6 +249,10 @@
 #define DRI_CONF_ALLOW_INVALID_GLX_DESTROY_WINDOW(def) \
    DRI_CONF_OPT_B(allow_invalid_glx_destroy_window, def, \
                   "Allow passing an invalid window into glXDestroyWindow")
+
+#define DRI_CONF_KEEP_NATIVE_WINDOW_GLX_DRAWABLE(def) \
+   DRI_CONF_OPT_B(keep_native_window_glx_drawable, def, \
+                  "Keep GLX drawable created from native window when switch context")
 
 #define DRI_CONF_OVERRIDE_VRAM_SIZE() \
    DRI_CONF_OPT_I(override_vram_size, -1, -1, 2147483647, \
@@ -571,5 +575,13 @@
 #define DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(def) \
   DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
                  "Disable anisotropic filtering for single level images")
+
+/**
+ * \brief ANV specific configuration options
+ */
+
+#define DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(def) \
+   DRI_CONF_OPT_B(anv_assume_full_subgroups, def, \
+                  "Allow assuming full subgroups requirement even when it's not specified explicitly")
 
 #endif

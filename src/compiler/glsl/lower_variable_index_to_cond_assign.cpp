@@ -56,58 +56,6 @@
 
 using namespace ir_builder;
 
-/**
- * Generate a comparison value for a block of indices
- *
- * Lowering passes for non-constant indexing of arrays, matrices, or vectors
- * can use this to generate blocks of index comparison values.
- *
- * \param instructions  List where new instructions will be appended
- * \param index         \c ir_variable containing the desired index
- * \param base          Base value for this block of comparisons
- * \param components    Number of unique index values to compare.  This must
- *                      be on the range [1, 4].
- * \param mem_ctx       ralloc memory context to be used for all allocations.
- *
- * \returns
- * An \c ir_variable containing the per-component comparison results.  This
- * must be dereferenced per use.
- */
-ir_variable *
-compare_index_block(ir_factory &body, ir_variable *index,
-                    unsigned base, unsigned components)
-{
-   assert(index->type->is_scalar());
-   assert(index->type->base_type == GLSL_TYPE_INT ||
-          index->type->base_type == GLSL_TYPE_UINT);
-   assert(components >= 1 && components <= 4);
-
-   ir_rvalue *const broadcast_index = components > 1
-      ? swizzle(index, SWIZZLE_XXXX, components)
-      : operand(index).val;
-
-   /* Compare the desired index value with the next block of four indices.
-    */
-   ir_constant_data test_indices_data;
-   memset(&test_indices_data, 0, sizeof(test_indices_data));
-   test_indices_data.i[0] = base;
-   test_indices_data.i[1] = base + 1;
-   test_indices_data.i[2] = base + 2;
-   test_indices_data.i[3] = base + 3;
-
-   ir_constant *const test_indices =
-      new(body.mem_ctx) ir_constant(broadcast_index->type, &test_indices_data);
-
-   ir_rvalue *const condition_val = equal(broadcast_index, test_indices);
-
-   ir_variable *const condition = body.make_temp(condition_val->type,
-                                                 "dereference_condition");
-
-   body.emit(assign(condition, condition_val));
-
-   return condition;
-}
-
 static inline bool
 is_array_or_matrix(const ir_rvalue *ir)
 {
@@ -193,7 +141,7 @@ struct assignment_generator
    {
    }
 
-   void generate(unsigned i, ir_rvalue* condition, ir_factory &body) const
+   void generate(unsigned i, ir_factory &body) const
    {
       /* Clone the old r-value in its entirety.  Then replace any occurances of
        * the old variable index with the new constant index.
@@ -204,12 +152,9 @@ struct assignment_generator
       element->accept(&r);
       assert(r.progress);
 
-      /* Generate a conditional assignment to (or from) the constant indexed
-       * array dereference.
-       */
       ir_assignment *const assignment = (is_write)
-         ? assign(element, this->var, condition, write_mask)
-         : assign(this->var, element, condition);
+         ? assign(element, this->var, write_mask)
+         : assign(this->var, element);
 
       body.emit(assignment);
    }
@@ -222,58 +167,13 @@ struct switch_generator
    const TFunction& generator;
 
    ir_variable* index;
-   unsigned linear_sequence_max_length;
-   unsigned condition_components;
 
    void *mem_ctx;
 
-   switch_generator(const TFunction& generator, ir_variable *index,
-                    unsigned linear_sequence_max_length,
-                    unsigned condition_components)
-      : generator(generator), index(index),
-        linear_sequence_max_length(linear_sequence_max_length),
-        condition_components(condition_components)
+   switch_generator(const TFunction& generator, ir_variable *index)
+      : generator(generator), index(index)
    {
       this->mem_ctx = ralloc_parent(index);
-   }
-
-   void linear_sequence(unsigned begin, unsigned end, ir_factory &body)
-   {
-      if (begin == end)
-         return;
-
-      /* If the array access is a read, read the first element of this subregion
-       * unconditionally.  The remaining tests will possibly overwrite this
-       * value with one of the other array elements.
-       *
-       * This optimization cannot be done for writes because it will cause the
-       * first element of the subregion to be written possibly *in addition* to
-       * one of the other elements.
-       */
-      unsigned first;
-      if (!this->generator.is_write) {
-         this->generator.generate(begin, 0, body);
-         first = begin + 1;
-      } else {
-         first = begin;
-      }
-
-      for (unsigned i = first; i < end; i += 4) {
-         const unsigned comps = MIN2(condition_components, end - i);
-         ir_variable *const cond = compare_index_block(body, index, i, comps);
-
-         if (comps == 1) {
-            this->generator.generate(i,
-                                     operand(cond).val,
-                                     body);
-         } else {
-            for (unsigned j = 0; j < comps; j++) {
-               this->generator.generate(i + j,
-                                        swizzle(cond, j, 1),
-                                        body);
-            }
-         }
-      }
    }
 
    void bisect(unsigned begin, unsigned end, ir_factory &body)
@@ -298,11 +198,14 @@ struct switch_generator
 
    void generate(unsigned begin, unsigned end, ir_factory &body)
    {
+      if (begin == end)
+         return;
+
       unsigned length = end - begin;
-      if (length <= this->linear_sequence_max_length)
-         return linear_sequence(begin, end, body);
+      if (length == 1)
+         generator.generate(begin, body);
       else
-         return bisect(begin, end, body);
+         bisect(begin, end, body);
    }
 };
 
@@ -476,24 +379,9 @@ public:
          ag.is_write = false;
       }
 
-      switch_generator sg(ag, index, 4, 4);
+      switch_generator sg(ag, index);
 
-      /* If the original assignment has a condition, respect that original
-       * condition!  This is acomplished by wrapping the new conditional
-       * assignments in an if-statement that uses the original condition.
-       */
-      if (orig_assign != NULL && orig_assign->condition != NULL) {
-         /* No need to clone the condition because the IR that it hangs on is
-          * going to be removed from the instruction sequence.
-          */
-         ir_if *if_stmt = new(mem_ctx) ir_if(orig_assign->condition);
-         ir_factory then_body(&if_stmt->then_instructions, body.mem_ctx);
-
-         sg.generate(0, length, then_body);
-         body.emit(if_stmt);
-      } else {
-         sg.generate(0, length, body);
-      }
+      sg.generate(0, length, body);
 
       base_ir->insert_before(&list);
       return var;

@@ -343,6 +343,53 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
 }
 
 static bool
+copy_ubo_to_uniform(nir_shader *nir, const struct ir3_const_state *const_state)
+{
+   const struct ir3_ubo_analysis_state *state = &const_state->ubo_state;
+
+   if (state->num_enabled == 0 ||
+       (state->num_enabled == 1 && !state->range[0].ubo.bindless &&
+        state->range[0].ubo.block == const_state->constant_data_ubo))
+      return false;
+
+   nir_function_impl *preamble = nir_shader_get_preamble(nir);
+   nir_builder _b, *b = &_b;
+   nir_builder_init(b, preamble);
+   b->cursor = nir_after_cf_list(&preamble->body);
+
+   for (unsigned i = 0; i < state->num_enabled; i++) {
+      const struct ir3_ubo_range *range = &state->range[i];
+
+      /* The constant_data UBO is pushed in a different path from normal
+       * uniforms, and the state is setup earlier so it makes more sense to let
+       * the CP do it for us.
+       */
+      if (!range->ubo.bindless &&
+          range->ubo.block == const_state->constant_data_ubo)
+         continue;
+
+      nir_ssa_def *ubo = nir_imm_int(b, range->ubo.block);
+      if (range->ubo.bindless) {
+         ubo = nir_bindless_resource_ir3(b, 32, ubo,
+                                         .desc_set = range->ubo.bindless_base);
+      }
+
+      /* ldc.k has a range of only 256, but there are 512 vec4 constants.
+       * Therefore we may have to split a large copy in two.
+       */
+      unsigned size = (range->end - range->start) / 16;
+      for (unsigned offset = 0; offset < size; offset += 256) {
+         nir_copy_ubo_to_uniform_ir3(b, ubo, nir_imm_int(b, range->start / 16 +
+                                                         offset),
+                                     .base = range->offset / 4 + offset * 4,
+                                     .range = MIN2(size - offset, 256));
+      }
+   }
+
+   return true;
+}
+
+static bool
 instr_is_load_ubo(nir_instr *instr)
 {
    if (instr->type != nir_instr_type_intrinsic)
@@ -369,7 +416,9 @@ ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader_variant *v)
     * allocation of the driver params' const space, because UBO pointers can
     * be driver params but this pass usually eliminatings them.
     */
-   struct ir3_const_state worst_case_const_state = {};
+   struct ir3_const_state worst_case_const_state = {
+      .preamble_size = const_state->preamble_size,
+   };
    ir3_setup_const_state(nir, v, &worst_case_const_state);
    const uint32_t max_upload =
       (ir3_max_const(v) - worst_case_const_state.offsets.immediate) * 16;
@@ -377,8 +426,9 @@ ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader_variant *v)
    memset(state, 0, sizeof(*state));
 
    uint32_t upload_remaining = max_upload;
+   bool push_ubos = compiler->push_ubo_with_preamble;
    nir_foreach_function (function, nir) {
-      if (function->impl) {
+      if (function->impl && (!push_ubos || !function->is_preamble)) {
          nir_foreach_block (block, function->impl) {
             nir_foreach_instr (instr, block) {
                if (instr_is_load_ubo(instr))
@@ -408,7 +458,7 @@ ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader_variant *v)
       assert(offset <= max_upload);
       offset += range_size;
    }
-   state->size = offset;
+   state->size = offset - v->shader->num_reserved_user_consts * 16;
 }
 
 bool
@@ -424,8 +474,15 @@ ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v)
 
    int num_ubos = 0;
    bool progress = false;
+   bool has_preamble = false;
+   bool push_ubos = compiler->push_ubo_with_preamble;
    nir_foreach_function (function, nir) {
       if (function->impl) {
+         if (function->is_preamble && push_ubos) {
+            has_preamble = true;
+            nir_metadata_preserve(function->impl, nir_metadata_all);
+            continue;
+         }
          nir_builder builder;
          nir_builder_init(&builder, function->impl);
          nir_foreach_block (block, function->impl) {
@@ -446,8 +503,11 @@ ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v)
     * Vulkan's bindless, we don't use the num_ubos field, so we can leave it
     * incremented.
     */
-   if (nir->info.first_ubo_is_default_ubo)
+   if (nir->info.first_ubo_is_default_ubo && !push_ubos && !has_preamble)
       nir->info.num_ubos = num_ubos;
+
+   if (compiler->has_preamble && push_ubos)
+      progress |= copy_ubo_to_uniform(nir, const_state);
 
    return progress;
 }

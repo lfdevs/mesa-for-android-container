@@ -242,7 +242,7 @@ static void test_modifier(const struct radeon_info *info,
                G_0098F8_NUM_SHADER_ENGINES_GFX9(info->gb_addr_config),
          .se = G_0098F8_NUM_SHADER_ENGINES_GFX9(info->gb_addr_config),
          .banks_or_pkrs = info->chip_class >= GFX10 ?
-            (info->gb_addr_config) : G_0098F8_NUM_BANKS(info->gb_addr_config)
+            G_0098F8_NUM_PKRS(info->gb_addr_config) : G_0098F8_NUM_BANKS(info->gb_addr_config)
       };
 
       struct radeon_surf surf = (struct radeon_surf) {

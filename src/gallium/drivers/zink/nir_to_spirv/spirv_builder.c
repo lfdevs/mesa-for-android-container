@@ -62,11 +62,12 @@ spirv_buffer_prepare(struct spirv_buffer *b, void *mem_ctx, size_t needed)
    return spirv_buffer_grow(b, mem_ctx, needed);
 }
 
-static inline void
+static inline uint32_t
 spirv_buffer_emit_word(struct spirv_buffer *b, uint32_t word)
 {
    assert(b->num_words < b->room);
-   b->words[b->num_words++] = word;
+   b->words[b->num_words] = word;
+   return b->num_words++;
 }
 
 static int
@@ -149,7 +150,7 @@ spirv_builder_emit_entry_point(struct spirv_builder *b,
         spirv_buffer_emit_word(&b->entry_points, interfaces[i]);
 }
 
-void
+uint32_t
 spirv_builder_emit_exec_mode_literal(struct spirv_builder *b, SpvId entry_point,
                                      SpvExecutionMode exec_mode, uint32_t param)
 {
@@ -157,7 +158,7 @@ spirv_builder_emit_exec_mode_literal(struct spirv_builder *b, SpvId entry_point,
    spirv_buffer_emit_word(&b->exec_modes, SpvOpExecutionMode | (4 << 16));
    spirv_buffer_emit_word(&b->exec_modes, entry_point);
    spirv_buffer_emit_word(&b->exec_modes, exec_mode);
-   spirv_buffer_emit_word(&b->exec_modes, param);
+   return spirv_buffer_emit_word(&b->exec_modes, param);
 }
 
 void
@@ -1272,7 +1273,7 @@ spirv_builder_type_image(struct spirv_builder *b, SpvId sampled_type,
       sampled_type, dim, depth ? 1 : 0, arrayed ? 1 : 0, ms ? 1 : 0, sampled,
       image_format
    };
-   if (sampled == 2 && ms)
+   if (sampled == 2 && ms && dim != SpvDimSubpassData)
       spirv_builder_emit_cap(b, SpvCapabilityStorageImageMultisample);
    return get_type_def(b, SpvOpTypeImage, args, ARRAY_SIZE(args));
 }
@@ -1613,7 +1614,8 @@ spirv_builder_get_num_words(struct spirv_builder *b)
 
 size_t
 spirv_builder_get_words(struct spirv_builder *b, uint32_t *words,
-                        size_t num_words, uint32_t spirv_version)
+                        size_t num_words, uint32_t spirv_version,
+                        uint32_t *tcs_vertices_out_word)
 {
    assert(num_words >= spirv_builder_get_num_words(b));
 
@@ -1643,10 +1645,16 @@ spirv_builder_get_words(struct spirv_builder *b, uint32_t *words,
       &b->instructions
    };
 
+   bool find_tcs_vertices_out = *tcs_vertices_out_word > 0;
    for (int i = 0; i < ARRAY_SIZE(buffers); ++i) {
       const struct spirv_buffer *buffer = buffers[i];
-      for (int j = 0; j < buffer->num_words; ++j)
+      for (int j = 0; j < buffer->num_words; ++j) {
+         if (find_tcs_vertices_out && buffer == &b->exec_modes && *tcs_vertices_out_word == j) {
+            *tcs_vertices_out_word = written;
+            find_tcs_vertices_out = false;
+         }
          words[written++] = buffer->words[j];
+      }
    }
 
    assert(written == spirv_builder_get_num_words(b));

@@ -26,7 +26,7 @@
 
 #include "amd_family.h"
 #include "compiler/shader_enums.h"
-#include "llvm-c/Core.h"
+#include <llvm-c/Core.h>
 #include "llvm-c/TargetMachine.h"
 
 #include <stdbool.h>

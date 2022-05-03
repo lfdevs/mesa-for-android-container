@@ -422,7 +422,7 @@ void si_preload_gs_rings(struct si_shader_context *ctx)
 struct si_shader *si_generate_gs_copy_shader(struct si_screen *sscreen,
                                              struct ac_llvm_compiler *compiler,
                                              struct si_shader_selector *gs_selector,
-                                             struct pipe_debug_callback *debug)
+                                             struct util_debug_callback *debug)
 {
    struct si_shader_context ctx;
    struct si_shader *shader;

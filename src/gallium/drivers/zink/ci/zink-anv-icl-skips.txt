@@ -1,0 +1,16 @@
+#waiver!
+dEQP-GLES2.functional.rasterization.interpolation.basic.line_loop_wide
+dEQP-GLES2.functional.rasterization.interpolation.basic.line_strip_wide
+dEQP-GLES2.functional.rasterization.interpolation.basic.lines_wide
+dEQP-GLES2.functional.rasterization.interpolation.projected.line_loop_wide
+dEQP-GLES2.functional.rasterization.interpolation.projected.line_strip_wide
+dEQP-GLES2.functional.rasterization.interpolation.projected.lines_wide
+dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.lines_wide
+dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.lines_wide
+dEQP-GLES3.functional.rasterization.interpolation.basic.line_loop_wide
+dEQP-GLES3.functional.rasterization.interpolation.basic.line_strip_wide
+dEQP-GLES3.functional.rasterization.interpolation.basic.lines_wide
+dEQP-GLES3.functional.rasterization.interpolation.projected.line_loop_wide
+dEQP-GLES3.functional.rasterization.interpolation.projected.line_strip_wide
+dEQP-GLES3.functional.rasterization.interpolation.projected.lines_wide
+

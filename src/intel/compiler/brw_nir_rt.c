@@ -294,7 +294,11 @@ lower_ray_walk_intrinsics(nir_shader *shader,
              * optimization passes.
              */
             nir_push_if(&b, nir_imm_true(&b));
-            nir_trace_ray_continue_intel(&b);
+            nir_trace_ray_intel(&b,
+                                nir_load_btd_global_arg_addr_intel(&b),
+                                nir_imm_int(&b, BRW_RT_BVH_LEVEL_OBJECT),
+                                nir_imm_int(&b, GEN_RT_TRACE_RAY_CONTINUE),
+                                .synchronous = false);
             nir_jump(&b, nir_jump_halt);
             nir_pop_if(&b, NULL);
             progress = true;
@@ -313,7 +317,11 @@ lower_ray_walk_intrinsics(nir_shader *shader,
             }
             nir_push_else(&b, NULL);
             {
-               nir_trace_ray_commit_intel(&b);
+               nir_trace_ray_intel(&b,
+                                   nir_load_btd_global_arg_addr_intel(&b),
+                                   nir_imm_int(&b, BRW_RT_BVH_LEVEL_OBJECT),
+                                   nir_imm_int(&b, GEN_RT_TRACE_RAY_COMMIT),
+                                   .synchronous = false);
                nir_jump(&b, nir_jump_halt);
             }
             nir_pop_if(&b, NULL);

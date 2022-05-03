@@ -26,7 +26,7 @@
 #include "d3d12_context.h"
 #include "d3d12_compiler.h"
 #include "d3d12_nir_passes.h"
-#include "nir_to_dxil.h"
+#include "d3d12_screen.h"
 
 static uint32_t
 hash_tcs_variant_key(const void *key)
@@ -58,10 +58,25 @@ d3d12_tcs_variant_cache_destroy(struct d3d12_context *ctx)
    _mesa_hash_table_destroy(ctx->tcs_variant_cache, delete_entry);
 }
 
+static void
+copy_vars(nir_builder *b, nir_deref_instr *dst, nir_deref_instr *src)
+{
+   assert(glsl_get_bare_type(dst->type) == glsl_get_bare_type(src->type));
+   if (glsl_type_is_struct(dst->type)) {
+      for (unsigned i = 0; i < glsl_get_length(dst->type); ++i) {
+         copy_vars(b, nir_build_deref_struct(b, dst, i), nir_build_deref_struct(b, src, i));
+      }
+   } else if (glsl_type_is_array_or_matrix(dst->type)) {
+      copy_vars(b, nir_build_deref_array_wildcard(b, dst), nir_build_deref_array_wildcard(b, src));
+   } else {
+      nir_copy_deref(b, dst, src);
+   }
+}
+
 static struct d3d12_shader_selector *
 create_tess_ctrl_shader_variant(struct d3d12_context *ctx, struct d3d12_tcs_variant_key *key)
 {
-   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_TESS_CTRL, dxil_get_nir_compiler_options(), "passthrough");
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_TESS_CTRL, &d3d12_screen(ctx->base.screen)->nir_options, "passthrough");
    nir_shader *nir = b.shader;
 
    nir_ssa_def *invocation_id = nir_load_invocation_id(&b);
@@ -88,9 +103,8 @@ create_tess_ctrl_shader_variant(struct d3d12_context *ctx, struct d3d12_tcs_vari
          for (unsigned i = 0; i < key->vertices_out; i++) {
             nir_if *start_block = nir_push_if(&b, nir_ieq(&b, invocation_id, nir_imm_int(&b, i)));
             nir_deref_instr *in_array_var = nir_build_deref_array(&b, nir_build_deref_var(&b, in), invocation_id);
-            nir_ssa_def *load = nir_load_deref(&b, in_array_var);
             nir_deref_instr *out_array_var = nir_build_deref_array_imm(&b, nir_build_deref_var(&b, out), i);
-            nir_store_deref(&b, out_array_var, load, 0xff);
+            copy_vars(&b, out_array_var, in_array_var);
             nir_pop_if(&b, start_block);
          }
       }
@@ -119,6 +133,7 @@ create_tess_ctrl_shader_variant(struct d3d12_context *ctx, struct d3d12_tcs_vari
 
    nir->info.tess.tcs_vertices_out = key->vertices_out;
    nir_validate_shader(nir, "created");
+   NIR_PASS_V(nir, nir_lower_var_copies);
 
    struct pipe_shader_state templ;
 

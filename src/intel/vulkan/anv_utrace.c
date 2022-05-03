@@ -307,6 +307,7 @@ anv_device_utrace_init(struct anv_device *device)
 void
 anv_device_utrace_finish(struct anv_device *device)
 {
+   u_trace_context_process(&device->ds.trace_context, true);
    intel_ds_device_fini(&device->ds);
 }
 

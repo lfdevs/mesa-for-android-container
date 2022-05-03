@@ -134,32 +134,32 @@ test_disk_cache_create(void *mem_ctx, const char *cache_dir_name)
    int err;
 
    /* Before doing anything else, ensure that with
-    * MESA_GLSL_CACHE_DISABLE set to true, that disk_cache_create returns NULL.
+    * MESA_SHADER_CACHE_DISABLE set to true, that disk_cache_create returns NULL.
     */
-   setenv("MESA_GLSL_CACHE_DISABLE", "true", 1);
+   setenv("MESA_SHADER_CACHE_DISABLE", "true", 1);
    cache = disk_cache_create("test", "make_check", 0);
-   EXPECT_EQ(cache, nullptr) << "disk_cache_create with MESA_GLSL_CACHE_DISABLE set";
+   EXPECT_EQ(cache, nullptr) << "disk_cache_create with MESA_SHADER_CACHE_DISABLE set";
 
-   unsetenv("MESA_GLSL_CACHE_DISABLE");
+   unsetenv("MESA_SHADER_CACHE_DISABLE");
 
 #ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
    /* With SHADER_CACHE_DISABLE_BY_DEFAULT, ensure that with
-    * MESA_GLSL_CACHE_DISABLE set to nothing, disk_cache_create returns NULL.
+    * MESA_SHADER_CACHE_DISABLE set to nothing, disk_cache_create returns NULL.
     */
-   unsetenv("MESA_GLSL_CACHE_DISABLE");
+   unsetenv("MESA_SHADER_CACHE_DISABLE");
    cache = disk_cache_create("test", "make_check", 0);
    EXPECT_EQ(cache, nullptr)
-      << "disk_cache_create with MESA_GLSL_CACHE_DISABLE unset "
+      << "disk_cache_create with MESA_SHADER_CACHE_DISABLE unset "
          "and SHADER_CACHE_DISABLE_BY_DEFAULT build option";
 
    /* For remaining tests, ensure that the cache is enabled. */
-   setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
+   setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
 #endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
 
    /* For the first real disk_cache_create() clear these environment
     * variables to test creation of cache in home directory.
     */
-   unsetenv("MESA_GLSL_CACHE_DIR");
+   unsetenv("MESA_SHADER_CACHE_DIR");
    unsetenv("XDG_CACHE_HOME");
 
    cache = disk_cache_create("test", "make_check", 0);
@@ -197,14 +197,14 @@ test_disk_cache_create(void *mem_ctx, const char *cache_dir_name)
 
    disk_cache_destroy(cache);
 
-   /* Test with MESA_GLSL_CACHE_DIR set */
+   /* Test with MESA_SHADER_CACHE_DIR set */
    err = rmrf_local(CACHE_TEST_TMP);
    EXPECT_EQ(err, 0) << "Removing " CACHE_TEST_TMP;
 
-   setenv("MESA_GLSL_CACHE_DIR", CACHE_TEST_TMP "/mesa-glsl-cache-dir", 1);
+   setenv("MESA_SHADER_CACHE_DIR", CACHE_TEST_TMP "/mesa-shader-cache-dir", 1);
    cache = disk_cache_create("test", "make_check", 0);
    EXPECT_FALSE(cache_exists(cache))
-      << "disk_cache_create with MESA_GLSL_CACHE_DIR set with a non-existing parent directory";
+      << "disk_cache_create with MESA_SHADER_CACHE_DIR set with a non-existing parent directory";
 
    err = mkdir(CACHE_TEST_TMP, 0755);
    if (err != 0) {
@@ -214,10 +214,10 @@ test_disk_cache_create(void *mem_ctx, const char *cache_dir_name)
    disk_cache_destroy(cache);
 
    cache = disk_cache_create("test", "make_check", 0);
-   EXPECT_TRUE(cache_exists(cache)) << "disk_cache_create with MESA_GLSL_CACHE_DIR set";
+   EXPECT_TRUE(cache_exists(cache)) << "disk_cache_create with MESA_SHADER_CACHE_DIR set";
 
    path = ralloc_asprintf(
-      mem_ctx, "%s%s", CACHE_TEST_TMP "/mesa-glsl-cache-dir/", cache_dir_name);
+      mem_ctx, "%s%s", CACHE_TEST_TMP "/mesa-shader-cache-dir/", cache_dir_name);
    check_directories_created(mem_ctx, path);
 
    disk_cache_destroy(cache);
@@ -238,7 +238,7 @@ test_put_and_get(bool test_cache_size_limit)
    int count;
 
 #ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
-   setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
+   setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
 #endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
 
    cache = disk_cache_create("test", "make_check", 0);
@@ -281,7 +281,7 @@ test_put_and_get(bool test_cache_size_limit)
    if (!test_cache_size_limit)
       return;
 
-   setenv("MESA_GLSL_CACHE_MAX_SIZE", "1K", 1);
+   setenv("MESA_SHADER_CACHE_MAX_SIZE", "1K", 1);
    cache = disk_cache_create("test", "make_check", 0);
 
    one_KB = (uint8_t *) calloc(1, 1024);
@@ -344,7 +344,7 @@ test_put_and_get(bool test_cache_size_limit)
     */
    disk_cache_destroy(cache);
 
-   setenv("MESA_GLSL_CACHE_MAX_SIZE", "1M", 1);
+   setenv("MESA_SHADER_CACHE_MAX_SIZE", "1M", 1);
    cache = disk_cache_create("test", "make_check", 0);
 
    disk_cache_put(cache, blob_key, blob, sizeof(blob), NULL);
@@ -416,7 +416,7 @@ test_put_key_and_get_key(void)
                          50, 55, 52, 53, 54, 55, 56, 57, 58, 59};
 
 #ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
-   setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
+   setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
 #endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
 
    cache = disk_cache_create("test", "make_check", 0);
@@ -472,7 +472,7 @@ test_put_and_get_between_instances()
    size_t size;
 
 #ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
-   setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
+   setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
 #endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
 
    struct disk_cache *cache1 = disk_cache_create("test_between_instances",

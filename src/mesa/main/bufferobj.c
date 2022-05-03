@@ -401,7 +401,7 @@ bufferobj_data_mem(struct gl_context *ctx,
                    GLenum usage,
                    struct gl_buffer_object *bufObj)
 {
-   return bufferobj_data(ctx, target, size, NULL, memObj, offset, usage, 0, bufObj);
+   return bufferobj_data(ctx, target, size, NULL, memObj, offset, usage, GL_DYNAMIC_STORAGE_BIT, bufObj);
 }
 
 /**

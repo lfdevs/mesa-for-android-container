@@ -415,7 +415,10 @@ print_vec_selectors_64(FILE *fp, unsigned swizzle,
                 unsigned a = (swizzle >> (i * 2)) & 3;
 
                 if (INPUT_EXPANDS(expand_mode)) {
-                        fprintf(fp, "%c", components[a]);
+                        if (expand_mode == midgard_src_expand_high)
+                                a += 2;
+
+                        fprintf(fp, "%c", components[a / 2]);
                         continue;
                 }
 
@@ -563,7 +566,11 @@ print_vector_constants(FILE *fp, unsigned src_binary,
         comp_mask = effective_writemask(alu->op, condense_writemask(alu->mask, bits));
         num_comp = util_bitcount(comp_mask);
 
-        fprintf(fp, "<");
+        if (num_comp > 1)
+                fprintf(fp, "<");
+        else
+                fprintf(fp, "#");
+
         bool first = true;
 
 	for (unsigned i = 0; i < max_comp; ++i) {
@@ -621,8 +628,6 @@ print_vector_constants(FILE *fp, unsigned src_binary,
                         /* We work on twos, actually */
                         if (i & 1)
                                 c++;
-                } else {
-                        printf(" (%u)", src->expand_mode);
                 }
 
                 if (first)
@@ -865,7 +870,7 @@ print_vector_field(disassemble_context *ctx, FILE *fp, const char *name,
         /* Mask out unused components based on the writemask, but don't mask out
          * components that are used for interlane instructions like fdot3. */
         uint8_t src_mask =
-                rep ? expand_writemask(mask_of(rep), log2(128 / bits_for_mode(mode))) : mask;
+                rep ? expand_writemask(mask_of(rep), util_logbase2(128 / bits_for_mode(mode))) : mask;
 
         fprintf(fp, ", ");
 
@@ -936,8 +941,8 @@ print_scalar_field(disassemble_context *ctx, FILE *fp, const char *name,
         bool is_int_out = midgard_is_integer_out_op(alu_field->op);
         bool full = alu_field->output_full;
 
-        if (alu_field->unknown)
-                fprintf(fp, "scalar ALU unknown bit set\n");
+        if (alu_field->reserved)
+                fprintf(fp, "scalar ALU reserved bit set\n");
 
         if (verbose)
                 fprintf(fp, "%s.", name);
@@ -1040,6 +1045,17 @@ print_branch_cond(FILE *fp, int cond)
         }
 }
 
+static const char *
+function_call_mode(enum midgard_call_mode mode)
+{
+        switch (mode) {
+        case midgard_call_mode_default: return "";
+        case midgard_call_mode_call: return ".call";
+        case midgard_call_mode_return: return ".return";
+        default: return ".reserved";
+        }
+}
+
 static bool
 print_compact_branch_writeout_field(disassemble_context *ctx, FILE *fp, uint16_t word)
 {
@@ -1050,10 +1066,7 @@ print_compact_branch_writeout_field(disassemble_context *ctx, FILE *fp, uint16_t
         case midgard_jmp_writeout_op_branch_uncond: {
                 midgard_branch_uncond br_uncond;
                 memcpy((char *) &br_uncond, (char *) &word, sizeof(br_uncond));
-                fprintf(fp, "br.uncond ");
-
-                if (br_uncond.unknown != 1)
-                        fprintf(fp, "unknown:%u, ", br_uncond.unknown);
+                fprintf(fp, "br.uncond%s ", function_call_mode(br_uncond.call_mode));
 
                 if (br_uncond.offset >= 0)
                         fprintf(fp, "+");
@@ -1100,7 +1113,7 @@ print_extended_branch_writeout_field(disassemble_context *ctx, FILE *fp, uint8_t
         midgard_branch_extended br;
         memcpy((char *) &br, (char *) words, sizeof(br));
 
-        fprintf(fp, "brx.");
+        fprintf(fp, "brx%s.", function_call_mode(br.call_mode));
 
         print_branch_op(fp, br.op);
 
@@ -1116,9 +1129,6 @@ print_extended_branch_writeout_field(disassemble_context *ctx, FILE *fp, uint8_t
                 print_branch_cond(fp, br.cond & 0x3);
         else
                 fprintf(fp, "lut%X", br.cond);
-
-        if (br.unknown)
-                fprintf(fp, ".unknown%u", br.unknown);
 
         fprintf(fp, " ");
 
@@ -1707,6 +1717,17 @@ derivative_mode(enum mali_derivative_mode mode)
         }
 }
 
+static const char *
+partial_exection_mode(enum midgard_partial_execution mode)
+{
+        switch (mode) {
+        case MIDGARD_PARTIAL_EXECUTION_NONE: return "";
+        case MIDGARD_PARTIAL_EXECUTION_SKIP: return ".skip";
+        case MIDGARD_PARTIAL_EXECUTION_KILL: return ".kill";
+        default: return ".reserved";
+        }
+}
+
 static void
 print_texture_word(disassemble_context *ctx, FILE *fp, uint32_t *word,
                    unsigned tabs, unsigned in_reg_base, unsigned out_reg_base)
@@ -1736,12 +1757,7 @@ print_texture_word(disassemble_context *ctx, FILE *fp, uint32_t *word,
         print_texture_format(fp, texture->format);
 
         /* Instruction "modifiers" parallel the ALU instructions. */
-
-        if (texture->cont)
-                fprintf(fp, ".cont");
-
-        if (texture->last)
-                fprintf(fp, ".last");
+        fputs(partial_exection_mode(texture->exec), fp);
 
         if (texture->out_of_order)
                 fprintf(fp, ".ooo%u", texture->out_of_order);

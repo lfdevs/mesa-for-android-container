@@ -321,7 +321,7 @@ bi_lower_opt_instruction(bi_instr *I)
 
         case BI_OPCODE_DISCARD_B32:
                 I->op = BI_OPCODE_DISCARD_F32;
-                I->src[1] = bi_imm_u16(0);
+                I->src[1] = bi_imm_u32(0);
                 I->cmpf = BI_CMPF_NE;
                 break;
 

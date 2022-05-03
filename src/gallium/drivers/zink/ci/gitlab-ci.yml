@@ -2,13 +2,28 @@
   extends:
     - .zink-rules
   variables:
-    ZINK_USE_LAVAPIPE: "true"
-    LIBGL_ALWAYS_SOFTWARE: "1"
+    MESA_LOADER_DRIVER_OVERRIDE: "zink"
+    LIBGL_ALWAYS_SOFTWARE: "true"
+    LVP_POISON_MEMORY: "1"
     GPU_VERSION: zink-lvp
+    FLAKES_CHANNEL: "#zink-ci"
     # Fix non-conformant llvmpipe filter defaults
     GALLIVM_PERF: "no_quad_lod"
-    LP_NUM_THREADS: 0
 
+zink:
+  tags:
+    - mesa-swrast
+  extends:
+    - .test-gl
+    - .deqp-test
+    - .zink-lvp-test
+  variables:
+    DEQP_SUITE: zink-lvp
+    PIGLIT_NO_WINDOW: 1
+  script:
+    - xvfb-run --server-args='-noreset' sh -c "GALLIUM_DRIVER=zink VK_DRIVER=lvp install/deqp-runner.sh"
+
+# Should be merged into the main zink job once we have prefix support in deqp-runner.
 .zink-piglit-quick_gl:
   extends:
     - .test-gl
@@ -17,26 +32,7 @@
     PIGLIT_PROFILES: quick_gl
     PIGLIT_NO_WINDOW: 1
     PIGLIT_RUNNER_OPTIONS: "--timeout 180"
-
-zink-piglit-timelines:
-  extends:
-    - .zink-piglit-quick_gl
-  script:
-    - xvfb-run --server-args='-noreset' sh -c "GALLIUM_DRIVER=zink VK_DRIVER=lvp install/piglit/piglit-runner.sh"
-
-zink-piglit-no_timelines:
-  extends:
-    - .zink-piglit-quick_gl
+    # No taking more than our fair share of CPU on fd.o shared runners.
+    LP_NUM_THREADS: 0
   script:
     - xvfb-run --server-args='-noreset' sh -c "ZINK_NO_TIMELINES=1 GALLIUM_DRIVER=zink VK_DRIVER=lvp install/piglit/piglit-runner.sh"
-
-zink-lvp-deqp:
-  extends:
-    - .test-gl
-    - .deqp-test
-    - .zink-lvp-test
-  variables:
-    GALLIUM_DRIVER: "zink" # move here due to bad xvfb-run interactions
-    VK_DRIVER: lvp # Don't move to the top level, piglit runs do funny stuff with VK_DRIVER set
-    DEQP_SUITE: zink-lvp
-  parallel: 4

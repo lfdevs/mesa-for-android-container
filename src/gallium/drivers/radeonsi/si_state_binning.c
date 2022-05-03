@@ -424,20 +424,17 @@ static void si_emit_dpbb_disable(struct si_context *sctx)
             S_028C44_BIN_SIZE_X(bin_size.x == 16) | S_028C44_BIN_SIZE_Y(bin_size.y == 16) |
             S_028C44_BIN_SIZE_X_EXTEND(bin_size_extend.x) |
             S_028C44_BIN_SIZE_Y_EXTEND(bin_size_extend.y) | S_028C44_DISABLE_START_OF_PRIM(1) |
-            S_028C44_FLUSH_ON_BINNING_TRANSITION(sctx->last_binning_enabled != 0));
+            S_028C44_FLUSH_ON_BINNING_TRANSITION(1));
    } else {
       radeon_opt_set_context_reg(
          sctx, R_028C44_PA_SC_BINNER_CNTL_0, SI_TRACKED_PA_SC_BINNER_CNTL_0,
          S_028C44_BINNING_MODE(V_028C44_DISABLE_BINNING_USE_LEGACY_SC) |
             S_028C44_DISABLE_START_OF_PRIM(1) |
-            S_028C44_FLUSH_ON_BINNING_TRANSITION((sctx->family == CHIP_VEGA12 ||
-                                                  sctx->family == CHIP_VEGA20 ||
-                                                  sctx->family >= CHIP_RAVEN2) &&
-                                                 sctx->last_binning_enabled != 0));
+            S_028C44_FLUSH_ON_BINNING_TRANSITION(sctx->family == CHIP_VEGA12 ||
+                                                 sctx->family == CHIP_VEGA20 ||
+                                                 sctx->family >= CHIP_RAVEN2));
    }
    radeon_end_update_context_roll(sctx);
-
-   sctx->last_binning_enabled = false;
 }
 
 void si_emit_dpbb_state(struct si_context *sctx)
@@ -513,11 +510,8 @@ void si_emit_dpbb_state(struct si_context *sctx)
          S_028C44_PERSISTENT_STATES_PER_BIN(sscreen->pbb_persistent_states_per_bin - 1) |
          S_028C44_DISABLE_START_OF_PRIM(1) |
          S_028C44_FPOVS_PER_BATCH(fpovs_per_batch) | S_028C44_OPTIMAL_BIN_SELECTION(1) |
-         S_028C44_FLUSH_ON_BINNING_TRANSITION((sctx->family == CHIP_VEGA12 ||
-                                               sctx->family == CHIP_VEGA20 ||
-                                               sctx->family >= CHIP_RAVEN2) &&
-                                              sctx->last_binning_enabled != 1));
+         S_028C44_FLUSH_ON_BINNING_TRANSITION(sctx->family == CHIP_VEGA12 ||
+                                              sctx->family == CHIP_VEGA20 ||
+                                              sctx->family >= CHIP_RAVEN2));
    radeon_end_update_context_roll(sctx);
-
-   sctx->last_binning_enabled = true;
 }

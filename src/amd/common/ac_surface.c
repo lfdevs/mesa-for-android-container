@@ -93,6 +93,7 @@
 
 struct ac_addrlib {
    ADDR_HANDLE handle;
+   simple_mtx_t lock;
 };
 
 bool ac_modifier_has_dcc(uint64_t modifier)
@@ -503,11 +504,13 @@ struct ac_addrlib *ac_addrlib_create(const struct radeon_info *info,
    }
 
    addrlib->handle = addrCreateOutput.hLib;
+   simple_mtx_init(&addrlib->lock, mtx_plain);
    return addrlib;
 }
 
 void ac_addrlib_destroy(struct ac_addrlib *addrlib)
 {
+   simple_mtx_destroy(&addrlib->lock);
    AddrDestroy(addrlib->handle);
    free(addrlib);
 }
@@ -816,7 +819,8 @@ static bool get_display_flag(const struct ac_surf_config *config, const struct r
    if (surf->modifier != DRM_FORMAT_MOD_INVALID)
       return false;
 
-   if (!config->is_3d && !config->is_cube && !(surf->flags & RADEON_SURF_Z_OR_SBUFFER) &&
+   if (!config->is_1d && !config->is_3d && !config->is_cube &&
+       !(surf->flags & RADEON_SURF_Z_OR_SBUFFER) &&
        surf->flags & RADEON_SURF_SCANOUT && config->info.samples <= 1 && surf->blk_w <= 2 &&
        surf->blk_h == 1) {
       /* subsampled */
@@ -1701,9 +1705,11 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
    }
 
    if (in->swizzleMode == ADDR_SW_LINEAR) {
+      int alignment = 256 / surf->bpe;
       for (unsigned i = 0; i < in->numMipLevels; i++) {
          surf->u.gfx9.offset[i] = mip_info[i].offset;
-         surf->u.gfx9.pitch[i] = mip_info[i].pitch;
+         /* Adjust pitch like we did for surf_pitch */
+         surf->u.gfx9.pitch[i] = align(mip_info[i].pitch / surf->blk_w, alignment);
       }
    }
 
@@ -1826,7 +1832,12 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
          din.dataSurfaceSize = out.surfSize;
          din.firstMipIdInTail = out.firstMipIdInTail;
 
+         if (info->chip_class == GFX9)
+            simple_mtx_lock(&addrlib->lock);
          ret = Addr2ComputeDccInfo(addrlib->handle, &din, &dout);
+         if (info->chip_class == GFX9)
+            simple_mtx_unlock(&addrlib->lock);
+
          if (ret != ADDR_OK)
             return ret;
 
@@ -1907,7 +1918,12 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
             assert(surf->tile_swizzle == 0);
             assert(surf->u.gfx9.color.dcc.pipe_aligned || surf->u.gfx9.color.dcc.rb_aligned);
 
+            if (info->chip_class == GFX9)
+               simple_mtx_lock(&addrlib->lock);
             ret = Addr2ComputeDccInfo(addrlib->handle, &din, &dout);
+            if (info->chip_class == GFX9)
+               simple_mtx_unlock(&addrlib->lock);
+
             if (ret != ADDR_OK)
                return ret;
 
@@ -2007,7 +2023,12 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
          else
             cin.swizzleMode = in->swizzleMode;
 
+         if (info->chip_class == GFX9)
+            simple_mtx_lock(&addrlib->lock);
          ret = Addr2ComputeCmaskInfo(addrlib->handle, &cin, &cout);
+         if (info->chip_class == GFX9)
+            simple_mtx_unlock(&addrlib->lock);
+
          if (ret != ADDR_OK)
             return ret;
 

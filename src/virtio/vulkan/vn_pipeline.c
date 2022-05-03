@@ -206,7 +206,7 @@ vn_GetPipelineCacheData(VkDevice device,
    }
 
    const VkPhysicalDeviceProperties *props =
-      &physical_dev->properties.properties;
+      &physical_dev->properties.vulkan_1_0;
    header->header_size = sizeof(*header);
    header->header_version = VK_PIPELINE_CACHE_HEADER_VERSION_ONE;
    header->vendor_id = props->vendorID;

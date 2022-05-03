@@ -143,17 +143,11 @@ KHR-GL46.tessellation_shader.tessellation_shader_triangles_tessellation.inner_te
 KHR-GL46.tessellation_shader.vertex.vertex_ordering,Fail
 KHR-GL46.tessellation_shader.vertex.vertex_spacing,Fail
 KHR-GL46.texture_swizzle.smoke,Timeout
-KHR-GL46.texture_view.reference_counting,Fail
 KHR-GL46.texture_view.view_classes,Fail
 KHR-GL46.texture_view.view_sampling,Fail
 KHR-GL46.transform_feedback.capture_geometry_interleaved_test,Fail
 KHR-GL46.transform_feedback.capture_geometry_separate_test,Fail
 KHR-GL46.transform_feedback.capture_vertex_separate_test,Fail
-KHR-GL46.transform_feedback.draw_xfb_feedbackk_test,Fail
-KHR-GL46.transform_feedback.draw_xfb_instanced_test,Fail
-KHR-GL46.transform_feedback.draw_xfb_stream_instanced_test,Fail
-KHR-GL46.transform_feedback.draw_xfb_stream_test,Fail
-KHR-GL46.transform_feedback.draw_xfb_test,Fail
 KHR-GL46.transform_feedback.query_geometry_interleaved_test,Fail
 KHR-GL46.transform_feedback.query_geometry_separate_test,Fail
 KHR-GL46.transform_feedback.query_vertex_interleaved_test,Fail
@@ -162,8 +156,6 @@ KHR-GL46.transform_feedback_overflow_query_ARB.advanced-single-stream-interleave
 KHR-GL46.transform_feedback_overflow_query_ARB.advanced-single-stream-separate-attribs,Fail
 KHR-GL46.transform_feedback_overflow_query_ARB.basic-single-stream-interleaved-attribs,Fail
 KHR-GL46.transform_feedback_overflow_query_ARB.basic-single-stream-separate-attribs,Fail
-KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-multiple-buffers-per-stream,Fail
-KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream,Fail
 
 dEQP-GLES31.functional.blend_equation_advanced.barrier.colorburn,Fail
 dEQP-GLES31.functional.blend_equation_advanced.barrier.colordodge,Fail

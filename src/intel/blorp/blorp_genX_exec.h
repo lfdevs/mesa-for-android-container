@@ -90,6 +90,10 @@ blorp_alloc_binding_table(struct blorp_batch *batch, unsigned num_entries,
                           uint32_t *bt_offset, uint32_t *surface_offsets,
                           void **surface_maps);
 
+static uint32_t
+blorp_binding_table_offset_to_pointer(struct blorp_batch *batch,
+                                      uint32_t offset);
+
 static void
 blorp_flush_range(struct blorp_batch *batch, void *start, size_t size);
 
@@ -1670,16 +1674,19 @@ blorp_emit_btp(struct blorp_batch *batch, uint32_t bind_offset)
    blorp_emit(batch, GENX(3DSTATE_BINDING_TABLE_POINTERS_GS), bt);
 
    blorp_emit(batch, GENX(3DSTATE_BINDING_TABLE_POINTERS_PS), bt) {
-      bt.PointertoPSBindingTable = bind_offset;
+      bt.PointertoPSBindingTable =
+         blorp_binding_table_offset_to_pointer(batch, bind_offset);
    }
 #elif GFX_VER >= 6
    blorp_emit(batch, GENX(3DSTATE_BINDING_TABLE_POINTERS), bt) {
       bt.PSBindingTableChange = true;
-      bt.PointertoPSBindingTable = bind_offset;
+      bt.PointertoPSBindingTable =
+         blorp_binding_table_offset_to_pointer(batch, bind_offset);
    }
 #else
    blorp_emit(batch, GENX(3DSTATE_BINDING_TABLE_POINTERS), bt) {
-      bt.PointertoPSBindingTable = bind_offset;
+      bt.PointertoPSBindingTable =
+         blorp_binding_table_offset_to_pointer(batch, bind_offset);
    }
 #endif
 }

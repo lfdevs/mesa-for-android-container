@@ -123,7 +123,7 @@ struct nv50_program {
 };
 
 bool nv50_program_translate(struct nv50_program *, uint16_t chipset,
-                            struct pipe_debug_callback *);
+                            struct util_debug_callback *);
 bool nv50_program_upload_code(struct nv50_context *, struct nv50_program *);
 void nv50_program_destroy(struct nv50_context *, struct nv50_program *);
 

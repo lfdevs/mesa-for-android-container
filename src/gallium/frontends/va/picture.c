@@ -785,6 +785,10 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
          context->desc.h264enc.frame_num_cnt++;
       } else if (u_reduce_video_profile(context->templat.profile) == PIPE_VIDEO_FORMAT_HEVC)
          getEncParamPresetH265(context);
+
+      context->desc.base.input_format = surf->buffer->buffer_format;
+      context->desc.base.output_format = surf->encoder_format;
+
       context->decoder->begin_frame(context->decoder, context->target, &context->desc.base);
       context->decoder->encode_bitstream(context->decoder, context->target,
                                          coded_buf->derived_surface.resource, &feedback);
@@ -813,6 +817,8 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
             context->first_single_submitted = false;
          surf->force_flushed = true;
       }
+      if (!context->desc.h264enc.not_referenced)
+         context->desc.h264enc.frame_num++;
    } else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE &&
               u_reduce_video_profile(context->templat.profile) == PIPE_VIDEO_FORMAT_HEVC)
       context->desc.h265enc.frame_num++;

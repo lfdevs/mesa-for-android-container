@@ -58,7 +58,7 @@
 struct iris_threaded_compile_job {
    struct iris_screen *screen;
    struct u_upload_mgr *uploader;
-   struct pipe_debug_callback *dbg;
+   struct util_debug_callback *dbg;
    struct iris_uncompiled_shader *ish;
    struct iris_compiled_shader *shader;
 };
@@ -1105,7 +1105,7 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
 
 static void
 iris_debug_recompile(struct iris_screen *screen,
-                     struct pipe_debug_callback *dbg,
+                     struct util_debug_callback *dbg,
                      struct iris_uncompiled_shader *ish,
                      const struct brw_base_prog_key *key)
 {
@@ -1267,7 +1267,7 @@ iris_threaded_compile_job_delete(void *_job, UNUSED void *_gdata,
 static void
 iris_schedule_compile(struct iris_screen *screen,
                       struct util_queue_fence *ready_fence,
-                      struct pipe_debug_callback *dbg,
+                      struct util_debug_callback *dbg,
                       struct iris_threaded_compile_job *job,
                       util_queue_execute_func execute)
 
@@ -1299,7 +1299,7 @@ iris_schedule_compile(struct iris_screen *screen,
 static void
 iris_compile_vs(struct iris_screen *screen,
                 struct u_upload_mgr *uploader,
-                struct pipe_debug_callback *dbg,
+                struct util_debug_callback *dbg,
                 struct iris_uncompiled_shader *ish,
                 struct iris_compiled_shader *shader)
 {
@@ -1479,7 +1479,7 @@ static void
 iris_compile_tcs(struct iris_screen *screen,
                  struct hash_table *passthrough_ht,
                  struct u_upload_mgr *uploader,
-                 struct pipe_debug_callback *dbg,
+                 struct util_debug_callback *dbg,
                  struct iris_uncompiled_shader *ish,
                  struct iris_compiled_shader *shader)
 {
@@ -1668,7 +1668,7 @@ iris_update_compiled_tcs(struct iris_context *ice)
 static void
 iris_compile_tes(struct iris_screen *screen,
                  struct u_upload_mgr *uploader,
-                 struct pipe_debug_callback *dbg,
+                 struct util_debug_callback *dbg,
                  struct iris_uncompiled_shader *ish,
                  struct iris_compiled_shader *shader)
 {
@@ -1807,7 +1807,7 @@ iris_update_compiled_tes(struct iris_context *ice)
 static void
 iris_compile_gs(struct iris_screen *screen,
                 struct u_upload_mgr *uploader,
-                struct pipe_debug_callback *dbg,
+                struct util_debug_callback *dbg,
                 struct iris_uncompiled_shader *ish,
                 struct iris_compiled_shader *shader)
 {
@@ -1941,7 +1941,7 @@ iris_update_compiled_gs(struct iris_context *ice)
 static void
 iris_compile_fs(struct iris_screen *screen,
                 struct u_upload_mgr *uploader,
-                struct pipe_debug_callback *dbg,
+                struct util_debug_callback *dbg,
                 struct iris_uncompiled_shader *ish,
                 struct iris_compiled_shader *shader,
                 struct brw_vue_map *vue_map)
@@ -2234,7 +2234,7 @@ iris_update_compiled_shaders(struct iris_context *ice)
 static void
 iris_compile_cs(struct iris_screen *screen,
                 struct u_upload_mgr *uploader,
-                struct pipe_debug_callback *dbg,
+                struct util_debug_callback *dbg,
                 struct iris_uncompiled_shader *ish,
                 struct iris_compiled_shader *shader)
 {
@@ -2545,7 +2545,7 @@ iris_compile_shader(void *_job, UNUSED void *_gdata, UNUSED int thread_index)
 
    struct iris_screen *screen = job->screen;
    struct u_upload_mgr *uploader = job->uploader;
-   struct pipe_debug_callback *dbg = job->dbg;
+   struct util_debug_callback *dbg = job->dbg;
    struct iris_uncompiled_shader *ish = job->ish;
    struct iris_compiled_shader *shader = job->shader;
 

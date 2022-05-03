@@ -923,10 +923,13 @@ v3dX(create_texture_shader_state_bo)(struct v3d_context *v3d,
                                      struct v3d_sampler_view *so)
 {
         struct pipe_resource *prsc = so->texture;
+        struct v3d_resource *rsc = v3d_resource(prsc);
         const struct pipe_sampler_view *cso = &so->base;
         struct v3d_screen *screen = v3d->screen;
 
         void *map;
+
+        assert(so->serial_id != rsc->serial_id);
 
 #if V3D_VERSION >= 40
         v3d_bo_unreference(&so->bo);
@@ -1010,6 +1013,8 @@ v3dX(create_texture_shader_state_bo)(struct v3d_context *v3d,
                                                               cso->format);
                 }
         };
+
+        so->serial_id = rsc->serial_id;
 }
 
 static struct pipe_sampler_view *
@@ -1204,6 +1209,18 @@ v3d_set_sampler_views(struct pipe_context *pctx,
                         stage_tex->textures[i] = views[i];
                 } else {
                         pipe_sampler_view_reference(&stage_tex->textures[i], views[i]);
+                }
+                /* If our sampler serial doesn't match our texture serial it
+                 * means the texture has been updated with a new BO, in which
+                 * case we need to update the sampler state to point to the
+                 * new BO as well
+                 */
+                if (stage_tex->textures[i]) {
+                        struct v3d_sampler_view *so =
+                                v3d_sampler_view(stage_tex->textures[i]);
+                        struct v3d_resource *rsc = v3d_resource(so->texture);
+                        if (so->serial_id != rsc->serial_id)
+                                v3d_create_texture_shader_state_bo(v3d, so);
                 }
         }
 

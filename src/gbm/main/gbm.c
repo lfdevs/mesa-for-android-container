@@ -101,6 +101,9 @@ gbm_device_get_format_modifier_plane_count(struct gbm_device *gbm,
 
 /** Destroy the gbm device and free all resources associated with it.
  *
+ * Prior to calling this function all buffers and surfaces created with the
+ * gbm device need to be destroyed.
+ *
  * \param gbm The device created using gbm_create_device()
  */
 GBM_EXPORT void
@@ -707,11 +710,11 @@ gbm_surface_create_with_modifiers2(struct gbm_device *gbm,
 }
 
 /**
- * Destroys the given surface and frees all resources associated with
- * it.
+ * Destroys the given surface and frees all resources associated with it.
  *
- * All buffers locked with gbm_surface_lock_front_buffer() should be
- * released prior to calling this function.
+ * Prior to calling this function all buffers locked with
+ * gbm_surface_lock_front_buffer() need to be released and the associated
+ * EGL surface destroyed.
  *
  * \param surf The surface
  */
@@ -729,18 +732,16 @@ gbm_surface_destroy(struct gbm_surface *surf)
  *
  * This function must be called exactly once after calling
  * eglSwapBuffers.  Calling it before any eglSwapBuffer has happened
- * on the surface or two or more times after eglSwapBuffers is an
- * error.  A new bo representing the new front buffer is returned.  On
- * multiple invocations, all the returned bos must be released in
- * order to release the actual surface buffer.
+ * on the surface or two or more times after eglSwapBuffers is an error.
  *
  * \param surf The surface
  *
- * \return A buffer object that should be released with
- * gbm_surface_release_buffer() when no longer needed.  The implementation
- * is free to reuse buffers released with gbm_surface_release_buffer() so
- * this bo should not be destroyed using gbm_bo_destroy().  If an error
- * occurs this function returns %NULL.
+ * \return A buffer object representing the front buffer that should be
+ * released with gbm_surface_release_buffer() when no longer needed and before
+ * the associated EGL surface gets destroyed. The implementation is free to
+ * reuse buffers released with gbm_surface_release_buffer() so this bo should
+ * not be destroyed using gbm_bo_destroy(). If an error occurs this function
+ * returns %NULL.
  */
 GBM_EXPORT struct gbm_bo *
 gbm_surface_lock_front_buffer(struct gbm_surface *surf)

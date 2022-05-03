@@ -133,7 +133,7 @@ vn_wsi_create_image(struct vn_device *dev,
       return result;
 
    img->wsi.is_wsi = true;
-   img->wsi.is_prime_blit_src = wsi_info->prime_blit_src;
+   img->wsi.is_prime_blit_src = wsi_info->buffer_blit_src;
    img->wsi.tiling_override = create_info->tiling;
 
    if (create_info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {

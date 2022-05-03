@@ -62,7 +62,7 @@
 #include "util/hash_table.h"
 #include "util/crc32.h"
 #include "util/os_file.h"
-#include "util/simple_list.h"
+#include "util/list.h"
 #include "util/u_process.h"
 #include "util/u_string.h"
 #include "api_exec_decl.h"
@@ -155,6 +155,14 @@ _mesa_get_shader_flags(void)
    return flags;
 }
 
+#define ANDROID_SHADER_CAPTURE 0
+
+#if ANDROID_SHADER_CAPTURE
+#include "util/u_process.h"
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
+
 /**
  * Memoized version of getenv("MESA_SHADER_CAPTURE_PATH").
  */
@@ -167,6 +175,15 @@ _mesa_get_shader_capture_path(void)
    if (!read_env_var) {
       path = getenv("MESA_SHADER_CAPTURE_PATH");
       read_env_var = true;
+
+#if ANDROID_SHADER_CAPTURE
+      if (!path) {
+         char *p;
+         asprintf(&p, "/data/shaders/%s", util_get_process_name());
+         mkdir(p, 0755);
+         path = p;
+      }
+#endif
    }
 
    return path;
@@ -3218,8 +3235,7 @@ _mesa_GetProgramStageiv(GLuint program, GLenum shadertype,
  */
 struct sh_incl_path_entry
 {
-   struct sh_incl_path_entry *next;
-   struct sh_incl_path_entry *prev;
+   struct list_head list;
 
    char *path;
 };
@@ -3336,8 +3352,8 @@ validate_and_tokenise_sh_incl(struct gl_context *ctx,
    char *path_str = strtok_r(full_path, "/", &save_ptr);
 
    *path_list = rzalloc(mem_ctx, struct sh_incl_path_entry);
-
-   make_empty_list(*path_list);
+   struct sh_incl_path_entry * list = *path_list;
+   list_inithead(&list->list);
 
    while (path_str != NULL) {
       if (strlen(path_str) == 0) {
@@ -3352,14 +3368,13 @@ validate_and_tokenise_sh_incl(struct gl_context *ctx,
       if (strcmp(path_str, ".") == 0) {
          /* Do nothing */
       } else if (strcmp(path_str, "..") == 0) {
-         struct sh_incl_path_entry *last = last_elem(*path_list);
-         remove_from_list(last);
+         list_del(list->list.prev);
       } else {
          struct sh_incl_path_entry *path =
             rzalloc(mem_ctx, struct sh_incl_path_entry);
 
          path->path = strdup(path_str);
-         insert_at_tail(*path_list, path);
+         list_addtail(&path->list, &list->list);
       }
 
       path_str = strtok_r(NULL, "/", &save_ptr);
@@ -3399,7 +3414,7 @@ next_relative_path:
          {
             struct sh_incl_path_entry *rel_path_list =
                ctx->Shared->ShaderIncludes->include_paths[i];
-            foreach(entry, rel_path_list) {
+            LIST_FOR_EACH_ENTRY(entry, &rel_path_list->list, list) {
                struct hash_entry *ht_entry =
                   _mesa_hash_table_search(path_ht, entry->path);
 
@@ -3428,7 +3443,7 @@ next_relative_path:
          }
       }
 
-      foreach(entry, path_list) {
+      LIST_FOR_EACH_ENTRY(entry, &path_list->list, list) {
          struct hash_entry *ht_entry =
             _mesa_hash_table_search(path_ht, entry->path);
 
@@ -3536,7 +3551,7 @@ _mesa_NamedStringARB(GLenum type, GLint namelen, const GLchar *name,
       ctx->Shared->ShaderIncludes->shader_include_tree;
 
    struct sh_incl_path_entry *entry;
-   foreach(entry, path_list) {
+   LIST_FOR_EACH_ENTRY(entry, &path_list->list, list) {
       struct hash_entry *ht_entry =
          _mesa_hash_table_search(path_ht, entry->path);
 
@@ -3553,7 +3568,7 @@ _mesa_NamedStringARB(GLenum type, GLint namelen, const GLchar *name,
 
       path_ht = sh_incl_ht_entry->path;
 
-      if (last_elem(path_list) == entry) {
+      if (list_last_entry(&path_list->list, struct sh_incl_path_entry, list) == entry) {
          free(sh_incl_ht_entry->shader_source);
          sh_incl_ht_entry->shader_source = string_cp;
       }

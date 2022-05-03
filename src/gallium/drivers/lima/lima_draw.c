@@ -1207,7 +1207,6 @@ lima_draw_vbo(struct pipe_context *pctx,
    if (job->draws > MAX_DRAWS_PER_JOB) {
       unsigned resolve = job->resolve;
       lima_do_job(job);
-      job = lima_job_get(ctx);
       /* Subsequent job will need to resolve the same buffers */
       lima_update_job_wb(ctx, resolve);
    }

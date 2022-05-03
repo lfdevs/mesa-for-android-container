@@ -17,8 +17,7 @@
   variables:
     DEVICE_TYPE: asus-C523NA-A20057-coral
     GPU_VERSION: iris-apl
-  tags:
-    - mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
 
 # 4 boards
 .iris-glk-test:
@@ -27,8 +26,7 @@
   variables:
     DEVICE_TYPE: hp-x360-12b-ca0010nr-n4020-octopus
     GPU_VERSION: iris-glk
-  tags:
-    - mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
+    RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
 
 # 5 boards, manual for now due to the GPU being occasionally stuck
 .iris-amly-test:
@@ -38,8 +36,7 @@
   variables:
     DEVICE_TYPE: asus-C433TA-AJ0005-rammus
     GPU_VERSION: iris-amly
-  tags:
-    - mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
 
 # 7 boards
 .iris-kbl-test:
@@ -48,19 +45,16 @@
   variables:
     DEVICE_TYPE: hp-x360-14-G1-sona
     GPU_VERSION: iris-kbl
-  tags:
-    - mesa-ci-x86-64-lava-hp-x360-14-G1-sona
+    RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-14-G1-sona
 
-# 5 boards, manual for now due to network issues in the lab that are WIP
+# 5 boards
 .iris-whl-test:
   extends:
     - .iris-test
-    - .test-manual-mr
   variables:
     DEVICE_TYPE: dell-latitude-5400-8665U-sarien
     GPU_VERSION: iris-whl
-  tags:
-    - mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
+    RUNNER_TAG: mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
 
 # 5 boards
 .iris-cml-test:
@@ -69,8 +63,7 @@
   variables:
     DEVICE_TYPE: asus-C436FA-Flip-hatch
     GPU_VERSION: iris-cml
-  tags:
-    - mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
 
 iris-apl-deqp:
   extends:
@@ -212,6 +205,8 @@ iris-cml-traces:
     PIGLIT_REPLAY_LOOP_TIMES: 150
     # We don't want for more than one workload to be submitted to the GPU at a time
     FDO_CI_CONCURRENT: 1
+    # Piglit is very sparse in its status output and downloads of big traces can take a while
+    LAVA_DEVICE_HANGING_TIMEOUT_SEC: 600
     # So we aren't capped by VSync by the X server
     EGL_PLATFORM: surfaceless
     GIT_STRATEGY: none

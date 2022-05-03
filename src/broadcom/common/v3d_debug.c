@@ -43,7 +43,7 @@ static const struct debug_named_value debug_control[] = {
         { "cl",          V3D_DEBUG_CL,
           "Dump command list during creation" },
         { "cl_nobin",    V3D_DEBUG_CL_NO_BIN,
-          "Dump command listduring creation, excluding binary resources" },
+          "Dump command list during creation, excluding binary resources" },
         { "clif",        V3D_DEBUG_CLIF,
           "Dump command list (CLIF format) during creation", },
         { "qpu",         V3D_DEBUG_QPU,
@@ -59,7 +59,7 @@ static const struct debug_named_value debug_control[] = {
         { "surface",     V3D_DEBUG_SURFACE,
           "Print resource layout information" },
         { "perf",        V3D_DEBUG_PERF,
-          "Print during runtime performance-related events" },
+          "Print performance-related events during runtime" },
         { "norast",      V3D_DEBUG_NORAST,
           "Skip actual hardware execution of commands" },
         { "fs",          V3D_DEBUG_FS,
@@ -90,6 +90,10 @@ static const struct debug_named_value debug_control[] = {
           "Disable loop unrolling" },
         { "db", V3D_DEBUG_DOUBLE_BUFFER,
           "Enable double buffer for Tile Buffer when MSAA is disabled" },
+#ifdef ENABLE_SHADER_CACHE
+        { "cache", V3D_DEBUG_CACHE,
+          "Print on-disk cache events (only with cache enabled)" },
+#endif
         { NULL }
 };
 

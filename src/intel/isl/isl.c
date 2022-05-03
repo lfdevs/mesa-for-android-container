@@ -3328,6 +3328,38 @@ isl_swizzle_invert(struct isl_swizzle swizzle)
    return (struct isl_swizzle) { chans[0], chans[1], chans[2], chans[3] };
 }
 
+static uint32_t
+isl_color_value_channel(union isl_color_value src,
+                        enum isl_channel_select chan,
+                        uint32_t one)
+{
+   if (chan == ISL_CHANNEL_SELECT_ZERO)
+      return 0;
+   if (chan == ISL_CHANNEL_SELECT_ONE)
+      return one;
+
+   assert(chan >= ISL_CHANNEL_SELECT_RED);
+   assert(chan < ISL_CHANNEL_SELECT_RED + 4);
+
+   return src.u32[chan - ISL_CHANNEL_SELECT_RED];
+}
+
+/** Applies an inverse swizzle to a color value */
+union isl_color_value
+isl_color_value_swizzle(union isl_color_value src,
+                        struct isl_swizzle swizzle,
+                        bool is_float)
+{
+   uint32_t one = is_float ? 0x3f800000 : 1;
+
+   return (union isl_color_value) { .u32 = {
+      isl_color_value_channel(src, swizzle.r, one),
+      isl_color_value_channel(src, swizzle.g, one),
+      isl_color_value_channel(src, swizzle.b, one),
+      isl_color_value_channel(src, swizzle.a, one),
+   } };
+}
+
 /** Applies an inverse swizzle to a color value */
 union isl_color_value
 isl_color_value_swizzle_inv(union isl_color_value src,

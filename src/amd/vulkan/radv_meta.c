@@ -84,65 +84,88 @@ radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_
       state->old_pipeline = cmd_buffer->state.pipeline;
 
       /* Save all viewports. */
-      state->viewport.count = cmd_buffer->state.dynamic.viewport.count;
-      typed_memcpy(state->viewport.viewports, cmd_buffer->state.dynamic.viewport.viewports,
+      state->dynamic.viewport.count = cmd_buffer->state.dynamic.viewport.count;
+      typed_memcpy(state->dynamic.viewport.viewports, cmd_buffer->state.dynamic.viewport.viewports,
                    MAX_VIEWPORTS);
-      typed_memcpy(state->viewport.xform, cmd_buffer->state.dynamic.viewport.xform,
+      typed_memcpy(state->dynamic.viewport.xform, cmd_buffer->state.dynamic.viewport.xform,
                    MAX_VIEWPORTS);
 
       /* Save all scissors. */
-      state->scissor.count = cmd_buffer->state.dynamic.scissor.count;
-      typed_memcpy(state->scissor.scissors, cmd_buffer->state.dynamic.scissor.scissors,
+      state->dynamic.scissor.count = cmd_buffer->state.dynamic.scissor.count;
+      typed_memcpy(state->dynamic.scissor.scissors, cmd_buffer->state.dynamic.scissor.scissors,
                    MAX_SCISSORS);
 
-      state->cull_mode = cmd_buffer->state.dynamic.cull_mode;
-      state->front_face = cmd_buffer->state.dynamic.front_face;
+      state->dynamic.line_stipple.factor = cmd_buffer->state.dynamic.line_stipple.factor;
+      state->dynamic.line_stipple.pattern = cmd_buffer->state.dynamic.line_stipple.pattern;
 
-      state->primitive_topology = cmd_buffer->state.dynamic.primitive_topology;
+      state->dynamic.cull_mode = cmd_buffer->state.dynamic.cull_mode;
+      state->dynamic.front_face = cmd_buffer->state.dynamic.front_face;
 
-      state->depth_test_enable = cmd_buffer->state.dynamic.depth_test_enable;
-      state->depth_write_enable = cmd_buffer->state.dynamic.depth_write_enable;
-      state->depth_compare_op = cmd_buffer->state.dynamic.depth_compare_op;
-      state->depth_bounds_test_enable = cmd_buffer->state.dynamic.depth_bounds_test_enable;
-      state->stencil_test_enable = cmd_buffer->state.dynamic.stencil_test_enable;
+      state->dynamic.primitive_topology = cmd_buffer->state.dynamic.primitive_topology;
 
-      state->stencil_op.front.compare_op = cmd_buffer->state.dynamic.stencil_op.front.compare_op;
-      state->stencil_op.front.fail_op = cmd_buffer->state.dynamic.stencil_op.front.fail_op;
-      state->stencil_op.front.pass_op = cmd_buffer->state.dynamic.stencil_op.front.pass_op;
-      state->stencil_op.front.depth_fail_op =
+      state->dynamic.depth_test_enable = cmd_buffer->state.dynamic.depth_test_enable;
+      state->dynamic.depth_write_enable = cmd_buffer->state.dynamic.depth_write_enable;
+      state->dynamic.depth_compare_op = cmd_buffer->state.dynamic.depth_compare_op;
+      state->dynamic.depth_bounds_test_enable = cmd_buffer->state.dynamic.depth_bounds_test_enable;
+      state->dynamic.stencil_test_enable = cmd_buffer->state.dynamic.stencil_test_enable;
+
+      state->dynamic.stencil_op.front.compare_op = cmd_buffer->state.dynamic.stencil_op.front.compare_op;
+      state->dynamic.stencil_op.front.fail_op = cmd_buffer->state.dynamic.stencil_op.front.fail_op;
+      state->dynamic.stencil_op.front.pass_op = cmd_buffer->state.dynamic.stencil_op.front.pass_op;
+      state->dynamic.stencil_op.front.depth_fail_op =
          cmd_buffer->state.dynamic.stencil_op.front.depth_fail_op;
 
-      state->stencil_op.back.compare_op = cmd_buffer->state.dynamic.stencil_op.back.compare_op;
-      state->stencil_op.back.fail_op = cmd_buffer->state.dynamic.stencil_op.back.fail_op;
-      state->stencil_op.back.pass_op = cmd_buffer->state.dynamic.stencil_op.back.pass_op;
-      state->stencil_op.back.depth_fail_op =
+      state->dynamic.stencil_op.back.compare_op = cmd_buffer->state.dynamic.stencil_op.back.compare_op;
+      state->dynamic.stencil_op.back.fail_op = cmd_buffer->state.dynamic.stencil_op.back.fail_op;
+      state->dynamic.stencil_op.back.pass_op = cmd_buffer->state.dynamic.stencil_op.back.pass_op;
+      state->dynamic.stencil_op.back.depth_fail_op =
          cmd_buffer->state.dynamic.stencil_op.back.depth_fail_op;
 
-      state->stencil_write_mask.front = cmd_buffer->state.dynamic.stencil_write_mask.front;
-      state->stencil_write_mask.back = cmd_buffer->state.dynamic.stencil_write_mask.back;
+      state->dynamic.line_width = cmd_buffer->state.dynamic.line_width;
 
-      state->stencil_reference.front = cmd_buffer->state.dynamic.stencil_reference.front;
-      state->stencil_reference.back = cmd_buffer->state.dynamic.stencil_reference.back;
+      state->dynamic.depth_bias.bias = cmd_buffer->state.dynamic.depth_bias.bias;
+      state->dynamic.depth_bias.clamp = cmd_buffer->state.dynamic.depth_bias.clamp;
+      state->dynamic.depth_bias.slope = cmd_buffer->state.dynamic.depth_bias.slope;
 
-      state->fragment_shading_rate.size = cmd_buffer->state.dynamic.fragment_shading_rate.size;
-      state->fragment_shading_rate.combiner_ops[0] =
+      memcpy(state->dynamic.blend_constants, cmd_buffer->state.dynamic.blend_constants,
+             sizeof(state->dynamic.blend_constants));
+
+      state->dynamic.depth_bounds.min = cmd_buffer->state.dynamic.depth_bounds.min;
+      state->dynamic.depth_bounds.max = cmd_buffer->state.dynamic.depth_bounds.max;
+
+      state->dynamic.stencil_compare_mask.front = cmd_buffer->state.dynamic.stencil_compare_mask.front;
+      state->dynamic.stencil_compare_mask.back = cmd_buffer->state.dynamic.stencil_compare_mask.back;
+
+      state->dynamic.stencil_write_mask.front = cmd_buffer->state.dynamic.stencil_write_mask.front;
+      state->dynamic.stencil_write_mask.back = cmd_buffer->state.dynamic.stencil_write_mask.back;
+
+      state->dynamic.stencil_reference.front = cmd_buffer->state.dynamic.stencil_reference.front;
+      state->dynamic.stencil_reference.back = cmd_buffer->state.dynamic.stencil_reference.back;
+
+      state->dynamic.fragment_shading_rate.size = cmd_buffer->state.dynamic.fragment_shading_rate.size;
+      state->dynamic.fragment_shading_rate.combiner_ops[0] =
          cmd_buffer->state.dynamic.fragment_shading_rate.combiner_ops[0];
-      state->fragment_shading_rate.combiner_ops[1] =
+      state->dynamic.fragment_shading_rate.combiner_ops[1] =
          cmd_buffer->state.dynamic.fragment_shading_rate.combiner_ops[1];
 
-      state->depth_bias_enable = cmd_buffer->state.dynamic.depth_bias_enable;
+      state->dynamic.depth_bias_enable = cmd_buffer->state.dynamic.depth_bias_enable;
 
-      state->primitive_restart_enable = cmd_buffer->state.dynamic.primitive_restart_enable;
+      state->dynamic.primitive_restart_enable = cmd_buffer->state.dynamic.primitive_restart_enable;
 
-      state->rasterizer_discard_enable = cmd_buffer->state.dynamic.rasterizer_discard_enable;
+      state->dynamic.rasterizer_discard_enable = cmd_buffer->state.dynamic.rasterizer_discard_enable;
 
-      state->logic_op = cmd_buffer->state.dynamic.logic_op;
+      state->dynamic.logic_op = cmd_buffer->state.dynamic.logic_op;
 
-      state->color_write_enable = cmd_buffer->state.dynamic.color_write_enable;
+      state->dynamic.color_write_enable = cmd_buffer->state.dynamic.color_write_enable;
+
+      state->dynamic.discard_rectangle.count = cmd_buffer->state.dynamic.discard_rectangle.count;
+      typed_memcpy(state->dynamic.discard_rectangle.rectangles,
+                   cmd_buffer->state.dynamic.discard_rectangle.rectangles,
+                   MAX_DISCARD_RECTANGLES);
    }
 
    if (state->flags & RADV_META_SAVE_SAMPLE_LOCATIONS) {
-      typed_memcpy(&state->sample_location, &cmd_buffer->state.dynamic.sample_location, 1);
+      typed_memcpy(&state->dynamic.sample_location, &cmd_buffer->state.dynamic.sample_location, 1);
    }
 
    if (state->flags & RADV_META_SAVE_COMPUTE_PIPELINE) {
@@ -186,61 +209,84 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_PIPELINE;
 
       /* Restore all viewports. */
-      cmd_buffer->state.dynamic.viewport.count = state->viewport.count;
-      typed_memcpy(cmd_buffer->state.dynamic.viewport.viewports, state->viewport.viewports,
+      cmd_buffer->state.dynamic.viewport.count = state->dynamic.viewport.count;
+      typed_memcpy(cmd_buffer->state.dynamic.viewport.viewports, state->dynamic.viewport.viewports,
                    MAX_VIEWPORTS);
-      typed_memcpy(cmd_buffer->state.dynamic.viewport.xform, state->viewport.xform,
+      typed_memcpy(cmd_buffer->state.dynamic.viewport.xform, state->dynamic.viewport.xform,
                    MAX_VIEWPORTS);
 
       /* Restore all scissors. */
-      cmd_buffer->state.dynamic.scissor.count = state->scissor.count;
-      typed_memcpy(cmd_buffer->state.dynamic.scissor.scissors, state->scissor.scissors,
+      cmd_buffer->state.dynamic.scissor.count = state->dynamic.scissor.count;
+      typed_memcpy(cmd_buffer->state.dynamic.scissor.scissors, state->dynamic.scissor.scissors,
                    MAX_SCISSORS);
 
-      cmd_buffer->state.dynamic.cull_mode = state->cull_mode;
-      cmd_buffer->state.dynamic.front_face = state->front_face;
+      cmd_buffer->state.dynamic.line_stipple.factor = state->dynamic.line_stipple.factor;
+      cmd_buffer->state.dynamic.line_stipple.pattern = state->dynamic.line_stipple.pattern;
 
-      cmd_buffer->state.dynamic.primitive_topology = state->primitive_topology;
+      cmd_buffer->state.dynamic.cull_mode = state->dynamic.cull_mode;
+      cmd_buffer->state.dynamic.front_face = state->dynamic.front_face;
 
-      cmd_buffer->state.dynamic.depth_test_enable = state->depth_test_enable;
-      cmd_buffer->state.dynamic.depth_write_enable = state->depth_write_enable;
-      cmd_buffer->state.dynamic.depth_compare_op = state->depth_compare_op;
-      cmd_buffer->state.dynamic.depth_bounds_test_enable = state->depth_bounds_test_enable;
-      cmd_buffer->state.dynamic.stencil_test_enable = state->stencil_test_enable;
+      cmd_buffer->state.dynamic.primitive_topology = state->dynamic.primitive_topology;
 
-      cmd_buffer->state.dynamic.stencil_op.front.compare_op = state->stencil_op.front.compare_op;
-      cmd_buffer->state.dynamic.stencil_op.front.fail_op = state->stencil_op.front.fail_op;
-      cmd_buffer->state.dynamic.stencil_op.front.pass_op = state->stencil_op.front.pass_op;
+      cmd_buffer->state.dynamic.depth_test_enable = state->dynamic.depth_test_enable;
+      cmd_buffer->state.dynamic.depth_write_enable = state->dynamic.depth_write_enable;
+      cmd_buffer->state.dynamic.depth_compare_op = state->dynamic.depth_compare_op;
+      cmd_buffer->state.dynamic.depth_bounds_test_enable = state->dynamic.depth_bounds_test_enable;
+      cmd_buffer->state.dynamic.stencil_test_enable = state->dynamic.stencil_test_enable;
+
+      cmd_buffer->state.dynamic.stencil_op.front.compare_op = state->dynamic.stencil_op.front.compare_op;
+      cmd_buffer->state.dynamic.stencil_op.front.fail_op = state->dynamic.stencil_op.front.fail_op;
+      cmd_buffer->state.dynamic.stencil_op.front.pass_op = state->dynamic.stencil_op.front.pass_op;
       cmd_buffer->state.dynamic.stencil_op.front.depth_fail_op =
-         state->stencil_op.front.depth_fail_op;
+         state->dynamic.stencil_op.front.depth_fail_op;
 
-      cmd_buffer->state.dynamic.stencil_op.back.compare_op = state->stencil_op.back.compare_op;
-      cmd_buffer->state.dynamic.stencil_op.back.fail_op = state->stencil_op.back.fail_op;
-      cmd_buffer->state.dynamic.stencil_op.back.pass_op = state->stencil_op.back.pass_op;
+      cmd_buffer->state.dynamic.stencil_op.back.compare_op = state->dynamic.stencil_op.back.compare_op;
+      cmd_buffer->state.dynamic.stencil_op.back.fail_op = state->dynamic.stencil_op.back.fail_op;
+      cmd_buffer->state.dynamic.stencil_op.back.pass_op = state->dynamic.stencil_op.back.pass_op;
       cmd_buffer->state.dynamic.stencil_op.back.depth_fail_op =
-         state->stencil_op.back.depth_fail_op;
+         state->dynamic.stencil_op.back.depth_fail_op;
 
-      cmd_buffer->state.dynamic.stencil_write_mask.front = state->stencil_write_mask.front;
-      cmd_buffer->state.dynamic.stencil_write_mask.back = state->stencil_write_mask.back;
+      cmd_buffer->state.dynamic.line_width = state->dynamic.line_width;
 
-      cmd_buffer->state.dynamic.stencil_reference.front = state->stencil_reference.front;
-      cmd_buffer->state.dynamic.stencil_reference.back = state->stencil_reference.back;
+      cmd_buffer->state.dynamic.depth_bias.bias = state->dynamic.depth_bias.bias;
+      cmd_buffer->state.dynamic.depth_bias.clamp = state->dynamic.depth_bias.clamp;
+      cmd_buffer->state.dynamic.depth_bias.slope = state->dynamic.depth_bias.slope;
 
-      cmd_buffer->state.dynamic.fragment_shading_rate.size = state->fragment_shading_rate.size;
+      memcpy(cmd_buffer->state.dynamic.blend_constants, state->dynamic.blend_constants,
+             sizeof(state->dynamic.blend_constants));
+
+      cmd_buffer->state.dynamic.depth_bounds.min = state->dynamic.depth_bounds.min;
+      cmd_buffer->state.dynamic.depth_bounds.max = state->dynamic.depth_bounds.max;
+
+      cmd_buffer->state.dynamic.stencil_compare_mask.front = state->dynamic.stencil_compare_mask.front;
+      cmd_buffer->state.dynamic.stencil_compare_mask.back = state->dynamic.stencil_compare_mask.back;
+
+      cmd_buffer->state.dynamic.stencil_write_mask.front = state->dynamic.stencil_write_mask.front;
+      cmd_buffer->state.dynamic.stencil_write_mask.back = state->dynamic.stencil_write_mask.back;
+
+      cmd_buffer->state.dynamic.stencil_reference.front = state->dynamic.stencil_reference.front;
+      cmd_buffer->state.dynamic.stencil_reference.back = state->dynamic.stencil_reference.back;
+
+      cmd_buffer->state.dynamic.fragment_shading_rate.size = state->dynamic.fragment_shading_rate.size;
       cmd_buffer->state.dynamic.fragment_shading_rate.combiner_ops[0] =
-         state->fragment_shading_rate.combiner_ops[0];
+         state->dynamic.fragment_shading_rate.combiner_ops[0];
       cmd_buffer->state.dynamic.fragment_shading_rate.combiner_ops[1] =
-         state->fragment_shading_rate.combiner_ops[1];
+         state->dynamic.fragment_shading_rate.combiner_ops[1];
 
-      cmd_buffer->state.dynamic.depth_bias_enable = state->depth_bias_enable;
+      cmd_buffer->state.dynamic.depth_bias_enable = state->dynamic.depth_bias_enable;
 
-      cmd_buffer->state.dynamic.primitive_restart_enable = state->primitive_restart_enable;
+      cmd_buffer->state.dynamic.primitive_restart_enable = state->dynamic.primitive_restart_enable;
 
-      cmd_buffer->state.dynamic.rasterizer_discard_enable = state->rasterizer_discard_enable;
+      cmd_buffer->state.dynamic.rasterizer_discard_enable = state->dynamic.rasterizer_discard_enable;
 
-      cmd_buffer->state.dynamic.logic_op = state->logic_op;
+      cmd_buffer->state.dynamic.logic_op = state->dynamic.logic_op;
 
-      cmd_buffer->state.dynamic.color_write_enable = state->color_write_enable;
+      cmd_buffer->state.dynamic.color_write_enable = state->dynamic.color_write_enable;
+
+      cmd_buffer->state.dynamic.discard_rectangle.count = state->dynamic.discard_rectangle.count;
+      typed_memcpy(cmd_buffer->state.dynamic.discard_rectangle.rectangles,
+                   state->dynamic.discard_rectangle.rectangles,
+                   MAX_DISCARD_RECTANGLES);
 
       cmd_buffer->state.dirty |=
          RADV_CMD_DIRTY_DYNAMIC_VIEWPORT | RADV_CMD_DIRTY_DYNAMIC_SCISSOR |
@@ -253,12 +299,15 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
          RADV_CMD_DIRTY_DYNAMIC_FRAGMENT_SHADING_RATE | RADV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS_ENABLE |
          RADV_CMD_DIRTY_DYNAMIC_PRIMITIVE_RESTART_ENABLE |
          RADV_CMD_DIRTY_DYNAMIC_RASTERIZER_DISCARD_ENABLE | RADV_CMD_DIRTY_DYNAMIC_LOGIC_OP |
-         RADV_CMD_DIRTY_DYNAMIC_COLOR_WRITE_ENABLE;
+         RADV_CMD_DIRTY_DYNAMIC_COLOR_WRITE_ENABLE | RADV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE |
+         RADV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK | RADV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS |
+         RADV_CMD_DIRTY_DYNAMIC_BLEND_CONSTANTS | RADV_CMD_DIRTY_DYNAMIC_LINE_WIDTH |
+         RADV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS | RADV_CMD_DIRTY_DYNAMIC_DISCARD_RECTANGLE;
    }
 
    if (state->flags & RADV_META_SAVE_SAMPLE_LOCATIONS) {
       typed_memcpy(&cmd_buffer->state.dynamic.sample_location.locations,
-                   &state->sample_location.locations, 1);
+                   &state->dynamic.sample_location.locations, 1);
 
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS;
    }
@@ -620,7 +669,6 @@ nir_builder PRINTFLIKE(2, 3) radv_meta_init_shader(gl_shader_stage stage, const 
       va_end(args);
    }
 
-   b.shader->info.internal = true;
    b.shader->info.workgroup_size[0] = 1;
    b.shader->info.workgroup_size[1] = 1;
    b.shader->info.workgroup_size[2] = 1;

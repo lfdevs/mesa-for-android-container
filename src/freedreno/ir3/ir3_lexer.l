@@ -374,6 +374,7 @@ static int parse_reg(const char *str)
 "getspid"                         return TOKEN(T_OP_GETSPID);
 "getwid"                          return TOKEN(T_OP_GETWID);
 "getfiberid"                      return TOKEN(T_OP_GETFIBERID);
+"stc"                             return TOKEN(T_OP_STC);
 
                                   /* category 7: */
 "bar"                             return TOKEN(T_OP_BAR);
@@ -413,6 +414,7 @@ static int parse_reg(const char *str)
 "p"                               return 'p';
 "s2en"                            return TOKEN(T_S2EN);
 "s"                               return 's';
+"k"                               return 'k';
 "base"[0-9]+                      ir3_yylval.num = strtol(yytext+4, NULL, 10); return T_BASE;
 "offset"[0-9]+                    ir3_yylval.num = strtol(yytext+6, NULL, 10); return T_OFFSET;
 "uniform"                         return T_UNIFORM;

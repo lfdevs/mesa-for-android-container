@@ -501,6 +501,10 @@ binary clover::nir::spirv_to_nir(const binary &mod, const device &dev,
       NIR_PASS_V(nir, nir_opt_dce);
       NIR_PASS_V(nir, nir_lower_convert_alu_types, NULL);
 
+      if (compiler_options->lower_to_scalar) {
+         NIR_PASS_V(nir, nir_lower_alu_to_scalar,
+                    compiler_options->lower_to_scalar_filter, NULL);
+      }
       NIR_PASS_V(nir, nir_lower_system_values);
       nir_lower_compute_system_values_options sysval_options = { 0 };
       sysval_options.has_base_global_invocation_id = true;

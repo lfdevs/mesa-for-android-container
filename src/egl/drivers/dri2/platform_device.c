@@ -41,6 +41,7 @@
 
 #include "egl_dri2.h"
 #include "loader.h"
+#include "kopper_interface.h"
 #include "util/debug.h"
 
 static __DRIimage*
@@ -212,10 +213,17 @@ static const __DRIimageLoaderExtension image_loader_extension = {
    .getCapability    = device_get_capability,
 };
 
+static const __DRIkopperLoaderExtension kopper_loader_extension = {
+    .base = { __DRI_KOPPER_LOADER, 1 },
+
+    .SetSurfaceCreateInfo   = NULL,
+};
+
 static const __DRIextension *image_loader_extensions[] = {
    &image_loader_extension.base,
    &image_lookup_extension.base,
    &use_invalidate.base,
+   &kopper_loader_extension.base,
    NULL,
 };
 
@@ -223,6 +231,7 @@ static const __DRIextension *swrast_loader_extensions[] = {
    &swrast_pbuffer_loader_extension.base,
    &image_lookup_extension.base,
    &use_invalidate.base,
+   &kopper_loader_extension.base,
    NULL,
 };
 
@@ -313,7 +322,7 @@ device_probe_device_sw(_EGLDisplay *disp)
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
    dri2_dpy->fd = -1;
-   dri2_dpy->driver_name = strdup("swrast");
+   dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");
    if (!dri2_dpy->driver_name)
       return false;
 

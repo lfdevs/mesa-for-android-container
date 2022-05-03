@@ -25,6 +25,7 @@
 #include "d3d12_context.h"
 #include "d3d12_fence.h"
 #include "d3d12_query.h"
+#include "d3d12_residency.h"
 #include "d3d12_resource.h"
 #include "d3d12_screen.h"
 #include "d3d12_surface.h"
@@ -189,6 +190,8 @@ d3d12_start_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
       d3d12_resume_queries(ctx);
    if (ctx->current_predication)
       d3d12_enable_predication(ctx);
+
+   batch->submit_id = ++ctx->submit_id;
 }
 
 void
@@ -205,9 +208,15 @@ d3d12_end_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
       return;
    }
 
+   mtx_lock(&screen->submit_mutex);
+
+   d3d12_process_batch_residency(screen, batch);
+
    ID3D12CommandList* cmdlists[] = { ctx->cmdlist };
    screen->cmdqueue->ExecuteCommandLists(1, cmdlists);
-   batch->fence = d3d12_create_fence(screen, ctx);
+   batch->fence = d3d12_create_fence(screen);
+
+   mtx_unlock(&screen->submit_mutex);
 }
 
 enum batch_bo_reference_state
@@ -251,6 +260,8 @@ d3d12_batch_reference_sampler_view(struct d3d12_batch *batch,
    if (!entry) {
       entry = _mesa_set_add(batch->sampler_views, sv);
       pipe_reference(NULL, &sv->base.reference);
+
+      d3d12_batch_reference_resource(batch, d3d12_resource(sv->base.texture), false);
    }
 }
 

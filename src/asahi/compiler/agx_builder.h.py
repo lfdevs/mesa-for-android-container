@@ -171,6 +171,14 @@ agx_ushr(agx_builder *b, agx_index s0, agx_index s1)
     return tmp;
 }
 
+static inline agx_index
+agx_mov(agx_builder *b, enum agx_size size, agx_index s0)
+{
+    agx_index tmp = agx_temp(b->shader, size);
+    agx_mov_to(b, tmp, s0);
+    return tmp;
+}
+
 #endif
 """
 

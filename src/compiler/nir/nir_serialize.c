@@ -59,6 +59,7 @@ typedef struct {
    /* For skipping equal ALU headers (typical after scalarization). */
    nir_instr_type last_instr_type;
    uintptr_t last_alu_header_offset;
+   uint32_t last_alu_header;
 
    /* Don't write optional data such as variable names. */
    bool strip;
@@ -708,8 +709,7 @@ write_dest(write_ctx *ctx, const nir_dest *dst, union packed_instr header,
       if (ctx->last_instr_type == nir_instr_type_alu) {
          assert(ctx->last_alu_header_offset);
          union packed_instr last_header;
-         memcpy(&last_header, ctx->blob->data + ctx->last_alu_header_offset,
-                sizeof(last_header));
+         last_header.u32 = ctx->last_alu_header;
 
          /* Clear the field that counts ALUs with equal headers. */
          union packed_instr clean_header;
@@ -722,16 +722,17 @@ write_dest(write_ctx *ctx, const nir_dest *dst, union packed_instr header,
          if (last_header.alu.num_followup_alu_sharing_header < 3 &&
              header.u32 == clean_header.u32) {
             last_header.alu.num_followup_alu_sharing_header++;
-            memcpy(ctx->blob->data + ctx->last_alu_header_offset,
-                   &last_header, sizeof(last_header));
-
+            blob_overwrite_uint32(ctx->blob, ctx->last_alu_header_offset,
+                                  last_header.u32);
+            ctx->last_alu_header = last_header.u32;
             equal_header = true;
          }
       }
 
       if (!equal_header) {
-         ctx->last_alu_header_offset = ctx->blob->size;
-         blob_write_uint32(ctx->blob, header.u32);
+         ctx->last_alu_header_offset = blob_reserve_uint32(ctx->blob);
+         blob_overwrite_uint32(ctx->blob, ctx->last_alu_header_offset, header.u32);
+         ctx->last_alu_header = header.u32;
       }
    } else {
       blob_write_uint32(ctx->blob, header.u32);
@@ -1606,9 +1607,10 @@ static void
 write_fixup_phis(write_ctx *ctx)
 {
    util_dynarray_foreach(&ctx->phi_fixups, write_phi_fixup, fixup) {
-      uint32_t *blob_ptr = (uint32_t *)(ctx->blob->data + fixup->blob_offset);
-      blob_ptr[0] = write_lookup_object(ctx, fixup->src);
-      blob_ptr[1] = write_lookup_object(ctx, fixup->block);
+      blob_overwrite_uint32(ctx->blob, fixup->blob_offset,
+                            write_lookup_object(ctx, fixup->src));
+      blob_overwrite_uint32(ctx->blob, fixup->blob_offset + sizeof(uint32_t),
+                            write_lookup_object(ctx, fixup->block));
    }
 
    util_dynarray_clear(&ctx->phi_fixups);
@@ -1953,6 +1955,10 @@ static void
 write_function_impl(write_ctx *ctx, const nir_function_impl *fi)
 {
    blob_write_uint8(ctx->blob, fi->structured);
+   blob_write_uint8(ctx->blob, !!fi->preamble);
+
+   if (fi->preamble)
+      blob_write_uint32(ctx->blob, write_lookup_object(ctx, fi->preamble));
 
    write_var_list(ctx, &fi->locals);
    write_reg_list(ctx, &fi->registers);
@@ -1969,6 +1975,10 @@ read_function_impl(read_ctx *ctx, nir_function *fxn)
    fi->function = fxn;
 
    fi->structured = blob_read_uint8(ctx->blob);
+   bool preamble = blob_read_uint8(ctx->blob);
+
+   if (preamble)
+      fi->preamble = read_object(ctx);
 
    read_var_list(ctx, &fi->locals);
    read_reg_list(ctx, &fi->registers);
@@ -1985,11 +1995,15 @@ read_function_impl(read_ctx *ctx, nir_function *fxn)
 static void
 write_function(write_ctx *ctx, const nir_function *fxn)
 {
-   uint32_t flags = fxn->is_entrypoint;
-   if (fxn->name)
+   uint32_t flags = 0;
+   if (fxn->is_entrypoint)
+      flags |= 0x1;
+   if (fxn->is_preamble)
       flags |= 0x2;
-   if (fxn->impl)
+   if (fxn->name)
       flags |= 0x4;
+   if (fxn->impl)
+      flags |= 0x8;
    blob_write_uint32(ctx->blob, flags);
    if (fxn->name)
       blob_write_string(ctx->blob, fxn->name);
@@ -2015,7 +2029,7 @@ static void
 read_function(read_ctx *ctx)
 {
    uint32_t flags = blob_read_uint32(ctx->blob);
-   bool has_name = flags & 0x2;
+   bool has_name = flags & 0x4;
    char *name = has_name ? blob_read_string(ctx->blob) : NULL;
 
    nir_function *fxn = nir_function_create(ctx->nir, name);
@@ -2031,7 +2045,8 @@ read_function(read_ctx *ctx)
    }
 
    fxn->is_entrypoint = flags & 0x1;
-   if (flags & 0x4)
+   fxn->is_preamble = flags & 0x2;
+   if (flags & 0x8)
       fxn->impl = NIR_SERIALIZE_FUNC_HAS_IMPL;
 }
 
@@ -2089,7 +2104,7 @@ nir_serialize(struct blob *blob, const nir_shader *nir, bool strip)
    if (nir->constant_data_size > 0)
       blob_write_bytes(blob, nir->constant_data, nir->constant_data_size);
 
-   *(uint32_t *)(blob->data + idx_size_offset) = ctx.next_idx;
+   blob_overwrite_uint32(blob, idx_size_offset, ctx.next_idx);
 
    _mesa_hash_table_destroy(ctx.remap_table, NULL);
    util_dynarray_fini(&ctx.phi_fixups);

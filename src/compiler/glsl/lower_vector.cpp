@@ -35,86 +35,17 @@ namespace {
 
 class lower_vector_visitor : public ir_rvalue_visitor {
 public:
-   lower_vector_visitor() : dont_lower_swz(false), progress(false)
+   lower_vector_visitor() : progress(false)
    {
       /* empty */
    }
 
    void handle_rvalue(ir_rvalue **rvalue);
 
-   /**
-    * Should SWZ-like expressions be lowered?
-    */
-   bool dont_lower_swz;
-
    bool progress;
 };
 
 } /* anonymous namespace */
-
-/**
- * Determine if an IR expression tree looks like an extended swizzle
- *
- * Extended swizzles consist of access of a single vector source (with possible
- * per component negation) and the constants -1, 0, or 1.
- */
-static bool
-is_extended_swizzle(ir_expression *ir)
-{
-   /* Track any variables that are accessed by this expression.
-    */
-   ir_variable *var = NULL;
-
-   assert(ir->operation == ir_quadop_vector);
-
-   for (unsigned i = 0; i < ir->type->vector_elements; i++) {
-      ir_rvalue *op = ir->operands[i];
-
-      while (op != NULL) {
-	 switch (op->ir_type) {
-	 case ir_type_constant: {
-	    const ir_constant *const c = op->as_constant();
-
-	    if (!c->is_one() && !c->is_zero() && !c->is_negative_one())
-	       return false;
-
-	    op = NULL;
-	    break;
-	 }
-
-	 case ir_type_dereference_variable: {
-	    ir_dereference_variable *const d = (ir_dereference_variable *) op;
-
-	    if ((var != NULL) && (var != d->var))
-	       return false;
-
-	    var = d->var;
-	    op = NULL;
-	    break;
-	 }
-
-	 case ir_type_expression: {
-	    ir_expression *const ex = (ir_expression *) op;
-
-	    if (ex->operation != ir_unop_neg)
-	       return false;
-
-	    op = ex->operands[0];
-	    break;
-	 }
-
-	 case ir_type_swizzle:
-	    op = ((ir_swizzle *) op)->val;
-	    break;
-
-	 default:
-	    return false;
-	 }
-      }
-   }
-
-   return true;
-}
 
 void
 lower_vector_visitor::handle_rvalue(ir_rvalue **rvalue)
@@ -124,9 +55,6 @@ lower_vector_visitor::handle_rvalue(ir_rvalue **rvalue)
 
    ir_expression *expr = (*rvalue)->as_expression();
    if ((expr == NULL) || (expr->operation != ir_quadop_vector))
-      return;
-
-   if (this->dont_lower_swz && is_extended_swizzle(expr))
       return;
 
    /* FINISHME: Is this the right thing to use for the ralloc context?
@@ -191,7 +119,7 @@ lower_vector_visitor::handle_rvalue(ir_rvalue **rvalue)
 				  &d);
       ir_dereference *const lhs = new(mem_ctx) ir_dereference_variable(temp);
       ir_assignment *const assign =
-	 new(mem_ctx) ir_assignment(lhs, c, NULL, write_mask);
+	 new(mem_ctx) ir_assignment(lhs, c, write_mask);
 
       this->base_ir->insert_before(assign);
    }
@@ -204,7 +132,7 @@ lower_vector_visitor::handle_rvalue(ir_rvalue **rvalue)
 
       ir_dereference *const lhs = new(mem_ctx) ir_dereference_variable(temp);
       ir_assignment *const assign =
-	 new(mem_ctx) ir_assignment(lhs, expr->operands[i], NULL, (1U << i));
+	 new(mem_ctx) ir_assignment(lhs, expr->operands[i], 1U << i);
 
       this->base_ir->insert_before(assign);
       assigned++;
@@ -217,11 +145,10 @@ lower_vector_visitor::handle_rvalue(ir_rvalue **rvalue)
 }
 
 bool
-lower_quadop_vector(exec_list *instructions, bool dont_lower_swz)
+lower_quadop_vector(exec_list *instructions)
 {
    lower_vector_visitor v;
 
-   v.dont_lower_swz = dont_lower_swz;
    visit_list_elements(&v, instructions);
 
    return v.progress;

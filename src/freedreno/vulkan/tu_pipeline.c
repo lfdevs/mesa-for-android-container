@@ -63,15 +63,16 @@ emit_load_state(struct tu_cs *cs, unsigned opcode, enum a6xx_state_type st,
 }
 
 static unsigned
-tu6_load_state_size(struct tu_pipeline *pipeline, bool compute)
+tu6_load_state_size(struct tu_pipeline *pipeline,
+                    struct tu_pipeline_layout *layout, bool compute)
 {
    const unsigned load_state_size = 4;
    unsigned size = 0;
-   for (unsigned i = 0; i < pipeline->layout->num_sets; i++) {
+   for (unsigned i = 0; i < layout->num_sets; i++) {
       if (!(pipeline->active_desc_sets & (1u << i)))
          continue;
 
-      struct tu_descriptor_set_layout *set_layout = pipeline->layout->set[i].layout;
+      struct tu_descriptor_set_layout *set_layout = layout->set[i].layout;
       for (unsigned j = 0; j < set_layout->binding_count; j++) {
          struct tu_descriptor_set_binding_layout *binding = &set_layout->binding[j];
          unsigned count = 0;
@@ -125,16 +126,16 @@ tu6_load_state_size(struct tu_pipeline *pipeline, bool compute)
 }
 
 static void
-tu6_emit_load_state(struct tu_pipeline *pipeline, bool compute)
+tu6_emit_load_state(struct tu_pipeline *pipeline,
+                    struct tu_pipeline_layout *layout, bool compute)
 {
-   unsigned size = tu6_load_state_size(pipeline, compute);
+   unsigned size = tu6_load_state_size(pipeline, layout, compute);
    if (size == 0)
       return;
 
    struct tu_cs cs;
    tu_cs_begin_sub_stream(&pipeline->cs, size, &cs);
 
-   struct tu_pipeline_layout *layout = pipeline->layout;
    for (unsigned i = 0; i < layout->num_sets; i++) {
       /* From 13.2.7. Descriptor Set Binding:
        *
@@ -174,21 +175,23 @@ tu6_emit_load_state(struct tu_pipeline *pipeline, bool compute)
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
             base = MAX_SETS;
             offset = (layout->set[i].dynamic_offset_start +
-                      binding->dynamic_offset_offset) * A6XX_TEX_CONST_DWORDS;
+                      binding->dynamic_offset_offset) / 4;
             FALLTHROUGH;
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
          case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: {
+            unsigned mul = binding->size / (A6XX_TEX_CONST_DWORDS * 4);
             /* IBO-backed resources only need one packet for all graphics stages */
             if (stages & ~VK_SHADER_STAGE_COMPUTE_BIT) {
                emit_load_state(&cs, CP_LOAD_STATE6, ST6_SHADER, SB6_IBO,
-                               base, offset, count);
+                               base, offset, count * mul);
             }
             if (stages & VK_SHADER_STAGE_COMPUTE_BIT) {
                emit_load_state(&cs, CP_LOAD_STATE6_FRAG, ST6_IBO, SB6_CS_SHADER,
-                               base, offset, count);
+                               base, offset, count * mul);
             }
             break;
+         }
          case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
          case VK_DESCRIPTOR_TYPE_MUTABLE_VALVE:
             /* nothing - input attachment doesn't use bindless */
@@ -207,7 +210,7 @@ tu6_emit_load_state(struct tu_pipeline *pipeline, bool compute)
          case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
             base = MAX_SETS;
             offset = (layout->set[i].dynamic_offset_start +
-                      binding->dynamic_offset_offset) * A6XX_TEX_CONST_DWORDS;
+                      binding->dynamic_offset_offset) / 4;
             FALLTHROUGH;
          case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
             tu_foreach_stage(stage, stages) {
@@ -246,6 +249,7 @@ tu6_emit_load_state(struct tu_pipeline *pipeline, bool compute)
 struct tu_pipeline_builder
 {
    struct tu_device *device;
+   void *mem_ctx;
    struct tu_pipeline_cache *cache;
    struct tu_pipeline_layout *layout;
    const VkAllocationCallbacks *alloc;
@@ -274,6 +278,8 @@ struct tu_pipeline_builder
    uint32_t render_components;
    uint32_t multiview_mask;
 
+   bool subpass_raster_order_attachment_access;
+   bool subpass_feedback_loop_color;
    bool subpass_feedback_loop_ds;
 };
 
@@ -416,7 +422,16 @@ tu_xs_get_immediates_packet_size_dwords(const struct ir3_shader_variant *xs)
 static uint32_t
 tu_xs_get_additional_cs_size_dwords(const struct ir3_shader_variant *xs)
 {
+   const struct ir3_const_state *const_state = ir3_const_state(xs);
+
    uint32_t size = tu_xs_get_immediates_packet_size_dwords(xs);
+
+   /* Variable number of UBO upload ranges. */
+   size += 4 * const_state->ubo_state.num_enabled;
+
+   /* Variable number of dwords for the primitive map */
+   size += DIV_ROUND_UP(xs->input_size, 4);
+
    return size;
 }
 
@@ -488,7 +503,6 @@ tu6_emit_xs(struct tu_cs *cs,
                .fullregfootprint = xs->info.max_reg + 1,
                .halfregfootprint = xs->info.max_half_reg + 1,
                .branchstack = ir3_shader_branchstack_hw(xs),
-               .mergedregs = xs->mergedregs,
       ));
       break;
    case MESA_SHADER_GEOMETRY:
@@ -1612,11 +1626,11 @@ tu6_emit_geom_tess_consts(struct tu_cs *cs,
 
       /* Create the shared tess factor BO the first time tess is used on the device. */
       mtx_lock(&dev->mutex);
-      if (!dev->tess_bo.size)
+      if (!dev->tess_bo)
          tu_bo_init_new(dev, &dev->tess_bo, TU_TESS_BO_SIZE, TU_BO_ALLOC_NO_FLAGS);
       mtx_unlock(&dev->mutex);
 
-      uint64_t tess_factor_iova = dev->tess_bo.iova;
+      uint64_t tess_factor_iova = dev->tess_bo->iova;
       uint64_t tess_param_iova = tess_factor_iova + TU_TESS_FACTOR_SIZE;
 
       uint32_t hs_params[8] = {
@@ -1803,7 +1817,6 @@ tu6_emit_vertex_input(struct tu_pipeline *pipeline,
                       const struct ir3_shader_variant *vs,
                       const VkPipelineVertexInputStateCreateInfo *info)
 {
-   uint32_t vfd_decode_idx = 0;
    uint32_t binding_instanced = 0; /* bitmask of instanced bindings */
    uint32_t step_rate[MAX_VBS];
 
@@ -1832,50 +1845,65 @@ tu6_emit_vertex_input(struct tu_pipeline *pipeline,
       }
    }
 
-   /* TODO: emit all VFD_DECODE/VFD_DEST_CNTL in same (two) pkt4 */
+   int32_t input_for_attr[MAX_VERTEX_ATTRIBS];
+   uint32_t used_attrs_count = 0;
 
-   for (uint32_t i = 0; i < info->vertexAttributeDescriptionCount; i++) {
-      const VkVertexInputAttributeDescription *attr =
-         &info->pVertexAttributeDescriptions[i];
-      uint32_t input_idx;
-
-      for (input_idx = 0; input_idx < vs->inputs_count; input_idx++) {
-         if ((vs->inputs[input_idx].slot - VERT_ATTRIB_GENERIC0) == attr->location)
+   for (uint32_t attr_idx = 0; attr_idx < info->vertexAttributeDescriptionCount; attr_idx++) {
+      input_for_attr[attr_idx] = -1;
+      for (uint32_t input_idx = 0; input_idx < vs->inputs_count; input_idx++) {
+         if ((vs->inputs[input_idx].slot - VERT_ATTRIB_GENERIC0) ==
+             info->pVertexAttributeDescriptions[attr_idx].location) {
+            input_for_attr[attr_idx] = input_idx;
+            used_attrs_count++;
             break;
+         }
       }
+   }
 
-      /* attribute not used, skip it */
-      if (input_idx == vs->inputs_count)
+   if (used_attrs_count)
+      tu_cs_emit_pkt4(cs, REG_A6XX_VFD_DECODE_INSTR(0), used_attrs_count * 2);
+
+   for (uint32_t attr_idx = 0; attr_idx < info->vertexAttributeDescriptionCount; attr_idx++) {
+      const VkVertexInputAttributeDescription *attr =
+         &info->pVertexAttributeDescriptions[attr_idx];
+
+      if (input_for_attr[attr_idx] == -1)
          continue;
 
       const struct tu_native_format format = tu6_format_vtx(attr->format);
-      tu_cs_emit_regs(cs,
-                      A6XX_VFD_DECODE_INSTR(vfd_decode_idx,
-                        .idx = attr->binding,
-                        .offset = attr->offset,
-                        .instanced = binding_instanced & (1 << attr->binding),
-                        .format = format.fmt,
-                        .swap = format.swap,
-                        .unk30 = 1,
-                        ._float = !vk_format_is_int(attr->format)),
-                      A6XX_VFD_DECODE_STEP_RATE(vfd_decode_idx, step_rate[attr->binding]));
+      tu_cs_emit(cs, A6XX_VFD_DECODE_INSTR(0,
+                       .idx = attr->binding,
+                       .offset = attr->offset,
+                       .instanced = binding_instanced & (1 << attr->binding),
+                       .format = format.fmt,
+                       .swap = format.swap,
+                       .unk30 = 1,
+                       ._float = !vk_format_is_int(attr->format)).value);
+      tu_cs_emit(cs, A6XX_VFD_DECODE_STEP_RATE(0, step_rate[attr->binding]).value);
+   }
 
-      tu_cs_emit_regs(cs,
-                      A6XX_VFD_DEST_CNTL_INSTR(vfd_decode_idx,
-                        .writemask = vs->inputs[input_idx].compmask,
-                        .regid = vs->inputs[input_idx].regid));
+   if (used_attrs_count)
+      tu_cs_emit_pkt4(cs, REG_A6XX_VFD_DEST_CNTL_INSTR(0), used_attrs_count);
 
-      vfd_decode_idx++;
+   for (uint32_t attr_idx = 0; attr_idx < info->vertexAttributeDescriptionCount; attr_idx++) {
+      int32_t input_idx = input_for_attr[attr_idx];
+      if (input_idx == -1)
+         continue;
+
+      tu_cs_emit(cs, A6XX_VFD_DEST_CNTL_INSTR(0,
+                       .writemask = vs->inputs[input_idx].compmask,
+                       .regid = vs->inputs[input_idx].regid).value);
    }
 
    tu_cs_emit_regs(cs,
                    A6XX_VFD_CONTROL_0(
-                     .fetch_cnt = vfd_decode_idx, /* decode_cnt for binning pass ? */
-                     .decode_cnt = vfd_decode_idx));
+                     .fetch_cnt = used_attrs_count, /* decode_cnt for binning pass ? */
+                     .decode_cnt = used_attrs_count));
 }
 
 void
-tu6_emit_viewport(struct tu_cs *cs, const VkViewport *viewports, uint32_t num_viewport)
+tu6_emit_viewport(struct tu_cs *cs, const VkViewport *viewports, uint32_t num_viewport,
+                  bool z_negative_one_to_one)
 {
    VkExtent2D guardband = {511, 511};
 
@@ -1886,10 +1914,20 @@ tu6_emit_viewport(struct tu_cs *cs, const VkViewport *viewports, uint32_t num_vi
       float scales[3];
       scales[0] = viewport->width / 2.0f;
       scales[1] = viewport->height / 2.0f;
-      scales[2] = viewport->maxDepth - viewport->minDepth;
+      if (z_negative_one_to_one) {
+         scales[2] = 0.5 * (viewport->maxDepth - viewport->minDepth);
+      } else {
+         scales[2] = viewport->maxDepth - viewport->minDepth;
+      }
+
       offsets[0] = viewport->x + scales[0];
       offsets[1] = viewport->y + scales[1];
-      offsets[2] = viewport->minDepth;
+      if (z_negative_one_to_one) {
+         offsets[2] = 0.5 * (viewport->minDepth + viewport->maxDepth);
+      } else {
+         offsets[2] = viewport->minDepth;
+      }
+
       for (uint32_t j = 0; j < 3; j++) {
          tu_cs_emit(cs, fui(offsets[j]));
          tu_cs_emit(cs, fui(scales[j]));
@@ -2217,7 +2255,7 @@ tu_setup_pvtmem(struct tu_device *dev,
    if (result != VK_SUCCESS)
       return result;
 
-   config->iova = pipeline->pvtmem_bo.iova;
+   config->iova = pipeline->pvtmem_bo->iova;
 
    return result;
 }
@@ -2226,10 +2264,12 @@ tu_setup_pvtmem(struct tu_device *dev,
 static VkResult
 tu_pipeline_allocate_cs(struct tu_device *dev,
                         struct tu_pipeline *pipeline,
+                        struct tu_pipeline_layout *layout,
                         struct tu_pipeline_builder *builder,
+                        struct tu_pipeline_cache *cache,
                         struct ir3_shader_variant *compute)
 {
-   uint32_t size = 2048 + tu6_load_state_size(pipeline, compute);
+   uint32_t size = 1024 + tu6_load_state_size(pipeline, layout, compute);
 
    /* graphics case: */
    if (builder) {
@@ -2262,13 +2302,27 @@ tu_pipeline_allocate_cs(struct tu_device *dev,
       size += tu_xs_get_additional_cs_size_dwords(compute);
    }
 
-   tu_cs_init(&pipeline->cs, dev, TU_CS_MODE_SUB_STREAM, size);
+   /* Allocate the space for the pipeline out of the device's RO suballocator.
+    *
+    * Sub-allocating BOs saves memory and also kernel overhead in refcounting of
+    * BOs at exec time.
+    *
+    * The pipeline cache would seem like a natural place to stick the
+    * suballocator, except that it is not guaranteed to outlive the pipelines
+    * created from it, so you can't store any long-lived state there, and you
+    * can't use its EXTERNALLY_SYNCHRONIZED flag to avoid atomics because
+    * pipeline destroy isn't synchronized by the cache.
+    */
+   pthread_mutex_lock(&dev->pipeline_mutex);
+   VkResult result = tu_suballoc_bo_alloc(&pipeline->bo, &dev->pipeline_suballoc,
+                                          size * 4, 128);
+   pthread_mutex_unlock(&dev->pipeline_mutex);
+   if (result != VK_SUCCESS)
+      return result;
 
-   /* Reserve the space now such that tu_cs_begin_sub_stream never fails. Note
-    * that LOAD_STATE can potentially take up a large amount of space so we
-    * calculate its size explicitly.
-   */
-   return tu_cs_reserve_space(&pipeline->cs, size);
+   tu_cs_init_suballoc(&pipeline->cs, dev, &pipeline->bo);
+
+   return VK_SUCCESS;
 }
 
 static void
@@ -2427,7 +2481,7 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
       if (!stage_info)
          continue;
 
-      nir[stage] = tu_spirv_to_nir(builder->device, stage_info, stage);
+      nir[stage] = tu_spirv_to_nir(builder->device, builder->mem_ctx, stage_info, stage);
       if (!nir[stage])
          return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
@@ -2825,11 +2879,14 @@ tu_pipeline_builder_parse_viewport(struct tu_pipeline_builder *builder,
 
    const VkPipelineViewportStateCreateInfo *vp_info =
       builder->create_info->pViewportState;
+   const VkPipelineViewportDepthClipControlCreateInfoEXT *depth_clip_info =
+         vk_find_struct_const(vp_info->pNext, PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT);
+   pipeline->z_negative_one_to_one = depth_clip_info ? depth_clip_info->negativeOneToOne : false;
 
    struct tu_cs cs;
 
    if (tu_pipeline_static_state(pipeline, &cs, VK_DYNAMIC_STATE_VIEWPORT, 8 + 10 * vp_info->viewportCount))
-      tu6_emit_viewport(&cs, vp_info->pViewports, vp_info->viewportCount);
+      tu6_emit_viewport(&cs, vp_info->pViewports, vp_info->viewportCount, pipeline->z_negative_one_to_one);
 
    if (tu_pipeline_static_state(pipeline, &cs, VK_DYNAMIC_STATE_SCISSOR, 1 + 2 * vp_info->scissorCount))
       tu6_emit_scissor(&cs, vp_info->pScissors, vp_info->scissorCount);
@@ -2876,7 +2933,7 @@ tu_pipeline_builder_parse_rasterization(struct tu_pipeline_builder *builder,
                      .zfar_clip_disable = depth_clip_disable,
                      /* TODO should this be depth_clip_disable instead? */
                      .unk5 = rast_info->depthClampEnable,
-                     .zero_gb_scale_z = 1,
+                     .zero_gb_scale_z = pipeline->z_negative_one_to_one ? 0 : 1,
                      .vp_clip_code_ignore = 1));
 
    tu_cs_emit_regs(&cs,
@@ -3146,14 +3203,92 @@ tu_pipeline_builder_parse_multisample_and_color_blend(
 }
 
 static void
+tu_pipeline_builder_parse_rasterization_order(
+   struct tu_pipeline_builder *builder, struct tu_pipeline *pipeline)
+{
+   if (builder->rasterizer_discard)
+      return;
+
+   pipeline->subpass_feedback_loop_ds = builder->subpass_feedback_loop_ds;
+
+   const VkPipelineColorBlendStateCreateInfo *blend_info =
+      builder->create_info->pColorBlendState;
+
+   const VkPipelineDepthStencilStateCreateInfo *ds_info =
+      builder->create_info->pDepthStencilState;
+
+   if (builder->use_color_attachments) {
+      pipeline->raster_order_attachment_access =
+         blend_info->flags &
+         VK_PIPELINE_COLOR_BLEND_STATE_CREATE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_BIT_ARM;
+   }
+
+   if (builder->depth_attachment_format != VK_FORMAT_UNDEFINED) {
+      pipeline->raster_order_attachment_access |=
+         ds_info->flags &
+         (VK_PIPELINE_DEPTH_STENCIL_STATE_CREATE_RASTERIZATION_ORDER_ATTACHMENT_DEPTH_ACCESS_BIT_ARM |
+          VK_PIPELINE_DEPTH_STENCIL_STATE_CREATE_RASTERIZATION_ORDER_ATTACHMENT_STENCIL_ACCESS_BIT_ARM);
+   }
+
+   if (unlikely(builder->device->physical_device->instance->debug_flags & TU_DEBUG_RAST_ORDER))
+      pipeline->raster_order_attachment_access = true;
+
+   /* VK_EXT_blend_operation_advanced would also require ordered access
+    * when implemented in the future.
+    */
+
+   uint32_t sysmem_prim_mode = NO_FLUSH;
+   uint32_t gmem_prim_mode = NO_FLUSH;
+
+   if (pipeline->raster_order_attachment_access) {
+      /* VK_ARM_rasterization_order_attachment_access:
+       *
+       * This extension allow access to framebuffer attachments when used as
+       * both input and color attachments from one fragment to the next,
+       * in rasterization order, without explicit synchronization.
+       */
+      sysmem_prim_mode = FLUSH_PER_OVERLAP_AND_OVERWRITE;
+      gmem_prim_mode = FLUSH_PER_OVERLAP;
+   } else {
+      /* If there is a feedback loop, then the shader can read the previous value
+       * of a pixel being written out. It can also write some components and then
+       * read different components without a barrier in between. This is a
+       * problem in sysmem mode with UBWC, because the main buffer and flags
+       * buffer can get out-of-sync if only one is flushed. We fix this by
+       * setting the SINGLE_PRIM_MODE field to the same value that the blob does
+       * for advanced_blend in sysmem mode if a feedback loop is detected.
+       */
+      if (builder->subpass_feedback_loop_color ||
+          builder->subpass_feedback_loop_ds) {
+         sysmem_prim_mode = FLUSH_PER_OVERLAP_AND_OVERWRITE;
+      }
+   }
+
+   struct tu_cs cs;
+
+   pipeline->prim_order_state_gmem = tu_cs_draw_state(&pipeline->cs, &cs, 2);
+   tu_cs_emit_write_reg(&cs, REG_A6XX_GRAS_SC_CNTL,
+                        A6XX_GRAS_SC_CNTL_CCUSINGLECACHELINESIZE(2) |
+                        A6XX_GRAS_SC_CNTL_SINGLE_PRIM_MODE(gmem_prim_mode));
+
+   pipeline->prim_order_state_sysmem = tu_cs_draw_state(&pipeline->cs, &cs, 2);
+   tu_cs_emit_write_reg(&cs, REG_A6XX_GRAS_SC_CNTL,
+                        A6XX_GRAS_SC_CNTL_CCUSINGLECACHELINESIZE(2) |
+                        A6XX_GRAS_SC_CNTL_SINGLE_PRIM_MODE(sysmem_prim_mode));
+}
+
+static void
 tu_pipeline_finish(struct tu_pipeline *pipeline,
                    struct tu_device *dev,
                    const VkAllocationCallbacks *alloc)
 {
    tu_cs_finish(&pipeline->cs);
+   pthread_mutex_lock(&dev->pipeline_mutex);
+   tu_suballoc_bo_free(&dev->pipeline_suballoc, &pipeline->bo);
+   pthread_mutex_unlock(&dev->pipeline_mutex);
 
-   if (pipeline->pvtmem_bo.size)
-      tu_bo_finish(dev, &pipeline->pvtmem_bo);
+   if (pipeline->pvtmem_bo)
+      tu_bo_finish(dev, pipeline->pvtmem_bo);
 
    ralloc_free(pipeline->executables_mem_ctx);
 }
@@ -3169,8 +3304,6 @@ tu_pipeline_builder_build(struct tu_pipeline_builder *builder,
    if (!*pipeline)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   (*pipeline)->layout = builder->layout;
-   (*pipeline)->subpass_feedback_loop_ds = builder->subpass_feedback_loop_ds;
    (*pipeline)->executables_mem_ctx = ralloc_context(NULL);
    util_dynarray_init(&(*pipeline)->executables, (*pipeline)->executables_mem_ctx);
 
@@ -3181,7 +3314,8 @@ tu_pipeline_builder_build(struct tu_pipeline_builder *builder,
       return result;
    }
 
-   result = tu_pipeline_allocate_cs(builder->device, *pipeline, builder, NULL);
+   result = tu_pipeline_allocate_cs(builder->device, *pipeline,
+                                    builder->layout, builder, builder->cache, NULL);
    if (result != VK_SUCCESS) {
       vk_object_free(&builder->device->vk, builder->alloc, *pipeline);
       return result;
@@ -3230,12 +3364,8 @@ tu_pipeline_builder_build(struct tu_pipeline_builder *builder,
    tu_pipeline_builder_parse_rasterization(builder, *pipeline);
    tu_pipeline_builder_parse_depth_stencil(builder, *pipeline);
    tu_pipeline_builder_parse_multisample_and_color_blend(builder, *pipeline);
-   tu6_emit_load_state(*pipeline, false);
-
-   /* we should have reserved enough space upfront such that the CS never
-    * grows
-    */
-   assert((*pipeline)->cs.bo_count == 1);
+   tu_pipeline_builder_parse_rasterization_order(builder, *pipeline);
+   tu6_emit_load_state(*pipeline, builder->layout, false);
 
    return VK_SUCCESS;
 }
@@ -3248,6 +3378,7 @@ tu_pipeline_builder_finish(struct tu_pipeline_builder *builder)
          continue;
       tu_shader_destroy(builder->device, builder->shaders[i], builder->alloc);
    }
+   ralloc_free(builder->mem_ctx);
 }
 
 static void
@@ -3262,6 +3393,7 @@ tu_pipeline_builder_init_graphics(
 
    *builder = (struct tu_pipeline_builder) {
       .device = dev,
+      .mem_ctx = ralloc_context(NULL),
       .cache = cache,
       .create_info = create_info,
       .alloc = alloc,
@@ -3284,6 +3416,9 @@ tu_pipeline_builder_init_graphics(
    const struct tu_subpass *subpass =
       &pass->subpasses[create_info->subpass];
 
+   builder->subpass_raster_order_attachment_access =
+      subpass->raster_order_attachment_access;
+   builder->subpass_feedback_loop_color = subpass->feedback_loop_color;
    builder->subpass_feedback_loop_ds = subpass->feedback_loop_ds;
 
    builder->multiview_mask = subpass->multiview_mask;
@@ -3379,12 +3514,13 @@ tu_CreateGraphicsPipelines(VkDevice device,
 
 static VkResult
 tu_compute_pipeline_create(VkDevice device,
-                           VkPipelineCache _cache,
+                           VkPipelineCache pipelineCache,
                            const VkComputePipelineCreateInfo *pCreateInfo,
                            const VkAllocationCallbacks *pAllocator,
                            VkPipeline *pPipeline)
 {
    TU_FROM_HANDLE(tu_device, dev, device);
+   TU_FROM_HANDLE(tu_pipeline_cache, cache, pipelineCache);
    TU_FROM_HANDLE(tu_pipeline_layout, layout, pCreateInfo->layout);
    const VkPipelineShaderStageCreateInfo *stage_info = &pCreateInfo->stage;
    VkResult result;
@@ -3398,14 +3534,13 @@ tu_compute_pipeline_create(VkDevice device,
    if (!pipeline)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   pipeline->layout = layout;
-
    pipeline->executables_mem_ctx = ralloc_context(NULL);
    util_dynarray_init(&pipeline->executables, pipeline->executables_mem_ctx);
 
    struct ir3_shader_key key = {};
 
-   nir_shader *nir = tu_spirv_to_nir(dev, stage_info, MESA_SHADER_COMPUTE);
+   void *pipeline_mem_ctx = ralloc_context(NULL);
+   nir_shader *nir = tu_spirv_to_nir(dev, pipeline_mem_ctx, stage_info, MESA_SHADER_COMPUTE);
 
    const bool executable_info = pCreateInfo->flags &
       VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR;
@@ -3433,7 +3568,7 @@ tu_compute_pipeline_create(VkDevice device,
    tu_pipeline_set_linkage(&pipeline->program.link[MESA_SHADER_COMPUTE],
                            shader, v);
 
-   result = tu_pipeline_allocate_cs(dev, pipeline, NULL, v);
+   result = tu_pipeline_allocate_cs(dev, pipeline, layout, NULL, cache, v);
    if (result != VK_SUCCESS)
       goto fail;
 
@@ -3453,11 +3588,12 @@ tu_compute_pipeline_create(VkDevice device,
    tu6_emit_cs_config(&prog_cs, shader, v, &pvtmem, shader_iova);
    pipeline->program.state = tu_cs_end_draw_state(&pipeline->cs, &prog_cs);
 
-   tu6_emit_load_state(pipeline, true);
+   tu6_emit_load_state(pipeline, layout, true);
 
    tu_append_executable(pipeline, v, nir_initial_disasm);
 
    tu_shader_destroy(dev, shader, pAllocator);
+   ralloc_free(pipeline_mem_ctx);
 
    *pPipeline = tu_pipeline_to_handle(pipeline);
 
@@ -3466,6 +3602,8 @@ tu_compute_pipeline_create(VkDevice device,
 fail:
    if (shader)
       tu_shader_destroy(dev, shader, pAllocator);
+
+   ralloc_free(pipeline_mem_ctx);
 
    vk_object_free(&dev->vk, pAllocator, pipeline);
 
@@ -3532,10 +3670,11 @@ tu_GetPipelineExecutablePropertiesKHR(
 {
    TU_FROM_HANDLE(tu_device, dev, _device);
    TU_FROM_HANDLE(tu_pipeline, pipeline, pPipelineInfo->pipeline);
-   VK_OUTARRAY_MAKE(out, pProperties, pExecutableCount);
+   VK_OUTARRAY_MAKE_TYPED(VkPipelineExecutablePropertiesKHR, out,
+                          pProperties, pExecutableCount);
 
    util_dynarray_foreach (&pipeline->executables, struct tu_pipeline_executable, exe) {
-      vk_outarray_append(&out, props) {
+      vk_outarray_append_typed(VkPipelineExecutablePropertiesKHR, &out, props) {
          gl_shader_stage stage = exe->stage;
          props->stages = mesa_to_vk_shader_stage(stage);
 
@@ -3562,12 +3701,13 @@ tu_GetPipelineExecutableStatisticsKHR(
       VkPipelineExecutableStatisticKHR* pStatistics)
 {
    TU_FROM_HANDLE(tu_pipeline, pipeline, pExecutableInfo->pipeline);
-   VK_OUTARRAY_MAKE(out, pStatistics, pStatisticCount);
+   VK_OUTARRAY_MAKE_TYPED(VkPipelineExecutableStatisticKHR, out,
+                          pStatistics, pStatisticCount);
 
    const struct tu_pipeline_executable *exe =
       tu_pipeline_get_executable(pipeline, pExecutableInfo->executableIndex);
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "Max Waves Per Core");
       WRITE_STR(stat->description,
                 "Maximum number of simultaneous waves per core.");
@@ -3575,7 +3715,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.max_waves;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "Instruction Count");
       WRITE_STR(stat->description,
                 "Total number of IR3 instructions in the final generated "
@@ -3584,7 +3724,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.instrs_count;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "Code size");
       WRITE_STR(stat->description,
                 "Total number of dwords in the final generated "
@@ -3593,7 +3733,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.sizedwords;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "NOPs Count");
       WRITE_STR(stat->description,
                 "Number of NOP instructions in the final generated "
@@ -3602,7 +3742,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.nops_count;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "MOV Count");
       WRITE_STR(stat->description,
                 "Number of MOV instructions in the final generated "
@@ -3611,7 +3751,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.mov_count;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "COV Count");
       WRITE_STR(stat->description,
                 "Number of COV instructions in the final generated "
@@ -3620,7 +3760,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.cov_count;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "Registers used");
       WRITE_STR(stat->description,
                 "Number of registers used in the final generated "
@@ -3629,7 +3769,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.max_reg + 1;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "Half-registers used");
       WRITE_STR(stat->description,
                 "Number of half-registers used in the final generated "
@@ -3638,7 +3778,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.max_half_reg + 1;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "Instructions with SS sync bit");
       WRITE_STR(stat->description,
                 "SS bit is set for instructions which depend on a result "
@@ -3647,7 +3787,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.ss;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "Instructions with SY sync bit");
       WRITE_STR(stat->description,
                 "SY bit is set for instructions which depend on a result "
@@ -3656,7 +3796,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.sy;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "Estimated cycles stalled on SS");
       WRITE_STR(stat->description,
                 "A better metric to estimate the impact of SS syncs.");
@@ -3664,7 +3804,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.sstall;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "Estimated cycles stalled on SY");
       WRITE_STR(stat->description,
                 "A better metric to estimate the impact of SY syncs.");
@@ -3673,7 +3813,7 @@ tu_GetPipelineExecutableStatisticsKHR(
    }
 
    for (int i = 0; i < ARRAY_SIZE(exe->stats.instrs_per_cat); i++) {
-      vk_outarray_append(&out, stat) {
+      vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
          WRITE_STR(stat->name, "cat%d instructions", i);
          WRITE_STR(stat->description,
                   "Number of cat%d instructions.", i);
@@ -3682,7 +3822,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       }
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "STP Count");
       WRITE_STR(stat->description,
                 "Number of STore Private instructions in the final generated "
@@ -3691,7 +3831,7 @@ tu_GetPipelineExecutableStatisticsKHR(
       stat->value.u64 = exe->stats.stp_count;
    }
 
-   vk_outarray_append(&out, stat) {
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
       WRITE_STR(stat->name, "LDP Count");
       WRITE_STR(stat->description,
                 "Number of LoaD Private instructions in the final generated "
@@ -3732,14 +3872,15 @@ tu_GetPipelineExecutableInternalRepresentationsKHR(
     VkPipelineExecutableInternalRepresentationKHR* pInternalRepresentations)
 {
    TU_FROM_HANDLE(tu_pipeline, pipeline, pExecutableInfo->pipeline);
-   VK_OUTARRAY_MAKE(out, pInternalRepresentations, pInternalRepresentationCount);
+   VK_OUTARRAY_MAKE_TYPED(VkPipelineExecutableInternalRepresentationKHR, out,
+                          pInternalRepresentations, pInternalRepresentationCount);
    bool incomplete_text = false;
 
    const struct tu_pipeline_executable *exe =
       tu_pipeline_get_executable(pipeline, pExecutableInfo->executableIndex);
 
    if (exe->nir_from_spirv) {
-      vk_outarray_append(&out, ir) {
+      vk_outarray_append_typed(VkPipelineExecutableInternalRepresentationKHR, &out, ir) {
          WRITE_STR(ir->name, "NIR from SPIRV");
          WRITE_STR(ir->description,
                    "Initial NIR before any optimizations");
@@ -3750,7 +3891,7 @@ tu_GetPipelineExecutableInternalRepresentationsKHR(
    }
 
    if (exe->nir_final) {
-      vk_outarray_append(&out, ir) {
+      vk_outarray_append_typed(VkPipelineExecutableInternalRepresentationKHR, &out, ir) {
          WRITE_STR(ir->name, "Final NIR");
          WRITE_STR(ir->description,
                    "Final NIR before going into the back-end compiler");
@@ -3761,7 +3902,7 @@ tu_GetPipelineExecutableInternalRepresentationsKHR(
    }
 
    if (exe->disasm) {
-      vk_outarray_append(&out, ir) {
+      vk_outarray_append_typed(VkPipelineExecutableInternalRepresentationKHR, &out, ir) {
          WRITE_STR(ir->name, "IR3 Assembly");
          WRITE_STR(ir->description,
                    "Final IR3 assembly for the generated shader binary");

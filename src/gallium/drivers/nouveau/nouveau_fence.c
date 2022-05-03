@@ -204,7 +204,7 @@ nouveau_fence_kick(struct nouveau_fence *fence)
 }
 
 bool
-nouveau_fence_wait(struct nouveau_fence *fence, struct pipe_debug_callback *debug)
+nouveau_fence_wait(struct nouveau_fence *fence, struct util_debug_callback *debug)
 {
    struct nouveau_screen *screen = fence->screen;
    uint32_t spins = 0;
@@ -219,7 +219,7 @@ nouveau_fence_wait(struct nouveau_fence *fence, struct pipe_debug_callback *debu
    do {
       if (fence->state == NOUVEAU_FENCE_STATE_SIGNALLED) {
          if (debug && debug->debug_message)
-            pipe_debug_message(debug, PERF_INFO,
+            util_debug_message(debug, PERF_INFO,
                                "stalled %.3f ms waiting for fence",
                                (os_time_get_nano() - start) / 1000000.f);
          return true;

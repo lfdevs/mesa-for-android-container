@@ -436,7 +436,7 @@ struct fd_context {
     */
    struct ir3_cache *shader_cache;
 
-   struct pipe_debug_callback debug;
+   struct util_debug_callback debug;
 
    struct u_trace_context trace_context dt;
 

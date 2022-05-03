@@ -83,6 +83,12 @@ v3d_screen_destroy(struct pipe_screen *pscreen)
                 v3d_simulator_destroy(screen->sim_file);
 
         v3d_compiler_free(screen->compiler);
+
+#ifdef ENABLE_SHADER_CACHE
+        if (screen->disk_cache)
+                disk_cache_destroy(screen->disk_cache);
+#endif
+
         u_transfer_helper_destroy(pscreen->transfer_helper);
 
         close(screen->fd);
@@ -118,7 +124,7 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_SWIZZLE:
         case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
         case PIPE_CAP_START_INSTANCE:
-        case PIPE_CAP_TGSI_INSTANCEID:
+        case PIPE_CAP_VS_INSTANCEID:
         case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
         case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
         case PIPE_CAP_VERTEX_SHADER_SATURATE:
@@ -132,14 +138,15 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_MULTI_DRAW_INDIRECT:
         case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
         case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
-        case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
-        case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+        case PIPE_CAP_SHADER_CAN_READ_OUTPUTS:
+        case PIPE_CAP_SHADER_PACK_HALF_FLOAT:
         case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
         case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
-        case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+        case PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL:
         case PIPE_CAP_TGSI_TEXCOORD:
         case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
         case PIPE_CAP_SAMPLER_VIEW_TARGET:
+        case PIPE_CAP_ANISOTROPIC_FILTER:
                 return 1;
 
         case PIPE_CAP_TEXTURE_QUERY_LOD:
@@ -177,7 +184,7 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return screen->devinfo.ver >= 40;
 
         case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
-                return 256;
+                return V3D_NON_COHERENT_ATOM_SIZE;
 
         case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
                 if (screen->devinfo.ver < 40)
@@ -199,16 +206,16 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
 		return 140;
 
-        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
+        case PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT:
                 return 1;
-        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
+        case PIPE_CAP_FS_COORD_ORIGIN_LOWER_LEFT:
                 return 0;
-        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+        case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
                 if (screen->devinfo.ver >= 40)
                         return 0;
                 else
                         return 1;
-        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+        case PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
                 if (screen->devinfo.ver >= 40)
                         return 1;
                 else
@@ -320,7 +327,7 @@ v3d_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
                 return V3D_MAX_POINT_SIZE;
 
         case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
-                return 0.0f;
+                return 16.0f;
         case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
                 return 16.0f;
 
@@ -694,7 +701,7 @@ static const nir_shader_compiler_options v3d_nir_options = {
         .lower_bitfield_extract_to_shifts = true,
         .lower_bitfield_reverse = true,
         .lower_bit_count = true,
-        .lower_cs_local_id_from_index = true,
+        .lower_cs_local_id_to_index = true,
         .lower_ffract = true,
         .lower_fmod = true,
         .lower_pack_unorm_2x16 = true,
@@ -865,7 +872,11 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
 
         v3d_resource_screen_init(pscreen);
 
-        screen->compiler = v3d_compiler_init(&screen->devinfo);
+        screen->compiler = v3d_compiler_init(&screen->devinfo, 0);
+
+#ifdef ENABLE_SHADER_CACHE
+        v3d_disk_cache_init(screen);
+#endif
 
         pscreen->get_name = v3d_screen_get_name;
         pscreen->get_vendor = v3d_screen_get_vendor;

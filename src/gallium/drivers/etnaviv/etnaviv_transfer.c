@@ -201,12 +201,9 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
    struct pipe_transfer *ptrans;
    enum pipe_format format = prsc->format;
 
-   trans = slab_alloc(&ctx->transfer_pool);
+   trans = slab_zalloc(&ctx->transfer_pool);
    if (!trans)
       return NULL;
-
-   /* slab_alloc() doesn't zero */
-   memset(trans, 0, sizeof(*trans));
 
    /*
     * Upgrade to UNSYNCHRONIZED if target is PIPE_BUFFER and range is uninitialized.

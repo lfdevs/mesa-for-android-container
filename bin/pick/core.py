@@ -20,10 +20,8 @@
 
 """Core data structures and routines for pick."""
 
-from __future__ import annotations
 import asyncio
 import enum
-import itertools
 import json
 import pathlib
 import re
@@ -44,6 +42,7 @@ if typing.TYPE_CHECKING:
         nominated: bool
         nomination_type: typing.Optional[int]
         resolution: typing.Optional[int]
+        main_sha: typing.Optional[str]
         because_sha: typing.Optional[str]
 
 IS_FIX = re.compile(r'^\s*fixes:\s*([a-f0-9]{6,40})', flags=re.MULTILINE | re.IGNORECASE)
@@ -82,7 +81,6 @@ class Resolution(enum.Enum):
     DENOMINATED = 2
     BACKPORTED = 3
     NOTNEEDED = 4
-    MANUAL_RESOLUTION = 5
 
 
 async def commit_state(*, amend: bool = False, message: str = 'Update') -> bool:
@@ -120,6 +118,7 @@ class Commit:
     nominated: bool = attr.ib(False)
     nomination_type: typing.Optional[NominationType] = attr.ib(None)
     resolution: Resolution = attr.ib(Resolution.UNRESOLVED)
+    main_sha: typing.Optional[str] = attr.ib(None)
     because_sha: typing.Optional[str] = attr.ib(None)
 
     def to_json(self) -> 'CommitDict':
@@ -132,7 +131,7 @@ class Commit:
 
     @classmethod
     def from_json(cls, data: 'CommitDict') -> 'Commit':
-        c = cls(data['sha'], data['description'], data['nominated'], because_sha=data['because_sha'])
+        c = cls(data['sha'], data['description'], data['nominated'], main_sha=data['main_sha'], because_sha=data['because_sha'])
         if data['nomination_type'] is not None:
             c.nomination_type = NominationType(data['nomination_type'])
         if data['resolution'] is not None:
@@ -147,7 +146,7 @@ class Commit:
             stderr=subprocess.DEVNULL
         ).decode("ascii").strip()
 
-    async def apply(self) -> typing.Tuple[bool, str]:
+    async def apply(self, ui: 'UI') -> typing.Tuple[bool, str]:
         # FIXME: This isn't really enough if we fail to cherry-pick because the
         # git tree will still be dirty
         async with COMMIT_LOCK:
@@ -162,6 +161,10 @@ class Commit:
             return (False, err.decode())
 
         self.resolution = Resolution.MERGED
+        await ui.feedback(f'{self.sha} ({self.description}) applied successfully')
+
+        # Append the changes to the .pickstatus.json file
+        ui.save()
         v = await commit_state(amend=True)
         return (v, '')
 
@@ -336,9 +339,7 @@ async def resolve_fixes(commits: typing.List['Commit'], previous: typing.List['C
 
 
 async def gather_commits(version: str, previous: typing.List['Commit'],
-                         new: typing.List[typing.Tuple[str, str]],
-                         cb: typing.Optional[typing.Callable[[], None]] = None
-                         ) -> typing.List['Commit']:
+                         new: typing.List[typing.Tuple[str, str]], cb) -> typing.List['Commit']:
     # We create an array of the final size up front, then we pass that array
     # to the "inner" co-routine, which is turned into a list of tasks and
     # collected by asyncio.gather. We do this to allow the tasks to be
@@ -349,10 +350,9 @@ async def gather_commits(version: str, previous: typing.List['Commit'],
 
     async def inner(commit: 'Commit', version: str,
                     commits: typing.List[typing.Optional['Commit']],
-                    index: int, cb: typing.Optional[typing.Callable[[], None]]) -> None:
+                    index: int, cb) -> None:
         commits[index] = await resolve_nomination(commit, version)
-        if cb:
-            cb()
+        cb()
 
     for i, (sha, desc) in enumerate(new):
         tasks.append(asyncio.ensure_future(
@@ -369,27 +369,6 @@ async def gather_commits(version: str, previous: typing.List['Commit'],
             commit.resolution = Resolution.NOTNEEDED
 
     return commits
-
-
-async def update_commits() -> typing.List[Commit]:
-    """Gather all new commits and update the on-disk cache.
-    """
-    commits = load()
-    with open('VERSION', 'r') as f:
-        version = '.'.join(f.read().split('.')[:2])
-    if commits:
-        sha = commits[0].sha
-    else:
-        sha = f'{version}-branchpoint'
-
-    if new := await get_new_commits(sha):
-        collected_commits = await gather_commits(version, commits, new)
-    else:
-        collected_commits = []
-
-    all_commits = list(itertools.chain(collected_commits, commits))
-    save(all_commits)
-    return all_commits
 
 
 def load() -> typing.List['Commit']:

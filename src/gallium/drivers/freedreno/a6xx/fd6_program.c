@@ -713,7 +713,6 @@ setup_stateobj(struct fd_ringbuffer *ring, struct fd_context *ctx,
          ring,
          A6XX_SP_DS_CTRL_REG0_FULLREGFOOTPRINT(ds->info.max_reg + 1) |
             A6XX_SP_DS_CTRL_REG0_HALFREGFOOTPRINT(ds->info.max_half_reg + 1) |
-            COND(ds->mergedregs, A6XX_SP_DS_CTRL_REG0_MERGEDREGS) |
             A6XX_SP_DS_CTRL_REG0_BRANCHSTACK(ir3_shader_branchstack_hw(ds)));
 
       fd6_emit_shader(ctx, ring, ds);

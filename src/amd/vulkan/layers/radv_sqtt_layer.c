@@ -149,10 +149,10 @@ radv_describe_begin_cmd_buffer(struct radv_cmd_buffer *cmd_buffer)
    marker.cb_id = 0;
    marker.device_id_low = device_id;
    marker.device_id_high = device_id >> 32;
-   marker.queue = cmd_buffer->queue_family_index;
+   marker.queue = cmd_buffer->qf;
    marker.queue_flags = VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT | VK_QUEUE_SPARSE_BINDING_BIT;
 
-   if (cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL)
+   if (cmd_buffer->qf == RADV_QUEUE_GENERAL)
       marker.queue_flags |= VK_QUEUE_GRAPHICS_BIT;
 
    radv_emit_thread_trace_userdata(cmd_buffer->device, cs, &marker, sizeof(marker) / 4);
@@ -496,9 +496,9 @@ sqtt_CmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDevic
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdCopyBuffer2KHR(VkCommandBuffer commandBuffer, const VkCopyBufferInfo2KHR *pCopyBufferInfo)
+sqtt_CmdCopyBuffer2(VkCommandBuffer commandBuffer, const VkCopyBufferInfo2 *pCopyBufferInfo)
 {
-   EVENT_MARKER_ALIAS(CopyBuffer2KHR, CopyBuffer, commandBuffer, pCopyBufferInfo);
+   EVENT_MARKER_ALIAS(CopyBuffer2, CopyBuffer, commandBuffer, pCopyBufferInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -516,31 +516,31 @@ sqtt_CmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDevice
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdCopyImage2KHR(VkCommandBuffer commandBuffer, const VkCopyImageInfo2KHR *pCopyImageInfo)
+sqtt_CmdCopyImage2(VkCommandBuffer commandBuffer, const VkCopyImageInfo2 *pCopyImageInfo)
 {
-   EVENT_MARKER_ALIAS(CopyImage2KHR, CopyImage, commandBuffer, pCopyImageInfo);
+   EVENT_MARKER_ALIAS(CopyImage2, CopyImage, commandBuffer, pCopyImageInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdCopyBufferToImage2KHR(VkCommandBuffer commandBuffer,
-                              const VkCopyBufferToImageInfo2KHR *pCopyBufferToImageInfo)
+sqtt_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer,
+                           const VkCopyBufferToImageInfo2 *pCopyBufferToImageInfo)
 {
-   EVENT_MARKER_ALIAS(CopyBufferToImage2KHR, CopyBufferToImage, commandBuffer,
+   EVENT_MARKER_ALIAS(CopyBufferToImage2, CopyBufferToImage, commandBuffer,
                       pCopyBufferToImageInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdCopyImageToBuffer2KHR(VkCommandBuffer commandBuffer,
-                              const VkCopyImageToBufferInfo2KHR *pCopyImageToBufferInfo)
+sqtt_CmdCopyImageToBuffer2(VkCommandBuffer commandBuffer,
+                           const VkCopyImageToBufferInfo2 *pCopyImageToBufferInfo)
 {
-   EVENT_MARKER_ALIAS(CopyImageToBuffer2KHR, CopyImageToBuffer, commandBuffer,
+   EVENT_MARKER_ALIAS(CopyImageToBuffer2, CopyImageToBuffer, commandBuffer,
                       pCopyImageToBufferInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdBlitImage2KHR(VkCommandBuffer commandBuffer, const VkBlitImageInfo2KHR *pBlitImageInfo)
+sqtt_CmdBlitImage2(VkCommandBuffer commandBuffer, const VkBlitImageInfo2 *pBlitImageInfo)
 {
-   EVENT_MARKER_ALIAS(BlitImage2KHR, BlitImage, commandBuffer, pBlitImageInfo);
+   EVENT_MARKER_ALIAS(BlitImage2, BlitImage, commandBuffer, pBlitImageInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -570,25 +570,25 @@ sqtt_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdResolveImage2KHR(VkCommandBuffer commandBuffer,
-                         const VkResolveImageInfo2KHR *pResolveImageInfo)
+sqtt_CmdResolveImage2(VkCommandBuffer commandBuffer,
+                      const VkResolveImageInfo2 *pResolveImageInfo)
 {
-   EVENT_MARKER_ALIAS(ResolveImage2KHR, ResolveImage, commandBuffer, pResolveImageInfo);
+   EVENT_MARKER_ALIAS(ResolveImage2, ResolveImage, commandBuffer, pResolveImageInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdWaitEvents2KHR(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent* pEvents,
-                       const VkDependencyInfoKHR* pDependencyInfos)
+sqtt_CmdWaitEvents2(VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent* pEvents,
+                    const VkDependencyInfo* pDependencyInfos)
 {
-   EVENT_MARKER_ALIAS(WaitEvents2KHR, WaitEvents, commandBuffer, eventCount, pEvents,
+   EVENT_MARKER_ALIAS(WaitEvents2, WaitEvents, commandBuffer, eventCount, pEvents,
                       pDependencyInfos);
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdPipelineBarrier2KHR(VkCommandBuffer commandBuffer,
-                            const VkDependencyInfoKHR* pDependencyInfo)
+sqtt_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
+                         const VkDependencyInfo* pDependencyInfo)
 {
-   EVENT_MARKER_ALIAS(PipelineBarrier2KHR, PipelineBarrier, commandBuffer, pDependencyInfo);
+   EVENT_MARKER_ALIAS(PipelineBarrier2, PipelineBarrier, commandBuffer, pDependencyInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -666,10 +666,10 @@ sqtt_CmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t 
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdWriteTimestamp2KHR(VkCommandBuffer commandBuffer, VkPipelineStageFlags2KHR stage,
-                           VkQueryPool queryPool, uint32_t query)
+sqtt_CmdWriteTimestamp2(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage,
+                        VkQueryPool queryPool, uint32_t query)
 {
-   API_MARKER_ALIAS(WriteTimestamp2KHR, WriteTimestamp, commandBuffer, stage, queryPool, query);
+   API_MARKER_ALIAS(WriteTimestamp2, WriteTimestamp, commandBuffer, stage, queryPool, query);
 }
 
 VKAPI_ATTR void VKAPI_CALL

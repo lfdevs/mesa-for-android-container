@@ -132,7 +132,6 @@ st_get_bitmap_shader(const struct tgsi_token *tokens,
                      bool use_texcoord, bool swizzle_xxxx)
 {
    struct tgsi_bitmap_transform ctx;
-   struct tgsi_token *newtoks;
    int newlen;
 
    assert(tex_target == PIPE_TEXTURE_2D ||
@@ -147,10 +146,6 @@ st_get_bitmap_shader(const struct tgsi_token *tokens,
    tgsi_scan_shader(tokens, &ctx.info);
 
    newlen = tgsi_num_tokens(tokens) + 20;
-   newtoks = tgsi_alloc_tokens(newlen);
-   if (!newtoks)
-      return NULL;
 
-   tgsi_transform_shader(tokens, newtoks, newlen, &ctx.base);
-   return newtoks;
+   return tgsi_transform_shader(tokens, newlen, &ctx.base);
 }

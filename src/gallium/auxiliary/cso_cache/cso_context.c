@@ -49,7 +49,7 @@
 #include "cso_cache/cso_cache.h"
 #include "cso_cache/cso_hash.h"
 #include "cso_context.h"
-
+#include "driver_trace/tr_dump.h"
 
 /**
  * Per-shader sampler information.
@@ -296,6 +296,9 @@ void cso_unbind_context(struct cso_context *ctx)
 {
    unsigned i;
 
+   bool dumping = trace_dumping_enabled_locked();
+   if (dumping)
+      trace_dumping_stop_locked();
    if (ctx->pipe) {
       ctx->pipe->bind_blend_state( ctx->pipe, NULL );
       ctx->pipe->bind_rasterizer_state( ctx->pipe, NULL );
@@ -399,6 +402,8 @@ void cso_unbind_context(struct cso_context *ctx)
    ctx->pipe->set_sample_mask(ctx->pipe, ctx->sample_mask);
    if (ctx->pipe->set_min_samples)
       ctx->pipe->set_min_samples(ctx->pipe, ctx->min_samples);
+   if (dumping)
+      trace_dumping_start_locked();
 }
 
 /**

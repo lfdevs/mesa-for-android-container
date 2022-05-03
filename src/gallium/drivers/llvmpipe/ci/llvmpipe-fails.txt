@@ -32,17 +32,7 @@ dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_d
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.fbo_bbox_larger,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.default_framebuffer,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.fbo,Fail
-KHR-GL45.get_texture_sub_image.errors_test,Fail
-KHR-GL45.get_texture_sub_image.functional_test,Fail
-KHR-GL45.transform_feedback.capture_vertex_interleaved_test,Fail
-KHR-GL45.transform_feedback.capture_vertex_separate_test,Fail
-KHR-GL45.transform_feedback.discard_vertex_test,Fail
-KHR-GL45.transform_feedback.draw_xfb_instanced_test,Crash
-KHR-GL45.transform_feedback.draw_xfb_stream_instanced_test,Crash
-KHR-GL45.transform_feedback.query_vertex_interleaved_test,Fail
-KHR-GL45.transform_feedback.query_vertex_separate_test,Fail
-spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.frag,Fail
-spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.vert,Fail
+
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 
@@ -56,7 +46,6 @@ glx@glx-copy-sub-buffer samples=4,Fail
 glx@glx-make-current,Crash
 
 glx@glx-multi-window-single-context,Fail
-glx@glx-multithread-texture,Fail
 glx@glx-swap-copy,Fail
 glx@glx-swap-pixmap-bad,Fail
 
@@ -119,9 +108,13 @@ spec@arb_program_interface_query@arb_program_interface_query-getprogramresourcei
 spec@arb_shader_image_load_store@early-z,Fail
 spec@arb_shader_image_load_store@early-z@occlusion query test/early-z pass,Fail
 
+spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-load,Crash
+spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-store,Crash
+
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
-spec@arb_timer_query@query gl_timestamp,Fail
-spec@egl 1.4@egl-copy-buffers,Fail
+
+spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-write,Crash
+
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 
 # No such file or directory (os error 2)

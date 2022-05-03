@@ -16,7 +16,7 @@ struct nvc0_query_funcs {
                             bool, union pipe_query_result *);
    void (*get_query_result_resource)(struct nvc0_context *nvc0,
                                      struct nvc0_query *q,
-                                     bool wait,
+                                     enum pipe_query_flags flags,
                                      enum pipe_query_value_type result_type,
                                      int index,
                                      struct pipe_resource *resource,

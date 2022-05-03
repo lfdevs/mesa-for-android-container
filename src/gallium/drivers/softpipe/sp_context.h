@@ -189,7 +189,7 @@ struct softpipe_context {
     */
    struct softpipe_tex_tile_cache *tex_cache[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
-   struct pipe_debug_callback debug;
+   struct util_debug_callback debug;
 };
 
 

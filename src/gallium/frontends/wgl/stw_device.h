@@ -91,6 +91,7 @@ struct stw_device
    struct st_config_options st_options;
 
    bool initialized;
+   bool zink;
 };
 
 

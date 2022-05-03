@@ -25,9 +25,20 @@ deqp_args = [
 timeout = 180.0
 
 [[deqp]]
+deqp = "/deqp/modules/gles31/deqp-gles31"
+caselists = ["/deqp/mustpass/gles31-master.txt"]
+deqp_args = [
+    "--deqp-surface-width=256",
+    "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+    "--deqp-visibility=hidden"
+]
+timeout = 180.0
+
+[[deqp]]
 deqp = "/deqp/external/openglcts/modules/glcts"
 caselists = [
-    "/deqp/mustpass/gl32-master.txt",
     "/deqp/mustpass/gl46-master.txt",
 ]
 deqp_args = [
@@ -38,3 +49,20 @@ deqp_args = [
     "--deqp-visibility=hidden"
 ]
 timeout = 180.0
+
+[[piglit]]
+piglit_folder = "/piglit"
+profile = "gpu"
+process_isolation = true
+timeout = 180.0
+  [piglit.env]
+
+# Whoops, no prefix support for piglit yet.  Looks like we're going to need a new deqp-runner.
+#[[piglit]]
+#piglit_folder = "/piglit"
+#profile = "quick_gl"
+#process_isolation = true
+#prefix = "no-timeline-"
+#timeout = 180.0
+#  [piglit.env]
+#  ZINK_NO_TIMELINES = "1"

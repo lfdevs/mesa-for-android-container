@@ -2446,7 +2446,14 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 	unsigned tmp, sid, ufi = 0;
 	int need_linear = 0;
 	unsigned z_export = 0, stencil_export = 0, mask_export = 0;
-	unsigned sprite_coord_enable = rctx->rasterizer ? rctx->rasterizer->sprite_coord_enable : 0;
+
+	/* Pull any state we use out of rctx.  Make sure that any additional
+	 * state added to this list is also checked in the caller in
+	 * r600_update_derived_state().
+	 */
+	bool sprite_coord_enable = rctx->rasterizer ? rctx->rasterizer->sprite_coord_enable : 0;
+	bool flatshade = rctx->rasterizer ? rctx->rasterizer->flatshade : 0;
+	bool msaa = rctx->framebuffer.nr_samples > 1 && rctx->ps_iter_samples > 0;
 
 	if (!cb->buf) {
 		r600_init_command_buffer(cb, 64);
@@ -2473,8 +2480,7 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 
 		if (rshader->input[i].name == TGSI_SEMANTIC_POSITION ||
 			rshader->input[i].interpolate == TGSI_INTERPOLATE_CONSTANT ||
-			(rshader->input[i].interpolate == TGSI_INTERPOLATE_COLOR &&
-				rctx->rasterizer && rctx->rasterizer->flatshade))
+			(rshader->input[i].interpolate == TGSI_INTERPOLATE_COLOR && flatshade))
 			tmp |= S_028644_FLAT_SHADE(1);
 
 		if (rshader->input[i].name == TGSI_SEMANTIC_PCOORD ||
@@ -2503,8 +2509,7 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 			z_export = 1;
 		if (rshader->output[i].name == TGSI_SEMANTIC_STENCIL)
 			stencil_export = 1;
-		if (rshader->output[i].name == TGSI_SEMANTIC_SAMPLEMASK &&
-			rctx->framebuffer.nr_samples > 1 && rctx->ps_iter_samples > 0)
+		if (rshader->output[i].name == TGSI_SEMANTIC_SAMPLEMASK && msaa)
 			mask_export = 1;
 	}
 	db_shader_control |= S_02880C_Z_EXPORT_ENABLE(z_export);
@@ -2585,8 +2590,8 @@ void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *sha
 	shader->ps_depth_export = z_export | stencil_export | mask_export;
 
 	shader->sprite_coord_enable = sprite_coord_enable;
-	if (rctx->rasterizer)
-		shader->flatshade = rctx->rasterizer->flatshade;
+	shader->flatshade = flatshade;
+	shader->msaa = msaa;
 }
 
 void r600_update_vs_state(struct pipe_context *ctx, struct r600_pipe_shader *shader)

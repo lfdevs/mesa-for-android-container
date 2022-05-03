@@ -26,6 +26,7 @@
 #include "util/macros.h"
 #include "util/os_file.h"
 #include "util/xmlconfig.h"
+#include "vk_format.h"
 #include "vk_util.h"
 #include "drm-uapi/drm_fourcc.h"
 
@@ -115,15 +116,17 @@ select_memory_type(const struct wsi_device *wsi,
 }
 
 static uint32_t
-vk_format_size(VkFormat format)
+prime_select_buffer_memory_type(const struct wsi_device *wsi,
+                                uint32_t type_bits)
 {
-   switch (format) {
-   case VK_FORMAT_B8G8R8A8_UNORM:
-   case VK_FORMAT_B8G8R8A8_SRGB:
-      return 4;
-   default:
-      unreachable("Unknown WSI Format");
-   }
+   return select_memory_type(wsi, false, type_bits);
+}
+
+static uint32_t
+prime_select_image_memory_type(const struct wsi_device *wsi,
+                               uint32_t type_bits)
+{
+   return select_memory_type(wsi, true, type_bits);
 }
 
 static const struct VkDrmFormatModifierPropertiesEXT *
@@ -419,13 +422,6 @@ wsi_create_native_image_mem(const struct wsi_swapchain *chain,
    return VK_SUCCESS;
 }
 
-static inline uint32_t
-align_u32(uint32_t v, uint32_t a)
-{
-   assert(a != 0 && a == (a & -a));
-   return (v + a - 1) & ~(a - 1);
-}
-
 #define WSI_PRIME_LINEAR_STRIDE_ALIGN 256
 
 static VkResult
@@ -434,87 +430,17 @@ wsi_create_prime_image_mem(const struct wsi_swapchain *chain,
                            struct wsi_image *image)
 {
    const struct wsi_device *wsi = chain->wsi;
-   VkResult result;
-
-   uint32_t linear_size = info->linear_stride * info->create.extent.height;
-   linear_size = align_u32(linear_size, 4096);
-
-   const VkExternalMemoryBufferCreateInfo prime_buffer_external_info = {
-      .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO,
-      .pNext = NULL,
-      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-   };
-   const VkBufferCreateInfo prime_buffer_info = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .pNext = &prime_buffer_external_info,
-      .size = linear_size,
-      .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-   };
-   result = wsi->CreateBuffer(chain->device, &prime_buffer_info,
-                              &chain->alloc, &image->prime.buffer);
-   if (result != VK_SUCCESS)
-      return result;
-
-   VkMemoryRequirements reqs;
-   wsi->GetBufferMemoryRequirements(chain->device, image->prime.buffer, &reqs);
-   assert(reqs.size <= linear_size);
-
-   const struct wsi_memory_allocate_info memory_wsi_info = {
-      .sType = VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA,
-      .pNext = NULL,
-      .implicit_sync = true,
-   };
-   const VkExportMemoryAllocateInfo prime_memory_export_info = {
-      .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
-      .pNext = &memory_wsi_info,
-      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-   };
-   const VkMemoryDedicatedAllocateInfo prime_memory_dedicated_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
-      .pNext = &prime_memory_export_info,
-      .image = VK_NULL_HANDLE,
-      .buffer = image->prime.buffer,
-   };
-   const VkMemoryAllocateInfo prime_memory_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .pNext = &prime_memory_dedicated_info,
-      .allocationSize = linear_size,
-      .memoryTypeIndex = select_memory_type(wsi, false, reqs.memoryTypeBits),
-   };
-   result = wsi->AllocateMemory(chain->device, &prime_memory_info,
-                                &chain->alloc, &image->prime.memory);
-   if (result != VK_SUCCESS)
-      return result;
-
-   result = wsi->BindBufferMemory(chain->device, image->prime.buffer,
-                                  image->prime.memory, 0);
-   if (result != VK_SUCCESS)
-      return result;
-
-   wsi->GetImageMemoryRequirements(chain->device, image->image, &reqs);
-
-   const VkMemoryDedicatedAllocateInfo memory_dedicated_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
-      .pNext = NULL,
-      .image = image->image,
-      .buffer = VK_NULL_HANDLE,
-   };
-   const VkMemoryAllocateInfo memory_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .pNext = &memory_dedicated_info,
-      .allocationSize = reqs.size,
-      .memoryTypeIndex = select_memory_type(wsi, true, reqs.memoryTypeBits),
-   };
-   result = wsi->AllocateMemory(chain->device, &memory_info,
-                                &chain->alloc, &image->memory);
+   VkResult result =
+      wsi_create_buffer_image_mem(chain, info, image,
+                                  VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+                                  true);
    if (result != VK_SUCCESS)
       return result;
 
    const VkMemoryGetFdInfoKHR linear_memory_get_fd_info = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
       .pNext = NULL,
-      .memory = image->prime.memory,
+      .memory = image->buffer.memory,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
    };
    int fd;
@@ -524,73 +450,7 @@ wsi_create_prime_image_mem(const struct wsi_swapchain *chain,
 
    image->drm_modifier = info->prime_use_linear_modifier ?
                          DRM_FORMAT_MOD_LINEAR : DRM_FORMAT_MOD_INVALID;
-   image->num_planes = 1;
-   image->sizes[0] = linear_size;
-   image->row_pitches[0] = info->linear_stride;
-   image->offsets[0] = 0;
    image->fds[0] = fd;
-
-   return VK_SUCCESS;
-}
-
-static VkResult
-wsi_finish_create_prime_image(const struct wsi_swapchain *chain,
-                              const struct wsi_image_info *info,
-                              struct wsi_image *image)
-{
-   const struct wsi_device *wsi = chain->wsi;
-   VkResult result;
-
-   image->prime.blit_cmd_buffers =
-      vk_zalloc(&chain->alloc,
-                sizeof(VkCommandBuffer) * wsi->queue_family_count, 8,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (!image->prime.blit_cmd_buffers)
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
-
-   int cmd_buffer_count = chain->prime_blit_queue != VK_NULL_HANDLE ? 1 : wsi->queue_family_count;
-   for (uint32_t i = 0; i < cmd_buffer_count; i++) {
-      const VkCommandBufferAllocateInfo cmd_buffer_info = {
-         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-         .pNext = NULL,
-         .commandPool = chain->cmd_pools[i],
-         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-         .commandBufferCount = 1,
-      };
-      result = wsi->AllocateCommandBuffers(chain->device, &cmd_buffer_info,
-                                           &image->prime.blit_cmd_buffers[i]);
-      if (result != VK_SUCCESS)
-         return result;
-
-      const VkCommandBufferBeginInfo begin_info = {
-         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      };
-      wsi->BeginCommandBuffer(image->prime.blit_cmd_buffers[i], &begin_info);
-
-      struct VkBufferImageCopy buffer_image_copy = {
-         .bufferOffset = 0,
-         .bufferRowLength = info->linear_stride /
-                            vk_format_size(info->create.format),
-         .bufferImageHeight = 0,
-         .imageSubresource = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-         },
-         .imageOffset = { .x = 0, .y = 0, .z = 0 },
-         .imageExtent = info->create.extent,
-      };
-      wsi->CmdCopyImageToBuffer(image->prime.blit_cmd_buffers[i],
-                                image->image,
-                                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                                image->prime.buffer,
-                                1, &buffer_image_copy);
-
-      result = wsi->EndCommandBuffer(image->prime.blit_cmd_buffers[i]);
-      if (result != VK_SUCCESS)
-         return result;
-   }
 
    return VK_SUCCESS;
 }
@@ -601,21 +461,21 @@ wsi_configure_prime_image(UNUSED const struct wsi_swapchain *chain,
                           bool use_modifier,
                           struct wsi_image_info *info)
 {
-   VkResult result = wsi_configure_image(chain, pCreateInfo,
-                                         0 /* handle_types */, info);
+   VkResult result =
+      wsi_configure_buffer_image(chain, pCreateInfo, info);
    if (result != VK_SUCCESS)
       return result;
 
-   info->create.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-   info->wsi.prime_blit_src = true,
    info->prime_use_linear_modifier = use_modifier;
 
-   const uint32_t cpp = vk_format_size(info->create.format);
-   info->linear_stride = align_u32(info->create.extent.width * cpp,
+   const uint32_t cpp = vk_format_get_blocksize(info->create.format);
+   info->linear_stride = ALIGN_POT(info->create.extent.width * cpp,
                                    WSI_PRIME_LINEAR_STRIDE_ALIGN);
+   info->size_align = 4096;
 
    info->create_mem = wsi_create_prime_image_mem;
-   info->finish_create = wsi_finish_create_prime_image;
+   info->select_buffer_memory_type = prime_select_buffer_memory_type;
+   info->select_image_memory_type = prime_select_image_memory_type;
 
    return VK_SUCCESS;
 }

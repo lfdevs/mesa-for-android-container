@@ -43,8 +43,7 @@ struct tu_descriptor_set_binding_layout
 
    uint32_t offset;
 
-   /* Index into the pDynamicOffsets array for dynamic descriptors, as well as
-    * the array of dynamic descriptors (offsetted by
+   /* Byte offset in the array of dynamic descriptors (offsetted by
     * tu_pipeline_layout::set::dynamic_offset_start).
     */
    uint32_t dynamic_offset_offset;
@@ -80,13 +79,8 @@ struct tu_descriptor_set_layout
    /* Shader stages affected by this descriptor set */
    uint16_t shader_stages;
 
-   /* Number of dynamic offsets used by this descriptor set */
-   uint16_t dynamic_offset_count;
-
-   /* A bitfield of which dynamic buffers are ubo's, to make the
-    * descriptor-binding-time patching easier.
-    */
-   uint32_t dynamic_ubo;
+   /* Size of dynamic offset descriptors used by this descriptor set */
+   uint16_t dynamic_offset_size;
 
    bool has_immutable_samplers;
    bool has_variable_descriptors;
@@ -129,7 +123,7 @@ struct tu_pipeline_layout
 
    uint32_t num_sets;
    uint32_t push_constant_size;
-   uint32_t dynamic_offset_count;
+   uint32_t dynamic_offset_size;
 };
 
 static inline const struct tu_sampler *

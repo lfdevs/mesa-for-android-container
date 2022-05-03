@@ -414,7 +414,7 @@ create_fs(struct st_context *st, bool download,
    const nir_shader_compiler_options *options =
       st_get_nir_compiler_options(st, MESA_SHADER_FRAGMENT);
    bool pos_is_sysval =
-      screen->get_param(screen, PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL);
+      screen->get_param(screen, PIPE_CAP_FS_POSITION_IS_SYSVAL);
 
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, options,
                                                   download ?
@@ -667,8 +667,8 @@ st_init_pbo_helpers(struct st_context *st)
    st->pbo.rgba_only =
       screen->get_param(screen, PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY);
 
-   if (screen->get_param(screen, PIPE_CAP_TGSI_INSTANCEID)) {
-      if (screen->get_param(screen, PIPE_CAP_TGSI_VS_LAYER_VIEWPORT)) {
+   if (screen->get_param(screen, PIPE_CAP_VS_INSTANCEID)) {
+      if (screen->get_param(screen, PIPE_CAP_VS_LAYER_VIEWPORT)) {
          st->pbo.layers = true;
       } else if (screen->get_param(screen, PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES) >= 3 &&
                  screen->get_shader_param(screen, PIPE_SHADER_GEOMETRY,

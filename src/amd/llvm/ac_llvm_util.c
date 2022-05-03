@@ -53,20 +53,9 @@ static void ac_init_llvm_target(void)
    /* For ACO disassembly. */
    LLVMInitializeAMDGPUDisassembler();
 
-   /* Workaround for bug in llvm 4.0 that causes image intrinsics
-    * to disappear.
-    * https://reviews.llvm.org/D26348
-    *
-    * "mesa" is the prefix for error messages.
-    *
-    * -global-isel-abort=2 is a no-op unless global isel has been enabled.
-    * This option tells the backend to fall-back to SelectionDAG and print
-    * a diagnostic message if global isel fails.
-    */
    const char *argv[] = {
+      /* error messages prefix */
       "mesa",
-      "-simplifycfg-sink-common=false",
-      "-global-isel-abort=2",
       "-amdgpu-atomic-optimizations=true",
 #if LLVM_VERSION_MAJOR == 11
       /* This fixes variable indexing on LLVM 11. It also breaks atomic.cmpswap on LLVM >= 12. */
@@ -174,12 +163,18 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
    case CHIP_NAVI14:
       return "gfx1012";
    case CHIP_SIENNA_CICHLID:
+      return "gfx1030";
    case CHIP_NAVY_FLOUNDER:
+      return LLVM_VERSION_MAJOR >= 12 ? "gfx1031" : "gfx1030";
    case CHIP_DIMGREY_CAVEFISH:
-   case CHIP_BEIGE_GOBY:
+      return LLVM_VERSION_MAJOR >= 12 ? "gfx1032" : "gfx1030";
    case CHIP_VANGOGH:
+      return LLVM_VERSION_MAJOR >= 12 ? "gfx1033" : "gfx1030";
+   case CHIP_BEIGE_GOBY:
+      return LLVM_VERSION_MAJOR >= 13 ? "gfx1034" : "gfx1030";
    case CHIP_YELLOW_CARP:
-   case CHIP_GFX1036:
+      return LLVM_VERSION_MAJOR >= 13 ? "gfx1035" : "gfx1030";
+   case CHIP_GFX1036: /* TODO: LLVM 15 doesn't support this yet */
       return "gfx1030";
    default:
       return "";
@@ -201,8 +196,7 @@ static LLVMTargetMachineRef ac_create_target_machine(enum radeon_family family,
 
    if (out_triple)
       *out_triple = triple;
-   if (tm_options & AC_TM_ENABLE_GLOBAL_ISEL)
-      ac_enable_global_isel(tm);
+
    return tm;
 }
 

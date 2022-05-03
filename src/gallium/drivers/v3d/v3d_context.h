@@ -41,6 +41,7 @@
 #include "broadcom/common/v3d_limits.h"
 
 #include "broadcom/simulator/v3d_simulator.h"
+#include "broadcom/compiler/v3d_compiler.h"
 
 struct v3d_job;
 struct v3d_bo;
@@ -165,6 +166,12 @@ struct v3d_sampler_view {
          * raster texture.
          */
         struct pipe_resource *texture;
+
+        /* A serial ID used to identify cases where a new BO has been created
+         * and we need to rebind a sampler view that was created against the
+         * previous BO to to point to the new one.
+         */
+        uint32_t serial_id;
 };
 
 struct v3d_sampler_state {
@@ -593,7 +600,7 @@ struct v3d_context {
         struct v3d_bo *current_oq;
         struct pipe_resource *prim_counts;
         uint32_t prim_counts_offset;
-        struct pipe_debug_callback debug;
+        struct util_debug_callback debug;
         struct v3d_perfmon_state *active_perfmon;
         struct v3d_perfmon_state *last_perfmon;
         /** @} */
@@ -628,7 +635,7 @@ struct v3d_blend_state {
         if (unlikely(V3D_DEBUG & V3D_DEBUG_PERF))       \
                 fprintf(stderr, __VA_ARGS__);           \
         if (unlikely(v3d->debug.debug_message))         \
-                pipe_debug_message(&v3d->debug, PERF_INFO, __VA_ARGS__);    \
+                util_debug_message(&v3d->debug, PERF_INFO, __VA_ARGS__);    \
 } while (0)
 
 static inline struct v3d_context *
@@ -787,6 +794,17 @@ void v3d_get_tile_buffer_size(bool is_msaa,
                               uint32_t *tile_width,
                               uint32_t *tile_height,
                               uint32_t *max_bpp);
+
+#ifdef ENABLE_SHADER_CACHE
+struct v3d_compiled_shader *v3d_disk_cache_retrieve(struct v3d_context *v3d,
+                                                    const struct v3d_key *key);
+
+void v3d_disk_cache_store(struct v3d_context *v3d,
+                          const struct v3d_key *key,
+                          const struct v3d_compiled_shader *shader,
+                          uint64_t *qpu_insts,
+                          uint32_t qpu_size);
+#endif /* ENABLE_SHADER_CACHE */
 
 #ifdef v3dX
 #  include "v3dx_context.h"

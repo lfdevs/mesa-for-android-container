@@ -1282,8 +1282,8 @@ Emma Anholt (204):
 - gallium/u_blitter: Read MSAA z/s from sampler's .x instead of .y or .z.
 - turnip: Drop the assertion about the temporary bit in sync fd imports.
 - ci/radeonsi: Use a deqp-runner suite suite for stoney.
-- ci/deqp-runner: Rename the deqp-drivername-\*.txt files to drivername-*.txt
-- ci/piglit-runner: Merge piglit-driver-\*.txt files into driver-*.txt.
+- ci/deqp-runner: Rename the deqp-drivername-\*.txt files to drivername-\*.txt
+- ci/piglit-runner: Merge piglit-driver-\*.txt files into driver-\*.txt.
 - ci: Enable testing radeonsi's libva using libva-util unit tests.
 - ci/etnaviv: Fix the dependency for the build artifacts.
 - ci/etnaviv: Add some more deqp flakes I've seen in recent runs.

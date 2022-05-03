@@ -1,0 +1,2 @@
+dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawelements.*1000x1000_drawcount_5000
+dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawarrays.*_500x500_drawcount_2500

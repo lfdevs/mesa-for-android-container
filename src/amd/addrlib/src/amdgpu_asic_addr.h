@@ -1,8 +1,7 @@
-/**
-***********************************************************************************************************************
+/*
+************************************************************************************************************************
 *
-* Copyright © 2007-2021 Advanced Micro Devices, Inc.
-* All Rights Reserved.
+*  Copyright (C) 2017-2022 Advanced Micro Devices, Inc.  All rights reserved.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a
 * copy of this software and associated documentation files (the "Software"),
@@ -22,8 +21,7 @@
 * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 * OTHER DEALINGS IN THE SOFTWARE
 *
-***********************************************************************************************************************
-*/
+***********************************************************************************************************************/
 
 #ifndef _AMDGPU_ASIC_ADDR_H
 #define _AMDGPU_ASIC_ADDR_H
@@ -83,6 +81,7 @@
 #define AMDGPU_ICELAND_RANGE    0x01, 0x14
 #define AMDGPU_TONGA_RANGE      0x14, 0x28
 #define AMDGPU_FIJI_RANGE       0x3C, 0x50
+
 #define AMDGPU_POLARIS10_RANGE  0x50, 0x5A
 #define AMDGPU_POLARIS11_RANGE  0x5A, 0x64
 #define AMDGPU_POLARIS12_RANGE  0x64, 0x6E
@@ -163,11 +162,17 @@
 #define ASICREV_IS_RENOIR(r)           ASICREV_IS(r, RENOIR)
 
 #define ASICREV_IS_NAVI10_P(r)         ASICREV_IS(r, NAVI10)
+
 #define ASICREV_IS_NAVI12_P(r)         ASICREV_IS(r, NAVI12)
+
 #define ASICREV_IS_NAVI14_M(r)         ASICREV_IS(r, NAVI14)
+
 #define ASICREV_IS_SIENNA_CICHLID(r)   ASICREV_IS(r, SIENNA_CICHLID)
+
 #define ASICREV_IS_NAVY_FLOUNDER(r)    ASICREV_IS(r, NAVY_FLOUNDER)
+
 #define ASICREV_IS_DIMGREY_CAVEFISH(r) ASICREV_IS(r, DIMGREY_CAVEFISH)
+
 #define ASICREV_IS_BEIGE_GOBY(r)       ASICREV_IS(r, BEIGE_GOBY)
 
 #define ASICREV_IS_VANGOGH(r)          ASICREV_IS(r, VANGOGH)

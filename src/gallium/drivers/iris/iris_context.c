@@ -42,7 +42,7 @@
  */
 static void
 iris_set_debug_callback(struct pipe_context *ctx,
-                        const struct pipe_debug_callback *cb)
+                        const struct util_debug_callback *cb)
 {
    struct iris_context *ice = (struct iris_context *)ctx;
    struct iris_screen *screen = (struct iris_screen *)ctx->screen;
@@ -83,7 +83,7 @@ iris_lost_context_state(struct iris_batch *batch)
    memset(&ice->shaders.urb, 0, sizeof(ice->shaders.urb));
    memset(ice->state.last_block, 0, sizeof(ice->state.last_block));
    memset(ice->state.last_grid, 0, sizeof(ice->state.last_grid));
-   batch->last_surface_base_address = ~0ull;
+   batch->last_binder_address = ~0ull;
    batch->last_aux_map_state = 0;
    batch->screen->vtbl.lost_genx_state(ice, batch);
 }
@@ -238,7 +238,6 @@ iris_destroy_context(struct pipe_context *ctx)
    }
 
    iris_destroy_program_cache(ice);
-   iris_destroy_border_color_pool(ice);
    if (screen->measure.config)
       iris_destroy_ctx_measure(ice);
 
@@ -334,7 +333,6 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    iris_init_perfquery_functions(ctx);
 
    iris_init_program_cache(ice);
-   iris_init_border_color_pool(ice);
    iris_init_binder(ice);
 
    slab_create_child(&ice->transfer_pool, &screen->transfer_pool);

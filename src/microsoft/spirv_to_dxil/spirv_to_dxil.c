@@ -738,10 +738,12 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
    if (!nir_to_dxil(nir, &opts, &dxil_blob)) {
       if (dxil_blob.allocated)
          blob_finish(&dxil_blob);
+      ralloc_free(nir);
       glsl_type_singleton_decref();
       return false;
    }
 
+   ralloc_free(nir);
    out_dxil->metadata.requires_runtime_data = requires_runtime_data;
    blob_finish_get_buffer(&dxil_blob, &out_dxil->binary.buffer,
                           &out_dxil->binary.size);

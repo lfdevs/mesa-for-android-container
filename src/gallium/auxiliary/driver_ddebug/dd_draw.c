@@ -500,7 +500,7 @@ dd_dump_get_query_result_resource(struct call_get_query_result_resource *info, F
 {
    fprintf(f, "%s:\n", __func__ + 8);
    DUMP_M(query_type, info, query_type);
-   DUMP_M(uint, info, wait);
+   DUMP_M(query_flags, info, flags);
    DUMP_M(query_value_type, info, result_type);
    DUMP_M(int, info, index);
    DUMP_M(resource, info, resource);
@@ -1445,7 +1445,7 @@ dd_context_generate_mipmap(struct pipe_context *_pipe,
 static void
 dd_context_get_query_result_resource(struct pipe_context *_pipe,
                                      struct pipe_query *query,
-                                     bool wait,
+                                     enum pipe_query_flags flags,
                                      enum pipe_query_value_type result_type,
                                      int index,
                                      struct pipe_resource *resource,
@@ -1458,7 +1458,7 @@ dd_context_get_query_result_resource(struct pipe_context *_pipe,
 
    record->call.type = CALL_GET_QUERY_RESULT_RESOURCE;
    record->call.info.get_query_result_resource.query = query;
-   record->call.info.get_query_result_resource.wait = wait;
+   record->call.info.get_query_result_resource.flags = flags;
    record->call.info.get_query_result_resource.result_type = result_type;
    record->call.info.get_query_result_resource.index = index;
    record->call.info.get_query_result_resource.resource = NULL;
@@ -1470,7 +1470,7 @@ dd_context_get_query_result_resource(struct pipe_context *_pipe,
    record->call.info.get_query_result_resource.query_type = dquery->type;
 
    dd_before_draw(dctx, record);
-   pipe->get_query_result_resource(pipe, dquery->query, wait,
+   pipe->get_query_result_resource(pipe, dquery->query, flags,
                                    result_type, index, resource, offset);
    dd_after_draw(dctx, record);
 }

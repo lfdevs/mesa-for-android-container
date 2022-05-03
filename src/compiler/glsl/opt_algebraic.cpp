@@ -398,7 +398,7 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
          return op_expr[0]->operands[0];
       }
 
-      if (!options->EmitNoPow && op_expr[0]->operation == ir_binop_mul) {
+      if (op_expr[0]->operation == ir_binop_mul) {
          for (int log2_pos = 0; log2_pos < 2; log2_pos++) {
             ir_expression *log2_expr =
                op_expr[0]->operands[log2_pos]->as_expression();

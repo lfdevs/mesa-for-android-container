@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019 Raspberry Pi
+ * Copyright © 2019 Raspberry Pi Ltd
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -447,6 +447,15 @@ copy_image_to_buffer_blit(struct v3dv_cmd_buffer *cmd_buffer,
 {
    bool handled = false;
 
+   /* This path uses a shader blit which doesn't support linear images. Return
+    * early to avoid all te heavy lifting in preparation for the blit_shader()
+    * call that is bound to fail in that scenario.
+    */
+   if (image->vk.tiling == VK_IMAGE_TILING_LINEAR &&
+       image->vk.image_type != VK_IMAGE_TYPE_1D) {
+      return handled;
+   }
+
    /* Generally, the bpp of the data in the buffer matches that of the
     * source image. The exception is the case where we are copying
     * stencil (8bpp) to a combined d24s8 image (32bpp).
@@ -864,8 +873,7 @@ copy_image_tfu(struct v3dv_cmd_buffer *cmd_buffer,
          dst->mem->bo->handle,
          dst_offset,
          dst_slice->tiling,
-         dst_slice->tiling == V3D_TILING_RASTER ?
-                              dst_slice->stride : dst_slice->padded_height,
+         dst_slice->padded_height,
          dst->cpp,
          src->mem->bo->handle,
          src_offset,
@@ -1371,8 +1379,7 @@ copy_buffer_to_image_tfu(struct v3dv_cmd_buffer *cmd_buffer,
              dst_bo->handle,
              dst_offset,
              slice->tiling,
-             slice->tiling == V3D_TILING_RASTER ?
-                              slice->stride : slice->padded_height,
+             slice->padded_height,
              image->cpp,
              src_bo->handle,
              src_offset,
@@ -2896,8 +2903,7 @@ blit_tfu(struct v3dv_cmd_buffer *cmd_buffer,
          dst->mem->bo->handle,
          dst_offset,
          dst_slice->tiling,
-         dst_slice->tiling == V3D_TILING_RASTER ?
-                              dst_slice->stride : dst_slice->padded_height,
+         dst_slice->padded_height,
          dst->cpp,
          src->mem->bo->handle,
          src_offset,
@@ -3820,8 +3826,10 @@ blit_shader(struct v3dv_cmd_buffer *cmd_buffer,
           !vk_format_is_depth_or_stencil(dst_format));
 
    /* Can't sample from linear images */
-   if (src->vk.tiling == VK_IMAGE_TILING_LINEAR && src->vk.image_type != VK_IMAGE_TYPE_1D)
+   if (src->vk.tiling == VK_IMAGE_TILING_LINEAR &&
+       src->vk.image_type != VK_IMAGE_TYPE_1D) {
       return false;
+   }
 
    VkImageBlit2KHR region = *_region;
    /* Rewrite combined D/S blits to compatible color blits */

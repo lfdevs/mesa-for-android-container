@@ -428,7 +428,7 @@ process_block(nir_block *block, nir_load_grouping grouping,
          }
 
          /* Only group load instructions with the same indirection level. */
-         if (current->pass_flags == level && is_grouped_load(current)) {
+         if (is_grouped_load(current) && current->pass_flags == level) {
             nir_instr *current_resource;
 
             switch (grouping) {

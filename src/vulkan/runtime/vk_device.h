@@ -36,14 +36,89 @@ extern "C" {
 
 struct vk_sync;
 
+enum vk_queue_submit_mode {
+   /** Submits happen immediately
+    *
+    * `vkQueueSubmit()` and `vkQueueBindSparse()` call
+    * `vk_queue::driver_submit` directly for all submits and the last call to
+    * `vk_queue::driver_submit` will have completed by the time
+    * `vkQueueSubmit()` or `vkQueueBindSparse()` return.
+    */
+   VK_QUEUE_SUBMIT_MODE_IMMEDIATE,
+
+   /** Submits may be deferred until a future `vk_queue_flush()`
+    *
+    * Submits are added to the queue and `vk_queue_flush()` is called.
+    * However, any submits with unsatisfied dependencies will be left on the
+    * queue until a future `vk_queue_flush()` call.  This is used for
+    * implementing emulated timeline semaphores without threading.
+    */
+   VK_QUEUE_SUBMIT_MODE_DEFERRED,
+
+   /** Submits will be added to the queue and handled later by a thread
+    *
+    * This places additional requirements on the vk_sync types used by the
+    * driver:
+    *
+    *    1. All `vk_sync` types which support `VK_SYNC_FEATURE_GPU_WAIT` also
+    *       support `VK_SYNC_FEATURE_WAIT_PENDING` so that the threads can
+    *       sort out when a given submit has all its dependencies resolved.
+    *
+    *    2. All binary `vk_sync` types which support `VK_SYNC_FEATURE_GPU_WAIT`
+    *       also support `VK_SYNC_FEATURE_CPU_RESET` so we can reset
+    *       semaphores after waiting on them.
+    *
+    *    3. All vk_sync types used as permanent payloads of semaphores support
+    *       `vk_sync_type::move` so that it can move the pending signal into a
+    *       temporary vk_sync and reset the semaphore.
+    *
+    * This is requied for shared timeline semaphores where we need to handle
+    * wait-before-signal by threading in the driver if we ever see an
+    * unresolve dependency.
+    */
+   VK_QUEUE_SUBMIT_MODE_THREADED,
+
+   /** Threaded but only if we need it to resolve dependencies
+    *
+    * This imposes all the same requirements on `vk_sync` types as
+    * `VK_QUEUE_SUBMIT_MODE_THREADED`.
+    */
+   VK_QUEUE_SUBMIT_MODE_THREADED_ON_DEMAND,
+};
+
+/** Base struct for VkDevice */
 struct vk_device {
    struct vk_object_base base;
+
+   /** Allocator used to create this device
+    *
+    * This is used as a fall-back for when a NULL pAllocator is passed into a
+    * device-level create function such as vkCreateImage().
+    */
    VkAllocationCallbacks alloc;
+
+   /** Pointer to the physical device */
    struct vk_physical_device *physical;
 
+   /** Table of enabled extensions */
    struct vk_device_extension_table enabled_extensions;
 
+   /** Device-level dispatch table */
    struct vk_device_dispatch_table dispatch_table;
+
+   /** Command dispatch table
+    *
+    * This is used for emulated secondary command buffer support.  To use
+    * emulated (trace/replay) secondary command buffers:
+    *
+    *  1. Provide your "real" command buffer dispatch table here.  Because
+    *     this doesn't get populated by vk_device_init(), the driver will have
+    *     to add the vk_common entrypoints to this table itself.
+    *
+    *  2. Add vk_enqueue_unless_primary_device_entrypoint_table to your device
+    *     level dispatch table.
+    */
+   const struct vk_device_dispatch_table *command_dispatch_table;
 
    /* For VK_EXT_private_data */
    uint32_t private_data_next_index;
@@ -89,6 +164,22 @@ struct vk_device {
                                       VkDeviceMemory memory,
                                       bool signal_memory,
                                       struct vk_sync **sync_out);
+
+   /** Increments the reference count on a pipeline layout
+    *
+    * This is required for vk_enqueue_CmdBindDescriptorSets() to avoid
+    * use-after-free problems with pipeline layouts.  If you're not using
+    * the command queue, you can ignore this.
+    */
+   void (*ref_pipeline_layout)(struct vk_device *device,
+                               VkPipelineLayout layout);
+
+   /** Decrements the reference count on a pipeline layout
+    *
+    * See ref_pipeline_layout above.
+    */
+   void (*unref_pipeline_layout)(struct vk_device *device,
+                                 VkPipelineLayout layout);
 
    /* Set by vk_device_set_drm_fd() */
    int drm_fd;
@@ -148,6 +239,14 @@ struct vk_device {
       VK_DEVICE_TIMELINE_MODE_NATIVE,
    } timeline_mode;
 
+   /** Per-device submit mode
+    *
+    * This represents the device-wide submit strategy which may be different
+    * from the per-queue submit mode.  See vk_queue.submit.mode for more
+    * details.
+    */
+   enum vk_queue_submit_mode submit_mode;
+
 #ifdef ANDROID
    mtx_t swapchain_private_mtx;
    struct hash_table *swapchain_private;
@@ -155,8 +254,27 @@ struct vk_device {
 };
 
 VK_DEFINE_HANDLE_CASTS(vk_device, base, VkDevice,
-                       VK_OBJECT_TYPE_DEVICE)
+                       VK_OBJECT_TYPE_DEVICE);
 
+/** Initialize a vk_device
+ *
+ * Along with initializing the data structures in `vk_device`, this function
+ * checks that every extension specified by
+ * `VkInstanceCreateInfo::ppEnabledExtensionNames` is actually supported by
+ * the physical device and returns `VK_ERROR_EXTENSION_NOT_PRESENT` if an
+ * unsupported extension is requested.  It also checks all the feature struct
+ * chained into the `pCreateInfo->pNext` chain against the features returned
+ * by `vkGetPhysicalDeviceFeatures2` and returns
+ * `VK_ERROR_FEATURE_NOT_PRESENT` if an unsupported feature is requested.
+ *
+ * @param[out] device               The device to initialize
+ * @param[in]  physical_device      The physical device
+ * @param[in]  dispatch_table       Device-level dispatch table
+ * @param[in]  pCreateInfo          VkDeviceCreateInfo pointer passed to
+ *                                  `vkCreateDevice()`
+ * @param[in]  alloc                Allocation callbacks passed to
+ *                                  `vkCreateDevice()`
+ */
 VkResult MUST_CHECK
 vk_device_init(struct vk_device *device,
                struct vk_physical_device *physical_device,
@@ -170,8 +288,30 @@ vk_device_set_drm_fd(struct vk_device *device, int drm_fd)
    device->drm_fd = drm_fd;
 }
 
+/** Tears down a vk_device
+ *
+ * @param[out] device               The device to tear down
+ */
 void
 vk_device_finish(struct vk_device *device);
+
+/** Enables threaded submit on this device
+ *
+ * This doesn't ensure that threaded submit will be used.  It just disables
+ * the deferred submit option for emulated timeline semaphores and forces them
+ * to always use the threaded path.  It also does some checks that the vk_sync
+ * types used by the driver work for threaded submit.
+ *
+ * This must be called before any queues are created.
+ */
+void vk_device_enable_threaded_submit(struct vk_device *device);
+
+static inline bool
+vk_device_supports_threaded_submit(const struct vk_device *device)
+{
+   return device->submit_mode == VK_QUEUE_SUBMIT_MODE_THREADED ||
+          device->submit_mode == VK_QUEUE_SUBMIT_MODE_THREADED_ON_DEMAND;
+}
 
 VkResult vk_device_flush(struct vk_device *device);
 

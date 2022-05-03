@@ -1,5 +1,5 @@
 /*
- * Copyright © 2021 Raspberry Pi
+ * Copyright © 2021 Raspberry Pi Ltd
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -794,7 +794,7 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
     * buffer.
     */
    if (!framebuffer) {
-      assert(cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+      assert(cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY);
       return;
    }
 
@@ -1460,7 +1460,7 @@ job_update_ez_state(struct v3dv_job *job,
          struct v3dv_framebuffer *fb = state->framebuffer;
 
          if (!fb) {
-            assert(cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+            assert(cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY);
             perf_debug("Loading depth aspect in a secondary command buffer "
                        "without framebuffer info disables early-z tests.\n");
             job->first_ez_state = V3D_EZ_DISABLED;
@@ -2327,9 +2327,9 @@ v3dX(cmd_buffer_render_pass_setup_render_target)(struct v3dv_cmd_buffer *cmd_buf
 
    *rt_bpp = iview->internal_bpp;
    *rt_type = iview->internal_type;
-   if (vk_format_is_int(iview->vk.format))
+   if (vk_format_is_int(iview->vk.view_format))
       *rt_clamp = V3D_RENDER_TARGET_CLAMP_INT;
-   else if (vk_format_is_srgb(iview->vk.format))
+   else if (vk_format_is_srgb(iview->vk.view_format))
       *rt_clamp = V3D_RENDER_TARGET_CLAMP_NORM;
    else
       *rt_clamp = V3D_RENDER_TARGET_CLAMP_NONE;

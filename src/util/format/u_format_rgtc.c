@@ -63,7 +63,7 @@ util_format_rgtc1_unorm_unpack_rgba_8unorm(uint8_t *restrict dst_row, unsigned d
 }
 
 void
-util_format_rgtc1_unorm_pack_rgba_8unorm(uint8_t *restrict dst_row, unsigned dst_stride, const uint8_t *restrict src_row, 
+util_format_rgtc1_unorm_pack_rgba_8unorm(uint8_t *restrict dst_row, unsigned dst_stride, const uint8_t *restrict src_row,
 					 unsigned src_stride, unsigned width, unsigned height)
 {
    const unsigned bw = 4, bh = 4, bytes_per_block = 8;

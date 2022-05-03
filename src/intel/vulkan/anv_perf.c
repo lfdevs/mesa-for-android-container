@@ -346,13 +346,14 @@ VkResult anv_EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
 
    uint32_t desc_count = *pCounterCount;
 
-   VK_OUTARRAY_MAKE(out, pCounters, pCounterCount);
-   VK_OUTARRAY_MAKE(out_desc, pCounterDescriptions, &desc_count);
+   VK_OUTARRAY_MAKE_TYPED(VkPerformanceCounterKHR, out, pCounters, pCounterCount);
+   VK_OUTARRAY_MAKE_TYPED(VkPerformanceCounterDescriptionKHR, out_desc,
+                          pCounterDescriptions, &desc_count);
 
    for (int c = 0; c < (perf ? perf->n_counters : 0); c++) {
       const struct intel_perf_query_counter *intel_counter = perf->counter_infos[c].counter;
 
-      vk_outarray_append(&out, counter) {
+      vk_outarray_append_typed(VkPerformanceCounterKHR, &out, counter) {
          counter->unit = intel_perf_counter_unit_to_vk_unit[intel_counter->units];
          counter->scope = VK_QUERY_SCOPE_COMMAND_KHR;
          counter->storage = intel_perf_counter_data_type_to_vk_storage[intel_counter->data_type];
@@ -364,7 +365,7 @@ VkResult anv_EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
          memcpy(counter->uuid, sha1_result, sizeof(counter->uuid));
       }
 
-      vk_outarray_append(&out_desc, desc) {
+      vk_outarray_append_typed(VkPerformanceCounterDescriptionKHR, &out_desc, desc) {
          desc->flags = 0; /* None so far. */
          snprintf(desc->name, sizeof(desc->name), "%s", intel_counter->name);
          snprintf(desc->category, sizeof(desc->category), "%s", intel_counter->category);

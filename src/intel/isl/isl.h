@@ -2014,6 +2014,11 @@ enum isl_format isl_format_rgb_to_rgbx(enum isl_format rgb) ATTRIBUTE_CONST;
 enum isl_format isl_format_rgbx_to_rgba(enum isl_format rgb) ATTRIBUTE_CONST;
 
 union isl_color_value
+isl_color_value_swizzle(union isl_color_value src,
+                        struct isl_swizzle swizzle,
+                        bool is_float);
+
+union isl_color_value
 isl_color_value_swizzle_inv(union isl_color_value src,
                             struct isl_swizzle swizzle);
 

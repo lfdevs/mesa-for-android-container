@@ -8,6 +8,9 @@ dEQP-VK.wsi.*
 # Exclude this test which timeout most of the time.
 dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1048576
 
-# Exclude this test because it fails with VK_KHR_maintenance4 and the CTS fix
-# hasn't landed yet.
-dEQP-VK.api.buffer.basic.size_max_uint64
+# Exclude this test which fails on all GPUS except RDNA2+.
+dEQP-VK.api.driver_properties.conformance_version
+
+# Exclude these tests because they randomly hang on Navi10 and randomly fail on
+# Sienna Cichlid.
+dEQP-VK.renderpass2.depth_stencil_resolve.*_samplemask

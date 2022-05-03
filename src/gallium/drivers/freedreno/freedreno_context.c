@@ -402,7 +402,7 @@ fd_context_destroy(struct pipe_context *pctx)
 
 static void
 fd_set_debug_callback(struct pipe_context *pctx,
-                      const struct pipe_debug_callback *cb)
+                      const struct util_debug_callback *cb)
 {
    struct fd_context *ctx = fd_context(pctx);
 

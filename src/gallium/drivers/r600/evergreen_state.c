@@ -3335,8 +3335,15 @@ void evergreen_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader
 	};
 	unsigned spi_baryc_cntl = 0, sid, tmp, num = 0;
 	unsigned z_export = 0, stencil_export = 0, mask_export = 0;
-	unsigned sprite_coord_enable = rctx->rasterizer ? rctx->rasterizer->sprite_coord_enable : 0;
 	uint32_t spi_ps_input_cntl[32];
+
+	/* Pull any state we use out of rctx.  Make sure that any additional
+	 * state added to this list is also checked in the caller in
+	 * r600_update_derived_state().
+	 */
+	bool sprite_coord_enable = rctx->rasterizer ? rctx->rasterizer->sprite_coord_enable : 0;
+	bool flatshade = rctx->rasterizer ? rctx->rasterizer->flatshade : 0;
+	bool msaa = rctx->framebuffer.nr_samples > 1 && rctx->ps_iter_samples > 0;
 
 	if (!cb->buf) {
 		r600_init_command_buffer(cb, 64);
@@ -3389,8 +3396,7 @@ void evergreen_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader
 
 			if (rshader->input[i].name == TGSI_SEMANTIC_POSITION ||
 				rshader->input[i].interpolate == TGSI_INTERPOLATE_CONSTANT ||
-				(rshader->input[i].interpolate == TGSI_INTERPOLATE_COLOR &&
-					rctx->rasterizer && rctx->rasterizer->flatshade)) {
+				(rshader->input[i].interpolate == TGSI_INTERPOLATE_COLOR && flatshade)) {
 				tmp |= S_028644_FLAT_SHADE(1);
 			}
 
@@ -3412,8 +3418,7 @@ void evergreen_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader
 			z_export = 1;
 		if (rshader->output[i].name == TGSI_SEMANTIC_STENCIL)
 			stencil_export = 1;
-		if (rshader->output[i].name == TGSI_SEMANTIC_SAMPLEMASK &&
-			rctx->framebuffer.nr_samples > 1 && rctx->ps_iter_samples > 0)
+		if (rshader->output[i].name == TGSI_SEMANTIC_SAMPLEMASK && msaa)
 			mask_export = 1;
 	}
 	if (rshader->uses_kill)
@@ -3512,8 +3517,8 @@ void evergreen_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader
 	shader->ps_depth_export = z_export | stencil_export | mask_export;
 
 	shader->sprite_coord_enable = sprite_coord_enable;
-	if (rctx->rasterizer)
-		shader->flatshade = rctx->rasterizer->flatshade;
+	shader->flatshade = flatshade;
+	shader->msaa = msaa;
 }
 
 void evergreen_update_es_state(struct pipe_context *ctx, struct r600_pipe_shader *shader)

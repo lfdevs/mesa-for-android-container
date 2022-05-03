@@ -447,7 +447,7 @@ crocus_resource_configure_aux(struct crocus_screen *screen,
       isl_surf_get_hiz_surf(&screen->isl_dev, &res->surf, &res->aux.surf);
 
    const bool has_ccs =
-      ((devinfo->ver >= 7 && !res->mod_info && !INTEL_DEBUG(DEBUG_NO_RBC)) ||
+      ((devinfo->ver >= 7 && !res->mod_info && !INTEL_DEBUG(DEBUG_NO_CCS)) ||
        (res->mod_info && res->mod_info->aux_usage != ISL_AUX_USAGE_NONE)) &&
       isl_surf_get_ccs_surf(&screen->isl_dev, &res->surf, NULL,
                             &res->aux.surf, 0);
@@ -1645,16 +1645,15 @@ crocus_transfer_map(struct pipe_context *ctx,
 
    struct crocus_transfer *map;
    if (usage & TC_TRANSFER_MAP_THREADED_UNSYNC)
-      map = slab_alloc(&ice->transfer_pool_unsync);
+      map = slab_zalloc(&ice->transfer_pool_unsync);
    else
-      map = slab_alloc(&ice->transfer_pool);
+      map = slab_zalloc(&ice->transfer_pool);
 
    struct pipe_transfer *xfer = &map->base.b;
 
    if (!map)
       return NULL;
 
-   memset(map, 0, sizeof(*map));
    map->dbg = &ice->dbg;
 
    map->has_swizzling = screen->devinfo.has_bit6_swizzle;
@@ -2010,7 +2009,7 @@ crocus_init_screen_resource_functions(struct pipe_screen *pscreen)
    pscreen->memobj_destroy = crocus_memobj_destroy;
    pscreen->transfer_helper =
       u_transfer_helper_create(&transfer_vtbl, screen->devinfo.ver >= 6,
-                               screen->devinfo.ver >= 6, false, true);
+                               screen->devinfo.ver >= 6, false, true, false);
 }
 
 void

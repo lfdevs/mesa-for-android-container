@@ -148,6 +148,29 @@ vtn_handle_function_call(struct vtn_builder *b, SpvOp opcode,
    }
 }
 
+static void
+function_decoration_cb(struct vtn_builder *b, struct vtn_value *val, int member,
+                       const struct vtn_decoration *dec, void *void_func)
+{
+   struct vtn_function *func = void_func;
+
+   switch (dec->decoration) {
+   case SpvDecorationLinkageAttributes: {
+      unsigned name_words;
+      const char *name =
+         vtn_string_literal(b, dec->operands, dec->num_operands, &name_words);
+      vtn_fail_if(name_words >= dec->num_operands,
+                  "Malformed LinkageAttributes decoration");
+      (void)name; /* TODO: What is this? */
+      func->linkage = dec->operands[name_words];
+      break;
+   }
+
+   default:
+      break;
+   }
+}
+
 static bool
 vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
                                    const uint32_t *w, unsigned count)
@@ -160,11 +183,14 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
       b->func->node.type = vtn_cf_node_type_function;
       b->func->node.parent = NULL;
       list_inithead(&b->func->body);
+      b->func->linkage = SpvLinkageTypeMax;
       b->func->control = w[3];
 
       UNUSED const struct glsl_type *result_type = vtn_get_type(b, w[1])->type;
       struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_function);
       val->func = b->func;
+
+      vtn_foreach_decoration(b, val, function_decoration_cb, b->func);
 
       b->func->type = vtn_get_type(b, w[4]);
       const struct vtn_type *func_type = b->func->type;
@@ -221,10 +247,19 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpFunctionEnd:
       b->func->end = w;
       if (b->func->start_block == NULL) {
+         vtn_fail_if(b->func->linkage != SpvLinkageTypeImport,
+                     "A function declaration (an OpFunction with no basic "
+                     "blocks), must have a Linkage Attributes Decoration "
+                     "with the Import Linkage Type.");
+
          /* In this case, the function didn't have any actual blocks.  It's
           * just a prototype so delete the function_impl.
           */
          b->func->nir_func->impl = NULL;
+      } else {
+         vtn_fail_if(b->func->linkage == SpvLinkageTypeImport,
+                     "A function definition (an OpFunction with basic blocks) "
+                     "cannot be decorated with the Import Linkage Type.");
       }
       b->func = NULL;
       break;

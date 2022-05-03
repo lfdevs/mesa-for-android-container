@@ -258,6 +258,7 @@ primconvert_init_draw(struct primconvert_context *pc,
    else {
       gen_func(draw.start, new_draw->count, dst);
    }
+   new_info->was_line_loop = info->mode == PIPE_PRIM_LINE_LOOP;
 
    if (src_transfer)
       pipe_buffer_unmap(pc->pipe, src_transfer);

@@ -7456,12 +7456,12 @@
   {
    "chips": ["gfx103"],
    "map": {"at": 198912, "to": "mm"},
-   "name": "VGT_ESGS_RING_SIZE_UMD"
+   "name": "VGT_ESGS_RING_SIZE"
   },
   {
    "chips": ["gfx103"],
    "map": {"at": 198916, "to": "mm"},
-   "name": "VGT_GSVS_RING_SIZE_UMD"
+   "name": "VGT_GSVS_RING_SIZE"
   },
   {
    "chips": ["gfx103"],
@@ -7524,19 +7524,19 @@
   {
    "chips": ["gfx103"],
    "map": {"at": 198968, "to": "mm"},
-   "name": "VGT_TF_RING_SIZE_UMD",
-   "type_ref": "VGT_TF_RING_SIZE_UMD"
+   "name": "VGT_TF_RING_SIZE",
+   "type_ref": "VGT_TF_RING_SIZE"
   },
   {
    "chips": ["gfx103"],
    "map": {"at": 198972, "to": "mm"},
-   "name": "VGT_HS_OFFCHIP_PARAM_UMD",
-   "type_ref": "VGT_HS_OFFCHIP_PARAM_UMD"
+   "name": "VGT_HS_OFFCHIP_PARAM",
+   "type_ref": "VGT_HS_OFFCHIP_PARAM"
   },
   {
    "chips": ["gfx103"],
    "map": {"at": 198976, "to": "mm"},
-   "name": "VGT_TF_MEMORY_BASE_UMD"
+   "name": "VGT_TF_MEMORY_BASE"
   },
   {
    "chips": ["gfx103"],
@@ -7628,7 +7628,7 @@
   {
    "chips": ["gfx103"],
    "map": {"at": 199044, "to": "mm"},
-   "name": "VGT_TF_MEMORY_BASE_HI_UMD",
+   "name": "VGT_TF_MEMORY_BASE_HI",
    "type_ref": "DB_Z_READ_BASE_HI"
   },
   {
@@ -14996,7 +14996,7 @@
     {"bits": [0, 7], "name": "REUSE_DEPTH"}
    ]
   },
-  "VGT_HS_OFFCHIP_PARAM_UMD": {
+  "VGT_HS_OFFCHIP_PARAM": {
    "fields": [
     {"bits": [0, 9], "name": "OFFCHIP_BUFFERING"},
     {"bits": [10, 11], "enum_ref": "VGT_HS_OFFCHIP_PARAM__OFFCHIP_GRANULARITY", "name": "OFFCHIP_GRANULARITY"}
@@ -15127,7 +15127,7 @@
     {"bits": [23, 25], "name": "MTYPE"}
    ]
   },
-  "VGT_TF_RING_SIZE_UMD": {
+  "VGT_TF_RING_SIZE": {
    "fields": [
     {"bits": [0, 15], "name": "SIZE"}
    ]

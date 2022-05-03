@@ -63,9 +63,9 @@ namespace {
             size_t fmt_last_pos = 0;
             size_t fmt_pos = 0;
             for (int arg_size : fmt.arg_sizes) {
-               const size_t spec_pos = util_printf_next_spec_pos(format, fmt_pos);
+               const size_t spec_pos = util_printf_next_spec_pos(format.c_str(), fmt_pos);
                const size_t cur_tok = format.rfind('%', spec_pos);
-               const size_t next_spec = util_printf_next_spec_pos(format, spec_pos);
+               const size_t next_spec = util_printf_next_spec_pos(format.c_str(), spec_pos);
                const size_t next_tok = next_spec == std::string::npos ? std::string::npos :
                   format.rfind('%', next_spec);
 

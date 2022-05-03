@@ -27,6 +27,7 @@
 
 #include "util/list.h"
 #include "util/slab.h"
+#include "util/u_debug.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
@@ -275,7 +276,7 @@ struct lima_context {
 
    int id;
 
-   struct pipe_debug_callback debug;
+   struct util_debug_callback debug;
 
    unsigned index_offset;
    struct lima_resource *index_res;

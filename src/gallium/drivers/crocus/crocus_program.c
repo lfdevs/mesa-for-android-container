@@ -2893,6 +2893,7 @@ crocus_create_fs_state(struct pipe_context *ctx,
          KEY_INIT(),
          .nr_color_regions = util_bitcount(color_outputs),
          .coherent_fb_fetch = false,
+         .ignore_sample_mask_out = screen->devinfo.ver < 6 ? 1 : 0,
          .input_slots_valid =
          can_rearrange_varyings ? 0 : info->inputs_read | VARYING_BIT_POS,
       };

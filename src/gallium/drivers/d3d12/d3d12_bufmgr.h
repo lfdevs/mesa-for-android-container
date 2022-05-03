@@ -26,6 +26,7 @@
 
 #include "pipebuffer/pb_buffer.h"
 #include "util/u_atomic.h"
+#include "util/list.h"
 
 #ifndef _WIN32
 #include <wsl/winadapter.h>
@@ -38,11 +39,23 @@ struct d3d12_screen;
 struct pb_manager;
 struct TransitionableResourceState;
 
+enum d3d12_residency_status {
+   d3d12_evicted,
+   d3d12_resident,
+   d3d12_permanently_resident,
+};
+
 struct d3d12_bo {
    int refcount;
    ID3D12Resource *res;
    struct pb_buffer *buffer;
    struct TransitionableResourceState *trans_state;
+
+   struct list_head residency_list_entry;
+   uint64_t estimated_size;
+   int64_t last_used_timestamp;
+   uint64_t last_used_fence;
+   enum d3d12_residency_status residency_status;
 };
 
 struct d3d12_buffer {
@@ -96,10 +109,10 @@ d3d12_bo_is_suballocated(struct d3d12_bo *bo)
 }
 
 struct d3d12_bo *
-d3d12_bo_new(ID3D12Device *dev, uint64_t size, uint64_t alignment);
+d3d12_bo_new(struct d3d12_screen *screen, uint64_t size, uint64_t alignment);
 
 struct d3d12_bo *
-d3d12_bo_wrap_res(ID3D12Resource *res, enum pipe_format format);
+d3d12_bo_wrap_res(struct d3d12_screen *screen, ID3D12Resource *res, enum pipe_format format, enum d3d12_residency_status residency);
 
 struct d3d12_bo *
 d3d12_bo_wrap_buffer(struct pb_buffer *buf);

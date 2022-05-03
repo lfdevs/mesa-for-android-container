@@ -40,6 +40,10 @@ tu_cs_init_external(struct tu_cs *cs, struct tu_device *device,
                     uint32_t *start, uint32_t *end);
 
 void
+tu_cs_init_suballoc(struct tu_cs *cs, struct tu_device *device,
+                    struct tu_suballoc_bo *bo);
+
+void
 tu_cs_finish(struct tu_cs *cs);
 
 void

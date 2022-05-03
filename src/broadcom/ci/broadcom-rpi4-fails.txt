@@ -25,6 +25,7 @@ spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-spot-light,Fail
 spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=2,Fail
+spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=4,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=2,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=4,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2,Fail
@@ -348,3 +349,11 @@ spec@oes_texture_view@rendering-formats@clear GL_RGB10_A2 as GL_R32I,Fail
 spec@oes_texture_view@rendering-formats@clear GL_RGB10_A2 as GL_RG16F,Fail
 spec@oes_texture_view@rendering-formats@clear GL_RGB10_A2 as GL_RG16I,Fail
 spec@oes_texture_view@rendering-formats@clear GL_RGB10_A2 as GL_RGBA8I,Fail
+
+# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3510
+dEQP-VK.api.external.semaphore.opaque_fd.info_timeline,Fail
+
+dEQP-VK.draw.renderpass.inverted_depth_ranges.nodepthclamp_deltazero,Fail
+
+# Works if using V3D_DEBUG=noloopunroll
+dEQP-VK.graphicsfuzz.cov-loop-condition-clamp-vec-of-ones,Crash

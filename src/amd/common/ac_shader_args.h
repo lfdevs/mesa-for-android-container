@@ -27,7 +27,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define AC_MAX_INLINE_PUSH_CONSTS 8
+/* Maximum dwords of inline push constants when the indirect path is still used */
+#define AC_MAX_INLINE_PUSH_CONSTS_WITH_INDIRECT 8
+/* Maximum dwords of inline push constants when the indirect path is not used */
+#define AC_MAX_INLINE_PUSH_CONSTS 32
 
 enum ac_arg_regfile
 {
@@ -139,10 +142,11 @@ struct ac_shader_args {
    /* Vulkan only */
    struct ac_arg push_constants;
    struct ac_arg inline_push_consts[AC_MAX_INLINE_PUSH_CONSTS];
-   unsigned base_inline_push_consts;
+   uint64_t inline_push_const_mask;
    struct ac_arg view_index;
    struct ac_arg sbt_descriptors;
    struct ac_arg ray_launch_size;
+   struct ac_arg force_vrs_rates;
 };
 
 void ac_add_arg(struct ac_shader_args *info, enum ac_arg_regfile regfile, unsigned registers,

@@ -28,7 +28,7 @@ if [[ -n ${DEVICE_TREES} ]]; then
     cp ${DEVICE_TREES} /lava-files/.
 fi
 
-if [[ ${DEBIAN_ARCH} = "amd64" ]]; then
+if [[ ${DEBIAN_ARCH} = "amd64" || ${DEBIAN_ARCH} = "arm64" ]]; then
     make modules
     INSTALL_MOD_PATH=/lava-files/rootfs-${DEBIAN_ARCH}/ make modules_install
 fi

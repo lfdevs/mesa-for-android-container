@@ -750,6 +750,13 @@ tu_CreateRenderPass2(VkDevice _device,
       subpass->samples = 0;
       subpass->srgb_cntl = 0;
 
+      const VkSubpassDescriptionFlagBits raster_order_access_bits =
+         VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_COLOR_ACCESS_BIT_ARM |
+         VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_DEPTH_ACCESS_BIT_ARM |
+         VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_STENCIL_ACCESS_BIT_ARM;
+
+      subpass->raster_order_attachment_access = desc->flags & raster_order_access_bits;
+
       subpass->multiview_mask = desc->viewMask;
 
       if (desc->inputAttachmentCount > 0) {

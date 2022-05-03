@@ -72,7 +72,8 @@ st_nir_make_passthrough_shader(struct st_context *st,
                                unsigned *output_locations,
                                unsigned *interpolation_modes,
                                unsigned sysval_mask);
-
+void
+st_nir_add_point_size(struct nir_shader *nir);
 #ifdef __cplusplus
 }
 #endif

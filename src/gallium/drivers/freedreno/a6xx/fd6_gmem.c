@@ -429,13 +429,13 @@ update_vsc_pipe(struct fd_batch *batch)
    if (!fd6_ctx->vsc_draw_strm) {
       fd6_ctx->vsc_draw_strm = fd_bo_new(
          ctx->screen->dev, VSC_DRAW_STRM_SIZE(fd6_ctx->vsc_draw_strm_pitch),
-         0, "vsc_draw_strm");
+         FD_BO_NOMAP, "vsc_draw_strm");
    }
 
    if (!fd6_ctx->vsc_prim_strm) {
       fd6_ctx->vsc_prim_strm = fd_bo_new(
          ctx->screen->dev, VSC_PRIM_STRM_SIZE(fd6_ctx->vsc_prim_strm_pitch),
-         0, "vsc_prim_strm");
+         FD_BO_NOMAP, "vsc_prim_strm");
    }
 
    OUT_REG(

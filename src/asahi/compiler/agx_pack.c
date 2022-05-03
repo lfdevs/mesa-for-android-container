@@ -457,6 +457,7 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups, agx
       assert(index_src.type == AGX_INDEX_IMMEDIATE);
       assert(!(flat && I->perspective));
       unsigned index = index_src.value;
+      bool kill = false; // TODO: optimize
 
       uint64_t raw =
             0x21 | (flat ? (1 << 7) : 0) |
@@ -466,7 +467,7 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups, agx
             (((uint64_t) index) << 16) |
             (((uint64_t) channels) << 30) |
             (!flat ? (1ull << 46) : 0) | /* XXX */
-            (!flat ? (1ull << 52) : 0) | /* XXX */
+            (kill ? (1ull << 52) : 0) | /* XXX */
             (((uint64_t) (D >> 8)) << 56);
 
       unsigned size = 8;

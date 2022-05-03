@@ -11,6 +11,12 @@
 #include "vn_instance.h"
 #include "vn_protocol_driver_structs.h"
 
+/*
+ * These structs/unions/commands are not included
+ *
+ *   vkGetFenceFdKHR
+ */
+
 /* struct VkExportFenceCreateInfo chain */
 
 static inline size_t

@@ -81,13 +81,8 @@ struct u_log_context;
 #define DBG_COMPUTE		(1 << 9)
 /* gap */
 #define DBG_VM			(1 << 11)
-#define DBG_NO_IR		(1 << 12)
-#define DBG_NO_TGSI		(1 << 13)
-#define DBG_NO_ASM		(1 << 14)
 #define DBG_PREOPT_IR		(1 << 15)
 #define DBG_CHECK_IR		(1 << 16)
-#define DBG_NO_OPT_VARIANT	(1 << 17)
-#define DBG_FS_CORRECT_DERIVS_AFTER_KILL (1 << 18)
 /* gaps */
 #define DBG_TEST_DMA		(1 << 20)
 /* Bits 21-31 are reserved for the r600g driver. */
@@ -99,12 +94,10 @@ struct u_log_context;
 #define DBG_NO_TILING		(1ull << 36)
 #define DBG_SWITCH_ON_EOP	(1ull << 37)
 #define DBG_FORCE_DMA		(1ull << 38)
-#define DBG_PRECOMPILE		(1ull << 39)
 #define DBG_INFO		(1ull << 40)
 #define DBG_NO_WC		(1ull << 41)
 #define DBG_CHECK_VM		(1ull << 42)
 /* gap */
-#define DBG_UNSAFE_MATH		(1ull << 49)
 #define DBG_TEST_VMFAULT_CP	(1ull << 51)
 #define DBG_TEST_VMFAULT_SDMA	(1ull << 52)
 #define DBG_TEST_VMFAULT_SHADER	(1ull << 53)
@@ -572,7 +565,7 @@ struct r600_common_context {
 	float				sample_locations_8x[8][2];
 	float				sample_locations_16x[16][2];
 
-	struct pipe_debug_callback	debug;
+	struct util_debug_callback	debug;
 	struct pipe_device_reset_callback device_reset_callback;
 	struct u_log_context		*log;
 

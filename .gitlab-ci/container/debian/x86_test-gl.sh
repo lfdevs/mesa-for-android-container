@@ -64,6 +64,7 @@ apt-get install -y --no-remove \
       python3-lxml \
       python3-renderdoc \
       python3-simplejson \
+      socat \
       spirv-tools \
       sysvinit-core \
       wget

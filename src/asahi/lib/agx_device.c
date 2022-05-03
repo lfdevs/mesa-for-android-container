@@ -426,7 +426,7 @@ agx_create_command_queue(struct agx_device *dev)
       };
 
       ASSERTED kern_return_t ret = IOConnectCallScalarMethod(dev->fd,
-                          0x29,
+                          0x31,
                           scalars, 2, NULL, NULL);
 
       assert(ret == 0);
@@ -454,8 +454,6 @@ agx_submit_cmdbuf(struct agx_device *dev, unsigned cmdbuf, unsigned mappings, ui
       .unk2 = 0x0,
       .unk3 = 0x1,
    };
-
-   assert(sizeof(req) == 40);
 
    ASSERTED kern_return_t ret = IOConnectCallMethod(dev->fd,
                                            AGX_SELECTOR_SUBMIT_COMMAND_BUFFERS,

@@ -141,7 +141,7 @@ si_emit_compute(struct radv_device *device, struct radeon_cmdbuf *cs)
 
       assert(device->physical_device->rad_info.chip_class == GFX8);
 
-      tba_va = radv_shader_get_va(device->trap_handler_shader);
+      tba_va = radv_trap_handler_shader_get_va(device->trap_handler_shader);
       tma_va = radv_buffer_get_va(device->tma_bo);
 
       radeon_set_sh_reg_seq(cs, R_00B838_COMPUTE_TBA_LO, 4);
@@ -553,7 +553,7 @@ si_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
 
       assert(device->physical_device->rad_info.chip_class == GFX8);
 
-      tba_va = radv_shader_get_va(device->trap_handler_shader);
+      tba_va = radv_trap_handler_shader_get_va(device->trap_handler_shader);
       tma_va = radv_buffer_get_va(device->tma_bo);
 
       uint32_t regs[] = {R_00B000_SPI_SHADER_TBA_LO_PS, R_00B100_SPI_SHADER_TBA_LO_VS,
@@ -1354,7 +1354,7 @@ si_cs_emit_cache_flush(struct radeon_cmdbuf *cs, enum chip_class chip_class, uin
 void
 si_emit_cache_flush(struct radv_cmd_buffer *cmd_buffer)
 {
-   bool is_compute = cmd_buffer->queue_family_index == RADV_QUEUE_COMPUTE;
+   bool is_compute = cmd_buffer->qf == RADV_QUEUE_COMPUTE;
 
    if (is_compute)
       cmd_buffer->state.flush_bits &=
@@ -1522,7 +1522,7 @@ si_emit_cp_dma(struct radv_cmd_buffer *cmd_buffer, uint64_t dst_va, uint64_t src
     * should precede it.
     */
    if (flags & CP_DMA_SYNC) {
-      if (cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL) {
+      if (cmd_buffer->qf == RADV_QUEUE_GENERAL) {
          radeon_emit(cs, PKT3(PKT3_PFP_SYNC_ME, 0, cmd_buffer->state.predicating));
          radeon_emit(cs, 0);
       }

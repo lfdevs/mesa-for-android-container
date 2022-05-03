@@ -151,7 +151,10 @@ struct d3d12_shader_state {
 
 struct blitter_context;
 struct primconvert_context;
-struct d3d12_validation_tools;
+
+#ifdef _WIN32
+struct dxil_validator;
+#endif
 
 #ifdef __cplusplus
 class ResourceStateManager;
@@ -234,10 +237,9 @@ struct d3d12_context {
    unsigned cmdlist_dirty;
    ID3D12PipelineState *current_gfx_pso;
    ID3D12PipelineState *current_compute_pso;
-   bool reverse_depth_range;
+   uint16_t reverse_depth_range;
 
-   ID3D12Fence *cmdqueue_fence;
-   uint64_t fence_value;
+   uint64_t submit_id;
    ID3D12GraphicsCommandList *cmdlist;
 
    struct list_head active_queries;
@@ -247,7 +249,9 @@ struct d3d12_context {
    struct d3d12_descriptor_handle null_sampler;
 
    PFN_D3D12_SERIALIZE_VERSIONED_ROOT_SIGNATURE D3D12SerializeVersionedRootSignature;
-   struct d3d12_validation_tools *validation_tools;
+#ifdef _WIN32
+   struct dxil_validator *dxil_validator;
+#endif
 
    struct d3d12_resource *current_predication;
    bool predication_condition;

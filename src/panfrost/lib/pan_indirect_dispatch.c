@@ -157,7 +157,6 @@ GENX(pan_indirect_dispatch_init)(struct panfrost_device *dev)
                 nir_builder_init_simple_shader(MESA_SHADER_COMPUTE,
                                                GENX(pan_shader_get_compiler_options)(),
                                                "%s", "indirect_dispatch");
-        b.shader->info.internal = true;
         nir_variable_create(b.shader, nir_var_mem_ubo,
                             glsl_uint_type(), "inputs");
         b.shader->info.num_ubos++;

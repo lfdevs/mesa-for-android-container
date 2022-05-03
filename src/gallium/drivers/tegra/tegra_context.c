@@ -154,7 +154,7 @@ tegra_get_query_result(struct pipe_context *pcontext,
 static void
 tegra_get_query_result_resource(struct pipe_context *pcontext,
                                 struct pipe_query *query,
-                                bool wait,
+                                enum pipe_query_flags flags,
                                 enum pipe_query_value_type result_type,
                                 int index,
                                 struct pipe_resource *resource,
@@ -162,7 +162,7 @@ tegra_get_query_result_resource(struct pipe_context *pcontext,
 {
    struct tegra_context *context = to_tegra_context(pcontext);
 
-   context->gpu->get_query_result_resource(context->gpu, query, wait,
+   context->gpu->get_query_result_resource(context->gpu, query, flags,
                                            result_type, index, resource,
                                            offset);
 }
@@ -602,7 +602,7 @@ tegra_set_tess_state(struct pipe_context *pcontext,
 
 static void
 tegra_set_debug_callback(struct pipe_context *pcontext,
-                         const struct pipe_debug_callback *callback)
+                         const struct util_debug_callback *callback)
 {
    struct tegra_context *context = to_tegra_context(pcontext);
 

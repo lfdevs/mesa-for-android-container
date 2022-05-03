@@ -61,6 +61,7 @@ struct si_pm4_state {
 
 void si_pm4_cmd_add(struct si_pm4_state *state, uint32_t dw);
 void si_pm4_set_reg(struct si_pm4_state *state, unsigned reg, uint32_t val);
+void si_pm4_set_reg_idx3(struct si_pm4_state *state, unsigned reg, uint32_t val);
 
 void si_pm4_clear_state(struct si_pm4_state *state);
 void si_pm4_free_state(struct si_context *sctx, struct si_pm4_state *state, unsigned idx);

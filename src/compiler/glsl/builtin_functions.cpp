@@ -85,9 +85,15 @@
 #include "builtin_functions.h"
 #include "util/hash_table.h"
 
+#ifndef M_PIf
 #define M_PIf   ((float) M_PI)
+#endif
+#ifndef M_PI_2f
 #define M_PI_2f ((float) M_PI_2)
+#endif
+#ifndef M_PI_4f
 #define M_PI_4f ((float) M_PI_4)
+#endif
 
 using namespace ir_builder;
 

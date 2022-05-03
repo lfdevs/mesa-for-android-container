@@ -56,6 +56,7 @@ struct vn_renderer_info {
    bool has_cache_management;
    bool has_external_sync;
    bool has_implicit_fencing;
+   bool has_guest_vram;
 
    uint32_t max_sync_queue_count;
 
@@ -65,6 +66,8 @@ struct vn_renderer_info {
    uint32_t vk_ext_command_serialization_spec_version;
    uint32_t vk_mesa_venus_protocol_spec_version;
    uint32_t supports_blob_id_0;
+   /* combined mask for vk_extension_mask1, 2,..., N */
+   uint32_t vk_extension_mask[32];
 };
 
 struct vn_renderer_submit_batch {
@@ -122,9 +125,6 @@ struct vn_renderer_wait {
 struct vn_renderer_ops {
    void (*destroy)(struct vn_renderer *renderer,
                    const VkAllocationCallbacks *alloc);
-
-   void (*get_info)(struct vn_renderer *renderer,
-                    struct vn_renderer_info *info);
 
    VkResult (*submit)(struct vn_renderer *renderer,
                       const struct vn_renderer_submit *submit);
@@ -216,6 +216,7 @@ struct vn_renderer_sync_ops {
 };
 
 struct vn_renderer {
+   struct vn_renderer_info info;
    struct vn_renderer_ops ops;
    struct vn_renderer_shmem_ops shmem_ops;
    struct vn_renderer_bo_ops bo_ops;
@@ -251,13 +252,6 @@ vn_renderer_destroy(struct vn_renderer *renderer,
                     const VkAllocationCallbacks *alloc)
 {
    renderer->ops.destroy(renderer, alloc);
-}
-
-static inline void
-vn_renderer_get_info(struct vn_renderer *renderer,
-                     struct vn_renderer_info *info)
-{
-   renderer->ops.get_info(renderer, info);
 }
 
 static inline VkResult

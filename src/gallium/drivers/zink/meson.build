@@ -20,6 +20,7 @@
 
 files_libzink = files(
   'nir_lower_dynamic_bo_access.c',
+  'zink_lower_cubemap_to_array.c',
   'nir_to_spirv/nir_to_spirv.c',
   'nir_to_spirv/spirv_builder.c',
   'zink_batch.c',
@@ -28,6 +29,7 @@ files_libzink = files(
   'zink_clear.c',
   'zink_compiler.c',
   'zink_context.c',
+  'zink_kopper.c',
   'zink_descriptors.c',
   'zink_descriptors_lazy.c',
   'zink_draw.cpp',
@@ -76,10 +78,6 @@ zink_nir_algebraic_c = custom_target(
 
 zink_c_args = []
 inc_zink_vk = []
-
-if with_swrast_vk
-  zink_c_args += '-DZINK_WITH_SWRAST_VK'
-endif
 
 # MoltenVK options
 if with_moltenvk_dir != ''

@@ -117,8 +117,20 @@
    radeon_emit(((reg) - SI_SH_REG_OFFSET) >> 2); \
 } while (0)
 
+#define radeon_set_sh_reg_idx3_seq(reg, num) do { \
+   SI_CHECK_SHADOWED_REGS(reg, num); \
+   assert((reg) >= SI_SH_REG_OFFSET && (reg) < SI_SH_REG_END); \
+   radeon_emit(PKT3(PKT3_SET_SH_REG_INDEX, num, 0)); \
+   radeon_emit((((reg) - SI_SH_REG_OFFSET) >> 2) | (3 << 28)); \
+} while (0)
+
 #define radeon_set_sh_reg(reg, value) do { \
    radeon_set_sh_reg_seq(reg, 1); \
+   radeon_emit(value); \
+} while (0)
+
+#define radeon_set_sh_reg_idx3(reg, value) do { \
+   radeon_set_sh_reg_idx3_seq(reg, 1); \
    radeon_emit(value); \
 } while (0)
 
@@ -247,6 +259,19 @@
    } \
 } while (0)
 
+#define radeon_opt_set_sh_reg_idx3(sctx, offset, reg, val) do { \
+   unsigned __value = val; \
+   if (((sctx->tracked_regs.reg_saved >> (reg)) & 0x1) != 0x1 || \
+       sctx->tracked_regs.reg_value[reg] != __value) { \
+      if (sctx->chip_class >= GFX10) \
+         radeon_set_sh_reg_idx3(offset, __value); \
+      else \
+         radeon_set_sh_reg(offset, __value); \
+      sctx->tracked_regs.reg_saved |= BITFIELD64_BIT(reg); \
+      sctx->tracked_regs.reg_value[reg] = __value; \
+   } \
+} while (0)
+
 #define radeon_opt_set_uconfig_reg(sctx, offset, reg, val) do { \
    unsigned __value = val; \
    if (((sctx->tracked_regs.reg_saved >> (reg)) & 0x1) != 0x1 || \
@@ -285,6 +310,14 @@ static inline void radeon_set_sh_reg_func(struct radeon_cmdbuf *cs, unsigned reg
 {
    radeon_begin(cs);
    radeon_set_sh_reg(reg_offset, value);
+   radeon_end();
+}
+
+static inline void radeon_set_sh_reg_idx3_func(struct radeon_cmdbuf *cs, unsigned reg_offset,
+                                               uint32_t value)
+{
+   radeon_begin(cs);
+   radeon_set_sh_reg_idx3(reg_offset, value);
    radeon_end();
 }
 

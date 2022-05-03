@@ -544,6 +544,20 @@ is_only_nonscheduled_use(struct ir3_instruction *instr,
    return true;
 }
 
+static unsigned
+new_regs(struct ir3_instruction *instr)
+{
+   unsigned regs = 0;
+
+   foreach_dst (dst, instr) {
+      if (!is_dest_gpr(dst))
+         continue;
+      regs += reg_elems(dst);
+   }
+
+   return regs;
+}
+
 /* find net change to live values if instruction were scheduled: */
 static int
 live_effect(struct ir3_instruction *instr)
@@ -552,7 +566,7 @@ live_effect(struct ir3_instruction *instr)
    int new_live =
       (n->partially_live || !instr->uses || instr->uses->entries == 0)
          ? 0
-         : dest_regs(instr);
+         : new_regs(instr);
    int freed_live = 0;
 
    /* if we schedule something that causes a vecN to be live,
@@ -569,7 +583,7 @@ live_effect(struct ir3_instruction *instr)
          continue;
 
       if (is_only_nonscheduled_use(src, instr))
-         freed_live += dest_regs(src);
+         freed_live += new_regs(src);
    }
 
    return new_live - freed_live;
@@ -1072,12 +1086,6 @@ is_output_collect(struct ir3_instruction *instr)
 static bool
 is_output_only(struct ir3_instruction *instr)
 {
-   if (!writes_gpr(instr))
-      return false;
-
-   if (!(instr->dsts[0]->flags & IR3_REG_SSA))
-      return false;
-
    foreach_ssa_use (use, instr)
       if (!is_output_collect(use))
          return false;

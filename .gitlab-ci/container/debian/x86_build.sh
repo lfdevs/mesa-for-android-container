@@ -44,6 +44,8 @@ apt-get install -y --no-remove \
       llvm-11-dev \
       llvm-9-dev \
       ocl-icd-opencl-dev \
+      python3-freezegun \
+      python3-pytest \
       procps \
       spirv-tools \
       strace \

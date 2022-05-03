@@ -7,7 +7,6 @@ dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.f
 
 # Some of these consistently time out after a minute, some are >30s and would
 # flake as timeouts in CI.
-dEQP-GLES31.functional.ssbo.layout.random.all_shared_buffer.36
 KHR-GL45.arrays_of_arrays_gl.SizedDeclarationsPrimitive
 KHR-GL45.copy_image.functional
 KHR-GL45.texture_size_promotion.functional
@@ -30,3 +29,4 @@ longprim
 
 # Unreliable on shared runners due to timing
 ext_timer_query@time-elapsed
+spec@arb_timer_query@query gl_timestamp

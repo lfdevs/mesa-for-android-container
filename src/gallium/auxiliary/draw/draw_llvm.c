@@ -3397,6 +3397,8 @@ draw_tcs_llvm_generate(struct draw_llvm *llvm,
 
    LLVMSetFunctionCallConv(variant_coro, LLVMCCallConv);
 
+   LLVMAddTargetDependentFunctionAttr(variant_coro, "coroutine.presplit", "0");
+
    for (i = 0; i < ARRAY_SIZE(arg_types); ++i) {
       if (LLVMGetTypeKind(arg_types[i]) == LLVMPointerTypeKind) {
          lp_add_function_attr(variant_coro, i + 1, LP_FUNC_ATTR_NOALIAS);

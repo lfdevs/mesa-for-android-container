@@ -32,6 +32,7 @@
 #include "vl/vl_defines.h"
 #include "vl/vl_video_buffer.h"
 #include "vl/vl_deint_filter.h"
+#include "vl/vl_winsys.h"
 
 #include "va_private.h"
 
@@ -125,8 +126,10 @@ static VAStatus vlVaPostProcBlit(vlVaDriver *drv, vlVaContext *context,
    bool grab = false;
    unsigned i;
 
-   if ((src->buffer_format == PIPE_FORMAT_B8G8R8A8_UNORM ||
-        src->buffer_format == PIPE_FORMAT_B8G8R8X8_UNORM) &&
+   if ((src->buffer_format == PIPE_FORMAT_B8G8R8X8_UNORM ||
+        src->buffer_format == PIPE_FORMAT_B8G8R8A8_UNORM ||
+        src->buffer_format == PIPE_FORMAT_R8G8B8X8_UNORM ||
+        src->buffer_format == PIPE_FORMAT_R8G8B8A8_UNORM) &&
        !src->interlaced)
       grab = true;
 
@@ -288,6 +291,7 @@ vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *contex
    struct pipe_video_buffer *src, *dst;
    vlVaSurface *src_surface, *dst_surface;
    unsigned i;
+   struct pipe_screen *pscreen;
 
    if (!drv || !context)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -302,6 +306,37 @@ vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *contex
 
    src_surface = handle_table_get(drv->htab, param->surface);
    dst_surface = handle_table_get(drv->htab, context->target_id);
+
+   pscreen = drv->vscreen->pscreen;
+
+   if (src_surface->buffer->buffer_format != dst_surface->buffer->buffer_format &&
+       !src_surface->buffer->interlaced &&
+       (dst_surface->buffer->buffer_format == PIPE_FORMAT_NV12 ||
+        dst_surface->buffer->buffer_format == PIPE_FORMAT_P010 ||
+        dst_surface->buffer->buffer_format == PIPE_FORMAT_P016) &&
+       pscreen->get_video_param(pscreen,
+                                PIPE_VIDEO_PROFILE_UNKNOWN,
+                                PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                PIPE_VIDEO_CAP_EFC_SUPPORTED)) {
+
+      // EFC will convert the buffer to a format the encoder accepts
+      dst_surface->encoder_format = dst_surface->buffer->buffer_format;
+
+      vlVaSurface *surf;
+
+      surf = handle_table_get(drv->htab, context->target_id);
+      surf->templat.interlaced = src_surface->templat.interlaced;
+      surf->templat.buffer_format = src_surface->templat.buffer_format;
+      surf->buffer->destroy(surf->buffer);
+
+      if (vlVaHandleSurfaceAllocate(drv, surf, &surf->templat, NULL, 0) != VA_STATUS_SUCCESS)
+         return VA_STATUS_ERROR_ALLOCATION_FAILED;
+
+      pipe_resource_reference(&(((struct vl_video_buffer *)(surf->buffer))->resources[0]), ((struct vl_video_buffer *)(src_surface->buffer))->resources[0]);
+      context->target = surf->buffer;
+
+      return VA_STATUS_SUCCESS;
+   }
 
    if (!src_surface || !src_surface->buffer)
       return VA_STATUS_ERROR_INVALID_SURFACE;

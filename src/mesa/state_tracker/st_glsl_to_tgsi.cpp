@@ -3395,18 +3395,13 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
    assert(l.file != PROGRAM_UNDEFINED);
    assert(r.file != PROGRAM_UNDEFINED);
 
-   if (ir->condition) {
-      const bool switch_order = this->process_move_condition(ir->condition);
-      st_src_reg condition = this->result;
-
-      emit_block_mov(ir, ir->lhs->type, &l, &r, &condition, switch_order);
-   } else if (ir->rhs->as_expression() &&
-              this->instructions.get_tail() &&
-              ir->rhs == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->ir &&
-              !((glsl_to_tgsi_instruction *)this->instructions.get_tail())->is_64bit_expanded &&
-              type_size(ir->lhs->type) == 1 &&
-              !ir->lhs->type->is_64bit() &&
-              l.writemask == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->dst[0].writemask) {
+   if (ir->rhs->as_expression() &&
+       this->instructions.get_tail() &&
+       ir->rhs == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->ir &&
+       !((glsl_to_tgsi_instruction *)this->instructions.get_tail())->is_64bit_expanded &&
+       type_size(ir->lhs->type) == 1 &&
+       !ir->lhs->type->is_64bit() &&
+       l.writemask == ((glsl_to_tgsi_instruction *)this->instructions.get_tail())->dst[0].writemask) {
       /* To avoid emitting an extra MOV when assigning an expression to a
        * variable, emit the last instruction of the expression again, but
        * replace the destination register with the target of the assignment.
@@ -6651,10 +6646,10 @@ emit_wpos(struct st_context *st,
     */
    if (program->info.fs.origin_upper_left) {
       /* Fragment shader wants origin in upper-left */
-      if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT)) {
+      if (pscreen->get_param(pscreen, PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT)) {
          /* the driver supports upper-left origin */
       }
-      else if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT)) {
+      else if (pscreen->get_param(pscreen, PIPE_CAP_FS_COORD_ORIGIN_LOWER_LEFT)) {
          /* the driver supports lower-left origin, need to invert Y */
          ureg_property(ureg, TGSI_PROPERTY_FS_COORD_ORIGIN,
                        TGSI_FS_COORD_ORIGIN_LOWER_LEFT);
@@ -6665,11 +6660,11 @@ emit_wpos(struct st_context *st,
    }
    else {
       /* Fragment shader wants origin in lower-left */
-      if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT))
+      if (pscreen->get_param(pscreen, PIPE_CAP_FS_COORD_ORIGIN_LOWER_LEFT))
          /* the driver supports lower-left origin */
          ureg_property(ureg, TGSI_PROPERTY_FS_COORD_ORIGIN,
                        TGSI_FS_COORD_ORIGIN_LOWER_LEFT);
-      else if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT))
+      else if (pscreen->get_param(pscreen, PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT))
          /* the driver supports upper-left origin, need to invert Y */
          invert = TRUE;
       else
@@ -6678,13 +6673,13 @@ emit_wpos(struct st_context *st,
 
    if (program->info.fs.pixel_center_integer) {
       /* Fragment shader wants pixel center integer */
-      if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER)) {
+      if (pscreen->get_param(pscreen, PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER)) {
          /* the driver supports pixel center integer */
          adjY[1] = 1.0f;
          ureg_property(ureg, TGSI_PROPERTY_FS_COORD_PIXEL_CENTER,
                        TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
       }
-      else if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER)) {
+      else if (pscreen->get_param(pscreen, PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER)) {
          /* the driver supports pixel center half integer, need to bias X,Y */
          adjX = -0.5f;
          adjY[0] = -0.5f;
@@ -6695,10 +6690,10 @@ emit_wpos(struct st_context *st,
    }
    else {
       /* Fragment shader wants pixel center half integer */
-      if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER)) {
+      if (pscreen->get_param(pscreen, PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER)) {
          /* the driver supports pixel center half integer */
       }
-      else if (pscreen->get_param(pscreen, PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER)) {
+      else if (pscreen->get_param(pscreen, PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER)) {
          /* the driver supports pixel center integer, need to bias X,Y */
          adjX = adjY[0] = adjY[1] = 0.5f;
          ureg_property(ureg, TGSI_PROPERTY_FS_COORD_PIXEL_CENTER,
@@ -7277,7 +7272,7 @@ get_mesa_program_tgsi(struct gl_context *ctx,
                                          prog->Parameters);
 
    /* Remove reads from output registers. */
-   if (!pscreen->get_param(pscreen, PIPE_CAP_TGSI_CAN_READ_OUTPUTS))
+   if (!pscreen->get_param(pscreen, PIPE_CAP_SHADER_CAN_READ_OUTPUTS))
       lower_output_reads(shader->Stage, shader->ir);
 
    /* Emit intermediate IR for main(). */

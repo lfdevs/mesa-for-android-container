@@ -88,7 +88,7 @@ bool
 d3d12_fix_io_uint_type(struct nir_shader *s, uint64_t in_mask, uint64_t out_mask);
 
 void
-d3d12_nir_invert_depth(nir_shader *s);
+d3d12_nir_invert_depth(nir_shader *s, unsigned viewport_mask);
 
 bool
 d3d12_lower_int_cubmap_to_array(nir_shader *s);
@@ -116,6 +116,9 @@ d3d12_disable_multisampling(nir_shader *s);
 
 bool
 d3d12_split_multistream_varyings(nir_shader *s);
+
+void
+d3d12_write_0_to_new_varying(nir_shader *s, nir_variable *var);
 
 #ifdef __cplusplus
 }

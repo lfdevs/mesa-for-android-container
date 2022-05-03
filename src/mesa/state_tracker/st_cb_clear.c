@@ -201,7 +201,7 @@ set_vertex_shader_layered(struct st_context *st)
       pscreen->get_shader_param(pscreen, PIPE_SHADER_VERTEX,
                                 PIPE_SHADER_CAP_PREFERRED_IR);
 
-   if (!st->screen->get_param(st->screen, PIPE_CAP_TGSI_INSTANCEID)) {
+   if (!st->screen->get_param(st->screen, PIPE_CAP_VS_INSTANCEID)) {
       assert(!"Got layered clear, but VS instancing is unsupported");
       set_vertex_shader(st);
       return;
@@ -209,7 +209,7 @@ set_vertex_shader_layered(struct st_context *st)
 
    if (!st->clear.vs_layered) {
       bool vs_layer =
-         st->screen->get_param(st->screen, PIPE_CAP_TGSI_VS_LAYER_VIEWPORT);
+         st->screen->get_param(st->screen, PIPE_CAP_VS_LAYER_VIEWPORT);
       if (vs_layer) {
          st->clear.vs_layered =
             use_nir ? make_nir_clear_vertex_shader(st, true)

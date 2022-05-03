@@ -20,6 +20,8 @@
 # IN THE SOFTWARE.
 
 import argparse
+import builtins
+import collections
 import os
 import sys
 import textwrap
@@ -392,10 +394,53 @@ def desc_units(unit):
         return ""
     if unit == 'hz':
         unit = 'Hz'
-    return " Unit: " + unit + "."
+    return "Unit: " + unit + "."
 
 
-def output_counter_report(set, counter, current_offset):
+counter_key_tuple = collections.namedtuple(
+    'counter_key',
+    [
+        'name',
+        'description',
+        'symbol_name',
+        'mdapi_group',
+        'semantic_type',
+        'data_type',
+        'units',
+    ]
+)
+
+
+def counter_key(counter):
+    return counter_key_tuple._make([counter.get(field) for field in counter_key_tuple._fields])
+
+
+def output_counter_struct(set, counter, idx,
+                          name_to_idx, desc_to_idx,
+                          symbol_name_to_idx, category_to_idx):
+    data_type = counter.data_type
+    data_type_uc = data_type.upper()
+
+    semantic_type = counter.semantic_type
+    if semantic_type in semantic_type_map:
+        semantic_type = semantic_type_map[semantic_type]
+
+    semantic_type_uc = semantic_type.upper()
+
+    c("[" + str(idx) + "] = {\n")
+    c_indent(3)
+    c(".name_idx = " + str(name_to_idx[counter.name]) + ",\n")
+    c(".desc_idx = " + str(desc_to_idx[counter.description + " " + desc_units(counter.units)]) + ",\n")
+    c(".symbol_name_idx = " + str(symbol_name_to_idx[counter.symbol_name]) + ",\n")
+    c(".category_idx = " + str(category_to_idx[counter.mdapi_group]) + ",\n")
+    c(".type = INTEL_PERF_COUNTER_TYPE_" + semantic_type_uc + ",\n")
+    c(".data_type = INTEL_PERF_COUNTER_DATA_TYPE_" + data_type_uc + ",\n")
+    c(".units = INTEL_PERF_COUNTER_UNITS_" + output_units(counter.units) + ",\n")
+    c_outdent(3)
+    c("},\n")
+
+
+def output_counter_report(set, counter, counter_to_idx, current_offset):
     data_type = counter.get('data_type')
     data_type_uc = data_type.upper()
     c_type = data_type
@@ -416,25 +461,44 @@ def output_counter_report(set, counter, current_offset):
         output_availability(set, availability, counter.get('name'))
         c_indent(3)
 
-    c("counter = &query->counters[query->n_counters++];\n")
-    c("counter->oa_counter_read_" + data_type + " = " + set.read_funcs[counter.get('symbol_name')] + ";\n")
-    c("counter->name = \"" + counter.get('name') + "\";\n")
-    c("counter->desc = \"" + counter.get('description') + desc_units(counter.get('units')) + "\";\n")
-    c("counter->symbol_name = \"" + counter.get('symbol_name') + "\";\n")
-    c("counter->category = \"" + counter.get('mdapi_group') + "\";\n")
-    c("counter->type = INTEL_PERF_COUNTER_TYPE_" + semantic_type_uc + ";\n")
-    c("counter->data_type = INTEL_PERF_COUNTER_DATA_TYPE_" + data_type_uc + ";\n")
-    c("counter->units = INTEL_PERF_COUNTER_UNITS_" + output_units(counter.get('units')) + ";\n")
-    c("counter->raw_max = " + set.max_values[counter.get('symbol_name')] + ";\n")
+    key = counter_key(counter)
+    idx = str(counter_to_idx[key])
 
     current_offset = pot_align(current_offset, sizeof(c_type))
-    c("counter->offset = " + str(current_offset) + ";\n")
+
+    c("intel_perf_query_add_counter(query, " + idx + ", " +
+        str(current_offset) + ", " +
+        set.max_values[counter.get('symbol_name')] + ", (oa_counter_read_func)" +
+        set.read_funcs[counter.get('symbol_name')] + ");\n")
 
     if availability:
         c_outdent(3);
         c("}")
 
     return current_offset + sizeof(c_type)
+
+
+def str_to_idx_table(strs):
+    sorted_strs = sorted(strs)
+
+    str_to_idx = collections.OrderedDict()
+    str_to_idx[sorted_strs[0]] = 0
+    previous = sorted_strs[0]
+
+    for i in range(1, len(sorted_strs)):
+        str_to_idx[sorted_strs[i]] = str_to_idx[previous] + len(previous) + 1
+        previous = sorted_strs[i]
+
+    return str_to_idx
+
+
+def output_str_table(name: str, str_to_idx):
+    c("\n")
+    c("static const char " + name + "[] = {\n")
+    c_indent(3)
+    c("\n".join(f"/* {idx} */ \"{val}\\0\"" for val, idx in str_to_idx.items()))
+    c_outdent(3)
+    c("};\n")
 
 
 register_types = {
@@ -686,54 +750,32 @@ def main():
 
     c(textwrap.dedent("""\
         #include "perf/intel_perf.h"
-
-
-        #define MIN(a, b) ((a < b) ? (a) : (b))
-        #define MAX(a, b) ((a > b) ? (a) : (b))
-
-        static struct intel_perf_query_info *
-        intel_query_alloc(struct intel_perf_config *perf, int ncounters)
-        {
-           struct intel_perf_query_info *query = rzalloc(perf, struct intel_perf_query_info);
-           query->perf = perf;
-           query->kind = INTEL_PERF_QUERY_TYPE_OA;
-           query->n_counters = 0;
-           query->oa_metrics_set_id = 0; /* determined at runtime, via sysfs */
-           query->counters = rzalloc_array(query, struct intel_perf_query_counter, ncounters);
-           return query;
-        }
-
-        static struct intel_perf_query_info *
-        hsw_query_alloc(struct intel_perf_config *perf, int ncounters)
-        {
-           struct intel_perf_query_info *query = intel_query_alloc(perf, ncounters);
-           query->oa_format = I915_OA_FORMAT_A45_B8_C8;
-           /* Accumulation buffer offsets... */
-           query->gpu_time_offset = 0;
-           query->a_offset = query->gpu_time_offset + 1;
-           query->b_offset = query->a_offset + 45;
-           query->c_offset = query->b_offset + 8;
-           query->perfcnt_offset = query->c_offset + 8;
-           query->rpstat_offset = query->perfcnt_offset + 2;
-           return query;
-        }
-
-        static struct intel_perf_query_info *
-        bdw_query_alloc(struct intel_perf_config *perf, int ncounters)
-        {
-           struct intel_perf_query_info *query = intel_query_alloc(perf, ncounters);
-           query->oa_format = I915_OA_FORMAT_A32u40_A4u32_B8_C8;
-           /* Accumulation buffer offsets... */
-           query->gpu_time_offset = 0;
-           query->gpu_clock_offset = query->gpu_time_offset + 1;
-           query->a_offset = query->gpu_clock_offset + 1;
-           query->b_offset = query->a_offset + 36;
-           query->c_offset = query->b_offset + 8;
-           query->perfcnt_offset = query->c_offset + 8;
-           query->rpstat_offset = query->perfcnt_offset + 2;
-           return query;
-        }
+        #include "perf/intel_perf_setup.h"
         """))
+
+    names = builtins.set()
+    descs = builtins.set()
+    symbol_names = builtins.set()
+    categories = builtins.set()
+    for gen in gens:
+        for set in gen.sets:
+            for counter in set.counters:
+                names.add(counter.get('name'))
+                symbol_names.add(counter.get('symbol_name'))
+                descs.add(counter.get('description') + " " + desc_units(counter.get('units')))
+                categories.add(counter.get('mdapi_group'))
+
+    name_to_idx = str_to_idx_table(names)
+    output_str_table("name", name_to_idx)
+
+    desc_to_idx = str_to_idx_table(descs)
+    output_str_table("desc", desc_to_idx)
+
+    symbol_name_to_idx = str_to_idx_table(symbol_names)
+    output_str_table("symbol_name", symbol_name_to_idx)
+
+    category_to_idx = str_to_idx_table(categories)
+    output_str_table("category", category_to_idx)
 
     # Print out all equation functions.
     for gen in gens:
@@ -741,6 +783,54 @@ def main():
             for counter in set.counters:
                 output_counter_read(gen, set, counter)
                 output_counter_max(gen, set, counter)
+
+    c("\n")
+    c("static const struct intel_perf_query_counter_data counters[] = {\n")
+    c_indent(3)
+
+    counter_to_idx = collections.OrderedDict()
+    idx = 0
+    for gen in gens:
+        for set in gen.sets:
+            for counter in set.counters:
+                key = counter_key(counter)
+                if key not in counter_to_idx:
+                    counter_to_idx[key] = idx
+                    output_counter_struct(set, key, idx,
+                                          name_to_idx,
+                                          desc_to_idx,
+                                          symbol_name_to_idx,
+                                          category_to_idx)
+                    idx += 1
+
+    c_outdent(3)
+    c("};\n\n")
+
+    c(textwrap.dedent("""\
+        typedef uint64_t (*oa_counter_read_func)(struct intel_perf_config *perf,
+                                                 const struct intel_perf_query_info *query,
+                                                 const struct intel_perf_query_result *results);
+        static void ATTRIBUTE_NOINLINE
+        intel_perf_query_add_counter(struct intel_perf_query_info *query,
+                                     int counter_idx, size_t offset,
+                                     uint64_t raw_max, oa_counter_read_func oa_counter_read_uint64)
+        {
+           struct intel_perf_query_counter *dest = &query->counters[query->n_counters++];
+           const struct intel_perf_query_counter_data *counter = &counters[counter_idx];
+
+           dest->name = &name[counter->name_idx];
+           dest->desc = &desc[counter->desc_idx];
+           dest->symbol_name = &symbol_name[counter->symbol_name_idx];
+           dest->category = &category[counter->category_idx];
+           dest->raw_max = raw_max;
+
+           dest->offset = offset;
+           dest->type = counter->type;
+           dest->data_type = counter->data_type;
+           dest->units = counter->units;
+           dest->oa_counter_read_uint64 = oa_counter_read_uint64;
+        }
+        """))
 
     # Print out all metric sets registration functions for each set in each
     # generation.
@@ -777,10 +867,11 @@ def main():
 
             offset = 0
             for counter in counters:
-                offset = output_counter_report(set, counter, offset)
+                offset = output_counter_report(set, counter, counter_to_idx, offset)
 
 
-            c("\nquery->data_size = counter->offset + intel_perf_query_counter_get_size(counter);\n")
+            c("\ncounter = &query->counters[query->n_counters - 1];\n")
+            c("query->data_size = counter->offset + intel_perf_query_counter_get_size(counter);\n")
 
             c_outdent(3)
             c("}");

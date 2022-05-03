@@ -335,7 +335,7 @@ khr_perf_query_ensure_relocs(struct anv_cmd_buffer *cmd_buffer)
    const struct anv_physical_device *pdevice = device->physical;
 
    cmd_buffer->self_mod_locations =
-      vk_alloc(&cmd_buffer->pool->alloc,
+      vk_alloc(&cmd_buffer->vk.pool->alloc,
                pdevice->n_perf_query_commands * sizeof(*cmd_buffer->self_mod_locations), 8,
                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -1234,9 +1234,9 @@ void genX(CmdEndQueryIndexedEXT)(
     * first index, mark the other query indices as being already available
     * with result 0.
     */
-   if (cmd_buffer->state.subpass && cmd_buffer->state.subpass->view_mask) {
+   if (cmd_buffer->state.gfx.view_mask) {
       const uint32_t num_queries =
-         util_bitcount(cmd_buffer->state.subpass->view_mask);
+         util_bitcount(cmd_buffer->state.gfx.view_mask);
       if (num_queries > 1)
          emit_zero_queries(cmd_buffer, &b, pool, query + 1, num_queries - 1);
    }
@@ -1244,9 +1244,9 @@ void genX(CmdEndQueryIndexedEXT)(
 
 #define TIMESTAMP 0x2358
 
-void genX(CmdWriteTimestamp2KHR)(
+void genX(CmdWriteTimestamp2)(
     VkCommandBuffer                             commandBuffer,
-    VkPipelineStageFlags2KHR                    stage,
+    VkPipelineStageFlags2                       stage,
     VkQueryPool                                 queryPool,
     uint32_t                                    query)
 {
@@ -1288,9 +1288,9 @@ void genX(CmdWriteTimestamp2KHR)(
     * first index, mark the other query indices as being already available
     * with result 0.
     */
-   if (cmd_buffer->state.subpass && cmd_buffer->state.subpass->view_mask) {
+   if (cmd_buffer->state.gfx.view_mask) {
       const uint32_t num_queries =
-         util_bitcount(cmd_buffer->state.subpass->view_mask);
+         util_bitcount(cmd_buffer->state.gfx.view_mask);
       if (num_queries > 1)
          emit_zero_queries(cmd_buffer, &b, pool, query + 1, num_queries - 1);
    }

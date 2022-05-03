@@ -1308,6 +1308,7 @@ _mesa_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
    info.has_user_indices = false;
    info.index_bounds_valid = true;
    info.increment_draw_id = false;
+   info.was_line_loop = false;
    info.take_index_buffer_ownership = false;
    info.index_bias_varies = false;
    /* Packed section end. */
@@ -1635,6 +1636,7 @@ _mesa_MultiDrawArrays(GLenum mode, const GLint *first,
    info.has_user_indices = false;
    info.index_bounds_valid = false;
    info.increment_draw_id = primcount > 1;
+   info.was_line_loop = false;
    info.take_index_buffer_ownership = false;
    info.index_bias_varies = false;
    /* Packed section end. */
@@ -1757,6 +1759,7 @@ _mesa_validated_drawrangeelements(struct gl_context *ctx, GLenum mode,
    info.has_user_indices = index_bo == NULL;
    info.index_bounds_valid = index_bounds_valid;
    info.increment_draw_id = false;
+   info.was_line_loop = false;
    info.take_index_buffer_ownership = false;
    info.index_bias_varies = false;
    /* Packed section end. */
@@ -2143,6 +2146,7 @@ _mesa_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
    info.has_user_indices = index_bo == NULL;
    info.index_bounds_valid = false;
    info.increment_draw_id = primcount > 1;
+   info.was_line_loop = false;
    info.take_index_buffer_ownership = false;
    info.index_bias_varies = !!basevertex;
    /* Packed section end. */
@@ -2554,6 +2558,7 @@ _mesa_MultiDrawArraysIndirect(GLenum mode, const GLvoid *indirect,
       info.has_user_indices = false;
       info.index_bounds_valid = false;
       info.increment_draw_id = primcount > 1;
+      info.was_line_loop = false;
       info.take_index_buffer_ownership = false;
       info.index_bias_varies = false;
       /* Packed section end. */
@@ -2645,6 +2650,7 @@ _mesa_MultiDrawElementsIndirect(GLenum mode, GLenum type,
       info.has_user_indices = false;
       info.index_bounds_valid = false;
       info.increment_draw_id = primcount > 1;
+      info.was_line_loop = false;
       info.take_index_buffer_ownership = false;
       info.index_bias_varies = false;
       /* Packed section end. */

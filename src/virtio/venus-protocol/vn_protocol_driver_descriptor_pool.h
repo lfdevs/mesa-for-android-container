@@ -93,6 +93,8 @@ vn_sizeof_VkDescriptorPoolCreateInfo_pnext(const void *val)
     while (pnext) {
         switch ((int32_t)pnext->sType) {
         case VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO:
+            if (!vn_cs_renderer_protocol_has_extension(139 /* VK_EXT_inline_uniform_block */))
+                break;
             size += vn_sizeof_simple_pointer(pnext);
             size += vn_sizeof_VkStructureType(&pnext->sType);
             size += vn_sizeof_VkDescriptorPoolCreateInfo_pnext(pnext->pNext);
@@ -146,6 +148,8 @@ vn_encode_VkDescriptorPoolCreateInfo_pnext(struct vn_cs_encoder *enc, const void
     while (pnext) {
         switch ((int32_t)pnext->sType) {
         case VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO:
+            if (!vn_cs_renderer_protocol_has_extension(139 /* VK_EXT_inline_uniform_block */))
+                break;
             vn_encode_simple_pointer(enc, pnext);
             vn_encode_VkStructureType(enc, &pnext->sType);
             vn_encode_VkDescriptorPoolCreateInfo_pnext(enc, pnext->pNext);

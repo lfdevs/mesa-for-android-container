@@ -89,10 +89,12 @@ Linux, FreeBSD, and other operating systems.
    drivers/lima
    drivers/llvmpipe
    drivers/panfrost
+   drivers/radv
    drivers/svga3d
    drivers/v3d
    drivers/vc4
    drivers/venus
+   drivers/virgl
    drivers/zink
 
 .. toctree::
@@ -111,6 +113,7 @@ Linux, FreeBSD, and other operating systems.
    release-calendar
    dispatch
    gallium/index
+   vulkan/index
    nir/index
    isl/index
    android

@@ -52,20 +52,20 @@ radv_render_pass_add_subpass_dep(struct radv_render_pass *pass, const VkSubpassD
     *  dstStageMask, srcAccessMask, and dstAccessMask parameters are ignored. The synchronization
     *  and access scopes instead are defined by the parameters of VkMemoryBarrier2."
     */
-   const VkMemoryBarrier2KHR *barrier =
-      vk_find_struct_const(dep->pNext, MEMORY_BARRIER_2_KHR);
-   VkPipelineStageFlags2KHR src_stage_mask = barrier ? barrier->srcStageMask : dep->srcStageMask;
-   VkAccessFlags2KHR src_access_mask = barrier ? barrier->srcAccessMask : dep->srcAccessMask;
-   VkPipelineStageFlags2KHR dst_stage_mask = barrier ? barrier->dstStageMask : dep->dstStageMask;
-   VkAccessFlags2KHR dst_access_mask = barrier ? barrier->dstAccessMask : dep->dstAccessMask;
+   const VkMemoryBarrier2 *barrier =
+      vk_find_struct_const(dep->pNext, MEMORY_BARRIER_2);
+   VkPipelineStageFlags2 src_stage_mask = barrier ? barrier->srcStageMask : dep->srcStageMask;
+   VkAccessFlags2 src_access_mask = barrier ? barrier->srcAccessMask : dep->srcAccessMask;
+   VkPipelineStageFlags2 dst_stage_mask = barrier ? barrier->dstStageMask : dep->dstStageMask;
+   VkAccessFlags2 dst_access_mask = barrier ? barrier->dstAccessMask : dep->dstAccessMask;
 
    if (dst == VK_SUBPASS_EXTERNAL) {
-      if (dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR)
+      if (dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)
          pass->end_barrier.src_stage_mask |= src_stage_mask;
       pass->end_barrier.src_access_mask |= src_access_mask;
       pass->end_barrier.dst_access_mask |= dst_access_mask;
    } else {
-      if (dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR)
+      if (dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)
          pass->subpasses[dst].start_barrier.src_stage_mask |= src_stage_mask;
       pass->subpasses[dst].start_barrier.src_access_mask |= src_access_mask;
       pass->subpasses[dst].start_barrier.dst_access_mask |= dst_access_mask;

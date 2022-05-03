@@ -43,6 +43,7 @@
 #include "draw/draw_vbuf.h"
 #include "util/u_rect.h"
 #include "util/u_pack_color.h"
+#include "util/slab.h"
 
 #define LP_SETUP_NEW_FS          0x01
 #define LP_SETUP_NEW_CONSTANTS   0x02
@@ -55,8 +56,8 @@ struct lp_setup_variant;
 
 
 /** Max number of scenes */
-/* XXX: make multiple scenes per context work, see lp_setup_rasterize_scene */
-#define MAX_SCENES 1
+#define INITIAL_SCENES 4
+#define MAX_SCENES 64
 
 
 
@@ -89,6 +90,9 @@ struct lp_setup_context
    struct draw_stage *vbuf;
    unsigned num_threads;
    unsigned scene_idx;
+
+   struct slab_mempool scene_slab;
+   int num_active_scenes;
    struct lp_scene *scenes[MAX_SCENES];  /**< all the scenes */
    struct lp_scene *scene;               /**< current scene being built */
 
@@ -154,6 +158,7 @@ struct lp_setup_context
    struct {
       struct pipe_shader_buffer current;
    } ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
+   uint32_t ssbo_write_mask;
 
    struct {
       struct pipe_image_view current;
@@ -229,7 +234,7 @@ boolean lp_setup_flush_and_restart(struct lp_setup_context *setup);
 boolean
 lp_setup_whole_tile(struct lp_setup_context *setup,
                     const struct lp_rast_shader_inputs *inputs,
-                    int tx, int ty);
+                    int tx, int ty, boolean opaque);
 
 boolean
 lp_setup_is_blit(const struct lp_setup_context *setup,
@@ -279,14 +284,16 @@ lp_setup_analyse_triangles(struct lp_setup_context *setup,
 boolean
 lp_setup_bin_triangle(struct lp_setup_context *setup,
                       struct lp_rast_triangle *tri,
-                      const struct u_rect *bboxorig,
+                      boolean use_32bits,
+                      boolean opaque,
                       const struct u_rect *bbox,
                       int nr_planes,
                       unsigned scissor_index);
 
 boolean
 lp_setup_bin_rectangle(struct lp_setup_context *setup,
-                       struct lp_rast_rectangle *rect);
+                       struct lp_rast_rectangle *rect,
+                       boolean opaque);
 
 
 #endif

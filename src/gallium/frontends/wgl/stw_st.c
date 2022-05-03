@@ -37,6 +37,10 @@
 #include "stw_pixelformat.h"
 #include "stw_winsys.h"
 
+#ifdef GALLIUM_ZINK
+#include "kopper_interface.h"
+#endif
+
 struct stw_st_framebuffer {
    struct st_framebuffer_iface base;
 
@@ -121,6 +125,22 @@ stw_pipe_blit(struct pipe_context *pipe,
    pipe->blit(pipe, &blit);
 }
 
+#ifdef GALLIUM_ZINK
+static void
+stw_st_fill_private_loader_data(struct stw_st_framebuffer *stwfb, struct kopper_loader_info *out)
+{
+   out->win32.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+   out->win32.pNext = NULL;
+   out->win32.flags = 0;
+   out->win32.hinstance = GetModuleHandle(NULL);
+   out->win32.hwnd = stwfb->fb->hWnd;
+   BYTE alpha;
+   if (GetLayeredWindowAttributes(stwfb->fb->hWnd, NULL, &alpha, NULL))
+      out->has_alpha = alpha != 255;
+   else
+      out->has_alpha = 0;
+}
+#endif 
 /**
  * Remove outdated textures and create the requested ones.
  */
@@ -185,6 +205,18 @@ stw_st_framebuffer_validate_locked(struct st_context_iface *stctx,
          bind = PIPE_BIND_DISPLAY_TARGET |
                 PIPE_BIND_SAMPLER_VIEW |
                 PIPE_BIND_RENDER_TARGET;
+
+#ifdef GALLIUM_ZINK
+         if (stw_dev->zink) {
+            /* Covers the case where we have already created a drawable that
+             * then got swapped and now we have to make a new back buffer.
+             * For Zink, we just alias the front buffer in that case.
+             */
+            if (i == ST_ATTACHMENT_BACK_LEFT && stwfb->textures[ST_ATTACHMENT_FRONT_LEFT])
+               bind &= ~PIPE_BIND_DISPLAY_TARGET;
+         }
+#endif
+
          break;
       case ST_ATTACHMENT_DEPTH_STENCIL:
          format = stwfb->stvis.depth_stencil_format;
@@ -209,12 +241,37 @@ stw_st_framebuffer_validate_locked(struct st_context_iface *stctx,
 
          templ.bind = bind;
          templ.nr_samples = templ.nr_storage_samples = 1;
-         if (stwfb->fb->winsys_framebuffer)
-            stwfb->textures[i] = stwfb->fb->winsys_framebuffer->get_resource(
-               stwfb->fb->winsys_framebuffer, i);
-         else
+
+#ifdef GALLIUM_ZINK
+         if (stw_dev->zink &&
+             i < ST_ATTACHMENT_DEPTH_STENCIL &&
+             stw_dev->screen->resource_create_drawable) {
+
+            struct kopper_loader_info loader_info;
+            void *data;
+
+            if (bind & PIPE_BIND_DISPLAY_TARGET) {
+               stw_st_fill_private_loader_data(stwfb, &loader_info);
+               data = &loader_info;
+            } else
+               data = stwfb->textures[ST_ATTACHMENT_FRONT_LEFT];
+
+            assert(data);
             stwfb->textures[i] =
-               stw_dev->screen->resource_create(stw_dev->screen, &templ);
+               stw_dev->screen->resource_create_drawable(stw_dev->screen,
+                                                             &templ,
+                                                             data);
+         } else {
+#endif
+            if (stwfb->fb->winsys_framebuffer)
+               stwfb->textures[i] = stwfb->fb->winsys_framebuffer->get_resource(
+                  stwfb->fb->winsys_framebuffer, i);
+            else
+               stwfb->textures[i] =
+                  stw_dev->screen->resource_create(stw_dev->screen, &templ);
+#ifdef GALLIUM_ZINK
+         }
+#endif
       }
    }
 

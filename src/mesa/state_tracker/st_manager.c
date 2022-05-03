@@ -262,7 +262,9 @@ st_framebuffer_validate(struct gl_framebuffer *stfb,
 
       rb = stfb->Attachment[idx].Renderbuffer;
       assert(rb);
-      if (rb->texture == textures[i]) {
+      if (rb->texture == textures[i] &&
+          rb->Width == textures[i]->width0 &&
+          rb->Height == textures[i]->height0) {
          pipe_resource_reference(&textures[i], NULL);
          continue;
       }

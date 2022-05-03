@@ -25,25 +25,13 @@
 #define AC_SHADER_ABI_H
 
 #include "ac_shader_args.h"
+#include "ac_shader_util.h"
 #include "compiler/shader_enums.h"
 #include <llvm-c/Core.h>
 
 #include <assert.h>
 
 #define AC_LLVM_MAX_OUTPUTS (VARYING_SLOT_VAR31 + 1)
-
-#define AC_MAX_INLINE_PUSH_CONSTS 8
-
-enum ac_descriptor_type
-{
-   AC_DESC_IMAGE,
-   AC_DESC_FMASK,
-   AC_DESC_SAMPLER,
-   AC_DESC_BUFFER,
-   AC_DESC_PLANE_0,
-   AC_DESC_PLANE_1,
-   AC_DESC_PLANE_2,
-};
 
 /* Document the shader ABI during compilation. This is what allows radeonsi and
  * radv to share a compiler backend.
@@ -99,9 +87,7 @@ struct ac_shader_abi {
    LLVMValueRef (*load_tess_level)(struct ac_shader_abi *abi, unsigned varying_id,
                                    bool load_default_state);
 
-   LLVMValueRef (*load_ubo)(struct ac_shader_abi *abi,
-                            unsigned desc_set, unsigned binding,
-                            bool valid_binding, LLVMValueRef index);
+   LLVMValueRef (*load_ubo)(struct ac_shader_abi *abi, LLVMValueRef index);
 
    /**
     * Load the descriptor for the given buffer.
@@ -128,16 +114,6 @@ struct ac_shader_abi {
                                      unsigned base_index, unsigned constant_index,
                                      LLVMValueRef index, enum ac_descriptor_type desc_type,
                                      bool image, bool write, bool bindless);
-
-   /**
-    * Load a Vulkan-specific resource.
-    *
-    * \param index resource index
-    * \param desc_set descriptor set
-    * \param binding descriptor set binding
-    */
-   LLVMValueRef (*load_resource)(struct ac_shader_abi *abi, LLVMValueRef index, unsigned desc_set,
-                                 unsigned binding);
 
    LLVMValueRef (*load_sample_position)(struct ac_shader_abi *abi, LLVMValueRef sample_id);
 
@@ -166,15 +142,8 @@ struct ac_shader_abi {
    /* Clamp div by 0 (so it won't produce NaN) */
    bool clamp_div_by_zero;
 
-   /* Whether gl_FragCoord.z should be adjusted for VRS due to a hw bug on
-    * some GFX10.3 chips.
-    */
-   bool adjust_frag_coord_z;
-
-   /* Whether anisotropic filtering should be disabled for single level
-    * images.
-    */
-   bool disable_aniso_single_level;
+   /* Whether to inline the compute dispatch size in user sgprs. */
+   bool load_grid_size_from_user_sgpr;
 };
 
 #endif /* AC_SHADER_ABI_H */

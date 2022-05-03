@@ -78,8 +78,6 @@ class Opcode(object):
       assert 0 <= output_size <= 5 or (output_size == 8) or (output_size == 16)
       for size in input_sizes:
          assert 0 <= size <= 5 or (size == 8) or (size == 16)
-         if output_size == 0:
-            assert size == 0
          if output_size != 0:
             assert size != 0
       self.name = name
@@ -368,6 +366,18 @@ unpack_4x8("snorm")
 unpack_2x16("unorm")
 unpack_4x8("unorm")
 unpack_2x16("half")
+
+# Convert two unsigned integers into a packed unsigned short (clamp is applied).
+unop_horiz("pack_uint_2x16", 1, tuint32, 2, tuint32, """
+dst.x = _mesa_unsigned_to_unsigned(src0.x, 16);
+dst.x |= _mesa_unsigned_to_unsigned(src0.y, 16) << 16;
+""")
+
+# Convert two signed integers into a packed signed short (clamp is applied).
+unop_horiz("pack_sint_2x16", 1, tint32, 2, tint32, """
+dst.x = _mesa_signed_to_signed(src0.x, 16) & 0xffff;
+dst.x |= _mesa_signed_to_signed(src0.y, 16) << 16;
+""")
 
 unop_horiz("pack_uvec2_to_uint", 1, tuint32, 2, tuint32, """
 dst.x = (src0.x & 0xffff) | (src0.y << 16);
@@ -884,13 +894,13 @@ binop("ixor", tuint, _2src_commutative + associative, "src0 ^ src1")
 binop_reduce("fdot", 1, tfloat, tfloat, "{src0} * {src1}", "{src0} + {src1}",
              "{src}")
 
-binop_reduce("fdot", 4, tfloat, tfloat,
+binop_reduce("fdot", 0, tfloat, tfloat,
              "{src0} * {src1}", "{src0} + {src1}", "{src}",
              suffix="_replicated")
 
 opcode("fdph", 1, tfloat, [3, 4], [tfloat, tfloat], False, "",
        "src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w")
-opcode("fdph_replicated", 4, tfloat, [3, 4], [tfloat, tfloat], False, "",
+opcode("fdph_replicated", 0, tfloat, [3, 4], [tfloat, tfloat], False, "",
        "src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w")
 
 binop("fmin", tfloat, _2src_commutative + associative, "fmin(src0, src1)")

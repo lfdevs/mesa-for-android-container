@@ -375,7 +375,6 @@ init_shader_builder(struct indirect_draw_shader_builder *builder,
         }
 
         nir_builder *b = &builder->b;
-        b->shader->info.internal = true;
         nir_variable_create(b->shader, nir_var_mem_ubo,
                             glsl_uint_type(), "inputs");
         b->shader->info.num_ubos++;

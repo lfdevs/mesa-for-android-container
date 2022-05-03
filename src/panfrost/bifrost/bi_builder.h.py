@@ -19,7 +19,9 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-SKIP = set(["lane", "lane_dest", "lanes", "lanes", "replicate", "swz", "widen", "swap", "neg", "abs", "not", "sign", "extend", "divzero", "clamp", "sem", "not_result", "skip"])
+SKIP = set(["lane", "lane_dest", "lanes", "lanes", "replicate", "swz", "widen",
+    "swap", "neg", "abs", "not", "sign", "extend", "divzero", "clamp", "sem",
+    "not_result", "skip", "round"])
 
 TEMPLATE = """
 #ifndef _BI_BUILDER_H_
@@ -99,10 +101,13 @@ bi_instr * bi_${opcode.replace('.', '_').lower()}${to_suffix(ops[opcode])}(${sig
     I->src[${src}] = src${src};
 % endfor
 % for mod in ops[opcode]["modifiers"]:
-% if mod[0:-1] not in SKIP and mod not in SKIP:
+% if not should_skip(mod, opcode):
     I->${mod} = ${mod};
 % endif
 % endfor
+% if ops[opcode]["rtz"]:
+    I->round = BI_ROUND_RTZ;
+% endif
 % for imm in ops[opcode]["immediates"]:
     I->${imm} = ${imm};
 % endfor
@@ -170,11 +175,16 @@ modifier_lists = order_modifiers(ir_instructions)
 
 # Generate type signature for a builder routine
 
-def should_skip(mod):
+def should_skip(mod, op):
+    # FROUND and HADD only make sense in context of a round mode, so override
+    # the usual skip
+    if mod == "round" and ("FROUND" in op or "HADD" in op):
+        return False
+
     return mod in SKIP or mod[0:-1] in SKIP
 
 def modifier_signature(op):
-    return sorted([m for m in op["modifiers"].keys() if not should_skip(m)])
+    return sorted([m for m in op["modifiers"].keys() if not should_skip(m, op["key"])])
 
 def signature(op, modifiers, typeful = False, sized = False, no_dests = False):
     return ", ".join(
@@ -198,4 +208,6 @@ def arguments(op, temp_dest = True):
         modifier_signature(op) +
         op["immediates"])
 
-print(Template(COPYRIGHT + TEMPLATE).render(ops = ir_instructions, modifiers = modifier_lists, signature = signature, arguments = arguments, src_count = src_count, typesize = typesize, SKIP = SKIP))
+print(Template(COPYRIGHT + TEMPLATE).render(ops = ir_instructions, modifiers =
+    modifier_lists, signature = signature, arguments = arguments, src_count =
+    src_count, typesize = typesize, should_skip = should_skip))

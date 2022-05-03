@@ -181,7 +181,7 @@ softpipe_render_condition(struct pipe_context *pipe,
 
 static void
 softpipe_set_debug_callback(struct pipe_context *pipe,
-                            const struct pipe_debug_callback *cb)
+                            const struct util_debug_callback *cb)
 {
    struct softpipe_context *softpipe = softpipe_context(pipe);
 

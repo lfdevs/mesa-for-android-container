@@ -191,8 +191,8 @@ radv_retile_dcc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image)
 
    struct radv_cmd_state *state = &cmd_buffer->state;
 
-   state->flush_bits |= radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_READ_BIT_KHR, image) |
-                        radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT_KHR, image);
+   state->flush_bits |= radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_READ_BIT, image) |
+                        radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, image);
 
    unsigned swizzle_mode = image->planes[0].surface.u.gfx9.swizzle_mode;
 
@@ -284,5 +284,5 @@ radv_retile_dcc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image)
    radv_meta_restore(&saved_state, cmd_buffer);
 
    state->flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-                        radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT_KHR, image);
+                        radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, image);
 }

@@ -32,6 +32,8 @@
 #include "msm_kgsl.h"
 #include "vk_util.h"
 
+#include "util/debug.h"
+
 struct tu_syncobj {
    struct vk_object_base base;
    uint32_t timestamp;
@@ -81,7 +83,7 @@ tu_drm_submitqueue_close(const struct tu_device *dev, uint32_t queue_id)
 }
 
 VkResult
-tu_bo_init_new(struct tu_device *dev, struct tu_bo *bo, uint64_t size,
+tu_bo_init_new(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
                enum tu_bo_alloc_flags flags)
 {
    struct kgsl_gpumem_alloc_id req = {
@@ -100,18 +102,24 @@ tu_bo_init_new(struct tu_device *dev, struct tu_bo *bo, uint64_t size,
                        "GPUMEM_ALLOC_ID failed (%s)", strerror(errno));
    }
 
+   struct tu_bo* bo = tu_device_lookup_bo(dev, req.id);
+   assert(bo && bo->gem_handle == 0);
+
    *bo = (struct tu_bo) {
       .gem_handle = req.id,
       .size = req.mmapsize,
       .iova = req.gpuaddr,
+      .refcnt = 1,
    };
+
+   *out_bo = bo;
 
    return VK_SUCCESS;
 }
 
 VkResult
 tu_bo_init_dmabuf(struct tu_device *dev,
-                  struct tu_bo *bo,
+                  struct tu_bo **out_bo,
                   uint64_t size,
                   int fd)
 {
@@ -142,11 +150,17 @@ tu_bo_init_dmabuf(struct tu_device *dev,
       return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                        "Failed to get dma-buf info (%s)\n", strerror(errno));
 
+   struct tu_bo* bo = tu_device_lookup_bo(dev, req.id);
+   assert(bo && bo->gem_handle == 0);
+
    *bo = (struct tu_bo) {
       .gem_handle = req.id,
       .size = info_req.size,
       .iova = info_req.gpuaddr,
+      .refcnt = 1,
    };
+
+   *out_bo = bo;
 
    return VK_SUCCESS;
 }
@@ -181,12 +195,18 @@ tu_bo_finish(struct tu_device *dev, struct tu_bo *bo)
 {
    assert(bo->gem_handle);
 
+   if (!p_atomic_dec_zero(&bo->refcnt))
+      return;
+
    if (bo->map)
       munmap(bo->map, bo->size);
 
    struct kgsl_gpumem_free_id req = {
       .id = bo->gem_handle
    };
+
+   /* Tell sparse array that entry is free */
+   memset(bo, 0, sizeof(*bo));
 
    safe_ioctl(dev->physical_device->local_fd, IOCTL_KGSL_GPUMEM_FREE_ID, &req);
 }
@@ -244,7 +264,7 @@ tu_enumerate_devices(struct tu_instance *instance)
       ((info.chip_id >> 16) & 0xff) * 10 +
       ((info.chip_id >>  8) & 0xff);
    device->dev_id.chip_id = info.chip_id;
-   device->gmem_size = info.gmem_sizebytes;
+   device->gmem_size = env_var_as_unsigned("TU_GMEM", info.gmem_sizebytes);
    device->gmem_base = gmem_iova;
 
    device->heap.size = tu_get_system_heap_size();
@@ -689,6 +709,33 @@ tu_device_get_suspend_count(struct tu_device *dev, uint64_t *suspend_count)
    /* kgsl doesn't have a way to get it */
    *suspend_count = 0;
    return 0;
+}
+
+VkResult
+tu_device_check_status(struct vk_device *vk_device)
+{
+   struct tu_device *device = container_of(vk_device, struct tu_device, vk);
+
+   for (unsigned i = 0; i < TU_MAX_QUEUE_FAMILIES; i++) {
+      for (unsigned q = 0; q < device->queue_count[i]; q++) {
+         /* KGSL's KGSL_PROP_GPU_RESET_STAT takes the u32 msm_queue_id and returns a
+         * KGSL_CTX_STAT_* for the worst reset that happened since the last time it
+         * was queried on that queue.
+         */
+         uint32_t value = device->queues[i][q].msm_queue_id;
+         VkResult status = get_kgsl_prop(device->fd, KGSL_PROP_GPU_RESET_STAT,
+                                       &value, sizeof(value));
+         if (status != VK_SUCCESS)
+            return vk_device_set_lost(&device->vk, "Failed to get GPU reset status");
+
+         if (value != KGSL_CTX_STAT_NO_ERROR &&
+            value != KGSL_CTX_STAT_INNOCENT_CONTEXT_RESET_EXT) {
+            return vk_device_set_lost(&device->vk, "GPU faulted or hung");
+         }
+      }
+   }
+
+   return VK_SUCCESS;
 }
 
 #ifdef ANDROID

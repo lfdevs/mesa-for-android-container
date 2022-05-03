@@ -375,3 +375,18 @@ gl_frag_result_name(gl_frag_result result)
    STATIC_ASSERT(ARRAY_SIZE(names) == FRAG_RESULT_MAX);
    return NAME(result);
 }
+
+unsigned
+num_mesh_vertices_per_primitive(unsigned prim)
+{
+   switch (prim) {
+      case SHADER_PRIM_POINTS:
+         return 1;
+      case SHADER_PRIM_LINES:
+         return 2;
+      case SHADER_PRIM_TRIANGLES:
+         return 3;
+      default:
+         unreachable("invalid mesh shader primitive type");
+   }
+}

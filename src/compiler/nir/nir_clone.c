@@ -522,6 +522,18 @@ nir_instr_clone(nir_shader *shader, const nir_instr *orig)
    return clone_instr(&state, orig);
 }
 
+nir_instr *
+nir_instr_clone_deep(nir_shader *shader, const nir_instr *orig,
+                     struct hash_table *remap_table)
+{
+   clone_state state = {
+      .allow_remap_fallback = true,
+      .ns = shader,
+      .remap_table = remap_table,
+   };
+   return clone_instr(&state, orig);
+}
+
 static nir_block *
 clone_block(clone_state *state, struct exec_list *cf_list, const nir_block *blk)
 {
@@ -671,6 +683,9 @@ clone_function_impl(clone_state *state, const nir_function_impl *fi)
 {
    nir_function_impl *nfi = nir_function_impl_create_bare(state->ns);
 
+   if (fi->preamble)
+      nfi->preamble = remap_global(state, fi->preamble);
+
    clone_var_list(state, &nfi->locals, &fi->locals);
    clone_reg_list(state, &nfi->registers, &fi->registers);
    nfi->reg_alloc = fi->reg_alloc;
@@ -717,6 +732,7 @@ clone_function(clone_state *state, const nir_function *fxn, nir_shader *ns)
            memcpy(nfxn->params, fxn->params, sizeof(nir_parameter) * fxn->num_params);
    }
    nfxn->is_entrypoint = fxn->is_entrypoint;
+   nfxn->is_preamble = fxn->is_preamble;
 
    /* At first glance, it looks like we should clone the function_impl here.
     * However, call instructions need to be able to reference at least the
@@ -743,9 +759,9 @@ nir_shader_clone(void *mem_ctx, const nir_shader *s)
       clone_function(&state, fxn, ns);
 
    /* Only after all functions are cloned can we clone the actual function
-    * implementations.  This is because nir_call_instrs need to reference the
-    * functions of other functions and we don't know what order the functions
-    * will have in the list.
+    * implementations.  This is because nir_call_instrs and preambles need to
+    * reference the functions of other functions and we don't know what order
+    * the functions will have in the list.
     */
    nir_foreach_function(fxn, s) {
       nir_function *nfxn = remap_global(&state, fxn);

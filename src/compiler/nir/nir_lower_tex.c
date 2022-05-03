@@ -939,15 +939,15 @@ swizzle_result(nir_builder *b, nir_tex_instr *tex, const uint8_t swizzle[4])
          /* We have no 0s or 1s, just emit a swizzling MOV */
          swizzled = nir_swizzle(b, &tex->dest.ssa, swiz, 4);
       } else {
-         nir_ssa_def *srcs[4];
+         nir_ssa_scalar srcs[4];
          for (unsigned i = 0; i < 4; i++) {
             if (swizzle[i] < 4) {
-               srcs[i] = nir_channel(b, &tex->dest.ssa, swizzle[i]);
+               srcs[i] = nir_get_ssa_scalar(&tex->dest.ssa, swizzle[i]);
             } else {
-               srcs[i] = get_zero_or_one(b, tex->dest_type, swizzle[i]);
+               srcs[i] = nir_get_ssa_scalar(get_zero_or_one(b, tex->dest_type, swizzle[i]), 0);
             }
          }
-         swizzled = nir_vec(b, srcs, 4);
+         swizzled = nir_vec_scalars(b, srcs, 4);
       }
    }
 
@@ -1083,7 +1083,8 @@ lower_tg4_offsets(nir_builder *b, nir_tex_instr *tex)
 
    b->cursor = nir_after_instr(&tex->instr);
 
-   nir_ssa_def *dest[5] = {NULL};
+   nir_ssa_scalar dest[5] = { 0 };
+   nir_ssa_def *residency = NULL;
    for (unsigned i = 0; i < 4; ++i) {
       nir_tex_instr *tex_copy = nir_tex_instr_create(b->shader, tex->num_srcs + 1);
       tex_copy->op = tex->op;
@@ -1112,14 +1113,18 @@ lower_tg4_offsets(nir_builder *b, nir_tex_instr *tex)
 
       nir_builder_instr_insert(b, &tex_copy->instr);
 
-      dest[i] = nir_channel(b, &tex_copy->dest.ssa, 3);
+      dest[i] = nir_get_ssa_scalar(&tex_copy->dest.ssa, 3);
       if (tex->is_sparse) {
          nir_ssa_def *code = nir_channel(b, &tex_copy->dest.ssa, 4);
-         dest[4] = dest[4] ? nir_sparse_residency_code_and(b, dest[4], code) : code;
+         if (residency)
+            residency = nir_sparse_residency_code_and(b, residency, code);
+         else
+            residency = code;
       }
    }
+   dest[4] = nir_get_ssa_scalar(residency, 0);
 
-   nir_ssa_def *res = nir_vec(b, dest, tex->dest.ssa.num_components);
+   nir_ssa_def *res = nir_vec_scalars(b, dest, tex->dest.ssa.num_components);
    nir_ssa_def_rewrite_uses(&tex->dest.ssa, res);
    nir_instr_remove(&tex->instr);
 
@@ -1314,7 +1319,8 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
       /* If we are clamping any coords, we must lower projector first
        * as clamping happens *after* projection:
        */
-      if (lower_txp || sat_mask) {
+      if (lower_txp || sat_mask ||
+          (options->lower_txp_array && tex->is_array)) {
          progress |= project_src(b, tex);
       }
 

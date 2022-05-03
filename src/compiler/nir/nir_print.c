@@ -106,8 +106,13 @@ static void
 print_ssa_def(nir_ssa_def *def, print_state *state)
 {
    FILE *fp = state->fp;
-   fprintf(fp, "%s %u ssa_%u", sizes[def->num_components], def->bit_size,
-           def->index);
+
+   const char *divergence = "";
+   if (state->shader->info.divergence_analysis_run)
+      divergence = def->divergent ? "div " : "con ";
+
+   fprintf(fp, "%s %2u %sssa_%u", sizes[def->num_components], def->bit_size,
+           divergence, def->index);
 }
 
 static void
@@ -558,7 +563,11 @@ get_variable_mode_str(nir_variable_mode mode, bool want_local_global_mode)
       return "shader_call_data";
    case nir_var_ray_hit_attrib:
       return "ray_hit_attrib";
+   case nir_var_mem_task_payload:
+      return "task_payload";
    default:
+      if (mode && (mode & nir_var_mem_generic) == mode)
+         return "generic";
       return "";
    }
 }
@@ -1059,6 +1068,12 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
          if (io.high_16bits)
             fprintf(fp, " high_16bits");
 
+         if (io.no_varying)
+            fprintf(fp, " no_varying");
+
+         if (io.no_sysval_output)
+            fprintf(fp, " no_sysval_output");
+
          if (state->shader &&
                state->shader->info.stage == MESA_SHADER_GEOMETRY &&
                (instr->intrinsic == nir_intrinsic_store_output ||
@@ -1073,6 +1088,36 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
             fprintf(fp, ")");
          }
 
+         break;
+      }
+
+      case NIR_INTRINSIC_IO_XFB:
+      case NIR_INTRINSIC_IO_XFB2: {
+         /* This prints both IO_XFB and IO_XFB2. */
+         fprintf(fp, "xfb%s(", idx == NIR_INTRINSIC_IO_XFB ? "" : "2");
+         bool first = true;
+         for (unsigned i = 0; i < 2; i++) {
+            unsigned start_comp = (idx == NIR_INTRINSIC_IO_XFB ? 0 : 2) + i;
+            nir_io_xfb xfb = start_comp < 2 ? nir_intrinsic_io_xfb(instr) :
+                                              nir_intrinsic_io_xfb2(instr);
+
+            if (!xfb.out[i].num_components)
+               continue;
+
+            if (!first)
+               fprintf(fp, ", ");
+            first = false;
+
+            if (xfb.out[i].num_components > 1) {
+               fprintf(fp, "components=%u..%u",
+                       start_comp, start_comp + xfb.out[i].num_components - 1);
+            } else {
+               fprintf(fp, "component=%u", start_comp);
+            }
+            fprintf(fp, " buffer=%u offset=%u",
+                    xfb.out[i].buffer, (uint32_t)xfb.out[i].offset * 4);
+         }
+         fprintf(fp, ")");
          break;
       }
 
@@ -1562,6 +1607,10 @@ print_function_impl(nir_function_impl *impl, print_state *state)
 
    fprintf(fp, "{\n");
 
+   if (impl->preamble) {
+      fprintf(fp, "\tpreamble %s\n", impl->preamble->name);
+   }
+
    nir_foreach_function_temp_variable(var, impl) {
       fprintf(fp, "\t");
       print_var_decl(var, state);
@@ -1664,6 +1713,10 @@ nir_print_shader_annotated(nir_shader *shader, FILE *fp,
               shader->info.workgroup_size[2],
               shader->info.workgroup_size_variable ? " (variable)" : "");
       fprintf(fp, "shared-size: %u\n", shader->info.shared_size);
+   }
+   if (shader->info.stage == MESA_SHADER_MESH ||
+       shader->info.stage == MESA_SHADER_TASK) {
+      fprintf(fp, "task_payload-size: %u\n", shader->info.task_payload_size);
    }
 
    fprintf(fp, "inputs: %u\n", shader->num_inputs);

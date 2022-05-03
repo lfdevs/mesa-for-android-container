@@ -613,6 +613,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_OP_GETSPID
 %token <tok> T_OP_GETWID
 %token <tok> T_OP_GETFIBERID
+%token <tok> T_OP_STC
 
 /* category 7: */
 %token <tok> T_OP_BAR
@@ -789,7 +790,7 @@ iflag:             T_SY   { iflags.flags |= IR3_INSTR_SY; }
 iflags:
 |                  iflag iflags
 
-instrs:            instr instrs
+instrs:            instrs instr
 |                  instr
 
 instr:             iflags cat0_instr
@@ -1228,12 +1229,22 @@ cat6_bindless_ibo: cat6_bindless_ibo_opc_1src cat6_typed cat6_dim cat6_type '.' 
 
 cat6_bindless_ldc_opc: T_OP_LDC  { new_instr(OPC_LDC); }
 
-cat6_bindless_ldc: cat6_bindless_ldc_opc '.' T_OFFSET '.' cat6_immed '.' cat6_bindless_mode dst_reg ',' cat6_reg_or_immed ',' cat6_reg_or_immed {
-                      instr->cat6.d = $3;
+/* This is separated from the opcode to avoid lookahead/shift-reduce conflicts */
+cat6_bindless_ldc_middle:
+                        T_OFFSET '.' cat6_immed '.' cat6_bindless_mode dst_reg { instr->cat6.d = $1; }
+|                       cat6_immed '.' 'k' '.' cat6_bindless_mode 'c' '[' T_A1 ']' { instr->opc = OPC_LDC_K; }
+
+cat6_bindless_ldc: cat6_bindless_ldc_opc '.' cat6_bindless_ldc_middle ',' cat6_reg_or_immed ',' cat6_reg_or_immed {
                       instr->cat6.type = TYPE_U32;
                       /* TODO cleanup ir3 src order: */
                       swap(instr->srcs[0], instr->srcs[1]);
                    }
+
+stc_dst:          integer { new_src(0, IR3_REG_IMMED)->iim_val = $1; }
+|                 T_A1 { new_src(0, IR3_REG_IMMED)->iim_val = 0; instr->flags |= IR3_INSTR_A1EN; }
+|                 T_A1 '+' integer { new_src(0, IR3_REG_IMMED)->iim_val = $3; instr->flags |= IR3_INSTR_A1EN; }
+
+cat6_stc: T_OP_STC { new_instr(OPC_STC); } cat6_type 'c' '[' stc_dst ']' ',' src_reg ',' cat6_immed
 
 cat6_todo:         T_OP_G2L                 { new_instr(OPC_G2L); }
 |                  T_OP_L2G                 { new_instr(OPC_L2G); }
@@ -1249,6 +1260,7 @@ cat6_instr:        cat6_load
 |                  cat6_id
 |                  cat6_bindless_ldc
 |                  cat6_bindless_ibo
+|                  cat6_stc
 |                  cat6_todo
 
 cat7_scope:        '.' 'w'  { instr->cat7.w = true; }

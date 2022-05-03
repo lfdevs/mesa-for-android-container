@@ -2,16 +2,6 @@
 # Broken in VK-GL-CTS e5c45899ed7e90fb616ccd1d3c66e6eded120684
 KHR-GL33.cull_distance.coverage,Fail
 
-# Framework bug, missing getProcAddress method.
-# https://gerrit.khronos.org/c/vk-gl-cts/+/8405
-KHR-GL33.transform_feedback.capture_vertex_interleaved_test,Fail
-KHR-GL33.transform_feedback.capture_vertex_separate_test,Fail
-KHR-GL33.transform_feedback.discard_vertex_test,Fail
-KHR-GL33.transform_feedback.draw_xfb_instanced_test,Crash
-KHR-GL33.transform_feedback.draw_xfb_stream_instanced_test,Crash
-KHR-GL33.transform_feedback.query_vertex_interleaved_test,Fail
-KHR-GL33.transform_feedback.query_vertex_separate_test,Fail
-
 # Lots of errors like "[279] Check failed. Received: [3,0,0,2] instead of: [5,0,0,2]"
 KHR-GLES31.core.geometry_shader.layered_framebuffer.depth_support,Fail
 
@@ -64,6 +54,9 @@ glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 shaders@glsl-fs-fogscale,Fail
 shaders@glsl-fs-fogscale@gs-out and fs,Fail
+
+# "../src/freedreno/ir3/ir3_shader.h:968:ir3_link_add: Assertion `i < ARRAY_SIZE(l->var)' failed."
+shaders@glsl-max-varyings >max_varying_components,Crash
 
 # "MESA: error: unknown vertex shader output name: VARYING_SLOT_EDGE
 #  gl-2.0-edgeflag: ../src/freedreno/ir3/ir3_context.c:411: ir3_context_error: Assertion `!""' failed."
@@ -138,6 +131,8 @@ spec@arb_sample_shading@samplemask 4 all@sample mask_in_one,Fail
 spec@arb_sample_shading@samplemask 4,Fail
 spec@arb_sample_shading@samplemask 4@noms mask_in_one,Fail
 spec@arb_sample_shading@samplemask 4@sample mask_in_one,Fail
+
+spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-load,Crash
 
 # These 3 fails started to happen after piglit uprev with commit
 # 0ef03f824d1833a853d1a20b4be121089bb9246c
@@ -276,7 +271,6 @@ spec@ext_framebuffer_multisample@sample-alpha-to-coverage 4 color,Fail
 spec@ext_framebuffer_multisample@sample-alpha-to-coverage 4 depth,Fail
 spec@ext_framebuffer_object@fbo-alphatest-nocolor,Fail
 spec@ext_framebuffer_object@fbo-alphatest-nocolor-ff,Fail
-spec@ext_framebuffer_object@fbo-blending-format-quirks,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor@GL_DEPTH24_STENCIL8- border color only,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor-swizzled,Fail
@@ -380,10 +374,8 @@ spec@glsl-1.50@execution@compatibility@clipping@vs-gs-clip-vertex-equal-to-posit
 spec@glsl-1.50@execution@compatibility@clipping@vs-gs-clip-vertex-homogeneity,Crash
 spec@glsl-1.50@execution@compatibility@clipping@vs-gs-clip-vertex-primitives-triangle-strip,Crash
 
-# "src/freedreno/ir3/ir3_shader.h:864:ir3_find_output: Assertion `0' failed."
-# Reading undefined vertex outputs should be undefined, not crash.
-spec@glsl-1.50@execution@compatibility@gs-clamp-vertex-color,Crash
-spec@glsl-1.50@execution@compatibility@gs-ff-frag,Crash
+spec@glsl-1.50@execution@compatibility@gs-clamp-vertex-color,Fail
+spec@glsl-1.50@execution@compatibility@gs-ff-frag,Fail
 
 spec@glsl-1.50@execution@compatibility@gs-texcoord-array-2,Fail
 spec@glsl-1.50@execution@compatibility@gs-texcoord-array,Fail
@@ -544,40 +536,92 @@ spec@!opengl 1.4@gl-1.4-polygon-offset,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag,Crash
 spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Crash
 
-# "../src/freedreno/ir3/ir3_shader.h:843:ir3_find_output: Assertion `0' failed."
-spec@!opengl 2.0@vertex-program-two-side back2,Crash
+# "src/freedreno/ir3/ir3_nir_lower_tess.c:111: shader_io_get_unique_index: Assertion `!"illegal slot in get unique index\n"'"
 spec@!opengl 2.0@vertex-program-two-side back back2,Crash
+
+spec@!opengl 2.0@vertex-program-two-side back front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side back front2 back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side back front2,Fail
+spec@!opengl 2.0@vertex-program-two-side back front2@gs-out and fs,Fail
 spec@!opengl 2.0@vertex-program-two-side back,Crash
-spec@!opengl 2.0@vertex-program-two-side back front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side back front2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back front2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front back back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front back,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front back front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front back front2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front front2,Crash
-spec@!opengl 2.0@vertex-program-two-side front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side front2,Crash
-spec@!opengl 2.0@vertex-program-two-side front back2,Crash
-spec@!opengl 2.0@vertex-program-two-side front back back2,Crash
-spec@!opengl 2.0@vertex-program-two-side front back,Crash
-spec@!opengl 2.0@vertex-program-two-side front back front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side front back front2,Crash
-spec@!opengl 2.0@vertex-program-two-side front,Crash
-spec@!opengl 2.0@vertex-program-two-side front front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side front front2,Crash
+spec@!opengl 2.0@vertex-program-two-side back2,Crash
+spec@!opengl 2.0@vertex-program-two-side enabled back back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back front2 back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back front2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back front2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back front2 back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back front2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back front2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front front2 back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front front2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front front2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front2 back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front back back2,Fail
+spec@!opengl 2.0@vertex-program-two-side front back back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front back front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side front back front2 back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front back front2,Fail
+spec@!opengl 2.0@vertex-program-two-side front back front2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front back,Fail
+spec@!opengl 2.0@vertex-program-two-side front back@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front back2,Fail
+spec@!opengl 2.0@vertex-program-two-side front back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side front front2 back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front front2,Fail
+spec@!opengl 2.0@vertex-program-two-side front front2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front,Fail
+spec@!opengl 2.0@vertex-program-two-side front@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side front2 back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side front2,Fail
+spec@!opengl 2.0@vertex-program-two-side front2@gs-out and fs,Fail
 
 spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Timeout
 spec@!opengl 3.1@primitive-restart-xfb generated,Fail
+
+# Failures with unaligned gmem store
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_32_32.samples_2.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_32_32.samples_2.d24_unorm_s8_uint.compatibility_depth_zero_stencil_zero_testing_stencil,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_32_32.samples_2.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_32_32.samples_2.d24_unorm_s8_uint_separate_layouts.compatibility_depth_zero_stencil_zero_testing_stencil,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_32_32.samples_4.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_32_32.samples_4.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_8_32.samples_2.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_8_32.samples_2.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_8_32.samples_4.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_8_32.samples_4.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_49_13.samples_2.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_49_13.samples_2.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_49_13.samples_4.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_49_13.samples_4.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_5_1.samples_2.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_5_1.samples_2.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_5_1.samples_4.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_5_1.samples_4.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_17_1.samples_2.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_17_1.samples_2.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_17_1.samples_4.d24_unorm_s8_uint.depth_zero_stencil_zero_testing_stencil_samplemask,Fail
+gmem-unaligned-dEQP-VK.renderpass2.depth_stencil_resolve.image_2d_17_1.samples_4.d24_unorm_s8_uint_separate_layouts.depth_zero_stencil_zero_testing_stencil_samplemask,Fail

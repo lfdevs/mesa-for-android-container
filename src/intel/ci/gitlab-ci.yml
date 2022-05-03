@@ -18,8 +18,7 @@
     DEVICE_TYPE: asus-cx9400-volteer
     GPU_VERSION: anv-tgl
     FDO_CI_CONCURRENT: 8
-  tags:
-    - mesa-ci-x86-64-lava-asus-cx9400-volteer
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-cx9400-volteer
 
 anv-tgl-vk:
   extends:

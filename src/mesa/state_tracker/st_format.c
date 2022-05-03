@@ -111,11 +111,19 @@ st_mesa_format_to_pipe_format(const struct st_context *st,
 
    if (st_astc_format_fallback(st, mesaFormat)) {
       if (_mesa_is_format_srgb(mesaFormat)) {
-         return st->transcode_astc ? PIPE_FORMAT_DXT5_SRGBA :
-                                     PIPE_FORMAT_R8G8B8A8_SRGB;
+         if (st->transcode_astc_to_bptc)
+            return PIPE_FORMAT_BPTC_SRGBA;
+         else if (st->transcode_astc_to_dxt5)
+            return PIPE_FORMAT_DXT5_SRGBA;
+         else
+            return PIPE_FORMAT_R8G8B8A8_SRGB;
       } else {
-         return st->transcode_astc ? PIPE_FORMAT_DXT5_RGBA :
-                                     PIPE_FORMAT_R8G8B8A8_UNORM;
+         if (st->transcode_astc_to_bptc)
+            return PIPE_FORMAT_BPTC_RGBA_UNORM;
+         else if (st->transcode_astc_to_dxt5)
+            return PIPE_FORMAT_DXT5_RGBA;
+         else
+            return PIPE_FORMAT_R8G8B8A8_UNORM;
       }
    }
 
@@ -1483,6 +1491,9 @@ st_QueryInternalFormat(struct gl_context *ctx, GLenum target,
    case GL_VIRTUAL_PAGE_SIZE_X_ARB:
    case GL_VIRTUAL_PAGE_SIZE_Y_ARB:
    case GL_VIRTUAL_PAGE_SIZE_Z_ARB: {
+      /* this is used only for passing CTS */
+      if (target == GL_RENDERBUFFER)
+         target = GL_TEXTURE_2D;
       mesa_format format = st_ChooseTextureFormat(ctx, target, internalFormat, GL_NONE, GL_NONE);
       enum pipe_format pformat = st_mesa_format_to_pipe_format(st, format);
 

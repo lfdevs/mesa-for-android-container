@@ -144,20 +144,23 @@ traces:
         checksum: 06d587a2b934295da6ad874b750b9c9d
       - device: gl-intel-cml
         checksum: 06d587a2b934295da6ad874b750b9c9d
-  - path: gputest/pixmark-piano.trace
-    expectations:
-      - device: gl-intel-apl
-        checksum: 3899d6cd893b7c3ef6baa637cbd79690
-      - device: gl-intel-glk
-        checksum: 3899d6cd893b7c3ef6baa637cbd79690
-      - device: gl-intel-amly
-        checksum: 3899d6cd893b7c3ef6baa637cbd79690
-      - device: gl-intel-kbl
-        checksum: 3899d6cd893b7c3ef6baa637cbd79690
-      - device: gl-intel-whl
-        checksum: 3899d6cd893b7c3ef6baa637cbd79690
-      - device: gl-intel-cml
-        checksum: 3899d6cd893b7c3ef6baa637cbd79690
+  # Sometimes hangchecks -- has triggered on glk at least, but is a common
+  # trigger of hangchecks across multiple drivers because it's a very slow scene
+  # to render.
+  #- path: gputest/pixmark-piano.trace
+  #  expectations:
+  #    - device: gl-intel-apl
+  #      checksum: 3899d6cd893b7c3ef6baa637cbd79690
+  #    - device: gl-intel-glk
+  #      checksum: 3899d6cd893b7c3ef6baa637cbd79690
+  #    - device: gl-intel-amly
+  #      checksum: 3899d6cd893b7c3ef6baa637cbd79690
+  #    - device: gl-intel-kbl
+  #      checksum: 3899d6cd893b7c3ef6baa637cbd79690
+  #    - device: gl-intel-whl
+  #      checksum: 3899d6cd893b7c3ef6baa637cbd79690
+  #    - device: gl-intel-cml
+  #      checksum: 3899d6cd893b7c3ef6baa637cbd79690
   - path: gputest/triangle.trace
     expectations:
       - device: gl-intel-apl

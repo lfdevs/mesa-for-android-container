@@ -112,21 +112,14 @@ llvmpipe_flush_resource(struct pipe_context *pipe,
    if ((referenced & LP_REFERENCED_FOR_WRITE) ||
        ((referenced & LP_REFERENCED_FOR_READ) && !read_only)) {
 
-      if (cpu_access) {
-         /*
-          * Flush and wait.
-          */
-         if (do_not_block)
-            return FALSE;
-
-         llvmpipe_finish(pipe, reason);
-      } else {
-         /*
-          * Just flush.
-          */
-
-         llvmpipe_flush(pipe, NULL, reason);
-      }
+      if (cpu_access)
+	if (do_not_block)
+	  return FALSE;
+      /*
+       * Flush and wait.
+       * Finish so VS can use FS results.
+       */
+      llvmpipe_finish(pipe, reason);
    }
 
    return TRUE;

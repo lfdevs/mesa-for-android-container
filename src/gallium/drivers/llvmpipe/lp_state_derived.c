@@ -182,7 +182,7 @@ check_linear_rasterizer( struct llvmpipe_context *lp )
    boolean clipping_changed = FALSE;
 
    bgr8 = (lp->framebuffer.nr_cbufs == 1 && lp->framebuffer.cbufs[0] &&
-           lp->framebuffer.cbufs[0]->texture->nr_samples == 1 &&
+           util_res_sample_count(lp->framebuffer.cbufs[0]->texture) == 1 &&
            lp->framebuffer.cbufs[0]->texture->target == PIPE_TEXTURE_2D &&
            (lp->framebuffer.cbufs[0]->format == PIPE_FORMAT_B8G8R8A8_UNORM ||
             lp->framebuffer.cbufs[0]->format == PIPE_FORMAT_B8G8R8X8_UNORM));
@@ -332,7 +332,7 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
    if (llvmpipe->dirty & LP_NEW_FS_SSBOS)
       lp_setup_set_fs_ssbos(llvmpipe->setup,
                             ARRAY_SIZE(llvmpipe->ssbos[PIPE_SHADER_FRAGMENT]),
-                            llvmpipe->ssbos[PIPE_SHADER_FRAGMENT]);
+                            llvmpipe->ssbos[PIPE_SHADER_FRAGMENT], llvmpipe->fs_ssbo_write_mask);
 
    if (llvmpipe->dirty & LP_NEW_FS_IMAGES)
       lp_setup_set_fs_images(llvmpipe->setup,

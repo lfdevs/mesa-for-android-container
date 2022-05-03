@@ -55,6 +55,7 @@ bir_fau_name(unsigned fau_idx)
             "blend_descriptor_2", "blend_descriptor_3",
             "blend_descriptor_4", "blend_descriptor_5",
             "blend_descriptor_6", "blend_descriptor_7",
+            "tls_ptr", "wls_ptr", "program_counter",
     };
 
     assert(fau_idx < ARRAY_SIZE(names));
@@ -169,7 +170,7 @@ bi_print_instr(const bi_instr *I, FILE *fp)
     fprintf(fp, " = %s", bi_opcode_props[I->op].name);
 
     if (I->table)
-        fprintf(fp, ".%s", bi_table_as_str(I->table));
+        fprintf(fp, ".table%u", I->table);
 
     switch (I->op) {
 % for opcode in ops:

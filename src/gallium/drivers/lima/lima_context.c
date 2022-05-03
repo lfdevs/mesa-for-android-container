@@ -189,7 +189,7 @@ plb_pp_stream_compare(const void *key1, const void *key2)
 
 static void
 lima_set_debug_callback(struct pipe_context *pctx,
-                        const struct pipe_debug_callback *cb)
+                        const struct util_debug_callback *cb)
 {
    struct lima_context *ctx = lima_context(pctx);
 

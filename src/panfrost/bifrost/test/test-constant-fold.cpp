@@ -171,18 +171,6 @@ TEST_F(ConstantFold, LimitedShiftsForTexturing)
    EXPECT_NOT_FOLD(I);
 }
 
-TEST_F(ConstantFold, LimitedRoundingForTexturing)
-{
-   bi_index reg = bi_register(0);
-
-   EXPECT_FOLD(bi_f32_to_u32_to(b, reg, bi_imm_f32(15.0), BI_ROUND_NONE), 15);
-   EXPECT_FOLD(bi_f32_to_u32_to(b, reg, bi_imm_f32(15.9), BI_ROUND_NONE), 15);
-   EXPECT_FOLD(bi_f32_to_u32_to(b, reg, bi_imm_f32(-20.4), BI_ROUND_NONE), 0);
-
-   EXPECT_NOT_FOLD(bi_f32_to_u32_to(b, reg, bi_imm_f32(-20.4), BI_ROUND_RTP));
-   EXPECT_NOT_FOLD(bi_f32_to_u32_to(b, reg, bi_imm_f32(-20.4), BI_ROUND_RTZ));
-}
-
 TEST_F(ConstantFold, NonConstantSourcesCannotBeFolded)
 {
    bi_index reg = bi_register(0);
@@ -198,6 +186,6 @@ TEST_F(ConstantFold, OtherOperationsShouldNotFold)
    bi_index zero = bi_fau(bir_fau(BIR_FAU_IMMEDIATE | 0), false);
    bi_index reg = bi_register(0);
 
-   EXPECT_NOT_FOLD(bi_fma_f32_to(b, reg, zero, zero, zero, BI_ROUND_NONE));
-   EXPECT_NOT_FOLD(bi_fadd_f32_to(b, reg, zero, zero, BI_ROUND_NONE));
+   EXPECT_NOT_FOLD(bi_fma_f32_to(b, reg, zero, zero, zero));
+   EXPECT_NOT_FOLD(bi_fadd_f32_to(b, reg, zero, zero));
 }

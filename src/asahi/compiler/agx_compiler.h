@@ -61,6 +61,18 @@ enum agx_size {
    AGX_SIZE_64 = 2
 };
 
+static inline unsigned
+agx_size_align_16(enum agx_size size)
+{
+   switch (size) {
+   case AGX_SIZE_16: return 1;
+   case AGX_SIZE_32: return 2;
+   case AGX_SIZE_64: return 4;
+   }
+
+   unreachable("Invalid size");
+}
+
 typedef struct {
    /* Sufficient for as many SSA values as we need. Immediates and uniforms fit in 16-bits */
    unsigned value : 22;
@@ -246,6 +258,7 @@ enum agx_convert {
 
 enum agx_lod_mode {
    AGX_LOD_MODE_AUTO_LOD = 0,
+   AGX_LOD_MODE_AUTO_LOD_BIAS = 5,
    AGX_LOD_MODE_LOD_MIN = 6,
    AGX_LOD_GRAD = 8,
    AGX_LOD_GRAD_MIN = 12

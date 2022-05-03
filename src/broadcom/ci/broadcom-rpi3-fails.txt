@@ -3,7 +3,6 @@ KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_compo
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_component16,Fail
 
 # https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3133
-KHR-GLES2.texture_3d.copy_sub_image.negative,Fail
 KHR-GLES2.texture_3d.copy_sub_image.rgba,Fail
 
 KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_clamp_clamp,Fail
@@ -330,9 +329,6 @@ KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_mirror_repeat
 KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_repeat_clamp,Fail
 KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_repeat_mirror,Fail
 KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_repeat_repeat,Fail
-
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3134
-KHR-GLES2.texture_3d.filtering.combinations.negative,Fail
 
 KHR-GLES2.texture_3d.filtering.formats.rgba8_linear,Fail
 KHR-GLES2.texture_3d.filtering.formats.rgba8_linear_mipmap_linear,Fail
@@ -1591,8 +1587,6 @@ spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d_projvec4,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2dshadow,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 3d,Fail
-spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-index-col-row-wr,Fail
-spec@glsl-1.20@execution@variable-indexing@vs-temp-array-mat4-index-col-row-wr,Fail
 spec@glsl-1.20@execution@vs-nan-builtin-max,Fail
 spec@glsl-1.20@execution@vs-nan-builtin-min,Fail
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail

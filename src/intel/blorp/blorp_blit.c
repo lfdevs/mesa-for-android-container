@@ -2875,6 +2875,11 @@ blorp_copy(struct blorp_batch *batch,
       assert(blorp_copy_supports_compute(batch->blorp,
                                          src_surf->surf, dst_surf->surf,
                                          dst_surf->aux_usage));
+   } else if (batch->flags & BLORP_BATCH_USE_BLITTER) {
+      assert(blorp_copy_supports_blitter(batch->blorp,
+                                         src_surf->surf, dst_surf->surf,
+                                         src_surf->aux_usage,
+                                         dst_surf->aux_usage));
    }
 
    brw_blorp_surface_info_init(batch, &params.src, src_surf, src_level,

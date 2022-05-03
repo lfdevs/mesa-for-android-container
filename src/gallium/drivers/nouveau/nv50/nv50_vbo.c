@@ -93,7 +93,7 @@ nv50_vertex_state_create(struct pipe_context *pipe,
             }
             so->element[i].state = nv50_vertex_format[fmt].vtx;
             so->need_conversion = true;
-            pipe_debug_message(&nouveau_context(pipe)->debug, FALLBACK,
+            util_debug_message(&nouveau_context(pipe)->debug, FALLBACK,
                                "Converting vertex element %d, no hw format %s",
                                i, util_format_name(ve->src_format));
         }

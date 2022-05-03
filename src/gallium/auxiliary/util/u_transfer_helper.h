@@ -125,7 +125,8 @@ struct u_transfer_helper * u_transfer_helper_create(const struct u_transfer_vtbl
                                                     bool separate_z32s8,
                                                     bool separate_stencil,
                                                     bool fake_rgtc,
-                                                    bool msaa_map);
+                                                    bool msaa_map,
+                                                    bool z24_in_z32f);
 
 void u_transfer_helper_destroy(struct u_transfer_helper *helper);
 

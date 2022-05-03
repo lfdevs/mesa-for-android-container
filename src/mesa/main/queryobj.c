@@ -381,9 +381,12 @@ store_query_result(struct gl_context *ctx, struct gl_query_object *q,
                    GLenum pname, GLenum ptype)
 {
    struct pipe_context *pipe = ctx->pipe;
-   boolean wait = pname == GL_QUERY_RESULT;
+   enum pipe_query_flags flags = 0;
    enum pipe_query_value_type result_type;
    int index;
+
+   if (pname == GL_QUERY_RESULT)
+      flags |= PIPE_QUERY_WAIT;
 
    /* GL_QUERY_TARGET is a bit of an extension since it has nothing to
     * do with the GPU end of the query. Write it in "by hand".
@@ -462,7 +465,7 @@ store_query_result(struct gl_context *ctx, struct gl_query_object *q,
       index = 0;
    }
 
-   pipe->get_query_result_resource(pipe, q->pq, wait, result_type, index,
+   pipe->get_query_result_resource(pipe, q->pq, flags, result_type, index,
                                    buf->buffer, offset);
 }
 

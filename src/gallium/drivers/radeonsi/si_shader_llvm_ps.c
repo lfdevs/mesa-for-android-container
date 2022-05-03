@@ -400,9 +400,8 @@ static bool si_llvm_init_ps_export_args(struct si_shader_context *ctx, LLVMValue
    return true;
 }
 
-static void si_export_mrt_color(struct si_shader_context *ctx, LLVMValueRef *color, unsigned index,
-                                unsigned first_color_export, unsigned color_type,
-                                struct si_ps_exports *exp)
+static void si_llvm_build_clamp_alpha_test(struct si_shader_context *ctx,
+                                           LLVMValueRef *color, unsigned index)
 {
    int i;
 
@@ -418,7 +417,12 @@ static void si_export_mrt_color(struct si_shader_context *ctx, LLVMValueRef *col
    /* Alpha test */
    if (index == 0 && ctx->shader->key.ps.part.epilog.alpha_func != PIPE_FUNC_ALWAYS)
       si_alpha_test(ctx, color[3]);
+}
 
+static void si_export_mrt_color(struct si_shader_context *ctx, LLVMValueRef *color, unsigned index,
+                                unsigned first_color_export, unsigned color_type,
+                                struct si_ps_exports *exp)
+{
    /* If last_cbuf > 0, FS_COLOR0_WRITES_ALL_CBUFS is true. */
    if (ctx->shader->key.ps.part.epilog.last_cbuf > 0) {
       assert(exp->num == first_color_export);
@@ -841,6 +845,7 @@ void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part
 {
    int i;
    struct si_ps_exports exp = {};
+   LLVMValueRef color[8][4];
 
    memset(&ctx->args, 0, sizeof(ctx->args));
 
@@ -864,6 +869,30 @@ void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part
    /* Disable elimination of unused inputs. */
    ac_llvm_add_target_dep_function_attr(ctx->main_fn, "InitialPSInputAddr", 0xffffff);
 
+   /* Prepare color. */
+   unsigned vgpr = ctx->args.num_sgprs_used;
+   unsigned colors_written = key->ps_epilog.colors_written;
+
+   while (colors_written) {
+      int write_i = u_bit_scan(&colors_written);
+      unsigned color_type = (key->ps_epilog.color_types >> (write_i * 2)) & 0x3;
+
+      if (color_type != SI_TYPE_ANY32) {
+         for (i = 0; i < 4; i++) {
+            color[write_i][i] = LLVMGetParam(ctx->main_fn, vgpr + i / 2);
+            color[write_i][i] = LLVMBuildBitCast(ctx->ac.builder, color[write_i][i],
+                                                 ctx->ac.v2f16, "");
+            color[write_i][i] = ac_llvm_extract_elem(&ctx->ac, color[write_i][i], i % 2);
+         }
+         vgpr += 4;
+      } else {
+         for (i = 0; i < 4; i++)
+            color[write_i][i] = LLVMGetParam(ctx->main_fn, vgpr++);
+      }
+
+      si_llvm_build_clamp_alpha_test(ctx, color[write_i], write_i);
+   }
+
    /* Prepare the mrtz export. */
    if (key->ps_epilog.writes_z ||
        key->ps_epilog.writes_stencil ||
@@ -884,27 +913,13 @@ void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part
 
    /* Prepare color exports. */
    const unsigned first_color_export = exp.num;
-   unsigned vgpr = ctx->args.num_sgprs_used;
-   unsigned colors_written = key->ps_epilog.colors_written;
+   colors_written = key->ps_epilog.colors_written;
 
    while (colors_written) {
-      LLVMValueRef color[4];
-      int output_index = u_bit_scan(&colors_written);
-      unsigned color_type = (key->ps_epilog.color_types >> (output_index * 2)) & 0x3;
+      int write_i = u_bit_scan(&colors_written);
+      unsigned color_type = (key->ps_epilog.color_types >> (write_i * 2)) & 0x3;
 
-      if (color_type != SI_TYPE_ANY32) {
-         for (i = 0; i < 4; i++) {
-            color[i] = LLVMGetParam(ctx->main_fn, vgpr + i / 2);
-            color[i] = LLVMBuildBitCast(ctx->ac.builder, color[i], ctx->ac.v2f16, "");
-            color[i] = ac_llvm_extract_elem(&ctx->ac, color[i], i % 2);
-         }
-         vgpr += 4;
-      } else {
-         for (i = 0; i < 4; i++)
-            color[i] = LLVMGetParam(ctx->main_fn, vgpr++);
-      }
-
-      si_export_mrt_color(ctx, color, output_index, first_color_export, color_type, &exp);
+      si_export_mrt_color(ctx, color[write_i], write_i, first_color_export, color_type, &exp);
    }
 
    if (exp.num) {

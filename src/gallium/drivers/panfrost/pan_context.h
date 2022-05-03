@@ -202,6 +202,12 @@ struct panfrost_context {
 
         struct panfrost_blend_state *blend;
 
+        /* On Valhall, does the current blend state use a blend shader for any
+         * output? We need this information in a hot path to decide if
+         * per-sample shading should be enabled.
+         */
+        bool valhall_has_blend_shader;
+
         struct pipe_viewport_state pipe_viewport;
         struct pipe_scissor_state scissor;
         struct pipe_blend_color blend_color;
@@ -297,27 +303,24 @@ struct panfrost_shader_variants {
         unsigned active_variant;
 };
 
+/** (Vertex buffer index, divisor) tuple that will become an Attribute Buffer
+ * Descriptor at draw-time on Midgard
+ */
 struct pan_vertex_buffer {
         unsigned vbi;
         unsigned divisor;
 };
 
-struct panfrost_vertex_state {
-        unsigned num_elements;
-
-        /* buffers corresponds to attribute buffer, element_buffers corresponds
-         * to an index in buffers for each vertex element */
-        struct pan_vertex_buffer buffers[PIPE_MAX_ATTRIBS];
-        unsigned element_buffer[PIPE_MAX_ATTRIBS];
-        unsigned nr_bufs;
-
-        struct pipe_vertex_element pipe[PIPE_MAX_ATTRIBS];
-        unsigned formats[PIPE_MAX_ATTRIBS];
-};
+unsigned
+pan_assign_vertex_buffer(struct pan_vertex_buffer *buffers,
+                         unsigned *nr_bufs,
+                         unsigned vbi,
+                         unsigned divisor);
 
 struct panfrost_zsa_state;
 struct panfrost_sampler_state;
 struct panfrost_sampler_view;
+struct panfrost_vertex_state;
 
 static inline struct panfrost_context *
 pan_context(struct pipe_context *pcontext)
@@ -408,5 +411,16 @@ panfrost_clean_state_3d(struct panfrost_context *ctx)
                         ctx->dirty_shader[i] = 0;
         }
 }
+
+void
+panfrost_set_batch_masks_blend(struct panfrost_batch *batch);
+
+void
+panfrost_set_batch_masks_zs(struct panfrost_batch *batch);
+
+void
+panfrost_track_image_access(struct panfrost_batch *batch,
+                            enum pipe_shader_type stage,
+                            struct pipe_image_view *image);
 
 #endif

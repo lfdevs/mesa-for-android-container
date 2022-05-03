@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019 Raspberry Pi
+ * Copyright © 2019 Raspberry Pi Ltd
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -257,7 +257,7 @@ create_image(struct v3dv_device *device,
    /* When using the simulator the WSI common code will see that our
     * driver wsi device doesn't match the display device and because of that
     * it will not attempt to present directly from the swapchain images,
-    * instead it will use the prime blit path (use_prime_blit flag in
+    * instead it will use the prime blit path (use_buffer_blit flag in
     * struct wsi_swapchain), where it copies the contents of the swapchain
     * images to a linear buffer with appropriate row stride for presentation.
     * As a result, on that path, swapchain images do not have any special
@@ -536,13 +536,13 @@ v3dv_CreateImageView(VkDevice _device,
                                            image_view_swizzle);
    }
 
-   iview->vk.format = format;
+   iview->vk.view_format = format;
    iview->format = v3dv_X(device, get_format)(format);
    assert(iview->format && iview->format->supported);
 
-   if (vk_format_is_depth_or_stencil(iview->vk.format)) {
+   if (vk_format_is_depth_or_stencil(iview->vk.view_format)) {
       iview->internal_type =
-         v3dv_X(device, get_internal_depth_type)(iview->vk.format);
+         v3dv_X(device, get_internal_depth_type)(iview->vk.view_format);
    } else {
       v3dv_X(device, get_internal_type_bpp_for_output_format)
          (iview->format->rt_type, &iview->internal_type, &iview->internal_bpp);

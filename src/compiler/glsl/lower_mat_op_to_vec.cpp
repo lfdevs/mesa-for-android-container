@@ -271,7 +271,7 @@ ir_mat_op_to_vec_visitor::do_equal_mat_mat(ir_dereference *result,
 	 new(this->mem_ctx) ir_dereference_variable(tmp_bvec);
 
       ir_assignment *const assign =
-	 new(this->mem_ctx) ir_assignment(lhs, cmp, NULL, (1U << i));
+         new(this->mem_ctx) ir_assignment(lhs, cmp, 1U << i);
 
       this->base_ir->insert_before(assign);
    }

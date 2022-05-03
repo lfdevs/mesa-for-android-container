@@ -46,7 +46,7 @@ TEST(u_qsort_test, qsort_test)
    util_qsort_r(data, GTEST_ARRAY_SIZE_(data),
                 sizeof(data[0]), cmp_func,
                 reinterpret_cast<void *>(&ctx));
-   
+
    for (size_t i = 0; i < GTEST_ARRAY_SIZE_(data); ++i) {
       EXPECT_EQ(data[i], i + 1);
    }

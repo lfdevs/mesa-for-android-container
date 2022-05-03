@@ -777,7 +777,9 @@ vtn_variable_copy(struct vtn_builder *b, struct vtn_pointer *dest,
 static void
 set_mode_system_value(struct vtn_builder *b, nir_variable_mode *mode)
 {
-   vtn_assert(*mode == nir_var_system_value || *mode == nir_var_shader_in);
+   vtn_assert(*mode == nir_var_system_value || *mode == nir_var_shader_in ||
+              /* Hack for NV_mesh_shader due to lack of dedicated storage class. */
+              *mode == nir_var_mem_task_payload);
    *mode = nir_var_system_value;
 }
 
@@ -1140,7 +1142,9 @@ vtn_get_builtin_location(struct vtn_builder *b,
       *location = VARYING_SLOT_PRIMITIVE_INDICES;
       break;
    case SpvBuiltInTaskCountNV:
+      /* NV_mesh_shader only. */
       *location = VARYING_SLOT_TASK_COUNT;
+      *mode = nir_var_shader_out;
       break;
    case SpvBuiltInMeshViewCountNV:
       *location = SYSTEM_VALUE_MESH_VIEW_COUNT;
@@ -1315,12 +1319,10 @@ apply_var_decoration(struct vtn_builder *b,
 
    case SpvDecorationPerTaskNV:
       vtn_fail_if(
-         !(b->shader->info.stage == MESA_SHADER_TASK && var_data->mode == nir_var_shader_out) &&
-         !(b->shader->info.stage == MESA_SHADER_MESH && var_data->mode == nir_var_shader_in),
-         "PerTaskNV decoration only allowed for Task shader outputs or Mesh shader inputs");
-      /* Don't set anything, because this decoration is implied by being a
-       * non-builtin Task Output or Mesh Input.
-       */
+         (b->shader->info.stage != MESA_SHADER_MESH &&
+          b->shader->info.stage != MESA_SHADER_TASK) ||
+         var_data->mode != nir_var_mem_task_payload,
+         "PerTaskNV decoration only allowed on Task/Mesh payload variables.");
       break;
 
    case SpvDecorationPerViewNV:
@@ -1544,10 +1546,22 @@ vtn_storage_class_to_mode(struct vtn_builder *b,
    case SpvStorageClassInput:
       mode = vtn_variable_mode_input;
       nir_mode = nir_var_shader_in;
+
+      /* NV_mesh_shader: fixup due to lack of dedicated storage class */
+      if (b->shader->info.stage == MESA_SHADER_MESH) {
+         mode = vtn_variable_mode_task_payload;
+         nir_mode = nir_var_mem_task_payload;
+      }
       break;
    case SpvStorageClassOutput:
       mode = vtn_variable_mode_output;
       nir_mode = nir_var_shader_out;
+
+      /* NV_mesh_shader: fixup due to lack of dedicated storage class */
+      if (b->shader->info.stage == MESA_SHADER_TASK) {
+         mode = vtn_variable_mode_task_payload;
+         nir_mode = nir_var_mem_task_payload;
+      }
       break;
    case SpvStorageClassPrivate:
       mode = vtn_variable_mode_private;
@@ -1642,6 +1656,9 @@ vtn_mode_to_address_format(struct vtn_builder *b, enum vtn_variable_mode mode)
 
    case vtn_variable_mode_accel_struct:
       return nir_address_format_64bit_global;
+
+   case vtn_variable_mode_task_payload:
+      return b->options->task_payload_addr_format;
 
    case vtn_variable_mode_function:
       if (b->physical_ptrs)
@@ -1936,6 +1953,7 @@ vtn_create_variable(struct vtn_builder *b, struct vtn_value *val,
 
    case vtn_variable_mode_workgroup:
    case vtn_variable_mode_cross_workgroup:
+   case vtn_variable_mode_task_payload:
       /* Create the variable normally */
       var->var = rzalloc(b->shader, nir_variable);
       var->var->name = ralloc_strdup(var->var, val->name);
@@ -2023,16 +2041,6 @@ vtn_create_variable(struct vtn_builder *b, struct vtn_value *val,
       vtn_foreach_decoration(b, vtn_value(b, per_vertex_type->id,
                                           vtn_value_type_type),
                              var_decoration_cb, var);
-
-      /* PerTask I/O is always a single block without any Location, so
-       * initialize the base_location of the block and let
-       * assign_missing_member_locations() do the rest.
-       */
-      if ((b->shader->info.stage == MESA_SHADER_TASK && var->mode == vtn_variable_mode_output) ||
-          (b->shader->info.stage == MESA_SHADER_MESH && var->mode == vtn_variable_mode_input)) {
-         if (var->type->block)
-            var->base_location = VARYING_SLOT_VAR0;
-      }
 
       break;
    }

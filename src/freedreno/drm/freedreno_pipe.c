@@ -164,6 +164,12 @@ fd_pipe_get_param(struct fd_pipe *pipe, enum fd_param_id param, uint64_t *value)
    return pipe->funcs->get_param(pipe, param, value);
 }
 
+int
+fd_pipe_set_param(struct fd_pipe *pipe, enum fd_param_id param, uint64_t value)
+{
+   return pipe->funcs->set_param(pipe, param, value);
+}
+
 const struct fd_dev_id *
 fd_pipe_dev_id(struct fd_pipe *pipe)
 {

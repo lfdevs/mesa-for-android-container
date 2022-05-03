@@ -27,10 +27,6 @@
 #include "nir.h"
 #include "nir_builder.h"
 
-#if defined(_WIN32) && !defined(snprintf)
-#define snprintf _snprintf
-#endif
-
 /*
  * Remap atomic counters to SSBOs, starting from the shader's next SSBO slot
  * (info.num_ssbos).

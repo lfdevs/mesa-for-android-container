@@ -152,6 +152,12 @@ struct ir3_register {
        * corner cases such as destinations of atomic instructions.
        */
       IR3_REG_UNUSED = 0x40000,
+
+      /* "Early-clobber" on a destination means that the destination is
+       * (potentially) written before any sources are read and therefore
+       * interferes with the sources of the instruction.
+       */
+      IR3_REG_EARLY_CLOBBER = 0x80000,
    } flags;
 
    unsigned name;
@@ -232,6 +238,22 @@ struct ir3_register {
       }                                                                        \
       arr[arr##_count++] = __VA_ARGS__;                                        \
    } while (0)
+
+typedef enum {
+   REDUCE_OP_ADD_U,
+   REDUCE_OP_ADD_F,
+   REDUCE_OP_MUL_U,
+   REDUCE_OP_MUL_F,
+   REDUCE_OP_MIN_U,
+   REDUCE_OP_MIN_S,
+   REDUCE_OP_MIN_F,
+   REDUCE_OP_MAX_U,
+   REDUCE_OP_MAX_S,
+   REDUCE_OP_MAX_F,
+   REDUCE_OP_AND_B,
+   REDUCE_OP_OR_B,
+   REDUCE_OP_XOR_B,
+} reduce_op_t;
 
 struct ir3_instruction {
    struct ir3_block *block;
@@ -318,6 +340,7 @@ struct ir3_instruction {
       struct {
          type_t src_type, dst_type;
          round_t round;
+         reduce_op_t reduce_op;
       } cat1;
       struct {
          enum {
@@ -459,6 +482,7 @@ struct ir3_instruction {
       IR3_BARRIER_ARRAY_W = 1 << 8,
       IR3_BARRIER_PRIVATE_R = 1 << 9,
       IR3_BARRIER_PRIVATE_W = 1 << 10,
+      IR3_BARRIER_CONST_W = 1 << 11,
    } barrier_class,
       barrier_conflict;
 
@@ -508,6 +532,11 @@ struct ir3 {
     */
    DECLARE_ARRAY(struct ir3_instruction *, astc_srgb);
 
+   /* Track tg4 instructions which need texture state patched in (for tg4
+    * swizzling workaround):
+    */
+   DECLARE_ARRAY(struct ir3_instruction *, tg4);
+
    /* List of blocks: */
    struct list_head block_list;
 
@@ -553,6 +582,7 @@ enum ir3_branch_type {
    IR3_BRANCH_ANY,    /* subgroupAny(condition) */
    IR3_BRANCH_ALL,    /* subgroupAll(condition) */
    IR3_BRANCH_GETONE, /* subgroupElect() */
+   IR3_BRANCH_SHPS,   /* preamble start */
 };
 
 struct ir3_block {
@@ -629,6 +659,19 @@ static inline struct ir3_block *
 ir3_start_block(struct ir3 *ir)
 {
    return list_first_entry(&ir->block_list, struct ir3_block, node);
+}
+
+static inline struct ir3_block *
+ir3_after_preamble(struct ir3 *ir)
+{
+   struct ir3_block *block = ir3_start_block(ir);
+   /* The preamble will have a usually-empty else branch, and we want to skip
+    * that to get to the block after the preamble.
+    */
+   if (block->brtype == IR3_BRANCH_SHPS)
+      return block->successors[1]->successors[0];
+   else
+      return block;
 }
 
 void ir3_block_add_predecessor(struct ir3_block *block, struct ir3_block *pred);
@@ -886,6 +929,7 @@ is_subgroup_cond_mov_macro(struct ir3_instruction *instr)
    case OPC_READ_COND_MACRO:
    case OPC_READ_FIRST_MACRO:
    case OPC_SWZ_SHARED_MACRO:
+   case OPC_SCAN_MACRO:
       return true;
    default:
       return false;
@@ -2009,8 +2053,6 @@ ir3_NOP(struct ir3_block *block)
    return ir3_instr_create(block, OPC_NOP, 0, 0);
 }
 
-#define IR3_INSTR_0 0
-
 /* clang-format off */
 #define __INSTR0(flag, name, opc)                                              \
 static inline struct ir3_instruction *ir3_##name(struct ir3_block *block)      \
@@ -2042,21 +2084,23 @@ static inline struct ir3_instruction *ir3_##name(                              \
 #define INSTR1NODST(name) __INSTR1(0, 0, name, OPC_##name)
 
 /* clang-format off */
-#define __INSTR2(flag, name, opc)                                              \
+#define __INSTR2(flag, dst_count, name, opc)                                   \
 static inline struct ir3_instruction *ir3_##name(                              \
    struct ir3_block *block, struct ir3_instruction *a, unsigned aflags,        \
    struct ir3_instruction *b, unsigned bflags)                                 \
 {                                                                              \
-   struct ir3_instruction *instr = ir3_instr_create(block, opc, 1, 2);         \
-   __ssa_dst(instr);                                                           \
+   struct ir3_instruction *instr = ir3_instr_create(block, opc, dst_count, 2); \
+   for (unsigned i = 0; i < dst_count; i++)                                    \
+      __ssa_dst(instr);                                                        \
    __ssa_src(instr, a, aflags);                                                \
    __ssa_src(instr, b, bflags);                                                \
    instr->flags |= flag;                                                       \
    return instr;                                                               \
 }
 /* clang-format on */
-#define INSTR2F(f, name) __INSTR2(IR3_INSTR_##f, name##_##f, OPC_##name)
-#define INSTR2(name)     __INSTR2(0, name, OPC_##name)
+#define INSTR2F(f, name)   __INSTR2(IR3_INSTR_##f, 1, name##_##f, OPC_##name)
+#define INSTR2(name)       __INSTR2(0, 1, name, OPC_##name)
+#define INSTR2NODST(name)  __INSTR2(0, 0, name, OPC_##name)
 
 /* clang-format off */
 #define __INSTR3(flag, dst_count, name, opc)                                   \
@@ -2163,6 +2207,8 @@ INSTR1NODST(PREDT)
 INSTR0(PREDF)
 INSTR0(PREDE)
 INSTR0(GETONE)
+INSTR0(SHPS)
+INSTR0(SHPE)
 
 /* cat1 macros */
 INSTR1(ANY_MACRO)
@@ -2175,6 +2221,15 @@ ir3_ELECT_MACRO(struct ir3_block *block)
 {
    struct ir3_instruction *instr =
       ir3_instr_create(block, OPC_ELECT_MACRO, 1, 0);
+   __ssa_dst(instr);
+   return instr;
+}
+
+static inline struct ir3_instruction *
+ir3_SHPS_MACRO(struct ir3_block *block)
+{
+   struct ir3_instruction *instr =
+      ir3_instr_create(block, OPC_SHPS_MACRO, 1, 0);
    __ssa_dst(instr);
    return instr;
 }
@@ -2334,6 +2389,8 @@ INSTR2(QUAD_SHUFFLE_BRCST)
 INSTR1(QUAD_SHUFFLE_HORIZ)
 INSTR1(QUAD_SHUFFLE_VERT)
 INSTR1(QUAD_SHUFFLE_DIAG)
+INSTR2NODST(LDC_K)
+INSTR2NODST(STC)
 #if GPU >= 600
 INSTR3NODST(STIB);
 INSTR2(LDIB);
@@ -2492,6 +2549,21 @@ regmask_or(regmask_t *dst, regmask_t *a, regmask_t *b)
       dst->mask[i] = a->mask[i] | b->mask[i];
 }
 
+static inline void
+regmask_or_shared(regmask_t *dst, regmask_t *a, regmask_t *b)
+{
+   regmaskstate_t shared_mask;
+   BITSET_ZERO(shared_mask);
+
+   if (b->mergedregs) {
+      BITSET_SET_RANGE(shared_mask, 2 * 4 * 48, 2 * 4 * 56 - 1);
+   } else {
+      BITSET_SET_RANGE(shared_mask, 4 * 48, 4 * 56 - 1);
+   }
+
+   for (unsigned i = 0; i < ARRAY_SIZE(dst->mask); i++)
+      dst->mask[i] = a->mask[i] | (b->mask[i] & shared_mask[i]);
+}
 
 static inline void
 regmask_set(regmask_t *regmask, struct ir3_register *reg)

@@ -109,7 +109,7 @@ resolve_sampler_views(struct iris_context *ice,
       }
 
       iris_emit_buffer_barrier_for(batch, isv->res->bo,
-                                   IRIS_DOMAIN_OTHER_READ);
+                                   IRIS_DOMAIN_SAMPLER_READ);
    }
 }
 
@@ -381,7 +381,7 @@ flush_ubos(struct iris_batch *batch,
       const int i = u_bit_scan(&cbufs);
       struct pipe_shader_buffer *cbuf = &shs->constbuf[i];
       struct iris_resource *res = (void *)cbuf->buffer;
-      iris_emit_buffer_barrier_for(batch, res->bo, IRIS_DOMAIN_OTHER_READ);
+      iris_emit_buffer_barrier_for(batch, res->bo, IRIS_DOMAIN_PULL_CONSTANT_READ);
    }
 
    shs->dirty_cbufs = 0;
@@ -875,7 +875,8 @@ iris_resource_texture_aux_usage(struct iris_context *ice,
    case ISL_AUX_USAGE_HIZ_CCS:
    case ISL_AUX_USAGE_HIZ_CCS_WT:
       assert(res->surf.format == view_format);
-      return util_last_bit(res->aux.sampler_usages) - 1;
+      return iris_sample_with_depth_aux(devinfo, res) ?
+             res->aux.usage : ISL_AUX_USAGE_NONE;
 
    case ISL_AUX_USAGE_MCS:
    case ISL_AUX_USAGE_MCS_CCS:

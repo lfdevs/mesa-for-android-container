@@ -732,7 +732,7 @@ dxil_module_get_split_double_ret_type(struct dxil_module *mod)
    const struct dxil_type *int32_type = dxil_module_get_int_type(mod, 32);
    const struct dxil_type *fields[2] = { int32_type, int32_type };
 
-   return dxil_module_get_struct_type(mod, "dx.types.splitDouble", fields, 2);
+   return dxil_module_get_struct_type(mod, "dx.types.splitdouble", fields, 2);
 }
 
 static const struct dxil_type *
@@ -2736,29 +2736,37 @@ dxil_emit_phi(struct dxil_module *m, const struct dxil_type *type)
       return NULL;
 
    instr->phi.type = type;
+   instr->phi.incoming = NULL;
    instr->phi.num_incoming = 0;
    instr->has_value = true;
 
    return instr;
 }
 
-void
-dxil_phi_set_incoming(struct dxil_instr *instr,
+bool
+dxil_phi_add_incoming(struct dxil_instr *instr,
                       const struct dxil_value *incoming_values[],
                       const unsigned incoming_blocks[],
                       size_t num_incoming)
 {
    assert(instr->type == INSTR_PHI);
    assert(num_incoming > 0);
-   assert(num_incoming < ARRAY_SIZE(instr->phi.incoming));
+
+   instr->phi.incoming = reralloc(instr, instr->phi.incoming,
+                                  struct dxil_phi_src,
+                                  instr->phi.num_incoming + num_incoming);
+   if (!instr->phi.incoming)
+      return false;
+
    for (int i = 0; i < num_incoming; ++i) {
       assert(incoming_values[i]);
       assert(types_equal(incoming_values[i]->type, instr->phi.type));
-
-      instr->phi.incoming[i].value = incoming_values[i];
-      instr->phi.incoming[i].block = incoming_blocks[i];
+      int dst = instr->phi.num_incoming + i;
+      instr->phi.incoming[dst].value = incoming_values[i];
+      instr->phi.incoming[dst].block = incoming_blocks[i];
    }
-   instr->phi.num_incoming = num_incoming;
+   instr->phi.num_incoming += num_incoming;
+   return true;
 }
 
 static struct dxil_instr *

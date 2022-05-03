@@ -54,6 +54,7 @@ point_size(struct gl_context *ctx, GLfloat size, bool no_error)
 
    FLUSH_VERTICES(ctx, _NEW_POINT, GL_POINT_BIT);
    ctx->Point.Size = size;
+   ctx->PointSizeIsOne = ctx->Point.Size == 1.0;
 }
 
 

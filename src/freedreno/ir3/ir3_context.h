@@ -153,6 +153,9 @@ struct ir3_context {
    /* on a4xx, bitmask of samplers which need astc+srgb workaround: */
    unsigned astc_srgb;
 
+   /* on a4xx, per-sampler per-component swizzles, for tg4: */
+   uint16_t sampler_swizzles[16];
+
    unsigned samples; /* bitmask of x,y sample shifts */
 
    unsigned max_texture_index;

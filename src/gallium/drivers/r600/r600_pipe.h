@@ -261,7 +261,6 @@ struct r600_gs_rings_state {
 #define DBG_NO_CP_DMA		(1 << 30)
 /* shader backend */
 #define DBG_NO_SB		(1 << 21)
-#define DBG_SB_CS		(1 << 22)
 #define DBG_SB_DRY_RUN	(1 << 23)
 #define DBG_SB_STAT		(1 << 24)
 #define DBG_SB_DUMP		(1 << 25)
@@ -363,7 +362,6 @@ struct r600_pipe_shader_selector {
 	/* TCS/VS */
 	uint64_t        lds_patch_outputs_written_mask;
 	uint64_t        lds_outputs_written_mask;
-	unsigned	nr_ps_max_color_exports;
 };
 
 struct r600_pipe_sampler_state {
@@ -1066,7 +1064,7 @@ struct r600_pipe_shader_selector *r600_create_shader_state_tokens(struct pipe_co
 								  unsigned pipe_shader_type);
 int r600_shader_select(struct pipe_context *ctx,
 		       struct r600_pipe_shader_selector* sel,
-		       bool *dirty);
+		       bool *dirty, bool precompile);
 
 void r600_delete_shader_selector(struct pipe_context *ctx,
 				 struct r600_pipe_shader_selector *sel);

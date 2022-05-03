@@ -69,6 +69,8 @@ libradv_files = files(
   'radv_meta_resolve.c',
   'radv_meta_resolve_cs.c',
   'radv_meta_resolve_fs.c',
+  'radv_nir_apply_pipeline_layout.c',
+  'radv_nir_lower_ray_queries.c',
   'radv_nir_lower_ycbcr_textures.c',
   'radv_pass.c',
   'radv_perfcounter.c',
@@ -77,6 +79,7 @@ libradv_files = files(
   'radv_pipeline_rt.c',
   'radv_private.h',
   'radv_radeon_winsys.h',
+  'radv_rt_common.c',
   'radv_sdma_copy_image.c',
   'radv_shader.c',
   'radv_shader.h',
@@ -86,7 +89,6 @@ libradv_files = files(
   'radv_spm.c',
   'radv_sqtt.c',
   'radv_query.c',
-  'radv_util.c',
   'radv_wsi.c',
   'si_cmd_buffer.c',
   'vk_format.h',
@@ -217,3 +219,20 @@ radeon_icd = custom_target(
   install : true,
 )
 
+if meson.version().version_compare('>= 0.58')
+  _dev_icdname = 'radeon_devenv_icd.@0@.json'.format(host_machine.cpu())
+  custom_target(
+    'radeon_devenv_icd',
+    input : [vk_icd_gen, vk_api_xml],
+    output : _dev_icdname,
+    command : [
+      prog_python, '@INPUT0@',
+      '--api-version', '1.3', '--xml', '@INPUT1@',
+      '--lib-path', meson.current_build_dir() / icd_file_name,
+      '--out', '@OUTPUT@',
+    ],
+    build_by_default : true,
+  )
+
+  devenv.append('VK_ICD_FILENAMES', meson.current_build_dir() / _dev_icdname)
+endif

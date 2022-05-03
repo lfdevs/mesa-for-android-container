@@ -333,7 +333,7 @@ is_not_const_and_not_fsign(struct hash_table *ht, const nir_alu_instr *instr,
 }
 
 static inline bool
-is_used_once(nir_alu_instr *instr)
+is_used_once(const nir_alu_instr *instr)
 {
    bool zero_if_use = list_is_empty(&instr->dest.dest.ssa.if_uses);
    bool zero_use = list_is_empty(&instr->dest.dest.ssa.uses);
@@ -355,19 +355,19 @@ is_used_once(nir_alu_instr *instr)
 }
 
 static inline bool
-is_used_by_if(nir_alu_instr *instr)
+is_used_by_if(const nir_alu_instr *instr)
 {
    return !list_is_empty(&instr->dest.dest.ssa.if_uses);
 }
 
 static inline bool
-is_not_used_by_if(nir_alu_instr *instr)
+is_not_used_by_if(const nir_alu_instr *instr)
 {
    return list_is_empty(&instr->dest.dest.ssa.if_uses);
 }
 
 static inline bool
-is_used_by_non_fsat(nir_alu_instr *instr)
+is_used_by_non_fsat(const nir_alu_instr *instr)
 {
    nir_foreach_use(src, &instr->dest.dest.ssa) {
       const nir_instr *const user_instr = src->parent_instr;
@@ -386,7 +386,7 @@ is_used_by_non_fsat(nir_alu_instr *instr)
 }
 
 static inline bool
-is_only_used_as_float(nir_alu_instr *instr)
+is_only_used_as_float(const nir_alu_instr *instr)
 {
    nir_foreach_use(src, &instr->dest.dest.ssa) {
       const nir_instr *const user_instr = src->parent_instr;
@@ -406,13 +406,13 @@ is_only_used_as_float(nir_alu_instr *instr)
 }
 
 static inline bool
-only_lower_8_bits_used(nir_alu_instr *instr)
+only_lower_8_bits_used(const nir_alu_instr *instr)
 {
    return (nir_ssa_def_bits_used(&instr->dest.dest.ssa) & ~0xffull) == 0;
 }
 
 static inline bool
-only_lower_16_bits_used(nir_alu_instr *instr)
+only_lower_16_bits_used(const nir_alu_instr *instr)
 {
    return (nir_ssa_def_bits_used(&instr->dest.dest.ssa) & ~0xffffull) == 0;
 }
@@ -466,13 +466,13 @@ is_lower_half_zero(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
 }
 
 static inline bool
-no_signed_wrap(nir_alu_instr *instr)
+no_signed_wrap(const nir_alu_instr *instr)
 {
    return instr->no_signed_wrap;
 }
 
 static inline bool
-no_unsigned_wrap(nir_alu_instr *instr)
+no_unsigned_wrap(const nir_alu_instr *instr)
 {
    return instr->no_unsigned_wrap;
 }

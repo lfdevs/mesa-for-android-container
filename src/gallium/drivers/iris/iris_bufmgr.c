@@ -226,6 +226,9 @@ struct iris_bufmgr {
    uint64_t vma_min_align;
    struct iris_memregion vram, sys;
 
+   /* Used only when use_global_vm is true. */
+   uint32_t global_vm_id;
+
    int next_screen_id;
 
    bool has_llc:1;
@@ -234,10 +237,13 @@ struct iris_bufmgr {
    bool has_tiling_uapi:1;
    bool has_userptr_probe:1;
    bool bo_reuse:1;
+   bool use_global_vm:1;
 
    struct intel_aux_map_context *aux_map_ctx;
 
    struct pb_slabs bo_slabs[NUM_SLAB_ALLOCATORS];
+
+   struct iris_border_color_pool border_color_pool;
 };
 
 static simple_mtx_t global_bufmgr_list_mutex = _SIMPLE_MTX_INITIALIZER_NP;
@@ -1482,7 +1488,7 @@ iris_bo_unreference(struct iris_bo *bo)
 }
 
 static void
-bo_wait_with_stall_warning(struct pipe_debug_callback *dbg,
+bo_wait_with_stall_warning(struct util_debug_callback *dbg,
                            struct iris_bo *bo,
                            const char *action)
 {
@@ -1519,7 +1525,7 @@ print_flags(unsigned flags)
 }
 
 static void *
-iris_bo_gem_mmap_legacy(struct pipe_debug_callback *dbg, struct iris_bo *bo)
+iris_bo_gem_mmap_legacy(struct util_debug_callback *dbg, struct iris_bo *bo)
 {
    struct iris_bufmgr *bufmgr = bo->bufmgr;
 
@@ -1546,7 +1552,7 @@ iris_bo_gem_mmap_legacy(struct pipe_debug_callback *dbg, struct iris_bo *bo)
 }
 
 static void *
-iris_bo_gem_mmap_offset(struct pipe_debug_callback *dbg, struct iris_bo *bo)
+iris_bo_gem_mmap_offset(struct util_debug_callback *dbg, struct iris_bo *bo)
 {
    struct iris_bufmgr *bufmgr = bo->bufmgr;
 
@@ -1606,7 +1612,7 @@ iris_bo_gem_mmap_offset(struct pipe_debug_callback *dbg, struct iris_bo *bo)
 }
 
 void *
-iris_bo_map(struct pipe_debug_callback *dbg,
+iris_bo_map(struct util_debug_callback *dbg,
             struct iris_bo *bo, unsigned flags)
 {
    struct iris_bufmgr *bufmgr = bo->bufmgr;
@@ -1727,6 +1733,8 @@ iris_bo_wait(struct iris_bo *bo, int64_t timeout_ns)
 static void
 iris_bufmgr_destroy(struct iris_bufmgr *bufmgr)
 {
+   iris_destroy_border_color_pool(&bufmgr->border_color_pool);
+
    /* Free aux-map buffers */
    intel_aux_map_finish(bufmgr->aux_map_ctx);
 
@@ -2152,6 +2160,24 @@ iris_hw_context_set_unrecoverable(struct iris_bufmgr *bufmgr,
    intel_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM, &p);
 }
 
+void
+iris_hw_context_set_vm_id(struct iris_bufmgr *bufmgr, uint32_t ctx_id)
+{
+   if (!bufmgr->use_global_vm)
+      return;
+
+   struct drm_i915_gem_context_param p = {
+      .ctx_id = ctx_id,
+      .param = I915_CONTEXT_PARAM_VM,
+      .value = bufmgr->global_vm_id,
+   };
+   int ret = intel_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM, &p);
+   if (ret != 0) {
+      DBG("DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM failed: %s\n",
+          strerror(errno));
+   }
+}
+
 uint32_t
 iris_create_hw_context(struct iris_bufmgr *bufmgr)
 {
@@ -2163,6 +2189,7 @@ iris_create_hw_context(struct iris_bufmgr *bufmgr)
    }
 
    iris_hw_context_set_unrecoverable(bufmgr, create.ctx_id);
+   iris_hw_context_set_vm_id(bufmgr, create.ctx_id);
 
    return create.ctx_id;
 }
@@ -2330,6 +2357,23 @@ iris_bufmgr_query_meminfo(struct iris_bufmgr *bufmgr)
    return true;
 }
 
+static void
+iris_bufmgr_init_global_vm(int fd, struct iris_bufmgr *bufmgr)
+{
+   struct drm_i915_gem_context_param gcp = {
+      .ctx_id = 0,
+      .param = I915_CONTEXT_PARAM_VM,
+   };
+
+   if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_GETPARAM, &gcp)) {
+      bufmgr->use_global_vm = false;
+      bufmgr->global_vm_id = 0;
+   } else {
+      bufmgr->use_global_vm = true;
+      bufmgr->global_vm_id = gcp.value;
+   }
+}
+
 /**
  * Initializes the GEM buffer manager, which uses the kernel to allocate, map,
  * and manage map buffer objections.
@@ -2362,6 +2406,8 @@ iris_bufmgr_create(struct intel_device_info *devinfo, int fd, bool bo_reuse)
    simple_mtx_init(&bufmgr->lock, mtx_plain);
    simple_mtx_init(&bufmgr->bo_deps_lock, mtx_plain);
 
+   iris_bufmgr_init_global_vm(fd, bufmgr);
+
    list_inithead(&bufmgr->zombie_list);
 
    bufmgr->has_llc = devinfo->has_llc;
@@ -2376,7 +2422,6 @@ iris_bufmgr_create(struct intel_device_info *devinfo, int fd, bool bo_reuse)
    STATIC_ASSERT(IRIS_MEMZONE_SHADER_START == 0ull);
    const uint64_t _4GB = 1ull << 32;
    const uint64_t _2GB = 1ul << 31;
-   const uint64_t _1GB = 1ul << 30;
 
    /* The STATE_BASE_ADDRESS size field can only hold 1 page shy of 4GB */
    const uint64_t _4GB_minus_1 = _4GB - PAGE_SIZE;
@@ -2384,11 +2429,12 @@ iris_bufmgr_create(struct intel_device_info *devinfo, int fd, bool bo_reuse)
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_SHADER],
                       PAGE_SIZE, _4GB_minus_1 - PAGE_SIZE);
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_BINDER],
-                      IRIS_MEMZONE_BINDER_START, _1GB - IRIS_BINDLESS_SIZE);
+                      IRIS_MEMZONE_BINDER_START, IRIS_BINDER_ZONE_SIZE);
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_BINDLESS],
                       IRIS_MEMZONE_BINDLESS_START, IRIS_BINDLESS_SIZE);
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_SURFACE],
-                      IRIS_MEMZONE_SURFACE_START, _4GB_minus_1 - _1GB);
+                      IRIS_MEMZONE_SURFACE_START, _4GB_minus_1 -
+                      IRIS_BINDER_ZONE_SIZE - IRIS_BINDLESS_SIZE);
    /* TODO: Why does limiting to 2GB help some state items on gfx12?
     *  - CC Viewport Pointer
     *  - Blend State Pointer
@@ -2447,6 +2493,8 @@ iris_bufmgr_create(struct intel_device_info *devinfo, int fd, bool bo_reuse)
                                                devinfo);
       assert(bufmgr->aux_map_ctx);
    }
+
+   iris_init_border_color_pool(bufmgr, &bufmgr->border_color_pool);
 
    return bufmgr;
 }
@@ -2530,4 +2578,10 @@ simple_mtx_t *
 iris_bufmgr_get_bo_deps_lock(struct iris_bufmgr *bufmgr)
 {
    return &bufmgr->bo_deps_lock;
+}
+
+struct iris_border_color_pool *
+iris_bufmgr_get_border_color_pool(struct iris_bufmgr *bufmgr)
+{
+   return &bufmgr->border_color_pool;
 }

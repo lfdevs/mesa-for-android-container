@@ -139,9 +139,12 @@ instr_can_cse(const bi_instr *I)
                         return false;
         }
 
-        /* Similar refuse to CSE non-SSA sources */
+        /* Similar refuse to CSE non-SSA sources. We allow machine registers,
+         * since CSE runs before register allocation which means any registers
+         * encountered are preloaded and hence assumed constant.
+         */
         bi_foreach_src(I, s) {
-                if (I->src[s].reg || I->src[s].type == BI_INDEX_REGISTER)
+                if (I->src[s].reg)
                         return false;
         }
 

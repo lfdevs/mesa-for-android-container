@@ -41,6 +41,20 @@ algebraic_late = [
     (('fabs', ('fddy', b)), ('fabs', ('fddy_must_abs_mali', b))),
 ]
 
+# Handling all combinations of boolean and float sizes for b2f is nontrivial.
+# bcsel has the same problem in more generality; lower b2f to bcsel in NIR to
+# reuse the efficient implementations of bcsel. This includes special handling
+# to allow vectorization in places the hardware does not directly.
+#
+# Because this lowering must happen late, NIR won't squash inot in
+# automatically. Do so explicitly. (The more specific pattern must be first.)
+for bsz in [8, 16, 32]:
+    for fsz in [16, 32]:
+        algebraic_late += [
+                ((f'b2f{fsz}', ('inot', f'a@{bsz}')), (f'b{bsz}csel', a, 0.0, 1.0)),
+                ((f'b2f{fsz}', f'a@{bsz}'), (f'b{bsz}csel', a, 1.0, 0.0)),
+        ]
+
 
 def main():
     parser = argparse.ArgumentParser()

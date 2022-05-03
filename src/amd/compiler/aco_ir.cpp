@@ -150,6 +150,11 @@ init_program(Program* program, Stage stage, const struct radv_shader_info* info,
       program->dev.has_fast_fma32 = true;
    program->dev.has_mac_legacy32 = program->chip_class <= GFX7 || program->chip_class >= GFX10;
 
+   program->dev.fused_mad_mix = program->chip_class >= GFX10;
+   if (program->family == CHIP_VEGA12 || program->family == CHIP_VEGA20 ||
+       program->family == CHIP_ARCTURUS || program->family == CHIP_ALDEBARAN)
+      program->dev.fused_mad_mix = true;
+
    program->wgp_mode = wgp_mode;
 
    program->progress = CompilationProgress::after_isel;
@@ -383,10 +388,10 @@ convert_to_DPP(aco_ptr<Instruction>& instr, bool dpp8)
 }
 
 bool
-can_use_opsel(chip_class chip, aco_opcode op, int idx, bool high)
+can_use_opsel(chip_class chip, aco_opcode op, int idx)
 {
    /* opsel is only GFX9+ */
-   if ((high || idx == -1) && chip < GFX9)
+   if (chip < GFX9)
       return false;
 
    switch (op) {
@@ -480,7 +485,7 @@ instr_is_16bit(chip_class chip, aco_opcode op)
    // case aco_opcode::v_cvt_norm_i16_f16:
    // case aco_opcode::v_cvt_norm_u16_f16:
    /* on GFX10, all opsel instructions preserve the high bits */
-   default: return chip >= GFX10 && can_use_opsel(chip, op, -1, false);
+   default: return chip >= GFX10 && can_use_opsel(chip, op, -1);
    }
 }
 
@@ -571,6 +576,7 @@ needs_exec_mask(const Instruction* instr)
          return instr->reads_exec();
       case aco_opcode::p_spill:
       case aco_opcode::p_reload:
+      case aco_opcode::p_end_linear_vgpr:
       case aco_opcode::p_logical_start:
       case aco_opcode::p_logical_end:
       case aco_opcode::p_startpgm: return instr->reads_exec();

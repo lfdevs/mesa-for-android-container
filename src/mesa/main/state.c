@@ -289,6 +289,17 @@ update_program(struct gl_context *ctx)
       _mesa_reference_program(ctx, &ctx->ComputeProgram._Current, NULL);
    }
 
+   bool vp_changed = ctx->VertexProgram._Current != prevVP;
+   bool tep_changed = ctx->TessEvalProgram._Current != prevTEP;
+   bool gp_changed = ctx->GeometryProgram._Current != prevGP;
+   if (ctx->GeometryProgram._Current) {
+      ctx->LastVertexStageDirty |= gp_changed;
+   } else if (ctx->TessEvalProgram._Current) {
+      ctx->LastVertexStageDirty |= gp_changed | tep_changed;
+   } else {
+      ctx->LastVertexStageDirty |= gp_changed | tep_changed | vp_changed;
+   }
+
    /* Let the driver know what's happening:
     */
    if (ctx->FragmentProgram._Current != prevFP ||

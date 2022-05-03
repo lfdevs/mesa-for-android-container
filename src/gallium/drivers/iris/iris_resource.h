@@ -145,18 +145,6 @@ struct iris_resource {
       enum isl_aux_usage usage;
 
       /**
-       * A bitfield of ISL_AUX_* modes that might this resource might use.
-       *
-       * For example, a surface might use both CCS_E and CCS_D at times.
-       */
-      unsigned possible_usages;
-
-      /**
-       * Same as possible_usages, but only with modes supported for sampling.
-       */
-      unsigned sampler_usages;
-
-      /**
        * \brief Maps miptree slices to their current aux state.
        *
        * This two-dimensional array is indexed as [level][layer] and stores an
@@ -205,6 +193,12 @@ struct iris_surface_state {
     * This can be updated and re-uploaded if (e.g.) addresses need to change.
     */
    uint32_t *cpu;
+
+   /**
+    * A bitfield of ISL_AUX_USAGE_* modes that are present in the surface
+    * states.
+    */
+   unsigned aux_usages;
 
    /**
     * How many states are there?  (Each aux mode has its own state.)
@@ -278,7 +272,7 @@ struct iris_surface {
  */
 struct iris_transfer {
    struct threaded_transfer base;
-   struct pipe_debug_callback *dbg;
+   struct util_debug_callback *dbg;
    void *buffer;
    void *ptr;
 
@@ -345,14 +339,6 @@ void iris_init_screen_resource_functions(struct pipe_screen *pscreen);
 
 void iris_dirty_for_history(struct iris_context *ice,
                             struct iris_resource *res);
-uint32_t iris_flush_bits_for_history(struct iris_context *ice,
-                                     struct iris_resource *res);
-
-void iris_flush_and_dirty_for_history(struct iris_context *ice,
-                                      struct iris_batch *batch,
-                                      struct iris_resource *res,
-                                      uint32_t extra_flags,
-                                      const char *reason);
 
 unsigned iris_get_num_logical_layers(const struct iris_resource *res,
                                      unsigned level);

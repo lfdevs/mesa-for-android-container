@@ -24,12 +24,38 @@
 #ifndef __AGX_TILING_H
 #define __AGX_TILING_H
 
+#include "util/u_math.h"
+
 void agx_detile(void *tiled, void *linear,
                 unsigned width, unsigned bpp, unsigned linear_pitch,
-                unsigned sx, unsigned sy, unsigned smaxx, unsigned smaxy);
+                unsigned sx, unsigned sy, unsigned smaxx, unsigned smaxy, unsigned tile_shift);
 
 void agx_tile(void *tiled, void *linear,
          unsigned width, unsigned bpp, unsigned linear_pitch,
-         unsigned sx, unsigned sy, unsigned smaxx, unsigned smaxy);
+         unsigned sx, unsigned sy, unsigned smaxx, unsigned smaxy, unsigned tile_shift);
+
+/* Select effective tile size given texture dimensions */
+static inline unsigned
+agx_select_tile_shift(unsigned width, unsigned height, unsigned level, unsigned blocksize)
+{
+   /* Calculate effective width/height due to mipmapping */
+   width = u_minify(width, level);
+   height = u_minify(height, level);
+
+   /* Select the largest square power-of-two tile fitting in the image */
+   unsigned shift = util_logbase2_ceil(MIN3(width, height, 64));
+
+   /* Shrink based on block size */
+   if (blocksize > 4)
+      return MAX2(shift - 1, 0);
+   else
+      return shift;
+}
+
+static inline unsigned
+agx_select_tile_size(unsigned width, unsigned height, unsigned level, unsigned blocksize)
+{
+   return 1 << agx_select_tile_shift(width, height, level, blocksize);
+}
 
 #endif

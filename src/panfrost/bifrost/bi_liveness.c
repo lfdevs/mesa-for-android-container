@@ -69,7 +69,7 @@ liveness_block_update(bi_block *blk, unsigned temp_count)
         memcpy(live, blk->live_out, temp_count);
 
         bi_foreach_instr_in_block_rev(blk, ins)
-                bi_liveness_ins_update(live, (bi_instr *) ins, temp_count);
+                bi_liveness_ins_update(live, ins, temp_count);
 
         /* To figure out progress, diff live_in */
 
@@ -105,7 +105,7 @@ bi_compute_liveness(bi_context *ctx)
                         _mesa_hash_pointer,
                         _mesa_key_pointer_equal);
 
-        list_for_each_entry(bi_block, block, &ctx->blocks, link) {
+        bi_foreach_block(ctx, block) {
                 if (block->live_in)
                         ralloc_free(block->live_in);
 
@@ -119,7 +119,7 @@ bi_compute_liveness(bi_context *ctx)
         /* Initialize the work list with the exit block */
         struct set_entry *cur;
 
-        cur = _mesa_set_add(work_list, pan_exit_block(&ctx->blocks));
+        cur = _mesa_set_add(work_list, bi_exit_block(&ctx->blocks));
 
         /* Iterate the work list */
 

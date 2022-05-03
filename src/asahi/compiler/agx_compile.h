@@ -47,6 +47,11 @@ enum agx_push_type {
    /* RGBA blend constant (FP32) */
    AGX_PUSH_BLEND_CONST = 8,
 
+   /* Array of 16-bit (array_size - 1) for indexed array textures, used to
+    * lower access to indexed array textures
+    */
+   AGX_PUSH_ARRAY_SIZE_MINUS_1 = 9,
+
    /* Keep last */
    AGX_PUSH_NUM_TYPES
 };
@@ -211,7 +216,7 @@ static const nir_shader_compiler_options agx_nir_options = {
    .lower_insert_byte = true,
    .lower_insert_word = true,
    .lower_uniforms_to_ubo = true,
-   .lower_cs_local_index_from_id = true,
+   .lower_cs_local_index_to_id = true,
 
    .lower_doubles_options = nir_lower_dmod,
    .lower_int64_options = ~(nir_lower_iadd64 | nir_lower_imul_2x32_64),

@@ -172,6 +172,11 @@ struct qinst {
 
         /* If this is a a TLB Z write */
         bool is_tlb_z_write;
+
+        /* Position of this instruction in the program. Filled in during
+         * register allocation.
+         */
+        int32_t ip;
 };
 
 enum quniform_contents {
@@ -333,6 +338,14 @@ enum quniform_contents {
          * Current value of gl_ViewIndex for Multiview rendering.
          */
         QUNIFORM_VIEW_INDEX,
+
+        /**
+         * Inline uniform buffers
+         */
+         QUNIFORM_INLINE_UBO_0,
+         QUNIFORM_INLINE_UBO_1,
+         QUNIFORM_INLINE_UBO_2,
+         QUNIFORM_INLINE_UBO_3,
 };
 
 static inline uint32_t v3d_unit_data_create(uint32_t unit, uint32_t value)
@@ -569,6 +582,7 @@ enum v3d_compilation_result {
  */
 struct v3d_compiler {
         const struct v3d_device_info *devinfo;
+        uint32_t max_inline_uniform_buffers;
         struct ra_regs *regs;
         struct ra_class *reg_class_any[3];
         struct ra_class *reg_class_r5[3];
@@ -585,6 +599,14 @@ struct v3d_interp_input {
    struct qreg vp;
    struct qreg C;
    unsigned mode; /* interpolation mode */
+};
+
+struct v3d_ra_node_info {
+        struct {
+                uint32_t priority;
+                uint8_t class_bits;
+        } *info;
+        uint32_t alloc_count;
 };
 
 struct v3d_compile {
@@ -697,6 +719,11 @@ struct v3d_compile {
         bool disable_loop_unrolling;
         bool unrolled_any_loops;
 
+        /* Disables scheduling of general TMU loads (and unfiltered image load).
+         */
+        bool disable_general_tmu_sched;
+        bool has_general_tmu_load;
+
         /* Minimum number of threads we are willing to use to register allocate
          * a shader with the current compilation strategy. This only prevents
          * us from lowering the thread count to register allocate successfully,
@@ -710,7 +737,7 @@ struct v3d_compile {
          * strategies that can reduce register pressure and hopefully reduce or
          * eliminate TMU spills in the shader.
          */
-        bool tmu_spilling_allowed;
+        uint32_t max_tmu_spills;
 
         /* The UBO index and block used with the last unifa load, as well as the
          * current unifa offset *after* emitting that load. This is used to skip
@@ -720,6 +747,7 @@ struct v3d_compile {
         struct qblock *current_unifa_block;
         int32_t current_unifa_index;
         uint32_t current_unifa_offset;
+        bool current_unifa_is_ubo;
 
         /* State for whether we're executing on each channel currently.  0 if
          * yes, otherwise a block number + 1 that the channel jumped to.
@@ -766,13 +794,26 @@ struct v3d_compile {
         uint32_t spill_size;
         /* Shader-db stats */
         uint32_t spills, fills, loops;
+
+        /* Whether we are in the process of spilling registers for
+         * register allocation
+         */
+        bool spilling;
+
         /**
          * Register spilling's per-thread base address, shared between each
-         * spill/fill's addressing calculations.
+         * spill/fill's addressing calculations (also used for scratch
+         * access).
          */
         struct qreg spill_base;
+
         /* Bit vector of which temps may be spilled */
         BITSET_WORD *spillable;
+
+        /* Used during register allocation */
+        int thread_index;
+        struct v3d_ra_node_info nodes;
+        struct ra_graph *g;
 
         /**
          * Array of the VARYING_SLOT_* of all FS QFILE_VARY reads.
@@ -809,6 +850,11 @@ struct v3d_compile {
 
         struct qreg undef;
         uint32_t num_temps;
+        /* Number of temps in the program right before we spill a new temp. We
+         * use this to know which temps existed before a spill and which were
+         * added with the spill itself.
+         */
+        uint32_t spill_start_num_temps;
 
         struct vir_cursor cursor;
         struct list_head blocks;
@@ -852,9 +898,6 @@ struct v3d_compile {
 
         bool emitted_tlb_load;
         bool lock_scoreboard_on_first_thrsw;
-
-        /* Total number of spilled registers in the program */
-        uint32_t spill_count;
 
         enum v3d_compilation_result compilation_result;
 
@@ -1011,7 +1054,8 @@ vir_has_uniform(struct qinst *inst)
         return inst->uniform != ~0;
 }
 
-const struct v3d_compiler *v3d_compiler_init(const struct v3d_device_info *devinfo);
+const struct v3d_compiler *v3d_compiler_init(const struct v3d_device_info *devinfo,
+                                             uint32_t max_inline_uniform_buffers);
 void v3d_compiler_free(const struct v3d_compiler *compiler);
 void v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s);
 
@@ -1121,7 +1165,7 @@ void v3d40_vir_emit_image_load_store(struct v3d_compile *c,
 void v3d_vir_to_qpu(struct v3d_compile *c, struct qpu_reg *temp_registers);
 uint32_t v3d_qpu_schedule_instructions(struct v3d_compile *c);
 void qpu_validate(struct v3d_compile *c);
-struct qpu_reg *v3d_register_allocate(struct v3d_compile *c, bool *spilled);
+struct qpu_reg *v3d_register_allocate(struct v3d_compile *c);
 bool vir_init_reg_sets(struct v3d_compiler *compiler);
 
 int v3d_shaderdb_dump(struct v3d_compile *c, char **shaderdb_str);

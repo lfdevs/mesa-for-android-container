@@ -912,7 +912,7 @@ bool si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader
 static void si_shader_dump_disassembly(struct si_screen *screen,
                                        const struct si_shader_binary *binary,
                                        gl_shader_stage stage, unsigned wave_size,
-                                       struct pipe_debug_callback *debug, const char *name,
+                                       struct util_debug_callback *debug, const char *name,
                                        FILE *file)
 {
    struct ac_rtld_binary rtld_binary;
@@ -941,7 +941,7 @@ static void si_shader_dump_disassembly(struct si_screen *screen,
        * overhead, but on the plus side it simplifies
        * parsing of resulting logs.
        */
-      pipe_debug_message(debug, SHADER_INFO, "Shader Disassembly Begin");
+      util_debug_message(debug, SHADER_INFO, "Shader Disassembly Begin");
 
       uint64_t line = 0;
       while (line < nbytes) {
@@ -951,13 +951,13 @@ static void si_shader_dump_disassembly(struct si_screen *screen,
             count = nl - (disasm + line);
 
          if (count) {
-            pipe_debug_message(debug, SHADER_INFO, "%.*s", count, disasm + line);
+            util_debug_message(debug, SHADER_INFO, "%.*s", count, disasm + line);
          }
 
          line += count + 1;
       }
 
-      pipe_debug_message(debug, SHADER_INFO, "Shader Disassembly End");
+      util_debug_message(debug, SHADER_INFO, "Shader Disassembly End");
    }
 
    if (file) {
@@ -1025,7 +1025,7 @@ static void si_calculate_max_simd_waves(struct si_shader *shader)
 }
 
 void si_shader_dump_stats_for_shader_db(struct si_screen *screen, struct si_shader *shader,
-                                        struct pipe_debug_callback *debug)
+                                        struct util_debug_callback *debug)
 {
    const struct ac_shader_config *conf = &shader->config;
    static const char *stages[] = {"VS", "TCS", "TES", "GS", "PS", "CS"};
@@ -1034,7 +1034,7 @@ void si_shader_dump_stats_for_shader_db(struct si_screen *screen, struct si_shad
       si_shader_dump_disassembly(screen, &shader->binary, shader->selector->info.stage,
                                  shader->wave_size, debug, "main", NULL);
 
-   pipe_debug_message(debug, SHADER_INFO,
+   util_debug_message(debug, SHADER_INFO,
                       "Shader Stats: SGPRS: %d VGPRS: %d Code Size: %d "
                       "LDS: %d Scratch: %d Max Waves: %d Spilled SGPRs: %d "
                       "Spilled VGPRs: %d PrivMem VGPRs: %d DivergentLoop: %d, InlineUniforms: %d, "
@@ -1116,7 +1116,7 @@ const char *si_get_shader_name(const struct si_shader *shader)
 }
 
 void si_shader_dump(struct si_screen *sscreen, struct si_shader *shader,
-                    struct pipe_debug_callback *debug, FILE *file, bool check_debug_option)
+                    struct util_debug_callback *debug, FILE *file, bool check_debug_option)
 {
    gl_shader_stage stage = shader->selector->info.stage;
 
@@ -1498,7 +1498,7 @@ void si_update_shader_binary_info(struct si_shader *shader, nir_shader *nir)
 }
 
 bool si_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                       struct si_shader *shader, struct pipe_debug_callback *debug)
+                       struct si_shader *shader, struct util_debug_callback *debug)
 {
    struct si_shader_selector *sel = shader->selector;
    bool free_nir;
@@ -1636,7 +1636,7 @@ bool si_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compi
 static struct si_shader_part *
 si_get_shader_part(struct si_screen *sscreen, struct si_shader_part **list,
                    gl_shader_stage stage, bool prolog, union si_shader_part_key *key,
-                   struct ac_llvm_compiler *compiler, struct pipe_debug_callback *debug,
+                   struct ac_llvm_compiler *compiler, struct util_debug_callback *debug,
                    void (*build)(struct si_shader_context *, union si_shader_part_key *),
                    const char *name)
 {
@@ -1716,7 +1716,7 @@ out:
 }
 
 static bool si_get_vs_prolog(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                             struct si_shader *shader, struct pipe_debug_callback *debug,
+                             struct si_shader *shader, struct util_debug_callback *debug,
                              struct si_shader *main_part, const struct si_vs_prolog_bits *key)
 {
    struct si_shader_selector *vs = main_part->selector;
@@ -1740,7 +1740,7 @@ static bool si_get_vs_prolog(struct si_screen *sscreen, struct ac_llvm_compiler 
  * Select and compile (or reuse) vertex shader parts (prolog & epilog).
  */
 static bool si_shader_select_vs_parts(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                                      struct si_shader *shader, struct pipe_debug_callback *debug)
+                                      struct si_shader *shader, struct util_debug_callback *debug)
 {
    return si_get_vs_prolog(sscreen, compiler, shader, debug, shader, &shader->key.ge.part.vs.prolog);
 }
@@ -1749,7 +1749,7 @@ static bool si_shader_select_vs_parts(struct si_screen *sscreen, struct ac_llvm_
  * Select and compile (or reuse) TCS parts (epilog).
  */
 static bool si_shader_select_tcs_parts(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                                       struct si_shader *shader, struct pipe_debug_callback *debug)
+                                       struct si_shader *shader, struct util_debug_callback *debug)
 {
    if (sscreen->info.chip_class >= GFX9) {
       struct si_shader *ls_main_part = shader->key.ge.part.tcs.ls->main_shader_part_ls;
@@ -1777,7 +1777,7 @@ static bool si_shader_select_tcs_parts(struct si_screen *sscreen, struct ac_llvm
  * Select and compile (or reuse) GS parts (prolog).
  */
 static bool si_shader_select_gs_parts(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                                      struct si_shader *shader, struct pipe_debug_callback *debug)
+                                      struct si_shader *shader, struct util_debug_callback *debug)
 {
    if (sscreen->info.chip_class >= GFX9) {
       struct si_shader *es_main_part;
@@ -1960,7 +1960,7 @@ void si_get_ps_epilog_key(struct si_shader *shader, union si_shader_part_key *ke
  * Select and compile (or reuse) pixel shader parts (prolog & epilog).
  */
 static bool si_shader_select_ps_parts(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                                      struct si_shader *shader, struct pipe_debug_callback *debug)
+                                      struct si_shader *shader, struct util_debug_callback *debug)
 {
    union si_shader_part_key prolog_key;
    union si_shader_part_key epilog_key;
@@ -2072,7 +2072,7 @@ void si_fix_resource_usage(struct si_screen *sscreen, struct si_shader *shader)
 }
 
 bool si_create_shader_variant(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                              struct si_shader *shader, struct pipe_debug_callback *debug)
+                              struct si_shader *shader, struct util_debug_callback *debug)
 {
    struct si_shader_selector *sel = shader->selector;
    struct si_shader *mainp = *si_get_main_shader_part(sel, &shader->key);

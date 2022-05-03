@@ -87,7 +87,6 @@ lp_fs_linear_run(const struct lp_rast_state *state,
 
    struct lp_linear_sampler samp[LP_MAX_LINEAR_TEXTURES];
    struct lp_linear_interp interp[LP_MAX_LINEAR_INPUTS];
-   uint8_t constants[LP_MAX_LINEAR_CONSTANTS][4];
 
    const float w0 = a0[0][3];
    float oow = 1.0f/w0;
@@ -110,18 +109,35 @@ lp_fs_linear_run(const struct lp_rast_state *state,
 
    /* XXX: Per statechange:
     */
-   for (i = 0; i < nr_consts; i++) {
-      for (j = 0; j < 4; j++) {
-         float val = state->jit_context.constants[0][i*4+j];
+   if (variant->shader->base.type == PIPE_SHADER_IR_TGSI) {
+      uint8_t constants[LP_MAX_LINEAR_CONSTANTS][4];
+
+      for (i = 0; i < nr_consts; i++) {
+         for (j = 0; j < 4; j++) {
+            float val = state->jit_context.constants[0][i*4+j];
+            if (val < 0.0f || val > 1.0f) {
+               if (LP_DEBUG & DEBUG_LINEAR2)
+                  debug_printf("  -- const[%d] out of range %f\n", i, val);
+               goto fail;
+            }
+            constants[i][j] = (uint8_t)(val * 255.0f);
+         }
+      }
+      jit.constants = (const uint8_t (*)[4])constants;
+   } else {
+      uint8_t nir_constants[LP_MAX_LINEAR_CONSTANTS * 4];
+
+      for (i = 0; i < state->jit_context.num_constants[0]; i++){
+         float val = state->jit_context.constants[0][i];
          if (val < 0.0f || val > 1.0f) {
             if (LP_DEBUG & DEBUG_LINEAR2)
-               debug_printf("  -- const[%d] out of range\n", i);
+               debug_printf("  -- const[%d] out of range %f\n", i, val);
             goto fail;
          }
-         constants[i][j] = (uint8_t)(val * 255.0f);
+         nir_constants[i] = (uint8_t)(val * 255.0f);
       }
+      jit.constants = (const uint8_t (*)[4])nir_constants;
    }
-   jit.constants = (const uint8_t (*)[4])constants;
 
    /* We assume BGRA ordering */
    assert(variant->key.cbuf_format[0] == PIPE_FORMAT_B8G8R8X8_UNORM ||

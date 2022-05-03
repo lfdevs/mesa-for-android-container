@@ -77,7 +77,7 @@ nvc0_get_query_result(struct pipe_context *pipe, struct pipe_query *pq,
 static void
 nvc0_get_query_result_resource(struct pipe_context *pipe,
                                struct pipe_query *pq,
-                               bool wait,
+                               enum pipe_query_flags flags,
                                enum pipe_query_value_type result_type,
                                int index,
                                struct pipe_resource *resource,
@@ -88,7 +88,7 @@ nvc0_get_query_result_resource(struct pipe_context *pipe,
       assert(!"Unexpected lack of get_query_result_resource");
       return;
    }
-   q->funcs->get_query_result_resource(nvc0_context(pipe), q, wait, result_type,
+   q->funcs->get_query_result_resource(nvc0_context(pipe), q, flags, result_type,
                                        index, resource, offset);
 }
 

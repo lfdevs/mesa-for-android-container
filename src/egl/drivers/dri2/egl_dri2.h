@@ -58,6 +58,7 @@ struct zwp_linux_dmabuf_feedback_v1;
 
 #include <GL/gl.h>
 #include <GL/internal/dri_interface.h>
+#include "kopper_interface.h"
 
 #ifdef HAVE_DRM_PLATFORM
 #include <gbm_driint.h>
@@ -221,12 +222,12 @@ struct dri2_egl_display
    const __DRIimageDriverExtension *image_driver;
    const __DRIdri2Extension *dri2;
    const __DRIswrastExtension *swrast;
+   const __DRIkopperExtension *kopper;
    const __DRI2flushExtension *flush;
    const __DRI2flushControlExtension *flush_control;
    const __DRItexBufferExtension *tex_buffer;
    const __DRIimageExtension *image;
    const __DRIrobustnessExtension *robustness;
-   const __DRInoErrorExtension *no_error;
    const __DRI2configQueryExtension *config;
    const __DRI2fenceExtension *fence;
    const __DRI2bufferDamageExtension *buffer_damage;
@@ -365,6 +366,10 @@ struct dri2_egl_surface
 #ifdef HAVE_ANDROID_PLATFORM
    struct ANativeWindow *window;
    struct ANativeWindowBuffer *buffer;
+
+   /* in-fence associated with buffer, -1 once passed down to dri layer: */
+   int in_fence_fd;
+
    __DRIimage *dri_image_back;
    __DRIimage *dri_image_front;
 

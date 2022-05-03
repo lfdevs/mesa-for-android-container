@@ -476,8 +476,7 @@ value_numbering(Program* program)
 
       /* increment exec_id when entering nested control flow */
       if (block.kind & block_kind_branch || block.kind & block_kind_loop_preheader ||
-          block.kind & block_kind_break || block.kind & block_kind_continue ||
-          block.kind & block_kind_discard)
+          block.kind & block_kind_break || block.kind & block_kind_continue)
          ctx.exec_id++;
       else if (block.kind & block_kind_continue_or_break)
          ctx.exec_id += 2;

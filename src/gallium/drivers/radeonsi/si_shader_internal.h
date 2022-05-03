@@ -28,7 +28,7 @@
 #include "ac_shader_abi.h"
 #include "si_shader.h"
 
-struct pipe_debug_callback;
+struct util_debug_callback;
 
 struct si_shader_output_values {
    LLVMValueRef values[4];
@@ -196,7 +196,7 @@ bool gfx10_ngg_calculate_subgroup_info(struct si_shader *shader);
 /* si_shader_llvm.c */
 bool si_compile_llvm(struct si_screen *sscreen, struct si_shader_binary *binary,
                      struct ac_shader_config *conf, struct ac_llvm_compiler *compiler,
-                     struct ac_llvm_context *ac, struct pipe_debug_callback *debug,
+                     struct ac_llvm_context *ac, struct util_debug_callback *debug,
                      gl_shader_stage stage, const char *name, bool less_optimized);
 void si_llvm_context_init(struct si_shader_context *ctx, struct si_screen *sscreen,
                           struct ac_llvm_compiler *compiler, unsigned wave_size);
@@ -226,7 +226,7 @@ void si_build_wrapper_function(struct si_shader_context *ctx, LLVMValueRef *part
 bool si_llvm_translate_nir(struct si_shader_context *ctx, struct si_shader *shader,
                            struct nir_shader *nir, bool free_nir, bool ngg_cull_shader);
 bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-                            struct si_shader *shader, struct pipe_debug_callback *debug,
+                            struct si_shader *shader, struct util_debug_callback *debug,
                             struct nir_shader *nir, bool free_nir);
 
 /* si_shader_llvm_gs.c */

@@ -651,7 +651,7 @@ iris_get_query_result(struct pipe_context *ctx,
 static void
 iris_get_query_result_resource(struct pipe_context *ctx,
                                struct pipe_query *query,
-                               bool wait,
+                               enum pipe_query_flags flags,
                                enum pipe_query_value_type result_type,
                                int index,
                                struct pipe_resource *p_res,
@@ -699,17 +699,12 @@ iris_get_query_result_resource(struct pipe_context *ctx,
          batch->screen->vtbl.store_data_imm64(batch, dst_bo, offset, q->result);
       }
 
-      /* Make sure the result lands before they use bind the QBO elsewhere
-       * and use the result.
-       */
-      // XXX: Why?  i965 doesn't do this.
-      iris_emit_pipe_control_flush(batch,
-                                   "query: unknown QBO flushing hack",
-                                   PIPE_CONTROL_CS_STALL);
+      /* Make sure QBO is flushed before its result is used elsewhere. */
+      iris_dirty_for_history(ice, res);
       return;
    }
 
-   bool predicated = !wait && !q->stalled;
+   bool predicated = !(flags & PIPE_QUERY_WAIT) && !q->stalled;
 
    struct mi_builder b;
    mi_builder_init(&b, &batch->screen->devinfo, batch);

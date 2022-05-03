@@ -58,7 +58,15 @@ stw_framebuffer_from_hwnd_locked(HWND hwnd)
    for (fb = stw_dev->fb_head; fb != NULL; fb = fb->next)
       if (fb->hWnd == hwnd) {
          stw_framebuffer_lock(fb);
-         assert(fb->mutex.RecursionCount == 1);
+
+         /* When running with Zink, during the Vulkan surface creation
+          * it's possible that the underlying Vulkan driver will try to
+          * access the HWND/HDC we passed in (see stw_st_fill_private_loader_data()).
+          * Because we create the Vulkan surface while holding the framebuffer
+          * lock, when the driver starts to look up properties,
+          * we'd end up double locking when looking up the framebuffer.
+          */
+         assert(stw_dev->zink || fb->mutex.RecursionCount == 1);
          return fb;
       }
 

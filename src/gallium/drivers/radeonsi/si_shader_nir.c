@@ -177,139 +177,6 @@ static void si_late_optimize_16bit_samplers(struct si_screen *sscreen, nir_shade
    }
 }
 
-static int type_size_vec4(const struct glsl_type *type, bool bindless)
-{
-   return glsl_count_attribute_slots(type, false);
-}
-
-static void si_nir_lower_color(nir_shader *nir)
-{
-   nir_function_impl *entrypoint = nir_shader_get_entrypoint(nir);
-
-   nir_builder b;
-   nir_builder_init(&b, entrypoint);
-
-   nir_foreach_block (block, entrypoint) {
-      nir_foreach_instr_safe (instr, block) {
-         if (instr->type != nir_instr_type_intrinsic)
-            continue;
-
-         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-
-         if (intrin->intrinsic != nir_intrinsic_load_deref)
-            continue;
-
-         nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
-         if (!nir_deref_mode_is(deref, nir_var_shader_in))
-            continue;
-
-         b.cursor = nir_before_instr(instr);
-         nir_variable *var = nir_deref_instr_get_variable(deref);
-         nir_ssa_def *def;
-
-         if (var->data.location == VARYING_SLOT_COL0) {
-            def = nir_load_color0(&b);
-            nir->info.fs.color0_interp = var->data.interpolation;
-            nir->info.fs.color0_sample = var->data.sample;
-            nir->info.fs.color0_centroid = var->data.centroid;
-         } else if (var->data.location == VARYING_SLOT_COL1) {
-            def = nir_load_color1(&b);
-            nir->info.fs.color1_interp = var->data.interpolation;
-            nir->info.fs.color1_sample = var->data.sample;
-            nir->info.fs.color1_centroid = var->data.centroid;
-         } else {
-            continue;
-         }
-
-         nir_ssa_def_rewrite_uses(&intrin->dest.ssa, def);
-         nir_instr_remove(instr);
-      }
-   }
-}
-
-static void si_lower_io(struct nir_shader *nir)
-{
-   /* HW supports indirect indexing for: | Enabled in driver
-    * -------------------------------------------------------
-    * TCS inputs                         | Yes
-    * TES inputs                         | Yes
-    * GS inputs                          | No
-    * -------------------------------------------------------
-    * VS outputs before TCS              | No
-    * TCS outputs                        | Yes
-    * VS/TES outputs before GS           | No
-    */
-   bool has_indirect_inputs = nir->info.stage == MESA_SHADER_TESS_CTRL ||
-                              nir->info.stage == MESA_SHADER_TESS_EVAL;
-   bool has_indirect_outputs = nir->info.stage == MESA_SHADER_TESS_CTRL;
-
-   if (!has_indirect_inputs || !has_indirect_outputs) {
-      NIR_PASS_V(nir, nir_lower_io_to_temporaries, nir_shader_get_entrypoint(nir),
-                 !has_indirect_outputs, !has_indirect_inputs);
-
-      /* Since we're doing nir_lower_io_to_temporaries late, we need
-       * to lower all the copy_deref's introduced by
-       * lower_io_to_temporaries before calling nir_lower_io.
-       */
-      NIR_PASS_V(nir, nir_split_var_copies);
-      NIR_PASS_V(nir, nir_lower_var_copies);
-      NIR_PASS_V(nir, nir_lower_global_vars_to_local);
-   }
-
-   /* The vectorization must be done after nir_lower_io_to_temporaries, because
-    * nir_lower_io_to_temporaries after vectorization breaks:
-    *    piglit/bin/arb_gpu_shader5-interpolateAtOffset -auto -fbo
-    * TODO: It's probably a bug in nir_lower_io_to_temporaries.
-    *
-    * The vectorizer can only vectorize this:
-    *    op src0.x, src1.x
-    *    op src0.y, src1.y
-    *
-    * So it requires that inputs are already vectors and it must be the same
-    * vector between instructions. The vectorizer doesn't create vectors
-    * from independent scalar sources, so vectorize inputs.
-    *
-    * TODO: The pass fails this for VS: assert(b.shader->info.stage != MESA_SHADER_VERTEX);
-    */
-   if (nir->info.stage != MESA_SHADER_VERTEX)
-      NIR_PASS_V(nir, nir_lower_io_to_vector, nir_var_shader_in);
-
-   /* Vectorize outputs, so that we don't split vectors before storing outputs. */
-   /* TODO: The pass fails an assertion for other shader stages. */
-   if (nir->info.stage == MESA_SHADER_TESS_CTRL ||
-       nir->info.stage == MESA_SHADER_FRAGMENT)
-      NIR_PASS_V(nir, nir_lower_io_to_vector, nir_var_shader_out);
-
-   if (nir->info.stage == MESA_SHADER_FRAGMENT)
-      si_nir_lower_color(nir);
-
-   NIR_PASS_V(nir, nir_lower_io, nir_var_shader_out | nir_var_shader_in,
-              type_size_vec4, nir_lower_io_lower_64bit_to_32);
-   nir->info.io_lowered = true;
-
-   /* This pass needs actual constants */
-   NIR_PASS_V(nir, nir_opt_constant_folding);
-   NIR_PASS_V(nir, nir_io_add_const_offset_to_base, nir_var_shader_in |
-                                                    nir_var_shader_out);
-
-   /* Remove dead derefs, so that nir_validate doesn't fail. */
-   NIR_PASS_V(nir, nir_opt_dce);
-
-   /* Remove input and output nir_variables, because we don't need them
-    * anymore. Also remove uniforms, because those should have been lowered
-    * to UBOs already.
-    */
-   unsigned modes = nir_var_shader_in | nir_var_shader_out | nir_var_uniform;
-   nir_foreach_variable_with_modes_safe(var, nir, modes) {
-      if (var->data.mode == nir_var_uniform &&
-          (glsl_type_get_image_count(var->type) ||
-           glsl_type_get_sampler_count(var->type)))
-         continue;
-
-      exec_node_remove(&var->node);
-   }
-}
-
 static bool
 lower_intrinsic_filter(const nir_instr *instr, const void *dummy)
 {
@@ -430,7 +297,18 @@ char *si_finalize_nir(struct pipe_screen *screen, void *nirptr)
    struct si_screen *sscreen = (struct si_screen *)screen;
    struct nir_shader *nir = (struct nir_shader *)nirptr;
 
-   si_lower_io(nir);
+   nir_lower_io_passes(nir, NULL);
+
+   /* Remove dead derefs, so that we can remove uniforms. */
+   NIR_PASS_V(nir, nir_opt_dce);
+
+   /* Remove uniforms because those should have been lowered to UBOs already. */
+   nir_foreach_variable_with_modes_safe(var, nir, nir_var_uniform) {
+      if (!glsl_type_get_image_count(var->type) &&
+          !glsl_type_get_sampler_count(var->type))
+         exec_node_remove(&var->node);
+   }
+
    si_lower_nir(sscreen, nir);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 

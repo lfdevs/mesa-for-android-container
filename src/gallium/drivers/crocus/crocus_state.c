@@ -2745,6 +2745,10 @@ crocus_create_sampler_view(struct pipe_context *ctx,
    if (tmpl->target != PIPE_BUFFER) {
       isv->view.base_level = tmpl->u.tex.first_level;
       isv->view.levels = tmpl->u.tex.last_level - tmpl->u.tex.first_level + 1;
+
+      /* Hardware older than skylake ignores this value */
+      assert(tex->target != PIPE_TEXTURE_3D || !tmpl->u.tex.first_layer);
+
       // XXX: do I need to port f9fd0cf4790cb2a530e75d1a2206dbb9d8af7cb2?
       isv->view.base_array_layer = tmpl->u.tex.first_layer;
       isv->view.array_len =
@@ -5967,7 +5971,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
          float vp_ymin = viewport_extent(state, 1, -1.0f);
          float vp_ymax = viewport_extent(state, 1,  1.0f);
 #endif
-         intel_calculate_guardband_size(cso_fb->width, cso_fb->height,
+         intel_calculate_guardband_size(0, cso_fb->width, 0, cso_fb->height,
                                         state->scale[0], state->scale[1],
                                         state->translate[0], state->translate[1],
                                         &gb_xmin, &gb_xmax, &gb_ymin, &gb_ymax);

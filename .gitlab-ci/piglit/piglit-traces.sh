@@ -188,6 +188,13 @@ fi
 
 ci-fairy minio login $MINIO_ARGS --token-file "${CI_JOB_JWT_FILE}"
 
+# The replayer doesn't do any size or checksum verification for the traces in
+# the replayer db, so if we had to restart the system due to intermittent device
+# errors (or tried to cache replayer-db between runs, which would be nice to
+# have), you could get a corrupted local trace that would spuriously fail the
+# run.
+rm -rf replayer-db
+
 eval $RUN_CMD
 
 if [ $? -ne 0 ]; then

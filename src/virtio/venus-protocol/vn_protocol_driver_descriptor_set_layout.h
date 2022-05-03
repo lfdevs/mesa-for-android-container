@@ -385,6 +385,8 @@ vn_decode_VkDescriptorSetLayoutSupport_pnext(struct vn_cs_decoder *dec, const vo
         assert(pnext);
         if (pnext->sType == stype)
             break;
+
+        pnext = pnext->pNext;
     }
 
     switch ((int32_t)pnext->sType) {

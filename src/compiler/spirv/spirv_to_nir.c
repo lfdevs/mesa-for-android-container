@@ -433,7 +433,7 @@ vtn_get_sampled_image(struct vtn_builder *b, uint32_t value_id)
    return si;
 }
 
-static const char *
+const char *
 vtn_string_literal(struct vtn_builder *b, const uint32_t *words,
                    unsigned word_count, unsigned *words_used)
 {
@@ -681,6 +681,7 @@ vtn_handle_decoration(struct vtn_builder *b, SpvOp opcode,
          unreachable("Invalid decoration opcode");
       }
       dec->decoration = *(w++);
+      dec->num_operands = w_end - w;
       dec->operands = w;
 
       /* Link into the list */
@@ -1115,7 +1116,6 @@ struct_member_decoration_cb(struct vtn_builder *b,
    case SpvDecorationGLSLShared:
    case SpvDecorationGLSLPacked:
    case SpvDecorationInvariant:
-   case SpvDecorationRestrict:
    case SpvDecorationAliased:
    case SpvDecorationConstant:
    case SpvDecorationIndex:
@@ -1127,6 +1127,14 @@ struct_member_decoration_cb(struct vtn_builder *b,
    case SpvDecorationCPacked:
       vtn_warn("Decoration not allowed on struct members: %s",
                spirv_decoration_to_string(dec->decoration));
+      break;
+
+   case SpvDecorationRestrict:
+      /* While "Restrict" is invalid for struct members, glslang incorrectly
+       * generates it and it ends up hiding actual driver issues in a wall of
+       * spam from deqp-vk.  Return it to the above block once the issue is
+       * resolved.  https://github.com/KhronosGroup/glslang/issues/703
+       */
       break;
 
    case SpvDecorationXfbBuffer:
@@ -2456,6 +2464,9 @@ vtn_mem_semantics_to_nir_var_modes(struct vtn_builder *b,
       modes |= nir_var_mem_global;
    if (semantics & SpvMemorySemanticsOutputMemoryMask) {
       modes |= nir_var_shader_out;
+
+      if (b->shader->info.stage == MESA_SHADER_TASK)
+         modes |= nir_var_mem_task_payload;
    }
 
    return modes;
@@ -4479,6 +4490,8 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
          if (!b->options->create_library)
             vtn_warn("Unsupported SPIR-V capability: %s",
                      spirv_capability_to_string(cap));
+         spv_check_supported(linkage, cap);
+         vtn_warn("The SPIR-V Linkage capability is not fully supported");
          break;
 
       case SpvCapabilitySparseResidency:
@@ -5604,13 +5617,27 @@ vtn_handle_write_packed_primitive_indices(struct vtn_builder *b, SpvOp opcode,
       }
    }
 
-   /* TODO(mesh): It may be the case that the variable is not present in the
+   /* It may be the case that the variable is not present in the
     * entry point interface list.
     *
     * See https://github.com/KhronosGroup/SPIRV-Registry/issues/104.
     */
-   vtn_fail_if(indices == NULL,
-               "Missing output variable decorated with PrimitiveIndices builtin.");
+
+   if (!indices) {
+      unsigned vertices_per_prim =
+         num_mesh_vertices_per_primitive(b->shader->info.mesh.primitive_type);
+      unsigned max_prim_indices =
+         vertices_per_prim * b->shader->info.mesh.max_primitives_out;
+      const struct glsl_type *t =
+         glsl_array_type(glsl_uint_type(), max_prim_indices, 0);
+      nir_variable *var =
+         nir_variable_create(b->shader, nir_var_shader_out, t,
+                             "gl_PrimitiveIndicesNV");
+
+      var->data.location = VARYING_SLOT_PRIMITIVE_INDICES;
+      var->data.interpolation = INTERP_MODE_NONE;
+      indices = nir_build_deref_var(&b->nb, var);
+   }
 
    nir_ssa_def *offset = vtn_get_nir_ssa(b, w[1]);
    nir_ssa_def *packed = vtn_get_nir_ssa(b, w[2]);
@@ -5619,7 +5646,7 @@ vtn_handle_write_packed_primitive_indices(struct vtn_builder *b, SpvOp opcode,
       nir_deref_instr *offset_deref =
          nir_build_deref_array(&b->nb, indices,
                                nir_iadd_imm(&b->nb, offset, i));
-      nir_ssa_def *val = nir_u2u(&b->nb, nir_channel(&b->nb, unpacked, i), 32);
+      nir_ssa_def *val = nir_u2u32(&b->nb, nir_channel(&b->nb, unpacked, i));
 
       nir_store_deref(&b->nb, offset_deref, val, 0x1);
    }
@@ -5692,7 +5719,8 @@ ray_query_load_intrinsic_create(struct vtn_builder *b, SpvOp opcode,
                        nir_rq_load(&b->nb,
                                    glsl_get_vector_elements(value.glsl_type),
                                    glsl_get_bit_size(value.glsl_type),
-                                   src0, src1));
+                                   src0, src1,
+                                   .base = value.nir_value));
    }
 }
 

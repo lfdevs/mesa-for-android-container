@@ -46,57 +46,14 @@
 #include <directx/d3d12.h>
 #include <dxguids/dxguids.h>
 
-#include <dxcapi.h>
-#include <wrl/client.h>
-
 extern "C" {
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_point_sprite.h"
 }
 
-using Microsoft::WRL::ComPtr;
-
-struct d3d12_validation_tools
-{
-   d3d12_validation_tools();
-
-   bool validate_and_sign(struct blob *dxil);
-
-   void disassemble(struct blob *dxil);
-
-   void load_dxil_dll();
-
-   struct HModule {
-      HModule();
-      ~HModule();
-
-      bool load(LPCSTR file_name);
-      operator util_dl_library *() const;
-   private:
-      util_dl_library *module;
-   };
-
-   HModule dxil_module;
-   HModule dxc_compiler_module;
-   ComPtr<IDxcCompiler> compiler;
-   ComPtr<IDxcValidator> validator;
-   ComPtr<IDxcLibrary> library;
-};
-
-struct d3d12_validation_tools *d3d12_validator_create()
-{
-   d3d12_validation_tools *tools = new d3d12_validation_tools();
-   if (tools->validator)
-      return tools;
-   delete tools;
-   return nullptr;
-}
-
-void d3d12_validator_destroy(struct d3d12_validation_tools *validator)
-{
-   delete validator;
-}
-
+#ifdef _WIN32
+#include "dxil_validator.h"
+#endif
 
 const void *
 d3d12_get_compiler_options(struct pipe_screen *screen,
@@ -104,7 +61,7 @@ d3d12_get_compiler_options(struct pipe_screen *screen,
                            enum pipe_shader_type shader)
 {
    assert(ir == PIPE_SHADER_IR_NIR);
-   return dxil_get_nir_compiler_options();
+   return &d3d12_screen(screen)->nir_options;
 }
 
 static uint32_t
@@ -165,7 +122,7 @@ compile_nir(struct d3d12_context *ctx, struct d3d12_shader_selector *sel,
 
    if (key->last_vertex_processing_stage) {
       if (key->invert_depth)
-         NIR_PASS_V(nir, d3d12_nir_invert_depth);
+         NIR_PASS_V(nir, d3d12_nir_invert_depth, key->invert_depth);
       NIR_PASS_V(nir, nir_lower_clip_halfz);
       NIR_PASS_V(nir, d3d12_lower_yflip);
    }
@@ -176,6 +133,7 @@ compile_nir(struct d3d12_context *ctx, struct d3d12_shader_selector *sel,
    NIR_PASS_V(nir, dxil_nir_lower_bool_input);
    NIR_PASS_V(nir, dxil_nir_lower_loads_stores_to_dxil);
    NIR_PASS_V(nir, dxil_nir_lower_atomics_to_dxil);
+   NIR_PASS_V(nir, dxil_nir_lower_double_math);
 
    if (key->fs.multisample_disabled)
       NIR_PASS_V(nir, d3d12_disable_multisampling);
@@ -226,13 +184,34 @@ compile_nir(struct d3d12_context *ctx, struct d3d12_shader_selector *sel,
          shader->cb_bindings[shader->num_cb_bindings++].binding = i;
       }
    }
-   if (ctx->validation_tools) {
-      ctx->validation_tools->validate_and_sign(&tmp);
+
+#ifdef _WIN32
+   if (ctx->dxil_validator) {
+      if (!(d3d12_debug & D3D12_DEBUG_EXPERIMENTAL)) {
+         char *err;
+         if (!dxil_validate_module(ctx->dxil_validator, tmp.data,
+                                   tmp.size, &err) && err) {
+            debug_printf(
+               "== VALIDATION ERROR =============================================\n"
+               "%s\n"
+               "== END ==========================================================\n",
+               err);
+            ralloc_free(err);
+         }
+      }
 
       if (d3d12_debug & D3D12_DEBUG_DISASS) {
-         ctx->validation_tools->disassemble(&tmp);
+         char *str = dxil_disasm_module(ctx->dxil_validator, tmp.data,
+                                        tmp.size);
+         fprintf(stderr,
+                 "== BEGIN SHADER ============================================\n"
+                 "%s\n"
+                 "== END SHADER ==============================================\n",
+               str);
+         ralloc_free(str);
       }
    }
+#endif
 
    blob_finish_get_buffer(&tmp, &shader->bytecode, &shader->bytecode_length);
 
@@ -284,12 +263,17 @@ missing_dual_src_outputs(struct d3d12_context *ctx)
                   continue;
 
                nir_variable *var = nir_intrinsic_get_var(intr, 0);
-               if (var->data.mode != nir_var_shader_out ||
-                   (var->data.location != FRAG_RESULT_COLOR &&
-                    var->data.location != FRAG_RESULT_DATA0))
+               if (var->data.mode != nir_var_shader_out)
                   continue;
 
-               indices_seen |= 1u << var->data.index;
+               unsigned index = var->data.index;
+               if (var->data.location > FRAG_RESULT_DATA0)
+                  index = var->data.location - FRAG_RESULT_DATA0;
+               else if (var->data.location != FRAG_RESULT_COLOR &&
+                        var->data.location != FRAG_RESULT_DATA0)
+                  continue;
+
+               indices_seen |= 1u << index;
                if ((indices_seen & 3) == 3)
                   return 0;
             }
@@ -474,7 +458,10 @@ has_flat_varyings(struct d3d12_context *ctx)
 
    nir_foreach_variable_with_modes(input, fs->current->nir,
                                    nir_var_shader_in) {
-      if (input->data.interpolation == INTERP_MODE_FLAT)
+      if (input->data.interpolation == INTERP_MODE_FLAT &&
+          /* Disregard sysvals */
+          (input->data.location >= VARYING_SLOT_VAR0 ||
+             input->data.location <= VARYING_SLOT_TEX7))
          return true;
    }
 
@@ -531,6 +518,9 @@ create_varying_from_info(nir_shader *nir, struct d3d12_varying_info *info,
    if (patch)
       var->data.location += VARYING_SLOT_PATCH0;
 
+   if (mode == nir_var_shader_out)
+      NIR_PASS_V(nir, d3d12_write_0_to_new_varying, var);
+
    return var;
 }
 
@@ -558,7 +548,15 @@ fill_varyings(struct d3d12_varying_info *info, nir_shader *s,
 
       if (!(mask & slot_bit))
          continue;
-      info->slots[slot].types[var->data.location_frac] = var->type;
+
+      const struct glsl_type *type = var->type;
+      if ((s->info.stage == MESA_SHADER_GEOMETRY ||
+           s->info.stage == MESA_SHADER_TESS_CTRL) &&
+          (modes & nir_var_shader_in) &&
+          glsl_type_is_array(type))
+         type = glsl_get_array_element(type);
+      info->slots[slot].types[var->data.location_frac] = type;
+
       info->slots[slot].patch = var->data.patch;
       auto& var_slot = info->slots[slot].vars[var->data.location_frac];
       var_slot.driver_location = var->data.driver_location;
@@ -803,7 +801,7 @@ d3d12_fill_shader_key(struct d3d12_selection_context *sel_ctx,
       if (stage == PIPE_SHADER_FRAGMENT || stage == PIPE_SHADER_GEOMETRY)
          system_out_values |= VARYING_BIT_POS;
       if (stage == PIPE_SHADER_FRAGMENT)
-         system_out_values |= VARYING_BIT_PSIZ;
+         system_out_values |= VARYING_BIT_PSIZ | VARYING_BIT_VIEWPORT;
       uint64_t mask = prev->current->nir->info.outputs_written & ~system_out_values;
       fill_varyings(&key->required_varying_inputs, prev->current->nir,
                     nir_var_shader_out, mask, false);
@@ -1091,6 +1089,7 @@ select_shader_variant(struct d3d12_selection_context *sel_ctx, d3d12_shader_sele
    /* Add the needed in and outputs, and re-sort */
    if (prev) {
       uint64_t mask = key.required_varying_inputs.mask & ~new_nir_variant->info.inputs_read;
+      new_nir_variant->info.inputs_read |= mask;
       while (mask) {
          int slot = u_bit_scan64(&mask);
          create_varyings_from_info(new_nir_variant, &key.required_varying_inputs, slot, nir_var_shader_in, false);
@@ -1098,6 +1097,7 @@ select_shader_variant(struct d3d12_selection_context *sel_ctx, d3d12_shader_sele
 
       if (sel->stage == PIPE_SHADER_TESS_EVAL) {
          uint32_t patch_mask = (uint32_t)key.ds.required_patch_inputs.mask & ~new_nir_variant->info.patch_inputs_read;
+         new_nir_variant->info.patch_inputs_read |= patch_mask;
          while (patch_mask) {
             int slot = u_bit_scan(&patch_mask);
             create_varyings_from_info(new_nir_variant, &key.ds.required_patch_inputs, slot, nir_var_shader_in, true);
@@ -1110,6 +1110,7 @@ select_shader_variant(struct d3d12_selection_context *sel_ctx, d3d12_shader_sele
 
    if (next) {
       uint64_t mask = key.required_varying_outputs.mask & ~new_nir_variant->info.outputs_written;
+      new_nir_variant->info.outputs_written |= mask;
       while (mask) {
          int slot = u_bit_scan64(&mask);
          create_varyings_from_info(new_nir_variant, &key.required_varying_outputs, slot, nir_var_shader_out, false);
@@ -1117,6 +1118,7 @@ select_shader_variant(struct d3d12_selection_context *sel_ctx, d3d12_shader_sele
 
       if (sel->stage == PIPE_SHADER_TESS_CTRL) {
          uint32_t patch_mask = (uint32_t)key.hs.required_patch_outputs.mask & ~new_nir_variant->info.patch_outputs_written;
+         new_nir_variant->info.patch_outputs_written |= patch_mask;
          while (patch_mask) {
             int slot = u_bit_scan(&patch_mask);
             create_varyings_from_info(new_nir_variant, &key.ds.required_patch_inputs, slot, nir_var_shader_out, true);
@@ -1322,11 +1324,11 @@ d3d12_create_shader(struct d3d12_context *ctx,
    d3d12_shader_selector *next = get_next_shader(ctx, sel->stage);
 
    uint64_t in_mask = nir->info.stage == MESA_SHADER_VERTEX ?
-                         0 : VARYING_BIT_PRIMITIVE_ID;
+                         0 : (VARYING_BIT_PRIMITIVE_ID | VARYING_BIT_VIEWPORT);
 
    uint64_t out_mask = nir->info.stage == MESA_SHADER_FRAGMENT ?
                           (1ull << FRAG_RESULT_STENCIL) | (1ull << FRAG_RESULT_SAMPLE_MASK) :
-                          VARYING_BIT_PRIMITIVE_ID;
+                          (VARYING_BIT_PRIMITIVE_ID | VARYING_BIT_VIEWPORT);
 
    d3d12_fix_io_uint_type(nir, in_mask, out_mask);
    NIR_PASS_V(nir, dxil_nir_split_clip_cull_distance);
@@ -1442,184 +1444,4 @@ d3d12_shader_free(struct d3d12_shader_selector *sel)
    }
    ralloc_free(sel->initial);
    ralloc_free(sel);
-}
-
-#ifdef _WIN32
-// Used to get path to self
-extern "C" extern IMAGE_DOS_HEADER __ImageBase;
-#endif
-
-void d3d12_validation_tools::load_dxil_dll()
-{
-   if (!dxil_module.load(UTIL_DL_PREFIX "dxil" UTIL_DL_EXT)) {
-#ifdef _WIN32
-      char selfPath[MAX_PATH] = "";
-      uint32_t pathSize = GetModuleFileNameA((HINSTANCE)&__ImageBase, selfPath, sizeof(selfPath));
-      if (pathSize == 0 || pathSize == sizeof(selfPath)) {
-         debug_printf("D3D12: Unable to get path to self");
-         return;
-      }
-
-      auto lastSlash = strrchr(selfPath, '\\');
-      if (!lastSlash) {
-         debug_printf("D3D12: Unable to get path to self");
-         return;
-      }
-
-      *(lastSlash + 1) = '\0';
-      if (strcat_s(selfPath, "dxil.dll") != 0) {
-         debug_printf("D3D12: Unable to get path to dxil.dll next to self");
-         return;
-      }
-
-      dxil_module.load(selfPath);
-#endif
-   }
-}
-
-d3d12_validation_tools::d3d12_validation_tools()
-{
-   load_dxil_dll();
-   DxcCreateInstanceProc dxil_create_func = (DxcCreateInstanceProc)util_dl_get_proc_address(dxil_module, "DxcCreateInstance");
-
-   if (dxil_create_func) {
-      HRESULT hr = dxil_create_func(CLSID_DxcValidator,  IID_PPV_ARGS(&validator));
-      if (FAILED(hr)) {
-         debug_printf("D3D12: Unable to create validator\n");
-      }
-   }
-#ifdef _WIN32
-   else if (!(d3d12_debug & D3D12_DEBUG_EXPERIMENTAL)) {
-      debug_printf("D3D12: Unable to load DXIL.dll\n");
-   }
-#endif
-
-   DxcCreateInstanceProc compiler_create_func  = nullptr;
-   if(dxc_compiler_module.load("dxcompiler.dll"))
-      compiler_create_func = (DxcCreateInstanceProc)util_dl_get_proc_address(dxc_compiler_module, "DxcCreateInstance");
-
-   if (compiler_create_func) {
-      HRESULT hr = compiler_create_func(CLSID_DxcLibrary, IID_PPV_ARGS(&library));
-      if (FAILED(hr)) {
-         debug_printf("D3D12: Unable to create library instance: %x\n", hr);
-      }
-
-      if (d3d12_debug & D3D12_DEBUG_DISASS) {
-         hr = compiler_create_func(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
-         if (FAILED(hr)) {
-            debug_printf("D3D12: Unable to create compiler instance\n");
-         }
-      }
-   } else if (d3d12_debug & D3D12_DEBUG_DISASS) {
-      debug_printf("D3D12: Disassembly requested but compiler couldn't be loaded\n");
-   }
-}
-
-d3d12_validation_tools::HModule::HModule():
-   module(0)
-{
-}
-
-d3d12_validation_tools::HModule::~HModule()
-{
-   if (module)
-      util_dl_close(module);
-}
-
-inline
-d3d12_validation_tools::HModule::operator util_dl_library * () const
-{
-   return module;
-}
-
-bool
-d3d12_validation_tools::HModule::load(LPCSTR file_name)
-{
-   module = util_dl_open(file_name);
-   return module != nullptr;
-}
-
-
-class ShaderBlob : public IDxcBlob {
-public:
-   ShaderBlob(blob* data) : m_data(data) {}
-
-   LPVOID STDMETHODCALLTYPE GetBufferPointer(void) override { return m_data->data; }
-
-   SIZE_T STDMETHODCALLTYPE GetBufferSize() override { return m_data->size; }
-
-   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void**) override { return E_NOINTERFACE; }
-
-   ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
-
-   ULONG STDMETHODCALLTYPE Release() override { return 0; }
-
-   blob* m_data;
-};
-
-bool d3d12_validation_tools::validate_and_sign(struct blob *dxil)
-{
-   ShaderBlob source(dxil);
-
-   ComPtr<IDxcOperationResult> result;
-
-   validator->Validate(&source, DxcValidatorFlags_InPlaceEdit, &result);
-   HRESULT validationStatus;
-   result->GetStatus(&validationStatus);
-   if (FAILED(validationStatus)) {
-      if (!library) {
-         debug_printf("D3D12: validation failed, but lacking "
-                      "IDxcLibrary for proper diagnostics.\n");
-         return false;
-      }
-
-      ComPtr<IDxcBlobEncoding> printBlob, printBlobUtf8;
-      result->GetErrorBuffer(&printBlob);
-      library->GetBlobAsUtf8(printBlob.Get(), printBlobUtf8.GetAddressOf());
-
-      char *errorString;
-      if (printBlobUtf8) {
-         errorString = reinterpret_cast<char*>(printBlobUtf8->GetBufferPointer());
-
-         errorString[printBlobUtf8->GetBufferSize() - 1] = 0;
-         debug_printf("== VALIDATION ERROR =============================================\n%s\n"
-                     "== END ==========================================================\n",
-                     errorString);
-      }
-
-      return false;
-   }
-   return true;
-
-}
-
-void d3d12_validation_tools::disassemble(struct blob *dxil)
-{
-   if (!compiler) {
-      fprintf(stderr, "D3D12: No Disassembler\n");
-      return;
-   }
-   ShaderBlob source(dxil);
-   IDxcBlobEncoding* pDisassembly = nullptr;
-
-   if (FAILED(compiler->Disassemble(&source, &pDisassembly))) {
-      fprintf(stderr, "D3D12: Disassembler failed\n");
-      return;
-   }
-
-   ComPtr<IDxcBlobEncoding> dissassably(pDisassembly);
-   ComPtr<IDxcBlobEncoding> blobUtf8;
-   library->GetBlobAsUtf8(pDisassembly, blobUtf8.GetAddressOf());
-   if (!blobUtf8) {
-      fprintf(stderr, "D3D12: Unable to get utf8 encoding\n");
-      return;
-   }
-
-   char *disassembly = reinterpret_cast<char*>(blobUtf8->GetBufferPointer());
-   disassembly[blobUtf8->GetBufferSize() - 1] = 0;
-
-   fprintf(stderr, "== BEGIN SHADER ============================================\n"
-           "%s\n"
-           "== END SHADER ==============================================\n",
-           disassembly);
 }

@@ -65,6 +65,7 @@ static bool
 bi_has_skip_bit(enum bi_opcode op)
 {
         switch (op) {
+        case BI_OPCODE_TEX_SINGLE:
         case BI_OPCODE_TEXC:
         case BI_OPCODE_TEXS_2D_F16:
         case BI_OPCODE_TEXS_2D_F32:
@@ -94,6 +95,9 @@ bi_instr_uses_helpers(bi_instr *I)
         case BI_OPCODE_VAR_TEX_F16:
         case BI_OPCODE_VAR_TEX_F32:
                 return !I->lod_mode; /* set for zero, clear for computed */
+        case BI_OPCODE_TEX_SINGLE:
+                return (I->va_lod_mode == BI_VA_LOD_MODE_COMPUTED_LOD) ||
+                       (I->va_lod_mode == BI_VA_LOD_MODE_COMPUTED_BIAS);
         case BI_OPCODE_CLPER_I32:
         case BI_OPCODE_CLPER_V6_I32:
                 /* Fragment shaders require helpers to implement derivatives.

@@ -122,10 +122,6 @@ d3d12_resource_wait_idle(struct d3d12_context *ctx,
                          bool want_to_write);
 
 void
-d3d12_resource_make_writeable(struct pipe_context *pctx,
-                              struct pipe_resource *pres);
-
-void
 d3d12_screen_resource_init(struct pipe_screen *pscreen);
 
 void

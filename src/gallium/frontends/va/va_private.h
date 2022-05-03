@@ -337,6 +337,7 @@ typedef struct {
    unsigned int frame_num_cnt;
    bool force_flushed;
    struct pipe_video_buffer *obsolete_buf;
+   enum pipe_format encoder_format;
 } vlVaSurface;
 
 // Public functions:

@@ -78,6 +78,7 @@ struct pan_blit_shader_key {
 
 struct pan_blit_shader_data {
         struct pan_blit_shader_key key;
+        struct pan_shader_info info;
         mali_ptr address;
         unsigned blend_ret_offsets[8];
         nir_alu_type blend_types[8];
@@ -186,13 +187,11 @@ pan_blitter_emit_rsd(const struct panfrost_device *dev,
                      const struct pan_image_view *s,
                      void *out)
 {
-        unsigned tex_count = 0;
-        bool zs = (z || s);
+        UNUSED bool zs = (z || s);
         bool ms = false;
 
         for (unsigned i = 0; i < rt_count; i++) {
                 if (rts[i]) {
-                        tex_count++;
                         if (rts[i]->nr_samples > 1)
                                 ms = true;
                 }
@@ -201,27 +200,16 @@ pan_blitter_emit_rsd(const struct panfrost_device *dev,
         if (z) {
                 if (z->image->layout.nr_samples > 1)
                         ms = true;
-                tex_count++;
         }
 
         if (s) {
                 if (s->image->layout.nr_samples > 1)
                         ms = true;
-                tex_count++;
         }
 
         pan_pack(out, RENDERER_STATE, cfg) {
                 assert(blit_shader->address);
-                cfg.shader.shader = blit_shader->address;
-                cfg.shader.varying_count = 1;
-                cfg.shader.texture_count = tex_count;
-                cfg.shader.sampler_count = 1;
-
-                cfg.properties.stencil_from_shader = s != NULL;
-                cfg.properties.depth_source =
-                        z ?
-                        MALI_DEPTH_SOURCE_SHADER :
-                        MALI_DEPTH_SOURCE_FIXED_FUNCTION;
+                pan_shader_prepare_rsd(&blit_shader->info, blit_shader->address, &cfg);
 
                 cfg.multisample_misc.sample_mask = 0xFFFF;
                 cfg.multisample_misc.multisample_enable = ms;
@@ -240,32 +228,23 @@ pan_blitter_emit_rsd(const struct panfrost_device *dev,
                 cfg.stencil_back = cfg.stencil_front;
 
 #if PAN_ARCH >= 6
-                if (zs) {
-                        cfg.properties.zs_update_operation =
-                                MALI_PIXEL_KILL_FORCE_LATE;
-                        cfg.properties.pixel_kill_operation =
-                                MALI_PIXEL_KILL_FORCE_LATE;
-                } else {
+                /* Skipping ATEST requires forcing Z/S */
+                if (!zs) {
                         cfg.properties.zs_update_operation =
                                 MALI_PIXEL_KILL_STRONG_EARLY;
                         cfg.properties.pixel_kill_operation =
                                 MALI_PIXEL_KILL_FORCE_EARLY;
                 }
 
-                /* We can only allow blit shader fragments to kill if they write all
-                 * colour outputs. This is true for our colour (non-Z/S) blit shaders,
-                 * but obviously not true for Z/S shaders. However, blit shaders
-                 * otherwise lack side effects, so other fragments may kill them.
-                 * However, while shaders writing Z/S can normally be killed, on v6
+                /* However, while shaders writing Z/S can normally be killed, on v6
                  * for frame shaders it can cause GPU timeouts, so only allow colour
                  * blit shaders to be killed. */
-
                 cfg.properties.allow_forward_pixel_to_kill = !zs;
-                cfg.properties.allow_forward_pixel_to_be_killed = (dev->arch >= 7) || !zs;
 
-                cfg.preload.fragment.coverage = true;
-                cfg.preload.fragment.sample_mask_id = ms;
+                if (PAN_ARCH == 6)
+                        cfg.properties.allow_forward_pixel_to_be_killed = !zs;
 #else
+
                 mali_ptr blend_shader = blend_shaders ?
                         panfrost_last_nonnull(blend_shaders, rt_count) : 0;
 
@@ -451,8 +430,6 @@ pan_blitter_get_blit_shader(struct panfrost_device *dev,
                 nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,
                                                GENX(pan_shader_get_compiler_options)(),
                                                "pan_blit(%s)", sig);
-        b.shader->info.internal = true;
-
         nir_variable *coord_var =
                 nir_variable_create(b.shader, nir_var_shader_in,
                                     glsl_vector_type(GLSL_TYPE_FLOAT, coord_comps),
@@ -569,7 +546,7 @@ pan_blitter_get_blit_shader(struct panfrost_device *dev,
                                 tex->src[2].src_type = nir_tex_src_lod;
                                 tex->src[2].src = nir_src_for_ssa(nir_imm_int(&b, 0));
                         } else {
-                                tex->op = nir_texop_tex;
+                                tex->op = nir_texop_txl;
 
                                 tex->src[0].src_type = nir_tex_src_coord;
                                 tex->src[0].src = nir_src_for_ssa(coord);
@@ -597,14 +574,19 @@ pan_blitter_get_blit_shader(struct panfrost_device *dev,
                 .is_blit = true,
         };
         struct util_dynarray binary;
-        struct pan_shader_info info;
 
         util_dynarray_init(&binary, NULL);
 
-        GENX(pan_shader_compile)(b.shader, &inputs, &binary, &info);
-
         shader = rzalloc(dev->blitter.shaders.blit,
                          struct pan_blit_shader_data);
+
+        nir_shader_gather_info(b.shader, nir_shader_get_entrypoint(b.shader));
+
+        for (unsigned i = 0; i < active_count; ++i)
+                BITSET_SET(b.shader->info.textures_used, i);
+
+        GENX(pan_shader_compile)(b.shader, &inputs, &binary, &shader->info);
+
         shader->key = *key;
         shader->address =
                 pan_pool_upload_aligned(dev->blitter.shaders.pool,
@@ -614,12 +596,10 @@ pan_blitter_get_blit_shader(struct panfrost_device *dev,
         util_dynarray_fini(&binary);
         ralloc_free(b.shader);
 
-#if PAN_ARCH <= 5
-        shader->address |= info.midgard.first_tag;
-#else
+#if PAN_ARCH >= 6
         for (unsigned i = 0; i < ARRAY_SIZE(shader->blend_ret_offsets); i++) {
-                shader->blend_ret_offsets[i] = info.bifrost.blend[i].return_offset;
-                shader->blend_types[i] = info.bifrost.blend[i].type;
+                shader->blend_ret_offsets[i] = shader->info.bifrost.blend[i].return_offset;
+                shader->blend_types[i] = shader->info.bifrost.blend[i].type;
         }
 #endif
 
@@ -975,8 +955,6 @@ pan_preload_emit_dcd(struct pan_pool *pool,
                      void *out, bool always_write)
 {
         pan_pack(out, DRAW, cfg) {
-                cfg.four_components_per_vertex = true;
-                cfg.draw_descriptor_is_64b = true;
                 cfg.thread_storage = tsd;
                 cfg.state = rsd;
 
@@ -1011,69 +989,37 @@ pan_preload_emit_dcd(struct pan_pool *pool,
         }
 }
 
-static void
-pan_blit_emit_dcd(struct pan_pool *pool,
-                  mali_ptr src_coords, mali_ptr dst_coords,
-                  mali_ptr textures, mali_ptr samplers,
-                  mali_ptr vpd, mali_ptr tsd, mali_ptr rsd,
-                  void *out)
-{
-        pan_pack(out, DRAW, cfg) {
-                cfg.four_components_per_vertex = true;
-                cfg.draw_descriptor_is_64b = true;
-                cfg.thread_storage = tsd;
-                cfg.state = rsd;
-
-                cfg.position = dst_coords;
-                pan_blitter_emit_varying(pool, src_coords, &cfg);
-                cfg.viewport = vpd;
-                cfg.textures = textures;
-                cfg.samplers = samplers;
-        }
-}
-
-static struct panfrost_ptr
-pan_blit_emit_tiler_job(struct pan_pool *desc_pool,
+static void *
+pan_blit_emit_tiler_job(struct pan_pool *pool,
                         struct pan_scoreboard *scoreboard,
-                        mali_ptr src_coords, mali_ptr dst_coords,
-                        mali_ptr textures, mali_ptr samplers,
-                        mali_ptr vpd, mali_ptr rsd, mali_ptr tsd,
-                        mali_ptr tiler)
+                        mali_ptr tiler,
+                        struct panfrost_ptr *job)
 {
-        struct panfrost_ptr job =
-                pan_pool_alloc_desc(desc_pool, TILER_JOB);
+        *job = pan_pool_alloc_desc(pool, TILER_JOB);
 
-        pan_blit_emit_dcd(desc_pool,
-                          src_coords, dst_coords, textures, samplers,
-                          vpd, tsd, rsd,
-                          pan_section_ptr(job.cpu, TILER_JOB, DRAW));
-
-        pan_section_pack(job.cpu, TILER_JOB, PRIMITIVE, cfg) {
+        pan_section_pack(job->cpu, TILER_JOB, PRIMITIVE, cfg) {
                 cfg.draw_mode = MALI_DRAW_MODE_TRIANGLE_STRIP;
                 cfg.index_count = 4;
                 cfg.job_task_split = 6;
         }
 
-        pan_section_pack(job.cpu, TILER_JOB, PRIMITIVE_SIZE, cfg) {
+        pan_section_pack(job->cpu, TILER_JOB, PRIMITIVE_SIZE, cfg) {
                 cfg.constant = 1.0f;
         }
 
-        void *invoc = pan_section_ptr(job.cpu,
-                                      TILER_JOB,
-                                      INVOCATION);
-        panfrost_pack_work_groups_compute(invoc, 1, 4,
-                                          1, 1, 1, 1, true, false);
+        void *invoc = pan_section_ptr(job->cpu, TILER_JOB, INVOCATION);
+        panfrost_pack_work_groups_compute(invoc, 1, 4, 1, 1, 1, 1, true, false);
 
 #if PAN_ARCH >= 6
-        pan_section_pack(job.cpu, TILER_JOB, PADDING, cfg);
-        pan_section_pack(job.cpu, TILER_JOB, TILER, cfg) {
+        pan_section_pack(job->cpu, TILER_JOB, PADDING, cfg);
+        pan_section_pack(job->cpu, TILER_JOB, TILER, cfg) {
                 cfg.address = tiler;
         }
 #endif
 
-        panfrost_add_job(desc_pool, scoreboard, MALI_JOB_TYPE_TILER,
-                         false, false, 0, 0, &job, false);
-        return job;
+        panfrost_add_job(pool, scoreboard, MALI_JOB_TYPE_TILER,
+                         false, false, 0, 0, job, false);
+        return pan_section_ptr(job->cpu, TILER_JOB, DRAW);
 }
 
 #if PAN_ARCH >= 6
@@ -1413,10 +1359,21 @@ GENX(pan_blit)(struct pan_blit_context *ctx,
                 pan_pool_upload_aligned(pool, src_rect,
                                         sizeof(src_rect), 64);
 
-        return pan_blit_emit_tiler_job(pool, scoreboard,
-                                       src_coords, ctx->position,
-                                       ctx->textures, ctx->samplers,
-                                       ctx->vpd, ctx->rsd, tsd, tiler);
+        struct panfrost_ptr job = { 0 };
+        void *dcd = pan_blit_emit_tiler_job(pool, scoreboard, tiler, &job);
+
+        pan_pack(dcd, DRAW, cfg) {
+                cfg.thread_storage = tsd;
+                cfg.state = ctx->rsd;
+
+                cfg.position = ctx->position;
+                pan_blitter_emit_varying(pool, src_coords, &cfg);
+                cfg.viewport = ctx->vpd;
+                cfg.textures = ctx->textures;
+                cfg.samplers = ctx->samplers;
+        }
+
+        return job;
 }
 
 static uint32_t pan_blit_shader_key_hash(const void *key)

@@ -135,13 +135,11 @@ panvk_varying_size(const struct panvk_varyings_info *varyings,
    }
 }
 
-#ifdef PAN_ARCH
 static inline unsigned
 panvk_varyings_buf_count(struct panvk_varyings_info *varyings)
 {
-   return util_bitcount(varyings->buf_mask) + (PAN_ARCH >= 6 ? 1 : 0);
+   return util_bitcount(varyings->buf_mask);
 }
-#endif
 
 static inline void
 panvk_varyings_alloc(struct panvk_varyings_info *varyings,

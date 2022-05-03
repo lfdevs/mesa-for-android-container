@@ -16,6 +16,7 @@
  *
  *   vkGetMemoryFdKHR
  *   vkGetMemoryFdPropertiesKHR
+ *   vkImportFenceFdKHR
  */
 
 /* struct VkCommandStreamDescriptionMESA */
@@ -300,6 +301,8 @@ vn_decode_VkMemoryResourcePropertiesMESA_pnext(struct vn_cs_decoder *dec, const 
         assert(pnext);
         if (pnext->sType == stype)
             break;
+
+        pnext = pnext->pNext;
     }
 
     switch ((int32_t)pnext->sType) {

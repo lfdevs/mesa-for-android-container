@@ -2371,6 +2371,7 @@ init_draw_info(struct pipe_draw_info *info,
     info->take_index_buffer_ownership = FALSE;
     info->index_bias_varies = FALSE;
     info->increment_draw_id = FALSE;
+    info->was_line_loop = FALSE;
     info->restart_index = 0;
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019 Raspberry Pi
+ * Copyright © 2019 Raspberry Pi Ltd
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -181,15 +181,17 @@ image_format_features(struct v3dv_physical_device *pdevice,
       vk_format_description(vk_format);
    assert(desc);
 
-   if (desc->layout == UTIL_FORMAT_LAYOUT_PLAIN && desc->is_array) {
-      flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
-      if (desc->nr_channels == 1 && vk_format_is_int(vk_format))
-         flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
-   } else if (vk_format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 ||
-              vk_format == VK_FORMAT_A2B10G10R10_UINT_PACK32 ||
-              vk_format == VK_FORMAT_B10G11R11_UFLOAT_PACK32) {
-      /* To comply with shaderStorageImageExtendedFormats */
-      flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+   if (tiling != VK_IMAGE_TILING_LINEAR) {
+      if (desc->layout == UTIL_FORMAT_LAYOUT_PLAIN && desc->is_array) {
+         flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+         if (desc->nr_channels == 1 && vk_format_is_int(vk_format))
+            flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
+      } else if (vk_format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 ||
+                 vk_format == VK_FORMAT_A2B10G10R10_UINT_PACK32 ||
+                 vk_format == VK_FORMAT_B10G11R11_UFLOAT_PACK32) {
+         /* To comply with shaderStorageImageExtendedFormats */
+         flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+      }
    }
 
    if (flags) {
@@ -289,10 +291,12 @@ v3dv_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
       switch ((unsigned)ext->sType) {
       case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT: {
          struct VkDrmFormatModifierPropertiesListEXT *list = (void *)ext;
-         VK_OUTARRAY_MAKE(out, list->pDrmFormatModifierProperties,
-                          &list->drmFormatModifierCount);
+         VK_OUTARRAY_MAKE_TYPED(VkDrmFormatModifierPropertiesEXT, out,
+                                list->pDrmFormatModifierProperties,
+                                &list->drmFormatModifierCount);
          if (pFormatProperties->formatProperties.linearTilingFeatures) {
-            vk_outarray_append(&out, mod_props) {
+            vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT,
+                                     &out, mod_props) {
                mod_props->drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
                mod_props->drmFormatModifierPlaneCount = 1;
                mod_props->drmFormatModifierTilingFeatures =
@@ -300,7 +304,8 @@ v3dv_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
             }
          }
          if (pFormatProperties->formatProperties.optimalTilingFeatures) {
-            vk_outarray_append(&out, mod_props) {
+            vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT,
+                                     &out, mod_props) {
                mod_props->drmFormatModifier = DRM_FORMAT_MOD_BROADCOM_UIF;
                mod_props->drmFormatModifierPlaneCount = 1;
                mod_props->drmFormatModifierTilingFeatures =

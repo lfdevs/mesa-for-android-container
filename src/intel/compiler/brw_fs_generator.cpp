@@ -31,6 +31,7 @@
 #include "brw_fs.h"
 #include "brw_cfg.h"
 #include "util/mesa-sha1.h"
+#include "util/half_float.h"
 
 static enum brw_reg_file
 brw_file_from_reg(fs_reg *reg)
@@ -1782,17 +1783,22 @@ fs_generator::generate_pack_half_2x16_split(fs_inst *,
       ? BRW_REGISTER_TYPE_HF : BRW_REGISTER_TYPE_W;
    struct brw_reg dst_w = spread(retype(dst, t), 2);
 
-   /* Give each 32-bit channel of dst the form below, where "." means
-    * unchanged.
-    *   0x....hhhh
-    */
-   brw_F32TO16(p, dst_w, y);
+   if (y.file == IMM) {
+      const uint32_t hhhh0000 = _mesa_float_to_half(y.f) << 16;
+      brw_MOV(p, dst, brw_imm_ud(hhhh0000));
+   } else {
+      /* Give each 32-bit channel of dst the form below, where "." means
+       * unchanged.
+       *   0x....hhhh
+       */
+      brw_F32TO16(p, dst_w, y);
 
-   /* Now the form:
-    *   0xhhhh0000
-    */
-   brw_set_default_swsb(p, tgl_swsb_regdist(1));
-   brw_SHL(p, dst, dst, brw_imm_ud(16u));
+      /* Now the form:
+       *   0xhhhh0000
+       */
+      brw_set_default_swsb(p, tgl_swsb_regdist(1));
+      brw_SHL(p, dst, dst, brw_imm_ud(16u));
+   }
 
    /* And, finally the form of packHalf2x16's output:
     *   0xhhhhllll
@@ -2425,9 +2431,21 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
                                           prog_data) ? brw_imm_ud(~0u) :
             stage == MESA_SHADER_FRAGMENT ? brw_vmask_reg() :
             brw_dmask_reg();
-         brw_find_live_channel(p, dst, mask);
+
+         brw_find_live_channel(p, dst, mask, false);
          break;
       }
+      case SHADER_OPCODE_FIND_LAST_LIVE_CHANNEL: {
+         /* ce0 doesn't consider the thread dispatch mask, so if we want
+          * to find the true last enabled channel, we need to apply that too.
+          */
+         const struct brw_reg mask =
+            stage == MESA_SHADER_FRAGMENT ? brw_vmask_reg() : brw_dmask_reg();
+
+         brw_find_live_channel(p, dst, mask, true);
+         break;
+      }
+
       case FS_OPCODE_LOAD_LIVE_CHANNELS: {
          assert(devinfo->ver >= 8);
          assert(inst->force_writemask_all && inst->group == 0);
@@ -2563,32 +2581,21 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          brw_float_controls_mode(p, src[0].d, src[1].d);
          break;
 
-      case SHADER_OPCODE_GET_DSS_ID:
-         /* The Slice, Dual-SubSlice, SubSlice, EU, and Thread IDs are all
-          * stored in sr0.0.  Normally, for reading from HW regs, we'd just do
-          * this in the IR and let the back-end generate some code but these
-          * live in the state register which tends to have special rules.
-          *
-          * For convenience, we combine Slice ID and Dual-SubSlice ID into a
-          * single ID.
-          */
-         if (devinfo->ver == 12) {
+      case SHADER_OPCODE_READ_SR_REG:
+         if (devinfo->ver >= 12) {
             /* There is a SWSB restriction that requires that any time sr0 is
              * accessed both the instruction doing the access and the next one
              * have SWSB set to RegDist(1).
              */
             if (brw_get_default_swsb(p).mode != TGL_SBID_NULL)
                brw_SYNC(p, TGL_SYNC_NOP);
+            assert(src[0].file == BRW_IMMEDIATE_VALUE);
             brw_set_default_swsb(p, tgl_swsb_regdist(1));
-            brw_SHR(p, dst, brw_sr0_reg(0), brw_imm_ud(9));
+            brw_MOV(p, dst, brw_sr0_reg(src[0].ud));
             brw_set_default_swsb(p, tgl_swsb_regdist(1));
-            brw_AND(p, dst, dst, brw_imm_ud(0x1f));
+            brw_AND(p, dst, dst, brw_imm_ud(0xffffffff));
          } else {
-            /* These move around basically every hardware generation, so don't
-             * do any >= checks and fail if the platform hasn't explicitly
-             * been enabled here.
-             */
-            unreachable("Unsupported platform");
+            brw_MOV(p, dst, brw_sr0_reg(src[0].ud));
          }
          break;
 

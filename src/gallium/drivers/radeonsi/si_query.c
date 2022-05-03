@@ -638,7 +638,8 @@ static bool si_query_hw_prepare_buffer(struct si_context *sctx, struct si_query_
 }
 
 static void si_query_hw_get_result_resource(struct si_context *sctx, struct si_query *squery,
-                                            bool wait, enum pipe_query_value_type result_type,
+                                            enum pipe_query_flags flags,
+                                            enum pipe_query_value_type result_type,
                                             int index, struct pipe_resource *resource,
                                             unsigned offset);
 
@@ -1372,13 +1373,13 @@ static bool si_get_query_result(struct pipe_context *ctx, struct pipe_query *que
 }
 
 static void si_get_query_result_resource(struct pipe_context *ctx, struct pipe_query *query,
-                                         bool wait, enum pipe_query_value_type result_type,
+                                         enum pipe_query_flags flags, enum pipe_query_value_type result_type,
                                          int index, struct pipe_resource *resource, unsigned offset)
 {
    struct si_context *sctx = (struct si_context *)ctx;
    struct si_query *squery = (struct si_query *)query;
 
-   squery->ops->get_result_resource(sctx, squery, wait, result_type, index, resource, offset);
+   squery->ops->get_result_resource(sctx, squery, flags, result_type, index, resource, offset);
 }
 
 static void si_query_hw_clear_result(struct si_query_hw *query, union pipe_query_result *result)
@@ -1423,7 +1424,8 @@ bool si_query_hw_get_result(struct si_context *sctx, struct si_query *squery, bo
 }
 
 static void si_query_hw_get_result_resource(struct si_context *sctx, struct si_query *squery,
-                                            bool wait, enum pipe_query_value_type result_type,
+                                            enum pipe_query_flags flags,
+                                            enum pipe_query_value_type result_type,
                                             int index, struct pipe_resource *resource,
                                             unsigned offset)
 {
@@ -1541,7 +1543,7 @@ static void si_query_hw_get_result_resource(struct si_context *sctx, struct si_q
          si_resource(resource)->TC_L2_dirty = true;
       }
 
-      if (wait && qbuf == &query->buffer) {
+      if ((flags & PIPE_QUERY_WAIT) && qbuf == &query->buffer) {
          uint64_t va;
 
          /* Wait for result availability. Wait only for readiness

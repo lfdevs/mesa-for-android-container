@@ -505,11 +505,11 @@ void st_init_limits(struct pipe_screen *screen,
    }
 
    c->GLSLFragCoordIsSysVal =
-      screen->get_param(screen, PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL);
+      screen->get_param(screen, PIPE_CAP_FS_POSITION_IS_SYSVAL);
    c->GLSLPointCoordIsSysVal =
-      screen->get_param(screen, PIPE_CAP_TGSI_FS_POINT_IS_SYSVAL);
+      screen->get_param(screen, PIPE_CAP_FS_POINT_IS_SYSVAL);
    c->GLSLFrontFacingIsSysVal =
-      screen->get_param(screen, PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL);
+      screen->get_param(screen, PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL);
 
    /* GL_ARB_get_program_binary */
    if (screen->get_disk_shader_cache && screen->get_disk_shader_cache(screen))
@@ -789,10 +789,10 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(OES_copy_image),                   PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS },
       { o(ARB_cull_distance),                PIPE_CAP_CULL_DISTANCE                    },
       { o(ARB_depth_clamp),                  PIPE_CAP_DEPTH_CLIP_DISABLE               },
-      { o(ARB_derivative_control),           PIPE_CAP_TGSI_FS_FINE_DERIVATIVE          },
+      { o(ARB_derivative_control),           PIPE_CAP_FS_FINE_DERIVATIVE               },
       { o(ARB_draw_buffers_blend),           PIPE_CAP_INDEP_BLEND_FUNC                 },
       { o(ARB_draw_indirect),                PIPE_CAP_DRAW_INDIRECT                    },
-      { o(ARB_draw_instanced),               PIPE_CAP_TGSI_INSTANCEID                  },
+      { o(ARB_draw_instanced),               PIPE_CAP_VS_INSTANCEID                    },
       { o(ARB_fragment_program_shadow),      PIPE_CAP_TEXTURE_SHADOW_MAP               },
       { o(ARB_framebuffer_object),           PIPE_CAP_MIXED_FRAMEBUFFER_SIZES          },
       { o(ARB_gpu_shader_int64),             PIPE_CAP_INT64                            },
@@ -810,14 +810,14 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_sample_shading),               PIPE_CAP_SAMPLE_SHADING                   },
       { o(ARB_sample_locations),             PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS    },
       { o(ARB_seamless_cube_map),            PIPE_CAP_SEAMLESS_CUBE_MAP                },
-      { o(ARB_shader_ballot),                PIPE_CAP_TGSI_BALLOT                      },
-      { o(ARB_shader_clock),                 PIPE_CAP_TGSI_CLOCK                       },
+      { o(ARB_shader_ballot),                PIPE_CAP_SHADER_BALLOT                    },
+      { o(ARB_shader_clock),                 PIPE_CAP_SHADER_CLOCK                     },
       { o(ARB_shader_draw_parameters),       PIPE_CAP_DRAW_PARAMETERS                  },
-      { o(ARB_shader_group_vote),            PIPE_CAP_TGSI_VOTE                        },
+      { o(ARB_shader_group_vote),            PIPE_CAP_SHADER_GROUP_VOTE                },
       { o(EXT_shader_image_load_formatted),  PIPE_CAP_IMAGE_LOAD_FORMATTED             },
-      { o(EXT_shader_image_load_store),      PIPE_CAP_TGSI_ATOMINC_WRAP                },
+      { o(EXT_shader_image_load_store),      PIPE_CAP_IMAGE_ATOMIC_INC_WRAP            },
       { o(ARB_shader_stencil_export),        PIPE_CAP_SHADER_STENCIL_EXPORT            },
-      { o(ARB_shader_texture_image_samples), PIPE_CAP_TGSI_TXQS                        },
+      { o(ARB_shader_texture_image_samples), PIPE_CAP_TEXTURE_QUERY_SAMPLES            },
       { o(ARB_shader_texture_lod),           PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD      },
       { o(ARB_shadow),                       PIPE_CAP_TEXTURE_SHADOW_MAP               },
       { o(ARB_sparse_buffer),                PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE          },
@@ -876,7 +876,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(NV_conditional_render),            PIPE_CAP_CONDITIONAL_RENDER               },
       { o(NV_fill_rectangle),                PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE      },
       { o(NV_primitive_restart),             PIPE_CAP_PRIMITIVE_RESTART                },
-      { o(NV_shader_atomic_float),           PIPE_CAP_TGSI_ATOMFADD                    },
+      { o(NV_shader_atomic_float),           PIPE_CAP_IMAGE_ATOMIC_FLOAT_ADD           },
       { o(NV_shader_atomic_int64),           PIPE_CAP_SHADER_ATOMIC_INT64              },
       { o(NV_texture_barrier),               PIPE_CAP_TEXTURE_BARRIER                  },
       { o(NV_viewport_array2),               PIPE_CAP_VIEWPORT_MASK                    },
@@ -1186,7 +1186,7 @@ void st_init_extensions(struct pipe_screen *screen,
    /* This extension needs full OpenGL 3.2, but we don't know if that's
     * supported at this point. Only check the GLSL version. */
    if (GLSLVersion >= 150 &&
-       screen->get_param(screen, PIPE_CAP_TGSI_VS_LAYER_VIEWPORT)) {
+       screen->get_param(screen, PIPE_CAP_VS_LAYER_VIEWPORT)) {
       extensions->AMD_vertex_shader_layer = GL_TRUE;
    }
 
@@ -1199,7 +1199,8 @@ void st_init_extensions(struct pipe_screen *screen,
       extensions->EXT_gpu_shader4 = GL_TRUE;
       extensions->EXT_texture_buffer_object = GL_TRUE;
 
-      if (screen->get_param(screen, PIPE_CAP_TGSI_ARRAY_COMPONENTS))
+      if (consts->MaxTransformFeedbackBuffers &&
+          screen->get_param(screen, PIPE_CAP_SHADER_ARRAY_COMPONENTS))
          extensions->ARB_enhanced_layouts = GL_TRUE;
    }
 
@@ -1551,7 +1552,7 @@ void st_init_extensions(struct pipe_screen *screen,
 
    if (extensions->AMD_vertex_shader_layer &&
        extensions->AMD_vertex_shader_viewport_index &&
-       screen->get_param(screen, PIPE_CAP_TGSI_TES_LAYER_VIEWPORT))
+       screen->get_param(screen, PIPE_CAP_TES_LAYER_VIEWPORT))
       extensions->ARB_shader_viewport_layer_array = GL_TRUE;
 
    /* ARB_framebuffer_no_attachments */

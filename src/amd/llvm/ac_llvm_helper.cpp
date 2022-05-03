@@ -256,11 +256,6 @@ void ac_llvm_add_barrier_noop_pass(LLVMPassManagerRef passmgr)
    llvm::unwrap(passmgr)->add(llvm::createBarrierNoopPass());
 }
 
-void ac_enable_global_isel(LLVMTargetMachineRef tm)
-{
-   reinterpret_cast<llvm::TargetMachine *>(tm)->setGlobalISel(true);
-}
-
 LLVMValueRef ac_build_atomic_rmw(struct ac_llvm_context *ctx, LLVMAtomicRMWBinOp op,
                                  LLVMValueRef ptr, LLVMValueRef val, const char *sync_scope)
 {

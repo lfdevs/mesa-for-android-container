@@ -139,7 +139,8 @@ si_emit_thread_trace_start(struct si_context* sctx,
                                           S_008D1C_SQ_STALL_EN(1) |
                                           S_008D1C_REG_DROP_ON_STALL(0) |
                                           S_008D1C_LOWATER_OFFSET(
-                                             sctx->chip_class >= GFX10_3 ? 4 : 0));
+                                             sctx->chip_class >= GFX10_3 ? 4 : 0) |
+                                          S_008D1C_AUTO_FLUSH_MODE(sctx->chip_class == GFX10_3));
       } else {
          /* Order seems important for the following 4 registers. */
          radeon_set_uconfig_reg(R_030CDC_SQ_THREAD_TRACE_BASE2,

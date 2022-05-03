@@ -1372,17 +1372,22 @@ static void *virgl_create_compute_state(struct pipe_context *ctx,
       tokens = state->prog;
    }
 
+   void *new_tokens = virgl_tgsi_transform((struct virgl_screen *)vctx->base.screen, tokens);
+   if (!new_tokens)
+      return NULL;
+
    handle = virgl_object_assign_handle();
    ret = virgl_encode_shader_state(vctx, handle, PIPE_SHADER_COMPUTE,
                                    &so_info,
                                    state->req_local_mem,
-                                   tokens);
+                                   new_tokens);
    if (ret) {
       FREE((void *)ntt_tokens);
       return NULL;
    }
 
    FREE((void *)ntt_tokens);
+   FREE(new_tokens);
 
    return (void *)(unsigned long)handle;
 }

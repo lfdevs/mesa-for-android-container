@@ -140,9 +140,9 @@ def write_format_table(formats):
     print()
 
     write_format_table_header(sys.stdout2)
-    
+
     u_format_pack.generate(formats)
-    
+
     def do_channel_array(channels, swizzles):
         print("   {")
         for i in range(4):

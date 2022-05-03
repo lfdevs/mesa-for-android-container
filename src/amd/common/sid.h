@@ -105,6 +105,7 @@
 #define PKT3_INDEX_BUFFER_SIZE              0x13
 #define PKT3_DISPATCH_DIRECT                0x15
 #define PKT3_DISPATCH_INDIRECT              0x16
+#define PKT3_ATOMIC_MEM                     0x1E
 #define PKT3_OCCLUSION_QUERY                0x1F /* new for CIK */
 #define PKT3_SET_PREDICATION                0x20
 #define PKT3_COND_EXEC                      0x22
@@ -219,6 +220,7 @@
 #define PKT3_LOAD_UCONFIG_REG       0x5E /* GFX7+ */
 #define PKT3_LOAD_SH_REG            0x5F
 #define PKT3_LOAD_CONTEXT_REG       0x61
+#define PKT3_LOAD_SH_REG_INDEX      0x63 /* GFX8+ */
 #define PKT3_SET_CONFIG_REG         0x68
 #define PKT3_SET_CONTEXT_REG        0x69
 #define PKT3_SET_SH_REG             0x76

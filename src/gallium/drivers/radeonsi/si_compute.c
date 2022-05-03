@@ -113,7 +113,7 @@ static void si_create_compute_state_async(void *job, void *gdata, int thread_ind
    struct si_shader_selector *sel = &program->sel;
    struct si_shader *shader = &program->shader;
    struct ac_llvm_compiler *compiler;
-   struct pipe_debug_callback *debug = &sel->compiler_ctx_state.debug;
+   struct util_debug_callback *debug = &sel->compiler_ctx_state.debug;
    struct si_screen *sscreen = sel->screen;
 
    assert(!debug->debug_message || debug->async);
@@ -426,14 +426,14 @@ void si_emit_initial_compute_regs(struct si_context *sctx, struct radeon_cmdbuf 
        (cs != &sctx->gfx_cs || !sctx->screen->info.has_graphics)) {
       radeon_set_uconfig_reg(R_0301EC_CP_COHER_START_DELAY,
                              sctx->chip_class >= GFX10 ? 0x20 : 0);
+   }
 
-      if (!info->has_graphics && info->family >= CHIP_ARCTURUS) {
-         radeon_set_sh_reg_seq(R_00B894_COMPUTE_STATIC_THREAD_MGMT_SE4, 4);
-         radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-         radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-         radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-         radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-      }
+   if (!info->has_graphics && info->family >= CHIP_ARCTURUS) {
+      radeon_set_sh_reg_seq(R_00B894_COMPUTE_STATIC_THREAD_MGMT_SE4, 4);
+      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
+      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
+      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
+      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
    }
 
    if (sctx->chip_class >= GFX10) {
@@ -449,12 +449,11 @@ void si_emit_initial_compute_regs(struct si_context *sctx, struct radeon_cmdbuf 
    radeon_end();
 }
 
-static bool si_setup_compute_scratch_buffer(struct si_context *sctx, struct si_shader *shader,
-                                            struct ac_shader_config *config)
+static bool si_setup_compute_scratch_buffer(struct si_context *sctx, struct si_shader *shader)
 {
    uint64_t scratch_bo_size, scratch_needed;
    scratch_bo_size = 0;
-   scratch_needed = config->scratch_bytes_per_wave * sctx->scratch_waves;
+   scratch_needed = sctx->max_seen_compute_scratch_bytes_per_wave * sctx->scratch_waves;
    if (sctx->compute_scratch_buffer)
       scratch_bo_size = sctx->compute_scratch_buffer->b.b.width0;
 
@@ -463,7 +462,7 @@ static bool si_setup_compute_scratch_buffer(struct si_context *sctx, struct si_s
 
       sctx->compute_scratch_buffer =
          si_aligned_buffer_create(&sctx->screen->b,
-                                  SI_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
+                                  PIPE_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
                                   PIPE_USAGE_DEFAULT,
                                   scratch_needed, sctx->screen->info.pte_fragment_size);
 
@@ -524,7 +523,12 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
       config->rsrc2 |= S_00B84C_LDS_SIZE(lds_blocks);
    }
 
-   if (!si_setup_compute_scratch_buffer(sctx, shader, config))
+   unsigned tmpring_size;
+   ac_get_scratch_tmpring_size(&sctx->screen->info, sctx->scratch_waves,
+                               config->scratch_bytes_per_wave,
+                               &sctx->max_seen_compute_scratch_bytes_per_wave, &tmpring_size);
+
+   if (!si_setup_compute_scratch_buffer(sctx, shader))
       return false;
 
    if (shader->scratch_bo) {
@@ -560,12 +564,7 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
                "COMPUTE_PGM_RSRC2: 0x%08x\n",
                config->rsrc1, config->rsrc2);
 
-   sctx->max_seen_compute_scratch_bytes_per_wave =
-      MAX2(sctx->max_seen_compute_scratch_bytes_per_wave, config->scratch_bytes_per_wave);
-
-   radeon_set_sh_reg(R_00B860_COMPUTE_TMPRING_SIZE,
-                     S_00B860_WAVES(sctx->scratch_waves) |
-                        S_00B860_WAVESIZE(sctx->max_seen_compute_scratch_bytes_per_wave >> 10));
+   radeon_set_sh_reg(R_00B860_COMPUTE_TMPRING_SIZE, tmpring_size);
    radeon_end();
 
    sctx->cs_shader_state.emitted_program = program;

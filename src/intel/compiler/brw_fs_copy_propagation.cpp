@@ -934,6 +934,11 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
          progress = true;
          break;
 
+      case FS_OPCODE_PACK_HALF_2x16_SPLIT:
+         inst->src[i] = val;
+         progress = true;
+         break;
+
       default:
          break;
       }

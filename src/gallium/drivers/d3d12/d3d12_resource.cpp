@@ -80,11 +80,14 @@ resource_is_busy(struct d3d12_context *ctx,
                  struct d3d12_resource *res,
                  bool want_to_write)
 {
+   if (d3d12_batch_has_references(d3d12_current_batch(ctx), res->bo, want_to_write))
+      return true;
+
    bool busy = false;
-
-   for (unsigned i = 0; i < ARRAY_SIZE(ctx->batches); i++)
-      busy |= d3d12_batch_has_references(&ctx->batches[i], res->bo, want_to_write);
-
+   d3d12_foreach_submitted_batch(ctx, batch) {
+      if (!d3d12_reset_batch(ctx, batch, 0))
+         busy |= d3d12_batch_has_references(batch, res->bo, want_to_write);
+   }
    return busy;
 }
 
@@ -97,11 +100,8 @@ d3d12_resource_wait_idle(struct d3d12_context *ctx,
       d3d12_flush_cmdlist_and_wait(ctx);
    } else {
       d3d12_foreach_submitted_batch(ctx, batch) {
-         if (d3d12_batch_has_references(batch, res->bo, want_to_write)) {
+         if (d3d12_batch_has_references(batch, res->bo, want_to_write))
             d3d12_reset_batch(ctx, batch, PIPE_TIMEOUT_INFINITE);
-            if (!resource_is_busy(ctx, res, want_to_write))
-               break;
-         }
       }
    }
 }
@@ -147,7 +147,15 @@ init_buffer(struct d3d12_screen *screen,
    default:
       unreachable("Invalid pipe usage");
    }
-   buf_desc.alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+
+   /* We can't suballocate buffers that might be bound as a sampler view, *only*
+    * because in the case of R32G32B32 formats (12 bytes per pixel), it's not possible
+    * to guarantee the offset will be divisible.
+    */
+   if (templ->bind & PIPE_BIND_SAMPLER_VIEW)
+      bufmgr = screen->cache_bufmgr;
+
+   buf_desc.alignment = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT;
    res->dxgi_format = DXGI_FORMAT_UNKNOWN;
    buf = bufmgr->create_buffer(bufmgr, templ->width0, &buf_desc);
    if (!buf)
@@ -241,8 +249,13 @@ init_texture(struct d3d12_screen *screen,
 
    D3D12_HEAP_PROPERTIES heap_pris = screen->dev->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
 
+   D3D12_HEAP_FLAGS heap_flags = screen->support_create_not_resident ?
+      D3D12_HEAP_FLAG_CREATE_NOT_RESIDENT : D3D12_HEAP_FLAG_NONE;
+   enum d3d12_residency_status init_residency = screen->support_create_not_resident ?
+      d3d12_evicted : d3d12_resident;
+
    HRESULT hres = screen->dev->CreateCommittedResource(&heap_pris,
-                                                   D3D12_HEAP_FLAG_NONE,
+                                                   heap_flags,
                                                    &desc,
                                                    D3D12_RESOURCE_STATE_COMMON,
                                                    NULL,
@@ -261,7 +274,7 @@ init_texture(struct d3d12_screen *screen,
                                              &res->dt_stride);
    }
 
-   res->bo = d3d12_bo_wrap_res(d3d12_res, templ->format);
+   res->bo = d3d12_bo_wrap_res(screen, d3d12_res, templ->format, init_residency);
 
    return true;
 }
@@ -342,7 +355,9 @@ d3d12_resource_create(struct pipe_screen *pscreen,
    }
 
    init_valid_range(res);
-   threaded_resource_init(&res->base.b, false);
+   threaded_resource_init(&res->base.b,
+      templ->usage == PIPE_USAGE_DEFAULT &&
+      templ->target == PIPE_BUFFER);
 
    memset(&res->bind_counts, 0, sizeof(d3d12_resource::bind_counts));
 
@@ -537,7 +552,7 @@ d3d12_resource_from_handle(struct pipe_screen *pscreen,
    res->dxgi_format = d3d12_get_format(res->overall_format);
 
    if (!res->bo) {
-      res->bo = d3d12_bo_wrap_res(d3d12_res, res->overall_format);
+      res->bo = d3d12_bo_wrap_res(screen, d3d12_res, res->overall_format, d3d12_permanently_resident);
    }
    init_valid_range(res);
 
@@ -724,7 +739,7 @@ transfer_buf_to_image_part(struct d3d12_context *ctx,
    struct copy_info copy_info;
    copy_info.src = staging_res;
    copy_info.src_loc = fill_buffer_location(ctx, res, staging_res, trans, depth, resid, z);
-   copy_info.src_loc.PlacedFootprint.Offset = (z  - start_z) * trans->base.b.layer_stride;
+   copy_info.src_loc.PlacedFootprint.Offset += (z  - start_z) * trans->base.b.layer_stride;
    copy_info.src_box = nullptr;
    copy_info.dst = res;
    copy_info.dst_loc = fill_texture_location(res, trans, resid, z);
@@ -784,7 +799,7 @@ transfer_image_part_to_buf(struct d3d12_context *ctx,
    copy_info.dst = staging_res;
    copy_info.dst_loc = fill_buffer_location(ctx, res, staging_res, trans,
                                             depth, resid, z);
-   copy_info.dst_loc.PlacedFootprint.Offset = (z  - start_layer) * trans->base.b.layer_stride;
+   copy_info.dst_loc.PlacedFootprint.Offset += (z  - start_layer) * trans->base.b.layer_stride;
    copy_info.dst_x = copy_info.dst_y = copy_info.dst_z = 0;
 
    bool whole_resource = util_texrange_covers_whole_level(&res->base.b, trans->base.b.level,
@@ -935,8 +950,11 @@ synchronize(struct d3d12_context *ctx,
    }
 
    if (!(usage & PIPE_MAP_UNSYNCHRONIZED) && resource_is_busy(ctx, res, usage & PIPE_MAP_WRITE)) {
-      if (usage & PIPE_MAP_DONTBLOCK)
+      if (usage & PIPE_MAP_DONTBLOCK) {
+         if (d3d12_batch_has_references(d3d12_current_batch(ctx), res->bo, usage & PIPE_MAP_WRITE))
+            d3d12_flush_cmdlist(ctx);
          return false;
+      }
 
       d3d12_resource_wait_idle(ctx, res, usage & PIPE_MAP_WRITE);
    }
@@ -1229,12 +1247,11 @@ d3d12_transfer_map(struct pipe_context *pctx,
 
    slab_child_pool* transfer_pool = (usage & TC_TRANSFER_MAP_THREADED_UNSYNC) ?
       &ctx->transfer_pool_unsync : &ctx->transfer_pool;
-   struct d3d12_transfer *trans = (struct d3d12_transfer *)slab_alloc(transfer_pool);
+   struct d3d12_transfer *trans = (struct d3d12_transfer *)slab_zalloc(transfer_pool);
    struct pipe_transfer *ptrans = &trans->base.b;
    if (!trans)
       return NULL;
 
-   memset(trans, 0, sizeof(*trans));
    pipe_resource_reference(&ptrans->resource, pres);
 
    ptrans->resource = pres;
@@ -1385,43 +1402,6 @@ d3d12_transfer_unmap(struct pipe_context *pctx,
 
    pipe_resource_reference(&ptrans->resource, NULL);
    slab_free(&d3d12_context(pctx)->transfer_pool, ptrans);
-}
-
-void
-d3d12_resource_make_writeable(struct pipe_context *pctx,
-                              struct pipe_resource *pres)
-{
-   struct d3d12_context *ctx = d3d12_context(pctx);
-   struct d3d12_resource *res = d3d12_resource(pres);
-   struct d3d12_resource *dup_res;
-
-   if (!res->bo || !d3d12_bo_is_suballocated(res->bo))
-      return;
-
-   dup_res = d3d12_resource(pipe_buffer_create(pres->screen,
-                                               pres->bind & PIPE_BIND_STREAM_OUTPUT,
-                                               (pipe_resource_usage) pres->usage,
-                                               pres->width0));
-
-   if (res->valid_buffer_range.end > res->valid_buffer_range.start) {
-      struct pipe_box box;
-
-      box.x = res->valid_buffer_range.start;
-      box.y = 0;
-      box.z = 0;
-      box.width = res->valid_buffer_range.end - res->valid_buffer_range.start;
-      box.height = 1;
-      box.depth = 1;
-
-      d3d12_direct_copy(ctx, dup_res, 0, &box, res, 0, &box, PIPE_MASK_RGBAZS);
-   }
-
-   /* Move new BO to old resource */
-   d3d12_bo_unreference(res->bo);
-   res->bo = dup_res->bo;
-   d3d12_bo_reference(res->bo);
-
-   d3d12_resource_destroy(dup_res->base.b.screen, &dup_res->base.b);
 }
 
 void

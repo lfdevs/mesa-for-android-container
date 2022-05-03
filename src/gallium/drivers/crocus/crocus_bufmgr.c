@@ -740,7 +740,7 @@ __crocus_bo_unreference(struct crocus_bo *bo)
 }
 
 static void
-bo_wait_with_stall_warning(struct pipe_debug_callback *dbg,
+bo_wait_with_stall_warning(struct util_debug_callback *dbg,
                            struct crocus_bo *bo,
                            const char *action)
 {
@@ -777,7 +777,7 @@ print_flags(unsigned flags)
 }
 
 static void *
-crocus_bo_gem_mmap_legacy(struct pipe_debug_callback *dbg,
+crocus_bo_gem_mmap_legacy(struct util_debug_callback *dbg,
                           struct crocus_bo *bo, bool wc)
 {
    struct crocus_bufmgr *bufmgr = bo->bufmgr;
@@ -800,7 +800,7 @@ crocus_bo_gem_mmap_legacy(struct pipe_debug_callback *dbg,
 }
 
 static void *
-crocus_bo_gem_mmap_offset(struct pipe_debug_callback *dbg, struct crocus_bo *bo,
+crocus_bo_gem_mmap_offset(struct util_debug_callback *dbg, struct crocus_bo *bo,
                           bool wc)
 {
    struct crocus_bufmgr *bufmgr = bo->bufmgr;
@@ -831,7 +831,7 @@ crocus_bo_gem_mmap_offset(struct pipe_debug_callback *dbg, struct crocus_bo *bo,
 }
 
 static void *
-crocus_bo_gem_mmap(struct pipe_debug_callback *dbg, struct crocus_bo *bo, bool wc)
+crocus_bo_gem_mmap(struct util_debug_callback *dbg, struct crocus_bo *bo, bool wc)
 {
    struct crocus_bufmgr *bufmgr = bo->bufmgr;
 
@@ -842,7 +842,7 @@ crocus_bo_gem_mmap(struct pipe_debug_callback *dbg, struct crocus_bo *bo, bool w
 }
 
 static void *
-crocus_bo_map_cpu(struct pipe_debug_callback *dbg,
+crocus_bo_map_cpu(struct util_debug_callback *dbg,
                   struct crocus_bo *bo, unsigned flags)
 {
    /* We disallow CPU maps for writing to non-coherent buffers, as the
@@ -900,7 +900,7 @@ crocus_bo_map_cpu(struct pipe_debug_callback *dbg,
 }
 
 static void *
-crocus_bo_map_wc(struct pipe_debug_callback *dbg,
+crocus_bo_map_wc(struct util_debug_callback *dbg,
                  struct crocus_bo *bo, unsigned flags)
 {
    if (!bo->map_wc) {
@@ -953,7 +953,7 @@ crocus_bo_map_wc(struct pipe_debug_callback *dbg,
  * tracking is handled on the buffer exchange instead.
  */
 static void *
-crocus_bo_map_gtt(struct pipe_debug_callback *dbg,
+crocus_bo_map_gtt(struct util_debug_callback *dbg,
                   struct crocus_bo *bo, unsigned flags)
 {
    struct crocus_bufmgr *bufmgr = bo->bufmgr;
@@ -1048,7 +1048,7 @@ can_map_cpu(struct crocus_bo *bo, unsigned flags)
 }
 
 void *
-crocus_bo_map(struct pipe_debug_callback *dbg,
+crocus_bo_map(struct util_debug_callback *dbg,
               struct crocus_bo *bo, unsigned flags)
 {
    if (bo->tiling_mode != I915_TILING_NONE && !(flags & MAP_RAW))

@@ -41,6 +41,7 @@
 #include "ir_optimization.h"
 #include "compiler/glsl_types.h"
 #include "ir_builder.h"
+#include "program/prog_instruction.h"
 
 using namespace ir_builder;
 
@@ -105,14 +106,53 @@ ir_vec_index_to_cond_assign_visitor::convert_vec_index_to_cond_assign(void *mem_
    ir_variable *const var = body.make_temp(type, "vec_index_tmp_v");
 
    /* Generate a single comparison condition "mask" for all of the components
-    * in the vector.
+    * in the vector.  This will be of the form vec3(i > 0, i > 1, i < 2).
     */
-   ir_variable *const cond =
-      compare_index_block(body, index, 0, orig_vector->type->vector_elements);
+   ir_rvalue *const broadcast_index = orig_vector->type->vector_elements > 2
+      ? swizzle(index, SWIZZLE_XXXX, orig_vector->type->vector_elements - 1)
+      : operand(index).val;
 
-   /* Generate a conditional move of each vector element to the temp. */
-   for (unsigned i = 0; i < orig_vector->type->vector_elements; i++)
-      body.emit(assign(var, swizzle(value, i, 1), swizzle(cond, i, 1)));
+   ir_constant_data test_indices_data;
+   memset(&test_indices_data, 0, sizeof(test_indices_data));
+   test_indices_data.i[0] = 0;
+   test_indices_data.i[1] = 1;
+   test_indices_data.i[2] = 2;
+
+   ir_constant *const test_indices =
+      new(mem_ctx) ir_constant(broadcast_index->type, &test_indices_data);
+
+   ir_rvalue *const condition_val = greater(broadcast_index, test_indices);
+
+   ir_variable *const cond = body.make_temp(condition_val->type,
+                                            "dereference_condition");
+
+   body.emit(assign(cond, condition_val));
+
+
+   /* Generate a series of conditional selections to pick the right element. */
+   assert(orig_vector->type->vector_elements <= 4 &&
+          orig_vector->type->vector_elements >= 2);
+
+   ir_rvalue *rhs = csel(swizzle(cond, 0, 1),
+                         swizzle(value, 1, 1),
+                         swizzle(value, 0, 1));
+
+   if (orig_vector->type->vector_elements > 2) {
+      ir_rvalue *tmp;
+
+      if (orig_vector->type->vector_elements > 3) {
+         tmp = csel(swizzle(cond, 2, 1),
+                    swizzle(value, 3, 1),
+                    swizzle(value, 2, 1));
+
+      } else {
+         tmp = swizzle(value, 2, 1);
+      }
+
+      rhs = csel(swizzle(cond, 1, 1), tmp, rhs);
+   }
+
+   body.emit(assign(var, rhs));
 
    /* Put all of the new instructions in the IR stream before the old
     * instruction.
@@ -191,9 +231,6 @@ ir_visitor_status
 ir_vec_index_to_cond_assign_visitor::visit_leave(ir_assignment *ir)
 {
    ir->rhs = convert_vector_extract_to_cond_assign(ir->rhs);
-
-   if (ir->condition)
-      ir->condition = convert_vector_extract_to_cond_assign(ir->condition);
 
    return visit_continue;
 }

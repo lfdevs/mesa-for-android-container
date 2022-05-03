@@ -568,13 +568,7 @@ tgsi_add_point_sprite(const struct tgsi_token *tokens_in,
    }
 
 
-   /* allocate new tokens buffer */
-   new_tokens = tgsi_alloc_tokens(new_len);
-   if (!new_tokens)
-      return NULL;
-
-   /* transform the shader */
-   tgsi_transform_shader(tokens_in, new_tokens, new_len, &transform.base);
+   new_tokens = tgsi_transform_shader(tokens_in, new_len, &transform.base);
 
    if (aa_point_coord_index)
       *aa_point_coord_index = transform.point_coord_aa;

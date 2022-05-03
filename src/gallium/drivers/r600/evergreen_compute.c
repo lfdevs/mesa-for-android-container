@@ -444,6 +444,13 @@ static void *evergreen_create_compute_state(struct pipe_context *ctx,
 	if (shader->ir_type == PIPE_SHADER_IR_TGSI ||
 	    shader->ir_type == PIPE_SHADER_IR_NIR) {
 		shader->sel = r600_create_shader_state_tokens(ctx, cso->prog, cso->ir_type, PIPE_SHADER_COMPUTE);
+
+		/* Precompile the shader with the expected shader key, to reduce jank at
+		 * draw time. Also produces output for shader-db.
+		 */
+		bool dirty;
+		r600_shader_select(ctx, shader->sel, &dirty, true);
+
 		return shader;
 	}
 #ifdef HAVE_OPENCL
@@ -506,7 +513,7 @@ static void evergreen_bind_compute_state(struct pipe_context *ctx, void *state)
 	    cstate->ir_type == PIPE_SHADER_IR_NIR) {
 		bool compute_dirty;
 		cstate->sel->ir_type = cstate->ir_type;
-		if (r600_shader_select(ctx, cstate->sel, &compute_dirty))
+		if (r600_shader_select(ctx, cstate->sel, &compute_dirty, false))
 			R600_ERR("Failed to select compute shader\n");
 	}
 	
@@ -736,7 +743,7 @@ static void compute_emit_cs(struct r600_context *rctx,
 
 	if (rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_TGSI||
 	    rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_NIR) {
-		if (r600_shader_select(&rctx->b.b, rctx->cs_shader_state.shader->sel, &compute_dirty)) {
+		if (r600_shader_select(&rctx->b.b, rctx->cs_shader_state.shader->sel, &compute_dirty, false)) {
 			R600_ERR("Failed to select compute shader\n");
 			return;
 		}

@@ -1,5 +1,5 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2009 VMware, Inc.
  * All Rights Reserved.
  *
@@ -75,7 +75,7 @@ symbol_name_cached(unw_cursor_t *cursor, unw_proc_info_t *pip)
          procname[1] = 0;
       }
 
-      if (asprintf(&name, "%s%s", procname, ret == -UNW_ENOMEM ? "..." : "") == -1) 
+      if (asprintf(&name, "%s%s", procname, ret == -UNW_ENOMEM ? "..." : "") == -1)
          name = "??";
       entry = _mesa_hash_table_insert(symbols_hash, addr, (void*)name);
    }

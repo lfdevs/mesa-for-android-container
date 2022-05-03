@@ -1,3 +1,11 @@
+mesa (22.1.0~rc3-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * rules: Clean all python build cruft.
+  * rules: Add intel-nullhw to vulkan confflags. (part of #1009027)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 03 May 2022 13:08:46 +0300
+
 mesa (22.0.2-1) unstable; urgency=medium
 
   * New upstream release.

@@ -163,7 +163,7 @@ can_remat_instr(nir_instr *instr, struct brw_bitset *remat)
 
       case nir_intrinsic_load_scratch_base_ptr:
       case nir_intrinsic_load_ray_launch_id:
-      case nir_intrinsic_load_btd_dss_id_intel:
+      case nir_intrinsic_load_topology_id_intel:
       case nir_intrinsic_load_btd_global_arg_addr_intel:
       case nir_intrinsic_load_btd_resume_sbt_addr_intel:
       case nir_intrinsic_load_ray_base_mem_addr_intel:
@@ -176,7 +176,8 @@ can_remat_instr(nir_instr *instr, struct brw_bitset *remat)
       case nir_intrinsic_load_ray_miss_sbt_stride_intel:
       case nir_intrinsic_load_callable_sbt_addr_intel:
       case nir_intrinsic_load_callable_sbt_stride_intel:
-      case nir_intrinsic_load_mesh_inline_data_intel:
+      case nir_intrinsic_load_reloc_const_intel:
+      case nir_intrinsic_load_ray_query_global_intel:
          /* Notably missing from the above list is btd_local_arg_addr_intel.
           * This is because the resume shader will have a different local
           * argument pointer because it has a different BSR.  Any access of
@@ -1114,8 +1115,16 @@ nir_lower_shader_calls(nir_shader *shader,
 
    /* Make N copies of our shader */
    nir_shader **resume_shaders = ralloc_array(mem_ctx, nir_shader *, num_calls);
-   for (unsigned i = 0; i < num_calls; i++)
+   for (unsigned i = 0; i < num_calls; i++) {
       resume_shaders[i] = nir_shader_clone(mem_ctx, shader);
+
+      /* Give them a recognizable name */
+      resume_shaders[i]->info.name =
+         ralloc_asprintf(mem_ctx, "%s%sresume_%u",
+                         shader->info.name ? shader->info.name : "",
+                         shader->info.name ? "-" : "",
+                         i);
+   }
 
    replace_resume_with_halt(shader, NULL);
    for (unsigned i = 0; i < num_calls; i++) {

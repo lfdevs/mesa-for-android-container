@@ -111,7 +111,8 @@ lp_setup_set_fs_constants(struct lp_setup_context *setup,
 void
 lp_setup_set_fs_ssbos(struct lp_setup_context *setup,
                       unsigned num,
-                      struct pipe_shader_buffer *buffers);
+                      struct pipe_shader_buffer *buffers,
+                      uint32_t ssbo_write_mask);
 
 void
 lp_setup_set_fs_images(struct lp_setup_context *setup,

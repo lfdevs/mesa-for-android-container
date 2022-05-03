@@ -29,6 +29,9 @@
 #include "ppir.h"
 
 const ppir_op_info ppir_op_infos[] = {
+   [ppir_op_unsupported] = {
+      .name = "unsupported",
+   },
    [ppir_op_mov] = {
       .name = "mov",
       .slots = (int []) {

@@ -38,6 +38,7 @@
 #include "radeon_compiler.h"
 #include "radeon_compiler_util.h"
 
+#include "util/log.h"
 
 static struct rc_instruction *emit1(
 	struct radeon_compiler * c, struct rc_instruction * after,
@@ -1026,6 +1027,9 @@ int radeonTransformTrigScale(struct radeon_compiler* c,
 	    inst->U.I.Opcode != RC_OPCODE_SIN)
 		return 0;
 
+	if (!c->needs_trig_input_transform)
+		return 1;
+
 	temp = rc_find_free_temporary(c);
 	constant = rc_constants_add_immediate_scalar(&c->Program.Constants, RCP_2PI, &constant_swizzle);
 
@@ -1054,6 +1058,9 @@ int r300_transform_trig_scale_vertex(struct radeon_compiler *c,
 	if (inst->U.I.Opcode != RC_OPCODE_COS &&
 	    inst->U.I.Opcode != RC_OPCODE_SIN)
 		return 0;
+
+	if (!c->needs_trig_input_transform)
+		return 1;
 
 	/* Repeat x in the range [-PI, PI]:
 	 *
@@ -1093,6 +1100,10 @@ int radeonStubDeriv(struct radeon_compiler* c,
 
 	inst->U.I.Opcode = RC_OPCODE_MOV;
 	inst->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_0000;
+
+	mesa_logw_once("r300: WARNING: Shader is trying to use derivatives, "
+					"but the hardware doesn't support it. "
+					"Expect possible misrendering (it's not a bug, do not report it).");
 
 	return 1;
 }

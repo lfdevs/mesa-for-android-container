@@ -20,18 +20,6 @@ if [ -z "$BM_POE_ADDRESS" ]; then
   exit 1
 fi
 
-if [ -z "$BM_POE_USERNAME" ]; then
-  echo "Must set BM_POE_USERNAME in your gitlab-runner config.toml [[runners]] environment"
-  echo "This is the PoE switch username."
-  exit 1
-fi
-
-if [ -z "$BM_POE_PASSWORD" ]; then
-  echo "Must set BM_POE_PASSWORD in your gitlab-runner config.toml [[runners]] environment"
-  echo "This is the PoE switch password."
-  exit 1
-fi
-
 if [ -z "$BM_POE_INTERFACE" ]; then
   echo "Must set BM_POE_INTERFACE in your gitlab-runner config.toml [[runners]] environment"
   echo "This is the PoE switch interface where the device is connected."
@@ -107,11 +95,25 @@ fi
 
 # Install kernel modules (it could be either in /lib/modules or
 # /usr/lib/modules, but we want to install in the latter)
-[ -d $BM_BOOTFS/usr/lib/modules ] && rsync -a --delete $BM_BOOTFS/usr/lib/modules/ /nfs/usr/lib/modules/
-[ -d $BM_BOOTFS/lib/modules ] && rsync -a --delete $BM_BOOTFS/lib/modules/ /nfs/usr/lib/modules/
+[ -d $BM_BOOTFS/usr/lib/modules ] && rsync -a $BM_BOOTFS/usr/lib/modules/ /nfs/usr/lib/modules/
+[ -d $BM_BOOTFS/lib/modules ] && rsync -a $BM_BOOTFS/lib/modules/ /nfs/lib/modules/
 
 # Install kernel image + bootloader files
-rsync -a --delete $BM_BOOTFS/boot/ /tftp/
+rsync -aL --delete $BM_BOOTFS/boot/ /tftp/
+
+# Set up the pxelinux config for Jetson Nano
+mkdir -p /tftp/pxelinux.cfg
+cat <<EOF >/tftp/pxelinux.cfg/default-arm-tegra210-p3450-0000
+PROMPT 0
+TIMEOUT 30
+DEFAULT primary
+MENU TITLE jetson nano boot options
+LABEL primary
+      MENU LABEL CI kernel on TFTP
+      LINUX Image
+      FDT tegra210-p3450-0000.dtb
+      APPEND \${cbootargs} $BM_CMDLINE
+EOF
 
 # Create the rootfs in the NFS directory
 mkdir -p /nfs/results
@@ -123,7 +125,7 @@ echo "$BM_CMDLINE" > /tftp/cmdline.txt
 printf "$BM_BOOTCONFIG" >> /tftp/config.txt
 
 set +e
-ATTEMPTS=2
+ATTEMPTS=10
 while [ $((ATTEMPTS--)) -gt 0 ]; do
   python3 $BM/poe_run.py \
           --dev="$BM_SERIAL" \

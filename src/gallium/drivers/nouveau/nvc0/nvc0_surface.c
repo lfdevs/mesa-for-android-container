@@ -1611,7 +1611,7 @@ nvc0_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
 
    if (info->src.box.width == 0 || info->src.box.height == 0 ||
        info->dst.box.width == 0 || info->dst.box.height == 0) {
-      pipe_debug_message(&nvc0->base.debug, ERROR,
+      util_debug_message(&nvc0->base.debug, ERROR,
                          "Blit with zero-size src or dst box");
       return;
    }

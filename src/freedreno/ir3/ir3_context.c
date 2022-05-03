@@ -38,8 +38,11 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader_variant *so)
    if (compiler->gen == 4) {
       if (so->type == MESA_SHADER_VERTEX) {
          ctx->astc_srgb = so->key.vastc_srgb;
-      } else if (so->type == MESA_SHADER_FRAGMENT) {
+         memcpy(ctx->sampler_swizzles, so->key.vsampler_swizzles, sizeof(ctx->sampler_swizzles));
+      } else if (so->type == MESA_SHADER_FRAGMENT ||
+            so->type == MESA_SHADER_COMPUTE) {
          ctx->astc_srgb = so->key.fastc_srgb;
+         memcpy(ctx->sampler_swizzles, so->key.fsampler_swizzles, sizeof(ctx->sampler_swizzles));
       }
    } else if (compiler->gen == 3) {
       if (so->type == MESA_SHADER_VERTEX) {

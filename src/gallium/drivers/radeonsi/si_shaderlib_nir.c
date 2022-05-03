@@ -53,6 +53,64 @@ static void unpack_2x16(nir_builder *b, nir_ssa_def *src, nir_ssa_def **x, nir_s
    *y = nir_ushr(b, src, nir_imm_int(b, 16));
 }
 
+static nir_ssa_def *
+deref_ssa(nir_builder *b, nir_variable *var)
+{
+   return &nir_build_deref_var(b, var)->dest.ssa;
+}
+
+/* Create a NIR compute shader implementing copy_image.
+ *
+ * This shader can handle 1D and 2D, linear and non-linear images.
+ * It expects the source and destination (x,y,z) coords as user_data_amd,
+ * packed into 3 SGPRs as 2x16bits per component.
+ */
+void *si_create_copy_image_cs(struct si_context *sctx, bool is_1D)
+{
+   const nir_shader_compiler_options *options =
+      sctx->b.screen->get_compiler_options(sctx->b.screen, PIPE_SHADER_IR_NIR, PIPE_SHADER_COMPUTE);
+
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options, "copy_image_cs");
+   b.shader->info.num_images = 2;
+
+   /* The workgroup size is either 8x8 for normal (non-linear) 2D images,
+    * or 64x1 for 1D and linear-2D images.
+    */
+   b.shader->info.workgroup_size_variable = true;
+
+   /* 1D uses 'x' as image coord, and 'y' as array index.
+    * 2D uses 'x'&'y' as image coords, and 'z' as array index.
+    */
+   int n_components = is_1D ? 2 : 3;
+   b.shader->info.cs.user_data_components_amd = n_components;
+   nir_ssa_def *ids = get_global_ids(&b, n_components);
+
+   nir_ssa_def *coord_src = NULL, *coord_dst = NULL;
+   unpack_2x16(&b, nir_load_user_data_amd(&b), &coord_src, &coord_dst);
+
+   coord_src = nir_iadd(&b, coord_src, ids);
+   coord_dst = nir_iadd(&b, coord_dst, ids);
+
+   const struct glsl_type *img_type = glsl_image_type(is_1D ? GLSL_SAMPLER_DIM_1D : GLSL_SAMPLER_DIM_2D,
+                                                      /*is_array*/ true, GLSL_TYPE_FLOAT);
+
+   nir_variable *img_src = nir_variable_create(b.shader, nir_var_image, img_type, "img_src");
+   img_src->data.binding = 0;
+
+   nir_variable *img_dst = nir_variable_create(b.shader, nir_var_image, img_type, "img_dst");
+   img_dst->data.binding = 1;
+
+   nir_ssa_def *undef32 = nir_ssa_undef(&b, 1, 32);
+   nir_ssa_def *zero = nir_imm_int(&b, 0);
+
+   nir_ssa_def *data = nir_image_deref_load(&b, /*num_components*/ 4, /*bit_size*/ 32,
+      deref_ssa(&b, img_src), coord_src, undef32, zero);
+
+   nir_image_deref_store(&b, deref_ssa(&b, img_dst), coord_dst, undef32, data, zero);
+
+   return create_nir_cs(sctx, &b);
+}
+
 void *si_create_dcc_retile_cs(struct si_context *sctx, struct radeon_surf *surf)
 {
    const nir_shader_compiler_options *options =
@@ -146,3 +204,42 @@ void *gfx9_create_clear_dcc_msaa_cs(struct si_context *sctx, struct si_texture *
 
    return create_nir_cs(sctx, &b);
 }
+
+/* Create a compute shader implementing clear_buffer or copy_buffer. */
+void *si_create_clear_buffer_rmw_cs(struct si_context *sctx)
+{
+   const nir_shader_compiler_options *options =
+      sctx->b.screen->get_compiler_options(sctx->b.screen, PIPE_SHADER_IR_NIR, PIPE_SHADER_COMPUTE);
+
+   nir_builder b =
+      nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options, "clear_buffer_rmw_cs");
+   b.shader->info.workgroup_size[0] = 64;
+   b.shader->info.workgroup_size[1] = 1;
+   b.shader->info.workgroup_size[2] = 1;
+   b.shader->info.cs.user_data_components_amd = 2;
+   b.shader->info.num_ssbos = 1;
+
+   /* address = blockID * 64 + threadID; */
+   nir_ssa_def *address = get_global_ids(&b, 1);
+
+   /* address = address * 16; (byte offset, loading one vec4 per thread) */
+   address = nir_ishl(&b, address, nir_imm_int(&b, 4));
+   
+   nir_ssa_def *zero = nir_imm_int(&b, 0);
+   nir_ssa_def *data = nir_load_ssbo(&b, 4, 32, zero, address, .align_mul = 4);
+
+   /* Get user data SGPRs. */
+   nir_ssa_def *user_sgprs = nir_load_user_data_amd(&b);
+
+   /* data &= inverted_writemask; */
+   data = nir_iand(&b, data, nir_channel(&b, user_sgprs, 1));
+   /* data |= clear_value_masked; */
+   data = nir_ior(&b, data, nir_channel(&b, user_sgprs, 0));
+
+   nir_store_ssbo(&b, data, zero, address,
+      .access = SI_COMPUTE_DST_CACHE_POLICY != L2_LRU ? ACCESS_STREAM_CACHE_POLICY : 0,
+      .align_mul = 4);
+
+   return create_nir_cs(sctx, &b);
+}
+

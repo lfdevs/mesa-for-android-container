@@ -1720,6 +1720,7 @@ scale_bits(struct gallivm_state *gallivm,
 
             result = lp_build_unsigned_norm_to_float(gallivm, src_bits, flt_type, src);
             result = lp_build_clamped_float_to_unsigned_norm(gallivm, flt_type, dst_bits, result);
+            result = LLVMBuildTrunc(gallivm->builder, result, lp_build_int_vec_type(gallivm, src_type), "");
             return result;
          }
 
@@ -1949,7 +1950,7 @@ convert_to_blend_type(struct gallivm_state *gallivm,
    src_type.length *= pixels / (src_type.length / mem_type.length);
 
    for (i = 0; i < num_srcs; ++i) {
-      LLVMValueRef chans[4];
+      LLVMValueRef chans;
       LLVMValueRef res = NULL;
 
       dst[i] = LLVMBuildZExt(builder, src[i], lp_build_vec_type(gallivm, src_type), "");
@@ -1960,38 +1961,38 @@ convert_to_blend_type(struct gallivm_state *gallivm,
 #if UTIL_ARCH_LITTLE_ENDIAN
          unsigned from_lsb = j;
 #else
-         unsigned from_lsb = src_fmt->nr_channels - j - 1;
+         unsigned from_lsb = (blend_type.length / pixels) - j - 1;
 #endif
 
          mask = (1 << src_fmt->channel[j].size) - 1;
 
          /* Extract bits from source */
-         chans[j] = LLVMBuildLShr(builder,
-                                  dst[i],
-                                  lp_build_const_int_vec(gallivm, src_type, sa),
-                                  "");
+         chans = LLVMBuildLShr(builder,
+                               dst[i],
+                               lp_build_const_int_vec(gallivm, src_type, sa),
+                               "");
 
-         chans[j] = LLVMBuildAnd(builder,
-                                 chans[j],
-                                 lp_build_const_int_vec(gallivm, src_type, mask),
-                                 "");
+         chans = LLVMBuildAnd(builder,
+                              chans,
+                              lp_build_const_int_vec(gallivm, src_type, mask),
+                              "");
 
          /* Scale bits */
          if (src_type.norm) {
-            chans[j] = scale_bits(gallivm, src_fmt->channel[j].size,
-                                  blend_type.width, chans[j], src_type);
+            chans = scale_bits(gallivm, src_fmt->channel[j].size,
+                               blend_type.width, chans, src_type);
          }
 
          /* Insert bits into correct position */
-         chans[j] = LLVMBuildShl(builder,
-                                 chans[j],
-                                 lp_build_const_int_vec(gallivm, src_type, from_lsb * blend_type.width),
-                                 "");
+         chans = LLVMBuildShl(builder,
+                              chans,
+                              lp_build_const_int_vec(gallivm, src_type, from_lsb * blend_type.width),
+                              "");
 
          if (j == 0) {
-            res = chans[j];
+            res = chans;
          } else {
-            res = LLVMBuildOr(builder, res, chans[j], "");
+            res = LLVMBuildOr(builder, res, chans, "");
          }
       }
 
@@ -2131,7 +2132,7 @@ convert_from_blend_type(struct gallivm_state *gallivm,
    dst_type.length = pixels;
 
    for (i = 0; i < num_srcs; ++i) {
-      LLVMValueRef chans[4];
+      LLVMValueRef chans;
       LLVMValueRef res = NULL;
 
       dst[i] = LLVMBuildBitCast(builder, src[i], lp_build_vec_type(gallivm, src_type), "");
@@ -2143,7 +2144,7 @@ convert_from_blend_type(struct gallivm_state *gallivm,
 #if UTIL_ARCH_LITTLE_ENDIAN
          unsigned from_lsb = j;
 #else
-         unsigned from_lsb = src_fmt->nr_channels - j - 1;
+         unsigned from_lsb = blend_type.length - j - 1;
 #endif
 
          assert(blend_type.width > src_fmt->channel[j].size);
@@ -2153,39 +2154,39 @@ convert_from_blend_type(struct gallivm_state *gallivm,
          }
 
          /* Extract bits */
-         chans[j] = LLVMBuildLShr(builder,
-                                  dst[i],
-                                  lp_build_const_int_vec(gallivm, src_type,
-                                                         from_lsb * blend_type.width),
-                                  "");
+         chans = LLVMBuildLShr(builder,
+                               dst[i],
+                               lp_build_const_int_vec(gallivm, src_type,
+                                                      from_lsb * blend_type.width),
+                               "");
 
-         chans[j] = LLVMBuildAnd(builder,
-                                 chans[j],
-                                 lp_build_const_int_vec(gallivm, src_type, mask),
-                                 "");
+         chans = LLVMBuildAnd(builder,
+                              chans,
+                              lp_build_const_int_vec(gallivm, src_type, mask),
+                              "");
 
          /* Scale down bits */
          if (src_type.norm) {
-            chans[j] = scale_bits(gallivm, blend_type.width,
-                                  src_fmt->channel[j].size, chans[j], src_type);
+            chans = scale_bits(gallivm, blend_type.width,
+                               src_fmt->channel[j].size, chans, src_type);
          } else if (!src_type.floating && sz_a < blend_type.width) {
             LLVMValueRef mask_val = lp_build_const_int_vec(gallivm, src_type, (1UL << sz_a) - 1);
-            LLVMValueRef mask = LLVMBuildICmp(builder, LLVMIntUGT, chans[j], mask_val, "");
-            chans[j] = LLVMBuildSelect(builder, mask, mask_val, chans[j], "");
+            LLVMValueRef mask = LLVMBuildICmp(builder, LLVMIntUGT, chans, mask_val, "");
+            chans = LLVMBuildSelect(builder, mask, mask_val, chans, "");
          }
 
          /* Insert bits */
-         chans[j] = LLVMBuildShl(builder,
-                                 chans[j],
-                                 lp_build_const_int_vec(gallivm, src_type, sa),
-                                 "");
+         chans = LLVMBuildShl(builder,
+                              chans,
+                              lp_build_const_int_vec(gallivm, src_type, sa),
+                              "");
 
          sa += src_fmt->channel[j].size;
 
          if (j == 0) {
-            res = chans[j];
+            res = chans;
          } else {
-            res = LLVMBuildOr(builder, res, chans[j], "");
+            res = LLVMBuildOr(builder, res, chans, "");
          }
       }
 
@@ -3393,6 +3394,9 @@ dump_fs_variant_key(struct lp_fragment_shader_variant_key *key)
    if (key->flatshade) {
       debug_printf("flatshade = 1\n");
    }
+   if (key->depth_clamp)
+      debug_printf("depth_clamp = 1\n");
+
    if (key->multisample) {
       debug_printf("multisample = 1\n");
       debug_printf("coverage samples = %d\n", key->coverage_samples);
@@ -3897,7 +3901,7 @@ llvmpipe_create_fs_state(struct pipe_context *pipe,
    if (templ->type == PIPE_SHADER_IR_TGSI)
      llvmpipe_fs_analyse(shader, templ->tokens);
    else
-     shader->kind = LP_FS_KIND_GENERAL;
+     llvmpipe_fs_analyse_nir(shader);
 
    return shader;
 }
@@ -4061,6 +4065,12 @@ llvmpipe_set_shader_buffers(struct pipe_context *pipe,
 
       util_copy_shader_buffer(&llvmpipe->ssbos[shader][i], buffer);
 
+      if (buffer && buffer->buffer) {
+         boolean read_only = !(writable_bitmask & (1 << idx));
+         llvmpipe_flush_resource(pipe, buffer->buffer, 0, read_only, false,
+                                 false, "buffer");
+      }
+
       if (shader == PIPE_SHADER_VERTEX ||
           shader == PIPE_SHADER_GEOMETRY ||
           shader == PIPE_SHADER_TESS_CTRL ||
@@ -4076,6 +4086,8 @@ llvmpipe_set_shader_buffers(struct pipe_context *pipe,
       } else if (shader == PIPE_SHADER_COMPUTE) {
 	 llvmpipe->cs_dirty |= LP_CSNEW_SSBOS;
       } else if (shader == PIPE_SHADER_FRAGMENT) {
+         llvmpipe->fs_ssbo_write_mask &= ~(((1 << count) - 1) << start_slot);
+         llvmpipe->fs_ssbo_write_mask |= writable_bitmask << start_slot;
          llvmpipe->dirty |= LP_NEW_FS_SSBOS;
       }
    }
@@ -4095,6 +4107,12 @@ llvmpipe_set_shader_images(struct pipe_context *pipe,
       const struct pipe_image_view *image = images ? &images[idx] : NULL;
 
       util_copy_image_view(&llvmpipe->images[shader][i], image);
+
+      if (image && image->resource) {
+         bool read_only = !(image->access & PIPE_IMAGE_ACCESS_WRITE);
+         llvmpipe_flush_resource(pipe, image->resource, 0, read_only, false,
+                                 false, "image");
+      }
    }
 
    llvmpipe->num_images[shader] = start_slot + count;

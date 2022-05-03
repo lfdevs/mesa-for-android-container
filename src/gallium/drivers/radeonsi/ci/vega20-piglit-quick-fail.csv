@@ -1,13 +1,12 @@
 glx@extension string sanity,Fail
-glx@glx-make-glxdrawable-current,Fail
 spec@!opengl 1.1@windowoverlap,Fail
 spec@arb_shader_clock@execution@clock,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 glx@glx-make-current,Crash
 glx@glx-multi-window-single-context,Fail
-glx@glx-visuals-depth -pixmap,Crash
-glx@glx-visuals-stencil -pixmap,Crash
+glx@glx-visuals-depth -pixmap,Fail
+glx@glx-visuals-stencil -pixmap,Fail
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
 glx@glx_arb_create_context_robustness@invalid reset notification strategy,Fail
@@ -36,27 +35,6 @@ spec@!opengl 1.1@read-front samples=2,Fail
 spec@!opengl 1.1@read-front samples=4,Fail
 spec@!opengl 1.1@read-front samples=6,Fail
 spec@!opengl 1.1@read-front samples=8,Fail
-spec@!opengl 1.1@teximage-colors gl_r16_snorm,Fail
-spec@!opengl 1.1@teximage-colors gl_r16_snorm@GL_R16_SNORM texture with GL_BGR and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_r16_snorm@GL_R16_SNORM texture with GL_BGRA and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_r16_snorm@GL_R16_SNORM texture with GL_RGB and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rg16_snorm,Fail
-spec@!opengl 1.1@teximage-colors gl_rg16_snorm@GL_RG16_SNORM texture with GL_BGR and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rg16_snorm@GL_RG16_SNORM texture with GL_BGRA and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rg16_snorm@GL_RG16_SNORM texture with GL_GREEN and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rg16_snorm@GL_RG16_SNORM texture with GL_RGB and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgb16_snorm,Fail
-spec@!opengl 1.1@teximage-colors gl_rgb16_snorm@GL_RGB16_SNORM texture with GL_BGR and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgb16_snorm@GL_RGB16_SNORM texture with GL_BGRA and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgb16_snorm@GL_RGB16_SNORM texture with GL_BLUE and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgb16_snorm@GL_RGB16_SNORM texture with GL_GREEN and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgb16_snorm@GL_RGB16_SNORM texture with GL_RGB and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgba16_snorm,Fail
-spec@!opengl 1.1@teximage-colors gl_rgba16_snorm@GL_RGBA16_SNORM texture with GL_BGR and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgba16_snorm@GL_RGBA16_SNORM texture with GL_BGRA and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgba16_snorm@GL_RGBA16_SNORM texture with GL_BLUE and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgba16_snorm@GL_RGBA16_SNORM texture with GL_GREEN and GL_BYTE,Fail
-spec@!opengl 1.1@teximage-colors gl_rgba16_snorm@GL_RGBA16_SNORM texture with GL_RGB and GL_BYTE,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-last,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail
@@ -69,8 +47,6 @@ spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims pv-last,Fail
 spec@arb_bindless_texture@compiler@images@arith-bound-image.frag,Crash
 spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
-spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.frag,Fail
-spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.vert,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x4-mat2x4,Fail
@@ -125,13 +101,9 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv,Fail
-spec@ext_transform_feedback@order arrays lines,Fail
-spec@ext_transform_feedback@order arrays points,Fail
-spec@ext_transform_feedback@order arrays triangles,Fail
-spec@ext_transform_feedback@order elements lines,Fail
-spec@ext_transform_feedback@order elements points,Fail
-spec@ext_transform_feedback@order elements triangles,Fail
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
+spec@glsl-1.30@execution@glsl-fs-continue-in-switch-in-do-while,Fail
+spec@glsl-1.30@execution@glsl-vs-continue-in-switch-in-do-while,Fail
 spec@glsl-1.50@execution@geometry@primitive-types gl_triangle_strip_adjacency,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency ffs,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency other,Fail

@@ -298,34 +298,6 @@ vn_encode_VkSemaphoreSignalInfo(struct vn_cs_encoder *enc, const VkSemaphoreSign
     vn_encode_VkSemaphoreSignalInfo_self(enc, val);
 }
 
-static inline void
-vn_decode_VkSemaphoreSignalInfo_pnext(struct vn_cs_decoder *dec, const void *val)
-{
-    /* no known/supported struct */
-    if (vn_decode_simple_pointer(dec))
-        assert(false);
-}
-
-static inline void
-vn_decode_VkSemaphoreSignalInfo_self(struct vn_cs_decoder *dec, VkSemaphoreSignalInfo *val)
-{
-    /* skip val->{sType,pNext} */
-    vn_decode_VkSemaphore(dec, &val->semaphore);
-    vn_decode_uint64_t(dec, &val->value);
-}
-
-static inline void
-vn_decode_VkSemaphoreSignalInfo(struct vn_cs_decoder *dec, VkSemaphoreSignalInfo *val)
-{
-    VkStructureType stype;
-    vn_decode_VkStructureType(dec, &stype);
-    assert(stype == VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO);
-
-    assert(val->sType == stype);
-    vn_decode_VkSemaphoreSignalInfo_pnext(dec, val->pNext);
-    vn_decode_VkSemaphoreSignalInfo_self(dec, val);
-}
-
 static inline size_t vn_sizeof_vkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSemaphore* pSemaphore)
 {
     const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCreateSemaphore_EXT;

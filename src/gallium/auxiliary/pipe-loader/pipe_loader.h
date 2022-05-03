@@ -144,6 +144,20 @@ pipe_loader_sw_probe_dri(struct pipe_loader_device **devs,
                          const struct drisw_loader_funcs *drisw_lf);
 
 /**
+ * Initialize vk dri device give the drisw_loader_funcs.
+ *
+ * This function is platform-specific.
+ *
+ * Function does not take ownership of the fd, but duplicates it locally.
+ * The local fd is closed during pipe_loader_release.
+ *
+ * \sa pipe_loader_probe
+ */
+bool
+pipe_loader_vk_probe_dri(struct pipe_loader_device **devs,
+                         const struct drisw_loader_funcs *drisw_lf);
+
+/**
  * Initialize a kms backed sw device given an fd.
  *
  * This function is platform-specific.

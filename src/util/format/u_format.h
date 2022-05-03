@@ -105,7 +105,7 @@ struct util_format_block
 {
    /** Block width in pixels */
    unsigned width;
-   
+
    /** Block height in pixels */
    unsigned height;
 
@@ -483,7 +483,7 @@ util_format_is_plain(enum pipe_format format)
    return desc->layout == UTIL_FORMAT_LAYOUT_PLAIN ? TRUE : FALSE;
 }
 
-static inline boolean 
+static inline boolean
 util_format_is_compressed(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -508,7 +508,7 @@ util_format_is_compressed(enum pipe_format format)
    }
 }
 
-static inline boolean 
+static inline boolean
 util_format_is_s3tc(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -534,7 +534,7 @@ util_format_is_etc(enum pipe_format format)
    return desc->layout == UTIL_FORMAT_LAYOUT_ETC ? TRUE : FALSE;
 }
 
-static inline boolean 
+static inline boolean
 util_format_is_srgb(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -1592,14 +1592,14 @@ util_format_write_4(enum pipe_format format,
 
 void
 util_format_read_4ub(enum pipe_format format,
-                     uint8_t *dst, unsigned dst_stride, 
-                     const void *src, unsigned src_stride, 
+                     uint8_t *dst, unsigned dst_stride,
+                     const void *src, unsigned src_stride,
                      unsigned x, unsigned y, unsigned w, unsigned h);
 
 void
 util_format_write_4ub(enum pipe_format format,
-                      const uint8_t *src, unsigned src_stride, 
-                      void *dst, unsigned dst_stride, 
+                      const uint8_t *src, unsigned src_stride,
+                      void *dst, unsigned dst_stride,
                       unsigned x, unsigned y, unsigned w, unsigned h);
 
 void

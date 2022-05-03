@@ -49,6 +49,14 @@ static const D3D12_RECT MAX_SCISSOR = { D3D12_VIEWPORT_BOUNDS_MIN,
                                         D3D12_VIEWPORT_BOUNDS_MAX,
                                         D3D12_VIEWPORT_BOUNDS_MAX };
 
+static const D3D12_RECT MAX_SCISSOR_ARRAY[] = {
+   MAX_SCISSOR, MAX_SCISSOR, MAX_SCISSOR, MAX_SCISSOR,
+   MAX_SCISSOR, MAX_SCISSOR, MAX_SCISSOR, MAX_SCISSOR,
+   MAX_SCISSOR, MAX_SCISSOR, MAX_SCISSOR, MAX_SCISSOR,
+   MAX_SCISSOR, MAX_SCISSOR, MAX_SCISSOR, MAX_SCISSOR
+};
+static_assert(ARRAY_SIZE(MAX_SCISSOR_ARRAY) == PIPE_MAX_VIEWPORTS, "Wrong scissor count");
+
 static D3D12_GPU_DESCRIPTOR_HANDLE
 fill_cbv_descriptors(struct d3d12_context *ctx,
                      struct d3d12_shader *shader,
@@ -1075,7 +1083,7 @@ d3d12_draw_vbo(struct pipe_context *pctx,
       if (ctx->gfx_pipeline_state.rast->base.scissor && ctx->num_viewports > 0)
          ctx->cmdlist->RSSetScissorRects(ctx->num_viewports, ctx->scissors);
       else
-         ctx->cmdlist->RSSetScissorRects(1, &MAX_SCISSOR);
+         ctx->cmdlist->RSSetScissorRects(PIPE_MAX_VIEWPORTS, MAX_SCISSOR_ARRAY);
    }
 
    if (ctx->cmdlist_dirty & D3D12_DIRTY_BLEND_COLOR) {
@@ -1156,8 +1164,6 @@ d3d12_draw_vbo(struct pipe_context *pctx,
 
       struct d3d12_resource *so_buffer = d3d12_resource(target->base.buffer);
       struct d3d12_resource *fill_buffer = d3d12_resource(target->fill_buffer);
-
-      d3d12_resource_make_writeable(pctx, target->base.buffer);
 
       if (ctx->cmdlist_dirty & D3D12_DIRTY_STREAM_OUTPUT) {
          d3d12_batch_reference_resource(batch, so_buffer, true);

@@ -122,12 +122,16 @@ st_upload_constants(struct st_context *st, struct gl_program *prog, gl_shader_st
       if (st->prefer_real_buffer_in_constbuf0) {
          struct pipe_context *pipe = st->pipe;
          uint32_t *ptr;
+
+         const unsigned alignment = MAX2(
+            st->ctx->Const.UniformBufferOffsetAlignment, 64);
+
          /* fetch_state always stores 4 components (16 bytes) per matrix row,
           * but matrix rows are sometimes allocated partially, so add 12
           * to compensate for the fetch_state defect.
           */
-         u_upload_alloc(pipe->const_uploader, 0, paramBytes + 12, 64,
-                        &cb.buffer_offset, &cb.buffer, (void**)&ptr);
+         u_upload_alloc(pipe->const_uploader, 0, paramBytes + 12,
+            alignment, &cb.buffer_offset, &cb.buffer, (void**)&ptr);
 
          int uniform_bytes = params->UniformBytes;
          if (uniform_bytes)

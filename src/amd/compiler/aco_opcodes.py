@@ -90,8 +90,8 @@ class Format(Enum):
                  ('bool', 'dlc', 'false'),
                  ('bool', 'nv', 'false')]
       elif self == Format.DS:
-         return [('int16_t', 'offset0', '0'),
-                 ('int8_t', 'offset1', '0'),
+         return [('uint16_t', 'offset0', '0'),
+                 ('uint8_t', 'offset1', '0'),
                  ('bool', 'gds', 'false')]
       elif self == Format.MTBUF:
          return [('unsigned', 'dfmt', None),

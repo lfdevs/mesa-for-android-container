@@ -1165,6 +1165,8 @@ to upconvert to 32b float internally?
 	<reg32 offset="0x0506" name="RBBM_PERFCTR_LOAD_VALUE_HI"/>
 	<array offset="0x0507" name="RBBM_PERFCTR_RBBM_SEL" stride="1" length="4"/>
 	<reg32 offset="0x050B" name="RBBM_PERFCTR_GPU_BUSY_MASKED"/>
+	<reg32 offset="0x050e" name="RBBM_PERFCTR_SRAM_INIT_CMD"/>
+	<reg32 offset="0x050f" name="RBBM_PERFCTR_SRAM_INIT_STATUS"/>
 	<reg32 offset="0x0533" name="RBBM_ISDB_CNT"/>
 
 	<!---
@@ -2880,6 +2882,10 @@ to upconvert to 32b float internally?
 	</bitset>
 
 	<reg32 offset="0xa800" name="SP_VS_CTRL_REG0" type="a6xx_sp_xs_ctrl_reg0">
+		<!--
+		This field actually controls all geometry stages. TCS, TES, and
+		GS must have the same mergedregs setting as VS.
+		-->
 		<bitfield name="MERGEDREGS" pos="20" type="boolean"/>
 		<!-- ??? (blob has it set) -->
 		<bitfield name="UNK21" pos="21" type="boolean"/>
@@ -2996,7 +3002,7 @@ to upconvert to 32b float internally?
 
 	<reg32 offset="0xa830" name="SP_HS_CTRL_REG0" type="a6xx_sp_xs_ctrl_reg0">
 		<!--
-		There is no mergedregs bit, that comes from the previous stage (VS).
+		There is no mergedregs bit, that comes from the VS.
 		No idea what this bit does here.
 		-->
 		<bitfield name="UNK20" pos="20" type="boolean"/>
@@ -3022,7 +3028,8 @@ to upconvert to 32b float internally?
 	<reg32 offset="0xa83d" name="SP_HS_PVT_MEM_HW_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_hw_stack_offset"/>
 
 	<reg32 offset="0xa840" name="SP_DS_CTRL_REG0" type="a6xx_sp_xs_ctrl_reg0">
-		<bitfield name="MERGEDREGS" pos="20" type="boolean"/>
+		<!-- There is no mergedregs bit, that comes from the VS. -->
+		<bitfield name="UNK20" pos="20" type="boolean"/> <!-- something preamble-related -->
 	</reg32>
 	<reg32 offset="0xa841" name="SP_DS_BRANCH_COND" type="hex"/>
 
@@ -3058,7 +3065,7 @@ to upconvert to 32b float internally?
 
 	<reg32 offset="0xa870" name="SP_GS_CTRL_REG0" type="a6xx_sp_xs_ctrl_reg0">
 		<!--
-		There is no mergedregs bit, that comes from the previous stage (VS/DS).
+		There is no mergedregs bit, that comes from the VS.
 		No idea what this bit does here.
 		-->
 		<bitfield name="UNK20" pos="20" type="boolean"/>
@@ -3880,71 +3887,6 @@ to upconvert to 32b float internally?
 	<reg32 offset="13" name="13"/>
 	<reg32 offset="14" name="14"/>
 	<reg32 offset="15" name="15"/>
-</domain>
-
-<!--
-Note the "SSBO" state blocks are actually used for both images and SSBOs,
-naming is just because I r/e'd SSBOs first.  I should probably come up
-with a better name.
--->
-<domain name="A6XX_IBO" width="32">
-	<reg32 offset="0" name="0">
-		<!--
-		NOTE: same position as in TEX_CONST state.. I don't see other bits
-		used but if they are good chance position is same as TEX_CONST
-		 -->
-		<bitfield name="TILE_MODE" low="0" high="1" type="a6xx_tile_mode"/>
-		<bitfield name="FMT" low="22" high="29" type="a6xx_format"/>
-	</reg32>
-	<reg32 offset="1" name="1">
-		<bitfield name="WIDTH" low="0" high="14" type="uint"/>
-		<bitfield name="HEIGHT" low="15" high="29" type="uint"/>
-	</reg32>
-	<reg32 offset="2" name="2">
-		<!--
-		b4 and b31 set for buffer/ssbo case, in which case low 15 bits
-		of size encoded in WIDTH, and high 15 bits encoded in HEIGHT
-		 -->
-		<bitfield name="UNK4" pos="4" type="boolean"/>
-		<doc>Pitch in bytes (so actually stride)</doc>
-		<bitfield name="PITCH" low="7" high="28" type="uint"/>
-		<bitfield name="TYPE" low="29" high="30" type="a6xx_tex_type"/>
-		<bitfield name="UNK31" pos="31" type="boolean"/>
-	</reg32>
-	<reg32 offset="3" name="3">
-		<!--
-		ARRAY_PITCH is basically LAYERSZ for the first mipmap level, and
-		for 3d textures (laid out mipmap level first) MIN_LAYERSZ is the
-		layer size at the point that it stops being reduced moving to
-		higher (smaller) mipmap levels
-		 -->
-		<bitfield name="ARRAY_PITCH" low="0" high="13" shr="12" type="uint"/>
-		<bitfield name="UNK27" pos="27" type="boolean"/>
-		<bitfield name="FLAG" pos="28" type="boolean"/>
-	</reg32>
-	<reg32 offset="4" name="4">
-		<bitfield name="BASE_LO" low="0" high="31"/>
-	</reg32>
-	<reg32 offset="5" name="5">
-		<bitfield name="BASE_HI" low="0" high="16"/>
-		<bitfield name="DEPTH" low="17" high="29" type="uint"/>
-	</reg32>
-	<reg32 offset="6" name="6">
-	</reg32>
-	<reg32 offset="7" name="7">
-	</reg32>
-	<reg32 offset="8" name="8">
-	</reg32>
-	<reg32 offset="9" name="9">
-		<bitfield name="FLAG_BUFFER_ARRAY_PITCH" low="0" high="16" shr="4" type="uint"/>
-	</reg32>
-	<reg32 offset="10" name="10">
-		<!--
-		I see some other bits set by blob above FLAG_BUFFER_PITCH, but they
-		don't seem to be particularly sensible... or needed for UBWC to work
-		 -->
-		<bitfield name="FLAG_BUFFER_PITCH" low="0" high="6" shr="6" type="uint"/>
-	</reg32>
 </domain>
 
 <domain name="A6XX_UBO" width="32">

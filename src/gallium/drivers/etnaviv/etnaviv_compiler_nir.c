@@ -146,7 +146,8 @@ etna_optimize_loop(nir_shader *s)
 
       NIR_PASS_V(s, nir_lower_vars_to_ssa);
       progress |= OPT(s, nir_opt_copy_prop_vars);
-      progress |= OPT(s, nir_opt_shrink_vectors, true);
+      progress |= OPT(s, nir_opt_shrink_stores, true);
+      progress |= OPT(s, nir_opt_shrink_vectors);
       progress |= OPT(s, nir_copy_prop);
       progress |= OPT(s, nir_opt_dce);
       progress |= OPT(s, nir_opt_cse);
@@ -1054,7 +1055,7 @@ fill_vs_mystery(struct etna_shader_variant *v)
 }
 
 bool
-etna_compile_shader_nir(struct etna_shader_variant *v)
+etna_compile_shader(struct etna_shader_variant *v)
 {
    if (unlikely(!v))
       return false;
@@ -1229,9 +1230,9 @@ etna_shader_vs_lookup(const struct etna_shader_variant *sobj,
 }
 
 bool
-etna_link_shader_nir(struct etna_shader_link_info *info,
-                     const struct etna_shader_variant *vs,
-                     const struct etna_shader_variant *fs)
+etna_link_shader(struct etna_shader_link_info *info,
+                 const struct etna_shader_variant *vs,
+                 const struct etna_shader_variant *fs)
 {
    int comp_ofs = 0;
    /* For each fragment input we need to find the associated vertex shader

@@ -340,27 +340,19 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
    memset(view->storage_descriptor, 0, sizeof(view->storage_descriptor));
 
    view->storage_descriptor[0] =
-      A6XX_IBO_0_FMT(storage_format) |
-      A6XX_IBO_0_TILE_MODE(tile_mode);
-   view->storage_descriptor[1] =
-      A6XX_IBO_1_WIDTH(width) |
-      A6XX_IBO_1_HEIGHT(height);
+      A6XX_TEX_CONST_0_FMT(storage_format) |
+      fdl6_texswiz(args, has_z24uint_s8uint) |
+      A6XX_TEX_CONST_0_TILE_MODE(tile_mode) |
+      A6XX_TEX_CONST_0_SWAP(color_swap);
+   view->storage_descriptor[1] = view->descriptor[1];
    view->storage_descriptor[2] =
-      A6XX_IBO_2_PITCH(pitch) |
-      A6XX_IBO_2_TYPE(fdl6_tex_type(args->type, true));
-   view->storage_descriptor[3] = A6XX_IBO_3_ARRAY_PITCH(layer_size);
-
+      A6XX_TEX_CONST_2_PITCH(pitch) |
+      A6XX_TEX_CONST_2_TYPE(fdl6_tex_type(args->type, true));
+   view->storage_descriptor[3] = view->descriptor[3];
    view->storage_descriptor[4] = base_addr;
-   view->storage_descriptor[5] = (base_addr >> 32) | A6XX_IBO_5_DEPTH(storage_depth);
-
-   if (ubwc_enabled) {
-      view->storage_descriptor[3] |= A6XX_IBO_3_FLAG | A6XX_IBO_3_UNK27;
-      view->storage_descriptor[7] |= ubwc_addr;
-      view->storage_descriptor[8] |= ubwc_addr >> 32;
-      view->storage_descriptor[9] = A6XX_IBO_9_FLAG_BUFFER_ARRAY_PITCH(layout->ubwc_layer_size >> 2);
-      view->storage_descriptor[10] =
-         A6XX_IBO_10_FLAG_BUFFER_PITCH(ubwc_pitch);
-   }
+   view->storage_descriptor[5] = (base_addr >> 32) | A6XX_TEX_CONST_5_DEPTH(storage_depth);
+   for (unsigned i = 6; i <= 10; i++)
+      view->storage_descriptor[i] = view->descriptor[i];
 
    view->width = width;
    view->height = height;

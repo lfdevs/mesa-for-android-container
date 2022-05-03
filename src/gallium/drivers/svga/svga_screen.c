@@ -265,11 +265,11 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_BLEND_EQUATION_SEPARATE: /* req. for GL 1.5 */
       return 1;
 
-   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
+   case PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT:
       return 1;
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+   case PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
       return sws->have_vgpu10;
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+   case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
       return !sws->have_vgpu10;
 
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
@@ -304,7 +304,7 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_INDEP_BLEND_ENABLE:
    case PIPE_CAP_CONDITIONAL_RENDER:
    case PIPE_CAP_QUERY_TIMESTAMP:
-   case PIPE_CAP_TGSI_INSTANCEID:
+   case PIPE_CAP_VS_INSTANCEID:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
    case PIPE_CAP_FAKE_SW_MSAA:

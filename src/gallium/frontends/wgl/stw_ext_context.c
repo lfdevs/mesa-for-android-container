@@ -133,7 +133,7 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
         ((majorVersion == 1 && minorVersion > 5) ||
          (majorVersion == 2 && minorVersion > 1) ||
          (majorVersion == 3 && minorVersion > 3) ||
-         (majorVersion == 4 && minorVersion > 5) ||
+         (majorVersion == 4 && minorVersion > 6) ||
          majorVersion > 4)) ||
        (profileMask == WGL_CONTEXT_ES_PROFILE_BIT_EXT &&
         ((majorVersion == 1 && minorVersion > 1) ||

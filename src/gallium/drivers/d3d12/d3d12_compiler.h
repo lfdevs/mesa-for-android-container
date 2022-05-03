@@ -59,10 +59,6 @@ enum d3d12_state_var {
 
 #define D3D12_MAX_POINT_SIZE 255.0f
 
-struct d3d12_validation_tools *d3d12_validator_create();
-
-void d3d12_validator_destroy(struct d3d12_validation_tools *validator);
-
 const void *
 d3d12_get_compiler_options(struct pipe_screen *screen,
                            enum pipe_shader_ir ir,
@@ -94,7 +90,7 @@ struct d3d12_shader_key {
    uint64_t next_varying_inputs;
    uint64_t prev_varying_outputs;
    unsigned last_vertex_processing_stage : 1;
-   unsigned invert_depth : 1;
+   unsigned invert_depth : 16;
    unsigned samples_int_textures : 1;
    unsigned input_clip_size : 4;
    unsigned tex_saturate_s : PIPE_MAX_SAMPLERS;

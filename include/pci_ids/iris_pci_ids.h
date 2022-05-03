@@ -244,4 +244,6 @@ CHIPSET(0x56a5, dg2_g11, "DG2", "Intel(R) Graphics")
 CHIPSET(0x56a6, dg2_g11, "DG2", "Intel(R) Graphics")
 CHIPSET(0x56b0, dg2_g11, "DG2", "Intel(R) Graphics")
 CHIPSET(0x56b1, dg2_g11, "DG2", "Intel(R) Graphics")
+CHIPSET(0x56c0, dg2_g10, "ATS-M", "Intel(R) Graphics")
+CHIPSET(0x56c1, dg2_g11, "ATS-M", "Intel(R) Graphics")
 #endif

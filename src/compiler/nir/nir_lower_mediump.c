@@ -62,8 +62,10 @@ get_io_intrinsic(nir_instr *instr, nir_variable_mode modes,
  * monotonically increasing.
  */
 bool
-nir_recompute_io_bases(nir_function_impl *impl, nir_variable_mode modes)
+nir_recompute_io_bases(nir_shader *nir, nir_variable_mode modes)
 {
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+
    BITSET_DECLARE(inputs, NUM_TOTAL_VARYING_SLOTS);
    BITSET_DECLARE(outputs, NUM_TOTAL_VARYING_SLOTS);
    BITSET_ZERO(inputs);
@@ -231,7 +233,7 @@ nir_lower_mediump_io(nir_shader *nir, nir_variable_mode modes,
    }
 
    if (changed && use_16bit_slots)
-      nir_recompute_io_bases(impl, modes);
+      nir_recompute_io_bases(nir, modes);
 
    if (changed) {
       nir_metadata_preserve(impl, nir_metadata_dominance |
@@ -342,7 +344,7 @@ nir_unpack_16bit_varying_slots(nir_shader *nir, nir_variable_mode modes)
    }
 
    if (changed)
-      nir_recompute_io_bases(impl, modes);
+      nir_recompute_io_bases(nir, modes);
 
    if (changed) {
       nir_metadata_preserve(impl, nir_metadata_dominance |
@@ -393,7 +395,8 @@ is_u16_to_u32_conversion(nir_instr *instr)
 static bool
 is_i32_to_i16_conversion(nir_instr *instr)
 {
-   return is_n_to_m_conversion(instr, 32, nir_op_i2i16);
+   return is_n_to_m_conversion(instr, 32, nir_op_i2i16) ||
+      is_n_to_m_conversion(instr, 32, nir_op_u2u16);
 }
 
 static void
@@ -606,12 +609,8 @@ nir_legalize_16bit_sampler_srcs(nir_shader *nir,
                continue;
 
             /* Fix the bit size. */
-            bool is_sint = i == nir_tex_src_offset;
-            bool is_uint = !is_sint &&
-                           (tex->op == nir_texop_txf ||
-                            tex->op == nir_texop_txf_ms ||
-                            tex->op == nir_texop_txs ||
-                            tex->op == nir_texop_samples_identical);
+            bool is_sint = nir_tex_instr_src_type(tex, i) == nir_type_int;
+            bool is_uint = nir_tex_instr_src_type(tex, i) == nir_type_uint;
             nir_ssa_def *(*convert)(nir_builder *, nir_ssa_def *);
 
             switch (bit_size) {

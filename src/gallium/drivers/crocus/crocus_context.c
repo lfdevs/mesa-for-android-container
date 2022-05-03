@@ -40,7 +40,7 @@
  */
 static void
 crocus_set_debug_callback(struct pipe_context *ctx,
-                          const struct pipe_debug_callback *cb)
+                          const struct util_debug_callback *cb)
 {
    struct crocus_context *ice = (struct crocus_context *)ctx;
 

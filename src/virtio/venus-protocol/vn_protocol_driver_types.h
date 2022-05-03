@@ -8,6 +8,7 @@
 #ifndef VN_PROTOCOL_DRIVER_TYPES_H
 #define VN_PROTOCOL_DRIVER_TYPES_H
 
+#include "vn_protocol_driver_cs.h"
 #include "vn_protocol_driver_defines.h"
 
 /* uint64_t */
@@ -418,6 +419,27 @@ vn_decode_uint8_t_array(struct vn_cs_decoder *dec, uint8_t *val, uint32_t count)
     const size_t size = sizeof(*val) * count;
     assert(size >= count);
     vn_decode(dec, (size + 3) & ~3, val, size);
+}
+
+/* uint16_t */
+
+static inline size_t
+vn_sizeof_uint16_t(const uint16_t *val)
+{
+    assert(sizeof(*val) == 2);
+    return 4;
+}
+
+static inline void
+vn_encode_uint16_t(struct vn_cs_encoder *enc, const uint16_t *val)
+{
+    vn_encode(enc, 4, val, sizeof(*val));
+}
+
+static inline void
+vn_decode_uint16_t(struct vn_cs_decoder *dec, uint16_t *val)
+{
+    vn_decode(dec, 4, val, sizeof(*val));
 }
 
 /* typedef uint32_t VkSampleMask */
@@ -1908,6 +1930,27 @@ vn_decode_VkDescriptorBindingFlagBits(struct vn_cs_decoder *dec, VkDescriptorBin
     vn_decode_int32_t(dec, (int32_t *)val);
 }
 
+/* enum VkConditionalRenderingFlagBitsEXT */
+
+static inline size_t
+vn_sizeof_VkConditionalRenderingFlagBitsEXT(const VkConditionalRenderingFlagBitsEXT *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkConditionalRenderingFlagBitsEXT(struct vn_cs_encoder *enc, const VkConditionalRenderingFlagBitsEXT *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkConditionalRenderingFlagBitsEXT(struct vn_cs_decoder *dec, VkConditionalRenderingFlagBitsEXT *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
 /* enum VkResolveModeFlagBits */
 
 static inline size_t
@@ -2838,6 +2881,66 @@ vn_decode_VkPointClippingBehavior(struct vn_cs_decoder *dec, VkPointClippingBeha
     vn_decode_int32_t(dec, (int32_t *)val);
 }
 
+/* enum VkTimeDomainEXT */
+
+static inline size_t
+vn_sizeof_VkTimeDomainEXT(const VkTimeDomainEXT *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkTimeDomainEXT(struct vn_cs_encoder *enc, const VkTimeDomainEXT *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkTimeDomainEXT(struct vn_cs_decoder *dec, VkTimeDomainEXT *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
+static inline size_t
+vn_sizeof_VkTimeDomainEXT_array(const VkTimeDomainEXT *val, uint32_t count)
+{
+    return vn_sizeof_int32_t_array((const int32_t *)val, count);
+}
+
+static inline void
+vn_encode_VkTimeDomainEXT_array(struct vn_cs_encoder *enc, const VkTimeDomainEXT *val, uint32_t count)
+{
+    vn_encode_int32_t_array(enc, (const int32_t *)val, count);
+}
+
+static inline void
+vn_decode_VkTimeDomainEXT_array(struct vn_cs_decoder *dec, VkTimeDomainEXT *val, uint32_t count)
+{
+    vn_decode_int32_t_array(dec, (int32_t *)val, count);
+}
+
+/* enum VkConservativeRasterizationModeEXT */
+
+static inline size_t
+vn_sizeof_VkConservativeRasterizationModeEXT(const VkConservativeRasterizationModeEXT *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkConservativeRasterizationModeEXT(struct vn_cs_encoder *enc, const VkConservativeRasterizationModeEXT *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkConservativeRasterizationModeEXT(struct vn_cs_decoder *dec, VkConservativeRasterizationModeEXT *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
 /* enum VkSemaphoreType */
 
 static inline size_t
@@ -2855,6 +2958,48 @@ vn_encode_VkSemaphoreType(struct vn_cs_encoder *enc, const VkSemaphoreType *val)
 
 static inline void
 vn_decode_VkSemaphoreType(struct vn_cs_decoder *dec, VkSemaphoreType *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
+/* enum VkLineRasterizationModeEXT */
+
+static inline size_t
+vn_sizeof_VkLineRasterizationModeEXT(const VkLineRasterizationModeEXT *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkLineRasterizationModeEXT(struct vn_cs_encoder *enc, const VkLineRasterizationModeEXT *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkLineRasterizationModeEXT(struct vn_cs_decoder *dec, VkLineRasterizationModeEXT *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
+/* enum VkProvokingVertexModeEXT */
+
+static inline size_t
+vn_sizeof_VkProvokingVertexModeEXT(const VkProvokingVertexModeEXT *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkProvokingVertexModeEXT(struct vn_cs_encoder *enc, const VkProvokingVertexModeEXT *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkProvokingVertexModeEXT(struct vn_cs_decoder *dec, VkProvokingVertexModeEXT *val)
 {
     vn_decode_int32_t(dec, (int32_t *)val);
 }

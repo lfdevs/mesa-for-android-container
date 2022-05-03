@@ -54,6 +54,8 @@ struct d3d12_batch {
    struct d3d12_descriptor_heap *view_heap;
    bool has_errors;
    bool pending_memory_barrier;
+
+   uint64_t submit_id;
 };
 
 bool

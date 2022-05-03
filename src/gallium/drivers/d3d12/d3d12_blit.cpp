@@ -620,7 +620,7 @@ get_stencil_resolve_vs(struct d3d12_context *ctx)
       return ctx->stencil_resolve_vs;
 
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX,
-                                                  dxil_get_nir_compiler_options(),
+                                                  &d3d12_screen(ctx->base.screen)->nir_options,
                                                   "linear_blit_vs");
 
    const struct glsl_type *vec4 = glsl_vec4_type();
@@ -651,7 +651,7 @@ get_stencil_resolve_fs(struct d3d12_context *ctx, bool no_flip)
       return ctx->stencil_resolve_fs_no_flip;
 
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,
-                                                  dxil_get_nir_compiler_options(),
+                                                  &d3d12_screen(ctx->base.screen)->nir_options,
                                                   no_flip ? "stencil_resolve_fs_no_flip" : "stencil_resolve_fs");
 
    nir_variable *stencil_out = nir_variable_create(b.shader,

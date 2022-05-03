@@ -221,7 +221,6 @@ st_get_drawpix_shader(const struct tgsi_token *tokens, bool use_texcoord,
                       unsigned texcoord_const, unsigned tex_target)
 {
    struct tgsi_drawpix_transform ctx;
-   struct tgsi_token *newtoks;
    int newlen;
 
    assert(tex_target == PIPE_TEXTURE_2D ||
@@ -241,10 +240,6 @@ st_get_drawpix_shader(const struct tgsi_token *tokens, bool use_texcoord,
    tgsi_scan_shader(tokens, &ctx.info);
 
    newlen = tgsi_num_tokens(tokens) + 60;
-   newtoks = tgsi_alloc_tokens(newlen);
-   if (!newtoks)
-      return NULL;
 
-   tgsi_transform_shader(tokens, newtoks, newlen, &ctx.base);
-   return newtoks;
+   return tgsi_transform_shader(tokens, newlen, &ctx.base);
 }

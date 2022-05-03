@@ -95,6 +95,22 @@ __gen_unpack_uint(const uint8_t *restrict cl, uint32_t start, uint32_t end)
    return (val >> (start % 8)) & mask;
 }
 
+/*
+ * LODs are 4:6 fixed point. We must clamp before converting to integers to
+ * avoid undefined behaviour for out-of-bounds inputs like +/- infinity.
+ */
+static inline uint32_t
+__float_to_lod(float f)
+{
+    return (uint32_t) CLAMP(f * (1 << 6), 0 /* 0.0 */, 0x380 /* 14.0 */);
+}
+
+static inline float
+__gen_unpack_lod(const uint8_t *restrict cl, uint32_t start, uint32_t end)
+{
+    return ((float) __gen_unpack_uint(cl, start, end)) / (1 << 6);
+}
+
 static inline uint64_t
 __gen_unpack_sint(const uint8_t *restrict cl, uint32_t start, uint32_t end)
 {
@@ -257,7 +273,7 @@ class Field(object):
             type = 'uint64_t'
         elif self.type == 'bool':
             type = 'bool'
-        elif self.type == 'float':
+        elif self.type in ['float', 'lod']:
             type = 'float'
         elif self.type in ['uint', 'hex'] and self.end - self.start > 32:
             type = 'uint64_t'
@@ -434,6 +450,9 @@ class Group(object):
                 elif field.type == "float":
                     assert(start == 0 and end == 31)
                     s = "__gen_uint(fui({}), 0, 32)".format(value)
+                elif field.type == "lod":
+                    assert(end - start + 1 == 10)
+                    s = "__gen_uint(__float_to_lod(%s), %d, %d)" % (value, start, end)
                 else:
                     s = "#error unhandled field {}, type {}".format(contributor.path, field.type)
 
@@ -498,6 +517,8 @@ class Group(object):
                 convert = "__gen_unpack_uint"
             elif field.type == "float":
                 convert = "__gen_unpack_float"
+            elif field.type == "lod":
+                convert = "__gen_unpack_lod"
             else:
                 s = "/* unhandled field %s, type %s */\n" % (field.name, field.type)
 
@@ -510,6 +531,9 @@ class Group(object):
                     suffix = " << {}".format(field.modifier[1])
                 if field.modifier[0] == "log2":
                     prefix = "1 << "
+
+            if field.type in self.parser.enums:
+                prefix = f"(enum {enum_name(field.type)}) {prefix}"
 
             decoded = '{}{}({}){}'.format(prefix, convert, ', '.join(args), suffix)
 
@@ -539,7 +563,7 @@ class Group(object):
                 print('   fprintf(fp, "%*s{}: %d\\n", indent, "", {});'.format(name, val))
             elif field.type == "bool":
                 print('   fprintf(fp, "%*s{}: %s\\n", indent, "", {} ? "true" : "false");'.format(name, val))
-            elif field.type == "float":
+            elif field.type in ["float", "lod"]:
                 print('   fprintf(fp, "%*s{}: %f\\n", indent, "", {});'.format(name, val))
             elif field.type in ["uint", "hex"] and (field.end - field.start) >= 32:
                 print('   fprintf(fp, "%*s{}: 0x%" PRIx64 "\\n", indent, "", {});'.format(name, val))

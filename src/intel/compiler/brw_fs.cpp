@@ -1058,6 +1058,7 @@ fs_inst::flags_written(const intel_device_info *devinfo) const
        opcode == FS_OPCODE_FB_WRITE) {
       return flag_mask(this, 1);
    } else if (opcode == SHADER_OPCODE_FIND_LIVE_CHANNEL ||
+              opcode == SHADER_OPCODE_FIND_LAST_LIVE_CHANNEL ||
               opcode == FS_OPCODE_LOAD_LIVE_CHANNELS) {
       return flag_mask(this, 32);
    } else {
@@ -1590,9 +1591,9 @@ fs_visitor::assign_curb_setup()
    prog_data->curb_read_length = uniform_push_length + ubo_push_length;
 
    uint64_t used = 0;
+   bool is_compute = gl_shader_stage_is_compute(stage);
 
-   if (stage == MESA_SHADER_COMPUTE &&
-       brw_cs_prog_data(prog_data)->uses_inline_data) {
+   if (is_compute && brw_cs_prog_data(prog_data)->uses_inline_data) {
       /* With COMPUTE_WALKER, we can push up to one register worth of data via
        * the inline data parameter in the COMPUTE_WALKER command itself.
        *
@@ -1600,7 +1601,7 @@ fs_visitor::assign_curb_setup()
        */
       assert(devinfo->verx10 >= 125);
       assert(uniform_push_length <= 1);
-   } else if (stage == MESA_SHADER_COMPUTE && devinfo->verx10 >= 125) {
+   } else if (is_compute && devinfo->verx10 >= 125) {
       fs_builder ubld = bld.exec_all().group(8, 0).at(
          cfg->first_block(), cfg->first_block()->start());
 
@@ -5518,6 +5519,40 @@ fs_visitor::emit_is_helper_invocation(fs_reg result)
    }
 }
 
+/**
+ * Predicate the specified instruction on the vector mask.
+ */
+static void
+emit_predicate_on_vector_mask(const fs_builder &bld, fs_inst *inst)
+{
+   assert(bld.shader->stage == MESA_SHADER_FRAGMENT &&
+          bld.group() == inst->group &&
+          bld.dispatch_width() == inst->exec_size);
+
+   const fs_builder ubld = bld.exec_all().group(1, 0);
+
+   const fs_visitor *v = static_cast<const fs_visitor *>(bld.shader);
+   const fs_reg vector_mask = ubld.vgrf(BRW_REGISTER_TYPE_UW);
+   ubld.emit(SHADER_OPCODE_READ_SR_REG, vector_mask, brw_imm_ud(3));
+   const unsigned subreg = sample_mask_flag_subreg(v);
+
+   ubld.MOV(brw_flag_subreg(subreg + inst->group / 16), vector_mask);
+
+   if (inst->predicate) {
+      assert(inst->predicate == BRW_PREDICATE_NORMAL);
+      assert(!inst->predicate_inverse);
+      assert(inst->flag_subreg == 0);
+      /* Combine the vector mask with the existing predicate by using a
+       * vertical predication mode.
+       */
+      inst->predicate = BRW_PREDICATE_ALIGN1_ALLV;
+   } else {
+      inst->flag_subreg = subreg;
+      inst->predicate = BRW_PREDICATE_NORMAL;
+      inst->predicate_inverse = false;
+   }
+}
+
 static void
 setup_surface_descriptors(const fs_builder &bld, fs_inst *inst, uint32_t desc,
                           const fs_reg &surface, const fs_reg &surface_handle)
@@ -6112,25 +6147,39 @@ emit_a64_oword_block_header(const fs_builder &bld, const fs_reg &addr)
 }
 
 static void
+emit_fragment_mask(const fs_builder &bld, fs_inst *inst)
+{
+   assert(inst->src[A64_LOGICAL_ENABLE_HELPERS].file == IMM);
+   const bool enable_helpers = inst->src[A64_LOGICAL_ENABLE_HELPERS].ud;
+
+   /* If we're a fragment shader, we have to predicate with the sample mask to
+    * avoid helper invocations to avoid helper invocations in instructions
+    * with side effects, unless they are explicitly required.
+    *
+    * There are also special cases when we actually want to run on helpers
+    * (ray queries).
+    */
+   assert(bld.shader->stage == MESA_SHADER_FRAGMENT);
+   if (enable_helpers)
+      emit_predicate_on_vector_mask(bld, inst);
+   else if (inst->has_side_effects())
+      emit_predicate_on_sample_mask(bld, inst);
+}
+
+static void
 lower_lsc_a64_logical_send(const fs_builder &bld, fs_inst *inst)
 {
    const intel_device_info *devinfo = bld.shader->devinfo;
 
    /* Get the logical send arguments. */
-   const fs_reg &addr = inst->src[0];
-   const fs_reg &src = inst->src[1];
+   const fs_reg &addr = inst->src[A64_LOGICAL_ADDRESS];
+   const fs_reg &src = inst->src[A64_LOGICAL_SRC];
    const unsigned src_sz = type_sz(src.type);
 
    const unsigned src_comps = inst->components_read(1);
-   assert(inst->src[2].file == IMM);
-   const unsigned arg = inst->src[2].ud;
+   assert(inst->src[A64_LOGICAL_ARG].file == IMM);
+   const unsigned arg = inst->src[A64_LOGICAL_ARG].ud;
    const bool has_side_effects = inst->has_side_effects();
-
-   /* If the surface message has side effects and we're a fragment shader, we
-    * have to predicate with the sample mask to avoid helper invocations.
-    */
-   if (has_side_effects && bld.shader->stage == MESA_SHADER_FRAGMENT)
-      emit_predicate_on_sample_mask(bld, inst);
 
    fs_reg payload = retype(bld.move_to_vgrf(addr, 1), BRW_REGISTER_TYPE_UD);
    fs_reg payload2 = retype(bld.move_to_vgrf(src, src_comps),
@@ -6207,6 +6256,9 @@ lower_lsc_a64_logical_send(const fs_builder &bld, fs_inst *inst)
       unreachable("Unknown A64 logical instruction");
    }
 
+   if (bld.shader->stage == MESA_SHADER_FRAGMENT)
+      emit_fragment_mask(bld, inst);
+
    /* Update the original instruction. */
    inst->opcode = SHADER_OPCODE_SEND;
    inst->mlen = lsc_msg_desc_src0_len(devinfo, inst->desc);
@@ -6229,18 +6281,12 @@ lower_a64_logical_send(const fs_builder &bld, fs_inst *inst)
 {
    const intel_device_info *devinfo = bld.shader->devinfo;
 
-   const fs_reg &addr = inst->src[0];
-   const fs_reg &src = inst->src[1];
+   const fs_reg &addr = inst->src[A64_LOGICAL_ADDRESS];
+   const fs_reg &src = inst->src[A64_LOGICAL_SRC];
    const unsigned src_comps = inst->components_read(1);
-   assert(inst->src[2].file == IMM);
-   const unsigned arg = inst->src[2].ud;
+   assert(inst->src[A64_LOGICAL_ARG].file == IMM);
+   const unsigned arg = inst->src[A64_LOGICAL_ARG].ud;
    const bool has_side_effects = inst->has_side_effects();
-
-   /* If the surface message has side effects and we're a fragment shader, we
-    * have to predicate with the sample mask to avoid helper invocations.
-    */
-   if (has_side_effects && bld.shader->stage == MESA_SHADER_FRAGMENT)
-      emit_predicate_on_sample_mask(bld, inst);
 
    fs_reg payload, payload2;
    unsigned mlen, ex_mlen = 0, header_size = 0;
@@ -6364,6 +6410,9 @@ lower_a64_logical_send(const fs_builder &bld, fs_inst *inst)
    default:
       unreachable("Unknown A64 logical instruction");
    }
+
+   if (bld.shader->stage == MESA_SHADER_FRAGMENT)
+      emit_fragment_mask(bld, inst);
 
    /* Update the original instruction. */
    inst->opcode = SHADER_OPCODE_SEND;
@@ -6658,31 +6707,53 @@ static void
 lower_trace_ray_logical_send(const fs_builder &bld, fs_inst *inst)
 {
    const intel_device_info *devinfo = bld.shader->devinfo;
-   const fs_reg &bvh_level = inst->src[0];
-   assert(inst->src[1].file == BRW_IMMEDIATE_VALUE);
-   const uint32_t trace_ray_control = inst->src[1].ud;
+   const fs_reg &globals_addr = inst->src[RT_LOGICAL_SRC_GLOBALS];
+   const fs_reg &bvh_level =
+      inst->src[RT_LOGICAL_SRC_BVH_LEVEL].file == BRW_IMMEDIATE_VALUE ?
+      inst->src[RT_LOGICAL_SRC_BVH_LEVEL] :
+      bld.move_to_vgrf(inst->src[RT_LOGICAL_SRC_BVH_LEVEL],
+                       inst->components_read(RT_LOGICAL_SRC_BVH_LEVEL));
+   const fs_reg &trace_ray_control =
+      inst->src[RT_LOGICAL_SRC_TRACE_RAY_CONTROL].file == BRW_IMMEDIATE_VALUE ?
+      inst->src[RT_LOGICAL_SRC_TRACE_RAY_CONTROL] :
+      bld.move_to_vgrf(inst->src[RT_LOGICAL_SRC_TRACE_RAY_CONTROL],
+                       inst->components_read(RT_LOGICAL_SRC_TRACE_RAY_CONTROL));
+   const fs_reg &synchronous_src = inst->src[RT_LOGICAL_SRC_SYNCHRONOUS];
+   assert(synchronous_src.file == BRW_IMMEDIATE_VALUE);
+   const bool synchronous = synchronous_src.ud;
 
    const unsigned mlen = 1;
    const fs_builder ubld = bld.exec_all().group(8, 0);
    fs_reg header = ubld.vgrf(BRW_REGISTER_TYPE_UD);
    ubld.MOV(header, brw_imm_ud(0));
-   ubld.group(2, 0).MOV(header,
-      retype(brw_vec2_grf(2, 0), BRW_REGISTER_TYPE_UD));
-   /* TODO: Bit 128 is ray_query */
+   ubld.group(2, 0).MOV(header, retype(globals_addr, BRW_REGISTER_TYPE_UD));
+   if (synchronous)
+      ubld.group(1, 0).MOV(byte_offset(header, 16), brw_imm_ud(synchronous));
 
    const unsigned ex_mlen = inst->exec_size / 8;
    fs_reg payload = bld.vgrf(BRW_REGISTER_TYPE_UD);
-   const uint32_t trc_bits = SET_BITS(trace_ray_control, 9, 8);
-   if (bvh_level.file == BRW_IMMEDIATE_VALUE) {
-      bld.MOV(payload, brw_imm_ud(trc_bits | (bvh_level.ud & 0x7)));
+   if (bvh_level.file == BRW_IMMEDIATE_VALUE &&
+       trace_ray_control.file == BRW_IMMEDIATE_VALUE) {
+      bld.MOV(payload, brw_imm_ud(SET_BITS(trace_ray_control.ud, 9, 8) |
+                                  (bvh_level.ud & 0x7)));
    } else {
-      bld.AND(payload, bvh_level, brw_imm_ud(0x7));
-      if (trc_bits != 0)
-         bld.OR(payload, payload, brw_imm_ud(trc_bits));
+      bld.SHL(payload, trace_ray_control, brw_imm_ud(8));
+      bld.OR(payload, payload, bvh_level);
    }
-   bld.AND(subscript(payload, BRW_REGISTER_TYPE_UW, 1),
-           retype(brw_vec8_grf(1, 0), BRW_REGISTER_TYPE_UW),
-           brw_imm_uw(0x7ff));
+
+   /* When doing synchronous traversal, the HW implicitly computes the
+    * stack_id using the following formula :
+    *
+    *    EUID[3:0] & THREAD_ID[2:0] & SIMD_LANE_ID[3:0]
+    *
+    * Only in the asynchronous case we need to set the stack_id given from the
+    * payload register.
+    */
+   if (!synchronous) {
+      bld.AND(subscript(payload, BRW_REGISTER_TYPE_UW, 1),
+              retype(brw_vec8_grf(1, 0), BRW_REGISTER_TYPE_UW),
+              brw_imm_uw(0x7ff));
+   }
 
    /* Update the original instruction. */
    inst->opcode = SHADER_OPCODE_SEND;
@@ -8910,7 +8981,7 @@ fs_visitor::allocate_registers(bool allow_spilling)
       prog_data->total_scratch = MAX2(brw_get_scratch_size(last_scratch),
                                       prog_data->total_scratch);
 
-      if (stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_KERNEL) {
+      if (gl_shader_stage_is_compute(stage)) {
          if (devinfo->platform == INTEL_PLATFORM_HSW) {
             /* According to the MEDIA_VFE_STATE's "Per Thread Scratch Space"
              * field documentation, Haswell supports a minimum of 2kB of
@@ -9266,9 +9337,6 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
       emit_dummy_memory_fence_before_eot();
 
       allocate_registers(allow_spilling);
-
-      if (failed)
-         return false;
    }
 
    return !failed;
@@ -9277,7 +9345,7 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
 bool
 fs_visitor::run_cs(bool allow_spilling)
 {
-   assert(stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_KERNEL);
+   assert(gl_shader_stage_is_compute(stage));
 
    setup_cs_payload();
 
@@ -9304,9 +9372,6 @@ fs_visitor::run_cs(bool allow_spilling)
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
    allocate_registers(allow_spilling);
-
-   if (failed)
-      return false;
 
    return !failed;
 }
@@ -9336,9 +9401,6 @@ fs_visitor::run_bs(bool allow_spilling)
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
    allocate_registers(allow_spilling);
-
-   if (failed)
-      return false;
 
    return !failed;
 }
@@ -9385,9 +9447,6 @@ fs_visitor::run_task(bool allow_spilling)
    emit_dummy_memory_fence_before_eot();
    allocate_registers(allow_spilling);
 
-   if (failed)
-      return false;
-
    return !failed;
 }
 
@@ -9432,9 +9491,6 @@ fs_visitor::run_mesh(bool allow_spilling)
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
    allocate_registers(allow_spilling);
-
-   if (failed)
-      return false;
 
    return !failed;
 }
@@ -9520,6 +9576,10 @@ brw_compute_flat_inputs(struct brw_wm_prog_data *prog_data,
    prog_data->flat_inputs = 0;
 
    nir_foreach_shader_in_variable(var, shader) {
+      /* flat shading */
+      if (var->data.interpolation != INTERP_MODE_FLAT)
+         continue;
+
       if (var->data.per_primitive)
          continue;
 
@@ -9527,11 +9587,7 @@ brw_compute_flat_inputs(struct brw_wm_prog_data *prog_data,
       for (unsigned s = 0; s < slots; s++) {
          int input_index = prog_data->urb_setup[var->data.location + s];
 
-         if (input_index < 0)
-            continue;
-
-         /* flat shading */
-         if (var->data.interpolation == INTERP_MODE_FLAT)
+         if (input_index >= 0)
             prog_data->flat_inputs |= 1 << input_index;
       }
    }
@@ -9769,6 +9825,7 @@ brw_compile_fs(const struct brw_compiler *compiler,
       INTEL_DEBUG(params->debug_flag ? params->debug_flag : DEBUG_WM);
 
    prog_data->base.stage = MESA_SHADER_FRAGMENT;
+   prog_data->base.ray_queries = nir->info.ray_queries;
    prog_data->base.total_scratch = 0;
 
    const struct intel_device_info *devinfo = compiler->devinfo;
@@ -9843,6 +9900,9 @@ brw_compile_fs(const struct brw_compiler *compiler,
       v8->limit_dispatch_width(16, "SIMD32 not supported with coarse"
                                " pixel shading.\n");
    }
+
+   if (nir->info.ray_queries > 0)
+      v8->limit_dispatch_width(16, "SIMD32 with ray queries.\n");
 
    if (!has_spilled &&
        v8->max_dispatch_width >= 16 &&
@@ -10139,6 +10199,7 @@ brw_compile_cs(const struct brw_compiler *compiler,
 
    prog_data->base.stage = MESA_SHADER_COMPUTE;
    prog_data->base.total_shared = nir->info.shared_size;
+   prog_data->base.ray_queries = nir->info.ray_queries;
    prog_data->base.total_scratch = 0;
 
    if (!nir->info.workgroup_size_variable) {
@@ -10398,6 +10459,7 @@ brw_compile_bs(const struct brw_compiler *compiler,
    const bool debug_enabled = INTEL_DEBUG(DEBUG_RT);
 
    prog_data->base.stage = shader->info.stage;
+   prog_data->base.ray_queries = shader->info.ray_queries;
    prog_data->base.total_scratch = 0;
 
    prog_data->max_stack_size = 0;

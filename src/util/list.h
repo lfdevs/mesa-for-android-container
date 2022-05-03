@@ -61,6 +61,12 @@ static inline void list_inithead(struct list_head *item)
     item->next = item;
 }
 
+/**
+ * Prepend an item to a list
+ *
+ * @param item The element to add to the list
+ * @param list The list to prepend to
+ */
 static inline void list_add(struct list_head *item, struct list_head *list)
 {
     item->prev = list;
@@ -69,6 +75,12 @@ static inline void list_add(struct list_head *item, struct list_head *list)
     list->next = item;
 }
 
+/**
+ * Append an item to a list
+ *
+ * @param item The element to add to the list
+ * @param list The list to append to
+ */
 static inline void list_addtail(struct list_head *item, struct list_head *list)
 {
     item->next = list;

@@ -71,6 +71,22 @@ anv_finish_wsi(struct anv_physical_device *physical_device)
                      &physical_device->instance->vk.alloc);
 }
 
+VkResult anv_AcquireNextImage2KHR(
+   VkDevice _device,
+   const VkAcquireNextImageInfoKHR *pAcquireInfo,
+   uint32_t *pImageIndex)
+{
+   VK_FROM_HANDLE(anv_device, device, _device);
+
+   VkResult result =
+      wsi_common_acquire_next_image2(&device->physical->wsi_device,
+                                     _device, pAcquireInfo, pImageIndex);
+   if (result == VK_SUCCESS)
+      anv_measure_acquire(device);
+
+   return result;
+}
+
 VkResult anv_QueuePresentKHR(
     VkQueue                                  _queue,
     const VkPresentInfoKHR*                  pPresentInfo)

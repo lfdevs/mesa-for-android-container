@@ -162,7 +162,7 @@ static VkResult
 init_render_queue_state(struct anv_queue *queue)
 {
    struct anv_device *device = queue->device;
-   uint32_t cmds[64];
+   uint32_t cmds[128];
    struct anv_batch batch = {
       .start = cmds,
       .next = cmds,
@@ -185,6 +185,60 @@ init_render_queue_state(struct anv_queue *queue)
       cm1.MSCRAWHazardAvoidanceBitMask = true;
       cm1.PartialResolveDisableInVC = true;
       cm1.PartialResolveDisableInVCMask = true;
+   }
+#endif
+
+#if GFX_VERx10 >= 125
+   /* GEN:BUG:1607854226:
+    *
+    *  Non-pipelined state has issues with not applying in MEDIA/GPGPU mode.
+    *  Fortunately, we always start the context off in 3D mode.
+    */
+   uint32_t mocs = device->isl_dev.mocs.internal;
+   anv_batch_emit(&batch, GENX(STATE_BASE_ADDRESS), sba) {
+      sba.GeneralStateBaseAddress = (struct anv_address) { NULL, 0 };
+      sba.GeneralStateBufferSize  = 0xfffff;
+      sba.GeneralStateMOCS = mocs;
+      sba.GeneralStateBaseAddressModifyEnable = true;
+      sba.GeneralStateBufferSizeModifyEnable = true;
+
+      sba.StatelessDataPortAccessMOCS = mocs;
+
+      sba.SurfaceStateBaseAddress =
+         (struct anv_address) { .offset = SURFACE_STATE_POOL_MIN_ADDRESS };
+      sba.SurfaceStateMOCS = mocs;
+      sba.SurfaceStateBaseAddressModifyEnable = true;
+
+      sba.DynamicStateBaseAddress =
+         (struct anv_address) { .offset = DYNAMIC_STATE_POOL_MIN_ADDRESS };
+      sba.DynamicStateBufferSize = DYNAMIC_STATE_POOL_SIZE / 4096;
+      sba.DynamicStateMOCS = mocs;
+      sba.DynamicStateBaseAddressModifyEnable = true;
+      sba.DynamicStateBufferSizeModifyEnable = true;
+
+      sba.IndirectObjectBaseAddress = (struct anv_address) { NULL, 0 };
+      sba.IndirectObjectBufferSize = 0xfffff;
+      sba.IndirectObjectMOCS = mocs;
+      sba.IndirectObjectBaseAddressModifyEnable = true;
+      sba.IndirectObjectBufferSizeModifyEnable = true;
+
+      sba.InstructionBaseAddress =
+         (struct anv_address) { .offset = INSTRUCTION_STATE_POOL_MIN_ADDRESS };
+      sba.InstructionBufferSize = INSTRUCTION_STATE_POOL_SIZE / 4096;
+      sba.InstructionMOCS = mocs;
+      sba.InstructionBaseAddressModifyEnable = true;
+      sba.InstructionBuffersizeModifyEnable = true;
+
+      sba.BindlessSurfaceStateBaseAddress =
+         (struct anv_address) { .offset = SURFACE_STATE_POOL_MIN_ADDRESS };
+      sba.BindlessSurfaceStateSize = (1 << 20) - 1;
+      sba.BindlessSurfaceStateMOCS = mocs;
+      sba.BindlessSurfaceStateBaseAddressModifyEnable = true;
+
+      sba.BindlessSamplerStateBaseAddress = (struct anv_address) { NULL, 0 };
+      sba.BindlessSamplerStateMOCS = mocs;
+      sba.BindlessSamplerStateBaseAddressModifyEnable = true;
+      sba.BindlessSamplerStateBufferSize = 0;
    }
 #endif
 
@@ -888,21 +942,30 @@ VkResult genX(CreateSampler)(
             (VkSamplerCustomBorderColorCreateInfoEXT *) ext;
          if (sampler->custom_border_color.map == NULL)
             break;
-         struct gfx8_border_color *cbc = sampler->custom_border_color.map;
-         if (custom_border_color->format == VK_FORMAT_B4G4R4A4_UNORM_PACK16) {
-            /* B4G4R4A4_UNORM_PACK16 is treated as R4G4B4A4_UNORM_PACK16 with
-             * a swizzle, but this does not carry over to the sampler for
-             * border colors, so we need to do the swizzle ourselves here.
-             */
-            cbc->uint32[0] = custom_border_color->customBorderColor.uint32[2];
-            cbc->uint32[1] = custom_border_color->customBorderColor.uint32[1];
-            cbc->uint32[2] = custom_border_color->customBorderColor.uint32[0];
-            cbc->uint32[3] = custom_border_color->customBorderColor.uint32[3];
-         } else {
-            /* Both structs share the same layout, so just copy them over. */
-            memcpy(cbc, &custom_border_color->customBorderColor,
-                   sizeof(VkClearColorValue));
+
+         union isl_color_value color = { .u32 = {
+            custom_border_color->customBorderColor.uint32[0],
+            custom_border_color->customBorderColor.uint32[1],
+            custom_border_color->customBorderColor.uint32[2],
+            custom_border_color->customBorderColor.uint32[3],
+         } };
+
+         const struct anv_format *format_desc =
+            custom_border_color->format != VK_FORMAT_UNDEFINED ?
+            anv_get_format(custom_border_color->format) : NULL;
+
+         /* For formats with a swizzle, it does not carry over to the sampler
+          * for border colors, so we need to do the swizzle ourselves here.
+          */
+         if (format_desc && format_desc->n_planes == 1 &&
+             !isl_swizzle_is_identity(format_desc->planes[0].swizzle)) {
+            const struct anv_format_plane *fmt_plane = &format_desc->planes[0];
+
+            assert(!isl_format_has_int_channel(fmt_plane->isl_format));
+            color = isl_color_value_swizzle(color, fmt_plane->swizzle, true);
          }
+
+         memcpy(sampler->custom_border_color.map, color.u32, sizeof(color));
          has_custom_color = true;
          break;
       }

@@ -543,7 +543,8 @@ lima_generate_pp_stream(struct lima_job *job, int off_x, int off_y,
    struct lima_pp_stream_state *ps = &ctx->pp_stream;
    struct lima_job_fb_info *fb = &job->fb;
    struct lima_screen *screen = lima_screen(ctx->base.screen);
-   int i, num_pp = screen->num_pp;
+   int num_pp = screen->num_pp;
+   assert(num_pp > 0);
 
    /* use hilbert_coords to generates 1D to 2D relationship.
     * 1D for pp stream index and 2D for plb block x/y on framebuffer.
@@ -565,10 +566,10 @@ lima_generate_pp_stream(struct lima_job *job, int off_x, int off_y,
       count = 1 << (dim + dim);
    }
 
-   for (i = 0; i < num_pp; i++)
+   for (int i = 0; i < num_pp; i++)
       stream[i] = ps->map + ps->offset[i];
 
-   for (i = 0; i < count; i++) {
+   for (int i = 0; i < count; i++) {
       int x, y;
       hilbert_coords(max, i, &x, &y);
       if (x < tiled_w && y < tiled_h) {
@@ -589,7 +590,7 @@ lima_generate_pp_stream(struct lima_job *job, int off_x, int off_y,
       }
    }
 
-   for (i = 0; i < num_pp; i++) {
+   for (int i = 0; i < num_pp; i++) {
       stream[i][si[i]++] = 0;
       stream[i][si[i]++] = 0xBC000000;
       stream[i][si[i]++] = 0;

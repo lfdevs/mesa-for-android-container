@@ -195,7 +195,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_TEXTURE_SWIZZLE:
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
-   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
+   case PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT:
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
@@ -217,9 +217,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
       return !is_a2xx(screen);
 
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+   case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
       return is_a2xx(screen);
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+   case PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
       return !is_a2xx(screen);
 
    case PIPE_CAP_PACKED_UNIFORMS:
@@ -251,7 +251,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_SHADER_SATURATE:
    case PIPE_CAP_PRIMITIVE_RESTART:
    case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
-   case PIPE_CAP_TGSI_INSTANCEID:
+   case PIPE_CAP_VS_INSTANCEID:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
    case PIPE_CAP_INDEP_BLEND_ENABLE:
    case PIPE_CAP_INDEP_BLEND_FUNC:
@@ -334,7 +334,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
          return 120;
 
    case PIPE_CAP_ESSL_FEATURE_LEVEL:
-      if (is_a5xx(screen) || is_a6xx(screen))
+      if (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen))
          return 320;
       if (is_ir3(screen))
          return 300;
@@ -344,6 +344,8 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       if (is_a6xx(screen))
          return 64;
       if (is_a5xx(screen))
+         return 4;
+      if (is_a4xx(screen))
          return 4;
       return 0;
 
@@ -449,14 +451,14 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 0;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
-   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
+   case PIPE_CAP_FS_POSITION_IS_SYSVAL:
    case PIPE_CAP_TGSI_TEXCOORD:
       if (is_ir3(screen))
          return 1;
       return 0;
-   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+   case PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL:
       return 1;
-   case PIPE_CAP_TGSI_FS_POINT_IS_SYSVAL:
+   case PIPE_CAP_FS_POINT_IS_SYSVAL:
       return is_a2xx(screen);
    case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
@@ -681,7 +683,7 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen,
       return 32;
    case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
-      if (is_a5xx(screen) || is_a6xx(screen)) {
+      if (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen)) {
          /* a5xx (and a4xx for that matter) has one state-block
           * for compute-shader SSBO's and another that is shared
           * by VS/HS/DS/GS/FS..  so to simplify things for now

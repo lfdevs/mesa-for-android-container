@@ -51,7 +51,7 @@ d3d12_fence(struct pipe_fence_handle *pfence)
 }
 
 struct d3d12_fence *
-d3d12_create_fence(struct d3d12_screen *screen, struct d3d12_context *ctx);
+d3d12_create_fence(struct d3d12_screen *screen);
 
 void
 d3d12_fence_reference(struct d3d12_fence **ptr, struct d3d12_fence *fence);

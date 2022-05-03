@@ -234,6 +234,7 @@ iris_init_batch(struct iris_context *ice,
                                   decode_get_bo, decode_get_state_size, batch);
       batch->decoder.dynamic_base = IRIS_MEMZONE_DYNAMIC_START;
       batch->decoder.instruction_base = IRIS_MEMZONE_SHADER_START;
+      batch->decoder.surface_base = IRIS_MEMZONE_BINDER_START;
       batch->decoder.max_vbo_decoded_lines = 32;
       if (batch->name == IRIS_BATCH_BLITTER)
          batch->decoder.engine = I915_ENGINE_CLASS_COPY;
@@ -300,6 +301,7 @@ iris_create_engines_context(struct iris_context *ice, int priority)
    }
 
    iris_hw_context_set_unrecoverable(screen->bufmgr, engines_ctx);
+   iris_hw_context_set_vm_id(screen->bufmgr, engines_ctx);
 
    free(engines_info);
    return engines_ctx;
@@ -512,6 +514,7 @@ iris_batch_reset(struct iris_batch *batch)
 {
    struct iris_screen *screen = batch->screen;
    struct iris_bufmgr *bufmgr = screen->bufmgr;
+   const struct intel_device_info *devinfo = &screen->devinfo;
 
    u_trace_fini(&batch->trace);
 
@@ -520,7 +523,10 @@ iris_batch_reset(struct iris_batch *batch)
    batch->total_chained_batch_size = 0;
    batch->contains_draw = false;
    batch->contains_fence_signal = false;
-   batch->decoder.surface_base = batch->last_surface_base_address;
+   if (devinfo->ver < 11)
+      batch->decoder.surface_base = batch->last_binder_address;
+   else
+      batch->decoder.bt_pool_base = batch->last_binder_address;
 
    create_batch(batch);
    assert(batch->bo->index == 0);
@@ -876,11 +882,6 @@ update_bo_syncobjs(struct iris_batch *batch, struct iris_bo *bo, bool write)
 static void
 update_batch_syncobjs(struct iris_batch *batch)
 {
-   struct iris_bufmgr *bufmgr = batch->screen->bufmgr;
-   simple_mtx_t *bo_deps_lock = iris_bufmgr_get_bo_deps_lock(bufmgr);
-
-   simple_mtx_lock(bo_deps_lock);
-
    for (int i = 0; i < batch->exec_count; i++) {
       struct iris_bo *bo = batch->exec_bos[i];
       bool write = BITSET_TEST(batch->bos_written, i);
@@ -890,7 +891,6 @@ update_batch_syncobjs(struct iris_batch *batch)
 
       update_bo_syncobjs(batch, bo, write);
    }
-   simple_mtx_unlock(bo_deps_lock);
 }
 
 /**
@@ -899,6 +899,9 @@ update_batch_syncobjs(struct iris_batch *batch)
 static int
 submit_batch(struct iris_batch *batch)
 {
+   struct iris_bufmgr *bufmgr = batch->screen->bufmgr;
+   simple_mtx_t *bo_deps_lock = iris_bufmgr_get_bo_deps_lock(bufmgr);
+
    iris_bo_unmap(batch->bo);
 
    struct drm_i915_gem_exec_object2 *validation_list =
@@ -932,13 +935,20 @@ submit_batch(struct iris_batch *batch)
 
    free(index_for_handle);
 
+   /* The decode operation may map and wait on the batch buffer, which could
+    * in theory try to grab bo_deps_lock. Let's keep it safe and decode
+    * outside the lock.
+    */
+   if (INTEL_DEBUG(DEBUG_BATCH))
+      decode_batch(batch);
+
+   simple_mtx_lock(bo_deps_lock);
+
+   update_batch_syncobjs(batch);
+
    if (INTEL_DEBUG(DEBUG_BATCH | DEBUG_SUBMIT)) {
       dump_fence_list(batch);
       dump_bo_list(batch);
-   }
-
-   if (INTEL_DEBUG(DEBUG_BATCH)) {
-      decode_batch(batch);
    }
 
    /* The requirement for using I915_EXEC_NO_RELOC are:
@@ -977,6 +987,8 @@ submit_batch(struct iris_batch *batch)
    if (!batch->screen->devinfo.no_hw &&
        intel_ioctl(batch->screen->fd, DRM_IOCTL_I915_GEM_EXECBUFFER2, &execbuf))
       ret = -errno;
+
+   simple_mtx_unlock(bo_deps_lock);
 
    for (int i = 0; i < batch->exec_count; i++) {
       struct iris_bo *bo = batch->exec_bos[i];
@@ -1022,8 +1034,6 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
    iris_measure_batch_end(ice, batch);
 
    iris_finish_batch(batch);
-
-   update_batch_syncobjs(batch);
 
    if (INTEL_DEBUG(DEBUG_BATCH | DEBUG_SUBMIT | DEBUG_PIPE_CONTROL)) {
       const char *basefile = strstr(file, "iris/");

@@ -80,15 +80,6 @@
       unreachable("Unknown hardware generation"); \
    }
 
-static void
-iris_flush_frontbuffer(struct pipe_screen *_screen,
-                       struct pipe_context *_pipe,
-                       struct pipe_resource *resource,
-                       unsigned level, unsigned layer,
-                       void *context_private, struct pipe_box *box)
-{
-}
-
 static const char *
 iris_get_vendor(struct pipe_screen *pscreen)
 {
@@ -174,10 +165,10 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_INDEP_BLEND_ENABLE:
    case PIPE_CAP_INDEP_BLEND_FUNC:
    case PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND:
-   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+   case PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT:
+   case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
-   case PIPE_CAP_TGSI_INSTANCEID:
+   case PIPE_CAP_VS_INSTANCEID:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
@@ -201,10 +192,10 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MULTI_DRAW_INDIRECT:
    case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
-   case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
-   case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
-   case PIPE_CAP_TGSI_FS_FINE_DERIVATIVE:
-   case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+   case PIPE_CAP_VS_LAYER_VIEWPORT:
+   case PIPE_CAP_TES_LAYER_VIEWPORT:
+   case PIPE_CAP_FS_FINE_DERIVATIVE:
+   case PIPE_CAP_SHADER_PACK_HALF_FLOAT:
    case PIPE_CAP_ACCELERATED:
    case PIPE_CAP_UMA:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
@@ -228,22 +219,22 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_QUERY_SO_OVERFLOW:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
    case PIPE_CAP_TGSI_TEX_TXF_LZ:
-   case PIPE_CAP_TGSI_TXQS:
-   case PIPE_CAP_TGSI_CLOCK:
-   case PIPE_CAP_TGSI_BALLOT:
+   case PIPE_CAP_TEXTURE_QUERY_SAMPLES:
+   case PIPE_CAP_SHADER_CLOCK:
+   case PIPE_CAP_SHADER_BALLOT:
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_CLEAR_SCISSORED:
-   case PIPE_CAP_TGSI_VOTE:
-   case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
+   case PIPE_CAP_SHADER_GROUP_VOTE:
+   case PIPE_CAP_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_TEXTURE_GATHER_SM5:
-   case PIPE_CAP_TGSI_ARRAY_COMPONENTS:
+   case PIPE_CAP_SHADER_ARRAY_COMPONENTS:
    case PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS:
    case PIPE_CAP_LOAD_CONSTBUF:
    case PIPE_CAP_NIR_COMPACT_ARRAYS:
    case PIPE_CAP_DRAW_PARAMETERS:
-   case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
-   case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
+   case PIPE_CAP_FS_POSITION_IS_SYSVAL:
+   case PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL:
    case PIPE_CAP_COMPUTE_SHADER_DERIVATIVES:
    case PIPE_CAP_INVALIDATE_BUFFER:
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
@@ -259,6 +250,8 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FENCE_SIGNAL:
    case PIPE_CAP_IMAGE_STORE_FORMATTED:
       return true;
+   case PIPE_CAP_PREFER_BACK_BUFFER_REUSE:
+      return false;
    case PIPE_CAP_FBFETCH:
       return BRW_MAX_DRAW_BUFFERS;
    case PIPE_CAP_FBFETCH_COHERENT:
@@ -695,21 +688,21 @@ iris_get_default_l3_config(const struct intel_device_info *devinfo,
 static void
 iris_shader_debug_log(void *data, unsigned *id, const char *fmt, ...)
 {
-   struct pipe_debug_callback *dbg = data;
+   struct util_debug_callback *dbg = data;
    va_list args;
 
    if (!dbg->debug_message)
       return;
 
    va_start(args, fmt);
-   dbg->debug_message(dbg->data, id, PIPE_DEBUG_TYPE_SHADER_INFO, fmt, args);
+   dbg->debug_message(dbg->data, id, UTIL_DEBUG_TYPE_SHADER_INFO, fmt, args);
    va_end(args);
 }
 
 static void
 iris_shader_perf_log(void *data, unsigned *id, const char *fmt, ...)
 {
-   struct pipe_debug_callback *dbg = data;
+   struct util_debug_callback *dbg = data;
    va_list args;
    va_start(args, fmt);
 
@@ -721,7 +714,7 @@ iris_shader_perf_log(void *data, unsigned *id, const char *fmt, ...)
    }
 
    if (dbg->debug_message) {
-      dbg->debug_message(dbg->data, id, PIPE_DEBUG_TYPE_PERF_INFO, fmt, args);
+      dbg->debug_message(dbg->data, id, UTIL_DEBUG_TYPE_PERF_INFO, fmt, args);
    }
 
    va_end(args);
@@ -871,7 +864,6 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    pscreen->get_disk_shader_cache = iris_get_disk_shader_cache;
    pscreen->is_format_supported = iris_is_format_supported;
    pscreen->context_create = iris_create_context;
-   pscreen->flush_frontbuffer = iris_flush_frontbuffer;
    pscreen->get_timestamp = iris_get_timestamp;
    pscreen->query_memory_info = iris_query_memory_info;
    pscreen->get_driver_query_group_info = iris_get_monitor_group_info;

@@ -1060,12 +1060,6 @@ void FragmentShaderFromNir::do_finalize()
    sh_info().two_side = m_shaderio.two_sided();
    sh_info().nlds = m_shaderio.nlds();
 
-   sh_info().nr_ps_max_color_exports = m_max_counted_color_exports;
-
-   if (sh_info().fs_write_all) {
-      sh_info().nr_ps_max_color_exports = m_max_color_exports;
-   }
-
    if (!m_last_pixel_export) {
       GPRVector v(0, {7,7,7,7});
       m_last_pixel_export = new ExportInstruction(0, v, ExportInstruction::et_pixel);
@@ -1075,9 +1069,6 @@ void FragmentShaderFromNir::do_finalize()
    }
 
    m_last_pixel_export->set_last();
-
-   if (sh_info().fs_write_all)
-      sh_info().nr_ps_max_color_exports = 8;
 }
 
 }

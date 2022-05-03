@@ -482,35 +482,6 @@ vn_encode_VkMappedMemoryRange(struct vn_cs_encoder *enc, const VkMappedMemoryRan
     vn_encode_VkMappedMemoryRange_self(enc, val);
 }
 
-static inline void
-vn_decode_VkMappedMemoryRange_pnext(struct vn_cs_decoder *dec, const void *val)
-{
-    /* no known/supported struct */
-    if (vn_decode_simple_pointer(dec))
-        assert(false);
-}
-
-static inline void
-vn_decode_VkMappedMemoryRange_self(struct vn_cs_decoder *dec, VkMappedMemoryRange *val)
-{
-    /* skip val->{sType,pNext} */
-    vn_decode_VkDeviceMemory(dec, &val->memory);
-    vn_decode_VkDeviceSize(dec, &val->offset);
-    vn_decode_VkDeviceSize(dec, &val->size);
-}
-
-static inline void
-vn_decode_VkMappedMemoryRange(struct vn_cs_decoder *dec, VkMappedMemoryRange *val)
-{
-    VkStructureType stype;
-    vn_decode_VkStructureType(dec, &stype);
-    assert(stype == VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE);
-
-    assert(val->sType == stype);
-    vn_decode_VkMappedMemoryRange_pnext(dec, val->pNext);
-    vn_decode_VkMappedMemoryRange_self(dec, val);
-}
-
 /* struct VkDeviceMemoryOpaqueCaptureAddressInfo chain */
 
 static inline size_t
@@ -562,33 +533,6 @@ vn_encode_VkDeviceMemoryOpaqueCaptureAddressInfo(struct vn_cs_encoder *enc, cons
     vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_DEVICE_MEMORY_OPAQUE_CAPTURE_ADDRESS_INFO });
     vn_encode_VkDeviceMemoryOpaqueCaptureAddressInfo_pnext(enc, val->pNext);
     vn_encode_VkDeviceMemoryOpaqueCaptureAddressInfo_self(enc, val);
-}
-
-static inline void
-vn_decode_VkDeviceMemoryOpaqueCaptureAddressInfo_pnext(struct vn_cs_decoder *dec, const void *val)
-{
-    /* no known/supported struct */
-    if (vn_decode_simple_pointer(dec))
-        assert(false);
-}
-
-static inline void
-vn_decode_VkDeviceMemoryOpaqueCaptureAddressInfo_self(struct vn_cs_decoder *dec, VkDeviceMemoryOpaqueCaptureAddressInfo *val)
-{
-    /* skip val->{sType,pNext} */
-    vn_decode_VkDeviceMemory(dec, &val->memory);
-}
-
-static inline void
-vn_decode_VkDeviceMemoryOpaqueCaptureAddressInfo(struct vn_cs_decoder *dec, VkDeviceMemoryOpaqueCaptureAddressInfo *val)
-{
-    VkStructureType stype;
-    vn_decode_VkStructureType(dec, &stype);
-    assert(stype == VK_STRUCTURE_TYPE_DEVICE_MEMORY_OPAQUE_CAPTURE_ADDRESS_INFO);
-
-    assert(val->sType == stype);
-    vn_decode_VkDeviceMemoryOpaqueCaptureAddressInfo_pnext(dec, val->pNext);
-    vn_decode_VkDeviceMemoryOpaqueCaptureAddressInfo_self(dec, val);
 }
 
 static inline size_t vn_sizeof_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory)
