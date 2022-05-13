@@ -525,6 +525,18 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
          shader->info.writes_memory = true;
       break;
    }
+   case nir_intrinsic_image_deref_load: {
+      nir_deref_instr *deref = nir_src_as_deref(instr->src[0]);
+      nir_variable *var = nir_deref_instr_get_variable(deref);
+      enum glsl_sampler_dim dim = glsl_get_sampler_dim(glsl_without_array(var->type));
+      if (dim != GLSL_SAMPLER_DIM_SUBPASS &&
+          dim != GLSL_SAMPLER_DIM_SUBPASS_MS)
+         break;
+
+      var->data.fb_fetch_output = true;
+      shader->info.fs.uses_fbfetch_output = true;
+      break;
+   }
 
    case nir_intrinsic_load_input:
    case nir_intrinsic_load_per_vertex_input:
@@ -915,7 +927,8 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
       shader->info.tess.tcs_cross_invocation_outputs_read = 0;
    }
 
-   shader->info.writes_memory = shader->info.has_transform_feedback_varyings;
+   if (shader->info.stage != MESA_SHADER_FRAGMENT)
+      shader->info.writes_memory = shader->info.has_transform_feedback_varyings;
 
    void *dead_ctx = ralloc_context(NULL);
    nir_foreach_block(block, entrypoint) {

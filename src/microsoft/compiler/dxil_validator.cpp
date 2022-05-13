@@ -148,8 +148,8 @@ void
 dxil_destroy_validator(struct dxil_validator *val)
 {
    /* if we have a validator, we have these */
-   FreeLibrary(val->dxil_mod);
    val->dxc_validator->Release();
+   FreeLibrary(val->dxil_mod);
 
    if (val->dxcompiler_mod) {
       if (val->dxc_library)

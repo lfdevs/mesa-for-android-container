@@ -209,6 +209,13 @@ struct lp_build_nir_context
    void (*elect)(struct lp_build_nir_context *bld_base, LLVMValueRef dst[4]);
    void (*reduce)(struct lp_build_nir_context *bld_base, LLVMValueRef src, nir_intrinsic_instr *instr, LLVMValueRef dst[4]);
    void (*ballot)(struct lp_build_nir_context *bld_base, LLVMValueRef src, nir_intrinsic_instr *instr, LLVMValueRef dst[4]);
+#if LLVM_VERSION_MAJOR >= 10
+   void (*shuffle)(struct lp_build_nir_context *bld_base,
+                   LLVMValueRef src,
+                   LLVMValueRef index,
+                   nir_intrinsic_instr *instr,
+                   LLVMValueRef dst[4]);
+#endif
    void (*read_invocation)(struct lp_build_nir_context *bld_base,
                            LLVMValueRef src, unsigned bit_size, LLVMValueRef invoc,
                            LLVMValueRef dst[4]);

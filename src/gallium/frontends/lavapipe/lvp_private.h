@@ -29,6 +29,8 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include <llvm/Config/llvm-config.h>
+
 #include "util/macros.h"
 #include "util/list.h"
 #include "util/u_dynarray.h"
@@ -174,6 +176,8 @@ struct lvp_queue {
    struct u_upload_mgr *uploader;
    struct pipe_fence_handle *last_fence;
    void *state;
+   struct util_dynarray pipeline_destroys;
+   simple_mtx_t pipeline_lock;
 };
 
 struct lvp_pipeline_cache {
@@ -376,6 +380,7 @@ struct lvp_descriptor_pool {
 
 struct lvp_descriptor_update_template {
    struct vk_object_base base;
+   unsigned ref_cnt;
    uint32_t entry_count;
    uint32_t set;
    VkDescriptorUpdateTemplateType type;
@@ -383,6 +388,27 @@ struct lvp_descriptor_update_template {
    struct lvp_pipeline_layout *pipeline_layout;
    VkDescriptorUpdateTemplateEntry entry[0];
 };
+
+static inline void
+lvp_descriptor_template_templ_ref(struct lvp_descriptor_update_template *templ)
+{
+   assert(templ && templ->ref_cnt >= 1);
+   p_atomic_inc(&templ->ref_cnt);
+}
+
+void
+lvp_descriptor_template_destroy(struct lvp_device *device, struct lvp_descriptor_update_template *templ);
+
+static inline void
+lvp_descriptor_template_templ_unref(struct lvp_device *device,
+                                    struct lvp_descriptor_update_template *templ)
+{
+   if (!templ)
+      return;
+   assert(templ->ref_cnt >= 1);
+   if (p_atomic_dec_zero(&templ->ref_cnt))
+      lvp_descriptor_template_destroy(device, templ);
+}
 
 VkResult
 lvp_descriptor_set_create(struct lvp_device *device,
@@ -629,6 +655,9 @@ lvp_vk_format_to_pipe_format(VkFormat format)
 
    return vk_format_to_pipe_format(format);
 }
+
+void
+lvp_pipeline_destroy(struct lvp_device *device, struct lvp_pipeline *pipeline);
 
 void
 queue_thread_noop(void *data, void *gdata, int thread_index);

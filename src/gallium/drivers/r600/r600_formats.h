@@ -82,7 +82,7 @@ static inline unsigned r600_endian_swap(unsigned size)
 	}
 }
 
-static inline bool r600_is_vertex_format_supported(enum pipe_format format)
+static inline bool r600_is_buffer_format_supported(enum pipe_format format, bool for_vbo)
 {
 	const struct util_format_description *desc = util_format_description(format);
 	unsigned i;
@@ -115,9 +115,9 @@ static inline bool r600_is_vertex_format_supported(enum pipe_format format)
 	     desc->channel[i].type == UTIL_FORMAT_TYPE_UNSIGNED))
 		return false;
 
-	/* No 8 bit 3 channel formats */
+    /* No 8 bit 3 channel formats for TBOs */
 	if (desc->channel[i].size == 8 && desc->nr_channels == 3)
-		return false;
+		return for_vbo;
 
 	return true;
 }

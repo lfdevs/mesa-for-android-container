@@ -1285,6 +1285,8 @@ LLVMValueRef ac_build_buffer_load_format(struct ac_llvm_context *ctx, LLVMValueR
    if (tfe) {
       assert(!d16);
 
+      cache_policy = get_load_cache_policy(ctx, cache_policy);
+
       char code[256];
       /* The definition in the assembly and the one in the constraint string
        * differs because of an assembler bug.

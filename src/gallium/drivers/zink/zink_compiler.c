@@ -1843,11 +1843,17 @@ get_shader_base_prim_type(struct nir_shader *nir)
 static bool
 convert_1d_shadow_tex(nir_builder *b, nir_instr *instr, void *data)
 {
+   struct zink_screen *screen = data;
    if (instr->type != nir_instr_type_tex)
       return false;
    nir_tex_instr *tex = nir_instr_as_tex(instr);
    if (tex->sampler_dim != GLSL_SAMPLER_DIM_1D || !tex->is_shadow)
       return false;
+   if (tex->is_sparse && screen->need_2D_sparse) {
+      /* no known case of this exists: only nvidia can hit it, and nothing uses it */
+      mesa_loge("unhandled/unsupported 1D sparse texture!");
+      abort();
+   }
    tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
    b->cursor = nir_before_instr(instr);
    tex->coord_components++;
@@ -1886,7 +1892,7 @@ convert_1d_shadow_tex(nir_builder *b, nir_instr *instr, void *data)
 }
 
 static bool
-lower_1d_shadow(nir_shader *shader)
+lower_1d_shadow(nir_shader *shader, struct zink_screen *screen)
 {
    bool found = false;
    nir_foreach_variable_with_modes(var, shader, nir_var_uniform | nir_var_image) {
@@ -1900,7 +1906,7 @@ lower_1d_shadow(nir_shader *shader)
       found = true;
    }
    if (found)
-      nir_shader_instructions_pass(shader, convert_1d_shadow_tex, nir_metadata_dominance, NULL);
+      nir_shader_instructions_pass(shader, convert_1d_shadow_tex, nir_metadata_dominance, screen);
    return found;
 }
 
@@ -2037,7 +2043,7 @@ zink_shader_create(struct zink_screen *screen, struct nir_shader *nir,
    NIR_PASS_V(nir, lower_sparse);
 
    if (screen->need_2D_zs)
-      NIR_PASS_V(nir, lower_1d_shadow);
+      NIR_PASS_V(nir, lower_1d_shadow, screen);
 
    {
       nir_lower_subgroups_options subgroup_options = {0};

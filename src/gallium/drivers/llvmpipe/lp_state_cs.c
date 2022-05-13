@@ -1263,10 +1263,9 @@ update_csctx_ssbo(struct llvmpipe_context *llvmpipe)
       struct pipe_resource *buffer = csctx->ssbos[i].current.buffer;
       const ubyte *current_data = NULL;
 
-      if (!buffer)
-         continue;
       /* resource buffer */
-      current_data = (ubyte *) llvmpipe_resource_data(buffer);
+      if (buffer)
+         current_data = (ubyte *) llvmpipe_resource_data(buffer);
       if (current_data) {
          current_data += csctx->ssbos[i].current.buffer_offset;
 
@@ -1424,7 +1423,8 @@ static void llvmpipe_launch_grid(struct pipe_context *pipe,
 
       lp_cs_tpool_wait_for_task(screen->cs_tpool, &task);
    }
-   llvmpipe->pipeline_statistics.cs_invocations += num_tasks * info->block[0] * info->block[1] * info->block[2];
+   if (!llvmpipe->queries_disabled)
+      llvmpipe->pipeline_statistics.cs_invocations += num_tasks * info->block[0] * info->block[1] * info->block[2];
 }
 
 static void

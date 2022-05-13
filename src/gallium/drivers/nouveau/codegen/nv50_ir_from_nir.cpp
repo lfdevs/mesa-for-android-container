@@ -1028,7 +1028,6 @@ bool Converter::assignSlots() {
       int slot = var->data.location;
       uint16_t slots = calcSlots(type, prog->getType(), nir->info, true, var);
       uint32_t vary = var->data.driver_location;
-
       assert(vary + slots <= PIPE_MAX_SHADER_INPUTS);
 
       switch(prog->getType()) {
@@ -3112,6 +3111,36 @@ Converter::visit(nir_tex_instr *insn)
    return true;
 }
 
+/* nouveau's RA doesn't track the liveness of exported registers in the fragment
+ * shader, so we need all the store_outputs to appear at the end of the shader
+ * with no other instructions that might generate a temp value in between them.
+ */
+static void
+nv_nir_move_stores_to_end(nir_shader *s)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(s);
+   nir_block *block = nir_impl_last_block(impl);
+   nir_instr *first_store = NULL;
+
+   nir_foreach_instr_safe(instr, block) {
+      if (instr == first_store)
+         break;
+      if (instr->type != nir_instr_type_intrinsic)
+         continue;
+      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+      if (intrin->intrinsic == nir_intrinsic_store_output) {
+         nir_instr_remove(instr);
+         nir_instr_insert(nir_after_block(block), instr);
+
+         if (!first_store)
+            first_store = instr;
+      }
+   }
+   nir_metadata_preserve(impl,
+                         nir_metadata_block_index |
+                         nir_metadata_dominance);
+}
+
 bool
 Converter::run()
 {
@@ -3180,6 +3209,9 @@ Converter::run()
                          nir_move_load_input);
    NIR_PASS_V(nir, nir_opt_sink, move_options);
    NIR_PASS_V(nir, nir_opt_move, move_options);
+
+   if (nir->info.stage == MESA_SHADER_FRAGMENT)
+      NIR_PASS_V(nir, nv_nir_move_stores_to_end);
 
    NIR_PASS_V(nir, nir_lower_bool_to_int32);
    NIR_PASS_V(nir, nir_convert_from_ssa, true);

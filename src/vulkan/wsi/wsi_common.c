@@ -362,22 +362,26 @@ wsi_configure_image(const struct wsi_swapchain *chain,
                     struct wsi_image_info *info)
 {
    memset(info, 0, sizeof(*info));
-   uint32_t *queue_family_indices;
+   uint32_t queue_family_count = 1;
 
-   if (pCreateInfo->imageSharingMode == VK_SHARING_MODE_CONCURRENT) {
-      queue_family_indices =
-         vk_alloc(&chain->alloc,
-                  sizeof(*queue_family_indices) *
-                  pCreateInfo->queueFamilyIndexCount,
-                  8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-      if (!queue_family_indices)
-         goto err_oom;
+   if (pCreateInfo->imageSharingMode == VK_SHARING_MODE_CONCURRENT)
+      queue_family_count = pCreateInfo->queueFamilyIndexCount;
 
+   /*
+    * TODO: there should be no reason to allocate this, but
+    * 15331 shows that games crashed without doing this.
+    */
+   uint32_t *queue_family_indices =
+      vk_alloc(&chain->alloc,
+               sizeof(*queue_family_indices) *
+               queue_family_count,
+               8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!queue_family_indices)
+      goto err_oom;
+
+   if (pCreateInfo->imageSharingMode == VK_SHARING_MODE_CONCURRENT)
       for (uint32_t i = 0; i < pCreateInfo->queueFamilyIndexCount; i++)
          queue_family_indices[i] = pCreateInfo->pQueueFamilyIndices[i];
-   } else {
-      queue_family_indices = NULL;
-   }
 
    info->create = (VkImageCreateInfo) {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -395,7 +399,7 @@ wsi_configure_image(const struct wsi_swapchain *chain,
       .tiling = VK_IMAGE_TILING_OPTIMAL,
       .usage = pCreateInfo->imageUsage,
       .sharingMode = pCreateInfo->imageSharingMode,
-      .queueFamilyIndexCount = pCreateInfo->queueFamilyIndexCount,
+      .queueFamilyIndexCount = queue_family_count,
       .pQueueFamilyIndices = queue_family_indices,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
    };
@@ -960,7 +964,7 @@ wsi_common_queue_present(const struct wsi_device *wsi,
             goto fail_present;
          }
          for (uint32_t s = 0; s < pPresentInfo->waitSemaphoreCount; s++)
-            stage_flags[s] = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+            stage_flags[s] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
          submit_info.pWaitDstStageMask = stage_flags;
       }

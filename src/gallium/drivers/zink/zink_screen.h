@@ -40,8 +40,6 @@
 #include "util/u_vertex_state_cache.h"
 #include "pipebuffer/pb_cache.h"
 #include "pipebuffer/pb_slab.h"
-#include "frontend/sw_winsys.h"
-#include "kopper_interface.h"
 
 #include <vulkan/vulkan.h>
 
@@ -66,6 +64,8 @@ enum zink_descriptor_type;
 #define NUM_SLAB_ALLOCATORS 3
 #define MIN_SLAB_ORDER 8
 
+#define ZINK_CONTEXT_COPY_ONLY (1<<30)
+
 enum zink_descriptor_mode {
    ZINK_DESCRIPTOR_MODE_AUTO,
    ZINK_DESCRIPTOR_MODE_LAZY,
@@ -87,6 +87,7 @@ struct zink_screen {
    VkSemaphore sem;
    VkSemaphore prev_sem;
    struct util_queue flush_queue;
+   struct zink_context *copy_context;
 
    unsigned buffer_rebind_counter;
 
@@ -94,10 +95,6 @@ struct zink_screen {
    simple_mtx_t dt_lock;
 
    bool device_lost;
-   int drm_fd;
-   struct sw_winsys winsys;
-   struct sw_winsys *sw_winsys; // wrapped
-   __DRIkopperLoaderExtension *loader;
 
    struct hash_table framebuffer_cache;
    simple_mtx_t framebuffer_mtx;
@@ -139,6 +136,7 @@ struct zink_screen {
    bool have_D24_UNORM_S8_UINT;
    bool have_triangle_fans;
    bool need_2D_zs;
+   bool need_2D_sparse;
    bool faked_e5sparse; //drivers may not expose R9G9B9E5 but cts requires it
 
    uint32_t gfx_queue;

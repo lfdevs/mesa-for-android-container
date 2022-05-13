@@ -994,6 +994,11 @@ dri2_x11_swap_interval(_EGLDisplay *disp, _EGLSurface *surf, EGLint interval)
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
 
+   if (dri2_dpy->kopper) {
+      dri2_dpy->kopper->setSwapInterval(dri2_surf->dri_drawable, interval);
+      return EGL_TRUE;
+   }
+
    if (dri2_dpy->swap_available)
       xcb_dri2_swap_interval(dri2_dpy->conn, dri2_surf->drawable, interval);
 
@@ -1169,6 +1174,42 @@ dri2_x11_get_sync_values(_EGLDisplay *display, _EGLSurface *surface,
    return EGL_TRUE;
 }
 
+static EGLBoolean
+dri2_kopper_swap_interval(_EGLDisplay *disp, _EGLSurface *surf, EGLint interval)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
+
+   /* This can legitimately be null for lavapipe */
+   if (dri2_dpy->kopper)
+      dri2_dpy->kopper->setSwapInterval(dri2_surf->dri_drawable, interval);
+
+   return EGL_TRUE;
+}
+
+static _EGLSurface *
+dri2_kopper_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
+                                  void *native_window,
+                                  const EGLint *attrib_list)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   _EGLSurface *surf;
+
+   surf = dri2_x11_create_surface(disp, EGL_WINDOW_BIT, conf,
+                                  native_window, attrib_list);
+   if (surf != NULL) {
+      /* When we first create the DRI2 drawable, its swap interval on the
+       * server side is 1.
+       */
+      surf->SwapInterval = 1;
+
+      /* Override that with a driconf-set value. */
+      dri2_kopper_swap_interval(disp, surf, dri2_dpy->default_swap_interval);
+   }
+
+   return surf;
+}
+
 static const struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
    .authenticate = NULL,
    .create_window_surface = dri2_x11_create_window_surface,
@@ -1176,6 +1217,23 @@ static const struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
    .create_pbuffer_surface = dri2_x11_create_pbuffer_surface,
    .destroy_surface = dri2_x11_destroy_surface,
    .create_image = dri2_create_image_khr,
+   .swap_buffers = dri2_x11_swap_buffers,
+   .swap_buffers_region = dri2_x11_swap_buffers_region,
+   .post_sub_buffer = dri2_x11_post_sub_buffer,
+   .copy_buffers = dri2_x11_copy_buffers,
+   /* XXX: should really implement this since X11 has pixmaps */
+   .query_surface = dri2_query_surface,
+   .get_dri_drawable = dri2_surface_get_dri_drawable,
+};
+
+static const struct dri2_egl_display_vtbl dri2_x11_kopper_display_vtbl = {
+   .authenticate = NULL,
+   .create_window_surface = dri2_kopper_create_window_surface,
+   .create_pixmap_surface = dri2_x11_create_pixmap_surface,
+   .create_pbuffer_surface = dri2_x11_create_pbuffer_surface,
+   .destroy_surface = dri2_x11_destroy_surface,
+   .create_image = dri2_create_image_khr,
+   .swap_interval = dri2_kopper_swap_interval,
    .swap_buffers = dri2_x11_swap_buffers,
    .swap_buffers_region = dri2_x11_swap_buffers_region,
    .post_sub_buffer = dri2_x11_post_sub_buffer,
@@ -1316,8 +1374,11 @@ dri2_x11_setup_swap_interval(_EGLDisplay *disp)
       return;
 
    /* If we do have swapbuffers, then we can support pretty much any swap
-    * interval.
+    * interval. Unless we're kopper, for now.
     */
+   if (dri2_dpy->kopper)
+       arbitrary_max_interval = 1;
+
    dri2_setup_swap_interval(disp, arbitrary_max_interval);
 }
 
@@ -1365,6 +1426,7 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
 #ifdef HAVE_WAYLAND_PLATFORM
       dri2_dpy->device_name = strdup("zink");
 #endif
+      dri2_dpy->swap_available = EGL_TRUE;
       dri2_x11_setup_swap_interval(disp);
       if (!dri2_dpy->is_different_gpu)
          disp->Extensions.KHR_image_pixmap = EGL_TRUE;
@@ -1382,7 +1444,10 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.
     */
-   dri2_dpy->vtbl = &dri2_x11_swrast_display_vtbl;
+   if (disp->Options.Zink)
+      dri2_dpy->vtbl = &dri2_x11_kopper_display_vtbl;
+   else
+      dri2_dpy->vtbl = &dri2_x11_swrast_display_vtbl;
 
    return EGL_TRUE;
 

@@ -255,7 +255,7 @@ genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
       ps.PipelineSelection = _3D;
    }
 
-   emit_common_so_memcpy(batch, device, device->l3_config);
+   emit_common_so_memcpy(batch, device, cfg);
 }
 
 void

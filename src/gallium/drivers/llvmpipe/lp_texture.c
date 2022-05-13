@@ -657,6 +657,11 @@ llvmpipe_resource_from_user_memory(struct pipe_screen *_screen,
    } else
       lpr->data = user_memory;
    lpr->user_ptr = true;
+#ifdef DEBUG
+   mtx_lock(&resource_list_mutex);
+   insert_at_tail(&resource_list, lpr);
+   mtx_unlock(&resource_list_mutex);
+#endif
    return &lpr->base;
 fail:
    FREE(lpr);

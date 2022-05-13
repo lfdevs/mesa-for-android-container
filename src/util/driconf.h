@@ -576,6 +576,10 @@
   DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
                  "Disable anisotropic filtering for single level images")
 
+#define DRI_CONF_RADV_DISABLE_SINKING_LOAD_INPUT_FS(def) \
+   DRI_CONF_OPT_B(radv_disable_sinking_load_input_fs, def, \
+                  "Disable sinking load inputs for fragment shaders")
+
 /**
  * \brief ANV specific configuration options
  */

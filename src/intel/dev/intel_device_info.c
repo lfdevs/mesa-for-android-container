@@ -31,6 +31,7 @@
 #include <xf86drm.h>
 
 #include "intel_device_info.h"
+#include "intel_hwconfig.h"
 #include "intel/common/intel_gem.h"
 #include "util/bitscan.h"
 #include "util/debug.h"
@@ -1117,7 +1118,7 @@ update_slice_subslice_counts(struct intel_device_info *devinfo)
 }
 
 static void
-update_pixel_pipes(struct intel_device_info *devinfo)
+update_pixel_pipes(struct intel_device_info *devinfo, uint8_t *subslice_masks)
 {
    if (devinfo->ver < 11)
       return;
@@ -1146,26 +1147,9 @@ update_pixel_pipes(struct intel_device_info *devinfo)
 
       if (subslice_idx < ARRAY_SIZE(devinfo->subslice_masks))
          devinfo->ppipe_subslices[p] =
-            __builtin_popcount(devinfo->subslice_masks[subslice_idx] & ppipe_mask);
+            __builtin_popcount(subslice_masks[subslice_idx] & ppipe_mask);
       else
          devinfo->ppipe_subslices[p] = 0;
-   }
-
-   /* From the "Fusing information" BSpec page regarding DG2 configurations
-    * where at least a slice has a single pixel pipe fused off:
-    *
-    * "Fault disable any 2 DSS in a Gslice and disable that Gslice (incl.
-    *  geom/color/Z)"
-    *
-    * XXX - Query geometry topology from hardware once kernel interface is
-    *       available instead of trying to do guesswork here.
-    */
-   if (intel_device_info_is_dg2(devinfo)) {
-      for (unsigned p = 0; p < INTEL_DEVICE_MAX_PIXEL_PIPES; p++) {
-         if (devinfo->ppipe_subslices[p] < 2 ||
-             devinfo->ppipe_subslices[p ^ 1] < 2)
-            devinfo->ppipe_subslices[p] = 0;
-      }
    }
 }
 
@@ -1208,8 +1192,16 @@ update_l3_banks(struct intel_device_info *devinfo)
  */
 static void
 update_from_single_slice_topology(struct intel_device_info *devinfo,
-                                  const struct drm_i915_query_topology_info *topology)
+                                  const struct drm_i915_query_topology_info *topology,
+                                  const struct drm_i915_query_topology_info *geom_topology)
 {
+   /* An array of bit masks of the subslices available for 3D
+    * workloads, analogous to intel_device_info::subslice_masks.  This
+    * may differ from the set of enabled subslices on XeHP+ platforms
+    * with compute-only subslices.
+    */
+   uint8_t geom_subslice_masks[ARRAY_SIZE(devinfo->subslice_masks)] = { 0 };
+
    assert(devinfo->verx10 >= 125);
 
    reset_masks(devinfo);
@@ -1228,15 +1220,28 @@ update_from_single_slice_topology(struct intel_device_info *devinfo,
    devinfo->eu_subslice_stride = DIV_ROUND_UP(16, 8);
 
    for (uint32_t ss_idx = 0; ss_idx < topology->max_subslices; ss_idx++) {
+      const uint32_t s = ss_idx / 4;
+      const uint32_t ss = ss_idx % 4;
+
+      /* Determine whether ss_idx is enabled (ss_idx_available) and
+       * available for 3D workloads (geom_ss_idx_available), which may
+       * differ on XeHP+ if ss_idx is a compute-only DSS.
+       */
       const bool ss_idx_available =
          (topology->data[topology->subslice_offset + ss_idx / 8] >>
           (ss_idx % 8)) & 1;
+      const bool geom_ss_idx_available =
+         (geom_topology->data[geom_topology->subslice_offset + ss_idx / 8] >>
+          (ss_idx % 8)) & 1;
+
+      if (geom_ss_idx_available) {
+         assert(ss_idx_available);
+         geom_subslice_masks[s * devinfo->subslice_slice_stride +
+                             ss / 8] |= 1u << (ss % 8);
+      }
 
       if (!ss_idx_available)
          continue;
-
-      uint32_t s = ss_idx / 4;
-      uint32_t ss = ss_idx % 4;
 
       devinfo->max_slices = MAX2(devinfo->max_slices, s + 1);
       devinfo->slice_masks |= 1u << s;
@@ -1260,7 +1265,7 @@ update_from_single_slice_topology(struct intel_device_info *devinfo,
    }
 
    update_slice_subslice_counts(devinfo);
-   update_pixel_pipes(devinfo);
+   update_pixel_pipes(devinfo, geom_subslice_masks);
    update_l3_banks(devinfo);
 }
 
@@ -1298,7 +1303,7 @@ update_from_topology(struct intel_device_info *devinfo,
 
    /* Now that all the masks are in place, update the counts. */
    update_slice_subslice_counts(devinfo);
-   update_pixel_pipes(devinfo);
+   update_pixel_pipes(devinfo, devinfo->subslice_masks);
    update_l3_banks(devinfo);
 }
 
@@ -1556,10 +1561,19 @@ query_topology(struct intel_device_info *devinfo, int fd)
    if (topo_info == NULL)
       return false;
 
-   if (devinfo->verx10 >= 125)
-      update_from_single_slice_topology(devinfo, topo_info);
-   else
+   if (devinfo->verx10 >= 125) {
+      struct drm_i915_query_topology_info *geom_topo_info =
+         intel_i915_query_alloc(fd, DRM_I915_QUERY_GEOMETRY_SUBSLICES, NULL);
+      if (geom_topo_info == NULL) {
+         free(topo_info);
+         return false;
+      }
+
+      update_from_single_slice_topology(devinfo, topo_info, geom_topo_info);
+      free(geom_topo_info);
+   } else {
       update_from_topology(devinfo, topo_info);
+   }
 
    free(topo_info);
 
@@ -1877,6 +1891,8 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
       devinfo->gtt_size = 2ull * 1024 * 1024 * 1024;
       return true;
    }
+
+   intel_get_and_process_hwconfig_table(fd, devinfo);
 
    int timestamp_frequency;
    if (getparam(fd, I915_PARAM_CS_TIMESTAMP_FREQUENCY,

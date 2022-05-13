@@ -312,7 +312,7 @@ __glXGetDrawableAttribute(Display * dpy, GLXDrawable drawable,
          *value = pdraw->psc->driScreen->getSwapInterval(pdraw);
          return 0;
       } else if (attribute == GLX_MAX_SWAP_INTERVAL_EXT) {
-         *value = INT_MAX;
+         *value = pdraw->psc->driScreen->maxSwapInterval;
          return 0;
       } else if (attribute == GLX_LATE_SWAPS_TEAR_EXT) {
          *value = __glXExtensionBitIsEnabled(pdraw->psc,

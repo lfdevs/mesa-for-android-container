@@ -684,13 +684,14 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateDescriptorUpdateTemplate(VkDevice _devi
 
    struct lvp_descriptor_update_template *templ;
 
-   templ = vk_alloc2(&device->vk.alloc, pAllocator, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   templ = vk_alloc(&device->vk.alloc, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!templ)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    vk_object_base_init(&device->vk, &templ->base,
                        VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE);
 
+   templ->ref_cnt = 1;
    templ->type = pCreateInfo->templateType;
    templ->bind_point = pCreateInfo->pipelineBindPoint;
    templ->set = pCreateInfo->set;
@@ -710,18 +711,23 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateDescriptorUpdateTemplate(VkDevice _devi
    return VK_SUCCESS;
 }
 
+void
+lvp_descriptor_template_destroy(struct lvp_device *device, struct lvp_descriptor_update_template *templ)
+{
+   if (!templ)
+      return;
+
+   vk_object_base_finish(&templ->base);
+   vk_free(&device->vk.alloc, templ);
+}
+
 VKAPI_ATTR void VKAPI_CALL lvp_DestroyDescriptorUpdateTemplate(VkDevice _device,
                                          VkDescriptorUpdateTemplate descriptorUpdateTemplate,
                                          const VkAllocationCallbacks *pAllocator)
 {
    LVP_FROM_HANDLE(lvp_device, device, _device);
    LVP_FROM_HANDLE(lvp_descriptor_update_template, templ, descriptorUpdateTemplate);
-
-   if (!templ)
-      return;
-
-   vk_object_base_finish(&templ->base);
-   vk_free2(&device->vk.alloc, pAllocator, templ);
+   lvp_descriptor_template_templ_unref(device, templ);
 }
 
 VKAPI_ATTR void VKAPI_CALL lvp_UpdateDescriptorSetWithTemplate(VkDevice _device,

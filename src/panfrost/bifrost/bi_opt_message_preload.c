@@ -112,7 +112,7 @@ bi_opt_message_preload(bi_context *ctx)
                                 .enabled = true,
                                 .texture = true,
                                 .varying_index = I->varying_index,
-                                .sampler_index = I->sampler_index,
+                                .texture_index = I->texture_index,
                                 .fp16 = (I->op == BI_OPCODE_VAR_TEX_F16),
                                 .skip = I->skip,
                                 .zero_lod = I->lod_mode

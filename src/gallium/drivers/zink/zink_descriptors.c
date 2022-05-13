@@ -930,16 +930,6 @@ zink_descriptor_surface_desc_set_add(struct zink_descriptor_surface *dsurf, stru
 }
 
 static void
-zink_image_view_desc_set_add(struct zink_image_view *image_view, struct zink_descriptor_set *zds, unsigned idx, bool is_buffer)
-{
-   assert(idx < zds->num_resources);
-   if (is_buffer)
-      desc_set_ref_add(zds, &image_view->buffer_view->desc_set_refs, (void**)&zds->surfaces[idx].bufferview, image_view->buffer_view);
-   else
-      desc_set_ref_add(zds, &image_view->surface->desc_set_refs, (void**)&zds->surfaces[idx].surface, image_view->surface);
-}
-
-static void
 zink_sampler_state_desc_set_add(struct zink_sampler_state *sampler_state, struct zink_descriptor_set *zds, unsigned idx)
 {
    assert(idx < zds->num_resources);
@@ -1157,8 +1147,8 @@ desc_set_sampler_add(struct zink_context *ctx, struct zink_descriptor_set *zds, 
 }
 
 static void
-desc_set_image_add(struct zink_context *ctx, struct zink_descriptor_set *zds, struct zink_image_view *image_view,
-                   unsigned int i, bool is_buffer, bool cache_hit)
+desc_set_image_add(struct zink_context *ctx, struct zink_descriptor_set *zds, struct zink_descriptor_surface *dsurf,
+                   unsigned int i, bool cache_hit)
 {
    /* if we got a cache hit, we have to verify that the cached set is still valid;
     * we store the vk resource to the set here to avoid a more complex and costly mechanism of maintaining a
@@ -1167,11 +1157,11 @@ desc_set_image_add(struct zink_context *ctx, struct zink_descriptor_set *zds, st
     */
 #ifndef NDEBUG
    uint32_t cur_hash = get_descriptor_surface_hash(ctx, &zds->surfaces[i]);
-   uint32_t new_hash = zink_get_image_view_hash(ctx, image_view, is_buffer);
+   uint32_t new_hash = get_descriptor_surface_hash(ctx, dsurf);
 #endif
    assert(!cache_hit || cur_hash == new_hash);
    if (!cache_hit)
-      zink_image_view_desc_set_add(image_view, zds, i, is_buffer);
+      zink_descriptor_surface_desc_set_add(dsurf, zds, i);
 }
 
 static void
@@ -1363,8 +1353,7 @@ update_descriptors_internal(struct zink_context *ctx, enum zink_descriptor_type 
 
                   desc_set_sampler_add(ctx, zds, &ctx->di.sampler_surfaces[stage][index + k], sampler, num_resources++, cache_hit);
                } else {
-                  struct zink_image_view *image_view = &ctx->image_views[stage][index + k];
-                  desc_set_image_add(ctx, zds, image_view, num_resources++, is_buffer, cache_hit);
+                  desc_set_image_add(ctx, zds, &ctx->di.image_surfaces[stage][index + k], num_resources++, cache_hit);
                }
             }
             if (is_buffer)

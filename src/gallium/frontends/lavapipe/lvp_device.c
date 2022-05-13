@@ -1007,6 +1007,10 @@ lvp_get_physical_device_properties_1_1(struct lvp_physical_device *pdevice,
    p->subgroupSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT | VK_SUBGROUP_FEATURE_VOTE_BIT | VK_SUBGROUP_FEATURE_ARITHMETIC_BIT | VK_SUBGROUP_FEATURE_BALLOT_BIT;
    p->subgroupQuadOperationsInAllStages = false;
 
+#if LLVM_VERSION_MAJOR >= 10
+   p->subgroupSupportedOperations |= VK_SUBGROUP_FEATURE_SHUFFLE_BIT | VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT;
+#endif
+
    p->pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
    p->maxMultiviewViewCount = 6;
    p->maxMultiviewInstanceIndex = INT_MAX;
@@ -1378,6 +1382,16 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetPhysicalDeviceProcAddr(
    return vk_instance_get_physical_device_proc_addr(&instance->vk, pName);
 }
 
+static void
+destroy_pipelines(struct lvp_queue *queue)
+{
+   simple_mtx_lock(&queue->pipeline_lock);
+   while (util_dynarray_contains(&queue->pipeline_destroys, struct lvp_pipeline*)) {
+      lvp_pipeline_destroy(queue->device, util_dynarray_pop(&queue->pipeline_destroys, struct lvp_pipeline*));
+   }
+   simple_mtx_unlock(&queue->pipeline_lock);
+}
+
 static VkResult
 lvp_queue_submit(struct vk_queue *vk_queue,
                  struct vk_queue_submit *submit)
@@ -1405,6 +1419,7 @@ lvp_queue_submit(struct vk_queue *vk_queue,
          vk_sync_as_lvp_pipe_sync(submit->signals[i].sync);
       lvp_pipe_sync_signal_with_fence(queue->device, sync, queue->last_fence);
    }
+   destroy_pipelines(queue);
 
    return VK_SUCCESS;
 }
@@ -1433,17 +1448,24 @@ lvp_queue_init(struct lvp_device *device, struct lvp_queue *queue,
 
    queue->vk.driver_submit = lvp_queue_submit;
 
+   simple_mtx_init(&queue->pipeline_lock, mtx_plain);
+   util_dynarray_init(&queue->pipeline_destroys, NULL);
+
    return VK_SUCCESS;
 }
 
 static void
 lvp_queue_finish(struct lvp_queue *queue)
 {
+   vk_queue_finish(&queue->vk);
+
+   destroy_pipelines(queue);
+   simple_mtx_destroy(&queue->pipeline_lock);
+   util_dynarray_fini(&queue->pipeline_destroys);
+
    u_upload_destroy(queue->uploader);
    cso_destroy_context(queue->cso);
    queue->ctx->destroy(queue->ctx);
-
-   vk_queue_finish(&queue->vk);
 }
 
 static void

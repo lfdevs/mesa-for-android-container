@@ -134,11 +134,7 @@ stw_st_fill_private_loader_data(struct stw_st_framebuffer *stwfb, struct kopper_
    out->win32.flags = 0;
    out->win32.hinstance = GetModuleHandle(NULL);
    out->win32.hwnd = stwfb->fb->hWnd;
-   BYTE alpha;
-   if (GetLayeredWindowAttributes(stwfb->fb->hWnd, NULL, &alpha, NULL))
-      out->has_alpha = alpha != 255;
-   else
-      out->has_alpha = 0;
+   out->has_alpha = true;
 }
 #endif 
 /**

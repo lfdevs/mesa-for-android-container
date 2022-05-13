@@ -107,6 +107,23 @@ const struct anv_dynamic_state default_dynamic_state = {
    .logic_op = 0,
 };
 
+void
+anv_dynamic_state_init(struct anv_dynamic_state *state)
+{
+   *state = default_dynamic_state;
+
+#define INIT_LOCATIONS(idx)                                 \
+   memcpy(state->sample_locations.locations_##idx,          \
+          intel_sample_positions_##idx##x,                  \
+          sizeof(state->sample_locations.locations_##idx))
+   INIT_LOCATIONS(1);
+   INIT_LOCATIONS(2);
+   INIT_LOCATIONS(4);
+   INIT_LOCATIONS(8);
+   INIT_LOCATIONS(16);
+#undef INIT_LOCATIONS
+}
+
 /**
  * Copy the dynamic state from src to dest based on the copy_mask.
  *
@@ -199,10 +216,26 @@ anv_dynamic_state_copy(struct anv_dynamic_state *dest,
    ANV_CMP_COPY(logic_op, ANV_CMD_DIRTY_DYNAMIC_LOGIC_OP);
 
    if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS) {
-      typed_memcpy(dest->sample_locations.locations,
-                   src->sample_locations.locations,
-                   ARRAY_SIZE(src->sample_locations.locations));
-      changed |= ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS;
+#define ANV_CMP_COPY_LOCATIONS(idx)                                     \
+      if (memcmp(dest->sample_locations.locations_##idx,                \
+                 src->sample_locations.locations_##idx,                 \
+                 sizeof(src->sample_locations.locations_##idx))) {      \
+         typed_memcpy(dest->sample_locations.locations_##idx,           \
+                      src->sample_locations.locations_##idx,            \
+                      ARRAY_SIZE(src->sample_locations.locations_##idx)); \
+         changed |= ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS;             \
+      }
+
+      switch (src->sample_locations.pipeline_samples) {
+      case  1: ANV_CMP_COPY_LOCATIONS(1);  break;
+      case  2: ANV_CMP_COPY_LOCATIONS(2);  break;
+      case  4: ANV_CMP_COPY_LOCATIONS(4);  break;
+      case  8: ANV_CMP_COPY_LOCATIONS(8);  break;
+      case 16: ANV_CMP_COPY_LOCATIONS(16); break;
+      default: unreachable("invalid sample count");
+      }
+
+#undef ANV_CMP_COPY_LOCATIONS
    }
 
    ANV_CMP_COPY(color_writes, ANV_CMD_DIRTY_DYNAMIC_COLOR_BLEND_STATE);
@@ -226,7 +259,7 @@ anv_cmd_state_init(struct anv_cmd_buffer *cmd_buffer)
 
    state->current_pipeline = UINT32_MAX;
    state->restart_index = UINT32_MAX;
-   state->gfx.dynamic = default_dynamic_state;
+   anv_dynamic_state_init(&state->gfx.dynamic);
 }
 
 static void
@@ -855,11 +888,16 @@ void anv_CmdSetSampleLocationsEXT(
 
    struct anv_dynamic_state *dyn_state = &cmd_buffer->state.gfx.dynamic;
    uint32_t samples = pSampleLocationsInfo->sampleLocationsPerPixel;
-
-   typed_memcpy(dyn_state->sample_locations.locations,
-                pSampleLocationsInfo->pSampleLocations, samples);
-
-   cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS;
+   struct intel_sample_position *positions =
+      anv_dynamic_state_get_sample_locations(dyn_state, samples);
+   for (uint32_t i = 0; i < samples; i++) {
+      if (positions[i].x != pSampleLocationsInfo->pSampleLocations[i].x ||
+          positions[i].y != pSampleLocationsInfo->pSampleLocations[i].y) {
+         positions[i].x = pSampleLocationsInfo->pSampleLocations[i].x;
+         positions[i].y = pSampleLocationsInfo->pSampleLocations[i].y;
+         cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS;
+      }
+   }
 }
 
 void anv_CmdSetLineStippleEXT(

@@ -1998,11 +1998,8 @@ setup_utrace_execbuf(struct anv_execbuf *execbuf, struct anv_queue *queue,
       flush->batch_bo->exec_obj_index = last_idx;
    }
 
-   if (!device->info.has_llc) {
-      __builtin_ia32_mfence();
-      for (uint32_t i = 0; i < flush->batch_bo->size; i += CACHELINE_SIZE)
-         __builtin_ia32_clflush(flush->batch_bo->map);
-   }
+   if (!device->info.has_llc)
+      intel_flush_range(flush->batch_bo->map, flush->batch_bo->size);
 
    execbuf->execbuf = (struct drm_i915_gem_execbuffer2) {
       .buffers_ptr = (uintptr_t) execbuf->objects,

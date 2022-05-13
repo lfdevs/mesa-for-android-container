@@ -620,7 +620,8 @@ generate_fs_loop(struct gallivm_state *gallivm,
 
       if (shader->info.base.properties[TGSI_PROPERTY_FS_EARLY_DEPTH_STENCIL])
          depth_mode = EARLY_DEPTH_TEST | EARLY_DEPTH_WRITE;
-      else if (!shader->info.base.writes_z && !shader->info.base.writes_stencil) {
+      else if (!shader->info.base.writes_z && !shader->info.base.writes_stencil &&
+               !shader->info.base.uses_fbfetch) {
          if (shader->info.base.writes_memory)
             depth_mode = LATE_DEPTH_TEST | LATE_DEPTH_WRITE;
          else if (key->alpha.enabled ||

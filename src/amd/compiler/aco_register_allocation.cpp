@@ -96,7 +96,7 @@ struct ra_ctx {
       phi_dummy.reset(
          create_instruction<Instruction>(aco_opcode::p_linear_phi, Format::PSEUDO, 0, 0));
       sgpr_limit = get_addr_sgpr_from_waves(program, program->min_waves);
-      vgpr_limit = get_addr_sgpr_from_waves(program, program->min_waves);
+      vgpr_limit = get_addr_vgpr_from_waves(program, program->min_waves);
    }
 };
 
@@ -2052,12 +2052,18 @@ void
 get_regs_for_phis(ra_ctx& ctx, Block& block, RegisterFile& register_file,
                   std::vector<aco_ptr<Instruction>>& instructions, IDSet& live_in)
 {
-   /* assign phis with all-matching registers to that register */
+   /* move all phis to instructions */
    for (aco_ptr<Instruction>& phi : block.instructions) {
       if (!is_phi(phi))
          break;
+      if (!phi->definitions[0].isKill())
+         instructions.emplace_back(std::move(phi));
+   }
+
+   /* assign phis with all-matching registers to that register */
+   for (aco_ptr<Instruction>& phi : instructions) {
       Definition& definition = phi->definitions[0];
-      if (definition.isKill() || definition.isFixed())
+      if (definition.isFixed())
          continue;
 
       if (!phi->operands[0].isTemp())
@@ -2079,11 +2085,9 @@ get_regs_for_phis(ra_ctx& ctx, Block& block, RegisterFile& register_file,
    }
 
    /* try to find a register that is used by at least one operand */
-   for (aco_ptr<Instruction>& phi : block.instructions) {
-      if (!is_phi(phi))
-         break;
+   for (aco_ptr<Instruction>& phi : instructions) {
       Definition& definition = phi->definitions[0];
-      if (definition.isKill() || definition.isFixed())
+      if (definition.isFixed())
          continue;
 
       /* use affinity if available */
@@ -2116,25 +2120,16 @@ get_regs_for_phis(ra_ctx& ctx, Block& block, RegisterFile& register_file,
    }
 
    /* find registers for phis where the register was blocked or no operand was assigned */
-   for (aco_ptr<Instruction>& phi : block.instructions) {
-      if (!is_phi(phi))
-         break;
-
+   for (aco_ptr<Instruction>& phi : instructions) {
       Definition& definition = phi->definitions[0];
-      if (definition.isKill())
+      if (definition.isFixed())
          continue;
-
-      if (definition.isFixed()) {
-         instructions.emplace_back(std::move(phi));
-         continue;
-      }
 
       definition.setFixed(
          get_reg_phi(ctx, live_in, register_file, instructions, block, phi, definition.getTemp()));
 
       register_file.fill(definition);
       ctx.assignments[definition.tempId()].set(definition);
-      instructions.emplace_back(std::move(phi));
    }
 }
 

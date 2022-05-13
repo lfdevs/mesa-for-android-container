@@ -266,6 +266,14 @@ VKAPI_ATTR void VKAPI_CALL lvp_TrimCommandPool(
    list_inithead(&pool->free_cmd_buffers);
 }
 
+static void
+lvp_free_CmdPushDescriptorSetWithTemplateKHR(struct vk_cmd_queue *queue, struct vk_cmd_queue_entry *cmd)
+{
+   struct lvp_device *device = cmd->driver_data;
+   LVP_FROM_HANDLE(lvp_descriptor_update_template, templ, cmd->u.push_descriptor_set_with_template_khr.descriptor_update_template);
+   lvp_descriptor_template_templ_unref(device, templ);
+}
+
 VKAPI_ATTR void VKAPI_CALL lvp_CmdPushDescriptorSetWithTemplateKHR(
    VkCommandBuffer                             commandBuffer,
    VkDescriptorUpdateTemplate                  descriptorUpdateTemplate,
@@ -285,8 +293,11 @@ VKAPI_ATTR void VKAPI_CALL lvp_CmdPushDescriptorSetWithTemplateKHR(
    cmd->type = VK_CMD_PUSH_DESCRIPTOR_SET_WITH_TEMPLATE_KHR;
 
    list_addtail(&cmd->cmd_link, &cmd_buffer->vk.cmd_queue.cmds);
+   cmd->driver_free_cb = lvp_free_CmdPushDescriptorSetWithTemplateKHR;
+   cmd->driver_data = cmd_buffer->device;
 
    cmd->u.push_descriptor_set_with_template_khr.descriptor_update_template = descriptorUpdateTemplate;
+   lvp_descriptor_template_templ_ref(templ);
    cmd->u.push_descriptor_set_with_template_khr.layout = layout;
    cmd->u.push_descriptor_set_with_template_khr.set = set;
 

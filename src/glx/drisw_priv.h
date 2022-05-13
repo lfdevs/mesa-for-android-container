@@ -71,6 +71,7 @@ struct drisw_drawable
    XImage *ximage;
    XShmSegmentInfo shminfo;
    int xDepth;
+   int swapInterval;
 };
 
 _X_HIDDEN int

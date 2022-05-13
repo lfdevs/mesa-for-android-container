@@ -53,8 +53,6 @@
 
 #include "driver_trace/tr_context.h"
 
-#include "frontend/sw_winsys.h"
-
 #if DETECT_OS_WINDOWS
 #include <io.h>
 #else
@@ -1214,6 +1212,9 @@ zink_destroy_screen(struct pipe_screen *pscreen)
       zink_kopper_deinit_displaytarget(screen, entry->data);
    simple_mtx_destroy(&screen->dt_lock);
 
+   if (screen->copy_context)
+      screen->copy_context->base.destroy(&screen->copy_context->base);
+
    if (VK_NULL_HANDLE != screen->debugUtilsCallbackHandle) {
       VKSCR(DestroyDebugUtilsMessengerEXT)(screen->instance, screen->debugUtilsCallbackHandle, NULL);
    }
@@ -1252,9 +1253,6 @@ zink_destroy_screen(struct pipe_screen *pscreen)
    VKSCR(DestroyDevice)(screen->dev, NULL);
    vkDestroyInstance(screen->instance, NULL);
    util_idalloc_mt_fini(&screen->buffer_ids);
-
-   if (screen->drm_fd != -1)
-      close(screen->drm_fd);
 
    slab_destroy_parent(&screen->transfer_pool);
    ralloc_free(screen);
@@ -1704,6 +1702,9 @@ populate_format_props(struct zink_screen *screen)
       mesa_loge("ZINK: vkGetPhysicalDeviceImageFormatProperties failed");
    }
    screen->need_2D_zs = ret != VK_SUCCESS;
+
+   if (screen->info.feats.features.sparseResidencyImage2D)
+      screen->need_2D_sparse = !screen->base.get_sparse_texture_virtual_page_size(&screen->base, PIPE_TEXTURE_1D, false, PIPE_FORMAT_R32_FLOAT, 0, 16, NULL, NULL, NULL);
 }
 
 bool
@@ -1948,7 +1949,7 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
    VkImageType type;
    switch (target) {
    case PIPE_TEXTURE_1D:
-      type = screen->need_2D_zs && is_zs ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_1D;
+      type = (screen->need_2D_sparse || (screen->need_2D_zs && is_zs)) ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_1D;
       break;
 
    case PIPE_TEXTURE_2D:
@@ -1966,12 +1967,13 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
    default:
       return 0;
    }
-   VkImageUsageFlags flags = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+   VkImageUsageFlags flags = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
    flags |= is_zs ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
    VkSparseImageFormatProperties props[4]; //planar?
    unsigned prop_count = ARRAY_SIZE(props);
    VKSCR(GetPhysicalDeviceSparseImageFormatProperties)(screen->pdev, format, type,
-                                                       multi_sample ? VK_SAMPLE_COUNT_1_BIT : VK_SAMPLE_COUNT_2_BIT,
+                                                       multi_sample ? VK_SAMPLE_COUNT_2_BIT : VK_SAMPLE_COUNT_1_BIT,
                                                        flags,
                                                        VK_IMAGE_TILING_OPTIMAL,
                                                        &prop_count, props);
@@ -2331,6 +2333,11 @@ zink_internal_create_screen(const struct pipe_screen_config *config)
    glsl_type_singleton_init_or_ref();
 
    init_driver_workarounds(screen);
+   screen->copy_context = zink_context(screen->base.context_create(&screen->base, NULL, ZINK_CONTEXT_COPY_ONLY));
+   if (!screen->copy_context) {
+      mesa_loge("zink: failed to create copy context");
+      goto fail;
+   }
 
    return screen;
 
@@ -2343,10 +2350,6 @@ struct pipe_screen *
 zink_create_screen(struct sw_winsys *winsys, const struct pipe_screen_config *config)
 {
    struct zink_screen *ret = zink_internal_create_screen(config);
-   if (ret) {
-      ret->drm_fd = -1;
-      ret->sw_winsys = winsys;
-   }
 
    return &ret->base;
 }
@@ -2356,8 +2359,6 @@ zink_drm_create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct zink_screen *ret = zink_internal_create_screen(config);
 
-   if (ret)
-      ret->drm_fd = os_dupfd_cloexec(fd);
    if (ret && !ret->info.have_KHR_external_memory_fd) {
       debug_printf("ZINK: KHR_external_memory_fd required!\n");
       zink_destroy_screen(&ret->base);

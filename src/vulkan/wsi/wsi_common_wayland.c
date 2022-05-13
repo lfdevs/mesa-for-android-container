@@ -1191,12 +1191,9 @@ fail_image:
    return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
-static VkResult
-wsi_wl_swapchain_destroy(struct wsi_swapchain *wsi_chain,
-                         const VkAllocationCallbacks *pAllocator)
+static void
+wsi_wl_swapchain_images_free(struct wsi_wl_swapchain *chain)
 {
-   struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
-
    for (uint32_t i = 0; i < chain->base.image_count; i++) {
       if (chain->images[i].buffer) {
          wl_buffer_destroy(chain->images[i].buffer);
@@ -1206,7 +1203,12 @@ wsi_wl_swapchain_destroy(struct wsi_swapchain *wsi_chain,
       }
    }
    wsi_destroy_image_info(&chain->base, &chain->base.image_info);
+}
 
+static void
+wsi_wl_swapchain_chain_free(struct wsi_wl_swapchain *chain,
+                            const VkAllocationCallbacks *pAllocator)
+{
    if (chain->frame)
       wl_callback_destroy(chain->frame);
    if (chain->surface)
@@ -1218,6 +1220,16 @@ wsi_wl_swapchain_destroy(struct wsi_swapchain *wsi_chain,
    wsi_swapchain_finish(&chain->base);
 
    vk_free(pAllocator, chain);
+}
+
+static VkResult
+wsi_wl_swapchain_destroy(struct wsi_swapchain *wsi_chain,
+                         const VkAllocationCallbacks *pAllocator)
+{
+   struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
+
+   wsi_wl_swapchain_images_free(chain);
+   wsi_wl_swapchain_chain_free(chain, pAllocator);
 
    return VK_SUCCESS;
 }
@@ -1319,7 +1331,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       result = wsi_wl_image_init(chain, &chain->images[i],
                                  pCreateInfo, pAllocator);
       if (result != VK_SUCCESS)
-         goto fail;
+         goto fail_image_init;
       chain->images[i].busy = false;
    }
 
@@ -1327,8 +1339,11 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
 
    return VK_SUCCESS;
 
+fail_image_init:
+   wsi_wl_swapchain_images_free(chain);
+
 fail:
-   wsi_wl_swapchain_destroy(&chain->base, pAllocator);
+   wsi_wl_swapchain_chain_free(chain, pAllocator);
 
    return result;
 }

@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 #include <inttypes.h>
 
 #include <sys/types.h>
@@ -34,6 +35,7 @@
 #include <xf86drm.h>
 
 #include "intel_device_info.h"
+#include "intel_hwconfig.h"
 
 static int
 error(char *fmt, ...)
@@ -51,6 +53,7 @@ main(int argc, char *argv[])
 {
    drmDevicePtr devices[8];
    int max_devices;
+   bool print_hwconfig = argc > 1 && strcmp(argv[1], "--hwconfig") == 0;
 
    max_devices = drmGetDevices2(0, devices, ARRAY_SIZE(devices));
    if (max_devices < 1)
@@ -63,6 +66,10 @@ main(int argc, char *argv[])
 
       if (fd < 0)
          continue;
+
+      if (print_hwconfig) {
+         intel_get_and_print_hwconfig_table(fd);
+      }
 
       bool success = intel_get_device_info_from_fd(fd, &devinfo);
       close(fd);

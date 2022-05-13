@@ -199,7 +199,7 @@ pan_pack_message_preload(struct MALI_MESSAGE_PRELOAD *cfg,
         if (msg->enabled && msg->texture) {
                 cfg->type = MALI_MESSAGE_TYPE_VAR_TEX;
                 cfg->var_tex.varying_index = msg->varying_index;
-                cfg->var_tex.sampler_index = msg->sampler_index;
+                cfg->var_tex.texture_index = msg->texture_index;
                 cfg->var_tex.register_format = regfmt;
                 cfg->var_tex.skip = msg->skip;
                 cfg->var_tex.zero_lod = msg->zero_lod;

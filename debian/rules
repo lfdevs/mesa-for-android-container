@@ -41,6 +41,7 @@ endif
 EGL_PLATFORMS = x11
 GALLIUM_DRIVERS = swrast
 VULKAN_DRIVERS =
+VULKAN_LAYERS =
 
 confflags_DRI3 = -Ddri3=disabled
 confflags_OSMESA =  -Dosmesa=true
@@ -86,7 +87,6 @@ else
 		# svga needs xa state tracker
 		confflags_GALLIUM += -Dgallium-xa=enabled
 		VULKAN_DRIVERS += intel
-		confflags_VULKAN += intel-nullhw
 	endif
 
 	# Non-Linux ports lack epoll, so wayland isn't ready yet:
@@ -127,7 +127,7 @@ else
   # build vulkan layers where Vulkan loader is available
   ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x sparc64 x32))
 	GALLIUM_DRIVERS += zink
-	confflags_VULKAN += -Dvulkan-layers="device-select, overlay"
+	VULKAN_LAYERS += device-select intel-nullhw overlay
   endif
 
   ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
@@ -146,6 +146,8 @@ GALLIUM_DRIVERS := $(patsubst %,'%',$(GALLIUM_DRIVERS))
 GALLIUM_DRIVERS_LIST := $(subst $(space),$(comma),$(GALLIUM_DRIVERS))
 VULKAN_DRIVERS := $(patsubst %,'%',$(VULKAN_DRIVERS))
 VULKAN_DRIVERS_LIST := $(subst $(space),$(comma),$(VULKAN_DRIVERS))
+VULKAN_LAYERS := $(patsubst %,'%',$(VULKAN_LAYERS))
+VULKAN_LAYERS_LIST := $(subst $(space),$(comma),$(VULKAN_LAYERS))
 
 confflags_EGL = -Dplatforms="$(EGL_PLATFORMS)"
 confflags_GLES = -Dgles1=disabled -Dgles2=enabled
@@ -155,6 +157,7 @@ confflags += \
 	-Ddri-drivers-path=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
 	-Ddri-search-path='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	-Dvulkan-drivers="[$(VULKAN_DRIVERS_LIST)]" \
+	-Dvulkan-layers="[$(VULKAN_LAYERS_LIST)]" \
 	-Dglvnd=true \
 	-Dshared-glapi=enabled \
 	-Dgallium-xvmc=disabled \
@@ -169,8 +172,7 @@ confflags += \
 	$(confflags_GLES) \
 	$(confflags_OSMESA) \
 	$(confflags_SSE2) \
-	$(confflags_VALGRIND) \
-	$(confflags_VULKAN)
+	$(confflags_VALGRIND)
 
 override_dh_clean:
 	rm -rf .pc

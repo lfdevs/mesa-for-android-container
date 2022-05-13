@@ -1731,6 +1731,20 @@ static void visit_global_atomic(struct lp_build_nir_context *bld_base,
                            val_bitsize, addr, val, val2, &result[0]);
 }
 
+#if LLVM_VERSION_MAJOR >= 10
+static void visit_shuffle(struct lp_build_nir_context *bld_base,
+                          nir_intrinsic_instr *instr,
+                          LLVMValueRef dst[4])
+{
+   LLVMValueRef src = get_src(bld_base, instr->src[0]);
+   src = cast_type(bld_base, src, nir_type_int, nir_src_bit_size(instr->src[0]));
+   LLVMValueRef index = get_src(bld_base, instr->src[1]);
+   index = cast_type(bld_base, index, nir_type_uint, nir_src_bit_size(instr->src[1]));
+
+   bld_base->shuffle(bld_base, src, index, instr, dst);
+}
+#endif
+
 static void visit_interp(struct lp_build_nir_context *bld_base,
                          nir_intrinsic_instr *instr,
                          LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
@@ -1959,6 +1973,11 @@ static void visit_intrinsic(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_ballot:
       bld_base->ballot(bld_base, cast_type(bld_base, get_src(bld_base, instr->src[0]), nir_type_int, 32), instr, result);
       break;
+#if LLVM_VERSION_MAJOR >= 10
+   case nir_intrinsic_shuffle:
+      visit_shuffle(bld_base, instr, result);
+      break;
+#endif
    case nir_intrinsic_read_invocation:
    case nir_intrinsic_read_first_invocation: {
       LLVMValueRef src1 = NULL;
@@ -2518,6 +2537,7 @@ void lp_build_opt_nir(struct nir_shader *nir)
         .ballot_components = 1,
 	.lower_to_scalar = true,
 	.lower_subgroup_masks = true,
+        .lower_relative_shuffle = true,
       };
       NIR_PASS_V(nir, nir_lower_subgroups, &subgroups_options);
 

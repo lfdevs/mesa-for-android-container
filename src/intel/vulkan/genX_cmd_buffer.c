@@ -1788,6 +1788,18 @@ genX(BeginCommandBuffer)(
       cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_RENDER_TARGETS;
    }
 
+#if GFX_VER >= 8
+   /* Emit the sample pattern at the beginning of the batch because the
+    * default locations emitted at the device initialization might have been
+    * changed by a previous command buffer.
+    *
+    * Do not change that when we're continuing a previous renderpass.
+    */
+   if (cmd_buffer->device->vk.enabled_extensions.EXT_sample_locations &&
+       !(cmd_buffer->usage_flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
+      genX(emit_sample_pattern)(&cmd_buffer->batch, NULL);
+#endif
+
 #if GFX_VERx10 >= 75
    if (cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
       const VkCommandBufferInheritanceConditionalRenderingInfoEXT *conditional_rendering_info =
@@ -1982,6 +1994,8 @@ genX(CmdExecuteCommands)(
    primary->state.current_pipeline = UINT32_MAX;
    primary->state.current_l3_config = NULL;
    primary->state.current_hash_scale = 0;
+   primary->state.gfx.dirty |= ANV_CMD_DIRTY_DYNAMIC_ALL;
+   primary->state.gfx.push_constant_stages = 0;
 
    /* Each of the secondary command buffers will use its own state base
     * address.  We need to re-emit state base address for the primary after
@@ -4037,23 +4051,23 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
 
    cmd_buffer_emit_clip(cmd_buffer);
 
-   if (anv_cmd_buffer_needs_dynamic_state(cmd_buffer,
-                                          ANV_CMD_DIRTY_DYNAMIC_RASTERIZER_DISCARD_ENABLE))
+   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
+                                      ANV_CMD_DIRTY_DYNAMIC_RASTERIZER_DISCARD_ENABLE |
+                                      ANV_CMD_DIRTY_XFB_ENABLE))
       cmd_buffer_emit_streamout(cmd_buffer);
 
-   if (anv_cmd_buffer_needs_dynamic_state(cmd_buffer,
-                                          ANV_CMD_DIRTY_DYNAMIC_SCISSOR |
-                                          ANV_CMD_DIRTY_RENDER_TARGETS |
-                                          ANV_CMD_DIRTY_DYNAMIC_VIEWPORT)) {
+   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_DYNAMIC_SCISSOR |
+                                      ANV_CMD_DIRTY_RENDER_TARGETS |
+                                      ANV_CMD_DIRTY_DYNAMIC_VIEWPORT |
+                                      ANV_CMD_DIRTY_PIPELINE)) {
       cmd_buffer_emit_viewport(cmd_buffer);
       cmd_buffer_emit_depth_viewport(cmd_buffer,
                                      pipeline->depth_clamp_enable);
    }
 
-   if (anv_cmd_buffer_needs_dynamic_state(cmd_buffer,
-                                          ANV_CMD_DIRTY_DYNAMIC_SCISSOR |
-                                          ANV_CMD_DIRTY_RENDER_TARGETS |
-                                          ANV_CMD_DIRTY_DYNAMIC_VIEWPORT))
+   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_DYNAMIC_SCISSOR |
+                                      ANV_CMD_DIRTY_RENDER_TARGETS |
+                                      ANV_CMD_DIRTY_DYNAMIC_VIEWPORT))
       cmd_buffer_emit_scissor(cmd_buffer);
 
    genX(cmd_buffer_flush_dynamic_state)(cmd_buffer);

@@ -543,6 +543,9 @@ zink_draw(struct pipe_context *pctx,
    zink_query_update_gs_states(ctx, dinfo->was_line_loop);
 
    zink_batch_rp(ctx);
+   /* check dead swapchain */
+   if (unlikely(!ctx->batch.in_rp))
+      return;
 
    if (BATCH_CHANGED)
       zink_update_descriptor_refs(ctx, false);

@@ -43,6 +43,7 @@ struct zink_bo;
 #include <vulkan/vulkan.h>
 
 #define ZINK_MAP_TEMPORARY (PIPE_MAP_DRV_PRV << 0)
+#define ZINK_BIND_DMABUF (1 << 29)
 #define ZINK_BIND_TRANSIENT (1 << 30) //transient fb attachment
 #define ZINK_BIND_VIDEO (1 << 31)
 
@@ -78,6 +79,7 @@ struct zink_resource_object {
    bool transfer_dst;
    bool render_target;
    bool is_buffer;
+   bool exportable;
 
    /* TODO: this should be a union */
    struct zink_bo *bo;
@@ -128,7 +130,7 @@ struct zink_resource {
          VkImageLayout layout;
          VkImageAspectFlags aspect;
          bool optimal_tiling;
-         bool need_2D_zs;
+         bool need_2D;
          uint8_t fb_binds; //not counted in all_binds
       };
    };
@@ -152,11 +154,13 @@ struct zink_resource {
       };
    };
 
+   bool swapchain;
    bool dmabuf_acquire;
    unsigned dt_stride;
 
    uint8_t modifiers_count;
    uint64_t *modifiers;
+   enum pipe_format drm_format;
 };
 
 struct zink_transfer {
@@ -213,6 +217,12 @@ static inline bool
 zink_resource_has_binds(const struct zink_resource *res)
 {
    return res->all_binds > 0;
+}
+
+static inline bool
+zink_is_swapchain(const struct zink_resource *res)
+{
+   return res->swapchain;
 }
 
 #ifndef __cplusplus

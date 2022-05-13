@@ -63,6 +63,7 @@ struct radv_pipeline_key {
    uint32_t use_ngg : 1;
    uint32_t adjust_frag_coord_z : 1;
    uint32_t disable_aniso_single_level : 1;
+   uint32_t disable_sinking_load_input_fs : 1;
 
    struct {
       uint32_t instance_rate_inputs;
@@ -372,6 +373,7 @@ struct radv_vs_input_state {
 
    uint32_t instance_rate_inputs;
    uint32_t nontrivial_divisors;
+   uint32_t zero_divisors;
    uint32_t post_shuffle;
    /* Having two separate fields instead of a single uint64_t makes it easier to remove attributes
     * using bitwise arithmetic.

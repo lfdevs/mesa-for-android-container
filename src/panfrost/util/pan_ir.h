@@ -231,11 +231,11 @@ struct bifrost_message_preload {
         unsigned num_components;
 
         /* If texture is set, performs a texture instruction according to
-         * sampler_index, skip, and zero_lod. If texture is unset, only the
+         * texture_index, skip, and zero_lod. If texture is unset, only the
          * varying load is performed.
          */
         bool texture, skip, zero_lod;
-        unsigned sampler_index;
+        unsigned texture_index;
 };
 
 struct bifrost_shader_info {

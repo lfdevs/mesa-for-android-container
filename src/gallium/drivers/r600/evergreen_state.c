@@ -273,7 +273,7 @@ bool evergreen_is_format_supported(struct pipe_screen *screen,
 
 	if (usage & PIPE_BIND_SAMPLER_VIEW) {
 		if (target == PIPE_BUFFER) {
-			if (r600_is_vertex_format_supported(format))
+			if (r600_is_buffer_format_supported(format, false))
 				retval |= PIPE_BIND_SAMPLER_VIEW;
 		} else {
 			if (r600_is_sampler_format_supported(screen, format))
@@ -303,7 +303,7 @@ bool evergreen_is_format_supported(struct pipe_screen *screen,
 	}
 
 	if ((usage & PIPE_BIND_VERTEX_BUFFER) &&
-	    r600_is_vertex_format_supported(format)) {
+	    r600_is_buffer_format_supported(format, true)) {
 		retval |= PIPE_BIND_VERTEX_BUFFER;
 	}
 

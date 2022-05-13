@@ -1021,6 +1021,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
    psp->getSwapInterval = dri3_get_swap_interval;
    psp->bindTexImage = dri3_bind_tex_image;
    psp->releaseTexImage = dri3_release_tex_image;
+   psp->maxSwapInterval = INT_MAX;
 
    __glXEnableDirectExtension(&psc->base, "GLX_OML_sync_control");
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_video_sync");

@@ -256,7 +256,7 @@ init_render_queue_state(struct anv_queue *queue)
 #if GFX_VER >= 8
    anv_batch_emit(&batch, GENX(3DSTATE_WM_CHROMAKEY), ck);
 
-   genX(emit_sample_pattern)(&batch, 0, NULL);
+   genX(emit_sample_pattern)(&batch, NULL);
 
    /* The BDW+ docs describe how to use the 3DSTATE_WM_HZ_OP instruction in the
     * section titled, "Optimized Depth Buffer Clear and/or Stencil Buffer
@@ -646,7 +646,7 @@ genX(emit_l3_config)(struct anv_batch *batch,
 
 void
 genX(emit_multisample)(struct anv_batch *batch, uint32_t samples,
-                       const VkSampleLocationEXT *locations)
+                       const struct intel_sample_position *positions)
 {
    anv_batch_emit(batch, GENX(3DSTATE_MULTISAMPLE), ms) {
       ms.NumberofMultisamples       = __builtin_ffs(samples) - 1;
@@ -660,41 +660,21 @@ genX(emit_multisample)(struct anv_batch *batch, uint32_t samples,
        */
       ms.PixelPositionOffsetEnable  = false;
 #else
-
-      if (locations) {
-         switch (samples) {
-         case 1:
-            INTEL_SAMPLE_POS_1X_ARRAY(ms.Sample, locations);
+      switch (samples) {
+      case 1:
+         INTEL_SAMPLE_POS_1X_ARRAY(ms.Sample, positions);
+         break;
+      case 2:
+         INTEL_SAMPLE_POS_2X_ARRAY(ms.Sample, positions);
+         break;
+      case 4:
+         INTEL_SAMPLE_POS_4X_ARRAY(ms.Sample, positions);
+         break;
+      case 8:
+         INTEL_SAMPLE_POS_8X_ARRAY(ms.Sample, positions);
+         break;
+      default:
             break;
-         case 2:
-            INTEL_SAMPLE_POS_2X_ARRAY(ms.Sample, locations);
-            break;
-         case 4:
-            INTEL_SAMPLE_POS_4X_ARRAY(ms.Sample, locations);
-            break;
-         case 8:
-            INTEL_SAMPLE_POS_8X_ARRAY(ms.Sample, locations);
-            break;
-         default:
-            break;
-         }
-      } else {
-         switch (samples) {
-         case 1:
-            INTEL_SAMPLE_POS_1X(ms.Sample);
-            break;
-         case 2:
-            INTEL_SAMPLE_POS_2X(ms.Sample);
-            break;
-         case 4:
-            INTEL_SAMPLE_POS_4X(ms.Sample);
-            break;
-         case 8:
-            INTEL_SAMPLE_POS_8X(ms.Sample);
-            break;
-         default:
-            break;
-         }
       }
 #endif
    }
@@ -702,53 +682,38 @@ genX(emit_multisample)(struct anv_batch *batch, uint32_t samples,
 
 #if GFX_VER >= 8
 void
-genX(emit_sample_pattern)(struct anv_batch *batch, uint32_t samples,
-                          const VkSampleLocationEXT *locations)
+genX(emit_sample_pattern)(struct anv_batch *batch,
+                          const struct anv_dynamic_state *d)
 {
    /* See the Vulkan 1.0 spec Table 24.1 "Standard sample locations" and
     * VkPhysicalDeviceFeatures::standardSampleLocations.
     */
    anv_batch_emit(batch, GENX(3DSTATE_SAMPLE_PATTERN), sp) {
-      if (locations) {
-         /* The Skylake PRM Vol. 2a "3DSTATE_SAMPLE_PATTERN" says:
-          *
-          *    "When programming the sample offsets (for NUMSAMPLES_4 or _8
-          *    and MSRASTMODE_xxx_PATTERN), the order of the samples 0 to 3
-          *    (or 7 for 8X, or 15 for 16X) must have monotonically increasing
-          *    distance from the pixel center. This is required to get the
-          *    correct centroid computation in the device."
-          *
-          * However, the Vulkan spec seems to require that the the samples
-          * occur in the order provided through the API. The standard sample
-          * patterns have the above property that they have monotonically
-          * increasing distances from the center but client-provided ones do
-          * not. As long as this only affects centroid calculations as the
-          * docs say, we should be ok because OpenGL and Vulkan only require
-          * that the centroid be some lit sample and that it's the same for
-          * all samples in a pixel; they have no requirement that it be the
-          * one closest to center.
-          */
-         switch (samples) {
-         case 1:
-            INTEL_SAMPLE_POS_1X_ARRAY(sp._1xSample, locations);
-            break;
-         case 2:
-            INTEL_SAMPLE_POS_2X_ARRAY(sp._2xSample, locations);
-            break;
-         case 4:
-            INTEL_SAMPLE_POS_4X_ARRAY(sp._4xSample, locations);
-            break;
-         case 8:
-            INTEL_SAMPLE_POS_8X_ARRAY(sp._8xSample, locations);
-            break;
+      /* The Skylake PRM Vol. 2a "3DSTATE_SAMPLE_PATTERN" says:
+       *
+       *    "When programming the sample offsets (for NUMSAMPLES_4 or _8
+       *    and MSRASTMODE_xxx_PATTERN), the order of the samples 0 to 3
+       *    (or 7 for 8X, or 15 for 16X) must have monotonically increasing
+       *    distance from the pixel center. This is required to get the
+       *    correct centroid computation in the device."
+       *
+       * However, the Vulkan spec seems to require that the the samples occur
+       * in the order provided through the API. The standard sample patterns
+       * have the above property that they have monotonically increasing
+       * distances from the center but client-provided ones do not. As long as
+       * this only affects centroid calculations as the docs say, we should be
+       * ok because OpenGL and Vulkan only require that the centroid be some
+       * lit sample and that it's the same for all samples in a pixel; they
+       * have no requirement that it be the one closest to center.
+       */
+      if (d) {
+         INTEL_SAMPLE_POS_1X_ARRAY(sp._1xSample,  d->sample_locations.locations_1);
+         INTEL_SAMPLE_POS_2X_ARRAY(sp._2xSample,  d->sample_locations.locations_2);
+         INTEL_SAMPLE_POS_4X_ARRAY(sp._4xSample,  d->sample_locations.locations_4);
+         INTEL_SAMPLE_POS_8X_ARRAY(sp._8xSample,  d->sample_locations.locations_8);
 #if GFX_VER >= 9
-         case 16:
-            INTEL_SAMPLE_POS_16X_ARRAY(sp._16xSample, locations);
-            break;
+         INTEL_SAMPLE_POS_16X_ARRAY(sp._16xSample, d->sample_locations.locations_16);
 #endif
-         default:
-            break;
-         }
       } else {
          INTEL_SAMPLE_POS_1X(sp._1xSample);
          INTEL_SAMPLE_POS_2X(sp._2xSample);

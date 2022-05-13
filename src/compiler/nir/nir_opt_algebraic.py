@@ -420,7 +420,7 @@ optimizations.extend([
 # bits of the second source.  These replacements must correctly handle the
 # case where (b % bitsize) + (c % bitsize) >= bitsize.
 for s in [8, 16, 32, 64]:
-   mask = (1 << s) - 1
+   mask = s - 1
 
    ishl = "ishl@{}".format(s)
    ishr = "ishr@{}".format(s)

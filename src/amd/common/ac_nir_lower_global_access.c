@@ -37,8 +37,6 @@ try_extract_additions(nir_builder *b, nir_ssa_scalar scalar, uint64_t *out_const
    nir_ssa_scalar src0 = nir_ssa_scalar_chase_alu_src(scalar, 0);
    nir_ssa_scalar src1 = nir_ssa_scalar_chase_alu_src(scalar, 1);
 
-   b->cursor = nir_before_instr(&alu->instr);
-
    for (unsigned i = 0; i < 2; ++i) {
       nir_ssa_scalar src = i ? src1 : src0;
       if (nir_ssa_scalar_is_const(src)) {
@@ -64,7 +62,6 @@ try_extract_additions(nir_builder *b, nir_ssa_scalar scalar, uint64_t *out_const
    if (!replace_src0 && !replace_src1)
       return NULL;
 
-   b->cursor = nir_before_instr(&alu->instr);
    replace_src0 = replace_src0 ? replace_src0 : nir_channel(b, src0.def, src0.comp);
    replace_src1 = replace_src1 ? replace_src1 : nir_channel(b, src1.def, src1.comp);
    return nir_iadd(b, replace_src0, replace_src1);
@@ -139,6 +136,7 @@ process_instr(nir_builder *b, nir_instr *instr, void *_)
    uint64_t off_const = 0;
    nir_ssa_def *offset = NULL;
    nir_ssa_scalar src = {addr_src->ssa, 0};
+   b->cursor = nir_after_instr(addr_src->ssa->parent_instr);
    nir_ssa_def *addr = try_extract_additions(b, src, &off_const, &offset);
    addr = addr ? addr : addr_src->ssa;
 

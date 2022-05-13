@@ -1,3 +1,13 @@
+# #6463
+KHR-GL46.shader_image_load_store.incomplete_textures,Fail
+spec@arb_shader_image_load_store@invalid,Fail
+spec@arb_shader_image_load_store@invalid@imageLoad/incompatible format test,Fail
+spec@arb_shader_image_load_store@invalid@imageLoad/incomplete image test,Fail
+spec@arb_shader_image_load_store@invalid@imageLoad/invalid format test,Fail
+spec@arb_shader_image_load_store@invalid@imageLoad/layer bounds test,Fail
+spec@arb_shader_image_load_store@invalid@imageLoad/level bounds test,Fail
+spec@arb_shader_image_load_store@invalid@imageLoad/unbound image test,Fail
+
 # #6115
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-float-index-rd,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec2-index-rd,Crash
@@ -299,7 +309,6 @@ spec@ext_texture_snorm@fbo-blending-formats@GL_LUMINANCE16_SNORM,Fail
 spec@ext_texture_snorm@fbo-blending-formats@GL_LUMINANCE8_SNORM,Fail
 spec@ext_texture_snorm@fbo-blending-formats@GL_LUMINANCE_SNORM,Fail
 spec@ext_texture_swizzle@depth_texture_mode_and_swizzle,Fail
-spec@ext_transform_feedback@generatemipmap prims_generated,Fail
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 spec@khr_texture_compression_astc@array-gl,Fail
 spec@khr_texture_compression_astc@array-gl@12x12 Block Dim,Fail
@@ -340,9 +349,6 @@ spec@arb_shader_image_load_store@early-z@occlusion query test/early-z pass,Fail
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-load,Crash
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-store,Crash
 
-spec@arb_shader_image_load_store@invalid,Fail
-spec@arb_shader_image_load_store@invalid@imageLoad/incompatible format test/imageBuffer,Fail
-
 spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-read,Crash
 spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-write,Crash
 
@@ -351,7 +357,6 @@ spec@khr_texture_compression_astc@array-gles@12x12 Block Dim,Fail
 spec@khr_texture_compression_astc@array-gles@5x5 Block Dim,Fail
 spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3,Fail
 spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3@oes_egl_image_external_essl3_imageLoad,Fail
-spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3@oes_egl_image_external_essl3_imageStore,Fail
 
 
 #literally no driver can pass these

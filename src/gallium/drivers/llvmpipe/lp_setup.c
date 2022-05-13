@@ -1345,10 +1345,9 @@ try_update_scene_state( struct lp_setup_context *setup )
          struct pipe_resource *buffer = setup->ssbos[i].current.buffer;
          const ubyte *current_data = NULL;
 
-         if (!buffer)
-            continue;
          /* resource buffer */
-         current_data = (ubyte *) llvmpipe_resource_data(buffer);
+         if (buffer)
+            current_data = (ubyte *) llvmpipe_resource_data(buffer);
          if (current_data) {
             current_data += setup->ssbos[i].current.buffer_offset;
 

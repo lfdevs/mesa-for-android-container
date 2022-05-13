@@ -767,6 +767,9 @@ lower_tex_to_txd(nir_builder *b, nir_tex_instr *tex)
    txd->coord_components = tex->coord_components;
    txd->texture_index = tex->texture_index;
    txd->sampler_index = tex->sampler_index;
+   txd->is_array = tex->is_array;
+   txd->is_shadow = tex->is_shadow;
+   txd->is_new_style_shadow = tex->is_new_style_shadow;
 
    /* reuse existing srcs */
    for (unsigned i = 0; i < tex->num_srcs; i++) {
@@ -803,6 +806,9 @@ lower_txb_to_txl(nir_builder *b, nir_tex_instr *tex)
    txl->coord_components = tex->coord_components;
    txl->texture_index = tex->texture_index;
    txl->sampler_index = tex->sampler_index;
+   txl->is_array = tex->is_array;
+   txl->is_shadow = tex->is_shadow;
+   txl->is_new_style_shadow = tex->is_new_style_shadow;
 
    /* reuse all but bias src */
    for (int i = 0; i < 2; i++) {

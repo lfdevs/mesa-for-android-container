@@ -854,7 +854,7 @@
 
   <struct name="VAR_TEX Preload" size="1" no-direct-packing="true">
     <field name="Varying Index" size="3" start="4" type="uint"/>
-    <field name="Sampler Index" size="2" start="7" type="uint"/>
+    <field name="Texture Index" size="2" start="7" type="uint"/>
     <field name="Register Format" size="2" start="9" type="Message Preload Register Format"/>
     <field name="Skip" size="1" start="14" type="bool"/>
     <field name="Zero LOD" size="1" start="15" type="bool"/>

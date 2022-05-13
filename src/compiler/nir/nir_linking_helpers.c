@@ -1433,7 +1433,9 @@ insert_sorted(struct exec_list *var_list, nir_variable *new_var)
        */
       if (new_var->data.per_primitive < var->data.per_primitive ||
           (new_var->data.per_primitive == var->data.per_primitive &&
-           var->data.location > new_var->data.location)) {
+           (var->data.location > new_var->data.location ||
+            (var->data.location == new_var->data.location &&
+             var->data.location_frac > new_var->data.location_frac)))) {
          exec_node_insert_node_before(&var->node, &new_var->node);
          return;
       }

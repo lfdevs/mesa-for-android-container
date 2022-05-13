@@ -1976,9 +1976,6 @@ if with_osmesa
       error('OSMesa bits must be 8 if building glx or dri based drivers')
     endif
     osmesa_lib_name = osmesa_lib_name + osmesa_bits
-    pre_args += [
-      '-DCHAN_BITS=@0@'.format(osmesa_bits), '-DDEFAULT_SOFTWARE_DEPTH_BITS=31'
-    ]
   endif
 endif
 

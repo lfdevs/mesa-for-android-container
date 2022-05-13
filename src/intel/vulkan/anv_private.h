@@ -49,6 +49,7 @@
 #include "common/intel_gem.h"
 #include "common/intel_l3_config.h"
 #include "common/intel_measure.h"
+#include "common/intel_sample_positions.h"
 #include "dev/intel_device_info.h"
 #include "blorp/blorp.h"
 #include "compiler/brw_compiler.h"
@@ -2743,7 +2744,13 @@ struct anv_dynamic_state {
    } line_stipple;
 
    struct {
-      VkSampleLocationEXT                       locations[MAX_SAMPLE_LOCATIONS];
+      struct intel_sample_position              locations_1[1];
+      struct intel_sample_position              locations_2[2];
+      struct intel_sample_position              locations_4[4];
+      struct intel_sample_position              locations_8[8];
+      struct intel_sample_position              locations_16[16];
+      /* Only valid on the pipeline dynamic state */
+      unsigned                                  pipeline_samples;
    } sample_locations;
 
    struct {
@@ -2772,9 +2779,24 @@ struct anv_dynamic_state {
 
 extern const struct anv_dynamic_state default_dynamic_state;
 
+void anv_dynamic_state_init(struct anv_dynamic_state *state);
 uint32_t anv_dynamic_state_copy(struct anv_dynamic_state *dest,
                                 const struct anv_dynamic_state *src,
                                 uint32_t copy_mask);
+
+static inline struct intel_sample_position *
+anv_dynamic_state_get_sample_locations(struct anv_dynamic_state *state,
+                                       unsigned samples)
+{
+   switch (samples) {
+   case  1: return state->sample_locations.locations_1;  break;
+   case  2: return state->sample_locations.locations_2;  break;
+   case  4: return state->sample_locations.locations_4;  break;
+   case  8: return state->sample_locations.locations_8;  break;
+   case 16: return state->sample_locations.locations_16; break;
+   default: unreachable("invalid sample count");
+   }
+}
 
 struct anv_surface_state {
    struct anv_state state;
@@ -3362,11 +3384,6 @@ struct anv_graphics_pipeline {
 
    uint32_t                                     batch_data[512];
 
-   /* States that are part of batch_data and should be not emitted
-    * dynamically.
-    */
-   anv_cmd_dirty_mask_t                         static_state_mask;
-
    /* States that need to be reemitted in cmd_buffer_flush_dynamic_state().
     * This might cover more than the dynamic states specified at pipeline
     * creation.
@@ -3409,8 +3426,6 @@ struct anv_graphics_pipeline {
     * views to replicate.
     */
    bool                                         use_primitive_replication;
-
-   struct anv_state                             blend_state;
 
    uint32_t                                     vb_used;
    struct anv_pipeline_vertex_binding {
@@ -3566,31 +3581,6 @@ anv_pipeline_get_last_vue_prog_data(const struct anv_graphics_pipeline *pipeline
       return &get_tes_prog_data(pipeline)->base;
    else
       return &get_vs_prog_data(pipeline)->base;
-}
-
-static inline bool
-anv_cmd_buffer_needs_dynamic_state(const struct anv_cmd_buffer *cmd_buffer,
-                                   anv_cmd_dirty_mask_t mask)
-{
-   /* Only dynamic state */
-   assert((mask & ANV_CMD_DIRTY_PIPELINE) == 0);
-
-   /* If all the state is statically put into the pipeline batch, nothing to
-    * do.
-    */
-   if ((cmd_buffer->state.gfx.pipeline->static_state_mask & mask) == mask)
-      return false;
-
-   /* Dynamic state affected by vkCmd* commands */
-   if (cmd_buffer->state.gfx.dirty & mask)
-      return true;
-
-   /* For all other states we might have part of the information in the
-    * anv_graphics_pipeline::dynamic_state not emitted as part of the pipeline
-    * batch so we need to reemit the packet associated with this state if the
-    * pipeline changed.
-    */
-   return (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) != 0;
 }
 
 VkResult

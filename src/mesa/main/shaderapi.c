@@ -1705,7 +1705,7 @@ _mesa_DeleteObjectARB(GLhandleARB obj)
          delete_shader(ctx, obj);
       }
       else {
-         /* error? */
+         _mesa_error(ctx, GL_INVALID_VALUE, "glDeleteObjectARB");
       }
    }
 }

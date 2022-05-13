@@ -2585,3 +2585,15 @@ iris_bufmgr_get_border_color_pool(struct iris_bufmgr *bufmgr)
 {
    return &bufmgr->border_color_pool;
 }
+
+uint64_t
+iris_bufmgr_vram_size(struct iris_bufmgr *bufmgr)
+{
+   return bufmgr->vram.size;
+}
+
+uint64_t
+iris_bufmgr_sram_size(struct iris_bufmgr *bufmgr)
+{
+   return bufmgr->sys.size;
+}

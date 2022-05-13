@@ -818,6 +818,11 @@ opt_if_loop_last_continue(nir_loop *loop, bool aggressive_last_continue)
        exec_list_is_empty(&last_block->instr_list))
       return false;
 
+   /* If there are single-source phis in the last block,
+    * get rid of them first
+    */
+   nir_opt_remove_phis_block(last_block);
+
    /* Move the last block of the loop inside the last if-statement */
    nir_cf_list tmp;
    nir_cf_extract(&tmp, nir_after_cf_node(if_node),

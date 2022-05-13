@@ -530,17 +530,27 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
 
    case SpvOpUMulExtended: {
       vtn_assert(glsl_type_is_struct_or_ifc(dest_type));
-      nir_ssa_def *umul = nir_umul_2x32_64(&b->nb, src[0], src[1]);
-      dest->elems[0]->def = nir_unpack_64_2x32_split_x(&b->nb, umul);
-      dest->elems[1]->def = nir_unpack_64_2x32_split_y(&b->nb, umul);
+      if (src[0]->bit_size == 32) {
+         nir_ssa_def *umul = nir_umul_2x32_64(&b->nb, src[0], src[1]);
+         dest->elems[0]->def = nir_unpack_64_2x32_split_x(&b->nb, umul);
+         dest->elems[1]->def = nir_unpack_64_2x32_split_y(&b->nb, umul);
+      } else {
+         dest->elems[0]->def = nir_imul(&b->nb, src[0], src[1]);
+         dest->elems[1]->def = nir_umul_high(&b->nb, src[0], src[1]);
+      }
       break;
    }
 
    case SpvOpSMulExtended: {
       vtn_assert(glsl_type_is_struct_or_ifc(dest_type));
-      nir_ssa_def *smul = nir_imul_2x32_64(&b->nb, src[0], src[1]);
-      dest->elems[0]->def = nir_unpack_64_2x32_split_x(&b->nb, smul);
-      dest->elems[1]->def = nir_unpack_64_2x32_split_y(&b->nb, smul);
+      if (src[0]->bit_size == 32) {
+         nir_ssa_def *umul = nir_imul_2x32_64(&b->nb, src[0], src[1]);
+         dest->elems[0]->def = nir_unpack_64_2x32_split_x(&b->nb, umul);
+         dest->elems[1]->def = nir_unpack_64_2x32_split_y(&b->nb, umul);
+      } else {
+         dest->elems[0]->def = nir_imul(&b->nb, src[0], src[1]);
+         dest->elems[1]->def = nir_imul_high(&b->nb, src[0], src[1]);
+      }
       break;
    }
 

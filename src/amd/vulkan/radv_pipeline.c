@@ -3099,6 +3099,9 @@ radv_generate_graphics_pipeline_key(const struct radv_pipeline *pipeline,
    key.use_ngg = pipeline->device->physical_device->use_ngg;
    key.adjust_frag_coord_z = pipeline->device->adjust_frag_coord_z;
 
+   if (pipeline->device->instance->disable_sinking_load_input_fs)
+      key.disable_sinking_load_input_fs = true;
+
    return key;
 }
 
@@ -4408,7 +4411,11 @@ radv_create_shaders(struct radv_pipeline *pipeline, struct radv_pipeline_layout 
                            .allow_fp16 = device->physical_device->rad_info.chip_class >= GFX9,
                         });
 
-         nir_opt_sink(stages[i].nir, nir_move_load_input | nir_move_const_undef | nir_move_copies);
+         nir_move_options sink_opts = nir_move_const_undef | nir_move_copies;
+         if (i != MESA_SHADER_FRAGMENT || !pipeline_key->disable_sinking_load_input_fs)
+            sink_opts |= nir_move_load_input;
+
+         nir_opt_sink(stages[i].nir, sink_opts);
          nir_opt_move(stages[i].nir, nir_move_load_input | nir_move_const_undef | nir_move_copies);
 
          /* Lower I/O intrinsics to memory instructions. */
@@ -4448,9 +4455,12 @@ radv_create_shaders(struct radv_pipeline *pipeline, struct radv_pipeline_layout 
 
          /* cleanup passes */
          nir_lower_load_const_to_scalar(stages[i].nir);
+
+         sink_opts |= nir_move_comparisons | nir_move_load_ubo | nir_move_load_ssbo;
+         nir_opt_sink(stages[i].nir, sink_opts);
+
          nir_move_options move_opts = nir_move_const_undef | nir_move_load_ubo |
                                       nir_move_load_input | nir_move_comparisons | nir_move_copies;
-         nir_opt_sink(stages[i].nir, move_opts | nir_move_load_ssbo);
          nir_opt_move(stages[i].nir, move_opts);
 
          stages[i].feedback.duration += os_time_get_nano() - stage_start;

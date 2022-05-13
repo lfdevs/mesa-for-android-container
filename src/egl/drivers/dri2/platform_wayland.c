@@ -839,6 +839,18 @@ dri2_wl_destroy_surface(_EGLDisplay *disp, _EGLSurface *surf)
    return EGL_TRUE;
 }
 
+static EGLBoolean
+dri2_wl_swap_interval(_EGLDisplay *disp, _EGLSurface *surf, EGLint interval)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
+
+   if (dri2_dpy->kopper)
+      dri2_dpy->kopper->setSwapInterval(dri2_surf->dri_drawable, interval);
+
+   return EGL_TRUE;
+}
+
 static void
 dri2_wl_release_buffers(struct dri2_egl_surface *dri2_surf)
 {
@@ -1937,6 +1949,7 @@ static const struct dri2_egl_display_vtbl dri2_wl_display_vtbl = {
    .create_window_surface = dri2_wl_create_window_surface,
    .create_pixmap_surface = dri2_wl_create_pixmap_surface,
    .destroy_surface = dri2_wl_destroy_surface,
+   .swap_interval = dri2_wl_swap_interval,
    .create_image = dri2_create_image_khr,
    .swap_buffers = dri2_wl_swap_buffers,
    .swap_buffers_with_damage = dri2_wl_swap_buffers_with_damage,

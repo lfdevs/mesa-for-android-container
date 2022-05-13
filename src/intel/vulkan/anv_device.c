@@ -1596,7 +1596,11 @@ void anv_GetPhysicalDeviceFeatures2(
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT: {
          VkPhysicalDeviceLineRasterizationFeaturesEXT *features =
             (VkPhysicalDeviceLineRasterizationFeaturesEXT *)ext;
-         features->rectangularLines = true;
+         /* Rectangular lines must use the strict algorithm, which is not
+          * supported for wide lines prior to ICL.  See rasterization_mode for
+          * details and how the HW states are programmed.
+          */
+         features->rectangularLines = pdevice->info.ver >= 10;
          features->bresenhamLines = true;
          /* Support for Smooth lines with MSAA was removed on gfx11.  From the
           * BSpec section "Multisample ModesState" table for "AA Line Support

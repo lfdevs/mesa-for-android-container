@@ -127,7 +127,7 @@ wgl_screen_create(HDC hDC)
       sw_only ? "" : "d3d12",
 #endif
 #ifdef GALLIUM_ZINK
-      "zink",
+      sw_only ? "" : "zink",
 #endif
 #if defined(GALLIUM_LLVMPIPE)
       "llvmpipe",
