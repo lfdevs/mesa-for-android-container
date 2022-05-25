@@ -2579,10 +2579,10 @@ emit_task_state(struct anv_graphics_pipeline *pipeline)
    /* Recommended values from "Task and Mesh Distribution Programming". */
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_TASK_REDISTRIB), redistrib) {
       redistrib.LocalBOTAccumulatorThreshold = MULTIPLIER_1;
-      redistrib.SmallTaskThreshold = MULTIPLIER_2;
-      redistrib.TargetMeshBatchSize = MULTIPLIER_4;
+      redistrib.SmallTaskThreshold = 1; /* 2^N */
+      redistrib.TargetMeshBatchSize = devinfo->num_slices > 2 ? 3 : 5; /* 2^N */
       redistrib.TaskRedistributionLevel = TASKREDISTRIB_BOM;
-      redistrib.TaskRedistributionMode = TASKREDISTRIB_RR_FREE;
+      redistrib.TaskRedistributionMode = TASKREDISTRIB_RR_STRICT;
    }
 }
 
@@ -2653,8 +2653,8 @@ emit_mesh_state(struct anv_graphics_pipeline *pipeline)
    /* Recommended values from "Task and Mesh Distribution Programming". */
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_MESH_DISTRIB), distrib) {
       distrib.DistributionMode = MESH_RR_FREE;
-      distrib.TaskDistributionBatchSize = 2; /* 2^2 thread groups */
-      distrib.MeshDistributionBatchSize = 3; /* 2^3 thread groups */
+      distrib.TaskDistributionBatchSize = devinfo->num_slices > 2 ? 8 : 9; /* 2^N thread groups */
+      distrib.MeshDistributionBatchSize = devinfo->num_slices > 2 ? 5 : 3; /* 2^N thread groups */
    }
 }
 #endif
@@ -2811,6 +2811,12 @@ genX(graphics_pipeline_create)(
 #endif
    } else {
       assert(anv_pipeline_is_mesh(pipeline));
+
+      /* BSpec 46303 forbids both 3DSTATE_MESH_CONTROL.MeshShaderEnable
+       * and 3DSTATE_STREAMOUT.SOFunctionEnable to be 1.
+       */
+      anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_STREAMOUT), so) {}
+
 #if GFX_VERx10 >= 125
       emit_task_state(pipeline);
       emit_mesh_state(pipeline);

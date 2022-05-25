@@ -2636,7 +2636,22 @@ extract_sparse_load(struct ntv_context *ctx, SpvId result, SpvId dest_type, nir_
    uint32_t idx = 0;
    SpvId resident = spirv_builder_emit_composite_extract(&ctx->builder, spirv_builder_type_uint(&ctx->builder, 32), result, &idx, 1);
    idx = 1;
-   result = spirv_builder_emit_composite_extract(&ctx->builder, dest_type, result, &idx, 1);
+   /* normal vec4 return */
+   if (dest_ssa->num_components == 4)
+      result = spirv_builder_emit_composite_extract(&ctx->builder, dest_type, result, &idx, 1);
+   else {
+      /* shadow */
+      assert(dest_ssa->num_components == 1);
+      SpvId type = spirv_builder_type_float(&ctx->builder, dest_ssa->bit_size);
+      SpvId val[2];
+      /* pad to 2 components: the upcoming is_sparse_texels_resident instr will always use the
+       * separate residency value, but the shader still expects this return to be a vec2,
+       * so give it a vec2
+       */
+      val[0] = spirv_builder_emit_composite_extract(&ctx->builder, type, result, &idx, 1);
+      val[1] = emit_float_const(ctx, dest_ssa->bit_size, 0);
+      result = spirv_builder_emit_composite_construct(&ctx->builder, get_fvec_type(ctx, dest_ssa->bit_size, 2), val, 2);
+   }
    assert(resident != 0);
    assert(dest_ssa->index < ctx->num_defs);
    ctx->resident_defs[dest_ssa->index] = resident;
@@ -3427,6 +3442,8 @@ emit_tex(struct ntv_context *ctx, nir_tex_instr *tex)
          result = spirv_builder_emit_image_fetch(&ctx->builder, actual_dest_type,
                                                  image, coord, lod, sample, const_offset, offset, tex->is_sparse);
    } else {
+      if (tex->op == nir_texop_txl)
+         min_lod = 0;
       result = spirv_builder_emit_image_sample(&ctx->builder,
                                                actual_dest_type, load,
                                                coord,
@@ -3453,8 +3470,10 @@ emit_tex(struct ntv_context *ctx, nir_tex_instr *tex)
       result = emit_unop(ctx, SpvOpFConvert, dest_type, result);
    }
 
+   if (tex->is_sparse && tex->is_shadow)
+      tex->dest.ssa.num_components++;
    store_dest(ctx, &tex->dest, result, tex->dest_type);
-   if (tex->is_sparse)
+   if (tex->is_sparse && !tex->is_shadow)
       tex->dest.ssa.num_components++;
 }
 

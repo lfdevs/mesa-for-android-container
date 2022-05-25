@@ -652,8 +652,11 @@ radv_descriptor_set_create(struct radv_device *device, struct radv_descriptor_po
    layout_size = align_u32(layout_size, 32);
    set->header.size = layout_size;
 
-   if (!pool->host_memory_base && pool->entry_count == pool->max_entry_count) {
-      vk_free2(&device->vk.alloc, NULL, set);
+   if (pool->entry_count == pool->max_entry_count) {
+      if (!pool->host_memory_base) {
+         vk_free2(&device->vk.alloc, NULL, set);
+      }
+
       return VK_ERROR_OUT_OF_POOL_MEMORY;
    }
 

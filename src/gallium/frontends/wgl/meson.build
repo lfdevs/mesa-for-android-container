@@ -52,5 +52,5 @@ libwgl = static_library(
   include_directories : [
     inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_mapi, inc_mesa,
   ],
-  dependencies : [idep_xmlconfig],
+  dependencies : [idep_xmlconfig, driver_zink],
 )

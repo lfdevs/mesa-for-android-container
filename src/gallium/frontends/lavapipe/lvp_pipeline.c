@@ -242,7 +242,8 @@ static VkResult
 deep_copy_dynamic_state(void *mem_ctx,
                         VkPipelineDynamicStateCreateInfo *dst,
                         const VkPipelineDynamicStateCreateInfo *src,
-                        VkGraphicsPipelineLibraryFlagsEXT stages)
+                        VkGraphicsPipelineLibraryFlagsEXT stages,
+                        bool has_depth, bool has_stencil)
 {
    dst->sType = src->sType;
    dst->pNext = NULL;
@@ -274,17 +275,21 @@ deep_copy_dynamic_state(void *mem_ctx,
 
       case VK_DYNAMIC_STATE_DEPTH_BIAS:
       case VK_DYNAMIC_STATE_DEPTH_BOUNDS:
-      case VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK:
-      case VK_DYNAMIC_STATE_STENCIL_WRITE_MASK:
-      case VK_DYNAMIC_STATE_STENCIL_REFERENCE:
       case VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT:
       case VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT:
       case VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT:
       case VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT:
       case VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE_EXT:
+         if (has_depth && (stages & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT))
+            states[dst->dynamicStateCount++] = src->pDynamicStates[i];
+         break;
+
+      case VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK:
+      case VK_DYNAMIC_STATE_STENCIL_WRITE_MASK:
+      case VK_DYNAMIC_STATE_STENCIL_REFERENCE:
       case VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT:
       case VK_DYNAMIC_STATE_STENCIL_OP_EXT:
-         if (stages & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
+         if (has_stencil && (stages & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT))
             states[dst->dynamicStateCount++] = src->pDynamicStates[i];
          break;
 
@@ -354,6 +359,12 @@ deep_copy_graphics_create_info(void *mem_ctx,
       dst->subpass = src->subpass;
       dst->renderPass = src->renderPass;
       rp_info = vk_get_pipeline_rendering_create_info(src);
+   }
+   bool has_depth = false;
+   bool has_stencil = false;
+   if (rp_info) {
+      has_depth = rp_info->depthAttachmentFormat != VK_FORMAT_UNDEFINED;
+      has_stencil = rp_info->stencilAttachmentFormat != VK_FORMAT_UNDEFINED;
    }
    dst->basePipelineHandle = src->basePipelineHandle;
    dst->basePipelineIndex = src->basePipelineIndex;
@@ -438,14 +449,41 @@ deep_copy_graphics_create_info(void *mem_ctx,
 
    if (shaders & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {
       assert(rp_info);
+      bool have_output = (shaders & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) > 0;
       /* pDepthStencilState */
       if (src->pDepthStencilState && !rasterization_disabled &&
-          (rp_info->depthAttachmentFormat != VK_FORMAT_UNDEFINED ||
-           rp_info->stencilAttachmentFormat != VK_FORMAT_UNDEFINED)) {
+          /*
+             VUID-VkGraphicsPipelineCreateInfo-renderPass-06053
+             * If renderPass is VK_NULL_HANDLE, the pipeline is being created with fragment shader
+               state and fragment output interface state, and either of
+               VkPipelineRenderingCreateInfo::depthAttachmentFormat
+               or
+               VkPipelineRenderingCreateInfo::stencilAttachmentFormat
+               are not VK_FORMAT_UNDEFINED, pDepthStencilState must be a valid pointer to a valid
+               VkPipelineDepthStencilStateCreateInfo structure
+
+             VUID-VkGraphicsPipelineCreateInfo-renderPass-06590
+             * If renderPass is VK_NULL_HANDLE and the pipeline is being created with fragment shader
+               state but not fragment output interface state, pDepthStencilState must be a valid pointer
+               to a valid VkPipelineDepthStencilStateCreateInfo structure
+          */
+          (!have_output || has_depth || has_stencil)) {
          LVP_PIPELINE_DUP(dst->pDepthStencilState,
                           src->pDepthStencilState,
                           VkPipelineDepthStencilStateCreateInfo,
                           1);
+         VkPipelineDepthStencilStateCreateInfo *pDepthStencilState = (void*)dst->pDepthStencilState;
+         if (!has_depth) {
+            pDepthStencilState->depthTestEnable = VK_FALSE;
+            pDepthStencilState->depthWriteEnable = VK_FALSE;
+            pDepthStencilState->depthCompareOp = VK_COMPARE_OP_ALWAYS;
+            pDepthStencilState->depthBoundsTestEnable = VK_FALSE;
+         }
+         if (!has_stencil) {
+            pDepthStencilState->stencilTestEnable = VK_FALSE;
+            memset(&pDepthStencilState->front, 0, sizeof(VkStencilOpState));
+            memset(&pDepthStencilState->back, 0, sizeof(VkStencilOpState));
+         }
       } else
          dst->pDepthStencilState = NULL;
    }
@@ -517,7 +555,7 @@ deep_copy_graphics_create_info(void *mem_ctx,
       }
       if (!dyn_state || !dyn_state->pDynamicStates)
          return VK_ERROR_OUT_OF_HOST_MEMORY;
-      deep_copy_dynamic_state(mem_ctx, dyn_state, src->pDynamicState, shaders);
+      deep_copy_dynamic_state(mem_ctx, dyn_state, src->pDynamicState, shaders, has_depth, has_stencil);
       dst->pDynamicState = dyn_state;
    } else
       dst->pDynamicState = NULL;

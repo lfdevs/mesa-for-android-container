@@ -1000,15 +1000,6 @@ suspend_query(struct zink_context *ctx, struct zink_query *query)
       end_query(ctx, &ctx->batch, query);
    if (query->needs_update)
       update_qbo(ctx, query);
-   /* do an implicit copy+reset if:
-    * - query is being read from and >50% of pool is used
-    * - >90% of pool is used
-    *
-    * this avoids overflow
-    */
-   struct zink_query_start *start = util_dynarray_top_ptr(&query->starts, struct zink_query_start);
-   if (get_num_starts(query) == 100 || (get_num_starts(query) && start->vkq[0]->query_id > NUM_QUERIES / 2) || (start->vkq[0]->query_id > NUM_QUERIES * 0.9))
-      reset_qbos(ctx, query);
 }
 
 void

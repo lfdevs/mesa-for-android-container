@@ -1318,7 +1318,7 @@ choose_pdev(struct zink_screen *screen)
       }
    }
    is_cpu = cur_prio == prio_map[VK_PHYSICAL_DEVICE_TYPE_CPU];
-   if (cpu && !is_cpu)
+   if (cpu != is_cpu)
       goto out;
 
    screen->pdev = pdevs[idx];
@@ -1936,6 +1936,20 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
                                           int *x, int *y, int *z)
 {
    struct zink_screen *screen = zink_screen(pscreen);
+   static const int page_size_2d[][3] = {
+      { 256, 256, 1 }, /* 8bpp   */
+      { 256, 128, 1 }, /* 16bpp  */
+      { 128, 128, 1 }, /* 32bpp  */
+      { 128, 64,  1 }, /* 64bpp  */
+      { 64,  64,  1 }, /* 128bpp */
+   };
+   static const int page_size_3d[][3] = {
+      { 64,  32,  32 }, /* 8bpp   */
+      { 32,  32,  32 }, /* 16bpp  */
+      { 32,  32,  16 }, /* 32bpp  */
+      { 32,  16,  16 }, /* 64bpp  */
+      { 16,  16,  16 }, /* 128bpp */
+   };
    /* Only support one type of page size. */
    if (offset != 0)
       return 0;
@@ -1949,6 +1963,7 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
    VkImageType type;
    switch (target) {
    case PIPE_TEXTURE_1D:
+   case PIPE_TEXTURE_1D_ARRAY:
       type = (screen->need_2D_sparse || (screen->need_2D_zs && is_zs)) ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_1D;
       break;
 
@@ -1963,6 +1978,9 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
    case PIPE_TEXTURE_3D:
       type = VK_IMAGE_TYPE_3D;
       break;
+
+   case PIPE_BUFFER:
+      goto hack_it_up;
 
    default:
       return 0;
@@ -1980,30 +1998,7 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
    if (!prop_count) {
       if (pformat == PIPE_FORMAT_R9G9B9E5_FLOAT) {
          screen->faked_e5sparse = true;
-         static const int page_size_2d[][3] = {
-            { 256, 256, 1 }, /* 8bpp   */
-            { 256, 128, 1 }, /* 16bpp  */
-            { 128, 128, 1 }, /* 32bpp  */
-            { 128, 64,  1 }, /* 64bpp  */
-            { 64,  64,  1 }, /* 128bpp */
-         };
-         static const int page_size_3d[][3] = {
-            { 64,  32,  32 }, /* 8bpp   */
-            { 32,  32,  32 }, /* 16bpp  */
-            { 32,  32,  16 }, /* 32bpp  */
-            { 32,  16,  16 }, /* 64bpp  */
-            { 16,  16,  16 }, /* 128bpp */
-         };
-         const int (*page_sizes)[3] = target == PIPE_TEXTURE_3D ? page_size_3d : page_size_2d;
-         int blk_size = util_format_get_blocksize(pformat);
-
-         if (size) {
-            unsigned index = util_logbase2(blk_size);
-            if (x) *x = page_sizes[index][0];
-            if (y) *y = page_sizes[index][1];
-            if (z) *z = page_sizes[index][2];
-         }
-         return 1;
+         goto hack_it_up;
       }
       return 0;
    }
@@ -2017,6 +2012,19 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
          *z = props[0].imageGranularity.depth;
    }
 
+   return 1;
+hack_it_up:
+   {
+      const int (*page_sizes)[3] = target == PIPE_TEXTURE_3D ? page_size_3d : page_size_2d;
+      int blk_size = util_format_get_blocksize(pformat);
+
+      if (size) {
+         unsigned index = util_logbase2(blk_size);
+         if (x) *x = page_sizes[index][0];
+         if (y) *y = page_sizes[index][1];
+         if (z) *z = page_sizes[index][2];
+      }
+   }
    return 1;
 }
 

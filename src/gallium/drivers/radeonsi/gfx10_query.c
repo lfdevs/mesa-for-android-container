@@ -446,6 +446,9 @@ void gfx10_init_query(struct si_context *sctx)
 
 void gfx10_destroy_query(struct si_context *sctx)
 {
+   if (!sctx->shader_query_buffers.next)
+      return;
+
    while (!list_is_empty(&sctx->shader_query_buffers)) {
       struct gfx10_sh_query_buffer *qbuf =
          list_first_entry(&sctx->shader_query_buffers, struct gfx10_sh_query_buffer, list);

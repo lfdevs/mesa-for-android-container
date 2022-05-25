@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-pipe_loader_link_args = [ld_args_gc_sections]
+pipe_loader_link_args = [ld_args_gc_sections, ld_args_build_id]
 pipe_loader_link_deps = []
 pipe_loader_link_with = [libgallium]
 pipe_loader_comp_args = []

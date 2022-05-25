@@ -570,20 +570,13 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
                        screen->is_format_supported(screen, PIPE_FORMAT_DXT1_SRGBA,
                                                    PIPE_TEXTURE_2D, 0, 0,
                                                    PIPE_BIND_SAMPLER_VIEW);
-   st->transcode_astc_to_bptc = options->transcode_astc &&
-      screen->is_format_supported(screen, PIPE_FORMAT_BPTC_SRGBA,
-                                  PIPE_TEXTURE_2D, 0, 0,
-                                  PIPE_BIND_SAMPLER_VIEW) &&
-      screen->is_format_supported(screen, PIPE_FORMAT_BPTC_RGBA_UNORM,
-                                  PIPE_TEXTURE_2D, 0, 0,
-                                  PIPE_BIND_SAMPLER_VIEW);
-   st->transcode_astc_to_dxt5 = options->transcode_astc &&
-      screen->is_format_supported(screen, PIPE_FORMAT_DXT5_SRGBA,
-                                  PIPE_TEXTURE_2D, 0, 0,
-                                  PIPE_BIND_SAMPLER_VIEW) &&
-      screen->is_format_supported(screen, PIPE_FORMAT_DXT5_RGBA,
-                                  PIPE_TEXTURE_2D, 0, 0,
-                                  PIPE_BIND_SAMPLER_VIEW);
+   st->transcode_astc = options->transcode_astc &&
+                        screen->is_format_supported(screen, PIPE_FORMAT_DXT5_SRGBA,
+                                                    PIPE_TEXTURE_2D, 0, 0,
+                                                    PIPE_BIND_SAMPLER_VIEW) &&
+                        screen->is_format_supported(screen, PIPE_FORMAT_DXT5_RGBA,
+                                                    PIPE_TEXTURE_2D, 0, 0,
+                                                    PIPE_BIND_SAMPLER_VIEW);
    st->has_astc_2d_ldr =
       screen->is_format_supported(screen, PIPE_FORMAT_ASTC_4x4_SRGB,
                                   PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW);

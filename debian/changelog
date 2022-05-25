@@ -1,3 +1,10 @@
+mesa (22.1.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * mesa-vulkan-drivers.install: Fix installing layers.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 25 May 2022 15:10:32 +0300
+
 mesa (22.1.0~rc5-1) experimental; urgency=medium
 
   * New upstream release candidate.

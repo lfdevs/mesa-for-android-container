@@ -4139,8 +4139,8 @@ vtn_emit_memory_barrier(struct vtn_builder *b, SpvScope scope,
       return;
    }
 
-   /* There's only two scopes thing left */
-   vtn_assert(scope == SpvScopeInvocation || scope == SpvScopeDevice);
+   /* There's only three scopes left */
+   vtn_assert(scope == SpvScopeInvocation || scope == SpvScopeDevice || scope == SpvScopeQueueFamily);
 
    /* Map the GLSL memoryBarrier() construct and any barriers with more than one
     * semantic to the corresponding NIR one.

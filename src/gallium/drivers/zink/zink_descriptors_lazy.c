@@ -419,8 +419,10 @@ check_push_pool_alloc(struct zink_context *ctx, struct zink_descriptor_pool *poo
          return check_push_pool_alloc(ctx, bdd->push_pool[is_compute], bdd, is_compute);
       }
       if (!zink_descriptor_util_alloc_sets(screen, ctx->dd->push_dsl[is_compute]->layout,
-                                           pool->pool, &pool->sets[pool->sets_alloc], sets_to_alloc))
+                                           pool->pool, &pool->sets[pool->sets_alloc], sets_to_alloc)) {
+         mesa_loge("ZINK: failed to allocate push set!");
          return NULL;
+      }
       pool->sets_alloc += sets_to_alloc;
    }
    return pool;

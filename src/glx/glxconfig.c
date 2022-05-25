@@ -145,10 +145,10 @@ glx_config_get(struct glx_config * mode, int attribute, int *value_return)
       *value_return = mode->fbconfigID;
       return 0;
    case GLX_MAX_PBUFFER_WIDTH:
-      *value_return = mode->maxPbufferWidth;
+      *value_return = 4096; /* _EGL_MAX_PBUFFER_WIDTH */
       return 0;
    case GLX_MAX_PBUFFER_HEIGHT:
-      *value_return = mode->maxPbufferHeight;
+      *value_return = 4096; /* _EGL_MAX_PBUFFER_HEIGHT */
       return 0;
    case GLX_MAX_PBUFFER_PIXELS:
       *value_return = mode->maxPbufferPixels;

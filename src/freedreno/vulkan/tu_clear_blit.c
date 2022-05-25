@@ -333,7 +333,9 @@ r2d_setup(struct tu_cmd_buffer *cmd,
 {
    assert(samples == VK_SAMPLE_COUNT_1_BIT);
 
-   tu_emit_cache_flush_ccu(cmd, cs, TU_CMD_CCU_SYSMEM);
+   if (!cmd->state.pass) {
+      tu_emit_cache_flush_ccu(cmd, cs, TU_CMD_CCU_SYSMEM);
+   }
 
    r2d_setup_common(cmd, cs, format, aspect_mask, blit_param, clear, ubwc, false);
 }

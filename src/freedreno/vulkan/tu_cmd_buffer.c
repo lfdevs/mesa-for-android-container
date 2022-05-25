@@ -159,6 +159,8 @@ tu_emit_cache_flush_ccu(struct tu_cmd_buffer *cmd_buffer,
    enum tu_cmd_flush_bits flushes = cmd_buffer->state.cache.flush_bits;
 
    assert(ccu_state != TU_CMD_CCU_UNKNOWN);
+   /* It's unsafe to flush inside condition because we clear flush_bits */
+   assert(!cs->cond_flags);
 
    /* Changing CCU state must involve invalidating the CCU. In sysmem mode,
     * the CCU may also contain data that we haven't flushed out yet, so we

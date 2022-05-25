@@ -3116,6 +3116,11 @@ VkResult anv_CreateDevice(
                                   &physical_device->info,
                                   stderr, decode_flags, NULL,
                                   decode_get_bo, NULL, device);
+
+      device->decoder_ctx.dynamic_base = DYNAMIC_STATE_POOL_MIN_ADDRESS;
+      device->decoder_ctx.surface_base = SURFACE_STATE_POOL_MIN_ADDRESS;
+      device->decoder_ctx.instruction_base =
+         INSTRUCTION_STATE_POOL_MIN_ADDRESS;
    }
 
    device->physical = physical_device;

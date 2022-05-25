@@ -114,8 +114,11 @@ unsigned si_determine_wave_size(struct si_screen *sscreen, struct si_shader *sha
 
    /* There are a few very rare cases where VS is better with Wave32, and there are no known
     * cases where Wave64 is better.
+    * Wave32 is disabled for GFX10 when culling is active as a workaround for #6457. I don't
+    * know why this helps.
     */
-   if (stage <= MESA_SHADER_GEOMETRY)
+   if (stage <= MESA_SHADER_GEOMETRY &&
+       !(sscreen->info.chip_class == GFX10 && shader && shader->key.ge.opt.ngg_culling))
       return 32;
 
    /* TODO: Merged shaders must use the same wave size because the driver doesn't recompile

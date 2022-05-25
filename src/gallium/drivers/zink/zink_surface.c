@@ -145,7 +145,7 @@ create_surface(struct pipe_context *pctx,
    VkFormatFeatureFlags feats = res->optimal_tiling ?
                                 screen->format_props[templ->format].optimalTilingFeatures :
                                 screen->format_props[templ->format].linearTilingFeatures;
-   VkImageUsageFlags attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+   VkImageUsageFlags attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
    usage_info.usage = res->obj->vkusage & ~attachment;
    if ((res->obj->vkusage & attachment) &&
        !(feats & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
@@ -373,8 +373,8 @@ zink_rebind_surface(struct zink_context *ctx, struct pipe_surface **psurface)
    if (surface->simage_view)
       return false;
    assert(!res->obj->dt);
-   VkImageViewCreateInfo ivci = create_ivci(screen,
-                                            zink_resource((*psurface)->texture), (*psurface), surface->base.texture->target);
+   VkImageViewCreateInfo ivci = surface->ivci;
+   ivci.image = res->obj->image;
    uint32_t hash = hash_ivci(&ivci);
 
    simple_mtx_lock(&res->surface_mtx);

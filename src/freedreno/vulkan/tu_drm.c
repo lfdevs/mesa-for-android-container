@@ -964,6 +964,7 @@ tu_queue_build_msm_gem_submit_cmds(struct tu_queue *queue,
             &dev->perfcntrs_pass_cs_entries[submit->perf_pass_index];
 
          tu_fill_msm_gem_submit(dev, &cmds[entry_idx], perf_cs_entry);
+         entry_idx++;
       }
 
       for (unsigned i = 0; i < cs->entry_count; ++i, ++entry_idx) {
@@ -975,6 +976,7 @@ tu_queue_build_msm_gem_submit_cmds(struct tu_queue *queue,
             submit->u_trace_submission_data->cmd_trace_data[j].timestamp_copy_cs;
          if (ts_cs) {
             tu_fill_msm_gem_submit(dev, &cmds[entry_idx], &ts_cs->entries[0]);
+            entry_idx++;
          }
       }
    }

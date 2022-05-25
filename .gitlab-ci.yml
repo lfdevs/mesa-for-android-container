@@ -18,7 +18,7 @@ variables:
   # Individual CI farm status, set to "offline" to disable jobs
   # running on a particular CI farm (ie. for outages, etc):
   FD_FARM: "online"
-  COLLABORA_FARM: "online"
+  COLLABORA_FARM: "offline"
   MICROSOFT_FARM: "offline"
 
 default:

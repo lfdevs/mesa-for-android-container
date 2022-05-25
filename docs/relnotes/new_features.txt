@@ -1,8 +1,0 @@
-d3d12 GL4.2
-GL_NV_pack_subimage
-VK_EXT_depth_clip_control on lavapipe and RADV
-Vulkan 1.3 support on lavapipe
-VK_EXT_graphics_pipeline_library on lavapipe
-VK_EXT_primitives_generated_query on lavapipe
-VK_EXT_image_2d_view_of_3d on ANV and lavapipe
-VK_KHR_swapchain_mutable_format on lavapipe

@@ -151,6 +151,7 @@ create_array_tex_from_cube_tex(nir_builder *b, nir_tex_instr *tex, nir_ssa_def *
    array_tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
    array_tex->is_array = true;
    array_tex->is_shadow = tex->is_shadow;
+   array_tex->is_sparse = tex->is_sparse;
    array_tex->is_new_style_shadow = tex->is_new_style_shadow;
    array_tex->texture_index = tex->texture_index;
    array_tex->sampler_index = tex->sampler_index;
@@ -422,6 +423,7 @@ lower_tex_to_txl(nir_builder *b, nir_tex_instr *tex)
    txl->sampler_index = tex->sampler_index;
    txl->is_array = tex->is_array;
    txl->is_shadow = tex->is_shadow;
+   txl->is_sparse = tex->is_sparse;
    txl->is_new_style_shadow = tex->is_new_style_shadow;
 
    unsigned s = 0;

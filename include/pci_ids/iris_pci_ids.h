@@ -157,13 +157,10 @@ CHIPSET(0x4c90, rkl_gt1, "RKL GT1", "Intel(R) Graphics")
 CHIPSET(0x4c9a, rkl_gt1, "RKL GT1", "Intel(R) Graphics")
 
 CHIPSET(0x4680, adl_gt1, "ADL-S GT1", "Intel(R) Graphics")
-CHIPSET(0x4681, adl_gt1, "ADL-S GT1", "Intel(R) Graphics")
 CHIPSET(0x4682, adl_gt1, "ADL-S GT1", "Intel(R) Graphics")
-CHIPSET(0x4683, adl_gt05, "ADL-S GT0.5", "Intel(R) Graphics")
 CHIPSET(0x4688, adl_gt1, "ADL-S GT1", "Intel(R) Graphics")
-CHIPSET(0x4689, adl_gt1, "ADL-S GT1", "Intel(R) Graphics")
+CHIPSET(0x468a, adl_gt1, "ADL-S GT1", "Intel(R) Graphics")
 CHIPSET(0x4690, adl_gt1, "ADL-S GT1", "Intel(R) Graphics")
-CHIPSET(0x4691, adl_gt1, "ADL-S GT1", "Intel(R) Graphics")
 CHIPSET(0x4692, adl_gt1, "ADL-S GT1", "Intel(R) Graphics")
 CHIPSET(0x4693, adl_gt05, "ADL-S GT0.5", "Intel(R) Graphics")
 
@@ -208,6 +205,8 @@ CHIPSET(0xa782, rpl, "RPL-S", "Intel(R) Graphics")
 CHIPSET(0xa783, rpl, "RPL-S", "Intel(R) Graphics")
 CHIPSET(0xa788, rpl, "RPL-S", "Intel(R) Graphics")
 CHIPSET(0xa789, rpl, "RPL-S", "Intel(R) Graphics")
+CHIPSET(0xa78a, rpl, "RPL-S", "Intel(R) Graphics")
+CHIPSET(0xa78b, rpl, "RPL-S", "Intel(R) Graphics")
 
 CHIPSET(0xa720, rpl_p, "RPL-P", "Intel(R) Graphics")
 CHIPSET(0xa721, rpl_p, "RPL-P", "Intel(R) Graphics")
@@ -222,28 +221,32 @@ CHIPSET(0x4907, sg1, "SG1", "Intel(R) Graphics")
 CHIPSET(0x4908, dg1, "DG1", "Intel(R) Graphics")
 CHIPSET(0x4909, dg1, "DG1", "Intel(R) Graphics")
 
-/* Waiting on i915 upstream support */
-#if 0
-CHIPSET(0x4f80, dg2_g10, "DG2", "Intel(R) Graphics")
-CHIPSET(0x4f81, dg2_g10, "DG2", "Intel(R) Graphics")
-CHIPSET(0x4f82, dg2_g10, "DG2", "Intel(R) Graphics")
-CHIPSET(0x4f83, dg2_g10, "DG2", "Intel(R) Graphics")
-CHIPSET(0x4f84, dg2_g10, "DG2", "Intel(R) Graphics")
-CHIPSET(0x4f87, dg2_g11, "DG2", "Intel(R) Graphics")
-CHIPSET(0x4f88, dg2_g11, "DG2", "Intel(R) Graphics")
+/* Commented devices are waiting on i915 upstream support */
+/* CHIPSET(0x4f80, dg2_g10, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x4f81, dg2_g10, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x4f82, dg2_g10, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x4f83, dg2_g10, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x4f84, dg2_g10, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x4f87, dg2_g11, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x4f88, dg2_g11, "DG2", "Intel(R) Graphics") */
 CHIPSET(0x5690, dg2_g10, "DG2", "Intel(R) Graphics")
 CHIPSET(0x5691, dg2_g10, "DG2", "Intel(R) Graphics")
 CHIPSET(0x5692, dg2_g10, "DG2", "Intel(R) Graphics")
 CHIPSET(0x5693, dg2_g11, "DG2", "Intel(R) Graphics")
 CHIPSET(0x5694, dg2_g11, "DG2", "Intel(R) Graphics")
 CHIPSET(0x5695, dg2_g11, "DG2", "Intel(R) Graphics")
-CHIPSET(0x56a0, dg2_g10, "DG2", "Intel(R) Graphics")
-CHIPSET(0x56a1, dg2_g10, "DG2", "Intel(R) Graphics")
-CHIPSET(0x56a2, dg2_g10, "DG2", "Intel(R) Graphics")
-CHIPSET(0x56a5, dg2_g11, "DG2", "Intel(R) Graphics")
-CHIPSET(0x56a6, dg2_g11, "DG2", "Intel(R) Graphics")
+CHIPSET(0x5696, dg2_g12, "DG2", "Intel(R) Graphics")
+CHIPSET(0x5697, dg2_g12, "DG2", "Intel(R) Graphics")
+/* CHIPSET(0x56a0, dg2_g10, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x56a1, dg2_g10, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x56a2, dg2_g10, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x56a3, dg2_g12, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x56a4, dg2_g12, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x56a5, dg2_g11, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x56a6, dg2_g11, "DG2", "Intel(R) Graphics") */
 CHIPSET(0x56b0, dg2_g11, "DG2", "Intel(R) Graphics")
-CHIPSET(0x56b1, dg2_g11, "DG2", "Intel(R) Graphics")
-CHIPSET(0x56c0, dg2_g10, "ATS-M", "Intel(R) Graphics")
-CHIPSET(0x56c1, dg2_g11, "ATS-M", "Intel(R) Graphics")
-#endif
+/* CHIPSET(0x56b1, dg2_g11, "DG2", "Intel(R) Graphics") */
+CHIPSET(0x56b2, dg2_g12, "DG2", "Intel(R) Graphics")
+/* CHIPSET(0x56b3, dg2_g12, "DG2", "Intel(R) Graphics") */
+/* CHIPSET(0x56c0, dg2_g10, "ATS-M", "Intel(R) Graphics") */
+/* CHIPSET(0x56c1, dg2_g11, "ATS-M", "Intel(R) Graphics") */

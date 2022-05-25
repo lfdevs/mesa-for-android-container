@@ -3459,7 +3459,7 @@ LLVMValueRef ac_build_mbcnt_add(struct ac_llvm_context *ctx, LLVMValueRef mask, 
 {
    if (ctx->wave_size == 32) {
       LLVMValueRef val = ac_build_intrinsic(ctx, "llvm.amdgcn.mbcnt.lo", ctx->i32,
-                                (LLVMValueRef[]){mask, ctx->i32_0}, 2, AC_FUNC_ATTR_READNONE);
+                                (LLVMValueRef[]){mask, add_src}, 2, AC_FUNC_ATTR_READNONE);
       ac_set_range_metadata(ctx, val, 0, ctx->wave_size);
       return val;
    }

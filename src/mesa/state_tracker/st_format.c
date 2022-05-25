@@ -111,19 +111,11 @@ st_mesa_format_to_pipe_format(const struct st_context *st,
 
    if (st_astc_format_fallback(st, mesaFormat)) {
       if (_mesa_is_format_srgb(mesaFormat)) {
-         if (st->transcode_astc_to_bptc)
-            return PIPE_FORMAT_BPTC_SRGBA;
-         else if (st->transcode_astc_to_dxt5)
-            return PIPE_FORMAT_DXT5_SRGBA;
-         else
-            return PIPE_FORMAT_R8G8B8A8_SRGB;
+         return st->transcode_astc ? PIPE_FORMAT_DXT5_SRGBA :
+                                     PIPE_FORMAT_R8G8B8A8_SRGB;
       } else {
-         if (st->transcode_astc_to_bptc)
-            return PIPE_FORMAT_BPTC_RGBA_UNORM;
-         else if (st->transcode_astc_to_dxt5)
-            return PIPE_FORMAT_DXT5_RGBA;
-         else
-            return PIPE_FORMAT_R8G8B8A8_UNORM;
+         return st->transcode_astc ? PIPE_FORMAT_DXT5_RGBA :
+                                     PIPE_FORMAT_R8G8B8A8_UNORM;
       }
    }
 

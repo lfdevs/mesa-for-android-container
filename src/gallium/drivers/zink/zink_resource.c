@@ -69,13 +69,19 @@
 static bool
 equals_ivci(const void *a, const void *b)
 {
-   return memcmp(a, b, sizeof(VkImageViewCreateInfo)) == 0;
+   const uint8_t *pa = a;
+   const uint8_t *pb = b;
+   size_t offset = offsetof(VkImageViewCreateInfo, flags);
+   return memcmp(pa + offset, pb + offset, sizeof(VkImageViewCreateInfo) - offset) == 0;
 }
 
 static bool
 equals_bvci(const void *a, const void *b)
 {
-   return memcmp(a, b, sizeof(VkBufferViewCreateInfo)) == 0;
+   const uint8_t *pa = a;
+   const uint8_t *pb = b;
+   size_t offset = offsetof(VkBufferViewCreateInfo, flags);
+   return memcmp(pa + offset, pb + offset, sizeof(VkBufferViewCreateInfo) - offset) == 0;
 }
 
 static void
@@ -227,14 +233,25 @@ check_ici(struct zink_screen *screen, VkImageCreateInfo *ici, uint64_t modifier)
    } else
       ret = VKSCR(GetPhysicalDeviceImageFormatProperties)(screen->pdev, ici->format, ici->imageType,
                                                    ici->tiling, ici->usage, ici->flags, &image_props);
-   return ret == VK_SUCCESS;
+   if (ret != VK_SUCCESS)
+      return false;
+   if (ici->extent.depth > image_props.maxExtent.depth ||
+       ici->extent.height > image_props.maxExtent.height ||
+       ici->extent.width > image_props.maxExtent.width)
+      return false;
+   if (ici->mipLevels > image_props.maxMipLevels)
+      return false;
+   if (ici->arrayLayers > image_props.maxArrayLayers)
+      return false;
+   return true;
 }
 
 static VkImageUsageFlags
-get_image_usage_for_feats(struct zink_screen *screen, VkFormatFeatureFlags feats, const struct pipe_resource *templ, unsigned bind)
+get_image_usage_for_feats(struct zink_screen *screen, VkFormatFeatureFlags feats, const struct pipe_resource *templ, unsigned bind, bool *need_extended)
 {
    VkImageUsageFlags usage = 0;
    bool is_planar = util_format_get_num_planes(templ->format) > 1;
+   *need_extended = false;
 
    if (bind & ZINK_BIND_TRANSIENT)
       usage |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
@@ -258,9 +275,18 @@ get_image_usage_for_feats(struct zink_screen *screen, VkFormatFeatureFlags feats
          usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
          if ((bind & (PIPE_BIND_LINEAR | PIPE_BIND_SHARED)) != (PIPE_BIND_LINEAR | PIPE_BIND_SHARED))
             usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-      } else if (templ->nr_samples || !(feats & VK_FORMAT_FEATURE_BLIT_DST_BIT))
-         /* this can't be populated, so we can't do it */
+      } else {
+         /* trust that gallium isn't going to give us anything wild */
+         *need_extended = true;
          return 0;
+      }
+   } else if ((bind & PIPE_BIND_SAMPLER_VIEW) && !util_format_is_depth_or_stencil(templ->format)) {
+      if (!(feats & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)) {
+         /* ensure we can u_blitter this later */
+         *need_extended = true;
+         return 0;
+      }
+      usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
    }
 
    if (bind & PIPE_BIND_DEPTH_STENCIL) {
@@ -298,6 +324,7 @@ static VkImageUsageFlags
 get_image_usage(struct zink_screen *screen, VkImageCreateInfo *ici, const struct pipe_resource *templ, unsigned bind, unsigned modifiers_count, const uint64_t *modifiers, uint64_t *mod)
 {
    VkImageTiling tiling = ici->tiling;
+   bool need_extended = false;
    *mod = DRM_FORMAT_MOD_INVALID;
    if (modifiers_count) {
       bool have_linear = false;
@@ -312,7 +339,8 @@ get_image_usage(struct zink_screen *screen, VkImageCreateInfo *ici, const struct
          }
          VkFormatFeatureFlags feats = find_modifier_feats(prop, modifiers[i], mod);
          if (feats) {
-            VkImageUsageFlags usage = get_image_usage_for_feats(screen, feats, templ, bind);
+            VkImageUsageFlags usage = get_image_usage_for_feats(screen, feats, templ, bind, &need_extended);
+            assert(!need_extended);
             if (usage) {
                ici->usage = usage;
                if (check_ici(screen, ici, *mod))
@@ -324,7 +352,8 @@ get_image_usage(struct zink_screen *screen, VkImageCreateInfo *ici, const struct
       if (have_linear) {
          VkFormatFeatureFlags feats = find_modifier_feats(prop, DRM_FORMAT_MOD_LINEAR, mod);
          if (feats) {
-            VkImageUsageFlags usage = get_image_usage_for_feats(screen, feats, templ, bind);
+            VkImageUsageFlags usage = get_image_usage_for_feats(screen, feats, templ, bind, &need_extended);
+            assert(!need_extended);
             if (usage) {
                ici->usage = usage;
                if (check_ici(screen, ici, *mod))
@@ -336,7 +365,14 @@ get_image_usage(struct zink_screen *screen, VkImageCreateInfo *ici, const struct
    {
       VkFormatProperties props = screen->format_props[templ->format];
       VkFormatFeatureFlags feats = tiling == VK_IMAGE_TILING_LINEAR ? props.linearTilingFeatures : props.optimalTilingFeatures;
-      VkImageUsageFlags usage = get_image_usage_for_feats(screen, feats, templ, bind);
+      if (ici->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT)
+         feats = UINT32_MAX;
+      VkImageUsageFlags usage = get_image_usage_for_feats(screen, feats, templ, bind, &need_extended);
+      if (need_extended) {
+         ici->flags |= VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
+         feats = UINT32_MAX;
+         usage = get_image_usage_for_feats(screen, feats, templ, bind, &need_extended);
+      }
       if (usage) {
          ici->usage = usage;
          if (check_ici(screen, ici, *mod))
@@ -436,6 +472,7 @@ create_ici(struct zink_screen *screen, VkImageCreateInfo *ici, const struct pipe
    bool first = true;
    bool tried[2] = {0};
    uint64_t mod = DRM_FORMAT_MOD_INVALID;
+retry:
    while (!ici->usage) {
       if (!first) {
          switch (ici->tiling) {
@@ -457,8 +494,15 @@ create_ici(struct zink_screen *screen, VkImageCreateInfo *ici, const struct pipe
             unreachable("unhandled tiling mode");
          }
          if (tried[ici->tiling]) {
-            *success = false;
+            if (ici->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT) {
+               *success = false;
                return DRM_FORMAT_MOD_INVALID;
+            }
+            ici->flags |= VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
+            tried[0] = false;
+            tried[1] = false;
+            first = true;
+            goto retry;
          }
       }
       ici->usage = get_image_usage(screen, ici, templ, bind, modifiers_count, modifiers, &mod);
