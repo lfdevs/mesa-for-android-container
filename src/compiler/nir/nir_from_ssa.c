@@ -1006,10 +1006,16 @@ nir_lower_phis_to_regs_block(nir_block *block)
       nir_ssa_def_rewrite_uses(&phi->dest.ssa, def);
 
       nir_foreach_phi_src(src, phi) {
-         assert(src->src.is_ssa);
-         _mesa_set_add(visited_blocks, src->src.ssa->parent_instr->block);
-         place_phi_read(&b, reg, src->src.ssa, src->pred, visited_blocks);
-         _mesa_set_clear(visited_blocks, NULL);
+         if (src->src.is_ssa) {
+            _mesa_set_add(visited_blocks, src->src.ssa->parent_instr->block);
+            place_phi_read(&b, reg, src->src.ssa, src->pred, visited_blocks);
+            _mesa_set_clear(visited_blocks, NULL);
+         } else {
+            b.cursor = nir_after_block_before_jump(src->pred);
+            nir_ssa_def *src_ssa =
+               nir_ssa_for_src(&b, src->src, phi->dest.ssa.num_components);
+            nir_store_reg(&b, reg, src_ssa, ~0);
+         }
       }
 
       nir_instr_remove(&phi->instr);

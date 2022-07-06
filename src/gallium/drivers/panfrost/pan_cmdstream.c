@@ -3522,7 +3522,7 @@ panfrost_launch_grid(struct pipe_context *pipe,
 
         /* Indirect dispatch can't handle workgroup local storage since that
          * would require dynamic memory allocation. Bail in this case. */
-        if (info->indirect && (!cs->info.wls_size || !PAN_GPU_INDIRECTS)) {
+        if (info->indirect && ((cs->info.wls_size != 0) || !PAN_GPU_INDIRECTS)) {
                 struct pipe_transfer *transfer;
                 uint32_t *params = pipe_buffer_map_range(pipe, info->indirect,
                                 info->indirect_offset,

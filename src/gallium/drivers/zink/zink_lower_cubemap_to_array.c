@@ -176,7 +176,7 @@ create_array_tex_from_cube_tex(nir_builder *b, nir_tex_instr *tex, nir_ssa_def *
    }
 
    nir_ssa_dest_init(&array_tex->instr, &array_tex->dest,
-                     nir_tex_instr_dest_size(array_tex), 32, NULL);
+                     nir_tex_instr_dest_size(array_tex), nir_dest_bit_size(tex->dest), NULL);
    nir_builder_instr_insert(b, &array_tex->instr);
    return &array_tex->dest.ssa;
 }
@@ -391,7 +391,9 @@ rewrite_cube_var_type(nir_builder *b, nir_tex_instr *tex)
    nir_foreach_variable_with_modes(var, b->shader, nir_var_uniform) {
       if (!glsl_type_is_sampler(glsl_without_array(var->type)))
          continue;
-      if (var->data.driver_location == index) {
+      unsigned size = glsl_type_is_array(var->type) ? glsl_get_length(var->type) : 1;
+      if (var->data.driver_location == index ||
+          (var->data.driver_location < index && var->data.driver_location + size > index)) {
          sampler = var;
          break;
       }

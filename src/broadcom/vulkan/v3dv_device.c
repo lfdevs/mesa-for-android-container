@@ -2488,8 +2488,10 @@ v3dv_CreateBuffer(VkDevice  _device,
 
    /* Limit allocations to 32-bit */
    const VkDeviceSize aligned_size = align64(buffer->size, buffer->alignment);
-   if (aligned_size > UINT32_MAX || aligned_size < buffer->size)
+   if (aligned_size > UINT32_MAX || aligned_size < buffer->size) {
+      vk_free(&device->vk.alloc, buffer);
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+   }
 
    *pBuffer = v3dv_buffer_to_handle(buffer);
 

@@ -92,8 +92,8 @@ vn_buffer_cache_entries_create(struct vn_device *dev,
       if (buf->requirements.memory.memoryRequirements.alignment <
           buf->requirements.memory.memoryRequirements.size) {
          vk_free(alloc, entries);
-         *out_entries = entries;
-         *out_entry_count = entry_count;
+         *out_entries = NULL;
+         *out_entry_count = 0;
          return VK_SUCCESS;
       }
 

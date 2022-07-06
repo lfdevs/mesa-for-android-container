@@ -33,6 +33,7 @@
 #include "vk_log.h"
 #include "vk_physical_device.h"
 #include "vk_sync.h"
+#include "vk_sync_binary.h"
 #include "vk_queue.h"
 #include "vk_shader_module.h"
 #include "wsi_common.h"
@@ -159,7 +160,7 @@ struct dzn_meta_blits {
 const dzn_meta_blit *
 dzn_meta_blits_get_context(dzn_device *device, const dzn_meta_blit_key *key);
 
-#define MAX_SYNC_TYPES 2
+#define MAX_SYNC_TYPES 3
 #define MAX_QUEUE_FAMILIES 3
 
 struct dzn_physical_device {
@@ -946,6 +947,8 @@ struct dzn_instance {
    } d3d12;
    bool physical_devices_enumerated;
    uint32_t debug_flags;
+
+   struct vk_sync_binary_type sync_binary_type;
 
    struct list_head physical_devices;
 };

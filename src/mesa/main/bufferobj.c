@@ -485,6 +485,9 @@ _mesa_bufferobj_map_range(struct gl_context *ctx,
          transfer_flags &= ~PIPE_MAP_UNSYNCHRONIZED;
    }
 
+   if (ctx->Const.ForceMapBufferSynchronized)
+      transfer_flags &= ~PIPE_MAP_UNSYNCHRONIZED;
+
    obj->Mappings[index].Pointer = pipe_buffer_map_range(pipe,
                                                         obj->buffer,
                                                         offset, length,

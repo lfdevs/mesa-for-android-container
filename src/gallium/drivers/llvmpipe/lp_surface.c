@@ -176,6 +176,7 @@ static void lp_blit(struct pipe_context *pipe,
 static void
 lp_flush_resource(struct pipe_context *ctx, struct pipe_resource *resource)
 {
+   llvmpipe_flush_resource(ctx, resource, 0, true, true, false, "resource");
 }
 
 

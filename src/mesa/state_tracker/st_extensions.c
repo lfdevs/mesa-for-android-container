@@ -1168,6 +1168,8 @@ void st_init_extensions(struct pipe_screen *screen,
 
    consts->GLSLIgnoreWriteToReadonlyVar = options->glsl_ignore_write_to_readonly_var;
 
+   consts->ForceMapBufferSynchronized = options->force_gl_map_buffer_synchronized;
+
    consts->PrimitiveRestartFixedIndex =
       screen->get_param(screen, PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX);
 

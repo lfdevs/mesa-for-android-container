@@ -2767,6 +2767,16 @@ glsl_type::get_explicit_type_for_size_align(glsl_type_size_align_func type_info,
          *size = fields[i].offset + field_size;
          *alignment = MAX2(*alignment, field_align);
       }
+      /*
+       * "The alignment of the struct is the alignment of the most-aligned
+       *  field in it."
+       *
+       * "Finally, the size of the struct is the current offset rounded up to
+       *  the nearest multiple of the struct's alignment."
+       *
+       * https://doc.rust-lang.org/reference/type-layout.html#reprc-structs
+       */
+      *size = align(*size, *alignment);
 
       const glsl_type *type;
       if (this->is_struct()) {

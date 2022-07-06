@@ -9739,6 +9739,7 @@ brw_nir_populate_wm_prog_data(const nir_shader *shader,
                           key->emit_alpha_test;
    prog_data->uses_omask = !key->ignore_sample_mask_out &&
       (shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK));
+   prog_data->color_outputs_written = key->color_outputs_valid;
    prog_data->computed_depth_mode = computed_depth_mode(shader);
    prog_data->computed_stencil =
       shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL);

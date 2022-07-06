@@ -1658,8 +1658,8 @@ uncompact_immediate(const struct intel_device_info *devinfo,
          return (int)(compact_imm << 20) >> 20;
       case BRW_REGISTER_TYPE_W:
          /* Extend the 12th bit into the high 4 bits and replicate */
-         return (  (int)(compact_imm << 20) >> 4) |
-                ((short)(compact_imm <<  4) >> 4);
+         return ((int)(compact_imm << 20) >> 4) |
+                ((unsigned short)((short)(compact_imm << 4) >> 4));
       case BRW_REGISTER_TYPE_NF:
       case BRW_REGISTER_TYPE_DF:
       case BRW_REGISTER_TYPE_Q:

@@ -89,26 +89,24 @@ vn_device_init_queues(struct vn_device *dev,
    if (!queues)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   VkResult result = VK_SUCCESS;
    count = 0;
    for (uint32_t i = 0; i < create_info->queueCreateInfoCount; i++) {
+      VkResult result;
+
       const VkDeviceQueueCreateInfo *queue_info =
          &create_info->pQueueCreateInfos[i];
       for (uint32_t j = 0; j < queue_info->queueCount; j++) {
          result = vn_queue_init(dev, &queues[count], queue_info, j);
-         if (result != VK_SUCCESS)
-            break;
+         if (result != VK_SUCCESS) {
+            for (uint32_t k = 0; k < count; k++)
+               vn_queue_fini(&queues[k]);
+            vk_free(alloc, queues);
+
+            return result;
+         }
 
          count++;
       }
-   }
-
-   if (result != VK_SUCCESS) {
-      for (uint32_t i = 0; i < count; i++)
-         vn_queue_fini(&queues[i]);
-      vk_free(alloc, queues);
-
-      return result;
    }
 
    dev->queues = queues;

@@ -83,8 +83,22 @@ pan_sample_pattern(unsigned samples)
 }
 
 int
-GENX(pan_select_crc_rt)(const struct pan_fb_info *fb)
+GENX(pan_select_crc_rt)(const struct pan_fb_info *fb, unsigned tile_size)
 {
+        /* Disable CRC when the tile size is not 16x16. In the hardware, CRC
+         * tiles are the same size as the tiles of the framebuffer. However,
+         * our code only handles 16x16 tiles. Therefore under the current
+         * implementation, we must disable CRC when 16x16 tiles are not used.
+         *
+         * This may hurt performance. However, smaller tile sizes are rare, and
+         * CRCs are more expensive at smaller tile sizes, reducing the benefit.
+         * Restricting CRC to 16x16 should work in practice.
+         */
+        if (tile_size != 16 * 16) {
+                assert(tile_size < 16 * 16);
+                return -1;
+        }
+
 #if PAN_ARCH <= 6
         if (fb->rt_count == 1 && fb->rts[0].view && !fb->rts[0].discard &&
             fb->rts[0].view->image->layout.crc_mode != PAN_IMAGE_CRC_NONE)
@@ -636,8 +650,8 @@ GENX(pan_emit_fbd)(const struct panfrost_device *dev,
 
         unsigned tile_size;
         unsigned internal_cbuf_size = pan_internal_cbuf_size(fb, &tile_size);
-        int crc_rt = GENX(pan_select_crc_rt)(fb);
-        bool has_zs_crc_ext = pan_fbd_has_zs_crc_ext(fb);
+        int crc_rt = GENX(pan_select_crc_rt)(fb, tile_size);
+        bool has_zs_crc_ext = (fb->zs.view.zs || fb->zs.view.s || crc_rt >= 0);
 
         pan_section_pack(fbd, FRAMEBUFFER, PARAMETERS, cfg) {
 #if PAN_ARCH >= 6

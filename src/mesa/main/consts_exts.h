@@ -943,6 +943,9 @@ struct gl_constants
     */
    bool BufferCreateMapUnsynchronizedThreadSafe;
 
+   /** Override GL_MAP_UNSYNCHRONIZED_BIT */
+   bool ForceMapBufferSynchronized;
+
    /** GL_ARB_get_program_binary */
    GLuint NumProgramBinaryFormats;
 

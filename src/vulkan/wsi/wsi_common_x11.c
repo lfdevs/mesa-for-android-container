@@ -1269,21 +1269,46 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index,
 
    xcb_void_cookie_t cookie;
    void *myptr;
+   size_t hdr_len = sizeof(xcb_put_image_request_t);
+   int stride_b = image->base.row_pitches[0];
+   size_t size = (hdr_len + stride_b * chain->extent.height) >> 2;
+   uint64_t max_req_len = xcb_get_maximum_request_length(chain->conn);
+
    chain->base.wsi->MapMemory(chain->base.device,
                               image->base.memory,
                               0, 0, 0, &myptr);
 
-   cookie = xcb_put_image(chain->conn, XCB_IMAGE_FORMAT_Z_PIXMAP,
-                          chain->window,
-                          chain->gc,
-			  image->base.row_pitches[0] / 4,
-                          chain->extent.height,
-                          0,0,0,24,
-                          image->base.row_pitches[0] * chain->extent.height,
-                          myptr);
+   if (size < max_req_len) {
+      cookie = xcb_put_image(chain->conn, XCB_IMAGE_FORMAT_Z_PIXMAP,
+                             chain->window,
+                             chain->gc,
+                             image->base.row_pitches[0] / 4,
+                             chain->extent.height,
+                             0,0,0,24,
+                             image->base.row_pitches[0] * chain->extent.height,
+                             myptr);
+      xcb_discard_reply(chain->conn, cookie.sequence);
+   } else {
+      int num_lines = ((max_req_len << 2) - hdr_len) / stride_b;
+      int y_start = 0;
+      int y_todo = chain->extent.height;
+      while (y_todo) {
+         int this_lines = MIN2(num_lines, y_todo);
+         cookie = xcb_put_image(chain->conn, XCB_IMAGE_FORMAT_Z_PIXMAP,
+                                chain->window,
+                                chain->gc,
+                                image->base.row_pitches[0] / 4,
+                                this_lines,
+                                0,y_start,0,24,
+                                this_lines * stride_b,
+                                (const uint8_t *)myptr + (y_start * stride_b));
+         xcb_discard_reply(chain->conn, cookie.sequence);
+         y_start += this_lines;
+         y_todo -= this_lines;
+      }
+   }
 
    chain->base.wsi->UnmapMemory(chain->base.device, image->base.memory);
-   xcb_discard_reply(chain->conn, cookie.sequence);
    xcb_flush(chain->conn);
    return x11_swapchain_result(chain, VK_SUCCESS);
 }
@@ -1468,9 +1493,6 @@ x11_manage_fifo_queues(void *state)
          goto fail;
 
       if (chain->has_acquire_queue) {
-        xcb_generic_event_t *event = NULL;
-        xcb_connection_t *conn = chain->conn;
-
          /* Assume this isn't a swapchain where we force 5 images, because those
           * don't end up with an acquire queue at the moment.
           */
@@ -1502,35 +1524,19 @@ x11_manage_fifo_queues(void *state)
                  * VUID-vkAcquireNextImageKHR-swapchain-01802 */
                 x11_driver_owned_images(chain) < forward_progress_guaranteed_acquired_images) {
 
-            event = xcb_poll_for_special_event(conn, chain->special_event);
-            if (event) {
-               result = x11_handle_dri3_present_event(chain, (void *)event);
-               /* Ensure that VK_SUBOPTIMAL_KHR is reported to the application */
-               result = x11_swapchain_result(chain, result);
-               free(event);
-               if (result < 0)
-                  goto fail;
-
-               continue;
-            }
-
-            if (chain->status < 0 || xcb_connection_has_error(conn)) {
+            xcb_generic_event_t *event =
+               xcb_wait_for_special_event(chain->conn, chain->special_event);
+            if (!event) {
                result = VK_ERROR_SURFACE_LOST_KHR;
                goto fail;
             }
 
-            /* poke the window to see if it got destroyed from under us, and
-             * to flush any pending special events out of the server
-             */
-            xcb_get_geometry_reply_t *geometry =
-               xcb_get_geometry_reply(conn,
-                                      xcb_get_geometry(conn, chain->window),
-                                      NULL);
-            if (geometry == NULL) {
-               result = VK_ERROR_SURFACE_LOST_KHR;
+            result = x11_handle_dri3_present_event(chain, (void *)event);
+            /* Ensure that VK_SUBOPTIMAL_KHR is reported to the application */
+            result = x11_swapchain_result(chain, result);
+            free(event);
+            if (result < 0)
                goto fail;
-            }
-            free(geometry);
          }
       }
    }

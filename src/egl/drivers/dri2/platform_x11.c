@@ -153,9 +153,13 @@ swrastPutImage(__DRIdrawable * draw, int op,
 {
    struct dri2_egl_surface *dri2_surf = loaderPrivate;
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(dri2_surf->base.Resource.Display);
+   size_t hdr_len = sizeof(xcb_put_image_request_t);
+   int stride_b = dri2_surf->bytes_per_pixel * w;
+   size_t size = (hdr_len + stride_b * h) >> 2;
+   uint64_t max_req_len = xcb_get_maximum_request_length(dri2_dpy->conn);
 
    xcb_gcontext_t gc;
-
+   xcb_void_cookie_t cookie;
    switch (op) {
    case __DRI_SWRAST_IMAGE_OP_DRAW:
       gc = dri2_surf->gc;
@@ -167,9 +171,25 @@ swrastPutImage(__DRIdrawable * draw, int op,
       return;
    }
 
-   xcb_put_image(dri2_dpy->conn, XCB_IMAGE_FORMAT_Z_PIXMAP, dri2_surf->drawable,
-                 gc, w, h, x, y, 0, dri2_surf->depth,
-                 w*h*dri2_surf->bytes_per_pixel, (const uint8_t *)data);
+   if (size < max_req_len) {
+      cookie = xcb_put_image(dri2_dpy->conn, XCB_IMAGE_FORMAT_Z_PIXMAP, dri2_surf->drawable,
+                             gc, w, h, x, y, 0, dri2_surf->depth,
+                             h * stride_b, (const uint8_t *)data);
+      xcb_discard_reply(dri2_dpy->conn, cookie.sequence);
+   } else {
+      int num_lines = ((max_req_len << 2) - hdr_len) / stride_b;
+      int y_start = 0;
+      int y_todo = h;
+      while (y_todo) {
+         int this_lines = MIN2(num_lines, y_todo);
+         cookie = xcb_put_image(dri2_dpy->conn, XCB_IMAGE_FORMAT_Z_PIXMAP, dri2_surf->drawable,
+                                gc, w, this_lines, x, y_start, 0, dri2_surf->depth,
+                                this_lines * stride_b, ((const uint8_t *)data + y_start * stride_b));
+         xcb_discard_reply(dri2_dpy->conn, cookie.sequence);
+         y_start += this_lines;
+         y_todo -= this_lines;
+      }
+   }
 }
 
 static void

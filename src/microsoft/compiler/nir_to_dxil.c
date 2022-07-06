@@ -2482,11 +2482,7 @@ emit_barrier_impl(struct ntd_context *ctx, nir_variable_mode modes, nir_scope ex
    if (execution_scope == NIR_SCOPE_WORKGROUP)
       flags |= DXIL_BARRIER_MODE_SYNC_THREAD_GROUP;
 
-   /* Currently vtn uses uniform to indicate image memory, which DXIL considers global */
-   if (modes & nir_var_uniform)
-      modes |= nir_var_mem_global;
-
-   if (modes & (nir_var_mem_ssbo | nir_var_mem_global)) {
+   if (modes & (nir_var_mem_ssbo | nir_var_mem_global | nir_var_image)) {
       if (mem_scope > NIR_SCOPE_WORKGROUP)
          flags |= DXIL_BARRIER_MODE_UAV_FENCE_GLOBAL;
       else

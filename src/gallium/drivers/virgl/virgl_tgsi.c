@@ -288,8 +288,6 @@ virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
           * one precise output */
          if (inst->Instruction.Precise)
             vtctx->precise_flags[index] |= bits;
-         else if (inst->Instruction.Opcode != TGSI_OPCODE_MOV)
-            vtctx->precise_flags[index] &= ~bits;
       } else if (inst->Instruction.Opcode == TGSI_OPCODE_MOV) {
          for (int i = 0; i < inst->Instruction.NumSrcRegs; ++i) {
             if (inst->Src[i].Register.File == TGSI_FILE_TEMPORARY) {

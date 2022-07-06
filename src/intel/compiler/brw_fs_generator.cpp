@@ -1785,7 +1785,9 @@ fs_generator::generate_pack_half_2x16_split(fs_inst *,
 
    if (y.file == IMM) {
       const uint32_t hhhh0000 = _mesa_float_to_half(y.f) << 16;
+
       brw_MOV(p, dst, brw_imm_ud(hhhh0000));
+      brw_set_default_swsb(p, tgl_swsb_regdist(1));
    } else {
       /* Give each 32-bit channel of dst the form below, where "." means
        * unchanged.

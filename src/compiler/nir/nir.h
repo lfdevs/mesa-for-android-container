@@ -125,6 +125,13 @@ nir_num_components_valid(unsigned num_components)
            num_components == 16;
 }
 
+static inline nir_component_mask_t
+nir_component_mask(unsigned num_components)
+{
+   assert(nir_num_components_valid(num_components));
+   return (1u << num_components) - 1;
+}
+
 void
 nir_process_debug_variable(void);
 
@@ -417,7 +424,7 @@ typedef struct nir_variable {
        *
        * \sa nir_variable_mode
        */
-      unsigned mode:15;
+      unsigned mode:16;
 
       /**
        * Is the variable read-only?

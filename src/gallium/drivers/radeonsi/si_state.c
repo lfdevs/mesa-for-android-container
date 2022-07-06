@@ -641,6 +641,12 @@ static bool si_check_blend_dst_sampler_noop(struct si_context *sctx)
 {
    if (sctx->framebuffer.state.nr_cbufs == 1) {
       struct si_shader_selector *sel = sctx->shader.ps.cso;
+
+      /* Wait for the shader to be ready. */
+      util_queue_fence_wait(&sel->ready);
+
+      assert(!sel->nir);
+
       bool free_nir;
       if (unlikely(sel->info.writes_1_if_tex_is_1 == 0xff)) {
          struct nir_shader *nir = si_get_nir_shader(sel, &sctx->shader.ps.key, &free_nir);
@@ -658,6 +664,7 @@ static bool si_check_blend_dst_sampler_noop(struct si_context *sctx)
             sel->info.writes_1_if_tex_is_1 = 0;
          }
 
+         assert(free_nir);
          if (free_nir)
             ralloc_free(nir);
       }

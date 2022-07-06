@@ -149,15 +149,7 @@ GENX(pan_emit_tls)(const struct pan_tls_info *info,
                    void *out);
 
 int
-GENX(pan_select_crc_rt)(const struct pan_fb_info *fb);
-
-static inline bool
-pan_fbd_has_zs_crc_ext(const struct pan_fb_info *fb)
-{
-        return PAN_ARCH >= 5 &&
-               (fb->zs.view.zs || fb->zs.view.s ||
-                GENX(pan_select_crc_rt)(fb) >= 0);
-}
+GENX(pan_select_crc_rt)(const struct pan_fb_info *fb, unsigned tile_size);
 
 unsigned
 GENX(pan_emit_fbd)(const struct panfrost_device *dev,

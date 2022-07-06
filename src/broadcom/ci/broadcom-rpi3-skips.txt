@@ -31,6 +31,8 @@ spec@arb_internalformat_query2@all internalformat_<x>_type pname checks
 spec@!opengl 1.1@streaming-texture-leak
 spec@!opengl 1.0@gl-1.0-blend-func
 shaders@glsl-predication-on-large-array
+spec@arb_texture_rectangle@copyteximage rect samples=2
+spec@arb_texture_rectangle@copyteximage rect samples=4
 
 # Extensions not supported
 spec@arb_gpu_shader_fp64.*

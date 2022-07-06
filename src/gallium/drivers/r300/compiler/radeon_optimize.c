@@ -396,8 +396,7 @@ static void constant_folding(struct radeon_compiler * c, struct rc_instruction *
 		}
 
 		/* don't make the swizzle worse */
-		if (!c->SwizzleCaps->IsNative(inst->U.I.Opcode, newsrc) &&
-		    c->SwizzleCaps->IsNative(inst->U.I.Opcode, inst->U.I.SrcReg[src]))
+		if (!c->SwizzleCaps->IsNative(inst->U.I.Opcode, newsrc))
 			continue;
 
 		inst->U.I.SrcReg[src] = newsrc;

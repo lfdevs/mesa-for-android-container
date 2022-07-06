@@ -672,7 +672,7 @@ tu_gather_xfb_info(nir_shader *nir, struct ir3_stream_output_info *info)
          output_map[var->data.location + i] = var->data.driver_location + i;
    }
 
-   assert(xfb->output_count < IR3_MAX_SO_OUTPUTS);
+   assert(xfb->output_count <= IR3_MAX_SO_OUTPUTS);
    info->num_outputs = xfb->output_count;
 
    for (int i = 0; i < IR3_MAX_SO_BUFFERS; i++) {

@@ -95,4 +95,8 @@ zink_get_framebuffer_imageless(struct zink_context *ctx);
 
 struct zink_framebuffer *
 zink_get_framebuffer(struct zink_context *ctx);
+
+unsigned
+zink_framebuffer_get_num_layers(const struct pipe_framebuffer_state *fb);
+
 #endif

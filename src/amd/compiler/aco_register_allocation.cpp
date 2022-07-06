@@ -2120,7 +2120,10 @@ get_regs_for_phis(ra_ctx& ctx, Block& block, RegisterFile& register_file,
    }
 
    /* find registers for phis where the register was blocked or no operand was assigned */
-   for (aco_ptr<Instruction>& phi : instructions) {
+
+   /* Don't use iterators because get_reg_phi() can add phis to the end of the vector. */
+   for (unsigned i = 0; i < instructions.size(); i++) {
+      aco_ptr<Instruction>& phi = instructions[i];
       Definition& definition = phi->definitions[0];
       if (definition.isFixed())
          continue;

@@ -143,10 +143,6 @@
 #include "macros.h"
 #include "git_sha1.h"
 
-#ifdef USE_SPARC_ASM
-#include "sparc/sparc.h"
-#endif
-
 #include "compiler/glsl_types.h"
 #include "compiler/glsl/builtin_functions.h"
 #include "compiler/glsl/glsl_parser_extras.h"

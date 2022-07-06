@@ -219,7 +219,7 @@ TEST_F(nir_redundant_load_vars_test, duplicated_load)
 {
    /* Load a variable twice in the same block.  One should be removed. */
 
-   nir_variable *in = create_int(nir_var_mem_ssbo, "in");
+   nir_variable *in = create_int(nir_var_mem_global, "in");
    nir_variable **out = create_many_int(nir_var_shader_out, "out", 2);
 
    nir_store_var(b, out[0], nir_load_var(b, in), 1);
@@ -241,7 +241,7 @@ TEST_F(nir_redundant_load_vars_test, duplicated_load_volatile)
 {
    /* Load a variable twice in the same block.  One should be removed. */
 
-   nir_variable *in = create_int(nir_var_mem_ssbo, "in");
+   nir_variable *in = create_int(nir_var_mem_global, "in");
    nir_variable **out = create_many_int(nir_var_shader_out, "out", 3);
 
    /* Volatile prevents us from eliminating a load by combining it with
@@ -276,7 +276,7 @@ TEST_F(nir_redundant_load_vars_test, duplicated_load_in_two_blocks)
 {
    /* Load a variable twice in different blocks.  One should be removed. */
 
-   nir_variable *in = create_int(nir_var_mem_ssbo, "in");
+   nir_variable *in = create_int(nir_var_mem_global, "in");
    nir_variable **out = create_many_int(nir_var_shader_out, "out", 2);
 
    nir_store_var(b, out[0], nir_load_var(b, in), 1);
@@ -349,7 +349,7 @@ TEST_F(nir_redundant_load_vars_test, invalidate_live_load_in_the_end_of_loop)
     * body.
     */
 
-   nir_variable *v = create_int(nir_var_mem_ssbo, "v");
+   nir_variable *v = create_int(nir_var_mem_global, "v");
 
    nir_load_var(b, v);
 
@@ -397,7 +397,7 @@ TEST_F(nir_copy_prop_vars_test, simple_copies)
 
 TEST_F(nir_copy_prop_vars_test, self_copy)
 {
-   nir_variable *v = create_int(nir_var_mem_ssbo, "v");
+   nir_variable *v = create_int(nir_var_mem_global, "v");
 
    nir_copy_var(b, v, v);
 
@@ -582,7 +582,7 @@ TEST_F(nir_copy_prop_vars_test, store_volatile)
 
 TEST_F(nir_copy_prop_vars_test, self_copy_volatile)
 {
-   nir_variable *v = create_int(nir_var_mem_ssbo, "v");
+   nir_variable *v = create_int(nir_var_mem_global, "v");
 
    nir_copy_var(b, v, v);
    nir_copy_deref_with_access(b, nir_build_deref_var(b, v),
@@ -613,7 +613,7 @@ TEST_F(nir_copy_prop_vars_test, self_copy_volatile)
 
 TEST_F(nir_copy_prop_vars_test, memory_barrier_in_two_blocks)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 4);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 4);
 
    nir_store_var(b, v[0], nir_imm_int(b, 1), 1);
    nir_store_var(b, v[1], nir_imm_int(b, 2), 1);
@@ -624,7 +624,7 @@ TEST_F(nir_copy_prop_vars_test, memory_barrier_in_two_blocks)
    nir_store_var(b, v[2], nir_load_var(b, v[0]), 1);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQ_REL,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_store_var(b, v[3], nir_load_var(b, v[1]), 1);
 
@@ -639,12 +639,12 @@ TEST_F(nir_copy_prop_vars_test, memory_barrier_in_two_blocks)
 
 TEST_F(nir_redundant_load_vars_test, acquire_barrier_prevents_load_removal)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 1);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 1);
 
    nir_load_var(b, x[0]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQUIRE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
 
@@ -656,13 +656,13 @@ TEST_F(nir_redundant_load_vars_test, acquire_barrier_prevents_load_removal)
 
 TEST_F(nir_redundant_load_vars_test, acquire_barrier_prevents_same_mode_load_removal)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQUIRE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
@@ -675,7 +675,7 @@ TEST_F(nir_redundant_load_vars_test, acquire_barrier_prevents_same_mode_load_rem
 
 TEST_F(nir_redundant_load_vars_test, acquire_barrier_allows_different_mode_load_removal)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
    nir_variable **y = create_many_int(nir_var_mem_shared, "y", 2);
 
    nir_load_var(b, x[0]);
@@ -684,7 +684,7 @@ TEST_F(nir_redundant_load_vars_test, acquire_barrier_allows_different_mode_load_
    nir_load_var(b, y[1]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQUIRE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
@@ -716,12 +716,12 @@ TEST_F(nir_redundant_load_vars_test, acquire_barrier_allows_different_mode_load_
 
 TEST_F(nir_redundant_load_vars_test, release_barrier_allows_load_removal)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 1);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 1);
 
    nir_load_var(b, x[0]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_RELEASE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
 
@@ -733,13 +733,13 @@ TEST_F(nir_redundant_load_vars_test, release_barrier_allows_load_removal)
 
 TEST_F(nir_redundant_load_vars_test, release_barrier_allows_same_mode_load_removal)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_RELEASE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
@@ -752,7 +752,7 @@ TEST_F(nir_redundant_load_vars_test, release_barrier_allows_same_mode_load_remov
 
 TEST_F(nir_redundant_load_vars_test, release_barrier_allows_different_mode_load_removal)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
    nir_variable **y = create_many_int(nir_var_mem_shared, "y", 2);
 
    nir_load_var(b, x[0]);
@@ -761,7 +761,7 @@ TEST_F(nir_redundant_load_vars_test, release_barrier_allows_different_mode_load_
    nir_load_var(b, y[1]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_RELEASE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
@@ -788,12 +788,12 @@ TEST_F(nir_redundant_load_vars_test, release_barrier_allows_different_mode_load_
 
 TEST_F(nir_copy_prop_vars_test, acquire_barrier_prevents_propagation)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 1);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 1);
 
    nir_store_var(b, x[0], nir_imm_int(b, 10), 1);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQUIRE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
 
@@ -806,13 +806,13 @@ TEST_F(nir_copy_prop_vars_test, acquire_barrier_prevents_propagation)
 
 TEST_F(nir_copy_prop_vars_test, acquire_barrier_prevents_same_mode_propagation)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
 
    nir_store_var(b, x[0], nir_imm_int(b, 10), 1);
    nir_store_var(b, x[1], nir_imm_int(b, 20), 1);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQUIRE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
@@ -826,7 +826,7 @@ TEST_F(nir_copy_prop_vars_test, acquire_barrier_prevents_same_mode_propagation)
 
 TEST_F(nir_copy_prop_vars_test, acquire_barrier_allows_different_mode_propagation)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
    nir_variable **y = create_many_int(nir_var_mem_shared, "y", 2);
 
    nir_store_var(b, x[0], nir_imm_int(b, 10), 1);
@@ -835,7 +835,7 @@ TEST_F(nir_copy_prop_vars_test, acquire_barrier_allows_different_mode_propagatio
    nir_store_var(b, y[1], nir_imm_int(b, 40), 1);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQUIRE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
@@ -870,12 +870,12 @@ TEST_F(nir_copy_prop_vars_test, acquire_barrier_allows_different_mode_propagatio
 
 TEST_F(nir_copy_prop_vars_test, release_barrier_allows_propagation)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 1);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 1);
 
    nir_store_var(b, x[0], nir_imm_int(b, 10), 1);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_RELEASE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
 
@@ -887,13 +887,13 @@ TEST_F(nir_copy_prop_vars_test, release_barrier_allows_propagation)
 
 TEST_F(nir_copy_prop_vars_test, release_barrier_allows_same_mode_propagation)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
 
    nir_store_var(b, x[0], nir_imm_int(b, 10), 1);
    nir_store_var(b, x[1], nir_imm_int(b, 20), 1);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_RELEASE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
@@ -907,7 +907,7 @@ TEST_F(nir_copy_prop_vars_test, release_barrier_allows_same_mode_propagation)
 
 TEST_F(nir_copy_prop_vars_test, release_barrier_allows_different_mode_propagation)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
    nir_variable **y = create_many_int(nir_var_mem_shared, "y", 2);
 
    nir_store_var(b, x[0], nir_imm_int(b, 10), 1);
@@ -916,7 +916,7 @@ TEST_F(nir_copy_prop_vars_test, release_barrier_allows_different_mode_propagatio
    nir_store_var(b, y[1], nir_imm_int(b, 40), 1);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_RELEASE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_load_var(b, x[0]);
    nir_load_var(b, x[1]);
@@ -944,12 +944,12 @@ TEST_F(nir_copy_prop_vars_test, release_barrier_allows_different_mode_propagatio
 
 TEST_F(nir_copy_prop_vars_test, acquire_barrier_prevents_propagation_from_copy)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 3);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 3);
 
    nir_copy_var(b, x[1], x[0]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQUIRE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_copy_var(b, x[2], x[1]);
 
@@ -969,13 +969,13 @@ TEST_F(nir_copy_prop_vars_test, acquire_barrier_prevents_propagation_from_copy)
 
 TEST_F(nir_copy_prop_vars_test, acquire_barrier_prevents_propagation_from_copy_to_different_mode)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
    nir_variable **y = create_many_int(nir_var_mem_shared, "y", 1);
 
    nir_copy_var(b, y[0], x[0]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQUIRE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_copy_var(b, x[1], y[0]);
 
@@ -995,12 +995,12 @@ TEST_F(nir_copy_prop_vars_test, acquire_barrier_prevents_propagation_from_copy_t
 
 TEST_F(nir_copy_prop_vars_test, release_barrier_allows_propagation_from_copy)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 3);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 3);
 
    nir_copy_var(b, x[1], x[0]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_RELEASE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_copy_var(b, x[2], x[1]);
 
@@ -1020,13 +1020,13 @@ TEST_F(nir_copy_prop_vars_test, release_barrier_allows_propagation_from_copy)
 
 TEST_F(nir_copy_prop_vars_test, release_barrier_allows_propagation_from_copy_to_different_mode)
 {
-   nir_variable **x = create_many_int(nir_var_mem_ssbo, "x", 2);
+   nir_variable **x = create_many_int(nir_var_mem_global, "x", 2);
    nir_variable **y = create_many_int(nir_var_mem_shared, "y", 1);
 
    nir_copy_var(b, y[0], x[0]);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_RELEASE,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_copy_var(b, x[1], y[0]);
 
@@ -1076,10 +1076,10 @@ TEST_F(nir_copy_prop_vars_test, simple_store_load_in_two_blocks)
 
 TEST_F(nir_copy_prop_vars_test, load_direct_array_deref_on_vector_reuses_previous_load)
 {
-   nir_variable *in0 = create_ivec2(nir_var_mem_ssbo, "in0");
-   nir_variable *in1 = create_ivec2(nir_var_mem_ssbo, "in1");
-   nir_variable *vec = create_ivec2(nir_var_mem_ssbo, "vec");
-   nir_variable *out = create_int(nir_var_mem_ssbo, "out");
+   nir_variable *in0 = create_ivec2(nir_var_mem_global, "in0");
+   nir_variable *in1 = create_ivec2(nir_var_mem_global, "in1");
+   nir_variable *vec = create_ivec2(nir_var_mem_global, "vec");
+   nir_variable *out = create_int(nir_var_mem_global, "out");
 
    nir_store_var(b, vec, nir_load_var(b, in0), 1 << 0);
    nir_store_var(b, vec, nir_load_var(b, in1), 1 << 1);
@@ -1112,8 +1112,8 @@ TEST_F(nir_copy_prop_vars_test, load_direct_array_deref_on_vector_reuses_previou
 
 TEST_F(nir_copy_prop_vars_test, load_direct_array_deref_on_vector_reuses_previous_copy)
 {
-   nir_variable *in0 = create_ivec2(nir_var_mem_ssbo, "in0");
-   nir_variable *vec = create_ivec2(nir_var_mem_ssbo, "vec");
+   nir_variable *in0 = create_ivec2(nir_var_mem_global, "in0");
+   nir_variable *vec = create_ivec2(nir_var_mem_global, "vec");
 
    nir_copy_var(b, vec, in0);
 
@@ -1136,9 +1136,9 @@ TEST_F(nir_copy_prop_vars_test, load_direct_array_deref_on_vector_reuses_previou
 
 TEST_F(nir_copy_prop_vars_test, load_direct_array_deref_on_vector_gets_reused)
 {
-   nir_variable *in0 = create_ivec2(nir_var_mem_ssbo, "in0");
-   nir_variable *vec = create_ivec2(nir_var_mem_ssbo, "vec");
-   nir_variable *out = create_ivec2(nir_var_mem_ssbo, "out");
+   nir_variable *in0 = create_ivec2(nir_var_mem_global, "in0");
+   nir_variable *vec = create_ivec2(nir_var_mem_global, "vec");
+   nir_variable *out = create_ivec2(nir_var_mem_global, "out");
 
    /* Loading "vec[1]" deref will save the information about vec.y. */
    nir_deref_instr *deref =
@@ -1170,9 +1170,9 @@ TEST_F(nir_copy_prop_vars_test, load_direct_array_deref_on_vector_gets_reused)
 
 TEST_F(nir_copy_prop_vars_test, store_load_direct_array_deref_on_vector)
 {
-   nir_variable *vec = create_ivec2(nir_var_mem_ssbo, "vec");
-   nir_variable *out0 = create_int(nir_var_mem_ssbo, "out0");
-   nir_variable *out1 = create_ivec2(nir_var_mem_ssbo, "out1");
+   nir_variable *vec = create_ivec2(nir_var_mem_global, "vec");
+   nir_variable *out0 = create_int(nir_var_mem_global, "out0");
+   nir_variable *out1 = create_ivec2(nir_var_mem_global, "out1");
 
    /* Store to "vec[1]" and "vec[0]". */
    nir_deref_instr *store_deref_y =
@@ -1215,9 +1215,9 @@ TEST_F(nir_copy_prop_vars_test, store_load_direct_array_deref_on_vector)
 
 TEST_F(nir_copy_prop_vars_test, store_load_indirect_array_deref_on_vector)
 {
-   nir_variable *vec = create_ivec2(nir_var_mem_ssbo, "vec");
-   nir_variable *idx = create_int(nir_var_mem_ssbo, "idx");
-   nir_variable *out = create_int(nir_var_mem_ssbo, "out");
+   nir_variable *vec = create_ivec2(nir_var_mem_global, "vec");
+   nir_variable *idx = create_int(nir_var_mem_global, "idx");
+   nir_variable *out = create_int(nir_var_mem_global, "out");
 
    nir_ssa_def *idx_ssa = nir_load_var(b, idx);
 
@@ -1252,9 +1252,9 @@ TEST_F(nir_copy_prop_vars_test, store_load_indirect_array_deref_on_vector)
 
 TEST_F(nir_copy_prop_vars_test, store_load_direct_and_indirect_array_deref_on_vector)
 {
-   nir_variable *vec = create_ivec2(nir_var_mem_ssbo, "vec");
-   nir_variable *idx = create_int(nir_var_mem_ssbo, "idx");
-   nir_variable **out = create_many_int(nir_var_mem_ssbo, "out", 2);
+   nir_variable *vec = create_ivec2(nir_var_mem_global, "vec");
+   nir_variable *idx = create_int(nir_var_mem_global, "idx");
+   nir_variable **out = create_many_int(nir_var_mem_global, "out", 2);
 
    nir_ssa_def *idx_ssa = nir_load_var(b, idx);
 
@@ -1290,11 +1290,11 @@ TEST_F(nir_copy_prop_vars_test, store_load_direct_and_indirect_array_deref_on_ve
 
 TEST_F(nir_copy_prop_vars_test, store_load_indirect_array_deref)
 {
-   nir_variable *arr = create_var(nir_var_mem_ssbo,
+   nir_variable *arr = create_var(nir_var_mem_global,
                                   glsl_array_type(glsl_int_type(), 10, 0),
                                   "arr");
-   nir_variable *idx = create_int(nir_var_mem_ssbo, "idx");
-   nir_variable *out = create_int(nir_var_mem_ssbo, "out");
+   nir_variable *idx = create_int(nir_var_mem_global, "idx");
+   nir_variable *out = create_int(nir_var_mem_global, "out");
 
    nir_ssa_def *idx_ssa = nir_load_var(b, idx);
 
@@ -1327,9 +1327,231 @@ TEST_F(nir_copy_prop_vars_test, store_load_indirect_array_deref)
    EXPECT_EQ(first->src[1].ssa, second->src[1].ssa);
 }
 
+TEST_F(nir_copy_prop_vars_test, restrict_ssbo_bindings)
+{
+   glsl_struct_field field = glsl_struct_field();
+   field.type = glsl_int_type();
+   field.name = "x";
+   const glsl_type *ifc_type =
+      glsl_type::get_interface_instance(&field, 1,
+                                        GLSL_INTERFACE_PACKING_STD430,
+                                        false /* row_major */, "b");
+   nir_variable *ssbo0 = create_var(nir_var_mem_ssbo, ifc_type, "ssbo0");
+   nir_variable *ssbo1 = create_var(nir_var_mem_ssbo, ifc_type, "ssbo1");
+   ssbo0->data.access = ssbo1->data.access = ACCESS_RESTRICT;
+   nir_variable *out = create_var(nir_var_mem_ssbo, ifc_type, "out");
+   out->data.access = ACCESS_RESTRICT;
+
+   nir_deref_instr *ssbo0_x =
+      nir_build_deref_struct(b, nir_build_deref_var(b, ssbo0), 0);
+   nir_store_deref(b, ssbo0_x, nir_imm_int(b, 20), 1);
+
+   nir_deref_instr *ssbo1_x =
+      nir_build_deref_struct(b, nir_build_deref_var(b, ssbo1), 0);
+   nir_store_deref(b, ssbo1_x, nir_imm_int(b, 30), 1);
+
+   /* Load ssbo0.x and store it in out.x.  This load should be dropped */
+   nir_deref_instr *out_x =
+      nir_build_deref_struct(b, nir_build_deref_var(b, out), 0);
+   nir_store_deref(b, out_x, nir_load_deref(b, ssbo0_x), 1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 1);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+
+   bool progress = nir_opt_copy_prop_vars(b->shader);
+   EXPECT_TRUE(progress);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 0);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+
+   /* Store to b0.x propagated to out. */
+   nir_intrinsic_instr *first = get_intrinsic(nir_intrinsic_store_deref, 0);
+   nir_intrinsic_instr *third = get_intrinsic(nir_intrinsic_store_deref, 2);
+   ASSERT_TRUE(first->src[1].is_ssa);
+   ASSERT_TRUE(third->src[1].is_ssa);
+   EXPECT_EQ(first->src[1].ssa, third->src[1].ssa);
+}
+
+TEST_F(nir_copy_prop_vars_test, aliasing_ssbo_bindings)
+{
+   glsl_struct_field field = glsl_struct_field();
+   field.type = glsl_int_type();
+   field.name = "x";
+   const glsl_type *ifc_type =
+      glsl_type::get_interface_instance(&field, 1,
+                                        GLSL_INTERFACE_PACKING_STD430,
+                                        false /* row_major */, "b");
+   nir_variable *ssbo0 = create_var(nir_var_mem_ssbo, ifc_type, "ssbo0");
+   nir_variable *ssbo1 = create_var(nir_var_mem_ssbo, ifc_type, "ssbo1");
+   nir_variable *out = create_var(nir_var_mem_ssbo, ifc_type, "out");
+   out->data.access = ACCESS_RESTRICT;
+
+   nir_deref_instr *ssbo0_x =
+      nir_build_deref_struct(b, nir_build_deref_var(b, ssbo0), 0);
+   nir_store_deref(b, ssbo0_x, nir_imm_int(b, 20), 1);
+
+   nir_deref_instr *ssbo1_x =
+      nir_build_deref_struct(b, nir_build_deref_var(b, ssbo1), 0);
+   nir_store_deref(b, ssbo1_x, nir_imm_int(b, 30), 1);
+
+   /* Load ssbo0.x and store it in out.x.  This load should not be dropped */
+   nir_deref_instr *out_x =
+      nir_build_deref_struct(b, nir_build_deref_var(b, out), 0);
+   nir_store_deref(b, out_x, nir_load_deref(b, ssbo0_x), 1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 1);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+
+   bool progress = nir_opt_copy_prop_vars(b->shader);
+   EXPECT_FALSE(progress);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 1);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+}
+
+TEST_F(nir_copy_prop_vars_test, ssbo_array_binding_indirect)
+{
+   glsl_struct_field field = glsl_struct_field();
+   field.type = glsl_int_type();
+   field.name = "x";
+   const glsl_type *ifc_type =
+      glsl_type::get_interface_instance(&field, 1,
+                                        GLSL_INTERFACE_PACKING_STD430,
+                                        false /* row_major */, "b");
+   const glsl_type *arr_ifc_type = glsl_type::get_array_instance(ifc_type, 2);
+   nir_variable *ssbo_arr = create_var(nir_var_mem_ssbo, arr_ifc_type,
+                                       "ssbo_arr");
+   ssbo_arr->data.access = ACCESS_RESTRICT;
+   nir_variable *out = create_var(nir_var_mem_ssbo, ifc_type, "out");
+   out->data.access = ACCESS_RESTRICT;
+
+   nir_deref_instr *ssbo_0 =
+      nir_build_deref_array_imm(b, nir_build_deref_var(b, ssbo_arr), 0);
+   nir_deref_instr *ssbo_0_x = nir_build_deref_struct(b, ssbo_0, 0);
+   nir_store_deref(b, ssbo_0_x, nir_imm_int(b, 20), 1);
+
+   nir_deref_instr *ssbo_i =
+      nir_build_deref_array(b, nir_build_deref_var(b, ssbo_arr),
+                               nir_load_local_invocation_index(b));
+   nir_deref_instr *ssbo_i_x = nir_build_deref_struct(b, ssbo_i, 0);
+   nir_store_deref(b, ssbo_i_x, nir_imm_int(b, 30), 1);
+
+   /* Load ssbo_arr[0].x and store it in out.x.  This load should not be dropped */
+   nir_deref_instr *out_x =
+      nir_build_deref_struct(b, nir_build_deref_var(b, out), 0);
+   nir_store_deref(b, out_x, nir_load_deref(b, ssbo_0_x), 1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 1);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+
+   bool progress = nir_opt_copy_prop_vars(b->shader);
+   EXPECT_FALSE(progress);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 1);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+}
+
+TEST_F(nir_copy_prop_vars_test, restrict_ssbo_array_binding)
+{
+   glsl_struct_field field = glsl_struct_field();
+   field.type = glsl_int_type();
+   field.name = "x";
+   const glsl_type *ifc_type =
+      glsl_type::get_interface_instance(&field, 1,
+                                        GLSL_INTERFACE_PACKING_STD430,
+                                        false /* row_major */, "b");
+   const glsl_type *arr_ifc_type = glsl_type::get_array_instance(ifc_type, 2);
+   nir_variable *ssbo_arr = create_var(nir_var_mem_ssbo, arr_ifc_type,
+                                       "ssbo_arr");
+   ssbo_arr->data.access = ACCESS_RESTRICT;
+   nir_variable *out = create_var(nir_var_mem_ssbo, ifc_type, "out");
+   out->data.access = ACCESS_RESTRICT;
+
+   nir_deref_instr *ssbo_0 =
+      nir_build_deref_array_imm(b, nir_build_deref_var(b, ssbo_arr), 0);
+   nir_deref_instr *ssbo_0_x = nir_build_deref_struct(b, ssbo_0, 0);
+   nir_store_deref(b, ssbo_0_x, nir_imm_int(b, 20), 1);
+
+   nir_deref_instr *ssbo_1 =
+      nir_build_deref_array_imm(b, nir_build_deref_var(b, ssbo_arr), 1);
+   nir_deref_instr *ssbo_1_x = nir_build_deref_struct(b, ssbo_1, 0);
+   nir_store_deref(b, ssbo_1_x, nir_imm_int(b, 30), 1);
+
+   /* Load ssbo_arr[0].x and store it in out.x.  This load should be dropped */
+   nir_deref_instr *out_x =
+      nir_build_deref_struct(b, nir_build_deref_var(b, out), 0);
+   nir_store_deref(b, out_x, nir_load_deref(b, ssbo_0_x), 1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 1);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+
+   bool progress = nir_opt_copy_prop_vars(b->shader);
+   EXPECT_TRUE(progress);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 0);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+
+   /* Store to b0.x propagated to out. */
+   nir_intrinsic_instr *first = get_intrinsic(nir_intrinsic_store_deref, 0);
+   nir_intrinsic_instr *third = get_intrinsic(nir_intrinsic_store_deref, 2);
+   ASSERT_TRUE(first->src[1].is_ssa);
+   ASSERT_TRUE(third->src[1].is_ssa);
+   EXPECT_EQ(first->src[1].ssa, third->src[1].ssa);
+}
+
+TEST_F(nir_copy_prop_vars_test, aliasing_ssbo_array_binding)
+{
+   glsl_struct_field field = glsl_struct_field();
+   field.type = glsl_int_type();
+   field.name = "x";
+   const glsl_type *ifc_type =
+      glsl_type::get_interface_instance(&field, 1,
+                                        GLSL_INTERFACE_PACKING_STD430,
+                                        false /* row_major */, "b");
+   const glsl_type *arr_ifc_type = glsl_type::get_array_instance(ifc_type, 2);
+   nir_variable *ssbo_arr = create_var(nir_var_mem_ssbo, arr_ifc_type,
+                                       "ssbo_arr");
+   nir_variable *out = create_var(nir_var_mem_ssbo, ifc_type, "out");
+   out->data.access = ACCESS_RESTRICT;
+
+   nir_deref_instr *ssbo_0 =
+      nir_build_deref_array_imm(b, nir_build_deref_var(b, ssbo_arr), 0);
+   nir_deref_instr *ssbo_0_x = nir_build_deref_struct(b, ssbo_0, 0);
+   nir_store_deref(b, ssbo_0_x, nir_imm_int(b, 20), 1);
+
+   nir_deref_instr *ssbo_1 =
+      nir_build_deref_array_imm(b, nir_build_deref_var(b, ssbo_arr), 1);
+   nir_deref_instr *ssbo_1_x = nir_build_deref_struct(b, ssbo_1, 0);
+   nir_store_deref(b, ssbo_1_x, nir_imm_int(b, 30), 1);
+
+   /* Load ssbo_arr[0].x and store it in out.x.  This load should not be dropped */
+   nir_deref_instr *out_x =
+      nir_build_deref_struct(b, nir_build_deref_var(b, out), 0);
+   nir_store_deref(b, out_x, nir_load_deref(b, ssbo_0_x), 1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 1);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+
+   bool progress = nir_opt_copy_prop_vars(b->shader);
+   EXPECT_FALSE(progress);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 1);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_deref), 3);
+}
+
 TEST_F(nir_dead_write_vars_test, no_dead_writes_in_block)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 2);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 2);
 
    nir_store_var(b, v[0], nir_load_var(b, v[1]), 1);
 
@@ -1339,7 +1561,7 @@ TEST_F(nir_dead_write_vars_test, no_dead_writes_in_block)
 
 TEST_F(nir_dead_write_vars_test, no_dead_writes_different_components_in_block)
 {
-   nir_variable **v = create_many_ivec2(nir_var_mem_ssbo, "v", 3);
+   nir_variable **v = create_many_ivec2(nir_var_mem_global, "v", 3);
 
    nir_store_var(b, v[0], nir_load_var(b, v[1]), 1 << 0);
    nir_store_var(b, v[0], nir_load_var(b, v[2]), 1 << 1);
@@ -1350,7 +1572,7 @@ TEST_F(nir_dead_write_vars_test, no_dead_writes_different_components_in_block)
 
 TEST_F(nir_dead_write_vars_test, volatile_write)
 {
-   nir_variable *v = create_int(nir_var_mem_ssbo, "v");
+   nir_variable *v = create_int(nir_var_mem_global, "v");
 
    nir_store_var(b, v, nir_imm_int(b, 0), 0x1);
    nir_store_var_volatile(b, v, nir_imm_int(b, 1), 0x1);
@@ -1370,7 +1592,7 @@ TEST_F(nir_dead_write_vars_test, volatile_write)
 
 TEST_F(nir_dead_write_vars_test, volatile_copies)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 2);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 2);
 
    nir_copy_var(b, v[0], v[1]);
    nir_copy_deref_with_access(b, nir_build_deref_var(b, v[0]),
@@ -1392,7 +1614,7 @@ TEST_F(nir_dead_write_vars_test, volatile_copies)
 
 TEST_F(nir_dead_write_vars_test, no_dead_writes_in_if_statement)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 6);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 6);
 
    nir_store_var(b, v[2], nir_load_var(b, v[0]), 1);
    nir_store_var(b, v[3], nir_load_var(b, v[1]), 1);
@@ -1412,7 +1634,7 @@ TEST_F(nir_dead_write_vars_test, no_dead_writes_in_if_statement)
 
 TEST_F(nir_dead_write_vars_test, no_dead_writes_in_loop_statement)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 3);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 3);
 
    nir_store_var(b, v[0], nir_load_var(b, v[1]), 1);
 
@@ -1434,7 +1656,7 @@ TEST_F(nir_dead_write_vars_test, no_dead_writes_in_loop_statement)
 
 TEST_F(nir_dead_write_vars_test, dead_write_in_block)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 3);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 3);
 
    nir_store_var(b, v[0], nir_load_var(b, v[1]), 1);
    nir_ssa_def *load_v2 = nir_load_var(b, v[2]);
@@ -1452,7 +1674,7 @@ TEST_F(nir_dead_write_vars_test, dead_write_in_block)
 
 TEST_F(nir_dead_write_vars_test, dead_write_components_in_block)
 {
-   nir_variable **v = create_many_ivec2(nir_var_mem_ssbo, "v", 3);
+   nir_variable **v = create_many_ivec2(nir_var_mem_global, "v", 3);
 
    nir_store_var(b, v[0], nir_load_var(b, v[1]), 1 << 0);
    nir_ssa_def *load_v2 = nir_load_var(b, v[2]);
@@ -1476,7 +1698,7 @@ TEST_F(nir_dead_write_vars_test, dead_write_components_in_block)
 
 TEST_F(nir_dead_write_vars_test, DISABLED_dead_write_in_two_blocks)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 3);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 3);
 
    nir_store_var(b, v[0], nir_load_var(b, v[1]), 1);
    nir_ssa_def *load_v2 = nir_load_var(b, v[2]);
@@ -1498,7 +1720,7 @@ TEST_F(nir_dead_write_vars_test, DISABLED_dead_write_in_two_blocks)
 
 TEST_F(nir_dead_write_vars_test, DISABLED_dead_write_components_in_two_blocks)
 {
-   nir_variable **v = create_many_ivec2(nir_var_mem_ssbo, "v", 3);
+   nir_variable **v = create_many_ivec2(nir_var_mem_global, "v", 3);
 
    nir_store_var(b, v[0], nir_load_var(b, v[1]), 1 << 0);
 
@@ -1520,7 +1742,7 @@ TEST_F(nir_dead_write_vars_test, DISABLED_dead_write_components_in_two_blocks)
 
 TEST_F(nir_dead_write_vars_test, DISABLED_dead_writes_in_if_statement)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 4);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 4);
 
    /* Both branches will overwrite, making the previous store dead. */
    nir_store_var(b, v[0], nir_load_var(b, v[1]), 1);
@@ -1550,7 +1772,7 @@ TEST_F(nir_dead_write_vars_test, DISABLED_dead_writes_in_if_statement)
 
 TEST_F(nir_dead_write_vars_test, DISABLED_memory_barrier_in_two_blocks)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 2);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 2);
 
    nir_store_var(b, v[0], nir_imm_int(b, 1), 1);
    nir_store_var(b, v[1], nir_imm_int(b, 2), 1);
@@ -1562,7 +1784,7 @@ TEST_F(nir_dead_write_vars_test, DISABLED_memory_barrier_in_two_blocks)
    nir_store_var(b, v[0], nir_imm_int(b, 3), 1);
 
    nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQ_REL,
-                             nir_var_mem_ssbo);
+                             nir_var_mem_global);
 
    nir_store_var(b, v[1], nir_imm_int(b, 4), 1);
 
@@ -1574,7 +1796,7 @@ TEST_F(nir_dead_write_vars_test, DISABLED_memory_barrier_in_two_blocks)
 
 TEST_F(nir_dead_write_vars_test, DISABLED_unrelated_barrier_in_two_blocks)
 {
-   nir_variable **v = create_many_int(nir_var_mem_ssbo, "v", 3);
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 3);
    nir_variable *out = create_int(nir_var_shader_out, "out");
 
    nir_store_var(b, out, nir_load_var(b, v[1]), 1);
@@ -1609,7 +1831,7 @@ TEST_F(nir_dead_write_vars_test, DISABLED_unrelated_barrier_in_two_blocks)
 
 TEST_F(nir_combine_stores_test, non_overlapping_stores)
 {
-   nir_variable **v = create_many_ivec4(nir_var_mem_ssbo, "v", 4);
+   nir_variable **v = create_many_ivec4(nir_var_mem_global, "v", 4);
    nir_variable *out = create_ivec4(nir_var_shader_out, "out");
 
    for (int i = 0; i < 4; i++)
@@ -1645,7 +1867,7 @@ TEST_F(nir_combine_stores_test, non_overlapping_stores)
 
 TEST_F(nir_combine_stores_test, overlapping_stores)
 {
-   nir_variable **v = create_many_ivec4(nir_var_mem_ssbo, "v", 3);
+   nir_variable **v = create_many_ivec4(nir_var_mem_global, "v", 3);
    nir_variable *out = create_ivec4(nir_var_shader_out, "out");
 
    /* Make stores with xy, yz and zw masks. */
@@ -1694,9 +1916,9 @@ TEST_F(nir_combine_stores_test, overlapping_stores)
 
 TEST_F(nir_combine_stores_test, direct_array_derefs)
 {
-   nir_variable **v = create_many_ivec4(nir_var_mem_ssbo, "vec", 2);
-   nir_variable **s = create_many_int(nir_var_mem_ssbo, "scalar", 2);
-   nir_variable *out = create_ivec4(nir_var_mem_ssbo, "out");
+   nir_variable **v = create_many_ivec4(nir_var_mem_global, "vec", 2);
+   nir_variable **s = create_many_int(nir_var_mem_global, "scalar", 2);
+   nir_variable *out = create_ivec4(nir_var_mem_global, "out");
 
    nir_deref_instr *out_deref = nir_build_deref_var(b, out);
 
@@ -1722,7 +1944,7 @@ TEST_F(nir_combine_stores_test, direct_array_derefs)
 
    nir_validate_shader(b->shader, NULL);
 
-   bool progress = nir_opt_combine_stores(b->shader, nir_var_mem_ssbo);
+   bool progress = nir_opt_combine_stores(b->shader, nir_var_mem_global);
    ASSERT_TRUE(progress);
 
    nir_validate_shader(b->shader, NULL);

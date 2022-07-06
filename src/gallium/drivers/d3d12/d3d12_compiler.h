@@ -119,6 +119,7 @@ struct d3d12_shader_key {
       unsigned ccw:1;
       unsigned point_mode:1;
       unsigned spacing:2;
+      unsigned patch_vertices_in:5;
       struct d3d12_varying_info required_patch_outputs;
       uint32_t next_patch_inputs;
    } hs;

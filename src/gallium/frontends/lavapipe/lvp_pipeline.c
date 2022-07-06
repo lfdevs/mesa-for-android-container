@@ -158,6 +158,7 @@ deep_copy_vertex_input_state(void *mem_ctx,
             break;
          }
          default:
+            unreachable("unhandled pNext!");
             break;
          }
       }
@@ -212,6 +213,24 @@ deep_copy_viewport_state(void *mem_ctx,
       dst->scissorCount = src->scissorCount;
    else
       dst->scissorCount = 0;
+
+   if (src->pNext) {
+      vk_foreach_struct(ext, src->pNext) {
+         switch (ext->sType) {
+         case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT: {
+            VkPipelineViewportDepthClipControlCreateInfoEXT *ext_src = (VkPipelineViewportDepthClipControlCreateInfoEXT *)ext;
+            VkPipelineViewportDepthClipControlCreateInfoEXT *ext_dst = ralloc(mem_ctx, VkPipelineViewportDepthClipControlCreateInfoEXT);
+            memcpy(ext_dst, ext_src, sizeof(*ext_dst));
+            ext_dst->pNext = dst->pNext;
+            dst->pNext = ext_dst;
+            break;
+         }
+         default:
+            unreachable("unhandled pNext!");
+            break;
+         }
+      }
+   }
 
    return VK_SUCCESS;
 }
@@ -323,12 +342,33 @@ deep_copy_rasterization_state(void *mem_ctx,
             VkPipelineRasterizationDepthClipStateCreateInfoEXT *ext_src = (VkPipelineRasterizationDepthClipStateCreateInfoEXT *)ext;
             VkPipelineRasterizationDepthClipStateCreateInfoEXT *ext_dst = ralloc(mem_ctx, VkPipelineRasterizationDepthClipStateCreateInfoEXT);
             ext_dst->sType = ext_src->sType;
+            ext_dst->pNext = dst->pNext;
             ext_dst->flags = ext_src->flags;
             ext_dst->depthClipEnable = ext_src->depthClipEnable;
             dst->pNext = ext_dst;
             break;
          }
+         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT: {
+            VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *ext_src = (VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *)ext;
+            VkPipelineRasterizationProvokingVertexStateCreateInfoEXT *ext_dst = ralloc(mem_ctx, VkPipelineRasterizationProvokingVertexStateCreateInfoEXT);
+            memcpy(ext_dst, ext_src, sizeof(*ext_dst));
+            ext_dst->pNext = dst->pNext;
+            dst->pNext = ext_dst;
+            break;
+         }
+         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT: {
+            VkPipelineRasterizationLineStateCreateInfoEXT *ext_src = (VkPipelineRasterizationLineStateCreateInfoEXT *)ext;
+            VkPipelineRasterizationLineStateCreateInfoEXT *ext_dst = ralloc(mem_ctx, VkPipelineRasterizationLineStateCreateInfoEXT);
+            memcpy(ext_dst, ext_src, sizeof(*ext_dst));
+            ext_dst->pNext = dst->pNext;
+            dst->pNext = ext_dst;
+            break;
+         }
+         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
+            /* do nothing */
+            break;
          default:
+            unreachable("unhandled pNext!");
             break;
          }
       }
@@ -353,18 +393,32 @@ deep_copy_graphics_create_info(void *mem_ctx,
    dst->pNext = NULL;
    dst->flags = src->flags;
    dst->layout = src->layout;
-   if (shaders & (VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT | VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)) {
+   if (shaders & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) {
       assert(!dst->renderPass || !src->renderPass || dst->renderPass == src->renderPass);
       assert(!dst->subpass || !src->subpass || dst->subpass == src->subpass);
       dst->subpass = src->subpass;
       dst->renderPass = src->renderPass;
       rp_info = vk_get_pipeline_rendering_create_info(src);
+      if (rp_info && !src->renderPass) {
+         VkPipelineRenderingCreateInfoKHR *r = ralloc(mem_ctx, VkPipelineRenderingCreateInfoKHR);
+         memcpy(r, rp_info, sizeof(VkPipelineRenderingCreateInfoKHR));
+         r->pNext = NULL;
+         dst->pNext = r;
+      }
    }
    bool has_depth = false;
    bool has_stencil = false;
    if (rp_info) {
       has_depth = rp_info->depthAttachmentFormat != VK_FORMAT_UNDEFINED;
       has_stencil = rp_info->stencilAttachmentFormat != VK_FORMAT_UNDEFINED;
+   } else if ((shaders & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) &&
+              (shaders ^ VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)) {
+      /* if this is a fragment stage without a fragment output,
+       * assume both of these exist so the dynamic states are covered,
+       * then let them be naturally pruned in the final pipeline
+       */
+      has_depth = true;
+      has_stencil = true;
    }
    dst->basePipelineHandle = src->basePipelineHandle;
    dst->basePipelineIndex = src->basePipelineIndex;
@@ -448,8 +502,6 @@ deep_copy_graphics_create_info(void *mem_ctx,
    }
 
    if (shaders & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {
-      assert(rp_info);
-      bool have_output = (shaders & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) > 0;
       /* pDepthStencilState */
       if (src->pDepthStencilState && !rasterization_disabled &&
           /*
@@ -467,7 +519,7 @@ deep_copy_graphics_create_info(void *mem_ctx,
                state but not fragment output interface state, pDepthStencilState must be a valid pointer
                to a valid VkPipelineDepthStencilStateCreateInfo structure
           */
-          (!have_output || has_depth || has_stencil)) {
+          (has_depth || has_stencil)) {
          LVP_PIPELINE_DUP(dst->pDepthStencilState,
                           src->pDepthStencilState,
                           VkPipelineDepthStencilStateCreateInfo,
@@ -1374,9 +1426,8 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
              }
           }
        }
-   }
-
-   if (pipeline->stages & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) {
+   } else if (pipeline->stages & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) {
+      /* composite pipelines should have these values set above */
       if (pipeline->graphics_create_info.pViewportState) {
          /* if pViewportState is null, it means rasterization is discarded,
           * so this is ignored

@@ -56,10 +56,6 @@
 #endif /* _MSC_VER */
 
 
-/*
- * Alternative stdint.h and stdbool.h headers are supplied in include/c99 for
- * systems that lack it.
- */
 #include <stdint.h>
 #include <stdbool.h>
 

@@ -1004,6 +1004,7 @@ d3d12_disable_multisampling(nir_shader *s)
    nir_foreach_variable_with_modes_safe(var, s, nir_var_shader_out) {
       if (var->data.location == FRAG_RESULT_SAMPLE_MASK) {
          exec_node_remove(&var->node);
+         s->info.outputs_written &= ~(1ull << FRAG_RESULT_SAMPLE_MASK);
          progress = true;
       }
    }

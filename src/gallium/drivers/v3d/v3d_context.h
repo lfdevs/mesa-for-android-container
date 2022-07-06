@@ -754,7 +754,7 @@ bool v3d_format_supports_tlb_msaa_resolve(const struct v3d_device_info *devinfo,
 
 void v3d_init_query_functions(struct v3d_context *v3d);
 void v3d_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info);
-void v3d_blitter_save(struct v3d_context *v3d);
+void v3d_blitter_save(struct v3d_context *v3d, bool op_blit);
 bool v3d_generate_mipmap(struct pipe_context *pctx,
                          struct pipe_resource *prsc,
                          enum pipe_format format,

@@ -916,7 +916,7 @@ setup_registers_and_variables(struct ptn_compile *c)
    }
 
    /* Create output registers and variables. */
-   int max_outputs = util_last_bit(c->prog->info.outputs_written);
+   int max_outputs = util_last_bit64(c->prog->info.outputs_written);
    c->output_regs = rzalloc_array(c, nir_register *, max_outputs);
 
    uint64_t outputs_written = c->prog->info.outputs_written;

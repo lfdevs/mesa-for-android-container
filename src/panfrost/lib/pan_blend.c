@@ -802,7 +802,6 @@ GENX(pan_blend_get_shader_locked)(const struct panfrost_device *dev,
 
         if (shader->nvariants < PAN_BLEND_SHADER_MAX_VARIANTS) {
                 variant = rzalloc(shader, struct pan_blend_shader_variant);
-                memcpy(variant->constants, state->constants, sizeof(variant->constants));
                 util_dynarray_init(&variant->binary, variant);
                 list_add(&variant->node, &shader->variants);
                 shader->nvariants++;
@@ -812,6 +811,8 @@ GENX(pan_blend_get_shader_locked)(const struct panfrost_device *dev,
                 list_add(&variant->node, &shader->variants);
                 util_dynarray_clear(&variant->binary);
         }
+
+        memcpy(variant->constants, state->constants, sizeof(variant->constants));
 
         nir_shader *nir =
                 GENX(pan_blend_create_shader)(dev, state, src0_type, src1_type, rt);

@@ -29,8 +29,15 @@
 #include "broadcom/common/v3d_tiling.h"
 #include "broadcom/common/v3d_tfu.h"
 
+/**
+ * The param @op_blit is used to tell if we are saving state for blitter_blit
+ * (if true) or blitter_clear (if false). If other blitter functions are used
+ * that require different state we may need something more elaborated than
+ * this.
+ */
+
 void
-v3d_blitter_save(struct v3d_context *v3d)
+v3d_blitter_save(struct v3d_context *v3d, bool op_blit)
 {
         util_blitter_save_fragment_constant_buffer_slot(v3d->blitter,
                                                         v3d->constbuf[PIPE_SHADER_FRAGMENT].cb);
@@ -42,21 +49,24 @@ v3d_blitter_save(struct v3d_context *v3d)
                                      v3d->streamout.targets);
         util_blitter_save_rasterizer(v3d->blitter, v3d->rasterizer);
         util_blitter_save_viewport(v3d->blitter, &v3d->viewport);
-        util_blitter_save_scissor(v3d->blitter, &v3d->scissor);
         util_blitter_save_fragment_shader(v3d->blitter, v3d->prog.bind_fs);
         util_blitter_save_blend(v3d->blitter, v3d->blend);
         util_blitter_save_depth_stencil_alpha(v3d->blitter, v3d->zsa);
         util_blitter_save_stencil_ref(v3d->blitter, &v3d->stencil_ref);
         util_blitter_save_sample_mask(v3d->blitter, v3d->sample_mask, 0);
-        util_blitter_save_framebuffer(v3d->blitter, &v3d->framebuffer);
-        util_blitter_save_fragment_sampler_states(v3d->blitter,
-                        v3d->tex[PIPE_SHADER_FRAGMENT].num_samplers,
-                        (void **)v3d->tex[PIPE_SHADER_FRAGMENT].samplers);
-        util_blitter_save_fragment_sampler_views(v3d->blitter,
-                        v3d->tex[PIPE_SHADER_FRAGMENT].num_textures,
-                        v3d->tex[PIPE_SHADER_FRAGMENT].textures);
         util_blitter_save_so_targets(v3d->blitter, v3d->streamout.num_targets,
                                      v3d->streamout.targets);
+
+        if (op_blit) {
+                util_blitter_save_scissor(v3d->blitter, &v3d->scissor);
+                util_blitter_save_framebuffer(v3d->blitter, &v3d->framebuffer);
+                util_blitter_save_fragment_sampler_states(v3d->blitter,
+                                                          v3d->tex[PIPE_SHADER_FRAGMENT].num_samplers,
+                                                          (void **)v3d->tex[PIPE_SHADER_FRAGMENT].samplers);
+                util_blitter_save_fragment_sampler_views(v3d->blitter,
+                                                         v3d->tex[PIPE_SHADER_FRAGMENT].num_textures,
+                                                         v3d->tex[PIPE_SHADER_FRAGMENT].textures);
+        }
 }
 
 static void
@@ -108,7 +118,7 @@ v3d_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
                 return;
         }
 
-        v3d_blitter_save(v3d);
+        v3d_blitter_save(v3d, true);
         util_blitter_blit(v3d->blitter, info);
 
         pipe_resource_reference(&tiled, NULL);
@@ -176,7 +186,7 @@ v3d_stencil_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
         struct pipe_sampler_view *src_view =
                 ctx->create_sampler_view(ctx, &src->base, &src_tmpl);
 
-        v3d_blitter_save(v3d);
+        v3d_blitter_save(v3d, true);
         util_blitter_blit_generic(v3d->blitter, dst_surf, &info->dst.box,
                                   src_view, &info->src.box,
                                   src->base.width0, src->base.height0,
@@ -759,7 +769,7 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         assert(info->src.box.width == info->dst.box.width);
         assert(info->src.box.height == info->dst.box.height);
 
-        v3d_blitter_save(v3d);
+        v3d_blitter_save(v3d, true);
 
         struct pipe_surface dst_tmpl;
         util_blitter_default_dst_texture(&dst_tmpl, info->dst.resource,

@@ -98,7 +98,7 @@ uint_to_ballot_type(nir_builder *b, nir_ssa_def *value,
     * have enough ballot bits.
     */
    if (value->num_components > num_components)
-      value = nir_channels(b, value, BITFIELD_MASK(num_components));
+      value = nir_channels(b, value, nir_component_mask(num_components));
 
    return value;
 }

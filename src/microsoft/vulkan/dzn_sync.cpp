@@ -183,12 +183,9 @@ dzn_sync_wait(struct vk_device *device,
 const struct vk_sync_type dzn_sync_type = {
    .size = sizeof(dzn_sync),
    .features = (enum vk_sync_features)
-      (VK_SYNC_FEATURE_BINARY |
-       VK_SYNC_FEATURE_TIMELINE |
+      (VK_SYNC_FEATURE_TIMELINE |
        VK_SYNC_FEATURE_GPU_WAIT |
-       VK_SYNC_FEATURE_GPU_MULTI_WAIT |
        VK_SYNC_FEATURE_CPU_WAIT |
-       VK_SYNC_FEATURE_CPU_RESET |
        VK_SYNC_FEATURE_CPU_SIGNAL |
        VK_SYNC_FEATURE_WAIT_ANY |
        VK_SYNC_FEATURE_WAIT_BEFORE_SIGNAL),

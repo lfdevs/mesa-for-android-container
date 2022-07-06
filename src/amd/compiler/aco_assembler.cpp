@@ -82,10 +82,12 @@ emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction* inst
       instr->opcode = aco_opcode::s_getpc_b64;
       instr->operands.pop_back();
    } else if (instr->opcode == aco_opcode::p_constaddr_addlo) {
-      ctx.constaddrs[instr->operands[1].constantValue()].add_literal = out.size() + 1;
+      ctx.constaddrs[instr->operands[2].constantValue()].add_literal = out.size() + 1;
 
       instr->opcode = aco_opcode::s_add_u32;
-      instr->operands[1] = Operand::zero();
+      instr->operands.pop_back();
+      assert(instr->operands[1].isConstant());
+      /* in case it's an inline constant, make it a literal */
       instr->operands[1].setFixed(PhysReg(255));
    }
 

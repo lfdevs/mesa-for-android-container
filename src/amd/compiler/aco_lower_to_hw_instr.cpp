@@ -2098,7 +2098,7 @@ lower_to_hw_instr(Program* program)
                PhysReg reg = instr->definitions[0].physReg();
                bld.sop1(aco_opcode::p_constaddr_getpc, instr->definitions[0], Operand::c32(id));
                bld.sop2(aco_opcode::p_constaddr_addlo, Definition(reg, s1), bld.def(s1, scc),
-                        Operand(reg, s1), Operand::c32(id));
+                        Operand(reg, s1), instr->operands[0], Operand::c32(id));
                bld.sop2(aco_opcode::s_addc_u32, Definition(reg.advance(4), s1), bld.def(s1, scc),
                         Operand(reg.advance(4), s1), Operand::zero(), Operand(scc, s1));
                break;

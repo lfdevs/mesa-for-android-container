@@ -432,7 +432,11 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_VENDOR_ID:
       return 0x15ad; /* VMware Inc. */
    case PIPE_CAP_DEVICE_ID:
-      return 0x0405; /* assume SVGA II */
+      if (sws->device_id) {
+         return sws->device_id;
+      } else {
+         return 0x0405; /* assume SVGA II */
+      }
    case PIPE_CAP_ACCELERATED:
       return 0; /* XXX: */
    case PIPE_CAP_VIDEO_MEMORY:

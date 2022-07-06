@@ -4169,7 +4169,6 @@ ntq_emit_nonuniform_loop(struct v3d_compile *c, nir_loop *loop)
 static void
 ntq_emit_uniform_loop(struct v3d_compile *c, nir_loop *loop)
 {
-
         c->loop_cont_block = vir_new_block(c);
         c->loop_break_block = vir_new_block(c);
 
@@ -4189,6 +4188,23 @@ ntq_emit_uniform_loop(struct v3d_compile *c, nir_loop *loop)
 static void
 ntq_emit_loop(struct v3d_compile *c, nir_loop *loop)
 {
+        /* Disable flags optimization for loop conditions. The problem here is
+         * that we can have code like this:
+         *
+         *  // block_0
+         *  vec1 32 con ssa_9 = ine32 ssa_8, ssa_2
+         *  loop {
+         *     // block_1
+         *     if ssa_9 {
+         *
+         * In this example we emit flags to compute ssa_9 and the optimization
+         * will skip regenerating them again for the loop condition in the
+         * loop continue block (block_1). However, this is not safe after the
+         * first iteration because the loop body can stomp the flags if it has
+         * any conditionals.
+         */
+        c->flags_temp = -1;
+
         bool was_in_control_flow = c->in_control_flow;
         c->in_control_flow = true;
 

@@ -6080,6 +6080,26 @@ radv_emit_view_index(struct radv_cmd_buffer *cmd_buffer, unsigned index)
    }
 }
 
+/**
+ * Emulates predication for MEC using COND_EXEC.
+ * When the current command buffer is predicating, emit a COND_EXEC packet
+ * so that the MEC skips the next few dwords worth of packets.
+ */
+static void
+radv_cs_emit_compute_predication(struct radv_cmd_buffer *cmd_buffer, unsigned dwords)
+{
+   if (!cmd_buffer->state.predicating)
+      return;
+
+   struct radeon_cmdbuf *cs = cmd_buffer->cs;
+
+   radeon_emit(cs, PKT3(PKT3_COND_EXEC, 3, 0));
+   radeon_emit(cs, cmd_buffer->state.predication_va);
+   radeon_emit(cs, cmd_buffer->state.predication_va >> 32);
+   radeon_emit(cs, 0); /* Cache policy */
+   radeon_emit(cs, dwords); /* Size of the predicated packet(s) in DWORDs. */
+}
+
 static void
 radv_cs_emit_draw_packet(struct radv_cmd_buffer *cmd_buffer, uint32_t vertex_count,
                          uint32_t use_opaque)
@@ -7300,7 +7320,7 @@ radv_emit_dispatch_packets(struct radv_cmd_buffer *cmd_buffer, struct radv_pipel
 
    loc = radv_lookup_user_sgpr(pipeline, MESA_SHADER_COMPUTE, AC_UD_CS_GRID_SIZE);
 
-   ASSERTED unsigned cdw_max = radeon_check_space(ws, cs, 25);
+   ASSERTED unsigned cdw_max = radeon_check_space(ws, cs, 30);
 
    if (compute_shader->info.wave_size == 32) {
       assert(cmd_buffer->device->physical_device->rad_info.chip_class >= GFX10);
@@ -7326,7 +7346,8 @@ radv_emit_dispatch_packets(struct radv_cmd_buffer *cmd_buffer, struct radv_pipel
       }
 
       if (radv_cmd_buffer_uses_mec(cmd_buffer)) {
-         radeon_emit(cs, PKT3(PKT3_DISPATCH_INDIRECT, 2, predicating) | PKT3_SHADER_TYPE_S(1));
+         radv_cs_emit_compute_predication(cmd_buffer, 4 /* DISPATCH_INDIRECT size */);
+         radeon_emit(cs, PKT3(PKT3_DISPATCH_INDIRECT, 2, 0) | PKT3_SHADER_TYPE_S(1));
          radeon_emit(cs, info->va);
          radeon_emit(cs, info->va >> 32);
          radeon_emit(cs, dispatch_initiator);
@@ -7405,6 +7426,11 @@ radv_emit_dispatch_packets(struct radv_cmd_buffer *cmd_buffer, struct radv_pipel
             blocks[i] += offsets[i];
       } else {
          dispatch_initiator |= S_00B800_FORCE_START_AT_000(1);
+      }
+
+      if (radv_cmd_buffer_uses_mec(cmd_buffer)) {
+         radv_cs_emit_compute_predication(cmd_buffer, 5 /* DISPATCH_DIRECT size */);
+         predicating = false;
       }
 
       radeon_emit(cs, PKT3(PKT3_DISPATCH_DIRECT, 3, predicating) | PKT3_SHADER_TYPE_S(1));
@@ -8720,11 +8746,59 @@ radv_CmdBeginConditionalRenderingEXT(
       pred_op = PREDICATION_OP_BOOL64;
    }
 
-   /* Enable predication for this command buffer. */
-   si_emit_set_predication_state(cmd_buffer, draw_visible, pred_op, va);
-   cmd_buffer->state.predicating = true;
+
+   if (radv_cmd_buffer_uses_mec(cmd_buffer)) {
+      /* MEC does not support real predication, so we have to emulate that
+       * using COND_EXEC packets before each dispatch.
+       */
+
+      if (!draw_visible) {
+         /* COND_EXEC can only skip the next packet(s) when the condition is 0.
+          * When using inverted conditional rendering, we allocate some space in
+          * the upload BO and emit some packets to invert the condition.
+          */
+
+         uint64_t pred_value = 0, pred_va;
+         unsigned pred_offset;
+
+         radv_cmd_buffer_upload_data(cmd_buffer, 4, &pred_value, &pred_offset);
+         pred_va = radv_buffer_get_va(cmd_buffer->upload.upload_bo) + pred_offset;
+
+         /* Write 1 to the new predication VA. */
+         radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
+         radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_IMM) | COPY_DATA_DST_SEL(COPY_DATA_DST_MEM) |
+                         COPY_DATA_WR_CONFIRM);
+         radeon_emit(cs, 1);
+         radeon_emit(cs, 0);
+         radeon_emit(cs, pred_va);
+         radeon_emit(cs, pred_va >> 32);
+
+         /* If the API predication VA == 0, skip next command. */
+         radeon_emit(cs, PKT3(PKT3_COND_EXEC, 3, 0));
+         radeon_emit(cs, va);
+         radeon_emit(cs, va >> 32);
+         radeon_emit(cs, 0);
+         radeon_emit(cs, 6); /* 1x COPY_DATA size */
+
+         /* Write 0 to the new predication VA (when the API condition != 0) */
+         radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
+         radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_IMM) | COPY_DATA_DST_SEL(COPY_DATA_DST_MEM) |
+                         COPY_DATA_WR_CONFIRM);
+         radeon_emit(cs, 0);
+         radeon_emit(cs, 0);
+         radeon_emit(cs, pred_va);
+         radeon_emit(cs, pred_va >> 32);
+
+         va = pred_va;
+         draw_visible = true;
+      }
+   } else {
+      /* Enable predication for this command buffer. */
+      si_emit_set_predication_state(cmd_buffer, draw_visible, pred_op, va);
+   }
 
    /* Store conditional rendering user info. */
+   cmd_buffer->state.predicating = true;
    cmd_buffer->state.predication_type = draw_visible;
    cmd_buffer->state.predication_op = pred_op;
    cmd_buffer->state.predication_va = va;
@@ -8735,11 +8809,16 @@ radv_CmdEndConditionalRenderingEXT(VkCommandBuffer commandBuffer)
 {
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
 
-   /* Disable predication for this command buffer. */
-   si_emit_set_predication_state(cmd_buffer, false, 0, 0);
-   cmd_buffer->state.predicating = false;
+   /* Note, MEC doesn't support predication, so we
+    * don't have to emit anything for MEC here.
+    */
+   if (!radv_cmd_buffer_uses_mec(cmd_buffer)) {
+      /* Disable predication for this command buffer. */
+      si_emit_set_predication_state(cmd_buffer, false, 0, 0);
+   }
 
    /* Reset conditional rendering user info. */
+   cmd_buffer->state.predicating = false;
    cmd_buffer->state.predication_type = -1;
    cmd_buffer->state.predication_op = 0;
    cmd_buffer->state.predication_va = 0;
@@ -9135,7 +9214,7 @@ radv_CmdWriteBufferMarker2AMD(VkCommandBuffer commandBuffer, VkPipelineStageFlag
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    RADV_FROM_HANDLE(radv_buffer, buffer, dstBuffer);
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
-   uint64_t va = radv_buffer_get_va(buffer->bo) + dstOffset;
+   uint64_t va = radv_buffer_get_va(buffer->bo) + buffer->offset + dstOffset;
 
    si_emit_cache_flush(cmd_buffer);
 

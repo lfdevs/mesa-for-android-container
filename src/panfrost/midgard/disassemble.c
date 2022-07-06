@@ -737,7 +737,6 @@ print_alu_mask(FILE *fp, uint8_t mask, unsigned bits, midgard_shrink_mode shrink
         fprintf(fp, ".");
 
         unsigned skip = MAX2(bits / 16, 1);
-        bool uppercase = bits > 32;
         bool tripped = false;
 
         /* To apply an upper destination shrink_mode, we "shift" the alphabet.
@@ -763,11 +762,6 @@ print_alu_mask(FILE *fp, uint8_t mask, unsigned bits, midgard_shrink_mode shrink
                         /* TODO: handle shrinking from 16-bit */
                         unsigned comp_idx = bits == 8 ? i * 2 : i;
                         char c = alphabet[comp_idx / skip];
-
-                        if (uppercase) {
-                                c = toupper(c);
-                                assert(c == 'X' || c == 'Y');
-                        }
 
                         fprintf(fp, "%c", c);
                         if (bits == 8)

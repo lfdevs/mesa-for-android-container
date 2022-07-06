@@ -1173,7 +1173,8 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    if ((info->drm_minor >= 31 && (info->family == CHIP_RAVEN || info->family == CHIP_RAVEN2 ||
                                   info->family == CHIP_RENOIR)) ||
        info->chip_class >= GFX10_3) {
-      if (info->max_render_backends == 1)
+      /* GFX10+ requires retiling in all cases. */
+      if (info->max_render_backends == 1 && info->chip_class == GFX9)
          info->use_display_dcc_unaligned = true;
       else
          info->use_display_dcc_with_retile_blit = true;

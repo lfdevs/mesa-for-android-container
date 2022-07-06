@@ -72,7 +72,7 @@ nu_handle_compare(const nir_lower_non_uniform_access_options *options,
    nir_component_mask_t channel_mask = ~0;
    if (options->callback)
       channel_mask = options->callback(handle->src, options->callback_data);
-   channel_mask &= BITFIELD_MASK(handle->handle->num_components);
+   channel_mask &= nir_component_mask(handle->handle->num_components);
 
    nir_ssa_def *channels[NIR_MAX_VEC_COMPONENTS];
    for (unsigned i = 0; i < handle->handle->num_components; i++)

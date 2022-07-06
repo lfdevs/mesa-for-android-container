@@ -282,7 +282,8 @@ zink_descriptor_program_init_lazy(struct zink_context *ctx, struct zink_program 
    pg->layout = zink_pipeline_layout_create(screen, pg, &pg->compat_id);
    if (!pg->layout)
       return false;
-   if (!screen->info.have_KHR_descriptor_update_template || screen->descriptor_mode == ZINK_DESCRIPTOR_MODE_NOTEMPLATES)
+   /* TODO: figure out uncached+notemplate and return on screen->descriptor_mode == ZINK_DESCRIPTOR_MODE_NOTEMPLATES */
+   if (!screen->info.have_KHR_descriptor_update_template)
       return true;
 
    VkDescriptorUpdateTemplateCreateInfo template[ZINK_DESCRIPTOR_TYPES + 1] = {0};

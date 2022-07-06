@@ -222,7 +222,7 @@ BEGIN_TEST(assembler.long_jump.constaddr)
    //! s_add_u32 s0, s0, 0xe0                                      ; 8000ff00 000000e0
    bld.sop1(aco_opcode::p_constaddr_getpc, Definition(PhysReg(0), s2), Operand::zero());
    bld.sop2(aco_opcode::p_constaddr_addlo, Definition(PhysReg(0), s1), bld.def(s1, scc),
-            Operand(PhysReg(0), s1), Operand::zero());
+            Operand(PhysReg(0), s1), Operand::zero(), Operand::zero());
 
    program->blocks[2].linear_preds.push_back(0u);
    program->blocks[2].linear_preds.push_back(1u);

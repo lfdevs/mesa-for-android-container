@@ -712,6 +712,7 @@ d3d12_compare_shader_keys(const d3d12_shader_key *expect, const d3d12_shader_key
           expect->hs.ccw != have->hs.ccw ||
           expect->hs.point_mode != have->hs.point_mode ||
           expect->hs.spacing != have->hs.spacing ||
+          expect->hs.patch_vertices_in != have->hs.patch_vertices_in ||
           memcmp(&expect->hs.required_patch_outputs, &have->hs.required_patch_outputs,
                  sizeof(struct d3d12_varying_info)) ||
           expect->hs.next_patch_inputs != have->hs.next_patch_inputs)
@@ -903,6 +904,7 @@ d3d12_fill_shader_key(struct d3d12_selection_context *sel_ctx,
          key->hs.point_mode = false;
          key->hs.spacing = TESS_SPACING_EQUAL;
       }
+      key->hs.patch_vertices_in = MAX2(sel_ctx->ctx->patch_vertices, 1);
    } else if (stage == PIPE_SHADER_TESS_EVAL) {
       if (prev && prev->current->nir->info.stage == MESA_SHADER_TESS_CTRL)
          key->ds.tcs_vertices_out = prev->current->nir->info.tess.tcs_vertices_out;
@@ -1070,6 +1072,8 @@ select_shader_variant(struct d3d12_selection_context *sel_ctx, d3d12_shader_sele
       new_nir_variant->info.tess.ccw = key.hs.ccw;
       new_nir_variant->info.tess.point_mode = key.hs.point_mode;
       new_nir_variant->info.tess.spacing = key.hs.spacing;
+
+      NIR_PASS_V(new_nir_variant, dxil_nir_set_tcs_patches_in, key.hs.patch_vertices_in);
    } else if (new_nir_variant->info.stage == MESA_SHADER_TESS_EVAL) {
       new_nir_variant->info.tess.tcs_vertices_out = key.ds.tcs_vertices_out;
    }

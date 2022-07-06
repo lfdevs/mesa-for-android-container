@@ -615,6 +615,13 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
       VkExternalMemoryImageCreateInfo emici;
       VkImageDrmFormatModifierExplicitCreateInfoEXT idfmeci;
       VkImageDrmFormatModifierListCreateInfoEXT idfmlci;
+      VkSubresourceLayout plane_layout = {
+         .offset = whandle ? whandle->offset : 0,
+         .size = 0,
+         .rowPitch = whandle ? whandle->stride : 0,
+         .arrayPitch = 0,
+         .depthPitch = 0,
+      };
       if (!success)
          goto fail1;
 
@@ -634,13 +641,6 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
             idfmeci.drmFormatModifier = mod;
 
             idfmeci.drmFormatModifierPlaneCount = 1;
-            VkSubresourceLayout plane_layout = {
-               .offset = whandle->offset,
-               .size = 0,
-               .rowPitch = whandle->stride,
-               .arrayPitch = 0,
-               .depthPitch = 0,
-            };
             idfmeci.pPlaneLayouts = &plane_layout;
 
             ici.pNext = &idfmeci;
@@ -876,9 +876,18 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
    if (templ->usage == PIPE_USAGE_STAGING && obj->is_buffer)
       alignment = MAX2(alignment, screen->info.props.limits.minMemoryMapAlignment);
    obj->alignment = alignment;
+retry:
    obj->bo = zink_bo(zink_bo_create(screen, reqs.size, alignment, heap, mai.pNext ? ZINK_ALLOC_NO_SUBALLOC : 0, mai.pNext));
-   if (!obj->bo)
-     goto fail2;
+   if (!obj->bo) {
+      if (heap == ZINK_HEAP_DEVICE_LOCAL_VISIBLE) {
+         if (templ->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT || templ->usage == PIPE_USAGE_DYNAMIC)
+            heap = ZINK_HEAP_HOST_VISIBLE_COHERENT;
+         else
+            heap = ZINK_HEAP_DEVICE_LOCAL;
+         goto retry;
+      }
+      goto fail2;
+   }
    if (aflags == ZINK_ALLOC_SPARSE) {
       obj->size = templ->width0;
    } else {
@@ -1572,6 +1581,7 @@ zink_buffer_map(struct pipe_context *pctx,
       }
    }
 
+   unsigned map_offset = box->x;
    if (usage & PIPE_MAP_DISCARD_RANGE &&
         (!res->obj->host_visible ||
         !(usage & (PIPE_MAP_UNSYNCHRONIZED | PIPE_MAP_PERSISTENT)))) {
@@ -1623,8 +1633,7 @@ zink_buffer_map(struct pipe_context *pctx,
          zink_copy_buffer(ctx, staging_res, res, trans->offset, box->x, box->width);
          res = staging_res;
          usage &= ~PIPE_MAP_UNSYNCHRONIZED;
-         ptr = map_resource(screen, res);
-         ptr = ((uint8_t *)ptr) + trans->offset;
+         map_offset = trans->offset;
       }
    } else if ((usage & PIPE_MAP_UNSYNCHRONIZED) && !res->obj->host_visible) {
       trans->offset = box->x % screen->info.props.limits.minMemoryMapAlignment;
@@ -1633,8 +1642,7 @@ zink_buffer_map(struct pipe_context *pctx,
          goto fail;
       struct zink_resource *staging_res = zink_resource(trans->staging_res);
       res = staging_res;
-      ptr = map_resource(screen, res);
-      ptr = ((uint8_t *)ptr) + trans->offset;
+      map_offset = trans->offset;
    }
 
    if (!(usage & PIPE_MAP_UNSYNCHRONIZED)) {
@@ -1656,7 +1664,7 @@ zink_buffer_map(struct pipe_context *pctx,
       ptr = map_resource(screen, res);
       if (!ptr)
          goto fail;
-      ptr = ((uint8_t *)ptr) + box->x;
+      ptr = ((uint8_t *)ptr) + map_offset;
    }
 
    if (!res->obj->coherent
@@ -1824,17 +1832,18 @@ zink_transfer_flush_region(struct pipe_context *pctx,
       struct zink_screen *screen = zink_screen(pctx->screen);
       struct zink_resource *m = trans->staging_res ? zink_resource(trans->staging_res) :
                                                      res;
-      ASSERTED VkDeviceSize size, offset;
+      ASSERTED VkDeviceSize size, src_offset, dst_offset = 0;
       if (m->obj->is_buffer) {
          size = box->width;
-         offset = trans->offset;
+         src_offset = box->x + (trans->staging_res ? trans->offset : ptrans->box.x);
+         dst_offset = box->x + ptrans->box.x;
       } else {
          size = (VkDeviceSize)box->width * box->height * util_format_get_blocksize(m->base.b.format);
-         offset = trans->offset +
+         src_offset = trans->offset +
                   box->z * trans->depthPitch +
                   util_format_get_2d_size(m->base.b.format, trans->base.b.stride, box->y) +
                   util_format_get_stride(m->base.b.format, box->x);
-         assert(offset + size <= res->obj->size);
+         assert(src_offset + size <= res->obj->size);
       }
       if (!m->obj->coherent) {
          VkMappedMemoryRange range = zink_resource_init_mem_range(screen, m->obj, m->obj->offset, m->obj->size);
@@ -1846,7 +1855,7 @@ zink_transfer_flush_region(struct pipe_context *pctx,
          struct zink_resource *staging_res = zink_resource(trans->staging_res);
 
          if (ptrans->resource->target == PIPE_BUFFER)
-            zink_copy_buffer(ctx, res, staging_res, box->x, offset, box->width);
+            zink_copy_buffer(ctx, res, staging_res, dst_offset, src_offset, size);
          else
             zink_transfer_copy_bufimage(ctx, res, staging_res, trans);
       }
@@ -1861,7 +1870,10 @@ transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
    struct zink_transfer *trans = (struct zink_transfer *)ptrans;
 
    if (!(trans->base.b.usage & (PIPE_MAP_FLUSH_EXPLICIT | PIPE_MAP_COHERENT))) {
-      zink_transfer_flush_region(pctx, ptrans, &ptrans->box);
+      /* flush_region is relative to the mapped region: use only the extents */
+      struct pipe_box box = ptrans->box;
+      box.x = box.y = box.z = 0;
+      zink_transfer_flush_region(pctx, ptrans, &box);
    }
 
    if ((trans->base.b.usage & PIPE_MAP_PERSISTENT) && !(trans->base.b.usage & PIPE_MAP_COHERENT))

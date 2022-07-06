@@ -378,8 +378,9 @@ validate_ir(Program* program)
             }
 
             if (instr->isSOP1() || instr->isSOP2()) {
-               check(instr->definitions[0].getTemp().type() == RegType::sgpr,
-                     "Wrong Definition type for SALU instruction", instr.get());
+               if (!instr->definitions.empty())
+                  check(instr->definitions[0].getTemp().type() == RegType::sgpr,
+                        "Wrong Definition type for SALU instruction", instr.get());
                for (const Operand& op : instr->operands) {
                   check(op.isConstant() || op.regClass().type() <= RegType::sgpr,
                         "Wrong Operand type for SALU instruction", instr.get());

@@ -192,6 +192,8 @@ lower_intrinsic_instr(nir_builder *b, nir_instr *instr, void *dummy)
    case nir_intrinsic_is_sparse_texels_resident:
       /* code==0 means sparse texels are resident */
       return nir_ieq_imm(b, intrin->src[0].ssa, 0);
+   case nir_intrinsic_sparse_residency_code_and:
+      return nir_ior(b, intrin->src[0].ssa, intrin->src[1].ssa);
    default:
       return NULL;
    }

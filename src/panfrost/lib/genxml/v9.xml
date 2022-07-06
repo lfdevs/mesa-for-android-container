@@ -1091,7 +1091,7 @@
     <field name="Alpha hint" size="1" start="2:5" type="bool"/>
     <field name="Compression mode" size="6" start="2:10" type="AFBC Compression Mode"/>
 
-    <field name="Body" size="64" start="8:0" type="address"/>
+    <field name="Header" size="64" start="8:0" type="address"/>
     <field name="Row stride" size="32" start="10:0" type="uint"/>
     <field name="Body offset" size="32" start="11:0" type="uint"/>
   </struct>

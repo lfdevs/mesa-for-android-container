@@ -995,7 +995,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
 
          lp_build_alpha_test(gallivm, key->alpha.func, type, cbuf_format_desc,
                              &mask, alpha, alpha_ref_value,
-                             (depth_mode & LATE_DEPTH_TEST) != 0);
+                             ((depth_mode & LATE_DEPTH_TEST) != 0) && !key->multisample);
       }
    }
 

@@ -846,14 +846,17 @@ static void blitter_set_rectangle(struct blitter_context_priv *ctx,
    ctx->vertices[3][0][0] = (float)x1 / ctx->dst_width * 2.0f - 1.0f; /*v3.x*/
    ctx->vertices[3][0][1] = (float)y2 / ctx->dst_height * 2.0f - 1.0f; /*v3.y*/
 
+   for (unsigned i = 0; i < 4; ++i)
+      ctx->vertices[i][0][2] = depth;
+
    /* viewport */
    struct pipe_viewport_state viewport;
    viewport.scale[0] = 0.5f * ctx->dst_width;
    viewport.scale[1] = 0.5f * ctx->dst_height;
-   viewport.scale[2] = 0.0f;
+   viewport.scale[2] = 1.0f;
    viewport.translate[0] = 0.5f * ctx->dst_width;
    viewport.translate[1] = 0.5f * ctx->dst_height;
-   viewport.translate[2] = depth;
+   viewport.translate[2] = 0.0f;
    viewport.swizzle_x = PIPE_VIEWPORT_SWIZZLE_POSITIVE_X;
    viewport.swizzle_y = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y;
    viewport.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;

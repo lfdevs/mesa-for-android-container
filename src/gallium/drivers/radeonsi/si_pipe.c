@@ -1433,3 +1433,16 @@ struct pipe_screen *radeonsi_screen_create(int fd, const struct pipe_screen_conf
    drmFreeVersion(version);
    return rw ? rw->screen : NULL;
 }
+
+struct si_context* si_get_aux_context(struct si_screen *sscreen)
+{
+   simple_mtx_lock(&sscreen->aux_context_lock);
+   return (struct si_context*)sscreen->aux_context;
+}
+
+void si_put_aux_context_flush(struct si_screen *sscreen)
+{
+   struct pipe_context *c = &((struct si_context*)sscreen->aux_context)->b;
+   c->flush(c, NULL, 0);
+   simple_mtx_unlock(&sscreen->aux_context_lock);
+}

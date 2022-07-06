@@ -6345,21 +6345,31 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
    if (dw == NULL)
       return;
 
+   struct isl_view isl_view = {};
    struct isl_depth_stencil_hiz_emit_info info = {
+      .view = &isl_view,
       .mocs = anv_mocs(device, NULL, ISL_SURF_USAGE_DEPTH_BIT),
    };
 
    if (gfx->depth_att.iview != NULL) {
-      info.view = &gfx->depth_att.iview->planes[0].isl;
+      isl_view = gfx->depth_att.iview->planes[0].isl;
    } else if (gfx->stencil_att.iview != NULL) {
-      info.view = &gfx->stencil_att.iview->planes[0].isl;
+      isl_view = gfx->stencil_att.iview->planes[0].isl;
+   }
+
+   if (gfx->view_mask) {
+      assert(isl_view.array_len == 0 ||
+             isl_view.array_len >= util_last_bit(gfx->view_mask));
+      isl_view.array_len = util_last_bit(gfx->view_mask);
+   } else {
+      assert(isl_view.array_len == 0 ||
+             isl_view.array_len >= util_last_bit(gfx->layer_count));
+      isl_view.array_len = gfx->layer_count;
    }
 
    if (gfx->depth_att.iview != NULL) {
       const struct anv_image_view *iview = gfx->depth_att.iview;
       const struct anv_image *image = iview->image;
-
-      info.view = &iview->planes[0].isl;
 
       const uint32_t depth_plane =
          anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_DEPTH_BIT);
@@ -6400,9 +6410,6 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
    if (gfx->stencil_att.iview != NULL) {
       const struct anv_image_view *iview = gfx->stencil_att.iview;
       const struct anv_image *image = iview->image;
-
-      if (info.view == NULL)
-         info.view = &iview->planes[0].isl;
 
       const uint32_t stencil_plane =
          anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_STENCIL_BIT);
@@ -6698,10 +6705,19 @@ void genX(CmdBeginRendering)(
       gfx->color_att[i].layout = att->imageLayout;
       gfx->color_att[i].aux_usage = aux_usage;
 
+      struct isl_view isl_view = iview->planes[0].isl;
+      if (pRenderingInfo->viewMask) {
+         assert(isl_view.array_len >= util_last_bit(pRenderingInfo->viewMask));
+         isl_view.array_len = util_last_bit(pRenderingInfo->viewMask);
+      } else {
+         assert(isl_view.array_len >= pRenderingInfo->layerCount);
+         isl_view.array_len = pRenderingInfo->layerCount;
+      }
+
       anv_image_fill_surface_state(cmd_buffer->device,
                                    iview->image,
                                    VK_IMAGE_ASPECT_COLOR_BIT,
-                                   &iview->planes[0].isl,
+                                   &isl_view,
                                    ISL_SURF_USAGE_RENDER_TARGET_BIT,
                                    aux_usage, &fast_clear_color,
                                    0, /* anv_image_view_state_flags */

@@ -862,6 +862,15 @@ zink_begin_query(struct pipe_context *pctx,
 
    query->last_start_idx = get_num_starts(query);
 
+   /* A query must either begin and end inside the same subpass of a render pass
+      instance, or must both begin and end outside of a render pass instance
+      (i.e. contain entire render pass instances).
+      - 18.2. Query Operation
+
+    * tilers prefer out-of-renderpass queries for perf reasons, so force all queries
+    * out of renderpasses
+    */
+   zink_batch_no_rp(ctx);
    begin_query(ctx, batch, query);
 
    return true;
@@ -939,6 +948,7 @@ zink_end_query(struct pipe_context *pctx,
 
    /* FIXME: this can be called from a thread, but it needs to write to the cmdbuf */
    threaded_context_unwrap_sync(pctx);
+   zink_batch_no_rp(ctx);
 
    if (needs_stats_list(query))
       list_delinit(&query->stats_list);

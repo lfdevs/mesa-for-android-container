@@ -493,6 +493,7 @@ static const nir_shader_compiler_options nv30_base_compiler_options = {
    .lower_extract_byte = true,
    .lower_extract_word = true,
    .lower_fdiv = true,
+   .lower_fsat = true,
    .lower_insert_byte = true,
    .lower_insert_word = true,
    .lower_fdph = true,
@@ -676,6 +677,7 @@ nv30_screen_create(struct nouveau_device *dev)
    }
 
    screen->fs_compiler_options = nv30_base_compiler_options;
+   screen->fs_compiler_options.lower_fsat = false;
    if (oclass >= NV40_3D_CLASS)
       screen->fs_compiler_options.lower_fpow = false;
 

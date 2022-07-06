@@ -697,25 +697,22 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
 
       std::vector<unsigned>& preds =
          phi->opcode == aco_opcode::p_phi ? block->logical_preds : block->linear_preds;
-      bool spill = true;
-
+      bool is_all_spilled = true;
       for (unsigned i = 0; i < phi->operands.size(); i++) {
-         /* non-temp operands can increase the register pressure */
-         if (!phi->operands[i].isTemp()) {
-            partial_spills.insert(phi->definitions[0].getTemp());
+         if (phi->operands[i].isUndefined())
             continue;
-         }
-
-         if (!ctx.spills_exit[preds[i]].count(phi->operands[i].getTemp()))
-            spill = false;
-         else
-            partial_spills.insert(phi->definitions[0].getTemp());
+         is_all_spilled &= phi->operands[i].isTemp() &&
+                           ctx.spills_exit[preds[i]].count(phi->operands[i].getTemp());
       }
-      if (spill) {
+
+      if (is_all_spilled) {
+         /* The phi is spilled at all predecessors. Keep it spilled. */
          ctx.spills_entry[block_idx][phi->definitions[0].getTemp()] =
             ctx.allocate_spill_id(phi->definitions[0].regClass());
-         partial_spills.erase(phi->definitions[0].getTemp());
          spilled_registers += phi->definitions[0].getTemp();
+      } else {
+         /* Phis might increase the register pressure. */
+         partial_spills.insert(phi->definitions[0].getTemp());
       }
    }
 

@@ -50,6 +50,12 @@
 
 #include <vulkan/vulkan.h>
 
+#define GFX_SHADER_BITS (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | \
+                         VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT | \
+                         VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT | \
+                         VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT | \
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+
 #define pipe_buffer_write "use tc_buffer_write to avoid breaking threaded context"
 
 #ifdef __cplusplus
@@ -363,7 +369,6 @@ struct zink_context {
    uint32_t num_so_targets;
    struct pipe_stream_output_target *so_targets[PIPE_MAX_SO_OUTPUTS];
    bool dirty_so_targets;
-   bool first_frame_done;
    bool have_timelines;
 
    bool gfx_dirty;

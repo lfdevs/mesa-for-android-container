@@ -38,6 +38,11 @@
 #define ZINK_WORKGROUP_SIZE_Y 2
 #define ZINK_WORKGROUP_SIZE_Z 3
 
+/* stop inlining shaders if they have >limit ssa vals after inlining:
+ * recompile time isn't worth the inline
+ */
+#define ZINK_ALWAYS_INLINE_LIMIT 1500
+
 struct pipe_screen;
 struct zink_context;
 struct zink_screen;
@@ -89,6 +94,7 @@ struct zink_shader {
    uint32_t ubos_used; // bitfield of which ubo indices are used
    uint32_t ssbos_used; // bitfield of which ssbo indices are used
    bool bindless;
+   bool can_inline;
    struct spirv_shader *spirv;
 
    simple_mtx_t lock;

@@ -1980,7 +1980,7 @@ void anv_GetPhysicalDeviceProperties(
        * Since the Windows driver does the same, it's probably fair to assume
        * that no one needs more than this.
        */
-      .lineWidthRange                           = { 0.0, 7.9921875 },
+      .lineWidthRange                           = { 0.0, devinfo->ver >= 9 ? 8.0 : 7.9921875 },
       .pointSizeGranularity                     = (1.0 / 8.0),
       .lineWidthGranularity                     = (1.0 / 128.0),
       .strictLines                              = false,

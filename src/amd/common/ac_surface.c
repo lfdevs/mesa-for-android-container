@@ -355,12 +355,6 @@ bool ac_get_supported_modifiers(const struct radeon_info *info,
               AMD_FMT_MOD_SET(DCC_MAX_COMPRESSED_BLOCK, AMD_FMT_MOD_DCC_BLOCK_128B))
 
       if (info->chip_class >= GFX10_3) {
-         if (info->max_render_backends == 1) {
-            ADD_MOD(AMD_FMT_MOD | common_dcc |
-                    AMD_FMT_MOD_SET(DCC_INDEPENDENT_128B, 1) |
-                    AMD_FMT_MOD_SET(DCC_MAX_COMPRESSED_BLOCK, AMD_FMT_MOD_DCC_BLOCK_128B))
-         }
-
          ADD_MOD(AMD_FMT_MOD | common_dcc |
                  AMD_FMT_MOD_SET(DCC_RETILE, 1) |
                  AMD_FMT_MOD_SET(DCC_INDEPENDENT_128B, 1) |
@@ -369,13 +363,6 @@ bool ac_get_supported_modifiers(const struct radeon_info *info,
 
       if (info->family == CHIP_NAVI12 || info->family == CHIP_NAVI14 || info->chip_class >= GFX10_3) {
          bool independent_128b = info->chip_class >= GFX10_3;
-
-         if (info->max_render_backends == 1) {
-            ADD_MOD(AMD_FMT_MOD | common_dcc |
-                    AMD_FMT_MOD_SET(DCC_INDEPENDENT_64B, 1) |
-                    AMD_FMT_MOD_SET(DCC_INDEPENDENT_128B, independent_128b) |
-                    AMD_FMT_MOD_SET(DCC_MAX_COMPRESSED_BLOCK, AMD_FMT_MOD_DCC_BLOCK_64B))
-         }
 
          ADD_MOD(AMD_FMT_MOD | common_dcc |
                  AMD_FMT_MOD_SET(DCC_RETILE, 1) |

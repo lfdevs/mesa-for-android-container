@@ -3157,7 +3157,7 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
       unsigned result_size = glsl_get_vector_elements(ret_type->type);
       dest->elems[0]->def = nir_channel(&b->nb, &instr->dest.ssa, result_size);
       dest->elems[1]->def = nir_channels(&b->nb, &instr->dest.ssa,
-                                         BITFIELD_MASK(result_size));
+                                         nir_component_mask(result_size));
       vtn_push_ssa_value(b, w[2], dest);
    } else {
       vtn_push_nir_ssa(b, w[2], &instr->dest.ssa);
@@ -3580,7 +3580,7 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
          if (intrin->dest.ssa.bit_size != 32)
             dest->elems[0]->def = nir_u2u32(&b->nb, dest->elems[0]->def);
          dest->elems[1]->def = nir_channels(&b->nb, result,
-                                            BITFIELD_MASK(res_type_size));
+                                            nir_component_mask(res_type_size));
          vtn_push_ssa_value(b, w[2], dest);
       } else {
          vtn_push_nir_ssa(b, w[2], result);

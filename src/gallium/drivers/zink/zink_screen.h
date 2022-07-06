@@ -86,6 +86,7 @@ struct zink_screen {
    uint32_t last_finished; //this is racy but ultimately doesn't matter
    VkSemaphore sem;
    VkSemaphore prev_sem;
+   VkFence fence;
    struct util_queue flush_queue;
    struct zink_context *copy_context;
 
@@ -115,6 +116,7 @@ struct zink_screen {
       uint32_t next_bo_unique_id;
    } pb;
    uint8_t heap_map[VK_MAX_MEMORY_TYPES];
+   VkMemoryPropertyFlags heap_flags[VK_MAX_MEMORY_TYPES];
    bool resizable_bar;
 
    uint64_t total_video_mem;
@@ -184,6 +186,7 @@ struct zink_screen {
    struct {
       bool color_write_missing;
       bool depth_clip_control_missing;
+      bool implicit_sync;
    } driver_workarounds;
 };
 

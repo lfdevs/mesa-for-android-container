@@ -1046,7 +1046,10 @@ pan_preload_emit_pre_frame_dcd(struct pan_pool *desc_pool,
         void *dcd = fb->bifrost.pre_post.dcds.cpu +
                     (dcd_idx * pan_size(DRAW));
 
-        int crc_rt = GENX(pan_select_crc_rt)(fb);
+        /* We only use crc_rt to determine whether to force writes for updating
+         * the CRCs, so use a conservative tile size (16x16).
+         */
+        int crc_rt = GENX(pan_select_crc_rt)(fb, 16 * 16);
 
         bool always_write = false;
 

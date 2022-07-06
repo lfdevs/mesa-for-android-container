@@ -8698,7 +8698,7 @@
     <src start="3"/>
   </ins>
 
-  <ins name="+LD_BUFFER.i16" staging="w=1" pseudo="true">
+  <ins name="+LD_BUFFER.i16" staging="w=1" pseudo="true" message="load">
     <src start="0"/>
     <src start="3"/>
     <mod name="lane_dest" size="2" default="h0">

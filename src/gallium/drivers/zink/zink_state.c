@@ -419,7 +419,7 @@ zink_bind_blend_state(struct pipe_context *pctx, void *cso)
       state->blend_id = blend ? blend->hash : 0;
       state->dirty = true;
       bool force_dual_color_blend = zink_screen(pctx->screen)->driconf.dual_color_blend_by_location &&
-                                    blend && blend->dual_src_blend && state->blend_state->attachments[1].blendEnable;
+                                    blend && blend->dual_src_blend && state->blend_state->attachments[0].blendEnable;
       if (force_dual_color_blend != zink_get_fs_key(ctx)->force_dual_color_blend)
          zink_set_fs_key(ctx)->force_dual_color_blend = force_dual_color_blend;
       ctx->blend_state_changed = true;

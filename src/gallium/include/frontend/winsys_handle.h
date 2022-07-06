@@ -77,6 +77,12 @@ struct winsys_handle
     * Output for resource_get_handle.
     */
    void *com_obj;
+
+   /**
+    * Total size of the object.
+    * Output for resource_get_handle.
+    */
+   uint64_t size;
 };
 
 #ifdef __cplusplus

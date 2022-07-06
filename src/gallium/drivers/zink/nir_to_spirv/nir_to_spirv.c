@@ -2191,9 +2191,9 @@ emit_store_deref(struct ntv_context *ctx, nir_intrinsic_instr *intr)
    const struct glsl_type *gtype = nir_src_as_deref(intr->src[0])->type;
    SpvId type = get_glsl_type(ctx, gtype);
    nir_variable *var = nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
-   unsigned num_writes = util_bitcount(nir_intrinsic_write_mask(intr));
    unsigned wrmask = nir_intrinsic_write_mask(intr);
-   if (num_writes && num_writes != intr->num_components) {
+   if (!glsl_type_is_scalar(gtype) &&
+       wrmask != BITFIELD_MASK(glsl_get_length(gtype))) {
       /* no idea what we do if this fails */
       assert(glsl_type_is_array(gtype) || glsl_type_is_vector(gtype));
 
@@ -2202,14 +2202,14 @@ emit_store_deref(struct ntv_context *ctx, nir_intrinsic_instr *intr)
       SpvId member_type;
       if (glsl_type_is_vector(gtype)) {
          result_type = get_glsl_basetype(ctx, glsl_get_base_type(gtype));
-         member_type = get_uvec_type(ctx, 32, 1);
+         member_type = get_uvec_type(ctx, glsl_get_bit_size(gtype), 1);
       } else
          member_type = result_type = get_glsl_type(ctx, glsl_get_array_element(gtype));
       SpvId ptr_type = spirv_builder_type_pointer(&ctx->builder,
                                                   SpvStorageClassOutput,
                                                   result_type);
       for (unsigned i = 0; i < 4; i++)
-         if ((wrmask >> i) & 1) {
+         if (wrmask & BITFIELD_BIT(i)) {
             SpvId idx = emit_uint_const(ctx, 32, i);
             SpvId val = spirv_builder_emit_composite_extract(&ctx->builder, member_type, src, &i, 1);
             val = emit_bitcast(ctx, result_type, val);
@@ -2828,6 +2828,7 @@ emit_vote(struct ntv_context *ctx, nir_intrinsic_instr *intr)
    default:
       unreachable("unknown vote intrinsic");
    }
+   spirv_builder_emit_cap(&ctx->builder, SpvCapabilityGroupNonUniformVote);
    SpvId result = spirv_builder_emit_vote(&ctx->builder, op, get_src(ctx, &intr->src[0]));
    store_dest_raw(ctx, &intr->dest, result);
 }
@@ -3929,6 +3930,7 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
 
    case MESA_SHADER_VERTEX:
       if (BITSET_TEST(s->info.system_values_read, SYSTEM_VALUE_INSTANCE_ID) ||
+          BITSET_TEST(s->info.system_values_read, SYSTEM_VALUE_DRAW_ID) ||
           BITSET_TEST(s->info.system_values_read, SYSTEM_VALUE_BASE_INSTANCE) ||
           BITSET_TEST(s->info.system_values_read, SYSTEM_VALUE_BASE_VERTEX)) {
          spirv_builder_emit_extension(&ctx.builder, "SPV_KHR_shader_draw_parameters");
@@ -4066,18 +4068,19 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
    nir_foreach_shader_in_variable(var, s)
       emit_input(&ctx, var);
 
-   int max_output = -1;
+   int max_output = 0;
    nir_foreach_shader_out_variable(var, s) {
       /* ignore SPIR-V built-ins, tagged with a sentinel value */
       if (var->data.driver_location != UINT_MAX) {
          assert(var->data.driver_location < INT_MAX);
-         max_output = MAX2(max_output, (int)var->data.driver_location);
+         unsigned extent = glsl_count_attribute_slots(var->type, false);
+         max_output = MAX2(max_output, (int)var->data.driver_location + extent);
       }
       emit_output(&ctx, var);
    }
 
    if (sinfo->last_vertex)
-      emit_so_info(&ctx, sinfo, max_output + 1);
+      emit_so_info(&ctx, sinfo, max_output);
    uint32_t tcs_vertices_out_word = 0;
 
    /* we have to reverse iterate to match what's done in zink_compiler.c */

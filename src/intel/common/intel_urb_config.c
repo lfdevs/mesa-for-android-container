@@ -338,7 +338,10 @@ intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
       task_urb_share = task_urb_share_percentage / 100.0f;
    }
 
-   const unsigned task_urb_kb = ALIGN(total_urb_kb * task_urb_share, 8);
+   const unsigned one_task_urb_kb = ALIGN(r.task_entry_size_64b * 64, 1024) / 1024;
+
+   const unsigned task_urb_kb = ALIGN(MAX2(total_urb_kb * task_urb_share, one_task_urb_kb), 8);
+
    const unsigned mesh_urb_kb = total_urb_kb - task_urb_kb;
 
    /* TODO(mesh): Could we avoid allocating URB for Mesh if rasterization is

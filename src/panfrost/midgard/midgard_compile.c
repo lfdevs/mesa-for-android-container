@@ -287,6 +287,9 @@ mdg_should_scalarize(const nir_instr *instr, const void *_unused)
 {
         const nir_alu_instr *alu = nir_instr_as_alu(instr);
 
+        if (nir_src_bit_size(alu->src[0].src) == 64)
+                return true;
+
         if (nir_dest_bit_size(alu->dest.dest) == 64)
                 return true;
 
@@ -1955,20 +1958,18 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
                         enum midgard_rt_id rt;
 
                         unsigned reg_z = ~0, reg_s = ~0, reg_2 = ~0;
+                        unsigned writeout = PAN_WRITEOUT_C;
                         if (combined) {
-                                unsigned writeout = nir_intrinsic_component(instr);
+                                writeout = nir_intrinsic_component(instr);
                                 if (writeout & PAN_WRITEOUT_Z)
                                         reg_z = nir_src_index(ctx, &instr->src[2]);
                                 if (writeout & PAN_WRITEOUT_S)
                                         reg_s = nir_src_index(ctx, &instr->src[3]);
                                 if (writeout & PAN_WRITEOUT_2)
                                         reg_2 = nir_src_index(ctx, &instr->src[4]);
+                        }
 
-                                if (writeout & PAN_WRITEOUT_C)
-                                        rt = MIDGARD_COLOR_RT0;
-                                else
-                                        rt = MIDGARD_ZS_RT;
-                        } else {
+                        if (writeout & PAN_WRITEOUT_C) {
                                 const nir_variable *var =
                                         nir_find_variable_with_driver_location(ctx->nir, nir_var_shader_out,
                                                  nir_intrinsic_base(instr));
@@ -1978,6 +1979,8 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
 
                                 rt = MIDGARD_COLOR_RT0 + var->data.location -
                                      FRAG_RESULT_DATA0;
+                        } else {
+                                rt = MIDGARD_ZS_RT;
                         }
 
                         /* Dual-source blend writeout is done by leaving the

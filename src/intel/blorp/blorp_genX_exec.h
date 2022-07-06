@@ -1323,7 +1323,7 @@ blorp_emit_pipeline(struct blorp_batch *batch,
     * one CC_STATE_POINTERS packet so we have to emit that here.
     */
    blorp_emit(batch, GENX(3DSTATE_CC_STATE_POINTERS), cc) {
-      cc.BLEND_STATEChange = true;
+      cc.BLEND_STATEChange = params->wm_prog_data ? true : false;
       cc.ColorCalcStatePointerValid = true;
       cc.DEPTH_STENCIL_STATEChange = true;
       cc.PointertoBLEND_STATE = blend_state_offset;

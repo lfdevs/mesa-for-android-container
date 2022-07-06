@@ -179,7 +179,13 @@ build_triangles(struct radv_bvh_build_ctx *ctx, const VkAccelerationStructureGeo
 {
    const VkAccelerationStructureGeometryTrianglesDataKHR *tri_data = &geom->geometry.triangles;
    VkTransformMatrixKHR matrix;
-   const char *index_data = (const char *)tri_data->indexData.hostAddress + range->primitiveOffset;
+   const char *index_data = (const char *)tri_data->indexData.hostAddress;
+   const char *v_data_base = (const char *)tri_data->vertexData.hostAddress;
+
+   if (tri_data->indexType == VK_INDEX_TYPE_NONE_KHR)
+      v_data_base += range->primitiveOffset;
+   else
+      index_data += range->primitiveOffset;
 
    if (tri_data->transformData.hostAddress) {
       matrix = *(const VkTransformMatrixKHR *)((const char *)tri_data->transformData.hostAddress +
@@ -218,7 +224,7 @@ build_triangles(struct radv_bvh_build_ctx *ctx, const VkAccelerationStructureGeo
             break;
          }
 
-         const char *v_data = (const char *)tri_data->vertexData.hostAddress + v_index * tri_data->vertexStride;
+         const char *v_data = v_data_base + v_index * tri_data->vertexStride;
          float coords[4];
          switch (tri_data->vertexFormat) {
          case VK_FORMAT_R32G32_SFLOAT:
@@ -340,10 +346,12 @@ build_instances(struct radv_device *device, struct radv_bvh_build_ctx *ctx,
    const VkAccelerationStructureGeometryInstancesDataKHR *inst_data = &geom->geometry.instances;
 
    for (uint32_t p = 0; p < range->primitiveCount; ++p, ctx->curr_ptr += 128) {
+      const char *instance_data =
+         (const char *)inst_data->data.hostAddress + range->primitiveOffset;
       const VkAccelerationStructureInstanceKHR *instance =
          inst_data->arrayOfPointers
-            ? (((const VkAccelerationStructureInstanceKHR *const *)inst_data->data.hostAddress)[p])
-            : &((const VkAccelerationStructureInstanceKHR *)inst_data->data.hostAddress)[p];
+            ? (((const VkAccelerationStructureInstanceKHR *const *)instance_data)[p])
+            : &((const VkAccelerationStructureInstanceKHR *)instance_data)[p];
       if (!instance->accelerationStructureReference) {
          continue;
       }
@@ -411,7 +419,7 @@ build_aabbs(struct radv_bvh_build_ctx *ctx, const VkAccelerationStructureGeometr
 
       const VkAabbPositionsKHR *aabb =
          (const VkAabbPositionsKHR *)((const char *)aabb_data->data.hostAddress +
-                                      p * aabb_data->stride);
+                                      range->primitiveOffset + p * aabb_data->stride);
 
       node->aabb[0][0] = aabb->minX;
       node->aabb[0][1] = aabb->minY;
@@ -1823,12 +1831,14 @@ radv_CmdBuildAccelerationStructuresKHR(
             case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
                prim_consts.vertex_addr =
                   geom->geometry.triangles.vertexData.deviceAddress +
-                  ppBuildRangeInfos[i][j].firstVertex * geom->geometry.triangles.vertexStride +
-                  (geom->geometry.triangles.indexType != VK_INDEX_TYPE_NONE_KHR
-                      ? ppBuildRangeInfos[i][j].primitiveOffset
-                      : 0);
-               prim_consts.index_addr = geom->geometry.triangles.indexData.deviceAddress +
-                                        ppBuildRangeInfos[i][j].primitiveOffset;
+                  ppBuildRangeInfos[i][j].firstVertex * geom->geometry.triangles.vertexStride;
+               prim_consts.index_addr = geom->geometry.triangles.indexData.deviceAddress;
+
+               if (geom->geometry.triangles.indexType == VK_INDEX_TYPE_NONE_KHR)
+                  prim_consts.vertex_addr += ppBuildRangeInfos[i][j].primitiveOffset;
+               else
+                  prim_consts.index_addr += ppBuildRangeInfos[i][j].primitiveOffset;
+
                prim_consts.transform_addr = geom->geometry.triangles.transformData.deviceAddress +
                                             ppBuildRangeInfos[i][j].transformOffset;
                prim_consts.vertex_stride = geom->geometry.triangles.vertexStride;
@@ -1843,7 +1853,8 @@ radv_CmdBuildAccelerationStructuresKHR(
                prim_size = 64;
                break;
             case VK_GEOMETRY_TYPE_INSTANCES_KHR:
-               prim_consts.instance_data = geom->geometry.instances.data.deviceAddress;
+               prim_consts.instance_data = geom->geometry.instances.data.deviceAddress +
+                                           ppBuildRangeInfos[i][j].primitiveOffset;
                prim_consts.array_of_pointers = geom->geometry.instances.arrayOfPointers ? 1 : 0;
                prim_size = 128;
                bvh_states[i].instance_count += ppBuildRangeInfos[i][j].primitiveCount;

@@ -2910,7 +2910,9 @@ tu_pipeline_builder_parse_rasterization(struct tu_pipeline_builder *builder,
 
    pipeline->line_mode = RECTANGULAR;
 
-   if (tu6_primtype_line(pipeline->ia.primtype)) {
+   if (tu6_primtype_line(pipeline->ia.primtype) ||
+       (tu6_primtype_patches(pipeline->ia.primtype) &&
+        pipeline->tess.patch_type == IR3_TESS_ISOLINES)) {
       const VkPipelineRasterizationLineStateCreateInfoEXT *rast_line_state =
          vk_find_struct_const(rast_info->pNext,
                               PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT);

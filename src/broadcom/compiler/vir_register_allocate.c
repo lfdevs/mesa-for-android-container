@@ -499,6 +499,8 @@ v3d_emit_tmu_spill(struct v3d_compile *c,
 
         c->cursor = vir_after_inst(position);
 
+        enum v3d_qpu_cond cond = vir_get_cond(inst);
+
         /* If inst and position don't match, this is a postponed spill,
          * in which case we have already allocated the temp for the spill
          * and we should use that, otherwise create a new temp with the
@@ -511,9 +513,15 @@ v3d_emit_tmu_spill(struct v3d_compile *c,
                 add_node(c, inst->dst.index, class_bits);
         } else {
                 inst->dst = spill_temp;
+
+                /* If this is a postponed spill the register being spilled may
+                 * have been written more than once including conditional
+                 * writes, so ignore predication on the spill instruction and
+                 * always spill the full register.
+                 */
+                cond = V3D_QPU_COND_NONE;
         }
 
-        enum v3d_qpu_cond cond = vir_get_cond(inst);
         struct qinst *tmp =
                 vir_MOV_dest(c, vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_TMUD),
                              inst->dst);
@@ -676,12 +684,19 @@ v3d_spill_reg(struct v3d_compile *c, int *acc_nodes, int spill_temp)
                                          * with a new temp though.
                                          */
                                         if (start_of_tmu_sequence) {
+                                                if (postponed_spill) {
+                                                        postponed_spill->dst =
+                                                                postponed_spill_temp;
+                                                }
+                                                if (!postponed_spill ||
+                                                    vir_get_cond(inst) == V3D_QPU_COND_NONE) {
+                                                        postponed_spill_temp =
+                                                                vir_get_temp(c);
+                                                        add_node(c,
+                                                                 postponed_spill_temp.index,
+                                                                 c->nodes.info[spill_node].class_bits);
+                                                }
                                                 postponed_spill = inst;
-                                                postponed_spill_temp =
-                                                        vir_get_temp(c);
-                                                add_node(c,
-                                                         postponed_spill_temp.index,
-                                                         c->nodes.info[spill_node].class_bits);
                                         } else {
                                                 v3d_emit_tmu_spill(c, inst,
                                                                    postponed_spill_temp,

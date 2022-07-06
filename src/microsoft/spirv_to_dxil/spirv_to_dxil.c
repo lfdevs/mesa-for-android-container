@@ -156,9 +156,10 @@ static nir_variable *
 add_push_constant_var(nir_shader *nir, unsigned size, unsigned desc_set, unsigned binding)
 {
    /* Size must be a multiple of 16 as buffer load is loading 16 bytes at a time */
-   size = ALIGN_POT(size, 16) / 16;
+   unsigned num_32bit_words = ALIGN_POT(size, 16) / 4;
 
-   const struct glsl_type *array_type = glsl_array_type(glsl_uint_type(), size, 4);
+   const struct glsl_type *array_type =
+      glsl_array_type(glsl_uint_type(), num_32bit_words, 4);
    const struct glsl_struct_field field = {array_type, "arr"};
    nir_variable *var = nir_variable_create(
       nir, nir_var_mem_ubo,
@@ -173,8 +174,7 @@ struct lower_load_push_constant_data {
    nir_address_format ubo_format;
    unsigned desc_set;
    unsigned binding;
-   uint32_t min;
-   uint32_t max;
+   unsigned size;
 };
 
 static bool
@@ -195,8 +195,8 @@ lower_load_push_constant(struct nir_builder *builder, nir_instr *instr,
 
    uint32_t base = nir_intrinsic_base(intrin);
    uint32_t range = nir_intrinsic_range(intrin);
-   data->min = MIN2(data->min, base);
-   data->max = MAX2(data->max, base + range);
+
+   data->size = MAX2(base + range, data->size);
 
    builder->cursor = nir_after_instr(instr);
    nir_address_format ubo_format = data->ubo_format;
@@ -235,8 +235,6 @@ dxil_spirv_nir_lower_load_push_constant(nir_shader *shader,
       .ubo_format = ubo_format,
       .desc_set = desc_set,
       .binding = binding,
-      .min = UINT32_MAX,
-      .max = 0,
    };
    ret = nir_shader_instructions_pass(shader, lower_load_push_constant,
                                       nir_metadata_block_index |
@@ -244,10 +242,7 @@ dxil_spirv_nir_lower_load_push_constant(nir_shader *shader,
                                          nir_metadata_loop_analysis,
                                       &data);
 
-   if (data.min >= data.max)
-      *size = 0;
-   else
-      *size = (data.max - data.min);
+   *size = data.size;
 
    assert(ret == (*size > 0));
 

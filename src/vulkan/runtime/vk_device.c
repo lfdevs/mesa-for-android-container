@@ -797,6 +797,7 @@ vk_get_physical_device_core_1_1_property_ext(struct VkBaseOutStructure *ext,
       CORE_PROPERTY(deviceUUID);
       CORE_PROPERTY(driverUUID);
       CORE_PROPERTY(deviceLUID);
+      CORE_PROPERTY(deviceNodeMask);
       CORE_PROPERTY(deviceLUIDValid);
       return true;
    }

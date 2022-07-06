@@ -164,8 +164,18 @@ radv_hash_rt_shaders(unsigned char *hash, const VkRayTracingPipelineCreateInfoKH
       }
    }
 
-   _mesa_sha1_update(&ctx, pCreateInfo->pGroups,
-                     pCreateInfo->groupCount * sizeof(*pCreateInfo->pGroups));
+   for (uint32_t i = 0; i < pCreateInfo->groupCount; i++) {
+      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].type,
+                        sizeof(pCreateInfo->pGroups[i].type));
+      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].generalShader,
+                        sizeof(pCreateInfo->pGroups[i].generalShader));
+      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].anyHitShader,
+                        sizeof(pCreateInfo->pGroups[i].anyHitShader));
+      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].closestHitShader,
+                        sizeof(pCreateInfo->pGroups[i].closestHitShader));
+      _mesa_sha1_update(&ctx, &pCreateInfo->pGroups[i].intersectionShader,
+                        sizeof(pCreateInfo->pGroups[i].intersectionShader));
+   }
 
    if (!radv_rt_pipeline_has_dynamic_stack_size(pCreateInfo))
       _mesa_sha1_update(&ctx, &pCreateInfo->maxPipelineRayRecursionDepth, 4);

@@ -329,8 +329,14 @@ static void emit_state(struct rendering_state *state)
       assert(offsetof(struct pipe_rasterizer_state, offset_clamp) - offsetof(struct pipe_rasterizer_state, offset_units) == sizeof(float) * 2);
       if (state->depth_bias.enabled) {
          memcpy(&state->rs_state.offset_units, &state->depth_bias, sizeof(float) * 3);
+         state->rs_state.offset_tri = true;
+         state->rs_state.offset_line = true;
+         state->rs_state.offset_point = true;
       } else {
          memset(&state->rs_state.offset_units, 0, sizeof(float) * 3);
+         state->rs_state.offset_tri = false;
+         state->rs_state.offset_line = false;
+         state->rs_state.offset_point = false;
       }
       cso_set_rasterizer(state->cso, &state->rs_state);
       state->rs_dirty = false;
@@ -892,13 +898,14 @@ static void handle_graphics_pipeline(struct vk_cmd_queue_entry *cmd,
          state->info.primitive_restart = ia->primitiveRestartEnable;
    }
 
-   if (pipeline->graphics_create_info.pTessellationState) {
-      if (!dynamic_states[conv_dynamic_state_idx(VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT)]) {
+   if (!dynamic_states[conv_dynamic_state_idx(VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT)]) {
+      if (pipeline->graphics_create_info.pTessellationState) {
          const VkPipelineTessellationStateCreateInfo *ts = pipeline->graphics_create_info.pTessellationState;
          state->patch_vertices = ts->patchControlPoints;
+      } else {
+         state->patch_vertices = 0;
       }
-   } else
-      state->patch_vertices = 0;
+   }
 
    bool halfz_changed = false;
    if (!pipeline->negative_one_to_one != clip_halfz) {

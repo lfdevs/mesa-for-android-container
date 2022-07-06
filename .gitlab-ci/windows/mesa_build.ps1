@@ -40,8 +40,13 @@ meson --default-library=shared -Dzlib:default_library=static --buildtype=release
 -Dbuild-tests=true -Dwerror=true -Dwarning_level=2 -Dzlib:warning_level=1 -Dlibelf:warning_level=1 `
 $sourcedir
 
-ninja install -j32
-meson test --num-processes 32
+if ($?) {
+  ninja install -j32
+}
+
+if ($?) {
+  meson test --num-processes 32
+}
 
 $buildstatus = $?
 Pop-Location

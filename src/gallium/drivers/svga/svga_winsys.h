@@ -824,6 +824,9 @@ struct svga_winsys_screen
 
    /** Have GL43 capable device */
    boolean have_gl43;
+
+   /** SVGA device_id version we're running on */
+   uint16_t device_id;
 };
 
 

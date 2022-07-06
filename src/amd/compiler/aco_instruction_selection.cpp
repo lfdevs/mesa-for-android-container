@@ -4195,6 +4195,8 @@ smem_load_callback(Builder& bld, const LoadEmitInfo& info, Temp offset, unsigned
       if (offset.id() && const_offset)
          load->operands[1] = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.def(s1, scc), offset,
                                       Operand::c32(const_offset));
+      else if (offset.id())
+         load->operands[1] = Operand(offset);
       else
          load->operands[1] = Operand::c32(const_offset);
    }
@@ -6592,6 +6594,8 @@ visit_load_global(isel_context* ctx, nir_intrinsic_instr* instr)
       params.byte_align_loads = ctx->options->chip_class > GFX6 || byte_align_for_smem_mubuf;
       emit_load(ctx, bld, info, params);
    } else {
+      if (info.resource.id())
+         info.resource = bld.as_uniform(info.resource);
       info.offset = Operand(bld.as_uniform(info.offset));
       emit_load(ctx, bld, info, smem_load_params);
    }

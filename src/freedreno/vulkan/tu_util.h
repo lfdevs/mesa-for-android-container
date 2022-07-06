@@ -99,6 +99,12 @@ tu6_primtype_line(enum pc_di_primtype type)
     }
 }
 
+static inline bool
+tu6_primtype_patches(enum pc_di_primtype type)
+{
+   return type >= DI_PT_PATCHES0 && type <= DI_PT_PATCHES31;
+}
+
 static inline enum pc_di_primtype
 tu6_primtype(VkPrimitiveTopology topology)
 {

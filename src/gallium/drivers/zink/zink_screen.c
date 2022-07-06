@@ -1246,6 +1246,9 @@ zink_destroy_screen(struct pipe_screen *pscreen)
    if (screen->prev_sem)
       VKSCR(DestroySemaphore)(screen->dev, screen->prev_sem, NULL);
 
+   if (screen->fence)
+      VKSCR(DestroyFence)(screen->dev, screen->fence, NULL);
+
    if (screen->threaded)
       util_queue_destroy(&screen->flush_queue);
 
@@ -2076,8 +2079,6 @@ check_base_requirements(struct zink_screen *screen)
 {
    if (!screen->info.feats.features.logicOp ||
        !screen->info.feats.features.fillModeNonSolid ||
-       !screen->info.feats.features.wideLines ||
-       !screen->info.feats.features.largePoints ||
        !screen->info.feats.features.shaderClipDistance ||
        !(screen->info.feats12.scalarBlockLayout ||
          screen->info.have_EXT_scalar_block_layout) ||
@@ -2092,8 +2093,6 @@ check_base_requirements(struct zink_screen *screen)
          fprintf(stderr, "%s ", #X)
       CHECK_OR_PRINT(feats.features.logicOp);
       CHECK_OR_PRINT(feats.features.fillModeNonSolid);
-      CHECK_OR_PRINT(feats.features.wideLines);
-      CHECK_OR_PRINT(feats.features.largePoints);
       CHECK_OR_PRINT(feats.features.shaderClipDistance);
       if (!screen->info.feats12.scalarBlockLayout && !screen->info.have_EXT_scalar_block_layout)
          printf("scalarBlockLayout OR EXT_scalar_block_layout ");
@@ -2118,6 +2117,21 @@ zink_get_sample_pixel_grid(struct pipe_screen *pscreen, unsigned sample_count,
 static void
 init_driver_workarounds(struct zink_screen *screen)
 {
+   /* enable implicit sync for all non-mesa drivers */
+   screen->driver_workarounds.implicit_sync = true;
+   switch (screen->info.driver_props.driverID) {
+   case VK_DRIVER_ID_MESA_RADV:
+   case VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA:
+   case VK_DRIVER_ID_MESA_LLVMPIPE:
+   case VK_DRIVER_ID_MESA_TURNIP:
+   case VK_DRIVER_ID_MESA_V3DV:
+   case VK_DRIVER_ID_MESA_PANVK:
+   case VK_DRIVER_ID_MESA_VENUS:
+      screen->driver_workarounds.implicit_sync = false;
+      break;
+   default:
+      break;
+   }
    screen->driver_workarounds.color_write_missing = !screen->info.have_EXT_color_write_enable;
    screen->driver_workarounds.depth_clip_control_missing = !screen->info.have_EXT_depth_clip_control;
    if (screen->info.driver_props.driverID == VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA) {
@@ -2314,6 +2328,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config)
          else
             screen->heap_map[i] = screen->heap_map[ZINK_HEAP_DEVICE_LOCAL];
       }
+      screen->heap_flags[i] = screen->info.mem_props.memoryTypes[screen->heap_map[i]].propertyFlags;
    }
    {
       unsigned vis_vram = screen->heap_map[ZINK_HEAP_DEVICE_LOCAL_VISIBLE];

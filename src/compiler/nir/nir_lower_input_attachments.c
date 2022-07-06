@@ -140,7 +140,7 @@ try_lower_input_load(nir_function_impl *impl, nir_intrinsic_instr *load,
 
    if (tex->is_sparse) {
       unsigned load_result_size = load->dest.ssa.num_components - 1;
-      unsigned load_result_mask = BITFIELD_MASK(load_result_size);
+      nir_component_mask_t load_result_mask = nir_component_mask(load_result_size);
       nir_ssa_def *res = nir_channels(
          &b, &tex->dest.ssa, load_result_mask | 0x10);
 

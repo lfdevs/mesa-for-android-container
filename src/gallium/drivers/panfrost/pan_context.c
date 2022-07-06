@@ -1048,7 +1048,7 @@ panfrost_set_stream_output_targets(struct pipe_context *pctx,
 struct pipe_context *
 panfrost_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
 {
-        struct panfrost_context *ctx = rzalloc(screen, struct panfrost_context);
+        struct panfrost_context *ctx = rzalloc(NULL, struct panfrost_context);
         struct pipe_context *gallium = (struct pipe_context *) ctx;
         struct panfrost_device *dev = pan_device(screen);
 

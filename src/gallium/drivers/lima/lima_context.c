@@ -205,7 +205,7 @@ lima_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    struct lima_screen *screen = lima_screen(pscreen);
    struct lima_context *ctx;
 
-   ctx = rzalloc(screen, struct lima_context);
+   ctx = rzalloc(NULL, struct lima_context);
    if (!ctx)
       return NULL;
 

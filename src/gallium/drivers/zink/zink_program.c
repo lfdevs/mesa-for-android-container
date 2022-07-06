@@ -106,7 +106,7 @@ get_shader_module_for_stage(struct zink_context *ctx, struct zink_screen *screen
    }
    if (ctx && zs->nir->info.num_inlinable_uniforms &&
        ctx->inlinable_uniforms_valid_mask & BITFIELD64_BIT(pstage)) {
-      if (screen->is_cpu || prog->inlined_variant_count[pstage] < ZINK_MAX_INLINED_VARIANTS)
+      if (zs->can_inline && (screen->is_cpu || prog->inlined_variant_count[pstage] < ZINK_MAX_INLINED_VARIANTS))
          inline_size = zs->nir->info.num_inlinable_uniforms;
       else
          key->inline_uniforms = false;
@@ -128,7 +128,7 @@ get_shader_module_for_stage(struct zink_context *ctx, struct zink_screen *screen
       if (!zm) {
          return NULL;
       }
-      if (zs->is_generated && zs->spirv) {
+      if (pstage == PIPE_SHADER_TESS_CTRL && zs->is_generated && zs->spirv) {
          assert(ctx); //TODO async
          mod = zink_shader_tcs_compile(screen, zs, zink_get_tcs_key(ctx)->patch_vertices);
       } else {
@@ -155,7 +155,7 @@ get_shader_module_for_stage(struct zink_context *ctx, struct zink_screen *screen
       zm->has_nonseamless = !!nonseamless_size;
       if (inline_size)
          memcpy(zm->key + key->size + nonseamless_size, key->base.inlined_uniform_values, inline_size * sizeof(uint32_t));
-      if (zs->is_generated)
+      if (pstage == PIPE_SHADER_TESS_CTRL && zs->is_generated)
          zm->hash = zink_get_tcs_key(ctx)->patch_vertices;
       else
          zm->hash = shader_module_hash(zm);

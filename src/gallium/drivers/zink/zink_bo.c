@@ -247,7 +247,6 @@ bo_create_internal(struct zink_screen *screen,
    mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
    mai.pNext = pNext;
    mai.allocationSize = size;
-demote:
    mai.memoryTypeIndex = screen->heap_map[heap];
    if (screen->info.mem_props.memoryTypes[mai.memoryTypeIndex].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
       alignment = MAX2(alignment, screen->info.props.limits.minMemoryMapAlignment);
@@ -270,11 +269,6 @@ demote:
 
    VkResult ret = VKSCR(AllocateMemory)(screen->dev, &mai, NULL, &bo->mem);
    if (!zink_screen_handle_vkresult(screen, ret)) {
-      if (heap == ZINK_HEAP_DEVICE_LOCAL_VISIBLE) {
-         heap = ZINK_HEAP_DEVICE_LOCAL;
-         mesa_loge("zink: %p couldn't allocate memory! from BAR heap: retrying as device-local", bo);
-         goto demote;
-      }
       mesa_loge("zink: couldn't allocate memory! from heap %u", heap);
       goto fail;
    }
@@ -290,7 +284,7 @@ demote:
    bo->base.alignment_log2 = util_logbase2(alignment);
    bo->base.size = mai.allocationSize;
    bo->base.vtbl = &bo_vtbl;
-   bo->base.placement = vk_domain_from_heap(heap);
+   bo->base.placement = screen->heap_flags[heap];
    bo->base.usage = flags;
    bo->unique_id = p_atomic_inc_return(&screen->pb.next_bo_unique_id);
 

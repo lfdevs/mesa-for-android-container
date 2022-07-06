@@ -881,21 +881,24 @@ rewrite_bo_access_instr(nir_builder *b, nir_instr *instr, void *data)
                         nir_src_as_uint(intr->src[0]) == 0 &&
                         nir_dest_bit_size(intr->dest) == 64 &&
                         nir_intrinsic_align_offset(intr) % 8 != 0;
-      nir_instr_rewrite_src_ssa(instr, &intr->src[1], nir_udiv_imm(b, intr->src[1].ssa,
-                                (force_2x32 ? 32 : nir_dest_bit_size(intr->dest)) / 8));
+      force_2x32 |= nir_dest_bit_size(intr->dest) == 64 && !has_int64;
+      nir_ssa_def *offset = nir_udiv_imm(b, intr->src[1].ssa, (force_2x32 ? 32 : nir_dest_bit_size(intr->dest)) / 8);
+      nir_instr_rewrite_src_ssa(instr, &intr->src[1], offset);
       /* if 64bit isn't supported, 64bit loads definitely aren't supported, so rewrite as 2x32 with cast and pray */
-      if (force_2x32 || (nir_dest_bit_size(intr->dest) == 64 && !has_int64)) {
+      if (force_2x32) {
          /* this is always scalarized */
          assert(intr->dest.ssa.num_components == 1);
          /* rewrite as 2x32 */
-         nir_ssa_def *load;
-         if (intr->intrinsic == nir_intrinsic_load_ssbo)
-            load = nir_load_ssbo(b, 2, 32, intr->src[0].ssa, intr->src[1].ssa, .align_mul = 4, .align_offset = 0);
-         else
-            load = nir_load_ubo(b, 2, 32, intr->src[0].ssa, intr->src[1].ssa, .align_mul = 4, .align_offset = 0, .range = 4);
-         nir_intrinsic_set_access(nir_instr_as_intrinsic(load->parent_instr), nir_intrinsic_access(intr));
+         nir_ssa_def *load[2];
+         for (unsigned i = 0; i < 2; i++) {
+            if (intr->intrinsic == nir_intrinsic_load_ssbo)
+               load[i] = nir_load_ssbo(b, 1, 32, intr->src[0].ssa, nir_iadd_imm(b, intr->src[1].ssa, i), .align_mul = 4, .align_offset = 0);
+            else
+               load[i] = nir_load_ubo(b, 1, 32, intr->src[0].ssa, nir_iadd_imm(b, intr->src[1].ssa, i), .align_mul = 4, .align_offset = 0, .range = 4);
+            nir_intrinsic_set_access(nir_instr_as_intrinsic(load[i]->parent_instr), nir_intrinsic_access(intr));
+         }
          /* cast back to 64bit */
-         nir_ssa_def *casted = nir_pack_64_2x32(b, load);
+         nir_ssa_def *casted = nir_pack_64_2x32_split(b, load[0], load[1]);
          nir_ssa_def_rewrite_uses(&intr->dest.ssa, casted);
          nir_instr_remove(instr);
       }
@@ -903,48 +906,58 @@ rewrite_bo_access_instr(nir_builder *b, nir_instr *instr, void *data)
    }
    case nir_intrinsic_load_shared:
       b->cursor = nir_before_instr(instr);
-      nir_instr_rewrite_src_ssa(instr, &intr->src[0], nir_udiv_imm(b, intr->src[0].ssa, nir_dest_bit_size(intr->dest) / 8));
+      bool force_2x32 = nir_dest_bit_size(intr->dest) == 64 && !has_int64;
+      nir_ssa_def *offset = nir_udiv_imm(b, intr->src[0].ssa, (force_2x32 ? 32 : nir_dest_bit_size(intr->dest)) / 8);
+      nir_instr_rewrite_src_ssa(instr, &intr->src[0], offset);
       /* if 64bit isn't supported, 64bit loads definitely aren't supported, so rewrite as 2x32 with cast and pray */
-      if (nir_dest_bit_size(intr->dest) == 64 && !has_int64) {
+      if (force_2x32) {
          /* this is always scalarized */
          assert(intr->dest.ssa.num_components == 1);
          /* rewrite as 2x32 */
-         nir_ssa_def *load = nir_load_shared(b, 2, 32, intr->src[0].ssa, .align_mul = 4, .align_offset = 0);
+         nir_ssa_def *load[2];
+         for (unsigned i = 0; i < 2; i++)
+            load[i] = nir_load_shared(b, 1, 32, nir_iadd_imm(b, intr->src[0].ssa, i), .align_mul = 4, .align_offset = 0);
          /* cast back to 64bit */
-         nir_ssa_def *casted = nir_pack_64_2x32(b, load);
+         nir_ssa_def *casted = nir_pack_64_2x32_split(b, load[0], load[1]);
          nir_ssa_def_rewrite_uses(&intr->dest.ssa, casted);
          nir_instr_remove(instr);
          return true;
       }
       break;
-   case nir_intrinsic_store_ssbo:
+   case nir_intrinsic_store_ssbo: {
       b->cursor = nir_before_instr(instr);
-      nir_instr_rewrite_src_ssa(instr, &intr->src[2], nir_udiv_imm(b, intr->src[2].ssa, nir_src_bit_size(intr->src[0]) / 8));
+      bool force_2x32 = nir_src_bit_size(intr->src[0]) == 64 && !has_int64;
+      nir_ssa_def *offset = nir_udiv_imm(b, intr->src[2].ssa, (force_2x32 ? 32 : nir_src_bit_size(intr->src[0])) / 8);
+      nir_instr_rewrite_src_ssa(instr, &intr->src[2], offset);
+      /* if 64bit isn't supported, 64bit loads definitely aren't supported, so rewrite as 2x32 with cast and pray */
+      if (force_2x32) {
+         /* this is always scalarized */
+         assert(intr->src[0].ssa->num_components == 1);
+         /* cast to 32bit: nir_unpack_64_2x32 not supported by ntv */
+         nir_ssa_def *casted = nir_vec2(b, nir_u2u32(b, intr->src[0].ssa), nir_u2u32(b, nir_ushr_imm(b, intr->src[0].ssa, 32)));
+         for (unsigned i = 0; i < 2; i++)
+            nir_store_ssbo(b, nir_channel(b, casted, i), intr->src[1].ssa, nir_iadd_imm(b, intr->src[2].ssa, i), .align_mul = 4, .align_offset = 0);
+         nir_instr_remove(instr);
+      }
+      return true;
+   }
+   case nir_intrinsic_store_shared: {
+      b->cursor = nir_before_instr(instr);
+      bool force_2x32 = nir_src_bit_size(intr->src[0]) == 64 && !has_int64;
+      nir_ssa_def *offset = nir_udiv_imm(b, intr->src[1].ssa, (force_2x32 ? 32 : nir_src_bit_size(intr->src[0])) / 8);
+      nir_instr_rewrite_src_ssa(instr, &intr->src[1], offset);
       /* if 64bit isn't supported, 64bit loads definitely aren't supported, so rewrite as 2x32 with cast and pray */
       if (nir_src_bit_size(intr->src[0]) == 64 && !has_int64) {
          /* this is always scalarized */
          assert(intr->src[0].ssa->num_components == 1);
          /* cast to 32bit: nir_unpack_64_2x32 not supported by ntv */
          nir_ssa_def *casted = nir_vec2(b, nir_u2u32(b, intr->src[0].ssa), nir_u2u32(b, nir_ushr_imm(b, intr->src[0].ssa, 32)));
-         /* rewrite as 2x32 */
-         nir_store_ssbo(b, casted, intr->src[1].ssa, intr->src[2].ssa, .align_mul = 4, .align_offset = 0);
+         for (unsigned i = 0; i < 2; i++)
+            nir_store_shared(b, nir_channel(b, casted, i), nir_iadd_imm(b, intr->src[1].ssa, i), .align_mul = 4, .align_offset = 0);
          nir_instr_remove(instr);
       }
       return true;
-   case nir_intrinsic_store_shared:
-      b->cursor = nir_before_instr(instr);
-      nir_instr_rewrite_src_ssa(instr, &intr->src[1], nir_udiv_imm(b, intr->src[1].ssa, nir_src_bit_size(intr->src[0]) / 8));
-      /* if 64bit isn't supported, 64bit loads definitely aren't supported, so rewrite as 2x32 with cast and pray */
-      if (nir_src_bit_size(intr->src[0]) == 64 && !has_int64) {
-         /* this is always scalarized */
-         assert(intr->src[0].ssa->num_components == 1);
-         /* cast to 32bit: nir_unpack_64_2x32 not supported by ntv */
-         nir_ssa_def *casted = nir_vec2(b, nir_u2u32(b, intr->src[0].ssa), nir_u2u32(b, nir_ushr_imm(b, intr->src[0].ssa, 32)));
-         /* rewrite as 2x32 */
-         nir_store_shared(b, casted, intr->src[1].ssa, .align_mul = 4, .align_offset = 0);
-         nir_instr_remove(instr);
-      }
-      return true;
+   }
    default:
       break;
    }
@@ -1386,6 +1399,7 @@ zink_shader_compile(struct zink_screen *screen, struct zink_shader *zs, nir_shad
       NIR_PASS_V(nir, nir_lower_io_to_scalar, nir_var_mem_ubo | nir_var_mem_ssbo | nir_var_mem_shared);
       NIR_PASS_V(nir, rewrite_bo_access, screen);
       NIR_PASS_V(nir, remove_bo_access);
+      need_optimize = true;
    }
    if (inlined_uniforms) {
       optimize_nir(nir);
@@ -1393,6 +1407,10 @@ zink_shader_compile(struct zink_screen *screen, struct zink_shader *zs, nir_shad
       /* This must be done again. */
       NIR_PASS_V(nir, nir_io_add_const_offset_to_base, nir_var_shader_in |
                                                        nir_var_shader_out);
+
+      nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+      if (impl->ssa_alloc > ZINK_ALWAYS_INLINE_LIMIT)
+         zs->can_inline = false;
    } else if (need_optimize)
       optimize_nir(nir);
    prune_io(nir);
@@ -1961,8 +1979,7 @@ scan_nir(struct zink_screen *screen, nir_shader *shader, struct zink_shader *zs)
             static bool warned = false;
             if (!screen->info.have_EXT_shader_atomic_float && !screen->is_cpu && !warned) {
                switch (intr->intrinsic) {
-               case nir_intrinsic_image_deref_atomic_add:
-               case nir_intrinsic_image_deref_atomic_exchange: {
+               case nir_intrinsic_image_deref_atomic_add: {
                   nir_variable *var = nir_intrinsic_get_var(intr, 0);
                   if (util_format_is_float(var->data.image.format))
                      fprintf(stderr, "zink: Vulkan driver missing VK_EXT_shader_atomic_float but attempting to do atomic ops!\n");
@@ -2179,6 +2196,8 @@ zink_shader_create(struct zink_screen *screen, struct nir_shader *nir,
       }
    }
 
+   ret->can_inline = true;
+
    return ret;
 }
 
@@ -2234,12 +2253,18 @@ zink_shader_free(struct zink_context *ctx, struct zink_shader *shader)
             _mesa_hash_table_remove_key(&ctx->program_cache[prog->stages_present >> 2], prog->shaders);
             prog->base.removed = true;
          }
-         prog->shaders[pstage] = NULL;
+         if (shader->nir->info.stage != MESA_SHADER_TESS_CTRL || !shader->is_generated)
+            prog->shaders[pstage] = NULL;
+         /* only remove generated tcs during parent tes destruction */
          if (shader->nir->info.stage == MESA_SHADER_TESS_EVAL && shader->generated)
-            /* automatically destroy generated tcs shaders when tes is destroyed */
-            zink_shader_free(ctx, shader->generated);
+            prog->shaders[PIPE_SHADER_TESS_CTRL] = NULL;
          zink_gfx_program_reference(ctx, &prog, NULL);
       }
+   }
+   if (shader->nir->info.stage == MESA_SHADER_TESS_EVAL && shader->generated) {
+      /* automatically destroy generated tcs shaders when tes is destroyed */
+      zink_shader_free(ctx, shader->generated);
+      shader->generated = NULL;
    }
    _mesa_set_destroy(shader->programs, NULL);
    ralloc_free(shader->nir);

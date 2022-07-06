@@ -32,7 +32,6 @@ shaders/activeprogram-get: skip
 shaders/createshaderprogram-attached-shaders: skip
 shaders/createshaderprogram-bad-type: skip
 shaders/glsl-bug-110796: skip
-shaders/glsl-fs-pointcoord: crash
 shaders/glsl-max-varyings: fail
 shaders/glsl-max-varyings >max_varying_components: fail
 shaders/glsl-uniform-interstage-limits/1 vs, 520 fs: fail
@@ -222,7 +221,6 @@ spec/!opengl 3.2/layered-rendering/gl-layer-cube-map: fail
 spec/!opengl 3.2/layered-rendering/gl-layer-render: fail
 spec/!opengl 3.2/layered-rendering/gl-layer-render-clipped: fail
 spec/!opengl 3.2/layered-rendering/gl-layer-render-storage: fail
-spec/!opengl 3.2/pointsprite-origin: crash
 spec/!opengl 3.3/required-sized-texture-formats: fail
 spec/!opengl 4.2/gl-max-vertex-attrib-stride: skip
 spec/!opengl 4.2/required-sized-texture-formats: fail
@@ -465,7 +463,6 @@ spec/arb_framebuffer_no_attachments/arb_framebuffer_no_attachments-query/ms2: sk
 spec/arb_framebuffer_no_attachments/arb_framebuffer_no_attachments-query/ms4: skip
 spec/arb_framebuffer_no_attachments/arb_framebuffer_no_attachments-query/ms6: skip
 spec/arb_framebuffer_no_attachments/arb_framebuffer_no_attachments-query/ms8: skip
-spec/arb_framebuffer_object/fbo-gl_pointcoord: crash
 spec/arb_framebuffer_srgb/arb_framebuffer_srgb-srgb_conformance: fail
 spec/arb_geometry_shader4/arb_geometry_shader4-ignore-adjacent-vertices  gl_line_strip_adjacency: skip
 spec/arb_geometry_shader4/arb_geometry_shader4-ignore-adjacent-vertices  gl_lines_adjacency: skip
@@ -3530,10 +3527,10 @@ wgl/wgl-sanity: skip
 summary:
        name:  results
        ----  --------
-       pass:    17836
-       fail:     2048
-      crash:       10
-       skip:     1452
+       pass:    17850
+       fail:     2039
+      crash:       12
+       skip:     1450
     timeout:        0
        warn:       10
  incomplete:        0

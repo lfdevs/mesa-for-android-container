@@ -871,7 +871,7 @@ etna_get_specs(struct etna_screen *screen)
       } else {
          screen->specs.vs_offset = 0x4000;
          screen->specs.ps_offset = 0x6000;
-         screen->specs.max_instructions = instruction_count / 2;
+         screen->specs.max_instructions = instruction_count;
       }
       screen->specs.has_icache = false;
    }

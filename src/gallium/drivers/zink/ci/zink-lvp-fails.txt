@@ -160,7 +160,6 @@ spec@!opengl 1.1@linestipple@Factor 2x,Fail
 spec@!opengl 1.1@linestipple@Factor 3x,Fail
 spec@!opengl 1.1@linestipple@Line loop,Fail
 spec@!opengl 1.1@linestipple@Line strip,Fail
-spec@!opengl 1.1@polygon-offset,Fail
 spec@!opengl 1.1@polygon-mode,Fail
 spec@!opengl 1.1@polygon-mode-facing,Fail
 spec@!opengl 1.1@polygon-mode-offset,Fail

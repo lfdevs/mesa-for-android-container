@@ -1003,6 +1003,16 @@ nir_bitcast_vector(nir_builder *b, nir_ssa_def *src, unsigned dest_bit_size)
    return nir_extract_bits(b, &src, 1, 0, dest_num_components, dest_bit_size);
 }
 
+static inline nir_ssa_def *
+nir_trim_vector(nir_builder *b, nir_ssa_def *src, unsigned num_components)
+{
+   assert(src->num_components >= num_components);
+   if (src->num_components == num_components)
+      return src;
+
+   return nir_channels(b, src, nir_component_mask(num_components));
+}
+
 /**
  * Pad a value to N components with undefs of matching bit size.
  * If the value already contains >= num_components, it is returned without change.
