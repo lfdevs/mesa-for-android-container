@@ -960,6 +960,24 @@ bind_last_vertex_stage(struct zink_context *ctx)
          /* always unset vertex shader values when changing to a non-vs last stage */
          memset(&ctx->gfx_pipeline_state.shader_keys.key[PIPE_SHADER_VERTEX].key.vs_base, 0, sizeof(struct zink_vs_key_base));
       }
+
+      unsigned num_viewports = ctx->vp_state.num_viewports;
+      struct zink_screen *screen = zink_screen(ctx->base.screen);
+      /* number of enabled viewports is based on whether last vertex stage writes viewport index */
+      if (ctx->last_vertex_stage) {
+         if (ctx->last_vertex_stage->nir->info.outputs_written & (VARYING_BIT_VIEWPORT | VARYING_BIT_VIEWPORT_MASK))
+            ctx->vp_state.num_viewports = MIN2(screen->info.props.limits.maxViewports, PIPE_MAX_VIEWPORTS);
+         else
+            ctx->vp_state.num_viewports = 1;
+      } else {
+         ctx->vp_state.num_viewports = 1;
+      }
+      ctx->vp_state_changed |= num_viewports != ctx->vp_state.num_viewports;
+      if (!screen->info.have_EXT_extended_dynamic_state) {
+         if (ctx->gfx_pipeline_state.dyn_state1.num_viewports != ctx->vp_state.num_viewports)
+            ctx->gfx_pipeline_state.dirty = true;
+         ctx->gfx_pipeline_state.dyn_state1.num_viewports = ctx->vp_state.num_viewports;
+      }
       ctx->last_vertex_stage_dirty = true;
    }
 }
@@ -971,8 +989,8 @@ zink_bind_vs_state(struct pipe_context *pctx,
    struct zink_context *ctx = zink_context(pctx);
    if (!cso && !ctx->gfx_stages[PIPE_SHADER_VERTEX])
       return;
-   void *prev = ctx->gfx_stages[PIPE_SHADER_VERTEX];
    bind_stage(ctx, PIPE_SHADER_VERTEX, cso);
+   bind_last_vertex_stage(ctx);
    if (cso) {
       struct zink_shader *zs = cso;
       ctx->shader_reads_drawid = BITSET_TEST(zs->nir->info.system_values_read, SYSTEM_VALUE_DRAW_ID);
@@ -981,9 +999,6 @@ zink_bind_vs_state(struct pipe_context *pctx,
       ctx->shader_reads_drawid = false;
       ctx->shader_reads_basevertex = false;
    }
-   if (ctx->last_vertex_stage == prev)
-      ctx->last_vertex_stage = cso;
-
 }
 
 /* if gl_SampleMask[] is written to, we have to ensure that we get a shader with the same sample count:

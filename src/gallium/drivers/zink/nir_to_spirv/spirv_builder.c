@@ -255,32 +255,32 @@ spirv_builder_emit_builtin(struct spirv_builder *b, SpvId target,
 }
 
 void
-spirv_builder_emit_vertex(struct spirv_builder *b, uint32_t stream)
+spirv_builder_emit_vertex(struct spirv_builder *b, uint32_t stream, bool multistream)
 {
    unsigned words = 1;
    SpvOp op = SpvOpEmitVertex;
-   if (stream > 0) {
+   if (multistream) {
       op = SpvOpEmitStreamVertex;
       words++;
    }
    spirv_buffer_prepare(&b->instructions, b->mem_ctx, words);
    spirv_buffer_emit_word(&b->instructions, op | (words << 16));
-   if (stream)
+   if (multistream)
       spirv_buffer_emit_word(&b->instructions, spirv_builder_const_uint(b, 32, stream));
 }
 
 void
-spirv_builder_end_primitive(struct spirv_builder *b, uint32_t stream)
+spirv_builder_end_primitive(struct spirv_builder *b, uint32_t stream, bool multistream)
 {
    unsigned words = 1;
    SpvOp op = SpvOpEndPrimitive;
-   if (stream > 0) {
+   if (multistream || stream > 0) {
       op = SpvOpEndStreamPrimitive;
       words++;
    }
    spirv_buffer_prepare(&b->instructions, b->mem_ctx, words);
    spirv_buffer_emit_word(&b->instructions, op | (words << 16));
-   if (stream)
+   if (multistream || stream > 0)
       spirv_buffer_emit_word(&b->instructions, spirv_builder_const_uint(b, 32, stream));
 }
 

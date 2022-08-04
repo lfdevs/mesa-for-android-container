@@ -325,8 +325,11 @@ zink_blit(struct pipe_context *pctx,
       goto end;
    }
 
-   if (src->obj->dt)
+   if (src->obj->dt) {
+      zink_fb_clears_apply_region(ctx, info->src.resource, zink_rect_from_box(&info->src.box));
       needs_present_readback = zink_kopper_acquire_readback(ctx, src);
+   }
+
    /* this is discard_only because we're about to start a renderpass that will
     * flush all pending clears anyway
     */

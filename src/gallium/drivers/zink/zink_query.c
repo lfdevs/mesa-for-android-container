@@ -262,7 +262,7 @@ timestamp_to_nanoseconds(struct zink_screen *screen, uint64_t *timestamp)
     * can be obtained from VkPhysicalDeviceLimits::timestampPeriod
     * - 17.5. Timestamp Queries
     */
-   *timestamp *= screen->info.props.limits.timestampPeriod;
+   *timestamp *= (double)screen->info.props.limits.timestampPeriod;
 }
 
 static VkQueryType

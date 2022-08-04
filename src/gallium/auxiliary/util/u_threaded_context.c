@@ -2835,27 +2835,14 @@ tc_fence_server_sync(struct pipe_context *_pipe,
    screen->fence_reference(screen, &call->fence, fence);
 }
 
-static uint16_t
-tc_call_fence_server_signal(struct pipe_context *pipe, void *call, uint64_t *last)
-{
-   struct pipe_fence_handle *fence = to_call(call, tc_fence_call)->fence;
-
-   pipe->fence_server_signal(pipe, fence);
-   pipe->screen->fence_reference(pipe->screen, &fence, NULL);
-   return call_size(tc_fence_call);
-}
-
 static void
 tc_fence_server_signal(struct pipe_context *_pipe,
                            struct pipe_fence_handle *fence)
 {
    struct threaded_context *tc = threaded_context(_pipe);
-   struct pipe_screen *screen = tc->pipe->screen;
-   struct tc_fence_call *call = tc_add_call(tc, TC_CALL_fence_server_signal,
-                                            tc_fence_call);
-
-   call->fence = NULL;
-   screen->fence_reference(screen, &call->fence, fence);
+   struct pipe_context *pipe = tc->pipe;
+   tc_sync(tc);
+   pipe->fence_server_signal(pipe, fence);
 }
 
 static struct pipe_video_codec *

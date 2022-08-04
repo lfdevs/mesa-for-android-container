@@ -59,7 +59,7 @@
 
 #define LP_MAX_TGSI_SHADER_BUFFER_SIZE (1 << 27)
 
-#define LP_MAX_TGSI_SHADER_IMAGES 16
+#define LP_MAX_TGSI_SHADER_IMAGES 32
 
 /*
  * For quick access we cache registers in statically

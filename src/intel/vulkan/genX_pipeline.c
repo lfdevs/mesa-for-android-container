@@ -1541,8 +1541,7 @@ emit_3dstate_clip(struct anv_graphics_pipeline *pipeline,
    clip.ViewportZClipTestEnable = pipeline->depth_clip_enable;
 #else
    clip.NonPerspectiveBarycentricEnable = wm_prog_data ?
-      (wm_prog_data->barycentric_interp_modes &
-       BRW_BARYCENTRIC_NONPERSPECTIVE_BITS) != 0 : 0;
+      wm_prog_data->uses_nonperspective_interp_modes : 0;
 #endif
 
    GENX(3DSTATE_CLIP_pack)(NULL, pipeline->gfx7.clip, &clip);
@@ -2853,7 +2852,7 @@ emit_compute_state(struct anv_compute_pipeline *pipeline,
 
    anv_batch_emit(&pipeline->base.batch, GENX(CFE_STATE), cfe) {
       cfe.MaximumNumberofThreads =
-         devinfo->max_cs_threads * devinfo->subslice_total - 1;
+         devinfo->max_cs_threads * devinfo->subslice_total;
       cfe.ScratchSpaceBuffer =
          get_scratch_surf(&pipeline->base, MESA_SHADER_COMPUTE, cs_bin);
    }

@@ -604,6 +604,8 @@ iris_fence_signal(struct pipe_context *ctx,
          batch->contains_fence_signal = true;
          iris_batch_add_syncobj(batch, fine->syncobj, I915_EXEC_FENCE_SIGNAL);
       }
+      if (batch->contains_fence_signal)
+         iris_batch_flush(batch);
    }
 }
 

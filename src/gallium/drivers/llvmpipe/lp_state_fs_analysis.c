@@ -245,10 +245,12 @@ llvmpipe_nir_fn_is_linear_compat(struct nir_shader *shader,
             }
 
             tex_info->sampler_unit = tex->sampler_index;
+            tex_info->texture_unit = tex->texture_index;
 
             /* this is enforced in the scanner previously. */
-            tex_info->coord[0].file = TGSI_FILE_INPUT;
-            tex_info->coord[1].file = TGSI_FILE_INPUT;
+            tex_info->coord[0].file = TGSI_FILE_INPUT;  // S
+            tex_info->coord[0].swizzle = 0;
+            tex_info->coord[1].file = TGSI_FILE_INPUT;  // T
             tex_info->coord[1].swizzle = 1;
             info->num_texs++;
             break;

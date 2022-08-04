@@ -116,6 +116,9 @@ void panfrost_resource_context_init(struct pipe_context *pctx);
 /* Blitting */
 
 void
+panfrost_blitter_save(struct panfrost_context *ctx, bool render_cond);
+
+void
 panfrost_blit(struct pipe_context *pipe,
               const struct pipe_blit_info *info);
 

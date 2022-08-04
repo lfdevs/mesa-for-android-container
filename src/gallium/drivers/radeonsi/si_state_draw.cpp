@@ -2045,22 +2045,7 @@ static void si_draw(struct pipe_context *ctx,
     */
    struct si_context *sctx = (struct si_context *)ctx;
 
-   /* Recompute and re-emit the texture resource states if needed. */
-   unsigned dirty_tex_counter = p_atomic_read(&sctx->screen->dirty_tex_counter);
-   if (unlikely(dirty_tex_counter != sctx->last_dirty_tex_counter)) {
-      sctx->last_dirty_tex_counter = dirty_tex_counter;
-      sctx->framebuffer.dirty_cbufs |= ((1 << sctx->framebuffer.state.nr_cbufs) - 1);
-      sctx->framebuffer.dirty_zsbuf = true;
-      si_mark_atom_dirty(sctx, &sctx->atoms.s.framebuffer);
-      si_update_all_texture_descriptors(sctx);
-   }
-
-   unsigned dirty_buf_counter = p_atomic_read(&sctx->screen->dirty_buf_counter);
-   if (unlikely(dirty_buf_counter != sctx->last_dirty_buf_counter)) {
-      sctx->last_dirty_buf_counter = dirty_buf_counter;
-      /* Rebind all buffers unconditionally. */
-      si_rebind_buffer(sctx, NULL);
-   }
+   si_check_dirty_buffers_textures(sctx);
 
    si_decompress_textures(sctx, u_bit_consecutive(0, SI_NUM_GRAPHICS_SHADERS));
    si_need_gfx_cs_space(sctx, num_draws);

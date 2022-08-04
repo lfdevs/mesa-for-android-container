@@ -460,7 +460,7 @@ spirv_builder_get_words(struct spirv_builder *b, uint32_t *words,
                         uint32_t *tcs_vertices_out_word);
 
 void
-spirv_builder_emit_vertex(struct spirv_builder *b, uint32_t stream);
+spirv_builder_emit_vertex(struct spirv_builder *b, uint32_t stream, bool multistream);
 void
-spirv_builder_end_primitive(struct spirv_builder *b, uint32_t stream);
+spirv_builder_end_primitive(struct spirv_builder *b, uint32_t stream, bool multistream);
 #endif

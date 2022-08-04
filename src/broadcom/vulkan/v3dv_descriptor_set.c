@@ -410,7 +410,7 @@ v3dv_CreateDescriptorPool(VkDevice _device,
           * size as the size in bytes of the block.
           */
          assert(inline_info);
-         descriptor_count++;
+         descriptor_count += inline_info->maxInlineUniformBlockBindings;
          bo_size += pCreateInfo->pPoolSizes[i].descriptorCount;
       } else {
          descriptor_count += pCreateInfo->pPoolSizes[i].descriptorCount;

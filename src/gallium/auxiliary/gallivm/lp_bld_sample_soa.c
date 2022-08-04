@@ -2390,10 +2390,11 @@ lp_build_sample_aniso(struct lp_build_sample_context *bld,
          wnz = LLVMBuildSExt(builder, wnz, bld->int_coord_bld.vec_type, "");
          wnz = lp_build_any_true_range(&bld->coord_bld, bld->coord_bld.type.length, wnz);
          lp_build_if(&noloadw0, gallivm, wnz);
-         LLVMValueRef new_coords[3];
+         LLVMValueRef new_coords[4];
          new_coords[0] = lp_build_div(coord_bld, lp_build_int_to_float(coord_bld, u_val), width_dim);
          new_coords[1] = lp_build_div(coord_bld, lp_build_int_to_float(coord_bld, v_val), height_dim);
          new_coords[2] = coords[2];
+         new_coords[3] = coords[3];
 
          /* lookup q in filter table */
          LLVMValueRef temp_colors[4];

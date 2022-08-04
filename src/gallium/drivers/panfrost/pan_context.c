@@ -61,18 +61,26 @@ panfrost_clear(
         double depth, unsigned stencil)
 {
         struct panfrost_context *ctx = pan_context(pipe);
+        struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
 
         if (!panfrost_render_condition_check(ctx))
                 return;
 
-        /* TODO: panfrost_get_fresh_batch_for_fbo() instantiates a new batch if
-         * the existing batch targeting this FBO has draws. We could probably
-         * avoid that by replacing plain clears by quad-draws with a specific
-         * color/depth/stencil value, thus avoiding the generation of extra
-         * fragment jobs.
-         */
-        struct panfrost_batch *batch = panfrost_get_fresh_batch_for_fbo(ctx, "Slow clear");
-        panfrost_batch_clear(batch, buffers, color, depth, stencil);
+        /* At the start of the batch, we can clear for free */
+        if (!batch->scoreboard.first_job) {
+                panfrost_batch_clear(batch, buffers, color, depth, stencil);
+                return;
+        }
+
+        /* Once there is content, clear with a fullscreen quad */
+        panfrost_blitter_save(ctx, false /* render condition */);
+
+        util_blitter_clear(ctx->blitter,
+                           ctx->pipe_framebuffer.width,
+                           ctx->pipe_framebuffer.height,
+                           util_framebuffer_get_num_layers(&ctx->pipe_framebuffer),
+                           buffers, color, depth, stencil,
+                           util_framebuffer_get_num_samples(&ctx->pipe_framebuffer) > 1);
 }
 
 bool
@@ -1039,7 +1047,7 @@ panfrost_set_stream_output_targets(struct pipe_context *pctx,
                 pipe_so_target_reference(&so->targets[i], targets[i]);
         }
 
-        for (unsigned i = 0; i < so->num_targets; i++)
+        for (unsigned i = num_targets; i < so->num_targets; i++)
                 pipe_so_target_reference(&so->targets[i], NULL);
 
         so->num_targets = num_targets;

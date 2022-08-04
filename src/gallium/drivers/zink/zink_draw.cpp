@@ -627,10 +627,12 @@ zink_draw(struct pipe_context *pctx,
             ctx->vp_state.viewport_states[i].translate[1] - ctx->vp_state.viewport_states[i].scale[1],
             MAX2(ctx->vp_state.viewport_states[i].scale[0] * 2, 1),
             ctx->vp_state.viewport_states[i].scale[1] * 2,
-            ctx->rast_state->base.clip_halfz ?
-               ctx->vp_state.viewport_states[i].translate[2] :
-               ctx->vp_state.viewport_states[i].translate[2] - ctx->vp_state.viewport_states[i].scale[2],
-            ctx->vp_state.viewport_states[i].translate[2] + ctx->vp_state.viewport_states[i].scale[2]
+            CLAMP(ctx->rast_state->base.clip_halfz ?
+                  ctx->vp_state.viewport_states[i].translate[2] :
+                  ctx->vp_state.viewport_states[i].translate[2] - ctx->vp_state.viewport_states[i].scale[2],
+                  0, 1),
+            CLAMP(ctx->vp_state.viewport_states[i].translate[2] + ctx->vp_state.viewport_states[i].scale[2],
+                  0, 1)
          };
          viewports[i] = viewport;
       }
@@ -792,7 +794,10 @@ zink_draw(struct pipe_context *pctx,
    if (zink_program_has_descriptors(&ctx->curr_program->base))
       screen->descriptors_update(ctx, false);
 
-   if (ctx->di.any_bindless_dirty && ctx->curr_program->base.dd->bindless)
+   if (ctx->di.any_bindless_dirty &&
+       /* some apps (d3dretrace) call MakeTextureHandleResidentARB randomly */
+       zink_program_has_descriptors(&ctx->curr_program->base) &&
+       ctx->curr_program->base.dd->bindless)
       zink_descriptors_update_bindless(ctx);
 
    if (reads_basevertex) {

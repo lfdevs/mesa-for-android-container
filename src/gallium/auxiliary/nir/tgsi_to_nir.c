@@ -2326,6 +2326,9 @@ ttn_compile_init(const void *tgsi_tokens,
    s->info.num_textures = util_last_bit(scan.samplers_declared);
    s->info.internal = false;
 
+   /* Default for TGSI is separate, this is assumed throughout the tree */
+   s->info.separate_shader = true;
+
    for (unsigned i = 0; i < TGSI_PROPERTY_COUNT; i++) {
       unsigned value = scan.properties[i];
 

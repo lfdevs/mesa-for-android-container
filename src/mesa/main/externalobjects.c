@@ -696,7 +696,7 @@ server_signal_semaphore(struct gl_context *ctx,
          pipe->flush_resource(pipe, texObj->pt);
    }
 
-   /* The driver is allowed to flush during fence_server_signal, be prepared */
+   /* The driver must flush during fence_server_signal, be prepared */
    st_flush_bitmap_cache(st);
    pipe->fence_server_signal(pipe, semObj->fence);
 }

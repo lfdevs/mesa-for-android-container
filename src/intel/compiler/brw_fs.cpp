@@ -6707,7 +6707,14 @@ static void
 lower_trace_ray_logical_send(const fs_builder &bld, fs_inst *inst)
 {
    const intel_device_info *devinfo = bld.shader->devinfo;
-   const fs_reg &globals_addr = inst->src[RT_LOGICAL_SRC_GLOBALS];
+   /* The emit_uniformize() in brw_fs_nir.cpp will generate an horizontal
+    * stride of 0. Below we're doing a MOV() in SIMD2. Since we can't use UQ/Q
+    * types in on Gfx12.5, we need to tweak the stride with a value of 1 dword
+    * so that the MOV operates on 2 components rather than twice the same
+    * component.
+    */
+   fs_reg globals_addr = retype(inst->src[RT_LOGICAL_SRC_GLOBALS], BRW_REGISTER_TYPE_UD);
+   globals_addr.stride = 1;
    const fs_reg &bvh_level =
       inst->src[RT_LOGICAL_SRC_BVH_LEVEL].file == BRW_IMMEDIATE_VALUE ?
       inst->src[RT_LOGICAL_SRC_BVH_LEVEL] :
@@ -6726,7 +6733,7 @@ lower_trace_ray_logical_send(const fs_builder &bld, fs_inst *inst)
    const fs_builder ubld = bld.exec_all().group(8, 0);
    fs_reg header = ubld.vgrf(BRW_REGISTER_TYPE_UD);
    ubld.MOV(header, brw_imm_ud(0));
-   ubld.group(2, 0).MOV(header, retype(globals_addr, BRW_REGISTER_TYPE_UD));
+   ubld.group(2, 0).MOV(header, globals_addr);
    if (synchronous)
       ubld.group(1, 0).MOV(byte_offset(header, 16), brw_imm_ud(synchronous));
 
@@ -9780,6 +9787,9 @@ brw_nir_populate_wm_prog_data(const nir_shader *shader,
 
    prog_data->barycentric_interp_modes =
       brw_compute_barycentric_interp_modes(devinfo, shader);
+   prog_data->uses_nonperspective_interp_modes |=
+      (prog_data->barycentric_interp_modes &
+      BRW_BARYCENTRIC_NONPERSPECTIVE_BITS) != 0;
 
    prog_data->per_coarse_pixel_dispatch =
       key->coarse_pixel &&

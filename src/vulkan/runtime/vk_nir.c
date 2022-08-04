@@ -64,6 +64,16 @@ spirv_nir_debug(void *private_data,
    }
 }
 
+static bool
+is_not_xfb_output(nir_variable *var, void *data)
+{
+   if (var->data.mode != nir_var_shader_out)
+      return true;
+
+   return !var->data.explicit_xfb_buffer &&
+          !var->data.explicit_xfb_stride;
+}
+
 nir_shader *
 vk_spirv_to_nir(struct vk_device *device,
                 uint32_t *spirv_data, size_t spirv_size_B,
@@ -129,10 +139,13 @@ vk_spirv_to_nir(struct vk_device *device,
    NIR_PASS_V(nir, nir_split_var_copies);
    NIR_PASS_V(nir, nir_split_per_member_structs);
 
+   nir_remove_dead_variables_options dead_vars_opts = {
+      .can_remove_var = is_not_xfb_output,
+   };
    NIR_PASS_V(nir, nir_remove_dead_variables,
               nir_var_shader_in | nir_var_shader_out | nir_var_system_value |
               nir_var_shader_call_data | nir_var_ray_hit_attrib,
-              NULL);
+              &dead_vars_opts);
 
    NIR_PASS_V(nir, nir_propagate_invariant, false);
 

@@ -187,8 +187,11 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetPhysicalDeviceFormatProperties2(
    pFormatProperties->formatProperties.optimalTilingFeatures = format_props.optimalTilingFeatures & VK_ALL_FORMAT_FEATURE_FLAG_BITS;
    pFormatProperties->formatProperties.bufferFeatures = format_props.bufferFeatures & VK_ALL_FORMAT_FEATURE_FLAG_BITS;
    VkFormatProperties3 *prop3 = (void*)vk_find_struct_const(pFormatProperties->pNext, FORMAT_PROPERTIES_3);
-   if (prop3)
-      *prop3 = format_props;
+   if (prop3) {
+      prop3->linearTilingFeatures = format_props.linearTilingFeatures;
+      prop3->optimalTilingFeatures = format_props.optimalTilingFeatures;
+      prop3->bufferFeatures = format_props.bufferFeatures;
+   }
 }
 static VkResult lvp_get_image_format_properties(struct lvp_physical_device *physical_device,
                                                  const VkPhysicalDeviceImageFormatInfo2 *info,

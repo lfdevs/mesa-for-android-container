@@ -99,6 +99,17 @@ zink_context_destroy(struct pipe_context *pctx)
    if (ctx->batch.state && !screen->device_lost && VKSCR(QueueWaitIdle)(ctx->batch.state->queue) != VK_SUCCESS)
       mesa_loge("ZINK: vkQueueWaitIdle failed");
 
+   for (unsigned i = 0; i < ARRAY_SIZE(ctx->program_cache); i++) {
+      hash_table_foreach(&ctx->program_cache[i], entry) {
+         struct zink_program *pg = entry->data;
+         screen->descriptor_program_deinit(ctx, pg);
+      }
+   }
+   hash_table_foreach(&ctx->compute_program_cache, entry) {
+      struct zink_program *pg = entry->data;
+      screen->descriptor_program_deinit(ctx, pg);
+   }
+
    if (ctx->blitter)
       util_blitter_destroy(ctx->blitter);
    for (unsigned i = 0; i < ctx->fb_state.nr_cbufs; i++)
@@ -438,7 +449,7 @@ get_imageview_for_binding(struct zink_context *ctx, enum pipe_shader_type stage,
    switch (type) {
    case ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW: {
       struct zink_sampler_view *sampler_view = zink_sampler_view(ctx->sampler_views[stage][idx]);
-      if (!sampler_view->base.texture)
+      if (!sampler_view || !sampler_view->base.texture)
          return NULL;
       /* if this is a non-seamless cube sampler, return the cube array view */
       return (ctx->di.nonseamless[stage] & ctx->di.cubes[stage] & BITFIELD_BIT(idx)) ?
@@ -1092,13 +1103,7 @@ zink_set_viewport_states(struct pipe_context *pctx,
 
    for (unsigned i = 0; i < num_viewports; ++i)
       ctx->vp_state.viewport_states[start_slot + i] = state[i];
-   ctx->vp_state.num_viewports = start_slot + num_viewports;
 
-   if (!zink_screen(pctx->screen)->info.have_EXT_extended_dynamic_state) {
-      if (ctx->gfx_pipeline_state.dyn_state1.num_viewports != ctx->vp_state.num_viewports)
-         ctx->gfx_pipeline_state.dirty = true;
-      ctx->gfx_pipeline_state.dyn_state1.num_viewports = ctx->vp_state.num_viewports;
-   }
    ctx->vp_state_changed = true;
 }
 
@@ -1981,8 +1986,10 @@ zink_update_fbfetch(struct zink_context *ctx)
    ctx->di.fbfetch.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
    if (changed) {
       zink_screen(ctx->base.screen)->context_invalidate_descriptor_state(ctx, PIPE_SHADER_FRAGMENT, ZINK_DESCRIPTOR_TYPE_UBO, 0, 1);
-      ctx->rp_changed = true;
-      zink_batch_no_rp(ctx);
+      if (!had_fbfetch) {
+         ctx->rp_changed = true;
+         zink_batch_no_rp(ctx);
+      }
    }
 }
 

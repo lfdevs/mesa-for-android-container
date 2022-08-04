@@ -334,6 +334,17 @@ bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
                         if (node < node_count)
                                 l->solutions[node] = 4;
                 }
+
+                /* Experimentally, it seems coverage masks inputs to ATEST must
+                 * be in R60. Otherwise coverage mask writes do not work with
+                 * early-ZS with pixel-frequency-shading (this combination of
+                 * settings is legal if depth/stencil writes are disabled).
+                 */
+                if (ins->op == BI_OPCODE_ATEST) {
+                        unsigned node = bi_get_node(ins->src[0]);
+                        assert(node < node_count);
+                        l->solutions[node] = 60;
+                }
         }
 
         bi_compute_interference(ctx, l, full_regs);

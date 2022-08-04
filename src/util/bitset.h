@@ -52,6 +52,7 @@
 #define BITSET_EQUAL(x, y) (memcmp( (x), (y), sizeof (x) ) == 0)
 #define BITSET_ZERO(x) memset( (x), 0, sizeof (x) )
 #define BITSET_ONES(x) memset( (x), 0xff, sizeof (x) )
+#define BITSET_SIZE(x) (8 * sizeof(x))  // bitset size in bits
 
 #define BITSET_BITWORD(b) ((b) / BITSET_WORDBITS)
 #define BITSET_BIT(b) (1u << ((b) % BITSET_WORDBITS))
@@ -262,11 +263,9 @@ __bitset_count(const BITSET_WORD *x, unsigned n)
 static inline int
 __bitset_ffs(const BITSET_WORD *x, int n)
 {
-   int i;
-
-   for (i = 0; i < n; i++) {
+   for (int i = 0; i < n; i++) {
       if (x[i])
-	 return ffs(x[i]) + BITSET_WORDBITS * i;
+         return ffs(x[i]) + BITSET_WORDBITS * i;
    }
 
    return 0;

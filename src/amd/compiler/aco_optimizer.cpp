@@ -3326,7 +3326,8 @@ combine_vop3p(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 
    /* apply clamp */
    if (instr->opcode == aco_opcode::v_pk_mul_f16 && instr->operands[1].constantEquals(0x3C00) &&
-       vop3p->clamp && instr->operands[0].isTemp() && ctx.uses[instr->operands[0].tempId()] == 1) {
+       vop3p->clamp && instr->operands[0].isTemp() && ctx.uses[instr->operands[0].tempId()] == 1 &&
+       !((vop3p->opsel_lo | vop3p->opsel_hi) & 2)) {
 
       ssa_info& info = ctx.info[instr->operands[0].tempId()];
       if (info.is_vop3p() && instr_info.can_use_output_modifiers[(int)info.instr->opcode]) {
@@ -3350,6 +3351,12 @@ combine_vop3p(opt_ctx& ctx, aco_ptr<Instruction>& instr)
          ssa_info& info = ctx.info[op.tempId()];
          if (info.is_vop3p() && info.instr->opcode == aco_opcode::v_pk_mul_f16 &&
              info.instr->operands[1].constantEquals(0x3C00)) {
+
+            VOP3P_instruction* fneg = &info.instr->vop3p();
+
+            if ((fneg->opsel_lo | fneg->opsel_hi) & 2)
+               continue;
+
             Operand ops[3];
             for (unsigned j = 0; j < instr->operands.size(); j++)
                ops[j] = instr->operands[j];
@@ -3357,7 +3364,6 @@ combine_vop3p(opt_ctx& ctx, aco_ptr<Instruction>& instr)
             if (!check_vop3_operands(ctx, instr->operands.size(), ops))
                continue;
 
-            VOP3P_instruction* fneg = &info.instr->vop3p();
             if (fneg->clamp)
                continue;
             instr->operands[i] = fneg->operands[0];

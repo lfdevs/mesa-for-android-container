@@ -894,9 +894,16 @@ struct brw_wm_prog_data {
 
    /**
     * Mask of which interpolation modes are required by the fragment shader.
-    * Used in hardware setup on gfx6+.
+    * Those interpolations are delivered as part of the thread payload. Used
+    * in hardware setup on gfx6+.
     */
    uint32_t barycentric_interp_modes;
+
+   /**
+    * Whether nonperspective interpolation modes are used by the
+    * barycentric_interp_modes or fragment shader through interpolator messages.
+    */
+   bool uses_nonperspective_interp_modes;
 
    /**
     * Mask of which FS inputs are marked flat by the shader source.  This is

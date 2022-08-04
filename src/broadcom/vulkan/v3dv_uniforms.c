@@ -56,8 +56,8 @@ struct state_bo_list {
    struct v3dv_bo *states[MAX_TOTAL_STATES];
 };
 
-#define MAX_TOTAL_UNIFORM_BUFFERS (1 + (MAX_UNIFORM_BUFFERS + \
-                                        MAX_INLINE_UNIFORM_BUFFERS) * MAX_STAGES)
+#define MAX_TOTAL_UNIFORM_BUFFERS ((MAX_UNIFORM_BUFFERS + \
+                                    MAX_INLINE_UNIFORM_BUFFERS) * MAX_STAGES)
 #define MAX_TOTAL_STORAGE_BUFFERS (MAX_STORAGE_BUFFERS * MAX_STAGES)
 struct buffer_bo_list {
    struct v3dv_bo *ubo[MAX_TOTAL_UNIFORM_BUFFERS];
@@ -97,6 +97,9 @@ check_push_constants_ubo(struct v3dv_cmd_buffer *cmd_buffer,
       cmd_buffer->push_constants_resource.bo =
          v3dv_bo_alloc(cmd_buffer->device, MAX_PUSH_CONSTANTS_SIZE,
                        "push constants", true);
+
+      v3dv_job_add_bo(cmd_buffer->state.job,
+                      cmd_buffer->push_constants_resource.bo);
 
       if (!cmd_buffer->push_constants_resource.bo) {
          fprintf(stderr, "Failed to allocate memory for push constants\n");
@@ -254,9 +257,8 @@ write_ubo_ssbo_uniforms(struct v3dv_cmd_buffer *cmd_buffer,
     */
    uint32_t index = v3d_unit_data_get_unit(data);
    if (content == QUNIFORM_UBO_ADDR && index == 0) {
-      /* This calls is to ensure that the push_constant_ubo is
-       * updated. It already take into account it is should do the
-       * update or not
+      /* Ensure the push constants UBO is created and updated. This also
+       * adds the BO to the job so we don't need to track it in buffer_bos.
        */
       check_push_constants_ubo(cmd_buffer, pipeline);
 
@@ -267,7 +269,6 @@ write_ubo_ssbo_uniforms(struct v3dv_cmd_buffer *cmd_buffer,
       cl_aligned_u32(uniforms, resource->bo->offset +
                                resource->offset +
                                offset + dynamic_offset);
-      buffer_bos->ubo[0] = resource->bo;
    } else {
       if (content == QUNIFORM_UBO_ADDR) {
          /* We reserve index 0 for push constants and artificially increase our

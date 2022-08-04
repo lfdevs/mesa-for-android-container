@@ -53,6 +53,7 @@ typedef struct
    bool export_prim_id;
    bool early_prim_export;
    bool use_edgeflags;
+   bool can_cull;
    unsigned wave_size;
    unsigned max_num_waves;
    unsigned num_vertices_per_primitives;
@@ -374,6 +375,17 @@ emit_ngg_nogs_prim_exp_arg(nir_builder *b, lower_ngg_nogs_state *st)
 static void
 emit_ngg_nogs_prim_export(nir_builder *b, lower_ngg_nogs_state *st, nir_ssa_def *arg)
 {
+   bool need_prim_id_store_shared =
+      st->export_prim_id && b->shader->info.stage == MESA_SHADER_VERTEX;
+
+   /* Add barrier if LDS is already used by culling and we need LDS for prim id here. */
+   if (st->can_cull && need_prim_id_store_shared) {
+      nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
+                            .memory_scope = NIR_SCOPE_WORKGROUP,
+                            .memory_semantics = NIR_MEMORY_ACQ_REL,
+                            .memory_modes = nir_var_mem_shared);
+   }
+
    nir_ssa_def *gs_thread = st->gs_accepted_var
                             ? nir_load_var(b, st->gs_accepted_var)
                             : nir_has_input_primitive_amd(b);
@@ -383,7 +395,7 @@ emit_ngg_nogs_prim_export(nir_builder *b, lower_ngg_nogs_state *st, nir_ssa_def 
       if (!arg)
          arg = emit_ngg_nogs_prim_exp_arg(b, st);
 
-      if (st->export_prim_id && b->shader->info.stage == MESA_SHADER_VERTEX) {
+      if (need_prim_id_store_shared) {
          nir_ssa_def *prim_valid = nir_ieq_imm(b, nir_ushr_imm(b, arg, 31), 0);
          nir_if *if_prim_valid = nir_push_if(b, prim_valid);
          {
@@ -1064,7 +1076,7 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
    unsigned total_es_lds_bytes = pervertex_lds_bytes * nogs_state->max_es_num_vertices;
    unsigned max_num_waves = nogs_state->max_num_waves;
    unsigned ngg_scratch_lds_base_addr = ALIGN(total_es_lds_bytes, 8u);
-   unsigned ngg_scratch_lds_bytes = DIV_ROUND_UP(max_num_waves, 4u);
+   unsigned ngg_scratch_lds_bytes = ALIGN(max_num_waves, 4u);
    nogs_state->total_lds_bytes = ngg_scratch_lds_base_addr + ngg_scratch_lds_bytes;
 
    nir_function_impl *impl = nir_shader_get_entrypoint(b->shader);
@@ -1322,6 +1334,7 @@ ac_nir_lower_ngg_nogs(nir_shader *shader,
       .export_prim_id = export_prim_id,
       .early_prim_export = early_prim_export,
       .use_edgeflags = use_edgeflags,
+      .can_cull = can_cull,
       .num_vertices_per_primitives = num_vertices_per_primitives,
       .provoking_vtx_idx = provoking_vtx_last ? (num_vertices_per_primitives - 1) : 0,
       .position_value_var = position_value_var,

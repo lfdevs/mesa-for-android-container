@@ -1032,10 +1032,10 @@ lvp_get_physical_device_properties_1_2(struct lvp_physical_device *pdevice,
             );
 
    p->conformanceVersion = (VkConformanceVersion){
-      .major = 0,
-      .minor = 0,
-      .subminor = 0,
-      .patch = 0,
+      .major = 1,
+      .minor = 3,
+      .subminor = 1,
+      .patch = 1,
    };
 
    p->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL_KHR;

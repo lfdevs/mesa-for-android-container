@@ -918,6 +918,8 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
    if (program->ir_type != PIPE_SHADER_IR_NATIVE && program->shader.compilation_failed)
       return;
 
+   si_check_dirty_buffers_textures(sctx);
+
    if (sctx->has_graphics) {
       if (sctx->last_num_draw_calls != sctx->num_draw_calls) {
          si_update_fb_dirtiness_after_rendering(sctx);

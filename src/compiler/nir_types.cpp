@@ -313,7 +313,7 @@ glsl_type_is_matrix(const struct glsl_type *type)
 bool
 glsl_matrix_type_is_row_major(const struct glsl_type *type)
 {
-   assert(type->is_matrix() && type->explicit_stride);
+   assert((type->is_matrix() && type->explicit_stride) || type->is_interface());
    return type->interface_row_major;
 }
 

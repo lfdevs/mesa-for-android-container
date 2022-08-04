@@ -2068,10 +2068,12 @@ panfrost_emit_vertex_data(struct panfrost_batch *batch,
         }
 #endif
 
-        k = ALIGN_POT(k, 2);
-        emit_image_attribs(ctx, PIPE_SHADER_VERTEX, out + so->num_elements, k);
-        emit_image_bufs(batch, PIPE_SHADER_VERTEX, bufs + k, k);
-        k += (util_last_bit(ctx->image_mask[PIPE_SHADER_VERTEX]) * 2);
+        if (nr_images) {
+                k = ALIGN_POT(k, 2);
+                emit_image_attribs(ctx, PIPE_SHADER_VERTEX, out + so->num_elements, k);
+                emit_image_bufs(batch, PIPE_SHADER_VERTEX, bufs + k, k);
+                k += (util_last_bit(ctx->image_mask[PIPE_SHADER_VERTEX]) * 2);
+        }
 
 #if PAN_ARCH >= 6
         /* We need an empty attrib buf to stop the prefetching on Bifrost */

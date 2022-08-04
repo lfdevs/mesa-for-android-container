@@ -1548,13 +1548,12 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
 
 static MUST_CHECK VkResult
 anv_cmd_buffer_init_attachments(struct anv_cmd_buffer *cmd_buffer,
-                                uint32_t color_att_count,
-                                uint32_t color_att_valid)
+                                uint32_t color_att_count)
 {
    struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
 
    /* Reserve one for the NULL state. */
-   unsigned num_states = 1 + util_bitcount(color_att_valid);
+   unsigned num_states = 1 + color_att_count;
    const struct isl_device *isl_dev = &cmd_buffer->device->isl_dev;
    const uint32_t ss_stride = align_u32(isl_dev->ss.size, isl_dev->ss.align);
    gfx->att_states =
@@ -1574,17 +1573,11 @@ anv_cmd_buffer_init_attachments(struct anv_cmd_buffer *cmd_buffer,
 
    gfx->color_att_count = color_att_count;
    for (uint32_t i = 0; i < color_att_count; i++) {
-      if (color_att_valid & BITFIELD_BIT(i)) {
-         gfx->color_att[i] = (struct anv_attachment) {
-            .surface_state.state = next_state,
-         };
-         next_state.offset += ss_stride;
-         next_state.map += ss_stride;
-      } else {
-         gfx->color_att[i] = (struct anv_attachment) {
-            .surface_state.state = gfx->null_surface_state,
-         };
-      }
+      gfx->color_att[i] = (struct anv_attachment) {
+         .surface_state.state = next_state,
+      };
+      next_state.offset += ss_stride;
+      next_state.map += ss_stride;
    }
    gfx->depth_att = (struct anv_attachment) { };
    gfx->stencil_att = (struct anv_attachment) { };
@@ -1693,47 +1686,27 @@ genX(BeginCommandBuffer)(
          vk_get_command_buffer_inheritance_rendering_info(cmd_buffer->vk.level,
                                                           pBeginInfo);
 
-      /* We can't get this information from the inheritance info */
+      gfx->rendering_flags = inheritance_info->flags;
       gfx->render_area = (VkRect2D) { };
       gfx->layer_count = 0;
-      gfx->samples = 0;
+      gfx->samples = inheritance_info->rasterizationSamples;
+      gfx->view_mask = inheritance_info->viewMask;
       gfx->depth_att = (struct anv_attachment) { };
       gfx->stencil_att = (struct anv_attachment) { };
 
-      if (inheritance_info == NULL) {
-         gfx->rendering_flags = 0;
-         gfx->view_mask = 0;
-         gfx->samples = 0;
-         result = anv_cmd_buffer_init_attachments(cmd_buffer, 0, 0);
-         if (result != VK_SUCCESS)
-            return result;
-      } else {
-         gfx->rendering_flags = inheritance_info->flags;
-         gfx->view_mask = inheritance_info->viewMask;
-         gfx->samples = inheritance_info->rasterizationSamples;
+      const uint32_t color_att_count = inheritance_info->colorAttachmentCount;
+      result = anv_cmd_buffer_init_attachments(cmd_buffer, color_att_count);
+      if (result != VK_SUCCESS)
+         return result;
 
-         uint32_t color_att_valid = 0;
-         uint32_t color_att_count = inheritance_info->colorAttachmentCount;
-         for (uint32_t i = 0; i < color_att_count; i++) {
-            VkFormat format = inheritance_info->pColorAttachmentFormats[i];
-            if (format != VK_FORMAT_UNDEFINED)
-               color_att_valid |= BITFIELD_BIT(i);
-         }
-         result = anv_cmd_buffer_init_attachments(cmd_buffer,
-                                                  color_att_count,
-                                                  color_att_valid);
-         if (result != VK_SUCCESS)
-            return result;
-
-         for (uint32_t i = 0; i < color_att_count; i++) {
-            gfx->color_att[i].vk_format =
-               inheritance_info->pColorAttachmentFormats[i];
-         }
-         gfx->depth_att.vk_format =
-            inheritance_info->depthAttachmentFormat;
-         gfx->stencil_att.vk_format =
-            inheritance_info->stencilAttachmentFormat;
+      for (uint32_t i = 0; i < color_att_count; i++) {
+         gfx->color_att[i].vk_format =
+            inheritance_info->pColorAttachmentFormats[i];
       }
+      gfx->depth_att.vk_format =
+         inheritance_info->depthAttachmentFormat;
+      gfx->stencil_att.vk_format =
+         inheritance_info->stencilAttachmentFormat;
 
       /* Try to figure out the depth buffer if we can */
       if (pBeginInfo->pInheritanceInfo->renderPass != VK_NULL_HANDLE &&
@@ -2630,8 +2603,8 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
          const enum isl_format format =
             anv_isl_format_for_descriptor_type(cmd_buffer->device,
                                                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-         anv_fill_buffer_surface_state(cmd_buffer->device,
-                                       surface_state, format,
+         anv_fill_buffer_surface_state(cmd_buffer->device, surface_state,
+                                       format, ISL_SWIZZLE_IDENTITY,
                                        ISL_SURF_USAGE_CONSTANT_BUFFER_BIT,
                                        constant_data, constant_data_size, 1);
 
@@ -2652,7 +2625,7 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
             anv_isl_format_for_descriptor_type(cmd_buffer->device,
                                                VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
          anv_fill_buffer_surface_state(cmd_buffer->device, surface_state,
-                                       format,
+                                       format, ISL_SWIZZLE_IDENTITY,
                                        ISL_SURF_USAGE_CONSTANT_BUFFER_BIT,
                                        cmd_buffer->state.compute.num_workgroups,
                                        12, 1);
@@ -2814,7 +2787,8 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
                   ISL_SURF_USAGE_STORAGE_BIT;
 
                anv_fill_buffer_surface_state(cmd_buffer->device, surface_state,
-                                             format, usage, address, range, 1);
+                                             format, ISL_SWIZZLE_IDENTITY,
+                                             usage, address, range, 1);
                if (need_client_mem_relocs)
                   add_surface_reloc(cmd_buffer, surface_state, address);
             } else {
@@ -6539,23 +6513,15 @@ void genX(CmdBeginRendering)(
       .d = layers,
    };
 
-   /* Reserve one for the NULL state. */
-   uint32_t color_att_valid = 0;
-   uint32_t color_att_count = pRenderingInfo->colorAttachmentCount;
-   for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; i++) {
-      if (pRenderingInfo->pColorAttachments[i].imageView != VK_NULL_HANDLE)
-         color_att_valid |= BITFIELD_BIT(i);
-   }
-   result = anv_cmd_buffer_init_attachments(cmd_buffer,
-                                            color_att_count,
-                                            color_att_valid);
+   const uint32_t color_att_count = pRenderingInfo->colorAttachmentCount;
+   result = anv_cmd_buffer_init_attachments(cmd_buffer, color_att_count);
    if (result != VK_SUCCESS)
       return;
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
    for (uint32_t i = 0; i < gfx->color_att_count; i++) {
-      if (!(color_att_valid & BITFIELD_BIT(i)))
+      if (pRenderingInfo->pColorAttachments[i].imageView == VK_NULL_HANDLE)
          continue;
 
       const VkRenderingAttachmentInfo *att =
@@ -6961,6 +6927,15 @@ void genX(CmdBeginRendering)(
    isl_null_fill_state(&cmd_buffer->device->isl_dev,
                        gfx->null_surface_state.map,
                        .size = fb_size);
+
+   for (uint32_t i = 0; i < gfx->color_att_count; i++) {
+      if (pRenderingInfo->pColorAttachments[i].imageView != VK_NULL_HANDLE)
+         continue;
+
+      isl_null_fill_state(&cmd_buffer->device->isl_dev,
+                          gfx->color_att[i].surface_state.state.map,
+                          .size = fb_size);
+   }
 
    /****** We can now start emitting code to begin the render pass ******/
 

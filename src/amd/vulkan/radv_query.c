@@ -854,6 +854,13 @@ radv_query_shader(struct radv_cmd_buffer *cmd_buffer, VkPipeline *pipeline,
 
    radv_unaligned_dispatch(cmd_buffer, count, 1, 1);
 
+   /* Ensure that the query copy dispatch is complete before a potential vkCmdResetPool because
+    * there is an implicit execution dependency from each such query command to all query commands
+    * previously submitted to the same queue.
+    */
+   cmd_buffer->active_query_flush_bits |=
+      RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_L2 | RADV_CMD_FLAG_INV_VCACHE;
+
    /* Restore conditional rendering. */
    cmd_buffer->state.predicating = old_predicating;
 

@@ -204,10 +204,13 @@ zink_fence_server_signal(struct pipe_context *pctx, struct pipe_fence_handle *pf
    struct zink_tc_fence *mfence = (struct zink_tc_fence *)pfence;
 
    assert(!ctx->batch.state->signal_semaphore);
-   /* this is a deferred flush to reduce overhead */
    ctx->batch.state->signal_semaphore = mfence->sem;
    ctx->batch.has_work = true;
-   pctx->flush(pctx, NULL, PIPE_FLUSH_ASYNC);
+   struct zink_batch_state *bs = ctx->batch.state;
+   /* this must produce a synchronous flush that completes before the function returns */
+   pctx->flush(pctx, NULL, 0);
+   if (zink_screen(ctx->base.screen)->threaded)
+      util_queue_fence_wait(&bs->flush_completed);
 }
 
 void

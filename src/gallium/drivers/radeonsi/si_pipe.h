@@ -2040,6 +2040,28 @@ static inline unsigned si_num_vbos_in_user_sgprs(struct si_screen *sscreen)
    return si_num_vbos_in_user_sgprs_inline(sscreen->info.chip_class);
 }
 
+static inline
+void si_check_dirty_buffers_textures(struct si_context *sctx)
+{
+   /* Recompute and re-emit the texture resource states if needed. */
+   unsigned dirty_tex_counter = p_atomic_read(&sctx->screen->dirty_tex_counter);
+   if (unlikely(dirty_tex_counter != sctx->last_dirty_tex_counter)) {
+      sctx->last_dirty_tex_counter = dirty_tex_counter;
+      sctx->framebuffer.dirty_cbufs |= ((1 << sctx->framebuffer.state.nr_cbufs) - 1);
+      sctx->framebuffer.dirty_zsbuf = true;
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.framebuffer);
+      si_update_all_texture_descriptors(sctx);
+   }
+
+   unsigned dirty_buf_counter = p_atomic_read(&sctx->screen->dirty_buf_counter);
+   if (unlikely(dirty_buf_counter != sctx->last_dirty_buf_counter)) {
+      sctx->last_dirty_buf_counter = dirty_buf_counter;
+      /* Rebind all buffers unconditionally. */
+      si_rebind_buffer(sctx, NULL);
+   }
+}
+
+
 #define PRINT_ERR(fmt, args...)                                                                    \
    fprintf(stderr, "EE %s:%d %s - " fmt, __FILE__, __LINE__, __func__, ##args)
 

@@ -1569,8 +1569,6 @@ lvp_compute_pipeline_init(struct lvp_pipeline *pipeline,
                           struct lvp_pipeline_cache *cache,
                           const VkComputePipelineCreateInfo *pCreateInfo)
 {
-   VK_FROM_HANDLE(vk_shader_module, module,
-                   pCreateInfo->stage.module);
    pipeline->device = device;
    pipeline->layout = lvp_pipeline_layout_from_handle(pCreateInfo->layout);
    lvp_pipeline_layout_ref(pipeline->layout);
@@ -1581,10 +1579,21 @@ lvp_compute_pipeline_init(struct lvp_pipeline *pipeline,
                                  &pipeline->compute_create_info, pCreateInfo);
    pipeline->is_compute_pipeline = true;
 
-   lvp_shader_compile_to_ir(pipeline, module->size, module->data,
-                            pCreateInfo->stage.pName,
-                            MESA_SHADER_COMPUTE,
-                            pCreateInfo->stage.pSpecializationInfo);
+   if (pCreateInfo->stage.module) {
+      VK_FROM_HANDLE(vk_shader_module, module,
+                     pCreateInfo->stage.module);
+      lvp_shader_compile_to_ir(pipeline, module->size, module->data,
+                               pCreateInfo->stage.pName,
+                               MESA_SHADER_COMPUTE,
+                               pCreateInfo->stage.pSpecializationInfo);
+   } else {
+         const VkShaderModuleCreateInfo *info = vk_find_struct_const(pCreateInfo->stage.pNext, SHADER_MODULE_CREATE_INFO);
+         assert(info);
+         lvp_shader_compile_to_ir(pipeline, info->codeSize, info->pCode,
+                                  pCreateInfo->stage.pName,
+                                  MESA_SHADER_COMPUTE,
+                                  pCreateInfo->stage.pSpecializationInfo);
+   }
    if (!pipeline->pipeline_nir[MESA_SHADER_COMPUTE])
       return VK_ERROR_FEATURE_NOT_PRESENT;
    lvp_pipeline_compile(pipeline, MESA_SHADER_COMPUTE);

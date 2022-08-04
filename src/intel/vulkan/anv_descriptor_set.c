@@ -1176,7 +1176,8 @@ anv_descriptor_set_create(struct anv_device *device,
 
       if (!pool->host_only) {
          set->desc_surface_state = anv_descriptor_pool_alloc_state(pool);
-         anv_fill_buffer_surface_state(device, set->desc_surface_state, format,
+         anv_fill_buffer_surface_state(device, set->desc_surface_state,
+                                       format, ISL_SWIZZLE_IDENTITY,
                                        ISL_SURF_USAGE_CONSTANT_BUFFER_BIT,
                                        set->desc_addr,
                                        descriptor_buffer_size, 1);
@@ -1631,7 +1632,6 @@ anv_descriptor_set_write_buffer(struct anv_device *device,
    struct anv_buffer_view *bview =
       &set->buffer_views[bind_layout->buffer_view_index + element];
 
-   bview->format = anv_isl_format_for_descriptor_type(device, type);
    bview->range = bind_range;
    bview->address = bind_addr;
 
@@ -1651,9 +1651,10 @@ anv_descriptor_set_write_buffer(struct anv_device *device,
       ISL_SURF_USAGE_CONSTANT_BUFFER_BIT :
       ISL_SURF_USAGE_STORAGE_BIT;
 
+   enum isl_format format = anv_isl_format_for_descriptor_type(device, type);
    anv_fill_buffer_surface_state(device, bview->surface_state,
-                                 bview->format, usage,
-                                 bind_addr, bind_range, 1);
+                                 format, ISL_SWIZZLE_IDENTITY,
+                                 usage, bind_addr, bind_range, 1);
    desc->set_buffer_view = bview;
 }
 

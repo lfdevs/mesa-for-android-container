@@ -2631,12 +2631,15 @@ radv_emit_index_buffer(struct radv_cmd_buffer *cmd_buffer, bool indirect)
    if (!indirect)
       return;
 
-   radeon_emit(cs, PKT3(PKT3_INDEX_BASE, 1, 0));
-   radeon_emit(cs, state->index_va);
-   radeon_emit(cs, state->index_va >> 32);
+   if (state->max_index_count ||
+       !cmd_buffer->device->physical_device->rad_info.has_zero_index_buffer_bug) {
+      radeon_emit(cs, PKT3(PKT3_INDEX_BASE, 1, 0));
+      radeon_emit(cs, state->index_va);
+      radeon_emit(cs, state->index_va >> 32);
 
-   radeon_emit(cs, PKT3(PKT3_INDEX_BUFFER_SIZE, 0, 0));
-   radeon_emit(cs, state->max_index_count);
+      radeon_emit(cs, PKT3(PKT3_INDEX_BUFFER_SIZE, 0, 0));
+      radeon_emit(cs, state->max_index_count);
+   }
 
    cmd_buffer->state.dirty &= ~RADV_CMD_DIRTY_INDEX_BUFFER;
 }
@@ -5654,11 +5657,11 @@ radv_CmdSetVertexInputEXT(VkCommandBuffer commandBuffer, uint32_t vertexBindingD
          unsigned bit = 1u << loc;
          if (binding->stride & format_align_req_minus_1) {
             state->misaligned_mask |= bit;
-            if (cmd_buffer->state.vbo_bound_mask & bit)
+            if (cmd_buffer->state.vbo_bound_mask & BITFIELD_BIT(attrib->binding))
                cmd_buffer->state.vbo_misaligned_mask |= bit;
          } else {
             state->possibly_misaligned_mask |= bit;
-            if (cmd_buffer->state.vbo_bound_mask & bit &&
+            if (cmd_buffer->state.vbo_bound_mask & BITFIELD_BIT(attrib->binding) &&
                 ((vb[attrib->binding].offset + state->offsets[loc]) & format_align_req_minus_1))
                cmd_buffer->state.vbo_misaligned_mask |= bit;
          }

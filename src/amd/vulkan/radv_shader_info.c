@@ -200,10 +200,10 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr,
       info->ps.reads_front_face = true;
       break;
    case nir_intrinsic_load_frag_coord:
-      info->ps.reads_frag_coord_mask = nir_ssa_def_components_read(&instr->dest.ssa);
+      info->ps.reads_frag_coord_mask |= nir_ssa_def_components_read(&instr->dest.ssa);
       break;
    case nir_intrinsic_load_sample_pos:
-      info->ps.reads_sample_pos_mask = nir_ssa_def_components_read(&instr->dest.ssa);
+      info->ps.reads_sample_pos_mask |= nir_ssa_def_components_read(&instr->dest.ssa);
       break;
    case nir_intrinsic_load_view_index:
       info->uses_view_index = true;

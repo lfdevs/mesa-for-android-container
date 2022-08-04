@@ -302,7 +302,6 @@ wsi_x11_connection_create(struct wsi_device *wsi_dev,
             free(error);
          }
       }
-      free(shm_reply);
    }
 
    free(dri3_reply);
@@ -310,6 +309,8 @@ wsi_x11_connection_create(struct wsi_device *wsi_dev,
    free(randr_reply);
    free(amd_reply);
    free(nv_reply);
+   if (wsi_dev->sw)
+      free(shm_reply);
 
    return wsi_conn;
 }
@@ -1276,7 +1277,7 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index,
 
    chain->base.wsi->MapMemory(chain->base.device,
                               image->base.memory,
-                              0, 0, 0, &myptr);
+                              0, VK_WHOLE_SIZE, 0, &myptr);
 
    if (size < max_req_len) {
       cookie = xcb_put_image(chain->conn, XCB_IMAGE_FORMAT_Z_PIXMAP,

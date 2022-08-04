@@ -748,14 +748,14 @@ static void handle_graphics_pipeline(struct vk_cmd_queue_entry *cmd,
       const VkPipelineColorBlendStateCreateInfo *cb = pipeline->graphics_create_info.pColorBlendState;
       int i;
 
+      state->blend_state.logicop_enable = cb->logicOpEnable;
       if (cb->logicOpEnable) {
-         state->blend_state.logicop_enable = VK_TRUE;
          if (!dynamic_states[conv_dynamic_state_idx(VK_DYNAMIC_STATE_LOGIC_OP_EXT)])
             state->blend_state.logicop_func = vk_conv_logic_op(cb->logicOp);
       }
 
-      if (cb->attachmentCount > 1)
-         state->blend_state.independent_blend_enable = true;
+      state->blend_state.independent_blend_enable = (cb->attachmentCount > 1);
+
       for (i = 0; i < cb->attachmentCount; i++) {
          state->blend_state.rt[i].colormask = cb->pAttachments[i].colorWriteMask;
          state->blend_state.rt[i].blend_enable = cb->pAttachments[i].blendEnable;
@@ -3372,7 +3372,7 @@ static void handle_begin_transform_feedback(struct vk_cmd_queue_entry *cmd,
 
    memset(offsets, 0, sizeof(uint32_t)*4);
 
-   for (unsigned i = 0; i < btf->counter_buffer_count; i++) {
+   for (unsigned i = 0; btf->counter_buffers && i < btf->counter_buffer_count; i++) {
       if (!btf->counter_buffers[i])
          continue;
 
@@ -3392,7 +3392,7 @@ static void handle_end_transform_feedback(struct vk_cmd_queue_entry *cmd,
    struct vk_cmd_end_transform_feedback_ext *etf = &cmd->u.end_transform_feedback_ext;
 
    if (etf->counter_buffer_count) {
-      for (unsigned i = 0; i < etf->counter_buffer_count; i++) {
+      for (unsigned i = 0; etf->counter_buffers && i < etf->counter_buffer_count; i++) {
          if (!etf->counter_buffers[i])
             continue;
 

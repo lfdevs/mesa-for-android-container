@@ -2193,7 +2193,7 @@ emit_store_deref(struct ntv_context *ctx, nir_intrinsic_instr *intr)
    nir_variable *var = nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
    unsigned wrmask = nir_intrinsic_write_mask(intr);
    if (!glsl_type_is_scalar(gtype) &&
-       wrmask != BITFIELD_MASK(glsl_get_length(gtype))) {
+       wrmask != BITFIELD_MASK(glsl_type_is_array(gtype) ? glsl_get_aoa_size(gtype) : glsl_get_vector_elements(gtype))) {
       /* no idea what we do if this fails */
       assert(glsl_type_is_array(gtype) || glsl_type_is_vector(gtype));
 
@@ -2903,7 +2903,9 @@ emit_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
        */
       if (ctx->sinfo)
          emit_so_outputs(ctx, ctx->sinfo);
-      spirv_builder_emit_vertex(&ctx->builder, nir_intrinsic_stream_id(intr));
+      if (ctx->nir->info.gs.vertices_out) //skip vertex emission if !vertices_out
+         spirv_builder_emit_vertex(&ctx->builder, nir_intrinsic_stream_id(intr),
+                                   ctx->nir->info.stage == MESA_SHADER_GEOMETRY && util_bitcount(ctx->nir->info.gs.active_stream_mask) > 1);
       break;
 
    case nir_intrinsic_set_vertex_and_primitive_count:
@@ -2911,7 +2913,8 @@ emit_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
       break;
 
    case nir_intrinsic_end_primitive_with_counter:
-      spirv_builder_end_primitive(&ctx->builder, nir_intrinsic_stream_id(intr));
+      spirv_builder_end_primitive(&ctx->builder, nir_intrinsic_stream_id(intr),
+                                  ctx->nir->info.stage == MESA_SHADER_GEOMETRY && util_bitcount(ctx->nir->info.gs.active_stream_mask) > 1);
       break;
 
    case nir_intrinsic_load_helper_invocation:
@@ -3398,10 +3401,8 @@ emit_tex(struct ntv_context *ctx, nir_tex_instr *tex)
       return;
    }
    SpvId actual_dest_type;
-   if (dref)
-      actual_dest_type =
-         spirv_builder_type_float(&ctx->builder,
-                                  nir_dest_bit_size(tex->dest));
+   if (dref && tex->op != nir_texop_tg4)
+      actual_dest_type = spirv_builder_type_float(&ctx->builder, 32);
    else {
       unsigned num_components = nir_dest_num_components(tex->dest);
       switch (nir_alu_type_get_base_type(tex->dest_type)) {
@@ -3435,10 +3436,10 @@ emit_tex(struct ntv_context *ctx, nir_tex_instr *tex)
       if (tex->op == nir_texop_tg4) {
          if (const_offset)
             spirv_builder_emit_cap(&ctx->builder, SpvCapabilityImageGatherExtended);
-         actual_dest_type = dest_type;
-         result = spirv_builder_emit_image_gather(&ctx->builder, dest_type,
+         result = spirv_builder_emit_image_gather(&ctx->builder, actual_dest_type,
                                                  load, coord, emit_uint_const(ctx, 32, tex->component),
                                                  lod, sample, const_offset, offset, dref, tex->is_sparse);
+         actual_dest_type = dest_type;
       } else
          result = spirv_builder_emit_image_fetch(&ctx->builder, actual_dest_type,
                                                  image, coord, lod, sample, const_offset, offset, tex->is_sparse);
@@ -4152,7 +4153,7 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
                                            s->info.gs.invocations);
       spirv_builder_emit_exec_mode_literal(&ctx.builder, entry_point,
                                            SpvExecutionModeOutputVertices,
-                                           s->info.gs.vertices_out);
+                                           MAX2(s->info.gs.vertices_out, 1));
       break;
    case MESA_SHADER_COMPUTE:
       if (s->info.shared_size)

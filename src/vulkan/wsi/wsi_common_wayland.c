@@ -1049,7 +1049,7 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
       void *sptr;
       chain->base.wsi->MapMemory(chain->base.device,
                                  image->base.memory,
-                                 0, 0, 0, &sptr);
+                                 0, VK_WHOLE_SIZE, 0, &sptr);
 
       for (unsigned r = 0; r < chain->extent.height; r++) {
          memcpy(dptr, sptr, image->base.row_pitches[0]);

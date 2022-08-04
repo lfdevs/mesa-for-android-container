@@ -124,7 +124,7 @@ unsigned si_determine_wave_size(struct si_screen *sscreen, struct si_shader *sha
    /* TODO: Merged shaders must use the same wave size because the driver doesn't recompile
     * individual shaders of merged shaders to match the wave size between them.
     */
-   bool merged_shader = shader && !shader->is_gs_copy_shader &&
+   bool merged_shader = stage <= MESA_SHADER_GEOMETRY && shader && !shader->is_gs_copy_shader &&
                         (shader->key.ge.as_ls || shader->key.ge.as_es ||
                          stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_GEOMETRY);
 

@@ -935,6 +935,27 @@ isl_format_supports_multisampling(const struct intel_device_info *devinfo,
 }
 
 /**
+ * Returns true if the two formats are component size compatible meaning that
+ * each component from one format has the same number of bits as the other
+ * format.
+ *
+ * This is useful to check whether an image used with 2 different formats can
+ * be fast cleared with a non 0 clear color.
+ */
+bool
+isl_formats_have_same_bits_per_channel(enum isl_format format1,
+                                       enum isl_format format2)
+{
+   const struct isl_format_layout *fmtl1 = isl_format_get_layout(format1);
+   const struct isl_format_layout *fmtl2 = isl_format_get_layout(format2);
+
+   return fmtl1->channels.r.bits == fmtl2->channels.r.bits &&
+          fmtl1->channels.g.bits == fmtl2->channels.g.bits &&
+          fmtl1->channels.b.bits == fmtl2->channels.b.bits &&
+          fmtl1->channels.a.bits == fmtl2->channels.a.bits;
+}
+
+/**
  * Returns true if the two formats are "CCS_E compatible" meaning that you can
  * render in one format with CCS_E enabled and then texture using the other
  * format without needing a resolve.
@@ -962,16 +983,10 @@ isl_formats_are_ccs_e_compatible(const struct intel_device_info *devinfo,
    if (format2 == ISL_FORMAT_A8_UNORM)
       format2 = ISL_FORMAT_R8_UNORM;
 
-   const struct isl_format_layout *fmtl1 = isl_format_get_layout(format1);
-   const struct isl_format_layout *fmtl2 = isl_format_get_layout(format2);
-
    /* The compression used by CCS is not dependent on the actual data encoding
     * of the format but only depends on the bit-layout of the channels.
     */
-   return fmtl1->channels.r.bits == fmtl2->channels.r.bits &&
-          fmtl1->channels.g.bits == fmtl2->channels.g.bits &&
-          fmtl1->channels.b.bits == fmtl2->channels.b.bits &&
-          fmtl1->channels.a.bits == fmtl2->channels.a.bits;
+   return isl_formats_have_same_bits_per_channel(format1, format2);
 }
 
 static bool

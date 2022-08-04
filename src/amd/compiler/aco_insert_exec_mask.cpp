@@ -585,7 +585,8 @@ process_instructions(exec_ctx& ctx, Block* block, std::vector<aco_ptr<Instructio
          }
       } else if (instr->opcode == aco_opcode::p_demote_to_helper) {
          /* turn demote into discard_if with only exact masks */
-         assert(ctx.info[block->index].exec[0].second == (mask_type_exact | mask_type_global));
+         assert((ctx.info[block->index].exec[0].second & mask_type_exact) &&
+                (ctx.info[block->index].exec[0].second & mask_type_global));
 
          int num;
          Temp cond, exit_cond;

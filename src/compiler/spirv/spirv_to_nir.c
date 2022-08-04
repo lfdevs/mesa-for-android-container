@@ -1826,8 +1826,7 @@ vtn_handle_type(struct vtn_builder *b, SpvOp opcode,
 
    case SpvOpTypeRayQueryKHR: {
       val->type->base_type = vtn_base_type_ray_query;
-      const char *name = "RayQueryKHR";
-      val->type->type = glsl_struct_type(NULL, 0, name, false);
+      val->type->type = glsl_uint64_t_type();
       /* We may need to run queries on helper invocations. Here the parser
        * doesn't go through a deeper analysis on whether the result of a query
        * will be used in derivative instructions.

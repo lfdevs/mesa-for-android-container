@@ -762,13 +762,13 @@ binop("fdiv", tfloat, "", "src0 / src1")
 binop("idiv", tint, "", "src1 == 0 ? 0 : (src0 / src1)")
 binop("udiv", tuint, "", "src1 == 0 ? 0 : (src0 / src1)")
 
-# returns a boolean representing the carry resulting from the addition of
-# the two unsigned arguments.
+# returns an integer (1 or 0) representing the carry resulting from the
+# addition of the two unsigned arguments.
 
 binop_convert("uadd_carry", tuint, tuint, _2src_commutative, "src0 + src1 < src0")
 
-# returns a boolean representing the borrow resulting from the subtraction
-# of the two unsigned arguments.
+# returns an integer (1 or 0) representing the borrow resulting from the
+# subtraction of the two unsigned arguments.
 
 binop_convert("usub_borrow", tuint, tuint, "", "src0 < src1")
 

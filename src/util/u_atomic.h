@@ -153,10 +153,8 @@
    ((void) p_atomic_add_return((_v), (_i)))
 
 #define p_atomic_add_return(_v, _i) (\
-   sizeof *(_v) == sizeof(char)    ? _InterlockedExchangeAdd8 ((char *)   (_v), (_i)) : \
-   sizeof *(_v) == sizeof(short)   ? _InterlockedExchangeAdd16((short *)  (_v), (_i)) : \
-   sizeof *(_v) == sizeof(long)    ? _InterlockedExchangeAdd  ((long *)   (_v), (_i)) : \
-   sizeof *(_v) == sizeof(__int64) ? InterlockedExchangeAdd64((__int64 *)(_v), (_i)) : \
+   sizeof *(_v) == sizeof(long)    ? InterlockedAdd  ((long *)   (_v), (_i)) : \
+   sizeof *(_v) == sizeof(__int64) ? InterlockedAdd64((__int64 *)(_v), (_i)) : \
                                      (assert(!"should not get here"), 0))
 
 #define p_atomic_cmpxchg(_v, _old, _new) (\

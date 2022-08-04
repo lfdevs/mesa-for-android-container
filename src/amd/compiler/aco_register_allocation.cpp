@@ -2012,6 +2012,7 @@ get_reg_phi(ra_ctx& ctx, IDSet& live_in, RegisterFile& register_file,
       if (prev_phi) {
          /* if so, just update that phi's register */
          prev_phi->definitions[0].setFixed(pc.second.physReg());
+         register_file.fill(prev_phi->definitions[0]);
          ctx.assignments[prev_phi->definitions[0].tempId()] = {pc.second.physReg(),
                                                                pc.second.regClass()};
          continue;

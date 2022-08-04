@@ -1863,6 +1863,9 @@ bool isl_formats_are_ccs_e_compatible(const struct intel_device_info *devinfo,
 uint8_t isl_format_get_aux_map_encoding(enum isl_format format);
 uint8_t isl_get_render_compression_format(enum isl_format format);
 
+bool isl_formats_have_same_bits_per_channel(enum isl_format format1,
+                                            enum isl_format format2);
+
 bool isl_format_has_unorm_channel(enum isl_format fmt) ATTRIBUTE_CONST;
 bool isl_format_has_snorm_channel(enum isl_format fmt) ATTRIBUTE_CONST;
 bool isl_format_has_ufloat_channel(enum isl_format fmt) ATTRIBUTE_CONST;

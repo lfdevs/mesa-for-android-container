@@ -120,10 +120,12 @@ opt_shrink_vector(nir_builder *b, nir_alu_instr *instr)
       if (!((mask >> i) & 0x1))
          continue;
 
+      nir_ssa_scalar scalar = nir_get_ssa_scalar(instr->src[i].src.ssa, instr->src[i].swizzle[0]);
+
       /* Try reuse a component with the same value */
       unsigned j;
       for (j = 0; j < num_components; j++) {
-         if (nir_alu_srcs_equal(instr, instr, i, j)) {
+         if (scalar.def == srcs[j].def && scalar.comp == srcs[j].comp) {
             reswizzle[i] = j;
             break;
          }
@@ -131,7 +133,7 @@ opt_shrink_vector(nir_builder *b, nir_alu_instr *instr)
 
       /* Otherwise, just append the value */
       if (j == num_components) {
-         srcs[num_components] = nir_get_ssa_scalar(instr->src[i].src.ssa, instr->src[i].swizzle[0]);
+         srcs[num_components] = scalar;
          reswizzle[i] = num_components++;
       }
    }

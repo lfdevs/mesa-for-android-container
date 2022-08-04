@@ -560,7 +560,7 @@ static void si_fence_server_signal(struct pipe_context *ctx, struct pipe_fence_h
       si_add_syncobj_signal(sctx, sfence->gfx);
 
    /**
-    * The spec does not require a flush here. We insert a flush
+    * The spec requires a flush here. We insert a flush
     * because syncobj based signals are not directly placed into
     * the command stream. Instead the signal happens when the
     * submission associated with the syncobj finishes execution.

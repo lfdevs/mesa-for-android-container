@@ -1991,7 +1991,6 @@ anv_descriptor_set_is_push(struct anv_descriptor_set *set)
 struct anv_buffer_view {
    struct vk_object_base base;
 
-   enum isl_format format; /**< VkBufferViewCreateInfo::format */
    uint64_t range; /**< VkBufferViewCreateInfo::range */
 
    struct anv_address address;
@@ -2618,6 +2617,14 @@ anv_pipe_invalidate_bits_for_access_flags(struct anv_device *device,
           * all the caches.
           */
          pipe_bits |= ANV_PIPE_FLUSH_BITS;
+         break;
+      case VK_ACCESS_2_TRANSFORM_FEEDBACK_WRITE_BIT_EXT:
+         /* We're transitioning a buffer to be written by the streamout fixed
+          * function. This one is apparently not L3 coherent, so we need a
+          * tile cache flush to make sure any previous write is not going to
+          * create WaW hazards.
+          */
+         pipe_bits |= ANV_PIPE_TILE_CACHE_FLUSH_BIT;
          break;
       default:
          break; /* Nothing to do */
@@ -3889,6 +3896,22 @@ struct anv_image {
 
       /** Location of the fast clear state.  */
       struct anv_image_memory_range fast_clear_memory_range;
+
+      /**
+       * Whether this image can be fast cleared with non-zero clear colors.
+       * This can happen with mutable images when formats of different bit
+       * sizes per components are used.
+       *
+       * On Gfx9+, because the clear colors are stored as a 4 components 32bit
+       * values, we can clear in R16G16_UNORM (store 2 16bit values in the
+       * components 0 & 1 of the clear color) and then draw in R32_UINT which
+       * would interpret the clear color as a single component value, using
+       * only the first 16bit component of the previous written clear color.
+       *
+       * On Gfx7/7.5/8, only CC_ZERO/CC_ONE clear colors are supported, this
+       * boolean will prevent the usage of CC_ONE.
+       */
+      bool can_non_zero_fast_clear;
    } planes[3];
 };
 
@@ -4343,6 +4366,7 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
 void anv_fill_buffer_surface_state(struct anv_device *device,
                                    struct anv_state state,
                                    enum isl_format format,
+                                   struct isl_swizzle swizzle,
                                    isl_surf_usage_flags_t usage,
                                    struct anv_address address,
                                    uint32_t range, uint32_t stride);

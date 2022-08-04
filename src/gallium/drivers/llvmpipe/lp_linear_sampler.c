@@ -964,7 +964,9 @@ lp_linear_init_noop_sampler(struct lp_linear_sampler *samp)
    samp->base.fetch = fetch_noop;
 }
 
-/* Check the variant for linear path compatibility.
+
+/*
+ * Check the given sampler and texture info for linear path compatibility.
  */
 boolean
 lp_linear_check_sampler(const struct lp_sampler_static_state *sampler,
@@ -995,6 +997,14 @@ lp_linear_check_sampler(const struct lp_sampler_static_state *sampler,
    if (sampler->texture_state.format != PIPE_FORMAT_B8G8R8A8_UNORM &&
        sampler->texture_state.format != PIPE_FORMAT_B8G8R8X8_UNORM)
       return FALSE;
+
+   /* We don't support sampler view swizzling on the linear path */
+   if (sampler->texture_state.swizzle_r != PIPE_SWIZZLE_X ||
+       sampler->texture_state.swizzle_g != PIPE_SWIZZLE_Y ||
+       sampler->texture_state.swizzle_b != PIPE_SWIZZLE_Z ||
+       sampler->texture_state.swizzle_a != PIPE_SWIZZLE_W) {
+      return FALSE;
+   }
 
    return TRUE;
 }
