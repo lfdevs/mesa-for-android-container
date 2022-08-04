@@ -43,8 +43,14 @@
 
 #include <vulkan/vulkan.h>
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern uint32_t zink_debug;
 struct hash_table;
+struct util_dl_library;
 
 struct zink_batch_state;
 struct zink_context;
@@ -56,10 +62,15 @@ enum zink_descriptor_type;
 /* this is the spec minimum */
 #define ZINK_SPARSE_BUFFER_PAGE_SIZE (64 * 1024)
 
-#define ZINK_DEBUG_NIR 0x1
-#define ZINK_DEBUG_SPIRV 0x2
-#define ZINK_DEBUG_TGSI 0x4
-#define ZINK_DEBUG_VALIDATION 0x8
+enum zink_debug {
+   ZINK_DEBUG_NIR = (1<<0),
+   ZINK_DEBUG_SPIRV = (1<<1),
+   ZINK_DEBUG_TGSI = (1<<2),
+   ZINK_DEBUG_VALIDATION = (1<<3),
+   ZINK_DEBUG_SYNC = (1<<4),
+   ZINK_DEBUG_COMPACT = (1<<5),
+   ZINK_DEBUG_NOREORDER = (1<<6),
+};
 
 #define NUM_SLAB_ALLOCATORS 3
 #define MIN_SLAB_ORDER 8
@@ -69,9 +80,15 @@ enum zink_descriptor_type;
 enum zink_descriptor_mode {
    ZINK_DESCRIPTOR_MODE_AUTO,
    ZINK_DESCRIPTOR_MODE_LAZY,
-   ZINK_DESCRIPTOR_MODE_NOFALLBACK,
+   ZINK_DESCRIPTOR_MODE_CACHED,
    ZINK_DESCRIPTOR_MODE_NOTEMPLATES,
+   ZINK_DESCRIPTOR_MODE_COMPACT,
 };
+
+extern enum zink_descriptor_mode zink_descriptor_mode;
+
+//keep in sync with zink_descriptor_type since headers can't be cross-included
+#define ZINK_MAX_DESCRIPTOR_SETS 6
 
 struct zink_modifier_prop {
     uint32_t                             drmFormatModifierCount;
@@ -80,25 +97,32 @@ struct zink_modifier_prop {
 
 struct zink_screen {
    struct pipe_screen base;
+
+   struct util_dl_library *loader_lib;
+   PFN_vkGetInstanceProcAddr vk_GetInstanceProcAddr;
+   PFN_vkGetDeviceProcAddr vk_GetDeviceProcAddr;
+
    bool threaded;
    bool is_cpu;
-   uint32_t curr_batch; //the current batch id
-   uint32_t last_finished; //this is racy but ultimately doesn't matter
+   bool abort_on_hang;
+   uint64_t curr_batch; //the current batch id
+   uint32_t last_finished;
    VkSemaphore sem;
-   VkSemaphore prev_sem;
    VkFence fence;
    struct util_queue flush_queue;
    struct zink_context *copy_context;
 
    unsigned buffer_rebind_counter;
+   unsigned image_rebind_counter;
+   unsigned robust_ctx_count;
 
    struct hash_table dts;
    simple_mtx_t dt_lock;
 
    bool device_lost;
+   int drm_fd;
 
    struct hash_table framebuffer_cache;
-   simple_mtx_t framebuffer_mtx;
 
    struct slab_parent_pool transfer_pool;
    struct disk_cache *disk_cache;
@@ -111,8 +135,6 @@ struct zink_screen {
       struct pb_cache bo_cache;
       struct pb_slabs bo_slabs[NUM_SLAB_ALLOCATORS];
       unsigned min_alloc_size;
-      struct hash_table *bo_export_table;
-      simple_mtx_t bo_export_table_lock;
       uint32_t next_bo_unique_id;
    } pb;
    uint8_t heap_map[VK_MAX_MEMORY_TYPES];
@@ -142,12 +164,12 @@ struct zink_screen {
    bool faked_e5sparse; //drivers may not expose R9G9B9E5 but cts requires it
 
    uint32_t gfx_queue;
+   uint32_t sparse_queue;
    uint32_t max_queues;
    uint32_t timestamp_valid_bits;
-   unsigned max_fences;
    VkDevice dev;
    VkQueue queue; //gfx+compute
-   VkQueue thread_queue; //gfx+compute
+   VkQueue queue_sparse;
    simple_mtx_t queue_lock;
    VkDebugUtilsMessengerEXT debugUtilsCallbackHandle;
 
@@ -155,6 +177,8 @@ struct zink_screen {
 
    struct vk_dispatch_table vk;
 
+   bool compact_descriptors;
+   uint8_t desc_set_id[ZINK_MAX_DESCRIPTOR_SETS];
    bool (*descriptor_program_init)(struct zink_context *ctx, struct zink_program *pg);
    void (*descriptor_program_deinit)(struct zink_context *ctx, struct zink_program *pg);
    void (*descriptors_update)(struct zink_context *ctx, bool is_compute);
@@ -167,7 +191,6 @@ struct zink_screen {
    void (*batch_descriptor_deinit)(struct zink_screen *screen, struct zink_batch_state *bs);
    bool (*descriptors_init)(struct zink_context *ctx);
    void (*descriptors_deinit)(struct zink_context *ctx);
-   enum zink_descriptor_mode descriptor_mode;
 
    struct {
       bool dual_color_blend_by_location;
@@ -192,36 +215,38 @@ struct zink_screen {
 
 /* update last_finished to account for batch_id wrapping */
 static inline void
-zink_screen_update_last_finished(struct zink_screen *screen, uint32_t batch_id)
+zink_screen_update_last_finished(struct zink_screen *screen, uint64_t batch_id)
 {
+   const uint32_t check_id = (uint32_t)batch_id;
    /* last_finished may have wrapped */
    if (screen->last_finished < UINT_MAX / 2) {
       /* last_finished has wrapped, batch_id has not */
-      if (batch_id > UINT_MAX / 2)
+      if (check_id > UINT_MAX / 2)
          return;
-   } else if (batch_id < UINT_MAX / 2) {
+   } else if (check_id < UINT_MAX / 2) {
       /* batch_id has wrapped, last_finished has not */
-      screen->last_finished = batch_id;
+      screen->last_finished = check_id;
       return;
    }
    /* neither have wrapped */
-   screen->last_finished = MAX2(batch_id, screen->last_finished);
+   screen->last_finished = MAX2(check_id, screen->last_finished);
 }
 
 /* check a batch_id against last_finished while accounting for wrapping */
 static inline bool
 zink_screen_check_last_finished(struct zink_screen *screen, uint32_t batch_id)
 {
+   const uint32_t check_id = (uint32_t)batch_id;
    /* last_finished may have wrapped */
    if (screen->last_finished < UINT_MAX / 2) {
       /* last_finished has wrapped, batch_id has not */
-      if (batch_id > UINT_MAX / 2)
+      if (check_id > UINT_MAX / 2)
          return true;
-   } else if (batch_id < UINT_MAX / 2) {
+   } else if (check_id < UINT_MAX / 2) {
       /* batch_id has wrapped, last_finished has not */
       return false;
    }
-   return screen->last_finished >= batch_id;
+   return screen->last_finished >= check_id;
 }
 
 bool
@@ -238,6 +263,9 @@ zink_screen_handle_vkresult(struct zink_screen *screen, VkResult ret)
    case VK_ERROR_DEVICE_LOST:
       screen->device_lost = true;
       mesa_loge("zink: DEVICE LOST!\n");
+      /* if nothing can save us, abort */
+      if (screen->abort_on_hang && !screen->robust_ctx_count)
+         abort();
       FALLTHROUGH;
    default:
       success = false;
@@ -265,15 +293,12 @@ VkFormat
 zink_get_format(struct zink_screen *screen, enum pipe_format format);
 
 bool
-zink_screen_batch_id_wait(struct zink_screen *screen, uint32_t batch_id, uint64_t timeout);
-
-bool
-zink_screen_timeline_wait(struct zink_screen *screen, uint32_t batch_id, uint64_t timeout);
+zink_screen_timeline_wait(struct zink_screen *screen, uint64_t batch_id, uint64_t timeout);
 
 bool
 zink_is_depth_format_supported(struct zink_screen *screen, VkFormat format);
 
-#define GET_PROC_ADDR_INSTANCE_LOCAL(instance, x) PFN_vk##x vk_##x = (PFN_vk##x)vkGetInstanceProcAddr(instance, "vk"#x)
+#define GET_PROC_ADDR_INSTANCE_LOCAL(screen, instance, x) PFN_vk##x vk_##x = (PFN_vk##x)(screen)->vk_GetInstanceProcAddr(instance, "vk"#x)
 
 void
 zink_screen_update_pipeline_cache(struct zink_screen *screen, struct zink_program *pg);
@@ -296,5 +321,9 @@ zink_stub_function_not_loaded(void);
          warned = true; \
       } \
    } while (0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -766,6 +766,7 @@ enum pipe_cap
    PIPE_CAP_FS_COORD_ORIGIN_LOWER_LEFT,
    PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER,
    PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER,
+   PIPE_CAP_POINT_COORD_ORIGIN_UPPER_LEFT,
    PIPE_CAP_DEPTH_CLIP_DISABLE,
    PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE,
    PIPE_CAP_DEPTH_CLAMP_ENABLE,
@@ -810,7 +811,7 @@ enum pipe_cap
    PIPE_CAP_TEXTURE_TRANSFER_MODES,
    PIPE_CAP_QUERY_PIPELINE_STATISTICS,
    PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK,
-   PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE,
+   PIPE_CAP_MAX_TEXEL_BUFFER_ELEMENTS_UINT,
    PIPE_CAP_MAX_VIEWPORTS,
    PIPE_CAP_ENDIANNESS,
    PIPE_CAP_MIXED_FRAMEBUFFER_SIZES,
@@ -859,6 +860,7 @@ enum pipe_cap
    PIPE_CAP_SHADER_PACK_HALF_FLOAT,
    PIPE_CAP_MULTI_DRAW_INDIRECT,
    PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS,
+   PIPE_CAP_MULTI_DRAW_INDIRECT_PARTIAL_STRIDE,
    PIPE_CAP_FS_POSITION_IS_SYSVAL,
    PIPE_CAP_FS_POINT_IS_SYSVAL,
    PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL,
@@ -887,10 +889,9 @@ enum pipe_cap
    PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS,
    PIPE_CAP_SHADER_CAN_READ_OUTPUTS,
    PIPE_CAP_NATIVE_FENCE_FD,
-   PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY,
    PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS,
    PIPE_CAP_FBFETCH,
-   PIPE_CAP_TGSI_MUL_ZERO_WINS,
+   PIPE_CAP_LEGACY_MATH_RULES,
    PIPE_CAP_DOUBLES,
    PIPE_CAP_INT64,
    PIPE_CAP_INT64_DIVMOD,
@@ -925,7 +926,7 @@ enum pipe_cap
    PIPE_CAP_CONSERVATIVE_RASTER_INNER_COVERAGE,
    PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS,
    PIPE_CAP_MAX_GS_INVOCATIONS,
-   PIPE_CAP_MAX_SHADER_BUFFER_SIZE,
+   PIPE_CAP_MAX_SHADER_BUFFER_SIZE_UINT,
    PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE,
    PIPE_CAP_MAX_COMBINED_SHADER_BUFFERS,
    PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTERS,
@@ -941,7 +942,6 @@ enum pipe_cap
    PIPE_CAP_MAX_VARYINGS,
    PIPE_CAP_COMPUTE_GRID_INFO_LAST_BLOCK,
    PIPE_CAP_COMPUTE_SHADER_DERIVATIVES,
-   PIPE_CAP_TGSI_SKIP_SHRINK_IO_ARRAYS,
    PIPE_CAP_IMAGE_LOAD_FORMATTED,
    PIPE_CAP_IMAGE_STORE_FORMATTED,
    PIPE_CAP_THROTTLE,
@@ -954,7 +954,6 @@ enum pipe_cap
    PIPE_CAP_TGSI_DIV,
    PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD,
    PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES,
-   PIPE_CAP_VERTEX_SHADER_SATURATE,
    PIPE_CAP_TEXTURE_SHADOW_LOD,
    PIPE_CAP_SHADER_SAMPLES_IDENTICAL,
    PIPE_CAP_IMAGE_ATOMIC_INC_WRAP,
@@ -1008,6 +1007,12 @@ enum pipe_cap
    PIPE_CAP_SPARSE_TEXTURE_FULL_ARRAY_CUBE_MIPMAPS,
    PIPE_CAP_QUERY_SPARSE_TEXTURE_RESIDENCY,
    PIPE_CAP_CLAMP_SPARSE_TEXTURE_LOD,
+   PIPE_CAP_ALLOW_DRAW_OUT_OF_ORDER,
+   PIPE_CAP_MAX_CONSTANT_BUFFER_SIZE_UINT,
+   PIPE_CAP_HARDWARE_GL_SELECT,
+   PIPE_CAP_DITHERING,
+   PIPE_CAP_FBFETCH_ZS,
+   PIPE_CAP_TIMELINE_SEMAPHORE_IMPORT,
 
    PIPE_CAP_LAST,
    /* XXX do not add caps after PIPE_CAP_LAST! */
@@ -1032,6 +1037,7 @@ enum pipe_texture_transfer_mode {
 
 #define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 (1 << 0)
 #define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_R600 (1 << 1)
+#define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_FREEDRENO (1 << 2)
 
 enum pipe_endian
 {
@@ -1077,11 +1083,11 @@ enum pipe_shader_cap
    PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH,
    PIPE_SHADER_CAP_MAX_INPUTS,
    PIPE_SHADER_CAP_MAX_OUTPUTS,
-   PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE,
+   PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE,
    PIPE_SHADER_CAP_MAX_CONST_BUFFERS,
    PIPE_SHADER_CAP_MAX_TEMPS,
    /* boolean caps */
-   PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED,
+   PIPE_SHADER_CAP_CONT_SUPPORTED,
    PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR,
    PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR,
    PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR,
@@ -1098,17 +1104,13 @@ enum pipe_shader_cap
    PIPE_SHADER_CAP_PREFERRED_IR,
    PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED,
    PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS,
-   PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED, /* all rounding modes */
-   PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED,
-   PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED,
+   PIPE_SHADER_CAP_DROUND_SUPPORTED, /* all rounding modes */
+   PIPE_SHADER_CAP_DFRACEXP_DLDEXP_SUPPORTED,
    PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE,
-   PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT,
    PIPE_SHADER_CAP_MAX_SHADER_BUFFERS,
    PIPE_SHADER_CAP_SUPPORTED_IRS,
    PIPE_SHADER_CAP_MAX_SHADER_IMAGES,
-   PIPE_SHADER_CAP_LOWER_IF_THRESHOLD,
-   PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS,
-   PIPE_SHADER_CAP_TGSI_LDEXP_SUPPORTED,
+   PIPE_SHADER_CAP_LDEXP_SUPPORTED,
    PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS,
    PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS,
 };
@@ -1213,17 +1215,22 @@ struct pipe_query_data_timestamp_disjoint
  */
 struct pipe_query_data_pipeline_statistics
 {
-   uint64_t ia_vertices;    /**< Num vertices read by the vertex fetcher. */
-   uint64_t ia_primitives;  /**< Num primitives read by the vertex fetcher. */
-   uint64_t vs_invocations; /**< Num vertex shader invocations. */
-   uint64_t gs_invocations; /**< Num geometry shader invocations. */
-   uint64_t gs_primitives;  /**< Num primitives output by a geometry shader. */
-   uint64_t c_invocations;  /**< Num primitives sent to the rasterizer. */
-   uint64_t c_primitives;   /**< Num primitives that were rendered. */
-   uint64_t ps_invocations; /**< Num pixel shader invocations. */
-   uint64_t hs_invocations; /**< Num hull shader invocations. */
-   uint64_t ds_invocations; /**< Num domain shader invocations. */
-   uint64_t cs_invocations; /**< Num compute shader invocations. */
+   union {
+      struct {
+         uint64_t ia_vertices;    /**< Num vertices read by the vertex fetcher. */
+         uint64_t ia_primitives;  /**< Num primitives read by the vertex fetcher. */
+         uint64_t vs_invocations; /**< Num vertex shader invocations. */
+         uint64_t gs_invocations; /**< Num geometry shader invocations. */
+         uint64_t gs_primitives;  /**< Num primitives output by a geometry shader. */
+         uint64_t c_invocations;  /**< Num primitives sent to the rasterizer. */
+         uint64_t c_primitives;   /**< Num primitives that were rendered. */
+         uint64_t ps_invocations; /**< Num pixel shader invocations. */
+         uint64_t hs_invocations; /**< Num hull shader invocations. */
+         uint64_t ds_invocations; /**< Num domain shader invocations. */
+         uint64_t cs_invocations; /**< Num compute shader invocations. */
+      };
+      uint64_t counters[11];
+   };
 };
 
 /**
@@ -1358,6 +1365,7 @@ enum pipe_fd_type
 {
    PIPE_FD_TYPE_NATIVE_SYNC,
    PIPE_FD_TYPE_SYNCOBJ,
+   PIPE_FD_TYPE_TIMELINE_SEMAPHORE,
 };
 
 /**
@@ -1384,6 +1392,7 @@ enum pipe_perf_counter_data_type
 };
 
 #define PIPE_UUID_SIZE 16
+#define PIPE_LUID_SIZE 8
 
 #ifdef PIPE_OS_UNIX
 #define PIPE_MEMORY_FD

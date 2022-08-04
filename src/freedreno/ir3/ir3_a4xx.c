@@ -232,7 +232,7 @@ get_image_offset(struct ir3_context *ctx, const nir_intrinsic_instr *instr,
    unsigned cb;
    if (ctx->compiler->gen > 4) {
       const struct ir3_const_state *const_state = ir3_const_state(ctx->so);
-      debug_assert(const_state->image_dims.mask & (1 << index));
+      assert(const_state->image_dims.mask & (1 << index));
 
       cb = regid(const_state->offsets.image_dims, 0) +
          const_state->image_dims.off[index];
@@ -308,7 +308,7 @@ emit_intrinsic_load_image(struct ir3_context *ctx, nir_intrinsic_instr *intr,
          break;
       default:
          /* For some reason even more 32-bit components don't work. */
-         debug_assert(0);
+         assert(0);
          break;
       }
    }

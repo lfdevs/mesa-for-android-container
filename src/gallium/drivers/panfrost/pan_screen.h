@@ -128,6 +128,7 @@ void panfrost_cmdstream_screen_init_v4(struct panfrost_screen *screen);
 void panfrost_cmdstream_screen_init_v5(struct panfrost_screen *screen);
 void panfrost_cmdstream_screen_init_v6(struct panfrost_screen *screen);
 void panfrost_cmdstream_screen_init_v7(struct panfrost_screen *screen);
+void panfrost_cmdstream_screen_init_v9(struct panfrost_screen *screen);
 
 #define perf_debug(dev, ...) \
         do { \

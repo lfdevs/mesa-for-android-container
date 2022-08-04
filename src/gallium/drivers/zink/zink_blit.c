@@ -44,12 +44,12 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info, bool *
    struct zink_resource *dst = zink_resource(info->dst.resource);
 
    struct zink_screen *screen = zink_screen(ctx->base.screen);
+   /* aliased/swizzled formats need u_blitter */
    if (src->format != zink_get_format(screen, info->src.format) ||
        dst->format != zink_get_format(screen, info->dst.format))
       return false;
-   if (info->dst.resource->target == PIPE_BUFFER)
-      util_range_add(info->dst.resource, &dst->valid_buffer_range,
-                     info->dst.box.x, info->dst.box.x + info->dst.box.width);
+   if (src->format != dst->format)
+      return false;
 
    apply_dst_clears(ctx, info, false);
    zink_fb_clears_apply_region(ctx, info->src.resource, zink_rect_from_box(&info->src.box));
@@ -58,11 +58,12 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info, bool *
       *needs_present_readback = zink_kopper_acquire_readback(ctx, src);
 
    struct zink_batch *batch = &ctx->batch;
-   zink_batch_no_rp(ctx);
+   zink_resource_setup_transfer_layouts(ctx, src, dst);
+   VkCommandBuffer cmdbuf = *needs_present_readback ?
+                            ctx->batch.state->cmdbuf :
+                            zink_get_cmdbuf(ctx, src, dst);
    zink_batch_reference_resource_rw(batch, src, false);
    zink_batch_reference_resource_rw(batch, dst, true);
-
-   zink_resource_setup_transfer_layouts(ctx, src, dst);
 
    VkImageResolve region = {0};
 
@@ -101,7 +102,7 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info, bool *
    region.extent.width = info->dst.box.width;
    region.extent.height = info->dst.box.height;
    region.extent.depth = info->dst.box.depth;
-   VKCTX(CmdResolveImage)(batch->state->cmdbuf, src->obj->image, src->layout,
+   VKCTX(CmdResolveImage)(cmdbuf, src->obj->image, src->layout,
                      dst->obj->image, dst->layout,
                      1, &region);
 
@@ -167,14 +168,13 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
       *needs_present_readback = zink_kopper_acquire_readback(ctx, src);
 
    struct zink_batch *batch = &ctx->batch;
-   zink_batch_no_rp(ctx);
+   zink_resource_setup_transfer_layouts(ctx, src, dst);
+   VkCommandBuffer cmdbuf = *needs_present_readback ?
+                            ctx->batch.state->cmdbuf :
+                            zink_get_cmdbuf(ctx, src, dst);
    zink_batch_reference_resource_rw(batch, src, false);
    zink_batch_reference_resource_rw(batch, dst, true);
 
-   zink_resource_setup_transfer_layouts(ctx, src, dst);
-   if (info->dst.resource->target == PIPE_BUFFER)
-      util_range_add(info->dst.resource, &dst->valid_buffer_range,
-                     info->dst.box.x, info->dst.box.x + info->dst.box.width);
    VkImageBlit region = {0};
    region.srcSubresource.aspectMask = src->aspect;
    region.srcSubresource.mipLevel = info->src.level;
@@ -251,7 +251,7 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
    }
    assert(region.dstOffsets[0].z != region.dstOffsets[1].z);
 
-   VKCTX(CmdBlitImage)(batch->state->cmdbuf, src->obj->image, src->layout,
+   VKCTX(CmdBlitImage)(cmdbuf, src->obj->image, src->layout,
                   dst->obj->image, dst->layout,
                   1, &region,
                   zink_filter(info->filter));
@@ -318,11 +318,23 @@ zink_blit(struct pipe_context *pctx,
 
 
 
+   bool stencil_blit = false;
    if (!util_blitter_is_blit_supported(ctx->blitter, info)) {
-      debug_printf("blit unsupported %s -> %s\n",
-              util_format_short_name(info->src.resource->format),
-              util_format_short_name(info->dst.resource->format));
-      goto end;
+      if (util_format_is_depth_or_stencil(info->src.resource->format)) {
+         struct pipe_blit_info depth_blit = *info;
+         depth_blit.mask = PIPE_MASK_Z;
+         stencil_blit = util_blitter_is_blit_supported(ctx->blitter, &depth_blit);
+         if (stencil_blit) {
+            zink_blit_begin(ctx, ZINK_BLIT_SAVE_FB | ZINK_BLIT_SAVE_FS | ZINK_BLIT_SAVE_TEXTURES);
+            util_blitter_blit(ctx->blitter, &depth_blit);
+         }
+      }
+      if (!stencil_blit) {
+         mesa_loge("ZINK: blit unsupported %s -> %s",
+                 util_format_short_name(info->src.resource->format),
+                 util_format_short_name(info->dst.resource->format));
+         goto end;
+      }
    }
 
    if (src->obj->dt) {
@@ -335,12 +347,33 @@ zink_blit(struct pipe_context *pctx,
     */
    apply_dst_clears(ctx, info, true);
 
-   if (info->dst.resource->target == PIPE_BUFFER)
-      util_range_add(info->dst.resource, &dst->valid_buffer_range,
-                     info->dst.box.x, info->dst.box.x + info->dst.box.width);
+   /* this will draw a full-resource quad, so ignore existing data */
+   if (util_blit_covers_whole_resource(info))
+      pctx->invalidate_resource(pctx, info->dst.resource);
    zink_blit_begin(ctx, ZINK_BLIT_SAVE_FB | ZINK_BLIT_SAVE_FS | ZINK_BLIT_SAVE_TEXTURES);
 
-   util_blitter_blit(ctx->blitter, info);
+   if (stencil_blit) {
+      struct pipe_surface *dst_view, dst_templ;
+      util_blitter_default_dst_texture(&dst_templ, info->dst.resource, info->dst.level, info->dst.box.z);
+      dst_view = pctx->create_surface(pctx, info->dst.resource, &dst_templ);
+
+      util_blitter_clear_depth_stencil(ctx->blitter, dst_view, PIPE_CLEAR_STENCIL,
+                                       0, 0, info->dst.box.x, info->dst.box.y,
+                                       info->dst.box.width, info->dst.box.height);
+      zink_blit_begin(ctx, ZINK_BLIT_SAVE_FB | ZINK_BLIT_SAVE_FS | ZINK_BLIT_SAVE_TEXTURES);
+      util_blitter_stencil_fallback(ctx->blitter,
+                                    info->dst.resource,
+                                    info->dst.level,
+                                    &info->dst.box,
+                                    info->src.resource,
+                                    info->src.level,
+                                    &info->src.box,
+                                    info->scissor_enable ? &info->scissor : NULL);
+
+      pipe_surface_release(pctx, &dst_view);
+   } else {
+      util_blitter_blit(ctx->blitter, info);
+   }
 end:
    if (needs_present_readback)
       zink_kopper_present_readback(ctx, src);

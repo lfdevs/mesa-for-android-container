@@ -2481,6 +2481,8 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_ray_launch_id;
    case SYSTEM_VALUE_RAY_LAUNCH_SIZE:
       return nir_intrinsic_load_ray_launch_size;
+   case SYSTEM_VALUE_RAY_LAUNCH_SIZE_ADDR_AMD:
+      return nir_intrinsic_load_ray_launch_size_addr_amd;
    case SYSTEM_VALUE_RAY_WORLD_ORIGIN:
       return nir_intrinsic_load_ray_world_origin;
    case SYSTEM_VALUE_RAY_WORLD_DIRECTION:
@@ -2505,6 +2507,8 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_ray_geometry_index;
    case SYSTEM_VALUE_RAY_INSTANCE_CUSTOM_INDEX:
       return nir_intrinsic_load_ray_instance_custom_index;
+   case SYSTEM_VALUE_CULL_MASK:
+      return nir_intrinsic_load_cull_mask;
    case SYSTEM_VALUE_MESH_VIEW_COUNT:
       return nir_intrinsic_load_mesh_view_count;
    case SYSTEM_VALUE_FRAG_SHADING_RATE:
@@ -2624,6 +2628,8 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_RAY_LAUNCH_ID;
    case nir_intrinsic_load_ray_launch_size:
       return SYSTEM_VALUE_RAY_LAUNCH_SIZE;
+   case nir_intrinsic_load_ray_launch_size_addr_amd:
+      return SYSTEM_VALUE_RAY_LAUNCH_SIZE_ADDR_AMD;
    case nir_intrinsic_load_ray_world_origin:
       return SYSTEM_VALUE_RAY_WORLD_ORIGIN;
    case nir_intrinsic_load_ray_world_direction:
@@ -2648,6 +2654,8 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_RAY_GEOMETRY_INDEX;
    case nir_intrinsic_load_ray_instance_custom_index:
       return SYSTEM_VALUE_RAY_INSTANCE_CUSTOM_INDEX;
+   case nir_intrinsic_load_cull_mask:
+      return SYSTEM_VALUE_CULL_MASK;
    case nir_intrinsic_load_frag_shading_rate:
       return SYSTEM_VALUE_FRAG_SHADING_RATE;
    case nir_intrinsic_load_mesh_view_count:
@@ -2853,7 +2861,11 @@ nir_binding nir_chase_binding(nir_src rsrc)
    if (nir_src_is_const(rsrc)) {
       /* GL binding model after deref lowering */
       res.success = true;
-      res.binding = nir_src_as_uint(rsrc);
+      /* Can't use just nir_src_as_uint. Vulkan resource index produces a
+       * vec2. Some drivers lower it to vec1 (to handle get_ssbo_size for
+       * example) but others just keep it around as a vec2 (v3dv).
+       */
+      res.binding = nir_src_comp_as_uint(rsrc, 0);
       return res;
    }
 
@@ -3516,4 +3528,13 @@ void nir_remove_sysval_output(nir_intrinsic_instr *intr)
    } else {
       nir_instr_remove(&intr->instr);
    }
+}
+
+void nir_remove_non_entrypoints(nir_shader *nir)
+{
+   foreach_list_typed_safe(nir_function, func, node, &nir->functions) {
+      if (!func->is_entrypoint)
+         exec_node_remove(&func->node);
+   }
+   assert(exec_list_length(&nir->functions) == 1);
 }

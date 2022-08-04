@@ -1046,6 +1046,37 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
       r = (struct ssa_result_range){le_zero, false, true, false};
       break;
 
+   case nir_op_fdot2:
+   case nir_op_fdot3:
+   case nir_op_fdot4:
+   case nir_op_fdot8:
+   case nir_op_fdot16:
+   case nir_op_fdot2_replicated:
+   case nir_op_fdot3_replicated:
+   case nir_op_fdot4_replicated:
+   case nir_op_fdot8_replicated:
+   case nir_op_fdot16_replicated: {
+      const struct ssa_result_range left =
+         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
+
+      /* If the two sources are the same SSA value, then the result is either
+       * NaN or some number >= 0.  If one source is the negation of the other,
+       * the result is either NaN or some number <= 0.
+       *
+       * In either of these two cases, if one source is a number, then the
+       * other must also be a number.  Since it should not be possible to get
+       * Inf-Inf in the dot-product, the result must also be a number.
+       */
+      if (nir_alu_srcs_equal(alu, alu, 0, 1)) {
+         r = (struct ssa_result_range){ge_zero, false, left.is_a_number, false };
+      } else if (nir_alu_srcs_negative_equal(alu, alu, 0, 1)) {
+         r = (struct ssa_result_range){le_zero, false, left.is_a_number, false };
+      } else {
+         r = (struct ssa_result_range){unknown, false, false, false};
+      }
+      break;
+   }
+
    case nir_op_fpow: {
       /* Due to flush-to-zero semanatics of floating-point numbers with very
        * small mangnitudes, we can never really be sure a result will be
@@ -1416,6 +1447,13 @@ nir_unsigned_upper_bound(nir_shader *shader, struct hash_table *range_ht,
          /* Very generous maximum: TCS/TES executed by largest possible workgroup */
          res = config->max_workgroup_invocations / MAX2(shader->info.tess.tcs_vertices_out, 1u);
          break;
+      case nir_intrinsic_load_scalar_arg_amd:
+      case nir_intrinsic_load_vector_arg_amd: {
+         uint32_t upper_bound = nir_intrinsic_arg_upper_bound_u32_amd(intrin);
+         if (upper_bound)
+            res = upper_bound;
+         break;
+      }
       default:
          break;
       }

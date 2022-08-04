@@ -83,6 +83,7 @@ struct d3d12_image_format_conversion_info {
 };
 
 struct d3d12_shader_key {
+   uint32_t hash;
    enum pipe_shader_type stage;
 
    struct d3d12_varying_info required_varying_inputs;
@@ -91,6 +92,7 @@ struct d3d12_shader_key {
    uint64_t prev_varying_outputs;
    unsigned last_vertex_processing_stage : 1;
    unsigned invert_depth : 16;
+   unsigned halfz : 1;
    unsigned samples_int_textures : 1;
    unsigned input_clip_size : 4;
    unsigned tex_saturate_s : PIPE_MAX_SAMPLERS;

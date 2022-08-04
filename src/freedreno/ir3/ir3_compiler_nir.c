@@ -769,7 +769,7 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
       break;
    }
    case nir_op_bit_count: {
-      if (ctx->compiler->gen < 5) {
+      if (ctx->compiler->gen < 5 || (src[0]->dsts[0]->flags & IR3_REG_HALF)) {
          dst[0] = ir3_CBITS_B(b, src[0], 0);
          break;
       }
@@ -824,6 +824,14 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
       break;
    case nir_op_iadd_sat:
       dst[0] = ir3_ADD_S(b, src[0], 0, src[1], 0);
+      dst[0]->flags |= IR3_INSTR_SAT;
+      break;
+   case nir_op_usub_sat:
+      dst[0] = ir3_SUB_U(b, src[0], 0, src[1], 0);
+      dst[0]->flags |= IR3_INSTR_SAT;
+      break;
+   case nir_op_isub_sat:
+      dst[0] = ir3_SUB_S(b, src[0], 0, src[1], 0);
       dst[0]->flags |= IR3_INSTR_SAT;
       break;
 
@@ -1747,29 +1755,27 @@ create_sysval_input(struct ir3_context *ctx, gl_system_value slot,
 static struct ir3_instruction *
 get_barycentric(struct ir3_context *ctx, enum ir3_bary bary)
 {
-   static const gl_system_value sysval_base =
-      SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL;
-
-   STATIC_ASSERT(sysval_base + IJ_PERSP_PIXEL ==
+   STATIC_ASSERT(SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + IJ_PERSP_PIXEL ==
                  SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL);
-   STATIC_ASSERT(sysval_base + IJ_PERSP_SAMPLE ==
+   STATIC_ASSERT(SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + IJ_PERSP_SAMPLE ==
                  SYSTEM_VALUE_BARYCENTRIC_PERSP_SAMPLE);
-   STATIC_ASSERT(sysval_base + IJ_PERSP_CENTROID ==
+   STATIC_ASSERT(SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + IJ_PERSP_CENTROID ==
                  SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID);
-   STATIC_ASSERT(sysval_base + IJ_PERSP_SIZE ==
-                 SYSTEM_VALUE_BARYCENTRIC_PERSP_SIZE);
-   STATIC_ASSERT(sysval_base + IJ_LINEAR_PIXEL ==
+   STATIC_ASSERT(SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + IJ_PERSP_CENTER_RHW ==
+                 SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTER_RHW);
+   STATIC_ASSERT(SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + IJ_LINEAR_PIXEL ==
                  SYSTEM_VALUE_BARYCENTRIC_LINEAR_PIXEL);
-   STATIC_ASSERT(sysval_base + IJ_LINEAR_CENTROID ==
+   STATIC_ASSERT(SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + IJ_LINEAR_CENTROID ==
                  SYSTEM_VALUE_BARYCENTRIC_LINEAR_CENTROID);
-   STATIC_ASSERT(sysval_base + IJ_LINEAR_SAMPLE ==
+   STATIC_ASSERT(SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + IJ_LINEAR_SAMPLE ==
                  SYSTEM_VALUE_BARYCENTRIC_LINEAR_SAMPLE);
 
    if (!ctx->ij[bary]) {
       struct ir3_instruction *xy[2];
       struct ir3_instruction *ij;
 
-      ij = create_sysval_input(ctx, sysval_base + bary, 0x3);
+      ij = create_sysval_input(ctx, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL +
+                               bary, 0x3);
       ir3_split_dest(ctx->in_block, xy, ij, 0, 2);
 
       ctx->ij[bary] = ir3_create_collect(ctx->in_block, xy, 2);
@@ -1898,7 +1904,7 @@ create_multidst_mov(struct ir3_block *block, struct ir3_register *dst)
       ir3_src_create(mov, INVALID_REG, IR3_REG_SSA | src_flags);
    src->wrmask = dst->wrmask;
    src->def = dst;
-   debug_assert(!(dst->flags & IR3_REG_RELATIV));
+   assert(!(dst->flags & IR3_REG_RELATIV));
    mov->cat1.src_type = mov->cat1.dst_type =
       (dst->flags & IR3_REG_HALF) ? TYPE_U16 : TYPE_U32;
    return mov;
@@ -2071,7 +2077,7 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
           */
          ctx->so->constlen =
             MAX2(ctx->so->constlen,
-                 ctx->so->shader->num_reserved_user_consts +
+                 ctx->so->num_reserved_user_consts +
                  const_state->ubo_state.size / 16);
       }
       break;
@@ -2173,12 +2179,12 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 
       break;
    }
-   case nir_intrinsic_load_size_ir3:
-      if (!ctx->ij[IJ_PERSP_SIZE]) {
-         ctx->ij[IJ_PERSP_SIZE] =
-            create_sysval_input(ctx, SYSTEM_VALUE_BARYCENTRIC_PERSP_SIZE, 0x1);
+   case nir_intrinsic_load_persp_center_rhw_ir3:
+      if (!ctx->ij[IJ_PERSP_CENTER_RHW]) {
+         ctx->ij[IJ_PERSP_CENTER_RHW] =
+            create_sysval_input(ctx, SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTER_RHW, 0x1);
       }
-      dst[0] = ctx->ij[IJ_PERSP_SIZE];
+      dst[0] = ctx->ij[IJ_PERSP_CENTER_RHW];
       break;
    case nir_intrinsic_load_barycentric_centroid:
    case nir_intrinsic_load_barycentric_sample:
@@ -2200,9 +2206,6 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       emit_intrinsic_load_ssbo(ctx, intr, dst);
       break;
    case nir_intrinsic_store_ssbo_ir3:
-      if ((ctx->so->type == MESA_SHADER_FRAGMENT) &&
-          !ctx->s->info.fs.early_fragment_tests)
-         ctx->so->no_earlyz = true;
       ctx->funcs->emit_intrinsic_store_ssbo(ctx, intr);
       break;
    case nir_intrinsic_get_ssbo_size:
@@ -2218,9 +2221,6 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    case nir_intrinsic_ssbo_atomic_xor_ir3:
    case nir_intrinsic_ssbo_atomic_exchange_ir3:
    case nir_intrinsic_ssbo_atomic_comp_swap_ir3:
-      if ((ctx->so->type == MESA_SHADER_FRAGMENT) &&
-          !ctx->s->info.fs.early_fragment_tests)
-         ctx->so->no_earlyz = true;
       dst[0] = ctx->funcs->emit_intrinsic_atomic_ssbo(ctx, intr);
       break;
    case nir_intrinsic_load_shared:
@@ -2253,9 +2253,6 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       break;
    case nir_intrinsic_image_store:
    case nir_intrinsic_bindless_image_store:
-      if ((ctx->so->type == MESA_SHADER_FRAGMENT) &&
-          !ctx->s->info.fs.early_fragment_tests)
-         ctx->so->no_earlyz = true;
       ctx->funcs->emit_intrinsic_store_image(ctx, intr);
       break;
    case nir_intrinsic_image_size:
@@ -2282,9 +2279,6 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    case nir_intrinsic_bindless_image_atomic_exchange:
    case nir_intrinsic_image_atomic_comp_swap:
    case nir_intrinsic_bindless_image_atomic_comp_swap:
-      if ((ctx->so->type == MESA_SHADER_FRAGMENT) &&
-          !ctx->s->info.fs.early_fragment_tests)
-         ctx->so->no_earlyz = true;
       dst[0] = ctx->funcs->emit_intrinsic_atomic_image(ctx, intr);
       break;
    case nir_intrinsic_scoped_barrier:
@@ -3058,6 +3052,7 @@ emit_tex(struct ir3_context *ctx, nir_tex_instr *tex)
 
    nsrc0 = i;
 
+   type_t coord_pad_type = is_half(coord[0]) ? TYPE_U16 : TYPE_U32;
    /* scale up integer coords for TXF based on the LOD */
    if (ctx->compiler->unminify_coords && (opc == OPC_ISAML)) {
       assert(has_lod);
@@ -3070,24 +3065,19 @@ emit_tex(struct ir3_context *ctx, nir_tex_instr *tex)
        * height of 1, and patch up the y coord.
        */
       if (is_isam(opc)) {
-         src0[nsrc0++] = create_immed(b, 0);
+         src0[nsrc0++] = create_immed_typed(b, 0, coord_pad_type);
+      } else if (is_half(coord[0])) {
+         src0[nsrc0++] = create_immed_typed(b, _mesa_float_to_half(0.5), coord_pad_type);
       } else {
-         src0[nsrc0++] = create_immed(b, fui(0.5));
+         src0[nsrc0++] = create_immed_typed(b, fui(0.5), coord_pad_type);
       }
    }
 
    if (tex->is_shadow && tex->op != nir_texop_lod)
       src0[nsrc0++] = compare;
 
-   if (tex->is_array && tex->op != nir_texop_lod) {
-      struct ir3_instruction *idx = coord[coords];
-
-      /* the array coord for cube arrays needs 0.5 added to it */
-      if (ctx->compiler->array_index_add_half && !is_isam(opc))
-         idx = ir3_ADD_F(b, idx, 0, create_immed(b, fui(0.5)), 0);
-
-      src0[nsrc0++] = idx;
-   }
+   if (tex->is_array && tex->op != nir_texop_lod)
+      src0[nsrc0++] = coord[coords];
 
    if (has_proj) {
       src0[nsrc0++] = proj;
@@ -3097,15 +3087,15 @@ emit_tex(struct ir3_context *ctx, nir_tex_instr *tex)
    /* pad to 4, then ddx/ddy: */
    if (tex->op == nir_texop_txd) {
       while (nsrc0 < 4)
-         src0[nsrc0++] = create_immed(b, fui(0.0));
+         src0[nsrc0++] = create_immed_typed(b, fui(0.0), coord_pad_type);
       for (i = 0; i < coords; i++)
          src0[nsrc0++] = ddx[i];
       if (coords < 2)
-         src0[nsrc0++] = create_immed(b, fui(0.0));
+         src0[nsrc0++] = create_immed_typed(b, fui(0.0), coord_pad_type);
       for (i = 0; i < coords; i++)
          src0[nsrc0++] = ddy[i];
       if (coords < 2)
-         src0[nsrc0++] = create_immed(b, fui(0.0));
+         src0[nsrc0++] = create_immed_typed(b, fui(0.0), coord_pad_type);
    }
 
    /* NOTE a3xx (and possibly a4xx?) might be different, using isaml
@@ -3143,7 +3133,7 @@ emit_tex(struct ir3_context *ctx, nir_tex_instr *tex)
          for (i = 0; i < off_coords; i++)
             src1[nsrc1++] = off[i];
          if (off_coords < 2)
-            src1[nsrc1++] = create_immed(b, fui(0.0));
+            src1[nsrc1++] = create_immed_typed(b, fui(0.0), coord_pad_type);
          flags |= IR3_INSTR_O;
       }
 
@@ -3238,7 +3228,7 @@ emit_tex(struct ir3_context *ctx, nir_tex_instr *tex)
                bits = 10;
             break;
          default:
-            debug_assert(0);
+            assert(0);
          }
 
          sam->cat5.type = TYPE_F32;
@@ -3280,12 +3270,15 @@ emit_tex(struct ir3_context *ctx, nir_tex_instr *tex)
 
    /* GETLOD returns results in 4.8 fixed point */
    if (opc == OPC_GETLOD) {
-      struct ir3_instruction *factor = create_immed(b, fui(1.0 / 256));
+      bool half = nir_dest_bit_size(tex->dest) == 16;
+      struct ir3_instruction *factor =
+         half ? create_immed_typed(b, _mesa_float_to_half(1.0 / 256), TYPE_F16)
+              : create_immed(b, fui(1.0 / 256));
 
-      compile_assert(ctx, tex->dest_type == nir_type_float32);
       for (i = 0; i < 2; i++) {
-         dst[i] =
-            ir3_MUL_F(b, ir3_COV(b, dst[i], TYPE_S32, TYPE_F32), 0, factor, 0);
+         dst[i] = ir3_MUL_F(
+            b, ir3_COV(b, dst[i], TYPE_S32, half ? TYPE_F16 : TYPE_F32), 0,
+            factor, 0);
       }
    }
 
@@ -3756,7 +3749,7 @@ static void
 emit_stream_out(struct ir3_context *ctx)
 {
    struct ir3 *ir = ctx->ir;
-   struct ir3_stream_output_info *strmout = &ctx->so->shader->stream_output;
+   struct ir3_stream_output_info *strmout = &ctx->so->stream_output;
    struct ir3_block *orig_end_block, *stream_out_block, *new_end_block;
    struct ir3_instruction *vtxcnt, *maxvtxcnt, *cond;
    struct ir3_instruction *bases[IR3_MAX_SO_BUFFERS];
@@ -3894,9 +3887,9 @@ emit_function(struct ir3_context *ctx, nir_function_impl *impl)
     * out instructions.
     */
    if ((ctx->compiler->gen < 5) &&
-       (ctx->so->shader->stream_output.num_outputs > 0) &&
+       (ctx->so->stream_output.num_outputs > 0) &&
        !ctx->so->binning_pass) {
-      debug_assert(ctx->so->type == MESA_SHADER_VERTEX);
+      assert(ctx->so->type == MESA_SHADER_VERTEX);
       emit_stream_out(ctx);
    }
 
@@ -4168,7 +4161,7 @@ setup_output(struct ir3_context *ctx, nir_intrinsic_instr *intr)
          break;
       case VARYING_SLOT_PRIMITIVE_ID:
       case VARYING_SLOT_GS_VERTEX_FLAGS_IR3:
-         debug_assert(ctx->so->type == MESA_SHADER_GEOMETRY);
+         assert(ctx->so->type == MESA_SHADER_GEOMETRY);
          FALLTHROUGH;
       case VARYING_SLOT_COL0:
       case VARYING_SLOT_COL1:
@@ -4384,8 +4377,12 @@ emit_instructions(struct ir3_context *ctx)
    ctx->so->num_samp =
       BITSET_LAST_BIT(ctx->s->info.textures_used) + ctx->s->info.num_images;
 
-   /* Save off clip+cull information. */
-   ctx->so->clip_mask = MASK(ctx->s->info.clip_distance_array_size);
+   /* Save off clip+cull information. Note that in OpenGL clip planes may
+    * be individually enabled/disabled, and some gens handle lowering in
+    * backend, so we also need to consider the shader key:
+    */
+   ctx->so->clip_mask = ctx->so->key.ucp_enables |
+                        MASK(ctx->s->info.clip_distance_array_size);
    ctx->so->cull_mask = MASK(ctx->s->info.cull_distance_array_size)
                         << ctx->s->info.clip_distance_array_size;
 
@@ -4592,6 +4589,7 @@ collect_tex_prefetches(struct ir3_context *ctx, struct ir3 *ir)
 
 int
 ir3_compile_shader_nir(struct ir3_compiler *compiler,
+                       struct ir3_shader *shader,
                        struct ir3_shader_variant *so)
 {
    struct ir3_context *ctx;
@@ -4601,7 +4599,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 
    assert(!so->ir);
 
-   ctx = ir3_context_init(compiler, so);
+   ctx = ir3_context_init(compiler, shader, so);
    if (!ctx) {
       DBG("INIT failed!");
       ret = -1;
@@ -4765,7 +4763,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
             unsigned n = i / 4;
             unsigned c = i % 4;
 
-            debug_assert(n < so->nonbinning->inputs_count);
+            assert(n < so->nonbinning->inputs_count);
 
             if (so->nonbinning->inputs[n].sysval)
                continue;
@@ -4836,12 +4834,6 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 
    ir3_debug_print(ir, "AFTER: ir3_sched");
 
-   if (IR3_PASS(ir, ir3_cp_postsched)) {
-      /* cleanup the result of removing unneeded mov's: */
-      while (IR3_PASS(ir, ir3_dce, so)) {
-      }
-   }
-
    /* Pre-assign VS inputs on a6xx+ binning pass shader, to align
     * with draw pass VS, so binning and draw pass can both use the
     * same VBO state.
@@ -4900,6 +4892,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 
    IR3_PASS(ir, ir3_postsched, so);
 
+   IR3_PASS(ir, ir3_legalize_relative);
    IR3_PASS(ir, ir3_lower_subgroups);
 
    if (so->type == MESA_SHADER_FRAGMENT)
@@ -4983,6 +4976,10 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
    if (so->type == MESA_SHADER_FRAGMENT &&
        ctx->s->info.fs.needs_quad_helper_invocations)
       so->need_pixlod = true;
+
+   if ((ctx->so->type == MESA_SHADER_FRAGMENT) &&
+       !ctx->s->info.fs.early_fragment_tests)
+      ctx->so->no_earlyz |= ctx->s->info.writes_memory;
 
 out:
    if (ret) {

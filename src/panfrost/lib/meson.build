@@ -39,7 +39,7 @@ endforeach
 
 libpanfrost_per_arch = []
 
-foreach ver : ['4', '5', '6', '7']
+foreach ver : ['4', '5', '6', '7', '9']
   libpanfrost_per_arch += static_library(
     'pan-arch-v' + ver,
     [
@@ -81,7 +81,7 @@ libpanfrost_lib_files = files(
   'pan_earlyzs.c',
   'pan_samples.c',
   'pan_tiler.c',
-  'pan_texture.c',
+  'pan_layout.c',
   'pan_scratch.c',
   'pan_props.c',
   'pan_util.c',
@@ -129,5 +129,22 @@ if with_tests
       dependencies: [libpanfrost_dep],
     ),
     suite : ['panfrost'],
+  )
+
+  test(
+    'panfrost_tests',
+    executable(
+      'panfrost_tests',
+      files(
+        'tests/test-earlyzs.cpp',
+        'tests/test-layout.cpp',
+      ),
+      c_args : [c_msvc_compat_args, no_override_init_args],
+      gnu_symbol_visibility : 'hidden',
+      include_directories : [inc_include, inc_src, inc_mesa, inc_panfrost, inc_gallium],
+      dependencies: [idep_gtest, libpanfrost_dep],
+    ),
+    suite : ['panfrost'],
+    protocol : gtest_test_protocol,
   )
 endif

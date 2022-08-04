@@ -165,7 +165,7 @@ class Channel(object):
 
 
 class Format(object):
-    """Class taht contains all values needed by the template."""
+    """Class that contains all values needed by the template."""
     def __init__(self, line):
         # pylint: disable=invalid-name
         self.name = line[0].strip()

@@ -119,6 +119,7 @@ static const struct debug_control panvk_debug_options[] = {
    { "sync", PANVK_DEBUG_SYNC },
    { "afbc", PANVK_DEBUG_AFBC },
    { "linear", PANVK_DEBUG_LINEAR },
+   { "dump", PANVK_DEBUG_DUMP },
    { NULL, 0 }
 };
 
@@ -154,10 +155,12 @@ panvk_get_device_extensions(const struct panvk_physical_device *device,
 {
    *ext = (struct vk_device_extension_table) {
       .KHR_copy_commands2 = true,
+      .KHR_storage_buffer_storage_class = true,
 #ifdef PANVK_USE_WSI_PLATFORM
       .KHR_swapchain = true,
 #endif
       .KHR_synchronization2 = true,
+      .KHR_variable_pointers = true,
       .EXT_custom_border_color = true,
       .EXT_index_type_uint8 = true,
       .EXT_vertex_attribute_divisor = true,
@@ -324,7 +327,7 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    panfrost_open_device(NULL, fd, &device->pdev);
    fd = -1;
 
-   if (device->pdev.arch < 5) {
+   if (device->pdev.arch <= 5) {
       result = vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
                          "%s not supported",
                          device->pdev.model->name);
@@ -342,8 +345,7 @@ panvk_physical_device_init(struct panvk_physical_device *device,
       goto fail_close_device;
    }
 
-   fprintf(stderr, "WARNING: panvk is not a conformant vulkan implementation, "
-                   "testing use only.\n");
+   vk_warn_non_conformant_implementation("panvk");
 
    panvk_get_driver_uuid(&device->device_uuid);
    panvk_get_device_uuid(&device->device_uuid);
@@ -475,8 +477,10 @@ panvk_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
                                  VkPhysicalDeviceFeatures2 *pFeatures)
 {
    pFeatures->features = (VkPhysicalDeviceFeatures) {
+      .robustBufferAccess = true,
       .fullDrawIndexUint32 = true,
       .independentBlend = true,
+      .logicOp = true,
       .wideLines = true,
       .largePoints = true,
       .textureCompressionETC2 = true,
@@ -755,9 +759,9 @@ panvk_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       .maxCullDistances = 8,
       .maxCombinedClipAndCullDistances = 8,
       .discreteQueuePriorities = 1,
-      .pointSizeRange = { 0.125, 255.875 },
+      .pointSizeRange = { 0.125, 4095.9375 },
       .lineWidthRange = { 0.0, 7.9921875 },
-      .pointSizeGranularity = (1.0 / 8.0),
+      .pointSizeGranularity = (1.0 / 16.0),
       .lineWidthGranularity = (1.0 / 128.0),
       .strictLines = false, /* FINISHME */
       .standardSampleLocations = true,
@@ -913,7 +917,6 @@ panvk_queue_init(struct panvk_device *device,
    }
 
    switch (pdev->arch) {
-   case 5: queue->vk.driver_submit = panvk_v5_queue_submit; break;
    case 6: queue->vk.driver_submit = panvk_v6_queue_submit; break;
    case 7: queue->vk.driver_submit = panvk_v7_queue_submit; break;
    default: unreachable("Invalid arch");
@@ -927,25 +930,6 @@ static void
 panvk_queue_finish(struct panvk_queue *queue)
 {
    vk_queue_finish(&queue->vk);
-}
-
-static void
-panvk_ref_pipeline_layout(struct vk_device *dev,
-                          VkPipelineLayout layout)
-{
-   VK_FROM_HANDLE(panvk_pipeline_layout, playout, layout);
-
-   panvk_pipeline_layout_ref(playout);
-}
-
-static void
-panvk_unref_pipeline_layout(struct vk_device *dev,
-                            VkPipelineLayout layout)
-{
-   struct panvk_device *device = container_of(dev, struct panvk_device, vk);
-   VK_FROM_HANDLE(panvk_pipeline_layout, playout, layout);
-
-   panvk_pipeline_layout_unref(device, playout);
 }
 
 VkResult
@@ -967,9 +951,6 @@ panvk_CreateDevice(VkPhysicalDevice physicalDevice,
    struct vk_device_dispatch_table dispatch_table;
 
    switch (physical_device->pdev.arch) {
-   case 5:
-      dev_entrypoints = &panvk_v5_device_entrypoints;
-      break;
    case 6:
       dev_entrypoints = &panvk_v6_device_entrypoints;
       break;
@@ -1020,8 +1001,6 @@ panvk_CreateDevice(VkPhysicalDevice physicalDevice,
     * whole struct.
     */
    device->vk.command_dispatch_table = &device->cmd_dispatch;
-   device->vk.ref_pipeline_layout = panvk_ref_pipeline_layout;
-   device->vk.unref_pipeline_layout = panvk_unref_pipeline_layout;
 
    device->instance = physical_device->instance;
    device->physical_device = physical_device;
@@ -1300,7 +1279,7 @@ panvk_GetBufferMemoryRequirements2(VkDevice device,
    VK_FROM_HANDLE(panvk_buffer, buffer, pInfo->buffer);
 
    const uint64_t align = 64;
-   const uint64_t size = align64(buffer->size, align);
+   const uint64_t size = align64(buffer->vk.size, align);
 
    pMemoryRequirements->memoryRequirements.memoryTypeBits = 1;
    pMemoryRequirements->memoryRequirements.alignment = align;
@@ -1520,14 +1499,10 @@ panvk_CreateBuffer(VkDevice _device,
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
 
-   buffer = vk_object_alloc(&device->vk, pAllocator, sizeof(*buffer),
-                            VK_OBJECT_TYPE_BUFFER);
+   buffer = vk_buffer_create(&device->vk, pCreateInfo,
+                             pAllocator, sizeof(*buffer));
    if (buffer == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   buffer->size = pCreateInfo->size;
-   buffer->usage = pCreateInfo->usage;
-   buffer->flags = pCreateInfo->flags;
 
    *pBuffer = panvk_buffer_to_handle(buffer);
 
@@ -1545,7 +1520,7 @@ panvk_DestroyBuffer(VkDevice _device,
    if (!buffer)
       return;
 
-   vk_object_free(&device->vk, pAllocator, buffer);
+   vk_buffer_destroy(&device->vk, pAllocator, &buffer->vk);
 }
 
 VkResult

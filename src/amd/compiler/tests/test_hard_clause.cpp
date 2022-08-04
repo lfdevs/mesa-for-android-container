@@ -204,7 +204,7 @@ END_TEST
 
 BEGIN_TEST(form_hard_clauses.nsa)
    for (unsigned i = GFX10; i <= GFX10_3; i++) {
-      if (!setup_cs(NULL, (chip_class)i))
+      if (!setup_cs(NULL, (amd_gfx_level)i))
          continue;
 
       //>> p_unit_test 0

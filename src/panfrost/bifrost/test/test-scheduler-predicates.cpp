@@ -150,3 +150,9 @@ TEST_F(SchedulerPredicates, RestrictionsOnFAddV2F16)
    ASSERT_FALSE(bi_can_fma(fadd));
    ASSERT_FALSE(bi_can_add(fadd));
 }
+
+TEST_F(SchedulerPredicates, BranchOffset)
+{
+   bi_instr *jump = bi_jump(b, TMP());
+   ASSERT_FALSE(bi_reads_t(jump, 0));
+}

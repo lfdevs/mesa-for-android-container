@@ -334,11 +334,7 @@ brw_kernel_from_spirv(struct brw_compiler *compiler,
    NIR_PASS_V(nir, nir_opt_deref);
 
    /* Pick off the single entrypoint that we want */
-   foreach_list_typed_safe(nir_function, func, node, &nir->functions) {
-      if (!func->is_entrypoint)
-         exec_node_remove(&func->node);
-   }
-   assert(exec_list_length(&nir->functions) == 1);
+   nir_remove_non_entrypoints(nir);
 
    /* Now that we've deleted all but the main function, we can go ahead and
     * lower the rest of the constant initializers.  We do this here so that
@@ -443,9 +439,7 @@ brw_kernel_from_spirv(struct brw_compiler *compiler,
    NIR_PASS_V(nir, brw_nir_lower_cs_intrinsics);
    NIR_PASS_V(nir, lower_kernel_intrinsics);
 
-   struct brw_cs_prog_key key = {
-      .base.subgroup_size_type = BRW_SUBGROUP_SIZE_VARYING,
-   };
+   struct brw_cs_prog_key key = { };
 
    memset(&kernel->prog_data, 0, sizeof(kernel->prog_data));
    kernel->prog_data.base.nr_params = DIV_ROUND_UP(nir->num_uniforms, 4);
@@ -454,7 +448,7 @@ brw_kernel_from_spirv(struct brw_compiler *compiler,
       .nir = nir,
       .key = &key,
       .prog_data = &kernel->prog_data,
-      .stats = &kernel->stats,
+      .stats = kernel->stats,
       .log_data = log_data,
    };
 

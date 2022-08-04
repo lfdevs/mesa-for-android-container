@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 ##########################################################################
-# 
-# Copyright 2008-2013, VMware, Inc.
+#
+# Copyright 2008-2021, VMware, Inc.
 # All Rights Reserved.
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the
 # "Software"), to deal in the Software without restriction, including
@@ -11,11 +11,11 @@
 # distribute, sub license, and/or sell copies of the Software, and to
 # permit persons to whom the Software is furnished to do so, subject to
 # the following conditions:
-# 
+#
 # The above copyright notice and this permission notice (including the
 # next paragraph) shall be included in all copies or substantial portions
 # of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 # OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 # MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -23,7 +23,7 @@
 # ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-# 
+#
 ##########################################################################
 
 
@@ -50,12 +50,7 @@ except ImportError:
 #
 # Some constants
 #
-PIPE_BUFFER = 0
-PIPE_SHADER_VERTEX   = 0
-PIPE_SHADER_FRAGMENT = 1
-PIPE_SHADER_GEOMETRY = 2
-PIPE_SHADER_COMPUTE  = 3
-PIPE_SHADER_TYPES    = 4
+PIPE_BUFFER = 'PIPE_BUFFER'
 
 
 def serialize(obj):
@@ -89,7 +84,7 @@ def serialize(obj):
 
 class Struct:
     """C-like struct.
-    
+
     Python doesn't have C structs, but do its dynamic nature, any object is
     pretty close.
     """
@@ -119,22 +114,22 @@ class Translator(model.Visitor):
         self.result = None
         node.visit(self)
         return self.result
-        
+
     def visit_literal(self, node):
         self.result = node.value
-    
+
     def visit_blob(self, node):
         self.result = node
-    
+
     def visit_named_constant(self, node):
         self.result = node.name
-    
+
     def visit_array(self, node):
         array = []
         for element in node.elements:
             array.append(self.visit(element))
         self.result = array
-    
+
     def visit_struct(self, node):
         struct = Struct()
         for member_name, member_node in node.members:
@@ -142,17 +137,17 @@ class Translator(model.Visitor):
             member_value = self.visit(member_node)
             setattr(struct, member_name, member_value)
         self.result = struct
-    
+
     def visit_pointer(self, node):
         self.result = self.interpreter.lookup_object(node.address)
 
 
 class Dispatcher:
     '''Base class for classes whose methods can dispatch Gallium calls.'''
-    
+
     def __init__(self, interpreter):
         self.interpreter = interpreter
-        
+
 
 class Global(Dispatcher):
     '''Global name space.
@@ -163,11 +158,11 @@ class Global(Dispatcher):
 
     def pipe_screen_create(self):
         return Screen(self.interpreter)
-    
+
     def pipe_context_create(self, screen):
         return screen.context_create()
 
-    
+
 class Transfer:
     '''pipe_transfer'''
 
@@ -180,7 +175,7 @@ class Transfer:
 
 class Screen(Dispatcher):
     '''pipe_screen'''
-    
+
     def __init__(self, interpreter):
         Dispatcher.__init__(self, interpreter)
 
@@ -189,10 +184,7 @@ class Screen(Dispatcher):
 
     def context_create(self, priv=None, flags=0):
         return Context(self.interpreter)
-    
-    def is_format_supported(self, format, target, sample_count, bind, geom_flags):
-        pass
-    
+
     def resource_create(self, templat):
         resource = templat
         # Normalize state to avoid spurious differences
@@ -205,18 +197,35 @@ class Screen(Dispatcher):
             del resource.format
         return resource
 
+    resource_create_unbacked = resource_create
+
+    def allocate_memory(screen, size):
+        pass
+
+    def free_memory(screen, pmem):
+        pass
+
+    def map_memory(screen, pmem):
+        pass
+
+    def unmap_memory(screen, pmem):
+        pass
+
+    def resource_bind_backing(screen, resource, pmem, offset):
+        pass
+
     def resource_destroy(self, resource):
         self.interpreter.unregister_object(resource)
 
     def fence_finish(self, fence, timeout=None, ctx=None):
         pass
-    
+
     def fence_signalled(self, fence):
         pass
-    
+
     def fence_reference(self, dst, src):
         pass
-    
+
     def flush_frontbuffer(self, resource):
         pass
 
@@ -225,7 +234,7 @@ class Context(Dispatcher):
     '''pipe_context'''
 
     # Internal methods variable should be prefixed with '_'
-    
+
     def __init__(self, interpreter):
         Dispatcher.__init__(self, interpreter)
 
@@ -236,28 +245,39 @@ class Context(Dispatcher):
         self._state.vertex_buffers = []
         self._state.vertex_elements = []
         self._state.vs = Struct()
+        self._state.tcs = Struct()
+        self._state.tes = Struct()
         self._state.gs = Struct()
         self._state.fs = Struct()
         self._state.vs.shader = None
+        self._state.tcs.shader = None
+        self._state.tes.shader = None
         self._state.gs.shader = None
         self._state.fs.shader = None
         self._state.vs.sampler = []
+        self._state.tcs.sampler = []
+        self._state.tes.sampler = []
         self._state.gs.sampler = []
         self._state.fs.sampler = []
         self._state.vs.sampler_views = []
+        self._state.tcs.sampler_views = []
+        self._state.tes.sampler_views = []
         self._state.gs.sampler_views = []
         self._state.fs.sampler_views = []
         self._state.vs.constant_buffer = []
+        self._state.tcs.constant_buffer = []
+        self._state.tes.constant_buffer = []
         self._state.gs.constant_buffer = []
         self._state.fs.constant_buffer = []
         self._state.render_condition_condition = 0
         self._state.render_condition_mode = 0
+        self._state.sample_mask = 0xffffffff
 
         self._draw_no = 0
 
     def destroy(self):
         pass
-    
+
     def create_blend_state(self, state):
         # Normalize state to avoid spurious differences
         if not state.logicop_enable:
@@ -277,7 +297,7 @@ class Context(Dispatcher):
 
     def delete_blend_state(self, state):
         pass
-    
+
     def create_sampler_state(self, state):
         return state
 
@@ -300,21 +320,21 @@ class Context(Dispatcher):
     def bind_fragment_sampler_states(self, num_states, states):
         # XXX: deprecated method
         self._state.fs.sampler = states
-        
+
     def create_rasterizer_state(self, state):
         return state
 
     def bind_rasterizer_state(self, state):
         self._state.rasterizer = state
-        
+
     def delete_rasterizer_state(self, state):
         pass
-    
+
     def create_depth_stencil_alpha_state(self, state):
         # Normalize state to avoid spurious differences
-        if not state.alpha.enabled:
-            del state.alpha.func
-            del state.alpha.ref_value
+        if not state.alpha_enabled:
+            del state.alpha_func
+            del state.alpha_ref_value
         for i in range(2):
             if not state.stencil[i].enabled:
                 del state.stencil[i].func
@@ -322,7 +342,7 @@ class Context(Dispatcher):
 
     def bind_depth_stencil_alpha_state(self, state):
         self._state.depth_stencil_alpha = state
-            
+
     def delete_depth_stencil_alpha_state(self, state):
         pass
 
@@ -335,22 +355,35 @@ class Context(Dispatcher):
         return state
 
     create_vs_state = _create_shader_state
+    create_tcs_state = _create_shader_state
+    create_tes_state = _create_shader_state
     create_gs_state = _create_shader_state
     create_fs_state = _create_shader_state
-    
+
     def bind_vs_state(self, state):
         self._state.vs.shader = state
 
+    def bind_tcs_state(self, state):
+        self._state.tcs.shader = state
+
+    def bind_tes_state(self, state):
+        self._state.tes.shader = state
+
     def bind_gs_state(self, state):
         self._state.gs.shader = state
-        
+
     def bind_fs_state(self, state):
         self._state.fs.shader = state
-        
+
+    def bind_tcz_state(self, state):
+        self._state.tcs.shader = state
+
     def _delete_shader_state(self, state):
         return state
 
     delete_vs_state = _delete_shader_state
+    delete_tcs_state = _delete_shader_state
+    delete_tes_state = _delete_shader_state
     delete_gs_state = _delete_shader_state
     delete_fs_state = _delete_shader_state
 
@@ -377,15 +410,19 @@ class Context(Dispatcher):
         sys.stdout.flush()
 
     def _get_stage_state(self, shader):
-        if shader == PIPE_SHADER_VERTEX:
+        if shader == 'PIPE_SHADER_VERTEX':
             return self._state.vs
-        if shader == PIPE_SHADER_GEOMETRY:
+        if shader == 'PIPE_SHADER_TESS_CTRL':
+            return self._state.tcs
+        if shader == 'PIPE_SHADER_TESS_EVAL':
+            return self._state.tes
+        if shader == 'PIPE_SHADER_GEOMETRY':
             return self._state.gs
-        if shader == PIPE_SHADER_FRAGMENT:
+        if shader == 'PIPE_SHADER_FRAGMENT':
             return self._state.fs
         assert False
 
-    def set_constant_buffer(self, shader, index, constant_buffer):
+    def set_constant_buffer(self, shader, index, take_ownership, constant_buffer):
         self._update(self._get_stage_state(shader).constant_buffer, index, 1, [constant_buffer])
 
     def set_framebuffer_state(self, state):
@@ -417,7 +454,7 @@ class Context(Dispatcher):
     def sampler_view_destroy(self, view):
         pass
 
-    def set_sampler_views(self, shader, start, num, views):
+    def set_sampler_views(self, shader, start, num, unbind_num_trailing_slots, take_ownership, views):
         # FIXME: Handle non-zero start
         assert start == 0
         self._get_stage_state(shader).sampler_views = views
@@ -434,9 +471,9 @@ class Context(Dispatcher):
         # XXX: deprecated
         self._state.vs.sampler_views = views
 
-    def set_vertex_buffers(self, start_slot, num_buffers, buffers):
+    def set_vertex_buffers(self, start_slot, num_buffers, unbind_num_trailing_slots, take_ownership, buffers):
         self._update(self._state.vertex_buffers, start_slot, num_buffers, buffers)
-            
+
     def create_vertex_elements_state(self, num_elements, elements):
         return elements[0:num_elements]
 
@@ -449,6 +486,9 @@ class Context(Dispatcher):
     def set_index_buffer(self, ib):
         self._state.index_buffer = ib
 
+    def set_patch_vertices(self, patch_vertices):
+        pass
+
     # Don't dump more than this number of indices/vertices
     MAX_ELEMENTS = 16
 
@@ -456,7 +496,7 @@ class Context(Dispatcher):
         '''Merge the vertices into our state.'''
 
         index_size = self._state.index_buffer.index_size
-        
+
         format = {
             1: 'B',
             2: 'H',
@@ -543,7 +583,13 @@ class Context(Dispatcher):
         self._state.so_targets = tgs
         self._state.offsets = offsets
 
-    def draw_vbo(self, info):
+    def set_sample_mask(self, sample_mask):
+        self._state.sample_mask = sample_mask
+
+    def set_min_samples(self, min_samples):
+        pass
+
+    def draw_vbo(self, info, drawid_offset, indirect, draws, num_draws):
         self._draw_no += 1
 
         if self.interpreter.call_no < self.interpreter.options.call and \
@@ -557,8 +603,8 @@ class Context(Dispatcher):
         if info.index_size != 0:
             min_index, max_index = self._merge_indices(info)
         else:
-            min_index = info.start
-            max_index = info.start + info.count - 1
+            min_index = draws[0].start
+            max_index = draws[0].start + draws[0].count - 1
         self._merge_vertices(min_index, max_index - min_index + 1)
 
         self._dump_state()
@@ -566,33 +612,32 @@ class Context(Dispatcher):
     _dclRE = re.compile('^DCL\s+(IN|OUT|SAMP|SVIEW)\[([0-9]+)\].*$', re.MULTILINE)
 
     def _normalize_stage_state(self, stage):
-
-        registers = {}
-
         if stage.shader is not None and stage.shader.tokens is not None:
+            registers = {}
+
             for mo in self._dclRE.finditer(stage.shader.tokens):
                 file_ = mo.group(1)
                 index = mo.group(2)
                 register = registers.setdefault(file_, set())
                 register.add(int(index))
 
-        if 'SAMP' in registers and 'SVIEW' not in registers:
-            registers['SVIEW'] = registers['SAMP']
+            if 'SAMP' in registers and 'SVIEW' not in registers:
+                registers['SVIEW'] = registers['SAMP']
 
-        mapping = [
-            #("CONST", "constant_buffer"),
-            ("SAMP", "sampler"),
-            ("SVIEW", "sampler_views"),
-        ]
+            mapping = [
+                #("CONST", "constant_buffer"),
+                ("SAMP", "sampler"),
+                ("SVIEW", "sampler_views"),
+            ]
 
-        for fileName, attrName in mapping:
-            register = registers.setdefault(fileName, set())
-            attr = getattr(stage, attrName)
-            for index in range(len(attr)):
-                if index not in register:
-                    attr[index] = None
-            while attr and attr[-1] is None:
-                attr.pop()
+            for fileName, attrName in mapping:
+                register = registers.setdefault(fileName, set())
+                attr = getattr(stage, attrName)
+                for index in range(len(attr)):
+                    if index not in register:
+                        attr[index] = None
+                while attr and attr[-1] is None:
+                    attr.pop()
 
     def _dump_state(self):
         '''Dump our state to JSON and terminate.'''
@@ -600,6 +645,8 @@ class Context(Dispatcher):
         state = copy.deepcopy(self._state)
 
         self._normalize_stage_state(state.vs)
+        self._normalize_stage_state(state.tcs)
+        self._normalize_stage_state(state.tes)
         self._normalize_stage_state(state.gs)
         self._normalize_stage_state(state.fs)
 
@@ -630,13 +677,13 @@ class Context(Dispatcher):
 
     def is_resource_referenced(self, texture, face, level):
         pass
-    
+
     def get_transfer(self, texture, sr, usage, box):
         if texture is None:
             return None
         transfer = Transfer(texture, sr, usage, box)
         return transfer
-    
+
     def tex_transfer_destroy(self, transfer):
         self.interpreter.unregister_object(transfer)
 
@@ -672,11 +719,14 @@ class Context(Dispatcher):
 
     def clear(self, buffers, color, depth, stencil, scissor_state=None):
         pass
-        
-    def clear_render_target(self, dst, rgba, dstx, dsty, width, height):
+
+    def clear_render_target(self, dst, rgba, dstx, dsty, width, height, render_condition_enabled):
         pass
 
-    def clear_depth_stencil(self, dst, clear_flags, depth, stencil, dstx, dsty, width, height):
+    def clear_depth_stencil(self, dst, clear_flags, depth, stencil, dstx, dsty, width, height, render_condition_enabled):
+        pass
+
+    def clear_texture(self, res, level, box, **color):
         pass
 
     def create_surface(self, resource, surf_tmpl):
@@ -689,7 +739,7 @@ class Context(Dispatcher):
 
     def create_query(self, query_type, index):
         return query_type
-    
+
     def destroy_query(self, query):
         pass
 
@@ -710,21 +760,28 @@ class Context(Dispatcher):
 class Interpreter(parser.SimpleTraceDumper):
     '''Specialization of a trace parser that interprets the calls as it goes
     along.'''
-    
+
     ignoredCalls = set((
             ('pipe_screen', 'is_format_supported'),
             ('pipe_screen', 'get_name'),
             ('pipe_screen', 'get_vendor'),
+            ('pipe_screen', 'get_device_uuid'),
+            ('pipe_screen', 'get_driver_uuid'),
+            ('pipe_screen', 'get_compiler_options'),
             ('pipe_screen', 'get_param'),
             ('pipe_screen', 'get_paramf'),
             ('pipe_screen', 'get_shader_param'),
+            ('pipe_screen', 'get_compute_param'),
             ('pipe_screen', 'get_disk_shader_cache'),
             ('pipe_context', 'clear_render_target'), # XXX workaround trace bugs
             ('pipe_context', 'flush_resource'),
+            ('pipe_context', 'buffer_map'),
+            ('pipe_context', 'texture_map'),
+            ('pipe_context', 'transfer_unmap'),
     ))
 
-    def __init__(self, stream, options, formatter):
-        parser.SimpleTraceDumper.__init__(self, stream, options, formatter)
+    def __init__(self, stream, options, formatter, state):
+        parser.SimpleTraceDumper.__init__(self, stream, options, formatter, state)
         self.objects = {}
         self.result = None
         self.globl = Global(self)
@@ -732,7 +789,7 @@ class Interpreter(parser.SimpleTraceDumper):
 
     def register_object(self, address, object):
         self.objects[address] = object
-        
+
     def unregister_object(self, object):
         # TODO
         pass
@@ -743,7 +800,7 @@ class Interpreter(parser.SimpleTraceDumper):
         except KeyError:
             # Could happen, e.g., with user memory pointers
             return address
-    
+
     def interpret(self, trace):
         for call in trace.calls:
             self.interpret_call(call)
@@ -761,9 +818,9 @@ class Interpreter(parser.SimpleTraceDumper):
             parser.TraceDumper.handle_call(self, call)
             sys.stderr.flush()
             sys.stdout.flush()
-        
-        args = [(str(name), self.interpret_arg(arg)) for name, arg in call.args] 
-        
+
+        args = [(str(name), self.interpret_arg(arg)) for name, arg in call.args]
+
         if call.klass:
             name, obj = args[0]
             args = args[1:]
@@ -772,7 +829,7 @@ class Interpreter(parser.SimpleTraceDumper):
 
         method = getattr(obj, call.method)
         ret = method(**dict(args))
-        
+
         # Keep track of created pointer objects.
         if call.ret and isinstance(call.ret, model.Pointer):
             if ret is None:
@@ -787,7 +844,19 @@ class Interpreter(parser.SimpleTraceDumper):
 
     def verbosity(self, level):
         return self.options.verbosity >= level
-    
+
+
+class DumpStateOptions(parser.ParseOptions):
+
+    def __init__(self, args=None):
+
+        # These will get initialized in ModelOptions.__init__()
+        self.verbosity = None
+        self.call = None
+        self.draw = None
+
+        parser.ParseOptions.__init__(self, args)
+
 
 class Main(parser.Main):
 
@@ -804,9 +873,12 @@ class Main(parser.Main):
         optparser.add_argument("-d", "--draw", action="store", type=int, dest="draw", default=0xffffffff, help="dump on this draw")
         return optparser
 
+    def make_options(self, args):
+        return DumpStateOptions(args)
+
     def process_arg(self, stream, options):
         formatter = format.Formatter(sys.stderr)
-        parser = Interpreter(stream, options, formatter)
+        parser = Interpreter(stream, options, formatter, model.TraceStateData())
         parser.parse()
 
 

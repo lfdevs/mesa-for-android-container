@@ -31,11 +31,9 @@ lookup_blorp_shader(struct blorp_batch *batch,
    struct blorp_context *blorp = batch->blorp;
    struct anv_device *device = blorp->driver_ctx;
 
-   /* The default cache must be a real cache */
-   assert(device->default_pipeline_cache.cache);
-
    struct anv_shader_bin *bin =
-      anv_pipeline_cache_search(&device->default_pipeline_cache, key, key_size);
+      anv_device_search_for_kernel(device, device->internal_cache,
+                                   key, key_size, NULL);
    if (!bin)
       return false;
 
@@ -61,19 +59,16 @@ upload_blorp_shader(struct blorp_batch *batch, uint32_t stage,
    struct blorp_context *blorp = batch->blorp;
    struct anv_device *device = blorp->driver_ctx;
 
-   /* The blorp cache must be a real cache */
-   assert(device->default_pipeline_cache.cache);
-
    struct anv_pipeline_bind_map bind_map = {
       .surface_count = 0,
       .sampler_count = 0,
    };
 
    struct anv_shader_bin *bin =
-      anv_pipeline_cache_upload_kernel(&device->default_pipeline_cache, stage,
-                                       key, key_size, kernel, kernel_size,
-                                       prog_data, prog_data_size,
-                                       NULL, 0, NULL, &bind_map);
+      anv_device_upload_kernel(device, device->internal_cache, stage,
+                               key, key_size, kernel, kernel_size,
+                               prog_data, prog_data_size,
+                               NULL, 0, NULL, &bind_map);
 
    if (!bin)
       return false;
@@ -311,11 +306,11 @@ copy_image(struct anv_cmd_buffer *cmd_buffer,
            const VkImageCopy2 *region)
 {
    VkOffset3D srcOffset =
-      anv_sanitize_image_offset(src_image->vk.image_type, region->srcOffset);
+      vk_image_sanitize_offset(&src_image->vk, region->srcOffset);
    VkOffset3D dstOffset =
-      anv_sanitize_image_offset(dst_image->vk.image_type, region->dstOffset);
+      vk_image_sanitize_offset(&dst_image->vk, region->dstOffset);
    VkExtent3D extent =
-      anv_sanitize_image_extent(src_image->vk.image_type, region->extent);
+      vk_image_sanitize_extent(&src_image->vk, region->extent);
 
    const uint32_t dst_level = region->dstSubresource.mipLevel;
    unsigned dst_base_layer, layer_count;
@@ -495,11 +490,11 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
                                 image_layout, ISL_AUX_USAGE_NONE,
                                 &image.surf);
    image.offset =
-      anv_sanitize_image_offset(anv_image->vk.image_type, region->imageOffset);
+      vk_image_sanitize_offset(&anv_image->vk, region->imageOffset);
    image.level = region->imageSubresource.mipLevel;
 
    VkExtent3D extent =
-      anv_sanitize_image_extent(anv_image->vk.image_type, region->imageExtent);
+      vk_image_sanitize_extent(&anv_image->vk, region->imageExtent);
    if (anv_image->vk.image_type != VK_IMAGE_TYPE_3D) {
       image.offset.z = region->imageSubresource.baseArrayLayer;
       extent.depth =
@@ -513,21 +508,8 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
    const struct isl_format_layout *linear_fmtl =
       isl_format_get_layout(linear_format);
 
-   const uint32_t buffer_row_length =
-      region->bufferRowLength ?
-      region->bufferRowLength : extent.width;
-
-   const uint32_t buffer_image_height =
-      region->bufferImageHeight ?
-      region->bufferImageHeight : extent.height;
-
-   const uint32_t buffer_row_pitch =
-      DIV_ROUND_UP(buffer_row_length, linear_fmtl->bw) *
-      (linear_fmtl->bpb / 8);
-
-   const uint32_t buffer_layer_stride =
-      DIV_ROUND_UP(buffer_image_height, linear_fmtl->bh) *
-      buffer_row_pitch;
+   const struct vk_image_buffer_layout buffer_layout =
+      vk_image_buffer_copy_layout(&anv_image->vk, region);
 
    /* Some formats have additional restrictions which may cause ISL to
     * fail to create a surface for us.  For example, YCbCr formats
@@ -548,8 +530,8 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
    get_blorp_surf_for_anv_buffer(cmd_buffer->device,
                                  anv_buffer, region->bufferOffset,
                                  buffer_extent.width, buffer_extent.height,
-                                 buffer_row_pitch, buffer_format, false,
-                                 &buffer.surf, &buffer_isl_surf);
+                                 buffer_layout.row_stride_B, buffer_format,
+                                 false, &buffer.surf, &buffer_isl_surf);
 
    bool dst_has_shadow = false;
    struct blorp_surf dst_shadow_surf;
@@ -588,7 +570,7 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
       }
 
       image.offset.z++;
-      buffer.surf.addr.offset += buffer_layer_stride;
+      buffer.surf.addr.offset += buffer_layout.image_stride_B;
    }
 }
 
@@ -936,7 +918,7 @@ void anv_CmdFillBuffer(
    struct blorp_batch batch;
    anv_blorp_batch_init(cmd_buffer, &batch, 0);
 
-   fillSize = anv_buffer_get_range(dst_buffer, dstOffset, fillSize);
+   fillSize = vk_buffer_range(&dst_buffer->vk, dstOffset, fillSize);
 
    /* From the Vulkan spec:
     *
@@ -1876,7 +1858,8 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
                              (devinfo->verx10 == 120 ?
                                 ANV_PIPE_DEPTH_STALL_BIT : 0) |
                              (devinfo->verx10 == 125 ?
-                                ANV_PIPE_HDC_PIPELINE_FLUSH_BIT : 0) |
+                                ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
+                                ANV_PIPE_DATA_CACHE_FLUSH_BIT : 0) |
                              ANV_PIPE_PSS_STALL_SYNC_BIT |
                              ANV_PIPE_END_OF_PIPE_SYNC_BIT,
                              "before fast clear mcs");
@@ -1972,7 +1955,8 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
                              (devinfo->verx10 == 120 ?
                                 ANV_PIPE_DEPTH_STALL_BIT : 0) |
                              (devinfo->verx10 == 125 ?
-                                ANV_PIPE_HDC_PIPELINE_FLUSH_BIT : 0) |
+                                ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
+                                ANV_PIPE_DATA_CACHE_FLUSH_BIT : 0) |
                              ANV_PIPE_PSS_STALL_SYNC_BIT |
                              ANV_PIPE_END_OF_PIPE_SYNC_BIT,
                              "before fast clear ccs");

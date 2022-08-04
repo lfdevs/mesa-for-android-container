@@ -53,7 +53,7 @@ radv_amdgpu_bo_va_op(struct radv_amdgpu_winsys *ws, amdgpu_bo_handle bo, uint64_
    if (bo) {
       flags = AMDGPU_VM_PAGE_READABLE | AMDGPU_VM_PAGE_EXECUTABLE;
 
-      if ((bo_flags & RADEON_FLAG_VA_UNCACHED) && ws->info.chip_class >= GFX9)
+      if ((bo_flags & RADEON_FLAG_VA_UNCACHED) && ws->info.gfx_level >= GFX9)
          flags |= AMDGPU_VM_MTYPE_UC;
 
       if (!(bo_flags & RADEON_FLAG_READ_ONLY))
@@ -93,12 +93,16 @@ radv_amdgpu_winsys_rebuild_bo_list(struct radv_amdgpu_winsys_bo *bo)
 
    qsort(bo->bos, temp_bo_count, sizeof(struct radv_amdgpu_winsys_bo *), &bo_comparator);
 
-   uint32_t final_bo_count = 1;
-   for (uint32_t i = 1; i < temp_bo_count; ++i)
-      if (bo->bos[i] != bo->bos[i - 1])
-         bo->bos[final_bo_count++] = bo->bos[i];
+   if (!temp_bo_count) {
+      bo->bo_count = 0;
+   } else {
+      uint32_t final_bo_count = 1;
+      for (uint32_t i = 1; i < temp_bo_count; ++i)
+         if (bo->bos[i] != bo->bos[i - 1])
+            bo->bos[final_bo_count++] = bo->bos[i];
 
-   bo->bo_count = final_bo_count;
+      bo->bo_count = final_bo_count;
+   }
 
    return VK_SUCCESS;
 }
@@ -134,6 +138,21 @@ radv_amdgpu_winsys_bo_virtual_bind(struct radeon_winsys *_ws, struct radeon_wins
    if (r) {
       fprintf(stderr, "radv/amdgpu: Failed to replace a PRT VA region (%d).\n", r);
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+   }
+
+   /* Do not add the BO to the virtual BO list if it's already in the global list to avoid dangling
+    * BO references because it might have been destroyed without being previously unbound. Resetting
+    * it to NULL clears the old BO ranges if present.
+    *
+    * This is going to be clarified in the Vulkan spec:
+    * https://gitlab.khronos.org/vulkan/vulkan/-/issues/3125
+    *
+    * The issue still exists for non-global BO but it will be addressed later, once we are 100% it's
+    * RADV fault (mostly because the solution looks more complicated).
+    */
+   if (bo && bo->base.use_global_list) {
+      bo = NULL;
+      bo_offset = 0;
    }
 
    /* We have at most 2 new ranges (1 by the bind, and another one by splitting a range that
@@ -573,7 +592,7 @@ radv_amdgpu_get_optimal_vm_alignment(struct radv_amdgpu_winsys *ws, uint64_t siz
    /* Gfx9: Increase the VM alignment to the most significant bit set
     * in the size for faster address translation.
     */
-   if (ws->info.chip_class >= GFX9) {
+   if (ws->info.gfx_level >= GFX9) {
       unsigned msb = util_last_bit64(size); /* 0 = no bit is set */
       uint64_t msb_alignment = msb ? 1ull << (msb - 1) : 0;
 
@@ -870,7 +889,7 @@ radv_amdgpu_winsys_bo_set_metadata(struct radeon_winsys *_ws, struct radeon_wins
    struct amdgpu_bo_metadata metadata = {0};
    uint64_t tiling_flags = 0;
 
-   if (ws->info.chip_class >= GFX9) {
+   if (ws->info.gfx_level >= GFX9) {
       tiling_flags |= AMDGPU_TILING_SET(SWIZZLE_MODE, md->u.gfx9.swizzle_mode);
       tiling_flags |= AMDGPU_TILING_SET(DCC_OFFSET_256B, md->u.gfx9.dcc_offset_256b);
       tiling_flags |= AMDGPU_TILING_SET(DCC_PITCH_MAX, md->u.gfx9.dcc_pitch_max);
@@ -924,7 +943,7 @@ radv_amdgpu_winsys_bo_get_metadata(struct radeon_winsys *_ws, struct radeon_wins
 
    uint64_t tiling_flags = info.metadata.tiling_info;
 
-   if (ws->info.chip_class >= GFX9) {
+   if (ws->info.gfx_level >= GFX9) {
       md->u.gfx9.swizzle_mode = AMDGPU_TILING_GET(tiling_flags, SWIZZLE_MODE);
       md->u.gfx9.scanout = AMDGPU_TILING_GET(tiling_flags, SCANOUT);
    } else {

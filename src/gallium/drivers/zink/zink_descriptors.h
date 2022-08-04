@@ -40,6 +40,8 @@ extern "C" {
 #define ZINK_SHADER_COUNT (PIPE_SHADER_TYPES - 1)
 #endif
 
+#define ZINK_DESCRIPTOR_COMPACT 2
+
 enum zink_descriptor_type {
    ZINK_DESCRIPTOR_TYPE_UBO,
    ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW,
@@ -73,6 +75,15 @@ enum zink_descriptor_size_index {
    ZDS_INDEX_STORAGE_TEXELS,
 };
 
+enum zink_descriptor_size_index_compact {
+   ZDS_INDEX_COMP_UBO,
+   ZDS_INDEX_COMP_STORAGE_BUFFER,
+   ZDS_INDEX_COMP_COMBINED_SAMPLER,
+   ZDS_INDEX_COMP_UNIFORM_TEXELS,
+   ZDS_INDEX_COMP_STORAGE_IMAGE,
+   ZDS_INDEX_COMP_STORAGE_TEXELS,
+};
+
 struct hash_table;
 
 struct zink_context;
@@ -97,13 +108,13 @@ struct zink_descriptor_layout_key {
 
 struct zink_descriptor_layout {
    VkDescriptorSetLayout layout;
-   VkDescriptorUpdateTemplateKHR desc_template;
 };
 
 struct zink_descriptor_pool_key {
    unsigned use_count;
+   unsigned num_type_sizes;
    struct zink_descriptor_layout_key *layout;
-   VkDescriptorPoolSize sizes[2];
+   VkDescriptorPoolSize sizes[4];
 };
 
 struct zink_descriptor_reference {
@@ -114,11 +125,14 @@ struct zink_descriptor_reference {
 struct zink_descriptor_data {
    struct zink_descriptor_state gfx_descriptor_states[ZINK_SHADER_COUNT]; // keep incremental hashes here
    struct zink_descriptor_state descriptor_states[2]; // gfx, compute
+   struct zink_descriptor_state compact_gfx_descriptor_states[ZINK_SHADER_COUNT]; // keep incremental hashes here
+   struct zink_descriptor_state compact_descriptor_states[2]; // gfx, compute
    struct hash_table *descriptor_pools[ZINK_DESCRIPTOR_TYPES];
 
    struct zink_descriptor_layout_key *push_layout_keys[2]; //gfx, compute
    struct zink_descriptor_pool *push_pool[2]; //gfx, compute
    struct zink_descriptor_layout *push_dsl[2]; //gfx, compute
+   VkDescriptorUpdateTemplate push_template[2]; //gfx, compute
    uint8_t last_push_usage[2];
    bool push_valid[2];
    uint32_t push_state[2];
@@ -128,6 +142,7 @@ struct zink_descriptor_data {
 
    VkDescriptorPool dummy_pool;
    struct zink_descriptor_layout *dummy_dsl;
+   VkDescriptorUpdateTemplate dummy_template;
    VkDescriptorSet dummy_set;
 
    VkDescriptorSetLayout bindless_layout;
@@ -145,9 +160,10 @@ struct zink_program_descriptor_data {
    bool bindless;
    bool fbfetch;
    uint8_t binding_usage;
+   uint8_t real_binding_usage;
    struct zink_descriptor_pool_key *pool_key[ZINK_DESCRIPTOR_TYPES]; //push set doesn't need one
    struct zink_descriptor_layout *layouts[ZINK_DESCRIPTOR_TYPES + 1];
-   VkDescriptorUpdateTemplateKHR push_template;
+   VkDescriptorUpdateTemplate templates[ZINK_DESCRIPTOR_TYPES + 1];
 };
 
 struct zink_batch_descriptor_data {
@@ -176,6 +192,28 @@ zink_vktype_to_size_idx(VkDescriptorType type)
    unreachable("unknown type");
 }
 
+static inline enum zink_descriptor_size_index_compact
+zink_vktype_to_size_idx_comp(VkDescriptorType type)
+{
+   switch (type) {
+   case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+   case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+      return ZDS_INDEX_COMP_UBO;
+   case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+      return ZDS_INDEX_COMP_COMBINED_SAMPLER;
+   case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+      return ZDS_INDEX_COMP_UNIFORM_TEXELS;
+   case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+      return ZDS_INDEX_COMP_STORAGE_BUFFER;
+   case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+      return ZDS_INDEX_COMP_STORAGE_IMAGE;
+   case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+      return ZDS_INDEX_COMP_STORAGE_TEXELS;
+   default: break;
+   }
+   unreachable("unknown type");
+}
+
 static inline enum zink_descriptor_size_index
 zink_descriptor_type_to_size_idx(enum zink_descriptor_type type)
 {
@@ -188,6 +226,21 @@ zink_descriptor_type_to_size_idx(enum zink_descriptor_type type)
       return ZDS_INDEX_STORAGE_BUFFER;
    case ZINK_DESCRIPTOR_TYPE_IMAGE:
       return ZDS_INDEX_STORAGE_IMAGE;
+   default: break;
+   }
+   unreachable("unknown type");
+}
+
+static inline enum zink_descriptor_size_index_compact
+zink_descriptor_type_to_size_idx_comp(enum zink_descriptor_type type)
+{
+   switch (type) {
+   case ZINK_DESCRIPTOR_TYPE_UBO:
+      return ZDS_INDEX_COMP_UBO;
+   case ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW:
+      return ZDS_INDEX_COMP_COMBINED_SAMPLER;
+   case ZINK_DESCRIPTOR_TYPE_SSBO:
+   case ZINK_DESCRIPTOR_TYPE_IMAGE:
    default: break;
    }
    unreachable("unknown type");

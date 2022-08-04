@@ -250,7 +250,7 @@ fd4_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
    } else if (shader == PIPE_SHADER_COMPUTE) {
       sampler_swizzles = fd4_ctx->csampler_swizzles;
    } else {
-      debug_assert(0);
+      assert(0);
       sampler_swizzles = fd4_ctx->csampler_swizzles;
    }
 
@@ -279,7 +279,7 @@ fd4_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
                sampler_swizzles[start + i] |= 0x4000;
                break;
             default:
-               debug_assert(0);
+               assert(0);
             }
          }
       }

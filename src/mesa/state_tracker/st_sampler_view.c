@@ -507,10 +507,10 @@ last_layer(const struct gl_texture_object *texObj)
 /**
  * Determine the format for the texture sampler view.
  */
-static enum pipe_format
-get_sampler_view_format(struct st_context *st,
-                        const struct gl_texture_object *texObj,
-                        bool srgb_skip_decode)
+enum pipe_format
+st_get_sampler_view_format(const struct st_context *st,
+                           const struct gl_texture_object *texObj,
+                           bool srgb_skip_decode)
 {
    enum pipe_format format;
 
@@ -647,7 +647,7 @@ st_get_texture_sampler_view_from_stobj(struct st_context *st,
       struct pipe_sampler_view *view = sv->view;
       assert(texObj->pt == view->texture);
       assert(!check_sampler_swizzle(st, texObj, view, glsl130_or_later));
-      assert(get_sampler_view_format(st, texObj, srgb_skip_decode) == view->format);
+      assert(st_get_sampler_view_format(st, texObj, srgb_skip_decode) == view->format);
       assert(gl_target_to_pipe(texObj->Target) == view->target);
       assert(texObj->level_override >= 0 ||
              texObj->Attrib.MinLevel +
@@ -666,8 +666,8 @@ st_get_texture_sampler_view_from_stobj(struct st_context *st,
    }
 
    /* create new sampler view */
-   enum pipe_format format = get_sampler_view_format(st, texObj,
-                                                     srgb_skip_decode);
+   enum pipe_format format = st_get_sampler_view_format(st, texObj,
+                                                        srgb_skip_decode);
    struct pipe_sampler_view *view =
          st_create_texture_sampler_view_from_stobj(st, texObj, format,
                                                    glsl130_or_later);

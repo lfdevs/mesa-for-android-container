@@ -41,6 +41,16 @@ anv_queue_init(struct anv_device *device, struct anv_queue *queue,
    if (result != VK_SUCCESS)
       return result;
 
+   if (INTEL_DEBUG(DEBUG_SYNC)) {
+      result = vk_sync_create(&device->vk,
+                              &device->physical->sync_syncobj_type,
+                              0, 0, &queue->sync);
+      if (result != VK_SUCCESS) {
+         vk_queue_finish(&queue->vk);
+         return result;
+      }
+   }
+
    queue->vk.driver_submit = anv_queue_submit;
 
    queue->device = device;
@@ -58,5 +68,8 @@ anv_queue_init(struct anv_device *device, struct anv_queue *queue,
 void
 anv_queue_finish(struct anv_queue *queue)
 {
+   if (queue->sync)
+      vk_sync_destroy(&queue->device->vk, queue->sync);
+
    vk_queue_finish(&queue->vk);
 }

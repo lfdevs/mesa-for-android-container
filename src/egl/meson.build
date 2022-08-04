@@ -177,6 +177,15 @@ else
   )
 endif
 
+egl_def = custom_target(
+  'egl.def',
+  input: 'main/egl.def.in',
+  output : 'egl.def',
+  command : [prog_python, gen_vs_module_defs_py,
+             '--in_file', '@INPUT@', '--out_file', '@OUTPUT@',
+             '--compiler_id', cc.get_argument_syntax(), '--cpu_family', host_machine.cpu_family()]
+)
+
 libegl = shared_library(
   egl_lib_name,
   files_egl,
@@ -194,7 +203,7 @@ libegl = shared_library(
   version : egl_lib_version,
   soversion : egl_lib_soversion,
   name_prefix : 'lib', # even on windows
-  vs_module_defs : 'main/egl.def'
+  vs_module_defs : egl_def
 )
 
 if not with_glvnd

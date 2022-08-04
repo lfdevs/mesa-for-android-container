@@ -19,7 +19,6 @@
 # SOFTWARE.
 
 files_libzink = files(
-  'nir_lower_dynamic_bo_access.c',
   'zink_lower_cubemap_to_array.c',
   'nir_to_spirv/nir_to_spirv.c',
   'nir_to_spirv/spirv_builder.c',
@@ -92,8 +91,8 @@ libzink = static_library(
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_vulkan_util, inc_zink_vk],
   dependencies: [
-    dep_vulkan, idep_nir_headers, idep_mesautil, idep_vulkan_util_headers,
-    idep_vulkan_wsi_headers, idep_vulkan_util
+    idep_nir_headers, idep_mesautil, idep_vulkan_util_headers,
+    idep_vulkan_wsi_headers, idep_vulkan_util, dep_libdrm
   ],
   c_args: zink_c_args,
 )

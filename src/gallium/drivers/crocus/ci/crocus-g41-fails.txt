@@ -22,14 +22,6 @@ dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg
 
 # RGB/RGBA half float should be incomplete, tested as complete.
 dEQP-GLES2.functional.fbo.completeness.renderable.texture.color0.rgb_half_float_oes,Fail
-dEQP-GLES2.functional.fbo.completeness.renderable.texture.color0.rgba_half_float_oes,Fail
-
-dEQP-GLES2.functional.rasterization.interpolation.basic.line_loop_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.basic.line_strip_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.basic.lines_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.projected.line_loop_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.projected.line_strip_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.projected.lines_wide,Fail
 
 dEQP-GLES2.functional.shaders.texture_functions.vertex.texturecubelod,Fail
 
@@ -90,9 +82,6 @@ spec@!opengl 1.1@read-front,Fail
 spec@!opengl 1.1@read-front clear-front-first,Fail
 spec@!opengl 1.1@windowoverlap,Fail
 
-# Regression from i965
-spec@!opengl 1.1@depthstencil-default_fb-blit,Fail
-
 spec@!opengl 1.1@line-aa-width,Fail
 spec@!opengl 1.1@linestipple,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
@@ -104,11 +93,6 @@ spec@!opengl 1.1@linestipple@Line strip,Fail
 spec@!opengl 1.1@max-texture-size,Crash
 
 spec@!opengl 1.4@gl-1.4-polygon-offset,Fail
-
-# Regression from i965
-# "Unexpected GL error: GL_INVALID_VALUE 0x501"
-spec@!opengl 2.0@max-samplers,Fail
-spec@!opengl 2.0@max-samplers border,Fail
 
 # Regression from i965
 # "data not copied"

@@ -187,9 +187,6 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
       break;
    default:
       assert(0 && "Unexpected texture in st_gl_texture_dims_to_pipe_dims()");
-#if defined(NDEBUG) || defined(DEBUG)
-      FALLTHROUGH;
-#endif
    case GL_TEXTURE_3D:
    case GL_PROXY_TEXTURE_3D:
       *widthOut = widthIn;

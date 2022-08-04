@@ -40,13 +40,15 @@ enum radv_meta_save_flags {
    RADV_META_SAVE_GRAPHICS_PIPELINE = (1 << 3),
    RADV_META_SAVE_COMPUTE_PIPELINE = (1 << 4),
    RADV_META_SAVE_SAMPLE_LOCATIONS = (1 << 5),
+   RADV_META_SUSPEND_PREDICATING = (1 << 6),
 };
 
 struct radv_meta_saved_state {
    uint32_t flags;
 
    struct radv_descriptor_set *old_descriptor_set0;
-   struct radv_pipeline *old_pipeline;
+   struct radv_graphics_pipeline *old_graphics_pipeline;
+   struct radv_compute_pipeline *old_compute_pipeline;
    struct radv_dynamic_state dynamic;
 
    char push_constants[MAX_PUSH_CONSTANTS_SIZE];
@@ -56,6 +58,10 @@ struct radv_meta_saved_state {
    struct radv_attachment_state *attachments;
    struct vk_framebuffer *framebuffer;
    VkRect2D render_area;
+
+   unsigned active_pipeline_gds_queries;
+
+   bool predicating;
 };
 
 VkResult radv_device_init_meta_clear_state(struct radv_device *device, bool on_demand);
@@ -103,6 +109,9 @@ void radv_device_finish_accel_struct_build_state(struct radv_device *device);
 
 VkResult radv_device_init_meta_etc_decode_state(struct radv_device *device, bool on_demand);
 void radv_device_finish_meta_etc_decode_state(struct radv_device *device);
+
+VkResult radv_device_init_dgc_prepare_state(struct radv_device *device);
+void radv_device_finish_dgc_prepare_state(struct radv_device *device);
 
 void radv_meta_save(struct radv_meta_saved_state *saved_state, struct radv_cmd_buffer *cmd_buffer,
                     uint32_t flags);
@@ -233,9 +242,9 @@ static inline bool
 radv_is_fmask_decompress_pipeline(struct radv_cmd_buffer *cmd_buffer)
 {
    struct radv_meta_state *meta_state = &cmd_buffer->device->meta_state;
-   struct radv_pipeline *pipeline = cmd_buffer->state.pipeline;
+   struct radv_graphics_pipeline *pipeline = cmd_buffer->state.graphics_pipeline;
 
-   return radv_pipeline_to_handle(pipeline) ==
+   return radv_pipeline_to_handle(&pipeline->base) ==
           meta_state->fast_clear_flush.fmask_decompress_pipeline;
 }
 
@@ -246,19 +255,20 @@ static inline bool
 radv_is_dcc_decompress_pipeline(struct radv_cmd_buffer *cmd_buffer)
 {
    struct radv_meta_state *meta_state = &cmd_buffer->device->meta_state;
-   struct radv_pipeline *pipeline = cmd_buffer->state.pipeline;
+   struct radv_graphics_pipeline *pipeline = cmd_buffer->state.graphics_pipeline;
 
-   return radv_pipeline_to_handle(pipeline) == meta_state->fast_clear_flush.dcc_decompress_pipeline;
+   return radv_pipeline_to_handle(&pipeline->base) ==
+          meta_state->fast_clear_flush.dcc_decompress_pipeline;
 }
 
 /* common nir builder helpers */
 #include "nir/nir_builder.h"
 
-nir_builder PRINTFLIKE(2, 3) radv_meta_init_shader(gl_shader_stage stage, const char *name, ...);
-nir_ssa_def *radv_meta_gen_rect_vertices(nir_builder *vs_b);
-nir_ssa_def *radv_meta_gen_rect_vertices_comp2(nir_builder *vs_b, nir_ssa_def *comp2);
-nir_shader *radv_meta_build_nir_vs_generate_vertices(void);
-nir_shader *radv_meta_build_nir_fs_noop(void);
+nir_builder PRINTFLIKE(3, 4)
+   radv_meta_init_shader(struct radv_device *dev, gl_shader_stage stage, const char *name, ...);
+
+nir_shader *radv_meta_build_nir_vs_generate_vertices(struct radv_device *dev);
+nir_shader *radv_meta_build_nir_fs_noop(struct radv_device *dev);
 
 void radv_meta_build_resolve_shader_core(nir_builder *b, bool is_integer, int samples,
                                          nir_variable *input_img, nir_variable *color,

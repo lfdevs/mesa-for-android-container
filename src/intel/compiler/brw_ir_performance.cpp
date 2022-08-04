@@ -120,11 +120,11 @@ namespace {
     * instructions.
     */
    struct instruction_info {
-      instruction_info(const intel_device_info *devinfo, const fs_inst *inst) :
-         devinfo(devinfo), op(inst->opcode),
+      instruction_info(const struct brw_isa_info *isa, const fs_inst *inst) :
+         isa(isa), devinfo(isa->devinfo), op(inst->opcode),
          td(inst->dst.type), sd(DIV_ROUND_UP(inst->size_written, REG_SIZE)),
          tx(get_exec_type(inst)), sx(0), ss(0),
-         sc(has_bank_conflict(devinfo, inst) ? sd : 0),
+         sc(has_bank_conflict(isa, inst) ? sd : 0),
          desc(inst->desc), sfid(inst->sfid)
       {
          /* We typically want the maximum source size, except for split send
@@ -150,9 +150,9 @@ namespace {
             tx = brw_int_type(8, tx == BRW_REGISTER_TYPE_D);
       }
 
-      instruction_info(const intel_device_info *devinfo,
+      instruction_info(const struct brw_isa_info *isa,
                        const vec4_instruction *inst) :
-         devinfo(devinfo), op(inst->opcode),
+         isa(isa), devinfo(isa->devinfo), op(inst->opcode),
          td(inst->dst.type), sd(DIV_ROUND_UP(inst->size_written, REG_SIZE)),
          tx(get_exec_type(inst)), sx(0), ss(0), sc(0),
          desc(inst->desc), sfid(inst->sfid)
@@ -173,6 +173,8 @@ namespace {
             tx = brw_int_type(8, tx == BRW_REGISTER_TYPE_D);
       }
 
+      /** ISA encoding information */
+      const struct brw_isa_info *isa;
       /** Device information. */
       const struct intel_device_info *devinfo;
       /** Instruction opcode. */
@@ -840,8 +842,8 @@ namespace {
 
       case VS_OPCODE_UNPACK_FLAGS_SIMD4X2:
       case TCS_OPCODE_GET_INSTANCE_ID:
-      case TCS_OPCODE_SET_INPUT_URB_OFFSETS:
-      case TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
+      case VEC4_TCS_OPCODE_SET_INPUT_URB_OFFSETS:
+      case VEC4_TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
       case TES_OPCODE_CREATE_INPUT_READ_HEADER:
          if (devinfo->ver >= 8)
             return calculate_desc(info, EU_UNIT_FPU, 22 /* XXX */, 0, 0,
@@ -920,19 +922,13 @@ namespace {
                                8 /* XXX */, 750 /* XXX */, 0, 0,
                                2 /* XXX */, 0);
 
-      case SHADER_OPCODE_URB_READ_SIMD8:
-      case SHADER_OPCODE_URB_READ_SIMD8_PER_SLOT:
-      case SHADER_OPCODE_URB_WRITE_SIMD8:
-      case SHADER_OPCODE_URB_WRITE_SIMD8_PER_SLOT:
-      case SHADER_OPCODE_URB_WRITE_SIMD8_MASKED:
-      case SHADER_OPCODE_URB_WRITE_SIMD8_MASKED_PER_SLOT:
       case VEC4_OPCODE_URB_READ:
-      case VS_OPCODE_URB_WRITE:
-      case GS_OPCODE_URB_WRITE:
-      case GS_OPCODE_URB_WRITE_ALLOCATE:
+      case VEC4_VS_OPCODE_URB_WRITE:
+      case VEC4_GS_OPCODE_URB_WRITE:
+      case VEC4_GS_OPCODE_URB_WRITE_ALLOCATE:
       case GS_OPCODE_THREAD_END:
       case GS_OPCODE_FF_SYNC:
-      case TCS_OPCODE_URB_WRITE:
+      case VEC4_TCS_OPCODE_URB_WRITE:
       case TCS_OPCODE_RELEASE_INPUT:
       case TCS_OPCODE_THREAD_END:
          return calculate_desc(info, EU_UNIT_URB, 2, 0, 0, 0, 6 /* XXX */,
@@ -1150,6 +1146,10 @@ namespace {
             return calculate_desc(info, EU_UNIT_SPAWNER, 2, 0, 0, 0 /* XXX */, 0,
                                   10 /* XXX */, 0, 0, 0, 0, 0);
 
+         case BRW_SFID_URB:
+            return calculate_desc(info, EU_UNIT_URB, 2, 0, 0, 0, 6 /* XXX */,
+                                  32 /* XXX */, 200 /* XXX */, 0, 0, 0, 0);
+
          default:
             abort();
          }
@@ -1338,11 +1338,12 @@ namespace {
     * Model the performance behavior of an FS back-end instruction.
     */
    void
-   issue_fs_inst(state &st, const intel_device_info *devinfo,
+   issue_fs_inst(state &st, const struct brw_isa_info *isa,
                  const backend_instruction *be_inst)
    {
+      const struct intel_device_info *devinfo = isa->devinfo;
       const fs_inst *inst = static_cast<const fs_inst *>(be_inst);
-      const instruction_info info(devinfo, inst);
+      const instruction_info info(isa, inst);
       const perf_desc perf = instruction_desc(info);
 
       /* Stall on any source dependencies. */
@@ -1458,12 +1459,13 @@ namespace {
     * Model the performance behavior of a VEC4 back-end instruction.
     */
    void
-   issue_vec4_instruction(state &st, const intel_device_info *devinfo,
+   issue_vec4_instruction(state &st, const struct brw_isa_info *isa,
                           const backend_instruction *be_inst)
    {
+      const struct intel_device_info *devinfo = isa->devinfo;
       const vec4_instruction *inst =
          static_cast<const vec4_instruction *>(be_inst);
-      const instruction_info info(devinfo, inst);
+      const instruction_info info(isa, inst);
       const perf_desc perf = instruction_desc(info);
 
       /* Stall on any source dependencies. */
@@ -1569,7 +1571,7 @@ namespace {
    void
    calculate_performance(performance &p, const backend_shader *s,
                          void (*issue_instruction)(
-                            state &, const intel_device_info *,
+                            state &, const struct brw_isa_info *,
                             const backend_instruction *),
                          unsigned dispatch_width)
    {
@@ -1611,7 +1613,7 @@ namespace {
          foreach_inst_in_block(backend_instruction, inst, block) {
             const unsigned clock0 = st.unit_ready[EU_UNIT_FE];
 
-            issue_instruction(st, s->devinfo, inst);
+            issue_instruction(st, &s->compiler->isa, inst);
 
             if (inst->opcode == SHADER_OPCODE_HALT_TARGET && halt_count)
                st.weight /= discard_weight;

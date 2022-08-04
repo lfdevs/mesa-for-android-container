@@ -31,6 +31,7 @@
 
 #include "gfx6_gs_visitor.h"
 #include "brw_eu.h"
+#include "brw_prim.h"
 
 namespace brw {
 
@@ -111,7 +112,7 @@ gfx6_gs_visitor::emit_prolog()
 
    /* PrimitveID is delivered in r0.1 of the thread payload. If the program
     * needs it we have to move it to a separate register where we can map
-    * the atttribute.
+    * the attribute.
     *
     * Notice that we cannot use a virtual register for this, because we need to
     * map all input attributes to hardware registers in setup_payload(),
@@ -155,7 +156,7 @@ gfx6_gs_visitor::gs_emit_vertex(int stream_id)
           * each will generate a scratch write with the same offset into
           * scratch space (thus, each one overwriting the previous). This is
           * not what we want. What we will do instead is emit PSIZ to a
-          * a regular temporary register, then move that resgister into the
+          * a regular temporary register, then move that register into the
           * array. This way we only have one instruction with an array
           * destination and we only produce a single scratch write.
           */
@@ -292,7 +293,7 @@ gfx6_gs_visitor::emit_snb_gs_urb_write_opcode(bool complete, int base_mrf,
 
    if (!complete) {
       /* If the vertex is not complete we don't have to do anything special */
-      inst = emit(GS_OPCODE_URB_WRITE);
+      inst = emit(VEC4_GS_OPCODE_URB_WRITE);
       inst->urb_write_flags = BRW_URB_WRITE_NO_FLAGS;
    } else {
       /* Otherwise we always request to allocate a new VUE handle. If this is
@@ -303,7 +304,7 @@ gfx6_gs_visitor::emit_snb_gs_urb_write_opcode(bool complete, int base_mrf,
        * which would require to end the program with an IF/ELSE/ENDIF block,
        * something we do not want.
        */
-      inst = emit(GS_OPCODE_URB_WRITE_ALLOCATE);
+      inst = emit(VEC4_GS_OPCODE_URB_WRITE_ALLOCATE);
       inst->urb_write_flags = BRW_URB_WRITE_COMPLETE;
       inst->dst = dst_reg(MRF, base_mrf);
       inst->src[0] = this->temp;
@@ -329,7 +330,7 @@ gfx6_gs_visitor::emit_thread_end()
    }
 
    /* Here we have to:
-    * 1) Emit an FF_SYNC messsage to obtain an initial VUE handle.
+    * 1) Emit an FF_SYNC message to obtain an initial VUE handle.
     * 2) Loop over all buffered vertex data and write it to corresponding
     *    URB entries.
     * 3) Allocate new VUE handles for all vertices other than the first.

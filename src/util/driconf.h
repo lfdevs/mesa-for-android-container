@@ -294,6 +294,10 @@
    DRI_CONF_OPT_B(vk_dont_care_as_load, def, \
                   "Treat VK_ATTACHMENT_LOAD_OP_DONT_CARE as LOAD_OP_LOAD, workaround on tiler GPUs for games that confuse these two load ops")
 
+#define DRI_CONF_LIMIT_TRIG_INPUT_RANGE(def) \
+   DRI_CONF_OPT_B(limit_trig_input_range, def, \
+                  "Limit trig input range to [-2p : 2p] to improve sin/cos calculation precision on Intel")
+
 /**
  * \brief Image quality-related options
  */
@@ -475,14 +479,6 @@
  * \brief radeonsi specific configuration options
  */
 
-#define DRI_CONF_RADEONSI_ASSUME_NO_Z_FIGHTS(def) \
-   DRI_CONF_OPT_B(radeonsi_assume_no_z_fights, def, \
-                  "Assume no Z fights (enables aggressive out-of-order rasterization to improve performance; may cause rendering errors)")
-
-#define DRI_CONF_RADEONSI_COMMUTATIVE_BLEND_ADD(def) \
-   DRI_CONF_OPT_B(radeonsi_commutative_blend_add, def, \
-                  "Commutative additive blending optimizations (may cause rendering errors)")
-
 #define DRI_CONF_RADEONSI_ZERO_ALL_VRAM_ALLOCS(def) \
    DRI_CONF_OPT_B(radeonsi_zerovram, def, \
                   "Zero all vram allocations")
@@ -510,6 +506,13 @@
 #define DRI_CONF_FORMAT_L8_SRGB_ENABLE_READBACK(def) \
    DRI_CONF_OPT_B(format_l8_srgb_enable_readback, def, \
                   "Force-enable reading back L8_SRGB textures")
+
+/**
+ * \brief venus specific configuration options
+ */
+#define DRI_CONF_VENUS_IMPLICIT_FENCING(def) \
+   DRI_CONF_OPT_B(venus_implicit_fencing, def, \
+                  "Assume the virtio-gpu kernel driver supports implicit fencing")
 
 /**
  * \brief RADV specific configuration options
@@ -563,17 +566,9 @@
    DRI_CONF_OPT_B(radv_disable_dcc, def, \
                   "Disable DCC for color images")
 
-#define DRI_CONF_RADV_REPORT_APU_AS_DGPU(def) \
-   DRI_CONF_OPT_B(radv_report_apu_as_dgpu, def, \
-                  "Report APUs as discrete GPUs instead of integrated GPUs")
-
 #define DRI_CONF_RADV_REQUIRE_ETC2(def)                                        \
   DRI_CONF_OPT_B(radv_require_etc2, def,                                       \
                  "Implement emulated ETC2 on HW that does not support it")
-
-#define DRI_CONF_RADV_DISABLE_HTILE_LAYERS(def) \
-   DRI_CONF_OPT_B(radv_disable_htile_layers, def, \
-                  "Disable HTILE for layered depth/stencil formats")
 
 #define DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(def) \
   DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
@@ -583,6 +578,10 @@
    DRI_CONF_OPT_B(radv_disable_sinking_load_input_fs, def, \
                   "Disable sinking load inputs for fragment shaders")
 
+#define DRI_CONF_RADV_DGC(def) \
+   DRI_CONF_OPT_B(radv_dgc, def, \
+                  "Expose an experimental implementation of VK_NV_device_generated_commands")
+
 /**
  * \brief ANV specific configuration options
  */
@@ -590,5 +589,9 @@
 #define DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(def) \
    DRI_CONF_OPT_B(anv_assume_full_subgroups, def, \
                   "Allow assuming full subgroups requirement even when it's not specified explicitly")
+
+#define DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(def) \
+   DRI_CONF_OPT_B(anv_sample_mask_out_opengl_behaviour, def, \
+                  "Ignore sample mask out when having single sampled target")
 
 #endif

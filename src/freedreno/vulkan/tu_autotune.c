@@ -151,9 +151,9 @@ hash_renderpass_instance(const struct tu_render_pass *pass,
    for (unsigned i = 0; i < pass->attachment_count; i++) {
       APPEND_TO_HASH(&hash_state, cmd->state.attachments[i]->view.width);
       APPEND_TO_HASH(&hash_state, cmd->state.attachments[i]->view.height);
-      APPEND_TO_HASH(&hash_state, cmd->state.attachments[i]->image->vk_format);
-      APPEND_TO_HASH(&hash_state, cmd->state.attachments[i]->image->layer_count);
-      APPEND_TO_HASH(&hash_state, cmd->state.attachments[i]->image->level_count);
+      APPEND_TO_HASH(&hash_state, cmd->state.attachments[i]->image->vk.format);
+      APPEND_TO_HASH(&hash_state, cmd->state.attachments[i]->image->vk.array_layers);
+      APPEND_TO_HASH(&hash_state, cmd->state.attachments[i]->image->vk.mip_levels);
    }
 
    APPEND_TO_HASH(&hash_state, pass->subpass_count);
@@ -355,9 +355,8 @@ tu_autotune_on_submit(struct tu_device *dev,
       queue_pending_results(at, cmdbuf);
    }
 
-#if TU_AUTOTUNE_DEBUG_LOG != 0
-   mesa_logi("Total history entries: %u", at->ht->entries);
-#endif
+   if (TU_AUTOTUNE_DEBUG_LOG)
+      mesa_logi("Total history entries: %u", at->ht->entries);
 
    /* Cleanup old entries from history table. The assumption
     * here is that application doesn't hold many old unsubmitted
@@ -369,9 +368,8 @@ tu_autotune_on_submit(struct tu_device *dev,
           (new_fence - history->last_fence) <= MAX_HISTORY_LIFETIME)
          continue;
 
-#if TU_AUTOTUNE_DEBUG_LOG != 0
-      mesa_logi("Removed old history entry %016"PRIx64"", history->key);
-#endif
+      if (TU_AUTOTUNE_DEBUG_LOG)
+         mesa_logi("Removed old history entry %016"PRIx64"", history->key);
 
       u_rwlock_wrlock(&at->ht_lock);
       _mesa_hash_table_remove_key(at->ht, &history->key);
@@ -416,18 +414,18 @@ tu_autotune_init(struct tu_autotune *at, struct tu_device *dev)
 void
 tu_autotune_fini(struct tu_autotune *at, struct tu_device *dev)
 {
-#if TU_AUTOTUNE_LOG_AT_FINISH != 0
-   while (!list_is_empty(&at->pending_results)) {
-      process_results(at);
-   }
+   if (TU_AUTOTUNE_LOG_AT_FINISH) {
+      while (!list_is_empty(&at->pending_results)) {
+         process_results(at);
+      }
 
-   hash_table_foreach(at->ht, entry) {
-      struct tu_renderpass_history *history = entry->data;
+      hash_table_foreach(at->ht, entry) {
+         struct tu_renderpass_history *history = entry->data;
 
-      mesa_logi("%016"PRIx64" \tavg_passed=%u results=%u",
-                history->key, history->avg_samples, history->num_results);
+         mesa_logi("%016"PRIx64" \tavg_passed=%u results=%u",
+                   history->key, history->avg_samples, history->num_results);
+      }
    }
-#endif
 
    tu_autotune_free_results(dev, &at->pending_results);
 
@@ -482,7 +480,7 @@ fallback_use_bypass(const struct tu_render_pass *pass,
                     const struct tu_framebuffer *framebuffer,
                     const struct tu_cmd_buffer *cmd_buffer)
 {
-   if (cmd_buffer->state.drawcall_count > 5)
+   if (cmd_buffer->state.rp.drawcall_count > 5)
       return false;
 
    for (unsigned i = 0; i < pass->subpass_count; i++) {
@@ -491,6 +489,27 @@ fallback_use_bypass(const struct tu_render_pass *pass,
    }
 
    return true;
+}
+
+static uint32_t
+get_render_pass_pixel_count(const struct tu_cmd_buffer *cmd)
+{
+   const VkExtent2D *extent = &cmd->state.render_area.extent;
+   return extent->width * extent->height;
+}
+
+static uint64_t
+estimate_drawcall_bandwidth(const struct tu_cmd_buffer *cmd,
+                            uint32_t avg_renderpass_sample_count)
+{
+   const struct tu_cmd_state *state = &cmd->state;
+
+   if (!state->rp.drawcall_count)
+      return 0;
+
+   /* sample count times drawcall_bandwidth_per_sample */
+   return (uint64_t)avg_renderpass_sample_count *
+      state->rp.drawcall_bandwidth_per_sample_sum / state->rp.drawcall_count;
 }
 
 bool
@@ -541,41 +560,47 @@ tu_autotune_use_bypass(struct tu_autotune *at,
 
    uint32_t avg_samples = 0;
    if (get_history(at, renderpass_key, &avg_samples)) {
-      /* TODO we should account for load/stores/clears/resolves especially
-       * with low drawcall count and ~fb_size samples passed, in D3D11 games
-       * we are seeing many renderpasses like:
-       *  - color attachment load
-       *  - single fullscreen draw
-       *  - color attachment store
-       */
+      const uint32_t pass_pixel_count =
+         get_render_pass_pixel_count(cmd_buffer);
+      uint64_t sysmem_bandwidth =
+         (uint64_t)pass->sysmem_bandwidth_per_pixel * pass_pixel_count;
+      uint64_t gmem_bandwidth =
+         (uint64_t)pass->gmem_bandwidth_per_pixel * pass_pixel_count;
 
-      /* Low sample count could mean there was only a clear.. or there was
-       * a clear plus draws that touch no or few samples
+      const uint64_t total_draw_call_bandwidth =
+         estimate_drawcall_bandwidth(cmd_buffer, avg_samples);
+
+      /* drawcalls access the memory in sysmem rendering (ignoring CCU) */
+      sysmem_bandwidth += total_draw_call_bandwidth;
+
+      /* drawcalls access gmem in gmem rendering, but we do not want to ignore
+       * them completely.  The state changes between tiles also have an
+       * overhead.  The magic numbers of 11 and 10 are randomly chosen.
        */
-      if (avg_samples < 500) {
-#if TU_AUTOTUNE_DEBUG_LOG != 0
-         mesa_logi("%016"PRIx64":%u\t avg_samples=%u selecting sysmem",
-            renderpass_key, cmd_buffer->state.drawcall_count, avg_samples);
-#endif
-         return true;
+      gmem_bandwidth = (gmem_bandwidth * 11 + total_draw_call_bandwidth) / 10;
+
+      const bool select_sysmem = sysmem_bandwidth <= gmem_bandwidth;
+      if (TU_AUTOTUNE_DEBUG_LOG) {
+         const VkExtent2D *extent = &cmd_buffer->state.render_area.extent;
+         const float drawcall_bandwidth_per_sample =
+            (float)cmd_buffer->state.rp.drawcall_bandwidth_per_sample_sum /
+            cmd_buffer->state.rp.drawcall_count;
+
+         mesa_logi("autotune %016" PRIx64 ":%u selecting %s",
+               renderpass_key,
+               cmd_buffer->state.rp.drawcall_count,
+               select_sysmem ? "sysmem" : "gmem");
+         mesa_logi("   avg_samples=%u, draw_bandwidth_per_sample=%.2f, total_draw_call_bandwidth=%" PRIu64,
+               avg_samples,
+               drawcall_bandwidth_per_sample,
+               total_draw_call_bandwidth);
+         mesa_logi("   render_area=%ux%u, sysmem_bandwidth_per_pixel=%u, gmem_bandwidth_per_pixel=%u",
+               extent->width, extent->height,
+               pass->sysmem_bandwidth_per_pixel,
+               pass->gmem_bandwidth_per_pixel);
+         mesa_logi("   sysmem_bandwidth=%" PRIu64 ", gmem_bandwidth=%" PRIu64,
+               sysmem_bandwidth, gmem_bandwidth);
       }
-
-      /* Cost-per-sample is an estimate for the average number of reads+
-       * writes for a given passed sample.
-       */
-      float sample_cost = cmd_buffer->state.total_drawcalls_cost;
-      sample_cost /= cmd_buffer->state.drawcall_count;
-
-      float single_draw_cost = (avg_samples * sample_cost) / cmd_buffer->state.drawcall_count;
-
-      bool select_sysmem = single_draw_cost < 6000.0;
-
-#if TU_AUTOTUNE_DEBUG_LOG != 0
-      mesa_logi("%016"PRIx64":%u\t avg_samples=%u, "
-          "sample_cost=%f, single_draw_cost=%f selecting %s",
-          renderpass_key, cmd_buffer->state.drawcall_count, avg_samples,
-          sample_cost, single_draw_cost, select_sysmem ? "sysmem" : "gmem");
-#endif
 
       return select_sysmem;
    }

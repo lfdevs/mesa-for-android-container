@@ -46,7 +46,7 @@ static void gfx10_release_query_buffers(struct si_context *sctx,
    while (first) {
       struct gfx10_sh_query_buffer *qbuf = first;
       if (first != last)
-         first = LIST_ENTRY(struct gfx10_sh_query_buffer, qbuf->list.next, list);
+         first = list_entry(qbuf->list.next, struct gfx10_sh_query_buffer, list);
       else
          first = NULL;
 
@@ -129,7 +129,7 @@ success:;
    sbuf.buffer_offset = qbuf->head;
    sbuf.buffer_size = sizeof(struct gfx10_sh_query_buffer_mem);
    si_set_internal_shader_buffer(sctx, SI_GS_QUERY_BUF, &sbuf);
-   sctx->current_vs_state |= S_VS_STATE_STREAMOUT_QUERY_ENABLED(1);
+   SET_FIELD(sctx->current_gs_state, GS_STATE_STREAMOUT_QUERY_ENABLED, 1);
 
    si_mark_atom_dirty(sctx, &sctx->atoms.s.shader_query);
    return true;
@@ -185,7 +185,7 @@ static bool gfx10_sh_query_end(struct si_context *sctx, struct si_query *rquery)
 
    if (sctx->num_active_shader_queries <= 0 || !si_is_atom_dirty(sctx, &sctx->atoms.s.shader_query)) {
       si_set_internal_shader_buffer(sctx, SI_GS_QUERY_BUF, NULL);
-      sctx->current_vs_state &= C_VS_STATE_STREAMOUT_QUERY_ENABLED;
+      SET_FIELD(sctx->current_gs_state, GS_STATE_STREAMOUT_QUERY_ENABLED, 0);
 
       /* If a query_begin is followed by a query_end without a draw
        * in-between, we need to clear the atom to ensure that the
@@ -242,7 +242,7 @@ static bool gfx10_sh_query_get_result(struct si_context *sctx, struct si_query *
    assert(query->last);
 
    for (struct gfx10_sh_query_buffer *qbuf = query->last;;
-        qbuf = LIST_ENTRY(struct gfx10_sh_query_buffer, qbuf->list.prev, list)) {
+        qbuf = list_entry(qbuf->list.prev, struct gfx10_sh_query_buffer, list)) {
       unsigned usage = PIPE_MAP_READ | (wait ? 0 : PIPE_MAP_DONTBLOCK);
       void *map;
 
@@ -403,13 +403,15 @@ static void gfx10_sh_query_get_result_resource(struct si_context *sctx, struct s
          si_cp_wait_mem(sctx, &sctx->gfx_cs, va, 0x00000001, 0x00000001, 0);
       }
 
+      /* ssbo[2] is either tmp_buffer or resource */
+      assert(ssbo[2].buffer);
       si_launch_grid_internal_ssbos(sctx, &grid, sctx->sh_query_result_shader,
                                     SI_OP_SYNC_PS_BEFORE | SI_OP_SYNC_AFTER, SI_COHERENCY_SHADER,
-                                    3, ssbo, 0x6);
+                                    3, ssbo, (1 << 2) | (ssbo[1].buffer ? 1 << 1 : 0));
 
       if (qbuf == query->last)
          break;
-      qbuf = LIST_ENTRY(struct gfx10_sh_query_buffer, qbuf->list.next, list);
+      qbuf = list_entry(qbuf->list.next, struct gfx10_sh_query_buffer, list);
    }
 
    si_restore_qbo_state(sctx, &saved_state);

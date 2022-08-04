@@ -131,3 +131,35 @@ st_nir_make_passthrough_shader(struct st_context *st,
 
    return st_nir_finish_builtin_shader(st, b.shader);
 }
+
+/**
+ * Make a simple shader that reads color value from a constant buffer
+ * and uses it to clear all color buffers.
+ */
+struct pipe_shader_state *
+st_nir_make_clearcolor_shader(struct st_context *st)
+{
+   const nir_shader_compiler_options *options =
+      st_get_nir_compiler_options(st, MESA_SHADER_FRAGMENT);
+
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, options,
+                                                  "clear color FS");
+   b.shader->info.num_ubos = 1;
+   b.shader->num_outputs = 1;
+   b.shader->num_uniforms = 1;
+
+   /* Read clear color from constant buffer */
+   nir_ssa_def *clear_color = nir_load_uniform(&b, 4, 32, nir_imm_int(&b,0),
+                                               .range = 16,
+                                               .dest_type = nir_type_float32);
+
+   nir_variable *color_out =
+      nir_variable_create(b.shader, nir_var_shader_out, glsl_vec_type(4),
+                             "outcolor");
+   color_out->data.location = FRAG_RESULT_COLOR;
+
+   /* Write out the color */
+   nir_store_var(&b, color_out, clear_color, 0xf);
+
+   return st_nir_finish_builtin_shader(st, b.shader);
+}

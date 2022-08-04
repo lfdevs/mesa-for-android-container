@@ -248,7 +248,7 @@ lower_immed(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr, unsigned n,
 static void
 unuse(struct ir3_instruction *instr)
 {
-   debug_assert(instr->use_count > 0);
+   assert(instr->use_count > 0);
 
    if (--instr->use_count == 0) {
       struct ir3_block *block = instr->block;
@@ -260,7 +260,7 @@ unuse(struct ir3_instruction *instr)
        * be things like array store's)
        */
       for (unsigned i = 0; i < block->keeps_count; i++) {
-         debug_assert(block->keeps[i] != instr);
+         assert(block->keeps[i] != instr);
       }
    }
 }
@@ -360,7 +360,7 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
 
       if (ir3_valid_flags(instr, n, new_flags)) {
          if (new_flags & IR3_REG_ARRAY) {
-            debug_assert(!(reg->flags & IR3_REG_ARRAY));
+            assert(!(reg->flags & IR3_REG_ARRAY));
             reg->array = src_reg->array;
          }
          reg->flags = new_flags;
@@ -475,7 +475,7 @@ reg_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr,
       if (src_reg->flags & IR3_REG_IMMED) {
          int32_t iim_val = src_reg->iim_val;
 
-         debug_assert((opc_cat(instr->opc) == 1) ||
+         assert((opc_cat(instr->opc) == 1) ||
                       (opc_cat(instr->opc) == 2) ||
                       (opc_cat(instr->opc) == 6) ||
                       is_meta(instr) ||
@@ -530,7 +530,7 @@ eliminate_output_mov(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr)
       struct ir3_register *reg = instr->srcs[0];
       if (!(reg->flags & IR3_REG_ARRAY)) {
          struct ir3_instruction *src_instr = ssa(reg);
-         debug_assert(src_instr);
+         assert(src_instr);
          ctx->progress = true;
          return src_instr;
       }
@@ -648,7 +648,7 @@ instr_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr)
        */
       struct ir3_instruction *samp_tex = ssa(instr->srcs[0]);
 
-      debug_assert(samp_tex->opc == OPC_META_COLLECT);
+      assert(samp_tex->opc == OPC_META_COLLECT);
 
       struct ir3_register *samp = samp_tex->srcs[0];
       struct ir3_register *tex = samp_tex->srcs[1];
@@ -690,7 +690,7 @@ ir3_cp(struct ir3 *ir, struct ir3_shader_variant *so)
          /* by the way, we don't account for false-dep's, so the CP
           * pass should always happen before false-dep's are inserted
           */
-         debug_assert(instr->deps_count == 0);
+         assert(instr->deps_count == 0);
 
          foreach_ssa_src (src, instr) {
             src->use_count++;

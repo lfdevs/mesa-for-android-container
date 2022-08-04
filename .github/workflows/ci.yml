@@ -1,0 +1,39 @@
+name: CI
+on: push
+
+permissions:
+  contents: read
+
+jobs:
+  CI:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Install Dependencies
+      run: |
+        cat > Brewfile <<EOL
+        brew "bison"
+        brew "expat"
+        brew "gettext"
+        brew "libx11"
+        brew "libxcb"
+        brew "libxdamage"
+        brew "libxext"
+        brew "meson"
+        brew "pkg-config"
+        brew "python@3.10"
+        EOL
+
+        brew update
+        brew bundle --verbose
+    - name: Install Mako
+      run: pip3 install --user mako
+    - name: Configure
+      run: meson . build -Dbuild-tests=true -Dosmesa=true
+    - name: Build
+      run: meson compile -C build
+    - name: Test
+      run: meson test -C build --print-errorlogs
+    - name: Install
+      run: meson install -C build

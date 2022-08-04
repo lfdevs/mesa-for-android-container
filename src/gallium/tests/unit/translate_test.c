@@ -69,8 +69,6 @@ int main(int argc, char** argv)
 
    create_fn = 0;
 
-   util_cpu_detect();
-
    if (argc <= 1 ||
        !strcmp(argv[1], "default") )
       create_fn = translate_create;
@@ -179,12 +177,11 @@ int main(int argc, char** argv)
       unsigned output_format_size;
       unsigned output_normalized = 0;
 
-      if (!output_format_desc
-            || !fetch_rgba
-            || !output_format_pack->pack_rgba_float
-            || output_format_desc->colorspace != UTIL_FORMAT_COLORSPACE_RGB
-            || output_format_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN
-            || !translate_is_output_format_supported(output_format))
+      if (!fetch_rgba
+          || !output_format_pack->pack_rgba_float
+          || output_format_desc->colorspace != UTIL_FORMAT_COLORSPACE_RGB
+          || output_format_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN
+          || !translate_is_output_format_supported(output_format))
          continue;
 
       for(i = 0; i < output_format_desc->nr_channels; ++i)
@@ -208,12 +205,11 @@ int main(int argc, char** argv)
          unsigned input_normalized = 0;
          boolean input_is_float = FALSE;
 
-         if (!input_format_desc
-               || !fetch_rgba
-               || !input_format_pack->pack_rgba_float
-               || input_format_desc->colorspace != UTIL_FORMAT_COLORSPACE_RGB
-               || input_format_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN
-               || !translate_is_output_format_supported(input_format))
+         if (!fetch_rgba
+             || !input_format_pack->pack_rgba_float
+             || input_format_desc->colorspace != UTIL_FORMAT_COLORSPACE_RGB
+             || input_format_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN
+             || !translate_is_output_format_supported(input_format))
             continue;
 
          input_format_size = util_format_get_stride(input_format, 1);

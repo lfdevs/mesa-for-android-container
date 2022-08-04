@@ -46,18 +46,13 @@
 #define ENTRY_CURRENT_TABLE_GET U_STRINGIFY(u_current_get_table_internal)
 #endif
 
-/* REALLY_INITIAL_EXEC implies USE_ELF_TLS and __GNUC__ */
+/* REALLY_INITIAL_EXEC implies __GLIBC__ */
 #if defined(USE_X86_ASM) && defined(REALLY_INITIAL_EXEC)
 #include "entry_x86_tls.h"
-#elif defined(USE_X86_ASM) && !defined(GLX_X86_READONLY_TEXT) && defined(__GNUC__)
-#include "entry_x86_tsd.h"
 #elif defined(USE_X86_64_ASM) && defined(REALLY_INITIAL_EXEC)
 #include "entry_x86-64_tls.h"
 #elif defined(USE_PPC64LE_ASM) && UTIL_ARCH_LITTLE_ENDIAN && defined(REALLY_INITIAL_EXEC)
 #include "entry_ppc64le_tls.h"
-/* ppc64le non-IE TSD stubs are possible but not currently implemented */
-#elif defined(USE_PPC64LE_ASM) && UTIL_ARCH_LITTLE_ENDIAN && !defined(USE_ELF_TLS) && defined(__GNUC__)
-#include "entry_ppc64le_tsd.h"
 #else
 
 static inline const struct _glapi_table *

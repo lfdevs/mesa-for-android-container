@@ -23,5 +23,7 @@
 
 #include <stdbool.h>
 #include "nir.h"
+#include "nir_builder.h"
 
 bool bifrost_nir_lower_algebraic_late(nir_shader *shader);
+bool bifrost_nir_lower_xfb(nir_shader *shader);

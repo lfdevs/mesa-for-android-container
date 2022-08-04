@@ -72,9 +72,7 @@ panfrost_batch_init(struct panfrost_context *ctx,
 
         batch->seqnum = ++ctx->batches.seqnum;
 
-        batch->first_bo = INT32_MAX;
-        batch->last_bo = INT32_MIN;
-        util_sparse_array_init(&batch->bos, sizeof(uint32_t), 64);
+        util_dynarray_init(&batch->bos, NULL);
 
         batch->minx = batch->miny = ~0;
         batch->maxx = batch->maxy = 0;
@@ -113,10 +111,11 @@ panfrost_batch_cleanup(struct panfrost_context *ctx, struct panfrost_batch *batc
 
         unsigned batch_idx = panfrost_batch_idx(batch);
 
-        for (int i = batch->first_bo; i <= batch->last_bo; i++) {
-                uint32_t *flags = util_sparse_array_get(&batch->bos, i);
+        pan_bo_access *flags = util_dynarray_begin(&batch->bos);
+        unsigned end_bo = util_dynarray_num_elements(&batch->bos, pan_bo_access);
 
-                if (!*flags)
+        for (int i = 0; i < end_bo; ++i) {
+                if (!flags[i])
                         continue;
 
                 struct panfrost_bo *bo = pan_lookup_bo(dev, i);
@@ -142,7 +141,7 @@ panfrost_batch_cleanup(struct panfrost_context *ctx, struct panfrost_batch *batc
 
         util_unreference_framebuffer_state(&batch->key);
 
-        util_sparse_array_finish(&batch->bos);
+        util_dynarray_fini(&batch->bos);
 
         memset(batch, 0, sizeof(*batch));
         BITSET_CLEAR(ctx->batches.active, batch_idx);
@@ -274,6 +273,21 @@ panfrost_batch_update_access(struct panfrost_batch *batch,
         }
 }
 
+static pan_bo_access *
+panfrost_batch_get_bo_access(struct panfrost_batch *batch, unsigned handle)
+{
+        unsigned size = util_dynarray_num_elements(&batch->bos, pan_bo_access);
+
+        if (handle >= size) {
+                unsigned grow = handle + 1 - size;
+
+                memset(util_dynarray_grow(&batch->bos, pan_bo_access, grow),
+                       0, grow * sizeof(pan_bo_access));
+        }
+
+        return util_dynarray_element(&batch->bos, pan_bo_access, handle);
+}
+
 static void
 panfrost_batch_add_bo_old(struct panfrost_batch *batch,
                 struct panfrost_bo *bo, uint32_t flags)
@@ -281,13 +295,12 @@ panfrost_batch_add_bo_old(struct panfrost_batch *batch,
         if (!bo)
                 return;
 
-        uint32_t *entry = util_sparse_array_get(&batch->bos, bo->gem_handle);
-        uint32_t old_flags = *entry;
+        pan_bo_access *entry =
+                panfrost_batch_get_bo_access(batch, bo->gem_handle);
+        pan_bo_access old_flags = *entry;
 
         if (!old_flags) {
                 batch->num_bos++;
-                batch->first_bo = MIN2(batch->first_bo, bo->gem_handle);
-                batch->last_bo = MAX2(batch->last_bo, bo->gem_handle);
                 panfrost_bo_reference(bo);
         }
 
@@ -375,11 +388,11 @@ struct panfrost_bo *
 panfrost_batch_get_scratchpad(struct panfrost_batch *batch,
                 unsigned size_per_thread,
                 unsigned thread_tls_alloc,
-                unsigned core_count)
+                unsigned core_id_range)
 {
         unsigned size = panfrost_get_total_stack_size(size_per_thread,
                         thread_tls_alloc,
-                        core_count);
+                        core_id_range);
 
         if (batch->scratchpad) {
                 assert(batch->scratchpad->size >= size);
@@ -434,6 +447,8 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
         fb->extent.maxy = batch->maxy - 1;
         fb->nr_samples = util_framebuffer_get_num_samples(&batch->key);
         fb->rt_count = batch->key.nr_cbufs;
+        fb->sprite_coord_origin = pan_tristate_get(batch->sprite_coord_origin);
+        fb->first_provoking_vertex = pan_tristate_get(batch->first_provoking_vertex);
 
         static const unsigned char id_swz[] = {
                 PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y, PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W,
@@ -588,10 +603,11 @@ panfrost_batch_submit_ioctl(struct panfrost_batch *batch,
                             sizeof(*bo_handles));
         assert(bo_handles);
 
-        for (int i = batch->first_bo; i <= batch->last_bo; i++) {
-                uint32_t *flags = util_sparse_array_get(&batch->bos, i);
+        pan_bo_access *flags = util_dynarray_begin(&batch->bos);
+        unsigned end_bo = util_dynarray_num_elements(&batch->bos, pan_bo_access);
 
-                if (!*flags)
+        for (int i = 0; i < end_bo; ++i) {
+                if (!flags[i])
                         continue;
 
                 assert(submit.bo_handle_count < batch->num_bos);
@@ -606,7 +622,7 @@ panfrost_batch_submit_ioctl(struct panfrost_batch *batch,
                  */
                 struct panfrost_bo *bo = pan_lookup_bo(dev, i);
 
-                bo->gpu_access |= *flags & (PAN_BO_ACCESS_RW);
+                bo->gpu_access |= flags[i] & (PAN_BO_ACCESS_RW);
         }
 
         panfrost_pool_get_bo_handles(&batch->pool, bo_handles + submit.bo_handle_count);
@@ -654,6 +670,12 @@ panfrost_batch_submit_ioctl(struct panfrost_batch *batch,
         return 0;
 }
 
+static bool
+panfrost_has_fragment_job(struct panfrost_batch *batch)
+{
+        return batch->scoreboard.first_tiler || batch->clear;
+}
+
 /* Submit both vertex/tiler and fragment jobs for a batch, possibly with an
  * outsync corresponding to the later of the two (since there will be an
  * implicit dep between them) */
@@ -668,7 +690,7 @@ panfrost_batch_submit_jobs(struct panfrost_batch *batch,
         struct panfrost_device *dev = pan_device(pscreen);
         bool has_draws = batch->scoreboard.first_job;
         bool has_tiler = batch->scoreboard.first_tiler;
-        bool has_frag = has_tiler || batch->clear;
+        bool has_frag = panfrost_has_fragment_job(batch);
         int ret = 0;
 
         /* Take the submit lock to make sure no tiler jobs from other context
@@ -732,6 +754,26 @@ panfrost_batch_submit(struct panfrost_context *ctx,
         /* Nothing to do! */
         if (!batch->scoreboard.first_job && !batch->clear)
                 goto out;
+
+        if (batch->key.zsbuf && panfrost_has_fragment_job(batch)) {
+                struct pipe_surface *surf = batch->key.zsbuf;
+                struct panfrost_resource *z_rsrc = pan_resource(surf->texture);
+
+                /* Shared depth/stencil resources are not supported, and would
+                 * break this optimisation. */
+                assert(!(z_rsrc->base.bind & PAN_BIND_SHARED_MASK));
+
+                if (batch->clear & PIPE_CLEAR_STENCIL) {
+                        z_rsrc->stencil_value = batch->clear_stencil;
+                        z_rsrc->constant_stencil = true;
+                } else if (z_rsrc->constant_stencil) {
+                        batch->clear_stencil = z_rsrc->stencil_value;
+                        batch->clear |= PIPE_CLEAR_STENCIL;
+                }
+
+                if (batch->draws & PIPE_CLEAR_STENCIL)
+                        z_rsrc->constant_stencil = false;
+        }
 
         struct pan_fb_info fb;
         struct pan_image_view rts[8], zs, s;
@@ -897,6 +939,9 @@ panfrost_batch_union_scissor(struct panfrost_batch *batch,
 /**
  * Checks if rasterization should be skipped. If not, a TILER job must be
  * created for each draw, or the IDVS flow must be used.
+ *
+ * As a special case, if there is no vertex shader, no primitives are generated,
+ * meaning the whole pipeline (including rasterization) should be skipped.
  */
 bool
 panfrost_batch_skip_rasterization(struct panfrost_batch *batch)
@@ -905,5 +950,6 @@ panfrost_batch_skip_rasterization(struct panfrost_batch *batch)
         struct pipe_rasterizer_state *rast = (void *) ctx->rasterizer;
 
         return (rast->rasterizer_discard ||
-                batch->scissor_culls_everything);
+                batch->scissor_culls_everything ||
+                !batch->rsd[PIPE_SHADER_VERTEX]);
 }

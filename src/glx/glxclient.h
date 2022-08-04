@@ -425,11 +425,6 @@ struct glx_context
    /*@} */
 
    /**
-    * Number of threads we're currently current in.
-    */
-   unsigned long thread_refcount;
-
-   /**
     * GLX_ARB_create_context_no_error setting for this context.
     * This needs to be kept here to enforce shared context rules.
     */
@@ -655,17 +650,9 @@ extern int __glXDebug;
 
 extern void __glXSetCurrentContext(struct glx_context * c);
 
-# if defined( USE_ELF_TLS )
-
 extern __THREAD_INITIAL_EXEC void *__glX_tls_Context;
 
 #  define __glXGetCurrentContext() __glX_tls_Context
-
-# else
-
-extern struct glx_context *__glXGetCurrentContext(void);
-
-# endif /* defined( USE_ELF_TLS ) */
 
 extern void __glXSetCurrentContextNull(void);
 

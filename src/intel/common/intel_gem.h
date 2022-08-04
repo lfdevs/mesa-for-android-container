@@ -63,7 +63,7 @@ intel_48b_address(uint64_t v)
 }
 
 /**
- * Call ioctl, restarting if it is interupted
+ * Call ioctl, restarting if it is interrupted
  */
 static inline int
 intel_ioctl(int fd, unsigned long request, void *arg)

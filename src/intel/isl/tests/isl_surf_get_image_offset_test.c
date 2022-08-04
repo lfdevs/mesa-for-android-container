@@ -32,7 +32,7 @@
 
 #define BDW_GT2_DEVID 0x161a
 
-// An asssert that works regardless of NDEBUG.
+// An assert that works regardless of NDEBUG.
 #define t_assert(cond) \
    do { \
       if (!(cond)) { \

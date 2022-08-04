@@ -60,7 +60,7 @@ END_TEST
 
 BEGIN_TEST(isel.compute.simple)
    for (unsigned i = GFX7; i <= GFX8; i++) {
-      if (!set_variant((chip_class)i))
+      if (!set_variant((amd_gfx_level)i))
          continue;
 
       QoShaderModuleCreateInfo cs = qoShaderModuleCreateInfoGLSL(COMPUTE,
@@ -75,7 +75,7 @@ BEGIN_TEST(isel.compute.simple)
          }
       );
 
-      PipelineBuilder pbld(get_vk_device((chip_class)i));
+      PipelineBuilder pbld(get_vk_device((amd_gfx_level)i));
       pbld.add_cs(cs);
       pbld.print_ir(VK_SHADER_STAGE_COMPUTE_BIT, "ACO IR", true);
    }
@@ -83,7 +83,7 @@ END_TEST
 
 BEGIN_TEST(isel.gs.no_outputs)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      if (!set_variant((chip_class)i))
+      if (!set_variant((amd_gfx_level)i))
          continue;
 
       QoShaderModuleCreateInfo vs = qoShaderModuleCreateInfoGLSL(VERTEX,
@@ -100,7 +100,7 @@ BEGIN_TEST(isel.gs.no_outputs)
          }
       );
 
-      PipelineBuilder pbld(get_vk_device((chip_class)i));
+      PipelineBuilder pbld(get_vk_device((amd_gfx_level)i));
       pbld.add_stage(VK_SHADER_STAGE_VERTEX_BIT, vs);
       pbld.add_stage(VK_SHADER_STAGE_GEOMETRY_BIT, gs);
       pbld.create_pipeline();
@@ -112,7 +112,7 @@ END_TEST
 
 BEGIN_TEST(isel.gs.no_verts)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      if (!set_variant((chip_class)i))
+      if (!set_variant((amd_gfx_level)i))
          continue;
 
       QoShaderModuleCreateInfo vs = qoShaderModuleCreateInfoGLSL(VERTEX,
@@ -126,7 +126,7 @@ BEGIN_TEST(isel.gs.no_verts)
          void main() {}
       );
 
-      PipelineBuilder pbld(get_vk_device((chip_class)i));
+      PipelineBuilder pbld(get_vk_device((amd_gfx_level)i));
       pbld.add_stage(VK_SHADER_STAGE_VERTEX_BIT, vs);
       pbld.add_stage(VK_SHADER_STAGE_GEOMETRY_BIT, gs);
       pbld.create_pipeline();
@@ -138,7 +138,7 @@ END_TEST
 
 BEGIN_TEST(isel.sparse.clause)
    for (unsigned i = GFX10_3; i <= GFX10_3; i++) {
-      if (!set_variant((chip_class)i))
+      if (!set_variant((amd_gfx_level)i))
          continue;
 
       QoShaderModuleCreateInfo cs = qoShaderModuleCreateInfoGLSL(COMPUTE,
@@ -179,7 +179,7 @@ BEGIN_TEST(isel.sparse.clause)
 
       fprintf(output, "llvm_version: %u\n", LLVM_VERSION_MAJOR);
 
-      PipelineBuilder pbld(get_vk_device((chip_class)i));
+      PipelineBuilder pbld(get_vk_device((amd_gfx_level)i));
       pbld.add_cs(cs);
       pbld.print_ir(VK_SHADER_STAGE_COMPUTE_BIT, "ACO IR", true);
       pbld.print_ir(VK_SHADER_STAGE_COMPUTE_BIT, "Assembly", true);

@@ -35,7 +35,7 @@ static void si_build_load_reg(struct si_screen *sscreen, struct si_pm4_state *pm
    unsigned packet, num_ranges, offset;
    const struct ac_reg_range *ranges;
 
-   ac_get_reg_ranges(sscreen->info.chip_class, sscreen->info.family,
+   ac_get_reg_ranges(sscreen->info.gfx_level, sscreen->info.family,
                      type, &num_ranges, &ranges);
 
    switch (type) {
@@ -90,21 +90,56 @@ si_create_shadowing_ib_preamble(struct si_context *sctx)
    si_pm4_cmd_add(pm4, PKT3(PKT3_EVENT_WRITE, 0, 0));
    si_pm4_cmd_add(pm4, EVENT_TYPE(V_028A90_VGT_FLUSH) | EVENT_INDEX(0));
 
-   if (sctx->chip_class >= GFX10) {
+   if (sctx->gfx_level >= GFX11) {
+      /* We must wait for idle using an EOP event before changing the attribute ring registers.
+       * Use the bottom-of-pipe EOP event, but increment the PWS counter instead of writing memory.
+       */
+      si_pm4_cmd_add(pm4, PKT3(PKT3_RELEASE_MEM, 6, 0));
+      si_pm4_cmd_add(pm4, S_490_EVENT_TYPE(V_028A90_BOTTOM_OF_PIPE_TS) |
+                          S_490_EVENT_INDEX(5) |
+                          S_490_PWS_ENABLE(1));
+      si_pm4_cmd_add(pm4, 0); /* DST_SEL, INT_SEL, DATA_SEL */
+      si_pm4_cmd_add(pm4, 0); /* ADDRESS_LO */
+      si_pm4_cmd_add(pm4, 0); /* ADDRESS_HI */
+      si_pm4_cmd_add(pm4, 0); /* DATA_LO */
+      si_pm4_cmd_add(pm4, 0); /* DATA_HI */
+      si_pm4_cmd_add(pm4, 0); /* INT_CTXID */
+
+      unsigned gcr_cntl = S_586_GL2_INV(1) | S_586_GL2_WB(1) |
+                          S_586_GLM_INV(1) | S_586_GLM_WB(1) |
+                          S_586_GL1_INV(1) | S_586_GLV_INV(1) |
+                          S_586_GLK_INV(1) | S_586_GLI_INV(V_586_GLI_ALL);
+
+      /* Wait for the PWS counter. */
+      si_pm4_cmd_add(pm4, PKT3(PKT3_ACQUIRE_MEM, 6, 0));
+      si_pm4_cmd_add(pm4, S_580_PWS_STAGE_SEL(V_580_CP_PFP) |
+                          S_580_PWS_COUNTER_SEL(V_580_TS_SELECT) |
+                          S_580_PWS_ENA2(1) |
+                          S_580_PWS_COUNT(0));
+      si_pm4_cmd_add(pm4, 0xffffffff); /* GCR_SIZE */
+      si_pm4_cmd_add(pm4, 0x01ffffff); /* GCR_SIZE_HI */
+      si_pm4_cmd_add(pm4, 0); /* GCR_BASE_LO */
+      si_pm4_cmd_add(pm4, 0); /* GCR_BASE_HI */
+      si_pm4_cmd_add(pm4, S_585_PWS_ENA(1));
+      si_pm4_cmd_add(pm4, gcr_cntl); /* GCR_CNTL */
+   } else if (sctx->gfx_level >= GFX10) {
       unsigned gcr_cntl = S_586_GL2_INV(1) | S_586_GL2_WB(1) |
                           S_586_GLM_INV(1) | S_586_GLM_WB(1) |
                           S_586_GL1_INV(1) | S_586_GLV_INV(1) |
                           S_586_GLK_INV(1) | S_586_GLI_INV(V_586_GLI_ALL);
 
       si_pm4_cmd_add(pm4, PKT3(PKT3_ACQUIRE_MEM, 6, 0));
-      si_pm4_cmd_add(pm4, 0);		/* CP_COHER_CNTL */
+      si_pm4_cmd_add(pm4, 0);           /* CP_COHER_CNTL */
       si_pm4_cmd_add(pm4, 0xffffffff);  /* CP_COHER_SIZE */
-      si_pm4_cmd_add(pm4, 0xffffff);	/* CP_COHER_SIZE_HI */
-      si_pm4_cmd_add(pm4, 0);		/* CP_COHER_BASE */
-      si_pm4_cmd_add(pm4, 0);		/* CP_COHER_BASE_HI */
+      si_pm4_cmd_add(pm4, 0xffffff);    /* CP_COHER_SIZE_HI */
+      si_pm4_cmd_add(pm4, 0);           /* CP_COHER_BASE */
+      si_pm4_cmd_add(pm4, 0);           /* CP_COHER_BASE_HI */
       si_pm4_cmd_add(pm4, 0x0000000A);  /* POLL_INTERVAL */
-      si_pm4_cmd_add(pm4, gcr_cntl);	/* GCR_CNTL */
-   } else if (sctx->chip_class == GFX9) {
+      si_pm4_cmd_add(pm4, gcr_cntl);    /* GCR_CNTL */
+
+      si_pm4_cmd_add(pm4, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
+      si_pm4_cmd_add(pm4, 0);
+   } else if (sctx->gfx_level == GFX9) {
       unsigned cp_coher_cntl = S_0301F0_SH_ICACHE_ACTION_ENA(1) |
                                S_0301F0_SH_KCACHE_ACTION_ENA(1) |
                                S_0301F0_TC_ACTION_ENA(1) |
@@ -114,16 +149,16 @@ si_create_shadowing_ib_preamble(struct si_context *sctx)
       si_pm4_cmd_add(pm4, PKT3(PKT3_ACQUIRE_MEM, 5, 0));
       si_pm4_cmd_add(pm4, cp_coher_cntl); /* CP_COHER_CNTL */
       si_pm4_cmd_add(pm4, 0xffffffff);    /* CP_COHER_SIZE */
-      si_pm4_cmd_add(pm4, 0xffffff);	  /* CP_COHER_SIZE_HI */
-      si_pm4_cmd_add(pm4, 0);		  /* CP_COHER_BASE */
-      si_pm4_cmd_add(pm4, 0);		  /* CP_COHER_BASE_HI */
+      si_pm4_cmd_add(pm4, 0xffffff);      /* CP_COHER_SIZE_HI */
+      si_pm4_cmd_add(pm4, 0);             /* CP_COHER_BASE */
+      si_pm4_cmd_add(pm4, 0);             /* CP_COHER_BASE_HI */
       si_pm4_cmd_add(pm4, 0x0000000A);    /* POLL_INTERVAL */
+
+      si_pm4_cmd_add(pm4, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
+      si_pm4_cmd_add(pm4, 0);
    } else {
       unreachable("invalid chip");
    }
-
-   si_pm4_cmd_add(pm4, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
-   si_pm4_cmd_add(pm4, 0);
 
    si_pm4_cmd_add(pm4, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
    si_pm4_cmd_add(pm4,

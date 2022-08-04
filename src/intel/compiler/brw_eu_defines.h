@@ -59,29 +59,6 @@
 #define GET_BITS(data, high, low) ((data & INTEL_MASK((high), (low))) >> (low))
 #define GET_FIELD(word, field) (((word)  & field ## _MASK) >> field ## _SHIFT)
 
-#define _3DPRIM_POINTLIST         0x01
-#define _3DPRIM_LINELIST          0x02
-#define _3DPRIM_LINESTRIP         0x03
-#define _3DPRIM_TRILIST           0x04
-#define _3DPRIM_TRISTRIP          0x05
-#define _3DPRIM_TRIFAN            0x06
-#define _3DPRIM_QUADLIST          0x07
-#define _3DPRIM_QUADSTRIP         0x08
-#define _3DPRIM_LINELIST_ADJ      0x09 /* G45+ */
-#define _3DPRIM_LINESTRIP_ADJ     0x0A /* G45+ */
-#define _3DPRIM_TRILIST_ADJ       0x0B /* G45+ */
-#define _3DPRIM_TRISTRIP_ADJ      0x0C /* G45+ */
-#define _3DPRIM_TRISTRIP_REVERSE  0x0D
-#define _3DPRIM_POLYGON           0x0E
-#define _3DPRIM_RECTLIST          0x0F
-#define _3DPRIM_LINELOOP          0x10
-#define _3DPRIM_POINTLIST_BF      0x11
-#define _3DPRIM_LINESTRIP_CONT    0x12
-#define _3DPRIM_LINESTRIP_BF      0x13
-#define _3DPRIM_LINESTRIP_CONT_BF 0x14
-#define _3DPRIM_TRIFAN_NOSTIPPLE  0x16
-#define _3DPRIM_PATCHLIST(n) ({ assert(n > 0 && n <= 32); 0x20 + (n - 1); })
-
 /* Bitfields for the URB_WRITE message, DW2 of message header: */
 #define URB_WRITE_PRIM_END		0x1
 #define URB_WRITE_PRIM_START		0x2
@@ -490,15 +467,10 @@ enum opcode {
    SHADER_OPCODE_SCRATCH_HEADER,
 
    /**
-    * Gfx8+ SIMD8 URB Read messages.
+    * Gfx8+ SIMD8 URB messages.
     */
-   SHADER_OPCODE_URB_READ_SIMD8,
-   SHADER_OPCODE_URB_READ_SIMD8_PER_SLOT,
-
-   SHADER_OPCODE_URB_WRITE_SIMD8,
-   SHADER_OPCODE_URB_WRITE_SIMD8_PER_SLOT,
-   SHADER_OPCODE_URB_WRITE_SIMD8_MASKED,
-   SHADER_OPCODE_URB_WRITE_SIMD8_MASKED_PER_SLOT,
+   SHADER_OPCODE_URB_READ_LOGICAL,
+   SHADER_OPCODE_URB_WRITE_LOGICAL,
 
    /**
     * Return the index of the first enabled live channel and assign it to
@@ -603,7 +575,7 @@ enum opcode {
    FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET,
    FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET,
 
-   VS_OPCODE_URB_WRITE,
+   VEC4_VS_OPCODE_URB_WRITE,
    VS_OPCODE_PULL_CONSTANT_LOAD,
    VS_OPCODE_PULL_CONSTANT_LOAD_GFX7,
 
@@ -612,11 +584,11 @@ enum opcode {
    /**
     * Write geometry shader output data to the URB.
     *
-    * Unlike VS_OPCODE_URB_WRITE, this opcode doesn't do an implied move from
+    * Unlike VEC4_VS_OPCODE_URB_WRITE, this opcode doesn't do an implied move from
     * R0 to the first MRF.  This allows the geometry shader to override the
     * "Slot {0,1} Offset" fields in the message header.
     */
-   GS_OPCODE_URB_WRITE,
+   VEC4_GS_OPCODE_URB_WRITE,
 
    /**
     * Write geometry shader output data to the URB and request a new URB
@@ -624,7 +596,7 @@ enum opcode {
     *
     * This opcode doesn't do an implied move from R0 to the first MRF.
     */
-   GS_OPCODE_URB_WRITE_ALLOCATE,
+   VEC4_GS_OPCODE_URB_WRITE_ALLOCATE,
 
    /**
     * Terminate the geometry shader thread by doing an empty URB write.
@@ -798,9 +770,9 @@ enum opcode {
 
    VEC4_OPCODE_URB_READ,
    TCS_OPCODE_GET_INSTANCE_ID,
-   TCS_OPCODE_URB_WRITE,
-   TCS_OPCODE_SET_INPUT_URB_OFFSETS,
-   TCS_OPCODE_SET_OUTPUT_URB_OFFSETS,
+   VEC4_TCS_OPCODE_URB_WRITE,
+   VEC4_TCS_OPCODE_SET_INPUT_URB_OFFSETS,
+   VEC4_TCS_OPCODE_SET_OUTPUT_URB_OFFSETS,
    TCS_OPCODE_GET_PRIMITIVE_ID,
    TCS_OPCODE_CREATE_BARRIER_HEADER,
    TCS_OPCODE_SRC0_010_IS_ZERO,
@@ -972,6 +944,17 @@ enum rt_logical_srcs {
 
    RT_LOGICAL_NUM_SRCS
 };
+
+enum urb_logical_srcs {
+   URB_LOGICAL_SRC_HANDLE,
+   URB_LOGICAL_SRC_PER_SLOT_OFFSETS,
+   URB_LOGICAL_SRC_CHANNEL_MASK,
+   /** Data to be written.  BAD_FILE for reads. */
+   URB_LOGICAL_SRC_DATA,
+
+   URB_LOGICAL_NUM_SRCS
+};
+
 
 #ifdef __cplusplus
 /**

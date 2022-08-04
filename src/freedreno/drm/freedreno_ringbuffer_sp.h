@@ -76,6 +76,10 @@ struct fd_submit_sp {
    /* Used in case out_fence==NULL: */
    struct util_queue_fence fence;
 
+   /* Used by retire_queue, if used by backend: */
+   int out_fence_fd;
+   struct util_queue_fence retire_fence;
+
    flush_submit_list_fn flush_submit_list;
 };
 FD_DEFINE_CAST(fd_submit, fd_submit_sp);

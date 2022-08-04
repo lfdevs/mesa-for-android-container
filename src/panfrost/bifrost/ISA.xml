@@ -2429,6 +2429,7 @@
       <opt>rtz</opt>
       <opt>rtna</opt>
     </mod>
+    <mod name="ftz" start="9" size="1" opt="ftz" pseudo="true"/>
     <derived start="6" size="1">
       <and>
         <eq left="abs0" right="#none"/>
@@ -3712,7 +3713,7 @@
     <src start="6" mask="0xf7"/>
   </ins>
 
-  <ins name="+CLPER_V6.i32" mask="0xfffc0" exact="0x3f0c0">
+  <ins name="+CLPER_OLD.i32" mask="0xfffc0" exact="0x3f0c0">
     <src start="0" mask="0x7"/>
     <src start="3"/>
   </ins>
@@ -3870,6 +3871,7 @@
       <opt>h0</opt>
       <opt>h1</opt>
     </mod>
+    <mod name="ftz" start="9" size="1" opt="ftz" pseudo="true"/>
   </ins>
 
   <ins name="+F16_TO_S32">
@@ -6394,7 +6396,7 @@
     </mod>
   </ins>
 
-  <ins name="+LD_VAR" staging="w=vecsize" message="varying">
+  <ins name="+LD_VAR" staging="w=format" message="varying">
     <src start="0"/>
     <src start="3"/>
     <mod name="vecsize" start="8" size="2">
@@ -7938,6 +7940,7 @@
       <opt>rtz</opt>
       <opt>rtna</opt>
     </mod>
+    <mod name="ftz" start="9" size="1" opt="ftz" pseudo="true"/>
     <derived start="6" size="1">
       <and>
         <eq left="abs0" right="#none"/>
@@ -8339,36 +8342,6 @@
     <immediate name="index" size="32"/>
   </ins>
 
-  <ins name="+FRSCALE.f32" pseudo="true">
-    <src start="0"/>
-    <src start="3"/>
-    <mod name="clamp" size="2">
-      <opt>none</opt>
-      <opt>clamp_0_inf</opt>
-      <opt>clamp_m1_1</opt>
-      <opt>clamp_0_1</opt>
-    </mod>
-    <mod name="neg0" size="1" opt="neg"/>
-    <mod name="neg1" size="1" opt="neg"/>
-    <mod name="abs0" start="15" size="1" opt="abs"/>
-    <mod name="abs1" start="15" size="1" opt="abs"/>
-  </ins>
-
-  <ins name="+FRSCALE.v2f16" pseudo="true">
-    <src start="0"/>
-    <src start="3"/>
-    <mod name="clamp" size="2">
-      <opt>none</opt>
-      <opt>clamp_0_inf</opt>
-      <opt>clamp_m1_1</opt>
-      <opt>clamp_0_1</opt>
-    </mod>
-    <mod name="neg0" size="1" opt="neg"/>
-    <mod name="neg1" size="1" opt="neg"/>
-    <mod name="abs0" start="15" size="1" opt="abs"/>
-    <mod name="abs1" start="15" size="1" opt="abs"/>
-  </ins>
-
   <ins name="*FABSNEG.f32" pseudo="true">
     <src start="0" mask="0xfb"/>
     <mod name="neg0" start="7" size="1" opt="neg"/>
@@ -8590,6 +8563,12 @@
       <opt>u32</opt>
       <opt>u16</opt>
     </mod>
+    <mod name="source_format" size="2">
+      <opt>flat32</opt>
+      <opt>flat16</opt>
+      <opt>f32</opt>
+      <opt>f16</opt>
+    </mod>
     <mod name="sample" size="3">
       <opt>center</opt>
       <opt>centroid</opt>
@@ -8619,6 +8598,12 @@
       <opt>f16</opt>
       <opt>u32</opt>
       <opt>u16</opt>
+    </mod>
+    <mod name="source_format" size="2">
+      <opt>flat32</opt>
+      <opt>flat16</opt>
+      <opt>f32</opt>
+      <opt>f16</opt>
     </mod>
     <mod name="sample" size="3">
       <opt>center</opt>
@@ -8650,6 +8635,12 @@
       <opt>u32</opt>
       <opt>u16</opt>
     </mod>
+    <mod name="source_format" size="2">
+      <opt>flat32</opt>
+      <opt>flat16</opt>
+      <opt>f32</opt>
+      <opt>f16</opt>
+    </mod>
     <mod name="sample" size="3">
       <opt>center</opt>
       <opt>centroid</opt>
@@ -8679,6 +8670,12 @@
       <opt>f16</opt>
       <opt>u32</opt>
       <opt>u16</opt>
+    </mod>
+    <mod name="source_format" size="2">
+      <opt>flat32</opt>
+      <opt>flat16</opt>
+      <opt>f32</opt>
+      <opt>f16</opt>
     </mod>
     <mod name="sample" size="3">
       <opt>center</opt>
@@ -8818,6 +8815,30 @@
       <opt>v3</opt>
       <opt>v4</opt>
     </mod>
+  </ins>
+
+  <ins name="*MKVEC.v2i8" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="lane0" start="12" size="2" default="b0">
+      <opt>b0</opt>
+      <opt>b1</opt>
+      <opt>b2</opt>
+      <opt>b3</opt>
+    </mod>
+    <mod name="lane1" start="13" size="2" default="b0">
+      <opt>b0</opt>
+      <opt>b1</opt>
+      <opt>b2</opt>
+      <opt>b3</opt>
+    </mod>
+  </ins>
+
+  <ins name="+COLLECT.i32" pseudo="true"/>
+
+  <ins name="+SPLIT.i32" pseudo="true">
+    <src start="0"/>
   </ins>
 
 </bifrost>

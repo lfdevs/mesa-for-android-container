@@ -255,7 +255,7 @@ v3dv_CreateRenderPass2(VkDevice _device,
          }
 
          /* VK_KHR_depth_stencil_resolve */
-         const VkSubpassDescriptionDepthStencilResolveKHR *resolve_desc =
+         const VkSubpassDescriptionDepthStencilResolve *resolve_desc =
             vk_find_struct_const(desc->pNext, SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE);
          const VkAttachmentReference2 *resolve_att =
             resolve_desc && resolve_desc->pDepthStencilResolveAttachment &&

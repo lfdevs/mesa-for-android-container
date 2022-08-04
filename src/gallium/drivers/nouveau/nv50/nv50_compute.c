@@ -28,7 +28,7 @@
 #include "nv50/nv50_context.h"
 #include "nv50/nv50_compute.xml.h"
 
-#include "codegen/nv50_ir_driver.h"
+#include "nv50_ir_driver.h"
 
 int
 nv50_screen_compute_setup(struct nv50_screen *screen,

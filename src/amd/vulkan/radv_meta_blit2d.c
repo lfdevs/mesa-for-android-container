@@ -52,9 +52,6 @@ create_iview(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *s
              struct radv_image_view *iview, VkFormat depth_format, VkImageAspectFlagBits aspects)
 {
    VkFormat format;
-   VkImageViewType view_type = cmd_buffer->device->physical_device->rad_info.chip_class < GFX9
-                                  ? VK_IMAGE_VIEW_TYPE_2D
-                                  : radv_meta_get_view_type(surf->image);
 
    if (depth_format)
       format = depth_format;
@@ -65,7 +62,7 @@ create_iview(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *s
                         &(VkImageViewCreateInfo){
                            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                            .image = radv_image_to_handle(surf->image),
-                           .viewType = view_type,
+                           .viewType = radv_meta_get_view_type(surf->image),
                            .format = format,
                            .subresourceRange = {.aspectMask = aspects,
                                                 .baseMipLevel = surf->level,
@@ -73,7 +70,7 @@ create_iview(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *s
                                                 .baseArrayLayer = surf->layer,
                                                 .layerCount = 1},
                         },
-                        &(struct radv_image_view_extra_create_info){
+                        0, &(struct radv_image_view_extra_create_info){
                            .disable_dcc_mrt = surf->disable_compression
                         });
 }
@@ -213,9 +210,9 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
          unsigned src_aspect_mask = aspect_mask;
          VkFormat depth_format = 0;
          if (aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT)
-            depth_format = vk_format_stencil_only(dst->image->vk_format);
+            depth_format = vk_format_stencil_only(dst->image->vk.format);
          else if (aspect_mask == VK_IMAGE_ASPECT_DEPTH_BIT)
-            depth_format = vk_format_depth_only(dst->image->vk_format);
+            depth_format = vk_format_depth_only(dst->image->vk.format);
          else if (src_img)
             src_aspect_mask = src_img->aspect_mask;
 
@@ -241,7 +238,7 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
              aspect_mask == VK_IMAGE_ASPECT_PLANE_0_BIT ||
              aspect_mask == VK_IMAGE_ASPECT_PLANE_1_BIT ||
              aspect_mask == VK_IMAGE_ASPECT_PLANE_2_BIT) {
-            unsigned fs_key = radv_format_meta_fs_key(device, dst_temps.iview.vk_format);
+            unsigned fs_key = radv_format_meta_fs_key(device, dst_temps.iview.vk.format);
 
             if (device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key] ==
                 VK_NULL_HANDLE) {
@@ -325,7 +322,7 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
             };
 
-            const VkRenderingInfoKHR rendering_info = {
+            const VkRenderingInfo rendering_info = {
                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
                .renderArea = {
                   .offset = { rects[r].dst_x, rects[r].dst_y },
@@ -376,8 +373,7 @@ radv_meta_blit2d(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_sur
                  struct radv_meta_blit2d_buffer *src_buf, struct radv_meta_blit2d_surf *dst,
                  unsigned num_rects, struct radv_meta_blit2d_rect *rects)
 {
-   bool use_3d = cmd_buffer->device->physical_device->rad_info.chip_class >= GFX9 &&
-                 (src_img && src_img->image->type == VK_IMAGE_TYPE_3D);
+   bool use_3d = (src_img && src_img->image->vk.image_type == VK_IMAGE_TYPE_3D);
    enum blit2d_src_type src_type = src_buf  ? BLIT2D_SRC_TYPE_BUFFER
                                    : use_3d ? BLIT2D_SRC_TYPE_IMAGE_3D
                                             : BLIT2D_SRC_TYPE_IMAGE;
@@ -386,11 +382,11 @@ radv_meta_blit2d(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_sur
 }
 
 static nir_shader *
-build_nir_vertex_shader(void)
+build_nir_vertex_shader(struct radv_device *device)
 {
    const struct glsl_type *vec4 = glsl_vec4_type();
    const struct glsl_type *vec2 = glsl_vector_type(GLSL_TYPE_FLOAT, 2);
-   nir_builder b = radv_meta_init_shader(MESA_SHADER_VERTEX, "meta_blit2d_vs");
+   nir_builder b = radv_meta_init_shader(device, MESA_SHADER_VERTEX, "meta_blit2d_vs");
 
    nir_variable *pos_out = nir_variable_create(b.shader, nir_var_shader_out, vec4, "gl_Position");
    pos_out->data.location = VARYING_SLOT_POS;
@@ -399,7 +395,7 @@ build_nir_vertex_shader(void)
    tex_pos_out->data.location = VARYING_SLOT_VAR0;
    tex_pos_out->data.interpolation = INTERP_MODE_SMOOTH;
 
-   nir_ssa_def *outvec = radv_meta_gen_rect_vertices(&b);
+   nir_ssa_def *outvec = nir_gen_rect_vertices(&b, NULL, NULL);
    nir_store_var(&b, pos_out, outvec, 0xf);
 
    nir_ssa_def *src_box = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range = 16);
@@ -411,8 +407,8 @@ build_nir_vertex_shader(void)
    /* so channel 0 is vertex_id != 2 ? src_x : src_x + w
       channel 1 is vertex id != 1 ? src_y : src_y + w */
 
-   nir_ssa_def *c0cmp = nir_ine(&b, vertex_id, nir_imm_int(&b, 2));
-   nir_ssa_def *c1cmp = nir_ine(&b, vertex_id, nir_imm_int(&b, 1));
+   nir_ssa_def *c0cmp = nir_ine_imm(&b, vertex_id, 2);
+   nir_ssa_def *c1cmp = nir_ine_imm(&b, vertex_id, 1);
 
    nir_ssa_def *comp[2];
    comp[0] = nir_bcsel(&b, c0cmp, nir_channel(&b, src_box, 0), nir_channel(&b, src_box, 2));
@@ -527,7 +523,7 @@ build_nir_copy_fragment_shader(struct radv_device *device, texel_fetch_build_fun
 {
    const struct glsl_type *vec4 = glsl_vec4_type();
    const struct glsl_type *vec2 = glsl_vector_type(GLSL_TYPE_FLOAT, 2);
-   nir_builder b = radv_meta_init_shader(MESA_SHADER_FRAGMENT, "%s", name);
+   nir_builder b = radv_meta_init_shader(device, MESA_SHADER_FRAGMENT, "%s", name);
 
    nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in, vec2, "v_tex_pos");
    tex_pos_in->data.location = VARYING_SLOT_VAR0;
@@ -541,6 +537,8 @@ build_nir_copy_fragment_shader(struct radv_device *device, texel_fetch_build_fun
    nir_ssa_def *color = txf_func(&b, device, tex_pos, is_3d, is_multisampled);
    nir_store_var(&b, color_out, color, 0xf);
 
+   b.shader->info.fs.uses_sample_shading = is_multisampled;
+
    return b.shader;
 }
 
@@ -550,7 +548,7 @@ build_nir_copy_fragment_shader_depth(struct radv_device *device, texel_fetch_bui
 {
    const struct glsl_type *vec4 = glsl_vec4_type();
    const struct glsl_type *vec2 = glsl_vector_type(GLSL_TYPE_FLOAT, 2);
-   nir_builder b = radv_meta_init_shader(MESA_SHADER_FRAGMENT, "%s", name);
+   nir_builder b = radv_meta_init_shader(device, MESA_SHADER_FRAGMENT, "%s", name);
 
    nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in, vec2, "v_tex_pos");
    tex_pos_in->data.location = VARYING_SLOT_VAR0;
@@ -564,6 +562,8 @@ build_nir_copy_fragment_shader_depth(struct radv_device *device, texel_fetch_bui
    nir_ssa_def *color = txf_func(&b, device, tex_pos, is_3d, is_multisampled);
    nir_store_var(&b, color_out, color, 0x1);
 
+   b.shader->info.fs.uses_sample_shading = is_multisampled;
+
    return b.shader;
 }
 
@@ -573,7 +573,7 @@ build_nir_copy_fragment_shader_stencil(struct radv_device *device, texel_fetch_b
 {
    const struct glsl_type *vec4 = glsl_vec4_type();
    const struct glsl_type *vec2 = glsl_vector_type(GLSL_TYPE_FLOAT, 2);
-   nir_builder b = radv_meta_init_shader(MESA_SHADER_FRAGMENT, "%s", name);
+   nir_builder b = radv_meta_init_shader(device, MESA_SHADER_FRAGMENT, "%s", name);
 
    nir_variable *tex_pos_in = nir_variable_create(b.shader, nir_var_shader_in, vec2, "v_tex_pos");
    tex_pos_in->data.location = VARYING_SLOT_VAR0;
@@ -587,6 +587,8 @@ build_nir_copy_fragment_shader_stencil(struct radv_device *device, texel_fetch_b
    nir_ssa_def *color = txf_func(&b, device, tex_pos, is_3d, is_multisampled);
    nir_store_var(&b, color_out, color, 0x1);
 
+   b.shader->info.fs.uses_sample_shading = is_multisampled;
+
    return b.shader;
 }
 
@@ -599,9 +601,9 @@ radv_device_finish_meta_blit2d_state(struct radv_device *device)
       for (unsigned src = 0; src < BLIT2D_NUM_SRC_TYPES; src++) {
          radv_DestroyPipelineLayout(radv_device_to_handle(device),
                                     state->blit2d[log2_samples].p_layouts[src], &state->alloc);
-         radv_DestroyDescriptorSetLayout(radv_device_to_handle(device),
-                                         state->blit2d[log2_samples].ds_layouts[src],
-                                         &state->alloc);
+         device->vk.dispatch_table.DestroyDescriptorSetLayout(
+            radv_device_to_handle(device), state->blit2d[log2_samples].ds_layouts[src],
+            &state->alloc);
 
          for (unsigned j = 0; j < NUM_META_FS_KEYS; ++j) {
             radv_DestroyPipeline(radv_device_to_handle(device),
@@ -653,7 +655,7 @@ blit2d_init_color_pipeline(struct radv_device *device, enum blit2d_src_type src_
    const VkPipelineVertexInputStateCreateInfo *vi_create_info;
    nir_shader *fs = build_nir_copy_fragment_shader(
       device, src_func, name, src_type == BLIT2D_SRC_TYPE_IMAGE_3D, log2_samples > 0);
-   nir_shader *vs = build_nir_vertex_shader();
+   nir_shader *vs = build_nir_vertex_shader(device);
 
    vi_create_info = &normal_vi_create_info;
 
@@ -788,7 +790,7 @@ blit2d_init_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type
    const VkPipelineVertexInputStateCreateInfo *vi_create_info;
    nir_shader *fs = build_nir_copy_fragment_shader_depth(
       device, src_func, name, src_type == BLIT2D_SRC_TYPE_IMAGE_3D, log2_samples > 0);
-   nir_shader *vs = build_nir_vertex_shader();
+   nir_shader *vs = build_nir_vertex_shader(device);
 
    vi_create_info = &normal_vi_create_info;
 
@@ -945,7 +947,7 @@ blit2d_init_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_ty
    const VkPipelineVertexInputStateCreateInfo *vi_create_info;
    nir_shader *fs = build_nir_copy_fragment_shader_stencil(
       device, src_func, name, src_type == BLIT2D_SRC_TYPE_IMAGE_3D, log2_samples > 0);
-   nir_shader *vs = build_nir_vertex_shader();
+   nir_shader *vs = build_nir_vertex_shader(device);
 
    vi_create_info = &normal_vi_create_info;
 
@@ -1116,13 +1118,9 @@ VkResult
 radv_device_init_meta_blit2d_state(struct radv_device *device, bool on_demand)
 {
    VkResult result;
-   bool create_3d = device->physical_device->rad_info.chip_class >= GFX9;
 
    for (unsigned log2_samples = 0; log2_samples < MAX_SAMPLES_LOG2; log2_samples++) {
       for (unsigned src = 0; src < BLIT2D_NUM_SRC_TYPES; src++) {
-         if (src == BLIT2D_SRC_TYPE_IMAGE_3D && !create_3d)
-            continue;
-
          /* Don't need to handle copies between buffers and multisample images. */
          if (src == BLIT2D_SRC_TYPE_BUFFER && log2_samples > 0)
             continue;
@@ -1133,7 +1131,7 @@ radv_device_init_meta_blit2d_state(struct radv_device *device, bool on_demand)
 
          result = meta_blit2d_create_pipe_layout(device, src, log2_samples);
          if (result != VK_SUCCESS)
-            goto fail;
+            return result;
 
          if (on_demand)
             continue;
@@ -1142,22 +1140,18 @@ radv_device_init_meta_blit2d_state(struct radv_device *device, bool on_demand)
             result = blit2d_init_color_pipeline(device, src, radv_fs_key_format_exemplars[j],
                                                 log2_samples);
             if (result != VK_SUCCESS)
-               goto fail;
+               return result;
          }
 
          result = blit2d_init_depth_only_pipeline(device, src, log2_samples);
          if (result != VK_SUCCESS)
-            goto fail;
+            return result;
 
          result = blit2d_init_stencil_only_pipeline(device, src, log2_samples);
          if (result != VK_SUCCESS)
-            goto fail;
+            return result;
       }
    }
 
    return VK_SUCCESS;
-
-fail:
-   radv_device_finish_meta_blit2d_state(device);
-   return result;
 }

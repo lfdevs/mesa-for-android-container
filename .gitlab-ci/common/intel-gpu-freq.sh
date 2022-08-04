@@ -1,8 +1,15 @@
 #!/bin/sh
 #
-# The Intel i915 GPU driver allows to change the minimum, maximum and boost
-# frequencies in steps of 50 MHz via /sys/class/drm/card<n>/<freq_info>,
-# where <n> is the DRM card index and <freq_info> one of the following:
+# This is an utility script to manage Intel GPU frequencies.
+# It can be used for debugging performance problems or trying to obtain a stable
+# frequency while benchmarking.
+#
+# Note the Intel i915 GPU driver allows to change the minimum, maximum and boost
+# frequencies in steps of 50 MHz via:
+#
+# /sys/class/drm/card<n>/<freq_info>
+#
+# Where <n> is the DRM card index and <freq_info> one of the following:
 #
 # - gt_max_freq_mhz (enforced maximum freq)
 # - gt_min_freq_mhz (enforced minimum freq)
@@ -18,6 +25,11 @@
 # - gt_act_freq_mhz (the actual GPU freq)
 # - gt_cur_freq_mhz (the last requested freq)
 #
+# Also note that in addition to GPU management, the script offers the
+# possibility to adjust CPU operating frequencies. However, this is currently
+# limited to just setting the maximum scaling frequency as percentage of the
+# maximum frequency allowed by the hardware.
+#
 # Copyright (C) 2022 Collabora Ltd.
 # Author: Cristian Ciocaltea <cristian.ciocaltea@collabora.com>
 #
@@ -27,12 +39,22 @@
 #
 # Constants
 #
+
+# GPU
 DRM_FREQ_SYSFS_PATTERN="/sys/class/drm/card%d/gt_%s_freq_mhz"
 ENF_FREQ_INFO="max min boost"
 CAP_FREQ_INFO="RP0 RPn RP1"
 ACT_FREQ_INFO="act cur"
 THROTT_DETECT_SLEEP_SEC=2
 THROTT_DETECT_PID_FILE_PATH=/tmp/thrott-detect.pid
+
+# CPU
+CPU_SYSFS_PREFIX=/sys/devices/system/cpu
+CPU_PSTATE_SYSFS_PATTERN="${CPU_SYSFS_PREFIX}/intel_pstate/%s"
+CPU_FREQ_SYSFS_PATTERN="${CPU_SYSFS_PREFIX}/cpu%s/cpufreq/%s_freq"
+CAP_CPU_FREQ_INFO="cpuinfo_max cpuinfo_min"
+ENF_CPU_FREQ_INFO="scaling_max scaling_min"
+ACT_CPU_FREQ_INFO="scaling_cur"
 
 #
 # Global variables.
@@ -41,6 +63,7 @@ unset INTEL_DRM_CARD_INDEX
 unset GET_ACT_FREQ GET_ENF_FREQ GET_CAP_FREQ
 unset SET_MIN_FREQ SET_MAX_FREQ
 unset MONITOR_FREQ
+unset CPU_SET_MAX_FREQ
 unset DETECT_THROTT
 unset DRY_RUN
 
@@ -98,14 +121,16 @@ identify_intel_gpu() {
 # return: Global variable(s) FREQ_${arg} containing the requested information
 #
 read_freq_info() {
-    local var val path print=0 ret=0
+    local var val info path print=0 ret=0
 
     [ "$1" = "y" ] && print=1
     shift
 
     while [ $# -gt 0 ]; do
-        var=FREQ_$1
-        path=$(print_freq_sysfs_path "$1")
+        info=$1
+        shift
+        var=FREQ_${info}
+        path=$(print_freq_sysfs_path "${info}")
 
         [ -r ${path} ] && read ${var} < ${path} || {
             log ERROR "Failed to read freq info from: %s" "${path}"
@@ -121,10 +146,8 @@ read_freq_info() {
 
         [ ${print} -eq 1 ] && {
             eval val=\$${var}
-            printf "%6s: %4s MHz\n" "$1" "${val}"
+            printf "%6s: %4s MHz\n" "${info}" "${val}"
         }
-
-        shift
     done
 
     return ${ret}
@@ -393,6 +416,156 @@ detect_throttling() {
 }
 
 #
+# Retrieve the list of online CPUs.
+#
+get_online_cpus() {
+    local path cpu_index
+
+    printf "0"
+    for path in $(grep 1 ${CPU_SYSFS_PREFIX}/cpu*/online); do
+        cpu_index=${path##*/cpu}
+        printf " %s" ${cpu_index%%/*}
+    done
+}
+
+#
+# Helper to print sysfs path for the given CPU index and freq info.
+#
+# arg1: Frequency info sysfs name, one of *_CPU_FREQ_INFO constants above
+# arg2: CPU index
+#
+print_cpu_freq_sysfs_path() {
+    printf ${CPU_FREQ_SYSFS_PATTERN} "$2" "$1"
+}
+
+#
+# Read the specified CPU freq info from sysfs.
+#
+# arg1: CPU index
+# arg2: Flag (y/n) to also enable printing the freq info.
+# arg3...: Frequency info sysfs name(s), see *_CPU_FREQ_INFO constants above
+# return: Global variable(s) CPU_FREQ_${arg} containing the requested information
+#
+read_cpu_freq_info() {
+    local var val info path cpu_index print=0 ret=0
+
+    cpu_index=$1
+    [ "$2" = "y" ] && print=1
+    shift 2
+
+    while [ $# -gt 0 ]; do
+        info=$1
+        shift
+        var=CPU_FREQ_${info}
+        path=$(print_cpu_freq_sysfs_path "${info}" ${cpu_index})
+
+        [ -r ${path} ] && read ${var} < ${path} || {
+            log ERROR "Failed to read CPU freq info from: %s" "${path}"
+            ret=1
+            continue
+        }
+
+        [ -n "${var}" ] || {
+            log ERROR "Got empty CPU freq info from: %s" "${path}"
+            ret=1
+            continue
+        }
+
+        [ ${print} -eq 1 ] && {
+            eval val=\$${var}
+            printf "%6s: %4s Hz\n" "${info}" "${val}"
+        }
+    done
+
+    return ${ret}
+}
+
+#
+# Helper to print freq. value as requested by user via '--cpu-set-max' option.
+# arg1: user requested freq value
+#
+compute_cpu_freq_set() {
+    local val
+
+    case "$1" in
+    +)
+        val=${CPU_FREQ_cpuinfo_max}
+        ;;
+    -)
+        val=${CPU_FREQ_cpuinfo_min}
+        ;;
+    *%)
+        val=$((${1%?} * ${CPU_FREQ_cpuinfo_max} / 100))
+        ;;
+    *[!0-9]*)
+        log ERROR "Cannot set CPU freq to invalid value: %s" "$1"
+        return 1
+        ;;
+    "")
+        log ERROR "Cannot set CPU freq to unspecified value"
+        return 1
+        ;;
+    *)
+        log ERROR "Cannot set CPU freq to custom value; use +, -, or % instead"
+        return 1
+        ;;
+    esac
+
+    printf "%s" "${val}"
+}
+
+#
+# Adjust CPU max scaling frequency.
+#
+set_cpu_freq_max() {
+    local target_freq res=0
+    case "${CPU_SET_MAX_FREQ}" in
+    +)
+        target_freq=100
+        ;;
+    -)
+        target_freq=1
+        ;;
+    *%)
+        target_freq=${CPU_SET_MAX_FREQ%?}
+        ;;
+    *)
+        log ERROR "Invalid CPU freq"
+        return 1
+        ;;
+    esac
+
+    local pstate_info=$(printf "${CPU_PSTATE_SYSFS_PATTERN}" max_perf_pct)
+    [ -e "${pstate_info}" ] && {
+        log INFO "Setting intel_pstate max perf to %s" "${target_freq}%"
+        printf "%s" "${target_freq}" > "${pstate_info}"
+        [ $? -eq 0 ] || {
+            log ERROR "Failed to set intel_pstate max perf"
+            res=1
+        }
+    }
+
+    local cpu_index
+    for cpu_index in $(get_online_cpus); do
+        read_cpu_freq_info ${cpu_index} n ${CAP_CPU_FREQ_INFO} || { res=$?; continue; }
+
+        target_freq=$(compute_cpu_freq_set "${CPU_SET_MAX_FREQ}")
+        [ -z "${target_freq}" ] && { res=$?; continue; }
+
+        log INFO "Setting CPU%s max scaling freq to %s Hz" ${cpu_index} "${target_freq}"
+        [ -n "${DRY_RUN}" ] && continue
+
+        printf "%s" ${target_freq} > $(print_cpu_freq_sysfs_path scaling_max ${cpu_index})
+        [ $? -eq 0 ] || {
+            res=1
+            log ERROR "Failed to set CPU%s max scaling frequency" ${cpu_index}
+        }
+    done
+
+    return ${res}
+}
+
+#
 # Show help message.
 #
 print_usage() {
@@ -425,6 +598,12 @@ Options:
                         Start (default operation) the throttling detector
                         as a background process. Use 'stop' or 'status' to
                         terminate the detector process or verify its status.
+
+  --cpu-set-max [FREQUENCY%|+|-}
+                        Set CPU max scaling frequency as % of hw max.
+                        Use '+' or '-' to set frequency to hardware max or min.
+
+  -r, --reset           Reset frequencies to hardware defaults.
 
   --dry-run             See what the script will do without applying any
                         frequency changes.
@@ -461,6 +640,8 @@ parse_option_get() {
 
 #
 # Validate user input for '-s, --set' option.
+# arg1: input value to be validated
+# arg2: optional flag indicating input is restricted to %
 #
 validate_option_set() {
     case "$1" in
@@ -472,6 +653,8 @@ validate_option_set() {
         exit 1
         ;;
     esac
+
+    [ -z "$2" ] || { print_usage; exit 1; }
 }
 
 #
@@ -525,6 +708,12 @@ while [ $# -gt 0 ]; do
         esac
         ;;
 
+    --cpu-set-max)
+        shift
+        CPU_SET_MAX_FREQ=$1
+        validate_option_set "${CPU_SET_MAX_FREQ}" restricted
+        ;;
+
     --dry-run)
         DRY_RUN=1
         ;;
@@ -557,6 +746,8 @@ identify_intel_gpu || {
 print_freq_info
 
 [ -n "${DETECT_THROTT}" ] && detect_throttling ${DETECT_THROTT}
+
+[ -n "${CPU_SET_MAX_FREQ}" ] && { set_cpu_freq_max || RET=$?; }
 
 [ -n "${MONITOR_FREQ}" ] && {
     log INFO "Entering frequency monitoring mode"

@@ -37,20 +37,20 @@
 #define PVR_MAX_TRANSFER_SIZE_IN_TEXELS 2048U
 
 void pvr_CmdBlitImage2KHR(VkCommandBuffer commandBuffer,
-                          const VkBlitImageInfo2KHR *pBlitImageInfo)
+                          const VkBlitImageInfo2 *pBlitImageInfo)
 {
    assert(!"Unimplemented");
 }
 
 void pvr_CmdCopyImageToBuffer2KHR(
    VkCommandBuffer commandBuffer,
-   const VkCopyImageToBufferInfo2KHR *pCopyImageToBufferInfo)
+   const VkCopyImageToBufferInfo2 *pCopyImageToBufferInfo)
 {
    assert(!"Unimplemented");
 }
 
 void pvr_CmdCopyImage2KHR(VkCommandBuffer commandBuffer,
-                          const VkCopyImageInfo2KHR *pCopyImageInfo)
+                          const VkCopyImageInfo2 *pCopyImageInfo)
 {
    assert(!"Unimplemented");
 }
@@ -75,7 +75,7 @@ void pvr_CmdFillBuffer(VkCommandBuffer commandBuffer,
 
 void pvr_CmdCopyBufferToImage2KHR(
    VkCommandBuffer commandBuffer,
-   const VkCopyBufferToImageInfo2KHR *pCopyBufferToImageInfo)
+   const VkCopyBufferToImageInfo2 *pCopyBufferToImageInfo)
 {
    assert(!"Unimplemented");
 }
@@ -101,7 +101,7 @@ void pvr_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer,
 }
 
 void pvr_CmdCopyBuffer2KHR(VkCommandBuffer commandBuffer,
-                           const VkCopyBufferInfo2KHR *pCopyBufferInfo)
+                           const VkCopyBufferInfo2 *pCopyBufferInfo)
 {
    PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
    PVR_FROM_HANDLE(pvr_buffer, src, pCopyBufferInfo->srcBuffer);
@@ -141,7 +141,7 @@ void pvr_CmdClearAttachments(VkCommandBuffer commandBuffer,
 }
 
 void pvr_CmdResolveImage2KHR(VkCommandBuffer commandBuffer,
-                             const VkResolveImageInfo2KHR *pResolveImageInfo)
+                             const VkResolveImageInfo2 *pResolveImageInfo)
 {
    assert(!"Unimplemented");
 }

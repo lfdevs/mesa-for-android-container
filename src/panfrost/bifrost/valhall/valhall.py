@@ -191,6 +191,10 @@ class Instruction:
         self.modifiers = modifiers
         self.staging = staging
         self.unit = unit
+        self.is_signed = len(name.split(".")) > 1 and ('s' in name.split(".")[1])
+
+        # Message-passing instruction <===> not ALU instruction
+        self.message = unit not in ["FMA", "CVT", "SFU"]
 
         self.secondary_shift = max(len(self.srcs) * 8, 16)
         self.secondary_mask = 0xF if opcode2 is not None else 0x0
@@ -377,12 +381,15 @@ MODIFIERS = {
     "integer_coordinates": Flag("integer_coordinates", 13),
     "fetch_component": Modifier("fetch_component", 14, 2),
     "lod_mode": Modifier("lod_mode", 13, 3),
+    "lod_bias_disable": Modifier("lod_mode", 13, 1),
+    "lod_clamp_disable": Modifier("lod_mode", 14, 1),
     "write_mask": Modifier("write_mask", 22, 4),
     "register_type": Modifier("register_type", 26, 2),
     "dimension": Modifier("dimension", 28, 2),
     "skip": Flag("skip", 39),
     "register_width": Modifier("register_width", 46, 1, force_enum = "register_width"),
     "secondary_register_width": Modifier("secondary_register_width", 47, 1, force_enum = "register_width"),
+    "vartex_register_width": Modifier("varying_texture_register_width", 24, 2),
 
     "atom_opc": Modifier("atomic_operation", 22, 4),
     "atom_opc_1": Modifier("atomic_operation_with_1", 22, 4),
@@ -402,6 +409,7 @@ MODIFIERS = {
     "cmp": Modifier("condition", 32, 3),
     "clamp": Modifier("clamp", 32, 2),
     "sr_count": Modifier("staging_register_count", 33, 3, implied = True),
+    "sample_and_update": Modifier("sample_and_update_mode", 33, 3),
     "sr_write_count": Modifier("staging_register_write_count", 36, 3, implied = True),
 
     "conservative": Flag("conservative", 35),

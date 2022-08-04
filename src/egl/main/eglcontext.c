@@ -740,9 +740,6 @@ _eglCheckMakeCurrent(_EGLContext *ctx, _EGLSurface *draw, _EGLSurface *read)
    _EGLThreadInfo *t = _eglGetCurrentThread();
    _EGLDisplay *disp;
 
-   if (_eglIsCurrentThreadDummy())
-      return _eglError(EGL_BAD_ALLOC, "eglMakeCurrent");
-
    /* this is easy */
    if (!ctx) {
       if (draw || read)

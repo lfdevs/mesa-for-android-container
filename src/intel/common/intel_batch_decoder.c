@@ -30,6 +30,7 @@
 
 void
 intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,
+                            const struct brw_isa_info *isa,
                             const struct intel_device_info *devinfo,
                             FILE *fp, enum intel_batch_decode_flags flags,
                             const char *xml_path,
@@ -42,6 +43,7 @@ intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,
 {
    memset(ctx, 0, sizeof(*ctx));
 
+   ctx->isa = isa;
    ctx->devinfo = *devinfo;
    ctx->get_bo = get_bo;
    ctx->get_state_size = get_state_size;
@@ -137,7 +139,7 @@ ctx_disassemble_program(struct intel_batch_decode_ctx *ctx,
       return;
 
    fprintf(ctx->fp, "\nReferenced %s:\n", type);
-   intel_disassemble(&ctx->devinfo, bo.map, 0, ctx->fp);
+   intel_disassemble(ctx->isa, bo.map, 0, ctx->fp);
 }
 
 /* Heuristic to determine whether a uint32_t is probably actually a float
@@ -281,9 +283,22 @@ dump_binding_table(struct intel_batch_decode_ctx *ctx,
       return;
    }
 
-   /* When 256B binding tables are enabled, we have to shift the offset */
-   if (ctx->use_256B_binding_tables)
+   /* Most platforms use a 16-bit pointer with 32B alignment in bits 15:5. */
+   uint32_t btp_alignment = 32;
+   uint32_t btp_pointer_bits = 16;
+
+   if (ctx->devinfo.verx10 >= 125) {
+      /* The pointer is now 21-bit with 32B alignment in bits 20:5. */
+      btp_pointer_bits = 21;
+   } else if (ctx->use_256B_binding_tables) {
+      /* When 256B binding tables are enabled, we have to shift the offset
+       * which is stored in bits 15:5 but interpreted as bits 18:8 of the
+       * actual offset.  The effective pointer is 19-bit with 256B alignment.
+       */
       offset <<= 3;
+      btp_pointer_bits = 19;
+      btp_alignment = 256;
+   }
 
    const uint64_t bt_pool_base = ctx->bt_pool_base ? ctx->bt_pool_base :
                                                      ctx->surface_base;
@@ -293,7 +308,7 @@ dump_binding_table(struct intel_batch_decode_ctx *ctx,
                            bt_pool_base, 1, 8);
    }
 
-   if (offset % 32 != 0 || offset >= UINT16_MAX) {
+   if (offset % btp_alignment != 0 || offset >= (1u << btp_pointer_bits)) {
       fprintf(ctx->fp, "  invalid binding table pointer\n");
       return;
    }

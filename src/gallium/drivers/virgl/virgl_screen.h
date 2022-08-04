@@ -37,7 +37,7 @@ enum virgl_debug_flags {
    VIRGL_DEBUG_SYNC                 = 1 << 4,
    VIRGL_DEBUG_XFER                 = 1 << 5,
    VIRGL_DEBUG_NO_COHERENT          = 1 << 6,
-   VIRGL_DEBUG_NIR                  = 1 << 7,
+   VIRGL_DEBUG_USE_TGSI             = 1 << 7,
    VIRGL_DEBUG_L8_SRGB_ENABLE_READBACK = 1 << 8,
 };
 

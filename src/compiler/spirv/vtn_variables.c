@@ -459,6 +459,7 @@ vtn_pointer_dereference(struct vtn_builder *b,
          tail = nir_build_deref_array(&b->nb, tail, arr_index);
          type = type->array_element;
       }
+      tail->arr.in_bounds = deref_chain->in_bounds;
 
       access |= type->access;
    }
@@ -1119,6 +1120,10 @@ vtn_get_builtin_location(struct vtn_builder *b,
       break;
    case SpvBuiltInRayGeometryIndexKHR:
       *location = SYSTEM_VALUE_RAY_GEOMETRY_INDEX;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInCullMaskKHR:
+      *location = SYSTEM_VALUE_CULL_MASK;
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInShadingRateKHR:
@@ -2460,6 +2465,8 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
 
       struct vtn_pointer *base = vtn_pointer(b, w[3]);
 
+      chain->in_bounds = (opcode == SpvOpInBoundsAccessChain || opcode == SpvOpInBoundsPtrAccessChain);
+
       /* Workaround for https://gitlab.freedesktop.org/mesa/mesa/-/issues/3406 */
       access |= base->access & ACCESS_NON_UNIFORM;
 
@@ -2640,13 +2647,11 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
 
          /* array_length = max(buffer_size - offset, 0) / stride */
          nir_ssa_def *array_length =
-            nir_idiv(&b->nb,
-                     nir_imax(&b->nb,
-                              nir_isub(&b->nb,
-                                       buf_size,
-                                       nir_imm_int(&b->nb, offset)),
-                              nir_imm_int(&b->nb, 0u)),
-                     nir_imm_int(&b->nb, stride));
+            nir_udiv_imm(&b->nb,
+                         nir_usub_sat(&b->nb,
+                                      buf_size,
+                                      nir_imm_int(&b->nb, offset)),
+                         stride);
 
          vtn_push_nir_ssa(b, w[2], array_length);
       }

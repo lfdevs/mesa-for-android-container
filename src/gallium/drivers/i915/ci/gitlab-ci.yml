@@ -10,20 +10,12 @@
     GPU_VERSION: i915-g33
     FLAKES_CHANNEL: "#intel-ci"
 
-i915-g33-deqp:
+i915-g33:
   extends:
     - .anholt-g33-test
     - .deqp-test
   variables:
     DEQP_SUITE: i915g
-
-i915-g33-piglit:
-  extends:
-    - .anholt-g33-test
-    - .piglit-test
-  variables:
-    PIGLIT_PROFILES: gpu
-    PIGLIT_PLATFORM: gbm
 
 i915-g33-traces:
   extends:

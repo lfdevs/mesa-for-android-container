@@ -176,6 +176,7 @@ struct gl_extensions
    GLboolean EXT_gpu_shader4;
    GLboolean EXT_memory_object;
    GLboolean EXT_memory_object_fd;
+   GLboolean EXT_memory_object_win32;
    GLboolean EXT_multisampled_render_to_texture;
    GLboolean EXT_packed_float;
    GLboolean EXT_pixel_buffer_object;
@@ -183,6 +184,7 @@ struct gl_extensions
    GLboolean EXT_render_snorm;
    GLboolean EXT_semaphore;
    GLboolean EXT_semaphore_fd;
+   GLboolean EXT_semaphore_win32;
    GLboolean EXT_shader_image_load_formatted;
    GLboolean EXT_shader_image_load_store;
    GLboolean EXT_shader_integer_mix;
@@ -231,7 +233,7 @@ struct gl_extensions
    GLboolean AMD_vertex_shader_layer;
    GLboolean AMD_vertex_shader_viewport_index;
    GLboolean ANDROID_extension_pack_es31a;
-   GLboolean APPLE_object_purgeable;
+   GLboolean ARM_shader_framebuffer_fetch_depth_stencil;
    GLboolean ATI_meminfo;
    GLboolean ATI_texture_compression_3dc;
    GLboolean ATI_texture_mirror_once;
@@ -283,6 +285,7 @@ struct gl_extensions
    GLboolean OES_draw_texture;
    GLboolean OES_depth_texture_cube_map;
    GLboolean OES_EGL_image_external;
+   GLboolean OES_texture_3D;
    GLboolean OES_texture_float;
    GLboolean OES_texture_float_linear;
    GLboolean OES_texture_half_float;
@@ -309,10 +312,8 @@ struct gl_extensions
 struct gl_shader_compiler_options
 {
    /** Driver-selectable options: */
-   GLboolean EmitNoLoops;
    GLboolean EmitNoCont;                  /**< Emit CONT opcode? */
    GLboolean EmitNoMainReturn;            /**< Emit CONT/RET opcodes? */
-   GLboolean EmitNoSat;                   /**< Emit SAT opcodes? */
    GLboolean LowerCombinedClipCullDistance; /** Lower gl_ClipDistance and
                                               * gl_CullDistance together from
                                               * float[8] to vec4[2]
@@ -345,11 +346,9 @@ struct gl_shader_compiler_options
    GLboolean EmitNoIndirectOutput;  /**< No indirect addressing of outputs */
    GLboolean EmitNoIndirectTemp;    /**< No indirect addressing of temps */
    GLboolean EmitNoIndirectUniform; /**< No indirect addressing of constants */
-   GLboolean EmitNoIndirectSampler; /**< No indirect addressing of samplers */
    /*@}*/
 
    GLuint MaxIfDepth;               /**< Maximum nested IF blocks */
-   GLuint MaxUnrollIterations;
 
    /**
     * Optimize code for array of structures backends.
@@ -359,9 +358,6 @@ struct gl_shader_compiler_options
     *     matrix * vector operations, such as position transformation.
     */
    GLboolean OptimizeForAOS;
-
-   /** Lower UBO and SSBO access to intrinsics. */
-   GLboolean LowerBufferInterfaceBlocks;
 
    /** Clamp UBO and SSBO block indices so they don't go out-of-bounds. */
    GLboolean ClampBlockIndicesToArrayBounds;
@@ -770,13 +766,6 @@ struct gl_constants
    bool GLSLFrontFacingIsSysVal;
 
    /**
-    * Run the minimum amount of GLSL optimizations to be able to link
-    * shaders optimally (eliminate dead varyings and uniforms) and just do
-    * all the necessary lowering.
-    */
-   bool GLSLOptimizeConservatively;
-
-   /**
     * Whether to call lower_const_arrays_to_uniforms() during linking.
     */
    bool GLSLLowerConstArrays;
@@ -959,9 +948,6 @@ struct gl_constants
    /** Is the drivers uniform storage packed or padded to 16 bytes. */
    bool PackedDriverUniformStorage;
 
-   /** Does the driver make use of the NIR based GLSL linker */
-   bool UseNIRGLSLLinker;
-
    /** Wether or not glBitmap uses red textures rather than alpha */
    bool BitmapUsesRed;
 
@@ -1011,5 +997,11 @@ struct gl_constants
    GLuint MaxSparse3DTextureSize;
    GLuint MaxSparseArrayTextureLayers;
    bool SparseTextureFullArrayCubeMipmaps;
+
+   /** Use hardware accelerated GL_SELECT */
+   bool HardwareAcceleratedSelect;
+
+   /** Origin of point coordinates. True if upper left, false if lower left. */
+   bool PointCoordOriginUpperLeft;
 };
 #endif

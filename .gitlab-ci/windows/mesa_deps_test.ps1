@@ -25,6 +25,9 @@ if (!$?) {
   Exit 1
 }
 
+$MyPath = $MyInvocation.MyCommand.Path | Split-Path -Parent
+. "$MyPath\mesa_vs_init.ps1"
+
 Get-Date
 Write-Host "Downloading glext.h"
 New-Item -ItemType Directory -Path ".\glext" -Name "GL"
@@ -46,7 +49,14 @@ Get-Date
 $piglit_build = New-Item -ItemType Directory -Path "C:\src\piglit" -Name "build"
 Push-Location -Path $piglit_build.FullName
 Write-Host "Compiling Piglit"
-cmd.exe /C 'C:\BuildTools\Common7\Tools\VsDevCmd.bat -host_arch=amd64 -arch=amd64 && cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="C:\Piglit" -DGLUT_INCLUDE_DIR=C:\freeglut\include -DGLUT_glut_LIBRARY_RELEASE=C:\freeglut\lib\x64\freeglut.lib -DGLEXT_INCLUDE_DIR=.\glext && ninja -j32'
+cmake .. `
+-GNinja `
+-DCMAKE_BUILD_TYPE=Release `
+-DCMAKE_INSTALL_PREFIX="C:\Piglit" `
+-DGLUT_INCLUDE_DIR=C:\freeglut\include `
+-DGLUT_glut_LIBRARY_RELEASE=C:\freeglut\lib\x64\freeglut.lib `
+-DGLEXT_INCLUDE_DIR=.\glext && `
+ninja -j32
 $buildstatus = $?
 ninja -j32 install | Out-Null
 $installstatus = $?
@@ -63,7 +73,7 @@ Get-Date
 Write-Host "Cloning spirv-samples"
 git clone --no-progress --single-branch --no-checkout https://github.com/dneto0/spirv-samples.git  C:\spirv-samples\
 Push-Location -Path C:\spirv-samples\
-git checkout 7ac0ad5a7fe0ec884faba1dc2916028d0268eeef
+git checkout 36372636df06a24c4e2de1551beee055db01b91d
 Pop-Location
 
 Get-Date
@@ -86,7 +96,12 @@ Get-Date
 $deqp_build = New-Item -ItemType Directory -Path "C:\deqp"
 Push-Location -Path $deqp_build.FullName
 Write-Host "Compiling deqp"
-cmd.exe /C "C:\BuildTools\Common7\Tools\VsDevCmd.bat -host_arch=amd64 -arch=amd64 && cmake -S $($deqp_source) -B . -GNinja -DCMAKE_BUILD_TYPE=Release -DDEQP_TARGET=default && ninja -j32"
+cmake -S $($deqp_source) `
+-B . `
+-GNinja `
+-DCMAKE_BUILD_TYPE=Release `
+-DDEQP_TARGET=default && `
+ninja -j32
 $buildstatus = $?
 Pop-Location
 if (!$buildstatus -Or !$installstatus) {

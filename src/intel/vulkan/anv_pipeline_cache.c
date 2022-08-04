@@ -31,6 +31,39 @@
 #include "nir/nir_xfb_info.h"
 #include "vulkan/util/vk_util.h"
 
+static bool
+anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
+                         struct blob *blob);
+
+struct vk_pipeline_cache_object *
+anv_shader_bin_deserialize(struct vk_device *device,
+                           const void *key_data, size_t key_size,
+                           struct blob_reader *blob);
+
+static void
+anv_shader_bin_destroy(struct vk_pipeline_cache_object *object)
+{
+   struct anv_device *device =
+      container_of(object->device, struct anv_device, vk);
+   struct anv_shader_bin *shader =
+      container_of(object, struct anv_shader_bin, base);
+
+   anv_state_pool_free(&device->instruction_state_pool, shader->kernel);
+   vk_pipeline_cache_object_finish(&shader->base);
+   vk_free(&device->vk.alloc, shader);
+}
+
+static const struct vk_pipeline_cache_object_ops anv_shader_bin_ops = {
+   .serialize = anv_shader_bin_serialize,
+   .deserialize = anv_shader_bin_deserialize,
+   .destroy = anv_shader_bin_destroy,
+};
+
+const struct vk_pipeline_cache_object_ops *const anv_cache_import_ops[2] = {
+   &anv_shader_bin_ops,
+   NULL
+};
+
 struct anv_shader_bin *
 anv_shader_bin_create(struct anv_device *device,
                       gl_shader_stage stage,
@@ -44,8 +77,7 @@ anv_shader_bin_create(struct anv_device *device,
 {
    VK_MULTIALLOC(ma);
    VK_MULTIALLOC_DECL(&ma, struct anv_shader_bin, shader, 1);
-   VK_MULTIALLOC_DECL_SIZE(&ma, struct anv_shader_bin_key, key,
-                                sizeof(*key) + key_size);
+   VK_MULTIALLOC_DECL_SIZE(&ma, void, obj_key_data, key_size);
    VK_MULTIALLOC_DECL_SIZE(&ma, struct brw_stage_prog_data, prog_data,
                                 prog_data_size);
    VK_MULTIALLOC_DECL(&ma, struct brw_shader_reloc, prog_data_relocs,
@@ -65,13 +97,11 @@ anv_shader_bin_create(struct anv_device *device,
                             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE))
       return NULL;
 
-   shader->ref_cnt = 1;
+   memcpy(obj_key_data, key_data, key_size);
+   vk_pipeline_cache_object_init(&device->vk, &shader->base,
+                                 &anv_shader_bin_ops, obj_key_data, key_size);
 
    shader->stage = stage;
-
-   key->size = key_size;
-   memcpy(key->data, key_data, key_size);
-   shader->key = key;
 
    shader->kernel =
       anv_state_pool_alloc(&device->instruction_state_pool, kernel_size, 64);
@@ -112,7 +142,8 @@ anv_shader_bin_create(struct anv_device *device,
       };
    }
 
-   brw_write_shader_relocs(&device->info, shader->kernel.map, prog_data_in,
+   brw_write_shader_relocs(&device->physical->compiler->isa,
+                           shader->kernel.map, prog_data_in,
                            reloc_values, rv_count);
 
    memcpy(prog_data, prog_data_in, prog_data_size);
@@ -149,23 +180,14 @@ anv_shader_bin_create(struct anv_device *device,
    return shader;
 }
 
-void
-anv_shader_bin_destroy(struct anv_device *device,
-                       struct anv_shader_bin *shader)
-{
-   assert(shader->ref_cnt == 0);
-   anv_state_pool_free(&device->instruction_state_pool, shader->kernel);
-   vk_free(&device->vk.alloc, shader);
-}
-
 static bool
-anv_shader_bin_write_to_blob(const struct anv_shader_bin *shader,
-                             struct blob *blob)
+anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
+                         struct blob *blob)
 {
-   blob_write_uint32(blob, shader->stage);
+   struct anv_shader_bin *shader =
+      container_of(object, struct anv_shader_bin, base);
 
-   blob_write_uint32(blob, shader->key->size);
-   blob_write_bytes(blob, shader->key->data, shader->key->size);
+   blob_write_uint32(blob, shader->stage);
 
    blob_write_uint32(blob, shader->kernel_size);
    blob_write_bytes(blob, shader->kernel.map, shader->kernel_size);
@@ -209,14 +231,15 @@ anv_shader_bin_write_to_blob(const struct anv_shader_bin *shader,
    return !blob->out_of_memory;
 }
 
-static struct anv_shader_bin *
-anv_shader_bin_create_from_blob(struct anv_device *device,
-                                struct blob_reader *blob)
+struct vk_pipeline_cache_object *
+anv_shader_bin_deserialize(struct vk_device *vk_device,
+                           const void *key_data, size_t key_size,
+                           struct blob_reader *blob)
 {
-   gl_shader_stage stage = blob_read_uint32(blob);
+   struct anv_device *device =
+      container_of(vk_device, struct anv_device, vk);
 
-   uint32_t key_size = blob_read_uint32(blob);
-   const void *key_data = blob_read_bytes(blob, key_size);
+   gl_shader_stage stage = blob_read_uint32(blob);
 
    uint32_t kernel_size = blob_read_uint32(blob);
    const void *kernel_data = blob_read_bytes(blob, kernel_size);
@@ -259,466 +282,45 @@ anv_shader_bin_create_from_blob(struct anv_device *device,
    if (blob->overrun)
       return NULL;
 
-   return anv_shader_bin_create(device, stage,
-                                key_data, key_size,
-                                kernel_data, kernel_size,
-                                &prog_data.base, prog_data_size,
-                                stats, num_stats, xfb_info, &bind_map);
-}
-
-/* Remaining work:
- *
- * - Compact binding table layout so it's tight and not dependent on
- *   descriptor set layout.
- *
- * - Review prog_data struct for size and cacheability: struct
- *   brw_stage_prog_data has binding_table which uses a lot of uint32_t for 8
- *   bit quantities etc; use bit fields for all bools, eg dual_src_blend.
- */
-
-static uint32_t
-shader_bin_key_hash_func(const void *void_key)
-{
-   const struct anv_shader_bin_key *key = void_key;
-   return _mesa_hash_data(key->data, key->size);
-}
-
-static bool
-shader_bin_key_compare_func(const void *void_a, const void *void_b)
-{
-   const struct anv_shader_bin_key *a = void_a, *b = void_b;
-   if (a->size != b->size)
-      return false;
-
-   return memcmp(a->data, b->data, a->size) == 0;
-}
-
-static uint32_t
-sha1_hash_func(const void *sha1)
-{
-   return _mesa_hash_data(sha1, 20);
-}
-
-static bool
-sha1_compare_func(const void *sha1_a, const void *sha1_b)
-{
-   return memcmp(sha1_a, sha1_b, 20) == 0;
-}
-
-void
-anv_pipeline_cache_init(struct anv_pipeline_cache *cache,
-                        struct anv_device *device,
-                        bool cache_enabled,
-                        bool external_sync)
-{
-   vk_object_base_init(&device->vk, &cache->base,
-                       VK_OBJECT_TYPE_PIPELINE_CACHE);
-   cache->device = device;
-   cache->external_sync = external_sync;
-   pthread_mutex_init(&cache->mutex, NULL);
-
-   if (cache_enabled) {
-      cache->cache = _mesa_hash_table_create(NULL, shader_bin_key_hash_func,
-                                             shader_bin_key_compare_func);
-      cache->nir_cache = _mesa_hash_table_create(NULL, sha1_hash_func,
-                                                 sha1_compare_func);
-   } else {
-      cache->cache = NULL;
-      cache->nir_cache = NULL;
-   }
-}
-
-void
-anv_pipeline_cache_finish(struct anv_pipeline_cache *cache)
-{
-   pthread_mutex_destroy(&cache->mutex);
-
-   if (cache->cache) {
-      /* This is a bit unfortunate.  In order to keep things from randomly
-       * going away, the shader cache has to hold a reference to all shader
-       * binaries it contains.  We unref them when we destroy the cache.
-       */
-      hash_table_foreach(cache->cache, entry)
-         anv_shader_bin_unref(cache->device, entry->data);
-
-      _mesa_hash_table_destroy(cache->cache, NULL);
-   }
-
-   if (cache->nir_cache) {
-      hash_table_foreach(cache->nir_cache, entry)
-         ralloc_free(entry->data);
-
-      _mesa_hash_table_destroy(cache->nir_cache, NULL);
-   }
-
-   vk_object_base_finish(&cache->base);
-}
-
-static struct anv_shader_bin *
-anv_pipeline_cache_search_locked(struct anv_pipeline_cache *cache,
-                                 const void *key_data, uint32_t key_size)
-{
-   uint32_t vla[1 + DIV_ROUND_UP(key_size, sizeof(uint32_t))];
-   struct anv_shader_bin_key *key = (void *)vla;
-   key->size = key_size;
-   memcpy(key->data, key_data, key_size);
-
-   struct hash_entry *entry = _mesa_hash_table_search(cache->cache, key);
-   if (entry)
-      return entry->data;
-   else
-      return NULL;
-}
-
-static inline void
-anv_cache_lock(struct anv_pipeline_cache *cache)
-{
-   if (!cache->external_sync)
-      pthread_mutex_lock(&cache->mutex);
-}
-
-static inline void
-anv_cache_unlock(struct anv_pipeline_cache *cache)
-{
-   if (!cache->external_sync)
-      pthread_mutex_unlock(&cache->mutex);
-}
-
-struct anv_shader_bin *
-anv_pipeline_cache_search(struct anv_pipeline_cache *cache,
-                          const void *key_data, uint32_t key_size)
-{
-   if (!cache->cache)
-      return NULL;
-
-   anv_cache_lock(cache);
-
    struct anv_shader_bin *shader =
-      anv_pipeline_cache_search_locked(cache, key_data, key_size);
-
-   anv_cache_unlock(cache);
-
-   /* We increment refcount before handing it to the caller */
-   if (shader)
-      anv_shader_bin_ref(shader);
-
-   return shader;
-}
-
-static void
-anv_pipeline_cache_add_shader_bin(struct anv_pipeline_cache *cache,
-                                  struct anv_shader_bin *bin)
-{
-   if (!cache->cache)
-      return;
-
-   anv_cache_lock(cache);
-
-   struct hash_entry *entry = _mesa_hash_table_search(cache->cache, bin->key);
-   if (entry == NULL) {
-      /* Take a reference for the cache */
-      anv_shader_bin_ref(bin);
-      _mesa_hash_table_insert(cache->cache, bin->key, bin);
-   }
-
-   anv_cache_unlock(cache);
-}
-
-static struct anv_shader_bin *
-anv_pipeline_cache_add_shader_locked(struct anv_pipeline_cache *cache,
-                                     gl_shader_stage stage,
-                                     const void *key_data, uint32_t key_size,
-                                     const void *kernel_data,
-                                     uint32_t kernel_size,
-                                     const struct brw_stage_prog_data *prog_data,
-                                     uint32_t prog_data_size,
-                                     const struct brw_compile_stats *stats,
-                                     uint32_t num_stats,
-                                     const nir_xfb_info *xfb_info,
-                                     const struct anv_pipeline_bind_map *bind_map)
-{
-   struct anv_shader_bin *shader =
-      anv_pipeline_cache_search_locked(cache, key_data, key_size);
-   if (shader)
-      return shader;
-
-   struct anv_shader_bin *bin =
-      anv_shader_bin_create(cache->device, stage,
+      anv_shader_bin_create(device, stage,
                             key_data, key_size,
                             kernel_data, kernel_size,
-                            prog_data, prog_data_size,
-                            stats, num_stats, xfb_info, bind_map);
-   if (!bin)
+                            &prog_data.base, prog_data_size,
+                            stats, num_stats, xfb_info, &bind_map);
+   if (shader == NULL)
       return NULL;
 
-   _mesa_hash_table_insert(cache->cache, bin->key, bin);
-
-   return bin;
-}
-
-struct anv_shader_bin *
-anv_pipeline_cache_upload_kernel(struct anv_pipeline_cache *cache,
-                                 gl_shader_stage stage,
-                                 const void *key_data, uint32_t key_size,
-                                 const void *kernel_data, uint32_t kernel_size,
-                                 const struct brw_stage_prog_data *prog_data,
-                                 uint32_t prog_data_size,
-                                 const struct brw_compile_stats *stats,
-                                 uint32_t num_stats,
-                                 const nir_xfb_info *xfb_info,
-                                 const struct anv_pipeline_bind_map *bind_map)
-{
-   if (cache->cache) {
-      anv_cache_lock(cache);
-
-      struct anv_shader_bin *bin =
-         anv_pipeline_cache_add_shader_locked(cache, stage, key_data, key_size,
-                                              kernel_data, kernel_size,
-                                              prog_data, prog_data_size,
-                                              stats, num_stats,
-                                              xfb_info, bind_map);
-
-      anv_cache_unlock(cache);
-
-      /* We increment refcount before handing it to the caller */
-      if (bin)
-         anv_shader_bin_ref(bin);
-
-      return bin;
-   } else {
-      /* In this case, we're not caching it so the caller owns it entirely */
-      return anv_shader_bin_create(cache->device, stage,
-                                   key_data, key_size,
-                                   kernel_data, kernel_size,
-                                   prog_data, prog_data_size,
-                                   stats, num_stats,
-                                   xfb_info, bind_map);
-   }
-}
-
-static void
-anv_pipeline_cache_load(struct anv_pipeline_cache *cache,
-                        const void *data, size_t size)
-{
-   struct anv_device *device = cache->device;
-   struct anv_physical_device *pdevice = device->physical;
-
-   if (cache->cache == NULL)
-      return;
-
-   struct blob_reader blob;
-   blob_reader_init(&blob, data, size);
-
-   struct vk_pipeline_cache_header header;
-   blob_copy_bytes(&blob, &header, sizeof(header));
-   uint32_t count = blob_read_uint32(&blob);
-   if (blob.overrun)
-      return;
-
-   if (header.header_size < sizeof(header))
-      return;
-   if (header.header_version != VK_PIPELINE_CACHE_HEADER_VERSION_ONE)
-      return;
-   if (header.vendor_id != 0x8086)
-      return;
-   if (header.device_id != device->info.pci_device_id)
-      return;
-   if (memcmp(header.uuid, pdevice->pipeline_cache_uuid, VK_UUID_SIZE) != 0)
-      return;
-
-   for (uint32_t i = 0; i < count; i++) {
-      struct anv_shader_bin *bin =
-         anv_shader_bin_create_from_blob(device, &blob);
-      if (!bin)
-         break;
-      _mesa_hash_table_insert(cache->cache, bin->key, bin);
-   }
-}
-
-VkResult anv_CreatePipelineCache(
-    VkDevice                                    _device,
-    const VkPipelineCacheCreateInfo*            pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkPipelineCache*                            pPipelineCache)
-{
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   struct anv_pipeline_cache *cache;
-
-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO);
-
-   cache = vk_alloc2(&device->vk.alloc, pAllocator,
-                       sizeof(*cache), 8,
-                       VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (cache == NULL)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   anv_pipeline_cache_init(cache, device,
-                           device->physical->instance->pipeline_cache_enabled,
-                           pCreateInfo->flags & VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT_EXT);
-
-   if (pCreateInfo->initialDataSize > 0)
-      anv_pipeline_cache_load(cache,
-                              pCreateInfo->pInitialData,
-                              pCreateInfo->initialDataSize);
-
-   *pPipelineCache = anv_pipeline_cache_to_handle(cache);
-
-   return VK_SUCCESS;
-}
-
-void anv_DestroyPipelineCache(
-    VkDevice                                    _device,
-    VkPipelineCache                             _cache,
-    const VkAllocationCallbacks*                pAllocator)
-{
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   ANV_FROM_HANDLE(anv_pipeline_cache, cache, _cache);
-
-   if (!cache)
-      return;
-
-   anv_pipeline_cache_finish(cache);
-
-   vk_free2(&device->vk.alloc, pAllocator, cache);
-}
-
-VkResult anv_GetPipelineCacheData(
-    VkDevice                                    _device,
-    VkPipelineCache                             _cache,
-    size_t*                                     pDataSize,
-    void*                                       pData)
-{
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   ANV_FROM_HANDLE(anv_pipeline_cache, cache, _cache);
-
-   struct blob blob;
-   if (pData) {
-      blob_init_fixed(&blob, pData, *pDataSize);
-   } else {
-      blob_init_fixed(&blob, NULL, SIZE_MAX);
-   }
-
-   struct vk_pipeline_cache_header header = {
-      .header_size = sizeof(struct vk_pipeline_cache_header),
-      .header_version = VK_PIPELINE_CACHE_HEADER_VERSION_ONE,
-      .vendor_id = 0x8086,
-      .device_id = device->info.pci_device_id,
-   };
-   memcpy(header.uuid, device->physical->pipeline_cache_uuid, VK_UUID_SIZE);
-   blob_write_bytes(&blob, &header, sizeof(header));
-
-   uint32_t count = 0;
-   intptr_t count_offset = blob_reserve_uint32(&blob);
-   if (count_offset < 0) {
-      *pDataSize = 0;
-      blob_finish(&blob);
-      return VK_INCOMPLETE;
-   }
-
-   VkResult result = VK_SUCCESS;
-   if (cache->cache) {
-      hash_table_foreach(cache->cache, entry) {
-         struct anv_shader_bin *shader = entry->data;
-
-         size_t save_size = blob.size;
-         if (!anv_shader_bin_write_to_blob(shader, &blob)) {
-            /* If it fails reset to the previous size and bail */
-            blob.size = save_size;
-            result = VK_INCOMPLETE;
-            break;
-         }
-
-         count++;
-      }
-   }
-
-   blob_overwrite_uint32(&blob, count_offset, count);
-
-   *pDataSize = blob.size;
-
-   blob_finish(&blob);
-
-   return result;
-}
-
-VkResult anv_MergePipelineCaches(
-    VkDevice                                    _device,
-    VkPipelineCache                             destCache,
-    uint32_t                                    srcCacheCount,
-    const VkPipelineCache*                      pSrcCaches)
-{
-   ANV_FROM_HANDLE(anv_pipeline_cache, dst, destCache);
-
-   if (!dst->cache)
-      return VK_SUCCESS;
-
-   for (uint32_t i = 0; i < srcCacheCount; i++) {
-      ANV_FROM_HANDLE(anv_pipeline_cache, src, pSrcCaches[i]);
-      if (!src->cache)
-         continue;
-
-      hash_table_foreach(src->cache, entry) {
-         struct anv_shader_bin *bin = entry->data;
-         assert(bin);
-
-         if (_mesa_hash_table_search(dst->cache, bin->key))
-            continue;
-
-         anv_shader_bin_ref(bin);
-         _mesa_hash_table_insert(dst->cache, bin->key, bin);
-      }
-   }
-
-   return VK_SUCCESS;
+   return &shader->base;
 }
 
 struct anv_shader_bin *
 anv_device_search_for_kernel(struct anv_device *device,
-                             struct anv_pipeline_cache *cache,
+                             struct vk_pipeline_cache *cache,
                              const void *key_data, uint32_t key_size,
                              bool *user_cache_hit)
 {
-   struct anv_shader_bin *bin;
+   /* Use the default pipeline cache if none is specified */
+   if (cache == NULL)
+      cache = device->default_pipeline_cache;
 
-   *user_cache_hit = false;
-
-   if (cache) {
-      bin = anv_pipeline_cache_search(cache, key_data, key_size);
-      if (bin) {
-         *user_cache_hit = cache != &device->default_pipeline_cache;
-         return bin;
-      }
+   bool cache_hit = false;
+   struct vk_pipeline_cache_object *object =
+      vk_pipeline_cache_lookup_object(cache, key_data, key_size,
+                                      &anv_shader_bin_ops, &cache_hit);
+   if (user_cache_hit != NULL) {
+      *user_cache_hit = object != NULL && cache_hit &&
+                        cache != device->default_pipeline_cache;
    }
+   if (object == NULL)
+      return NULL;
 
-#ifdef ENABLE_SHADER_CACHE
-   struct disk_cache *disk_cache = device->physical->disk_cache;
-   if (disk_cache && device->physical->instance->pipeline_cache_enabled) {
-      cache_key cache_key;
-      disk_cache_compute_key(disk_cache, key_data, key_size, cache_key);
-
-      size_t buffer_size;
-      uint8_t *buffer = disk_cache_get(disk_cache, cache_key, &buffer_size);
-      if (buffer) {
-         struct blob_reader blob;
-         blob_reader_init(&blob, buffer, buffer_size);
-         bin = anv_shader_bin_create_from_blob(device, &blob);
-         free(buffer);
-
-         if (bin) {
-            if (cache)
-               anv_pipeline_cache_add_shader_bin(cache, bin);
-            return bin;
-         }
-      }
-   }
-#endif
-
-   return NULL;
+   return container_of(object, struct anv_shader_bin, base);
 }
 
 struct anv_shader_bin *
 anv_device_upload_kernel(struct anv_device *device,
-                         struct anv_pipeline_cache *cache,
+                         struct vk_pipeline_cache *cache,
                          gl_shader_stage stage,
                          const void *key_data, uint32_t key_size,
                          const void *kernel_data, uint32_t kernel_size,
@@ -729,127 +331,50 @@ anv_device_upload_kernel(struct anv_device *device,
                          const nir_xfb_info *xfb_info,
                          const struct anv_pipeline_bind_map *bind_map)
 {
-   struct anv_shader_bin *bin;
-   if (cache) {
-      bin = anv_pipeline_cache_upload_kernel(cache, stage, key_data, key_size,
-                                             kernel_data, kernel_size,
-                                             prog_data, prog_data_size,
-                                             stats, num_stats,
-                                             xfb_info, bind_map);
-   } else {
-      bin = anv_shader_bin_create(device, stage, key_data, key_size,
-                                  kernel_data, kernel_size,
-                                  prog_data, prog_data_size,
-                                  stats, num_stats,
-                                  xfb_info, bind_map);
-   }
+   /* Use the default pipeline cache if none is specified */
+   if (cache == NULL)
+      cache = device->default_pipeline_cache;
 
-   if (bin == NULL)
+   struct anv_shader_bin *shader =
+      anv_shader_bin_create(device, stage,
+                            key_data, key_size,
+                            kernel_data, kernel_size,
+                            prog_data, prog_data_size,
+                            stats, num_stats,
+                            xfb_info, bind_map);
+   if (shader == NULL)
       return NULL;
 
-#ifdef ENABLE_SHADER_CACHE
-   struct disk_cache *disk_cache = device->physical->disk_cache;
-   if (disk_cache) {
-      struct blob binary;
-      blob_init(&binary);
-      if (anv_shader_bin_write_to_blob(bin, &binary)) {
-         cache_key cache_key;
-         disk_cache_compute_key(disk_cache, key_data, key_size, cache_key);
+   struct vk_pipeline_cache_object *cached =
+      vk_pipeline_cache_add_object(cache, &shader->base);
 
-         disk_cache_put(disk_cache, cache_key, binary.data, binary.size, NULL);
-      }
-
-      blob_finish(&binary);
-   }
-#endif
-
-   return bin;
+   return container_of(cached, struct anv_shader_bin, base);
 }
 
-struct serialized_nir {
-   unsigned char sha1_key[20];
-   size_t size;
-   char data[0];
-};
+#define SHA1_KEY_SIZE 20
 
 struct nir_shader *
 anv_device_search_for_nir(struct anv_device *device,
-                          struct anv_pipeline_cache *cache,
+                          struct vk_pipeline_cache *cache,
                           const nir_shader_compiler_options *nir_options,
-                          unsigned char sha1_key[20],
+                          unsigned char sha1_key[SHA1_KEY_SIZE],
                           void *mem_ctx)
 {
-   if (cache && cache->nir_cache) {
-      const struct serialized_nir *snir = NULL;
+   if (cache == NULL)
+      cache = device->default_pipeline_cache;
 
-      anv_cache_lock(cache);
-      struct hash_entry *entry =
-         _mesa_hash_table_search(cache->nir_cache, sha1_key);
-      if (entry)
-         snir = entry->data;
-      anv_cache_unlock(cache);
-
-      if (snir) {
-         struct blob_reader blob;
-         blob_reader_init(&blob, snir->data, snir->size);
-
-         nir_shader *nir = nir_deserialize(mem_ctx, nir_options, &blob);
-         if (blob.overrun) {
-            ralloc_free(nir);
-         } else {
-            return nir;
-         }
-      }
-   }
-
-   return NULL;
+   return vk_pipeline_cache_lookup_nir(cache, sha1_key, SHA1_KEY_SIZE,
+                                       nir_options, NULL, mem_ctx);
 }
 
 void
 anv_device_upload_nir(struct anv_device *device,
-                      struct anv_pipeline_cache *cache,
+                      struct vk_pipeline_cache *cache,
                       const struct nir_shader *nir,
-                      unsigned char sha1_key[20])
+                      unsigned char sha1_key[SHA1_KEY_SIZE])
 {
-   if (cache && cache->nir_cache) {
-      anv_cache_lock(cache);
-      struct hash_entry *entry =
-         _mesa_hash_table_search(cache->nir_cache, sha1_key);
-      anv_cache_unlock(cache);
-      if (entry)
-         return;
+   if (cache == NULL)
+      cache = device->default_pipeline_cache;
 
-      struct blob blob;
-      blob_init(&blob);
-
-      nir_serialize(&blob, nir, false);
-      if (blob.out_of_memory) {
-         blob_finish(&blob);
-         return;
-      }
-
-      anv_cache_lock(cache);
-      /* Because ralloc isn't thread-safe, we have to do all this inside the
-       * lock.  We could unlock for the big memcpy but it's probably not worth
-       * the hassle.
-       */
-      entry = _mesa_hash_table_search(cache->nir_cache, sha1_key);
-      if (entry) {
-         blob_finish(&blob);
-         anv_cache_unlock(cache);
-         return;
-      }
-
-      struct serialized_nir *snir =
-         ralloc_size(cache->nir_cache, sizeof(*snir) + blob.size);
-      memcpy(snir->sha1_key, sha1_key, 20);
-      snir->size = blob.size;
-      memcpy(snir->data, blob.data, blob.size);
-
-      blob_finish(&blob);
-
-      _mesa_hash_table_insert(cache->nir_cache, snir->sha1_key, snir);
-
-      anv_cache_unlock(cache);
-   }
+   vk_pipeline_cache_add_nir(cache, sha1_key, SHA1_KEY_SIZE, nir);
 }

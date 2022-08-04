@@ -1,402 +1,115 @@
+# Test expects red instead of luminance, contra OES_depth_texture spec.
+# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3815
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component16,Fail
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component24,Fail
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_component16,Fail
 
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3133
-KHR-GLES2.texture_3d.copy_sub_image.rgba,Fail
-
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_linear_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_linear_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_linear_nearest_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_linear_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_mipmap_nearest_nearest_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.linear_nearest_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_linear_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_linear_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_linear_nearest_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_linear_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_mipmap_nearest_nearest_repeat_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_clamp_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_clamp_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_clamp_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_clamp_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_clamp_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_clamp_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_clamp_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_clamp_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_clamp_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_mirror_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_mirror_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_mirror_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_mirror_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_mirror_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_mirror_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_mirror_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_mirror_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_mirror_repeat_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_clamp_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_clamp_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_clamp_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_mirror_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_mirror_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_mirror_repeat,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_repeat_clamp,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_repeat_mirror,Fail
-KHR-GLES2.texture_3d.filtering.combinations.nearest_nearest_repeat_repeat_repeat,Fail
-
-KHR-GLES2.texture_3d.filtering.formats.rgba8_linear,Fail
-KHR-GLES2.texture_3d.filtering.formats.rgba8_linear_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.formats.rgba8_linear_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.formats.rgba8_nearest,Fail
-KHR-GLES2.texture_3d.filtering.formats.rgba8_nearest_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.formats.rgba8_nearest_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.128x32x64_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.128x32x64_linear_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.128x32x64_linear_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.128x32x64_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.128x32x64_nearest_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.128x32x64_nearest_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.32x64x16_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.32x64x16_linear_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.32x64x16_linear_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.32x64x16_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.32x64x16_nearest_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.32x64x16_nearest_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.3x7x5_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.3x7x5_linear_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.3x7x5_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.3x7x5_nearest_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.3x7x5_nearest_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.4x8x8_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.4x8x8_linear_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.4x8x8_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.4x8x8_nearest_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.4x8x8_nearest_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.63x63x63_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.63x63x63_linear_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.63x63x63_linear_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.63x63x63_nearest,Fail
-KHR-GLES2.texture_3d.filtering.sizes.63x63x63_nearest_mipmap_linear,Fail
-KHR-GLES2.texture_3d.filtering.sizes.63x63x63_nearest_mipmap_nearest,Fail
-KHR-GLES2.texture_3d.framebuffer_texture.rgba,Fail
-KHR-GLES2.texture_3d.sub_image.rgba8,Fail
-
+#  Creating OpenGL ES 3 context
+# Fail, context: 0x00000000, error: EGL_BAD_MATCH
+# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3816
 dEQP-EGL.functional.create_context.no_config,Fail
 
+# wide line outside the viewport incorrectly clipped out when ES wants it
+# rendered as a quad and clipped appropriately.  I think by expanding
+# CLIPPER_XY_SCALING to have a guard band we might get these to work.
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
+
 dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_masked,Fail
-dEQP-GLES2.functional.draw.draw_arrays.line_loop.multiple_attributes,Fail
-dEQP-GLES2.functional.draw.draw_arrays.line_loop.single_attribute,Fail
+
+# A glTexImage, glDraw, glTexSubImage sequence into a texture is missing what looks like the drawing.
 dEQP-GLES2.functional.fbo.render.texsubimage.after_render_tex2d_rgba,Fail
+# A glTexImage, glDraw, glTexSubImage, glDraw sequence into a texture is missing what looks like the first drawing.
 dEQP-GLES2.functional.fbo.render.texsubimage.between_render_tex2d_rgba,Fail
-dEQP-GLES2.functional.negative_api.vertex_array.vertex_attrib,Fail
-dEQP-GLES2.functional.negative_api.vertex_array.vertex_attribv,Fail
+
+# Sampling grid slightly off in test 2?
 dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_mirror_rgba8888,Fail
 dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_repeat_rgba8888,Fail
 dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_nearest_linear_mirror_rgba8888,Fail
 dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_nearest_linear_repeat_rgba8888,Fail
+
+# " Warning: High precision not supported in fragment shaders.
+#   ERROR: Image verification failed, found 2048 invalid pixels!"
+# one of the magnified pixels is (0xff, 0x29,0xd6) instead of (0xff,0x2d,0xd2).
+# We do support highp, so we should fix glGetShaderPrecisionFormat reporting.
 dEQP-GLES2.functional.texture.mipmap.2d.basic.linear_linear_repeat_non_square,Fail
 dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_clamp_non_square,Fail
 dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_mirror_non_square,Fail
 dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_repeat_non_square,Fail
+
+# Sequence of glTexImage, glDraw, glCopyTexSubImage.
+# background red/green checkerboard on the left side is incorrectly white.
 dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_rgba,Fail
+# Maybe it was copied as RGB instead of RGBA?
 dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_rgba,Fail
+
+# One of the pixels on the left edge near the bottom is wrong for both min and
+# mag.  Also a line of pixels through the image in minification.
 dEQP-GLES2.functional.texture.wrap.clamp_clamp_nearest_npot_etc1,Fail
 
-glx@glx-make-current,Crash
+# Despite exposing GL 2.1, the HW doesn't actually support 3D textures so we set
+# 0 max levels.  These tests fail (or assertion fail) as a result.
+spec@!opengl 1.1@max-texture-size,Crash
+spec@!opengl 1.2@copyteximage 3d,Fail
+spec@!opengl 1.2@getteximage-targets 3d,Fail
+spec@!opengl 1.2@tex3d-maxsize,Fail
+spec@!opengl 1.2@tex3d,Fail
+spec@!opengl 1.2@texture-packed-formats,Fail
+spec@!opengl 1.2@texwrap 3d bordercolor,Fail
+spec@!opengl 1.2@texwrap 3d proj bordercolor,Fail
+spec@!opengl 1.2@texwrap 3d proj,Fail
+spec@!opengl 1.2@texwrap 3d proj@GL_RGBA8- NPOT- projected,Fail
+spec@!opengl 1.2@texwrap 3d proj@GL_RGBA8- projected,Fail
+spec@!opengl 1.2@texwrap 3d proj@GL_RGBA8- swizzled- projected,Fail
+spec@!opengl 1.2@texwrap 3d,Fail
+spec@!opengl 1.2@texwrap 3d@GL_RGBA8- NPOT,Fail
+spec@!opengl 1.2@texwrap 3d@GL_RGBA8- swizzled,Fail
+spec@!opengl 1.2@texwrap 3d@GL_RGBA8,Fail
+spec@!opengl 1.3@tex3d-depth1,Fail
+spec@!opengl 2.0@tex3d-npot,Fail
+spec@!opengl 2.1@minmax,Fail
+spec@arb_framebuffer_object@fbo-generatemipmap-3d,Fail
+spec@arb_framebuffer_object@fbo-incomplete,Fail
+spec@arb_framebuffer_object@fbo-incomplete@invalid slice of 3D texture,Fail
+spec@arb_get_texture_sub_image@arb_get_texture_sub_image-get,Fail
+spec@arb_robustness@arb_robustness_client-mem-bounds,Fail
+spec@arb_texture_multisample@arb_texture_multisample-teximage-3d-multisample,Fail
+spec@arb_texture_storage@texture-storage,Crash
+spec@arb_texture_storage@texture-storage@3D mipmapped ,Fail
+spec@arb_texture_storage@texture-storage@3D mipmapped (EXT_dsa),Fail
+spec@arb_texture_storage@texture-storage@3D non-mipmapped ,Fail
+spec@arb_texture_storage@texture-storage@3D non-mipmapped (EXT_dsa),Fail
+spec@ext_direct_state_access@multi-texture@MultiTexImage3DEXT,Fail
+spec@ext_direct_state_access@textures,Crash
+spec@ext_direct_state_access@textures@CopyTextureSubImage3DEXT + display list GL_COMPILE_AND_EXECUTE,Fail
+spec@ext_direct_state_access@textures@CopyTextureSubImage3DEXT + display list GL_COMPILE,Fail
+spec@ext_direct_state_access@textures@CopyTextureSubImage3DEXT,Fail
+spec@ext_direct_state_access@textures@GL_PROXY_TEXTURE_3D + glTex* + display list GL_COMPILE_AND_EXECUTE,Fail
+spec@ext_direct_state_access@textures@GL_PROXY_TEXTURE_3D + glTex* + display list GL_COMPILE,Fail
+spec@ext_direct_state_access@textures@GL_PROXY_TEXTURE_3D + glTex*,Fail
+spec@ext_direct_state_access@textures@TextureImage3DEXT + display list GL_COMPILE_AND_EXECUTE,Fail
+spec@ext_direct_state_access@textures@TextureImage3DEXT + display list GL_COMPILE,Fail
+spec@ext_direct_state_access@textures@TextureImage3DEXT,Fail
+spec@ext_direct_state_access@textures@TextureSubImage3DEXT + display list GL_COMPILE_AND_EXECUTE,Fail
+spec@ext_direct_state_access@textures@TextureSubImage3DEXT + display list GL_COMPILE,Fail
+spec@ext_direct_state_access@textures@TextureSubImage3DEXT,Fail
+spec@ext_framebuffer_object@fbo-3d,Fail
+spec@glsl-1.10@execution@texture3d-computed-coord,Fail
+spec@glsl-1.10@execution@texture3d,Fail
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 3d,Fail
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 3d,Fail
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 3d,Fail
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 3d,Fail
+spec@khr_texture_compression_astc@basic-gl,Fail
+
 glx@glx-multithread-buffer,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
-glx@glx_arb_create_context_no_error@no error,Fail
+# X error 167 (GLXBadFBConfig (9)) was generated, but X error 8 was expected.
+glx@glx_arb_create_context_no_error@no error,Crash
+
 glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
 glx@glx_ext_import_context@get current display,Fail
@@ -1105,6 +818,7 @@ spec@!opengl 1.1@linestipple@Factor 3x,Fail
 spec@!opengl 1.1@linestipple@Line loop,Fail
 spec@!opengl 1.1@linestipple@Line strip,Fail
 spec@!opengl 1.1@linestipple@Restarting lines within a single Begin-End block,Fail
+
 spec@!opengl 1.1@polygon-mode,Fail
 spec@!opengl 1.1@polygon-mode-offset,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on bottom edge,Fail
@@ -1172,23 +886,10 @@ spec@!opengl 1.1@texwrap formats@GL_RGBA16- swizzled,Fail
 spec@!opengl 1.1@texwrap formats@GL_RGBA8,Fail
 spec@!opengl 1.1@texwrap formats@GL_RGBA8- NPOT,Fail
 spec@!opengl 1.1@texwrap formats@GL_RGBA8- swizzled,Fail
-spec@!opengl 1.2@copyteximage 3d,Fail
-spec@!opengl 1.2@getteximage-targets 3d,Fail
 spec@!opengl 1.2@lodclamp,Fail
 spec@!opengl 1.2@lodclamp-between,Fail
 spec@!opengl 1.2@lodclamp-between-max,Fail
 spec@!opengl 1.2@mipmap-setup,Fail
-spec@!opengl 1.2@tex3d,Fail
-spec@!opengl 1.2@tex3d-maxsize,Fail
-spec@!opengl 1.2@texwrap 3d proj,Fail
-spec@!opengl 1.2@texwrap 3d proj@GL_RGBA8- NPOT- projected,Fail
-spec@!opengl 1.2@texwrap 3d proj@GL_RGBA8- projected,Fail
-spec@!opengl 1.2@texwrap 3d proj@GL_RGBA8- swizzled- projected,Fail
-spec@!opengl 1.2@texwrap 3d,Fail
-spec@!opengl 1.2@texwrap 3d@GL_RGBA8,Fail
-spec@!opengl 1.2@texwrap 3d@GL_RGBA8- NPOT,Fail
-spec@!opengl 1.2@texwrap 3d@GL_RGBA8- swizzled,Fail
-spec@!opengl 1.3@tex3d-depth1,Fail
 spec@!opengl 1.4@gl-1.4-polygon-offset,Fail
 spec@!opengl 1.4@tex-miplevel-selection,Fail
 spec@!opengl 1.4@tex-miplevel-selection-lod,Fail
@@ -1198,8 +899,6 @@ spec@!opengl 2.0@attrib-assignments,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
 spec@!opengl 2.0@occlusion-query-discard,Fail
-spec@!opengl 2.0@tex3d-npot,Fail
-spec@!opengl 2.1@minmax,Fail
 spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
@@ -1233,7 +932,6 @@ spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_stencil_index8,Fail
 spec@arb_framebuffer_object@fbo-attachments-blit-scaled-linear,Fail
 spec@arb_framebuffer_object@fbo-blit-stretch,Fail
-spec@arb_framebuffer_object@fbo-generatemipmap-3d,Fail
 spec@arb_framebuffer_object@fbo-mipmap-copypix,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels draw stencil,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels read stencil,Fail
@@ -1265,14 +963,8 @@ spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail
 spec@arb_sampler_objects@sampler-objects,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-texturelod-01,Fail
-spec@arb_texture_multisample@arb_texture_multisample-teximage-3d-multisample,Fail
 spec@arb_texture_rectangle@1-1-linear-texture,Fail
 spec@arb_texture_rectangle@texrect-many,Crash
-spec@arb_texture_storage@texture-storage,Fail
-spec@arb_texture_storage@texture-storage@3D mipmapped ,Fail
-spec@arb_texture_storage@texture-storage@3D mipmapped (EXT_dsa),Fail
-spec@arb_texture_storage@texture-storage@3D non-mipmapped ,Fail
-spec@arb_texture_storage@texture-storage@3D non-mipmapped (EXT_dsa),Fail
 spec@arb_vertex_program@minmax,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear,Fail
@@ -1282,27 +974,13 @@ spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,F
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
 spec@ext_direct_state_access@multi-texture,Crash
-spec@ext_direct_state_access@multi-texture@MultiTexImage3DEXT,Fail
 spec@ext_direct_state_access@multi-texture@MultiTexSubImage1DEXT,Fail
-spec@ext_direct_state_access@textures,Fail
-spec@ext_direct_state_access@textures@CopyTextureSubImage3DEXT + display list GL_COMPILE,Fail
-spec@ext_direct_state_access@textures@CopyTextureSubImage3DEXT + display list GL_COMPILE_AND_EXECUTE,Fail
-spec@ext_direct_state_access@textures@CopyTextureSubImage3DEXT,Fail
 spec@ext_direct_state_access@textures@GL_PROXY_TEXTURE_1D + glTex* + display list GL_COMPILE,Fail
 spec@ext_direct_state_access@textures@GL_PROXY_TEXTURE_1D + glTex* + display list GL_COMPILE_AND_EXECUTE,Fail
 spec@ext_direct_state_access@textures@GL_PROXY_TEXTURE_1D + glTex*,Fail
-spec@ext_direct_state_access@textures@GL_PROXY_TEXTURE_3D + glTex* + display list GL_COMPILE,Fail
-spec@ext_direct_state_access@textures@GL_PROXY_TEXTURE_3D + glTex* + display list GL_COMPILE_AND_EXECUTE,Fail
-spec@ext_direct_state_access@textures@GL_PROXY_TEXTURE_3D + glTex*,Fail
-spec@ext_direct_state_access@textures@TextureImage3DEXT + display list GL_COMPILE,Fail
-spec@ext_direct_state_access@textures@TextureImage3DEXT + display list GL_COMPILE_AND_EXECUTE,Fail
-spec@ext_direct_state_access@textures@TextureImage3DEXT,Fail
 spec@ext_direct_state_access@textures@TextureSubImage2DEXT + display list GL_COMPILE,Fail
 spec@ext_direct_state_access@textures@TextureSubImage2DEXT + display list GL_COMPILE_AND_EXECUTE,Fail
 spec@ext_direct_state_access@textures@TextureSubImage2DEXT,Fail
-spec@ext_direct_state_access@textures@TextureSubImage3DEXT + display list GL_COMPILE,Fail
-spec@ext_direct_state_access@textures@TextureSubImage3DEXT + display list GL_COMPILE_AND_EXECUTE,Fail
-spec@ext_direct_state_access@textures@TextureSubImage3DEXT,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 
 # Remaining crashes are CMA allocation failures.
@@ -1346,7 +1024,6 @@ spec@ext_framebuffer_multisample@unaligned-blit 4 depth upsample,Crash
 spec@ext_framebuffer_multisample@upsample 2 stencil,Fail
 spec@ext_framebuffer_multisample@upsample 4 stencil,Fail
 
-spec@ext_framebuffer_object@fbo-3d,Fail
 spec@ext_framebuffer_object@fbo-blending-format-quirks,Fail
 spec@ext_framebuffer_object@fbo-depth-sample-compare,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index1-blit,Fail
@@ -1467,7 +1144,6 @@ spec@glsl-1.10@execution@glsl-fs-convolution-2,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-sampler-numbering-2,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-sampler-numbering-3,Fail
 spec@glsl-1.10@execution@samplers@in-parameter-array,Fail
-spec@glsl-1.10@execution@texture3d,Fail
 spec@glsl-1.20@built-in constants,Fail
 spec@glsl-1.20@built-in constants@gl_MaxVertexAttribs,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-max,Fail
@@ -1476,13 +1152,11 @@ spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 1d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 1dshadow,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 2d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 3d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() cube,Crash
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 1d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 1dshadow,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 2d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 3d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) cube,Crash
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d_projvec4,Fail
@@ -1490,14 +1164,13 @@ spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1dshadow,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2d_projvec4,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 3d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 1d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 1d_projvec4,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 1dshadow,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d_projvec4,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 3d,Fail
+
 spec@glsl-1.20@execution@vs-nan-builtin-max,Fail
 spec@glsl-1.20@execution@vs-nan-builtin-min,Fail
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
@@ -1515,3 +1188,6 @@ spec@khr_texture_compression_astc@miptree-gles ldr@LDR Profile,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@oes_compressed_etc1_rgb8_texture@miptree,Fail
+spec@!opengl 1.0@depth-clear-precision-check,Fail
+spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
+spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail

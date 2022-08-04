@@ -187,6 +187,12 @@ struct st_egl_image
    unsigned layer;
    /* GL internal format. */
    unsigned internalformat;
+
+   /* one of __DRI_YUV_COLOR_SPACE_* */
+   unsigned yuv_color_space;
+
+   /* one of __DRI_YUV_RANGE_* */
+   unsigned yuv_range;
 };
 
 /**

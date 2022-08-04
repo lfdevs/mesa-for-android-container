@@ -75,25 +75,8 @@ idep_libintel_common = declare_dependency(
 )
 
 install_intel_gpu_tests = get_option('install-intel-gpu-tests')
-
-if install_intel_gpu_tests
-  foreach g : [['70', 'gfx7'], ['75', 'hsw'], ['80', 'gfx8'],
-               ['90', 'gfx9'], ['110', 'gfx11'], ['120', 'gfx12'],
-               ['125', 'gfx125']]
-    executable(
-      'intel_@0@_mi_builder_test'.format(g[1]),
-      files('tests/mi_builder_test.cpp'),
-      cpp_args : [
-        cpp_msvc_compat_args,
-        '-DGFX_VERx10=@0@'.format(g[0])
-      ],
-      gnu_symbol_visibility : 'hidden',
-      include_directories : [inc_include, inc_src, inc_intel],
-      link_with : [libintel_dev],
-      dependencies : [dep_libdrm, idep_gtest, idep_genxml, idep_mesautil],
-      install : install_intel_gpu_tests,
-    )
-  endforeach
+if install_intel_gpu_tests and not with_tests
+  error('`install-intel-gpu-tests` requires `build-tests`')
 endif
 
 if with_tests and not with_platform_android
@@ -126,4 +109,22 @@ if with_tests and not with_platform_android
     args : ['-quiet'],
     suite : ['intel'],
   )
+
+  foreach g : [['70', 'gfx7'], ['75', 'hsw'], ['80', 'gfx8'],
+               ['90', 'gfx9'], ['110', 'gfx11'], ['120', 'gfx12'],
+               ['125', 'gfx125']]
+    executable(
+      'intel_@0@_mi_builder_test'.format(g[1]),
+      files('tests/mi_builder_test.cpp'),
+      cpp_args : [
+        cpp_msvc_compat_args,
+        '-DGFX_VERx10=@0@'.format(g[0])
+      ],
+      gnu_symbol_visibility : 'hidden',
+      include_directories : [inc_include, inc_src, inc_intel],
+      link_with : [libintel_dev],
+      dependencies : [dep_libdrm, idep_gtest, idep_genxml, idep_mesautil],
+      install : install_intel_gpu_tests,
+    )
+  endforeach
 endif

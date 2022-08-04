@@ -120,7 +120,8 @@ i915_ioctl_gem_mmap(int fd, unsigned long request, void *arg)
       return -1;
 
    if (!bo->map)
-      bo->map = drm_shim_mmap(shim_fd, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED, -1, (uintptr_t)bo);
+      bo->map = drm_shim_mmap(shim_fd, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED, -1,
+                              drm_shim_bo_get_mmap_offset(shim_fd, bo));
 
    mmap_arg->addr_ptr = (uint64_t) (bo->map + mmap_arg->offset);
 
@@ -292,6 +293,7 @@ query_write_topology(struct drm_i915_query_item *item)
    info->subslice_offset = DIV_ROUND_UP(i915.devinfo.num_slices, 8);
    info->subslice_stride = DIV_ROUND_UP(i915.devinfo.num_subslices[0], 8);
    info->eu_offset = info->subslice_offset + info->max_slices * info->subslice_stride;
+   info->eu_stride = DIV_ROUND_UP(info->max_eus_per_subslice, 8);
 
    uint32_t slice_mask = (1u << i915.devinfo.num_slices) - 1;
    for (uint32_t i = 0; i < info->subslice_offset; i++)

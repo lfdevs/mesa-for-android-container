@@ -2025,7 +2025,6 @@ ir_variable::ir_variable(const struct glsl_type *type, const char *name,
    this->data.explicit_component = false;
    this->data.has_initializer = false;
    this->data.is_implicit_initializer = false;
-   this->data.is_unmatched_generic_inout = false;
    this->data.is_xfb = false;
    this->data.is_xfb_only = false;
    this->data.explicit_xfb_buffer = false;

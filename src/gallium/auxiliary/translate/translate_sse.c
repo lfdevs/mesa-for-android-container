@@ -111,8 +111,8 @@ struct translate_sse
    struct x86_function elt8_func;
    struct x86_function *func;
 
-   PIPE_ALIGN_VAR(16) float consts[NUM_FLOAT_CONSTS][4];
-   PIPE_ALIGN_VAR(16) float uconsts[NUM_UNSIGNED_CONSTS][4];
+   alignas(16) float consts[NUM_FLOAT_CONSTS][4];
+   alignas(16) float uconsts[NUM_UNSIGNED_CONSTS][4];
    int8_t reg_to_const[16];
    int8_t const_to_reg[NUM_FLOAT_CONSTS + NUM_UNSIGNED_CONSTS];
 

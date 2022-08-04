@@ -64,11 +64,11 @@ brw_nir_lower_load_uniforms_impl(nir_builder *b, nir_instr *instr,
                                     nir_load_mesh_inline_data_intel(b, 64, 0), 0);
 }
 
-static void
+static bool
 brw_nir_lower_load_uniforms(nir_shader *nir)
 {
-   nir_shader_lower_instructions(nir, brw_nir_lower_load_uniforms_filter,
-                                 brw_nir_lower_load_uniforms_impl, NULL);
+   return nir_shader_lower_instructions(nir, brw_nir_lower_load_uniforms_filter,
+                                        brw_nir_lower_load_uniforms_impl, NULL);
 }
 
 static inline int
@@ -107,8 +107,8 @@ brw_nir_lower_tue_outputs(nir_shader *nir, brw_tue_map *map)
       var->data.driver_location = 0;
    }
 
-   nir_lower_io(nir, nir_var_shader_out, type_size_scalar_dwords,
-                nir_lower_io_lower_64bit_to_32);
+   NIR_PASS(_, nir, nir_lower_io, nir_var_shader_out,
+            type_size_scalar_dwords, nir_lower_io_lower_64bit_to_32);
 
    /* From bspec: "It is suggested that SW reserve the 16 bytes following the
     * TUE Header, and therefore start the SW-defined data structure at 32B
@@ -121,10 +121,10 @@ brw_nir_lower_tue_outputs(nir_shader *nir, brw_tue_map *map)
     * set it to start after the header.
     */
    nir->info.task_payload_size = map->per_task_data_start_dw * 4;
-   nir_lower_vars_to_explicit_types(nir, nir_var_mem_task_payload,
-                                    shared_type_info);
-   nir_lower_explicit_io(nir, nir_var_mem_task_payload,
-                         nir_address_format_32bit_offset);
+   NIR_PASS(_, nir, nir_lower_vars_to_explicit_types,
+            nir_var_mem_task_payload, shared_type_info);
+   NIR_PASS(_, nir, nir_lower_explicit_io,
+            nir_var_mem_task_payload, nir_address_format_32bit_offset);
 
    map->size_dw = ALIGN(DIV_ROUND_UP(nir->info.task_payload_size, 4), 8);
 }
@@ -190,7 +190,7 @@ brw_nir_adjust_payload(nir_shader *shader, const struct brw_compiler *compiler)
    bool adjusted = false;
    NIR_PASS(adjusted, shader, brw_nir_adjust_task_payload_offsets);
    if (adjusted) /* clean up the mess created by offset adjustments */
-      NIR_PASS_V(shader, nir_opt_constant_folding);
+      NIR_PASS(_, shader, nir_opt_constant_folding);
 }
 
 const unsigned *
@@ -214,10 +214,10 @@ brw_compile_task(const struct brw_compiler *compiler,
    prog_data->uses_drawid =
       BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_DRAW_ID);
 
-   NIR_PASS_V(nir, brw_nir_lower_tue_outputs, &prog_data->map);
+   brw_nir_lower_tue_outputs(nir, &prog_data->map);
 
    const unsigned required_dispatch_width =
-      brw_required_dispatch_width(&nir->info, key->base.subgroup_size_type);
+      brw_required_dispatch_width(&nir->info);
 
    fs_visitor *v[3]     = {0};
    const char *error[3] = {0};
@@ -232,8 +232,8 @@ brw_compile_task(const struct brw_compiler *compiler,
       nir_shader *shader = nir_shader_clone(mem_ctx, nir);
       brw_nir_apply_key(shader, compiler, &key->base, dispatch_width, true /* is_scalar */);
 
-      NIR_PASS_V(shader, brw_nir_lower_load_uniforms);
-      NIR_PASS_V(shader, brw_nir_lower_simd, dispatch_width);
+      NIR_PASS(_, shader, brw_nir_lower_load_uniforms);
+      NIR_PASS(_, shader, brw_nir_lower_simd, dispatch_width);
 
       brw_postprocess_nir(shader, compiler, true /* is_scalar */, debug_enabled,
                           key->base.robust_buffer_access);
@@ -300,8 +300,12 @@ brw_nir_lower_tue_inputs(nir_shader *nir, const brw_tue_map *map)
 
    nir->info.task_payload_size = map->per_task_data_start_dw * 4;
 
-   if (nir_lower_vars_to_explicit_types(nir, nir_var_mem_task_payload,
-                                        shared_type_info)) {
+   bool progress = false;
+
+   NIR_PASS(progress, nir, nir_lower_vars_to_explicit_types,
+            nir_var_mem_task_payload, shared_type_info);
+
+   if (progress) {
       /* The types for Task Output and Mesh Input should match, so their sizes
        * should also match.
        */
@@ -314,8 +318,8 @@ brw_nir_lower_tue_inputs(nir_shader *nir, const brw_tue_map *map)
       nir->info.task_payload_size = 0;
    }
 
-   nir_lower_explicit_io(nir, nir_var_mem_task_payload,
-                         nir_address_format_32bit_offset);
+   NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_task_payload,
+            nir_address_format_32bit_offset);
 }
 
 /* Mesh URB Entry consists of an initial section
@@ -375,6 +379,8 @@ brw_compute_mue_map(struct nir_shader *nir, struct brw_mue_map *map)
    /* TODO(mesh): Multiview. */
    map->per_primitive_header_size_dw =
          (nir->info.outputs_written & (BITFIELD64_BIT(VARYING_SLOT_VIEWPORT) |
+                                       BITFIELD64_BIT(VARYING_SLOT_CULL_PRIMITIVE) |
+                                       BITFIELD64_BIT(VARYING_SLOT_PRIMITIVE_SHADING_RATE) |
                                        BITFIELD64_BIT(VARYING_SLOT_LAYER))) ? 8 : 0;
 
    map->per_primitive_start_dw = ALIGN(primitive_list_size_dw, 8);
@@ -385,11 +391,17 @@ brw_compute_mue_map(struct nir_shader *nir, struct brw_mue_map *map)
 
       unsigned start;
       switch (location) {
+      case VARYING_SLOT_PRIMITIVE_SHADING_RATE:
+         start = map->per_primitive_start_dw + 0;
+         break;
       case VARYING_SLOT_LAYER:
          start = map->per_primitive_start_dw + 1; /* RTAIndex */
          break;
       case VARYING_SLOT_VIEWPORT:
          start = map->per_primitive_start_dw + 2;
+         break;
+      case VARYING_SLOT_CULL_PRIMITIVE:
+         start = map->per_primitive_start_dw + 3;
          break;
       default:
          assert(location == VARYING_SLOT_PRIMITIVE_ID ||
@@ -516,8 +528,10 @@ brw_nir_lower_mue_outputs(nir_shader *nir, const struct brw_mue_map *map)
       var->data.driver_location = map->start_dw[location];
    }
 
-   nir_lower_io(nir, nir_var_shader_out, type_size_scalar_dwords,
-                nir_lower_io_lower_64bit_to_32);
+   NIR_PASS(_, nir, nir_lower_io, nir_var_shader_out,
+            type_size_scalar_dwords, nir_lower_io_lower_64bit_to_32);
+
+   NIR_PASS(_, nir, brw_nir_lower_shading_rate_output);
 }
 
 static void
@@ -660,13 +674,14 @@ brw_nir_adjust_offset_for_arrayed_indices_instr(nir_builder *b, nir_instr *instr
    }
 }
 
-static void
+static bool
 brw_nir_adjust_offset_for_arrayed_indices(nir_shader *nir, const struct brw_mue_map *map)
 {
-   nir_shader_instructions_pass(nir, brw_nir_adjust_offset_for_arrayed_indices_instr,
-                                nir_metadata_block_index |
-                                nir_metadata_dominance,
-                                (void *)map);
+   return nir_shader_instructions_pass(nir,
+                                       brw_nir_adjust_offset_for_arrayed_indices_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       (void *)map);
 }
 
 const unsigned *
@@ -699,13 +714,13 @@ brw_compile_mesh(const struct brw_compiler *compiler,
    prog_data->uses_drawid =
       BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_DRAW_ID);
 
-   NIR_PASS_V(nir, brw_nir_lower_tue_inputs, params->tue_map);
+   brw_nir_lower_tue_inputs(nir, params->tue_map);
 
    brw_compute_mue_map(nir, &prog_data->map);
-   NIR_PASS_V(nir, brw_nir_lower_mue_outputs, &prog_data->map);
+   brw_nir_lower_mue_outputs(nir, &prog_data->map);
 
    const unsigned required_dispatch_width =
-      brw_required_dispatch_width(&nir->info, key->base.subgroup_size_type);
+      brw_required_dispatch_width(&nir->info);
 
    fs_visitor *v[3]     = {0};
    const char *error[3] = {0};
@@ -728,12 +743,12 @@ brw_compile_mesh(const struct brw_compiler *compiler,
 
       brw_nir_apply_key(shader, compiler, &key->base, dispatch_width, true /* is_scalar */);
 
-      NIR_PASS_V(shader, brw_nir_adjust_offset_for_arrayed_indices, &prog_data->map);
+      NIR_PASS(_, shader, brw_nir_adjust_offset_for_arrayed_indices, &prog_data->map);
       /* Load uniforms can do a better job for constants, so fold before it. */
-      NIR_PASS_V(shader, nir_opt_constant_folding);
-      NIR_PASS_V(shader, brw_nir_lower_load_uniforms);
+      NIR_PASS(_, shader, nir_opt_constant_folding);
+      NIR_PASS(_, shader, brw_nir_lower_load_uniforms);
 
-      NIR_PASS_V(shader, brw_nir_lower_simd, dispatch_width);
+      NIR_PASS(_, shader, brw_nir_lower_simd, dispatch_width);
 
       brw_postprocess_nir(shader, compiler, true /* is_scalar */, debug_enabled,
                           key->base.robust_buffer_access);
@@ -882,24 +897,25 @@ emit_urb_direct_writes(const fs_builder &bld, nir_intrinsic_instr *instr,
       for (unsigned q = 0; q < bld.dispatch_width() / 8; q++) {
          fs_builder bld8 = bld.group(8, q);
 
-         fs_reg payload_srcs[6];
-         unsigned p = 0;
-
-         payload_srcs[p++] = urb_handle;
-         payload_srcs[p++] = brw_imm_ud(first_mask << 16);
-         const unsigned header_size = p;
+         fs_reg payload_srcs[4];
+         unsigned length = 0;
 
          for (unsigned i = 0; i < comp_shift; i++)
-            payload_srcs[p++] = reg_undef;
+            payload_srcs[length++] = reg_undef;
 
          for (unsigned c = 0; c < first_comps; c++)
-            payload_srcs[p++] = quarter(offset(src, bld, c), q);
+            payload_srcs[length++] = quarter(offset(src, bld, c), q);
 
-         fs_reg payload = bld8.vgrf(BRW_REGISTER_TYPE_UD, p);
-         bld8.LOAD_PAYLOAD(payload, payload_srcs, p, header_size);
+         fs_reg srcs[URB_LOGICAL_NUM_SRCS];
+         srcs[URB_LOGICAL_SRC_HANDLE] = urb_handle;
+         srcs[URB_LOGICAL_SRC_CHANNEL_MASK] = brw_imm_ud(first_mask << 16);
+         srcs[URB_LOGICAL_SRC_DATA] = fs_reg(VGRF, bld.shader->alloc.allocate(length),
+                                             BRW_REGISTER_TYPE_F);
+         bld.LOAD_PAYLOAD(srcs[URB_LOGICAL_SRC_DATA], payload_srcs, length, 0);
 
-         fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_WRITE_SIMD8_MASKED, reg_undef, payload);
-         inst->mlen = p;
+         fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_WRITE_LOGICAL,
+                                   reg_undef, srcs, ARRAY_SIZE(srcs));
+         inst->mlen = 2 + length;
          inst->offset = urb_global_offset;
          assert(inst->offset < 2048);
       }
@@ -912,21 +928,22 @@ emit_urb_direct_writes(const fs_builder &bld, nir_intrinsic_instr *instr,
       for (unsigned q = 0; q < bld.dispatch_width() / 8; q++) {
          fs_builder bld8 = bld.group(8, q);
 
-         fs_reg payload_srcs[6];
-         unsigned p = 0;
-
-         payload_srcs[p++] = urb_handle;
-         payload_srcs[p++] = brw_imm_ud(second_mask << 16);
-         const unsigned header_size = p;
+         fs_reg payload_srcs[4];
+         unsigned length = 0;
 
          for (unsigned c = 0; c < second_comps; c++)
-            payload_srcs[p++] = quarter(offset(src, bld, c + first_comps), q);
+            payload_srcs[length++] = quarter(offset(src, bld, c + first_comps), q);
 
-         fs_reg payload = bld8.vgrf(BRW_REGISTER_TYPE_UD, p);
-         bld8.LOAD_PAYLOAD(payload, payload_srcs, p, header_size);
+         fs_reg srcs[URB_LOGICAL_NUM_SRCS];
+         srcs[URB_LOGICAL_SRC_HANDLE] = urb_handle;
+         srcs[URB_LOGICAL_SRC_CHANNEL_MASK] = brw_imm_ud(second_mask << 16);
+         srcs[URB_LOGICAL_SRC_DATA] = fs_reg(VGRF, bld.shader->alloc.allocate(length),
+                                             BRW_REGISTER_TYPE_F);
+         bld.LOAD_PAYLOAD(srcs[URB_LOGICAL_SRC_DATA], payload_srcs, length, 0);
 
-         fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_WRITE_SIMD8_MASKED, reg_undef, payload);
-         inst->mlen = p;
+         fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_WRITE_LOGICAL,
+                                   reg_undef, srcs, ARRAY_SIZE(srcs));
+         inst->mlen = 2 + length;
          inst->offset = urb_global_offset;
          assert(inst->offset < 2048);
       }
@@ -976,20 +993,23 @@ emit_urb_indirect_writes(const fs_builder &bld, nir_intrinsic_instr *instr,
 
          bld8.SHR(off, off, brw_imm_ud(2));
 
-         fs_reg payload_srcs[7];
-         int x = 0;
-         payload_srcs[x++] = urb_handle;
-         payload_srcs[x++] = off;
-         payload_srcs[x++] = mask;
+         fs_reg payload_srcs[4];
+         unsigned length = 0;
 
          for (unsigned j = 0; j < 4; j++)
-            payload_srcs[x++] = quarter(src_comp, q);
+            payload_srcs[length++] = quarter(src_comp, q);
 
-         fs_reg payload = bld8.vgrf(BRW_REGISTER_TYPE_UD, x);
-         bld8.LOAD_PAYLOAD(payload, payload_srcs, x, 3);
+         fs_reg srcs[URB_LOGICAL_NUM_SRCS];
+         srcs[URB_LOGICAL_SRC_HANDLE] = urb_handle;
+         srcs[URB_LOGICAL_SRC_PER_SLOT_OFFSETS] = off;
+         srcs[URB_LOGICAL_SRC_CHANNEL_MASK] = mask;
+         srcs[URB_LOGICAL_SRC_DATA] = fs_reg(VGRF, bld.shader->alloc.allocate(length),
+                                             BRW_REGISTER_TYPE_F);
+         bld.LOAD_PAYLOAD(srcs[URB_LOGICAL_SRC_DATA], payload_srcs, length, 0);
 
-         fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_WRITE_SIMD8_MASKED_PER_SLOT, reg_undef, payload);
-         inst->mlen = x;
+         fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_WRITE_LOGICAL,
+                                   reg_undef, srcs, ARRAY_SIZE(srcs));
+         inst->mlen = 3 + length;
          inst->offset = 0;
       }
    }
@@ -1022,8 +1042,11 @@ emit_urb_direct_reads(const fs_builder &bld, nir_intrinsic_instr *instr,
 
    fs_builder ubld8 = bld.group(8, 0).exec_all();
    fs_reg data = ubld8.vgrf(BRW_REGISTER_TYPE_UD, num_regs);
+   fs_reg srcs[URB_LOGICAL_NUM_SRCS];
+   srcs[URB_LOGICAL_SRC_HANDLE] = urb_handle;
 
-   fs_inst *inst = ubld8.emit(SHADER_OPCODE_URB_READ_SIMD8, data, urb_handle);
+   fs_inst *inst = ubld8.emit(SHADER_OPCODE_URB_READ_LOGICAL, data,
+                              srcs, ARRAY_SIZE(srcs));
    inst->mlen = 1;
    inst->offset = urb_global_offset;
    assert(inst->offset < 2048);
@@ -1069,7 +1092,7 @@ emit_urb_indirect_reads(const fs_builder &bld, nir_intrinsic_instr *instr,
          bld8.MOV(off, quarter(offset_src, q));
          bld8.ADD(off, off, brw_imm_ud(base_in_dwords + c));
 
-         STATIC_ASSERT(util_is_power_of_two_nonzero(REG_SIZE) && REG_SIZE > 1);
+         STATIC_ASSERT(IS_POT(REG_SIZE) && REG_SIZE > 1);
 
          fs_reg comp = bld8.vgrf(BRW_REGISTER_TYPE_UD, 1);
          bld8.AND(comp, off, brw_imm_ud(0x3));
@@ -1078,16 +1101,14 @@ emit_urb_indirect_reads(const fs_builder &bld, nir_intrinsic_instr *instr,
 
          bld8.SHR(off, off, brw_imm_ud(2));
 
-         fs_reg payload_srcs[2];
-         payload_srcs[0] = urb_handle;
-         payload_srcs[1] = off;
-
-         fs_reg payload = bld8.vgrf(BRW_REGISTER_TYPE_UD, 2);
-         bld8.LOAD_PAYLOAD(payload, payload_srcs, 2, 2);
+         fs_reg srcs[URB_LOGICAL_NUM_SRCS];
+         srcs[URB_LOGICAL_SRC_HANDLE] = urb_handle;
+         srcs[URB_LOGICAL_SRC_PER_SLOT_OFFSETS] = off;
 
          fs_reg data = bld8.vgrf(BRW_REGISTER_TYPE_UD, 4);
 
-         fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_READ_SIMD8_PER_SLOT, data, payload);
+         fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_READ_LOGICAL,
+                                   data, srcs, ARRAY_SIZE(srcs));
          inst->mlen = 2;
          inst->offset = 0;
          inst->size_written = 4 * REG_SIZE;

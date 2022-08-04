@@ -42,6 +42,15 @@ struct vn_renderer_sync {
 
 struct vn_renderer_info {
    struct {
+      bool has_primary;
+      int primary_major;
+      int primary_minor;
+      bool has_render;
+      int render_major;
+      int render_minor;
+   } drm;
+
+   struct {
       uint16_t vendor_id;
       uint16_t device_id;
 
@@ -68,6 +77,7 @@ struct vn_renderer_info {
    uint32_t supports_blob_id_0;
    /* combined mask for vk_extension_mask1, 2,..., N */
    uint32_t vk_extension_mask[32];
+   uint32_t allow_vk_wait_syncs;
 };
 
 struct vn_renderer_submit_batch {

@@ -49,6 +49,7 @@ protected:
       imm1 = bi_fau((enum bir_fau) (BIR_FAU_IMMEDIATE | 1), false);
       imm2 = bi_fau((enum bir_fau) (BIR_FAU_IMMEDIATE | 2), false);
       unif = bi_fau((enum bir_fau) (BIR_FAU_UNIFORM | 5), false);
+      unif_hi = bi_fau((enum bir_fau) (BIR_FAU_UNIFORM | 5), true);
       unif2 = bi_fau((enum bir_fau) (BIR_FAU_UNIFORM | 6), false);
       core_id = bi_fau(BIR_FAU_CORE_ID, false);
       lane_id = bi_fau(BIR_FAU_LANE_ID, false);
@@ -60,18 +61,17 @@ protected:
 
    void *mem_ctx;
    bi_builder *b;
-   bi_index zero, imm1, imm2, unif, unif2, core_id, lane_id;
+   bi_index zero, imm1, imm2, unif, unif_hi, unif2, core_id, lane_id;
 };
 
 TEST_F(ValidateFau, One64BitUniformSlot)
 {
    VALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), bi_register(3),
             unif));
-   VALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), bi_word(unif, 1),
-            unif));
-   VALID(bi_fma_f32_to(b, bi_register(1), unif, unif, bi_word(unif, 1)));
+   VALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), unif_hi, unif));
+   VALID(bi_fma_f32_to(b, bi_register(1), unif, unif, unif_hi));
    INVALID(bi_fma_f32_to(b, bi_register(1), unif, unif2, bi_register(1)));
-   INVALID(bi_fma_f32_to(b, bi_register(1), unif, unif2, bi_word(unif, 1)));
+   INVALID(bi_fma_f32_to(b, bi_register(1), unif, unif2, unif_hi));
 
    /* Crafted case that appears correct at first glance and was erronously
     * marked as valid in early versions of the validator.
@@ -83,20 +83,17 @@ TEST_F(ValidateFau, One64BitUniformSlot)
 
 TEST_F(ValidateFau, Combined64BitUniformsConstants)
 {
-   VALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), bi_word(unif, 1),
-            unif));
+   VALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), unif_hi, unif));
    VALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), zero, unif));
    VALID(bi_fma_f32_to(b, bi_register(1), zero, imm1, imm1));
-   INVALID(bi_fma_f32_to(b, bi_register(1), zero, bi_word(unif, 1), unif));
+   INVALID(bi_fma_f32_to(b, bi_register(1), zero, unif_hi, unif));
    INVALID(bi_fma_f32_to(b, bi_register(1), zero, imm1, imm2));
 }
 
 TEST_F(ValidateFau, UniformsOnlyInDefaultMode)
 {
-   INVALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), bi_word(unif, 1),
-            lane_id));
-   INVALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), bi_word(unif, 1),
-            core_id));
+   INVALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), unif_hi, lane_id));
+   INVALID(bi_fma_f32_to(b, bi_register(1), bi_register(2), unif_hi, core_id));
 }
 
 TEST_F(ValidateFau, SingleSpecialImmediate)

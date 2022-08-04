@@ -15,17 +15,15 @@ STABLE_EPHEMERAL=" \
       python3-pip \
       "
 
-# We need multiarch for Wine
-dpkg --add-architecture i386
 apt-get update
 
 apt-get install -y --no-remove \
       $STABLE_EPHEMERAL \
       check \
       clang \
-      cmake \
       libasan6 \
       libarchive-dev \
+      libclang-cpp13-dev \
       libclang-cpp11-dev \
       libgbm-dev \
       libglvnd-dev \
@@ -41,6 +39,7 @@ apt-get install -y --no-remove \
       libxcb-xfixes0-dev \
       libxcb1-dev \
       libxml2-dev \
+      llvm-13-dev \
       llvm-11-dev \
       llvm-9-dev \
       ocl-icd-opencl-dev \
@@ -49,24 +48,10 @@ apt-get install -y --no-remove \
       procps \
       spirv-tools \
       strace \
-      time \
-      wine \
-      wine32
+      time
 
 
 . .gitlab-ci/container/container_pre_build.sh
-
-
-# Debian's pkg-config wrapers for mingw are broken, and there's no sign that
-# they're going to be fixed, so we'll just have to fix it ourselves
-# https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=930492
-cat >/usr/local/bin/x86_64-w64-mingw32-pkg-config <<EOF
-#!/bin/sh
-
-PKG_CONFIG_LIBDIR=/usr/x86_64-w64-mingw32/lib/pkgconfig pkg-config \$@
-EOF
-chmod +x /usr/local/bin/x86_64-w64-mingw32-pkg-config
-
 
 # dependencies where we want a specific version
 export              XORG_RELEASES=https://xorg.freedesktop.org/releases/individual
@@ -89,10 +74,9 @@ cd shader-db
 make
 popd
 
-git clone https://github.com/microsoft/DirectX-Headers -b v1.0.1 --depth 1
-pushd DirectX-Headers
-mkdir build
-cd build
+git clone https://github.com/microsoft/DirectX-Headers -b v1.606.3 --depth 1
+mkdir -p DirectX-Headers/build
+pushd DirectX-Headers/build
 meson .. --backend=ninja --buildtype=release -Dbuild-test=false
 ninja
 ninja install

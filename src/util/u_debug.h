@@ -54,7 +54,7 @@
 #include <OS.h>
 #endif
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -203,41 +203,6 @@ debug_get_num_option(const char *name, long dfault);
 
 void
 debug_get_version_option(const char *name, unsigned *major, unsigned *minor);
-
-#ifdef _MSC_VER
-__declspec(noreturn)
-#endif
-void _debug_assert_fail(const char *expr,
-                        const char *file,
-                        unsigned line,
-                        const char *function)
-#if defined(__GNUC__) && !defined(DEBUG)
-   __attribute__((noreturn))
-#endif
-;
-
-
-/**
- * Assert macro
- *
- * Do not expect that the assert call terminates -- errors must be handled
- * regardless of assert behavior.
- *
- * For non debug builds the assert macro will expand to a no-op, so do not
- * call functions with side effects in the assert expression.
- */
-#ifndef NDEBUG
-#define debug_assert(expr) ((expr) ? (void)0 : _debug_assert_fail(#expr, __FILE__, __LINE__, __FUNCTION__))
-#else
-#define debug_assert(expr) (void)(0 && (expr))
-#endif
-
-
-/** Override standard assert macro */
-#ifdef assert
-#undef assert
-#endif
-#define assert(expr) debug_assert(expr)
 
 
 /**
@@ -449,10 +414,10 @@ debug_get_flags_option(const char *name,
 static const char * \
 debug_get_option_ ## suffix (void) \
 { \
-   static bool first = true; \
+   static bool initialized = false; \
    static const char * value; \
-   if (first) { \
-      first = false; \
+   if (!initialized) { \
+      initialized = true; \
       value = debug_get_option(name, dfault); \
    } \
    return value; \
@@ -478,12 +443,12 @@ __check_suid(void)
 static FILE * \
 debug_get_option_ ## suffix (void) \
 { \
-   static bool first = true; \
+   static bool initialized = false; \
    static const char * value; \
    if (__check_suid()) \
       return NULL; \
-   if (first) { \
-      first = false; \
+   if (!initialized) { \
+      initialized = true; \
       value = debug_get_option(name, dfault); \
    } \
    if (!value) \
@@ -495,10 +460,10 @@ debug_get_option_ ## suffix (void) \
 static bool \
 debug_get_option_ ## sufix (void) \
 { \
-   static bool first = true; \
+   static bool initialized = false; \
    static bool value; \
-   if (first) { \
-      first = false; \
+   if (!initialized) { \
+      initialized = true; \
       value = debug_get_bool_option(name, dfault); \
    } \
    return value; \
@@ -508,10 +473,10 @@ debug_get_option_ ## sufix (void) \
 static long \
 debug_get_option_ ## sufix (void) \
 { \
-   static bool first = true; \
+   static bool initialized = false; \
    static long value; \
-   if (first) { \
-      first = false; \
+   if (!initialized) { \
+      initialized = true; \
       value = debug_get_num_option(name, dfault); \
    } \
    return value; \
@@ -521,17 +486,17 @@ debug_get_option_ ## sufix (void) \
 static unsigned long \
 debug_get_option_ ## sufix (void) \
 { \
-   static bool first = true; \
+   static bool initialized = false; \
    static unsigned long value; \
-   if (first) { \
-      first = false; \
+   if (!initialized) { \
+      initialized = true; \
       value = debug_get_flags_option(name, flags, dfault); \
    } \
    return value; \
 }
 
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 }
 #endif
 

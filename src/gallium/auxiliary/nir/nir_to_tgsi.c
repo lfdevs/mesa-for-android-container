@@ -30,6 +30,7 @@
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_from_mesa.h"
 #include "tgsi/tgsi_info.h"
+#include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_ureg.h"
 #include "tgsi/tgsi_util.h"
 #include "util/debug.h"
@@ -522,6 +523,14 @@ ntt_allocate_regs(struct ntt_compile *c, nir_function_impl *impl)
          ntt_ra_check(c, ra_map, released, ip, i);
    }
 }
+
+static void
+ntt_allocate_regs_unoptimized(struct ntt_compile *c, nir_function_impl *impl)
+{
+   for (int i = c->first_non_array_temp; i < c->num_temps; i++)
+      ureg_DECL_temporary(c->ureg);
+}
+
 
 /**
  * Try to find an iadd of a constant value with a non-constant value in the
@@ -1160,7 +1169,12 @@ ntt_get_alu_src(struct ntt_compile *c, nir_alu_instr *instr, int i)
    nir_alu_src src = instr->src[i];
    struct ureg_src usrc = ntt_get_src(c, src.src);
 
-   if (nir_src_bit_size(src.src) == 64) {
+   /* Expand double/dvec2 src references to TGSI swizzles using a pair of 32-bit
+    * channels.  We skip this for undefs, as those don't get split to vec2s (but
+    * the specific swizzles from an undef don't matter)
+    */
+   if (nir_src_bit_size(src.src) == 64 &&
+      !(src.src.is_ssa && src.src.ssa->parent_instr->type == nir_instr_type_ssa_undef)) {
       int chan0 = 0, chan1 = 1;
       if (nir_op_infos[instr->op].input_sizes[i] == 0) {
          chan0 = ffs(instr->dest.write_mask) - 1;
@@ -1436,25 +1450,18 @@ ntt_emit_alu(struct ntt_compile *c, nir_alu_instr *instr)
       [nir_op_ldexp] = { TGSI_OPCODE_LDEXP, 0 },
    };
 
-   /* TGSI's 64 bit compares storing to 32-bit are weird and write .xz instead
-    * of .xy.  Store to a temp and move it to the real dst.
-    */
-   bool tgsi_64bit_compare = src_64 && !dst_64 &&
-      (num_srcs == 2 ||
-        nir_op_infos[instr->op].output_type == nir_type_bool32) &&
-      (dst.WriteMask != TGSI_WRITEMASK_X);
-
-   /* TGSI 64bit-to-32-bit conversions only generate results in the .xy
-    * channels and will need to get fixed up.
-    */
-   bool tgsi_64bit_downconvert = (src_64 && !dst_64 &&
-                                  num_srcs == 1 && !tgsi_64bit_compare &&
-                                  (dst.WriteMask & ~TGSI_WRITEMASK_XY));
-
-   struct ureg_dst real_dst = ureg_dst_undef();
-   if (tgsi_64bit_compare || tgsi_64bit_downconvert) {
-      real_dst = dst;
-      dst = ntt_temp(c);
+   if (src_64 && !dst_64) {
+      if (num_srcs == 2 || nir_op_infos[instr->op].output_type == nir_type_bool32) {
+         /* TGSI's 64 bit compares storing to 32-bit are weird and write .xz instead
+         * of .xy.
+         */
+         assert(!(dst.WriteMask & TGSI_WRITEMASK_YW));
+      } else {
+         /* TGSI 64bit-to-32-bit conversions only generate results in the .xy
+         * channels and will need to get fixed up.
+         */
+        assert(!(dst.WriteMask & TGSI_WRITEMASK_ZW));
+      }
    }
 
    bool table_op64 = src_64;
@@ -1710,25 +1717,6 @@ ntt_emit_alu(struct ntt_compile *c, nir_alu_instr *instr)
       default:
          fprintf(stderr, "Unknown NIR opcode: %s\n", nir_op_infos[instr->op].name);
          unreachable("Unknown NIR opcode");
-      }
-   }
-
-   /* 64-bit op fixup movs */
-   if (!ureg_dst_is_undef(real_dst)) {
-      if (tgsi_64bit_compare) {
-         ntt_MOV(c, real_dst,
-                  ureg_swizzle(ureg_src(dst), 0, 2, 0, 2));
-      } else {
-         assert(tgsi_64bit_downconvert);
-         uint8_t swizzle[] = {0, 0, 0, 0};
-         uint32_t second_bit = real_dst.WriteMask & ~(1 << (ffs(real_dst.WriteMask) - 1));
-         if (second_bit)
-            swizzle[ffs(second_bit) - 1] = 1;
-         ntt_MOV(c, real_dst, ureg_swizzle(ureg_src(dst),
-                                                  swizzle[0],
-                                                  swizzle[1],
-                                                  swizzle[2],
-                                                  swizzle[3]));
       }
    }
 
@@ -2310,10 +2298,24 @@ ntt_emit_load_output(struct ntt_compile *c, nir_intrinsic_instr *instr)
       out = ntt_ureg_dst_indirect(c, out, instr->src[0]);
    }
 
+   struct ureg_dst dst = ntt_get_dest(c, &instr->dest);
+   struct ureg_src out_src = ureg_src(out);
+
+   /* Don't swizzling unavailable channels of the output in the writemasked-out
+    * components. Avoids compile failures in virglrenderer with
+    * TESS_LEVEL_INNER.
+    */
+   int fill_channel = ffs(dst.WriteMask) - 1;
+   uint8_t swizzles[4] = { 0, 1, 2, 3 };
+   for (int i = 0; i < 4; i++)
+      if (!(dst.WriteMask & (1 << i)))
+         swizzles[i] = fill_channel;
+   out_src = ureg_swizzle(out_src, swizzles[0], swizzles[1], swizzles[2], swizzles[3]);
+
    if (semantics.fb_fetch_output)
-      ntt_FBFETCH(c, ntt_get_dest(c, &instr->dest), ureg_src(out));
+      ntt_FBFETCH(c, dst, out_src);
    else
-      ntt_MOV(c, ntt_get_dest(c, &instr->dest), ureg_src(out));
+      ntt_MOV(c, dst, out_src);
 }
 
 static void
@@ -2580,7 +2582,23 @@ ntt_push_tex_arg(struct ntt_compile *c,
    if (tex_src < 0)
       return;
 
-   s->srcs[s->i++] = ntt_get_src(c, instr->src[tex_src].src);
+   nir_src *src = &instr->src[tex_src].src;
+
+   /* virglrenderer workaround that's hard to do in tgsi_translate: Make sure
+    * that TG4's immediate offset arg is float-typed.
+    */
+   if (instr->op == nir_texop_tg4 && tex_src_type == nir_tex_src_backend2 &&
+       nir_src_is_const(*src)) {
+      nir_const_value *consts = nir_src_as_const_value(*src);
+      s->srcs[s->i++] = ureg_imm4f(c->ureg,
+                                   consts[0].f32,
+                                   consts[1].f32,
+                                   consts[2].f32,
+                                   consts[3].f32);
+      return;
+   }
+
+   s->srcs[s->i++] = ntt_get_src(c, *src);
 }
 
 static void
@@ -3013,6 +3031,7 @@ ntt_emit_impl(struct ntt_compile *c, nir_function_impl *impl)
       _mesa_hash_table_insert(c->blocks, block, ntt_block);
    }
 
+
    ntt_setup_registers(c, &impl->registers);
 
    c->cur_block = ntt_block_from_nir(c, nir_start_block(impl));
@@ -3023,7 +3042,13 @@ ntt_emit_impl(struct ntt_compile *c, nir_function_impl *impl)
    /* Emit the ntt insns */
    ntt_emit_cf_list(c, &impl->body);
 
-   ntt_allocate_regs(c, impl);
+   /* Don't do optimized RA if the driver requests it, unless the number of
+    * temps is too large to be covered by the 16 bit signed int that TGSI
+    * allocates for the register index */
+   if (!c->options->unoptimized_ra || c->num_temps > 0x7fff)
+      ntt_allocate_regs(c, impl);
+   else
+      ntt_allocate_regs_unoptimized(c, impl);
 
    /* Turn the ntt insns into actual TGSI tokens */
    ntt_emit_cf_list_ureg(c, &impl->body);
@@ -3042,11 +3067,11 @@ type_size(const struct glsl_type *type, bool bindless)
 /* Allow vectorizing of ALU instructions, but avoid vectorizing past what we
  * can handle for 64-bit values in TGSI.
  */
-static bool
-ntt_should_vectorize_instr(const nir_instr *instr, void *data)
+static uint8_t
+ntt_should_vectorize_instr(const nir_instr *instr, const void *data)
 {
    if (instr->type != nir_instr_type_alu)
-      return false;
+      return 0;
 
    nir_alu_instr *alu = nir_instr_as_alu(instr);
 
@@ -3060,7 +3085,7 @@ ntt_should_vectorize_instr(const nir_instr *instr, void *data)
        *
        * https://gitlab.freedesktop.org/virgl/virglrenderer/-/issues/195
        */
-      return false;
+      return 1;
 
    default:
       break;
@@ -3077,10 +3102,10 @@ ntt_should_vectorize_instr(const nir_instr *instr, void *data)
        * 64-bit instrs in the first place, I don't see much reason to care about
        * this.
        */
-      return false;
+      return 1;
    }
 
-   return true;
+   return 4;
 }
 
 static bool
@@ -3143,6 +3168,7 @@ ntt_optimize_nir(struct nir_shader *s, struct pipe_screen *screen)
       progress = false;
 
       NIR_PASS_V(s, nir_lower_vars_to_ssa);
+      NIR_PASS_V(s, nir_split_64bit_vec3_and_vec4);
 
       NIR_PASS(progress, s, nir_copy_prop);
       NIR_PASS(progress, s, nir_opt_algebraic);
@@ -3218,6 +3244,7 @@ nir_to_tgsi_lower_64bit_intrinsic(nir_builder *b, nir_intrinsic_instr *instr)
    case nir_intrinsic_load_interpolated_input:
    case nir_intrinsic_load_per_vertex_input:
    case nir_intrinsic_store_output:
+   case nir_intrinsic_store_per_vertex_output:
    case nir_intrinsic_store_ssbo:
       break;
    default:
@@ -3442,20 +3469,6 @@ nir_to_tgsi_lower_tex_instr(nir_builder *b, nir_instr *instr, void *data)
    if (nir_tex_instr_src_index(tex, nir_tex_src_coord) < 0)
       return false;
 
-   /* NIR after lower_tex will have LOD set to 0 for tex ops that wanted
-    * implicit lod in shader stages that don't have quad-based derivatives.
-    * TGSI doesn't want that, it requires that the backend do implict LOD 0 for
-    * those stages.
-    */
-   if (!nir_shader_supports_implicit_lod(b->shader) && tex->op == nir_texop_txl) {
-      int lod_index = nir_tex_instr_src_index(tex, nir_tex_src_lod);
-      nir_src *lod_src = &tex->src[lod_index].src;
-      if (nir_src_is_const(*lod_src) && nir_src_as_uint(*lod_src) == 0) {
-         nir_tex_instr_remove_src(tex, lod_index);
-         tex->op = nir_texop_tex;
-      }
-   }
-
    b->cursor = nir_before_instr(instr);
 
    struct ntt_lower_tex_state s = {0};
@@ -3514,6 +3527,9 @@ ntt_fix_nir_options(struct pipe_screen *screen, struct nir_shader *s,
       !screen->get_shader_param(screen, pipe_shader_type_from_mesa(s->info.stage),
                                 PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED);
 
+   bool force_indirect_unrolling_sampler =
+      screen->get_param(screen, PIPE_CAP_GLSL_FEATURE_LEVEL) < 400;
+
    nir_variable_mode no_indirects_mask = ntt_no_indirects_mask(s, screen);
 
    if (!options->lower_extract_byte ||
@@ -3524,10 +3540,13 @@ ntt_fix_nir_options(struct pipe_screen *screen, struct nir_shader *s,
        !options->lower_flrp64 ||
        !options->lower_fmod ||
        !options->lower_rotate ||
+       !options->lower_uadd_sat ||
+       !options->lower_usub_sat ||
        !options->lower_uniforms_to_ubo ||
        !options->lower_vector_cmp ||
        options->lower_fsqrt != lower_fsqrt ||
-       options->force_indirect_unrolling != no_indirects_mask) {
+       options->force_indirect_unrolling != no_indirects_mask ||
+       force_indirect_unrolling_sampler) {
       nir_shader_compiler_options *new_options = ralloc(s, nir_shader_compiler_options);
       *new_options = *s->options;
 
@@ -3539,10 +3558,13 @@ ntt_fix_nir_options(struct pipe_screen *screen, struct nir_shader *s,
       new_options->lower_flrp64 = true;
       new_options->lower_fmod = true;
       new_options->lower_rotate = true;
-      new_options->lower_uniforms_to_ubo = true,
+      new_options->lower_uadd_sat = true;
+      new_options->lower_usub_sat = true;
+      new_options->lower_uniforms_to_ubo = true;
       new_options->lower_vector_cmp = true;
       new_options->lower_fsqrt = lower_fsqrt;
       new_options->force_indirect_unrolling = no_indirects_mask;
+      new_options->force_indirect_unrolling_sampler = force_indirect_unrolling_sampler;
 
       s->options = new_options;
    }
@@ -3628,7 +3650,7 @@ nir_lower_primid_sysval_to_input_lower(nir_builder *b, nir_instr *instr, void *d
       var = nir_variable_create(b->shader, nir_var_shader_in, glsl_uint_type(), "gl_PrimitiveID");
       var->data.location = VARYING_SLOT_PRIMITIVE_ID;
       b->shader->info.inputs_read |= VARYING_BIT_PRIMITIVE_ID;
-      var->data.driver_location = b->shader->num_outputs++;
+      var->data.driver_location = b->shader->num_inputs++;
 
       *(nir_variable **)data = var;
    }
@@ -3660,6 +3682,42 @@ nir_to_tgsi(struct nir_shader *s,
    return nir_to_tgsi_options(s, screen, &default_ntt_options);
 }
 
+/* Prevent lower_vec_to_mov from coalescing 64-to-32 conversions and comparisons
+ * into unsupported channels of registers.
+ */
+static bool
+ntt_vec_to_mov_writemask_cb(const nir_instr *instr, unsigned writemask, UNUSED const void *_data)
+{
+   if (instr->type != nir_instr_type_alu)
+      return false;
+
+   nir_alu_instr *alu = nir_instr_as_alu(instr);
+   int dst_32 = nir_dest_bit_size(alu->dest.dest) == 32;
+   int src_64 = nir_src_bit_size(alu->src[0].src) == 64;
+
+   if (src_64 && dst_32) {
+      int num_srcs = nir_op_infos[alu->op].num_inputs;
+
+      if (num_srcs == 2 || nir_op_infos[alu->op].output_type == nir_type_bool32) {
+         /* TGSI's 64 bit compares storing to 32-bit are weird and write .xz
+          * instead of .xy.  Just support scalar compares storing to .x,
+          * GLSL-to-TGSI only ever emitted scalar ops anyway.
+          */
+        if (writemask != TGSI_WRITEMASK_X)
+           return false;
+      } else {
+         /* TGSI's 64-to-32-bit conversions can only store to .xy (since a TGSI
+          * register can only store a dvec2).  Don't try to coalesce to write to
+          * .zw.
+          */
+         if (writemask & ~(TGSI_WRITEMASK_XY))
+            return false;
+      }
+   }
+
+   return true;
+}
+
 /**
  * Translates the NIR shader to TGSI.
  *
@@ -3680,6 +3738,20 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
    const struct nir_shader_compiler_options *original_options = s->options;
 
    ntt_fix_nir_options(screen, s, options);
+
+   /* Lower array indexing on FS inputs.  Since we don't set
+    * ureg->supports_any_inout_decl_range, the TGSI input decls will be split to
+    * elements by ureg, and so dynamically indexing them would be invalid.
+    * Ideally we would set that ureg flag based on
+    * PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE, but can't due to mesa/st
+    * splitting NIR VS outputs to elements even if the FS doesn't get the
+    * corresponding splitting, and virgl depends on TGSI across link boundaries
+    * having matching declarations.
+    */
+   if (s->info.stage == MESA_SHADER_FRAGMENT) {
+      NIR_PASS_V(s, nir_lower_indirect_derefs, nir_var_shader_in, UINT32_MAX);
+      NIR_PASS_V(s, nir_remove_dead_variables, nir_var_shader_in, NULL);
+   }
 
    NIR_PASS_V(s, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
               type_size, (nir_lower_io_options)0);
@@ -3760,7 +3832,7 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
    NIR_PASS_V(s, nir_lower_to_source_mods, source_mods);
 
    NIR_PASS_V(s, nir_convert_from_ssa, true);
-   NIR_PASS_V(s, nir_lower_vec_to_movs, NULL, NULL);
+   NIR_PASS_V(s, nir_lower_vec_to_movs, ntt_vec_to_mov_writemask_cb, NULL);
 
    /* locals_to_regs will leave dead derefs that are good to clean up. */
    NIR_PASS_V(s, nir_lower_locals_to_regs);
@@ -3784,6 +3856,8 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
    c->native_integers = native_integers;
    c->ureg = ureg_create(pipe_shader_type_from_mesa(s->info.stage));
    ureg_setup_shader_info(c->ureg, &s->info);
+   if (s->info.use_legacy_math_rules && screen->get_param(screen, PIPE_CAP_LEGACY_MATH_RULES))
+      ureg_property(c->ureg, TGSI_PROPERTY_LEGACY_MATH_RULES, 1);
 
    if (s->info.stage == MESA_SHADER_FRAGMENT) {
       /* The draw module's polygon stipple layer doesn't respect the chosen
@@ -3837,7 +3911,10 @@ static const nir_shader_compiler_options nir_to_tgsi_compiler_options = {
    .lower_fmod = true,
    .lower_rotate = true,
    .lower_uniforms_to_ubo = true,
+   .lower_uadd_sat = true,
+   .lower_usub_sat = true,
    .lower_vector_cmp = true,
+   .lower_int64_options = nir_lower_imul_2x32_64,
    .use_interpolated_input_intrinsics = true,
 };
 
@@ -3851,4 +3928,18 @@ nir_to_tgsi_get_compiler_options(struct pipe_screen *pscreen,
 {
    assert(ir == PIPE_SHADER_IR_NIR);
    return &nir_to_tgsi_compiler_options;
+}
+
+/** Helper for getting TGSI tokens to store for a pipe_shader_state CSO. */
+const void *
+pipe_shader_state_to_tgsi_tokens(struct pipe_screen *screen,
+                                 const struct pipe_shader_state *cso)
+{
+   if (cso->type == PIPE_SHADER_IR_NIR) {
+      return nir_to_tgsi((nir_shader *)cso->ir.nir, screen);
+   } else {
+      assert(cso->type == PIPE_SHADER_IR_TGSI);
+      /* we need to keep a local copy of the tokens */
+      return tgsi_dup_tokens(cso->tokens);
+   }
 }

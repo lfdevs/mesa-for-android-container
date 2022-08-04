@@ -64,7 +64,7 @@ build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_s
    const struct glsl_type *sampler_type =
       glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false, GLSL_TYPE_FLOAT);
    const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D, false, GLSL_TYPE_FLOAT);
-   nir_builder b = radv_meta_init_shader(MESA_SHADER_COMPUTE, "meta_resolve_cs-%d-%s", samples,
+   nir_builder b = radv_meta_init_shader(dev, MESA_SHADER_COMPUTE, "meta_resolve_cs-%d-%s", samples,
                                          is_integer ? "int" : (is_srgb ? "srgb" : "float"));
    b.shader->info.workgroup_size[0] = 8;
    b.shader->info.workgroup_size[1] = 8;
@@ -79,7 +79,7 @@ build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_s
 
    nir_ssa_def *global_id = get_global_ids(&b, 2);
 
-   nir_ssa_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 16);
+   nir_ssa_def *src_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
    nir_ssa_def *dst_offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 8), .range = 16);
 
    nir_ssa_def *src_coord = nir_iadd(&b, global_id, src_offset);
@@ -134,7 +134,7 @@ build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
       glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, true, GLSL_TYPE_FLOAT);
    const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D, true, GLSL_TYPE_FLOAT);
 
-   nir_builder b = radv_meta_init_shader(MESA_SHADER_COMPUTE, "meta_resolve_cs_%s-%s-%d",
+   nir_builder b = radv_meta_init_shader(dev, MESA_SHADER_COMPUTE, "meta_resolve_cs_%s-%s-%d",
                                          index == DEPTH_RESOLVE ? "depth" : "stencil",
                                          get_resolve_mode_str(resolve_mode), samples);
    b.shader->info.workgroup_size[0] = 8;
@@ -373,7 +373,7 @@ radv_device_init_meta_resolve_compute_state(struct radv_device *device, bool on_
 
    res = create_layout(device);
    if (res != VK_SUCCESS)
-      goto fail;
+      return res;
 
    if (on_demand)
       return VK_SUCCESS;
@@ -384,65 +384,58 @@ radv_device_init_meta_resolve_compute_state(struct radv_device *device, bool on_
       res = create_resolve_pipeline(device, samples, false, false,
                                     &state->resolve_compute.rc[i].pipeline);
       if (res != VK_SUCCESS)
-         goto fail;
+         return res;
 
       res = create_resolve_pipeline(device, samples, true, false,
                                     &state->resolve_compute.rc[i].i_pipeline);
       if (res != VK_SUCCESS)
-         goto fail;
+         return res;
 
       res = create_resolve_pipeline(device, samples, false, true,
                                     &state->resolve_compute.rc[i].srgb_pipeline);
       if (res != VK_SUCCESS)
-         goto fail;
+         return res;
 
       res = create_depth_stencil_resolve_pipeline(
          device, samples, DEPTH_RESOLVE, VK_RESOLVE_MODE_AVERAGE_BIT,
          &state->resolve_compute.depth[i].average_pipeline);
       if (res != VK_SUCCESS)
-         goto fail;
+         return res;
 
       res = create_depth_stencil_resolve_pipeline(device, samples, DEPTH_RESOLVE,
                                                   VK_RESOLVE_MODE_MAX_BIT,
                                                   &state->resolve_compute.depth[i].max_pipeline);
       if (res != VK_SUCCESS)
-         goto fail;
+         return res;
 
       res = create_depth_stencil_resolve_pipeline(device, samples, DEPTH_RESOLVE,
                                                   VK_RESOLVE_MODE_MIN_BIT,
                                                   &state->resolve_compute.depth[i].min_pipeline);
       if (res != VK_SUCCESS)
-         goto fail;
+         return res;
 
       res = create_depth_stencil_resolve_pipeline(device, samples, STENCIL_RESOLVE,
                                                   VK_RESOLVE_MODE_MAX_BIT,
                                                   &state->resolve_compute.stencil[i].max_pipeline);
       if (res != VK_SUCCESS)
-         goto fail;
+         return res;
 
       res = create_depth_stencil_resolve_pipeline(device, samples, STENCIL_RESOLVE,
                                                   VK_RESOLVE_MODE_MIN_BIT,
                                                   &state->resolve_compute.stencil[i].min_pipeline);
       if (res != VK_SUCCESS)
-         goto fail;
+         return res;
    }
 
    res = create_depth_stencil_resolve_pipeline(device, 0, DEPTH_RESOLVE,
                                                VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
                                                &state->resolve_compute.depth_zero_pipeline);
    if (res != VK_SUCCESS)
-      goto fail;
+      return res;
 
-   res = create_depth_stencil_resolve_pipeline(device, 0, STENCIL_RESOLVE,
-                                               VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
-                                               &state->resolve_compute.stencil_zero_pipeline);
-   if (res != VK_SUCCESS)
-      goto fail;
-
-   return VK_SUCCESS;
-fail:
-   radv_device_finish_meta_resolve_compute_state(device);
-   return res;
+   return create_depth_stencil_resolve_pipeline(device, 0, STENCIL_RESOLVE,
+                                                VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
+                                                &state->resolve_compute.stencil_zero_pipeline);
 }
 
 void
@@ -481,8 +474,8 @@ radv_device_finish_meta_resolve_compute_state(struct radv_device *device)
    radv_DestroyPipeline(radv_device_to_handle(device), state->resolve_compute.stencil_zero_pipeline,
                         &state->alloc);
 
-   radv_DestroyDescriptorSetLayout(radv_device_to_handle(device), state->resolve_compute.ds_layout,
-                                   &state->alloc);
+   device->vk.dispatch_table.DestroyDescriptorSetLayout(
+      radv_device_to_handle(device), state->resolve_compute.ds_layout, &state->alloc);
    radv_DestroyPipelineLayout(radv_device_to_handle(device), state->resolve_compute.p_layout,
                               &state->alloc);
 }
@@ -496,9 +489,9 @@ radv_get_resolve_pipeline(struct radv_cmd_buffer *cmd_buffer, struct radv_image_
    uint32_t samples_log2 = ffs(samples) - 1;
    VkPipeline *pipeline;
 
-   if (vk_format_is_int(src_iview->vk_format))
+   if (vk_format_is_int(src_iview->vk.format))
       pipeline = &state->resolve_compute.rc[samples_log2].i_pipeline;
-   else if (vk_format_is_srgb(src_iview->vk_format))
+   else if (vk_format_is_srgb(src_iview->vk.format))
       pipeline = &state->resolve_compute.rc[samples_log2].srgb_pipeline;
    else
       pipeline = &state->resolve_compute.rc[samples_log2].pipeline;
@@ -506,8 +499,8 @@ radv_get_resolve_pipeline(struct radv_cmd_buffer *cmd_buffer, struct radv_image_
    if (!*pipeline) {
       VkResult ret;
 
-      ret = create_resolve_pipeline(device, samples, vk_format_is_int(src_iview->vk_format),
-                                    vk_format_is_srgb(src_iview->vk_format), pipeline);
+      ret = create_resolve_pipeline(device, samples, vk_format_is_int(src_iview->vk.format),
+                                    vk_format_is_srgb(src_iview->vk.format), pipeline);
       if (ret != VK_SUCCESS) {
          cmd_buffer->record_result = ret;
          return NULL;
@@ -700,11 +693,9 @@ radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer, struct radv_
    const uint32_t dest_base_layer =
       radv_meta_get_iview_layer(dest_image, &region->dstSubresource, &region->dstOffset);
 
-   const struct VkExtent3D extent = radv_sanitize_image_extent(src_image->type, region->extent);
-   const struct VkOffset3D srcOffset =
-      radv_sanitize_image_offset(src_image->type, region->srcOffset);
-   const struct VkOffset3D dstOffset =
-      radv_sanitize_image_offset(dest_image->type, region->dstOffset);
+   const struct VkExtent3D extent = vk_image_sanitize_extent(&src_image->vk, region->extent);
+   const struct VkOffset3D srcOffset = vk_image_sanitize_offset(&src_image->vk, region->srcOffset);
+   const struct VkOffset3D dstOffset = vk_image_sanitize_offset(&dest_image->vk, region->dstOffset);
 
    for (uint32_t layer = 0; layer < region->srcSubresource.layerCount; ++layer) {
 
@@ -724,7 +715,7 @@ radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer, struct radv_
                                     .layerCount = 1,
                                  },
                            },
-                           NULL);
+                           0, NULL);
 
       struct radv_image_view dest_iview;
       radv_image_view_init(&dest_iview, cmd_buffer->device,
@@ -742,7 +733,7 @@ radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer, struct radv_
                                     .layerCount = 1,
                                  },
                            },
-                           NULL);
+                           0, NULL);
 
       emit_resolve(cmd_buffer, &src_iview, &dest_iview, &(VkOffset2D){srcOffset.x, srcOffset.y},
                    &(VkOffset2D){dstOffset.x, dstOffset.y},
@@ -810,23 +801,23 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
          .srcSubresource =
             (VkImageSubresourceLayers){
                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-               .mipLevel = src_iview->base_mip,
-               .baseArrayLayer = src_iview->base_layer,
+               .mipLevel = src_iview->vk.base_mip_level,
+               .baseArrayLayer = src_iview->vk.base_array_layer,
                .layerCount = layer_count,
             },
          .dstSubresource =
             (VkImageSubresourceLayers){
                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-               .mipLevel = dst_iview->base_mip,
-               .baseArrayLayer = dst_iview->base_layer,
+               .mipLevel = dst_iview->vk.base_mip_level,
+               .baseArrayLayer = dst_iview->vk.base_array_layer,
                .layerCount = layer_count,
             },
          .srcOffset = (VkOffset3D){0, 0, 0},
          .dstOffset = (VkOffset3D){0, 0, 0},
       };
 
-      radv_meta_resolve_compute_image(cmd_buffer, src_iview->image, src_iview->vk_format,
-                                      src_att.layout, dst_iview->image, dst_iview->vk_format,
+      radv_meta_resolve_compute_image(cmd_buffer, src_iview->image, src_iview->vk.format,
+                                      src_att.layout, dst_iview->image, dst_iview->vk.format,
                                       dst_att.layout, &region);
    }
 
@@ -864,7 +855,7 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
    region.sType = VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2;
    region.srcSubresource.aspectMask = aspects;
    region.srcSubresource.mipLevel = 0;
-   region.srcSubresource.baseArrayLayer = src_iview->base_layer;
+   region.srcSubresource.baseArrayLayer = src_iview->vk.base_array_layer;
    region.srcSubresource.layerCount = layer_count;
 
    radv_decompress_resolve_src(cmd_buffer, src_image, src_att.layout, &region);
@@ -882,17 +873,17 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
                            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                            .image = radv_image_to_handle(src_image),
                            .viewType = radv_meta_get_view_type(src_image),
-                           .format = src_iview->vk_format,
+                           .format = src_iview->vk.format,
                            .subresourceRange =
                               {
                                  .aspectMask = aspects,
-                                 .baseMipLevel = src_iview->base_mip,
+                                 .baseMipLevel = src_iview->vk.base_mip_level,
                                  .levelCount = 1,
-                                 .baseArrayLayer = src_iview->base_layer,
+                                 .baseArrayLayer = src_iview->vk.base_array_layer,
                                  .layerCount = layer_count,
                               },
                         },
-                        NULL);
+                        0, NULL);
 
    struct radv_image_view tdst_iview;
    radv_image_view_init(&tdst_iview, cmd_buffer->device,
@@ -900,17 +891,17 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
                            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                            .image = radv_image_to_handle(dst_image),
                            .viewType = radv_meta_get_view_type(dst_image),
-                           .format = dst_iview->vk_format,
+                           .format = dst_iview->vk.format,
                            .subresourceRange =
                               {
                                  .aspectMask = aspects,
-                                 .baseMipLevel = dst_iview->base_mip,
+                                 .baseMipLevel = dst_iview->vk.base_mip_level,
                                  .levelCount = 1,
-                                 .baseArrayLayer = dst_iview->base_layer,
+                                 .baseArrayLayer = dst_iview->vk.base_array_layer,
                                  .layerCount = layer_count,
                               },
                         },
-                        NULL);
+                        0, NULL);
 
    emit_depth_stencil_resolve(cmd_buffer, &tsrc_iview, &tdst_iview,
                               &(VkExtent3D){fb->width, fb->height, layer_count}, aspects,
@@ -927,9 +918,9 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
    if (radv_layout_is_htile_compressed(cmd_buffer->device, dst_image, layout, false, queue_mask)) {
       VkImageSubresourceRange range = {0};
       range.aspectMask = aspects;
-      range.baseMipLevel = dst_iview->base_mip;
+      range.baseMipLevel = dst_iview->vk.base_mip_level;
       range.levelCount = 1;
-      range.baseArrayLayer = dst_iview->base_layer;
+      range.baseArrayLayer = dst_iview->vk.base_array_layer;
       range.layerCount = layer_count;
 
       uint32_t htile_value = radv_get_htile_initial_value(cmd_buffer->device, dst_image);

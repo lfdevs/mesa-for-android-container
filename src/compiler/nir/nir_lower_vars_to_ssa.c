@@ -460,7 +460,7 @@ register_variable_uses(nir_function_impl *impl,
             nir_deref_instr *deref = nir_instr_as_deref(instr);
 
             if (deref->deref_type == nir_deref_type_var &&
-                nir_deref_instr_has_complex_use(deref))
+                nir_deref_instr_has_complex_use(deref, 0))
                register_complex_use(deref, state);
 
             break;

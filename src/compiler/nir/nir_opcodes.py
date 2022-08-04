@@ -146,6 +146,7 @@ def type_base_type(type_):
 # sources.
 _2src_commutative = "2src_commutative "
 associative = "associative "
+selection = "selection "
 
 # global dictionary of opcodes
 opcodes = {}
@@ -480,12 +481,12 @@ for (bit = bit_size - 1; bit >= 0; bit--) {
    if ((src0 & (1u << bit)) != 0)
       break;
 }
-dst = (unsigned)(31 - bit);
+dst = (unsigned)(bit_size - bit - 1);
 """)
 
 unop("ifind_msb", tint32, """
 dst = -1;
-for (int bit = 31; bit >= 0; bit--) {
+for (int bit = bit_size - 1; bit >= 0; bit--) {
    /* If src0 < 0, we're looking for the first 0 bit.
     * if src0 >= 0, we're looking for the first 1 bit.
     */
@@ -1008,22 +1009,22 @@ triop("iadd3", tint, _2src_commutative + associative, "src0 + src1 + src2")
 # component on vectors). There are two versions, one for floating point
 # bools (0.0 vs 1.0) and one for integer bools (0 vs ~0).
 
-triop("fcsel", tfloat32, "", "(src0 != 0.0f) ? src1 : src2")
+triop("fcsel", tfloat32, selection, "(src0 != 0.0f) ? src1 : src2")
 
 opcode("bcsel", 0, tuint, [0, 0, 0],
-       [tbool1, tuint, tuint], False, "", "src0 ? src1 : src2")
+       [tbool1, tuint, tuint], False, selection, "src0 ? src1 : src2")
 opcode("b8csel", 0, tuint, [0, 0, 0],
-       [tbool8, tuint, tuint], False, "", "src0 ? src1 : src2")
+       [tbool8, tuint, tuint], False, selection, "src0 ? src1 : src2")
 opcode("b16csel", 0, tuint, [0, 0, 0],
-       [tbool16, tuint, tuint], False, "", "src0 ? src1 : src2")
+       [tbool16, tuint, tuint], False, selection, "src0 ? src1 : src2")
 opcode("b32csel", 0, tuint, [0, 0, 0],
-       [tbool32, tuint, tuint], False, "", "src0 ? src1 : src2")
+       [tbool32, tuint, tuint], False, selection, "src0 ? src1 : src2")
 
-triop("i32csel_gt", tint32, "", "(src0 > 0) ? src1 : src2")
-triop("i32csel_ge", tint32, "", "(src0 >= 0) ? src1 : src2")
+triop("i32csel_gt", tint32, selection, "(src0 > 0) ? src1 : src2")
+triop("i32csel_ge", tint32, selection, "(src0 >= 0) ? src1 : src2")
 
-triop("fcsel_gt", tfloat32, "", "(src0 > 0.0f) ? src1 : src2")
-triop("fcsel_ge", tfloat32, "", "(src0 >= 0.0f) ? src1 : src2")
+triop("fcsel_gt", tfloat32, selection, "(src0 > 0.0f) ? src1 : src2")
+triop("fcsel_ge", tfloat32, selection, "(src0 >= 0.0f) ? src1 : src2")
 
 # SM5 bfi assembly
 triop("bfi", tuint32, "", """
@@ -1260,11 +1261,11 @@ unop_horiz("cube_r600", 4, tfloat32, 3, tfloat32, """
    }
 """)
 
-# r600 specific sin and cos
+# r600/gcn specific sin and cos
 # these trigeometric functions need some lowering because the supported
 # input values are expected to be normalized by dividing by (2 * pi)
-unop("fsin_r600", tfloat32, "sinf(6.2831853 * src0)")
-unop("fcos_r600", tfloat32, "cosf(6.2831853 * src0)")
+unop("fsin_amd", tfloat, "sinf(6.2831853 * src0)")
+unop("fcos_amd", tfloat, "cosf(6.2831853 * src0)")
 
 # AGX specific sin with input expressed in quadrants. Used in the lowering for
 # fsin/fcos. This corresponds to a sequence of 3 ALU ops in the backend (where

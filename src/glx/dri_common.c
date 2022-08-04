@@ -417,7 +417,14 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
       (*pdraw->destroyDrawable) (pdraw);
       return NULL;
    }
-   pdraw->refcount = 1;
+   /* This sure does look suspicious, doesn't it? We're on this path because
+    * this is a naked Window. GLX 1.3 drawables have an explicit creation
+    * step (setting refcount to 1), and those we would have found in the
+    * hash lookup above, bumped their refcount for the bind_context we're
+    * being called for, and then returned. But since we just created the
+    * internal naked-Window state, we need to account for both here.
+    */
+   pdraw->refcount = 2;
 
    return pdraw;
 }
@@ -491,7 +498,7 @@ releaseDrawable(const struct glx_display *priv, GLXDrawable drawable)
 _X_HIDDEN void
 driReleaseDrawables(struct glx_context *gc)
 {
-   const struct glx_display *priv = gc->psc->display;
+   const struct glx_display *priv = (gc && gc->psc) ? gc->psc->display : NULL;
 
    if (priv == NULL)
       return;

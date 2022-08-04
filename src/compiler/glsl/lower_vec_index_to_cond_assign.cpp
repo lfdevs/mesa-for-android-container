@@ -59,11 +59,6 @@ public:
       /* empty */
    }
 
-   ir_rvalue *convert_vec_index_to_cond_assign(void *mem_ctx,
-                                               ir_rvalue *orig_vector,
-                                               ir_rvalue *orig_index,
-                                               const glsl_type *type);
-
    ir_rvalue *convert_vector_extract_to_cond_assign(ir_rvalue *ir);
 
    virtual ir_visitor_status visit_enter(ir_expression *);
@@ -77,91 +72,6 @@ public:
 };
 
 } /* anonymous namespace */
-
-ir_rvalue *
-ir_vec_index_to_cond_assign_visitor::convert_vec_index_to_cond_assign(void *mem_ctx,
-                                                                      ir_rvalue *orig_vector,
-                                                                      ir_rvalue *orig_index,
-                                                                      const glsl_type *type)
-{
-   exec_list list;
-   ir_factory body(&list, base_ir);
-
-   /* Store the index to a temporary to avoid reusing its tree. */
-   assert(orig_index->type == glsl_type::int_type ||
-          orig_index->type == glsl_type::uint_type);
-   ir_variable *const index =
-      body.make_temp(orig_index->type, "vec_index_tmp_i");
-
-   body.emit(assign(index, orig_index));
-
-   /* Store the value inside a temp, thus avoiding matrixes duplication */
-   ir_variable *const value =
-      body.make_temp(orig_vector->type, "vec_value_tmp");
-
-   body.emit(assign(value, orig_vector));
-
-
-   /* Temporary where we store whichever value we swizzle out. */
-   ir_variable *const var = body.make_temp(type, "vec_index_tmp_v");
-
-   /* Generate a single comparison condition "mask" for all of the components
-    * in the vector.  This will be of the form vec3(i > 0, i > 1, i < 2).
-    */
-   ir_rvalue *const broadcast_index = orig_vector->type->vector_elements > 2
-      ? swizzle(index, SWIZZLE_XXXX, orig_vector->type->vector_elements - 1)
-      : operand(index).val;
-
-   ir_constant_data test_indices_data;
-   memset(&test_indices_data, 0, sizeof(test_indices_data));
-   test_indices_data.i[0] = 0;
-   test_indices_data.i[1] = 1;
-   test_indices_data.i[2] = 2;
-
-   ir_constant *const test_indices =
-      new(mem_ctx) ir_constant(broadcast_index->type, &test_indices_data);
-
-   ir_rvalue *const condition_val = greater(broadcast_index, test_indices);
-
-   ir_variable *const cond = body.make_temp(condition_val->type,
-                                            "dereference_condition");
-
-   body.emit(assign(cond, condition_val));
-
-
-   /* Generate a series of conditional selections to pick the right element. */
-   assert(orig_vector->type->vector_elements <= 4 &&
-          orig_vector->type->vector_elements >= 2);
-
-   ir_rvalue *rhs = csel(swizzle(cond, 0, 1),
-                         swizzle(value, 1, 1),
-                         swizzle(value, 0, 1));
-
-   if (orig_vector->type->vector_elements > 2) {
-      ir_rvalue *tmp;
-
-      if (orig_vector->type->vector_elements > 3) {
-         tmp = csel(swizzle(cond, 2, 1),
-                    swizzle(value, 3, 1),
-                    swizzle(value, 2, 1));
-
-      } else {
-         tmp = swizzle(value, 2, 1);
-      }
-
-      rhs = csel(swizzle(cond, 1, 1), tmp, rhs);
-   }
-
-   body.emit(assign(var, rhs));
-
-   /* Put all of the new instructions in the IR stream before the old
-    * instruction.
-    */
-   base_ir->insert_before(&list);
-
-   this->progress = true;
-   return deref(var).val;
-}
 
 ir_rvalue *
 ir_vec_index_to_cond_assign_visitor::convert_vector_extract_to_cond_assign(ir_rvalue *ir)
@@ -191,19 +101,13 @@ ir_vec_index_to_cond_assign_visitor::convert_vector_extract_to_cond_assign(ir_rv
          new(base_ir) ir_expression(expr->operation, vec_input->type,
                                     vec_input, expr->operands[1]);
 
-      return convert_vec_index_to_cond_assign(ralloc_parent(ir),
-                                              vec_interpolate,
-                                              interpolant->operands[1],
-                                              ir->type);
+      this->progress = true;
+      return new(base_ir) ir_expression(ir_binop_vector_extract, ir->type,
+                                        vec_interpolate,
+                                        interpolant->operands[1]);
    }
 
-   if (expr->operation != ir_binop_vector_extract)
-      return ir;
-
-   return convert_vec_index_to_cond_assign(ralloc_parent(ir),
-                                           expr->operands[0],
-                                           expr->operands[1],
-                                           ir->type);
+   return ir;
 }
 
 ir_visitor_status

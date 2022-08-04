@@ -694,7 +694,7 @@ hud_stop_queries(struct hud_context *hud, struct pipe_context *pipe)
              * per frame. It will eventually reach an equilibrium.
              */
             if (gr->current_value <
-                LIST_ENTRY(struct hud_graph, next, head)->current_value) {
+                list_entry(next, struct hud_graph, head)->current_value) {
                list_del(&gr->head);
                list_add(&gr->head, &next->head);
             }
@@ -1432,7 +1432,7 @@ hud_parse_env_var(struct hud_context *hud, struct pipe_screen *screen,
          strip_hyphens(s);
          if (added && !list_is_empty(&pane->graph_list)) {
             struct hud_graph *graph;
-            graph = LIST_ENTRY(struct hud_graph, pane->graph_list.prev, head);
+            graph = list_entry(pane->graph_list.prev, struct hud_graph, head);
             strncpy(graph->name, s, sizeof(graph->name)-1);
             graph->name[sizeof(graph->name)-1] = 0;
          }
@@ -1682,11 +1682,11 @@ hud_set_draw_context(struct hud_context *hud, struct cso_context *cso,
          "FRAG\n"
          "DCL IN[0], GENERIC[0], LINEAR\n"
          "DCL SAMP[0]\n"
-         "DCL SVIEW[0], RECT, FLOAT\n"
+         "DCL SVIEW[0], 2D, FLOAT\n"
          "DCL OUT[0], COLOR[0]\n"
          "DCL TEMP[0]\n"
 
-         "TEX TEMP[0], IN[0], SAMP[0], RECT\n"
+         "TEX TEMP[0], IN[0], SAMP[0], 2D\n"
          "MOV OUT[0], TEMP[0].xxxx\n"
          "END\n"
       };
@@ -1753,6 +1753,7 @@ hud_set_draw_context(struct hud_context *hud, struct cso_context *cso,
          "DCL CONST[0][0..2]\n"
          "DCL TEMP[0]\n"
          "IMM[0] FLT32 { -1, 0, 0, 1 }\n"
+         "IMM[1] FLT32 { 0.0078125, 0.00390625, 1, 1 }\n" // 1.0 / 128, 1.0 / 256, 1, 1
 
          /* v = in * (xscale, yscale) + (xoffset, yoffset) */
          "MAD TEMP[0].xy, IN[0], CONST[0][2].xyyy, CONST[0][1].zwww\n"
@@ -1760,7 +1761,7 @@ hud_set_draw_context(struct hud_context *hud, struct cso_context *cso,
          "MAD OUT[0].xy, TEMP[0], CONST[0][1].xyyy, IMM[0].xxxx\n"
          "MOV OUT[0].zw, IMM[0]\n"
 
-         "MOV OUT[1], IN[1]\n"
+         "MUL OUT[1], IN[1], IMM[1]\n"
          "END\n"
       };
 
@@ -1935,7 +1936,7 @@ hud_create(struct cso_context *cso, struct st_context_iface *st,
    hud->font_sampler_state.wrap_s = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
    hud->font_sampler_state.wrap_t = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
    hud->font_sampler_state.wrap_r = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
-   hud->font_sampler_state.normalized_coords = 0;
+   hud->font_sampler_state.normalized_coords = 1;
 
    /* constants */
    hud->constbuf.buffer_size = sizeof(hud->constants);

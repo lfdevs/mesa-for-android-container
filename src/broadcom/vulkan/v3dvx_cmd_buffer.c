@@ -23,6 +23,7 @@
 
 #include "v3dv_private.h"
 #include "broadcom/common/v3d_macros.h"
+#include "broadcom/common/v3d_util.h"
 #include "broadcom/cle/v3dx_pack.h"
 #include "broadcom/compiler/v3d_compiler.h"
 
@@ -754,11 +755,8 @@ set_rcl_early_z_config(struct v3dv_job *job,
                        bool *early_z_disable,
                        uint32_t *early_z_test_and_update_direction)
 {
-   /* If this is true then we have not emitted any draw calls in this job
-    * and we don't get any benefits form early Z.
-    */
-   if (!job->decided_global_ez_enable) {
-      assert(job->draw_count == 0);
+   /* Disable if none of the draw calls in this job enabled EZ */
+   if (!job->has_ez_draws) {
       *early_z_disable = true;
       return;
    }
@@ -1400,7 +1398,10 @@ v3dX(cmd_buffer_emit_varyings_state)(struct v3dv_cmd_buffer *cmd_buffer)
    }
 }
 
-static void
+/* Updates job early Z state tracking. Returns False if EZ must be disabled
+ * for the current draw call.
+ */
+static bool
 job_update_ez_state(struct v3dv_job *job,
                     struct v3dv_pipeline *pipeline,
                     struct v3dv_cmd_buffer *cmd_buffer)
@@ -1414,8 +1415,14 @@ job_update_ez_state(struct v3dv_job *job,
     */
    if (job->first_ez_state == V3D_EZ_DISABLED) {
       assert(job->ez_state == V3D_EZ_DISABLED);
-      return;
+      return false;
    }
+
+   /* If ez_state is V3D_EZ_DISABLED it means that we have already decided
+    * that EZ must be disabled for the remaining of the frame.
+    */
+   if (job->ez_state == V3D_EZ_DISABLED)
+      return false;
 
    /* This is part of the pre draw call handling, so we should be inside a
     * render pass.
@@ -1436,7 +1443,7 @@ job_update_ez_state(struct v3dv_job *job,
       if (subpass->ds_attachment.attachment == VK_ATTACHMENT_UNUSED) {
          job->first_ez_state = V3D_EZ_DISABLED;
          job->ez_state = V3D_EZ_DISABLED;
-         return;
+         return false;
       }
 
       /* GFXH-1918: the early-z buffer may load incorrect depth values
@@ -1465,7 +1472,7 @@ job_update_ez_state(struct v3dv_job *job,
                        "without framebuffer info disables early-z tests.\n");
             job->first_ez_state = V3D_EZ_DISABLED;
             job->ez_state = V3D_EZ_DISABLED;
-            return;
+            return false;
          }
 
          if (((fb->width % 2) != 0 || (fb->height % 2) != 0)) {
@@ -1473,7 +1480,7 @@ job_update_ez_state(struct v3dv_job *job,
                        "or height disables early-Z tests.\n");
             job->first_ez_state = V3D_EZ_DISABLED;
             job->ez_state = V3D_EZ_DISABLED;
-            return;
+            return false;
          }
       }
    }
@@ -1481,16 +1488,8 @@ job_update_ez_state(struct v3dv_job *job,
    /* Otherwise, we can decide to selectively enable or disable EZ for draw
     * calls using the CFG_BITS packet based on the bound pipeline state.
     */
-
-   /* If the FS writes Z, then it may update against the chosen EZ direction */
-   struct v3dv_shader_variant *fs_variant =
-      pipeline->shared_data->variants[BROADCOM_SHADER_FRAGMENT];
-   if (fs_variant->prog_data.fs->writes_z &&
-       !fs_variant->prog_data.fs->writes_z_from_fep) {
-      job->ez_state = V3D_EZ_DISABLED;
-      return;
-   }
-
+   bool disable_ez = false;
+   bool incompatible_test = false;
    switch (pipeline->ez_state) {
    case V3D_EZ_UNDECIDED:
       /* If the pipeline didn't pick a direction but didn't disable, then go
@@ -1504,24 +1503,38 @@ job_update_ez_state(struct v3dv_job *job,
       /* If the pipeline picked a direction, then it needs to match the current
        * direction if we've decided on one.
        */
-      if (job->ez_state == V3D_EZ_UNDECIDED)
+      if (job->ez_state == V3D_EZ_UNDECIDED) {
          job->ez_state = pipeline->ez_state;
-      else if (job->ez_state != pipeline->ez_state)
-         job->ez_state = V3D_EZ_DISABLED;
+      } else if (job->ez_state != pipeline->ez_state) {
+         disable_ez = true;
+         incompatible_test = true;
+      }
       break;
 
    case V3D_EZ_DISABLED:
-      /* If the pipeline disables EZ because of a bad Z func or stencil
-       * operation, then we can't do any more EZ in this frame.
-       */
-      job->ez_state = V3D_EZ_DISABLED;
+         disable_ez = true;
+         incompatible_test = pipeline->incompatible_ez_test;
       break;
    }
 
-   if (job->first_ez_state == V3D_EZ_UNDECIDED &&
-       job->ez_state != V3D_EZ_DISABLED) {
+   if (job->first_ez_state == V3D_EZ_UNDECIDED && !disable_ez) {
+      assert(job->ez_state != V3D_EZ_DISABLED);
       job->first_ez_state = job->ez_state;
    }
+
+   /* If we had to disable EZ because of an incompatible test direction and
+    * and the pipeline writes depth then we need to disable EZ for the rest of
+    * the frame.
+    */
+   if (incompatible_test && pipeline->z_updates_enable) {
+      assert(disable_ez);
+      job->ez_state = V3D_EZ_DISABLED;
+   }
+
+   if (!disable_ez)
+      job->has_ez_draws = true;
+
+   return !disable_ez;
 }
 
 void
@@ -1533,13 +1546,13 @@ v3dX(cmd_buffer_emit_configuration_bits)(struct v3dv_cmd_buffer *cmd_buffer)
    struct v3dv_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
    assert(pipeline);
 
-   job_update_ez_state(job, pipeline, cmd_buffer);
+   bool enable_ez = job_update_ez_state(job, pipeline, cmd_buffer);
 
    v3dv_cl_ensure_space_with_branch(&job->bcl, cl_packet_length(CFG_BITS));
    v3dv_return_if_oom(cmd_buffer, NULL);
 
    cl_emit_with_prepacked(&job->bcl, CFG_BITS, pipeline->cfg_bits, config) {
-      config.early_z_enable = job->ez_state != V3D_EZ_DISABLED;
+      config.early_z_enable = enable_ez;
       config.early_z_updates_enable = config.early_z_enable &&
          pipeline->z_updates_enable;
    }
@@ -1578,7 +1591,8 @@ cmd_buffer_subpass_split_for_barrier(struct v3dv_cmd_buffer *cmd_buffer,
    if (!job)
       return NULL;
 
-   job->serialize = true;
+   /* FIXME: we can do better than all barriers */
+   job->serialize = V3DV_BARRIER_ALL;
    job->needs_bcl_sync = is_bcl_barrier;
    return job;
 }
@@ -1630,8 +1644,7 @@ v3dX(cmd_buffer_execute_inside_pass)(struct v3dv_cmd_buffer *primary,
     * pipelines used by the secondaries do, we need to re-start the primary
     * job to enable MSAA. See cmd_buffer_restart_job_for_msaa_if_needed.
     */
-   bool pending_barrier = false;
-   bool pending_bcl_barrier = false;
+   struct v3dv_barrier_state pending_barrier = { 0 };
    for (uint32_t i = 0; i < cmd_buffer_count; i++) {
       V3DV_FROM_HANDLE(v3dv_cmd_buffer, secondary, cmd_buffers[i]);
 
@@ -1665,9 +1678,13 @@ v3dX(cmd_buffer_execute_inside_pass)(struct v3dv_cmd_buffer *primary,
              * branch?
              */
             struct v3dv_job *primary_job = primary->state.job;
-            if (!primary_job || secondary_job->serialize || pending_barrier) {
+            if (!primary_job || secondary_job->serialize ||
+                pending_barrier.dst_mask) {
                const bool needs_bcl_barrier =
-                  secondary_job->needs_bcl_sync || pending_bcl_barrier;
+                  secondary_job->needs_bcl_sync ||
+                  pending_barrier.bcl_buffer_access ||
+                  pending_barrier.bcl_image_access;
+
                primary_job =
                   cmd_buffer_subpass_split_for_barrier(primary,
                                                        needs_bcl_barrier);
@@ -1707,15 +1724,21 @@ v3dX(cmd_buffer_execute_inside_pass)(struct v3dv_cmd_buffer *primary,
              */
             v3dv_cmd_buffer_finish_job(primary);
             v3dv_job_clone_in_cmd_buffer(secondary_job, primary);
-            if (pending_barrier) {
-               secondary_job->serialize = true;
-               if (pending_bcl_barrier)
+            if (pending_barrier.dst_mask) {
+               /* FIXME: do the same we do for primaries and only choose the
+                * relevant src masks.
+                */
+               secondary_job->serialize = pending_barrier.src_mask_graphics |
+                                          pending_barrier.src_mask_transfer |
+                                          pending_barrier.src_mask_compute;
+               if (pending_barrier.bcl_buffer_access ||
+                   pending_barrier.bcl_image_access) {
                   secondary_job->needs_bcl_sync = true;
+               }
             }
          }
 
-         pending_barrier = false;
-         pending_bcl_barrier = false;
+         memset(&pending_barrier, 0, sizeof(pending_barrier));
       }
 
       /* If the secondary has recorded any vkCmdEndQuery commands, we need to
@@ -1727,14 +1750,16 @@ v3dX(cmd_buffer_execute_inside_pass)(struct v3dv_cmd_buffer *primary,
       /* If this secondary had any pending barrier state we will need that
        * barrier state consumed with whatever comes next in the primary.
        */
-      assert(secondary->state.has_barrier || !secondary->state.has_bcl_barrier);
-      pending_barrier = secondary->state.has_barrier;
-      pending_bcl_barrier = secondary->state.has_bcl_barrier;
+      assert(secondary->state.barrier.dst_mask ||
+             (!secondary->state.barrier.bcl_buffer_access &&
+              !secondary->state.barrier.bcl_image_access));
+
+      pending_barrier = secondary->state.barrier;
    }
 
-   if (pending_barrier) {
-      primary->state.has_barrier = true;
-      primary->state.has_bcl_barrier |= pending_bcl_barrier;
+   if (pending_barrier.dst_mask) {
+      v3dv_cmd_buffer_merge_barrier_state(&primary->state.barrier,
+                                          &pending_barrier);
    }
 }
 
@@ -2082,36 +2107,16 @@ v3dX(cmd_buffer_emit_gl_shader_state)(struct v3dv_cmd_buffer *cmd_buffer)
       }
    }
 
+   /* Clearing push constants and descriptor sets for all stages is not quite
+    * correct (some shader stages may not be used at all or they may not be
+    * consuming push constants), however this is not relevant because if we
+    * bind a different pipeline we always have to rebuild the uniform streams.
+    */
    cmd_buffer->state.dirty &= ~(V3DV_CMD_DIRTY_VERTEX_BUFFER |
                                 V3DV_CMD_DIRTY_DESCRIPTOR_SETS |
                                 V3DV_CMD_DIRTY_PUSH_CONSTANTS);
    cmd_buffer->state.dirty_descriptor_stages &= ~VK_SHADER_STAGE_ALL_GRAPHICS;
    cmd_buffer->state.dirty_push_constants_stages &= ~VK_SHADER_STAGE_ALL_GRAPHICS;
-}
-
-/* FIXME: C&P from v3dx_draw. Refactor to common place? */
-static uint32_t
-v3d_hw_prim_type(enum pipe_prim_type prim_type)
-{
-   switch (prim_type) {
-   case PIPE_PRIM_POINTS:
-   case PIPE_PRIM_LINES:
-   case PIPE_PRIM_LINE_LOOP:
-   case PIPE_PRIM_LINE_STRIP:
-   case PIPE_PRIM_TRIANGLES:
-   case PIPE_PRIM_TRIANGLE_STRIP:
-   case PIPE_PRIM_TRIANGLE_FAN:
-      return prim_type;
-
-   case PIPE_PRIM_LINES_ADJACENCY:
-   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
-   case PIPE_PRIM_TRIANGLES_ADJACENCY:
-   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
-      return 8 + (prim_type - PIPE_PRIM_LINES_ADJACENCY);
-
-   default:
-      unreachable("Unsupported primitive type");
-   }
 }
 
 void
@@ -2323,7 +2328,7 @@ v3dX(cmd_buffer_render_pass_setup_render_target)(struct v3dv_cmd_buffer *cmd_buf
    assert(attachment_idx < state->framebuffer->attachment_count &&
           attachment_idx < state->attachment_alloc_count);
    struct v3dv_image_view *iview = state->attachments[attachment_idx].image_view;
-   assert(iview->vk.aspects & VK_IMAGE_ASPECT_COLOR_BIT);
+   assert(vk_format_is_color(iview->vk.format));
 
    *rt_bpp = iview->internal_bpp;
    *rt_type = iview->internal_type;

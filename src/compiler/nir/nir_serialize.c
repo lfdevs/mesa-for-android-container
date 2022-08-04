@@ -23,6 +23,7 @@
 
 #include "nir_serialize.h"
 #include "nir_control_flow.h"
+#include "nir_xfb_info.h"
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
 
@@ -633,7 +634,8 @@ union packed_instr {
       unsigned deref_type:3;
       unsigned cast_type_same_as_last:1;
       unsigned modes:5; /* See (de|en)code_deref_modes() */
-      unsigned _pad:10;
+      unsigned _pad:9;
+      unsigned in_bounds:1;
       unsigned packed_src_ssa_16bit:1; /* deref_var redefines this */
       unsigned dest:8;
    } deref;
@@ -1042,6 +1044,8 @@ write_deref(write_ctx *ctx, const nir_deref_instr *deref)
       header.deref.packed_src_ssa_16bit =
          deref->parent.is_ssa && deref->arr.index.is_ssa &&
          are_object_ids_16bit(ctx);
+
+      header.deref.in_bounds = deref->arr.in_bounds;
    }
 
    write_dest(ctx, &deref->dest, header, deref->instr.type);
@@ -1128,6 +1132,8 @@ read_deref(read_ctx *ctx, union packed_instr header)
          read_src(ctx, &deref->parent, &deref->instr);
          read_src(ctx, &deref->arr.index, &deref->instr);
       }
+
+      deref->arr.in_bounds = header.deref.in_bounds;
 
       parent = nir_src_as_deref(deref->parent);
       if (deref->deref_type == nir_deref_type_array)
@@ -1317,7 +1323,7 @@ write_load_const(write_ctx *ctx, const nir_load_const_instr *lc)
             /* packed_value contains high 19 bits, low bits are 0 */
             header.load_const.packing = load_const_scalar_hi_19bits;
             header.load_const.packed_value = lc->value[0].u64 >> 45;
-         } else if (((lc->value[0].i64 << 45) >> 45) == lc->value[0].i64) {
+         } else if (util_mask_sign_extend(lc->value[0].i64, 19) == lc->value[0].i64) {
             /* packed_value contains low 19 bits, high bits are sign-extended */
             header.load_const.packing = load_const_scalar_lo_19bits_sext;
             header.load_const.packed_value = lc->value[0].u64;
@@ -1328,7 +1334,7 @@ write_load_const(write_ctx *ctx, const nir_load_const_instr *lc)
          if ((lc->value[0].u32 & 0x1fff) == 0) {
             header.load_const.packing = load_const_scalar_hi_19bits;
             header.load_const.packed_value = lc->value[0].u32 >> 13;
-         } else if (((lc->value[0].i32 << 13) >> 13) == lc->value[0].i32) {
+         } else if (util_mask_sign_extend(lc->value[0].i32, 19) == lc->value[0].i32) {
             header.load_const.packing = load_const_scalar_lo_19bits_sext;
             header.load_const.packed_value = lc->value[0].u32;
          }
@@ -1387,6 +1393,7 @@ read_load_const(read_ctx *ctx, union packed_instr header)
    nir_load_const_instr *lc =
       nir_load_const_instr_create(ctx->nir, header.load_const.last_component + 1,
                                   decode_bit_size_3bits(header.load_const.bit_size));
+   lc->def.divergent = false;
 
    switch (header.load_const.packing) {
    case load_const_scalar_hi_19bits:
@@ -1475,6 +1482,8 @@ read_ssa_undef(read_ctx *ctx, union packed_instr header)
    nir_ssa_undef_instr *undef =
       nir_ssa_undef_instr_create(ctx->nir, header.undef.last_component + 1,
                                  decode_bit_size_3bits(header.undef.bit_size));
+
+   undef->def.divergent = false;
 
    read_add_object(ctx, &undef->def);
    return undef;
@@ -2054,6 +2063,32 @@ read_function(read_ctx *ctx)
       fxn->impl = NIR_SERIALIZE_FUNC_HAS_IMPL;
 }
 
+static void
+write_xfb_info(write_ctx *ctx, const nir_xfb_info *xfb)
+{
+   if (xfb == NULL) {
+      blob_write_uint32(ctx->blob, 0);
+   } else {
+      size_t size = nir_xfb_info_size(xfb->output_count);
+      assert(size <= UINT32_MAX);
+      blob_write_uint32(ctx->blob, size);
+      blob_write_bytes(ctx->blob, xfb, size);
+   }
+}
+
+static nir_xfb_info *
+read_xfb_info(read_ctx *ctx)
+{
+   uint32_t size = blob_read_uint32(ctx->blob);
+   if (size == 0)
+      return NULL;
+
+   struct nir_xfb_info *xfb = ralloc_size(ctx->nir, size);
+   blob_copy_bytes(ctx->blob, (void *)xfb, size);
+
+   return xfb;
+}
+
 /**
  * Serialize NIR into a binary blob.
  *
@@ -2107,6 +2142,8 @@ nir_serialize(struct blob *blob, const nir_shader *nir, bool strip)
    blob_write_uint32(blob, nir->constant_data_size);
    if (nir->constant_data_size > 0)
       blob_write_bytes(blob, nir->constant_data, nir->constant_data_size);
+
+   write_xfb_info(&ctx, nir->xfb_info);
 
    blob_overwrite_uint32(blob, idx_size_offset, ctx.next_idx);
 
@@ -2162,6 +2199,8 @@ nir_deserialize(void *mem_ctx,
       blob_copy_bytes(blob, ctx.nir->constant_data,
                       ctx.nir->constant_data_size);
    }
+
+   ctx.nir->xfb_info = read_xfb_info(&ctx);
 
    free(ctx.idx_table);
 

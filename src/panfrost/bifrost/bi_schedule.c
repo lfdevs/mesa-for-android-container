@@ -107,6 +107,17 @@ struct bi_const_state {
         unsigned word_idx;
 };
 
+enum bi_ftz_state {
+        /* No flush-to-zero state assigned yet */
+        BI_FTZ_STATE_NONE,
+
+        /* Never flush-to-zero */
+        BI_FTZ_STATE_DISABLE,
+
+        /* Always flush-to-zero */
+        BI_FTZ_STATE_ENABLE,
+};
+
 struct bi_clause_state {
         /* Has a message-passing instruction already been assigned? */
         bool message;
@@ -114,10 +125,13 @@ struct bi_clause_state {
         /* Indices already accessed, this needs to be tracked to avoid hazards
          * around message-passing instructions */
         unsigned access_count;
-        bi_index accesses[(BI_MAX_SRCS + 2) * 16];
+        bi_index accesses[(BI_MAX_SRCS + BI_MAX_DESTS) * 16];
 
         unsigned tuple_count;
         struct bi_const_state consts[8];
+
+        /* Numerical state of the clause */
+        enum bi_ftz_state ftz;
 };
 
 /* Determines messsage type by checking the table and a few special cases. Only
@@ -491,58 +505,6 @@ bi_can_iaddc(bi_instr *ins)
 }
 
 /*
- * When MUX.i32 or MUX.v2i16 is used to multiplex entire sources, they can be
- * replaced by CSEL as follows:
- *
- *      MUX.neg(x, y, b) -> CSEL.s.lt(b, 0, x, y)
- *      MUX.int_zero(x, y, b) -> CSEL.i.eq(b, 0, x, y)
- *      MUX.fp_zero(x, y, b) -> CSEL.f.eq(b, 0, x, y)
- *
- * MUX.bit cannot be transformed like this.
- *
- * Note that MUX.v2i16 has partial support for swizzles, which CSEL.v2i16 lacks.
- * So we must check the swizzles too.
- */
-static bool
-bi_can_csel(bi_instr *I)
-{
-        return ((I->op == BI_OPCODE_MUX_I32) || (I->op == BI_OPCODE_MUX_V2I16)) &&
-                (I->mux != BI_MUX_BIT) &&
-                (I->src[0].swizzle == BI_SWIZZLE_H01) &&
-                (I->src[1].swizzle == BI_SWIZZLE_H01) &&
-                (I->src[2].swizzle == BI_SWIZZLE_H01);
-}
-
-static enum bi_opcode
-bi_csel_for_mux(bool b32, enum bi_mux mux)
-{
-        switch (mux) {
-        case BI_MUX_INT_ZERO:
-                return b32 ? BI_OPCODE_CSEL_I32 : BI_OPCODE_CSEL_V2I16;
-        case BI_MUX_NEG:
-                return b32 ? BI_OPCODE_CSEL_S32 : BI_OPCODE_CSEL_V2S16;
-        case BI_MUX_FP_ZERO:
-                return b32 ? BI_OPCODE_CSEL_F32 : BI_OPCODE_CSEL_V2F16;
-        default:
-             unreachable("No CSEL for MUX.bit");
-        }
-}
-
-static void
-bi_replace_mux_with_csel(bi_instr *I)
-{
-        assert(I->op == BI_OPCODE_MUX_I32 || I->op == BI_OPCODE_MUX_V2I16);
-        I->op = bi_csel_for_mux(I->op == BI_OPCODE_MUX_I32, I->mux);
-        I->cmpf = (I->mux == BI_MUX_NEG) ? BI_CMPF_LT : BI_CMPF_EQ;
-
-        bi_index vTrue = I->src[0], vFalse = I->src[1], cond = I->src[2];
-
-        I->src[0] = cond;
-        I->src[1] = bi_zero();
-        I->src[2] = vTrue;
-        I->src[3] = vFalse;
-}
-/*
  * The encoding of *FADD.v2f16 only specifies a single abs flag. All abs
  * encodings are permitted by swapping operands; however, this scheme fails if
  * both operands are equal. Test for this case.
@@ -562,7 +524,7 @@ bi_can_fma(bi_instr *ins)
                 return true;
 
         /* +MUX -> *CSEL */
-        if (bi_can_csel(ins))
+        if (bi_can_replace_with_csel(ins))
                 return true;
 
         /* *FADD.v2f16 has restricted abs modifiers, use +FADD.v2f16 instead */
@@ -666,7 +628,7 @@ bi_reads_temps(bi_instr *ins, unsigned src)
         switch (ins->op) {
         /* Cannot permute a temporary */
         case BI_OPCODE_CLPER_I32:
-        case BI_OPCODE_CLPER_V6_I32:
+        case BI_OPCODE_CLPER_OLD_I32:
                 return src != 0;
         case BI_OPCODE_IMULD:
                 return false;
@@ -772,6 +734,10 @@ bi_reads_t(bi_instr *ins, unsigned src)
                 return src != 2;
         case BI_OPCODE_BLEND:
                 return src != 2 && src != 3;
+
+        /* +JUMP can't read the offset from T */
+        case BI_OPCODE_JUMP:
+                return false;
 
         /* Else, just check if we can read any temps */
         default:
@@ -1027,6 +993,28 @@ bi_write_count(bi_instr *instr, uint64_t live_after_temp)
         return count;
 }
 
+/*
+ * Test if an instruction required flush-to-zero mode. Currently only supported
+ * for f16<-->f32 conversions to implement fquantize16
+ */
+static bool
+bi_needs_ftz(bi_instr *I)
+{
+        return (I->op == BI_OPCODE_F16_TO_F32 ||
+                I->op == BI_OPCODE_V2F32_TO_V2F16) && I->ftz;
+}
+
+/*
+ * Test if an instruction would be numerically incompatible with the clause. At
+ * present we only consider flush-to-zero modes.
+ */
+static bool
+bi_numerically_incompatible(struct bi_clause_state *clause, bi_instr *instr)
+{
+        return (clause->ftz != BI_FTZ_STATE_NONE) &&
+               ((clause->ftz == BI_FTZ_STATE_ENABLE) != bi_needs_ftz(instr));
+}
+
 /* Instruction placement entails two questions: what subset of instructions in
  * the block can legally be scheduled? and of those which is the best? That is,
  * we seek to maximize a cost function on a subset of the worklist satisfying a
@@ -1054,6 +1042,10 @@ bi_instr_schedulable(bi_instr *instr,
                 return false;
 
         if (bi_must_not_last(instr) && tuple->last)
+                return false;
+
+        /* Numerical properties must be compatible with the clause */
+        if (bi_numerically_incompatible(clause, instr))
                 return false;
 
         /* Message-passing instructions are not guaranteed write within the
@@ -1220,6 +1212,13 @@ bi_pop_instr(struct bi_clause_state *clause, struct bi_tuple_state *tuple,
                 if (bi_tuple_is_new_src(instr, &tuple->reg, s))
                         tuple->reg.reads[tuple->reg.nr_reads++] = instr->src[s];
         }
+
+        /* This could be optimized to allow pairing integer instructions with
+         * special flush-to-zero instructions, but punting on this until we have
+         * a workload that cares.
+         */
+        clause->ftz = bi_needs_ftz(instr) ? BI_FTZ_STATE_ENABLE :
+                                            BI_FTZ_STATE_DISABLE;
 }
 
 /* Choose the best instruction and pop it off the worklist. Returns NULL if no
@@ -1281,8 +1280,8 @@ bi_take_instr(bi_context *ctx, struct bi_worklist st,
                 assert(bi_can_iaddc(instr));
                 instr->op = BI_OPCODE_IADDC_I32;
                 instr->src[2] = bi_zero();
-        } else if (fma && bi_can_csel(instr)) {
-                bi_replace_mux_with_csel(instr);
+        } else if (fma && bi_can_replace_with_csel(instr)) {
+                bi_replace_mux_with_csel(instr, false);
         }
 
         return instr;
@@ -1864,6 +1863,8 @@ bi_schedule_clause(bi_context *ctx, bi_block *block, struct bi_worklist st, uint
         bi_instr *last = clause->tuples[max_tuples - 1].add;
         clause->next_clause_prefetch = !last || (last->op != BI_OPCODE_JUMP);
         clause->block = block;
+
+        clause->ftz = (clause_state.ftz == BI_FTZ_STATE_ENABLE);
 
         /* We emit in reverse and emitted to the back of the tuples array, so
          * move it up front for easy indexing */

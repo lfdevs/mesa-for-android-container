@@ -445,12 +445,16 @@ wgl_create_context(_EGLDisplay *disp, _EGLConfig *conf,
       flags |= WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
    if (wgl_ctx->base.Flags & EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR)
       flags |= WGL_CONTEXT_DEBUG_BIT_ARB;
+   unsigned resetStrategy = WGL_NO_RESET_NOTIFICATION_ARB;
+   if (wgl_ctx->base.ResetNotificationStrategy != EGL_NO_RESET_NOTIFICATION)
+      resetStrategy = WGL_LOSE_CONTEXT_ON_RESET_ARB;
    wgl_ctx->ctx = stw_create_context_attribs(disp->PlatformDisplay, 0, shared,
       wgl_ctx->base.ClientMajorVersion,
       wgl_ctx->base.ClientMinorVersion,
       flags,
       profile_mask,
-      stw_config->iPixelFormat);
+      stw_config->iPixelFormat,
+      resetStrategy);
 
    if (!wgl_ctx->ctx)
       goto cleanup;

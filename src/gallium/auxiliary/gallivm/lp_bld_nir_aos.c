@@ -18,8 +18,8 @@
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
  * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
  **************************************************************************/
 
@@ -31,6 +31,7 @@
 #include "lp_bld_swizzle.h"
 #include "lp_bld_debug.h"
 #include "util/u_math.h"
+
 
 static LLVMValueRef
 swizzle_aos(struct lp_build_nir_context *bld_base,
@@ -56,199 +57,213 @@ swizzle_aos(struct lp_build_nir_context *bld_base,
    return lp_build_swizzle_aos(&bld->bld_base.base, a, swizzles);
 }
 
-LLVMValueRef lp_nir_aos_conv_const(struct gallivm_state *gallivm, LLVMValueRef constval, int nc)
+
+LLVMValueRef
+lp_nir_aos_conv_const(struct gallivm_state *gallivm,
+                      LLVMValueRef constval, int nc)
 {
    LLVMValueRef elems[16];
    uint8_t val = 0;
    /* convert from 1..4 x f32 to 16 x unorm8 */
    for (unsigned i = 0; i < nc; i++) {
-      LLVMValueRef value = LLVMBuildExtractElement(gallivm->builder, constval, lp_build_const_int32(gallivm, i), "");
+      LLVMValueRef value =
+         LLVMBuildExtractElement(gallivm->builder, constval,
+                                 lp_build_const_int32(gallivm, i), "");
       assert(LLVMIsConstant(value));
       unsigned uval = LLVMConstIntGetZExtValue(value);
       float f = uif(uval);
       val = float_to_ubyte(f);
       for (unsigned j = 0; j < 4; j++) {
-         elems[j * 4 + i] = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), val, 0);
+         elems[j * 4 + i] =
+            LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), val, 0);
       }
    }
    for (unsigned i = nc; i < 4; i++) {
       for (unsigned j = 0; j < 4; j++) {
-         elems[j * 4 + i] = LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), val, 0);
+         elems[j * 4 + i] =
+            LLVMConstInt(LLVMInt8TypeInContext(gallivm->context), val, 0);
       }
    }
    return LLVMConstVector(elems, 16);
 }
 
-static void init_var_slots(struct lp_build_nir_context *bld_base,
-                           nir_variable *var)
+
+static void
+init_var_slots(struct lp_build_nir_context *bld_base,
+               nir_variable *var)
 {
-   struct lp_build_nir_aos_context *bld = (struct lp_build_nir_aos_context *)bld_base;
+   struct lp_build_nir_aos_context *bld =
+      (struct lp_build_nir_aos_context *)bld_base;
 
    if (!bld->outputs)
-     return;
+      return;
    unsigned this_loc = var->data.driver_location;
 
    bld->outputs[this_loc] = lp_build_alloca(bld_base->base.gallivm,
-                                               bld_base->base.vec_type, "output");
+                                            bld_base->base.vec_type,
+                                            "output");
 }
 
-static void emit_var_decl(struct lp_build_nir_context *bld_base,
-                          nir_variable *var)
+
+static void
+emit_var_decl(struct lp_build_nir_context *bld_base,
+              nir_variable *var)
 {
-   switch (var->data.mode) {
-   case nir_var_shader_out: {
+   if (var->data.mode == nir_var_shader_out) {
       init_var_slots(bld_base, var);
-      break;
-   }
-   default:
-      break;
    }
 }
 
-static void emit_load_var(struct lp_build_nir_context *bld_base,
-                           nir_variable_mode deref_mode,
-                           unsigned num_components,
-                           unsigned bit_size,
-                           nir_variable *var,
-                           unsigned vertex_index,
-                           LLVMValueRef indir_vertex_index,
-                           unsigned const_index,
-                           LLVMValueRef indir_index,
-                           LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
+
+static void
+emit_load_var(struct lp_build_nir_context *bld_base,
+              nir_variable_mode deref_mode,
+              unsigned num_components,
+              unsigned bit_size,
+              nir_variable *var,
+              unsigned vertex_index,
+              LLVMValueRef indir_vertex_index,
+              unsigned const_index,
+              LLVMValueRef indir_index,
+              LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
 {
-   struct lp_build_nir_aos_context *bld = (struct lp_build_nir_aos_context *)bld_base;
+   struct lp_build_nir_aos_context *bld =
+      (struct lp_build_nir_aos_context *)bld_base;
    unsigned location = var->data.driver_location;
 
-   switch (deref_mode) {
-   case nir_var_shader_in:
+   if (deref_mode == nir_var_shader_in) {
       result[0] = bld->inputs[location];
-      break;
-   default:
-      break;
    }
 }
 
-static void emit_store_var(struct lp_build_nir_context *bld_base,
-                           nir_variable_mode deref_mode,
-                           unsigned num_components,
-                           unsigned bit_size,
-                           nir_variable *var,
-                           unsigned writemask,
-                           LLVMValueRef indir_vertex_index,
-                           unsigned const_index,
-                           LLVMValueRef indir_index,
-                           LLVMValueRef dst)
+
+static void
+emit_store_var(struct lp_build_nir_context *bld_base,
+               nir_variable_mode deref_mode,
+               unsigned num_components,
+               unsigned bit_size,
+               nir_variable *var,
+               unsigned writemask,
+               LLVMValueRef indir_vertex_index,
+               unsigned const_index,
+               LLVMValueRef indir_index,
+               LLVMValueRef vals)
 {
-   struct lp_build_nir_aos_context *bld = (struct lp_build_nir_aos_context *)bld_base;
+   struct lp_build_nir_aos_context *bld =
+      (struct lp_build_nir_aos_context *)bld_base;
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    unsigned location = var->data.driver_location;
 
-   if (LLVMIsConstant(dst)) {
-      dst = lp_nir_aos_conv_const(gallivm, dst, num_components);
+   if (LLVMIsConstant(vals)) {
+      vals = lp_nir_aos_conv_const(gallivm, vals, num_components);
    }
 
-   switch (deref_mode) {
-   case nir_var_shader_out:
-      LLVMBuildStore(gallivm->builder, dst, bld->outputs[location]);
-      break;
-   default:
-      break;
+   if (deref_mode == nir_var_shader_out) {
+      LLVMBuildStore(gallivm->builder, vals, bld->outputs[location]);
    }
 }
 
-static LLVMValueRef emit_load_reg(struct lp_build_nir_context *bld_base,
-                                  struct lp_build_context *reg_bld,
-                                  const nir_reg_src *reg,
-                                  LLVMValueRef indir_src,
-                                  LLVMValueRef reg_storage)
+
+static LLVMValueRef
+emit_load_reg(struct lp_build_nir_context *bld_base,
+              struct lp_build_context *reg_bld,
+              const nir_reg_src *reg,
+              LLVMValueRef indir_src,
+              LLVMValueRef reg_storage)
 {
    struct gallivm_state *gallivm = bld_base->base.gallivm;
-
    return LLVMBuildLoad(gallivm->builder, reg_storage, "");
 }
 
-static void emit_store_reg(struct lp_build_nir_context *bld_base,
-                           struct lp_build_context *reg_bld,
-                           const nir_reg_dest *reg,
-                           unsigned writemask,
-                           LLVMValueRef indir_src,
-                           LLVMValueRef reg_storage,
-                           LLVMValueRef dst[NIR_MAX_VEC_COMPONENTS])
+
+static void
+emit_store_reg(struct lp_build_nir_context *bld_base,
+               struct lp_build_context *reg_bld,
+               const nir_reg_dest *reg,
+               unsigned writemask,
+               LLVMValueRef indir_src,
+               LLVMValueRef reg_storage,
+               LLVMValueRef vals[NIR_MAX_VEC_COMPONENTS])
 {
    struct gallivm_state *gallivm = bld_base->base.gallivm;
 
-   if (LLVMIsConstant(dst[0]))
-      dst[0] = lp_nir_aos_conv_const(gallivm, dst[0], 1);
+   if (LLVMIsConstant(vals[0]))
+      vals[0] = lp_nir_aos_conv_const(gallivm, vals[0], 1);
 
    if (writemask == 0xf) {
-      LLVMBuildStore(gallivm->builder, dst[0], reg_storage);
+      LLVMBuildStore(gallivm->builder, vals[0], reg_storage);
       return;
    }
 
    LLVMValueRef cur = LLVMBuildLoad(gallivm->builder, reg_storage, "");
    LLVMTypeRef i32t = LLVMInt32TypeInContext(gallivm->context);
-   for (unsigned i = 0; i < 4; i++) {
-      if (writemask & (1 << i)) {
-         LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH] = { 0 };
-         for (unsigned j = 0; j < 16; j++){
-            if (j % 4 == i)
-               shuffles[j] = LLVMConstInt(i32t, 16 + j, 0);
-            else
-               shuffles[j] = LLVMConstInt(i32t, j, 0);
-         }
-
-         cur = LLVMBuildShuffleVector(gallivm->builder, cur, dst[0],
-                                      LLVMConstVector(shuffles, 16), "");
+   LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
+   for (unsigned j = 0; j < 16; j++) {
+      unsigned comp = j % 4;
+      if (writemask & (1 << comp)) {
+         shuffles[j] = LLVMConstInt(i32t, 16 + j, 0); // new val
+      } else {
+         shuffles[j] = LLVMConstInt(i32t, j, 0);      // cur val
       }
    }
+   cur = LLVMBuildShuffleVector(gallivm->builder, cur, vals[0],
+                                LLVMConstVector(shuffles, 16), "");
+
    LLVMBuildStore(gallivm->builder, cur, reg_storage);
 }
 
-static void emit_load_ubo(struct lp_build_nir_context *bld_base,
-                          unsigned nc,
-                          unsigned bit_size,
-                          bool offset_is_uniform,
-                          LLVMValueRef index,
-                          LLVMValueRef offset,
-                          LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
+
+static void
+emit_load_ubo(struct lp_build_nir_context *bld_base,
+              unsigned nc,
+              unsigned bit_size,
+              bool offset_is_uniform,
+              LLVMValueRef index,
+              LLVMValueRef offset,
+              LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
 {
-   struct lp_build_nir_aos_context *bld = (struct lp_build_nir_aos_context *)bld_base;
+   struct lp_build_nir_aos_context *bld =
+      (struct lp_build_nir_aos_context *)bld_base;
    LLVMBuilderRef builder = bld_base->base.gallivm->builder;
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    struct lp_type type = bld_base->base.type;
    LLVMValueRef res;
 
    res = bld->bld_base.base.undef;
-   offset = LLVMBuildExtractElement(builder, offset, lp_build_const_int32(gallivm, 0), "");
+   offset = LLVMBuildExtractElement(builder, offset,
+                                    lp_build_const_int32(gallivm, 0), "");
    assert(LLVMIsConstant(offset));
    unsigned offset_val = LLVMConstIntGetZExtValue(offset) >> 2;
    for (unsigned chan = 0; chan < nc; ++chan) {
-      LLVMValueRef this_offset = lp_build_const_int32(gallivm, offset_val + chan);
+      LLVMValueRef this_offset = lp_build_const_int32(gallivm,
+                                                      offset_val + chan);
 
-      LLVMValueRef scalar_ptr = LLVMBuildGEP(builder, bld->consts_ptr, &this_offset, 1, "");
+      LLVMValueRef scalar_ptr = LLVMBuildGEP(builder, bld->consts_ptr,
+                                             &this_offset, 1, "");
 
       LLVMValueRef scalar = LLVMBuildLoad(builder, scalar_ptr, "");
 
       lp_build_name(scalar, "const[%u].%c", offset_val, "xyzw"[chan]);
 
       LLVMValueRef swizzle = lp_build_const_int32(bld->bld_base.base.gallivm,
-                                                  nc == 1 ? 0 : bld->swizzles[chan]);
+                                           nc == 1 ? 0 : bld->swizzles[chan]);
 
       res = LLVMBuildInsertElement(builder, res, scalar, swizzle, "");
    }
+
    if (type.length > 4) {
       LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
 
       for (unsigned chan = 0; chan < nc; ++chan) {
-         shuffles[chan] = lp_build_const_int32(bld->bld_base.base.gallivm, chan);
+         shuffles[chan] =
+            lp_build_const_int32(bld->bld_base.base.gallivm, chan);
       }
 
       for (unsigned i = nc; i < type.length; ++i) {
          shuffles[i] = shuffles[i % nc];
       }
 
-      res = LLVMBuildShuffleVector(builder,
-                                   res, bld->bld_base.base.undef,
+      res = LLVMBuildShuffleVector(builder, res, bld->bld_base.base.undef,
                                    LLVMConstVector(shuffles, type.length),
                                    "");
    }
@@ -259,11 +274,14 @@ static void emit_load_ubo(struct lp_build_nir_context *bld_base,
    result[0] = res;
 }
 
-static void emit_tex(struct lp_build_nir_context *bld_base,
-                     struct lp_sampler_params *params)
+
+static void
+emit_tex(struct lp_build_nir_context *bld_base,
+         struct lp_sampler_params *params)
 {
-   struct lp_build_nir_aos_context *bld = (struct lp_build_nir_aos_context *)bld_base;
-   struct lp_derivatives derivs = { 0 };
+   struct lp_build_nir_aos_context *bld =
+      (struct lp_build_nir_aos_context *)bld_base;
+   static const struct lp_derivatives derivs = { 0 };
    params->type = bld_base->base.type;
    params->texel[0] = bld->sampler->emit_fetch_texel(bld->sampler,
                                                      &bld->bld_base.base,
@@ -271,8 +289,9 @@ static void emit_tex(struct lp_build_nir_context *bld_base,
                                                      params->texture_index,
                                                      params->coords[0],
                                                      params->derivs ? params->derivs[0] : derivs,
-                                                     0);
+                                                     LP_BLD_TEX_MODIFIER_NONE);
 }
+
 
 static void
 emit_load_const(struct lp_build_nir_context *bld_base,
@@ -282,7 +301,7 @@ emit_load_const(struct lp_build_nir_context *bld_base,
    struct lp_build_nir_aos_context *bld = lp_nir_aos_context(bld_base);
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    LLVMValueRef elems[4];
-   int nc = instr->def.num_components;
+   const int nc = instr->def.num_components;
    bool do_swizzle = false;
 
    if (nc == 4)
@@ -290,10 +309,13 @@ emit_load_const(struct lp_build_nir_context *bld_base,
 
    for (unsigned i = 0; i < nc; i++) {
       int idx = do_swizzle ? bld->swizzles[i] : i;
-      elems[idx] = LLVMConstInt(LLVMInt32TypeInContext(gallivm->context), instr->value[i].u32, bld_base->base.type.sign ? 1 : 0);
+      elems[idx] = LLVMConstInt(LLVMInt32TypeInContext(gallivm->context),
+                                instr->value[i].u32,
+                                bld_base->base.type.sign ? 1 : 0);
    }
    outval[0] = LLVMConstVector(elems, nc);
 }
+
 
 void
 lp_build_nir_aos(struct gallivm_state *gallivm,

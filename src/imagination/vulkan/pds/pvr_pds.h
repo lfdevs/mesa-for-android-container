@@ -601,7 +601,7 @@ void pvr_pds_setup_doutu(struct pvr_pds_usc_task_control *usc_task_control,
                          uint64_t execution_address,
                          uint32_t usc_temps,
                          uint32_t sample_rate,
-                         uint32_t phase_rate_change);
+                         bool phase_rate_change);
 
 /* Pixel */
 #define pvr_pds_set_sizes_pixel_shader(X) \
@@ -715,8 +715,8 @@ uint32_t *pvr_pds_vertex_shader_sa(
    const struct pvr_device_info *dev_info);
 
 /* Pixel Event */
-#define pvr_pds_set_sizes_pixel_event(X) \
-   pvr_pds_generate_pixel_event(X, NULL, PDS_GENERATE_SIZES, NULL)
+#define pvr_pds_set_sizes_pixel_event(X, Y) \
+   pvr_pds_generate_pixel_event(X, NULL, PDS_GENERATE_SIZES, Y)
 
 #define pvr_pds_generate_pixel_event_data_segment(X, Y, Z) \
    pvr_pds_generate_pixel_event(X, Y, PDS_GENERATE_DATA_SEGMENT, Z)

@@ -126,6 +126,11 @@ void rc_inline_literals(struct radeon_compiler *c, void *user)
 				if (swz == RC_SWIZZLE_UNUSED) {
 					continue;
 				}
+				/* Don't try to inline constant swizzle */
+				if (swz >= RC_SWIZZLE_ZERO) {
+					use_literal = 0;
+					break;
+				}
 				float_value = constant->u.Immediate[swz];
 				ret = ieee_754_to_r300_float(float_value,
 								&r300_float_tmp);

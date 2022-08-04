@@ -53,7 +53,7 @@ struct stw_context *stw_create_context_attribs(HDC hdc, INT iLayerPlane,
                                                struct stw_context *shareCtx,
                                                int majorVersion, int minorVersion,
                                                int contextFlags, int profileMask,
-                                               int iPixelFormat);
+                                               int iPixelFormat, int resetStrategy);
 
 DHGLRC stw_create_context_handle(struct stw_context *context, DHGLRC handle);
 

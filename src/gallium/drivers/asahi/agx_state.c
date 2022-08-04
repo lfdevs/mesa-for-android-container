@@ -288,16 +288,17 @@ agx_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
    struct agx_context *ctx = agx_context(pctx);
    struct agx_rasterizer *so = cso;
 
-   /* Check if scissor state has changed, since scissor enable is part of the
-    * rasterizer state but everything else needed for scissors is part of
-    * viewport/scissor states */
-   bool scissor_changed = (cso == NULL) || (ctx->rast == NULL) ||
-      (ctx->rast->base.scissor != so->base.scissor);
+   /* Check if scissor or depth bias state has changed, since scissor/depth bias
+    * enable is part of the rasterizer state but everything else needed for
+    * scissors and depth bias is part of the scissor/depth bias arrays */
+   bool scissor_zbias_changed = (cso == NULL) || (ctx->rast == NULL) ||
+      (ctx->rast->base.scissor != so->base.scissor) ||
+      (ctx->rast->base.offset_tri != so->base.offset_tri);
 
    ctx->rast = so;
 
-   if (scissor_changed)
-      ctx->dirty |= AGX_DIRTY_SCISSOR;
+   if (scissor_zbias_changed)
+      ctx->dirty |= AGX_DIRTY_SCISSOR_ZBIAS;
 }
 
 static enum agx_wrap
@@ -424,6 +425,7 @@ static enum agx_texture_dimension
 agx_translate_texture_dimension(enum pipe_texture_target dim)
 {
    switch (dim) {
+   case PIPE_TEXTURE_RECT:
    case PIPE_TEXTURE_2D: return AGX_TEXTURE_DIMENSION_2D;
    case PIPE_TEXTURE_2D_ARRAY: return AGX_TEXTURE_DIMENSION_2D_ARRAY;
    case PIPE_TEXTURE_3D: return AGX_TEXTURE_DIMENSION_3D;
@@ -606,7 +608,7 @@ agx_set_scissor_states(struct pipe_context *pctx,
    assert(num_scissors == 1 && "no geometry shaders");
 
    ctx->scissor = *scissor;
-   ctx->dirty |= AGX_DIRTY_SCISSOR;
+   ctx->dirty |= AGX_DIRTY_SCISSOR_ZBIAS;
 }
 
 static void
@@ -704,6 +706,22 @@ agx_upload_viewport_scissor(struct agx_pool *pool,
       .viewport = T.gpu,
       .scissor = index
    };
+}
+
+static uint16_t
+agx_upload_depth_bias(struct agx_batch *batch,
+                      const struct pipe_rasterizer_state *rast)
+{
+   struct agx_depth_bias_packed *ptr = batch->depth_bias.bo->ptr.cpu;
+   unsigned index = (batch->depth_bias.count++);
+
+   agx_pack(ptr + index, DEPTH_BIAS, cfg) {
+      cfg.depth_bias    = rast->offset_units;
+      cfg.slope_scale   = rast->offset_scale;
+      cfg.clamp         = rast->offset_clamp;
+   }
+
+   return index;
 }
 
 /* A framebuffer state can be reused across batches, so it doesn't make sense
@@ -913,26 +931,19 @@ agx_update_shader(struct agx_context *ctx, struct agx_compiled_shader **out,
 
    nir_shader *nir = nir_shader_clone(NULL, so->nir);
 
-   if (key->blend.blend_enable) {
+   if (stage == PIPE_SHADER_FRAGMENT) {
       nir_lower_blend_options opts = {
          .format = { key->rt_formats[0] },
-         .scalar_blend_const = true
-      };
-
-      memcpy(opts.rt, key->blend.rt, sizeof(opts.rt));
-      NIR_PASS_V(nir, nir_lower_blend, opts);
-   } else if (key->blend.logicop_enable) {
-      nir_lower_blend_options opts = {
-         .format = { key->rt_formats[0] },
-         .logicop_enable = true,
+         .scalar_blend_const = true,
+         .logicop_enable = key->blend.logicop_enable,
          .logicop_func = key->blend.logicop_func,
       };
 
-      NIR_PASS_V(nir, nir_lower_blend, opts);
-   }
+      memcpy(opts.rt, key->blend.rt, sizeof(opts.rt));
+      NIR_PASS_V(nir, nir_lower_blend, &opts);
 
-   if (stage == PIPE_SHADER_FRAGMENT)
       NIR_PASS_V(nir, nir_lower_fragcolor, key->nr_cbufs);
+   }
 
    agx_compile_shader_nir(nir, &key->base, &binary, &compiled->info);
 
@@ -1414,6 +1425,8 @@ demo_rasterizer(struct agx_context *ctx, struct agx_pool *pool, bool is_points)
        * optimize this out if the viewport is the default and the app does not
        * use the scissor test) */
       cfg.scissor_enable = true;
+
+      cfg.depth_bias_enable = rast->base.offset_tri;
    };
 
    /* Words 2-3: front */
@@ -1457,12 +1470,13 @@ demo_unk12(struct agx_pool *pool)
 }
 
 static uint64_t
-agx_set_scissor_index(struct agx_pool *pool, unsigned index)
+agx_set_index(struct agx_pool *pool, uint16_t scissor, uint16_t zbias)
 {
-   struct agx_ptr T = agx_pool_alloc_aligned(pool, AGX_SET_SCISSOR_LENGTH, 64);
+   struct agx_ptr T = agx_pool_alloc_aligned(pool, AGX_SET_INDEX_LENGTH, 64);
 
-   agx_pack(T.cpu, SET_SCISSOR, cfg) {
-      cfg.index = index;
+   agx_pack(T.cpu, SET_INDEX, cfg) {
+      cfg.scissor = scissor;
+      cfg.depth_bias = zbias;
    };
 
    return T.gpu;
@@ -1509,13 +1523,20 @@ agx_encode_state(struct agx_context *ctx, uint8_t *out,
    agx_push_record(&out, 7, demo_rasterizer(ctx, pool, is_points));
    agx_push_record(&out, 5, demo_unk11(pool, is_lines, is_points, reads_tib, sample_mask_from_shader));
 
-   if (ctx->dirty & (AGX_DIRTY_VIEWPORT | AGX_DIRTY_SCISSOR)) {
+   unsigned zbias = 0;
+
+   if (ctx->rast->base.offset_tri) {
+      zbias = agx_upload_depth_bias(ctx->batch, &ctx->rast->base);
+      ctx->dirty |= AGX_DIRTY_SCISSOR_ZBIAS;
+   }
+
+   if (ctx->dirty & (AGX_DIRTY_VIEWPORT | AGX_DIRTY_SCISSOR_ZBIAS)) {
       struct agx_viewport_scissor vps = agx_upload_viewport_scissor(pool,
             ctx->batch, &ctx->viewport,
             ctx->rast->base.scissor ? &ctx->scissor : NULL);
 
       agx_push_record(&out, 10, vps.viewport);
-      agx_push_record(&out, 2, agx_set_scissor_index(pool, vps.scissor));
+      agx_push_record(&out, 2, agx_set_index(pool, vps.scissor, zbias));
    }
 
    agx_push_record(&out, 3, demo_unk12(pool));
@@ -1604,6 +1625,9 @@ agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
       (info->mode == PIPE_PRIM_LINES) ||
       (info->mode == PIPE_PRIM_LINE_STRIP) ||
       (info->mode == PIPE_PRIM_LINE_LOOP);
+
+   ptrdiff_t encoder_use = batch->encoder_current - (uint8_t *) batch->encoder->ptr.cpu;
+   assert((encoder_use + 1024) < batch->encoder->size && "todo: how to expand encoder?");
 
    uint8_t *out = agx_encode_state(ctx, batch->encoder_current,
                                    agx_build_pipeline(ctx, ctx->vs, PIPE_SHADER_VERTEX),

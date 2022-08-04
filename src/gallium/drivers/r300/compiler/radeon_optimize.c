@@ -154,7 +154,7 @@ static void copy_propagate(struct radeon_compiler * c, struct rc_instruction * i
 		       copy_propagate_scan_read, NULL,
 		       is_src_clobbered_scan_write);
 
-	if (reader_data.Abort || reader_data.ReaderCount == 0)
+	if (reader_data.Abort || reader_data.ReaderCount == 0 || reader_data.ReadersAfterEndloop)
 		return;
 
 	/* We can propagate SaturateMode if all the readers are MOV instructions
@@ -886,6 +886,86 @@ static int peephole(struct radeon_compiler * c, struct rc_instruction * inst)
 	return 0;
 }
 
+static unsigned int merge_swizzles(unsigned int swz1, unsigned int swz2) {
+	unsigned int new_swz = rc_init_swizzle(RC_SWIZZLE_UNUSED, 0);
+	for (unsigned int chan = 0; chan < 4; chan++) {
+		unsigned int swz = GET_SWZ(swz1, chan);
+		if (swz != RC_SWIZZLE_UNUSED) {
+			SET_SWZ(new_swz, chan, swz);
+			continue;
+		}
+		swz = GET_SWZ(swz2, chan);
+		SET_SWZ(new_swz, chan, swz);
+	}
+	return new_swz;
+}
+
+static int merge_movs(struct radeon_compiler * c, struct rc_instruction * inst)
+{
+	unsigned int orig_dst_reg = inst->U.I.DstReg.Index;
+	unsigned int orig_dst_file = inst->U.I.DstReg.File;
+	unsigned int orig_dst_wmask = inst->U.I.DstReg.WriteMask;
+	unsigned int orig_src_reg = inst->U.I.SrcReg[0].Index;
+	unsigned int orig_src_file = inst->U.I.SrcReg[0].File;
+
+	struct rc_instruction * cur = inst;
+	while (cur!= &c->Program.Instructions) {
+		cur = cur->Next;
+		const struct rc_opcode_info * opcode = rc_get_opcode_info(cur->U.I.Opcode);
+
+		/* Keep it simple for now and stop when encountering any
+		 * control flow.
+		 */
+		if (opcode->IsFlowControl)
+			return 0;
+
+		/* Stop when the original destination is overwritten */
+		if (orig_dst_reg == cur->U.I.DstReg.Index &&
+			orig_dst_file == cur->U.I.DstReg.File &&
+			(orig_dst_wmask & cur->U.I.DstReg.WriteMask) != 0)
+			return 0;
+
+		/* Stop the search when the original instruction destination
+		 * is used as a source for anything.
+		 */
+		for (unsigned i = 0; i < opcode->NumSrcRegs; i++) {
+			if (cur->U.I.SrcReg[i].File == orig_dst_file &&
+				cur->U.I.SrcReg[i].Index == orig_dst_reg)
+				return 0;
+		}
+
+		if (cur->U.I.Opcode == RC_OPCODE_MOV &&
+			cur->U.I.DstReg.File == orig_dst_file &&
+			cur->U.I.DstReg.Index == orig_dst_reg &&
+			(cur->U.I.DstReg.WriteMask & orig_dst_wmask) == 0) {
+
+			/* We can merge the movs if one of them is from inline constant */
+			if (cur->U.I.SrcReg[0].File == RC_FILE_NONE ||
+				orig_src_file == RC_FILE_NONE) {
+				cur->U.I.DstReg.WriteMask |= orig_dst_wmask;
+
+				if (cur->U.I.SrcReg[0].File == RC_FILE_NONE) {
+					cur->U.I.SrcReg[0].File = orig_src_file;
+					cur->U.I.SrcReg[0].Index = orig_src_reg;
+					cur->U.I.SrcReg[0].Abs = inst->U.I.SrcReg[0].Abs;
+					cur->U.I.SrcReg[0].RelAddr = inst->U.I.SrcReg[0].RelAddr;
+				}
+				cur->U.I.SrcReg[0].Swizzle =
+					merge_swizzles(cur->U.I.SrcReg[0].Swizzle,
+							inst->U.I.SrcReg[0].Swizzle);
+
+				cur->U.I.SrcReg[0].Negate |= inst->U.I.SrcReg[0].Negate;
+
+				/* finally delete the original mov */
+				rc_remove_instruction(inst);
+
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
 void rc_optimize(struct radeon_compiler * c, void *user)
 {
 	struct rc_instruction * inst = c->Program.Instructions.Next;
@@ -899,6 +979,10 @@ void rc_optimize(struct radeon_compiler * c, void *user)
 			continue;
 
 		if (cur->U.I.Opcode == RC_OPCODE_MOV) {
+			if (c->is_r500) {
+				if (merge_movs(c, cur))
+					continue;
+			}
 			copy_propagate(c, cur);
 			/* cur may no longer be part of the program */
 		}

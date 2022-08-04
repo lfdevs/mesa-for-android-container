@@ -34,7 +34,7 @@ extern "C" {
 
 struct intel_device_info;
 
-void
+bool
 intel_get_and_process_hwconfig_table(int fd,
                                      struct intel_device_info *devinfo);
 void

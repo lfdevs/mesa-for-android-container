@@ -1852,7 +1852,8 @@ add_function(struct dxil_module *m, const char *name,
    if (!func)
       return NULL;
 
-   func->name = ralloc_strdup(func, name);
+   /* Truncate function name to make emit_symtab_entry() happy. */
+   func->name = ralloc_strndup(func, name, 253);
    if (!func->name) {
       return NULL;
    }
@@ -2218,7 +2219,7 @@ emit_symtab_entry(struct dxil_module *m, unsigned value, const char *name)
    temp[0] = VST_CODE_ENTRY;
    temp[1] = value;
    for (int i = 0; i < strlen(name); ++i)
-      temp[i + 2] = name[i];
+      temp[i + 2] = (uint8_t)(name[i]);
 
    enum value_symtab_abbrev_id abbrev = VST_ABBREV_ENTRY_8;
    if (is_char6_string(name))
@@ -2492,7 +2493,7 @@ emit_metadata_string(struct dxil_module *m, const char *str)
    assert(strlen(str) < ARRAY_SIZE(data) - 1);
    data[0] = METADATA_STRING;
    for (size_t i = 0; i < strlen(str); ++i)
-      data[i + 1] = str[i];
+      data[i + 1] = (uint8_t)(str[i]);
 
    return emit_metadata_abbrev_record(m, METADATA_ABBREV_STRING,
                                       data, strlen(str) + 1);

@@ -61,6 +61,8 @@ cache_dump_stats(struct v3dv_pipeline_cache *cache)
    fprintf(stderr, "  cache entries:      %d\n", cache->stats.count);
    fprintf(stderr, "  cache miss count:   %d\n", cache->stats.miss);
    fprintf(stderr, "  cache hit  count:   %d\n", cache->stats.hit);
+
+   fprintf(stderr, "  on-disk cache hit  count:   %d\n", cache->stats.on_disk_hit);
 }
 
 static void
@@ -219,7 +221,7 @@ v3dv_pipeline_cache_init(struct v3dv_pipeline_cache *cache,
       cache->stats.count = 0;
 
       cache->externally_synchronized = flags &
-         VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT_EXT;
+         VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
    } else {
       cache->nir_cache = NULL;
       cache->cache = NULL;
@@ -326,6 +328,11 @@ v3dv_pipeline_cache_search_for_pipeline(struct v3dv_pipeline_cache *cache,
          free(buffer);
 
          if (shared_data) {
+            /* Technically we could increase on_disk_hit as soon as we have a
+             * buffer, but we are more interested on hits that got a valid
+             * shared_data
+             */
+            cache->stats.on_disk_hit++;
             if (cache)
                pipeline_cache_upload_shared_data(cache, shared_data, true);
             return shared_data;
@@ -427,8 +434,13 @@ pipeline_cache_upload_shared_data(struct v3dv_pipeline_cache *cache,
       return;
 
    pipeline_cache_lock(cache);
-   struct hash_entry *entry =
-      _mesa_hash_table_search(cache->cache, shared_data->sha1_key);
+   struct hash_entry *entry = NULL;
+
+   /* If this is being called from the disk cache, we already know that the
+    * entry is not on the hash table
+    */
+   if (!from_disk_cache)
+      entry = _mesa_hash_table_search(cache->cache, shared_data->sha1_key);
 
    if (entry) {
       pipeline_cache_unlock(cache);

@@ -27,7 +27,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "pvr_winsys.h"
+#include "pvr_types.h"
+
+struct pvr_winsys;
+struct pvr_winsys_heap;
+struct pvr_winsys_static_data_offsets;
+struct pvr_winsys_vma;
 
 typedef struct pvr_winsys_vma *(*const heap_alloc_reserved_func)(
    struct pvr_winsys_heap *const heap,

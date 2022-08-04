@@ -178,30 +178,6 @@ void r300_init_vs_outputs(struct r300_context *r300,
     r300_shader_read_vs_outputs(r300, &vs->shader->info, &vs->shader->outputs);
 }
 
-static void r300_dummy_vertex_shader(
-    struct r300_context* r300,
-    struct r300_vertex_shader* vs)
-{
-    struct ureg_program *ureg;
-    struct ureg_dst dst;
-    struct ureg_src imm;
-
-    /* Make a simple vertex shader which outputs (0, 0, 0, 1),
-     * effectively rendering nothing. */
-    ureg = ureg_create(PIPE_SHADER_VERTEX);
-    dst = ureg_DECL_output(ureg, TGSI_SEMANTIC_POSITION, 0);
-    imm = ureg_imm4f(ureg, 0, 0, 0, 1);
-
-    ureg_MOV(ureg, dst, imm);
-    ureg_END(ureg);
-
-    vs->state.tokens = tgsi_dup_tokens(ureg_finalize(ureg));
-    ureg_destroy(ureg);
-
-    vs->shader->dummy = TRUE;
-    r300_translate_vertex_shader(r300, vs);
-}
-
 void r300_translate_vertex_shader(struct r300_context *r300,
                                   struct r300_vertex_shader *shader)
 {
@@ -219,8 +195,7 @@ void r300_translate_vertex_shader(struct r300_context *r300,
     DBG_ON(r300, DBG_VP) ? compiler.Base.Debug |= RC_DBG_LOG : 0;
     compiler.code = &vs->code;
     compiler.UserData = vs;
-    if (!vs->dummy)
-        compiler.Base.debug = &r300->debug;
+    compiler.Base.debug = &r300->debug;
     compiler.Base.is_r500 = r300->screen->caps.is_r500;
     compiler.Base.disable_optimizations = DBG_ON(r300, DBG_NO_OPT);
     compiler.Base.has_half_swizzles = FALSE;
@@ -245,8 +220,8 @@ void r300_translate_vertex_shader(struct r300_context *r300,
 
     if (ttr.error) {
         fprintf(stderr, "r300 VP: Cannot translate a shader. "
-                "Using a dummy shader instead.\n");
-        r300_dummy_vertex_shader(r300, shader);
+                "Corresponding draws will be skipped.\n");
+        vs->dummy = TRUE;
         return;
     }
 
@@ -264,17 +239,11 @@ void r300_translate_vertex_shader(struct r300_context *r300,
     /* Invoke the compiler */
     r3xx_compile_vertex_program(&compiler);
     if (compiler.Base.Error) {
-        fprintf(stderr, "r300 VP: Compiler error:\n%sUsing a dummy shader"
-                " instead.\n", compiler.Base.ErrorMsg);
-
-        if (vs->dummy) {
-            fprintf(stderr, "r300 VP: Cannot compile the dummy shader! "
-                    "Giving up...\n");
-            abort();
-        }
+        fprintf(stderr, "r300 VP: Compiler error:\n%sCorresponding draws will be"
+                " skipped.\n", compiler.Base.ErrorMsg);
 
         rc_destroy(&compiler.Base);
-        r300_dummy_vertex_shader(r300, shader);
+        vs->dummy = TRUE;
         return;
     }
 

@@ -1,12 +1,10 @@
 .gm20b-test:
   extends:
     - .baremetal-test-arm64
-    - .use-debian/arm_test
     - .nouveau-rules
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     BM_BOOTFS: /baremetal-files/jetson-nano/
-    BM_POE_TIMEOUT: 300
     BM_CMDLINE: "console=ttyS0,115200n8 rw nfsrootdebug init=/init"
     FLAKES_CHANNEL: "#nouveau-ci"
     GPU_VERSION: nouveau-gm20b
@@ -15,10 +13,6 @@
     HWCI_KERNEL_MODULES: tegra-drm,nouveau
   script:
     - ./install/bare-metal/poe-powered.sh
-  needs:
-    - debian/arm_test
-    - job: debian-arm64
-      artifacts: false
   tags:
     - google-nouveau-jetson-nano
 

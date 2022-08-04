@@ -25,6 +25,7 @@
 #include <vulkan/vulkan.h>
 
 #include "hwdef/rogue_hw_defs.h"
+#include "pipe/p_defines.h"
 #include "pvr_csb.h"
 #include "pvr_device_info.h"
 #include "pvr_formats.h"
@@ -135,12 +136,12 @@ pvr_pack_tex_state(struct pvr_device *device,
    /* Texture type specific stuff (word 1) */
    if (texture_type == PVRX(TEXSTATE_TEXTYPE_STRIDE)) {
       pvr_csb_pack (&state[1], TEXSTATE_STRIDE_IMAGE_WORD1, word1) {
-         word1.stride = info->stride;
+         assert(info->stride > 0U);
+         word1.stride = info->stride - 1U;
          word1.num_mip_levels = info->mip_levels;
          word1.mipmaps_present = info->mipmaps_present;
 
-         word1.texaddr = info->addr;
-         word1.texaddr.addr += info->offset;
+         word1.texaddr = PVR_DEV_ADDR_OFFSET(info->addr, info->offset);
 
          if (vk_format_is_alpha_on_msb(info->format))
             word1.alpha_msb = true;
@@ -178,8 +179,7 @@ pvr_pack_tex_state(struct pvr_device *device,
             word1.depth = array_layers - 1;
          }
 
-         word1.texaddr = info->addr;
-         word1.texaddr.addr += info->offset;
+         word1.texaddr = PVR_DEV_ADDR_OFFSET(info->addr, info->offset);
 
          if (!PVR_HAS_FEATURE(dev_info, tpu_extended_integer_lookup) &&
              !PVR_HAS_FEATURE(dev_info, tpu_image_state_v2)) {

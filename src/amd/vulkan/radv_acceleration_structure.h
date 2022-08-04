@@ -27,6 +27,13 @@
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
+enum radv_bvh_node_type {
+   radv_bvh_node_triangle = 0,
+   radv_bvh_node_internal = 5,
+   radv_bvh_node_instance = 6,
+   radv_bvh_node_aabb = 7,
+};
+
 struct radv_accel_struct_serialization_header {
    uint8_t driver_uuid[VK_UUID_SIZE];
    uint8_t accel_struct_compat[VK_UUID_SIZE];
@@ -47,6 +54,7 @@ struct radv_accel_struct_header {
    uint32_t copy_dispatch_size[3];
    uint64_t instance_offset;
    uint64_t instance_count;
+   uint64_t size;
 };
 
 struct radv_bvh_triangle_node {

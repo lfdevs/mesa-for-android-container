@@ -27,8 +27,8 @@
 
 #include "drm-uapi/drm_fourcc.h"
 
-#include "fd6_format.h"
 #include "fd6_resource.h"
+#include "fdl/fd6_format_table.h"
 
 #include "a6xx.xml.h"
 

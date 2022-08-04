@@ -24,6 +24,8 @@ vk_physical_device_features_gen_depend_files = [
 ]
 
 vulkan_runtime_files = files(
+  'vk_buffer.c',
+  'vk_buffer.h',
   'vk_cmd_copy.c',
   'vk_cmd_enqueue.c',
   'vk_command_buffer.c',
@@ -36,6 +38,8 @@ vulkan_runtime_files = files(
   'vk_debug_utils.h',
   'vk_deferred_operation.c',
   'vk_deferred_operation.h',
+  'vk_descriptor_set_layout.c',
+  'vk_descriptor_set_layout.h',
   'vk_descriptors.c',
   'vk_descriptors.h',
   'vk_device.c',
@@ -44,6 +48,8 @@ vulkan_runtime_files = files(
   'vk_fence.h',
   'vk_framebuffer.c',
   'vk_framebuffer.h',
+  'vk_graphics_state.c',
+  'vk_graphics_state.h',
   'vk_image.c',
   'vk_image.h',
   'vk_instance.c',
@@ -54,15 +60,25 @@ vulkan_runtime_files = files(
   'vk_nir.h',
   'vk_object.c',
   'vk_object.h',
+  'vk_pipeline.c',
+  'vk_pipeline.h',
+  'vk_pipeline_cache.c',
+  'vk_pipeline_cache.h',
   'vk_physical_device.c',
   'vk_physical_device.h',
+  'vk_pipeline_layout.c',
+  'vk_pipeline_layout.h',
   'vk_queue.c',
   'vk_queue.h',
   'vk_render_pass.c',
+  'vk_sampler.c',
+  'vk_sampler.h',
   'vk_semaphore.c',
   'vk_semaphore.h',
   'vk_shader_module.c',
   'vk_shader_module.h',
+  'vk_standard_sample_locations.c',
+  'vk_standard_sample_locations.h',
   'vk_sync.c',
   'vk_sync.h',
   'vk_sync_binary.c',
@@ -77,7 +93,7 @@ vulkan_runtime_files = files(
 vulkan_runtime_deps = [
   vulkan_wsi_deps,
   idep_mesautil,
-  idep_nir_headers,
+  idep_nir,
   idep_vulkan_util,
 ]
 
@@ -156,7 +172,7 @@ libvulkan_runtime = static_library(
   dependencies : vulkan_runtime_deps,
   # For glsl_type_singleton
   link_with : libcompiler,
-  c_args : [vulkan_wsi_args],
+  c_args : [c_msvc_compat_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

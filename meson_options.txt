@@ -357,7 +357,7 @@ option(
 option(
   'draw-use-llvm',
   type : 'boolean',
-  value : 'true',
+  value : true,
   description : 'Whether to use LLVM for the Gallium draw module, if LLVM is included.'
 )
 option(
@@ -420,9 +420,9 @@ option(
 option(
   'osmesa-bits',
   type : 'combo',
-  value : '8',
-  choices : ['8', '16', '32'],
-  description : 'Number of channel bits for OSMesa.'
+  value : 'unspecified',
+  choices : ['unspecified', '8', '16', '32'],
+  description : 'DEPRECATED: Number of channel bits for OSMesa.'
 )
 
 option(
@@ -526,4 +526,33 @@ option(
   type : 'feature',
   value : 'disabled',
   description : 'Build the intel-clc compiler (required for ray queries).'
+)
+option(
+  'video-codecs',
+  type : 'array',
+  value : [],
+  choices: [
+    'vc1dec', 'h264dec', 'h264enc', 'h265dec', 'h265enc'
+  ],
+  description : 'List of patent encumbered codecs to build support for. Distros might want to consult their legal department before enabling these. This is used for all video APIs (vaapi, vdpau, vulkan). Non-patent encumbered codecs will be enabled by default.'
+)
+option(
+  'gallium-d3d12-video',
+  type : 'feature',
+  value : 'auto',
+  description : 'build gallium d3d12 with video support.',
+)
+option(
+  'radv-build-id',
+  type : 'string',
+  value : '',
+  description : 'Override build id for shader cache keys (hex string). Can be extracted with readelf -x .note.gnu.build-id'
+)
+option(
+  'min-windows-version',
+  type : 'integer',
+  min : 7,
+  max : 11,
+  value : 8,
+  description : 'Minimum Windows version to support. Defaults to Windows 8.'
 )

@@ -268,7 +268,7 @@ vk_common_WaitForFences(VkDevice _device,
       VK_FROM_HANDLE(vk_fence, fence, pFences[i]);
       waits[i] = (struct vk_sync_wait) {
          .sync = vk_fence_get_active_sync(fence),
-         .stage_mask = ~(VkPipelineStageFlags2KHR)0,
+         .stage_mask = ~(VkPipelineStageFlags2)0,
       };
    }
 

@@ -105,7 +105,7 @@ static struct ir3_instruction * new_instr(opc_t opc)
 
 static void new_shader(void)
 {
-	variant->ir = ir3_create(variant->shader->compiler, variant);
+	variant->ir = ir3_create(variant->compiler, variant);
 	block = ir3_block_create(variant->ir);
 	list_addtail(&block->node, &variant->ir->block_list);
 	ip = 0;
@@ -334,6 +334,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_A_OUT
 %token <tok> T_A_TEX
 %token <tok> T_A_PVTMEM
+%token <tok> T_A_EARLYPREAMBLE
 /* todo, re-add @sampler/@uniform/@varying if needed someday */
 
 /* src register flags */
@@ -701,6 +702,7 @@ header:            localsize_header
 |                  out_header
 |                  tex_header
 |                  pvtmem_header
+|                  earlypreamble_header
 
 const_val:         T_FLOAT   { $$ = fui($1); }
 |                  T_INT     { $$ = $1;      }
@@ -743,14 +745,14 @@ invocationid_header: T_A_INVOCATIONID '(' T_REGISTER ')' {
 wgid_header:       T_A_WGID '(' T_REGISTER ')' {
                        assert(($3 & 0x1) == 0);  /* half-reg not allowed */
                        unsigned reg = $3 >> 1;
-                       assert(variant->shader->compiler->gen >= 5);
+                       assert(variant->compiler->gen >= 5);
                        assert(reg >= regid(48, 0)); /* must be a high reg */
                        add_sysval(reg, 0x7, SYSTEM_VALUE_WORKGROUP_ID);
 }
 |                  T_A_WGID '(' T_CONSTANT ')' {
                        assert(($3 & 0x1) == 0);  /* half-reg not allowed */
                        unsigned reg = $3 >> 1;
-                       assert(variant->shader->compiler->gen < 5);
+                       assert(variant->compiler->gen < 5);
                        info->wgid = reg;
 }
 
@@ -759,13 +761,15 @@ numwg_header:      T_A_NUMWG '(' T_CONSTANT ')' {
                        unsigned reg = $3 >> 1;
                        info->numwg = reg;
                        /* reserve space in immediates for the actual value to be plugged in later: */
-                       if (variant->shader->compiler->gen >= 5)
+                       if (variant->compiler->gen >= 5)
                           add_const($3, 0, 0, 0, 0);
 }
 
 branchstack_header: T_A_BRANCHSTACK const_val { variant->branchstack = $2; }
 
 pvtmem_header: T_A_PVTMEM const_val { variant->pvtmem_size = $2; }
+
+earlypreamble_header: T_A_EARLYPREAMBLE { info->early_preamble = 1; }
 
 /* Stubs for now */
 in_header:         T_A_IN '(' T_REGISTER ')' T_IDENTIFIER '(' T_IDENTIFIER '=' integer ')' { }

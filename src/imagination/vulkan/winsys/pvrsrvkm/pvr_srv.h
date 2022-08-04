@@ -42,8 +42,9 @@
 #define PVR_SRV_DEVMEM_HEAPNAME_MAXLENGTH 160
 
 #define PVR_SRV_GENERAL_HEAP_IDENT "General"
-#define PVR_SRV_RGNHDR_BRN_63142_HEAP_IDENT "RgnHdr BRN63142"
 #define PVR_SRV_PDSCODEDATA_HEAP_IDENT "PDS Code and Data"
+#define PVR_SRV_RGNHDR_BRN_63142_HEAP_IDENT "RgnHdr BRN63142"
+#define PVR_SRV_TRANSFER_3D_HEAP_IDENT "TQ3DParameters"
 #define PVR_SRV_USCCODE_HEAP_IDENT "USC Code"
 #define PVR_SRV_VISIBILITY_TEST_HEAP_IDENT "Visibility Test"
 
@@ -81,6 +82,7 @@ struct pvr_srv_winsys {
    /* Required heaps */
    struct pvr_srv_winsys_heap general_heap;
    struct pvr_srv_winsys_heap pds_heap;
+   struct pvr_srv_winsys_heap transfer_3d_heap;
    struct pvr_srv_winsys_heap usc_heap;
    struct pvr_srv_winsys_heap vis_test_heap;
 

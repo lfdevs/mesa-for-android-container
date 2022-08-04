@@ -39,6 +39,7 @@
    .lower_uadd_carry = true,                                                  \
    .lower_usub_borrow = true,                                                 \
    .lower_flrp64 = true,                                                      \
+   .lower_fisnormal = true,                                                   \
    .lower_isign = true,                                                       \
    .lower_ldexp = true,                                                       \
    .lower_device_index_to_zero = true,                                        \
@@ -89,6 +90,7 @@ static const struct nir_shader_compiler_options vector_nir_options = {
     */
    .fdot_replicates = true,
 
+   .lower_usub_sat = true,
    .lower_pack_snorm_2x16 = true,
    .lower_pack_unorm_2x16 = true,
    .lower_unpack_snorm_2x16 = true,
@@ -106,8 +108,11 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
 
    compiler->devinfo = devinfo;
 
+   brw_init_isa_info(&compiler->isa, devinfo);
+
    brw_fs_alloc_reg_sets(compiler);
-   brw_vec4_alloc_reg_set(compiler);
+   if (devinfo->ver < 8)
+      brw_vec4_alloc_reg_set(compiler);
 
    compiler->precise_trig = env_var_as_boolean("INTEL_PRECISE_TRIG", false);
 
@@ -145,12 +150,12 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_lower_dsub |
       nir_lower_ddiv;
 
-   if (!devinfo->has_64bit_float || INTEL_DEBUG(DEBUG_SOFT64)) {
-      int64_options |= (nir_lower_int64_options)~0;
+   if (!devinfo->has_64bit_float || INTEL_DEBUG(DEBUG_SOFT64))
       fp64_options |= nir_lower_fp64_full_software;
-   }
+   if (!devinfo->has_64bit_int)
+      int64_options |= (nir_lower_int64_options)~0;
 
-   /* The Bspec's section tittled "Instruction_multiply[DevBDW+]" claims that
+   /* The Bspec's section titled "Instruction_multiply[DevBDW+]" claims that
     * destination type can be Quadword and source type Doubleword for Gfx8 and
     * Gfx9. So, lower 64 bit multiply instruction on rest of the platforms.
     */
@@ -193,6 +198,7 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
 
       nir_options->force_indirect_unrolling |=
          brw_nir_no_indirect_mask(compiler, i);
+      nir_options->force_indirect_unrolling_sampler = devinfo->ver < 7;
 
       if (compiler->use_tcs_8_patch) {
          /* TCS 8_PATCH mode has multiple patches per subgroup */
@@ -276,7 +282,7 @@ brw_prog_key_size(gl_shader_stage stage)
 }
 
 void
-brw_write_shader_relocs(const struct intel_device_info *devinfo,
+brw_write_shader_relocs(const struct brw_isa_info *isa,
                         void *program,
                         const struct brw_stage_prog_data *prog_data,
                         struct brw_shader_reloc_value *values,
@@ -293,7 +299,7 @@ brw_write_shader_relocs(const struct intel_device_info *devinfo,
                *(uint32_t *)dst = value;
                break;
             case BRW_SHADER_RELOC_TYPE_MOV_IMM:
-               brw_update_reloc_imm(devinfo, dst, value);
+               brw_update_reloc_imm(isa, dst, value);
                break;
             default:
                unreachable("Invalid relocation type");

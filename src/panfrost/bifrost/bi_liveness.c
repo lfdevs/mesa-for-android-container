@@ -91,19 +91,10 @@ liveness_block_update(bi_block *blk, unsigned temp_count)
 void
 bi_compute_liveness(bi_context *ctx)
 {
-        if (ctx->has_liveness)
-                return;
-
         unsigned temp_count = bi_max_temp(ctx);
 
-        /* Set of bi_block */
-        struct set *work_list = _mesa_set_create(NULL,
-                        _mesa_hash_pointer,
-                        _mesa_key_pointer_equal);
-
-        struct set *visited = _mesa_set_create(NULL,
-                        _mesa_hash_pointer,
-                        _mesa_key_pointer_equal);
+        u_worklist worklist;
+        bi_worklist_init(ctx, &worklist);
 
         bi_foreach_block(ctx, block) {
                 if (block->live_in)
@@ -114,43 +105,22 @@ bi_compute_liveness(bi_context *ctx)
 
                 block->live_in = rzalloc_array(block, uint8_t, temp_count);
                 block->live_out = rzalloc_array(block, uint8_t, temp_count);
+
+                bi_worklist_push_tail(&worklist, block);
         }
 
-        /* Initialize the work list with the exit block */
-        struct set_entry *cur;
+        while (!u_worklist_is_empty(&worklist)) {
+                /* Pop off in reverse order since liveness is backwards */
+                bi_block *blk = bi_worklist_pop_tail(&worklist);
 
-        cur = _mesa_set_add(work_list, bi_exit_block(&ctx->blocks));
-
-        /* Iterate the work list */
-
-        do {
-                /* Pop off a block */
-                bi_block *blk = (struct bi_block *) cur->key;
-                _mesa_set_remove(work_list, cur);
-
-                /* Update its liveness information */
-                bool progress = liveness_block_update(blk, temp_count);
-
-                /* If we made progress, we need to process the predecessors */
-
-                if (progress || !_mesa_set_search(visited, blk)) {
+                /* Update liveness information. If we made progress, we need to
+                 * reprocess the predecessors
+                 */
+                if (liveness_block_update(blk, temp_count)) {
                         bi_foreach_predecessor(blk, pred)
-                                _mesa_set_add(work_list, pred);
+                                bi_worklist_push_head(&worklist, *pred);
                 }
+        }
 
-                _mesa_set_add(visited, blk);
-        } while((cur = _mesa_set_next_entry(work_list, NULL)) != NULL);
-
-        _mesa_set_destroy(visited, NULL);
-        _mesa_set_destroy(work_list, NULL);
-
-        ctx->has_liveness = true;
-}
-
-/* Once liveness data is no longer valid, call this */
-
-void
-bi_invalidate_liveness(bi_context *ctx)
-{
-        ctx->has_liveness = false;
+        u_worklist_fini(&worklist);
 }

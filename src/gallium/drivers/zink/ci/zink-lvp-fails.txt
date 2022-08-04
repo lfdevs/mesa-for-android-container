@@ -1,42 +1,25 @@
-# #6463
-KHR-GL46.shader_image_load_store.incomplete_textures,Fail
-spec@arb_shader_image_load_store@invalid,Fail
-spec@arb_shader_image_load_store@invalid@imageLoad/incompatible format test,Fail
-spec@arb_shader_image_load_store@invalid@imageLoad/incomplete image test,Fail
-spec@arb_shader_image_load_store@invalid@imageLoad/invalid format test,Fail
-spec@arb_shader_image_load_store@invalid@imageLoad/layer bounds test,Fail
-spec@arb_shader_image_load_store@invalid@imageLoad/level bounds test,Fail
-spec@arb_shader_image_load_store@invalid@imageLoad/unbound image test,Fail
-
 # #6115
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-float-index-rd,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec2-index-rd,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec3-index-rd,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec4-index-rd,Crash
 
-# #6270
-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
+# #6322
+spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
+
+
+# #6905
+glx@glx-swap-copy,Fail
 
 #kopper regressions/changes
-fast_color_clear@fcc-front-buffer-distraction,Fail
 glx@extension string sanity,Fail
-glx@glx-tfp,Fail
-spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
-spec@!opengl 1.0@gl-1.0-front-invalidate-back,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_ust_test,Fail
-spec@ext_framebuffer_blit@fbo-sys-blit,Fail
-spec@ext_framebuffer_blit@fbo-sys-sub-blit,Fail
 
-dEQP-GLES2.functional.clipping.point.wide_point_clip,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
+
 dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_center,Fail
 dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_corner,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_center,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_corner,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_src_dst_x,Fail
@@ -50,77 +33,6 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_x,Fail
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
 
-dEQP-GLES31.functional.blend_equation_advanced.barrier.colorburn,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.colordodge,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.darken,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.difference,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.exclusion,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hardlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hsl_color,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hsl_hue,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hsl_luminosity,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hsl_saturation,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.lighten,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.multiply,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.overlay,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.screen,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.softlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.colorburn,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.colordodge,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.darken,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.difference,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.exclusion,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hardlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hsl_color,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hsl_hue,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hsl_luminosity,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hsl_saturation,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.lighten,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.multiply,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.overlay,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.screen,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.softlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.colorburn,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.colordodge,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.darken,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.difference,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.exclusion,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hardlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_color,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_hue,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_luminosity,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_saturation,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.lighten,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.multiply,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.overlay,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.screen,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.softlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.colorburn,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.colordodge,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.darken,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.difference,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.exclusion,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hardlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hsl_color,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hsl_hue,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hsl_luminosity,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hsl_saturation,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.lighten,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.multiply,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.overlay,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.screen,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.softlight,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.default_framebuffer_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.default_framebuffer_bbox_larger,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.fbo_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.fbo_bbox_larger,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.default_framebuffer_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.default_framebuffer_bbox_larger,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.fbo_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.fbo_bbox_larger,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.default_framebuffer,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.fbo,Fail
-
 # this test tries to be error-compatible with nvidia. spoiler: mesa isn't, and no driver can pass it
 glx@glx_arb_create_context@invalid flag,Fail
 
@@ -129,9 +41,10 @@ glx@glx-copy-sub-buffer samples=2,Fail
 glx@glx-copy-sub-buffer samples=4,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth,Crash
-glx@glx-visuals-stencil,Crash
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
-glx@glx_arb_create_context_no_error@no error,Fail
+# X error 167 (GLXBadFBConfig (9)) was generated, but X error 8 was expected.
+glx@glx_arb_create_context_no_error@no error,Crash
+
 glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
 glx@glx_ext_import_context@get current display,Fail
@@ -152,7 +65,6 @@ shaders@point-vertex-id gl_vertexid gl_instanceid divisor,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
-spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 spec@!opengl 1.1@linestipple,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
 spec@!opengl 1.1@linestipple@Factor 3x,Fail
@@ -181,21 +93,12 @@ spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
 spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
 spec@!opengl es 2.0@glsl-fs-pointcoord,Fail
-spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail
 spec@arb_depth_texture@depth-tex-modes,Fail
 spec@arb_framebuffer_object@fbo-gl_pointcoord,Fail
 spec@arb_get_program_binary@restore-sso-program,Fail
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
 spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-frag,Fail
-spec@arb_point_parameters@arb_point_parameters-point-attenuation,Fail
-spec@arb_point_parameters@arb_point_parameters-point-attenuation@Aliased combinations,Fail
-spec@arb_point_parameters@arb_point_parameters-point-attenuation@Antialiased combinations,Fail
 spec@arb_point_sprite@arb_point_sprite-checkerboard,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
@@ -352,9 +255,6 @@ spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-write,Crash
 spec@khr_texture_compression_astc@array-gles,Fail
 spec@khr_texture_compression_astc@array-gles@12x12 Block Dim,Fail
 spec@khr_texture_compression_astc@array-gles@5x5 Block Dim,Fail
-spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3,Fail
-spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3@oes_egl_image_external_essl3_imageLoad,Fail
-
 
 #literally no driver can pass these
 spec@!opengl 1.0@rasterpos,Fail

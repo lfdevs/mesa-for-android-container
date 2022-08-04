@@ -23,6 +23,9 @@
   variables:
     MESA_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_IMAGE_PATH}:${FDO_DISTRIBUTION_TAG}"
 
+.use-wine:
+  variables:
+    WINEPATH: "/usr/x86_64-w64-mingw32/bin;/usr/x86_64-w64-mingw32/lib;/usr/lib/gcc/x86_64-w64-mingw32/10-posix;c:/windows;c:/windows/system32"
 
 # Build the CI docker images.
 #
@@ -46,10 +49,11 @@
   extends:
     - .container-rules
     - .incorporate-templates-commit
+    - .use-wine
   variables:
     FDO_DISTRIBUTION_VERSION: bullseye-slim
     FDO_REPO_SUFFIX: $CI_JOB_NAME
-    FDO_DISTRIBUTION_EXEC: 'env FDO_CI_CONCURRENT=${FDO_CI_CONCURRENT} bash .gitlab-ci/container/${CI_JOB_NAME}.sh'
+    FDO_DISTRIBUTION_EXEC: 'env "WINEPATH=${WINEPATH}" FDO_CI_CONCURRENT=${FDO_CI_CONCURRENT} bash .gitlab-ci/container/${CI_JOB_NAME}.sh'
     # no need to pull the whole repo to build the container image
     GIT_STRATEGY: none
 
@@ -58,7 +62,7 @@
     - .container
     - .incorporate-base-tag+templates-commit
     # Don't want the .container rules
-    - .ci-run-policy
+    - .build-rules
 
 # Debian 11 based x86 build image base
 debian/x86_build-base:
@@ -112,6 +116,23 @@ debian/i386_build:
     MESA_IMAGE_TAG: *debian-i386_build
   needs:
     - debian/i386_build
+
+# Debian 11 based x86-mingw cross main build image
+debian/x86_build-mingw:
+  extends:
+    - .use-debian/x86_build-base
+  variables:
+    MESA_IMAGE_TAG: &debian-x86_build_mingw ${DEBIAN_BUILD_MINGW_TAG}
+
+.use-debian/x86_build_mingw:
+  extends:
+    - .set-image-base-tag
+  variables:
+    MESA_BASE_TAG: *debian-x86_build-base
+    MESA_IMAGE_PATH: ${DEBIAN_X86_BUILD_MINGW_IMAGE_PATH}
+    MESA_IMAGE_TAG: *debian-x86_build_mingw
+  needs:
+    - debian/x86_build-mingw
 
 # Debian 11 based ppc64el cross-build image
 debian/ppc64el_build:
@@ -185,7 +206,7 @@ debian/x86_test-gl:
   extends: .use-debian/x86_test-base
   variables:
     FDO_DISTRIBUTION_EXEC: 'env KERNEL_URL=${KERNEL_URL} FDO_CI_CONCURRENT=${FDO_CI_CONCURRENT} bash .gitlab-ci/container/${CI_JOB_NAME}.sh'
-    KERNEL_URL: &kernel-rootfs-url "https://gitlab.freedesktop.org/gfx-ci/linux/-/archive/v5.16-for-mesa-ci-991fec6622591/linux-v5.16-for-mesa-ci-991fec6622591.tar.bz2"
+    KERNEL_URL: &kernel-rootfs-url "https://gitlab.freedesktop.org/gfx-ci/linux/-/archive/v5.17-for-mesa-ci-b78f7870d97b/linux-v5.17-for-mesa-ci-b78f7870d97b.tar.bz2"
     MESA_IMAGE_TAG: &debian-x86_test-gl ${DEBIAN_X86_TEST_GL_TAG}
 
 .use-debian/x86_test-gl:
@@ -256,7 +277,7 @@ fedora/x86_build:
 
 .kernel+rootfs:
   extends:
-    - .ci-run-policy
+    - .build-rules
   stage: container
   variables:
     GIT_STRATEGY: fetch
@@ -307,7 +328,7 @@ debian/arm_test:
     - .fdo.container-build@debian
     - .container
     # Don't want the .container rules
-    - .ci-run-policy
+    - .build-rules
   needs:
     - kernel+rootfs_arm64
     - kernel+rootfs_armhf
@@ -347,7 +368,7 @@ debian/arm_test:
 
 .windows_container_build:
   inherit:
-    default: false
+    default: [retry]
   extends:
     - .container
     - .windows-docker-vs2019
@@ -361,47 +382,64 @@ debian/arm_test:
   tags:
     - windows
     - shell
-    - "1809"
+    - "2022"
     - mesa
   script:
     - .\.gitlab-ci\windows\mesa_container.ps1 $CI_REGISTRY $CI_REGISTRY_USER $CI_REGISTRY_PASSWORD $MESA_IMAGE $MESA_UPSTREAM_IMAGE ${DOCKERFILE} ${MESA_BASE_IMAGE}
 
-windows_build_vs2019:
+windows_vs2019:
   inherit:
-    default: false
+    default: [retry]
   extends:
     - .windows_container_build
   variables:
-    MESA_IMAGE_PATH: &windows_build_image_path ${WINDOWS_X64_BUILD_PATH}
-    MESA_IMAGE_TAG: &windows_build_image_tag ${WINDOWS_X64_BUILD_TAG}
-    DOCKERFILE: Dockerfile_build
-  timeout: 2h 30m # LLVM takes ages
+    MESA_IMAGE_PATH: &windows_vs_image_path ${WINDOWS_X64_VS_PATH}
+    MESA_IMAGE_TAG: &windows_vs_image_tag ${WINDOWS_X64_VS_TAG}
+    DOCKERFILE: Dockerfile_vs
+    MESA_BASE_IMAGE: "mcr.microsoft.com/windows/server:ltsc2022"
 
-windows_test_vs2019:
+windows_build_vs2019:
   inherit:
-    default: false
+    default: [retry]
   extends:
     - .windows_container_build
   rules:
     - if: '$MICROSOFT_FARM == "offline"'
       when: never
-    - !reference [.ci-run-policy, rules]
+    - !reference [.build-rules, rules]
+  variables:
+    MESA_IMAGE_PATH: &windows_build_image_path ${WINDOWS_X64_BUILD_PATH}
+    MESA_IMAGE_TAG: &windows_build_image_tag ${WINDOWS_X64_BUILD_TAG}
+    DOCKERFILE: Dockerfile_build
+    MESA_BASE_IMAGE_PATH: *windows_vs_image_path
+    MESA_BASE_IMAGE_TAG: *windows_vs_image_tag
+    MESA_BASE_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_BASE_IMAGE_PATH}:${MESA_BASE_IMAGE_TAG}"
+  timeout: 2h 30m # LLVM takes ages
+  needs:
+    - windows_vs2019
+
+windows_test_vs2019:
+  inherit:
+    default: [retry]
+  extends:
+    - .windows_container_build
+  rules:
+    - if: '$MICROSOFT_FARM == "offline"'
+      when: never
+    - !reference [.build-rules, rules]
   variables:
     MESA_IMAGE_PATH: &windows_test_image_path ${WINDOWS_X64_TEST_PATH}
     MESA_IMAGE_TAG: &windows_test_image_tag ${WINDOWS_X64_BUILD_TAG}--${WINDOWS_X64_TEST_TAG}
     DOCKERFILE: Dockerfile_test
-    # Right now this only needs the VS install to get DXIL.dll. Maybe see about decoupling this at some point
-    MESA_BASE_IMAGE_PATH: *windows_build_image_path
-    MESA_BASE_IMAGE_TAG: *windows_build_image_tag
+    MESA_BASE_IMAGE_PATH: *windows_vs_image_path
+    MESA_BASE_IMAGE_TAG: *windows_vs_image_tag
     MESA_BASE_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_BASE_IMAGE_PATH}:${MESA_BASE_IMAGE_TAG}"
-  script:
-    - .\.gitlab-ci\windows\mesa_container.ps1 $CI_REGISTRY $CI_REGISTRY_USER $CI_REGISTRY_PASSWORD $MESA_IMAGE $MESA_UPSTREAM_IMAGE Dockerfile_test ${MESA_BASE_IMAGE}
   needs:
-    - windows_build_vs2019
+    - windows_vs2019
 
 .use-windows_build_vs2019:
   inherit:
-    default: false
+    default: [retry]
   extends: .windows-docker-vs2019
   image: "$MESA_IMAGE"
   variables:
@@ -412,7 +450,7 @@ windows_test_vs2019:
 
 .use-windows_test_vs2019:
   inherit:
-    default: false
+    default: [retry]
   extends: .windows-docker-vs2019
   image: "$MESA_IMAGE"
   variables:

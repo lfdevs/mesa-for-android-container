@@ -83,6 +83,7 @@ dEQP-EGL.functional.wide_color.window_8888_colorspace_srgb
 
 dEQP-VK.pipeline.multisample.alpha_to_coverage_unused_attachment.samples_2.alpha_opaque
 dEQP-VK.pipeline.multisample.alpha_to_coverage_unused_attachment.samples_4.alpha_opaque
+gmem-dEQP-VK.pipeline.monolithic.multisample.alpha_to_coverage_unused_attachment.samples_2.alpha_opaque
 
 # Started at least by Jan 2020, current as of May 2021
 dEQP-GLES31.functional.layout_binding.ssbo.fragment_binding_array
@@ -100,7 +101,9 @@ KHR-GLES31.core.geometry_shader.layered_framebuffer.depth_support
 KHR-GLES31.core.tessellation_shader.tessellation_shader_tc_barriers.barrier_guarded_read_calls
 
 # edfff331b3241d1c18d5c589fcdf75728089c886 mostly fixed this, but apparently it still flakes.
+dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_basic
 dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_scale
+dEQP-GLES3.functional.fbo.blit.depth_stencil.depth32f_stencil8_stencil_only
 
 # looks like a cache flushing issue, and it does sometimes pass.
 bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.*
@@ -175,3 +178,15 @@ spec@!opengl 1.0@rasterpos@glsl_vs_ubo
 
 # First appeared 2021-06-14
 spec@egl 1.4@eglcreatepbuffersurface and then glclear
+
+# Flakes collected from June/July 2022 reports, that seem to have been around forever.
+spec@!opengl 1.0@gl-1.0-front-invalidate-back
+spec@!opengl 1.1@masked-clear
+spec@!opengl 1.1@texsubimage
+spec@!opengl 3.0@gl30basic
+spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x71-501x71
+spec@egl 1.4@eglcreatepbuffersurface and then glclear
+spec@egl_nok_texture_from_pixmap@basic
+spec@ext_framebuffer_blit@fbo-sys-blit
+spec@ext_framebuffer_blit@fbo-sys-sub-blit
+spec@glsl-1.30@execution@texelfetch fs sampler2d 1x71-501x71

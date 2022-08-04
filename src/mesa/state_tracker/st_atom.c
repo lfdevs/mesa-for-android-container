@@ -149,7 +149,7 @@ static void check_program_state( struct st_context *st )
    }
 
    if (st->lower_point_size && st->ctx->LastVertexStageDirty &&
-       !st->ctx->VertexProgram.PointSizeEnabled && !st->ctx->PointSizeIsOne) {
+       !st->ctx->VertexProgram.PointSizeEnabled && !st->ctx->PointSizeIsSet) {
       if (new_gp) {
          st->dirty |= ST_NEW_GS_CONSTANTS;
       } else if (new_tep) {

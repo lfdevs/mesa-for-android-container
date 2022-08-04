@@ -142,6 +142,8 @@ bool brw_nir_apply_attribute_workarounds(nir_shader *nir,
 
 bool brw_nir_apply_trig_workarounds(nir_shader *nir);
 
+bool brw_nir_limit_trig_input_range_workaround(nir_shader *nir);
+
 void brw_nir_apply_tcs_quads_workaround(nir_shader *nir);
 
 void brw_nir_apply_key(nir_shader *nir,

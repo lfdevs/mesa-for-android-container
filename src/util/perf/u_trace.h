@@ -30,7 +30,7 @@
 
 #include "util/u_queue.h"
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -69,6 +69,7 @@ extern "C" {
 struct u_trace_context;
 struct u_trace;
 struct u_trace_chunk;
+struct u_trace_printer;
 
 /**
  * Special reserved value to indicate that no timestamp was captured,
@@ -143,6 +144,7 @@ struct u_trace_context {
    u_trace_delete_flush_data delete_flush_data;
 
    FILE *out;
+   struct u_trace_printer *out_printer;
 
    /* Once u_trace_flush() is called u_trace_chunk's are queued up to
     * render tracepoints on a queue.  The per-chunk queue jobs block until
@@ -162,6 +164,9 @@ struct u_trace_context {
    uint64_t first_time_ns;
 
    uint32_t frame_nr;
+   uint32_t batch_nr;
+   uint32_t event_nr;
+   bool start_of_frame;
 
    /* list of unprocessed trace chunks in fifo order: */
    struct list_head flushed_trace_chunks;
@@ -294,7 +299,7 @@ u_trace_context_instrumenting(struct u_trace_context *utctx)
    return !!utctx->out || ut_trace_instrument || (ut_perfetto_enabled > 0);
 }
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 }
 #endif
 

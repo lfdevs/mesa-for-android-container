@@ -29,12 +29,22 @@ es2_glapi_mapi_tmp_h = custom_target(
 
 _es2_c_args = []
 if with_platform_windows
-  _es2_c_args += ['-D_GDI32_', '-DBUILD_GL32']
+  _es2_c_args += ['-D_GDI32_']
 endif
+
+gles2_def = custom_target(
+  'gles2.def',
+  input: 'gles2.def.in',
+  output : 'gles2.def',
+  command : [prog_python, gen_vs_module_defs_py,
+             '--in_file', '@INPUT@', '--out_file', '@OUTPUT@',
+             '--compiler_id', cc.get_argument_syntax(), '--cpu_family', host_machine.cpu_family()]
+)
 
 libgles2 = shared_library(
   'GLESv2' + get_option('gles-lib-suffix'),
   ['../entry.c', es2_glapi_mapi_tmp_h],
+  vs_module_defs : gles2_def,
   c_args : [
     c_msvc_compat_args,
     _es2_c_args,
@@ -46,7 +56,7 @@ libgles2 = shared_library(
   link_args : [ld_args_gc_sections],
   include_directories : [inc_src, inc_include, inc_mapi],
   link_with : libglapi,
-  dependencies : [dep_thread, dep_libdrm, dep_m, dep_dl],
+  dependencies : [dep_thread, dep_libdrm, dep_m, dep_dl, idep_mesautilc11],
   soversion : host_machine.system() == 'windows' ? '' : '2',
   version : '2.0.0',
   darwin_versions : '3.0.0',

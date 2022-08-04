@@ -34,9 +34,9 @@
 
 #include <stdint.h>
 #include <assert.h>
-#include <time.h>
 #include <stdbool.h>
 
+#include "c11/time.h"
 #include "macros.h"
 
 #define NSEC_PER_SEC 1000000000
@@ -329,22 +329,5 @@ timespec_after(const struct timespec *a, const struct timespec *b)
       (a->tv_nsec > b->tv_nsec) :
       (a->tv_sec > b->tv_sec);
 }
-
-#ifndef _MSC_VER
-/**
- * Checks whether a timespec value is after the current time
- *
- * \param clock_domain[in] clock in which to do the comparison
- * \param deadline[in] timespec to compare
- * \return whether deadline is after the current time
- */
-static inline bool
-timespec_passed(clockid_t clock_domain, const struct timespec *deadline)
-{
-   struct timespec current_time;
-   clock_gettime(clock_domain, &current_time);
-   return timespec_after(&current_time, deadline);
-}
-#endif
 
 #endif /* TIMESPEC_H */

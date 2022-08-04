@@ -59,12 +59,12 @@ test_compact_instruction(struct brw_codegen *p, brw_inst src)
    brw_compact_inst dst;
    memset(&dst, 0xd0, sizeof(dst));
 
-   if (brw_try_compact_instruction(p->devinfo, &dst, &src)) {
+   if (brw_try_compact_instruction(p->isa, &dst, &src)) {
       brw_inst uncompacted;
 
-      brw_uncompact_instruction(p->devinfo, &uncompacted, &dst);
+      brw_uncompact_instruction(p->isa, &uncompacted, &dst);
       if (memcmp(&uncompacted, &src, sizeof(src))) {
-	 brw_debug_compact_uncompact(p->devinfo, &src, &uncompacted);
+	 brw_debug_compact_uncompact(p->isa, &src, &uncompacted);
 	 return false;
       }
    } else {
@@ -74,7 +74,7 @@ test_compact_instruction(struct brw_codegen *p, brw_inst src)
       if (memcmp(&unchanged, &dst, sizeof(dst))) {
 	 fprintf(stderr, "Failed to compact, but dst changed\n");
 	 fprintf(stderr, "  Instruction: ");
-	 brw_disassemble_inst(stderr, p->devinfo, &src, false, 0, NULL);
+	 brw_disassemble_inst(stderr, p->isa, &src, false, 0, NULL);
 	 return false;
       }
    }
@@ -90,17 +90,19 @@ test_compact_instruction(struct brw_codegen *p, brw_inst src)
  * become meaningless once fuzzing twiddles a related bit.
  */
 static void
-clear_pad_bits(const struct intel_device_info *devinfo, brw_inst *inst)
+clear_pad_bits(const struct brw_isa_info *isa, brw_inst *inst)
 {
-   if (brw_inst_opcode(devinfo, inst) != BRW_OPCODE_SEND &&
-       brw_inst_opcode(devinfo, inst) != BRW_OPCODE_SENDC &&
+   const struct intel_device_info *devinfo = isa->devinfo;
+
+   if (brw_inst_opcode(isa, inst) != BRW_OPCODE_SEND &&
+       brw_inst_opcode(isa, inst) != BRW_OPCODE_SENDC &&
        brw_inst_src0_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE &&
        brw_inst_src1_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE) {
       brw_inst_set_bits(inst, 127, 111, 0);
    }
 
    if (devinfo->ver == 8 && devinfo->platform != INTEL_PLATFORM_CHV &&
-       is_3src(devinfo, brw_inst_opcode(devinfo, inst))) {
+       is_3src(isa, brw_inst_opcode(isa, inst))) {
       brw_inst_set_bits(inst, 105, 105, 0);
       brw_inst_set_bits(inst, 84, 84, 0);
       brw_inst_set_bits(inst, 36, 35, 0);
@@ -108,8 +110,10 @@ clear_pad_bits(const struct intel_device_info *devinfo, brw_inst *inst)
 }
 
 static bool
-skip_bit(const struct intel_device_info *devinfo, brw_inst *src, int bit)
+skip_bit(const struct brw_isa_info *isa, brw_inst *src, int bit)
 {
+   const struct intel_device_info *devinfo = isa->devinfo;
+
    /* pad bit */
    if (bit == 7)
       return true;
@@ -118,7 +122,7 @@ skip_bit(const struct intel_device_info *devinfo, brw_inst *src, int bit)
    if (bit == 29)
       return true;
 
-   if (is_3src(devinfo, brw_inst_opcode(devinfo, src))) {
+   if (is_3src(isa, brw_inst_opcode(isa, src))) {
       if (devinfo->ver >= 9 || devinfo->platform == INTEL_PLATFORM_CHV) {
          if (bit == 127)
             return true;
@@ -155,8 +159,8 @@ skip_bit(const struct intel_device_info *devinfo, brw_inst *src, int bit)
    }
 
    /* sometimes these are pad bits. */
-   if (brw_inst_opcode(devinfo, src) != BRW_OPCODE_SEND &&
-       brw_inst_opcode(devinfo, src) != BRW_OPCODE_SENDC &&
+   if (brw_inst_opcode(isa, src) != BRW_OPCODE_SEND &&
+       brw_inst_opcode(isa, src) != BRW_OPCODE_SENDC &&
        brw_inst_src0_reg_file(devinfo, src) != BRW_IMMEDIATE_VALUE &&
        brw_inst_src1_reg_file(devinfo, src) != BRW_IMMEDIATE_VALUE &&
        bit >= 121) {
@@ -170,22 +174,22 @@ static bool
 test_fuzz_compact_instruction(struct brw_codegen *p, brw_inst src)
 {
    for (int bit0 = 0; bit0 < 128; bit0++) {
-      if (skip_bit(p->devinfo, &src, bit0))
+      if (skip_bit(p->isa, &src, bit0))
 	 continue;
 
       for (int bit1 = 0; bit1 < 128; bit1++) {
          brw_inst instr = src;
 	 uint64_t *bits = instr.data;
 
-         if (skip_bit(p->devinfo, &src, bit1))
+         if (skip_bit(p->isa, &src, bit1))
 	    continue;
 
 	 bits[bit0 / 64] ^= (1ull << (bit0 & 63));
 	 bits[bit1 / 64] ^= (1ull << (bit1 & 63));
 
-         clear_pad_bits(p->devinfo, &instr);
+         clear_pad_bits(p->isa, &instr);
 
-         if (!brw_validate_instruction(p->devinfo, &instr, 0, NULL))
+         if (!brw_validate_instruction(p->isa, &instr, 0, sizeof(brw_inst), NULL))
             continue;
 
 	 if (!test_compact_instruction(p, instr)) {
@@ -209,7 +213,8 @@ protected:
       devinfo->verx10 = params.verx10;
       devinfo->ver = devinfo->verx10 / 10;
 
-      brw_init_codegen(devinfo, p, p);
+      brw_init_isa_info(&isa, devinfo);
+      brw_init_codegen(&isa, p, p);
       brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
       brw_set_default_access_mode(p, params.align);
    };
@@ -223,6 +228,7 @@ protected:
    };
 
    void *mem_ctx;
+   struct brw_isa_info isa;
    intel_device_info *devinfo;
    brw_codegen *p;
 };

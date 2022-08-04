@@ -117,6 +117,10 @@ struct pan_fb_info {
         union {
                 struct pan_fb_bifrost_info bifrost;
         };
+
+        /* Only used on Valhall */
+        bool sprite_coord_origin;
+        bool first_provoking_vertex;
 };
 
 static inline unsigned
@@ -140,7 +144,7 @@ pan_wls_mem_size(const struct panfrost_device *dev,
 {
         unsigned instances = pan_wls_instances(dim);
 
-        return pan_wls_adjust_size(wls_size) * instances * dev->core_count;
+        return pan_wls_adjust_size(wls_size) * instances * dev->core_id_range;
 }
 
 #ifdef PAN_ARCH
@@ -166,7 +170,7 @@ GENX(pan_emit_tiler_heap)(const struct panfrost_device *dev,
 void
 GENX(pan_emit_tiler_ctx)(const struct panfrost_device *dev,
                          unsigned fb_width, unsigned fb_height,
-                         unsigned nr_samples,
+                         unsigned nr_samples, bool first_provoking_vertex,
                          mali_ptr heap,
                          void *out);
 #endif

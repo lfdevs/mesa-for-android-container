@@ -39,7 +39,7 @@
  * 1) Iteratively determine where sync ((sy)/(ss)) flags are needed,
  *    based on state flowing out of predecessor blocks until there is
  *    no further change.  In some cases this requires inserting nops.
- * 2) Mark (ei) on last varying input, and (ul) on last use of a0.x
+ * 2) Mark (ei) on last varying input
  * 3) Final nop scheduling for instruction latency
  * 4) Resolve jumps and schedule blocks, marking potential convergence
  *    points with (jp)
@@ -88,7 +88,6 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
    if (bd->valid)
       return false;
 
-   struct ir3_instruction *last_rel = NULL;
    struct ir3_instruction *last_n = NULL;
    struct list_head instr_list;
    struct ir3_legalize_state prev_state = bd->state;
@@ -207,13 +206,6 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
                regmask_init(&state->needs_sy, mergedregs);
             }
          }
-
-         /* TODO: is it valid to have address reg loaded from a
-          * relative src (ie. mova a0, c<a0.x+4>)?  If so, the
-          * last_rel check below should be moved ahead of this:
-          */
-         if (reg->flags & IR3_REG_RELATIV)
-            last_rel = n;
       }
 
       foreach_dst (reg, n) {
@@ -222,11 +214,6 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
             last_input_needs_ss = false;
             regmask_init(&state->needs_ss_war, mergedregs);
             regmask_init(&state->needs_ss, mergedregs);
-         }
-
-         if (last_rel && (reg->num == regid(REG_A0, 0))) {
-            last_rel->flags |= IR3_INSTR_UL;
-            last_rel = NULL;
          }
       }
 
@@ -366,9 +353,6 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
       list_delinit(&baryf->node);
       list_add(&baryf->node, &block->instr_list);
    }
-
-   if (last_rel)
-      last_rel->flags |= IR3_INSTR_UL;
 
    bd->valid = true;
 
@@ -563,7 +547,7 @@ retarget_jump(struct ir3_instruction *instr, struct ir3_block *new_target)
    if (cur_block->successors[0] == old_target) {
       cur_block->successors[0] = new_target;
    } else {
-      debug_assert(cur_block->successors[1] == old_target);
+      assert(cur_block->successors[1] == old_target);
       cur_block->successors[1] = new_target;
    }
 
@@ -571,7 +555,7 @@ retarget_jump(struct ir3_instruction *instr, struct ir3_block *new_target)
    if (cur_block->physical_successors[0] == old_target) {
       cur_block->physical_successors[0] = new_target;
    } else {
-      debug_assert(cur_block->physical_successors[1] == old_target);
+      assert(cur_block->physical_successors[1] == old_target);
       cur_block->physical_successors[1] = new_target;
    }
 
@@ -753,7 +737,7 @@ block_sched(struct ir3 *ir)
              * to follow it with an inverted branch, so follow it by an
              * unconditional branch.
              */
-            debug_assert(!block->condition);
+            assert(!block->condition);
             if (block->brtype == IR3_BRANCH_GETONE)
                br1 = ir3_GETONE(block);
             else
@@ -763,7 +747,7 @@ block_sched(struct ir3 *ir)
             br2 = ir3_JUMP(block);
             br2->cat0.target = block->successors[0];
          } else {
-            debug_assert(block->condition);
+            assert(block->condition);
 
             /* create "else" branch first (since "then" block should
              * frequently/always end up being a fall-thru):
@@ -914,7 +898,7 @@ nop_sched(struct ir3 *ir, struct ir3_shader_variant *so)
          }
 
          if (delay > 0) {
-            debug_assert(delay <= 6);
+            assert(delay <= 6);
             ir3_NOP(block)->repeat = delay - 1;
          }
 

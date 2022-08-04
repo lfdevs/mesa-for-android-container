@@ -1,4 +1,6 @@
 #!/bin/bash
+# The relative paths in this file only become valid at runtime.
+# shellcheck disable=SC1091
 
 set -e
 set -o xtrace
@@ -14,6 +16,7 @@ STABLE_EPHEMERAL=" \
       g++-mingw-w64-x86-64-posix \
       glslang-tools \
       libexpat1-dev \
+      gnupg2 \
       libgbm-dev \
       libgles2-mesa-dev \
       liblz4-dev \
@@ -35,14 +38,21 @@ STABLE_EPHEMERAL=" \
       p7zip \
       patch \
       pkg-config \
+      python3-dev \
       python3-distutils \
+      python3-pip \
+      python3-setuptools \
+      python3-wheel \
+      software-properties-common \
       wget \
+      wine64-tools \
       xz-utils \
       "
 
 apt-get install -y --no-remove \
       $STABLE_EPHEMERAL \
       libxcb-shm0 \
+      pciutils \
       python3-lxml \
       python3-simplejson \
       xinit \
@@ -52,12 +62,16 @@ apt-get install -y --no-remove \
 # We need multiarch for Wine
 dpkg --add-architecture i386
 
-apt-get update
+# Install a more recent version of Wine than exists in Debian.
+apt-key add .gitlab-ci/container/debian/winehq.gpg.key
+apt-add-repository https://dl.winehq.org/wine-builds/debian/
+apt update -qyy
 
-apt-get install -y --no-remove \
-      wine \
-      wine32 \
-      wine64
+# Needed for Valve's tracing jobs to collect information about the graphics
+# hardware on the test devices.
+pip3 install gfxinfo-mupuf==0.0.9
+
+apt install -y --no-remove --install-recommends winehq-stable
 
 function setup_wine() {
     export WINEDEBUG="-all"
@@ -86,28 +100,44 @@ EOF
 
 ############### Install DXVK
 
-DXVK_VERSION="1.8.1"
+dxvk_install_release() {
+    local DXVK_VERSION=${1:-"1.10.1"}
 
+    wget "https://github.com/doitsujin/dxvk/releases/download/v${DXVK_VERSION}/dxvk-${DXVK_VERSION}.tar.gz"
+    tar xzpf dxvk-"${DXVK_VERSION}".tar.gz
+    "dxvk-${DXVK_VERSION}"/setup_dxvk.sh install
+    rm -rf "dxvk-${DXVK_VERSION}"
+    rm dxvk-"${DXVK_VERSION}".tar.gz
+}
+
+# Install from a Github PR number
+dxvk_install_pr() {
+    local __prnum=$1
+
+    # NOTE: Clone all the ensite history of the repo so as not to think
+    # harder about cloning just enough for 'git describe' to work.  'git
+    # describe' is used by the dxvk build system to generate a
+    # dxvk_version Meson variable, which is nice-to-have.
+    git clone https://github.com/doitsujin/dxvk
+    pushd dxvk
+    git fetch origin pull/"$__prnum"/head:pr
+    git checkout pr
+    ./package-release.sh pr ../dxvk-build --no-package
+    popd
+    pushd ./dxvk-build/dxvk-pr
+    ./setup_dxvk.sh install
+    popd
+    rm -rf ./dxvk-build ./dxvk
+}
+
+# Sets up the WINEPREFIX for the DXVK installation commands below.
 setup_wine "/dxvk-wine64"
+dxvk_install_release "1.10.1"
+#dxvk_install_pr 2359
 
-wget "https://github.com/doitsujin/dxvk/releases/download/v${DXVK_VERSION}/dxvk-${DXVK_VERSION}.tar.gz"
-tar xzpf dxvk-"${DXVK_VERSION}".tar.gz
-dxvk-"${DXVK_VERSION}"/setup_dxvk.sh install
-rm -rf dxvk-"${DXVK_VERSION}"
-rm dxvk-"${DXVK_VERSION}".tar.gz
+############### Install apitrace binaries for wine
 
-############### Install Windows' apitrace binaries
-
-APITRACE_VERSION="10.0"
-APITRACE_VERSION_DATE=""
-
-wget "https://github.com/apitrace/apitrace/releases/download/${APITRACE_VERSION}/apitrace-${APITRACE_VERSION}${APITRACE_VERSION_DATE}-win64.7z"
-7zr x "apitrace-${APITRACE_VERSION}${APITRACE_VERSION_DATE}-win64.7z" \
-      "apitrace-${APITRACE_VERSION}${APITRACE_VERSION_DATE}-win64/bin/apitrace.exe" \
-      "apitrace-${APITRACE_VERSION}${APITRACE_VERSION_DATE}-win64/bin/d3dretrace.exe"
-mv "apitrace-${APITRACE_VERSION}${APITRACE_VERSION_DATE}-win64" /apitrace-msvc-win64
-rm "apitrace-${APITRACE_VERSION}${APITRACE_VERSION_DATE}-win64.7z"
-
+. .gitlab-ci/container/install-wine-apitrace.sh
 # Add the apitrace path to the registry
 wine \
     reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" \
@@ -143,6 +173,10 @@ PIGLIT_BUILD_TARGETS="piglit_replayer" . .gitlab-ci/container/build-piglit.sh
 ############### Build dEQP VK
 
 . .gitlab-ci/container/build-deqp.sh
+
+############### Build apitrace
+
+. .gitlab-ci/container/build-apitrace.sh
 
 ############### Build gfxreconstruct
 

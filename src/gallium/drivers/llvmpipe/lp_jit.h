@@ -46,6 +46,7 @@
 struct lp_build_format_cache;
 struct lp_fragment_shader_variant;
 struct lp_compute_shader_variant;
+struct lp_rast_state;
 struct llvmpipe_screen;
 
 
@@ -137,6 +138,8 @@ enum {
    LP_JIT_IMAGE_SAMPLE_STRIDE,
    LP_JIT_IMAGE_NUM_FIELDS  /* number of fields above */
 };
+
+
 /**
  * This structure is passed directly to the generated fragment shader.
  *
@@ -244,6 +247,7 @@ enum {
 #define lp_jit_context_aniso_filter_table(_gallivm, _ptr) \
    lp_build_struct_get(_gallivm, _ptr, LP_JIT_CTX_ANISO_FILTER_TABLE, "aniso_filter_table")
 
+
 struct lp_jit_thread_data
 {
    struct lp_build_format_cache *cache;
@@ -288,7 +292,7 @@ enum {
    lp_build_struct_get(_gallivm, _ptr, \
                        LP_JIT_THREAD_DATA_RASTER_STATE_VIEW_INDEX, \
                        "raster_state.view_index")
- 
+
 /**
  * typedef for fragment shader function
  *
@@ -399,7 +403,6 @@ typedef const uint8_t *
 /* We're not really jitting this, but I need to get into the
  * rast_state struct to call the function we actually are jitting.
  */
-struct lp_rast_state;
 typedef boolean
 (*lp_jit_linear_func)(const struct lp_rast_state *state,
                       uint32_t x,
@@ -412,11 +415,13 @@ typedef boolean
                       uint8_t *color,
                       uint32_t color_stride);
 
+
 struct lp_jit_cs_thread_data
 {
    struct lp_build_format_cache *cache;
    void *shared;
 };
+
 
 enum {
    LP_JIT_CS_THREAD_DATA_CACHE = 0,
@@ -430,6 +435,7 @@ enum {
 
 #define lp_jit_cs_thread_data_shared(_gallivm, _ptr) \
    lp_build_struct_get(_gallivm, _ptr, LP_JIT_CS_THREAD_DATA_SHARED, "shared")
+
 
 struct lp_jit_cs_context
 {
@@ -516,14 +522,14 @@ typedef void
 void
 lp_jit_screen_cleanup(struct llvmpipe_screen *screen);
 
-
 boolean
 lp_jit_screen_init(struct llvmpipe_screen *screen);
-
 
 void
 lp_jit_init_types(struct lp_fragment_shader_variant *lp);
 
 void
 lp_jit_init_cs_types(struct lp_compute_shader_variant *lp);
+
+
 #endif /* LP_JIT_H */

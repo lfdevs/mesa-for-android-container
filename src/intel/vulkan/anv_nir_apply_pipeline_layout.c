@@ -74,7 +74,7 @@ addr_format_for_desc_type(VkDescriptorType desc_type,
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
       return state->ubo_addr_format;
 
-   case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+   case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
       return state->desc_addr_format;
 
    default:
@@ -348,7 +348,7 @@ build_res_index(nir_builder *b, uint32_t set, uint32_t binding,
 
    case nir_address_format_32bit_index_offset: {
       assert(state->desc_addr_format == nir_address_format_32bit_index_offset);
-      if (bind_layout->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) {
+      if (bind_layout->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
          uint32_t surface_index = state->set[set].desc_offset;
          return nir_imm_ivec2(b, surface_index,
                                  bind_layout->descriptor_offset);
@@ -443,7 +443,7 @@ build_desc_addr(nir_builder *b,
       struct res_index_defs res = unpack_res_index(b, index);
 
       nir_ssa_def *desc_offset = res.desc_offset_base;
-      if (desc_type != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) {
+      if (desc_type != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
          /* Compute the actual descriptor offset.  For inline uniform blocks,
           * the array index is ignored as they are only allowed to be a single
           * descriptor (not an array) and there is no concept of a "stride".
@@ -472,7 +472,7 @@ build_desc_addr(nir_builder *b,
    }
 
    case nir_address_format_32bit_index_offset:
-      assert(desc_type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT);
+      assert(desc_type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK);
       assert(state->desc_addr_format == nir_address_format_32bit_index_offset);
       return index;
 
@@ -495,7 +495,7 @@ build_buffer_addr_for_res_index(nir_builder *b,
                                 nir_address_format addr_format,
                                 struct apply_pipeline_layout_state *state)
 {
-   if (desc_type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) {
+   if (desc_type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
       assert(addr_format == state->desc_addr_format);
       return build_desc_addr(b, NULL, desc_type, res_index, addr_format, state);
    } else if (addr_format == nir_address_format_32bit_index_offset) {
@@ -1411,10 +1411,10 @@ compare_binding_infos(const void *_a, const void *_b)
 }
 
 void
-anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
+anv_nir_apply_pipeline_layout(nir_shader *shader,
+                              const struct anv_physical_device *pdevice,
                               bool robust_buffer_access,
                               const struct anv_pipeline_layout *layout,
-                              nir_shader *shader,
                               struct anv_pipeline_bind_map *map)
 {
    void *mem_ctx = ralloc_context(NULL);

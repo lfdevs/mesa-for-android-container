@@ -31,6 +31,7 @@
 
 #include "brw_compiler.h"
 #include "brw_eu.h"
+#include "brw_prim.h"
 
 #include "dev/intel_debug.h"
 
@@ -579,7 +580,7 @@ brw_compile_ff_gs_prog(struct brw_compiler *compiler,
 
    /* Begin the compilation:
     */
-   brw_init_codegen(compiler->devinfo, &c.func, mem_ctx);
+   brw_init_codegen(&compiler->isa, &c.func, mem_ctx);
 
    c.func.single_program_flow = 1;
 
@@ -650,7 +651,7 @@ brw_compile_ff_gs_prog(struct brw_compiler *compiler,
 
    if (INTEL_DEBUG(DEBUG_GS)) {
       fprintf(stderr, "gs:\n");
-      brw_disassemble_with_labels(compiler->devinfo, c.func.store,
+      brw_disassemble_with_labels(&compiler->isa, c.func.store,
                                   0, *final_assembly_size, stderr);
       fprintf(stderr, "\n");
     }

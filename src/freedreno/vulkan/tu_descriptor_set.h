@@ -124,6 +124,8 @@ struct tu_pipeline_layout
    uint32_t num_sets;
    uint32_t push_constant_size;
    uint32_t dynamic_offset_size;
+
+   unsigned char sha1[20];
 };
 
 static inline const struct tu_sampler *

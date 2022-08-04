@@ -460,10 +460,10 @@ void ac_modifier_max_extent(const struct radeon_info *info,
                             uint64_t modifier, uint32_t *width, uint32_t *height);
 
 unsigned ac_surface_get_nplanes(const struct radeon_surf *surf);
-uint64_t ac_surface_get_plane_offset(enum chip_class chip_class,
+uint64_t ac_surface_get_plane_offset(enum amd_gfx_level gfx_level,
                                      const struct radeon_surf *surf,
                                      unsigned plane, unsigned layer);
-uint64_t ac_surface_get_plane_stride(enum chip_class chip_class,
+uint64_t ac_surface_get_plane_stride(enum amd_gfx_level gfx_level,
                                      const struct radeon_surf *surf,
                                      unsigned plane, unsigned level);
 /* Of the whole miplevel, not an individual layer */
@@ -473,7 +473,7 @@ uint64_t ac_surface_get_plane_size(const struct radeon_surf *surf,
 void ac_surface_print_info(FILE *out, const struct radeon_info *info,
                            const struct radeon_surf *surf);
 
-bool ac_surface_supports_dcc_image_stores(enum chip_class chip_class,
+bool ac_surface_supports_dcc_image_stores(enum amd_gfx_level gfx_level,
                                           const struct radeon_surf *surf);
 
 #ifdef AC_SURFACE_INCLUDE_NIR

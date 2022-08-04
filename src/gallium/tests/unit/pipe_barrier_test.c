@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
 
    for (i = 0; i < NUM_THREADS; i++) {
       thread_ids[i] = i;
-      threads[i] = u_thread_create(thread_function, (void *) &thread_ids[i]);
+      u_thread_create(threads + i, thread_function, (void *) &thread_ids[i]);
    }
 
    for (i = 0; i < NUM_THREADS; i++ ) {

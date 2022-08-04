@@ -1192,7 +1192,7 @@ driParseConfigFiles(driOptionCache *cache, const driOptionCache *info,
                     const char *engineName, uint32_t engineVersion)
 {
    initOptionCache(cache, info);
-   struct OptConfData userData;
+   struct OptConfData userData = {0};
 
    userData.cache = cache;
    userData.screenNum = screenNum;

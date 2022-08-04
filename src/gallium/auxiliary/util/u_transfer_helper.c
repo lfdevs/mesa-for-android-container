@@ -91,7 +91,7 @@ struct u_transfer {
 static inline struct u_transfer *
 u_transfer(struct pipe_transfer *ptrans)
 {
-   debug_assert(handle_transfer(ptrans->resource));
+   assert(handle_transfer(ptrans->resource));
    return (struct u_transfer *)ptrans;
 }
 
@@ -259,7 +259,7 @@ u_transfer_helper_transfer_map(struct pipe_context *pctx,
    if (helper->msaa_map && (prsc->nr_samples > 1))
       return transfer_map_msaa(pctx, prsc, level, usage, box, pptrans);
 
-   debug_assert(box->depth == 1);
+   assert(box->depth == 1);
 
    trans = calloc(1, sizeof(*trans));
    if (!trans)
@@ -492,16 +492,17 @@ u_transfer_helper_transfer_flush_region(struct pipe_context *pctx,
    if (handle_transfer(ptrans->resource)) {
       struct u_transfer *trans = u_transfer(ptrans);
 
-      flush_region(pctx, ptrans, box);
-
       /* handle MSAA case, since there could be multiple levels of
        * wrapped transfer, call pctx->transfer_flush_region()
        * instead of helper->vtbl->transfer_flush_region()
        */
       if (trans->ss) {
          pctx->transfer_flush_region(pctx, trans->trans, box);
+         flush_region(pctx, ptrans, box);
          return;
       }
+
+      flush_region(pctx, ptrans, box);
 
       helper->vtbl->transfer_flush_region(pctx, trans->trans, box);
       if (trans->trans2)
@@ -524,6 +525,8 @@ u_transfer_helper_transfer_unmap(struct pipe_context *pctx,
       if (!(ptrans->usage & PIPE_MAP_FLUSH_EXPLICIT)) {
          struct pipe_box box;
          u_box_2d(0, 0, ptrans->box.width, ptrans->box.height, &box);
+         if (trans->ss)
+            pctx->transfer_flush_region(pctx, trans->trans, &box);
          flush_region(pctx, ptrans, &box);
       }
 
@@ -598,7 +601,7 @@ u_transfer_helper_deinterleave_transfer_map(struct pipe_context *pctx,
    if (!need_interleave_path(helper, format))
       return helper->vtbl->transfer_map(pctx, prsc, level, usage, box, pptrans);
 
-   debug_assert(box->depth == 1);
+   assert(box->depth == 1);
 
    trans = calloc(1, sizeof(*trans));
    if (!trans)

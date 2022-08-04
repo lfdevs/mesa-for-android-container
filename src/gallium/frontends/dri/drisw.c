@@ -526,7 +526,7 @@ drisw_init_screen(__DRIscreen * sPriv)
       return NULL;
 
    screen->sPriv = sPriv;
-   screen->fd = -1;
+   screen->fd = sPriv->fd;
 
    screen->swrast_no_present = debug_get_option_swrast_no_present();
 
@@ -537,7 +537,14 @@ drisw_init_screen(__DRIscreen * sPriv)
          lf = &drisw_shm_lf;
    }
 
-   if (pipe_loader_sw_probe_dri(&screen->dev, lf)) {
+   bool success = false;
+#ifdef HAVE_DRISW_KMS
+   if (screen->fd != -1)
+      success = pipe_loader_sw_probe_kms(&screen->dev, screen->fd);
+#endif
+   if (!success)
+      success = pipe_loader_sw_probe_dri(&screen->dev, lf);
+   if (success) {
       pscreen = pipe_loader_create_screen(screen->dev);
       dri_init_options(screen);
    }
@@ -614,11 +621,27 @@ static const struct __DRIDriverVtableExtensionRec galliumsw_vtable = {
    .vtable = &galliumsw_driver_api,
 };
 
+/* swrast copy sub buffer entrypoint. */
+static void driswCopySubBuffer(__DRIdrawable *pdp, int x, int y,
+                               int w, int h)
+{
+   assert(pdp->driScreenPriv->swrast_loader);
+
+   pdp->driScreenPriv->driver->CopySubBuffer(pdp, x, y, w, h);
+}
+
+/* for swrast only */
+const __DRIcopySubBufferExtension driSWCopySubBufferExtension = {
+   .base = { __DRI_COPY_SUB_BUFFER, 1 },
+
+   .copySubBuffer               = driswCopySubBuffer,
+};
+
 /* This is the table of extensions that the loader will dlsym() for. */
 const __DRIextension *galliumsw_driver_extensions[] = {
     &driCoreExtension.base,
     &driSWRastExtension.base,
-    &driCopySubBufferExtension.base,
+    &driSWCopySubBufferExtension.base,
     &gallium_config_options.base,
     &galliumsw_vtable.base,
     NULL

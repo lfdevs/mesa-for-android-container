@@ -41,7 +41,7 @@ download_skia_source() {
     # Skia cloned from https://android.googlesource.com/platform/external/skqp
     # has all needed assets tracked on git-fs
     SKQP_REPO=https://android.googlesource.com/platform/external/skqp
-    SKQP_BRANCH=android-cts-10.0_r11
+    SKQP_BRANCH=android-cts-11.0_r7
 
     git clone --branch "${SKQP_BRANCH}" --depth 1 "${SKQP_REPO}" "${SKIA_DIR}"
 }

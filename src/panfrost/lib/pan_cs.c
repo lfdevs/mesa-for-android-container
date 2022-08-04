@@ -42,8 +42,12 @@ mod_to_block_fmt(uint64_t mod)
                 return MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED;
         default:
 #if PAN_ARCH >= 5
-                if (drm_is_afbc(mod))
+                if (drm_is_afbc(mod) && !(mod & AFBC_FORMAT_MOD_TILED))
                         return MALI_BLOCK_FORMAT_AFBC;
+#endif
+#if PAN_ARCH >= 7
+                if (drm_is_afbc(mod) && (mod & AFBC_FORMAT_MOD_TILED))
+                        return MALI_BLOCK_FORMAT_AFBC_TILED;
 #endif
 
                 unreachable("Unsupported modifer");
@@ -214,14 +218,19 @@ pan_prepare_zs(const struct pan_fb_info *fb,
 
         struct pan_surface surf;
         pan_iview_get_surface(zs, 0, 0, 0, &surf);
+        UNUSED const struct pan_image_slice_layout *slice = &zs->image->layout.slices[level];
 
         if (drm_is_afbc(zs->image->layout.modifier)) {
-#if PAN_ARCH <= 8
-#if PAN_ARCH >= 6
-                const struct pan_image_slice_layout *slice = &zs->image->layout.slices[level];
+#if PAN_ARCH >= 9
+                ext->zs_writeback_base = surf.afbc.header;
+                ext->zs_writeback_row_stride = slice->row_stride;
+                /* TODO: surface stride? */
+                ext->zs_afbc_body_offset = surf.afbc.body - surf.afbc.header;
 
-                ext->zs_afbc_row_stride = slice->afbc.row_stride /
-                                          AFBC_HEADER_BYTES_PER_TILE;
+                /* TODO: stencil AFBC? */
+#else
+#if PAN_ARCH >= 6
+                ext->zs_afbc_row_stride = pan_afbc_stride_blocks(zs->image->layout.modifier, slice->row_stride);
 #else
                 ext->zs_block_format = MALI_BLOCK_FORMAT_AFBC;
                 ext->zs_afbc_body_size = 0x1000;
@@ -310,34 +319,37 @@ pan_bytes_per_pixel_tib(enum pipe_format format)
 }
 
 static unsigned
-pan_internal_cbuf_size(const struct pan_fb_info *fb,
-                       unsigned *tile_size)
+pan_cbuf_bytes_per_pixel(const struct pan_fb_info *fb)
 {
-        unsigned total_size = 0;
+        unsigned sum = 0;
 
-        *tile_size = 16 * 16;
         for (int cb = 0; cb < fb->rt_count; ++cb) {
                 const struct pan_image_view *rt = fb->rts[cb].view;
 
                 if (!rt)
                         continue;
 
-                total_size += pan_bytes_per_pixel_tib(rt->format) *
-                              rt->nr_samples * (*tile_size);
+                sum += pan_bytes_per_pixel_tib(rt->format) * rt->nr_samples;
         }
 
-        /* We have a 4KB budget, let's reduce the tile size until it fits. */
-        while (total_size > 4096) {
-                total_size >>= 1;
-                *tile_size >>= 1;
-        }
+        return sum;
+}
 
-        /* Align on 1k. */
-        total_size = ALIGN_POT(total_size, 1024);
+/*
+ * Select the largest tile size that fits within the tilebuffer budget.
+ * Formally, maximize (pixels per tile) such that it is a power of two and
+ *
+ *      (bytes per pixel) (pixels per tile) <= (max bytes per tile)
+ *
+ * A bit of algebra gives the following formula.
+ */
+static unsigned
+pan_select_max_tile_size(unsigned tile_buffer_bytes, unsigned bytes_per_pixel)
+{
+        assert(util_is_power_of_two_nonzero(tile_buffer_bytes));
+        assert(tile_buffer_bytes >= 1024);
 
-        /* Minimum tile size is 4x4. */
-        assert(*tile_size >= 4 * 4);
-        return total_size;
+        return tile_buffer_bytes >> util_logbase2_ceil(bytes_per_pixel);
 }
 
 static enum mali_color_format
@@ -408,6 +420,32 @@ pan_rt_init_format(const struct pan_image_view *rt,
         cfg->swizzle = panfrost_translate_swizzle_4(swizzle);
 }
 
+#if PAN_ARCH >= 9
+enum mali_afbc_compression_mode
+pan_afbc_compression_mode(enum pipe_format format)
+{
+        /* There's a special case for texturing the stencil part from a combined
+         * depth/stencil texture, handle it separately.
+         */
+        if (format == PIPE_FORMAT_X24S8_UINT)
+                return MALI_AFBC_COMPRESSION_MODE_X24S8;
+
+        /* Otherwise, map canonical formats to the hardware enum. This only
+         * needs to handle the subset of formats returned by
+         * panfrost_afbc_format.
+         */
+        switch (panfrost_afbc_format(PAN_ARCH, format)) {
+        case PIPE_FORMAT_R8G8_UNORM: return MALI_AFBC_COMPRESSION_MODE_R8G8;
+        case PIPE_FORMAT_R8G8B8_UNORM: return MALI_AFBC_COMPRESSION_MODE_R8G8B8;
+        case PIPE_FORMAT_R8G8B8A8_UNORM: return MALI_AFBC_COMPRESSION_MODE_R8G8B8A8;
+        case PIPE_FORMAT_R5G6B5_UNORM: return MALI_AFBC_COMPRESSION_MODE_R5G6B5;
+        case PIPE_FORMAT_S8_UINT: return MALI_AFBC_COMPRESSION_MODE_S8;
+        case PIPE_FORMAT_NONE: unreachable("invalid format for AFBC");
+        default: unreachable("unknown canonical AFBC format");
+        }
+}
+#endif
+
 static void
 pan_prepare_rt(const struct pan_fb_info *fb, unsigned idx,
                unsigned cbuf_offset,
@@ -458,14 +496,24 @@ pan_prepare_rt(const struct pan_fb_info *fb, unsigned idx,
         pan_iview_get_surface(rt, 0, 0, 0, &surf);
 
         if (drm_is_afbc(rt->image->layout.modifier)) {
-#if PAN_ARCH <= 8
+#if PAN_ARCH >= 9
+                if (rt->image->layout.modifier & AFBC_FORMAT_MOD_YTR)
+                        cfg->afbc.yuv_transform = true;
+
+                cfg->afbc.wide_block = panfrost_afbc_is_wide(rt->image->layout.modifier);
+                cfg->afbc.header = surf.afbc.header;
+                cfg->afbc.body_offset = surf.afbc.body - surf.afbc.header;
+                assert(surf.afbc.body >= surf.afbc.header);
+
+                cfg->afbc.compression_mode = pan_afbc_compression_mode(rt->format);
+                cfg->afbc.row_stride = row_stride;
+#else
                 const struct pan_image_slice_layout *slice = &rt->image->layout.slices[level];
 
 #if PAN_ARCH >= 6
-                cfg->afbc.row_stride = slice->afbc.row_stride /
-                                       AFBC_HEADER_BYTES_PER_TILE;
+                cfg->afbc.row_stride = pan_afbc_stride_blocks(rt->image->layout.modifier, slice->row_stride);
                 cfg->afbc.afbc_wide_block_enable =
-                        panfrost_block_dim(rt->image->layout.modifier, true, 0) > 16;
+                        panfrost_afbc_is_wide(rt->image->layout.modifier);
 #else
                 cfg->afbc.chunk_size = 9;
                 cfg->afbc.sparse = true;
@@ -498,7 +546,19 @@ GENX(pan_emit_tls)(const struct pan_tls_info *info,
                                 panfrost_get_stack_shift(info->tls.size);
 
                         cfg.tls_size = shift;
+#if PAN_ARCH >= 9
+                        /* For now, always use packed TLS addressing. This is
+                         * better for the cache and requires no fix up code in
+                         * the shader. We may need to revisit this someday for
+                         * OpenCL generic pointer support.
+                         */
+                        cfg.tls_address_mode = MALI_ADDRESS_MODE_PACKED;
+
+                        assert((info->tls.ptr & 4095) == 0);
+                        cfg.tls_base_pointer = info->tls.ptr >> 8;
+#else
                         cfg.tls_base_pointer = info->tls.ptr;
+#endif
                 }
 
                 if (info->wls.size) {
@@ -598,7 +658,7 @@ pan_force_clean_write_rt(const struct pan_image_view *rt, unsigned tile_size)
         if (!drm_is_afbc(rt->image->layout.modifier))
                 return false;
 
-        unsigned superblock = panfrost_block_dim(rt->image->layout.modifier, true, 0);
+        unsigned superblock = panfrost_afbc_superblock_width(rt->image->layout.modifier);
 
         assert(superblock >= 16);
         assert(tile_size <= 16*16);
@@ -648,8 +708,18 @@ GENX(pan_emit_fbd)(const struct panfrost_device *dev,
                            pan_section_ptr(fbd, FRAMEBUFFER, LOCAL_STORAGE));
 #endif
 
-        unsigned tile_size;
-        unsigned internal_cbuf_size = pan_internal_cbuf_size(fb, &tile_size);
+        unsigned bytes_per_pixel = pan_cbuf_bytes_per_pixel(fb);
+        unsigned tile_size = pan_select_max_tile_size(dev->optimal_tib_size,
+                                                      bytes_per_pixel);
+
+        /* Clamp tile size to hardware limits */
+        tile_size = MIN2(tile_size, 16 * 16);
+        assert(tile_size >= 4 * 4);
+
+        /* Colour buffer allocations must be 1K aligned. */
+        unsigned cbuf_allocation = ALIGN_POT(bytes_per_pixel * tile_size, 1024);
+        assert(cbuf_allocation <= dev->optimal_tib_size && "tile too big");
+
         int crc_rt = GENX(pan_select_crc_rt)(fb, tile_size);
         bool has_zs_crc_ext = (fb->zs.view.zs || fb->zs.view.s || crc_rt >= 0);
 
@@ -682,7 +752,7 @@ GENX(pan_emit_fbd)(const struct panfrost_device *dev,
 
                 cfg.z_clear = fb->zs.clear_value.depth;
                 cfg.s_clear = fb->zs.clear_value.stencil;
-                cfg.color_buffer_allocation = internal_cbuf_size;
+                cfg.color_buffer_allocation = cbuf_allocation;
                 cfg.sample_count = fb->nr_samples;
                 cfg.sample_pattern = pan_sample_pattern(fb->nr_samples);
                 cfg.z_write_enable = (fb->zs.view.zs && !fb->zs.discard.z);
@@ -704,6 +774,11 @@ GENX(pan_emit_fbd)(const struct panfrost_device *dev,
 
                         *valid |= full;
                 }
+
+#if PAN_ARCH >= 9
+                cfg.point_sprite_coord_origin_max_y = fb->sprite_coord_origin;
+                cfg.first_provoking_vertex = fb->first_provoking_vertex;
+#endif
         }
 
 #if PAN_ARCH >= 6
@@ -876,6 +951,7 @@ void
 GENX(pan_emit_tiler_ctx)(const struct panfrost_device *dev,
                          unsigned fb_width, unsigned fb_height,
                          unsigned nr_samples,
+                         bool first_provoking_vertex,
                          mali_ptr heap,
                          void *out)
 {
@@ -898,6 +974,9 @@ GENX(pan_emit_tiler_ctx)(const struct panfrost_device *dev,
                 tiler.fb_height = fb_height;
                 tiler.heap = heap;
                 tiler.sample_pattern = pan_sample_pattern(nr_samples);
+#if PAN_ARCH >= 9
+                tiler.first_provoking_vertex = first_provoking_vertex;
+#endif
         }
 }
 #endif

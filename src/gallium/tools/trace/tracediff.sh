@@ -81,11 +81,9 @@ strip_dump()
   INFILE="$1"
   OUTFILE="$2"
 
-  python3 "$TRACEDUMP" --plain --suppress \
+  python3 "$TRACEDUMP" --plain --suppress --ignore-junk \
     "${DUMP_ARGS[@]}" "$INFILE" \
   | sed \
-    -e '/pipe_screen::is_format_supported/d' \
-    -e '/pipe_screen::get_\(shader_\)\?paramf\?/d' \
     -e 's/\r$//g' \
     -e 's/, /,\n\t/g' \
     -e 's/) = /)\n\t= /' \

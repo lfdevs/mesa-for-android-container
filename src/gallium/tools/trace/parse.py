@@ -36,6 +36,22 @@ import format
 from model import *
 
 
+trace_ignore_calls = set((
+    ("pipe_screen", "is_format_supported"),
+    ("pipe_screen", "get_name"),
+    ("pipe_screen", "get_vendor"),
+    ("pipe_screen", "get_param"),
+    ("pipe_screen", "get_paramf"),
+    ("pipe_screen", "get_shader_param"),
+    ("pipe_screen", "get_compute_param"),
+    ("pipe_screen", "get_disk_shader_cache"),
+))
+
+
+def trace_call_ignore(call):
+    return (call.klass, call.method) in trace_ignore_calls
+
+
 ELEMENT_START, ELEMENT_END, CHARACTER_DATA, EOF = range(4)
 
 
@@ -72,7 +88,7 @@ class XmlTokenizer:
         self.skip_ws = skip_ws
         
         self.character_pos = 0, 0
-        self.character_data = ''
+        self.character_data = []
         
         self.parser = xpat.ParserCreate()
         self.parser.StartElementHandler  = self.handle_element_start
@@ -94,15 +110,16 @@ class XmlTokenizer:
     def handle_character_data(self, data):
         if not self.character_data:
             self.character_pos = self.pos()
-        self.character_data += data
+        self.character_data.append(data)
     
     def finish_character_data(self):
         if self.character_data:
-            if not self.skip_ws or not self.character_data.isspace(): 
+            character_data = ''.join(self.character_data)
+            if not self.skip_ws or not character_data.isspace(): 
                 line, column = self.character_pos
-                token = XmlToken(CHARACTER_DATA, self.character_data, None, line, column)
+                token = XmlToken(CHARACTER_DATA, character_data, None, line, column)
                 self.tokens.append(token)
-            self.character_data = ''
+            self.character_data = []
     
     def next(self):
         size = 16*1024
@@ -191,14 +208,17 @@ class XmlParser:
 
 class TraceParser(XmlParser):
 
-    def __init__(self, fp):
+    def __init__(self, fp, options, state):
         XmlParser.__init__(self, fp)
         self.last_call_no = 0
-    
+        self.state = state
+        self.options = options
+
     def parse(self):
         self.element_start('trace')
         while self.token.type not in (ELEMENT_END, EOF):
             call = self.parse_call()
+            call.is_junk = trace_call_ignore(call)
             self.handle_call(call)
         if self.token.type != EOF:
             self.element_end('trace')
@@ -346,7 +366,7 @@ class TraceParser(XmlParser):
         address = self.character_data()
         self.element_end('ptr')
 
-        return Pointer(address, pname)
+        return Pointer(self.state, address, pname)
 
     def handle_call(self, call):
         pass
@@ -354,35 +374,44 @@ class TraceParser(XmlParser):
     
 class SimpleTraceDumper(TraceParser):
     
-    def __init__(self, fp, options, formatter):
-        TraceParser.__init__(self, fp)
+    def __init__(self, fp, options, formatter, state):
+        TraceParser.__init__(self, fp, options, state)
         self.options = options
         self.formatter = formatter
         self.pretty_printer = PrettyPrinter(self.formatter, options)
 
     def handle_call(self, call):
+        if self.options.ignore_junk and call.is_junk:
+            return
+
         call.visit(self.pretty_printer)
-        self.formatter.newline()
 
 
 class TraceDumper(SimpleTraceDumper):
 
-    def __init__(self, fp, options, formatter):
-        SimpleTraceDumper.__init__(self, fp, options, formatter)
+    def __init__(self, fp, options, formatter, state):
+        SimpleTraceDumper.__init__(self, fp, options, formatter, state)
         self.call_stack = []
 
     def handle_call(self, call):
+        if self.options.ignore_junk and call.is_junk:
+            return
+
         if self.options.named_ptrs:
             self.call_stack.append(call)
         else:
             call.visit(self.pretty_printer)
-            self.formatter.newline()
 
-    def dump_calls(self):
-        for call in self.call_stack:
-            call.visit(self.pretty_printer)
-            self.formatter.newline()
-        
+
+class ParseOptions(ModelOptions):
+
+    def __init__(self, args=None):
+        # Initialize options local to this module
+        self.plain = False
+        self.ignore_junk = False
+
+        ModelOptions.__init__(self, args)
+
 
 class Main:
     '''Common main class for all retrace command line utilities.''' 
@@ -393,6 +422,7 @@ class Main:
     def main(self):
         optparser = self.get_optparser()
         args = optparser.parse_args()
+        options = self.make_options(args)
 
         for fname in args.filename:
             try:
@@ -408,25 +438,43 @@ class Main:
                 print("ERROR: {}".format(str(e)))
                 sys.exit(1)
 
-            self.process_arg(stream, args)
+            self.process_arg(stream, options)
+
+    def make_options(self, args):
+        return ParseOptions(args)
 
     def get_optparser(self):
+        estr = "\nList of junk calls:\n"
+        for klass, call in sorted(trace_ignore_calls):
+            estr += f"  {klass}::{call}\n"
+
         optparser = argparse.ArgumentParser(
-            description="Parse and dump Gallium trace(s)")
+            description="Parse and dump Gallium trace(s)",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog=estr)
+
         optparser.add_argument("filename", action="extend", nargs="+",
             type=str, metavar="filename", help="Gallium trace filename (plain or .gz, .bz2)")
+
         optparser.add_argument("-p", "--plain",
             action="store_const", const=True, default=False,
             dest="plain", help="disable ANSI color etc. formatting")
+
         optparser.add_argument("-S", "--suppress",
             action="store_const", const=True, default=False,
             dest="suppress_variants", help="suppress some variants in output for better diffability")
+
         optparser.add_argument("-N", "--named",
             action="store_const", const=True, default=False,
             dest="named_ptrs", help="generate symbolic names for raw pointer values")
+
         optparser.add_argument("-M", "--method-only",
             action="store_const", const=True, default=False,
             dest="method_only", help="output only call names without arguments")
+
+        optparser.add_argument("-I", "--ignore-junk",
+            action="store_const", const=True, default=False,
+            dest="ignore_junk", help="filter out/ignore junk calls (see below)")
 
         return optparser
 
@@ -436,11 +484,12 @@ class Main:
         else:
             formatter = format.DefaultFormatter(sys.stdout)
 
-        parser = TraceDumper(stream, options, formatter)
-        parser.parse()
+        dump = TraceDumper(stream, options, formatter, TraceStateData())
+        dump.parse()
 
         if options.named_ptrs:
-            parser.dump_calls()
+            for call in dump.call_stack:
+                call.visit(dump.pretty_printer)
 
 
 if __name__ == '__main__':

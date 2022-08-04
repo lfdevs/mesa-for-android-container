@@ -1,0 +1,15 @@
+spec@arb_query_buffer_object@qbo
+spec@amd_performance_monitor@measure
+spec@amd_performance_monitor@measure@change counters while active
+spec@amd_performance_monitor@measure@counters in range
+
+glx@glx-copy-sub-buffer samples=2
+glx@glx-copy-sub-buffer samples=16
+
+#X Error of failed request:  BadValue (integer parameter out of range for operation)
+#  Major opcode of failed request:  148 ()
+#  Minor opcode of failed request:  4
+#  Value in failed request:  0xa00007
+#  Serial number of failed request:  41
+#  Current serial number in output stream:  45
+glx@glx-multi-context-ib-1

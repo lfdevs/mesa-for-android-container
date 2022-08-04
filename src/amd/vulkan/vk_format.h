@@ -119,15 +119,6 @@ vk_format_no_srgb(VkFormat format)
    }
 }
 
-static inline unsigned
-vk_format_get_component_bits(VkFormat format, enum util_format_colorspace colorspace,
-                             unsigned component)
-{
-   return util_format_get_component_bits(vk_format_to_pipe_format(format),
-                                         colorspace,
-                                         component);
-}
-
 static inline VkFormat
 vk_to_non_srgb_format(VkFormat format)
 {
@@ -152,12 +143,6 @@ vk_to_non_srgb_format(VkFormat format)
 }
 
 static inline unsigned
-vk_format_get_plane_count(VkFormat format)
-{
-   return util_format_get_num_planes(vk_format_to_pipe_format(format));
-}
-
-static inline unsigned
 vk_format_get_plane_width(VkFormat format, unsigned plane, unsigned width)
 {
    return util_format_get_plane_width(vk_format_to_pipe_format(format), plane, width);
@@ -167,32 +152,6 @@ static inline unsigned
 vk_format_get_plane_height(VkFormat format, unsigned plane, unsigned height)
 {
    return util_format_get_plane_height(vk_format_to_pipe_format(format), plane, height);
-}
-
-static inline VkFormat
-vk_format_get_plane_format(VkFormat format, unsigned plane_id)
-{
-   assert(plane_id < vk_format_get_plane_count(format));
-
-   switch (format) {
-   case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
-   case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
-   case VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM:
-      return VK_FORMAT_R8_UNORM;
-   case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
-   case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
-      return plane_id ? VK_FORMAT_R8G8_UNORM : VK_FORMAT_R8_UNORM;
-   case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
-   case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
-   case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
-      return VK_FORMAT_R16_UNORM;
-   case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
-   case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
-      return plane_id ? VK_FORMAT_R16G16_UNORM : VK_FORMAT_R16_UNORM;
-   default:
-      assert(vk_format_get_plane_count(format) == 1);
-      return format;
-   }
 }
 
 #endif /* VK_FORMAT_H */

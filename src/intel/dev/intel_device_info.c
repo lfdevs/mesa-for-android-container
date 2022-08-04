@@ -37,6 +37,7 @@
 #include "util/debug.h"
 #include "util/log.h"
 #include "util/macros.h"
+#include "util/os_misc.h"
 
 #include "drm-uapi/i915_drm.h"
 
@@ -1189,7 +1190,7 @@ update_l3_banks(struct intel_device_info *devinfo)
 
 /* At some point in time, some people decided to redefine what topology means,
  * from useful HW related information (slice, subslice, etc...), to much less
- * useful generic stuff that noone cares about (a single slice with lots of
+ * useful generic stuff that no one cares about (a single slice with lots of
  * subslices). Of course all of this was done without asking the people who
  * defined the topology query in the first place, to solve a lack of
  * information Gfx10+. This function is here to workaround the fact it's not
@@ -1587,6 +1588,108 @@ query_topology(struct intel_device_info *devinfo, int fd)
 
 }
 
+/**
+ * Reports memory region info, and allows buffers to target system-memory,
+ * and/or device local memory.
+ */
+static bool
+query_regions(struct intel_device_info *devinfo, int fd, bool update)
+{
+   struct drm_i915_query_memory_regions *meminfo =
+      intel_i915_query_alloc(fd, DRM_I915_QUERY_MEMORY_REGIONS, NULL);
+   if (meminfo == NULL)
+      return false;
+
+   for (int i = 0; i < meminfo->num_regions; i++) {
+      const struct drm_i915_memory_region_info *mem = &meminfo->regions[i];
+      switch (mem->region.memory_class) {
+      case I915_MEMORY_CLASS_SYSTEM: {
+         if (!update) {
+            devinfo->mem.sram.mem_class = mem->region.memory_class;
+            devinfo->mem.sram.mem_instance = mem->region.memory_instance;
+            devinfo->mem.sram.mappable.size = mem->probed_size;
+         } else {
+            assert(devinfo->mem.sram.mem_class == mem->region.memory_class);
+            assert(devinfo->mem.sram.mem_instance == mem->region.memory_instance);
+            assert(devinfo->mem.sram.mappable.size == mem->probed_size);
+         }
+         /* The kernel uAPI only reports an accurate unallocated_size value
+          * for I915_MEMORY_CLASS_DEVICE.
+          */
+         uint64_t available;
+         if (os_get_available_system_memory(&available))
+            devinfo->mem.sram.mappable.free = MIN2(available, mem->probed_size);
+         break;
+      }
+      case I915_MEMORY_CLASS_DEVICE:
+         if (!update) {
+            devinfo->mem.vram.mem_class = mem->region.memory_class;
+            devinfo->mem.vram.mem_instance = mem->region.memory_instance;
+            if (mem->probed_cpu_visible_size > 0) {
+               devinfo->mem.vram.mappable.size = mem->probed_cpu_visible_size;
+               devinfo->mem.vram.unmappable.size =
+                  mem->probed_size - mem->probed_cpu_visible_size;
+            } else {
+               /* We are running on an older kernel without support for the
+                * small-bar uapi. These kernels only support systems where the
+                * entire vram is mappable.
+                */
+               devinfo->mem.vram.mappable.size = mem->probed_size;
+               devinfo->mem.vram.unmappable.size = 0;
+            }
+         } else {
+            assert(devinfo->mem.vram.mem_class == mem->region.memory_class);
+            assert(devinfo->mem.vram.mem_instance == mem->region.memory_instance);
+            assert((devinfo->mem.vram.mappable.size +
+                    devinfo->mem.vram.unmappable.size) == mem->probed_size);
+         }
+         if (mem->unallocated_cpu_visible_size > 0) {
+            if (mem->unallocated_size != -1) {
+               devinfo->mem.vram.mappable.free = mem->unallocated_cpu_visible_size;
+               devinfo->mem.vram.unmappable.free =
+                  mem->unallocated_size - mem->unallocated_cpu_visible_size;
+            }
+         } else {
+            /* We are running on an older kernel without support for the
+             * small-bar uapi. These kernels only support systems where the
+             * entire vram is mappable.
+             */
+            if (mem->unallocated_size != -1) {
+               devinfo->mem.vram.mappable.free = mem->unallocated_size;
+               devinfo->mem.vram.unmappable.free = 0;
+            }
+         }
+         break;
+      default:
+         break;
+      }
+   }
+
+   free(meminfo);
+   devinfo->mem.use_class_instance = true;
+   return true;
+}
+
+static bool
+compute_system_memory(struct intel_device_info *devinfo, bool update)
+{
+   uint64_t total_phys;
+   if (!os_get_total_physical_memory(&total_phys))
+      return false;
+
+   uint64_t available = 0;
+   os_get_available_system_memory(&available);
+
+   if (!update)
+      devinfo->mem.sram.mappable.size = total_phys;
+   else
+      assert(devinfo->mem.sram.mappable.size == total_phys);
+
+   devinfo->mem.sram.mappable.free = available;
+
+   return true;
+}
+
 static int
 intel_get_aperture_size(int fd, uint64_t *size)
 {
@@ -1830,61 +1933,33 @@ init_max_scratch_ids(struct intel_device_info *devinfo)
 bool
 intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
 {
-   int devid = 0;
-   const char *devid_override = getenv("INTEL_DEVID_OVERRIDE");
-   if (devid_override && strlen(devid_override) > 0) {
-      if (geteuid() == getuid()) {
-         devid = intel_device_name_to_pci_device_id(devid_override);
-         /* Fallback to PCI ID. */
-         if (devid <= 0)
-            devid = strtol(devid_override, NULL, 0);
-         if (devid <= 0) {
-            mesa_loge("Invalid INTEL_DEVID_OVERRIDE=\"%s\". "
-                    "Use a valid numeric PCI ID or one of the supported "
-                    "platform names:", devid_override);
-            for (unsigned i = 0; i < ARRAY_SIZE(name_map); i++)
-               mesa_loge("   %s", name_map[i].name);
-            return false;
-         }
-      } else {
-         mesa_logi("Ignoring INTEL_DEVID_OVERRIDE=\"%s\" because "
-                   "real and effective user ID don't match.", devid_override);
-      }
+   /* Get PCI info.
+    *
+    * Some callers may already have a valid drm device which holds values of
+    * PCI fields queried here prior to calling this function. But making this
+    * query optional leads to a more cumbersome implementation. These callers
+    * still need to initialize the fields somewhere out of this function and
+    * rely on an ioctl to get PCI device id for the next step when skipping
+    * this drm query.
+    */
+   drmDevicePtr drmdev = NULL;
+   if (drmGetDevice2(fd, DRM_DEVICE_GET_PCI_REVISION, &drmdev)) {
+      mesa_loge("Failed to query drm device.");
+      return false;
    }
-
-   if (devid > 0) {
-      if (!intel_get_device_info_from_pci_id(devid, devinfo))
-         return false;
-      devinfo->no_hw = true;
-   } else {
-      /* Get PCI info.
-       *
-       * Some callers may already have a valid drm device which holds
-       * values of PCI fields queried here prior to calling this function.
-       * But making this query optional leads to a more cumbersome
-       * implementation. These callers still need to initialize the fields
-       * somewhere out of this function and rely on an ioctl to get PCI
-       * device id for the next step when skipping this drm query.
-       */
-      drmDevicePtr drmdev = NULL;
-      if (drmGetDevice2(fd, DRM_DEVICE_GET_PCI_REVISION, &drmdev)) {
-         mesa_loge("Failed to query drm device.");
-         return false;
-      }
-      if (!intel_get_device_info_from_pci_id
-            (drmdev->deviceinfo.pci->device_id, devinfo)) {
-         drmFreeDevice(&drmdev);
-         return false;
-      }
-      devinfo->pci_domain = drmdev->businfo.pci->domain;
-      devinfo->pci_bus = drmdev->businfo.pci->bus;
-      devinfo->pci_dev = drmdev->businfo.pci->dev;
-      devinfo->pci_func = drmdev->businfo.pci->func;
-      devinfo->pci_device_id = drmdev->deviceinfo.pci->device_id;
-      devinfo->pci_revision_id = drmdev->deviceinfo.pci->revision_id;
+   if (!intel_get_device_info_from_pci_id
+       (drmdev->deviceinfo.pci->device_id, devinfo)) {
       drmFreeDevice(&drmdev);
-      devinfo->no_hw = env_var_as_boolean("INTEL_NO_HW", false);
+      return false;
    }
+   devinfo->pci_domain = drmdev->businfo.pci->domain;
+   devinfo->pci_bus = drmdev->businfo.pci->bus;
+   devinfo->pci_dev = drmdev->businfo.pci->dev;
+   devinfo->pci_func = drmdev->businfo.pci->func;
+   devinfo->pci_device_id = drmdev->deviceinfo.pci->device_id;
+   devinfo->pci_revision_id = drmdev->deviceinfo.pci->revision_id;
+   drmFreeDevice(&drmdev);
+   devinfo->no_hw = env_var_as_boolean("INTEL_NO_HW", false);
 
    if (devinfo->ver == 10) {
       mesa_loge("Gfx10 support is redacted.");
@@ -1894,11 +1969,19 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
    /* remaining initializion queries the kernel for device info */
    if (devinfo->no_hw) {
       /* Provide some sensible values for NO_HW. */
-      devinfo->gtt_size = 2ull * 1024 * 1024 * 1024;
+      devinfo->gtt_size =
+         devinfo->ver >= 8 ? (1ull << 48) : 2ull * 1024 * 1024 * 1024;
+      compute_system_memory(devinfo, false);
       return true;
    }
 
-   intel_get_and_process_hwconfig_table(fd, devinfo);
+   if (intel_get_and_process_hwconfig_table(fd, devinfo)) {
+      /* After applying hwconfig values, some items need to be recalculated. */
+      devinfo->max_cs_threads =
+         devinfo->max_eus_per_subslice * devinfo->num_thread_per_eu;
+
+      update_cs_workgroup_threads(devinfo);
+   }
 
    int timestamp_frequency;
    if (getparam(fd, I915_PARAM_CS_TIMESTAMP_FREQUENCY,
@@ -1922,6 +2005,18 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
        * will be wrong, affecting GPU metrics. In this case, fail silently.
        */
       getparam_topology(devinfo, fd);
+   }
+
+   /* If the memory region uAPI query is not available, try to generate some
+    * numbers out of os_* utils for sram only.
+    */
+   if (!query_regions(devinfo, fd, false))
+      compute_system_memory(devinfo, false);
+
+   /* region info is required for lmem support */
+   if (devinfo->has_local_mem && !devinfo->mem.use_class_instance) {
+      mesa_logw("Could not query local memory size.");
+      return false;
    }
 
    if (devinfo->platform == INTEL_PLATFORM_CHV)
@@ -1951,4 +2046,9 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo)
    init_max_scratch_ids(devinfo);
 
    return true;
+}
+
+bool intel_device_info_update_memory_info(struct intel_device_info *devinfo, int fd)
+{
+   return query_regions(devinfo, fd, true) || compute_system_memory(devinfo, true);
 }

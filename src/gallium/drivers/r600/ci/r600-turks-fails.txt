@@ -1,37 +1,19 @@
-KHR-GLES31.core.compressed_format.api.invalid_teximage_with_compressed_format,Fail
-
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_0_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_0_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_0_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_1_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_1_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_1_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_2_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_2_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_2_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_0_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_0_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_0_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_1_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_1_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_1_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_2_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_2_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_2_repeat,Fail
-
 KHR-GLES31.core.compute_shader.pipeline-compute-chain,Fail
-KHR-GLES31.core.compute_shader.resources-max,Fail
-KHR-GLES31.core.compute_shader.shared-struct,Fail
 
 KHR-GLES31.core.draw_buffers_indexed.blending,Fail
 
 KHR-GLES31.core.draw_indirect.basic-indicesDataType-unsigned_byte,Fail
 
+# "find_hw_atomic_counter: Assertion `0' failed."
+#
+# nir_to_tgsi's gives us a .Index of -1, and we obviously can't find that in a
+# counter declaration.
+KHR-GLES31.core.geometry_shader.api.max_atomic_counters,Crash
+
 KHR-GLES31.core.gpu_shader5.texture_gather_offset_color_clamp_to_border,Fail
 KHR-GLES31.core.gpu_shader5.texture_gather_offset_color_clamp_to_edge,Fail
 
 KHR-GLES31.core.layout_binding.image2D_layout_binding_imageLoad_ComputeShader,Fail
-KHR-GLES31.core.layout_binding.image2D_layout_binding_imageLoad_FragmentShader,Fail
 
 KHR-GLES31.core.shader_atomic_counters.advanced-usage-many-dispatches,Fail
 KHR-GLES31.core.shader_atomic_counters.advanced-usage-many-draw-calls2,Fail
@@ -40,14 +22,13 @@ KHR-GLES31.core.shader_atomic_counters.advanced-usage-multi-stage,Fail
 KHR-GLES31.core.shader_image_load_store.basic-allFormats-loadStoreComputeStage,Fail
 KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreCS,Fail
 
-KHR-GLES31.core.shader_storage_buffer_object.advanced-matrix-cs,Fail
 KHR-GLES31.core.shader_storage_buffer_object.advanced-readWrite-case1-cs,Fail
-KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std140-matR,Fail
-KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std140-struct,Fail
-KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std430-matC-pad,Fail
-KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std430-vec,Fail
-KHR-GLES31.core.shader_storage_buffer_object.advanced-usage-operators-cs,Fail
-KHR-GLES31.core.shader_storage_buffer_object.basic-operations-case1-cs,Fail
+
+# r600_shader.c:10547: fc_pushlevel: Assertion `ctx->bc->fc_sp < ARRAY_SIZE(ctx->bc->fc_stack)' failed.
+# Yeah, that's some deep flow control there.  Previously PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH would
+# do GLSL lower_if_to_cond_assign (which is incorrect for instructions with side effects) after 32
+# ifs deep, but we don't have the equivalent for NIR.
+KHR-GLES31.core.tessellation_shader.single.max_patch_vertices,Crash
 
 KHR-GLES31.core.tessellation_shader.tessellation_shader_tessellation.TCS_TES,Fail
 KHR-GLES31.core.tessellation_shader.tessellation_shader_tessellation.gl_InvocationID_PatchVerticesIn_PrimitiveID,Fail
@@ -493,14 +474,10 @@ dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_d
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.default_framebuffer,Fail
 dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.fbo,Fail
 
-dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.int_to_uvec2_fragment,Fail
-dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.int_to_uvec2_vertex,Fail
 dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.int_to_uvec3_fragment,Fail
 dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.int_to_uvec3_vertex,Fail
 dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.int_to_uvec4_fragment,Fail
 dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.int_to_uvec4_vertex,Fail
-dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.ivec2_to_uvec2_fragment,Fail
-dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.ivec2_to_uvec2_vertex,Fail
 dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.ivec3_to_uvec3_fragment,Fail
 dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.ivec3_to_uvec3_vertex,Fail
 dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.div.ivec4_to_uvec4_fragment,Fail
@@ -551,37 +528,6 @@ dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.a
 dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.at_sample_id.singlesample_rbo,Fail
 dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.at_sample_id.singlesample_texture,Fail
 
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.isampler2d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.isampler2darray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.isampler3d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.isamplercube,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.isamplercubearray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.sampler2d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.sampler2darray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.sampler3d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.samplercube,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.samplercubearray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.usampler2d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.usampler2darray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.usampler3d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.usamplercube,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.geometry.usamplercubearray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.isampler2d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.isampler2darray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.isampler3d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.isamplercube,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.isamplercubearray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.sampler2d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.sampler2darray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.sampler3d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.samplercube,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.samplercubearray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.usampler2d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.usampler2darray,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.usampler3d,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.usamplercube,Crash
-dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.geometry.usamplercubearray,Crash
-
 # Mask bit count in range only on the diagonal.
 dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bit_count_per_two_samples.multisample_rbo_4,Fail
 dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bit_count_per_two_samples.multisample_rbo_8,Fail
@@ -603,7 +549,6 @@ dEQP-GLES31.functional.synchronization.in_invocation.ssbo_alias_overwrite,Fail
 dEQP-GLES31.functional.synchronization.in_invocation.ssbo_alias_write,Fail
 dEQP-GLES31.functional.synchronization.in_invocation.ssbo_overwrite,Fail
 dEQP-GLES31.functional.synchronization.in_invocation.ssbo_write_read,Fail
-dEQP-GLES31.functional.synchronization.inter_invocation.image_overwrite,Fail
 dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_alias_overwrite,Fail
 dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_alias_write,Fail
 dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_overwrite,Fail
@@ -813,19 +758,9 @@ dEQP-GLES31.functional.texture.specification.teximage3d_pbo.rgb16f_cube_array,Fa
 dEQP-GLES31.functional.texture.specification.teximage3d_pbo.rgb16i_cube_array,Fail
 dEQP-GLES31.functional.texture.specification.teximage3d_pbo.rgb16ui_cube_array,Fail
 
-# split_vec: Assertion `!o->is_dead()' failed
-glslparsertest@glsl2@loop-03.vert,Crash
-glslparsertest@glsl2@loop-04.vert,Crash
-
-# segfaults
-glslparsertest@shaders@correctfull.frag,Crash
-glslparsertest@shaders@correctpreprocess5.frag,Crash
-
 shaders@glsl-bug-110796,Fail
 
-spec@arb_compute_shader@execution@shared-atomicadd-int,Fail
-spec@arb_compute_shader@execution@shared-atomiccompswap-int,Fail
-spec@arb_compute_shader@execution@shared-atomicexchange-int,Fail
+spec@arb_compute_shader@local-id-explosion,Fail
 
 spec@arb_depth_buffer_float@fbo-clear-formats stencil,Fail
 spec@arb_depth_buffer_float@fbo-clear-formats stencil@GL_DEPTH32F_STENCIL8,Fail
@@ -833,9 +768,10 @@ spec@arb_depth_buffer_float@fbo-clear-formats stencil@GL_DEPTH32F_STENCIL8,Fail
 spec@arb_draw_indirect@gl_vertexid used with gldrawarraysindirect,Fail
 spec@arb_draw_indirect@gl_vertexid used with gldrawelementsindirect,Fail
 
-spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.frag,Fail
-spec@arb_enhanced_layouts@compiler@block-member-locations@arrayed-block-member-location.vert,Fail
-spec@arb_enhanced_layouts@execution@component-layout@sso-vs-gs-fs-array-interleave,Fail
+# "	intrinsic copy_deref (ssa_2, ssa_3) (dst_access=0, src_access=0)
+#  error: glsl_get_bare_type(dst->type) == glsl_get_bare_type(src->type) (../src/compiler/nir/nir_validate.c:643)"
+# since ntt copy-deref optimization, probably.
+spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-write,Crash
 
 # "Testing level 3
 # Probe at (0,8)
@@ -847,11 +783,8 @@ spec@arb_framebuffer_object@framebuffer-blit-levels read stencil,Fail
 spec@arb_gpu_shader5@execution@built-in-functions@fs-interpolateatcentroid-block-array,Fail
 spec@arb_gpu_shader5@execution@built-in-functions@fs-interpolateatoffset-block-array,Crash
 spec@arb_gpu_shader5@execution@built-in-functions@fs-interpolateatsample-array-nonuniform,Fail
-spec@arb_gpu_shader5@execution@built-in-functions@fs-interpolateatsample-array-of-array,Crash
+spec@arb_gpu_shader5@execution@built-in-functions@fs-interpolateatsample-array-of-array,Fail
 spec@arb_gpu_shader5@execution@built-in-functions@fs-interpolateatsample-block-array,Fail
-
-# "../src/gallium/drivers/r600/sb/sb_bc_parser.cpp:130: int r600_sb::bc_parser::parse_decls(): Assertion `pshader->num_arrays' failed."
-spec@arb_gpu_shader5@execution@samplemaskin-indirect,Crash
 
 spec@arb_multi_draw_indirect@arb_draw_elements_base_vertex-multidrawelements -indirect,Fail
 spec@arb_multi_draw_indirect@gl-3.0-multidrawarrays-vertexid -indirect,Fail
@@ -938,6 +871,9 @@ spec@arb_sample_shading@samplemask 8@1.000000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 8@1.000000 partition,Fail
 spec@arb_sample_shading@samplemask 8@noms mask_in_one,Fail
 
+# "find_hw_atomic_counter: Assertion `0' failed."
+spec@arb_shader_atomic_counter_ops@execution@atomic-counter-array-out-of-bounds-access,Crash
+
 spec@arb_shader_image_load_store@host-mem-barrier,Fail
 spec@arb_shader_image_load_store@host-mem-barrier@Atomic counter/RaW/full barrier test/64x64,Fail
 spec@arb_shader_image_load_store@host-mem-barrier@Atomic counter/RaW/one bit barrier test/16x16,Fail
@@ -945,7 +881,6 @@ spec@arb_shader_image_load_store@host-mem-barrier@Atomic counter/RaW/one bit bar
 spec@arb_shader_image_load_store@host-mem-barrier@Atomic counter/RaW/one bit barrier test/64x64,Fail
 spec@arb_shader_image_load_store@host-mem-barrier@Buffer update/WaW/one bit barrier test/16x16,Fail
 spec@arb_shader_image_load_store@host-mem-barrier@Buffer update/WaW/one bit barrier test/4x4,Fail
-spec@arb_shader_image_load_store@host-mem-barrier@Buffer update/WaW/one bit barrier test/64x64,Fail
 spec@arb_shader_image_load_store@host-mem-barrier@Element array/RaW/full barrier test/4x4,Fail
 spec@arb_shader_image_load_store@host-mem-barrier@Element array/RaW/one bit barrier test/16x16,Fail
 spec@arb_shader_image_load_store@host-mem-barrier@Element array/RaW/one bit barrier test/4x4,Fail
@@ -958,7 +893,6 @@ spec@arb_shader_image_load_store@host-mem-barrier@Uniform buffer/RaW/one bit bar
 spec@arb_shader_image_load_store@host-mem-barrier@Uniform buffer/RaW/one bit barrier test/64x64,Fail
 spec@arb_shader_image_load_store@indexing,Fail
 spec@arb_shader_image_load_store@indexing@Compute shader/dynamically uniform indexing test,Fail
-spec@arb_shader_image_load_store@indexing@Fragment shader/dynamically uniform indexing test,Fail
 spec@arb_shader_image_load_store@invalid,Fail
 spec@arb_shader_image_load_store@invalid@imageAtomicAdd/address bounds test/imageBuffer/r32ui,Fail
 spec@arb_shader_image_load_store@invalid@imageAtomicAdd/incompatible format test,Fail
@@ -1038,15 +972,11 @@ spec@arb_shader_image_load_store@invalid@imageLoad/invalid format test,Fail
 spec@arb_shader_image_load_store@invalid@imageLoad/layer bounds test,Fail
 spec@arb_shader_image_load_store@invalid@imageLoad/level bounds test,Fail
 spec@arb_shader_image_load_store@invalid@imageLoad/unbound image test,Fail
-spec@arb_shader_image_load_store@max-images,Fail
-spec@arb_shader_image_load_store@max-images@Combined max image uniforms test,Fail
-spec@arb_shader_image_load_store@max-images@Fragment shader max image uniforms test,Fail
 
 spec@arb_shader_storage_buffer_object@array-ssbo-auto-binding,Fail
 spec@arb_shader_storage_buffer_object@compiler@atomicmin-swizzle.vert,Fail
 spec@arb_shader_storage_buffer_object@execution@ssbo-atomicadd-int,Fail
 spec@arb_shader_storage_buffer_object@linker@instance-matching-shader-storage-blocks-member-array-size-mismatch,Fail
-spec@arb_shader_storage_buffer_object@maxblocks,Fail
 
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb cube,Fail
@@ -1375,14 +1305,11 @@ spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB12,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB16,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB8,Fail
 
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xyuv,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y412,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv,Fail
@@ -1520,24 +1447,13 @@ spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SR
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT- swizzled- border color only,Fail
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT- swizzled- border color only,Fail
 
-spec@glsl-1.10@execution@function-calls@glsl-function-chain16-in-array-indirect,Fail
-spec@glsl-1.10@execution@function-calls@glsl-function-chain16-in-array-indirect2,Fail
-
-spec@glsl-1.10@execution@varying-packing@simple float arrays_of_arrays,Fail
-spec@glsl-1.10@execution@varying-packing@simple float separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple int arrays_of_arrays,Fail
-spec@glsl-1.10@execution@varying-packing@simple int separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple uint arrays_of_arrays,Fail
-spec@glsl-1.10@execution@varying-packing@simple uint separate,Fail
-
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-primitives,Fail
 
-spec@glsl-1.20@execution@matrix-out-of-bounds-access@fs-mat4-out-of-bounds-6,Crash
-
-spec@glsl-1.30@execution@clipping@vs-clip-distance-deadcode,Fail
 spec@glsl-1.30@execution@clipping@vs-clip-distance-primitives,Fail
+
+spec@glsl-1.30@execution@range_analysis_fsat_of_nan,Fail
 
 spec@glsl-1.30@execution@tex-miplevel-selection texture(bias) 1darrayshadow,Fail
 spec@glsl-1.30@execution@tex-miplevel-selection texture(bias) cubeshadow,Fail
@@ -1551,9 +1467,9 @@ spec@glsl-1.30@execution@tex-miplevel-selection textureoffset(bias) 1darrayshado
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency ffs,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency other,Fail
 
-spec@glsl-1.50@execution@variable-indexing@gs-input-array-vec3-index-rd,Fail
+spec@glsl-1.50@execution@variable-indexing@gs-input-array-vec2-index-rd,Fail
 
-# "void glsl_to_tgsi_visitor::visit_expression(ir_expression*, st_src_reg*): Assertion `ir->operands[2]->type->vector_elements == 1' failed."
+# fc_pushlevel: Assertion `ctx->bc->fc_sp < ARRAY_SIZE(ctx->bc->fc_stack)' failed.
 spec@glsl-1.50@gs-max-output,Crash
 
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail

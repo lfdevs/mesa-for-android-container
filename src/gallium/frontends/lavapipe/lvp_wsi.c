@@ -23,10 +23,6 @@
 
 #include "lvp_wsi.h"
 
-#include "vk_fence.h"
-#include "vk_semaphore.h"
-#include "vk_sync_dummy.h"
-
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 lvp_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {
@@ -47,6 +43,7 @@ lvp_init_wsi(struct lvp_physical_device *physical_device)
    if (result != VK_SUCCESS)
       return result;
 
+   physical_device->wsi_device.wants_linear = true;
    physical_device->vk.wsi_device = &physical_device->wsi_device;
 
    return VK_SUCCESS;
@@ -58,43 +55,4 @@ lvp_finish_wsi(struct lvp_physical_device *physical_device)
    physical_device->vk.wsi_device = NULL;
    wsi_device_finish(&physical_device->wsi_device,
                      &physical_device->vk.instance->alloc);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL lvp_AcquireNextImage2KHR(
-   VkDevice                                     _device,
-   const VkAcquireNextImageInfoKHR*             pAcquireInfo,
-   uint32_t*                                    pImageIndex)
-{
-   LVP_FROM_HANDLE(lvp_device, device, _device);
-   struct lvp_physical_device *pdevice = device->physical_device;
-
-   VkResult result = wsi_common_acquire_next_image2(&pdevice->wsi_device,
-                                                    _device,
-                                                    pAcquireInfo,
-                                                    pImageIndex);
-
-   VK_FROM_HANDLE(vk_fence, fence, pAcquireInfo->fence);
-   VK_FROM_HANDLE(vk_semaphore, sem, pAcquireInfo->semaphore);
-   if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
-      VkResult sync_res;
-      if (fence) {
-         vk_fence_reset_temporary(&device->vk, fence);
-         sync_res = vk_sync_create(&device->vk, &vk_sync_dummy_type,
-                                   0 /* flags */, 0 /* initial_value */,
-                                   &fence->temporary);
-         if (sync_res != VK_SUCCESS)
-            return sync_res;
-      }
-
-      if (sem) {
-         vk_semaphore_reset_temporary(&device->vk, sem);
-         sync_res = vk_sync_create(&device->vk, &vk_sync_dummy_type,
-                                   0 /* flags */, 0 /* initial_value */,
-                                   &sem->temporary);
-         if (sync_res != VK_SUCCESS)
-            return sync_res;
-      }
-   }
-
-   return result;
 }

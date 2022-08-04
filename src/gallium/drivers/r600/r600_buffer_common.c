@@ -26,6 +26,7 @@
 
 #include "r600_cs.h"
 #include "evergreen_compute.h"
+#include "compute_memory_pool.h"
 #include "util/u_memory.h"
 #include "util/u_upload_mgr.h"
 #include <inttypes.h>
@@ -124,15 +125,6 @@ void r600_init_resource_fields(struct r600_common_screen *rscreen,
 		res->domains = RADEON_DOMAIN_GTT;
 		break;
 	case PIPE_USAGE_DYNAMIC:
-		/* Older kernels didn't always flush the HDP cache before
-		 * CS execution
-		 */
-		if (rscreen->info.drm_minor < 40) {
-			res->domains = RADEON_DOMAIN_GTT;
-			res->flags |= RADEON_FLAG_GTT_WC;
-			break;
-		}
-		FALLTHROUGH;
 	case PIPE_USAGE_DEFAULT:
 	case PIPE_USAGE_IMMUTABLE:
 	default:
@@ -141,21 +133,6 @@ void r600_init_resource_fields(struct r600_common_screen *rscreen,
 		res->domains = RADEON_DOMAIN_VRAM;
 		res->flags |= RADEON_FLAG_GTT_WC;
 		break;
-	}
-
-	if (res->b.b.target == PIPE_BUFFER &&
-	    res->b.b.flags & (PIPE_RESOURCE_FLAG_MAP_PERSISTENT |
-			      PIPE_RESOURCE_FLAG_MAP_COHERENT)) {
-		/* Use GTT for all persistent mappings with older
-		 * kernels, because they didn't always flush the HDP
-		 * cache before CS execution.
-		 *
-		 * Write-combined CPU mappings are fine, the kernel
-		 * ensures all CPU writes finish before the GPU
-		 * executes a command stream.
-		 */
-		if (rscreen->info.drm_minor < 40)
-			res->domains = RADEON_DOMAIN_GTT;
 	}
 
 	/* Tiled textures are unmappable. Always put them in VRAM. */
@@ -347,7 +324,8 @@ void *r600_buffer_transfer_map(struct pipe_context *ctx,
 	uint8_t *data;
 
 	if (r600_resource(resource)->compute_global_bo) {
-		return r600_compute_global_transfer_map(ctx, resource, level, usage, box, ptransfer);
+		if ((data = r600_compute_global_transfer_map(ctx, resource, level, usage, box, ptransfer)))
+			return data;
 	}
 
 	assert(box->x + box->width <= resource->width0);
@@ -524,8 +502,9 @@ void r600_buffer_transfer_unmap(struct pipe_context *ctx,
 {
 	struct r600_common_context *rctx = (struct r600_common_context*)ctx;
 	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
+	struct r600_resource *rtransferr = r600_resource(transfer->resource);
 
-	if (r600_resource(transfer->resource)->compute_global_bo) {
+	if (rtransferr->compute_global_bo && !rtransferr->b.is_user_ptr) {
 		r600_compute_global_transfer_unmap(ctx, transfer);
 		return;
 	}
@@ -636,7 +615,15 @@ r600_buffer_from_user_memory(struct pipe_screen *screen,
 {
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
 	struct radeon_winsys *ws = rscreen->ws;
-	struct r600_resource *rbuffer = r600_alloc_buffer_struct(screen, templ);
+	struct r600_resource *rbuffer;
+
+	if ((templ->bind & PIPE_BIND_GLOBAL) &&
+	    (templ->bind & PIPE_BIND_COMPUTE_RESOURCE)) {
+		rbuffer = r600_resource(r600_compute_global_buffer_create(screen, templ));
+		((struct r600_resource_global *)rbuffer)->chunk->real_buffer = rbuffer;
+	} else {
+		rbuffer = r600_alloc_buffer_struct(screen, templ);
+	}
 
 	rbuffer->domains = RADEON_DOMAIN_GTT;
 	rbuffer->flags = 0;
@@ -645,7 +632,8 @@ r600_buffer_from_user_memory(struct pipe_screen *screen,
 	util_range_add(&rbuffer->b.b, &rbuffer->b.valid_buffer_range, 0, templ->width0);
 
 	/* Convert a user pointer to a buffer. */
-	rbuffer->buf = ws->buffer_from_ptr(ws, user_memory, templ->width0);
+	rbuffer->buf = ws->buffer_from_ptr(ws, user_memory, templ->width0,
+	                                   templ->usage == PIPE_USAGE_IMMUTABLE? RADEON_FLAG_READ_ONLY : 0);
 	if (!rbuffer->buf) {
 		FREE(rbuffer);
 		return NULL;

@@ -196,17 +196,12 @@ spec/!opengl 1.4/copy-pixels samples=8: skip
 spec/!opengl 1.4/gl-1.4-rgba-mipmap-texture-with-rgb-visual: skip
 spec/!opengl 1.4/triangle-rasterization-overdraw: fail
 spec/!opengl 2.0/gl-2.0-two-sided-stencil: fail
-spec/!opengl 2.0/max-samplers: fail
-spec/!opengl 2.0/max-samplers border: fail
-spec/!opengl 3.0/bound-resource-limits: fail
-spec/!opengl 3.0/required-sized-texture-formats: fail
 spec/!opengl 3.0/sampler-cube-shadow: fail
 spec/!opengl 3.1/default-vao: fail
 spec/!opengl 3.1/draw-buffers-errors: skip
 spec/!opengl 3.1/genned-names: fail
 spec/!opengl 3.1/gl-3.1-enable-vertex-array: fail
 spec/!opengl 3.1/gl-3.1-link-empty-prog-core: fail
-spec/!opengl 3.1/required-sized-texture-formats: fail
 spec/!opengl 3.2/gl-3.2-adj-prims cull-back pv-first: fail
 spec/!opengl 3.2/gl-3.2-adj-prims cull-back pv-last: fail
 spec/!opengl 3.2/gl-3.2-adj-prims cull-front pv-first: fail
@@ -217,13 +212,7 @@ spec/!opengl 3.2/gl-3.2-adj-prims line cull-front pv-first: fail
 spec/!opengl 3.2/gl-3.2-adj-prims line cull-front pv-last: fail
 spec/!opengl 3.2/gl-3.2-adj-prims pv-first: fail
 spec/!opengl 3.2/gl-3.2-adj-prims pv-last: fail
-spec/!opengl 3.2/layered-rendering/gl-layer-cube-map: fail
-spec/!opengl 3.2/layered-rendering/gl-layer-render: fail
-spec/!opengl 3.2/layered-rendering/gl-layer-render-clipped: fail
-spec/!opengl 3.2/layered-rendering/gl-layer-render-storage: fail
-spec/!opengl 3.3/required-sized-texture-formats: fail
 spec/!opengl 4.2/gl-max-vertex-attrib-stride: skip
-spec/!opengl 4.2/required-sized-texture-formats: fail
 spec/!opengl 4.3/get_glsl_version: skip
 spec/!opengl 4.5/compare-framebuffer-parameter-with-get: skip
 spec/!opengl 4.5/named-framebuffer-draw-buffers-errors: skip
@@ -330,9 +319,6 @@ spec/arb_clear_texture/arb_clear_texture-sized-formats: skip
 spec/arb_clear_texture/arb_clear_texture-srgb: skip
 spec/arb_clear_texture/arb_clear_texture-stencil: skip
 spec/arb_clear_texture/arb_clear_texture-texview: skip
-spec/arb_clip_control/arb_clip_control-clip-control: skip
-spec/arb_clip_control/arb_clip_control-depth-precision: skip
-spec/arb_clip_control/arb_clip_control-viewport: skip
 spec/arb_compute_shader/compute-and-render-bug-109630: fail
 spec/arb_copy_image/arb_copy_image-api_errors: skip
 spec/arb_copy_image/arb_copy_image-format-swizzle: skip
@@ -1405,8 +1391,6 @@ spec/arb_shader_image_load_store/invalid/imageload/address bounds test/image3d/r
 spec/arb_shader_image_load_store/invalid/imageload/address bounds test/imagebuffer/rgba32f: fail
 spec/arb_shader_image_load_store/invalid/imageload/address bounds test/imagecube/rgba32f: fail
 spec/arb_shader_image_load_store/invalid/imageload/address bounds test/imagecubearray/rgba32f: fail
-spec/arb_shader_image_load_store/max-size/imagecube max size test/16384x16384x6x1: skip
-spec/arb_shader_image_load_store/max-size/imagecubearray max size test/16384x16384x6x1: skip
 spec/arb_shader_image_load_store/semantics/imageatomicmax/vertex shader/r32ui/image1d test: fail
 spec/arb_shader_texture_image_samples/builtin-image: skip
 spec/arb_shader_texture_image_samples/texturesamples/fs-isampler2dms-16: skip
@@ -1524,7 +1508,6 @@ spec/arb_sparse_buffer/commit: skip
 spec/arb_sparse_buffer/minmax: skip
 spec/arb_stencil_texturing/draw: fail
 spec/arb_sync/clientwaitsync-timeout: skip
-spec/arb_tessellation_shader/arb_tessellation_shader-tes-gs-max-output -small -scan 1 50: crash
 spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 32 1 1 128 1: skip
 spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 32 1 1 128 2: skip
 spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 32 1 1 128 3: skip
@@ -2631,8 +2614,6 @@ spec/ext_direct_state_access/named-buffers 15/mapnamedbufferrangeext: skip
 spec/ext_direct_state_access/named-buffers 15/namedcopybuffersubdataext: skip
 spec/ext_disjoint_timer_query/simple: skip
 spec/ext_draw_instanced/ext_draw_instanced-drawarrays: skip
-spec/ext_external_objects/memory-object-api-errors: skip
-spec/ext_external_objects/semaphore-api-errors: skip
 spec/ext_external_objects/vk-buf-exchange: skip
 spec/ext_external_objects/vk-depth-display: skip
 spec/ext_external_objects/vk-image-display: skip
@@ -2881,7 +2862,12 @@ spec/ext_framebuffer_multisample/no-color 8 depth-computed separate: skip
 spec/ext_framebuffer_multisample/no-color 8 stencil separate: skip
 spec/ext_framebuffer_multisample/point-smooth 32: skip
 spec/ext_framebuffer_multisample/polygon-smooth 32: skip
+spec/ext_framebuffer_multisample/polygon-stipple 16: crash
+spec/ext_framebuffer_multisample/polygon-stipple 2: crash
 spec/ext_framebuffer_multisample/polygon-stipple 32: skip
+spec/ext_framebuffer_multisample/polygon-stipple 4: crash
+spec/ext_framebuffer_multisample/polygon-stipple 6: crash
+spec/ext_framebuffer_multisample/polygon-stipple 8: crash
 spec/ext_framebuffer_multisample/sample-alpha-to-coverage 32 color: skip
 spec/ext_framebuffer_multisample/sample-alpha-to-coverage 32 depth: skip
 spec/ext_framebuffer_multisample/sample-alpha-to-one 16: fail
@@ -3101,9 +3087,7 @@ spec/ext_texture_compression_latc/texwrap formats: skip
 spec/ext_texture_compression_latc/texwrap formats bordercolor: skip
 spec/ext_texture_compression_latc/texwrap formats bordercolor-swizzled: skip
 spec/ext_texture_compression_rgtc/rgtc-api_gles2: skip
-spec/ext_texture_compression_s3tc/s3tc-errors: fail
 spec/ext_texture_compression_s3tc/s3tc-errors_gles2: skip
-spec/ext_texture_compression_s3tc/s3tc-targeted: fail
 spec/ext_texture_compression_s3tc/s3tc-teximage_gles2: skip
 spec/ext_texture_compression_s3tc/s3tc-texsubimage_gles2: skip
 spec/ext_texture_env_combine/texture-env-combine: fail
@@ -3527,10 +3511,10 @@ wgl/wgl-sanity: skip
 summary:
        name:  results
        ----  --------
-       pass:    17850
-       fail:     2039
-      crash:       12
-       skip:     1450
+       pass:    17873
+       fail:     2035
+      crash:       11
+       skip:     1445
     timeout:        0
        warn:       10
  incomplete:        0
@@ -3539,4 +3523,4 @@ summary:
     changes:        0
       fixes:        0
 regressions:        0
-      total:    21365
+      total:    21383

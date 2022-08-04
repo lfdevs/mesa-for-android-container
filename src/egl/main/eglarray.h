@@ -29,8 +29,6 @@
 #ifndef EGLARRAY_INCLUDED
 #define EGLARRAY_INCLUDED
 
-#include "c99_compat.h"
-
 #include "egltypedefs.h"
 
 

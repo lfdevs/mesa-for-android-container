@@ -15,8 +15,11 @@
 #include "util/debug.h"
 #include "util/log.h"
 #include "util/os_misc.h"
+#include "util/u_debug.h"
 #include "venus-protocol/vn_protocol_driver_info.h"
 #include "vk_enum_to_str.h"
+
+#define VN_RELAX_MIN_BASE_SLEEP_US (10)
 
 static const struct debug_control vn_debug_options[] = {
    { "init", VN_DEBUG_INIT },
@@ -27,19 +30,51 @@ static const struct debug_control vn_debug_options[] = {
    { NULL, 0 },
 };
 
-uint64_t vn_debug;
+static const struct debug_control vn_perf_options[] = {
+   { "no_async_set_alloc", VN_PERF_NO_ASYNC_SET_ALLOC },
+   { "no_async_buffer_create", VN_PERF_NO_ASYNC_BUFFER_CREATE },
+   { "no_async_queue_submit", VN_PERF_NO_ASYNC_QUEUE_SUBMIT },
+   { "no_event_feedback", VN_PERF_NO_EVENT_FEEDBACK },
+   { "no_fence_feedback", VN_PERF_NO_FENCE_FEEDBACK },
+   { NULL, 0 },
+};
+
+struct vn_env vn_env;
 
 static void
-vn_debug_init_once(void)
+vn_env_init_once(void)
 {
-   vn_debug = parse_debug_string(os_get_option("VN_DEBUG"), vn_debug_options);
+   vn_env.debug =
+      parse_debug_string(os_get_option("VN_DEBUG"), vn_debug_options);
+   vn_env.perf =
+      parse_debug_string(os_get_option("VN_PERF"), vn_perf_options);
+   vn_env.draw_cmd_batch_limit =
+      debug_get_num_option("VN_DRAW_CMD_BATCH_LIMIT", UINT32_MAX);
+   if (!vn_env.draw_cmd_batch_limit)
+      vn_env.draw_cmd_batch_limit = UINT32_MAX;
+   vn_env.relax_base_sleep_us = debug_get_num_option(
+      "VN_RELAX_BASE_SLEEP_US", VN_RELAX_MIN_BASE_SLEEP_US);
+   vn_env.relax_base_sleep_us =
+      MAX2(vn_env.relax_base_sleep_us, VN_RELAX_MIN_BASE_SLEEP_US);
 }
 
 void
-vn_debug_init(void)
+vn_env_init(void)
 {
    static once_flag once = ONCE_FLAG_INIT;
-   call_once(&once, vn_debug_init_once);
+   call_once(&once, vn_env_init_once);
+
+   /* log per VkInstance creation */
+   if (VN_DEBUG(INIT)) {
+      vn_log(NULL,
+             "vn_env is as below:"
+             "\n\tdebug = 0x%" PRIx64 ""
+             "\n\tperf = 0x%" PRIx64 ""
+             "\n\tdraw_cmd_batch_limit = %u"
+             "\n\trelax_base_sleep_us = %u",
+             vn_env.debug, vn_env.perf, vn_env.draw_cmd_batch_limit,
+             vn_env.relax_base_sleep_us);
+   }
 }
 
 void
@@ -86,7 +121,7 @@ vn_relax(uint32_t *iter, const char *reason)
     * keep doubling both sleep length and count.
     */
    const uint32_t busy_wait_order = 4;
-   const uint32_t base_sleep_us = 10;
+   const uint32_t base_sleep_us = vn_env.relax_base_sleep_us;
    const uint32_t warn_order = 12;
    const uint32_t abort_order = 14;
 

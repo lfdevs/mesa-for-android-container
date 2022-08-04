@@ -34,6 +34,7 @@
 #include "program/program.h"
 
 #include "brw_clip.h"
+#include "brw_prim.h"
 
 static void release_tmps( struct brw_clip_compile *c )
 {
@@ -136,7 +137,7 @@ void brw_clip_tri_init_vertices( struct brw_clip_compile *c )
    struct brw_codegen *p = &c->func;
    struct brw_reg tmp0 = c->reg.loopcount; /* handy temporary */
 
-   /* Initial list of indices for incoming vertexes:
+   /* Initial list of indices for incoming vertices:
     */
    brw_AND(p, tmp0, get_element_ud(c->reg.R0, 2), brw_imm_ud(PRIM_MASK));
    brw_CMP(p,

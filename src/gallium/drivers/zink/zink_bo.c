@@ -29,10 +29,16 @@
  *    Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
  */
 
+#include "zink_context.h"
 #include "zink_bo.h"
 #include "zink_resource.h"
 #include "zink_screen.h"
 #include "util/u_hash_table.h"
+
+#if !defined(__APPLE__) && !defined(_WIN32)
+#define ZINK_USE_DMABUF
+#include <xf86drm.h>
+#endif
 
 struct zink_bo;
 
@@ -120,9 +126,19 @@ bo_destroy(struct zink_screen *screen, struct pb_buffer *pbuf)
 {
    struct zink_bo *bo = zink_bo(pbuf);
 
-   simple_mtx_lock(&screen->pb.bo_export_table_lock);
-   _mesa_hash_table_remove_key(screen->pb.bo_export_table, bo);
-   simple_mtx_unlock(&screen->pb.bo_export_table_lock);
+#ifdef ZINK_USE_DMABUF
+   if (bo->mem && !bo->u.real.use_reusable_pool) {
+      simple_mtx_lock(&bo->u.real.export_lock);
+      list_for_each_entry_safe(struct bo_export, export, &bo->u.real.exports, link) {
+         struct drm_gem_close args = { .handle = export->gem_handle };
+         drmIoctl(export->drm_fd, DRM_IOCTL_GEM_CLOSE, &args);
+         list_del(&export->link);
+         free(export);
+      }
+      simple_mtx_unlock(&bo->u.real.export_lock);
+      simple_mtx_destroy(&bo->u.real.export_lock);
+   }
+#endif
 
    if (!bo->u.real.is_user_ptr && bo->u.real.cpu_ptr) {
       bo->u.real.map_count = 1;
@@ -269,13 +285,18 @@ bo_create_internal(struct zink_screen *screen,
 
    VkResult ret = VKSCR(AllocateMemory)(screen->dev, &mai, NULL, &bo->mem);
    if (!zink_screen_handle_vkresult(screen, ret)) {
-      mesa_loge("zink: couldn't allocate memory! from heap %u", heap);
+      mesa_loge("zink: couldn't allocate memory: heap=%u size=%" PRIu64, heap, size);
       goto fail;
    }
 
    if (init_pb_cache) {
       bo->u.real.use_reusable_pool = true;
       pb_cache_init_entry(&screen->pb.bo_cache, bo->cache_entry, &bo->base, heap);
+   } else {
+#ifdef ZINK_USE_DMABUF
+      list_inithead(&bo->u.real.exports);
+      simple_mtx_init(&bo->u.real.export_lock, mtx_plain);
+#endif
    }
 
 
@@ -662,7 +683,7 @@ zink_bo_map(struct zink_screen *screen, struct zink_bo *bo)
       if (!cpu) {
          VkResult result = VKSCR(MapMemory)(screen->dev, real->mem, 0, real->base.size, 0, &cpu);
          if (result != VK_SUCCESS) {
-            mesa_loge("ZINK: vkMapMemory failed");
+            mesa_loge("ZINK: vkMapMemory failed (%s)", vk_Result_to_str(result));
             simple_mtx_unlock(&real->lock);
             return NULL;
          }
@@ -688,12 +709,30 @@ zink_bo_unmap(struct zink_screen *screen, struct zink_bo *bo)
    }
 }
 
-static bool
-buffer_commit_single(struct zink_screen *screen, struct zink_resource *res, struct zink_bo *bo, uint32_t bo_offset, uint32_t offset, uint32_t size, bool commit)
+static VkSemaphore
+get_semaphore(struct zink_screen *screen)
 {
+   VkSemaphoreCreateInfo sci = {
+      VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      NULL,
+      0
+   };
+   VkSemaphore sem;
+   VkResult ret = VKSCR(CreateSemaphore)(screen->dev, &sci, NULL, &sem);
+   return ret == VK_SUCCESS ? sem : VK_NULL_HANDLE;
+}
+
+static VkSemaphore
+buffer_commit_single(struct zink_screen *screen, struct zink_resource *res, struct zink_bo *bo, uint32_t bo_offset, uint32_t offset, uint32_t size, bool commit, VkSemaphore wait)
+{
+   VkSemaphore sem = get_semaphore(screen);
    VkBindSparseInfo sparse = {0};
    sparse.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
    sparse.bufferBindCount = res->obj->storage_buffer ? 2 : 1;
+   sparse.waitSemaphoreCount = !!wait;
+   sparse.pWaitSemaphores = &wait;
+   sparse.signalSemaphoreCount = 1;
+   sparse.pSignalSemaphores = &sem;
 
    VkSparseBufferMemoryBindInfo sparse_bind[2];
    sparse_bind[0].buffer = res->obj->buffer;
@@ -711,14 +750,15 @@ buffer_commit_single(struct zink_screen *screen, struct zink_resource *res, stru
    sparse_bind[0].pBinds = &mem_bind;
    sparse_bind[1].pBinds = &mem_bind;
 
-   VkQueue queue = screen->threaded ? screen->thread_queue : screen->queue;
-
-   VkResult ret = VKSCR(QueueBindSparse)(queue, 1, &sparse, VK_NULL_HANDLE);
-   return zink_screen_handle_vkresult(screen, ret);
+   VkResult ret = VKSCR(QueueBindSparse)(screen->queue_sparse, 1, &sparse, VK_NULL_HANDLE);
+   if (zink_screen_handle_vkresult(screen, ret))
+      return sem;
+   VKSCR(DestroySemaphore)(screen->dev, sem, NULL);
+   return VK_NULL_HANDLE;
 }
 
 static bool
-buffer_bo_commit(struct zink_screen *screen, struct zink_resource *res, uint32_t offset, uint32_t size, bool commit)
+buffer_bo_commit(struct zink_screen *screen, struct zink_resource *res, uint32_t offset, uint32_t size, bool commit, VkSemaphore *sem)
 {
    bool ok = true;
    struct zink_bo *bo = res->obj->bo;
@@ -731,7 +771,7 @@ buffer_bo_commit(struct zink_screen *screen, struct zink_resource *res, uint32_t
 
    uint32_t va_page = offset / ZINK_SPARSE_BUFFER_PAGE_SIZE;
    uint32_t end_va_page = va_page + DIV_ROUND_UP(size, ZINK_SPARSE_BUFFER_PAGE_SIZE);
-
+   VkSemaphore cur_sem = VK_NULL_HANDLE;
    if (commit) {
       while (va_page < end_va_page) {
          uint32_t span_va_page;
@@ -758,10 +798,10 @@ buffer_bo_commit(struct zink_screen *screen, struct zink_resource *res, uint32_t
                ok = false;
                goto out;
             }
-            if (!buffer_commit_single(screen, res, backing->bo, backing_start,
-                                      (uint64_t)span_va_page * ZINK_SPARSE_BUFFER_PAGE_SIZE,
-                                      (uint64_t)backing_size * ZINK_SPARSE_BUFFER_PAGE_SIZE, true)) {
-
+            cur_sem = buffer_commit_single(screen, res, backing->bo, backing_start,
+                                           (uint64_t)span_va_page * ZINK_SPARSE_BUFFER_PAGE_SIZE,
+                                           (uint64_t)backing_size * ZINK_SPARSE_BUFFER_PAGE_SIZE, true, cur_sem);
+            if (!cur_sem) {
                ok = sparse_backing_free(screen, bo, backing, backing_start, backing_size);
                assert(ok && "sufficient memory should already be allocated");
 
@@ -792,11 +832,14 @@ buffer_bo_commit(struct zink_screen *screen, struct zink_resource *res, uint32_t
             continue;
          }
 
-         if (!done && !buffer_commit_single(screen, res, NULL, 0,
-                                            (uint64_t)base_page * ZINK_SPARSE_BUFFER_PAGE_SIZE,
-                                            (uint64_t)(end_va_page - base_page) * ZINK_SPARSE_BUFFER_PAGE_SIZE, false)) {
-            ok = false;
-            goto out;
+         if (!done) {
+            cur_sem = buffer_commit_single(screen, res, NULL, 0,
+                                           (uint64_t)base_page * ZINK_SPARSE_BUFFER_PAGE_SIZE,
+                                           (uint64_t)(end_va_page - base_page) * ZINK_SPARSE_BUFFER_PAGE_SIZE, false, cur_sem);
+            if (!cur_sem) {
+               ok = false;
+               goto out;
+            }
          }
          done = true;
 
@@ -824,15 +867,21 @@ buffer_bo_commit(struct zink_screen *screen, struct zink_resource *res, uint32_t
       }
    }
 out:
+   *sem = cur_sem;
    return ok;
 }
 
-static bool
-texture_commit_single(struct zink_screen *screen, struct zink_resource *res, VkSparseImageMemoryBind *ibind, unsigned num_binds, bool commit)
+static VkSemaphore
+texture_commit_single(struct zink_screen *screen, struct zink_resource *res, VkSparseImageMemoryBind *ibind, unsigned num_binds, bool commit, VkSemaphore wait)
 {
+   VkSemaphore sem = get_semaphore(screen);
    VkBindSparseInfo sparse = {0};
    sparse.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
    sparse.imageBindCount = 1;
+   sparse.waitSemaphoreCount = !!wait;
+   sparse.pWaitSemaphores = &wait;
+   sparse.signalSemaphoreCount = 1;
+   sparse.pSignalSemaphores = &sem;
 
    VkSparseImageMemoryBindInfo sparse_ibind;
    sparse_ibind.image = res->obj->image;
@@ -840,18 +889,24 @@ texture_commit_single(struct zink_screen *screen, struct zink_resource *res, VkS
    sparse_ibind.pBinds = ibind;
    sparse.pImageBinds = &sparse_ibind;
 
-   VkQueue queue = screen->threaded ? screen->thread_queue : screen->queue;
-
-   VkResult ret = VKSCR(QueueBindSparse)(queue, 1, &sparse, VK_NULL_HANDLE);
-   return zink_screen_handle_vkresult(screen, ret);
+   VkResult ret = VKSCR(QueueBindSparse)(screen->queue_sparse, 1, &sparse, VK_NULL_HANDLE);
+   if (zink_screen_handle_vkresult(screen, ret))
+      return sem;
+   VKSCR(DestroySemaphore)(screen->dev, sem, NULL);
+   return VK_NULL_HANDLE;
 }
 
-static bool
-texture_commit_miptail(struct zink_screen *screen, struct zink_resource *res, struct zink_bo *bo, uint32_t bo_offset, uint32_t offset, bool commit)
+static VkSemaphore
+texture_commit_miptail(struct zink_screen *screen, struct zink_resource *res, struct zink_bo *bo, uint32_t bo_offset, uint32_t offset, bool commit, VkSemaphore wait)
 {
+   VkSemaphore sem = get_semaphore(screen);
    VkBindSparseInfo sparse = {0};
    sparse.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
    sparse.imageOpaqueBindCount = 1;
+   sparse.waitSemaphoreCount = !!wait;
+   sparse.pWaitSemaphores = &wait;
+   sparse.signalSemaphoreCount = 1;
+   sparse.pSignalSemaphores = &sem;
 
    VkSparseImageOpaqueMemoryBindInfo sparse_bind;
    sparse_bind.image = res->obj->image;
@@ -866,17 +921,19 @@ texture_commit_miptail(struct zink_screen *screen, struct zink_resource *res, st
    mem_bind.flags = 0;
    sparse_bind.pBinds = &mem_bind;
 
-   VkQueue queue = screen->threaded ? screen->thread_queue : screen->queue;
-
-   VkResult ret = VKSCR(QueueBindSparse)(queue, 1, &sparse, VK_NULL_HANDLE);
-   return zink_screen_handle_vkresult(screen, ret);
+   VkResult ret = VKSCR(QueueBindSparse)(screen->queue_sparse, 1, &sparse, VK_NULL_HANDLE);
+   if (zink_screen_handle_vkresult(screen, ret))
+      return sem;
+   VKSCR(DestroySemaphore)(screen->dev, sem, NULL);
+   return VK_NULL_HANDLE;
 }
 
 bool
-zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned level, struct pipe_box *box, bool commit)
+zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned level, struct pipe_box *box, bool commit, VkSemaphore *sem)
 {
    bool ok = true;
    struct zink_bo *bo = res->obj->bo;
+   VkSemaphore cur_sem = VK_NULL_HANDLE;
 
    if (screen->faked_e5sparse && res->base.b.format == PIPE_FORMAT_R9G9B9E5_FLOAT)
       return true;
@@ -884,7 +941,7 @@ zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned l
    simple_mtx_lock(&screen->queue_lock);
    simple_mtx_lock(&bo->lock);
    if (res->base.b.target == PIPE_BUFFER) {
-      ok = buffer_bo_commit(screen, res, box->x, box->width, commit);
+      ok = buffer_bo_commit(screen, res, box->x, box->width, commit, sem);
       goto out;
    }
 
@@ -904,8 +961,6 @@ zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned l
 			   (box->height % gheight) ? box->height % gheight : gheight,
 			   (box->depth % gdepth) ? box->depth % gdepth : gdepth
    };
-   /* TODO: msaa needs miptail */
-   //VkSparseImageOpaqueMemoryBindInfo sparse_obind;
 #define NUM_BATCHED_BINDS 50
    VkSparseImageMemoryBind ibind[NUM_BATCHED_BINDS];
    uint32_t backing_start[NUM_BATCHED_BINDS], backing_size[NUM_BATCHED_BINDS];
@@ -969,8 +1024,8 @@ zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned l
                      }
                      if (level >= res->sparse.imageMipTailFirstLod) {
                         uint32_t offset = res->sparse.imageMipTailOffset + d * res->sparse.imageMipTailStride;
-                        ok = texture_commit_miptail(screen, res, backing[i]->bo, backing_start[i], offset, commit);
-                        if (!ok)
+                        cur_sem = texture_commit_miptail(screen, res, backing[i]->bo, backing_start[i], offset, commit, cur_sem);
+                        if (!cur_sem)
                            goto out;
                      } else {
                         ibind[i].memory = backing[i]->bo->mem ? backing[i]->bo->mem : backing[i]->bo->u.slab.real->mem;
@@ -1017,8 +1072,8 @@ zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned l
                   }
                   if (level >= res->sparse.imageMipTailFirstLod) {
                      uint32_t offset = res->sparse.imageMipTailOffset + d * res->sparse.imageMipTailStride;
-                     ok = texture_commit_miptail(screen, res, NULL, 0, offset, commit);
-                     if (!ok)
+                     cur_sem = texture_commit_miptail(screen, res, NULL, 0, offset, commit, cur_sem);
+                     if (!cur_sem)
                         goto out;
                   } else {
                      commits_pending = true;
@@ -1027,7 +1082,8 @@ zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned l
                }
             }
             if (i == ARRAY_SIZE(ibind)) {
-               if (!texture_commit_single(screen, res, ibind, ARRAY_SIZE(ibind), commit)) {
+               cur_sem = texture_commit_single(screen, res, ibind, ARRAY_SIZE(ibind), commit, cur_sem);
+               if (!cur_sem) {
                   for (unsigned s = 0; s < i; s++) {
                      ok = sparse_backing_free(screen, backing[s]->bo, backing[s], backing_start[s], backing_size[s]);
                      if (!ok) {
@@ -1044,12 +1100,15 @@ zink_bo_commit(struct zink_screen *screen, struct zink_resource *res, unsigned l
          }
       }
    }
-   if (commits_pending && !texture_commit_single(screen, res, ibind, i, commit)) {
-      for (unsigned s = 0; s < i; s++) {
-         ok = sparse_backing_free(screen, backing[s]->bo, backing[s], backing_start[s], backing_size[s]);
-         if (!ok) {
-            /* Couldn't allocate tracking data structures, so we have to leak */
-            fprintf(stderr, "zink: leaking sparse backing memory\n");
+   if (commits_pending) {
+      cur_sem = texture_commit_single(screen, res, ibind, i, commit, cur_sem);
+      if (!cur_sem) {
+         for (unsigned s = 0; s < i; s++) {
+            ok = sparse_backing_free(screen, backing[s]->bo, backing[s], backing_start[s], backing_size[s]);
+            if (!ok) {
+               /* Couldn't allocate tracking data structures, so we have to leak */
+               fprintf(stderr, "zink: leaking sparse backing memory\n");
+            }
          }
       }
       ok = false;
@@ -1058,7 +1117,42 @@ out:
 
    simple_mtx_unlock(&bo->lock);
    simple_mtx_unlock(&screen->queue_lock);
+   *sem = cur_sem;
    return ok;
+}
+
+bool
+zink_bo_get_kms_handle(struct zink_screen *screen, struct zink_bo *bo, int fd, uint32_t *handle)
+{
+#ifdef ZINK_USE_DMABUF
+   assert(bo->mem && !bo->u.real.use_reusable_pool);
+   simple_mtx_lock(&bo->u.real.export_lock);
+   list_for_each_entry(struct bo_export, export, &bo->u.real.exports, link) {
+      if (export->drm_fd == fd) {
+         simple_mtx_unlock(&bo->u.real.export_lock);
+         *handle = export->gem_handle;
+         return true;
+      }
+   }
+   struct bo_export *export = CALLOC_STRUCT(bo_export);
+   if (!export) {
+      simple_mtx_unlock(&bo->u.real.export_lock);
+      return false;
+   }
+   bool success = drmPrimeFDToHandle(screen->drm_fd, fd, handle) == 0;
+   if (success) {
+      list_addtail(&export->link, &bo->u.real.exports);
+      export->gem_handle = *handle;
+      export->drm_fd = screen->drm_fd;
+   } else {
+      mesa_loge("zink: failed drmPrimeFDToHandle %s", strerror(errno));
+      FREE(export);
+   }
+   simple_mtx_unlock(&bo->u.real.export_lock);
+   return success;
+#else
+   return false;
+#endif
 }
 
 static const struct pb_vtbl bo_slab_vtbl = {
@@ -1125,12 +1219,7 @@ bo_slab_alloc(void *priv, unsigned heap, unsigned entry_size, unsigned group_ind
 
    list_inithead(&slab->base.free);
 
-#ifdef _MSC_VER
-   /* C11 too hard for msvc, no __sync_fetch_and_add */
-   base_id = p_atomic_add_return(&screen->pb.next_bo_unique_id, slab->base.num_entries) - slab->base.num_entries;
-#else
-   base_id = __sync_fetch_and_add(&screen->pb.next_bo_unique_id, slab->base.num_entries);
-#endif
+   base_id = p_atomic_fetch_add(&screen->pb.next_bo_unique_id, slab->base.num_entries);
    for (unsigned i = 0; i < slab->base.num_entries; ++i) {
       struct zink_bo *bo = &slab->entries[i];
 
@@ -1210,8 +1299,6 @@ zink_bo_init(struct zink_screen *screen)
       min_slab_order = max_order + 1;
    }
    screen->pb.min_alloc_size = 1 << screen->pb.bo_slabs[0].min_order;
-   screen->pb.bo_export_table = util_hash_table_create_ptr_keys();
-   simple_mtx_init(&screen->pb.bo_export_table_lock, mtx_plain);
    return true;
 }
 
@@ -1223,6 +1310,4 @@ zink_bo_deinit(struct zink_screen *screen)
          pb_slabs_deinit(&screen->pb.bo_slabs[i]);
    }
    pb_cache_deinit(&screen->pb.bo_cache);
-   _mesa_hash_table_destroy(screen->pb.bo_export_table, NULL);
-   simple_mtx_destroy(&screen->pb.bo_export_table_lock);
 }

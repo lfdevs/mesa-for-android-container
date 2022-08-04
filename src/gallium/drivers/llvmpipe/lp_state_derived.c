@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #include "util/u_math.h"
@@ -174,7 +174,7 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
 
 
 static void
-check_linear_rasterizer( struct llvmpipe_context *lp )
+check_linear_rasterizer(struct llvmpipe_context *lp)
 {
    boolean bgr8;
    boolean permit_linear;
@@ -233,7 +233,8 @@ check_linear_rasterizer( struct llvmpipe_context *lp )
  * Handle state changes before clears.
  * Called just prior to clearing (pipe::clear()).
  */
-void llvmpipe_update_derived_clear( struct llvmpipe_context *llvmpipe )
+void
+llvmpipe_update_derived_clear(struct llvmpipe_context *llvmpipe)
 {
    if (llvmpipe->dirty & (LP_NEW_FS |
                           LP_NEW_FRAMEBUFFER))
@@ -248,7 +249,8 @@ void llvmpipe_update_derived_clear( struct llvmpipe_context *llvmpipe )
  * Hopefully this will remain quite simple, otherwise need to pull in
  * something like the gallium frontend mechanism.
  */
-void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
+void
+llvmpipe_update_derived(struct llvmpipe_context *llvmpipe)
 {
    struct llvmpipe_screen *lp_screen = llvmpipe_screen(llvmpipe->pipe.screen);
 
@@ -305,7 +307,7 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
    if (llvmpipe->dirty & (LP_NEW_FS |
                           LP_NEW_FRAMEBUFFER |
                           LP_NEW_RASTERIZER))
-      llvmpipe_update_setup( llvmpipe );
+      llvmpipe_update_setup(llvmpipe);
 
    if (llvmpipe->dirty & LP_NEW_SAMPLE_MASK)
       lp_setup_set_sample_mask(llvmpipe->setup, llvmpipe->sample_mask);
@@ -318,7 +320,7 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
       lp_setup_set_scissors(llvmpipe->setup, llvmpipe->scissors);
 
    if (llvmpipe->dirty & LP_NEW_DEPTH_STENCIL_ALPHA) {
-      lp_setup_set_alpha_ref_value(llvmpipe->setup, 
+      lp_setup_set_alpha_ref_value(llvmpipe->setup,
                                    llvmpipe->depth_stencil->alpha_ref_value);
       lp_setup_set_stencil_ref_values(llvmpipe->setup,
                                       llvmpipe->stencil_ref.ref_value);

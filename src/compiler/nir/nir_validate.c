@@ -26,6 +26,7 @@
  */
 
 #include "nir.h"
+#include "nir_xfb_info.h"
 #include "c11/threads.h"
 #include <assert.h>
 
@@ -1796,6 +1797,18 @@ nir_validate_shader(nir_shader *shader, const char *when)
    exec_list_validate(&shader->functions);
    foreach_list_typed(nir_function, func, node, &shader->functions) {
       validate_function(func, &state);
+   }
+
+   if (shader->xfb_info != NULL) {
+      /* At least validate that, if nir_shader::xfb_info exists, the shader
+       * has real transform feedback going on.
+       */
+      validate_assert(&state, shader->info.stage == MESA_SHADER_VERTEX ||
+                              shader->info.stage == MESA_SHADER_TESS_EVAL ||
+                              shader->info.stage == MESA_SHADER_GEOMETRY);
+      validate_assert(&state, shader->xfb_info->buffers_written != 0);
+      validate_assert(&state, shader->xfb_info->streams_written != 0);
+      validate_assert(&state, shader->xfb_info->output_count > 0);
    }
 
    if (_mesa_hash_table_num_entries(state.errors) > 0)

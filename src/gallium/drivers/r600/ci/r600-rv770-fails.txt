@@ -2,61 +2,17 @@ KHR-GL33.clip_distance.functional,Fail
 KHR-GL33.cull_distance.functional,Fail
 KHR-GL33.nearest_edge.offset_right,Fail
 
-KHR-GL33.texture_repeat_mode.rgba32ui_11x131_0_clamp_to_edge,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_11x131_0_mirrored_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_11x131_0_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_11x131_1_clamp_to_edge,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_11x131_1_mirrored_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_11x131_1_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_11x131_2_clamp_to_edge,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_11x131_2_mirrored_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_11x131_2_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_49x23_0_clamp_to_edge,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_49x23_0_mirrored_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_49x23_0_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_49x23_1_clamp_to_edge,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_49x23_1_mirrored_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_49x23_1_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_49x23_2_clamp_to_edge,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_49x23_2_mirrored_repeat,Fail
-KHR-GL33.texture_repeat_mode.rgba32ui_49x23_2_repeat,Fail
-
 KHR-GL33.texture_size_promotion.functional,Fail
 
 KHR-GL33.texture_swizzle.functional,Fail
 
 KHR-GLES3.core.nearest_edge.offset_right,Fail
 
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_0_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_0_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_0_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_1_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_1_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_1_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_2_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_2_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_11x131_2_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_0_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_0_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_0_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_1_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_1_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_1_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_2_clamp_to_edge,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_2_mirrored_repeat,Fail
-KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_2_repeat,Fail
-
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
 dEQP-GLES2.functional.clipping.point.wide_point_clip,Fail
 dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center,Fail
 dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
-
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_component_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_dynamic_subscript_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_dynamic_subscript_read_vertex,Fail
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_static_loop_subscript_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_static_subscript_read_fragment,Fail
 
 dEQP-GLES2.functional.texture.size.cube.15x15_l8,Fail
 dEQP-GLES2.functional.texture.size.cube.15x15_rgb888,Fail
@@ -118,12 +74,6 @@ dEQP-GLES3.functional.shaders.derivate.fwidth.nicest.fbo_msaa4.float_highp,Fail
 dEQP-GLES3.functional.shaders.derivate.fwidth.nicest.fbo_msaa4.vec2_highp,Fail
 dEQP-GLES3.functional.shaders.derivate.fwidth.nicest.fbo_msaa4.vec3_highp,Fail
 dEQP-GLES3.functional.shaders.derivate.fwidth.nicest.fbo_msaa4.vec4_highp,Fail
-
-dEQP-GLES3.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_component_read_fragment,Fail
-dEQP-GLES3.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_dynamic_subscript_read_fragment,Fail
-dEQP-GLES3.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_dynamic_subscript_read_vertex,Fail
-dEQP-GLES3.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_static_loop_subscript_read_fragment,Fail
-dEQP-GLES3.functional.shaders.indexing.vector_subscript.vec3_dynamic_subscript_write_static_subscript_read_fragment,Fail
 
 dEQP-GLES3.functional.shaders.texture_functions.texture.samplercubeshadow_bias_fragment,Fail
 dEQP-GLES3.functional.shaders.texture_functions.texture.samplercubeshadow_fragment,Fail
@@ -429,6 +379,9 @@ dEQP-GLES3.functional.texture.specification.texsubimage3d_depth.depth_component3
 
 shaders@glsl-bug-110796,Fail
 
+shaders@glsl-max-varyings,Fail
+shaders@glsl-max-varyings >max_varying_components,Fail
+
 spec@!opengl 1.0@gl-1.0-dlist-bitmap,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
@@ -544,6 +497,90 @@ spec@!opengl 1.1@teximage-colors gl_sluminance8@GL_SLUMINANCE8 texture with GL_R
 spec@!opengl 1.1@teximage-colors gl_sluminance8@GL_SLUMINANCE8 texture with GL_RGBA and GL_UNSIGNED_SHORT_4_4_4_4,Fail
 spec@!opengl 1.1@teximage-colors gl_sluminance8@GL_SLUMINANCE8 texture with GL_RGBA and GL_UNSIGNED_SHORT_4_4_4_4_REV,Fail
 spec@!opengl 1.1@teximage-colors gl_sluminance8@GL_SLUMINANCE8 texture with GL_RGBA and GL_UNSIGNED_SHORT_5_5_5_1,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_ABGR_EXT and GL_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_ABGR_EXT and GL_FLOAT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_ABGR_EXT and GL_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_ABGR_EXT and GL_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_ABGR_EXT and GL_UNSIGNED_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_ABGR_EXT and GL_UNSIGNED_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_ABGR_EXT and GL_UNSIGNED_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGR and GL_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGR and GL_FLOAT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGR and GL_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGR and GL_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGR and GL_UNSIGNED_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGR and GL_UNSIGNED_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGR and GL_UNSIGNED_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_FLOAT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_INT_10_10_10_2,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_INT_2_10_10_10_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_INT_8_8_8_8,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_INT_8_8_8_8_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_SHORT_1_5_5_5_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_SHORT_4_4_4_4,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_SHORT_4_4_4_4_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_BGRA and GL_UNSIGNED_SHORT_5_5_5_1,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE and GL_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE and GL_FLOAT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE and GL_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE and GL_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE and GL_UNSIGNED_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE and GL_UNSIGNED_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE and GL_UNSIGNED_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE_ALPHA and GL_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE_ALPHA and GL_FLOAT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE_ALPHA and GL_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE_ALPHA and GL_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE_ALPHA and GL_UNSIGNED_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE_ALPHA and GL_UNSIGNED_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_LUMINANCE_ALPHA and GL_UNSIGNED_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RED and GL_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RED and GL_FLOAT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RED and GL_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RED and GL_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RED and GL_UNSIGNED_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RED and GL_UNSIGNED_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RED and GL_UNSIGNED_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RG and GL_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RG and GL_FLOAT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RG and GL_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RG and GL_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RG and GL_UNSIGNED_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RG and GL_UNSIGNED_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RG and GL_UNSIGNED_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_FLOAT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_UNSIGNED_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_UNSIGNED_BYTE_2_3_3_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_UNSIGNED_BYTE_3_3_2,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_UNSIGNED_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_UNSIGNED_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_UNSIGNED_SHORT_5_6_5,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGB and GL_UNSIGNED_SHORT_5_6_5_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_FLOAT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_BYTE,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_INT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_INT_10_10_10_2,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_INT_2_10_10_10_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_INT_8_8_8_8,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_INT_8_8_8_8_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_SHORT,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_SHORT_1_5_5_5_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_SHORT_4_4_4_4,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_SHORT_4_4_4_4_REV,Fail
+spec@ext_texture_srgb_r8@teximage-colors gl_sr8_ext@GL_SR8_EXT texture with GL_RGBA and GL_UNSIGNED_SHORT_5_5_5_1,Fail
 
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled,Fail
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB10- swizzled- border color only,Fail
@@ -629,10 +666,6 @@ spec@arb_fragment_layer_viewport@layer-vs-gs-write-simple,Fail
 spec@arb_fragment_layer_viewport@layer-vs-write-gs-no-write-simple,Fail
 spec@arb_fragment_layer_viewport@viewport-vs-gs-write-simple,Fail
 spec@arb_fragment_layer_viewport@viewport-vs-write-gs-no-write-simple,Fail
-
-spec@arb_fragment_program@fp-indirections2,Fail
-
-spec@arb_fragment_program_shadow@tex-shadow1d,Fail
 
 spec@arb_framebuffer_object@fbo-attachments-blit-scaled-linear,Fail
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
@@ -752,14 +785,8 @@ spec@egl 1.4@egl-context-priority,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
-spec@egl_ext_device_query@conformance,Fail
-spec@egl_ext_image_dma_buf_import_modifiers@conformance,Fail
 spec@egl_ext_protected_content@conformance,Fail
-spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
-spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,Fail
-spec@egl_khr_get_all_proc_addresses@conformance,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
-spec@egl_mesa_query_driver@conformance,Fail
 
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 
@@ -822,16 +849,11 @@ spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB12,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB16,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB8,Fail
 
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xyuv,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y412,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv,Fail
 
 spec@ext_packed_float@texwrap formats bordercolor-swizzled,Fail
@@ -847,8 +869,6 @@ spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRE
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA_S3TC_DXT3_EXT- swizzled- border color only,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA_S3TC_DXT5_EXT- swizzled- border color only,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGB_S3TC_DXT1_EXT- swizzled- border color only,Fail
-
-spec@ext_texture_integer@fbo-integer,Fail
 
 spec@ext_texture_integer@multisample-fast-clear gl_ext_texture_integer,Fail
 
@@ -960,26 +980,18 @@ spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SR
 
 spec@ext_transform_feedback@immediate-reuse-index-buffer,Fail
 
-spec@glsl-1.10@execution@function-calls@glsl-function-chain16-in-array-indirect,Fail
-spec@glsl-1.10@execution@function-calls@glsl-function-chain16-in-array-indirect2,Fail
-
-spec@glsl-1.10@execution@varying-packing@simple float arrays_of_arrays,Fail
-spec@glsl-1.10@execution@varying-packing@simple int arrays_of_arrays,Fail
-spec@glsl-1.10@execution@varying-packing@simple uint arrays_of_arrays,Fail
+spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-primitives,Fail
 
 spec@glsl-1.20@execution@fs-nan-builtin-max,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-min,Fail
 
-spec@glsl-1.20@execution@matrix-out-of-bounds-access@fs-mat4-out-of-bounds-6,Crash
-
 spec@glsl-1.20@execution@vs-nan-builtin-max,Fail
 spec@glsl-1.20@execution@vs-nan-builtin-min,Fail
-
-spec@glsl-1.30@execution@clipping@vs-clip-distance-deadcode,Fail
 spec@glsl-1.30@execution@clipping@vs-clip-distance-primitives,Fail
 
+spec@glsl-1.30@execution@range_analysis_fsat_of_nan,Fail
 spec@glsl-1.30@execution@tex-miplevel-selection texture(bias) 1darrayshadow,Fail
 spec@glsl-1.30@execution@tex-miplevel-selection texture(bias) cubeshadow,Fail
 spec@glsl-1.30@execution@tex-miplevel-selection texturegrad cube,Fail
@@ -987,8 +999,6 @@ spec@glsl-1.30@execution@tex-miplevel-selection texturegrad cubeshadow,Fail
 spec@glsl-1.30@execution@tex-miplevel-selection texturelod 1darrayshadow,Fail
 spec@glsl-1.30@execution@tex-miplevel-selection texturelodoffset 1darrayshadow,Fail
 spec@glsl-1.30@execution@tex-miplevel-selection textureoffset(bias) 1darrayshadow,Fail
-
-spec@glsl-1.50@execution@geometry@dynamic_input_array_index,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency ffs,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency other,Fail
 spec@glsl-1.50@execution@texelfetchoffset@gs-isampler2drect,Fail
@@ -1005,7 +1015,7 @@ spec@glsl-1.50@execution@texelfetchoffset@gs-texelfetch-usampler3d,Fail
 spec@glsl-1.50@execution@texelfetchoffset@gs-usampler2drect,Fail
 
 spec@glsl-1.50@execution@variable-indexing@gs-input-array-vec3-index-rd,Fail
-spec@glsl-1.50@execution@variable-indexing@gs-input-array-vec4-index-rd,Crash
+spec@glsl-1.50@execution@variable-indexing@gs-input-array-vec4-index-rd,Fail
 
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 

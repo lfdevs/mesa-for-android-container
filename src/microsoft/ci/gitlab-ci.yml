@@ -2,7 +2,7 @@ test-spirv2dxil-windows:
   extends:
     - .build-windows
     - .use-windows_test_vs2019
-    - .windows-test-rules
+    - .spirv2dxil-test-rules
   stage: layered-backends
   dependencies:
     - windows-vs2019
@@ -23,7 +23,7 @@ test-dozen-deqp:
   extends:
     - .build-windows
     - .use-windows_test_vs2019
-    - .windows-test-rules
+    - .dozen-test-rules
   stage: layered-backends
   dependencies:
     - windows-vs2019

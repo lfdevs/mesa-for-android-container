@@ -1797,10 +1797,15 @@ handle_precolored_input(struct ra_ctx *ctx, struct ir3_instruction *instr)
    if (instr->dsts[0]->num == INVALID_REG)
       return;
 
+   struct ra_file *file = ra_get_file(ctx, instr->dsts[0]);
    struct ra_interval *interval = &ctx->intervals[instr->dsts[0]->name];
    physreg_t physreg = ra_reg_get_physreg(instr->dsts[0]);
    allocate_dst_fixed(ctx, instr->dsts[0], physreg);
-   insert_dst(ctx, instr->dsts[0]);
+
+   d("insert precolored dst %u physreg %u", instr->dsts[0]->name,
+     ra_interval_get_physreg(interval));
+
+   ra_file_insert(file, interval);
    interval->frozen = true;
 }
 
@@ -2037,7 +2042,7 @@ insert_liveout_copy(struct ir3_block *block, physreg_t dst, physreg_t src,
    struct ir3_instruction *old_pcopy = NULL;
    if (!list_is_empty(&block->instr_list)) {
       struct ir3_instruction *last =
-         LIST_ENTRY(struct ir3_instruction, block->instr_list.prev, node);
+         list_entry(block->instr_list.prev, struct ir3_instruction, node);
       if (last->opc == OPC_META_PARALLEL_COPY)
          old_pcopy = last;
    }
@@ -2326,13 +2331,13 @@ calc_target_full_pressure(struct ir3_shader_variant *v, unsigned pressure)
    unsigned reg_independent_max_waves =
       ir3_get_reg_independent_max_waves(v, double_threadsize);
    unsigned reg_dependent_max_waves = ir3_get_reg_dependent_max_waves(
-      v->shader->compiler, reg_count, double_threadsize);
+      v->compiler, reg_count, double_threadsize);
    unsigned target_waves =
       MIN2(reg_independent_max_waves, reg_dependent_max_waves);
 
    while (target <= RA_FULL_SIZE / (2 * 4) &&
           ir3_should_double_threadsize(v, target) == double_threadsize &&
-          ir3_get_reg_dependent_max_waves(v->shader->compiler, target,
+          ir3_get_reg_dependent_max_waves(v->compiler, target,
                                           double_threadsize) >= target_waves)
       target++;
 
@@ -2493,7 +2498,7 @@ static void
 calc_limit_pressure_for_cs_with_barrier(struct ir3_shader_variant *v,
                                         struct ir3_pressure *limit_pressure)
 {
-   const struct ir3_compiler *compiler = v->shader->compiler;
+   const struct ir3_compiler *compiler = v->compiler;
 
    unsigned threads_per_wg;
    if (v->local_size_variable) {
@@ -2543,7 +2548,7 @@ ir3_ra(struct ir3_shader_variant *v)
    struct ra_ctx *ctx = rzalloc(NULL, struct ra_ctx);
 
    ctx->merged_regs = v->mergedregs;
-   ctx->compiler = v->shader->compiler;
+   ctx->compiler = v->compiler;
    ctx->stage = v->type;
 
    struct ir3_liveness *live = ir3_calc_liveness(ctx, v->ir);
@@ -2572,7 +2577,7 @@ ir3_ra(struct ir3_shader_variant *v)
     * because on some gens the register file is not big enough to hold a
     * double-size wave with all 48 registers in use.
     */
-   if (v->shader->real_wavesize == IR3_DOUBLE_ONLY) {
+   if (v->real_wavesize == IR3_DOUBLE_ONLY) {
       limit_pressure.full =
          MAX2(limit_pressure.full, ctx->compiler->reg_size_vec4 / 2 * 16);
    }
@@ -2590,7 +2595,7 @@ ir3_ra(struct ir3_shader_variant *v)
    bool spilled = false;
    if (max_pressure.full > limit_pressure.full ||
        max_pressure.half > limit_pressure.half) {
-      if (!v->shader->compiler->has_pvtmem) {
+      if (!v->compiler->has_pvtmem) {
          d("max pressure exceeded!");
          goto fail;
       }

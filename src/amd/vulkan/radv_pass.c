@@ -60,13 +60,17 @@ radv_render_pass_add_subpass_dep(struct radv_render_pass *pass, const VkSubpassD
    VkAccessFlags2 dst_access_mask = barrier ? barrier->dstAccessMask : dep->dstAccessMask;
 
    if (dst == VK_SUBPASS_EXTERNAL) {
-      if (dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)
+      if (dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT) {
          pass->end_barrier.src_stage_mask |= src_stage_mask;
+         pass->end_barrier.dst_stage_mask |= dst_stage_mask;
+      }
       pass->end_barrier.src_access_mask |= src_access_mask;
       pass->end_barrier.dst_access_mask |= dst_access_mask;
    } else {
-      if (dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)
+      if (dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT) {
          pass->subpasses[dst].start_barrier.src_stage_mask |= src_stage_mask;
+         pass->subpasses[dst].start_barrier.dst_stage_mask |= dst_stage_mask;
+      }
       pass->subpasses[dst].start_barrier.src_access_mask |= src_access_mask;
       pass->subpasses[dst].start_barrier.dst_access_mask |= dst_access_mask;
    }
@@ -142,7 +146,7 @@ radv_render_pass_add_implicit_deps(struct radv_render_pass *pass)
           */
          if (pass_att->first_subpass_idx == i && !subpass->has_ingoing_dep &&
              ((subpass_att->layout != initial_layout) ||
-              (subpass_att->layout != stencil_initial_layout))) {
+              (subpass_att->stencil_layout != stencil_initial_layout))) {
             add_ingoing_dep = true;
          }
 
@@ -152,7 +156,7 @@ radv_render_pass_add_implicit_deps(struct radv_render_pass *pass)
           */
          if (pass_att->last_subpass_idx == i && !subpass->has_outgoing_dep &&
              ((subpass_att->layout != final_layout) ||
-              (subpass_att->layout != stencil_final_layout))) {
+              (subpass_att->stencil_layout != stencil_final_layout))) {
             add_outgoing_dep = true;
          }
       }

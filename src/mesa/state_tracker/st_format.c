@@ -1557,6 +1557,8 @@ st_translate_color(union pipe_color_union *color,
       case GL_LUMINANCE_ALPHA:
          ci[1] = ci[2] = ci[0];
          break;
+      /* Stencil border is tricky on some hw. Help drivers a little here. */
+      case GL_STENCIL_INDEX:
       case GL_INTENSITY:
          ci[1] = ci[2] = ci[3] = ci[0];
          break;
@@ -1588,8 +1590,6 @@ st_translate_color(union pipe_color_union *color,
       case GL_LUMINANCE_ALPHA:
          cf[1] = cf[2] = cf[0];
          break;
-      /* Stencil border is tricky on some hw. Help drivers a little here. */
-      case GL_STENCIL_INDEX:
       case GL_INTENSITY:
          cf[1] = cf[2] = cf[3] = cf[0];
          break;

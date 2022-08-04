@@ -48,6 +48,48 @@ error(char *fmt, ...)
    return EXIT_FAILURE;
 }
 
+static void
+print_regions_info(const struct intel_device_info *devinfo)
+{
+   if (devinfo->mem.sram.mappable.size > 0 ||
+       devinfo->mem.sram.unmappable.size > 0) {
+      fprintf(stdout, "   sram:\n");
+      if (devinfo->mem.use_class_instance) {
+         fprintf(stdout, "      class: %d; instance: %d\n",
+                 devinfo->mem.sram.mem_class, devinfo->mem.sram.mem_instance);
+      }
+      fprintf(stdout, "      mappable: %" PRId64 "; ",
+              devinfo->mem.sram.mappable.size);
+      fprintf(stdout, "free: %" PRId64 "\n",
+              devinfo->mem.sram.mappable.free);
+      if (devinfo->mem.sram.unmappable.size > 0) {
+         fprintf(stdout, "      unmappable: %" PRId64 "; ",
+                 devinfo->mem.sram.unmappable.size);
+         fprintf(stdout, "free: %" PRId64 "\n",
+                 devinfo->mem.sram.unmappable.free);
+      }
+   }
+
+   if (devinfo->mem.vram.mappable.size > 0 ||
+       devinfo->mem.vram.unmappable.size > 0) {
+      fprintf(stdout, "   vram:\n");
+      if (devinfo->mem.use_class_instance) {
+         fprintf(stdout, "      class: %d; instance: %d\n",
+                 devinfo->mem.vram.mem_class, devinfo->mem.vram.mem_instance);
+      }
+      fprintf(stdout, "      mappable: %" PRId64 "; ",
+              devinfo->mem.vram.mappable.size);
+      fprintf(stdout, "free: %" PRId64 "\n",
+              devinfo->mem.vram.mappable.free);
+      if (devinfo->mem.vram.unmappable.size > 0) {
+         fprintf(stdout, "      unmappable: %" PRId64 "; ",
+                 devinfo->mem.vram.unmappable.size);
+         fprintf(stdout, "free: %" PRId64 "\n",
+                 devinfo->mem.vram.unmappable.free);
+      }
+   }
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -131,6 +173,8 @@ main(int argc, char *argv[])
       fprintf(stdout, "   max CS  threads: %u\n", devinfo.max_cs_threads);
       fprintf(stdout, "   timestamp frequency: %" PRIu64 " / %.4f ns\n",
               devinfo.timestamp_frequency, 1000000000.0 / devinfo.timestamp_frequency);
+
+      print_regions_info(&devinfo);
    }
 
    return EXIT_SUCCESS;

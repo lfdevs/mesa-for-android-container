@@ -102,7 +102,11 @@ namespace clover {
                                     clang::InputKind ik, const ::llvm::Triple& triple,
                                     clang::LangStandard::Kind d)
          {
+#if LLVM_VERSION_MAJOR >= 15
+            c->getLangOpts().setLangDefaults(c->getLangOpts(), ik.getLanguage(), triple,
+#else
             c->getInvocation().setLangDefaults(c->getLangOpts(), ik, triple,
+#endif
 #if LLVM_VERSION_MAJOR >= 12
                                                c->getPreprocessorOpts().Includes,
 #else

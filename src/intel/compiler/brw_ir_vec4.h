@@ -94,7 +94,7 @@ add_byte_offset(backend_reg *reg, unsigned bytes)
    }
 }
 
-} /* namepace detail */
+} /* namespace detail */
 
 static inline src_reg
 byte_offset(src_reg reg, unsigned bytes)

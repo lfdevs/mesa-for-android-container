@@ -1268,7 +1268,7 @@ TESTS = [
                  color2 = y + 1;
          }
          """,
-         r'assign  \(x\) \(var_ref x\)  \(expression float f162f'),
+         r'assign  \(x\) \(var_ref x@2\)  \(expression float f162f'),
     Test("ldexp",
          """
          #version 310 es

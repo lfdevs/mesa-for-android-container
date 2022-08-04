@@ -56,13 +56,3 @@ profile = "gpu"
 process_isolation = true
 timeout = 180.0
   [piglit.env]
-
-# Whoops, no prefix support for piglit yet.  Looks like we're going to need a new deqp-runner.
-#[[piglit]]
-#piglit_folder = "/piglit"
-#profile = "quick_gl"
-#process_isolation = true
-#prefix = "no-timeline-"
-#timeout = 180.0
-#  [piglit.env]
-#  ZINK_NO_TIMELINES = "1"

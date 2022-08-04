@@ -25,6 +25,7 @@
 
 #include <gtest/gtest.h>
 
+#include "c11/time.h"
 #include "util/timespec.h"
 
 #include <limits>
@@ -298,8 +299,8 @@ TEST(timespec_test, timespec_from_proto)
 TEST(timespec_test, timespec_is_zero)
 {
    struct timespec zero = { 0 };
-   struct timespec non_zero_sec = { .tv_sec = 1, .tv_nsec = 0 };
-   struct timespec non_zero_nsec = { .tv_sec = 0, .tv_nsec = 1 };
+   struct timespec non_zero_sec = { 1, 0 };
+   struct timespec non_zero_nsec = { 0, 1 };
 
    EXPECT_TRUE(timespec_is_zero(&zero));
    EXPECT_FALSE(timespec_is_zero(&non_zero_nsec));
@@ -308,12 +309,25 @@ TEST(timespec_test, timespec_is_zero)
 
 TEST(timespec_test, timespec_eq)
 {
-   struct timespec a = { .tv_sec = 2, .tv_nsec = 1 };
-   struct timespec b = { .tv_sec = -1, .tv_nsec = 2 };
+   struct timespec a = { 2, 1 };
+   struct timespec b = { -1, 2 };
 
    EXPECT_TRUE(timespec_eq(&a, &a));
    EXPECT_TRUE(timespec_eq(&b, &b));
 
    EXPECT_FALSE(timespec_eq(&a, &b));
    EXPECT_FALSE(timespec_eq(&b, &a));
+}
+
+TEST(timespec_test, timespec_get)
+{
+   struct timespec a;
+   struct timespec b;
+   time_t t;
+   timespec_get(&a, TIME_UTC);
+   time(&t);
+   timespec_get(&b, TIME_UTC);
+   /* `t + 1` and `t - 1` are used intentionally for avoid flakes */
+   EXPECT_LE(a.tv_sec, t + 1);
+   EXPECT_LE(t - 1, b.tv_sec);
 }

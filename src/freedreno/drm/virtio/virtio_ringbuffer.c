@@ -25,10 +25,27 @@
 #include <inttypes.h>
 #include <pthread.h>
 
+#include "util/libsync.h"
 #include "util/os_file.h"
 
 #include "drm/freedreno_ringbuffer_sp.h"
 #include "virtio_priv.h"
+
+static void
+retire_execute(void *job, void *gdata, int thread_index)
+{
+   struct fd_submit_sp *fd_submit = job;
+
+   sync_wait(fd_submit->out_fence_fd, -1);
+   close(fd_submit->out_fence_fd);
+}
+
+static void
+retire_cleanup(void *job, void *gdata, int thread_index)
+{
+   struct fd_submit_sp *fd_submit = job;
+   fd_submit_del(&fd_submit->base);
+}
 
 static int
 flush_submit_list(struct list_head *submit_list)
@@ -104,20 +121,28 @@ flush_submit_list(struct list_head *submit_list)
     * NOTE allocate on-stack in the common case, but with an upper-
     * bound to limit on-stack allocation to 4k:
     */
-   const unsigned bo_limit = sizeof(struct drm_msm_gem_submit_bo) / 4096;
+   const unsigned bo_limit = 4096 / sizeof(struct drm_msm_gem_submit_bo);
    bool bos_on_stack = fd_submit->nr_bos < bo_limit;
    struct drm_msm_gem_submit_bo
       _submit_bos[bos_on_stack ? fd_submit->nr_bos : 0];
    struct drm_msm_gem_submit_bo *submit_bos;
+   uint32_t _guest_handles[bos_on_stack ? fd_submit->nr_bos : 0];
+   uint32_t *guest_handles;
    if (bos_on_stack) {
       submit_bos = _submit_bos;
+      guest_handles = _guest_handles;
    } else {
       submit_bos = malloc(fd_submit->nr_bos * sizeof(submit_bos[0]));
+      guest_handles = malloc(fd_submit->nr_bos * sizeof(guest_handles[0]));
    }
 
    for (unsigned i = 0; i < fd_submit->nr_bos; i++) {
+      struct virtio_bo *virtio_bo = to_virtio_bo(fd_submit->bos[i]);
+
+      guest_handles[i] = virtio_bo->base.handle;
+
       submit_bos[i].flags = fd_submit->bos[i]->reloc_flags;
-      submit_bos[i].handle = to_virtio_bo(fd_submit->bos[i])->host_handle;
+      submit_bos[i].handle = virtio_bo->res_id;
       submit_bos[i].presumed = 0;
    }
 
@@ -156,6 +181,12 @@ flush_submit_list(struct list_head *submit_list)
        */
       out_fence->use_fence_fd = true;
       out_fence_fd = &out_fence->fence_fd;
+   } else {
+      /* we are using retire_queue, so we need an out-fence for each
+       * submit.. we can just re-use fd_submit->out_fence_fd for temporary
+       * storage.
+       */
+      out_fence_fd = &fd_submit->out_fence_fd;
    }
 
    if (fd_submit->in_fence_fd != -1) {
@@ -166,15 +197,32 @@ flush_submit_list(struct list_head *submit_list)
       req->flags |= MSM_SUBMIT_NO_IMPLICIT;
    }
 
-   virtio_execbuf_fenced(dev, &req->hdr, fd_submit->in_fence_fd, out_fence_fd);
+   virtio_execbuf_fenced(dev, &req->hdr, guest_handles, req->nr_bos,
+                         fd_submit->in_fence_fd, out_fence_fd,
+                         virtio_pipe->ring_idx);
 
    free(req);
 
-   if (!bos_on_stack)
+   if (!bos_on_stack) {
       free(submit_bos);
+      free(guest_handles);
+   }
 
    if (fd_submit->in_fence_fd != -1)
       close(fd_submit->in_fence_fd);
+
+   if (out_fence_fd != &fd_submit->out_fence_fd)
+      fd_submit->out_fence_fd = os_dupfd_cloexec(*out_fence_fd);
+
+   fd_submit_ref(&fd_submit->base);
+
+   util_queue_fence_init(&fd_submit->retire_fence);
+
+   util_queue_add_job(&virtio_pipe->retire_queue,
+                      fd_submit, &fd_submit->retire_fence,
+                      retire_execute,
+                      retire_cleanup,
+                      0);
 
    return 0;
 }

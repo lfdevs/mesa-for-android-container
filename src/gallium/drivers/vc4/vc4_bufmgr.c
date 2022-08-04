@@ -85,12 +85,12 @@ vc4_bo_dump_stats(struct vc4_screen *screen)
         fprintf(stderr, "  BOs cached size: %dkb\n", cache->bo_size / 1024);
 
         if (!list_is_empty(&cache->time_list)) {
-                struct vc4_bo *first = LIST_ENTRY(struct vc4_bo,
-                                                  cache->time_list.next,
+                struct vc4_bo *first = list_entry(cache->time_list.next,
+                                                  struct vc4_bo,
                                                   time_list);
-                struct vc4_bo *last = LIST_ENTRY(struct vc4_bo,
-                                                  cache->time_list.prev,
-                                                  time_list);
+                struct vc4_bo *last = list_entry(cache->time_list.prev,
+                                                 struct vc4_bo,
+                                                 time_list);
 
                 fprintf(stderr, "  oldest cache time: %ld\n",
                         (long)first->free_time);

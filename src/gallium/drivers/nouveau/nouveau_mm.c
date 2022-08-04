@@ -183,12 +183,12 @@ nouveau_mm_allocate(struct nouveau_mman *cache,
    }
 
    if (!list_is_empty(&bucket->used)) {
-      slab = LIST_ENTRY(struct mm_slab, bucket->used.next, head);
+      slab = list_entry(bucket->used.next, struct mm_slab, head);
    } else {
       if (list_is_empty(&bucket->free)) {
          mm_slab_new(cache, bucket, MAX2(mm_get_order(size), MM_MIN_ORDER));
       }
-      slab = LIST_ENTRY(struct mm_slab, bucket->free.next, head);
+      slab = list_entry(bucket->free.next, struct mm_slab, head);
 
       list_del(&slab->head);
       list_add(&slab->head, &bucket->used);

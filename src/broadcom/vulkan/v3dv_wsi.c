@@ -29,9 +29,6 @@
 #include "vk_util.h"
 #include "wsi_common.h"
 #include "wsi_common_drm.h"
-#include "vk_fence.h"
-#include "vk_semaphore.h"
-#include "vk_sync_dummy.h"
 
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 v3dv_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
@@ -146,43 +143,4 @@ v3dv_wsi_get_image_from_swapchain(VkSwapchainKHR swapchain, uint32_t index)
 {
    VkImage image = wsi_common_get_image(swapchain, index);
    return v3dv_image_from_handle(image);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL
-v3dv_AcquireNextImage2KHR(VkDevice _device,
-                          const VkAcquireNextImageInfoKHR *pAcquireInfo,
-                          uint32_t *pImageIndex)
-{
-   V3DV_FROM_HANDLE(v3dv_device, device, _device);
-   VK_FROM_HANDLE(vk_fence, fence, pAcquireInfo->fence);
-   VK_FROM_HANDLE(vk_semaphore, semaphore, pAcquireInfo->semaphore);
-
-   struct v3dv_physical_device *pdevice = device->pdevice;
-
-   VkResult result = wsi_common_acquire_next_image2(
-      &pdevice->wsi_device, _device, pAcquireInfo, pImageIndex);
-
-   /* signal fence/semaphore - image is available immediately */
-   if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
-      VkResult sync_res;
-      if (fence) {
-         vk_fence_reset_temporary(&device->vk, fence);
-         sync_res = vk_sync_create(&device->vk, &vk_sync_dummy_type,
-                                   0 /* flags */, 1 /* initial_value */,
-                                   &fence->temporary);
-         if (sync_res != VK_SUCCESS)
-            return sync_res;
-      }
-
-      if (semaphore) {
-         vk_semaphore_reset_temporary(&device->vk, semaphore);
-         sync_res = vk_sync_create(&device->vk, &vk_sync_dummy_type,
-                                   0 /* flags */, 1 /* initial_value */,
-                                   &semaphore->temporary);
-         if (sync_res != VK_SUCCESS)
-            return sync_res;
-      }
-   }
-
-   return result;
 }

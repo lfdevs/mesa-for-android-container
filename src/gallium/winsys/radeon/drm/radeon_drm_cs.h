@@ -70,7 +70,7 @@ struct radeon_cs_context {
 };
 
 struct radeon_drm_cs {
-   enum ring_type          ring_type;
+   enum amd_ip_type          ip_type;
 
    /* We flip between these two CS. While one is being consumed
     * by the kernel in another thread, the other one is being filled

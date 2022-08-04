@@ -25,13 +25,11 @@
 #define DZN_NIR_H
 
 #define D3D12_IGNORE_SDK_LAYERS
+#define COBJMACROS
+#include <unknwn.h>
 #include <directx/d3d12.h>
 
 #include "nir.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 struct dzn_indirect_draw_params {
    uint32_t vertex_count;
@@ -58,10 +56,18 @@ struct dzn_indirect_draw_triangle_fan_rewrite_params {
    uint64_t triangle_fan_index_buf_start;
 };
 
+struct dzn_indirect_draw_triangle_fan_prim_restart_rewrite_params {
+   uint32_t draw_buf_stride;
+   uint32_t triangle_fan_index_buf_stride;
+   uint64_t triangle_fan_index_buf_start;
+   uint64_t exec_buf_start;
+};
+
 struct dzn_indirect_draw_exec_params {
    struct {
       uint32_t first_vertex;
       uint32_t base_instance;
+      uint32_t draw_id;
    } sysvals;
    union {
       struct dzn_indirect_draw_params draw;
@@ -74,6 +80,7 @@ struct dzn_indirect_triangle_fan_draw_exec_params {
    struct {
       uint32_t first_vertex;
       uint32_t base_instance;
+      uint32_t draw_id;
    } sysvals;
    union {
       struct dzn_indirect_draw_params draw;
@@ -82,10 +89,12 @@ struct dzn_indirect_triangle_fan_draw_exec_params {
 };
 
 struct dzn_triangle_fan_rewrite_index_params {
-   union {
-      uint32_t first_index;
-      uint32_t first_vertex;
-   };
+   uint32_t first_index;
+};
+
+struct dzn_triangle_fan_prim_restart_rewrite_index_params {
+   uint32_t first_index;
+   uint32_t index_count;
 };
 
 struct dzn_indirect_triangle_fan_rewrite_index_exec_params {
@@ -96,11 +105,26 @@ struct dzn_indirect_triangle_fan_rewrite_index_exec_params {
    } group_count;
 };
 
+struct dzn_indirect_triangle_fan_prim_restart_rewrite_index_exec_params {
+   uint64_t new_index_buf;
+   struct dzn_triangle_fan_prim_restart_rewrite_index_params params;
+   uint64_t index_count_ptr;
+   struct {
+      uint32_t x, y, z;
+   } group_count;
+};
+
 enum dzn_indirect_draw_type {
    DZN_INDIRECT_DRAW,
+   DZN_INDIRECT_DRAW_COUNT,
    DZN_INDIRECT_INDEXED_DRAW,
+   DZN_INDIRECT_INDEXED_DRAW_COUNT,
    DZN_INDIRECT_DRAW_TRIANGLE_FAN,
+   DZN_INDIRECT_DRAW_COUNT_TRIANGLE_FAN,
    DZN_INDIRECT_INDEXED_DRAW_TRIANGLE_FAN,
+   DZN_INDIRECT_INDEXED_DRAW_COUNT_TRIANGLE_FAN,
+   DZN_INDIRECT_INDEXED_DRAW_TRIANGLE_FAN_PRIM_RESTART,
+   DZN_INDIRECT_INDEXED_DRAW_COUNT_TRIANGLE_FAN_PRIM_RESTART,
    DZN_NUM_INDIRECT_DRAW_TYPES,
 };
 
@@ -109,6 +133,9 @@ dzn_nir_indirect_draw_shader(enum dzn_indirect_draw_type type);
 
 nir_shader *
 dzn_nir_triangle_fan_rewrite_index_shader(uint8_t old_index_size);
+
+nir_shader *
+dzn_nir_triangle_fan_prim_restart_rewrite_index_shader(uint8_t old_index_size);
 
 struct dzn_nir_blit_info {
    union {
@@ -130,9 +157,5 @@ dzn_nir_blit_vs(void);
 
 nir_shader *
 dzn_nir_blit_fs(const struct dzn_nir_blit_info *info);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

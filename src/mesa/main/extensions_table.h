@@ -31,7 +31,6 @@ EXT(ANGLE_pack_reverse_row_order            , dummy_true                        
 EXT(ANGLE_texture_compression_dxt3          , ANGLE_texture_compression_dxt          , GLL, GLC, ES1, ES2, 2011)
 EXT(ANGLE_texture_compression_dxt5          , ANGLE_texture_compression_dxt          , GLL, GLC, ES1, ES2, 2011)
 
-EXT(APPLE_object_purgeable                  , APPLE_object_purgeable                 , GLL, GLC,  x ,  x , 2006)
 EXT(APPLE_packed_pixels                     , dummy_true                             , GLL,  x ,  x ,  x , 2002)
 EXT(APPLE_texture_max_level                 , dummy_true                             ,  x ,  x , ES1, ES2, 2009)
 
@@ -200,6 +199,8 @@ EXT(ARB_vertex_type_2_10_10_10_rev          , ARB_vertex_type_2_10_10_10_rev    
 EXT(ARB_viewport_array                      , ARB_viewport_array                     , GLL, GLC,  x ,  x , 2010)
 EXT(ARB_window_pos                          , dummy_true                             , GLL,  x ,  x ,  x , 2001)
 
+EXT(ARM_shader_framebuffer_fetch_depth_stencil, ARM_shader_framebuffer_fetch_depth_stencil, GLL, GLC,  x , ES2, 2014)
+
 EXT(ATI_blend_equation_separate             , EXT_blend_equation_separate            , GLL, GLC,  x ,  x , 2003)
 EXT(ATI_draw_buffers                        , dummy_true                             , GLL,  x ,  x ,  x , 2002)
 EXT(ATI_fragment_shader                     , ATI_fragment_shader                    , GLL,  x ,  x ,  x , 2001)
@@ -261,6 +262,7 @@ EXT(EXT_gpu_shader5                         , ARB_gpu_shader5                   
 EXT(EXT_map_buffer_range                    , ARB_map_buffer_range                   ,  x ,  x , ES1, ES2, 2012)
 EXT(EXT_memory_object                       , EXT_memory_object                      , GLL, GLC,  x , ES2, 2017)
 EXT(EXT_memory_object_fd                    , EXT_memory_object_fd                   , GLL, GLC,  x , ES2, 2017)
+EXT(EXT_memory_object_win32                 , EXT_memory_object_win32                , GLL, GLC,  x , ES2, 2017)
 EXT(EXT_multi_draw_arrays                   , dummy_true                             , GLL,  x , ES1, ES2, 1999)
 EXT(EXT_multisampled_render_to_texture      , EXT_multisampled_render_to_texture     ,  x ,  x ,  x , ES2, 2016)
 EXT(EXT_multisampled_render_to_texture2     , EXT_multisampled_render_to_texture     ,  x ,  x ,  x , ES2, 2016)
@@ -281,6 +283,7 @@ EXT(EXT_sRGB_write_control                  , EXT_framebuffer_sRGB              
 EXT(EXT_secondary_color                     , dummy_true                             , GLL,  x ,  x ,  x , 1999)
 EXT(EXT_semaphore                           , EXT_semaphore                          , GLL, GLC,  x , ES2, 2017)
 EXT(EXT_semaphore_fd                        , EXT_semaphore_fd                       , GLL, GLC,  x , ES2, 2017)
+EXT(EXT_semaphore_win32                     , EXT_semaphore_win32                    , GLL, GLC,  x , ES2, 2017)
 EXT(EXT_separate_shader_objects             , dummy_true                             ,  x ,  x ,  x , ES2, 2013)
 EXT(EXT_separate_specular_color             , dummy_true                             , GLL,  x ,  x ,  x , 1997)
 EXT(EXT_shader_framebuffer_fetch            , EXT_shader_framebuffer_fetch           , GLL, GLC,  x , ES2, 2013)
@@ -467,7 +470,7 @@ EXT(OES_stencil_wrap                        , dummy_true                        
 EXT(OES_surfaceless_context                 , dummy_true                             ,  x ,  x , ES1, ES2, 2012)
 EXT(OES_tessellation_point_size             , ARB_tessellation_shader                ,  x ,  x ,  x ,  31, 2014)
 EXT(OES_tessellation_shader                 , ARB_tessellation_shader                ,  x ,  x ,  x ,  31, 2014)
-EXT(OES_texture_3D                          , dummy_true                             ,  x ,  x ,  x , ES2, 2005)
+EXT(OES_texture_3D                          , OES_texture_3D                         ,  x ,  x ,  x , ES2, 2005)
 EXT(OES_texture_border_clamp                , dummy_true                             ,  x ,  x ,  x , ES2, 2014)
 EXT(OES_texture_buffer                      , OES_texture_buffer                     ,  x ,  x ,  x ,  31, 2014)
 EXT(OES_texture_compression_astc            , OES_texture_compression_astc           ,  x ,  x , ES1, ES2, 2015)

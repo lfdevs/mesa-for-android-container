@@ -688,6 +688,6 @@ is_coalescing_payload(const brw::simple_allocator &alloc, const fs_inst *inst)
 }
 
 bool
-has_bank_conflict(const intel_device_info *devinfo, const fs_inst *inst);
+has_bank_conflict(const struct brw_isa_info *isa, const fs_inst *inst);
 
 #endif

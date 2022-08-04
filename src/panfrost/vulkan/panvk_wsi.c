@@ -27,9 +27,6 @@
 
 #include "panvk_private.h"
 
-#include "vk_fence.h"
-#include "vk_semaphore.h"
-#include "vk_sync_dummy.h"
 #include "vk_util.h"
 #include "wsi_common.h"
 
@@ -67,43 +64,4 @@ panvk_wsi_finish(struct panvk_physical_device *physical_device)
    physical_device->vk.wsi_device = NULL;
    wsi_device_finish(&physical_device->wsi_device,
                      &physical_device->instance->vk.alloc);
-}
-
-VkResult
-panvk_AcquireNextImage2KHR(VkDevice _device,
-                           const VkAcquireNextImageInfoKHR *pAcquireInfo,
-                           uint32_t *pImageIndex)
-{
-   VK_FROM_HANDLE(panvk_device, device, _device);
-   VK_FROM_HANDLE(vk_fence, fence, pAcquireInfo->fence);
-   VK_FROM_HANDLE(vk_semaphore, sem, pAcquireInfo->semaphore);
-   struct panvk_physical_device *pdevice = device->physical_device;
-
-   VkResult result =
-      wsi_common_acquire_next_image2(&pdevice->wsi_device, _device,
-                                     pAcquireInfo, pImageIndex);
-
-   /* signal fence/semaphore - image is available immediately */
-   if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
-      VkResult sync_res;
-      if (fence) {
-         vk_fence_reset_temporary(&device->vk, fence);
-         sync_res = vk_sync_create(&device->vk, &vk_sync_dummy_type,
-                                   0 /* flags */, 0 /* initial_value */,
-                                   &fence->temporary);
-         if (sync_res != VK_SUCCESS)
-            return sync_res;
-      }
-
-      if (sem) {
-         vk_semaphore_reset_temporary(&device->vk, sem);
-         sync_res = vk_sync_create(&device->vk, &vk_sync_dummy_type,
-                                   0 /* flags */, 0 /* initial_value */,
-                                   &sem->temporary);
-         if (sync_res != VK_SUCCESS)
-            return sync_res;
-      }
-   }
-
-   return result;
 }

@@ -30,7 +30,7 @@
 
 #include "hwdef/rogue_hw_defs.h"
 #include "pvr_private.h"
-#include "pvr_winsys.h"
+#include "pvr_types.h"
 
 enum pvr_pbe_gamma {
    PVR_PBE_GAMMA_NONE,
@@ -125,7 +125,7 @@ struct pvr_pbe_render_params {
 };
 
 void pvr_pbe_pack_state(
-   struct pvr_device *device,
+   const struct pvr_device_info *dev_info,
    const struct pvr_pbe_surf_params *surface_params,
    const struct pvr_pbe_render_params *render_params,
    uint32_t pbe_cs_words[static const ROGUE_NUM_PBESTATE_STATE_WORDS],
@@ -140,12 +140,14 @@ void pvr_pbe_get_src_format_and_gamma(VkFormat vk_format,
                                       uint32_t *const src_format_out,
                                       enum pvr_pbe_gamma *const gamma_out);
 
-void pvr_setup_tiles_in_flight(const struct pvr_device_info *dev_info,
-                               uint32_t msaa_mode,
-                               uint32_t pixel_width,
-                               bool paired_tiles,
-                               uint32_t max_tiles_in_flight,
-                               uint32_t *const isp_ctl_out,
-                               uint32_t *const pixel_ctl_out);
+void pvr_setup_tiles_in_flight(
+   const struct pvr_device_info *dev_info,
+   const struct pvr_device_runtime_info *dev_runtime_info,
+   uint32_t msaa_mode,
+   uint32_t pixel_width,
+   bool paired_tiles,
+   uint32_t max_tiles_in_flight,
+   uint32_t *const isp_ctl_out,
+   uint32_t *const pixel_ctl_out);
 
 #endif /* PVR_JOB_COMMON_H */

@@ -215,6 +215,8 @@ lima_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
       return NULL;
    }
 
+   ctx->sample_mask = (1 << LIMA_MAX_SAMPLES) - 1;
+
    ctx->base.screen = pscreen;
    ctx->base.destroy = lima_context_destroy;
    ctx->base.set_debug_callback = lima_set_debug_callback;

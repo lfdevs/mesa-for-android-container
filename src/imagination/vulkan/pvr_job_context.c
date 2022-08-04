@@ -29,11 +29,13 @@
 
 #include "hwdef/rogue_hw_utils.h"
 #include "pvr_bo.h"
+#include "pvr_cdm_load_sr.h"
 #include "pvr_csb.h"
 #include "pvr_job_context.h"
 #include "pvr_pds.h"
 #include "pvr_private.h"
-#include "pvr_cdm_load_sr.h"
+#include "pvr_transfer_eot.h"
+#include "pvr_types.h"
 #include "pvr_vdm_load_sr.h"
 #include "pvr_vdm_store_sr.h"
 #include "pvr_winsys.h"
@@ -724,7 +726,7 @@ pvr_rogue_get_vdmctrl_pds_state_words(struct pvr_pds_upload *pds_program,
    };
 
    pvr_csb_pack (state1_out, VDMCTRL_PDS_STATE1, state) {
-      state.pds_data_addr.addr = pds_program->data_offset;
+      state.pds_data_addr = PVR_DEV_ADDR(pds_program->data_offset);
       state.sd_type = PVRX(VDMCTRL_SD_TYPE_PDS);
       state.sd_next_type = PVRX(VDMCTRL_SD_TYPE_PDS);
    }
@@ -751,7 +753,7 @@ pvr_rogue_get_geom_state_stream_out_words(struct pvr_pds_upload *pds_program,
    }
 
    pvr_csb_pack (stream_out2_out, TA_STATE_STREAM_OUT2, state) {
-      state.pds_data_addr.addr = pds_program->data_offset;
+      state.pds_data_addr = PVR_DEV_ADDR(pds_program->data_offset);
    }
 }
 
@@ -789,7 +791,8 @@ static void pvr_render_ctx_ws_static_state_init(
       d_dst = &static_state->geom_state[i].vdm_ctx_store_task1;
       pvr_csb_pack (d_dst, CR_VDM_CONTEXT_STORE_TASK1, task1) {
          pvr_csb_pack (&task1.pds_state2, VDMCTRL_PDS_STATE2, state) {
-            state.pds_code_addr.addr = sr_prog->pds.store_program.code_offset;
+            state.pds_code_addr =
+               PVR_DEV_ADDR(sr_prog->pds.store_program.code_offset);
          }
       }
 
@@ -813,7 +816,8 @@ static void pvr_render_ctx_ws_static_state_init(
       d_dst = &static_state->geom_state[i].vdm_ctx_resume_task1;
       pvr_csb_pack (d_dst, CR_VDM_CONTEXT_RESUME_TASK1, task1) {
          pvr_csb_pack (&task1.pds_state2, VDMCTRL_PDS_STATE2, state) {
-            state.pds_code_addr.addr = sr_prog->pds.load_program.code_offset;
+            state.pds_code_addr =
+               PVR_DEV_ADDR(sr_prog->pds.load_program.code_offset);
          }
       }
 
@@ -921,6 +925,8 @@ static VkResult pvr_pds_sr_fence_terminate_program_create_and_upload(
 {
    const uint32_t pds_data_alignment =
       PVRX(VDMCTRL_PDS_STATE0_PDS_DATA_SIZE_UNIT_SIZE) / 4U;
+   const struct pvr_device_runtime_info *dev_runtime_info =
+      &device->pdevice->dev_runtime_info;
    ASSERTED const struct pvr_device_info *dev_info = &device->pdevice->dev_info;
    uint32_t staging_buffer[PVRX(PDS_TASK_PROGRAM_SIZE) >> 2U];
    struct pvr_pds_fence_program program = { 0 };
@@ -930,7 +936,7 @@ static VkResult pvr_pds_sr_fence_terminate_program_create_and_upload(
 
    /* SW_COMPUTE_PDS_BARRIER is not supported with 2 or more phantoms. */
    assert(!(PVR_NEED_SW_COMPUTE_PDS_BARRIER(dev_info) &&
-            rogue_get_num_phantoms(dev_info) >= 2));
+            dev_runtime_info->num_phantoms >= 2));
 
    pvr_pds_generate_fence_terminate_program(&program,
                                             staging_buffer,
@@ -973,26 +979,24 @@ static void pvr_compute_ctx_ws_static_state_init(
 {
    const struct pvr_compute_ctx_switch *const ctx_switch = &ctx->ctx_switch;
 
-   pvr_csb_pack (&static_state->cdm_ctx_state_base_addr,
-                 CR_CDM_CONTEXT_STATE_BASE,
-                 state) {
-      state.addr = ctx_switch->compute_state_bo->vma->dev_addr;
-   }
-
    /* CR_CDM_CONTEXT_... use state store program info. */
 
    pvr_csb_pack (&static_state->cdm_ctx_store_pds0,
                  CR_CDM_CONTEXT_PDS0,
                  state) {
-      state.data_addr.addr = ctx_switch->sr[0].pds.store_program.data_offset;
-      state.code_addr.addr = ctx_switch->sr[0].pds.store_program.code_offset;
+      state.data_addr =
+         PVR_DEV_ADDR(ctx_switch->sr[0].pds.store_program.data_offset);
+      state.code_addr =
+         PVR_DEV_ADDR(ctx_switch->sr[0].pds.store_program.code_offset);
    }
 
    pvr_csb_pack (&static_state->cdm_ctx_store_pds0_b,
                  CR_CDM_CONTEXT_PDS0,
                  state) {
-      state.data_addr.addr = ctx_switch->sr[1].pds.store_program.data_offset;
-      state.code_addr.addr = ctx_switch->sr[1].pds.store_program.code_offset;
+      state.data_addr =
+         PVR_DEV_ADDR(ctx_switch->sr[1].pds.store_program.data_offset);
+      state.code_addr =
+         PVR_DEV_ADDR(ctx_switch->sr[1].pds.store_program.code_offset);
    }
 
    pvr_csb_pack (&static_state->cdm_ctx_store_pds1,
@@ -1024,8 +1028,10 @@ static void pvr_compute_ctx_ws_static_state_init(
    pvr_csb_pack (&static_state->cdm_ctx_terminate_pds,
                  CR_CDM_TERMINATE_PDS,
                  state) {
-      state.data_addr.addr = ctx_switch->sr_fence_terminate_program.data_offset;
-      state.code_addr.addr = ctx_switch->sr_fence_terminate_program.code_offset;
+      state.data_addr =
+         PVR_DEV_ADDR(ctx_switch->sr_fence_terminate_program.data_offset);
+      state.code_addr =
+         PVR_DEV_ADDR(ctx_switch->sr_fence_terminate_program.code_offset);
    }
 
    pvr_csb_pack (&static_state->cdm_ctx_terminate_pds1,
@@ -1057,15 +1063,19 @@ static void pvr_compute_ctx_ws_static_state_init(
    pvr_csb_pack (&static_state->cdm_ctx_resume_pds0,
                  CR_CDM_CONTEXT_LOAD_PDS0,
                  state) {
-      state.data_addr.addr = ctx_switch->sr[0].pds.load_program.data_offset;
-      state.code_addr.addr = ctx_switch->sr[0].pds.load_program.code_offset;
+      state.data_addr =
+         PVR_DEV_ADDR(ctx_switch->sr[0].pds.load_program.data_offset);
+      state.code_addr =
+         PVR_DEV_ADDR(ctx_switch->sr[0].pds.load_program.code_offset);
    }
 
    pvr_csb_pack (&static_state->cdm_ctx_resume_pds0_b,
                  CR_CDM_CONTEXT_LOAD_PDS0,
                  state) {
-      state.data_addr.addr = ctx_switch->sr[1].pds.load_program.data_offset;
-      state.code_addr.addr = ctx_switch->sr[1].pds.load_program.code_offset;
+      state.data_addr =
+         PVR_DEV_ADDR(ctx_switch->sr[1].pds.load_program.data_offset);
+      state.code_addr =
+         PVR_DEV_ADDR(ctx_switch->sr[1].pds.load_program.code_offset);
    }
 }
 
@@ -1180,5 +1190,145 @@ void pvr_compute_ctx_destroy(struct pvr_compute_ctx *const ctx)
 
    pvr_bo_free(device, ctx->ctx_switch.compute_state_bo);
 
+   vk_free(&device->vk.alloc, ctx);
+}
+
+static void pvr_transfer_ctx_ws_create_info_init(
+   enum pvr_winsys_ctx_priority priority,
+   struct pvr_winsys_transfer_ctx_create_info *const create_info)
+{
+   create_info->priority = priority;
+}
+
+static VkResult pvr_transfer_ctx_setup_shaders(struct pvr_device *device,
+                                               struct pvr_transfer_ctx *ctx)
+{
+   const uint32_t cache_line_size =
+      rogue_get_slc_cache_line_size(&device->pdevice->dev_info);
+   VkResult result;
+
+   /* TODO: Setup USC fragments. */
+
+   /* Setup EOT program. */
+   result = pvr_gpu_upload_usc(device,
+                               pvr_transfer_eot_usc_code,
+                               sizeof(pvr_transfer_eot_usc_code),
+                               cache_line_size,
+                               &ctx->usc_eot_bo);
+   if (result != VK_SUCCESS)
+      return result;
+
+   STATIC_ASSERT(ARRAY_SIZE(pvr_transfer_eot_usc_offsets) ==
+                 ARRAY_SIZE(ctx->transfer_mrts));
+   for (uint32_t i = 0U; i < ARRAY_SIZE(pvr_transfer_eot_usc_offsets); i++) {
+      ctx->transfer_mrts[i] =
+         PVR_DEV_ADDR_OFFSET(ctx->usc_eot_bo->vma->dev_addr,
+                             pvr_transfer_eot_usc_offsets[i]);
+   }
+
+   return VK_SUCCESS;
+}
+
+static void pvr_transfer_ctx_fini_shaders(struct pvr_device *device,
+                                          struct pvr_transfer_ctx *ctx)
+{
+   pvr_bo_free(device, ctx->usc_eot_bo);
+}
+
+VkResult pvr_transfer_ctx_create(struct pvr_device *const device,
+                                 enum pvr_winsys_ctx_priority priority,
+                                 struct pvr_transfer_ctx **const ctx_out)
+{
+   struct pvr_winsys_transfer_ctx_create_info create_info;
+   struct pvr_transfer_ctx *ctx;
+   VkResult result;
+
+   ctx = vk_zalloc(&device->vk.alloc,
+                   sizeof(*ctx),
+                   8U,
+                   VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!ctx)
+      return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   ctx->device = device;
+
+   result = pvr_ctx_reset_cmd_init(device, &ctx->reset_cmd);
+   if (result != VK_SUCCESS)
+      goto err_free_ctx;
+
+   pvr_transfer_ctx_ws_create_info_init(priority, &create_info);
+
+   result = device->ws->ops->transfer_ctx_create(device->ws,
+                                                 &create_info,
+                                                 &ctx->ws_ctx);
+   if (result != VK_SUCCESS)
+      goto err_fini_reset_cmd;
+
+   result = pvr_transfer_ctx_setup_shaders(device, ctx);
+   if (result != VK_SUCCESS)
+      goto err_destroy_transfer_ctx;
+
+   /* Create the PDS Uniform/Tex state code segment array. */
+   for (uint32_t i = 0U; i < ARRAY_SIZE(ctx->pds_unitex_code); i++) {
+      for (uint32_t j = 0U; j < ARRAY_SIZE(ctx->pds_unitex_code[0U]); j++) {
+         if (i == 0U && j == 0U)
+            continue;
+
+         result = pvr_pds_unitex_state_program_create_and_upload(
+            device,
+            NULL,
+            i,
+            j,
+            &ctx->pds_unitex_code[i][j]);
+         if (result != VK_SUCCESS) {
+            goto err_free_pds_unitex_bos;
+         }
+      }
+   }
+
+   *ctx_out = ctx;
+
+   return VK_SUCCESS;
+
+err_free_pds_unitex_bos:
+   for (uint32_t i = 0U; i < ARRAY_SIZE(ctx->pds_unitex_code); i++) {
+      for (uint32_t j = 0U; j < ARRAY_SIZE(ctx->pds_unitex_code[0U]); j++) {
+         if (!ctx->pds_unitex_code[i][j].pvr_bo)
+            continue;
+
+         pvr_bo_free(device, ctx->pds_unitex_code[i][j].pvr_bo);
+      }
+   }
+
+   pvr_transfer_ctx_fini_shaders(device, ctx);
+
+err_destroy_transfer_ctx:
+   device->ws->ops->transfer_ctx_destroy(ctx->ws_ctx);
+
+err_fini_reset_cmd:
+   pvr_ctx_reset_cmd_fini(device, &ctx->reset_cmd);
+
+err_free_ctx:
+   vk_free(&device->vk.alloc, ctx);
+
+   return result;
+}
+
+void pvr_transfer_ctx_destroy(struct pvr_transfer_ctx *const ctx)
+{
+   struct pvr_device *device = ctx->device;
+
+   for (uint32_t i = 0U; i < ARRAY_SIZE(ctx->pds_unitex_code); i++) {
+      for (uint32_t j = 0U; j < ARRAY_SIZE(ctx->pds_unitex_code[0U]); j++) {
+         if (!ctx->pds_unitex_code[i][j].pvr_bo)
+            continue;
+
+         pvr_bo_free(device, ctx->pds_unitex_code[i][j].pvr_bo);
+      }
+   }
+
+   pvr_transfer_ctx_fini_shaders(device, ctx);
+   device->ws->ops->transfer_ctx_destroy(ctx->ws_ctx);
+   pvr_ctx_reset_cmd_fini(device, &ctx->reset_cmd);
    vk_free(&device->vk.alloc, ctx);
 }

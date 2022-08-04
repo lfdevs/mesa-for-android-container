@@ -94,7 +94,43 @@
     <value name="Always" value="7"/>
   </enum>
 
+  <enum name="Address Mode">
+    <value name="Flat" value="0"/>
+    <value name="Packed" value="1"/>
+  </enum>
+
   <enum name="Format">
+    <!--
+      Used to index into the TEXTURE_FEATURES register, which indicates support
+      for compressed texture formats. The enum is no longer used for pixel
+      format descriptors, but the naming is kept consistent with previous Mali
+      generations for backwards compatibility.
+    -->
+    <value name="ETC2 RGB8" value="1"/>
+    <value name="ETC2 R11 UNORM" value="2"/>
+    <value name="ETC2 RGBA8" value="3"/>
+    <value name="ETC2 RG11 UNORM" value="4"/>
+    <value name="BC1 UNORM" value="7"/>
+    <value name="BC2 UNORM" value="8"/>
+    <value name="BC3 UNORM" value="9"/>
+    <value name="BC4 UNORM" value="10"/>
+    <value name="BC4 SNORM" value="11"/>
+    <value name="BC5 UNORM" value="12"/>
+    <value name="BC5 SNORM" value="13"/>
+    <value name="BC6H UF16" value="14"/>
+    <value name="BC6H SF16" value="15"/>
+    <value name="BC7 UNORM" value="16"/>
+    <value name="ETC2 R11 SNORM" value="17"/>
+    <value name="ETC2 RG11 SNORM" value="18"/>
+    <value name="ETC2 RGB8A1" value="19"/>
+    <value name="ASTC 3D LDR" value="20"/>
+    <value name="ASTC 3D HDR" value="21"/>
+    <value name="ASTC 2D LDR" value="22"/>
+    <value name="ASTC 2D HDR" value="23"/>
+    <value name="ASTC 2D NARROW" value="62"/>
+    <value name="ASTC 3D NARROW" value="63"/>
+
+    <!-- Actual enum values follow -->
     <value name="YUV8" value="32"/>
     <value name="YUVA8" value="33"/>
     <value name="YUYV8" value="34"/>
@@ -844,14 +880,13 @@
 
   <struct name="Local Storage" size="8" align="64">
     <field name="TLS Size" size="5" start="0:0" type="uint"/>
-    <field name="TLS Initial Stack Pointer Offset" size="27" start="0:5" type="uint"/>
     <field name="WLS Instances" size="5" start="1:0" type="uint" modifier="log2" prefix="MALI_LOCAL_STORAGE" default="MALI_LOCAL_STORAGE_NO_WORKGROUP_MEM">
       <value name="No Workgroup Mem" value="0x80000000"/>
     </field>
     <field name="WLS Size Base" size="2" start="1:5" type="uint"/>
     <field name="WLS Size Scale" size="5" start="1:8" type="uint"/>
-    <!-- Encoded as (0x10000000 << 32) | (real_base >> 8) due to TLS hashing -->
-    <field name="TLS Base Pointer" size="64" start="2:0" type="address"/>
+    <field name="TLS Base Pointer" size="48" start="2:0" type="address"/>
+    <field name="TLS Address Mode" size="4" start="3:28" type="Address Mode"/>
     <field name="WLS Base Pointer" size="64" start="4:0" type="address"/>
   </struct>
 

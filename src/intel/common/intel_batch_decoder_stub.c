@@ -26,6 +26,7 @@
 
 void
 intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,
+                            const struct brw_isa_info *isa,
                             const struct intel_device_info *devinfo,
                             FILE *fp, enum intel_batch_decode_flags flags,
                             const char *xml_path,

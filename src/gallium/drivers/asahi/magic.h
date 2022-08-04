@@ -31,10 +31,13 @@ demo_cmdbuf(uint64_t *buf, size_t size,
             uint64_t encoder_ptr,
             uint64_t encoder_id,
             uint64_t scissor_ptr,
-            uint32_t pipeline_null,
+            uint64_t depth_bias_ptr,
             uint32_t pipeline_clear,
+            uint32_t pipeline_load,
             uint32_t pipeline_store,
-            bool clear_pipeline_textures);
+            bool clear_pipeline_textures,
+            double clear_depth,
+            unsigned clear_stencil);
 
 void
 demo_mem_map(void *map, size_t size, unsigned *handles,

@@ -161,7 +161,7 @@ emit_const(struct fd_ringbuffer *ring, struct kernel *kernel, uint32_t constid, 
 {
    uint32_t align_sz;
 
-   debug_assert((constid % 4) == 0);
+   assert((constid % 4) == 0);
 
    /* Overwrite appropriate entries with buffer addresses */
    struct fd_bo **replacements = calloc(sizedwords, sizeof(struct fd_bo *));

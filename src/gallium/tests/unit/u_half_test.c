@@ -36,7 +36,6 @@ test(void)
 int
 main(int argc, char **argv)
 {
-   util_cpu_detect();
    test();
 
    /* Test non-f16c. */

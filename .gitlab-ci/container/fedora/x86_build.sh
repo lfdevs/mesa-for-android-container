@@ -25,6 +25,7 @@ dnf install -y --setopt=install_weak_deps=False \
     gcc \
     gcc-c++ \
     gettext \
+    glslang \
     kernel-headers \
     llvm-devel \
     clang-devel \

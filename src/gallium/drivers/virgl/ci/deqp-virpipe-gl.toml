@@ -38,9 +38,7 @@ timeout = 180.0
 [[deqp]]
 deqp = "/deqp/external/openglcts/modules/glcts"
 caselists = [
-    "/deqp/mustpass/gl30-master.txt",
-    "/deqp/mustpass/gl31-master.txt",
-    "/deqp/mustpass/gl32-master.txt",
+    "/deqp/mustpass/gl43-master.txt",
 ]
 deqp_args = [
     "--deqp-surface-width=256",
@@ -49,3 +47,14 @@ deqp_args = [
     "--deqp-gl-config-name=rgba8888d24s8ms0",
     "--deqp-visibility=hidden"
 ]
+# Some of the GL4.3 tests will tank virglrenderer and cause remaining rendering
+# to fail until things are recreated, so just do single-test-per-group on them
+# until virglrenderer is stabilized.
+tests_per_group = 1
+
+[[piglit]]
+piglit_folder = "/piglit"
+profile = "quick"
+process_isolation = true
+  [piglit.env]
+  PIGLIT_PLATFORM = "x11_egl"

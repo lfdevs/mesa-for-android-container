@@ -67,8 +67,6 @@ struct glx_context dummyContext = {
 
 _X_HIDDEN pthread_mutex_t __glXmutex = PTHREAD_MUTEX_INITIALIZER;
 
-# if defined( USE_ELF_TLS )
-
 /**
  * Per-thread GLX context pointer.
  *
@@ -83,56 +81,6 @@ __glXSetCurrentContext(struct glx_context * c)
 {
    __glX_tls_Context = (c != NULL) ? c : &dummyContext;
 }
-
-# else
-
-static pthread_once_t once_control = PTHREAD_ONCE_INIT;
-
-/**
- * Per-thread data key.
- *
- * Once \c init_thread_data has been called, the per-thread data key will
- * take a value of \c NULL.  As each new thread is created the default
- * value, in that thread, will be \c NULL.
- */
-static pthread_key_t ContextTSD;
-
-/**
- * Initialize the per-thread data key.
- *
- * This function is called \b exactly once per-process (not per-thread!) to
- * initialize the per-thread data key.  This is ideally done using the
- * \c pthread_once mechanism.
- */
-static void
-init_thread_data(void)
-{
-   if (pthread_key_create(&ContextTSD, NULL) != 0) {
-      perror("pthread_key_create");
-      exit(-1);
-   }
-}
-
-_X_HIDDEN void
-__glXSetCurrentContext(struct glx_context * c)
-{
-   pthread_once(&once_control, init_thread_data);
-   pthread_setspecific(ContextTSD, c);
-}
-
-_X_HIDDEN struct glx_context *
-__glXGetCurrentContext(void)
-{
-   void *v;
-
-   pthread_once(&once_control, init_thread_data);
-
-   v = pthread_getspecific(ContextTSD);
-   return (v == NULL) ? &dummyContext : (struct glx_context *) v;
-}
-
-# endif /* defined( USE_ELF_TLS ) */
-
 
 _X_HIDDEN void
 __glXSetCurrentContextNull(void)
@@ -202,10 +150,8 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
    }
 
    if (oldGC != &dummyContext) {
-      if (--oldGC->thread_refcount == 0) {
-	 oldGC->vtable->unbind(oldGC, gc);
-	 oldGC->currentDpy = NULL;
-      }
+      oldGC->vtable->unbind(oldGC, gc);
+      oldGC->currentDpy = NULL;
    }
 
    if (gc) {
@@ -224,18 +170,15 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
          return GL_FALSE;
       }
 
-      if (gc->thread_refcount == 0) {
-         gc->currentDpy = dpy;
-         gc->currentDrawable = draw;
-         gc->currentReadable = read;
-      }
-      gc->thread_refcount++;
+      gc->currentDpy = dpy;
+      gc->currentDrawable = draw;
+      gc->currentReadable = read;
       __glXSetCurrentContext(gc);
    } else {
       __glXSetCurrentContextNull();
    }
 
-   if (oldGC->thread_refcount == 0 && oldGC != &dummyContext && oldGC->xid == None) {
+   if (oldGC->currentDpy == NULL && oldGC != &dummyContext && oldGC->xid == None) {
       /* We are switching away from a context that was
        * previously destroyed, so we need to free the memory
        * for the old handle. */

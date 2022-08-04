@@ -128,7 +128,7 @@ DrvCreateLayerContext(HDC hdc, INT iLayerPlane)
 {
    struct stw_context *ctx = stw_create_context_attribs(hdc, iLayerPlane, 0, 1, 0, 0,
                                                         WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
-                                                        0);
+                                                        0, WGL_NO_RESET_NOTIFICATION_ARB);
    if (!ctx)
       return 0;
 
@@ -167,7 +167,7 @@ struct stw_context *
 stw_create_context_attribs(HDC hdc, INT iLayerPlane, struct stw_context *shareCtx,
                            int majorVersion, int minorVersion,
                            int contextFlags, int profileMask,
-                           int iPixelFormat)
+                           int iPixelFormat, int resetStrategy)
 {
    const struct stw_pixelformat_info *pfi;
    struct st_context_attribs attribs;
@@ -226,6 +226,10 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, struct stw_context *shareCt
       attribs.flags |= ST_CONTEXT_FLAG_FORWARD_COMPATIBLE;
    if (contextFlags & WGL_CONTEXT_DEBUG_BIT_ARB)
       attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
+   if (contextFlags & WGL_CONTEXT_ROBUST_ACCESS_BIT_ARB)
+      attribs.flags |= ST_CONTEXT_FLAG_ROBUST_ACCESS;
+   if (resetStrategy != WGL_NO_RESET_NOTIFICATION_ARB)
+      attribs.flags |= ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED;
 
    switch (profileMask) {
    case WGL_CONTEXT_CORE_PROFILE_BIT_ARB:

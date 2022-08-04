@@ -241,7 +241,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
 
     if (This->may_swvp &&
         (This->screen->get_shader_param(This->screen, PIPE_SHADER_VERTEX,
-                                        PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE)
+                                        PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE)
                                      < (NINE_MAX_CONST_F_SWVP/2) * sizeof(float[4]) ||
          This->screen->get_shader_param(This->screen, PIPE_SHADER_VERTEX,
                                         PIPE_SHADER_CAP_MAX_CONST_BUFFERS) < 5)) {
@@ -445,7 +445,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
         /* vs 3.0: >= 256 float constants, but for cards with exactly 256 slots,
          * we have to take in some more slots for int and bool*/
         max_const_vs = _min(pScreen->get_shader_param(pScreen, PIPE_SHADER_VERTEX,
-                                PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) /
+                                PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE) /
                                 sizeof(float[4]),
                             NINE_MAX_CONST_ALL);
         /* ps 3.0: 224 float constants. All cards supported support at least

@@ -13,6 +13,7 @@ STABLE_EPHEMERAL=" \
       bison \
       bzip2 \
       ccache \
+      clang-13 \
       clang-11 \
       cmake \
       flex \
@@ -20,6 +21,7 @@ STABLE_EPHEMERAL=" \
       glslang-tools \
       libasound2-dev \
       libcap-dev \
+      libclang-cpp13-dev \
       libclang-cpp11-dev \
       libelf-dev \
       libexpat1-dev \
@@ -37,6 +39,7 @@ STABLE_EPHEMERAL=" \
       libxext-dev \
       libxkbcommon-dev \
       libxrender-dev \
+      llvm-13-dev \
       llvm-11-dev \
       llvm-spirv \
       make \
@@ -48,11 +51,15 @@ STABLE_EPHEMERAL=" \
       xz-utils \
       "
 
+apt-get update
+
 apt-get install -y --no-remove \
       $STABLE_EPHEMERAL \
       clinfo \
       iptables \
+      libclang-common-13-dev \
       libclang-common-11-dev \
+      libclang-cpp13 \
       libclang-cpp11 \
       libcap2 \
       libegl1 \

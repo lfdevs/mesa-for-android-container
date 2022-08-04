@@ -54,7 +54,7 @@ BEGIN_TEST(simple.2)
    //~gfx9! test gfx9
    //! test all
    for (int cls = GFX6; cls <= GFX7; cls++) {
-      if (!set_variant((enum chip_class)cls))
+      if (!set_variant((enum amd_gfx_level)cls))
          continue;
       fprintf(output, "test gfx67\n");
       fprintf(output, "test all\n");

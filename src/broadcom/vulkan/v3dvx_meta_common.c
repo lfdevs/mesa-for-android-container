@@ -478,7 +478,7 @@ emit_copy_layer_to_buffer_per_tile_list(struct v3dv_job *job,
                                         struct v3dv_buffer *buffer,
                                         struct v3dv_image *image,
                                         uint32_t layer_offset,
-                                        const VkBufferImageCopy2KHR *region)
+                                        const VkBufferImageCopy2 *region)
 {
    struct v3dv_cl *cl = &job->indirect;
    v3dv_cl_ensure_space(cl, 200, 1);
@@ -558,7 +558,7 @@ emit_copy_layer_to_buffer(struct v3dv_job *job,
                           struct v3dv_image *image,
                           struct v3dv_meta_framebuffer *framebuffer,
                           uint32_t layer,
-                          const VkBufferImageCopy2KHR *region)
+                          const VkBufferImageCopy2 *region)
 {
    emit_copy_layer_to_buffer_per_tile_list(job, framebuffer, buffer,
                                            image, layer, region);
@@ -570,7 +570,7 @@ v3dX(meta_emit_copy_image_to_buffer_rcl)(struct v3dv_job *job,
                                          struct v3dv_buffer *buffer,
                                          struct v3dv_image *image,
                                          struct v3dv_meta_framebuffer *framebuffer,
-                                         const VkBufferImageCopy2KHR *region)
+                                         const VkBufferImageCopy2 *region)
 {
    struct v3dv_cl *rcl = emit_rcl_prologue(job, framebuffer, NULL);
    v3dv_return_if_oom(NULL, job);
@@ -587,7 +587,7 @@ emit_resolve_image_layer_per_tile_list(struct v3dv_job *job,
                                        struct v3dv_image *dst,
                                        struct v3dv_image *src,
                                        uint32_t layer_offset,
-                                       const VkImageResolve2KHR *region)
+                                       const VkImageResolve2 *region)
 {
    struct v3dv_cl *cl = &job->indirect;
    v3dv_cl_ensure_space(cl, 200, 1);
@@ -645,7 +645,7 @@ emit_resolve_image_layer(struct v3dv_job *job,
                          struct v3dv_image *src,
                          struct v3dv_meta_framebuffer *framebuffer,
                          uint32_t layer,
-                         const VkImageResolve2KHR *region)
+                         const VkImageResolve2 *region)
 {
    emit_resolve_image_layer_per_tile_list(job, framebuffer,
                                           dst, src, layer, region);
@@ -657,7 +657,7 @@ v3dX(meta_emit_resolve_image_rcl)(struct v3dv_job *job,
                                   struct v3dv_image *dst,
                                   struct v3dv_image *src,
                                   struct v3dv_meta_framebuffer *framebuffer,
-                                  const VkImageResolve2KHR *region)
+                                  const VkImageResolve2 *region)
 {
    struct v3dv_cl *rcl = emit_rcl_prologue(job, framebuffer, NULL);
    v3dv_return_if_oom(NULL, job);
@@ -748,7 +748,7 @@ emit_copy_image_layer_per_tile_list(struct v3dv_job *job,
                                     struct v3dv_image *dst,
                                     struct v3dv_image *src,
                                     uint32_t layer_offset,
-                                    const VkImageCopy2KHR *region)
+                                    const VkImageCopy2 *region)
 {
    struct v3dv_cl *cl = &job->indirect;
    v3dv_cl_ensure_space(cl, 200, 1);
@@ -806,7 +806,7 @@ emit_copy_image_layer(struct v3dv_job *job,
                       struct v3dv_image *src,
                       struct v3dv_meta_framebuffer *framebuffer,
                       uint32_t layer,
-                      const VkImageCopy2KHR *region)
+                      const VkImageCopy2 *region)
 {
    emit_copy_image_layer_per_tile_list(job, framebuffer, dst, src, layer, region);
    emit_supertile_coordinates(job, framebuffer);
@@ -817,7 +817,7 @@ v3dX(meta_emit_copy_image_rcl)(struct v3dv_job *job,
                                struct v3dv_image *dst,
                                struct v3dv_image *src,
                                struct v3dv_meta_framebuffer *framebuffer,
-                               const VkImageCopy2KHR *region)
+                               const VkImageCopy2 *region)
 {
    struct v3dv_cl *rcl = emit_rcl_prologue(job, framebuffer, NULL);
    v3dv_return_if_oom(NULL, job);
@@ -1049,7 +1049,7 @@ emit_copy_buffer_to_layer_per_tile_list(struct v3dv_job *job,
                                         struct v3dv_image *image,
                                         struct v3dv_buffer *buffer,
                                         uint32_t layer,
-                                        const VkBufferImageCopy2KHR *region)
+                                        const VkBufferImageCopy2 *region)
 {
    struct v3dv_cl *cl = &job->indirect;
    v3dv_cl_ensure_space(cl, 200, 1);
@@ -1161,7 +1161,7 @@ emit_copy_buffer_to_layer(struct v3dv_job *job,
                           struct v3dv_buffer *buffer,
                           struct v3dv_meta_framebuffer *framebuffer,
                           uint32_t layer,
-                          const VkBufferImageCopy2KHR *region)
+                          const VkBufferImageCopy2 *region)
 {
    emit_copy_buffer_to_layer_per_tile_list(job, framebuffer, image, buffer,
                                            layer, region);
@@ -1173,7 +1173,7 @@ v3dX(meta_emit_copy_buffer_to_image_rcl)(struct v3dv_job *job,
                                          struct v3dv_image *image,
                                          struct v3dv_buffer *buffer,
                                          struct v3dv_meta_framebuffer *framebuffer,
-                                         const VkBufferImageCopy2KHR *region)
+                                         const VkBufferImageCopy2 *region)
 {
    struct v3dv_cl *rcl = emit_rcl_prologue(job, framebuffer, NULL);
    v3dv_return_if_oom(NULL, job);
@@ -1185,8 +1185,8 @@ v3dX(meta_emit_copy_buffer_to_image_rcl)(struct v3dv_job *job,
 }
 
 /* Figure out a TLB size configuration for a number of pixels to process.
- * Beware that we can't "render" more than 4096x4096 pixels in a single job,
- * if the pixel count is larger than this, the caller might need to split
+ * Beware that we can't "render" more than MAX_DIMxMAX_DIM pixels in a single
+ * job, if the pixel count is larger than this, the caller might need to split
  * the job and call this function multiple times.
  */
 static void
@@ -1196,7 +1196,7 @@ framebuffer_size_for_pixel_count(uint32_t num_pixels,
 {
    assert(num_pixels > 0);
 
-   const uint32_t max_dim_pixels = 4096;
+   const uint32_t max_dim_pixels = V3D_MAX_IMAGE_DIMENSION;
    const uint32_t max_pixels = max_dim_pixels * max_dim_pixels;
 
    uint32_t w, h;
@@ -1225,7 +1225,7 @@ v3dX(meta_copy_buffer)(struct v3dv_cmd_buffer *cmd_buffer,
                        uint32_t dst_offset,
                        struct v3dv_bo *src,
                        uint32_t src_offset,
-                       const VkBufferCopy2KHR *region)
+                       const VkBufferCopy2 *region)
 {
    const uint32_t internal_bpp = V3D_INTERNAL_BPP_32;
    const uint32_t internal_type = V3D_INTERNAL_TYPE_8UI;

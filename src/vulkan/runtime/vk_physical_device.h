@@ -31,8 +31,10 @@
 extern "C" {
 #endif
 
+struct disk_cache;
 struct wsi_device;
 struct vk_sync_type;
+struct vk_pipeline_cache_object_ops;
 
 /** Base struct for all VkPhysicalDevice implementations
  */
@@ -57,6 +59,9 @@ struct vk_physical_device {
    /** Physical-device-level dispatch table */
    struct vk_physical_device_dispatch_table dispatch_table;
 
+   /** Disk cache, or NULL */
+   struct disk_cache *disk_cache;
+
    /** WSI device, or NULL */
    struct wsi_device *wsi_device;
 
@@ -70,6 +75,17 @@ struct vk_physical_device {
     * considered just one more criterion.
     */
    const struct vk_sync_type *const *supported_sync_types;
+
+   /** A null-terminated array of supported pipeline cache object types
+    *
+    * The common implementation of VkPipelineCache uses this to remember the
+    * type of objects stored in the cache and deserialize them immediately
+    * when importing the cache. If an object type isn't in this list, then it
+    * will be loaded as a raw data object and then deserialized when we first
+    * look it up. Deserializing immediately avoids a copy but may be more
+    * expensive for objects that aren't hit.
+    */
+   const struct vk_pipeline_cache_object_ops *const *pipeline_cache_import_ops;
 };
 
 VK_DEFINE_HANDLE_CASTS(vk_physical_device, base, VkPhysicalDevice,

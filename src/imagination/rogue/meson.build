@@ -55,7 +55,7 @@ libpowervr_rogue = shared_library(
     inc_gallium,
     inc_gallium_aux,
   ],
-  c_args : [c_msvc_compat_args, no_override_init_args],
+  c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   dependencies : [idep_mesautil, idep_nir, dep_csbgen],
   install : true,

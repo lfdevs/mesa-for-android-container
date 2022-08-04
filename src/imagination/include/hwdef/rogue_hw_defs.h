@@ -90,6 +90,9 @@
 /* Number of TEXSTATE_IMAGE_WORD values that need setting up. */
 #define ROGUE_NUM_TEXSTATE_IMAGE_WORDS 2U
 
+/* Number of TEXSTATE_SAMPLER state words that need setting up. */
+#define ROGUE_NUM_TEXSTATE_SAMPLER_WORDS 2U
+
 #define ROGUE_MAX_RENDER_TARGETS 2048U
 
 /* 12 dwords reserved for shared register management. The first dword is the

@@ -39,10 +39,22 @@ struct zink_render_pass;
 struct zink_screen;
 struct zink_vertex_elements_state;
 
+struct zink_pipeline_dynamic_state1 {
+   uint8_t front_face; //VkFrontFace:1
+   uint8_t cull_mode; //VkCullModeFlags:2
+   uint16_t num_viewports;
+   struct zink_depth_stencil_alpha_hw_state *depth_stencil_alpha_state; //must be last
+};
+
+struct zink_pipeline_dynamic_state2 {
+   bool primitive_restart;
+   bool rasterizer_discard;
+   uint16_t vertices_per_patch; //5 bits
+};
+
 struct zink_gfx_pipeline_state {
    uint32_t rast_state : ZINK_RAST_HW_STATE_SIZE; //zink_rasterizer_hw_state
-   uint32_t vertices_per_patch:5;
-   uint32_t rast_samples:8; //2 extra bits
+   uint32_t rast_samples:15; //9 extra bits
    uint32_t void_alpha_attachments:PIPE_MAX_COLOR_BUFS;
    VkSampleMask sample_mask;
 
@@ -54,16 +66,9 @@ struct zink_gfx_pipeline_state {
    uint32_t hash;
    bool dirty;
 
-   struct {
-      struct zink_depth_stencil_alpha_hw_state *depth_stencil_alpha_state; //non-dynamic state
-      VkFrontFace front_face;
-      unsigned num_viewports;
-   } dyn_state1;
+   struct zink_pipeline_dynamic_state1 dyn_state1;
 
-   struct {
-      bool primitive_restart;
-      bool rasterizer_discard;
-   } dyn_state2;
+   struct zink_pipeline_dynamic_state2 dyn_state2;
 
    VkShaderModule modules[PIPE_SHADER_TYPES - 1];
    bool modules_changed;
@@ -76,8 +81,10 @@ struct zink_gfx_pipeline_state {
    uint32_t vertex_buffers_enabled_mask;
    uint32_t vertex_strides[PIPE_MAX_ATTRIBS];
    bool sample_locations_enabled;
+   bool uses_dynamic_stride;
    bool have_EXT_extended_dynamic_state;
    bool have_EXT_extended_dynamic_state2;
+   bool extendedDynamicState2PatchControlPoints;
    uint8_t has_points; //either gs outputs points or prim type is points
    struct {
       struct zink_shader_key key[5];
@@ -85,6 +92,9 @@ struct zink_gfx_pipeline_state {
    } shader_keys;
    struct zink_blend_state *blend_state;
    struct zink_render_pass *render_pass;
+   struct zink_render_pass *next_render_pass; //will be used next time rp is begun
+   VkFormat rendering_formats[PIPE_MAX_COLOR_BUFS];
+   VkPipelineRenderingCreateInfo rendering_info;
    VkPipeline pipeline;
    unsigned idx : 8;
    enum pipe_prim_type gfx_prim_mode; //pending mode

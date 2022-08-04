@@ -111,9 +111,9 @@ cmod_propagate_cmp_to_add(const intel_device_info *devinfo, bblock_t *block,
           *
           * For floating and unsigned types there two special cases,
           * when we can remove inst even if scan_inst is saturated: G
-          * and LE. Since conditional modifiers are just comparations
+          * and LE. Since conditional modifiers are just comparisons
           * against zero, saturating positive values to the upper
-          * limit never changes the result of comparation.
+          * limit never changes the result of comparison.
           *
           * For negative values:
           * (sat(x) >  0) == (x >  0) --- false

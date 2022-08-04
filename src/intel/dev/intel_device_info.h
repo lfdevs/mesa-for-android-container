@@ -355,7 +355,7 @@ struct intel_device_info
     * SKL (or scale factor of 83.33333333) and a frequency of 19200000Hz for
     * BXT.
     *
-    * For simplicty to fit with the current code scaling by a single constant
+    * For simplicity to fit with the current code scaling by a single constant
     * to map from raw timestamps to nanoseconds we now do the conversion in
     * floating point instead of integer arithmetic.
     *
@@ -391,6 +391,18 @@ struct intel_device_info
     * apply_hwconfig is true when the platform should apply hwconfig values
     */
    bool apply_hwconfig;
+
+   struct {
+      bool use_class_instance;
+      struct {
+         uint16_t mem_class;
+         uint16_t mem_instance;
+         struct {
+            uint64_t size;
+            uint64_t free;
+         } mappable, unmappable;
+      } sram, vram;
+   } mem;
    /** @} */
 };
 
@@ -478,9 +490,21 @@ intel_device_info_timebase_scale(const struct intel_device_info *devinfo,
    return (upper_scaled_ts << 32) + lower_scaled_ts;
 }
 
+static inline bool
+intel_vram_all_mappable(const struct intel_device_info *devinfo)
+{
+   return devinfo->mem.vram.unmappable.size == 0;
+}
+
 bool intel_get_device_info_from_fd(int fh, struct intel_device_info *devinfo);
 bool intel_get_device_info_from_pci_id(int pci_id,
                                        struct intel_device_info *devinfo);
+
+/* Only updates intel_device_info::regions::...::free fields. The
+ * class/instance/size should remain the same over time.
+ */
+bool intel_device_info_update_memory_info(struct intel_device_info *devinfo,
+                                          int fd);
 
 #ifdef __cplusplus
 }

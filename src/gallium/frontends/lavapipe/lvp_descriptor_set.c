@@ -62,14 +62,10 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateDescriptorSetLayout(
                  num_bindings * sizeof(set_layout->binding[0]) +
                  immutable_sampler_count * sizeof(struct lvp_sampler *);
 
-   set_layout = vk_zalloc(&device->vk.alloc, size, 8,
-                          VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   set_layout = vk_descriptor_set_layout_zalloc(&device->vk, size);
    if (!set_layout)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   vk_object_base_init(&device->vk, &set_layout->base,
-                       VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT);
-   set_layout->ref_cnt = 1;
    set_layout->immutable_sampler_count = immutable_sampler_count;
    /* We just allocate all the samplers at the end of the struct */
    struct lvp_sampler **samplers =
@@ -84,8 +80,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateDescriptorSetLayout(
                                                pCreateInfo->bindingCount,
                                                &bindings);
    if (result != VK_SUCCESS) {
-      vk_object_base_finish(&set_layout->base);
-      vk_free(&device->vk.alloc, set_layout);
+      vk_descriptor_set_layout_unref(&device->vk, &set_layout->vk);
       return vk_error(device, result);
    }
 
@@ -224,29 +219,6 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateDescriptorSetLayout(
    return VK_SUCCESS;
 }
 
-void
-lvp_descriptor_set_layout_destroy(struct lvp_device *device,
-                                  struct lvp_descriptor_set_layout *layout)
-{
-   assert(layout->ref_cnt == 0);
-   vk_object_base_finish(&layout->base);
-   vk_free(&device->vk.alloc, layout);
-}
-
-VKAPI_ATTR void VKAPI_CALL lvp_DestroyDescriptorSetLayout(
-    VkDevice                                    _device,
-    VkDescriptorSetLayout                       _set_layout,
-    const VkAllocationCallbacks*                pAllocator)
-{
-   LVP_FROM_HANDLE(lvp_device, device, _device);
-   LVP_FROM_HANDLE(lvp_descriptor_set_layout, set_layout, _set_layout);
-
-   if (!_set_layout)
-     return;
-
-   lvp_descriptor_set_layout_unref(device, set_layout);
-}
-
 VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineLayout(
     VkDevice                                    _device,
     const VkPipelineLayoutCreateInfo*           pCreateInfo,
@@ -256,28 +228,16 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineLayout(
    LVP_FROM_HANDLE(lvp_device, device, _device);
    struct lvp_pipeline_layout *layout;
 
-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
+   layout = vk_pipeline_layout_zalloc(&device->vk, sizeof(*layout),
+                                      pCreateInfo);
 
-   layout = vk_zalloc(&device->vk.alloc, sizeof(*layout), 8,
-                     VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (layout == NULL)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   vk_object_base_init(&device->vk, &layout->base,
-                       VK_OBJECT_TYPE_PIPELINE_LAYOUT);
-   layout->ref_cnt = 1;
-   layout->num_sets = pCreateInfo->setLayoutCount;
-   if (pCreateInfo->flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT)
-      layout->independent_sets = true;
-
-   for (uint32_t set = 0; set < pCreateInfo->setLayoutCount; set++) {
-      LVP_FROM_HANDLE(lvp_descriptor_set_layout, set_layout,
-                      pCreateInfo->pSetLayouts[set]);
-      if (layout->independent_sets && (!layout->num_sets || !set_layout)) {
-         layout->set[set].layout = NULL;
+   for (uint32_t set = 0; set < layout->vk.set_count; set++) {
+      if (layout->vk.set_layouts[set] == NULL)
          continue;
-      }
-      layout->set[set].layout = set_layout;
+
+      const struct lvp_descriptor_set_layout *set_layout =
+         vk_to_lvp_descriptor_set_layout(layout->vk.set_layouts[set]);
+
       for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
          layout->stage[i].uniform_block_size += set_layout->stage[i].uniform_block_size;
          for (unsigned j = 0; j < set_layout->stage[i].uniform_block_count; j++) {
@@ -286,7 +246,6 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineLayout(
          }
          layout->stage[i].uniform_block_count += set_layout->stage[i].uniform_block_count;
       }
-      lvp_descriptor_set_layout_ref(set_layout);
    }
 
 #ifndef NDEBUG
@@ -305,13 +264,19 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineLayout(
       uint16_t sampler_count = 0;
       uint16_t sampler_view_count = 0;
       uint16_t image_count = 0;
-      for (unsigned j = 0; j < layout->num_sets; j++) {
-         if (layout->set[j].layout && layout->set[j].layout->shader_stages & array[i]) {
-            const_buffer_count += layout->set[j].layout->stage[i].const_buffer_count;
-            shader_buffer_count += layout->set[j].layout->stage[i].shader_buffer_count;
-            sampler_count += layout->set[j].layout->stage[i].sampler_count;
-            sampler_view_count += layout->set[j].layout->stage[i].sampler_view_count;
-            image_count += layout->set[j].layout->stage[i].image_count;
+      for (unsigned j = 0; j < layout->vk.set_count; j++) {
+         if (layout->vk.set_layouts[j] == NULL)
+            continue;
+
+         const struct lvp_descriptor_set_layout *set_layout =
+            vk_to_lvp_descriptor_set_layout(layout->vk.set_layouts[j]);
+
+         if (set_layout->shader_stages & array[i]) {
+            const_buffer_count += set_layout->stage[i].const_buffer_count;
+            shader_buffer_count += set_layout->stage[i].shader_buffer_count;
+            sampler_count += set_layout->stage[i].sampler_count;
+            sampler_view_count += set_layout->stage[i].sampler_view_count;
+            image_count += set_layout->stage[i].image_count;
          }
       }
       assert(const_buffer_count <= device->physical_device->device_limits.maxPerStageDescriptorUniformBuffers);
@@ -333,32 +298,6 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineLayout(
    *pPipelineLayout = lvp_pipeline_layout_to_handle(layout);
 
    return VK_SUCCESS;
-}
-
-void lvp_pipeline_layout_destroy(struct lvp_device *device,
-                                 struct lvp_pipeline_layout *pipeline_layout)
-{
-   assert(pipeline_layout->ref_cnt == 0);
-
-   for (uint32_t i = 0; i < pipeline_layout->num_sets; i++)
-      lvp_descriptor_set_layout_unref(device, pipeline_layout->set[i].layout);
-
-   vk_object_base_finish(&pipeline_layout->base);
-   vk_free(&device->vk.alloc, pipeline_layout);
-}
-
-VKAPI_ATTR void VKAPI_CALL lvp_DestroyPipelineLayout(
-    VkDevice                                    _device,
-    VkPipelineLayout                            _pipelineLayout,
-    const VkAllocationCallbacks*                pAllocator)
-{
-   LVP_FROM_HANDLE(lvp_device, device, _device);
-   LVP_FROM_HANDLE(lvp_pipeline_layout, pipeline_layout, _pipelineLayout);
-
-   if (!_pipelineLayout)
-     return;
-
-   lvp_pipeline_layout_unref(device, pipeline_layout);
 }
 
 VkResult
@@ -384,7 +323,7 @@ lvp_descriptor_set_create(struct lvp_device *device,
    vk_object_base_init(&device->vk, &set->base,
                        VK_OBJECT_TYPE_DESCRIPTOR_SET);
    set->layout = layout;
-   lvp_descriptor_set_layout_ref(layout);
+   vk_descriptor_set_layout_ref(&layout->vk);
 
    /* Go through and fill out immutable samplers if we have any */
    struct lvp_descriptor *desc = set->descriptors;
@@ -412,7 +351,7 @@ void
 lvp_descriptor_set_destroy(struct lvp_device *device,
                            struct lvp_descriptor_set *set)
 {
-   lvp_descriptor_set_layout_unref(device, set->layout);
+   vk_descriptor_set_layout_unref(&device->vk, &set->layout->vk);
    vk_object_base_finish(&set->base);
    vk_free(&device->vk.alloc, set);
 }
@@ -556,9 +495,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_UpdateDescriptorSets(
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
          for (uint32_t j = 0; j < write->descriptorCount; j++) {
-            assert(write->pBufferInfo[j].buffer);
             LVP_FROM_HANDLE(lvp_buffer, buffer, write->pBufferInfo[j].buffer);
-            assert(buffer);
             desc[j] = (struct lvp_descriptor) {
                .type = write->descriptorType,
                .info.offset = write->pBufferInfo[j].offset,
@@ -631,7 +568,7 @@ static void lvp_reset_descriptor_pool(struct lvp_device *device,
 {
    struct lvp_descriptor_set *set, *tmp;
    LIST_FOR_EACH_ENTRY_SAFE(set, tmp, &pool->sets, link) {
-      lvp_descriptor_set_layout_unref(device, set->layout);
+      vk_descriptor_set_layout_unref(&device->vk, &set->layout->vk);
       list_del(&set->link);
       vk_free(&device->vk.alloc, set);
    }
@@ -746,8 +683,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_UpdateDescriptorSetWithTemplate(VkDevice _device,
          &set->layout->binding[entry->dstBinding];
       struct lvp_descriptor *desc =
          &set->descriptors[bind_layout->descriptor_index];
-      if (entry->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) {
-         desc->type = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;
+      if (entry->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+         desc->type = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
          memcpy(desc->info.uniform + entry->dstArrayElement, pSrc, entry->descriptorCount);
          continue;
       }

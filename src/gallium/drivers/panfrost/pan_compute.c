@@ -46,14 +46,15 @@ panfrost_create_compute_state(
         struct panfrost_screen *screen = pan_screen(pctx->screen);
 
         struct panfrost_shader_variants *so = CALLOC_STRUCT(panfrost_shader_variants);
-        so->cbase = *cso;
-        so->is_compute = true;
+        so->req_input_mem = cso->req_input_mem;
 
         struct panfrost_shader_state *v = calloc(1, sizeof(*v));
         so->variants = v;
 
         so->variant_count = 1;
         so->active_variant = 0;
+
+        nir_shader *deserialized = NULL;
 
         if (cso->ir_type == PIPE_SHADER_IR_NIR_SERIALIZED) {
                 struct blob_reader reader;
@@ -64,17 +65,16 @@ panfrost_create_compute_state(
                 const struct nir_shader_compiler_options *options =
                         screen->vtbl.get_compiler_options();
 
-                so->cbase.prog = nir_deserialize(NULL, options, &reader);
-                so->cbase.ir_type = PIPE_SHADER_IR_NIR;
+                deserialized = nir_deserialize(NULL, options, &reader);
+        } else {
+                assert(cso->ir_type == PIPE_SHADER_IR_NIR && "TGSI kernels unsupported");
         }
 
         panfrost_shader_compile(pctx->screen, &ctx->shaders, &ctx->descs,
-                        so->cbase.ir_type, so->cbase.prog, MESA_SHADER_COMPUTE,
-                        v);
+                                deserialized ?: cso->prog, v);
 
         /* There are no variants so we won't need the NIR again */
-        ralloc_free((void *)so->cbase.prog);
-        so->cbase.prog = NULL;
+        ralloc_free(deserialized);
 
         return so;
 }

@@ -1,3 +1,10 @@
+mesa (22.2.0~rc1-1) unstable; urgency=medium
+
+  * New upstream release candidate.
+  * revert-enabling-tlsdesc-support.diff: Dropped, obsolete.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 04 Aug 2022 10:33:09 +0300
+
 mesa (22.1.5-1) unstable; urgency=medium
 
   * New upstream release.

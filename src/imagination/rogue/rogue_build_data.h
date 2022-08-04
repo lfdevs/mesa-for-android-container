@@ -61,6 +61,22 @@ struct rogue_ubo_data {
 };
 
 /**
+ * \brief Compile time constants that need uploading.
+ */
+struct rogue_compile_time_consts_data {
+   /* TODO: Output these from the compiler. */
+   /* TODO: Add the other types. */
+   struct {
+      size_t num;
+      size_t dest;
+      /* TODO: This should probably be bigger. Big enough to account for all
+       * available writable special constant regs.
+       */
+      uint32_t value[ROGUE_MAX_BUFFERS];
+   } static_consts;
+};
+
+/**
  * \brief Per-stage common build data.
  */
 struct rogue_common_build_data {
@@ -70,6 +86,7 @@ struct rogue_common_build_data {
    size_t shareds;
 
    struct rogue_ubo_data ubo_data;
+   struct rogue_compile_time_consts_data compile_time_consts_data;
 };
 
 /**

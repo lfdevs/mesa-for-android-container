@@ -28,7 +28,6 @@
 #include "util/ralloc.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
-#include "util/simple_list.h"
 #include "util/u_framebuffer.h"
 
 #include "pipe/p_format.h"
@@ -97,14 +96,15 @@ dump_fb_state(struct trace_context *tr_ctx,
               bool deep)
 {
    struct pipe_context *pipe = tr_ctx->pipe;
+   struct pipe_framebuffer_state *state = &tr_ctx->unwrapped_state;
 
    trace_dump_call_begin("pipe_context", method);
 
    trace_dump_arg(ptr, pipe);
    if (deep)
-      trace_dump_arg(framebuffer_state_deep, &tr_ctx->unwrapped_state);
+      trace_dump_arg(framebuffer_state_deep, state);
    else
-      trace_dump_arg(framebuffer_state, &tr_ctx->unwrapped_state);
+      trace_dump_arg(framebuffer_state, state);
    trace_dump_call_end();
 
    tr_ctx->seen_fb_state = true;
@@ -731,6 +731,18 @@ TRACE_SHADER_STATE(tes)
 
 #undef TRACE_SHADER_STATE
 
+static void
+trace_context_link_shader(struct pipe_context *_pipe, void **shaders)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+
+   trace_dump_call_begin("pipe_context", "link_shader");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg_array(ptr, shaders, PIPE_SHADER_TYPES);
+   pipe->link_shader(pipe, shaders);
+   trace_dump_call_end();
+}
 
 static inline void *
 trace_context_create_compute_state(struct pipe_context *_pipe,
@@ -1071,7 +1083,7 @@ trace_context_create_sampler_view(struct pipe_context *_pipe,
    trace_dump_arg(ptr, resource);
 
    trace_dump_arg_begin("templ");
-   trace_dump_sampler_view_template(templ, resource->target);
+   trace_dump_sampler_view_template(templ);
    trace_dump_arg_end();
 
    result = pipe->create_sampler_view(pipe, resource, templ);
@@ -2335,6 +2347,7 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(create_compute_state);
    TR_CTX_INIT(bind_compute_state);
    TR_CTX_INIT(delete_compute_state);
+   TR_CTX_INIT(link_shader);
    TR_CTX_INIT(create_vertex_elements_state);
    TR_CTX_INIT(bind_vertex_elements_state);
    TR_CTX_INIT(delete_vertex_elements_state);

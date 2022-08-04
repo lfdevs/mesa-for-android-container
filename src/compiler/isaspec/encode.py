@@ -528,7 +528,19 @@ encode${root.get_c_name()}(struct encode_state *s, struct bitset_params *p, ${ro
       if (s->gen >= ${leaf.gen_min} && s->gen <= ${leaf.gen_max}) {
 %           endif
 <% snippet = encode_bitset.render(s=s, root=root, leaf=leaf) %>
-      bitmask_t val = uint64_t_to_bitmask(${hex(leaf.get_pattern().match)});
+<%    words = isa.split_bits((leaf.get_pattern().match), 64) %>
+      bitmask_t val = uint64_t_to_bitmask(${words[-1]});
+
+<%    words.pop() %>
+
+%     for x in reversed(range(len(words))):
+      {
+         bitmask_t word = uint64_t_to_bitmask(${words[x]});
+         BITSET_SHL(val.bitset, 64);
+         BITSET_OR(val.bitset, val.bitset, word.bitset);
+      }
+%     endfor
+
       BITSET_OR(val.bitset, val.bitset, ${root.snippets[snippet]}(s, p, src).bitset);
       return val;
 %           if leaf.has_gen_restriction():

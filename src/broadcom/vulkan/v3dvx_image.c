@@ -27,30 +27,6 @@
 #include "broadcom/compiler/v3d_compiler.h"
 
 /*
- * This method translates pipe_swizzle to the swizzle values used at the
- * packet TEXTURE_SHADER_STATE
- *
- * FIXME: C&P from v3d, common place?
- */
-static uint32_t
-translate_swizzle(unsigned char pipe_swizzle)
-{
-   switch (pipe_swizzle) {
-   case PIPE_SWIZZLE_0:
-      return 0;
-   case PIPE_SWIZZLE_1:
-      return 1;
-   case PIPE_SWIZZLE_X:
-   case PIPE_SWIZZLE_Y:
-   case PIPE_SWIZZLE_Z:
-   case PIPE_SWIZZLE_W:
-      return 2 + pipe_swizzle;
-   default:
-      unreachable("unknown swizzle");
-   }
-}
-
-/*
  * Packs and ensure bo for the shader state (the latter can be temporal).
  */
 static void
@@ -93,10 +69,10 @@ pack_texture_shader_state_helper(struct v3dv_device *device,
       tex.max_level = image_view->vk.base_mip_level +
                       image_view->vk.level_count - 1;
 
-      tex.swizzle_r = translate_swizzle(image_view->swizzle[0]);
-      tex.swizzle_g = translate_swizzle(image_view->swizzle[1]);
-      tex.swizzle_b = translate_swizzle(image_view->swizzle[2]);
-      tex.swizzle_a = translate_swizzle(image_view->swizzle[3]);
+      tex.swizzle_r = v3d_translate_pipe_swizzle(image_view->swizzle[0]);
+      tex.swizzle_g = v3d_translate_pipe_swizzle(image_view->swizzle[1]);
+      tex.swizzle_b = v3d_translate_pipe_swizzle(image_view->swizzle[2]);
+      tex.swizzle_a = v3d_translate_pipe_swizzle(image_view->swizzle[3]);
 
       tex.reverse_standard_border_color = image_view->channel_reverse;
 
@@ -163,10 +139,10 @@ v3dX(pack_texture_shader_state_from_buffer_view)(struct v3dv_device *device,
    const struct v3dv_buffer *buffer = buffer_view->buffer;
 
    v3dvx_pack(buffer_view->texture_shader_state, TEXTURE_SHADER_STATE, tex) {
-      tex.swizzle_r = translate_swizzle(PIPE_SWIZZLE_X);
-      tex.swizzle_g = translate_swizzle(PIPE_SWIZZLE_Y);
-      tex.swizzle_b = translate_swizzle(PIPE_SWIZZLE_Z);
-      tex.swizzle_a = translate_swizzle(PIPE_SWIZZLE_W);
+      tex.swizzle_r = v3d_translate_pipe_swizzle(PIPE_SWIZZLE_X);
+      tex.swizzle_g = v3d_translate_pipe_swizzle(PIPE_SWIZZLE_Y);
+      tex.swizzle_b = v3d_translate_pipe_swizzle(PIPE_SWIZZLE_Z);
+      tex.swizzle_a = v3d_translate_pipe_swizzle(PIPE_SWIZZLE_W);
 
       tex.image_depth = 1;
 

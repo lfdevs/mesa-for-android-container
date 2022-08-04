@@ -86,13 +86,47 @@ va_demote_constant_fp16(uint32_t value)
       return bi_null();
 }
 
+/*
+ * Test if a 32-bit word arises as a sign or zero extension of some 8/16-bit
+ * value.
+ */
+static bool
+is_extension_of_8(uint32_t x, bool is_signed)
+{
+   if (is_signed)
+      return (x <= INT8_MAX) || ((x >> 7) == BITFIELD_MASK(24 + 1));
+   else
+      return (x <= UINT8_MAX);
+}
+
+static bool
+is_extension_of_16(uint32_t x, bool is_signed)
+{
+   if (is_signed)
+      return (x <= INT16_MAX) || ((x >> 15) == BITFIELD_MASK(16 + 1));
+   else
+      return (x <= UINT16_MAX);
+}
+
 static bi_index
-va_resolve_constant(bi_builder *b, uint32_t value, struct va_src_info info, bool staging)
+va_resolve_constant(bi_builder *b, uint32_t value, struct va_src_info info, bool is_signed, bool staging)
 {
    /* Try the constant as-is */
    if (!staging) {
       bi_index lut = va_lut_index_32(value);
       if (!bi_is_null(lut)) return lut;
+
+      /* ...or negated as a FP32 constant */
+      if (info.absneg && info.size == VA_SIZE_32) {
+         lut = bi_neg(va_lut_index_32(fui(-uif(value))));
+         if (!bi_is_null(lut)) return lut;
+      }
+
+      /* ...or negated as a FP16 constant */
+      if (info.absneg && info.size == VA_SIZE_16) {
+         lut = bi_neg(va_lut_index_32(value ^ 0x80008000));
+         if (!bi_is_null(lut)) return lut;
+      }
    }
 
    /* Try using a single half of a FP16 constant */
@@ -100,27 +134,39 @@ va_resolve_constant(bi_builder *b, uint32_t value, struct va_src_info info, bool
    if (!staging && info.swizzle && info.size == VA_SIZE_16 && replicated_halves) {
       bi_index lut = va_lut_index_16(value & 0xFFFF);
       if (!bi_is_null(lut)) return lut;
+
+      /* ...possibly negated */
+      if (info.absneg) {
+         lut = bi_neg(va_lut_index_16((value & 0xFFFF) ^ 0x8000));
+         if (!bi_is_null(lut)) return lut;
+      }
    }
 
-   /* TODO: Distinguish sign extend from zero extend */
-#if 0
-   /* Try zero-extending a single byte */
-   if (!staging && info.widen && value <= UINT8_MAX) {
-      bi_index lut = va_lut_index_8(value);
+   /* Try extending a byte */
+   if (!staging && (info.widen || info.lanes) &&
+       is_extension_of_8(value, is_signed)) {
+
+      bi_index lut = va_lut_index_8(value & 0xFF);
       if (!bi_is_null(lut)) return lut;
    }
 
-   /* Try zero-extending a single halfword */
-   if (!staging && info.widen && value <= UINT16_MAX) {
-      bi_index lut = va_lut_index_16(value);
+   /* Try extending a halfword */
+   if (!staging && info.widen &&
+       is_extension_of_16(value, is_signed)) {
+
+      bi_index lut = va_lut_index_16(value & 0xFFFF);
       if (!bi_is_null(lut)) return lut;
    }
-#endif
 
    /* Try demoting the constant to FP16 */
    if (!staging && info.swizzle && info.size == VA_SIZE_32) {
       bi_index lut = va_demote_constant_fp16(value);
       if (!bi_is_null(lut)) return lut;
+
+      if (info.absneg) {
+         bi_index lut = bi_neg(va_demote_constant_fp16(fui(-uif(value))));
+         if (!bi_is_null(lut)) return lut;
+      }
    }
 
    /* TODO: Optimize to uniform */
@@ -137,6 +183,7 @@ va_lower_constants(bi_context *ctx, bi_instr *I)
          /* abs(#c) is pointless, but -#c occurs in transcendental sequences */
          assert(!I->src[s].abs && "redundant .abs modifier");
 
+         bool is_signed = valhall_opcodes[I->op].is_signed;
          bool staging = (s < valhall_opcodes[I->op].nr_staging_srcs);
          struct va_src_info info = va_src_info(I->op, s);
          uint32_t value = I->src[s].value;
@@ -171,7 +218,7 @@ va_lower_constants(bi_context *ctx, bi_instr *I)
             value = bi_apply_swizzle(value, swz);
          }
 
-         bi_index cons = va_resolve_constant(&b, value, info, staging);
+         bi_index cons = va_resolve_constant(&b, value, info, is_signed, staging);
          cons.neg ^= I->src[s].neg;
          I->src[s] = cons;
       }

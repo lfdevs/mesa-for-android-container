@@ -11,15 +11,25 @@ if [ $DEBIAN_ARCH = arm64 ]; then
                    libvulkan-dev
     "
 elif [ $DEBIAN_ARCH = amd64 ]; then
+    # Add llvm 13 to the build image
+    apt-get -y install --no-install-recommends wget gnupg2 software-properties-common
+    apt-key add /llvm-snapshot.gpg.key
+    add-apt-repository "deb https://apt.llvm.org/bullseye/ llvm-toolchain-bullseye-13 main"
+
     ARCH_PACKAGES="firmware-amd-graphics
                    inetutils-syslogd
                    iptables
                    libcap2
+                   libfontconfig1
                    libelf1
                    libfdt1
+                   libgl1
+                   libglu1-mesa
+                   libllvm13
                    libllvm11
                    libva2
                    libva-drm2
+                   libvulkan-dev
                    socat
                    spirv-tools
                    sysvinit-core
@@ -33,6 +43,7 @@ INSTALL_CI_FAIRY_PACKAGES="git
                            python3-wheel
                            "
 
+apt-get update
 apt-get -y install --no-install-recommends \
     $ARCH_PACKAGES \
     $INSTALL_CI_FAIRY_PACKAGES \
@@ -188,6 +199,8 @@ UNNEEDED_PACKAGES="apt libapt-pkg6.0 "\
 "libgles2-mesa-dev "\
 "libglx-mesa0 "\
 "mesa-common-dev "\
+"gnupg2 "\
+"software-properties-common " \
 
 # Removing unneeded packages
 for PACKAGE in ${UNNEEDED_PACKAGES}

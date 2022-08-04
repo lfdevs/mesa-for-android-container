@@ -67,7 +67,7 @@ public:
    void set_latency_gfx4();
    void set_latency_gfx7(bool is_haswell);
 
-   const struct intel_device_info *devinfo;
+   const struct brw_isa_info *isa;
    backend_instruction *inst;
    schedule_node **children;
    int *child_latency;
@@ -400,7 +400,7 @@ schedule_node::set_latency_gfx7(bool is_haswell)
       }
 
       case GFX6_SFID_DATAPORT_RENDER_CACHE:
-         switch (brw_fb_desc_msg_type(devinfo, inst->desc)) {
+         switch (brw_fb_desc_msg_type(isa->devinfo, inst->desc)) {
          case GFX7_DATAPORT_RC_TYPED_SURFACE_WRITE:
          case GFX7_DATAPORT_RC_TYPED_SURFACE_READ:
             /* See also SHADER_OPCODE_TYPED_SURFACE_READ */
@@ -531,7 +531,7 @@ schedule_node::set_latency_gfx7(bool is_haswell)
       case GFX12_SFID_UGM:
       case GFX12_SFID_TGM:
       case GFX12_SFID_SLM:
-         switch (lsc_msg_desc_opcode(devinfo, inst->desc)) {
+         switch (lsc_msg_desc_opcode(isa->devinfo, inst->desc)) {
          case LSC_OP_LOAD:
          case LSC_OP_STORE:
          case LSC_OP_LOAD_CMASK:
@@ -572,6 +572,10 @@ schedule_node::set_latency_gfx7(bool is_haswell)
           * We'll assume for the moment that this is pretty quick as it
           * doesn't actually return any data.
           */
+         latency = 200;
+         break;
+
+      case BRW_SFID_URB:
          latency = 200;
          break;
 
@@ -957,7 +961,7 @@ schedule_node::schedule_node(backend_instruction *inst,
 {
    const struct intel_device_info *devinfo = sched->bs->devinfo;
 
-   this->devinfo = devinfo;
+   this->isa = &sched->bs->compiler->isa;
    this->inst = inst;
    this->child_array_size = 0;
    this->children = NULL;
@@ -1727,8 +1731,9 @@ vec4_instruction_scheduler::choose_instruction_to_schedule()
 int
 fs_instruction_scheduler::issue_time(backend_instruction *inst0)
 {
+   const struct brw_isa_info *isa = &v->compiler->isa;
    const fs_inst *inst = static_cast<fs_inst *>(inst0);
-   const unsigned overhead = v->grf_used && has_bank_conflict(v->devinfo, inst) ?
+   const unsigned overhead = v->grf_used && has_bank_conflict(isa, inst) ?
       DIV_ROUND_UP(inst->dst.component_size(inst->exec_size), REG_SIZE) : 0;
    if (is_compressed(inst))
       return 4 + overhead;

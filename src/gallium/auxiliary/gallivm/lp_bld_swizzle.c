@@ -110,25 +110,20 @@ lp_build_extract_broadcast(struct gallivm_state *gallivm,
          /*
           * Trivial scalar -> scalar.
           */
-
          res = vector;
-      }
-      else {
+      } else {
          /*
           * Broadcast scalar -> vector.
           */
-
          res = lp_build_broadcast(gallivm,
                                   lp_build_vec_type(gallivm, dst_type),
                                   vector);
       }
-   }
-   else {
+   } else {
       if (dst_type.length > 1) {
          /*
           * shuffle - result can be of different length.
           */
-
          LLVMValueRef shuffle;
          shuffle = lp_build_broadcast(gallivm,
                                       LLVMVectorType(i32t, dst_type.length),
@@ -136,8 +131,7 @@ lp_build_extract_broadcast(struct gallivm_state *gallivm,
          res = LLVMBuildShuffleVector(gallivm->builder, vector,
                                       LLVMGetUndef(lp_build_vec_type(gallivm, src_type)),
                                       shuffle, "");
-      }
-      else {
+      } else {
          /*
           * Trivial extract scalar from vector.
           */
@@ -161,9 +155,8 @@ lp_build_swizzle_scalar_aos(struct lp_build_context *bld,
    LLVMBuilderRef builder = bld->gallivm->builder;
    const struct lp_type type = bld->type;
    const unsigned n = type.length;
-   unsigned i, j;
 
-   if(a == bld->undef || a == bld->zero || a == bld->one || num_channels == 1)
+   if (a == bld->undef || a == bld->zero || a == bld->one || num_channels == 1)
       return a;
 
    assert(num_channels == 2 || num_channels == 4);
@@ -171,21 +164,19 @@ lp_build_swizzle_scalar_aos(struct lp_build_context *bld,
    /* XXX: SSE3 has PSHUFB which should be better than bitmasks, but forcing
     * using shuffles here actually causes worst results. More investigation is
     * needed. */
-   if (LLVMIsConstant(a) ||
-       type.width >= 16) {
+   if (LLVMIsConstant(a) || type.width >= 16) {
       /*
        * Shuffle.
        */
       LLVMTypeRef elem_type = LLVMInt32TypeInContext(bld->gallivm->context);
       LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
 
-      for(j = 0; j < n; j += num_channels)
-         for(i = 0; i < num_channels; ++i)
+      for (unsigned j = 0; j < n; j += num_channels)
+         for (unsigned i = 0; i < num_channels; ++i)
             shuffles[j + i] = LLVMConstInt(elem_type, j + channel, 0);
 
       return LLVMBuildShuffleVector(builder, a, bld->undef, LLVMConstVector(shuffles, n), "");
-   }
-   else if (num_channels == 2) {
+   } else if (num_channels == 2) {
       /*
        * Bit mask and shifts
        *
@@ -241,8 +232,7 @@ lp_build_swizzle_scalar_aos(struct lp_build_context *bld,
       }
 
       return LLVMBuildBitCast(builder, a, lp_build_vec_type(bld->gallivm, type), "");
-   }
-   else {
+   } else {
       /*
        * Bit mask and recursive shifts
        *
@@ -264,14 +254,12 @@ lp_build_swizzle_scalar_aos(struct lp_build_context *bld,
        *
        * shifts[] gives little-endian shift amounts; we need to negate for big-endian.
        */
-      struct lp_type type4;
-      const int shifts[4][2] = {
+      static const int shifts[4][2] = {
          { 1,  2},
          {-1,  2},
          { 1, -2},
          {-1, -2}
       };
-      unsigned i;
 
       a = LLVMBuildAnd(builder, a,
                        lp_build_const_mask_aos(bld->gallivm,
@@ -282,14 +270,14 @@ lp_build_swizzle_scalar_aos(struct lp_build_context *bld,
        * channels.
        */
 
-      type4 = type;
+      struct lp_type type4 = type;
       type4.floating = FALSE;
       type4.width *= 4;
       type4.length /= 4;
 
       a = LLVMBuildBitCast(builder, a, lp_build_vec_type(bld->gallivm, type4), "");
 
-      for(i = 0; i < 2; ++i) {
+      for (unsigned i = 0; i < 2; ++i) {
          LLVMValueRef tmp = NULL;
          int shift = shifts[channel][i];
 
@@ -298,13 +286,13 @@ lp_build_swizzle_scalar_aos(struct lp_build_context *bld,
          shift = -shift;
 #endif
 
-         if(shift > 0)
+         if (shift > 0)
             tmp = LLVMBuildShl(builder, a, lp_build_const_int_vec(bld->gallivm, type4, shift*type.width), "");
-         if(shift < 0)
+         if (shift < 0)
             tmp = LLVMBuildLShr(builder, a, lp_build_const_int_vec(bld->gallivm, type4, -shift*type.width), "");
 
          assert(tmp);
-         if(tmp)
+         if (tmp)
             a = LLVMBuildOr(builder, a, tmp, "");
       }
 
@@ -334,11 +322,10 @@ lp_build_swizzle_aos_n(struct gallivm_state* gallivm,
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef shuffles[LP_MAX_VECTOR_WIDTH];
-   unsigned i;
 
    assert(dst_len < LP_MAX_VECTOR_WIDTH);
 
-   for (i = 0; i < dst_len; ++i) {
+   for (unsigned i = 0; i < dst_len; ++i) {
       int swizzle = swizzles[i % num_swizzles];
 
       if (swizzle == LP_BLD_SWIZZLE_DONTCARE) {
@@ -348,7 +335,9 @@ lp_build_swizzle_aos_n(struct gallivm_state* gallivm,
       }
    }
 
-   return LLVMBuildShuffleVector(builder, src, LLVMGetUndef(LLVMTypeOf(src)), LLVMConstVector(shuffles, dst_len), "");
+   return LLVMBuildShuffleVector(builder, src,
+                                 LLVMGetUndef(LLVMTypeOf(src)),
+                                 LLVMConstVector(shuffles, dst_len), "");
 }
 
 
@@ -360,7 +349,6 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
    LLVMBuilderRef builder = bld->gallivm->builder;
    const struct lp_type type = bld->type;
    const unsigned n = type.length;
-   unsigned i, j;
 
    if (swizzles[0] == PIPE_SWIZZLE_X &&
        swizzles[1] == PIPE_SWIZZLE_Y &&
@@ -402,15 +390,12 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
 
       memset(aux, 0, sizeof aux);
 
-      for(j = 0; j < n; j += 4) {
-         for(i = 0; i < 4; ++i) {
+      for (unsigned j = 0; j < n; j += 4) {
+         for (unsigned i = 0; i < 4; ++i) {
             unsigned shuffle;
             switch (swizzles[i]) {
             default:
                assert(0);
-#if defined(NDEBUG) || defined(DEBUG)
-               FALLTHROUGH;
-#endif
             case PIPE_SWIZZLE_X:
             case PIPE_SWIZZLE_Y:
             case PIPE_SWIZZLE_Z:
@@ -439,7 +424,7 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
          }
       }
 
-      for (i = 0; i < n; ++i) {
+      for (unsigned i = 0; i < n; ++i) {
          if (!aux[i]) {
             aux[i] = undef;
          }
@@ -467,27 +452,24 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
        * This is necessary not only for faster cause, but because X86 backend
        * will refuse shuffles of <4 x i8> vectors
        */
-      LLVMValueRef res;
-      struct lp_type type4;
-      unsigned cond = 0;
-      int chan;
-      int shift;
 
       /*
        * Start with a mixture of 1 and 0.
        */
-      for (chan = 0; chan < 4; ++chan) {
+      unsigned cond = 0;
+      for (unsigned chan = 0; chan < 4; ++chan) {
          if (swizzles[chan] == PIPE_SWIZZLE_1) {
             cond |= 1 << chan;
          }
       }
-      res = lp_build_select_aos(bld, cond, bld->one, bld->zero, 4);
+      LLVMValueRef res =
+         lp_build_select_aos(bld, cond, bld->one, bld->zero, 4);
 
       /*
        * Build a type where each element is an integer that cover the four
        * channels.
        */
-      type4 = type;
+      struct lp_type type4 = type;
       type4.floating = FALSE;
       type4.width *= 4;
       type4.length /= 4;
@@ -500,14 +482,14 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
        * same shift as possible.  The shift amount is positive for shifts left
        * and negative for shifts right.
        */
-      for (shift = -3; shift <= 3; ++shift) {
+      for (int shift = -3; shift <= 3; ++shift) {
          uint64_t mask = 0;
 
          assert(type4.width <= sizeof(mask)*8);
 
          /*
-          * Vector element numbers follow the XYZW order, so 0 is always X, etc.
-          * After widening 4 times we have:
+          * Vector element numbers follow the XYZW order, so 0 is always X,
+          * etc.  After widening 4 times we have:
           *
           *                                3210
           * Little-endian register layout: WZYX
@@ -515,11 +497,12 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
           *                                0123
           * Big-endian register layout:    XYZW
           *
-          * For little-endian, higher-numbered channels are obtained by a shift right
-          * (negative shift amount) and lower-numbered channels by a shift left
-          * (positive shift amount).  The opposite is true for big-endian.
+          * For little-endian, higher-numbered channels are obtained by a
+          * shift right (negative shift amount) and lower-numbered channels by
+          * a shift left (positive shift amount).  The opposite is true for
+          * big-endian.
           */
-         for (chan = 0; chan < 4; ++chan) {
+         for (unsigned chan = 0; chan < 4; ++chan) {
             if (swizzles[chan] < 4) {
                /* We need to move channel swizzles[chan] into channel chan */
 #if UTIL_ARCH_LITTLE_ENDIAN
@@ -574,7 +557,7 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
 LLVMValueRef
 lp_build_swizzle_soa_channel(struct lp_build_context *bld,
                              const LLVMValueRef *unswizzled,
-                             unsigned swizzle)
+                             enum pipe_swizzle swizzle)
 {
    switch (swizzle) {
    case PIPE_SWIZZLE_X:
@@ -607,9 +590,7 @@ lp_build_swizzle_soa(struct lp_build_context *bld,
                      const unsigned char swizzles[4],
                      LLVMValueRef *swizzled)
 {
-   unsigned chan;
-
-   for (chan = 0; chan < 4; ++chan) {
+   for (unsigned chan = 0; chan < 4; ++chan) {
       swizzled[chan] = lp_build_swizzle_soa_channel(bld, unswizzled,
                                                     swizzles[chan]);
    }
@@ -629,9 +610,8 @@ lp_build_swizzle_soa_inplace(struct lp_build_context *bld,
                              const unsigned char swizzles[4])
 {
    LLVMValueRef unswizzled[4];
-   unsigned chan;
 
-   for (chan = 0; chan < 4; ++chan) {
+   for (unsigned chan = 0; chan < 4; ++chan) {
       unswizzled[chan] = values[chan];
    }
 
@@ -653,17 +633,15 @@ lp_build_transpose_aos(struct gallivm_state *gallivm,
                        LLVMValueRef dst[4])
 {
    struct lp_type double_type_lp = single_type_lp;
-   LLVMTypeRef single_type;
-   LLVMTypeRef double_type;
-   LLVMValueRef t0 = NULL, t1 = NULL, t2 = NULL, t3 = NULL;
-
    double_type_lp.length >>= 1;
    double_type_lp.width  <<= 1;
 
-   double_type = lp_build_vec_type(gallivm, double_type_lp);
-   single_type = lp_build_vec_type(gallivm, single_type_lp);
+   LLVMTypeRef double_type = lp_build_vec_type(gallivm, double_type_lp);
+   LLVMTypeRef single_type = lp_build_vec_type(gallivm, single_type_lp);
 
    LLVMValueRef double_type_zero = LLVMConstNull(double_type);
+   LLVMValueRef t0 = NULL, t1 = NULL, t2 = NULL, t3 = NULL;
+
    /* Interleave x, y, z, w -> xy and zw */
    if (src[0] || src[1]) {
       LLVMValueRef src0 = src[0];
@@ -728,29 +706,26 @@ lp_build_transpose_aos_n(struct gallivm_state *gallivm,
                          LLVMValueRef* dst)
 {
    switch (num_srcs) {
-      case 1:
-         dst[0] = src[0];
-         break;
+   case 1:
+      dst[0] = src[0];
+      break;
+   case 2:
+   {
+      /* Note: we must use a temporary incase src == dst */
+      LLVMValueRef lo, hi;
 
-      case 2:
-      {
-         /* Note: we must use a temporary incase src == dst */
-         LLVMValueRef lo, hi;
+      lo = lp_build_interleave2_half(gallivm, type, src[0], src[1], 0);
+      hi = lp_build_interleave2_half(gallivm, type, src[0], src[1], 1);
 
-         lo = lp_build_interleave2_half(gallivm, type, src[0], src[1], 0);
-         hi = lp_build_interleave2_half(gallivm, type, src[0], src[1], 1);
-
-         dst[0] = lo;
-         dst[1] = hi;
-         break;
-      }
-
-      case 4:
-         lp_build_transpose_aos(gallivm, type, src, dst);
-         break;
-
-      default:
-         assert(0);
+      dst[0] = lo;
+      dst[1] = hi;
+      break;
+   }
+   case 4:
+      lp_build_transpose_aos(gallivm, type, src, dst);
+      break;
+   default:
+      assert(0);
    }
 }
 
@@ -772,14 +747,13 @@ lp_build_pack_aos_scalars(struct gallivm_state *gallivm,
    LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
    unsigned num_src = src_type.length / 4;
    unsigned num_dst = dst_type.length;
-   unsigned i;
 
    assert(num_src <= num_dst);
 
-   for (i = 0; i < num_src; i++) {
+   for (unsigned i = 0; i < num_src; i++) {
       shuffles[i] = LLVMConstInt(i32t, i * 4 + channel, 0);
    }
-   for (i = num_src; i < num_dst; i++) {
+   for (unsigned i = num_src; i < num_dst; i++) {
       shuffles[i] = undef;
    }
 
@@ -807,11 +781,10 @@ lp_build_unpack_broadcast_aos_scalars(struct gallivm_state *gallivm,
    LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
    unsigned num_dst = dst_type.length;
    unsigned num_src = dst_type.length / 4;
-   unsigned i;
 
    assert(num_dst / 4 <= src_type.length);
 
-   for (i = 0; i < num_src; i++) {
+   for (unsigned i = 0; i < num_src; i++) {
       shuffles[i*4] = LLVMConstInt(i32t, i, 0);
       shuffles[i*4+1] = LLVMConstInt(i32t, i, 0);
       shuffles[i*4+2] = LLVMConstInt(i32t, i, 0);
@@ -821,8 +794,7 @@ lp_build_unpack_broadcast_aos_scalars(struct gallivm_state *gallivm,
    if (num_src == 1) {
       return lp_build_extract_broadcast(gallivm, src_type, dst_type,
                                         src, shuffles[0]);
-   }
-   else {
+   } else {
       return LLVMBuildShuffleVector(gallivm->builder, src, src,
                                     LLVMConstVector(shuffles, num_dst), "");
    }

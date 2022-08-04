@@ -1219,3 +1219,28 @@ util_make_fs_stencil_blit(struct pipe_context *pipe, bool msaa_src)
 
    return pipe->create_fs_state(pipe, &state);
 }
+
+void *
+util_make_fs_clear_all_cbufs(struct pipe_context *pipe)
+{
+   static const char text[] =
+      "FRAG\n"
+      "PROPERTY FS_COLOR0_WRITES_ALL_CBUFS 1\n"
+      "DCL OUT[0], COLOR[0]\n"
+      "DCL CONST[0][0]\n"
+
+      "MOV OUT[0], CONST[0][0]\n"
+      "END\n";
+
+   struct tgsi_token tokens[1000];
+   struct pipe_shader_state state = { 0 };
+
+   if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
+      assert(0);
+      return NULL;
+   }
+
+   pipe_shader_state_from_tgsi(&state, tokens);
+
+   return pipe->create_fs_state(pipe, &state);
+}

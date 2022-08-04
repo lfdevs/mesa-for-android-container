@@ -29,7 +29,6 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <stdbool.h>
-#include "c99_compat.h"
 #include "macros.h"
 
 #ifdef __cplusplus

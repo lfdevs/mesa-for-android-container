@@ -28,6 +28,8 @@
 #ifndef U_FORMAT_RGTC_H_
 #define U_FORMAT_RGTC_H_
 
+#include "c99_compat.h"
+
 void
 util_format_rgtc1_unorm_fetch_rgba_8unorm(uint8_t *restrict dst, const uint8_t *restrict src, unsigned i, unsigned j);
 

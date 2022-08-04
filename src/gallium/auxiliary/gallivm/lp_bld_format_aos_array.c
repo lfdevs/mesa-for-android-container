@@ -78,9 +78,10 @@ lp_build_fetch_rgba_aos_array(struct gallivm_state *gallivm,
     * (If all callers can guarantee element type alignment, we should
     * relax alignment restrictions elsewhere.)
     */
-   ptr = LLVMBuildGEP(builder, base_ptr, &offset, 1, "");
+   LLVMTypeRef byte_type = LLVMInt8TypeInContext(gallivm->context);
+   ptr = LLVMBuildGEP2(builder, byte_type, base_ptr, &offset, 1, "");
    ptr = LLVMBuildPointerCast(builder, ptr, LLVMPointerType(src_vec_type, 0), "");
-   res = LLVMBuildLoad(builder, ptr, "");
+   res = LLVMBuildLoad2(builder, src_vec_type, ptr, "");
    LLVMSetAlignment(res, src_type.width / 8);
 
    /* Truncate doubles to float */

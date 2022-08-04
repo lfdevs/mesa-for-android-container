@@ -227,7 +227,7 @@ namespace {
    }
 
    /**
-    * Substract two vectors with saturation.
+    * Subtract two vectors with saturation.
     */
    vector_type
    subs(vector_type v, vector_type w)
@@ -645,7 +645,7 @@ namespace {
          } else if (inst->opcode == BRW_OPCODE_WHILE) {
             block_scale /= 10;
 
-         } else if (inst->is_3src(v->devinfo) &&
+         } else if (inst->is_3src(v->compiler) &&
                     is_grf(inst->src[1]) && is_grf(inst->src[2])) {
             const unsigned r = p.atom_of_reg(reg_of(inst->src[1]));
             const unsigned s = p.atom_of_reg(reg_of(inst->src[2]));
@@ -942,10 +942,10 @@ fs_visitor::opt_bank_conflicts()
  * we don't know which bank each VGRF is going to end up aligned to.
  */
 bool
-has_bank_conflict(const intel_device_info *devinfo, const fs_inst *inst)
+has_bank_conflict(const struct brw_isa_info *isa, const fs_inst *inst)
 {
-   return inst->is_3src(devinfo) &&
+   return is_3src(isa, inst->opcode) &&
           is_grf(inst->src[1]) && is_grf(inst->src[2]) &&
           bank_of(reg_of(inst->src[1])) == bank_of(reg_of(inst->src[2])) &&
-          !is_conflict_optimized_out(devinfo, inst);
+          !is_conflict_optimized_out(isa->devinfo, inst);
 }

@@ -36,7 +36,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "c99_compat.h"
 #include "util/macros.h"
 
 #include "eglconfig.h"

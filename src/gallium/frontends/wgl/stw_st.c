@@ -160,11 +160,15 @@ stw_st_framebuffer_validate_locked(struct st_context_iface *stctx,
 
    /* As of now, the only stw_winsys_framebuffer implementation is
     * d3d12_wgl_framebuffer and it doesn't support front buffer
-    * drawing. A fake front texture is needed to handle that scenario */
+    * drawing. A fake front texture is needed to handle that scenario.
+    * For MSAA, we just need to make sure that the back buffer also
+    * exists, so we can blt to it during flush_frontbuffer. */
    if (mask & ST_ATTACHMENT_FRONT_LEFT_MASK &&
-       stwfb->fb->winsys_framebuffer &&
-       stwfb->stvis.samples <= 1) {
-      stwfb->needs_fake_front = true;
+       stwfb->fb->winsys_framebuffer) {
+      if (stwfb->stvis.samples <= 1)
+         stwfb->needs_fake_front = true;
+      else
+         mask |= ST_ATTACHMENT_BACK_LEFT_MASK;
    }
 
    /* remove outdated textures */
@@ -440,6 +444,7 @@ stw_st_framebuffer_flush_front(struct st_context_iface *stctx,
    struct pipe_context *pipe = stctx->pipe;
    bool ret;
    HDC hDC;
+   bool need_swap_textures = false;
 
    if (statt != ST_ATTACHMENT_FRONT_LEFT)
       return false;
@@ -448,17 +453,24 @@ stw_st_framebuffer_flush_front(struct st_context_iface *stctx,
 
    /* Resolve the front buffer. */
    if (stwfb->stvis.samples > 1) {
-      stw_pipe_blit(pipe, stwfb->textures[statt], stwfb->msaa_textures[statt]);
+      enum st_attachment_type blit_target = statt;
+      if (stwfb->fb->winsys_framebuffer) {
+         blit_target = ST_ATTACHMENT_BACK_LEFT;
+         need_swap_textures = true;
+      }
+
+      stw_pipe_blit(pipe, stwfb->textures[blit_target],
+                    stwfb->msaa_textures[statt]);
    } else if (stwfb->needs_fake_front) {
-      struct pipe_resource *ptex;
-
-      /* swap the textures */
-      ptex = stwfb->textures[ST_ATTACHMENT_FRONT_LEFT];
-      stwfb->textures[ST_ATTACHMENT_FRONT_LEFT] = stwfb->textures[ST_ATTACHMENT_BACK_LEFT];
-      stwfb->textures[ST_ATTACHMENT_BACK_LEFT] = ptex;
-
       /* fake front texture is now invalid */
       p_atomic_inc(&stwfb->base.stamp);
+      need_swap_textures = true;
+   }
+
+   if (need_swap_textures) {
+      struct pipe_resource *ptex = stwfb->textures[ST_ATTACHMENT_FRONT_LEFT];
+      stwfb->textures[ST_ATTACHMENT_FRONT_LEFT] = stwfb->textures[ST_ATTACHMENT_BACK_LEFT];
+      stwfb->textures[ST_ATTACHMENT_BACK_LEFT] = ptex;
    }
 
    if (stwfb->textures[statt])

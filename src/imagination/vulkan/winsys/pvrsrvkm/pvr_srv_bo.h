@@ -28,6 +28,7 @@
 
 #include "pvr_private.h"
 #include "pvr_srv.h"
+#include "pvr_types.h"
 #include "pvr_winsys.h"
 #include "util/macros.h"
 

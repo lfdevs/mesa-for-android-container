@@ -76,6 +76,7 @@
 #include "dri_common.h"
 #include "dri3_priv.h"
 #include "loader.h"
+#include "loader_dri_helper.h"
 #include "dri2.h"
 
 static struct dri3_drawable *
@@ -195,7 +196,7 @@ dri3_bind_context(struct glx_context *context, struct glx_context *old,
    pdraw = (struct dri3_drawable *) driFetchDrawable(context, draw);
    pread = (struct dri3_drawable *) driFetchDrawable(context, read);
 
-   driReleaseDrawables(&pcp->base);
+   driReleaseDrawables(old);
 
    if (pdraw)
       dri_draw = pdraw->loader_drawable.dri_drawable;
@@ -646,25 +647,10 @@ dri3_set_swap_interval(__GLXDRIdrawable *pdraw, int interval)
    assert(pdraw != NULL);
 
    struct dri3_drawable *priv =  (struct dri3_drawable *) pdraw;
-   GLint vblank_mode = DRI_CONF_VBLANK_DEF_INTERVAL_1;
    struct dri3_screen *psc = (struct dri3_screen *) priv->base.psc;
 
-   if (psc->config)
-      psc->config->configQueryi(psc->driScreen,
-                                "vblank_mode", &vblank_mode);
-
-   switch (vblank_mode) {
-   case DRI_CONF_VBLANK_NEVER:
-      if (interval != 0)
-         return GLX_BAD_VALUE;
-      break;
-   case DRI_CONF_VBLANK_ALWAYS_SYNC:
-      if (interval <= 0)
-         return GLX_BAD_VALUE;
-      break;
-   default:
-      break;
-   }
+   if (!dri_valid_swap_interval(psc->driScreen, psc->config, interval))
+      return GLX_BAD_VALUE;
 
    loader_dri3_set_swap_interval(&priv->loader_drawable, interval);
 

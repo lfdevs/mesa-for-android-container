@@ -38,6 +38,7 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 
+#include "intel/compiler/brw_isa_info.h"
 #include "util/macros.h"
 
 #include "aub_read.h"
@@ -59,6 +60,7 @@ static enum { COLOR_AUTO, COLOR_ALWAYS, COLOR_NEVER } option_color;
 uint16_t pci_id = 0;
 char *input_file = NULL, *xml_path = NULL;
 struct intel_device_info devinfo;
+struct brw_isa_info isa;
 struct intel_batch_decode_ctx batch_ctx;
 struct aub_mem mem;
 
@@ -73,6 +75,12 @@ aubinator_error(void *user_data, const void *aub_data, const char *msg)
 }
 
 static void
+aubinator_comment(void *user_data, const char *str)
+{
+   fprintf(outfile, "%s\n", str);
+}
+
+static void
 aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
 {
    pci_id = aub_pci_id;
@@ -81,6 +89,8 @@ aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
       fprintf(stderr, "can't find device information: pci_id=0x%x\n", pci_id);
       exit(EXIT_FAILURE);
    }
+
+   brw_init_isa_info(&isa, &devinfo);
 
    enum intel_batch_decode_flags batch_flags = 0;
    if (option_color == COLOR_ALWAYS)
@@ -91,8 +101,8 @@ aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
       batch_flags |= INTEL_BATCH_DECODE_OFFSETS;
    batch_flags |= INTEL_BATCH_DECODE_FLOATS;
 
-   intel_batch_decode_ctx_init(&batch_ctx, &devinfo, outfile, batch_flags,
-                               xml_path, NULL, NULL, NULL);
+   intel_batch_decode_ctx_init(&batch_ctx, &isa, &devinfo, outfile,
+                               batch_flags, xml_path, NULL, NULL, NULL);
 
    /* Check for valid spec instance, if wrong xml_path is passed then spec
     * instance is not initialized properly
@@ -310,9 +320,10 @@ int main(int argc, char *argv[])
       case 'g': {
          const int id = intel_device_name_to_pci_device_id(optarg);
          if (id < 0) {
-            fprintf(stderr, "can't parse gen: '%s', expected brw, g4x, ilk, "
+            fprintf(stderr, "can't parse gen: '%s', expected lpt, brw, g4x, ilk, "
                             "snb, ivb, hsw, byt, bdw, chv, skl, bxt, kbl, "
-                            "aml, glk, cfl, whl, cnl, icl", optarg);
+                            "aml, glk, cfl, whl, cml, icl, ehl, jsl, tgl, "
+                            "rkl, dg1, adl, sg1, rpl, dg2\n", optarg);
             exit(EXIT_FAILURE);
          } else {
             pci_id = id;
@@ -373,6 +384,7 @@ int main(int argc, char *argv[])
       .user_data = &mem,
       .error = aubinator_error,
       .info = aubinator_init,
+      .comment = aubinator_comment,
 
       .local_write = aub_mem_local_write,
       .phys_write = aub_mem_phys_write,

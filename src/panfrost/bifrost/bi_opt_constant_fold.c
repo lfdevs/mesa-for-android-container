@@ -58,6 +58,9 @@ bi_fold_constant(bi_instr *I, bool *unsupported)
         case BI_OPCODE_MKVEC_V4I8:
                 return (d << 24) | ((c & 0xFF) << 16) | ((b & 0xFF) << 8) | (a & 0xFF);
 
+        case BI_OPCODE_MKVEC_V2I8:
+                return (c << 16) | ((b & 0xFF) << 8) | (a & 0xFF);
+
         case BI_OPCODE_LSHIFT_OR_I32:
                 if (I->not_result || I->src[0].neg || I->src[1].neg)
                         break;

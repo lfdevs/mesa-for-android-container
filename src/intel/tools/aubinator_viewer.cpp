@@ -62,6 +62,7 @@ struct aub_file {
 
    /* Device state */
    struct intel_device_info devinfo;
+   struct brw_isa_info isa;
    struct intel_spec *spec;
 };
 
@@ -129,6 +130,7 @@ handle_info(void *user_data, int pci_id, const char *app_name)
       fprintf(stderr, "can't find device information: pci_id=0x%x\n", file->pci_id);
       exit(EXIT_FAILURE);
    }
+   brw_init_isa_info(&file->isa, &file->devinfo);
    file->spec = intel_spec_load(&file->devinfo);
 }
 
@@ -392,7 +394,7 @@ new_shader_window(struct aub_mem *mem, uint64_t address, const char *desc)
    if (shader_bo.map) {
       FILE *f = open_memstream(&window->shader, &window->shader_size);
       if (f) {
-         intel_disassemble(&context.file->devinfo,
+         intel_disassemble(&context.file->isa,
                            (const uint8_t *) shader_bo.map +
                            (address - shader_bo.addr), 0, f);
          fclose(f);

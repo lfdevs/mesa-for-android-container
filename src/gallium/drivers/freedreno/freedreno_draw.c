@@ -371,7 +371,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    if (FD_DBG(DDRAW))
       fd_context_all_dirty(ctx);
 
-   debug_assert(!batch->flushed);
+   assert(!batch->flushed);
 
    fd_batch_unlock_submit(batch);
    fd_batch_check_size(batch);
@@ -484,7 +484,7 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
       }
    }
 
-   debug_assert(!batch->flushed);
+   assert(!batch->flushed);
 
    fd_batch_unlock_submit(batch);
 

@@ -22,11 +22,13 @@ apt-get -y install \
 	flex \
 	g++ \
 	git \
+	glslang-tools \
 	kmod \
 	libasan6 \
 	libdrm-dev \
 	libelf-dev \
 	libexpat1-dev \
+	libvulkan-dev \
 	libx11-dev \
 	libx11-xcb-dev \
 	libxcb-dri2-0-dev \

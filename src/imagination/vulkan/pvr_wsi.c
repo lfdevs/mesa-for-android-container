@@ -25,11 +25,13 @@
  */
 
 #include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 #include <vulkan/vulkan.h>
 
 #include "pvr_private.h"
-#include "pvr_winsys.h"
 #include "util/u_atomic.h"
+#include "vk_object.h"
 #include "wsi_common.h"
 
 static PFN_vkVoidFunction pvr_wsi_proc_addr(VkPhysicalDevice physicalDevice,
@@ -83,42 +85,4 @@ VkResult pvr_QueuePresentKHR(VkQueue _queue,
    p_atomic_inc(&queue->device->global_queue_present_count);
 
    return VK_SUCCESS;
-}
-
-VkResult pvr_AcquireNextImage2KHR(VkDevice _device,
-                                  const VkAcquireNextImageInfoKHR *pAcquireInfo,
-                                  uint32_t *pImageIndex)
-{
-   PVR_FROM_HANDLE(pvr_device, device, _device);
-   struct pvr_winsys_syncobj *handles[2];
-   uint32_t count = 0U;
-   VkResult result;
-   VkResult ret;
-
-   result = wsi_common_acquire_next_image2(&device->pdevice->wsi_device,
-                                           _device,
-                                           pAcquireInfo,
-                                           pImageIndex);
-   if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
-      return result;
-
-   if (pAcquireInfo->fence) {
-      PVR_FROM_HANDLE(pvr_fence, fence, pAcquireInfo->fence);
-      handles[count++] = fence->syncobj;
-   }
-
-   if (pAcquireInfo->semaphore) {
-      PVR_FROM_HANDLE(pvr_semaphore, semaphore, pAcquireInfo->semaphore);
-      handles[count++] = semaphore->syncobj;
-   }
-
-   if (count == 0U)
-      return result;
-
-   /* We need to preserve VK_SUBOPTIMAL_KHR status. */
-   ret = device->ws->ops->syncobjs_signal(device->ws, handles, count);
-   if (ret != VK_SUCCESS)
-      return ret;
-
-   return result;
 }

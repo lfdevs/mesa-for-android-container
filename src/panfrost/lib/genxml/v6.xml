@@ -398,9 +398,7 @@
     <value name="YTR" value="1"/>
     <value name="Split Block" value="2"/>
     <value name="Wide Block" value="4"/>
-    <value name="Tiled Header" value="8"/>
     <value name="Prefetch" value="16"/>
-    <value name="Check Payload Range" value="32"/>
   </enum>
 
   <enum name="Wrap Mode">

@@ -514,7 +514,7 @@ spill_ctx_init(struct ra_spill_ctx *ctx, struct ir3_shader_variant *v,
       ctx->intervals[i] = &intervals[i];
 
    ctx->intervals_count = ctx->live->definitions_count;
-   ctx->compiler = v->shader->compiler;
+   ctx->compiler = v->compiler;
    ctx->merged_regs = v->mergedregs;
 
    rb_tree_init(&ctx->reg_ctx.intervals);

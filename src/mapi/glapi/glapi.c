@@ -33,22 +33,18 @@
  * u_current.c.
  */
 
-#ifdef USE_ELF_TLS
 /* not used, but defined for compatibility */
 const struct _glapi_table *_glapi_Dispatch;
 const void *_glapi_Context;
-#endif /* USE_ELF_TLS */
 
 void
 _glapi_destroy_multithread(void)
 {
-   u_current_destroy();
 }
 
 void
 _glapi_check_multithread(void)
 {
-   u_current_init();
 }
 
 void

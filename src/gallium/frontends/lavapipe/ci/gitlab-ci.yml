@@ -15,6 +15,7 @@ lavapipe:
     - mesa-swrast
   variables:
     DEQP_SUITE: lvp
+    MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
   stage: software-renderer
   extends:
     - .lavapipe-test

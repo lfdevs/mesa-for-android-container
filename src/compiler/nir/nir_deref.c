@@ -154,7 +154,8 @@ nir_deref_instr_is_known_out_of_bounds(nir_deref_instr *instr)
 }
 
 bool
-nir_deref_instr_has_complex_use(nir_deref_instr *deref)
+nir_deref_instr_has_complex_use(nir_deref_instr *deref,
+                                nir_deref_instr_has_complex_use_options opts)
 {
    nir_foreach_use(use_src, &deref->dest.ssa) {
       nir_instr *use_instr = use_src->parent_instr;
@@ -184,7 +185,7 @@ nir_deref_instr_has_complex_use(nir_deref_instr *deref)
              use_deref->deref_type != nir_deref_type_array)
             return true;
 
-         if (nir_deref_instr_has_complex_use(use_deref))
+         if (nir_deref_instr_has_complex_use(use_deref, opts))
             return true;
 
          continue;
@@ -211,6 +212,15 @@ nir_deref_instr_has_complex_use(nir_deref_instr *deref)
              * it and write a value there.
              */
             if (use_src == &use_intrin->src[0])
+               continue;
+            return true;
+
+         case nir_intrinsic_memcpy_deref:
+            if (use_src == &use_intrin->src[0] &&
+                (opts & nir_deref_instr_has_complex_use_allow_memcpy_dst))
+               continue;
+            if (use_src == &use_intrin->src[1] &&
+                (opts & nir_deref_instr_has_complex_use_allow_memcpy_src))
                continue;
             return true;
 
@@ -890,6 +900,30 @@ nir_deref_instr_fixup_child_types(nir_deref_instr *parent)
 }
 
 static bool
+opt_alu_of_cast(nir_alu_instr *alu)
+{
+   bool progress = false;
+
+   for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
+      assert(alu->src[i].src.is_ssa);
+      nir_instr *src_instr = alu->src[i].src.ssa->parent_instr;
+      if (src_instr->type != nir_instr_type_deref)
+         continue;
+
+      nir_deref_instr *src_deref = nir_instr_as_deref(src_instr);
+      if (src_deref->deref_type != nir_deref_type_cast)
+         continue;
+
+      assert(src_deref->parent.is_ssa);
+      nir_instr_rewrite_src_ssa(&alu->instr, &alu->src[i].src,
+                                src_deref->parent.ssa);
+      progress = true;
+   }
+
+   return progress;
+}
+
+static bool
 is_trivial_array_deref_cast(nir_deref_instr *cast)
 {
    assert(is_trivial_deref_cast(cast));
@@ -1195,6 +1229,8 @@ opt_deref_ptr_as_array(nir_builder *b, nir_deref_instr *deref)
    assert(parent->arr.index.is_ssa);
    assert(deref->arr.index.is_ssa);
 
+   deref->arr.in_bounds &= parent->arr.in_bounds;
+
    nir_ssa_def *new_idx = nir_iadd(b, parent->arr.index.ssa,
                                       deref->arr.index.ssa);
 
@@ -1385,6 +1421,13 @@ nir_opt_deref_impl(nir_function_impl *impl)
          b.cursor = nir_before_instr(instr);
 
          switch (instr->type) {
+         case nir_instr_type_alu: {
+            nir_alu_instr *alu = nir_instr_as_alu(instr);
+            if (opt_alu_of_cast(alu))
+               progress = true;
+            break;
+         }
+
          case nir_instr_type_deref: {
             nir_deref_instr *deref = nir_instr_as_deref(instr);
 

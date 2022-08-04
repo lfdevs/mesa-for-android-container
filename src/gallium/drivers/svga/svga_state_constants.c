@@ -1,6 +1,5 @@
-
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2022 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -605,7 +604,7 @@ emit_consts_vgpu9(struct svga_context *svga, enum pipe_shader_type shader)
       }
 
       assert(variant);
-      offset = variant->shader->info.file_max[TGSI_FILE_CONSTANT] + 1;
+      offset = variant->shader->info.constbuf0_num_uniforms;
       assert(count <= ARRAY_SIZE(extras));
 
       if (count > 0) {

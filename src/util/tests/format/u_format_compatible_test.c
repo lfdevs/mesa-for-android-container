@@ -41,16 +41,10 @@ test_all(void)
    for (src_format = 1; src_format < PIPE_FORMAT_COUNT; ++src_format) {
       const struct util_format_description *src_format_desc;
       src_format_desc = util_format_description(src_format);
-      if (!src_format_desc) {
-         continue;
-      }
 
       for (dst_format = 1; dst_format < PIPE_FORMAT_COUNT; ++dst_format) {
 	 const struct util_format_description *dst_format_desc;
 	 dst_format_desc = util_format_description(dst_format);
-	 if (!dst_format_desc) {
-	    continue;
-	 }
 
          if (dst_format == src_format) {
             continue;

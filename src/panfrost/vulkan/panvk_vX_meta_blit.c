@@ -118,13 +118,8 @@ panvk_meta_blit(struct panvk_cmd_buffer *cmdbuf,
       panvk_per_arch(cmd_alloc_fb_desc)(cmdbuf);
       panvk_per_arch(cmd_prepare_tiler_context)(cmdbuf);
 
-#if PAN_ARCH >= 6
       tsd = batch->tls.gpu;
       tiler = batch->tiler.descs.gpu;
-#else
-      tsd = batch->fb.desc.gpu;
-      tiler = 0;
-#endif
 
       struct panfrost_ptr job =
          GENX(pan_blit)(&ctx, &cmdbuf->desc_pool.base, &batch->scoreboard, tsd, tiler);

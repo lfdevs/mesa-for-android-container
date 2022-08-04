@@ -49,6 +49,9 @@ struct gcm_block_info {
    /* Number of loops this block is inside */
    unsigned loop_depth;
 
+   /* Number of ifs this block is inside */
+   unsigned if_depth;
+
    unsigned loop_instr_count;
 
    /* The loop the block is nested inside or NULL */
@@ -128,13 +131,14 @@ get_loop_instr_count(struct exec_list *cf_list)
 /* Recursively walks the CFG and builds the block_info structure */
 static void
 gcm_build_block_info(struct exec_list *cf_list, struct gcm_state *state,
-                     nir_loop *loop, unsigned loop_depth,
+                     nir_loop *loop, unsigned loop_depth, unsigned if_depth,
                      unsigned loop_instr_count)
 {
    foreach_list_typed(nir_cf_node, node, node, cf_list) {
       switch (node->type) {
       case nir_cf_node_block: {
          nir_block *block = nir_cf_node_as_block(node);
+         state->blocks[block->index].if_depth = if_depth;
          state->blocks[block->index].loop_depth = loop_depth;
          state->blocks[block->index].loop_instr_count = loop_instr_count;
          state->blocks[block->index].loop = loop;
@@ -142,13 +146,15 @@ gcm_build_block_info(struct exec_list *cf_list, struct gcm_state *state,
       }
       case nir_cf_node_if: {
          nir_if *if_stmt = nir_cf_node_as_if(node);
-         gcm_build_block_info(&if_stmt->then_list, state, loop, loop_depth, ~0u);
-         gcm_build_block_info(&if_stmt->else_list, state, loop, loop_depth, ~0u);
+         gcm_build_block_info(&if_stmt->then_list, state, loop, loop_depth,
+                              if_depth + 1, ~0u);
+         gcm_build_block_info(&if_stmt->else_list, state, loop, loop_depth,
+                              if_depth + 1, ~0u);
          break;
       }
       case nir_cf_node_loop: {
          nir_loop *loop = nir_cf_node_as_loop(node);
-         gcm_build_block_info(&loop->body, state, loop, loop_depth + 1,
+         gcm_build_block_info(&loop->body, state, loop, loop_depth + 1, if_depth,
                               get_loop_instr_count(&loop->body));
          break;
       }
@@ -375,6 +381,10 @@ gcm_pin_instructions(nir_function_impl *impl, struct gcm_state *state)
             pin_intrinsic(nir_instr_as_intrinsic(instr));
             break;
 
+         case nir_instr_type_call:
+            instr->pass_flags = GCM_INSTR_PINNED;
+            break;
+
          case nir_instr_type_jump:
          case nir_instr_type_ssa_undef:
          case nir_instr_type_phi:
@@ -528,20 +538,72 @@ set_block_for_loop_instr(struct gcm_state *state, nir_instr *instr,
    return false;
 }
 
+static bool
+set_block_to_if_block(struct gcm_state *state,  nir_instr *instr,
+                      nir_block *block)
+{
+   if (instr->type == nir_instr_type_load_const)
+      return true;
+
+   /* TODO: Figure out some more heuristics to allow more to be moved into
+    * if-statements.
+    */
+
+   return false;
+}
+
 static nir_block *
 gcm_choose_block_for_instr(nir_instr *instr, nir_block *early_block,
                            nir_block *late_block, struct gcm_state *state)
 {
    assert(nir_block_dominates(early_block, late_block));
 
+   bool block_set = false;
+
+   /* First see if we can push the instruction down into an if-statements block */
    nir_block *best = late_block;
    for (nir_block *block = late_block; block != NULL; block = block->imm_dom) {
+      if (state->blocks[block->index].loop_depth >
+          state->blocks[instr->block->index].loop_depth)
+         continue;
+
+      if (state->blocks[block->index].if_depth >=
+          state->blocks[best->index].if_depth &&
+          set_block_to_if_block(state, instr, block)) {
+            /* If we are pushing the instruction into an if we want it to be
+             * in the earliest block not the latest to avoid creating register
+             * pressure issues. So we don't break unless we come across the
+             * block the instruction was originally in.
+             */
+            best = block;
+            block_set = true;
+            if (block == instr->block)
+               break;
+      } else if (block == instr->block) {
+         /* If we couldn't push the instruction later just put is back where it
+          * was previously.
+          */
+         if (!block_set)
+            best = block;
+         break;
+      }
+
+      if (block == early_block)
+         break;
+   }
+
+   /* Now see if we can evict the instruction from a loop */
+   for (nir_block *block = late_block; block != NULL; block = block->imm_dom) {
       if (state->blocks[block->index].loop_depth <
-          state->blocks[best->index].loop_depth &&
-          set_block_for_loop_instr(state, instr, block))
-         best = block;
-      else if (block == instr->block)
-         best = block;
+          state->blocks[best->index].loop_depth) {
+         if (set_block_for_loop_instr(state, instr, block)) {
+            best = block;
+         } else if (block == instr->block) {
+            if (!block_set)
+               best = block;
+            break;
+         }
+      }
 
       if (block == early_block)
          break;
@@ -735,7 +797,8 @@ opt_gcm_impl(nir_shader *shader, nir_function_impl *impl, bool value_number)
    nir_metadata_require(impl, nir_metadata_block_index |
                               nir_metadata_dominance);
    nir_metadata_require(impl, nir_metadata_loop_analysis,
-                        shader->options->force_indirect_unrolling);
+                        shader->options->force_indirect_unrolling,
+                        shader->options->force_indirect_unrolling_sampler);
 
    /* A previous pass may have left pass_flags dirty, so clear it all out. */
    nir_foreach_block(block, impl)
@@ -750,7 +813,7 @@ opt_gcm_impl(nir_shader *shader, nir_function_impl *impl, bool value_number)
    exec_list_make_empty(&state.instrs);
    state.blocks = rzalloc_array(NULL, struct gcm_block_info, impl->num_blocks);
 
-   gcm_build_block_info(&impl->body, &state, NULL, 0, ~0u);
+   gcm_build_block_info(&impl->body, &state, NULL, 0, 0, ~0u);
 
    gcm_pin_instructions(impl, &state);
 

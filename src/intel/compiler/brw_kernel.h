@@ -49,7 +49,7 @@ struct brw_kernel_arg_desc {
 struct brw_kernel {
    struct brw_cs_prog_data prog_data;
 
-   struct brw_compile_stats stats;
+   struct brw_compile_stats stats[3];
 
    uint16_t args_size;
    uint16_t arg_count;

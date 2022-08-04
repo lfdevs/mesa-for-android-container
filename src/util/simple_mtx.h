@@ -26,6 +26,7 @@
 
 #include "util/futex.h"
 #include "util/macros.h"
+#include "u_atomic.h"
 
 #include "c11/threads.h"
 
@@ -95,16 +96,16 @@ simple_mtx_lock(simple_mtx_t *mtx)
 {
    uint32_t c;
 
-   c = __sync_val_compare_and_swap(&mtx->val, 0, 1);
+   c = p_atomic_cmpxchg(&mtx->val, 0, 1);
 
    assert(c != _SIMPLE_MTX_INVALID_VALUE);
 
    if (__builtin_expect(c != 0, 0)) {
       if (c != 2)
-         c = __sync_lock_test_and_set(&mtx->val, 2);
+         c = p_atomic_xchg(&mtx->val, 2);
       while (c != 0) {
          futex_wait(&mtx->val, 2, NULL);
-         c = __sync_lock_test_and_set(&mtx->val, 2);
+         c = p_atomic_xchg(&mtx->val, 2);
       }
    }
 
@@ -118,7 +119,7 @@ simple_mtx_unlock(simple_mtx_t *mtx)
 
    HG(ANNOTATE_RWLOCK_RELEASED(mtx, 1));
 
-   c = __sync_fetch_and_sub(&mtx->val, 1);
+   c = p_atomic_fetch_add(&mtx->val, -1);
 
    assert(c != _SIMPLE_MTX_INVALID_VALUE);
 
@@ -167,7 +168,7 @@ simple_mtx_unlock(simple_mtx_t *mtx)
 static inline void
 simple_mtx_assert_locked(simple_mtx_t *mtx)
 {
-#ifdef DEBUG
+#ifndef NDEBUG
    /* NOTE: this would not work for recursive mutexes, but
     * mtx_t doesn't support those
     */

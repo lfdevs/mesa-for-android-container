@@ -284,6 +284,7 @@ struct dri2_egl_display
    struct zwp_linux_dmabuf_feedback_v1 *wl_dmabuf_feedback;
    struct dmabuf_feedback_format_table format_table;
    bool authenticated;
+   uint32_t capabilities;
    char *device_name;
 #endif
 
@@ -415,12 +416,6 @@ struct dri2_egl_sync {
    int refcount;
    void *fence;
 };
-
-/* From driconf.h, user exposed so should be stable */
-#define DRI_CONF_VBLANK_NEVER 0
-#define DRI_CONF_VBLANK_DEF_INTERVAL_0 1
-#define DRI_CONF_VBLANK_DEF_INTERVAL_1 2
-#define DRI_CONF_VBLANK_ALWAYS_SYNC 3
 
 /* standard typecasts */
 _EGL_DRIVER_STANDARD_TYPECASTS(dri2_egl)

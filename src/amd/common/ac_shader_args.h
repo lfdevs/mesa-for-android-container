@@ -97,6 +97,7 @@ struct ac_shader_args {
 
    /* TCS */
    struct ac_arg tcs_factor_offset;
+   struct ac_arg tcs_wave_id; /* gfx11+ */
    struct ac_arg tcs_patch_id;
    struct ac_arg tcs_rel_ids;
 
@@ -110,6 +111,7 @@ struct ac_shader_args {
    struct ac_arg es2gs_offset;      /* separate legacy ES */
    struct ac_arg gs2vs_offset;      /* legacy GS */
    struct ac_arg gs_wave_id;        /* legacy GS */
+   struct ac_arg gs_attr_offset;    /* gfx11+: attribute ring offset in 512B increments */
    struct ac_arg gs_vtx_offset[6];  /* GFX6-8: [0-5], GFX9+: [0-2] packed */
    struct ac_arg gs_prim_id;
    struct ac_arg gs_invocation_id;
@@ -139,13 +141,16 @@ struct ac_shader_args {
    struct ac_arg workgroup_ids[3];
    struct ac_arg tg_size;
 
+   /* Mesh and task shaders */
+   struct ac_arg task_ring_entry; /* Pointer into the draw and payload rings. */
+
    /* Vulkan only */
    struct ac_arg push_constants;
    struct ac_arg inline_push_consts[AC_MAX_INLINE_PUSH_CONSTS];
    uint64_t inline_push_const_mask;
    struct ac_arg view_index;
    struct ac_arg sbt_descriptors;
-   struct ac_arg ray_launch_size;
+   struct ac_arg ray_launch_size_addr;
    struct ac_arg force_vrs_rates;
 };
 

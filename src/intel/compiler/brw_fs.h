@@ -81,6 +81,8 @@ offset(const fs_reg &reg, const brw::fs_builder &bld, unsigned delta)
 struct shader_stats {
    const char *scheduler_mode;
    unsigned promoted_constants;
+   unsigned spill_count;
+   unsigned fill_count;
 };
 
 /**
@@ -170,6 +172,7 @@ public:
    bool opt_drop_redundant_mov_to_flags();
    bool opt_register_renaming();
    bool opt_bank_conflicts();
+   bool opt_split_sends();
    bool register_coalesce();
    bool compute_to_mrf();
    bool eliminate_find_live_channel();
@@ -196,6 +199,7 @@ public:
    bool lower_simd_width();
    bool lower_barycentrics();
    bool lower_derivatives();
+   bool lower_find_live_channel();
    bool lower_scoreboard();
    bool lower_sub_sat();
    bool opt_combine_constants();
@@ -309,7 +313,6 @@ public:
    fs_inst *emit_single_fb_write(const brw::fs_builder &bld,
                                  fs_reg color1, fs_reg color2,
                                  fs_reg src0_alpha, unsigned components);
-   void emit_alpha_to_coverage_workaround(const fs_reg &src0_alpha);
    void emit_fb_writes();
    fs_inst *emit_non_coherent_fb_read(const brw::fs_builder &bld,
                                       const fs_reg &dst, unsigned target);
@@ -324,6 +327,7 @@ public:
    void emit_gs_input_load(const fs_reg &dst, const nir_src &vertex_src,
                            unsigned base_offset, const nir_src &offset_src,
                            unsigned num_components, unsigned first_component);
+   void emit_urb_fence();
    void emit_cs_terminate();
    fs_reg emit_work_group_id_setup();
 
@@ -646,14 +650,20 @@ fs_reg setup_imm_b(const brw::fs_builder &bld,
 fs_reg setup_imm_ub(const brw::fs_builder &bld,
                    uint8_t v);
 
-enum brw_barycentric_mode brw_barycentric_mode(enum glsl_interp_mode mode,
-                                               nir_intrinsic_op op);
+enum brw_barycentric_mode brw_barycentric_mode(nir_intrinsic_instr *intr);
 
 uint32_t brw_fb_write_msg_control(const fs_inst *inst,
                                   const struct brw_wm_prog_data *prog_data);
 
 void brw_compute_urb_setup_index(struct brw_wm_prog_data *wm_prog_data);
 
-void brw_nir_lower_simd(nir_shader *nir, unsigned dispatch_width);
+bool brw_nir_lower_simd(nir_shader *nir, unsigned dispatch_width);
+
+namespace brw {
+   class fs_builder;
+}
+
+fs_reg brw_sample_mask_reg(const brw::fs_builder &bld);
+void brw_emit_predicate_on_sample_mask(const brw::fs_builder &bld, fs_inst *inst);
 
 #endif /* BRW_FS_H */

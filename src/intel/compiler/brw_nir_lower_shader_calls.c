@@ -266,7 +266,7 @@ brw_nir_lower_shader_calls(nir_shader *shader)
  * return to the caller.
  *
  * By default, our HW has the ability to handle the fact that a shader is not
- * available and will execute the next folowing shader in the tracing call.
+ * available and will execute the next following shader in the tracing call.
  * For instance, a RAYGEN shader traces a ray, the tracing generates a hit,
  * but there is no ANYHIT shader available. The HW should follow up by
  * execution the CLOSESTHIT shader.

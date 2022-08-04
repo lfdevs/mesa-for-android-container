@@ -562,29 +562,21 @@ brw_nir_lower_ray_queries(nir_shader *shader,
    assert(exec_list_length(&shader->functions) == 1);
 
    /* Find query variables */
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      nir_foreach_block_safe(block, function->impl) {
-         nir_foreach_instr(instr, block)
-            maybe_create_brw_var(instr, &state);
-      }
+   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+   nir_foreach_block_safe(block, impl) {
+      nir_foreach_instr(instr, block)
+         maybe_create_brw_var(instr, &state);
    }
 
-   bool progress = false;
-   if (_mesa_hash_table_num_entries(state.queries) > 0) {
-      nir_foreach_function(function, shader) {
-         if (function->impl)
-            lower_ray_query_impl(function->impl, &state);
-      }
+   bool progress = _mesa_hash_table_num_entries(state.queries) > 0;
+
+   if (progress) {
+      lower_ray_query_impl(impl, &state);
 
       nir_remove_dead_derefs(shader);
       nir_remove_dead_variables(shader,
                                 nir_var_shader_temp | nir_var_function_temp,
                                 NULL);
-
-      progress = true;
    }
 
    ralloc_free(state.queries);

@@ -51,6 +51,10 @@
 #   error #define __pvr_get_address before including this file
 #endif
 
+#ifndef __pvr_make_address
+#   error #define __pvr_make_address before including this file
+#endif
+
 union __pvr_value {
    float f;
    uint32_t dw;
@@ -79,6 +83,15 @@ __pvr_uint(uint64_t v, uint32_t start, NDEBUG_UNUSED uint32_t end)
 }
 
 static inline __attribute__((always_inline)) uint64_t
+__pvr_uint_unpack(uint64_t packed, uint32_t start, uint32_t end)
+{
+   const int width = end - start + 1;
+   const uint64_t mask = ~0ull >> (64 - width);
+
+   return (packed >> start) & mask;
+}
+
+static inline __attribute__((always_inline)) uint64_t
 __pvr_sint(int64_t v, uint32_t start, uint32_t end)
 {
    const int width = end - start + 1;
@@ -98,6 +111,15 @@ __pvr_sint(int64_t v, uint32_t start, uint32_t end)
    return (v & mask) << start;
 }
 
+static inline __attribute__((always_inline)) int64_t
+__pvr_sint_unpack(uint64_t packed, uint32_t start, uint32_t end)
+{
+   const int width = end - start + 1;
+   const uint64_t mask = ~0ull >> (64 - width);
+
+   return (int64_t)((packed >> start) & mask);
+}
+
 static inline __attribute__((always_inline)) uint64_t
 __pvr_offset(uint64_t v,
              NDEBUG_UNUSED uint32_t start,
@@ -114,6 +136,20 @@ __pvr_offset(uint64_t v,
 }
 
 static inline __attribute__((always_inline)) uint64_t
+__pvr_offset_unpack(uint64_t packed,
+                    NDEBUG_UNUSED uint32_t start,
+                    NDEBUG_UNUSED uint32_t end)
+{
+#ifndef NDEBUG
+   uint64_t mask = (~0ull >> (64 - (end - start + 1))) << start;
+
+   assert((packed & ~mask) == 0);
+#endif
+
+   return packed;
+}
+
+static inline __attribute__((always_inline)) uint64_t
 __pvr_address(__pvr_address_type address,
               uint32_t shift,
               uint32_t start,
@@ -125,10 +161,28 @@ __pvr_address(__pvr_address_type address,
    return ((addr_u64 >> shift) << start) & mask;
 }
 
+static inline __attribute__((always_inline)) __pvr_address_type
+__pvr_address_unpack(uint64_t packed,
+                     uint32_t shift,
+                     uint32_t start,
+                     uint32_t end)
+{
+   uint64_t mask = (~0ull >> (64 - (end - start + 1))) << start;
+   uint64_t addr_u64 = ((packed & mask) >> start) << shift;
+
+   return __pvr_make_address(addr_u64);
+}
+
 static inline __attribute__((always_inline)) uint32_t __pvr_float(float v)
 {
    __pvr_validate_value(v);
    return ((union __pvr_value){ .f = (v) }).dw;
+}
+
+static inline __attribute__((always_inline)) float
+__pvr_float_unpack(uint32_t packed)
+{
+   return ((union __pvr_value){ .dw = (packed) }).f;
 }
 
 static inline __attribute__((always_inline)) uint64_t

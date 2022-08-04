@@ -30,7 +30,7 @@ files_libintel_dev = files(
 )
 
 libintel_dev = static_library(
-  ['intel_dev'],
+  'intel_dev',
   [files_libintel_dev, sha1_h],
   include_directories : [inc_include, inc_src, inc_intel],
   dependencies : [dep_libdrm, idep_mesautil],
@@ -48,6 +48,37 @@ if with_tests
        ),
        suite : ['intel'],
       )
+endif
+
+if with_tests and with_tools.contains('drm-shim') and with_tools.contains('intel')
+  platforms = [ [ 70,  ['ivb', 'byt'] ],
+                [ 75,  ['hsw'] ],
+                [ 80,  ['bdw', 'chv'] ],
+                [ 90,  ['skl', 'kbl', 'aml', 'cml', 'whl', 'bxt', 'glk'] ],
+                [ 110, ['icl', 'ehl', 'jsl'] ],
+                [ 120, ['tgl', 'rkl', 'adl', 'rpl', 'dg1', 'sg1'] ],
+                [ 125, ['dg2'] ],
+              ]
+  intel_devinfo_override_test = executable(
+    'intel_device_info_override_test',
+    'intel_device_info_override_test.c',
+    dependencies : [dep_libdrm],
+    include_directories : [inc_include, inc_src],
+    link_with : libintel_dev,
+  )
+  foreach _gens : platforms
+    gen = _gens[0]
+    foreach p : _gens[1]
+              test('intel_device_info_override_test_@0@'.format(p),
+                   intel_devinfo_override_test,
+                   args : '@0@'.format(gen),
+                   env : [ 'LD_PRELOAD=@0@'.format(join_paths(
+                     meson.current_build_dir(), '../tools/libintel_noop_drm_shim.so')),
+                           'INTEL_STUB_GPU_PLATFORM=@0@'.format(p) ],
+                   suite : ['intel'],
+                  )
+    endforeach
+  endforeach
 endif
 
 if with_intel_tools

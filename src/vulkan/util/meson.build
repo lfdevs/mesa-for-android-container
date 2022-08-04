@@ -98,7 +98,7 @@ libvulkan_util = static_library(
   [files_vulkan_util, vk_dispatch_table, vk_enum_to_str, vk_extensions],
   include_directories : [inc_include, inc_src, inc_gallium],
   dependencies : [vulkan_wsi_deps, idep_mesautil, idep_nir_headers],
-  c_args : [vulkan_wsi_args],
+  c_args : [c_msvc_compat_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

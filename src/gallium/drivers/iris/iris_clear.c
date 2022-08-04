@@ -261,7 +261,8 @@ fast_clear_color(struct iris_context *ice,
                               (devinfo->verx10 == 120 ?
                                  PIPE_CONTROL_DEPTH_STALL : 0) |
                               (devinfo->verx10 == 125 ?
-                                 PIPE_CONTROL_FLUSH_HDC : 0) |
+                                 PIPE_CONTROL_FLUSH_HDC |
+                                 PIPE_CONTROL_DATA_CACHE_FLUSH : 0) |
                               PIPE_CONTROL_PSS_STALL_SYNC);
 
    iris_batch_sync_region_start(batch);

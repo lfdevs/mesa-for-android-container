@@ -29,17 +29,18 @@
 #include "pvr_rogue_fwif_shared.h"
 
 struct rogue_fwif_rf_regs {
-   uint64_t cdm_ctrl_stream_base;
+   union {
+      uint64_t cdm_cb_base;
+      uint64_t cdm_ctrl_stream_base;
+   };
+
+   uint64_t cdm_cb_queue;
+   uint64_t cdm_cb;
 };
 
-/* Enables the reset framework in the firmware. */
-#define ROGUE_FWIF_RF_FLAG_ENABLE 0x00000001U
-
 struct rogue_fwif_rf_cmd {
-   uint32_t flags;
-
    /* THIS MUST BE THE LAST MEMBER OF THE CONTAINING STRUCTURE */
-   struct rogue_fwif_rf_regs ALIGN(8) regs;
+   struct rogue_fwif_rf_regs ALIGN_ATTR(8) regs;
 };
 
 #endif /* PVR_ROGUE_FWIF_RF_H */

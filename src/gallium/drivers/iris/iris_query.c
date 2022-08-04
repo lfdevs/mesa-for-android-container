@@ -310,7 +310,7 @@ calculate_result_on_cpu(const struct intel_device_info *devinfo,
       break;
    case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
       q->result = false;
-      for (int i = 0; i < MAX_VERTEX_STREAMS; i++)
+      for (int i = 0; i < PIPE_MAX_VERTEX_STREAMS; i++)
          q->result |= stream_overflowed((void *) q->map, i);
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS_SINGLE:
@@ -356,12 +356,12 @@ calc_overflow_for_stream(struct mi_builder *b,
 static struct mi_value
 calc_overflow_any_stream(struct mi_builder *b, struct iris_query *q)
 {
-   struct mi_value stream_result[MAX_VERTEX_STREAMS];
-   for (int i = 0; i < MAX_VERTEX_STREAMS; i++)
+   struct mi_value stream_result[PIPE_MAX_VERTEX_STREAMS];
+   for (int i = 0; i < PIPE_MAX_VERTEX_STREAMS; i++)
       stream_result[i] = calc_overflow_for_stream(b, q, i);
 
    struct mi_value result = stream_result[0];
-   for (int i = 1; i < MAX_VERTEX_STREAMS; i++)
+   for (int i = 1; i < PIPE_MAX_VERTEX_STREAMS; i++)
       result = mi_ior(b, result, stream_result[i]);
 
    return result;

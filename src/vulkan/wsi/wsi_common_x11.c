@@ -40,6 +40,7 @@
 #include <xf86drm.h>
 #include "drm-uapi/drm_fourcc.h"
 #include "util/hash_table.h"
+#include "util/os_file.h"
 #include "util/os_time.h"
 #include "util/u_debug.h"
 #include "util/u_thread.h"
@@ -65,6 +66,7 @@ struct wsi_x11_connection {
    bool is_proprietary_x11;
    bool is_xwayland;
    bool has_mit_shm;
+   bool has_xfixes;
 };
 
 struct wsi_x11 {
@@ -188,8 +190,14 @@ static struct wsi_x11_connection *
 wsi_x11_connection_create(struct wsi_device *wsi_dev,
                           xcb_connection_t *conn)
 {
-   xcb_query_extension_cookie_t dri3_cookie, pres_cookie, randr_cookie, amd_cookie, nv_cookie, shm_cookie, sync_cookie;
-   xcb_query_extension_reply_t *dri3_reply, *pres_reply, *randr_reply, *amd_reply, *nv_reply, *shm_reply = NULL;
+   xcb_query_extension_cookie_t dri3_cookie, pres_cookie, randr_cookie,
+                                amd_cookie, nv_cookie, shm_cookie, sync_cookie,
+                                xfixes_cookie;
+   xcb_query_extension_reply_t *dri3_reply, *pres_reply, *randr_reply,
+                               *amd_reply, *nv_reply, *shm_reply = NULL,
+                               *xfixes_reply;
+   bool wants_shm = wsi_dev->sw && !(WSI_DEBUG & WSI_DEBUG_NOSHM) &&
+                    wsi_dev->has_import_memory_host;
    bool has_dri3_v1_2 = false;
    bool has_present_v1_2 = false;
 
@@ -203,8 +211,9 @@ wsi_x11_connection_create(struct wsi_device *wsi_dev,
    dri3_cookie = xcb_query_extension(conn, 4, "DRI3");
    pres_cookie = xcb_query_extension(conn, 7, "Present");
    randr_cookie = xcb_query_extension(conn, 5, "RANDR");
+   xfixes_cookie = xcb_query_extension(conn, 6, "XFIXES");
 
-   if (wsi_dev->sw)
+   if (wants_shm)
       shm_cookie = xcb_query_extension(conn, 7, "MIT-SHM");
 
    /* We try to be nice to users and emit a warning if they try to use a
@@ -225,15 +234,17 @@ wsi_x11_connection_create(struct wsi_device *wsi_dev,
    randr_reply = xcb_query_extension_reply(conn, randr_cookie, NULL);
    amd_reply = xcb_query_extension_reply(conn, amd_cookie, NULL);
    nv_reply = xcb_query_extension_reply(conn, nv_cookie, NULL);
-   if (wsi_dev->sw)
+   xfixes_reply = xcb_query_extension_reply(conn, xfixes_cookie, NULL);
+   if (wants_shm)
       shm_reply = xcb_query_extension_reply(conn, shm_cookie, NULL);
-   if (!dri3_reply || !pres_reply) {
+   if (!dri3_reply || !pres_reply || !xfixes_reply) {
       free(dri3_reply);
       free(pres_reply);
+      free(xfixes_reply);
       free(randr_reply);
       free(amd_reply);
       free(nv_reply);
-      if (wsi_dev->sw)
+      if (wants_shm)
          free(shm_reply);
       vk_free(&wsi_dev->instance_alloc, wsi_conn);
       return NULL;
@@ -267,6 +278,17 @@ wsi_x11_connection_create(struct wsi_device *wsi_dev,
    }
 #endif
 
+   wsi_conn->has_xfixes = xfixes_reply->present != 0;
+   if (wsi_conn->has_xfixes) {
+      xcb_xfixes_query_version_cookie_t ver_cookie;
+      xcb_xfixes_query_version_reply_t *ver_reply;
+
+      ver_cookie = xcb_xfixes_query_version(conn, 6, 0);
+      ver_reply = xcb_xfixes_query_version_reply(conn, ver_cookie, NULL);
+      wsi_conn->has_xfixes = (ver_reply->major_version >= 2);
+      free(ver_reply);
+   }
+
    if (randr_reply && randr_reply->present != 0)
       wsi_conn->is_xwayland = wsi_x11_detect_xwayland(conn);
    else
@@ -280,7 +302,7 @@ wsi_x11_connection_create(struct wsi_device *wsi_dev,
       wsi_conn->is_proprietary_x11 = true;
 
    wsi_conn->has_mit_shm = false;
-   if (wsi_conn->has_dri3 && wsi_conn->has_present && wsi_dev->sw) {
+   if (wsi_conn->has_dri3 && wsi_conn->has_present && wants_shm) {
       bool has_mit_shm = shm_reply->present != 0;
 
       xcb_shm_query_version_cookie_t ver_cookie;
@@ -309,7 +331,7 @@ wsi_x11_connection_create(struct wsi_device *wsi_dev,
    free(randr_reply);
    free(amd_reply);
    free(nv_reply);
-   if (wsi_dev->sw)
+   if (wants_shm)
       free(shm_reply);
 
    return wsi_conn;
@@ -758,7 +780,7 @@ x11_surface_get_formats(VkIcdSurfaceBase *surface,
    for (unsigned i = 0; i < count; i++) {
       vk_outarray_append_typed(VkSurfaceFormatKHR, &out, f) {
          f->format = sorted_formats[i];
-         f->colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+         f->colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
       }
    }
 
@@ -784,7 +806,7 @@ x11_surface_get_formats2(VkIcdSurfaceBase *surface,
       vk_outarray_append_typed(VkSurfaceFormat2KHR, &out, f) {
          assert(f->sType == VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR);
          f->surfaceFormat.format = sorted_formats[i];
-         f->surfaceFormat.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+         f->surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
       }
    }
 
@@ -889,6 +911,8 @@ wsi_CreateXlibSurfaceKHR(VkInstance _instance,
 struct x11_image {
    struct wsi_image                          base;
    xcb_pixmap_t                              pixmap;
+   xcb_xfixes_region_t                       update_region; /* long lived XID */
+   xcb_xfixes_region_t                       update_area;   /* the above or None */
    bool                                      busy;
    bool                                      present_queued;
    struct xshmfence *                        shm_fence;
@@ -1237,24 +1261,26 @@ x11_present_to_x11_dri3(struct x11_swapchain *chain, uint32_t image_index,
    image->serial = (uint32_t) chain->send_sbc;
 
    xcb_void_cookie_t cookie =
-      xcb_present_pixmap(chain->conn,
-                         chain->window,
-                         image->pixmap,
-                         image->serial,
-                         0,                                    /* valid */
-                         0,                                    /* update */
-                         0,                                    /* x_off */
-                         0,                                    /* y_off */
-                         XCB_NONE,                             /* target_crtc */
-                         XCB_NONE,
-                         image->sync_fence,
-                         options,
-                         target_msc,
-                         divisor,
-                         remainder, 0, NULL);
-   xcb_discard_reply(chain->conn, cookie.sequence);
-
-   xcb_flush(chain->conn);
+      xcb_present_pixmap_checked(chain->conn,
+                                 chain->window,
+                                 image->pixmap,
+                                 image->serial,
+                                 0,                            /* valid */
+                                 image->update_area,           /* update */
+                                 0,                            /* x_off */
+                                 0,                            /* y_off */
+                                 XCB_NONE,                     /* target_crtc */
+                                 XCB_NONE,
+                                 image->sync_fence,
+                                 options,
+                                 target_msc,
+                                 divisor,
+                                 remainder, 0, NULL);
+   xcb_generic_error_t *error = xcb_request_check(chain->conn, cookie);
+   if (error) {
+      free(error);
+      return x11_swapchain_result(chain, VK_ERROR_SURFACE_LOST_KHR);
+   }
 
    return x11_swapchain_result(chain, VK_SUCCESS);
 }
@@ -1269,15 +1295,12 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index,
    struct x11_image *image = &chain->images[image_index];
 
    xcb_void_cookie_t cookie;
-   void *myptr;
+   void *myptr = image->base.cpu_map;
    size_t hdr_len = sizeof(xcb_put_image_request_t);
    int stride_b = image->base.row_pitches[0];
    size_t size = (hdr_len + stride_b * chain->extent.height) >> 2;
    uint64_t max_req_len = xcb_get_maximum_request_length(chain->conn);
-
-   chain->base.wsi->MapMemory(chain->base.device,
-                              image->base.memory,
-                              0, VK_WHOLE_SIZE, 0, &myptr);
+   chain->images[image_index].busy = false;
 
    if (size < max_req_len) {
       cookie = xcb_put_image(chain->conn, XCB_IMAGE_FORMAT_Z_PIXMAP,
@@ -1287,7 +1310,7 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index,
                              chain->extent.height,
                              0,0,0,24,
                              image->base.row_pitches[0] * chain->extent.height,
-                             myptr);
+                             image->base.cpu_map);
       xcb_discard_reply(chain->conn, cookie.sequence);
    } else {
       int num_lines = ((max_req_len << 2) - hdr_len) / stride_b;
@@ -1309,7 +1332,6 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index,
       }
    }
 
-   chain->base.wsi->UnmapMemory(chain->base.device, image->base.memory);
    xcb_flush(chain->conn);
    return x11_swapchain_result(chain, VK_SUCCESS);
 }
@@ -1344,10 +1366,29 @@ x11_acquire_next_image(struct wsi_swapchain *anv_chain,
    if (chain->status < 0)
       return chain->status;
 
-   /* For software drivers and without shared memory we only render to a single image. */
    if (chain->base.wsi->sw && !chain->has_mit_shm) {
-      *image_index = 0;
-      return VK_SUCCESS;
+      for (unsigned i = 0; i < chain->base.image_count; i++) {
+         if (!chain->images[i].busy) {
+            *image_index = i;
+            chain->images[i].busy = true;
+            xcb_generic_error_t *err;
+
+            xcb_get_geometry_cookie_t geom_cookie = xcb_get_geometry(chain->conn, chain->window);
+            xcb_get_geometry_reply_t *geom = xcb_get_geometry_reply(chain->conn, geom_cookie, &err);
+            VkResult result = VK_SUCCESS;
+            if (geom) {
+               if (chain->extent.width != geom->width ||
+                   chain->extent.height != geom->height)
+                  result = VK_SUBOPTIMAL_KHR;
+            } else {
+               result = VK_ERROR_SURFACE_LOST_KHR;
+            }
+            free(err);
+            free(geom);
+            return result;
+         }
+      }
+      return VK_NOT_READY;
    }
 
    if (chain->has_acquire_queue) {
@@ -1356,6 +1397,8 @@ x11_acquire_next_image(struct wsi_swapchain *anv_chain,
       return x11_acquire_next_image_poll_x11(chain, image_index, timeout);
    }
 }
+
+#define MAX_DAMAGE_RECTS 64
 
 /**
  * Queue a new presentation of an image that was previously acquired by the
@@ -1370,10 +1413,28 @@ x11_queue_present(struct wsi_swapchain *anv_chain,
                   const VkPresentRegionKHR *damage)
 {
    struct x11_swapchain *chain = (struct x11_swapchain *)anv_chain;
+   xcb_xfixes_region_t update_area = 0;
 
    /* If the swapchain is in an error state, don't go any further. */
    if (chain->status < 0)
       return chain->status;
+
+   if (damage && damage->pRectangles && damage->rectangleCount > 0 &&
+      damage->rectangleCount <= MAX_DAMAGE_RECTS) {
+      xcb_rectangle_t rects[MAX_DAMAGE_RECTS];
+
+      update_area = chain->images[image_index].update_region;
+      for (unsigned i = 0; i < damage->rectangleCount; i++) {
+         const VkRectLayerKHR *rect = &damage->pRectangles[i];
+         assert(rect->layer == 0);
+         rects[i].x = rect->offset.x;
+         rects[i].y = rect->offset.y;
+         rects[i].width = rect->extent.width;
+         rects[i].height = rect->extent.height;
+      }
+      xcb_xfixes_set_region(chain->conn, update_area, damage->rectangleCount, rects);
+   }
+   chain->images[image_index].update_area = update_area;
 
    chain->images[image_index].busy = true;
    if (chain->has_present_queue) {
@@ -1589,6 +1650,9 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
    if (result != VK_SUCCESS)
       return result;
 
+   image->update_region = xcb_generate_id(chain->conn);
+   xcb_xfixes_create_region(chain->conn, image->update_region, 0, NULL);
+
    if (chain->base.wsi->sw) {
       if (!chain->has_mit_shm) {
          image->busy = false;
@@ -1619,6 +1683,18 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
       /* If the image has a modifier, we must have DRI3 v1.2. */
       assert(chain->has_dri3_modifiers);
 
+      /* XCB requires an array of file descriptors but we only have one */
+      int fds[4] = { -1, -1, -1, -1 };
+      for (int i = 0; i < image->base.num_planes; i++) {
+         fds[i] = os_dupfd_cloexec(image->base.dma_buf_fd);
+         if (fds[i] == -1) {
+            for (int j = 0; j < i; j++)
+               close(fds[j]);
+
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+         }
+      }
+
       cookie =
          xcb_dri3_pixmap_from_buffers_checked(chain->conn,
                                               image->pixmap,
@@ -1636,12 +1712,17 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
                                               image->base.offsets[3],
                                               chain->depth, bpp,
                                               image->base.drm_modifier,
-                                              image->base.fds);
+                                              fds);
    } else
 #endif
    {
       /* Without passing modifiers, we can't have multi-plane RGB images. */
       assert(image->base.num_planes == 1);
+
+      /* XCB will take ownership of the FD we pass it. */
+      int fd = os_dupfd_cloexec(image->base.dma_buf_fd);
+      if (fd == -1)
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
       cookie =
          xcb_dri3_pixmap_from_buffer_checked(chain->conn,
@@ -1651,15 +1732,10 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
                                              pCreateInfo->imageExtent.width,
                                              pCreateInfo->imageExtent.height,
                                              image->base.row_pitches[0],
-                                             chain->depth, bpp,
-                                             image->base.fds[0]);
+                                             chain->depth, bpp, fd);
    }
 
    xcb_discard_reply(chain->conn, cookie.sequence);
-
-   /* XCB has now taken ownership of the FDs. */
-   for (int i = 0; i < image->base.num_planes; i++)
-      image->base.fds[i] = -1;
 
 out_fence:
    fence_fd = xshmfence_alloc_shm();
@@ -1707,6 +1783,9 @@ x11_image_finish(struct x11_swapchain *chain,
       xshmfence_unmap_shm(image->shm_fence);
 
       cookie = xcb_free_pixmap(chain->conn, image->pixmap);
+      xcb_discard_reply(chain->conn, cookie.sequence);
+
+      cookie = xcb_xfixes_destroy_region(chain->conn, image->update_region);
       xcb_discard_reply(chain->conn, cookie.sequence);
    }
 
@@ -2022,7 +2101,11 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
                                  modifiers, num_modifiers, &num_tranches,
                                  pAllocator);
 
-   if (chain->base.use_buffer_blit) {
+   if (wsi_device->sw) {
+      result = wsi_configure_cpu_image(&chain->base, pCreateInfo,
+                                       chain->has_mit_shm ? &alloc_shm : NULL,
+                                       &chain->base.image_info);
+   } else if (chain->base.use_buffer_blit) {
       bool use_modifier = num_tranches > 0;
       result = wsi_configure_prime_image(&chain->base, pCreateInfo,
                                          use_modifier,
@@ -2031,7 +2114,6 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       result = wsi_configure_native_image(&chain->base, pCreateInfo,
                                           num_tranches, num_modifiers,
                                           (const uint64_t *const *)modifiers,
-                                          chain->has_mit_shm ? &alloc_shm : NULL,
                                           &chain->base.image_info);
    }
    if (result != VK_SUCCESS)

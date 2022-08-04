@@ -85,12 +85,7 @@ extern void (*__glapi_noop_table[])(void);
  * static dispatch functions access these variables via \c _glapi_get_dispatch
  * and \c _glapi_get_context.
  *
- * There is a race condition in setting \c _glapi_Dispatch to \c NULL.  It is
- * possible for the original thread to be setting it at the same instant a new
- * thread, perhaps running on a different processor, is clearing it.  Because
- * of that, \c ThreadSafe, which can only ever be changed to \c GL_TRUE, is
- * used to determine whether or not the application is multithreaded.
- * 
+ *
  * In the TLS case, the variables \c _glapi_Dispatch and \c _glapi_Context are
  * hardcoded to \c NULL.  Instead the TLS variables \c _glapi_tls_Dispatch and
  * \c _glapi_tls_Context are used.  Having \c _glapi_Dispatch and
@@ -98,90 +93,13 @@ extern void (*__glapi_noop_table[])(void);
  * between TLS enabled loaders and non-TLS DRI drivers.
  */
 /*@{*/
-#if defined(USE_ELF_TLS)
 
 __THREAD_INITIAL_EXEC struct _glapi_table *u_current_table
     = (struct _glapi_table *) table_noop_array;
 
 __THREAD_INITIAL_EXEC void *u_current_context;
 
-#else
-
-struct _glapi_table *u_current_table =
-   (struct _glapi_table *) table_noop_array;
-void *u_current_context;
-
-tss_t u_current_table_tsd;
-static tss_t u_current_context_tsd;
-static int ThreadSafe;
-
-#endif /* defined(USE_ELF_TLS) */
 /*@}*/
-
-
-void
-u_current_destroy(void)
-{
-#if !defined(USE_ELF_TLS)
-   tss_delete(u_current_table_tsd);
-   tss_delete(u_current_context_tsd);
-#endif
-}
-
-
-#if !defined(USE_ELF_TLS)
-
-static void
-u_current_init_tsd(void)
-{
-   tss_create(&u_current_table_tsd, NULL);
-   tss_create(&u_current_context_tsd, NULL);
-}
-
-/**
- * Mutex for multithread check.
- */
-static mtx_t ThreadCheckMutex = _MTX_INITIALIZER_NP;
-
-static thread_id knownID;
-
-/**
- * We should call this periodically from a function such as glXMakeCurrent
- * in order to test if multiple threads are being used.
- */
-void
-u_current_init(void)
-{
-   static int firstCall = 1;
-
-   if (ThreadSafe)
-      return;
-
-   mtx_lock(&ThreadCheckMutex);
-   if (firstCall) {
-      u_current_init_tsd();
-
-      knownID = util_get_thread_id();
-      firstCall = 0;
-   }
-   else if (!util_thread_id_equal(knownID, util_get_thread_id())) {
-      ThreadSafe = 1;
-      u_current_set_table(NULL);
-      u_current_set_context(NULL);
-   }
-   mtx_unlock(&ThreadCheckMutex);
-}
-
-#else
-
-void
-u_current_init(void)
-{
-}
-
-#endif
-
-
 
 /**
  * Set the current context pointer for this thread.
@@ -191,14 +109,7 @@ u_current_init(void)
 void
 u_current_set_context(const void *ptr)
 {
-   u_current_init();
-
-#if defined(USE_ELF_TLS)
    u_current_context = (void *) ptr;
-#else
-   tss_set(u_current_context_tsd, (void *) ptr);
-   u_current_context = (ThreadSafe) ? NULL : (void *) ptr;
-#endif
 }
 
 /**
@@ -209,16 +120,7 @@ u_current_set_context(const void *ptr)
 void *
 u_current_get_context_internal(void)
 {
-#if defined(USE_ELF_TLS)
    return u_current_context;
-#else
-   if (ThreadSafe)
-      return tss_get(u_current_context_tsd);
-   else if (!util_thread_id_equal(knownID, util_get_thread_id()))
-      return NULL;
-   else
-      return u_current_context;
-#endif
 }
 
 /**
@@ -229,19 +131,12 @@ u_current_get_context_internal(void)
 void
 u_current_set_table(const struct _glapi_table *tbl)
 {
-   u_current_init();
-
    stub_init_once();
 
    if (!tbl)
       tbl = (const struct _glapi_table *) table_noop_array;
 
-#if defined(USE_ELF_TLS)
    u_current_table = (struct _glapi_table *) tbl;
-#else
-   tss_set(u_current_table_tsd, (void *) tbl);
-   u_current_table = (ThreadSafe) ? NULL : (void *) tbl;
-#endif
 }
 
 /**
@@ -250,14 +145,5 @@ u_current_set_table(const struct _glapi_table *tbl)
 struct _glapi_table *
 u_current_get_table_internal(void)
 {
-#if defined(USE_ELF_TLS)
    return u_current_table;
-#else
-   if (ThreadSafe)
-      return (struct _glapi_table *) tss_get(u_current_table_tsd);
-   else if (!util_thread_id_equal(knownID, util_get_thread_id()))
-      return (struct _glapi_table *) table_noop_array;
-   else
-      return (struct _glapi_table *) u_current_table;
-#endif
 }

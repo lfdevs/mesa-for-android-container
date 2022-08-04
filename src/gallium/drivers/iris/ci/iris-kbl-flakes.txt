@@ -1,4 +1,0 @@
-spec@arb_query_buffer_object@qbo
-spec@amd_performance_monitor@measure
-spec@amd_performance_monitor@measure@change counters while active
-spec@amd_performance_monitor@measure@counters in range

@@ -22,6 +22,7 @@
  *
  */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,12 +51,24 @@
 #define SUBOPCODE_BMP       0x1e
 
 /* Newer version AUB opcode */
-#define OPCODE_NEW_AUB      0x2e
-#define SUBOPCODE_REG_POLL  0x02
-#define SUBOPCODE_REG_WRITE 0x03
-#define SUBOPCODE_MEM_POLL  0x05
-#define SUBOPCODE_MEM_WRITE 0x06
-#define SUBOPCODE_VERSION   0x0e
+#define OPCODE_NEW_AUB              0x2e
+#define SUBOPCODE_VERSION           0x00
+#define SUBOPCODE_REG_CMP           0x01
+#define SUBOPCODE_REG_POLL          0x02
+#define SUBOPCODE_REG_WRITE         0x03
+#define SUBOPCODE_MEM_CMP           0x04
+#define SUBOPCODE_MEM_POLL          0x05
+#define SUBOPCODE_MEM_WRITE         0x06
+#define SUBOPCODE_FRAME_BEGIN       0x07
+#define SUBOPCODE_COMMENT           0x08
+#define SUBOPCODE_TRACE_DELAY       0x09
+#define SUBOPCODE_MEM_DUMP          0x0a
+#define SUBOPCODE_MEM_WRITE_DISCONT 0x0b
+#define SUBOPCODE_TEST_PHASE_MARKER 0x0c
+#define SUBOPCODE_MEM_CONT_REGION   0x0d
+#define SUBOPCODE_VERSION_EXT       0x0e
+#define SUBOPCODE_PREDICATE         0x0f
+#define SUBOPCODE_DUMP_COMPRESS     0x10
 
 static PRINTFLIKE(3, 4) void
 parse_error(struct aub_read *read, const uint32_t *p, const char *fmt, ...)
@@ -185,7 +198,7 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
    uint64_t context_descriptor;
 
    switch (offset) {
-   case EXECLIST_SUBMITPORT_RCSUNIT: /* render elsp */
+   case RCSUNIT(EXECLIST_SUBMITPORT): /* render elsp */
       read->render_elsp[read->render_elsp_index++] = value;
       if (read->render_elsp_index < 4)
          return;
@@ -195,7 +208,7 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
       context_descriptor = (uint64_t)read->render_elsp[2] << 32 |
          read->render_elsp[3];
       break;
-   case EXECLIST_SUBMITPORT_VCSUNIT0: /* video elsp */
+   case VCSUNIT0(EXECLIST_SUBMITPORT): /* video elsp */
       read->video_elsp[read->video_elsp_index++] = value;
       if (read->video_elsp_index < 4)
          return;
@@ -205,7 +218,7 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
       context_descriptor = (uint64_t)read->video_elsp[2] << 32 |
          read->video_elsp[3];
       break;
-   case EXECLIST_SUBMITPORT_BCSUNIT: /* blitter elsp */
+   case BCSUNIT0(EXECLIST_SUBMITPORT): /* blitter elsp */
       read->blitter_elsp[read->blitter_elsp_index++] = value;
       if (read->blitter_elsp_index < 4)
          return;
@@ -215,35 +228,35 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
       context_descriptor = (uint64_t)read->blitter_elsp[2] << 32 |
          read->blitter_elsp[3];
       break;
-   case EXECLIST_SQ_CONTENTS0_RCSUNIT: /* render elsq0 lo */
+   case RCSUNIT(EXECLIST_SQ_CONTENTS): /* render elsq0 lo */
       read->render_elsp[3] = value;
       return;
-   case (EXECLIST_SQ_CONTENTS0_RCSUNIT + 4): /* render elsq0 hi */
+   case RCSUNIT(EXECLIST_SQ_CONTENTS) + 4: /* render elsq0 hi */
       read->render_elsp[2] = value;
       return;
-   case EXECLIST_SQ_CONTENTS0_VCSUNIT0: /* video elsq0 lo */
+   case VCSUNIT0(EXECLIST_SQ_CONTENTS): /* video elsq0 lo */
       read->video_elsp[3] = value;
       return;
-   case EXECLIST_SQ_CONTENTS0_VCSUNIT0 + 4: /* video elsq0 hi */
+   case VCSUNIT0(EXECLIST_SQ_CONTENTS) + 4: /* video elsq0 hi */
       read->video_elsp[2] = value;
       return;
-   case EXECLIST_SQ_CONTENTS0_BCSUNIT: /* blitter elsq0 lo */
+   case BCSUNIT0(EXECLIST_SQ_CONTENTS): /* blitter elsq0 lo */
       read->blitter_elsp[3] = value;
       return;
-   case (EXECLIST_SQ_CONTENTS0_BCSUNIT + 4): /* blitter elsq0 hi */
+   case BCSUNIT0(EXECLIST_SQ_CONTENTS) + 4: /* blitter elsq0 hi */
       read->blitter_elsp[2] = value;
       return;
-   case EXECLIST_CONTROL_RCSUNIT: /* render elsc */
+   case RCSUNIT(EXECLIST_CONTROL): /* render elsc */
       engine = I915_ENGINE_CLASS_RENDER;
       context_descriptor = (uint64_t)read->render_elsp[2] << 32 |
          read->render_elsp[3];
       break;
-   case EXECLIST_CONTROL_VCSUNIT0: /* video_elsc */
+   case VCSUNIT0(EXECLIST_CONTROL): /* video_elsc */
       engine = I915_ENGINE_CLASS_VIDEO;
       context_descriptor = (uint64_t)read->video_elsp[2] << 32 |
          read->video_elsp[3];
       break;
-   case EXECLIST_CONTROL_BCSUNIT: /* blitter elsc */
+   case BCSUNIT0(EXECLIST_CONTROL): /* blitter elsc */
       engine = I915_ENGINE_CLASS_COPY;
       context_descriptor = (uint64_t)read->blitter_elsp[2] << 32 |
          read->blitter_elsp[3];
@@ -257,12 +270,10 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
 }
 
 static void
-handle_memtrace_mem_write(struct aub_read *read, const uint32_t *p)
+do_write(struct aub_read *read, uint32_t address_space, uint64_t addr, const void *data, uint32_t size)
 {
-   const void *data = p + 5;
-   uint64_t addr = intel_48b_address(*(uint64_t*)&p[1]);
-   uint32_t size = p[4];
-   uint32_t address_space = p[3] >> 28;
+   if (0)
+      fprintf(stderr, "*0x%" PRIx64 " = *0x%p (%d)\n", addr, data, size);
 
    switch (address_space) {
    case 0: /* GGTT */
@@ -281,6 +292,38 @@ handle_memtrace_mem_write(struct aub_read *read, const uint32_t *p)
       if (read->ggtt_entry_write)
          read->ggtt_entry_write(read->user_data, addr, data, size);
       break;
+   }
+}
+
+static void
+handle_memtrace_mem_write(struct aub_read *read, const uint32_t *p)
+{
+   const void *data = p + 5;
+   uint64_t addr = intel_48b_address(*(uint64_t*)&p[1]);
+   uint32_t size = p[4];
+   uint32_t address_space = p[3] >> 28;
+
+   do_write(read, address_space, addr, data, size);
+}
+
+static void
+handle_memtrace_mem_write_discont(struct aub_read *read, const uint32_t *p)
+{
+   uint32_t address_space = p[1] >> 28;
+   const struct {
+      uint64_t address;
+      uint32_t size;
+   } __attribute__((packed)) *cur = (const void *)(p + 2);
+   const void *data = p + 2 + 3 * 63;
+
+   for (unsigned i = 0; i < 63; ++i, ++cur) {
+      uint64_t addr = intel_48b_address(cur->address);
+      uint32_t size = cur->size;
+
+      if (size == 0)
+         continue;
+
+      do_write(read, address_space, addr, data, size);
    }
 }
 
@@ -322,6 +365,14 @@ aub_read_command(struct aub_read *read, const void *data, uint32_t data_len)
       return -1;
    }
 
+   if (0) {
+      fprintf(stderr, "0x%x, 0x%x, 0x%x, len: %d\n",
+            TYPE(h), OPCODE(h), SUBOPCODE(h), header_length);
+      for (const uint32_t *cur = p; cur < next; ++cur)
+         fprintf(stderr, "0x%08x ", *cur);
+      fprintf(stderr, "\n");
+   }
+
    switch (h & 0xffff0000) {
    case MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_HEADER):
       if (!handle_trace_header(read, p))
@@ -333,7 +384,7 @@ aub_read_command(struct aub_read *read, const void *data, uint32_t data_len)
       break;
    case MAKE_HEADER(TYPE_AUB, OPCODE_AUB, SUBOPCODE_BMP):
       break;
-   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_VERSION):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_VERSION_EXT):
       if (!handle_memtrace_version(read, p))
          return -1;
       break;
@@ -348,6 +399,23 @@ aub_read_command(struct aub_read *read, const void *data, uint32_t data_len)
       break;
    case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_REG_POLL):
       break;
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_COMMENT):
+      if (read->comment)
+         read->comment(read->user_data, (const char *)(p + 2));
+      break;
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_MEM_WRITE_DISCONT):
+      handle_memtrace_mem_write_discont(read, p);
+      break;
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_VERSION):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_REG_CMP):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_MEM_CMP):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_FRAME_BEGIN):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_TRACE_DELAY):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_MEM_DUMP):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_TEST_PHASE_MARKER):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_MEM_CONT_REGION):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_PREDICATE):
+   case MAKE_HEADER(TYPE_AUB, OPCODE_NEW_AUB, SUBOPCODE_DUMP_COMPRESS):
    default:
       parse_error(read, p,
                   "unknown block type=0x%x, opcode=0x%x, subopcode=0x%x (%08x)\n",

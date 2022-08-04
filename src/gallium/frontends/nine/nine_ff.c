@@ -1574,7 +1574,7 @@ nine_ff_get_vs(struct NineDevice9 *device)
     unsigned s, i;
     boolean has_indexes = false;
     boolean has_weights = false;
-    char input_texture_coord[8];
+    int8_t input_texture_coord[8];
 
     assert(sizeof(key) <= sizeof(key.value32));
 

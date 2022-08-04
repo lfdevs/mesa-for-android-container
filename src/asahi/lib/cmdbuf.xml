@@ -41,6 +41,12 @@
     <value name="Decr Wrap" value="7"/>
   </enum>
 
+  <enum name="Visibility Mode">
+    <value name="None" value="0"/>
+    <value name="Counting" value="2"/>
+    <value name="Boolean" value="3"/>
+  </enum>
+
   <enum name="Polygon Mode">
     <value name="Fill" value="0"/>
     <value name="Line" value="1"/>
@@ -287,12 +293,20 @@
     <field name="Max Z" size="32" start="3:0" type="float"/>
   </struct>
 
+  <!-- Note: this structure is not padded. It really is 12 bytes -->
+  <struct name="Depth bias" size="12">
+    <field name="Depth bias" size="32" start="0:0" type="float"/>
+    <field name="Slope scale" size="32" start="1:0" type="float"/>
+    <field name="Clamp" size="32" start="2:0" type="float"/>
+  </struct>
+
   <struct name="Rasterizer face" size="8">
     <field name="Stencil reference" size="8" start="0:0" type="hex"/>
     <!-- line width is 4:4 fixed point with off-by-one applied -->
     <field name="Line width" size="8" start="0:8" type="hex"/>
     <field name="Polygon mode" size="2" start="0:18" type="Polygon Mode"/>
     <field name="Disable depth write" size="1" start="0:21" type="bool"/>
+    <field name="Unk - visibility test internal" size="2" start="0:22" type="hex"/>
     <field name="Depth function" size="3" start="0:24" type="ZS Func"/>
     <field name="Stencil write mask" size="8" start="1:0" type="hex"/>
     <field name="Stencil read mask" size="8" start="1:8" type="hex"/>
@@ -305,12 +319,15 @@
   <struct name="Rasterizer" size="28">
     <field name="Tag" size="32" start="0:0" type="hex" default="0x10000b5"/>
     <field name="Unk 1" size="1" start="1:9" type="hex" default="0x1"/>
+    <field name="Visibility mode" size="2" start="1:14" type="Visibility Mode"/>
     <field name="Scissor enable" size="1" start="1:16" type="bool"/>
+    <field name="Depth bias enable" size="1" start="1:17" type="bool"/>
     <field name="Unk ZS" size="1" start="1:18" type="hex" default="0x1"/>
     <field name="Unk 2" size="2" start="1:19" type="hex" default="0x0"/>
     <field name="Unk fill lines" size="1" start="1:26" type="hex" default="0x0"/> <!-- set when drawing LINES -->
     <field name="Front" size="64" start="2:0" type="Rasterizer face"/>
     <field name="Back" size="64" start="4:0" type="Rasterizer face"/>
+    <field name="Visibility buffer offset" size="18" start="6:14" type="uint"/>
   </struct>
 
   <struct name="Unknown face" size="4">
@@ -354,10 +371,11 @@
     <field name="Varying count" size="32" start="3:0" type="uint"/>
   </struct>
 
-  <!-- Indexes into the array of scissor descriptors -->
-  <struct name="Set scissor" size="8">
+  <!-- Indexes into the scissor and depth bias arrays -->
+  <struct name="Set index" size="8">
     <field name="Tag" size="32" start="0:0" type="hex" default="0x100"/>
-    <field name="Index" size="32" start="1:0" type="uint"/>
+    <field name="Scissor" size="16" start="1:0" type="uint"/>
+    <field name="Depth bias" size="16" start="1:16" type="uint"/>
   </struct>
 
   <!--- Commands valid within a pipeline -->
@@ -471,7 +489,8 @@
   <struct name="Draw" size="16">
     <field name="Unk" size="8" start="0:0" type="hex" default="0x0"/>
     <field name="Primitive" size="8" start="0:8" type="Primitive"/>
-    <field name="Command" size="16" start="0:16" type="hex" default="0x61c0"/>
+    <field name="Unk 2" size="8" start="0:16" type="hex" default="0xc0"/>
+    <field name="Command" size="8" start="0:24" type="hex" default="0x61"/>
     <field name="Vertex count" size="32" start="1:0" type="uint"/>
     <field name="Instance count" size="32" start="2:0" type="uint"/> <!-- must be nonzero -->
     <field name="Vertex start" size="32" start="3:0" type="uint"/>
@@ -518,9 +537,10 @@
     <value name="Colour" value="0xE"/>
     <value name="Depth" value="0x10"/>
     <value name="Stencil" value="0x11"/>
+    <value name="Visibility" value="0x12"/>
   </enum>
 
-  <struct name="IOGPU Header" size="192">
+  <struct name="IOGPU Header" size="640">
     <field name="Unk 0" start="0:0" size="32" default="0x10000" type="hex"/>
     <field name="Total size" start="1:0" size="32" type="uint"/>
     <!-- 0x7 in 11.x -->
@@ -535,6 +555,15 @@
          geometry counts -->
     <field name="Deflake 1" start="38:0" size="64" type="address"/>
     <field name="Deflake 2" start="40:0" size="64" type="address"/>
+    <field name="Unk 54" start="54:0" size="32" default="0x6b0003" type="hex"/>
+    <field name="Unk 55" start="55:0" size="32" default="0x3a0012" type="hex"/>
+    <field name="Unk 56" start="56:0" size="32" default="0x1" type="hex"/>
+    <field name="Deflake 3" start="110:0" size="64" type="address"/>
+    <field name="Unk 112" start="112:0" size="32" default="0x1" type="hex"/>
+    <field name="Unk 114" start="114:0" size="32" default="0x1c" type="hex"/>
+    <field name="Unk 118" start="118:0" size="32" default="0xffffffff" type="hex"/>
+    <field name="Unk 119" start="119:0" size="32" default="0xffffffff" type="hex"/>
+    <field name="Unk 120" start="120:0" size="32" default="0xffffffff" type="hex"/>
   </struct>
 
   <struct name="IOGPU Attachment" size="24">
@@ -556,16 +585,18 @@
     <field name="Store pipeline unk" start="12:0" size="4" default="4" type="hex"/>
     <field name="Store pipeline" start="12:4" size="28" type="address" modifier="shr(4)"/>
     <field name="Scissor array" start="14:0" size="64" type="address"/>
-    <!-- Points to zeroes, allocation of 0xc0000 bytes unknwon type 28000000 -->
-    <field name="Unknown buffer" start="16:0" size="64" type="address"/>
-    <field name="Depth pipeline unk" start="20:0" size="4" default="4" type="hex"/>
-    <!-- 0xc0150 with depth clear and z32f and s8
-         0x40150 with z32f and s8
-         0x40 with z32f
-         0x4000040 with z16?
+    <field name="Depth bias array" start="16:0" size="64" type="address"/>
+    <!-- 0xc0154 with depth clear and z32f and s8
+         0x40154 with z32f and s8
+         0x44 with z32f
+         0x4000044 with z16?
     -->
-    <field name="Depth pipeline" start="20:4" size="28" type="address" modifier="shr(4)"/>
-    <field name="Depth unknown 1" start="26:0" size="32" type="hex"/>
+    <field name="Depth flags" start="20:0" size="32" type="hex"/>
+    <field name="Depth compression" start="20:6" size="1" type="bool"/>
+    <field name="Depth reload" start="20:15" size="1" type="bool"/>
+    <field name="Depth format 16 unorm" start="20:26" size="1" type="bool"/>
+    <field name="Depth width" start="26:0" size="15" type="uint" default="1" modifier="minus(1)"/>
+    <field name="Depth height" start="26:15" size="15" type="uint" default="1" modifier="minus(1)"/>
     <field name="Depth buffer (if clearing)" start="28:0" size="64" type="address"/>
     <field name="Depth acceleration buffer (if clearing)" start="34:0" size="64" type="address"/>
     <!-- bytes unknown type 888F50 -->
@@ -579,7 +610,7 @@
     <field name="Stencil acceleration buffer 2" start="64:0" size="64" type="address"/>
   </struct>
 
-  <struct name="IOGPU Aux Framebuffer" size="32">
+  <struct name="IOGPU Aux Framebuffer" size="256">
     <field name="Unk 0" start="0:0" size="32" default="0x4" type="hex"/>
     <field name="Unk 1" start="2:0" size="16" default="0xc000" type="hex"/>
     <field name="Z16 Unorm attachment" start="2:18" size="1" type="bool"/>
@@ -588,16 +619,24 @@
     <field name="Pointer" start="6:0" size="64" type="address"/>
   </struct>
 
-  <struct name="IOGPU Clear Z/S" size="48">
+  <struct name="IOGPU Clear Z/S" size="256">
     <!-- Encoded like the depth attachment -->
     <field name="Depth clear value" start="0:0" size="32" type="hex"/>
     <field name="Stencil clear value" start="1:0" size="8" type="uint"/>
     <field name="Unk 1" start="1:8" size="8" type="hex" default="3"/>
-    <field name="Unk 2" start="3:8" size="8" type="hex" default="0"/>
+    <field name="Set when reloading Z 1" start="3:8" size="1" type="bool"/>
+    <field name="Set when reloading Z 2" start="4:24" size="1" type="bool"/>
     <field name="Z16 Unorm attachment" start="5:8" size="1" type="bool"/>
     <field name="Unk 3" start="6:0" size="32" type="hex" default="0xffffffff"/>
     <field name="Unk 4" start="7:0" size="32" type="hex" default="0xffffffff"/>
     <field name="Unk 5" start="8:0" size="32" type="hex" default="0xffffffff"/>
+    <field name="Visibility result buffer" start="10:0" size="64" type="address"/>
+    <field name="Partial reload pipeline bind" start="20:0" size="32" type="hex"/>
+    <field name="Partial reload pipeline unk" start="22:0" size="4" default="4" type="hex"/>
+    <field name="Partial reload pipeline" start="22:4" size="28" type="address" modifier="shr(4)"/>
+    <field name="Partial store pipeline bind" start="28:0" size="32" type="hex"/>
+    <field name="Partial store pipeline unk" start="30:0" size="4" default="4" type="hex"/>
+    <field name="Partial store pipeline" start="30:4" size="28" type="address" modifier="shr(4)"/>
   </struct>
 
   <struct name="IOGPU Misc" size="288">
@@ -624,6 +663,10 @@
     <field name="Unk 52:0" start="64:0" size="32" default="1" type="uint"/>
     <field name="Unk 56:0" start="68:0" size="32" default="0" type="uint"/>
     <field name="Unk 70:0" start="70:0" size="32" default="1" type="uint"/>
+  </struct>
+
+  <struct name="IOGPU Attachment Count" size="16">
+    <field name="Count" start="3:0" size="32" type="uint"/>
   </struct>
 
 </agxml>

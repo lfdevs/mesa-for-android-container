@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "util/libsync.h"
 #include "util/u_process.h"
 
 #include "virtio_priv.h"
@@ -33,7 +34,9 @@ static void
 virtio_device_destroy(struct fd_device *dev)
 {
    struct virtio_device *virtio_dev = to_virtio_device(dev);
+
    fd_bo_del_locked(virtio_dev->shmem_bo);
+   util_vma_heap_finish(&virtio_dev->address_space);
 }
 
 static const struct fd_device_funcs funcs = {
@@ -53,6 +56,8 @@ get_capset(int fd, struct virgl_renderer_capset_drm *caps)
          .size = sizeof(*caps),
    };
 
+   memset(caps, 0, sizeof(*caps));
+
    return drmIoctl(fd, DRM_IOCTL_VIRTGPU_GET_CAPS, &args);
 }
 
@@ -61,6 +66,7 @@ set_context(int fd)
 {
    struct drm_virtgpu_context_set_param params[] = {
          { VIRTGPU_CONTEXT_PARAM_CAPSET_ID, VIRGL_RENDERER_CAPSET_DRM },
+         { VIRTGPU_CONTEXT_PARAM_NUM_RINGS, 64 },
    };
    struct drm_virtgpu_context_init args = {
       .num_params = ARRAY_SIZE(params),
@@ -145,8 +151,15 @@ virtio_device_new(int fd, drmVersionPtr version)
    INFO_MSG("version_minor:       %u", caps.version_minor);
    INFO_MSG("version_patchlevel:  %u", caps.version_patchlevel);
    INFO_MSG("has_cached_coherent: %u", caps.u.msm.has_cached_coherent);
+   INFO_MSG("va_start:            0x%0"PRIx64, caps.u.msm.va_start);
+   INFO_MSG("va_size:             0x%0"PRIx64, caps.u.msm.va_size);
+   INFO_MSG("gpu_id:              %u", caps.u.msm.gpu_id);
+   INFO_MSG("gmem_size:           %u", caps.u.msm.gmem_size);
+   INFO_MSG("gmem_base:           0x%0" PRIx64, caps.u.msm.gmem_base);
+   INFO_MSG("chip_id:             0x%0" PRIx64, caps.u.msm.chip_id);
+   INFO_MSG("max_freq:            %u", caps.u.msm.max_freq);
 
-   if (caps.wire_format_version != 1) {
+   if (caps.wire_format_version != 2) {
       ERROR_MSG("Unsupported protocol version: %u", caps.wire_format_version);
       return NULL;
    }
@@ -154,6 +167,11 @@ virtio_device_new(int fd, drmVersionPtr version)
    if ((caps.version_major != 1) || (caps.version_minor < FD_VERSION_SOFTPIN)) {
       ERROR_MSG("unsupported version: %u.%u.%u", caps.version_major,
                 caps.version_minor, caps.version_patchlevel);
+      return NULL;
+   }
+
+   if (!caps.u.msm.va_size) {
+      ERROR_MSG("No address space");
       return NULL;
    }
 
@@ -175,6 +193,8 @@ virtio_device_new(int fd, drmVersionPtr version)
 
    p_atomic_set(&virtio_dev->next_blob_id, 1);
 
+   virtio_dev->caps = caps;
+
    util_queue_init(&dev->submit_queue, "sq", 8, 1, 0, NULL);
 
    dev->bo_size = sizeof(struct virtio_bo);
@@ -183,6 +203,11 @@ virtio_device_new(int fd, drmVersionPtr version)
    simple_mtx_init(&virtio_dev->eb_lock, mtx_plain);
 
    set_debuginfo(dev);
+
+   util_vma_heap_init(&virtio_dev->address_space,
+                      caps.u.msm.va_start,
+                      caps.u.msm.va_size);
+   simple_mtx_init(&virtio_dev->address_space_lock, mtx_plain);
 
    return dev;
 }
@@ -197,7 +222,7 @@ virtio_alloc_rsp(struct fd_device *dev, struct msm_ccmd_req *req, uint32_t sz)
 
    sz = align(sz, 8);
 
-   if ((virtio_dev->next_rsp_off + sz) >= sizeof(virtio_dev->shmem->rsp_mem))
+   if ((virtio_dev->next_rsp_off + sz) >= virtio_dev->rsp_mem_len)
       virtio_dev->next_rsp_off = 0;
 
    off = virtio_dev->next_rsp_off;
@@ -207,37 +232,33 @@ virtio_alloc_rsp(struct fd_device *dev, struct msm_ccmd_req *req, uint32_t sz)
 
    req->rsp_off = off;
 
-   struct msm_ccmd_rsp *rsp = (void *)&virtio_dev->shmem->rsp_mem[off];
+   struct msm_ccmd_rsp *rsp = (void *)&virtio_dev->rsp_mem[off];
    rsp->len = sz;
 
    return rsp;
 }
 
-/**
- * Helper for "execbuf" ioctl.. note that in virtgpu execbuf is just
- * a generic "send commands to host", not necessarily specific to
- * cmdstream execution.
- */
-int
-virtio_execbuf_fenced(struct fd_device *dev, struct msm_ccmd_req *req,
-                      int in_fence_fd, int *out_fence_fd)
+static int execbuf_flush_locked(struct fd_device *dev, int *out_fence_fd);
+
+static int
+execbuf_locked(struct fd_device *dev, void *cmd, uint32_t cmd_size,
+               uint32_t *handles, uint32_t num_handles,
+               int in_fence_fd, int *out_fence_fd, int ring_idx)
 {
-   struct virtio_device *virtio_dev = to_virtio_device(dev);
-
-   simple_mtx_lock(&virtio_dev->eb_lock);
-   req->seqno = ++virtio_dev->next_seqno;
-
 #define COND(bool, val) ((bool) ? (val) : 0)
    struct drm_virtgpu_execbuffer eb = {
          .flags = COND(out_fence_fd, VIRTGPU_EXECBUF_FENCE_FD_OUT) |
-                  COND(in_fence_fd != -1, VIRTGPU_EXECBUF_FENCE_FD_IN),
+                  COND(in_fence_fd != -1, VIRTGPU_EXECBUF_FENCE_FD_IN) |
+                  VIRTGPU_EXECBUF_RING_IDX,
          .fence_fd = in_fence_fd,
-         .size  = req->len,
-         .command = VOID2U64(req),
+         .size  = cmd_size,
+         .command = VOID2U64(cmd),
+         .ring_idx = ring_idx,
+         .bo_handles = VOID2U64(handles),
+         .num_bo_handles = num_handles,
    };
 
    int ret = drmIoctl(dev->fd, DRM_IOCTL_VIRTGPU_EXECBUFFER, &eb);
-   simple_mtx_unlock(&virtio_dev->eb_lock);
    if (ret) {
       ERROR_MSG("EXECBUFFER failed: %s", strerror(errno));
       return ret;
@@ -249,16 +270,99 @@ virtio_execbuf_fenced(struct fd_device *dev, struct msm_ccmd_req *req,
    return 0;
 }
 
+/**
+ * Helper for "execbuf" ioctl.. note that in virtgpu execbuf is just
+ * a generic "send commands to host", not necessarily specific to
+ * cmdstream execution.
+ *
+ * Note that ring_idx 0 is the "CPU ring", ie. for synchronizing btwn
+ * guest and host CPU.
+ */
+int
+virtio_execbuf_fenced(struct fd_device *dev, struct msm_ccmd_req *req,
+                      uint32_t *handles, uint32_t num_handles,
+                      int in_fence_fd, int *out_fence_fd, int ring_idx)
+{
+   struct virtio_device *virtio_dev = to_virtio_device(dev);
+   int ret;
+
+   simple_mtx_lock(&virtio_dev->eb_lock);
+   execbuf_flush_locked(dev, NULL);
+   req->seqno = ++virtio_dev->next_seqno;
+
+   ret = execbuf_locked(dev, req, req->len, handles, num_handles,
+                        in_fence_fd, out_fence_fd, ring_idx);
+
+   simple_mtx_unlock(&virtio_dev->eb_lock);
+
+   return ret;
+}
+
+static int
+execbuf_flush_locked(struct fd_device *dev, int *out_fence_fd)
+{
+   struct virtio_device *virtio_dev = to_virtio_device(dev);
+   int ret;
+
+   if (!virtio_dev->reqbuf_len)
+      return 0;
+
+   ret = execbuf_locked(dev, virtio_dev->reqbuf, virtio_dev->reqbuf_len,
+                        NULL, 0, -1, out_fence_fd, 0);
+   if (ret)
+      return ret;
+
+   virtio_dev->reqbuf_len = 0;
+   virtio_dev->reqbuf_cnt = 0;
+
+   return 0;
+}
+
+int
+virtio_execbuf_flush(struct fd_device *dev)
+{
+   struct virtio_device *virtio_dev = to_virtio_device(dev);
+   simple_mtx_lock(&virtio_dev->eb_lock);
+   int ret = execbuf_flush_locked(dev, NULL);
+   simple_mtx_unlock(&virtio_dev->eb_lock);
+   return ret;
+}
+
 int
 virtio_execbuf(struct fd_device *dev, struct msm_ccmd_req *req, bool sync)
 {
-   int ret = virtio_execbuf_fenced(dev, req, -1, NULL);
+   struct virtio_device *virtio_dev = to_virtio_device(dev);
+   int fence_fd, ret = 0;
+
+   simple_mtx_lock(&virtio_dev->eb_lock);
+   req->seqno = ++virtio_dev->next_seqno;
+
+   if ((virtio_dev->reqbuf_len + req->len) > sizeof(virtio_dev->reqbuf)) {
+      ret = execbuf_flush_locked(dev, NULL);
+      if (ret)
+         goto out_unlock;
+   }
+
+   memcpy(&virtio_dev->reqbuf[virtio_dev->reqbuf_len], req, req->len);
+   virtio_dev->reqbuf_len += req->len;
+   virtio_dev->reqbuf_cnt++;
+
+   if (!sync)
+      goto out_unlock;
+
+   ret = execbuf_flush_locked(dev, &fence_fd);
+
+out_unlock:
+   simple_mtx_unlock(&virtio_dev->eb_lock);
 
    if (ret)
       return ret;
 
-   if (sync)
+   if (sync) {
+      sync_wait(fence_fd, -1);
+      close(fence_fd);
       virtio_host_sync(dev, req);
+   }
 
    return 0;
 }

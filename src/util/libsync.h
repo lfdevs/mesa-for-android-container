@@ -131,7 +131,7 @@ static inline int sync_wait(int fd, int timeout)
 
 static inline int sync_merge(const char *name, int fd1, int fd2)
 {
-	struct sync_merge_data data = {0};
+	struct sync_merge_data data = {{0}};
 	int ret;
 
 	data.fd2 = fd2;

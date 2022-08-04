@@ -163,8 +163,7 @@ nine_csmt_create( struct NineDevice9 *This )
 
     ctx->device = This;
 
-    ctx->worker = u_thread_create(nine_csmt_worker, ctx);
-    if (!ctx->worker) {
+    if (thrd_success != u_thread_create(&ctx->worker, nine_csmt_worker, ctx)) {
         nine_queue_delete(ctx->pool);
         FREE(ctx);
         return NULL;
@@ -418,7 +417,7 @@ prepare_vs_constants_userbuf_swvp(struct NineDevice9 *device)
         context->pipe_data.cb0_swvp.buffer_size = cb.buffer_size;
         context->pipe_data.cb0_swvp.user_buffer = cb.user_buffer;
 
-        cb.user_buffer = (char *)cb.user_buffer + 4096 * sizeof(float[4]);
+        cb.user_buffer = (int8_t *)cb.user_buffer + 4096 * sizeof(float[4]);
         context->pipe_data.cb1_swvp.buffer_offset = cb.buffer_offset;
         context->pipe_data.cb1_swvp.buffer_size = cb.buffer_size;
         context->pipe_data.cb1_swvp.user_buffer = cb.user_buffer;
@@ -840,7 +839,7 @@ update_vertex_elements(struct NineDevice9 *device)
     const struct NineVertexShader9 *vs;
     unsigned n, b, i;
     int index;
-    char vdecl_index_map[16]; /* vs->num_inputs <= 16 */
+    int8_t vdecl_index_map[16]; /* vs->num_inputs <= 16 */
     uint16_t used_streams = 0;
     int dummy_vbo_stream = -1;
     BOOL need_dummy_vbo = FALSE;
@@ -2373,6 +2372,7 @@ init_draw_info(struct pipe_draw_info *info,
     info->increment_draw_id = FALSE;
     info->was_line_loop = FALSE;
     info->restart_index = 0;
+    info->view_mask = 0;
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_draw_primitive,
@@ -3041,8 +3041,8 @@ update_vertex_elements_sw(struct NineDevice9 *device)
     const struct NineVertexShader9 *vs;
     unsigned n, b, i;
     int index;
-    char vdecl_index_map[16]; /* vs->num_inputs <= 16 */
-    char used_streams[device->caps.MaxStreams];
+    int8_t vdecl_index_map[16]; /* vs->num_inputs <= 16 */
+    int8_t used_streams[device->caps.MaxStreams];
     int dummy_vbo_stream = -1;
     BOOL need_dummy_vbo = FALSE;
     struct cso_velems_state ve;
@@ -3207,7 +3207,7 @@ update_vs_constants_sw(struct NineDevice9 *device)
         if (cb.buffer)
             pipe_resource_reference(&cb.buffer, NULL);
 
-        cb.user_buffer = (char *)buf + 4096 * sizeof(float[4]);
+        cb.user_buffer = (int8_t *)buf + 4096 * sizeof(float[4]);
 
         pipe_sw->set_constant_buffer(pipe_sw, PIPE_SHADER_VERTEX, 1, false, &cb);
         if (cb.buffer)

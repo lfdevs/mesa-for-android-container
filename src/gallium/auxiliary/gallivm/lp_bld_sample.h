@@ -100,6 +100,8 @@ enum lp_sampler_op_type {
 #define LP_SAMPLER_GATHER_COMP_MASK   (3 << 8)
 #define LP_SAMPLER_FETCH_MS          (1 << 10)
 
+
+/* Parameters used to handle TEX instructions */
 struct lp_sampler_params
 {
    struct lp_type type;
@@ -118,6 +120,7 @@ struct lp_sampler_params
    LLVMValueRef *texel;
 };
 
+/* Parameters used to handle sampler_size instructions */
 struct lp_sampler_size_query_params
 {
    struct lp_type int_type;
@@ -154,6 +157,8 @@ struct lp_img_params
    LLVMValueRef indata2[4];
    LLVMValueRef *outdata;
 };
+
+
 /**
  * Texture static state.
  *
@@ -335,7 +340,7 @@ struct lp_sampler_dynamic_state
                 LLVMValueRef context_ptr,
                 unsigned sampler_unit);
 
-   /** 
+   /**
     * Obtain texture cache (returns ptr to lp_build_format_cache).
     *
     * It's optional: no caching will be done if it's NULL.
@@ -477,6 +482,7 @@ struct lp_build_img_op_array_switch {
    LLVMValueRef phi[4];
 };
 
+
 /**
  * We only support a few wrap modes in lp_build_sample_wrap_linear_int() at
  * this time.  Return whether the given mode is supported by that function.
@@ -508,6 +514,7 @@ apply_sampler_swizzle(struct lp_build_sample_context *bld,
    lp_build_swizzle_soa_inplace(&bld->texel_bld, texel, swizzles);
 }
 
+
 /*
  * not really dimension as such, this indicates the amount of
  * "normal" texture coords subject to minification, wrapping etc.
@@ -534,6 +541,7 @@ texture_dims(enum pipe_texture_target tex)
    }
 }
 
+
 static inline boolean
 has_layer_coord(enum pipe_texture_target tex)
 {
@@ -551,9 +559,9 @@ has_layer_coord(enum pipe_texture_target tex)
 
 
 boolean
-lp_sampler_wrap_mode_uses_border_color(unsigned mode,
-                                       unsigned min_img_filter,
-                                       unsigned mag_img_filter);
+lp_sampler_wrap_mode_uses_border_color(enum pipe_tex_wrap mode,
+                                       enum pipe_tex_filter min_img_filter,
+                                       enum pipe_tex_filter mag_img_filter);
 
 /**
  * Derive the sampler static state.
@@ -583,7 +591,7 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
                       const struct lp_derivatives *derivs,
                       LLVMValueRef lod_bias, /* optional */
                       LLVMValueRef explicit_lod, /* optional */
-                      unsigned mip_filter,
+                      enum pipe_tex_mipfilter mip_filter,
                       LLVMValueRef max_aniso,
                       LLVMValueRef *out_lod,
                       LLVMValueRef *out_lod_ipart,
@@ -709,7 +717,7 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
                         const struct lp_sampler_size_query_params *params);
 
 void
-lp_build_sample_nop(struct gallivm_state *gallivm, 
+lp_build_sample_nop(struct gallivm_state *gallivm,
                     struct lp_type type,
                     const LLVMValueRef *coords,
                     LLVMValueRef texel_out[4]);
@@ -742,7 +750,8 @@ lp_build_sample_array_case_soa(struct lp_build_sample_array_switch *switch_info,
                            const struct lp_static_sampler_state *static_sampler_state,
                            struct lp_sampler_dynamic_state *dynamic_texture_state);
 
-void lp_build_sample_array_fini_soa(struct lp_build_sample_array_switch *switch_info);
+void
+lp_build_sample_array_fini_soa(struct lp_build_sample_array_switch *switch_info);
 
 void
 lp_build_image_op_switch_soa(struct lp_build_img_op_array_switch *switch_info,
@@ -753,11 +762,12 @@ lp_build_image_op_switch_soa(struct lp_build_img_op_array_switch *switch_info,
 
 void
 lp_build_image_op_array_case(struct lp_build_img_op_array_switch *switch_info,
-			     int idx,
-			     const struct lp_static_texture_state *static_texture_state,
-			     struct lp_sampler_dynamic_state *dynamic_state);
+                             int idx,
+                             const struct lp_static_texture_state *static_texture_state,
+                             struct lp_sampler_dynamic_state *dynamic_state);
 
-void lp_build_image_op_array_fini_soa(struct lp_build_img_op_array_switch *switch_info);
+void
+lp_build_image_op_array_fini_soa(struct lp_build_img_op_array_switch *switch_info);
 
 void
 lp_build_reduce_filter(struct lp_build_context *bld,

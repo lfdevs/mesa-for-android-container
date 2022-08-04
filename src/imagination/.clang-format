@@ -232,7 +232,8 @@ ForEachMacros: [
   'vk_foreach_struct_const',
 # FIXME: vk_outarray_append doesn't fit here, remove
 # it when a better solution exists for it.
-  'vk_outarray_append'
+  'vk_outarray_append',
+  'vk_outarray_append_typed'
 ]
 
 NamespaceMacros: [

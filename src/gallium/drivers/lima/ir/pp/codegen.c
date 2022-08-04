@@ -659,7 +659,7 @@ static void ppir_codegen_encode_branch(ppir_node *node, void *code)
    while (list_is_empty(&target->instr_list)) {
       if (!target->list.next)
          break;
-      target = LIST_ENTRY(ppir_block, target->list.next, list);
+      target = list_entry(target->list.next, ppir_block, list);
    }
 
    assert(!list_is_empty(&target->instr_list));

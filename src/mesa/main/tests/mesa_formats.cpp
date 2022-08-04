@@ -35,15 +35,9 @@
 #include "main/glformats.h"
 #include "main/format_unpack.h"
 #include "main/format_pack.h"
-#include "util/u_cpu_detect.h"
 
 // Test fixture for Format tests.
-// Currently just ensures that util_cpu_detect() has been called
 class MesaFormatsTest : public ::testing::Test {
-  protected:
-    MesaFormatsTest() {
-       util_cpu_detect();
-    }
 };
 
 /**

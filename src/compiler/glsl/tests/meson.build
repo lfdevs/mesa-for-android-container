@@ -23,31 +23,13 @@ test(
   executable(
     'general_ir_test',
     ['array_refcount_test.cpp', 'builtin_variable_test.cpp',
-     'invalidate_locations_test.cpp', 'general_ir_test.cpp',
-     'lower_int64_test.cpp', 'opt_add_neg_to_sub_test.cpp',
-     'varyings_test.cpp', ir_expression_operation_h],
+     'general_ir_test.cpp', 'lower_int64_test.cpp',
+     'opt_add_neg_to_sub_test.cpp', ir_expression_operation_h],
     cpp_args : [cpp_msvc_compat_args],
     gnu_symbol_visibility : 'hidden',
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glsl],
     link_with : [libglsl, libglsl_standalone, libglsl_util],
     dependencies : [dep_clock, dep_thread, idep_gtest, idep_mesautil],
-  ),
-  suite : ['compiler', 'glsl'],
-  protocol : gtest_test_protocol,
-)
-
-test(
-  'uniform_initializer_test',
-  executable(
-    'uniform_initializer_test',
-    ['copy_constant_to_storage_tests.cpp', 'set_uniform_initializer_tests.cpp',
-     'uniform_initializer_utils.cpp', 'uniform_initializer_utils.h',
-     ir_expression_operation_h],
-    cpp_args : [cpp_msvc_compat_args],
-    gnu_symbol_visibility : 'hidden',
-    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glsl],
-    link_with : [libglsl, libglsl_util],
-    dependencies : [dep_thread, idep_gtest, idep_mesautil],
   ),
   suite : ['compiler', 'glsl'],
   protocol : gtest_test_protocol,

@@ -29,7 +29,7 @@
 
 #include "pvr_private.h"
 #include "pvr_srv.h"
-#include "pvr_winsys.h"
+#include "pvr_types.h"
 #include "util/macros.h"
 
 /******************************************************************************
@@ -67,7 +67,13 @@
 #define PVR_SRV_BRIDGE_DMABUF 11UL
 
 #define PVR_SRV_BRIDGE_DMABUF_PHYSMEMIMPORTDMABUF 0UL
-#define PVR_SRV_BRIDGE_DMABUF_PHYSMEMEXPORTDMABUF 1UL
+#define PVR_SRV_BRIDGE_DMABUF_PHYSMEMEXPORTDMABUF 2UL
+
+#define PVR_SRV_BRIDGE_RGXTQ 128UL
+
+#define PVR_SRV_BRIDGE_RGXTQ_RGXCREATETRANSFERCONTEXT 0UL
+#define PVR_SRV_BRIDGE_RGXTQ_RGXDESTROYTRANSFERCONTEXT 1UL
+#define PVR_SRV_BRIDGE_RGXTQ_RGXSUBMITTRANSFER2 3UL
 
 #define PVR_SRV_BRIDGE_RGXCMP 129UL
 
@@ -91,11 +97,22 @@
 /* DRM command numbers, relative to DRM_COMMAND_BASE.
  * These defines must be prefixed with "DRM_".
  */
-#define DRM_SRVKM_CMD 0U /* Used for Services ioctls */
+#define DRM_SRVKM_CMD 0U /* PVR Services command. */
+#define DRM_SRVKM_INIT 5U /* PVR Services Render Device Init command. */
 
 /* These defines must be prefixed with "DRM_IOCTL_". */
 #define DRM_IOCTL_SRVKM_CMD \
    DRM_IOWR(DRM_COMMAND_BASE + DRM_SRVKM_CMD, struct drm_srvkm_cmd)
+#define DRM_IOCTL_SRVKM_INIT \
+   DRM_IOWR(DRM_COMMAND_BASE + DRM_SRVKM_INIT, struct drm_srvkm_init_data)
+
+/******************************************************************************
+   Bridge call specific defines
+ ******************************************************************************/
+
+/* Flags for PVR_SRV_BRIDGE_RGXTQ_RGXSUBMITTRANSFER2 bridge call. */
+#define PVR_TRANSFER_PREP_FLAGS_START BITFIELD_BIT(5U)
+#define PVR_TRANSFER_PREP_FLAGS_END BITFIELD_BIT(6U)
 
 /******************************************************************************
    Misc defines
@@ -111,13 +128,13 @@
     SUPPORT_BUFFER_SYNC_SET_OFFSET | OPTIONS_BIT31)
 
 #define PVR_SRV_VERSION_MAJ 1U
-#define PVR_SRV_VERSION_MIN 14U
+#define PVR_SRV_VERSION_MIN 17U
 
 #define PVR_SRV_VERSION                                            \
    (((uint32_t)((uint32_t)(PVR_SRV_VERSION_MAJ)&0xFFFFU) << 16U) | \
     (((PVR_SRV_VERSION_MIN)&0xFFFFU) << 0U))
 
-#define PVR_SRV_VERSION_BUILD 5843584
+#define PVR_SRV_VERSION_BUILD 6256262
 
 /*! This flags gets set if the client is 64 Bit compatible. */
 #define PVR_SRV_FLAGS_CLIENT_64BIT_COMPAT BITFIELD_BIT(5U)
@@ -128,6 +145,12 @@
 
 #define PVR_BUFFER_FLAG_READ BITFIELD_BIT(0U)
 #define PVR_BUFFER_FLAG_WRITE BITFIELD_BIT(1U)
+
+/* clang-format off */
+#define PVR_U8888_TO_U32(v1, v2, v3, v4)                                \
+   (((v1) & 0xFFU) | (((v2) & 0xFFU) << 8U) | (((v3) & 0xFFU) << 16U) | \
+    (((v4) & 0xFFU) << 24U))
+/* clang-format on */
 
 /******************************************************************************
    Services Boolean
@@ -352,6 +375,7 @@ struct pvr_srv_physmem_new_ram_backed_locked_pmr_cmd {
 struct pvr_srv_physmem_new_ram_backed_locked_pmr_ret {
    void *pmr;
    enum pvr_srv_error error;
+   uint64_t out_flags;
 } PACKED;
 
 /******************************************************************************
@@ -457,6 +481,69 @@ struct pvr_srv_phys_mem_export_dmabuf_ret {
 } PACKED;
 
 /******************************************************************************
+   PVR_SRV_BRIDGE_RGXTQ_RGXCREATETRANSFERCONTEXT structs
+ ******************************************************************************/
+
+struct pvr_srv_rgx_create_transfer_context_cmd {
+   uint64_t robustness_address;
+   void *priv_data;
+   uint8_t *reset_framework_cmd;
+   uint32_t context_flags;
+   uint32_t reset_framework_cmd_size;
+   uint32_t packed_ccb_size_u8888;
+   uint32_t priority;
+} PACKED;
+
+struct pvr_srv_rgx_create_transfer_context_ret {
+   void *cli_pmr_mem;
+   void *transfer_context;
+   void *usc_pmr_mem;
+   enum pvr_srv_error error;
+} PACKED;
+
+/******************************************************************************
+   PVR_SRV_BRIDGE_RGXTQ_RGXDESTROYTRANSFERCONTEXT structs
+ ******************************************************************************/
+
+struct pvr_srv_rgx_destroy_transfer_context_cmd {
+   void *transfer_context;
+} PACKED;
+
+struct pvr_srv_rgx_destroy_transfer_context_ret {
+   enum pvr_srv_error error;
+} PACKED;
+
+/******************************************************************************
+   PVR_SRV_BRIDGE_RGXTQ_RGXSUBMITTRANSFER2 structs
+ ******************************************************************************/
+
+struct pvr_srv_rgx_submit_transfer2_cmd {
+   void *transfer_context;
+   uint32_t *client_update_count;
+   uint32_t *cmd_size;
+   uint32_t *sync_pmr_flags;
+   uint32_t *tq_prepare_flags;
+   uint32_t **update_sync_offset;
+   uint32_t **update_value;
+   uint8_t **fw_command;
+   char *update_fence_name;
+   void **sync_pmrs;
+   void ***update_ufo_sync_prim_block;
+   int32_t update_timeline_2d;
+   int32_t update_timeline_3d;
+   int32_t check_fence;
+   uint32_t ext_job_ref;
+   uint32_t prepare_count;
+   uint32_t sync_pmr_count;
+} PACKED;
+
+struct pvr_srv_rgx_submit_transfer2_ret {
+   enum pvr_srv_error error;
+   int32_t update_fence_2d;
+   int32_t update_fence_3d;
+} PACKED;
+
+/******************************************************************************
    PVR_SRV_BRIDGE_RGXCMP_RGXCREATECOMPUTECONTEXT structs
  ******************************************************************************/
 
@@ -500,18 +587,20 @@ struct pvr_srv_rgx_kick_cdm2_cmd {
    void *compute_context;
    uint32_t *client_update_offset;
    uint32_t *client_update_value;
+   uint32_t *sync_pmr_flags;
    uint8_t *cdm_cmd;
    char *update_fence_name;
    void **client_update_ufo_sync_prim_block;
+   void **sync_pmrs;
    int32_t check_fence;
    int32_t update_timeline;
-   uint32_t client_cache_op_seq_num;
    uint32_t client_update_count;
    uint32_t cmd_size;
    uint32_t ext_job_ref;
    uint32_t num_work_groups;
    uint32_t num_work_items;
    uint32_t pdump_flags;
+   uint32_t sync_pmr_count;
 } PACKED;
 
 struct pvr_srv_rgx_kick_cdm2_ret {
@@ -524,27 +613,24 @@ struct pvr_srv_rgx_kick_cdm2_ret {
  ******************************************************************************/
 
 struct pvr_srv_rgx_create_hwrt_dataset_cmd {
-   pvr_dev_addr_t pm_mlist_dev_addr0;
-   pvr_dev_addr_t pm_mlist_dev_addr1;
-   pvr_dev_addr_t tail_ptrs_dev_addr;
-   pvr_dev_addr_t macrotile_array_dev_addr0;
-   pvr_dev_addr_t macrotile_array_dev_addr1;
-   pvr_dev_addr_t rtc_dev_addr;
-   pvr_dev_addr_t rgn_header_dev_addr0;
-   pvr_dev_addr_t rgn_header_dev_addr1;
-   pvr_dev_addr_t vheap_table_dev_add;
    uint64_t flipped_multi_sample_ctl;
    uint64_t multi_sample_ctl;
-   uint64_t rgn_header_size;
+   /* ROGUE_FWIF_NUM_RTDATAS sized array. */
+   const pvr_dev_addr_t *macrotile_array_dev_addrs;
+   /* ROGUE_FWIF_NUM_RTDATAS sized array. */
+   const pvr_dev_addr_t *pm_mlist_dev_addrs;
+   /* ROGUE_FWIF_NUM_GEOMDATAS sized array. */
+   const pvr_dev_addr_t *rtc_dev_addrs;
+   /* ROGUE_FWIF_NUM_RTDATAS sized array. */
+   const pvr_dev_addr_t *rgn_header_dev_addrs;
+   /* ROGUE_FWIF_NUM_GEOMDATAS sized array. */
+   const pvr_dev_addr_t *tail_ptrs_dev_addrs;
+   /* ROGUE_FWIF_NUM_GEOMDATAS sized array. */
+   const pvr_dev_addr_t *vheap_table_dev_adds;
+   /* ROGUE_FWIF_NUM_RTDATAS sized array of handles. */
+   void **hwrt_dataset;
+   /* ROGUE_FW_MAX_FREELISTS size array of handles. */
    void **free_lists;
-   uint32_t mtile_stride;
-   uint32_t ppp_screen;
-   uint32_t te_aa;
-   uint32_t te_mtile1;
-   uint32_t te_mtile2;
-   uint32_t te_screen;
-   uint32_t tpc_size;
-   uint32_t tpc_stride;
    uint32_t isp_merge_lower_x;
    uint32_t isp_merge_lower_y;
    uint32_t isp_merge_scale_x;
@@ -552,12 +638,21 @@ struct pvr_srv_rgx_create_hwrt_dataset_cmd {
    uint32_t isp_merge_upper_x;
    uint32_t isp_merge_upper_y;
    uint32_t isp_mtile_size;
+   uint32_t mtile_stride;
+   uint32_t ppp_screen;
+   uint32_t rgn_header_size;
+   uint32_t te_aa;
+   uint32_t te_mtile1;
+   uint32_t te_mtile2;
+   uint32_t te_screen;
+   uint32_t tpc_size;
+   uint32_t tpc_stride;
    uint16_t max_rts;
 } PACKED;
 
 struct pvr_srv_rgx_create_hwrt_dataset_ret {
-   void *hwrt_dataset0;
-   void *hwrt_dataset1;
+   /* ROGUE_FWIF_NUM_RTDATAS sized array of handles. */
+   void **hwrt_dataset;
    enum pvr_srv_error error;
 } PACKED;
 
@@ -629,6 +724,7 @@ struct pvr_srv_rgx_create_render_context_cmd {
 #define RGX_CONTEXT_PRIORITY_LOW 0U
    uint32_t priority;
    uint32_t static_render_context_state_size;
+   uint32_t call_stack_depth;
 } PACKED;
 
 struct pvr_srv_rgx_create_render_context_ret {
@@ -686,16 +782,15 @@ struct pvr_srv_rgx_kick_ta3d2_cmd {
    uint32_t cmd_3d_size;
    uint32_t cmd_3d_pr_size;
    uint32_t client_3d_update_count;
-   uint32_t client_cache_op_seq_num;
    uint32_t client_ta_fence_count;
    uint32_t client_ta_update_count;
    uint32_t ext_job_ref;
-   uint32_t client_pr_fence_ufo_sync_offset;
-   uint32_t client_pr_fence_value;
    uint32_t num_draw_calls;
    uint32_t num_indices;
    uint32_t num_mrts;
    uint32_t pdump_flags;
+   uint32_t client_pr_fence_ufo_sync_offset;
+   uint32_t client_pr_fence_value;
    uint32_t render_target_size;
    uint32_t sync_pmr_count;
    uint32_t cmd_ta_size;
@@ -708,9 +803,10 @@ struct pvr_srv_rgx_kick_ta3d2_ret {
 } PACKED;
 
 /******************************************************************************
-   Ioctl structure to pass cmd and ret structures
+   Ioctl structures
  ******************************************************************************/
 
+/* Ioctl to pass cmd and ret structures. */
 struct drm_srvkm_cmd {
    uint32_t bridge_id;
    uint32_t bridge_func_id;
@@ -720,8 +816,30 @@ struct drm_srvkm_cmd {
    uint32_t out_data_size;
 };
 
+/* Ioctl to initialize a module. */
+struct drm_srvkm_init_data {
+#define PVR_SRVKM_SERVICES_INIT 1U
+#define PVR_SRVKM_SYNC_INIT 2U
+   uint32_t init_module;
+};
+
 /******************************************************************************
-   Bridge function prototype
+   DRM helper enum
+ ******************************************************************************/
+
+enum pvr_srvkm_module_type {
+   PVR_SRVKM_MODULE_TYPE_SERVICES = PVR_SRVKM_SERVICES_INIT,
+   PVR_SRVKM_MODULE_TYPE_SYNC = PVR_SRVKM_SYNC_INIT,
+};
+
+/******************************************************************************
+   Ioctl function prototypes
+ ******************************************************************************/
+
+VkResult pvr_srv_init_module(int fd, enum pvr_srvkm_module_type module);
+
+/******************************************************************************
+   Bridge function prototypes
  ******************************************************************************/
 
 VkResult pvr_srv_connection_create(int fd, uint64_t *const bvnc_out);
@@ -825,7 +943,6 @@ void pvr_srv_rgx_destroy_compute_context(int fd, void *compute_context);
 
 VkResult pvr_srv_rgx_kick_compute2(int fd,
                                    void *compute_context,
-                                   uint32_t client_cache_op_seq_num,
                                    uint32_t client_update_count,
                                    void **client_update_ufo_sync_prim_block,
                                    uint32_t *client_update_offset,
@@ -835,6 +952,9 @@ VkResult pvr_srv_rgx_kick_compute2(int fd,
                                    uint32_t cmd_size,
                                    uint8_t *cdm_cmd,
                                    uint32_t ext_job_ref,
+                                   uint32_t sync_pmr_count,
+                                   uint32_t *sync_pmr_flags,
+                                   void **sync_pmrs,
                                    uint32_t num_work_groups,
                                    uint32_t num_work_items,
                                    uint32_t pdump_flags,
@@ -842,29 +962,50 @@ VkResult pvr_srv_rgx_kick_compute2(int fd,
                                    char *update_fence_name,
                                    int32_t *const update_fence_out);
 
+VkResult pvr_srv_rgx_create_transfer_context(int fd,
+                                             uint32_t priority,
+                                             uint32_t reset_framework_cmd_size,
+                                             uint8_t *reset_framework_cmd,
+                                             void *priv_data,
+                                             uint32_t packed_ccb_size_u8888,
+                                             uint32_t context_flags,
+                                             uint64_t robustness_address,
+                                             void **const cli_pmr_out,
+                                             void **const usc_pmr_out,
+                                             void **const transfer_context_out);
+void pvr_srv_rgx_destroy_transfer_context(int fd, void *transfer_context);
+VkResult pvr_srv_rgx_submit_transfer2(int fd,
+                                      void *transfer_context,
+                                      uint32_t prepare_count,
+                                      uint32_t *client_update_count,
+                                      void ***update_ufo_sync_prim_block,
+                                      uint32_t **update_sync_offset,
+                                      uint32_t **update_value,
+                                      int32_t check_fence,
+                                      int32_t update_timeline_2d,
+                                      int32_t update_timeline_3d,
+                                      char *update_fence_name,
+                                      uint32_t *cmd_size,
+                                      uint8_t **fw_command,
+                                      uint32_t *tq_prepare_flags,
+                                      uint32_t ext_job_ref,
+                                      uint32_t sync_pmr_count,
+                                      uint32_t *sync_pmr_flags,
+                                      void **sync_pmrs,
+                                      int32_t *update_fence_2d_out,
+                                      int32_t *update_fence_3d_out);
+
 VkResult
 pvr_srv_rgx_create_hwrt_dataset(int fd,
-                                pvr_dev_addr_t pm_mlist_dev_addr0,
-                                pvr_dev_addr_t pm_mlist_dev_addr1,
-                                pvr_dev_addr_t tail_ptrs_dev_addr,
-                                pvr_dev_addr_t macrotile_array_dev_addr0,
-                                pvr_dev_addr_t macrotile_array_dev_addr1,
-                                pvr_dev_addr_t rtc_dev_addr,
-                                pvr_dev_addr_t rgn_header_dev_addr0,
-                                pvr_dev_addr_t rgn_header_dev_addr1,
-                                pvr_dev_addr_t vheap_table_dev_add,
                                 uint64_t flipped_multi_sample_ctl,
                                 uint64_t multi_sample_ctl,
-                                uint64_t rgn_header_size,
+                                const pvr_dev_addr_t *macrotile_array_dev_addrs,
+                                const pvr_dev_addr_t *pm_mlist_dev_addrs,
+                                const pvr_dev_addr_t *rtc_dev_addrs,
+                                const pvr_dev_addr_t *rgn_header_dev_addrs,
+                                const pvr_dev_addr_t *tail_ptrs_dev_addrs,
+                                const pvr_dev_addr_t *vheap_table_dev_adds,
                                 void **free_lists,
-                                uint32_t mtile_stride,
-                                uint32_t ppp_screen,
-                                uint32_t te_aa,
-                                uint32_t te_mtile1,
-                                uint32_t te_mtile2,
-                                uint32_t te_screen,
-                                uint32_t tpc_size,
-                                uint32_t tpc_stride,
                                 uint32_t isp_merge_lower_x,
                                 uint32_t isp_merge_lower_y,
                                 uint32_t isp_merge_scale_x,
@@ -872,9 +1013,17 @@ pvr_srv_rgx_create_hwrt_dataset(int fd,
                                 uint32_t isp_merge_upper_x,
                                 uint32_t isp_merge_upper_y,
                                 uint32_t isp_mtile_size,
+                                uint32_t mtile_stride,
+                                uint32_t ppp_screen,
+                                uint32_t rgn_header_size,
+                                uint32_t te_aa,
+                                uint32_t te_mtile1,
+                                uint32_t te_mtile2,
+                                uint32_t te_screen,
+                                uint32_t tpc_size,
+                                uint32_t tpc_stride,
                                 uint16_t max_rts,
-                                void **const hwrt_dataset0_out,
-                                void **const hwrt_dataset1_out);
+                                void **hwrt_dataset_out);
 
 void pvr_srv_rgx_destroy_hwrt_dataset(int fd, void *hwrt_dataset);
 
@@ -897,6 +1046,7 @@ VkResult
 pvr_srv_rgx_create_render_context(int fd,
                                   uint32_t priority,
                                   pvr_dev_addr_t vdm_callstack_addr,
+                                  uint32_t call_stack_depth,
                                   uint32_t reset_framework_cmd_size,
                                   uint8_t *reset_framework_cmd,
                                   void *priv_data,
@@ -913,7 +1063,6 @@ void pvr_srv_rgx_destroy_render_context(int fd, void *render_context);
 
 VkResult pvr_srv_rgx_kick_render2(int fd,
                                   void *render_ctx,
-                                  uint32_t client_cache_op_seq_num,
                                   uint32_t client_geom_fence_count,
                                   void **client_geom_fence_sync_prim_block,
                                   uint32_t *client_geom_fence_sync_offset,

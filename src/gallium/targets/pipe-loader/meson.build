@@ -67,7 +67,7 @@ pipe_loaders = [
   [with_gallium_freedreno, 'msm', driver_freedreno, []],
   [with_gallium_kmsro, 'kmsro', _kmsro_targets, []],
   [with_gallium_svga, 'vmwgfx', driver_svga, []],
-  [with_gallium_softpipe, 'swrast', driver_swrast, [libwsw, libws_null]],
+  [with_gallium_softpipe, 'swrast', driver_swrast, [libwsw, libws_null, libswdri, libswkmsdri]],
 ]
 
 foreach x : pipe_loaders

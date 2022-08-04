@@ -90,9 +90,6 @@ static inline bool r600_is_buffer_format_supported(enum pipe_format format, bool
 	if (format == PIPE_FORMAT_R11G11B10_FLOAT)
 		return true;
 
-	if (!desc)
-		return false;
-
 	/* Find the first non-VOID channel. */
 	for (i = 0; i < 4; i++) {
 		if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID)

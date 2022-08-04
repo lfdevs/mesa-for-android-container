@@ -113,7 +113,7 @@ draw_llvm_texture_member(const struct lp_sampler_dynamic_state *base,
    LLVMValueRef ptr;
    LLVMValueRef res;
 
-   debug_assert(texture_unit < PIPE_MAX_SHADER_SAMPLER_VIEWS);
+   assert(texture_unit < PIPE_MAX_SHADER_SAMPLER_VIEWS);
 
    /* context[0] */
    indices[0] = lp_build_const_int32(gallivm, 0);
@@ -164,7 +164,7 @@ draw_llvm_sampler_member(const struct lp_sampler_dynamic_state *base,
    LLVMValueRef ptr;
    LLVMValueRef res;
 
-   debug_assert(sampler_unit < PIPE_MAX_SAMPLERS);
+   assert(sampler_unit < PIPE_MAX_SAMPLERS);
 
    /* context[0] */
    indices[0] = lp_build_const_int32(gallivm, 0);
@@ -210,7 +210,7 @@ draw_llvm_image_member(const struct lp_sampler_dynamic_state *base,
    LLVMValueRef ptr;
    LLVMValueRef res;
 
-   debug_assert(image_unit < PIPE_MAX_SHADER_IMAGES);
+   assert(image_unit < PIPE_MAX_SHADER_IMAGES);
 
    /* context[0] */
    indices[0] = lp_build_const_int32(gallivm, 0);

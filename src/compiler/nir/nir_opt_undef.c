@@ -38,7 +38,7 @@
 static bool
 opt_undef_csel(nir_alu_instr *instr)
 {
-   if (instr->op != nir_op_bcsel && instr->op != nir_op_fcsel)
+   if (!nir_op_is_selection(instr->op))
       return false;
 
    assert(instr->dest.dest.is_ssa);

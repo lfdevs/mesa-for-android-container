@@ -189,42 +189,46 @@ SOFTWARE.
 		<value name="YVU8_420_2PLANE_PACK8_P"       value="120"/>
 		<value name="YUV8_420_2PLANE_PACK8_F"       value="121"/>
 		<value name="YVU8_420_2PLANE_PACK8_F"       value="122"/>
-		<value name="COMPRESSED_ASTC_4x4"           value="0"/>
-		<value name="COMPRESSED_ASTC_5x4"           value="1"/>
-		<value name="COMPRESSED_ASTC_5x5"           value="2"/>
-		<value name="COMPRESSED_ASTC_6x5"           value="3"/>
-		<value name="COMPRESSED_ASTC_6x6"           value="4"/>
-		<value name="COMPRESSED_ASTC_8x5"           value="5"/>
-		<value name="COMPRESSED_ASTC_8x6"           value="6"/>
-		<value name="COMPRESSED_ASTC_8x8"           value="7"/>
-		<value name="COMPRESSED_ASTC_10x5"          value="8"/>
-		<value name="COMPRESSED_ASTC_10x6"          value="9"/>
-		<value name="COMPRESSED_ASTC_10x8"          value="10"/>
-		<value name="COMPRESSED_ASTC_10x10"         value="11"/>
-		<value name="COMPRESSED_ASTC_12x10"         value="12"/>
-		<value name="COMPRESSED_ASTC_12x12"         value="13"/>
-		<value name="COMPRESSED_PVRT2BPP"           value="40"/>
-		<value name="COMPRESSED_PVRT4BPP"           value="41"/>
-		<value name="COMPRESSED_PVRTII2BPP"         value="42"/>
-		<value name="COMPRESSED_PVRTII4BPP"         value="43"/>
-		<value name="COMPRESSED_UBC1"               value="44"/>
-		<value name="COMPRESSED_UBC2"               value="45"/>
-		<value name="COMPRESSED_UBC3"               value="46"/>
-		<value name="COMPRESSED_UBC4"               value="47"/>
-		<value name="COMPRESSED_SBC4"               value="48"/>
-		<value name="COMPRESSED_UBC5"               value="49"/>
-		<value name="COMPRESSED_SBC5"               value="50"/>
-		<value name="COMPRESSED_UBC6"               value="51"/>
-		<value name="COMPRESSED_SBC6"               value="52"/>
-		<value name="COMPRESSED_UBC7"               value="53"/>
-		<value name="COMPRESSED_ETC2_RGB"           value="68"/>
-		<value name="COMPRESSED_ETC2A_RGBA"         value="69"/>
-		<value name="COMPRESSED_ETC2_PUNCHTHROUGHA" value="70"/>
-		<value name="COMPRESSED_EAC_R11_UNSIGNED"   value="71"/>
-		<value name="COMPRESSED_EAC_R11_SIGNED"     value="72"/>
-		<value name="COMPRESSED_EAC_RG11_UNSIGNED"  value="73"/>
-		<value name="COMPRESSED_EAC_RG11_SIGNED"    value="74"/>
 		<value name="INVALID"                       value="0xFFFFFFFF"/>
+	</enum>
+
+	<enum name="FORMAT_COMPRESSED">
+		<value name="ASTC_4x4"           value="0"/>
+		<value name="ASTC_5x4"           value="1"/>
+		<value name="ASTC_5x5"           value="2"/>
+		<value name="ASTC_6x5"           value="3"/>
+		<value name="ASTC_6x6"           value="4"/>
+		<value name="ASTC_8x5"           value="5"/>
+		<value name="ASTC_8x6"           value="6"/>
+		<value name="ASTC_8x8"           value="7"/>
+		<value name="ASTC_10x5"          value="8"/>
+		<value name="ASTC_10x6"          value="9"/>
+		<value name="ASTC_10x8"          value="10"/>
+		<value name="ASTC_10x10"         value="11"/>
+		<value name="ASTC_12x10"         value="12"/>
+		<value name="ASTC_12x12"         value="13"/>
+		<value name="PVRT2BPP"           value="40"/>
+		<value name="PVRT4BPP"           value="41"/>
+		<value name="PVRTII2BPP"         value="42"/>
+		<value name="PVRTII4BPP"         value="43"/>
+		<value name="UBC1"               value="44"/>
+		<value name="UBC2"               value="45"/>
+		<value name="UBC3"               value="46"/>
+		<value name="UBC4"               value="47"/>
+		<value name="SBC4"               value="48"/>
+		<value name="UBC5"               value="49"/>
+		<value name="SBC5"               value="50"/>
+		<value name="UBC6"               value="51"/>
+		<value name="SBC6"               value="52"/>
+		<value name="UBC7"               value="53"/>
+		<value name="ETC2_RGB"           value="68"/>
+		<value name="ETC2A_RGBA"         value="69"/>
+		<value name="ETC2_PUNCHTHROUGHA" value="70"/>
+		<value name="EAC_R11_UNSIGNED"   value="71"/>
+		<value name="EAC_R11_SIGNED"     value="72"/>
+		<value name="EAC_RG11_UNSIGNED"  value="73"/>
+		<value name="EAC_RG11_SIGNED"    value="74"/>
+		<value name="INVALID"            value="0xFFFFFFFF"/>
 	</enum>
 
 	<enum name="GAMMA">
@@ -262,6 +266,7 @@ SOFTWARE.
 		<field name="height" start="48" end="61" type="uint"/>
 		<field name="width" start="34" end="47" type="uint"/>
 		<field name="texformat" start="27" end="33" type="FORMAT"/>
+		<field name="texformat_compressed" start="27" end="33" type="FORMAT_COMPRESSED"/>
 		<field name="minlod" start="17" end="26" type="uint"/>
 		<field name="swiz0" start="14" end="16" type="SWIZ"/>
 		<field name="swiz1" start="11" end="13" type="SWIZ"/>
@@ -329,6 +334,12 @@ SOFTWARE.
 		<field name="maxlod" start="23" end="32" type="CLAMP"/>
 		<field name="minlod" start="13" end="22" type="CLAMP"/>
 		<field name="dadjust" start="0" end="12" type="DADJUST"/>
+	</struct>
+
+	<struct name="SAMPLER_WORD1" length="2">
+		<field name="cemedge_dontfilter" start="63" end="63" type="bool"/>
+		<field name="texaddr_plane3" start="24" end="61" shift="2" type="address"/>
+		<field name="texaddr_plane2_hi" start="0" end="23" shift="16" type="address"/>
 	</struct>
 
 </csbgen>

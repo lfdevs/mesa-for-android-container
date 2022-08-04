@@ -120,7 +120,7 @@ radeon_set_sh_reg_idx(const struct radv_physical_device *pdevice, struct radeon_
    assert(idx);
 
    unsigned opcode = PKT3_SET_SH_REG_INDEX;
-   if (pdevice->rad_info.chip_class < GFX10)
+   if (pdevice->rad_info.gfx_level < GFX10)
       opcode = PKT3_SET_SH_REG;
 
    radeon_emit(cs, PKT3(opcode, 1, 0));
@@ -175,12 +175,32 @@ radeon_set_uconfig_reg_idx(const struct radv_physical_device *pdevice, struct ra
    assert(idx);
 
    unsigned opcode = PKT3_SET_UCONFIG_REG_INDEX;
-   if (pdevice->rad_info.chip_class < GFX9 ||
-       (pdevice->rad_info.chip_class == GFX9 && pdevice->rad_info.me_fw_version < 26))
+   if (pdevice->rad_info.gfx_level < GFX9 ||
+       (pdevice->rad_info.gfx_level == GFX9 && pdevice->rad_info.me_fw_version < 26))
       opcode = PKT3_SET_UCONFIG_REG;
 
    radeon_emit(cs, PKT3(opcode, 1, 0));
    radeon_emit(cs, (reg - CIK_UCONFIG_REG_OFFSET) >> 2 | (idx << 28));
+   radeon_emit(cs, value);
+}
+
+static inline void
+radeon_set_perfctr_reg(struct radv_cmd_buffer *cmd_buffer, unsigned reg, unsigned value)
+{
+   struct radeon_cmdbuf *cs = cmd_buffer->cs;
+   assert(reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END);
+   assert(cs->cdw + 3 <= cs->max_dw);
+
+   /*
+    * On GFX10, there is a bug with the ME implementation of its content addressable memory (CAM),
+    * that means that it can skip register writes due to not taking correctly into account the
+    * fields from the GRBM_GFX_INDEX. With this bit we can force the write.
+    */
+   bool filter_cam_workaround = cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX10 &&
+                                cmd_buffer->qf == RADV_QUEUE_GENERAL;
+
+   radeon_emit(cs, PKT3(PKT3_SET_UCONFIG_REG, 1, 0) | PKT3_RESET_FILTER_CAM(filter_cam_workaround));
+   radeon_emit(cs, (reg - CIK_UCONFIG_REG_OFFSET) >> 2);
    radeon_emit(cs, value);
 }
 

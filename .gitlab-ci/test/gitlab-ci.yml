@@ -1,6 +1,4 @@
 .test:
-  extends:
-    - .ci-run-policy
   # Cancel job if a newer commit is pushed to the same branch
   interruptible: true
   variables:
@@ -100,6 +98,11 @@
   variables:
     DEQP_VER: vk
 
+.skqp-test:
+  variables:
+    HWCI_START_XORG: 1
+    HWCI_TEST_SCRIPT: "/install/skqp-runner.sh"
+
 .fossilize-test:
   script:
     - ./install/fossilize-runner.sh
@@ -111,18 +114,18 @@
 
 .baremetal-test:
   extends:
-    - .ci-run-policy
     - .test
   # Cancel job if a newer commit is pushed to the same branch
   interruptible: true
-  stage: test
   before_script:
     - !reference [default, before_script]
     # Use this instead of gitlab's artifacts download because it hits packet.net
     # instead of fd.o.  Set FDO_HTTP_CACHE_URI to an http cache for your test lab to
     # improve it even more (see https://docs.mesa3d.org/ci/bare-metal.html for
     # setup).
+    - echo -e "\e[0Ksection_start:$(date +%s):artifacts_download[collapsed=true]\r\e[0KDownloading artifacts from minio"
     - wget ${FDO_HTTP_CACHE_URI:-}https://${PIPELINE_ARTIFACTS_BASE}/${MINIO_ARTIFACT_NAME}.tar.gz -S --progress=dot:giga -O- | tar -xz
+    - echo -e "\e[0Ksection_end:$(date +%s):artifacts_download\r\e[0K"
   artifacts:
     when: always
     name: "mesa_${CI_JOB_NAME}"
@@ -134,21 +137,37 @@
     reports:
       junit: results/junit.xml
 
+# ARM testing of bare-metal boards attached to an x86 gitlab-runner system
 .baremetal-test-armhf:
   extends:
     - .baremetal-test
+    - .use-debian/arm_test
   variables:
     BM_ROOTFS: /rootfs-armhf
     MINIO_ARTIFACT_NAME: mesa-armhf
+  needs:
+    - debian/arm_test
+    - job: debian-armhf
+      artifacts: false
 
+# ARM64 testing of bare-metal boards attached to an x86 gitlab-runner system
 .baremetal-test-arm64:
   extends:
     - .baremetal-test
+    - .use-debian/arm_test
   variables:
     BM_ROOTFS: /rootfs-arm64
     MINIO_ARTIFACT_NAME: mesa-arm64
+  needs:
+    - debian/arm_test
+    - job: debian-arm64
+      artifacts: false
 
+# ARM64 testing of bare-metal boards attached to an x86 gitlab-runner system, using an asan mesa build
 .baremetal-arm64-asan-test:
+  extends:
+    - .baremetal-test
+    - .use-debian/arm_test
   variables:
     DEQP_RUNNER_OPTIONS: "--env LD_PRELOAD=libasan.so.6:/install/lib/libdlclose-skip.so"
     MINIO_ARTIFACT_NAME: mesa-arm64-asan
@@ -180,26 +199,25 @@
   # depend on more than one image per job. So, the job container is
   # built as part of the CI in the boot2container project.
   image: registry.freedesktop.org/mupuf/valve-infra/mesa-trigger:2022-03-03.2
-  extends:
-    - .use-debian/x86_test-vk
+  timeout: 1h 40m
   variables:
     # No need by default to pull the whole repo
     GIT_STRATEGY: none
     # boot2container initrd configuration parameters.
-    B2C_KERNEL_URL: 'https://gitlab.freedesktop.org/mupuf/valve-infra/-/package_files/117/download'  # 5.16-for-mesa-ci
-    B2C_INITRAMFS_URL: 'https://gitlab.freedesktop.org/mupuf/boot2container/-/releases/v0.9.4/downloads/initramfs.linux_amd64.cpio.xz'
+    B2C_KERNEL_URL: 'https://gitlab.freedesktop.org/mupuf/valve-infra/-/package_files/144/download'  # 5.17.1
+    B2C_INITRAMFS_URL: 'https://gitlab.freedesktop.org/mupuf/boot2container/-/releases/v0.9.6/downloads/initramfs.linux_amd64.cpio.xz'
     B2C_JOB_SUCCESS_REGEX: '\[.*\]: Execution is over, pipeline status: 0\r$'
-    B2C_JOB_WARN_REGEX: 'null'
+    B2C_JOB_WARN_REGEX: '\*ERROR\* ring .* timeout, but soft recovered'
     B2C_LOG_LEVEL: 6
     B2C_POWEROFF_DELAY: 15
     B2C_SESSION_END_REGEX: '^.*It''s now safe to turn off your computer\r$'
-    B2C_SESSION_REBOOT_REGEX: 'GPU hang detected!'
-    B2C_TIMEOUT_BOOT_MINUTES: 240
-    B2C_TIMEOUT_BOOT_RETRIES: 2
+    B2C_SESSION_REBOOT_REGEX: '(GPU hang detected!|\*ERROR\* ring [^\s]+ timeout(?!, but soft recovered)|The CS has been cancelled because the context is lost)'
+    B2C_TIMEOUT_BOOT_MINUTES: 45
+    B2C_TIMEOUT_BOOT_RETRIES: 1
     B2C_TIMEOUT_FIRST_MINUTES: 5
     B2C_TIMEOUT_FIRST_RETRIES: 3
     B2C_TIMEOUT_MINUTES: 2
-    B2C_TIMEOUT_OVERALL_MINUTES: 240
+    B2C_TIMEOUT_OVERALL_MINUTES: 90
     B2C_TIMEOUT_RETRIES: 0
 
     # As noted in the top description, we make a distinction between the
@@ -208,11 +226,12 @@
     # we rename the MESA_IMAGE variable into IMAGE_UNDER_TEST.
     IMAGE_UNDER_TEST: "$MESA_IMAGE"
 
-    INSTALL_TARBALL: "./artifacts/install.tar"
-    CI_VALVE_ARTIFACTS: "./artifacts/valve"
+    INSTALL_TARBALL_NAME: "install.tar"
+    INSTALL_TARBALL: "./artifacts/${INSTALL_TARBALL_NAME}"
+    CI_B2C_ARTIFACTS: "./artifacts/b2c"
     CI_COMMON_SCRIPTS: "./artifacts/ci-common"
     GENERATE_ENV_SCRIPT: "${CI_COMMON_SCRIPTS}/generate-env.sh"
-    B2C_JOB_TEMPLATE: "${CI_VALVE_ARTIFACTS}/b2c.yml.jinja2.jinja2"
+    B2C_JOB_TEMPLATE: "${CI_B2C_ARTIFACTS}/b2c.yml.jinja2.jinja2"
     JOB_FOLDER: "job_folder"
   before_script:
     # We don't want the tarball unpacking of .test, but will take the JWT bits.
@@ -236,15 +255,15 @@
       fi
 
       [ -s "$INSTALL_TARBALL" ] || exit 1
-      [ -d "$CI_VALVE_ARTIFACTS" ] || exit 1
+      [ -d "$CI_B2C_ARTIFACTS" ] || exit 1
       [ -d "$CI_COMMON_SCRIPTS" ] || exit 1
 
 
-      B2C_TEST_SCRIPT="bash -c 'source ./set-job-env-vars.sh ; ${B2C_TEST_SCRIPT}'"
+      B2C_TEST_SCRIPT="bash -c 'source ./set-job-env-vars.sh; tar xf ${INSTALL_TARBALL_NAME}; ${B2C_TEST_SCRIPT}'"
 
       # The Valve CI gateway receives jobs in a YAML format. Create a
       # job description from the CI environment.
-      python3 "$CI_VALVE_ARTIFACTS"/generate_b2c.py \
+      python3 "$CI_B2C_ARTIFACTS"/generate_b2c.py \
         --ci-job-id "${CI_JOB_ID}" \
         --container-cmd "${B2C_TEST_SCRIPT}" \
         --initramfs-url "${B2C_INITRAMFS_URL}" \
@@ -283,9 +302,8 @@
       echo "export CI_JOB_JWT=${CI_JOB_JWT}" >> ${JOB_FOLDER}/set-job-env-vars.sh
       set -x
 
-      # Extract the Mesa distribution into the location expected by
-      # the Mesa CI deqp-runner scripts.
-      tar x -C ${JOB_FOLDER} -f $INSTALL_TARBALL
+      # Copy the mesa install tarball to the job folder, for later extraction
+      mv "${INSTALL_TARBALL}" "${JOB_FOLDER}"
 
   script: |
       slugify () {
@@ -302,9 +320,6 @@
       # Gitlab coordinator for status presentation. results/junit.xml
       # will be parsed by the UI for more detailed explanations of
       # test execution.
-  needs:
-    - debian/x86_test-vk
-    - debian-testing
   artifacts:
     when: always
     name: "mesa_${CI_JOB_NAME}"
@@ -312,3 +327,19 @@
       - ${JOB_FOLDER}/results
     reports:
       junit: ${JOB_FOLDER}/results/junit.xml
+
+.b2c-test-vk:
+  extends:
+    - .use-debian/x86_test-vk
+    - .b2c-test
+  needs:
+    - debian/x86_test-vk
+    - debian-testing
+
+.b2c-test-gl:
+  extends:
+    - .use-debian/x86_test-gl
+    - .b2c-test
+  needs:
+    - debian/x86_test-gl
+    - debian-testing

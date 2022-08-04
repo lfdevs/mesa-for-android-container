@@ -76,36 +76,3 @@ tu_wsi_finish(struct tu_physical_device *physical_device)
    wsi_device_finish(&physical_device->wsi_device,
                      &physical_device->instance->vk.alloc);
 }
-
-VKAPI_ATTR VkResult VKAPI_CALL
-tu_AcquireNextImage2KHR(VkDevice _device,
-                        const VkAcquireNextImageInfoKHR *pAcquireInfo,
-                        uint32_t *pImageIndex)
-{
-   TU_FROM_HANDLE(tu_device, device, _device);
-   VK_FROM_HANDLE(vk_fence, fence, pAcquireInfo->fence);
-   VK_FROM_HANDLE(vk_semaphore, semaphore, pAcquireInfo->semaphore);
-
-   struct tu_physical_device *pdevice = device->physical_device;
-
-   VkResult result = wsi_common_acquire_next_image2(
-      &pdevice->wsi_device, _device, pAcquireInfo, pImageIndex);
-
-   /* signal fence/semaphore - image is available immediately */
-   tu_signal_syncs(device,
-                   fence ? vk_fence_get_active_sync(fence) : NULL,
-                   semaphore ? vk_semaphore_get_active_sync(semaphore) : NULL);
-
-   return result;
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL
-tu_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
-{
-   TU_FROM_HANDLE(tu_queue, queue, _queue);
-
-   return wsi_common_queue_present(
-      &queue->device->physical_device->wsi_device,
-      tu_device_to_handle(queue->device), _queue, queue->vk.queue_family_index,
-      pPresentInfo);
-}

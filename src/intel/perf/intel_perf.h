@@ -35,8 +35,10 @@
 #include <sys/mkdev.h>
 #endif
 
-#include "util/hash_table.h"
 #include "compiler/glsl/list.h"
+#include "dev/intel_device_info.h"
+#include "util/bitscan.h"
+#include "util/hash_table.h"
 #include "util/ralloc.h"
 
 #include "drm-uapi/i915_drm.h"
@@ -44,8 +46,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-struct intel_device_info;
 
 struct intel_perf_config;
 struct intel_perf_query_info;
@@ -179,6 +179,14 @@ struct intel_perf_query_result {
    bool query_disjoint;
 };
 
+typedef uint64_t (*intel_counter_read_uint64_t)(struct intel_perf_config *perf,
+                                                const struct intel_perf_query_info *query,
+                                                const struct intel_perf_query_result *results);
+
+typedef float (*intel_counter_read_float_t)(struct intel_perf_config *perf,
+                                            const struct intel_perf_query_info *query,
+                                            const struct intel_perf_query_result *results);
+
 struct intel_perf_query_counter {
    const char *name;
    const char *desc;
@@ -187,16 +195,16 @@ struct intel_perf_query_counter {
    enum intel_perf_counter_type type;
    enum intel_perf_counter_data_type data_type;
    enum intel_perf_counter_units units;
-   uint64_t raw_max;
    size_t offset;
 
    union {
-      uint64_t (*oa_counter_read_uint64)(struct intel_perf_config *perf,
-                                         const struct intel_perf_query_info *query,
-                                         const struct intel_perf_query_result *results);
-      float (*oa_counter_read_float)(struct intel_perf_config *perf,
-                                     const struct intel_perf_query_info *query,
-                                     const struct intel_perf_query_result *results);
+      intel_counter_read_uint64_t oa_counter_max_uint64;
+      intel_counter_read_float_t  oa_counter_max_float;
+   };
+
+   union {
+      intel_counter_read_uint64_t oa_counter_read_uint64;
+      intel_counter_read_float_t  oa_counter_read_float;
       struct intel_pipeline_stat pipeline_stat;
    };
 };
@@ -278,6 +286,7 @@ struct intel_perf_query_field_layout {
          INTEL_PERF_QUERY_FIELD_TYPE_MI_RPC,
          INTEL_PERF_QUERY_FIELD_TYPE_SRM_PERFCNT,
          INTEL_PERF_QUERY_FIELD_TYPE_SRM_RPSTAT,
+         INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_A,
          INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_B,
          INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_C,
       } type;
@@ -317,6 +326,18 @@ struct intel_perf_config {
    /* Version of the i915-perf subsystem, refer to i915_drm.h. */
    int i915_perf_version;
 
+   /* Number of bits to shift the OA timestamp values by to match the ring
+    * timestamp.
+    */
+   int oa_timestamp_shift;
+
+   /* Mask of bits valid from the OA report (for instance you might have the
+    * lower 31 bits [30:0] of timestamp value). This is useful if you want to
+    * recombine a full timestamp value captured from the CPU with OA
+    * timestamps captured on the device but that only include 31bits of data.
+    */
+   uint64_t oa_timestamp_mask;
+
    /* Powergating configuration for the running the query. */
    struct drm_i915_gem_context_param_sseu sseu;
 
@@ -334,18 +355,18 @@ struct intel_perf_config {
     * All uint64_t for consistent operand types in generated code
     */
    struct {
-      uint64_t timestamp_frequency; /** $GpuTimestampFrequency */
       uint64_t n_eus;               /** $EuCoresTotalCount */
       uint64_t n_eu_slices;         /** $EuSlicesTotalCount */
       uint64_t n_eu_sub_slices;     /** $EuSubslicesTotalCount */
-      uint64_t eu_threads_count;    /** $EuThreadsCount */
+      uint64_t n_eu_slice0123;      /** $EuDualSubslicesSlice0123Count */
       uint64_t slice_mask;          /** $SliceMask */
       uint64_t subslice_mask;       /** $SubsliceMask */
       uint64_t gt_min_freq;         /** $GpuMinFrequency */
       uint64_t gt_max_freq;         /** $GpuMaxFrequency */
-      uint64_t revision;            /** $SkuRevisionId */
       bool     query_mode;          /** $QueryMode */
    } sys_vars;
+
+   struct intel_device_info devinfo;
 
    /* OA metric sets, indexed by GUID, as know by Mesa at build time, to
     * cross-reference with the GUIDs of configs advertised by the kernel at
@@ -429,6 +450,12 @@ uint64_t intel_perf_store_configuration(struct intel_perf_config *perf_cfg, int 
                                         const struct intel_perf_registers *config,
                                         const char *guid);
 
+static inline unsigned
+intel_perf_query_counter_info_first_query(const struct intel_perf_query_counter_info *counter_info)
+{
+   return ffsll(counter_info->query_mask);
+}
+
 /** Read the slice/unslice frequency from 2 OA reports and store then into
  *  result.
  */
@@ -455,7 +482,6 @@ void intel_perf_query_result_read_perfcnts(struct intel_perf_query_result *resul
  */
 void intel_perf_query_result_accumulate(struct intel_perf_query_result *result,
                                         const struct intel_perf_query_info *query,
-                                        const struct intel_device_info *devinfo,
                                         const uint32_t *start,
                                         const uint32_t *end);
 
@@ -469,7 +495,6 @@ uint64_t intel_perf_report_timestamp(const struct intel_perf_query_info *query,
  */
 void intel_perf_query_result_accumulate_fields(struct intel_perf_query_result *result,
                                                const struct intel_perf_query_info *query,
-                                               const struct intel_device_info *devinfo,
                                                const void *start,
                                                const void *end,
                                                bool no_oa_accumulate);
@@ -479,7 +504,6 @@ void intel_perf_query_result_clear(struct intel_perf_query_result *result);
 /** Debug helper printing out query data.
  */
 void intel_perf_query_result_print_fields(const struct intel_perf_query_info *query,
-                                          const struct intel_device_info *devinfo,
                                           const void *data);
 
 static inline size_t

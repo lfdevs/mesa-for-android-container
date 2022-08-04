@@ -21,6 +21,9 @@
  * IN THE SOFTWARE.
  */
 
+#ifndef BRW_GFX_VER_ENUM_H
+#define BRW_GFX_VER_ENUM_H
+
 #include "util/macros.h"
 #include "dev/intel_device_info.h"
 
@@ -44,7 +47,7 @@ enum gfx_ver {
 #define GFX_GE(ver) (~GFX_LT(ver))
 #define GFX_LE(ver) (GFX_LT(ver) | (ver))
 
-static enum gfx_ver
+static inline enum gfx_ver
 gfx_ver_from_devinfo(const struct intel_device_info *devinfo)
 {
    switch (devinfo->verx10) {
@@ -63,3 +66,5 @@ gfx_ver_from_devinfo(const struct intel_device_info *devinfo)
       unreachable("not reached");
    }
 }
+
+#endif

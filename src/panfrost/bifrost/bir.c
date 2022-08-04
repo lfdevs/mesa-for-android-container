@@ -93,6 +93,8 @@ bi_count_read_registers(const bi_instr *ins, unsigned s)
                 return bi_count_staging_registers(ins);
         else if (s == 4 && ins->op == BI_OPCODE_BLEND)
                 return ins->sr_count_2; /* Dual source blending */
+        else if (s == 0 && ins->op == BI_OPCODE_SPLIT_I32)
+                return ins->nr_dests;
         else
                 return 1;
 }
@@ -101,16 +103,38 @@ unsigned
 bi_count_write_registers(const bi_instr *ins, unsigned d)
 {
         if (d == 0 && bi_opcode_props[ins->op].sr_write) {
-                /* TODO: this special case is even more special, TEXC has a
-                 * generic write mask stuffed in the desc... */
-                if (ins->op == BI_OPCODE_TEXC)
-                        return 4;
-                else
+                switch (ins->op) {
+                case BI_OPCODE_TEXC:
+                        if (ins->sr_count_2)
+                                return ins->sr_count;
+                        else
+                                return bi_is_regfmt_16(ins->register_format) ? 2 : 4;
+
+                case BI_OPCODE_TEX_SINGLE:
+                case BI_OPCODE_TEX_FETCH:
+                case BI_OPCODE_TEX_GATHER: {
+                        unsigned chans = util_bitcount(ins->write_mask);
+
+                        return bi_is_regfmt_16(ins->register_format) ?
+                                DIV_ROUND_UP(chans, 2) : chans;
+                }
+
+                case BI_OPCODE_ACMPXCHG_I32:
+                        /* Reads 2 but writes 1 */
+                        return 1;
+
+                case BI_OPCODE_ATOM1_RETURN_I32:
+                        /* Allow omitting the destination for plain ATOM1 */
+                        return bi_is_null(ins->dest[0]) ? 0 : ins->sr_count;
+                default:
                         return bi_count_staging_registers(ins);
+                }
         } else if (ins->op == BI_OPCODE_SEG_ADD_I64) {
                 return 2;
         } else if (ins->op == BI_OPCODE_TEXC && d == 1) {
                 return ins->sr_count_2;
+        } else if (ins->op == BI_OPCODE_COLLECT_I32 && d == 0) {
+                return ins->nr_srcs;
         }
 
         return 1;
@@ -159,12 +183,6 @@ bool
 bi_side_effects(const bi_instr *I)
 {
         if (bi_opcode_props[I->op].last)
-                return true;
-
-        /* On Valhall, nontrivial flow control acts as a side effect and should
-         * not be dead code eliminated away.
-         */
-        if (I->flow)
                 return true;
 
         switch (I->op) {
@@ -222,8 +240,64 @@ bi_reconverge_branches(bi_block *block)
 
         /* Must have at least one successor */
         struct bi_block *succ = block->successors[0];
-        assert(succ->predecessors);
 
         /* Reconverge if the successor has multiple predecessors */
-        return (succ->predecessors->entries > 1);
+        return bi_num_predecessors(succ) > 1;
+}
+
+/*
+ * When MUX.i32 or MUX.v2i16 is used to multiplex entire sources, they can be
+ * replaced by CSEL as follows:
+ *
+ *      MUX.neg(x, y, b) -> CSEL.s.lt(b, 0, x, y)
+ *      MUX.int_zero(x, y, b) -> CSEL.i.eq(b, 0, x, y)
+ *      MUX.fp_zero(x, y, b) -> CSEL.f.eq(b, 0, x, y)
+ *
+ * MUX.bit cannot be transformed like this.
+ *
+ * Note that MUX.v2i16 has partial support for swizzles, which CSEL.v2i16 lacks.
+ * So we must check the swizzles too.
+ */
+bool
+bi_can_replace_with_csel(bi_instr *I)
+{
+        return ((I->op == BI_OPCODE_MUX_I32) || (I->op == BI_OPCODE_MUX_V2I16)) &&
+                (I->mux != BI_MUX_BIT) &&
+                (I->src[0].swizzle == BI_SWIZZLE_H01) &&
+                (I->src[1].swizzle == BI_SWIZZLE_H01) &&
+                (I->src[2].swizzle == BI_SWIZZLE_H01);
+}
+
+static enum bi_opcode
+bi_csel_for_mux(bool must_sign, bool b32, enum bi_mux mux)
+{
+        switch (mux) {
+        case BI_MUX_INT_ZERO:
+                if (must_sign)
+                        return b32 ? BI_OPCODE_CSEL_U32 : BI_OPCODE_CSEL_V2U16;
+                else
+                        return b32 ? BI_OPCODE_CSEL_I32 : BI_OPCODE_CSEL_V2I16;
+        case BI_MUX_NEG:
+                return b32 ? BI_OPCODE_CSEL_S32 : BI_OPCODE_CSEL_V2S16;
+        case BI_MUX_FP_ZERO:
+                return b32 ? BI_OPCODE_CSEL_F32 : BI_OPCODE_CSEL_V2F16;
+        default:
+             unreachable("No CSEL for MUX.bit");
+        }
+}
+
+void
+bi_replace_mux_with_csel(bi_instr *I, bool must_sign)
+{
+        assert(I->op == BI_OPCODE_MUX_I32 || I->op == BI_OPCODE_MUX_V2I16);
+        I->op = bi_csel_for_mux(must_sign, I->op == BI_OPCODE_MUX_I32, I->mux);
+        I->cmpf = (I->mux == BI_MUX_NEG) ? BI_CMPF_LT : BI_CMPF_EQ;
+        I->mux = 0;
+
+        bi_index vTrue = I->src[0], vFalse = I->src[1], cond = I->src[2];
+
+        I->src[0] = cond;
+        I->src[1] = bi_zero();
+        I->src[2] = vTrue;
+        I->src[3] = vFalse;
 }

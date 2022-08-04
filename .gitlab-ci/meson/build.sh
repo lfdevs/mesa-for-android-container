@@ -48,6 +48,8 @@ case $CI_JOB_NAME in
         if test -f /usr/bin/time; then
             MESON_TEST_ARGS+=--wrapper=$PWD/.gitlab-ci/meson/time.sh
         fi
+        Xvfb :0 -screen 0 1024x768x16 &
+        export DISPLAY=:0.0
         ;;
     *)
         if test -f /usr/bin/time -a -f /usr/bin/strace; then
@@ -63,7 +65,7 @@ meson _build --native-file=native.file \
       -D prefix=`pwd`/install \
       -D libdir=lib \
       -D buildtype=${BUILDTYPE:-debug} \
-      -D build-tests=true \
+      -D build-tests=false \
       -D c_args="$(echo -n $C_ARGS)" \
       -D cpp_args="$(echo -n $CPP_ARGS)" \
       -D libunwind=${UNWIND} \
@@ -71,11 +73,12 @@ meson _build --native-file=native.file \
       ${GALLIUM_ST} \
       -D gallium-drivers=${GALLIUM_DRIVERS:-[]} \
       -D vulkan-drivers=${VULKAN_DRIVERS:-[]} \
+      -D video-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec \
       -D werror=true \
       ${EXTRA_OPTION}
 cd _build
 meson configure
 ninja
-LC_ALL=C.UTF-8 meson test --num-processes ${FDO_CI_CONCURRENT:-4} ${MESON_TEST_ARGS}
+LC_ALL=C.UTF-8 meson test --num-processes ${FDO_CI_CONCURRENT:-4} --print-errorlogs ${MESON_TEST_ARGS}
 ninja install
 cd ..

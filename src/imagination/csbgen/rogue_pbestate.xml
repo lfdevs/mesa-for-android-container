@@ -127,13 +127,6 @@ SOFTWARE.
 		<value name="ENABLED"  value="1"/>
 	</enum>
 
-	<enum name="REG_WORD0_LINESTRIDE">
-		<value name="ALIGNSHIFT"                                 value="1"/>
-		<value name="ALIGNSIZE"                                  value="2"/>
-		<value name="ALIGNSHIFT_PBE_STRIDE_ALIGN_1PIXEL_ENABLED" value="0"/>
-		<value name="ALIGNSIZE_PBE_STRIDE_ALIGN_1PIXEL_ENABLED"  value="1"/>
-	</enum>
-
 	<enum name="ROTATION_TYPE">
 		<value name="0_DEG"   value="0"/>
 		<value name="90_DEG"  value="1"/>
@@ -263,6 +256,7 @@ SOFTWARE.
 		<field name="size_z" start="52" end="55" type="SIZE"/>
 		<field name="rotation" start="50" end="51" type="ROTATION_TYPE"/>
 		<field name="linestride" start="34" end="49" type="uint">
+			<!-- FIXME: When pbe_stride_align_1pixel is present, this should be 1. -->
 			<define name="UNIT_SIZE" value="2"/>
 		</field>
 		<field name="memlayout" start="32" end="33" type="MEMLAYOUT"/>

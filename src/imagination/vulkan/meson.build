@@ -43,12 +43,14 @@ pvr_files = files(
   'pvr_descriptor_set.c',
   'pvr_device.c',
   'pvr_formats.c',
+  'pvr_hardcode.c',
   'pvr_hw_pass.c',
   'pvr_image.c',
   'pvr_job_common.c',
   'pvr_job_compute.c',
   'pvr_job_context.c',
   'pvr_job_render.c',
+  'pvr_job_transfer.c',
   'pvr_pass.c',
   'pvr_pipeline.c',
   'pvr_pipeline_cache.c',
@@ -83,9 +85,12 @@ if with_imagination_srv
     'winsys/pvrsrvkm/pvr_srv.c',
     'winsys/pvrsrvkm/pvr_srv_bo.c',
     'winsys/pvrsrvkm/pvr_srv_bridge.c',
+    'winsys/pvrsrvkm/pvr_srv_job_common.c',
     'winsys/pvrsrvkm/pvr_srv_job_compute.c',
+    'winsys/pvrsrvkm/pvr_srv_job_null.c',
     'winsys/pvrsrvkm/pvr_srv_job_render.c',
-    'winsys/pvrsrvkm/pvr_srv_syncobj.c',
+    'winsys/pvrsrvkm/pvr_srv_job_transfer.c',
+    'winsys/pvrsrvkm/pvr_srv_sync.c',
   )
   pvr_flags += '-DPVR_SUPPORT_SERVICES_DRIVER'
 endif

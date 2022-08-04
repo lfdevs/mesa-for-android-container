@@ -1,6 +1,5 @@
 dEQP-GLES2.functional.texture.filtering.cube.nearest_linear_mirror_l8_pot
 spec@khr_debug@push-pop-group_gl.*
-glx@glx-multi-window-single-context
 
 # "Pending expose event- rerunning."
 #  exit status: signal: 11"
@@ -13,3 +12,14 @@ spec@arb_compute_variable_group_size@local-size
 # https://gitlab.freedesktop.org/mesa/mesa/-/jobs/20908454
 # "X connection to :99 broken (explicit kill or server shutdown)."
 glx@glx-multi-context-ib-1
+
+# depth visuals
+glx@glx-visuals-depth
+glx@glx-visuals-stencil
+
+# mysterious
+glx@glx-shader-sharing
+
+spec@arb_fragment_program@no-newline
+# glx-destroycontext-1: ../../src/xcb_conn.c:215: write_vec: Assertion `!c->out.queue_len' failed.
+glx@glx-destroycontext-1

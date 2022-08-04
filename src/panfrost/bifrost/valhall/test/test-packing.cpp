@@ -258,16 +258,19 @@ TEST_F(ValhallPacking, LdAttrImm) {
 TEST_F(ValhallPacking, LdVarBufImmF16) {
    CASE(bi_ld_var_buf_imm_f16_to(b, bi_register(2), bi_register(61),
                                  BI_REGISTER_FORMAT_F16, BI_SAMPLE_CENTER,
+                                 BI_SOURCE_FORMAT_F16,
                                  BI_UPDATE_RETRIEVE, BI_VECSIZE_V4, 0),
         0x005d82143300003d);
 
    CASE(bi_ld_var_buf_imm_f16_to(b, bi_register(0), bi_register(61),
                                  BI_REGISTER_FORMAT_F16, BI_SAMPLE_SAMPLE,
+                                 BI_SOURCE_FORMAT_F16,
                                  BI_UPDATE_STORE, BI_VECSIZE_V4, 0),
          0x005d80843300003d);
 
    CASE(bi_ld_var_buf_imm_f16_to(b, bi_register(0), bi_register(61),
                                  BI_REGISTER_FORMAT_F16, BI_SAMPLE_CENTROID,
+                                 BI_SOURCE_FORMAT_F16,
                                  BI_UPDATE_STORE, BI_VECSIZE_V4, 8),
          0x005d80443308003d);
 }

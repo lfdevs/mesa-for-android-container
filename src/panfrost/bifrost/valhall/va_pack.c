@@ -32,6 +32,34 @@
  */
 
 /*
+ * Unreachable for encoding failures, when hitting an invalid instruction.
+ * Prints the (first) failing instruction to aid debugging.
+ */
+NORETURN static void PRINTFLIKE(2, 3)
+invalid_instruction(const bi_instr *I, const char *cause, ...)
+{
+   fputs("\nInvalid ", stderr);
+
+   va_list ap;
+   va_start(ap, cause);
+   vfprintf(stderr, cause, ap);
+   va_end(ap);
+
+   fputs(":\n\t", stderr);
+   bi_print_instr(I, stderr);
+   fprintf(stderr, "\n");
+
+   unreachable("Invalid instruction");
+}
+
+/*
+ * Like assert, but prints the instruction if the assertion fails to aid
+ * debugging invalid inputs to the packing module.
+ */
+#define pack_assert(I, cond) \
+   if (!(cond)) invalid_instruction(I, "invariant " #cond);
+
+/*
  * Validate that two adjacent 32-bit sources form an aligned 64-bit register
  * pair. This is a compiler invariant, required on Valhall but not on Bifrost.
  */
@@ -40,30 +68,31 @@ va_validate_register_pair(const bi_instr *I, unsigned s)
 {
    ASSERTED bi_index lo = I->src[s], hi = I->src[s + 1];
 
-   assert(lo.type == hi.type);
+   pack_assert(I, lo.type == hi.type);
 
    if (lo.type == BI_INDEX_REGISTER) {
-      assert(hi.value & 1);
-      assert(hi.value == lo.value + 1);
+      pack_assert(I, hi.value & 1);
+      pack_assert(I, hi.value == lo.value + 1);
    } else if (lo.type == BI_INDEX_FAU && lo.value & BIR_FAU_IMMEDIATE) {
       /* Small constants are zero extended, so the top word encode zero */
-      assert(hi.value == (BIR_FAU_IMMEDIATE | 0));
+      pack_assert(I, hi.value == (BIR_FAU_IMMEDIATE | 0));
    } else {
-      assert(hi.offset & 1);
-      assert(hi.offset == lo.offset + 1);
+      pack_assert(I, hi.offset & 1);
+      pack_assert(I, hi.offset == lo.offset + 1);
    }
 }
 
 static unsigned
-va_pack_reg(bi_index idx)
+va_pack_reg(const bi_instr *I, bi_index idx)
 {
-   assert(idx.type == BI_INDEX_REGISTER);
-   assert(idx.value < 64);
+   pack_assert(I, idx.type == BI_INDEX_REGISTER);
+   pack_assert(I, idx.value < 64);
+
    return idx.value;
 }
 
 static unsigned
-va_pack_fau_special(enum bir_fau fau)
+va_pack_fau_special(const bi_instr *I, enum bir_fau fau)
 {
    switch (fau) {
    case BIR_FAU_ATEST_PARAM:     return VA_FAU_SPECIAL_PAGE_0_ATEST_DATUM;
@@ -71,12 +100,13 @@ va_pack_fau_special(enum bir_fau fau)
    case BIR_FAU_WLS_PTR:         return VA_FAU_SPECIAL_PAGE_1_WORKGROUP_LOCAL_POINTER;
    case BIR_FAU_LANE_ID:         return VA_FAU_SPECIAL_PAGE_3_LANE_ID;
    case BIR_FAU_PROGRAM_COUNTER: return VA_FAU_SPECIAL_PAGE_3_PROGRAM_COUNTER;
+   case BIR_FAU_SAMPLE_POS_ARRAY:return VA_FAU_SPECIAL_PAGE_0_SAMPLE;
 
    case BIR_FAU_BLEND_0...(BIR_FAU_BLEND_0 + 7):
       return VA_FAU_SPECIAL_PAGE_0_BLEND_DESCRIPTOR_0 + (fau - BIR_FAU_BLEND_0);
 
    default:
-      unreachable("Unknown FAU value");
+      invalid_instruction(I, "FAU");
    }
 }
 
@@ -85,9 +115,9 @@ va_pack_fau_special(enum bir_fau fau)
  * used to encode a 32-bit FAU source by or'ing in the appropriate offset.
  */
 static unsigned
-va_pack_fau_64(bi_index idx)
+va_pack_fau_64(const bi_instr *I, bi_index idx)
 {
-   assert(idx.type == BI_INDEX_FAU);
+   pack_assert(I, idx.type == BI_INDEX_FAU);
 
    unsigned val = (idx.value & BITFIELD_MASK(5));
 
@@ -96,39 +126,41 @@ va_pack_fau_64(bi_index idx)
    else if (idx.value & BIR_FAU_UNIFORM)
       return (0x2 << 6) | (val << 1);
    else
-      return (0x7 << 5) | (va_pack_fau_special(idx.value) << 1);
+      return (0x7 << 5) | (va_pack_fau_special(I, idx.value) << 1);
 }
 
 static unsigned
-va_pack_src(bi_index idx)
+va_pack_src(const bi_instr *I, unsigned s)
 {
+   bi_index idx = I->src[s];
+
    if (idx.type == BI_INDEX_REGISTER) {
-      unsigned value = va_pack_reg(idx);
+      unsigned value = va_pack_reg(I, idx);
       if (idx.discard) value |= (1 << 6);
       return value;
    } else if (idx.type == BI_INDEX_FAU) {
-      assert(idx.offset <= 1);
-      return va_pack_fau_64(idx) | idx.offset;
+      pack_assert(I, idx.offset <= 1);
+      return va_pack_fau_64(I, idx) | idx.offset;
    }
 
-   unreachable("Invalid type");
+   invalid_instruction(I, "type of source %u", s);
 }
 
 static unsigned
-va_pack_wrmask(enum bi_swizzle swz)
+va_pack_wrmask(const bi_instr *I)
 {
-   switch (swz) {
+   switch (I->dest[0].swizzle) {
    case BI_SWIZZLE_H00: return 0x1;
    case BI_SWIZZLE_H11: return 0x2;
    case BI_SWIZZLE_H01: return 0x3;
-   default: unreachable("Invalid write mask");
+   default: invalid_instruction(I, "write mask");
    }
 }
 
 static enum va_atomic_operation
-va_pack_atom_opc(enum bi_atom_opc opc)
+va_pack_atom_opc(const bi_instr *I)
 {
-   switch (opc) {
+   switch (I->atom_opc) {
    case BI_ATOM_OPC_AADD:  return VA_ATOMIC_OPERATION_AADD;
    case BI_ATOM_OPC_ASMIN: return VA_ATOMIC_OPERATION_ASMIN;
    case BI_ATOM_OPC_ASMAX: return VA_ATOMIC_OPERATION_ASMAX;
@@ -139,54 +171,54 @@ va_pack_atom_opc(enum bi_atom_opc opc)
    case BI_ATOM_OPC_AXOR:  return VA_ATOMIC_OPERATION_AXOR;
    case BI_ATOM_OPC_ACMPXCHG:
    case BI_ATOM_OPC_AXCHG: return VA_ATOMIC_OPERATION_AXCHG;
-   default: unreachable("Invalid atom_opc");
+   default: invalid_instruction(I, "atomic opcode");
    }
 }
 
 static enum va_atomic_operation_with_1
-va_pack_atom_opc_1(enum bi_atom_opc opc)
+va_pack_atom_opc_1(const bi_instr *I)
 {
-   switch (opc) {
+   switch (I->atom_opc) {
    case BI_ATOM_OPC_AINC:     return VA_ATOMIC_OPERATION_WITH_1_AINC;
    case BI_ATOM_OPC_ADEC:     return VA_ATOMIC_OPERATION_WITH_1_ADEC;
    case BI_ATOM_OPC_AUMAX1:   return VA_ATOMIC_OPERATION_WITH_1_AUMAX1;
    case BI_ATOM_OPC_ASMAX1:   return VA_ATOMIC_OPERATION_WITH_1_ASMAX1;
    case BI_ATOM_OPC_AOR1:     return VA_ATOMIC_OPERATION_WITH_1_AOR1;
-   default: unreachable("Invalid atom_opc");
+   default: invalid_instruction(I, "atomic opcode with implicit 1");
    }
 }
 
 static unsigned
-va_pack_dest(bi_index index)
+va_pack_dest(const bi_instr *I)
 {
-   return va_pack_reg(index) | (va_pack_wrmask(index.swizzle) << 6);
+   return va_pack_reg(I, I->dest[0]) | (va_pack_wrmask(I) << 6);
 }
 
 static enum va_widen
-va_pack_widen_f32(enum bi_swizzle swz)
+va_pack_widen_f32(const bi_instr *I, enum bi_swizzle swz)
 {
    switch (swz) {
    case BI_SWIZZLE_H01: return VA_WIDEN_NONE;
    case BI_SWIZZLE_H00: return VA_WIDEN_H0;
    case BI_SWIZZLE_H11: return VA_WIDEN_H1;
-   default: unreachable("Invalid widen");
+   default: invalid_instruction(I, "widen");
    }
 }
 
 static enum va_swizzles_16_bit
-va_pack_swizzle_f16(enum bi_swizzle swz)
+va_pack_swizzle_f16(const bi_instr *I, enum bi_swizzle swz)
 {
    switch (swz) {
    case BI_SWIZZLE_H00: return VA_SWIZZLES_16_BIT_H00;
    case BI_SWIZZLE_H10: return VA_SWIZZLES_16_BIT_H10;
    case BI_SWIZZLE_H01: return VA_SWIZZLES_16_BIT_H01;
    case BI_SWIZZLE_H11: return VA_SWIZZLES_16_BIT_H11;
-   default: unreachable("Invalid swizzle");
+   default: invalid_instruction(I, "16-bit swizzle");
    }
 }
 
 static unsigned
-va_pack_widen(enum bi_swizzle swz, enum va_size size)
+va_pack_widen(const bi_instr *I, enum bi_swizzle swz, enum va_size size)
 {
    if (size == VA_SIZE_8) {
       switch (swz) {
@@ -197,7 +229,7 @@ va_pack_widen(enum bi_swizzle swz, enum va_size size)
       case BI_SWIZZLE_B1111:  return VA_SWIZZLES_8_BIT_B1111;
       case BI_SWIZZLE_B2222:  return VA_SWIZZLES_8_BIT_B2222;
       case BI_SWIZZLE_B3333:  return VA_SWIZZLES_8_BIT_B3333;
-      default: unreachable("Exotic swizzles not yet handled");
+      default: invalid_instruction(I, "8-bit widen");
       }
    } else if (size == VA_SIZE_16) {
       switch (swz) {
@@ -209,7 +241,7 @@ va_pack_widen(enum bi_swizzle swz, enum va_size size)
       case BI_SWIZZLE_B1111:  return VA_SWIZZLES_16_BIT_B11;
       case BI_SWIZZLE_B2222:  return VA_SWIZZLES_16_BIT_B22;
       case BI_SWIZZLE_B3333:  return VA_SWIZZLES_16_BIT_B33;
-      default: unreachable("Exotic swizzles not yet handled");
+      default: invalid_instruction(I, "16-bit widen");
       }
    } else if (size == VA_SIZE_32) {
       switch (swz) {
@@ -220,15 +252,15 @@ va_pack_widen(enum bi_swizzle swz, enum va_size size)
       case BI_SWIZZLE_B1111:  return VA_SWIZZLES_32_BIT_B1;
       case BI_SWIZZLE_B2222:  return VA_SWIZZLES_32_BIT_B2;
       case BI_SWIZZLE_B3333:  return VA_SWIZZLES_32_BIT_B3;
-      default: unreachable("Invalid swizzle");
+      default: invalid_instruction(I, "32-bit widen");
       }
    } else {
-      unreachable("TODO: other type sizes");
+      invalid_instruction(I, "type size for widen");
    }
 }
 
 static enum va_half_swizzles_8_bit
-va_pack_halfswizzle(enum bi_swizzle swz)
+va_pack_halfswizzle(const bi_instr *I, enum bi_swizzle swz)
 {
    switch (swz) {
    case BI_SWIZZLE_B0000: return VA_HALF_SWIZZLES_8_BIT_B00;
@@ -238,42 +270,45 @@ va_pack_halfswizzle(enum bi_swizzle swz)
    case BI_SWIZZLE_B0011: return VA_HALF_SWIZZLES_8_BIT_B01;
    case BI_SWIZZLE_B2233: return VA_HALF_SWIZZLES_8_BIT_B23;
    case BI_SWIZZLE_B0022: return VA_HALF_SWIZZLES_8_BIT_B02;
-   default: unreachable("todo: more halfswizzles");
+   default: invalid_instruction(I, "v2u8 swizzle");
    }
 }
 
 static enum va_lanes_8_bit
-va_pack_shift_lanes(enum bi_swizzle swz)
+va_pack_shift_lanes(const bi_instr *I, enum bi_swizzle swz)
 {
    switch (swz) {
    case BI_SWIZZLE_H01:    return VA_LANES_8_BIT_B02;
    case BI_SWIZZLE_B0000:  return VA_LANES_8_BIT_B00;
-   default: unreachable("todo: more shifts");
+   case BI_SWIZZLE_B1111:  return VA_LANES_8_BIT_B11;
+   case BI_SWIZZLE_B2222:  return VA_LANES_8_BIT_B22;
+   case BI_SWIZZLE_B3333:  return VA_LANES_8_BIT_B33;
+   default: invalid_instruction(I, "lane shift");
    }
 }
 
 static enum va_combine
-va_pack_combine(enum bi_swizzle swz)
+va_pack_combine(const bi_instr *I, enum bi_swizzle swz)
 {
    switch (swz) {
    case BI_SWIZZLE_H01: return VA_COMBINE_NONE;
    case BI_SWIZZLE_H00: return VA_COMBINE_H0;
    case BI_SWIZZLE_H11: return VA_COMBINE_H1;
-   default: unreachable("Invalid branch lane");
+   default: invalid_instruction(I, "branch lane");
    }
 }
 
 static enum va_source_format
 va_pack_source_format(const bi_instr *I)
 {
-   switch (I->register_format) {
-   case BI_REGISTER_FORMAT_AUTO:
-   case BI_REGISTER_FORMAT_S32:
-   case BI_REGISTER_FORMAT_U32: return VA_SOURCE_FORMAT_SRC_FLAT32;
-   case BI_REGISTER_FORMAT_F32: return VA_SOURCE_FORMAT_SRC_F32;
-   case BI_REGISTER_FORMAT_F16: return VA_SOURCE_FORMAT_SRC_F16;
-   default: unreachable("unhandled register format");
+   switch (I->source_format) {
+   case BI_SOURCE_FORMAT_FLAT32: return VA_SOURCE_FORMAT_SRC_FLAT32;
+   case BI_SOURCE_FORMAT_FLAT16: return VA_SOURCE_FORMAT_SRC_FLAT16;
+   case BI_SOURCE_FORMAT_F32: return VA_SOURCE_FORMAT_SRC_F32;
+   case BI_SOURCE_FORMAT_F16: return VA_SOURCE_FORMAT_SRC_F16;
    }
+
+   invalid_instruction(I, "source format");
 }
 
 static uint64_t
@@ -302,7 +337,7 @@ va_pack_alu(const bi_instr *I)
    /* Add .eq flag */
    case BI_OPCODE_BRANCHZ_I16:
    case BI_OPCODE_BRANCHZI:
-      assert(I->cmpf == BI_CMPF_EQ || I->cmpf == BI_CMPF_NE);
+      pack_assert(I, I->cmpf == BI_CMPF_EQ || I->cmpf == BI_CMPF_NE);
 
       if (I->cmpf == BI_CMPF_EQ) hex |= (1ull << 36);
 
@@ -397,7 +432,7 @@ va_pack_alu(const bi_instr *I)
 
    /* FMA_RSCALE.f32 special modes treated as extra opcodes */
    if (I->op == BI_OPCODE_FMA_RSCALE_F32) {
-      assert(I->special < 4);
+      pack_assert(I, I->special < 4);
       hex |= ((uint64_t) I->special) << 48;
    }
 
@@ -405,9 +440,9 @@ va_pack_alu(const bi_instr *I)
     * added elsewhere, as they require special handling for control fields.
     */
    if (info.has_dest && info.nr_staging_dests == 0) {
-      hex |= (uint64_t) va_pack_dest(I->dest[0]) << 40;
+      hex |= (uint64_t) va_pack_dest(I) << 40;
    } else if (info.nr_staging_dests == 0 && info.nr_staging_srcs == 0) {
-      assert(bi_is_null(I->dest[0]));
+      pack_assert(I, bi_is_null(I->dest[0]));
       hex |= 0xC0ull << 40; /* Placeholder */
    }
 
@@ -423,7 +458,7 @@ va_pack_alu(const bi_instr *I)
       enum va_size size = src_info.size;
 
       bi_index src = I->src[logical_i + src_offset];
-      hex |= (uint64_t) va_pack_src(src) << (8 * i);
+      hex |= (uint64_t) va_pack_src(I, logical_i + src_offset) << (8 * i);
 
       if (src_info.notted) {
          if (src.neg) hex |= (1ull << 35);
@@ -434,48 +469,50 @@ va_pack_alu(const bi_instr *I)
          if (src.neg) hex |= 1ull << neg_offs;
          if (src.abs) hex |= 1ull << abs_offs;
       } else {
-         assert(!src.neg && "Unexpected negate");
-         assert(!src.abs && "Unexpected absolute value");
+         if (src.neg) invalid_instruction(I, "negate");
+         if (src.abs) invalid_instruction(I, "absolute value");
       }
 
       if (src_info.swizzle) {
          unsigned offs = 24 + ((2 - i) * 2);
          unsigned S = src.swizzle;
-         assert(size == VA_SIZE_16 || size == VA_SIZE_32);
+         pack_assert(I, size == VA_SIZE_16 || size == VA_SIZE_32);
 
-         uint64_t v = (size == VA_SIZE_32 ? va_pack_widen_f32(S) : va_pack_swizzle_f16(S));
+         uint64_t v = (size == VA_SIZE_32 ? va_pack_widen_f32(I, S) : va_pack_swizzle_f16(I, S));
          hex |= v << offs;
       } else if (src_info.widen) {
          unsigned offs = (i == 1) ? 26 : 36;
-         hex |= (uint64_t) va_pack_widen(src.swizzle, src_info.size) << offs;
+         hex |= (uint64_t) va_pack_widen(I, src.swizzle, src_info.size) << offs;
       } else if (src_info.lane) {
-         unsigned offs = 28;
-         assert(i == 0 && "todo: MKVEC");
+         unsigned offs = (I->op == BI_OPCODE_MKVEC_V2I8) ?
+                         ((i == 0) ? 38 : 36) :
+                         28;
+
          if (src_info.size == VA_SIZE_16) {
             hex |= (src.swizzle == BI_SWIZZLE_H11 ? 1 : 0) << offs;
          } else if (I->op == BI_OPCODE_BRANCHZ_I16) {
-            hex |= ((uint64_t) va_pack_combine(src.swizzle) << 37);
+            hex |= ((uint64_t) va_pack_combine(I, src.swizzle) << 37);
          } else {
-            assert(src_info.size == VA_SIZE_8);
+            pack_assert(I, src_info.size == VA_SIZE_8);
             unsigned comp = src.swizzle - BI_SWIZZLE_B0000;
-            assert(comp < 4);
+            pack_assert(I, comp < 4);
             hex |= (uint64_t) comp << offs;
          }
       } else if (src_info.lanes) {
-         assert(src_info.size == VA_SIZE_8);
-         assert(i == 1);
-         hex |= (uint64_t) va_pack_shift_lanes(src.swizzle) << 26;
+         pack_assert(I, src_info.size == VA_SIZE_8);
+         pack_assert(I, i == 1);
+         hex |= (uint64_t) va_pack_shift_lanes(I, src.swizzle) << 26;
       } else if (src_info.combine) {
          /* Treat as swizzle, subgroup ops not yet supported */
-         assert(src_info.size == VA_SIZE_32);
-         assert(i == 0);
-         hex |= (uint64_t) va_pack_widen_f32(src.swizzle) << 37;
+         pack_assert(I, src_info.size == VA_SIZE_32);
+         pack_assert(I, i == 0);
+         hex |= (uint64_t) va_pack_widen_f32(I, src.swizzle) << 37;
       } else if (src_info.halfswizzle) {
-         assert(src_info.size == VA_SIZE_8);
-         assert(i == 0);
-         hex |= (uint64_t) va_pack_halfswizzle(src.swizzle) << 36;
-      } else {
-         assert(src.swizzle == BI_SWIZZLE_H01 && "Unexpected swizzle");
+         pack_assert(I, src_info.size == VA_SIZE_8);
+         pack_assert(I, i == 0);
+         hex |= (uint64_t) va_pack_halfswizzle(I, src.swizzle) << 36;
+      } else if (src.swizzle != BI_SWIZZLE_H01) {
+         invalid_instruction(I, "swizzle");
       }
    }
 
@@ -491,7 +528,7 @@ static uint64_t
 va_pack_byte_offset(const bi_instr *I)
 {
    int16_t offset = I->byte_offset;
-   assert(offset == I->byte_offset && "offset overflow");
+   if (offset != I->byte_offset) invalid_instruction(I, "byte offset");
 
    uint16_t offset_as_u16 = offset;
    return ((uint64_t) offset_as_u16) << 8;
@@ -501,7 +538,7 @@ static uint64_t
 va_pack_byte_offset_8(const bi_instr *I)
 {
    uint8_t offset = I->byte_offset;
-   assert(offset == I->byte_offset && "offset overflow");
+   if (offset != I->byte_offset) invalid_instruction(I, "byte offset");
 
    return ((uint64_t) offset) << 8;
 }
@@ -529,10 +566,10 @@ va_pack_load(const bi_instr *I, bool buffer_descriptor)
    if (!buffer_descriptor)
       hex |= va_pack_byte_offset(I);
 
-   hex |= (uint64_t) va_pack_src(I->src[0]) << 0;
+   hex |= (uint64_t) va_pack_src(I, 0) << 0;
 
    if (buffer_descriptor)
-      hex |= (uint64_t) va_pack_src(I->src[1]) << 8;
+      hex |= (uint64_t) va_pack_src(I, 1) << 8;
 
    return hex;
 }
@@ -554,7 +591,7 @@ va_pack_store(const bi_instr *I)
    uint64_t hex = va_pack_memory_access(I) << 24;
 
    va_validate_register_pair(I, 1);
-   hex |= (uint64_t) va_pack_src(I->src[1]) << 0;
+   hex |= (uint64_t) va_pack_src(I, 1) << 0;
 
    hex |= va_pack_byte_offset(I);
 
@@ -562,9 +599,9 @@ va_pack_store(const bi_instr *I)
 }
 
 static enum va_lod_mode
-va_pack_lod_mode(enum bi_va_lod_mode mode)
+va_pack_lod_mode(const bi_instr *I)
 {
-   switch (mode) {
+   switch (I->va_lod_mode) {
    case BI_VA_LOD_MODE_ZERO_LOD:       return VA_LOD_MODE_ZERO;
    case BI_VA_LOD_MODE_COMPUTED_LOD:   return VA_LOD_MODE_COMPUTED;
    case BI_VA_LOD_MODE_EXPLICIT:       return VA_LOD_MODE_EXPLICIT;
@@ -572,13 +609,13 @@ va_pack_lod_mode(enum bi_va_lod_mode mode)
    case BI_VA_LOD_MODE_GRDESC:         return VA_LOD_MODE_GRDESC;
    }
 
-   unreachable("Invalid LOD mode");
+   invalid_instruction(I, "LOD mode");
 }
 
 static enum va_register_type
-va_pack_register_type(enum bi_register_format regfmt)
+va_pack_register_type(const bi_instr *I)
 {
-   switch (regfmt) {
+   switch (I->register_format) {
    case BI_REGISTER_FORMAT_F16:
    case BI_REGISTER_FORMAT_F32:
       return VA_REGISTER_TYPE_F;
@@ -592,7 +629,7 @@ va_pack_register_type(enum bi_register_format regfmt)
       return VA_REGISTER_TYPE_S;
 
    default:
-      unreachable("Invalid register format");
+      invalid_instruction(I, "register type");
    }
 }
 
@@ -607,7 +644,7 @@ va_pack_register_format(const bi_instr *I)
    case BI_REGISTER_FORMAT_S16:  return VA_REGISTER_FORMAT_S16;
    case BI_REGISTER_FORMAT_U32:  return VA_REGISTER_FORMAT_U32;
    case BI_REGISTER_FORMAT_U16:  return VA_REGISTER_FORMAT_U16;
-   default: unreachable("unhandled register format");
+   default: invalid_instruction(I, "register format");
    }
 }
 
@@ -619,10 +656,8 @@ va_pack_instr(const bi_instr *I)
    uint64_t hex = info.exact | (((uint64_t) I->flow) << 59);
    hex |= ((uint64_t) va_select_fau_page(I)) << 57;
 
-   if (info.slot) {
-      uint64_t slot = (I->op == BI_OPCODE_BARRIER) ? 7 : 0;
-      hex |= (slot << 30);
-   }
+   if (info.slot)
+      hex |= ((uint64_t) I->slot << 30);
 
    if (info.sr_count) {
       bool read = bi_opcode_props[I->op].sr_read;
@@ -633,13 +668,13 @@ va_pack_instr(const bi_instr *I)
          bi_count_write_registers(I, 0);
 
       hex |= ((uint64_t) count << 33);
-      hex |= (uint64_t) va_pack_reg(sr) << 40;
+      hex |= (uint64_t) va_pack_reg(I, sr) << 40;
       hex |= ((uint64_t) info.sr_control << 46);
    }
 
    if (info.sr_write_count) {
       hex |= ((uint64_t) bi_count_write_registers(I, 0) - 1) << 36;
-      hex |= ((uint64_t) va_pack_reg(I->dest[0])) << 16;
+      hex |= ((uint64_t) va_pack_reg(I, I->dest[0])) << 16;
    }
 
    if (info.vecsize)
@@ -690,18 +725,18 @@ va_pack_instr(const bi_instr *I)
 
       /* 64-bit source */
       va_validate_register_pair(I, 0);
-      hex |= (uint64_t) va_pack_src(I->src[0]) << 0;
+      hex |= (uint64_t) va_pack_src(I, 0) << 0;
       hex |= va_pack_byte_offset_8(I);
-      hex |= ((uint64_t) va_pack_atom_opc_1(I->atom_opc)) << 22;
+      hex |= ((uint64_t) va_pack_atom_opc_1(I)) << 22;
       break;
 
    case BI_OPCODE_ATOM_I32:
    case BI_OPCODE_ATOM_RETURN_I32:
       /* 64-bit source */
       va_validate_register_pair(I, 1);
-      hex |= (uint64_t) va_pack_src(I->src[1]) << 0;
+      hex |= (uint64_t) va_pack_src(I, 1) << 0;
       hex |= va_pack_byte_offset_8(I);
-      hex |= ((uint64_t) va_pack_atom_opc(I->atom_opc)) << 22;
+      hex |= ((uint64_t) va_pack_atom_opc(I)) << 22;
 
       if (I->op == BI_OPCODE_ATOM_RETURN_I32)
          hex |= (0xc0ull << 40); // flags
@@ -716,31 +751,21 @@ va_pack_instr(const bi_instr *I)
       hex |= va_pack_store(I);
 
       /* Conversion descriptor */
-      hex |= (uint64_t) va_pack_src(I->src[3]) << 16;
+      hex |= (uint64_t) va_pack_src(I, 3) << 16;
       break;
 
    case BI_OPCODE_BLEND:
    {
       /* Source 0 - Blend descriptor (64-bit) */
-      hex |= ((uint64_t) va_pack_src(I->src[2])) << 0;
-
-      /* Vaidate that it is a 64-bit register pair */
-      assert(I->src[3].type == I->src[2].type);
-
-      if (I->src[2].type == BI_INDEX_REGISTER) {
-         assert(I->src[3].value & 1);
-         assert(I->src[3].value == I->src[2].value + 1);
-      } else {
-         assert(I->src[3].offset & 1);
-         assert(I->src[3].offset == I->src[2].offset + 1);
-      }
+      hex |= ((uint64_t) va_pack_src(I, 2)) << 0;
+      va_validate_register_pair(I, 2);
 
       /* Target */
-      assert((I->branch_offset & 0x7) == 0);
+      if (I->branch_offset & 0x7) invalid_instruction(I, "unaligned branch");
       hex |= ((I->branch_offset >> 3) << 8);
 
       /* Source 2 - coverage mask */
-      hex |= ((uint64_t) va_pack_reg(I->src[1])) << 16;
+      hex |= ((uint64_t) va_pack_reg(I, I->src[1])) << 16;
 
       /* Vector size */
       unsigned vecsize = 4;
@@ -754,9 +779,10 @@ va_pack_instr(const bi_instr *I)
    case BI_OPCODE_TEX_GATHER:
    {
       /* Image to read from */
-      hex |= ((uint64_t) va_pack_src(I->src[1])) << 0;
+      hex |= ((uint64_t) va_pack_src(I, 1)) << 0;
 
-      assert(!(I->op == BI_OPCODE_TEX_FETCH && I->shadow));
+      if (I->op == BI_OPCODE_TEX_FETCH && I->shadow)
+         invalid_instruction(I, "TEX_FETCH does not support .shadow");
 
       if (I->array_enable) hex |= (1ull << 10);
       if (I->texel_offset) hex |= (1ull << 11);
@@ -764,10 +790,8 @@ va_pack_instr(const bi_instr *I)
       if (I->skip) hex |= (1ull << 39);
       if (!bi_is_regfmt_16(I->register_format)) hex |= (1ull << 46);
 
-      if (I->op == BI_OPCODE_TEX_SINGLE) {
-         assert(I->va_lod_mode < 8);
-         hex |= ((uint64_t) va_pack_lod_mode(I->va_lod_mode)) << 13;
-      }
+      if (I->op == BI_OPCODE_TEX_SINGLE)
+         hex |= ((uint64_t) va_pack_lod_mode(I)) << 13;
 
       if (I->op == BI_OPCODE_TEX_GATHER) {
          if (I->integer_coordinates) hex |= (1 << 13);
@@ -775,48 +799,21 @@ va_pack_instr(const bi_instr *I)
       }
 
       hex |= (VA_WRITE_MASK_RGBA << 22);
-      hex |= ((uint64_t) va_pack_register_type(I->register_format)) << 26;
+      hex |= ((uint64_t) va_pack_register_type(I)) << 26;
       hex |= ((uint64_t) I->dimension) << 28;
 
       break;
    }
 
    default:
-      if (!info.exact && I->op != BI_OPCODE_NOP) {
-         bi_print_instr(I, stderr);
-         fflush(stderr);
-         unreachable("Opcode not packable on Valhall");
-      }
+      if (!info.exact && I->op != BI_OPCODE_NOP)
+         invalid_instruction(I, "opcode");
 
       hex |= va_pack_alu(I);
       break;
    }
 
    return hex;
-}
-
-static bool
-va_last_in_block(bi_block *block, bi_instr *I)
-{
-   return (I->link.next == &block->instructions);
-}
-
-static bool
-va_should_return(bi_block *block, bi_instr *I)
-{
-   /* Don't return within a block */
-   if (!va_last_in_block(block, I))
-      return false;
-
-   /* Don't return if we're succeeded by instructions */
-   for (unsigned i = 0; i < ARRAY_SIZE(block->successors); ++i) {
-      bi_block *succ = block->successors[i];
-
-      if (succ && !bi_is_terminal_block(succ))
-         return false;
-   }
-
-   return true;
 }
 
 static unsigned
@@ -844,7 +841,7 @@ va_lower_branch_target(bi_context *ctx, bi_block *start, bi_instr *I)
    signed offset = 0;
 
    /* Determine if the target block is strictly greater in source order */
-   bool forwards = target->name > start->name;
+   bool forwards = target->index > start->index;
 
    if (forwards) {
       /* We have to jump through this block */
@@ -905,15 +902,13 @@ va_lower_branch_target(bi_context *ctx, bi_block *start, bi_instr *I)
 static void
 va_lower_blend(bi_context *ctx)
 {
-   bool last_blend = true;
-
    /* Link register (ABI between fragment and blend shaders) */
    bi_index lr = bi_register(48);
 
    /* Program counter for *next* instruction */
    bi_index pc = bi_fau(BIR_FAU_PROGRAM_COUNTER, false);
 
-   bi_foreach_instr_global_rev(ctx, I) {
+   bi_foreach_instr_global_safe(ctx, I) {
       if (I->op != BI_OPCODE_BLEND)
          continue;
 
@@ -921,7 +916,7 @@ va_lower_blend(bi_context *ctx)
 
       unsigned prolog_length = 2 * 8;
 
-      if (last_blend)
+      if (I->flow == VA_FLOW_END)
          bi_iadd_imm_i32_to(&b, lr, va_zero_lut(), 0);
       else
          bi_iadd_imm_i32_to(&b, lr, pc, prolog_length - 8);
@@ -929,66 +924,8 @@ va_lower_blend(bi_context *ctx)
       bi_branchzi(&b, va_zero_lut(), I->src[3], BI_CMPF_EQ);
 
       /* For fixed function: skip the prologue, or return */
-      if (last_blend)
-         I->flow = 0x7 | 0x8; /* .return */
-      else
+      if (I->flow != VA_FLOW_END)
          I->branch_offset = prolog_length;
-
-      /* Iterate backwards makes the last BLEND easy to identify */
-      last_blend = false;
-   }
-}
-
-/*
- * Add a flow control modifier to an instruction. There may be an existing flow
- * control modifier; if so, we need to add a NOP with the extra flow control
- * _after_ this instruction
- */
-static void
-va_add_flow(bi_context *ctx, bi_instr *I, enum va_flow flow)
-{
-   if (I->flow != VA_FLOW_NONE) {
-      bi_builder b = bi_init_builder(ctx, bi_after_instr(I));
-      I = bi_nop(&b);
-   }
-
-   I->flow = flow;
-}
-
-/*
- * Add flow control modifiers to the program. This is a stop gap until we have a
- * proper scheduler. For now, this should be conformant while doing little
- * optimization of message waits.
- */
-static void
-va_lower_flow_control(bi_context *ctx)
-{
-   bi_foreach_block(ctx, block) {
-      bool block_reconverges = bi_reconverge_branches(block);
-
-      bi_foreach_instr_in_block_safe(block, I) {
-         /* If this instruction returns, there is nothing left to do. */
-         if (va_should_return(block, I)) {
-            I->flow = VA_FLOW_END;
-            continue;
-         }
-
-         /* We may need to wait */
-         if (I->op == BI_OPCODE_BARRIER)
-            va_add_flow(ctx, I, VA_FLOW_WAIT);
-         else if (valhall_opcodes[I->op].nr_staging_dests > 0 || I->op == BI_OPCODE_BLEND)
-            va_add_flow(ctx, I, VA_FLOW_WAIT0);
-
-         /* Lastly, we may need to reconverge. If we need reconvergence, it
-          * has to be on the last instruction of the block. If we have to
-          * generate a NOP for that reconverge, we need that to be last. So
-          * this ordering is careful.
-          */
-         if (va_last_in_block(block, I) && block_reconverges)
-            va_add_flow(ctx, I, VA_FLOW_RECONVERGE);
-
-
-      }
    }
 }
 
@@ -1002,8 +939,6 @@ bi_pack_valhall(bi_context *ctx, struct util_dynarray *emission)
    /* Late lowering */
    if (ctx->stage == MESA_SHADER_FRAGMENT && !ctx->inputs->is_blend)
       va_lower_blend(ctx);
-
-   va_lower_flow_control(ctx);
 
    bi_foreach_block(ctx, block) {
       bi_foreach_instr_in_block(block, I) {

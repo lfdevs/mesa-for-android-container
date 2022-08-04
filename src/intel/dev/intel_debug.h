@@ -59,7 +59,7 @@ extern uint64_t intel_debug;
 #define DEBUG_URB                 (1ull << 11)
 #define DEBUG_VS                  (1ull << 12)
 #define DEBUG_CLIP                (1ull << 13)
-/*                                (1ull << 14) */
+#define DEBUG_STALL               (1ull << 14)
 #define DEBUG_BLORP               (1ull << 15)
 #define DEBUG_NO16                (1ull << 16)
 #define DEBUG_NO_DUAL_OBJECT_GS   (1ull << 17)

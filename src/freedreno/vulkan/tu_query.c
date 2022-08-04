@@ -425,6 +425,35 @@ statistics_index(uint32_t *statistics)
    }
 }
 
+static bool
+is_pipeline_query_with_vertex_stage(uint32_t pipeline_statistics)
+{
+   return pipeline_statistics &
+          (VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT |
+           VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT |
+           VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT |
+           VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT |
+           VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT |
+           VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT |
+           VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT |
+           VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT |
+           VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT);
+}
+
+static bool
+is_pipeline_query_with_fragment_stage(uint32_t pipeline_statistics)
+{
+   return pipeline_statistics &
+          VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT;
+}
+
+static bool
+is_pipeline_query_with_compute_stage(uint32_t pipeline_statistics)
+{
+   return pipeline_statistics &
+          VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT;
+}
+
 /* Wait on the the availability status of a query up until a timeout. */
 static VkResult
 wait_for_available(struct tu_device *device, struct tu_query_pool *pool,
@@ -842,9 +871,37 @@ emit_begin_stat_query(struct tu_cmd_buffer *cmdbuf,
    struct tu_cs *cs = cmdbuf->state.pass ? &cmdbuf->draw_cs : &cmdbuf->cs;
    uint64_t begin_iova = pipeline_stat_query_iova(pool, query, begin);
 
-   tu6_emit_event_write(cmdbuf, cs, START_PRIMITIVE_CTRS);
-   tu6_emit_event_write(cmdbuf, cs, RST_PIX_CNT);
-   tu6_emit_event_write(cmdbuf, cs, TILE_FLUSH);
+   if (is_pipeline_query_with_vertex_stage(pool->pipeline_statistics)) {
+      bool need_cond_exec = cmdbuf->state.pass && cmdbuf->state.prim_counters_running;
+      cmdbuf->state.prim_counters_running++;
+
+      /* Prevent starting primitive counters when it is supposed to be stopped
+       * for outer VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT query.
+       */
+      if (need_cond_exec) {
+         tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(RENDER_MODE) |
+                        CP_COND_REG_EXEC_0_SYSMEM |
+                        CP_COND_REG_EXEC_0_BINNING);
+      }
+
+      tu6_emit_event_write(cmdbuf, cs, START_PRIMITIVE_CTRS);
+
+      tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 3);
+      tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
+      tu_cs_emit(cs, 0);
+
+      if (need_cond_exec) {
+         tu_cond_exec_end(cs);
+      }
+   }
+
+   if (is_pipeline_query_with_fragment_stage(pool->pipeline_statistics)) {
+      tu6_emit_event_write(cmdbuf, cs, START_FRAGMENT_CTRS);
+   }
+
+   if (is_pipeline_query_with_compute_stage(pool->pipeline_statistics)) {
+      tu6_emit_event_write(cmdbuf, cs, START_COMPUTE_CTRS);
+   }
 
    tu_cs_emit_wfi(cs);
 
@@ -873,6 +930,10 @@ emit_begin_perf_query(struct tu_cmd_buffer *cmdbuf,
 {
    struct tu_cs *cs = cmdbuf->state.pass ? &cmdbuf->draw_cs : &cmdbuf->cs;
    uint32_t last_pass = ~0;
+
+   if (cmdbuf->state.pass) {
+      cmdbuf->state.rp.draw_cs_writes_to_cond_pred = true;
+   }
 
    /* Querying perf counters happens in these steps:
     *
@@ -961,9 +1022,24 @@ emit_begin_prim_generated_query(struct tu_cmd_buffer *cmdbuf,
    struct tu_cs *cs = cmdbuf->state.pass ? &cmdbuf->draw_cs : &cmdbuf->cs;
    uint64_t begin_iova = primitives_generated_query_iova(pool, query, begin);
 
+   if (cmdbuf->state.pass) {
+      cmdbuf->state.rp.has_prim_generated_query_in_rp = true;
+   } else {
+      cmdbuf->state.prim_generated_query_running_before_rp = true;
+   }
+
+   cmdbuf->state.prim_counters_running++;
+
+   if (cmdbuf->state.pass) {
+      /* Primitives that passed all tests are still counted in in each
+       * tile even with HW binning beforehand. Do not permit it.
+       */
+      tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(RENDER_MODE) |
+                           CP_COND_REG_EXEC_0_SYSMEM |
+                           CP_COND_REG_EXEC_0_BINNING);
+   }
+
    tu6_emit_event_write(cmdbuf, cs, START_PRIMITIVE_CTRS);
-   tu6_emit_event_write(cmdbuf, cs, RST_PIX_CNT);
-   tu6_emit_event_write(cmdbuf, cs, TILE_FLUSH);
 
    tu_cs_emit_wfi(cs);
 
@@ -972,6 +1048,10 @@ emit_begin_prim_generated_query(struct tu_cmd_buffer *cmdbuf,
                   CP_REG_TO_MEM_0_CNT(2) |
                   CP_REG_TO_MEM_0_64B);
    tu_cs_emit_qw(cs, begin_iova);
+
+   if (cmdbuf->state.pass) {
+      tu_cond_exec_end(cs);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1107,6 +1187,53 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_qw(cs, 0x1);
 }
 
+/* PRIMITIVE_CTRS is used for two distinct queries:
+ * - VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT
+ * - VK_QUERY_TYPE_PIPELINE_STATISTICS
+ * If one is nested inside other - STOP_PRIMITIVE_CTRS should be emitted
+ * only for outer query.
+ *
+ * Also, pipeline stat query could run outside of renderpass and prim gen
+ * query inside of secondary cmd buffer - for such case we ought to track
+ * the status of pipeline stats query.
+ */
+static void
+emit_stop_primitive_ctrs(struct tu_cmd_buffer *cmdbuf,
+                         struct tu_cs *cs,
+                         enum VkQueryType query_type)
+{
+   bool is_secondary = cmdbuf->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+   cmdbuf->state.prim_counters_running--;
+   if (cmdbuf->state.prim_counters_running == 0) {
+      bool need_cond_exec =
+         is_secondary &&
+         query_type == VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT &&
+         is_pipeline_query_with_vertex_stage(cmdbuf->inherited_pipeline_statistics);
+
+      if (!need_cond_exec) {
+         tu6_emit_event_write(cmdbuf, cs, STOP_PRIMITIVE_CTRS);
+      } else {
+         tu_cs_reserve(cs, 7 + 2);
+         /* Check that pipeline stats query is not running, only then
+          * we count stop the counter.
+          */
+         tu_cs_emit_pkt7(cs, CP_COND_EXEC, 6);
+         tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
+         tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
+         tu_cs_emit(cs, CP_COND_EXEC_4_REF(0x2));
+         tu_cs_emit(cs, 2); /* Cond execute the next 2 DWORDS */
+
+         tu6_emit_event_write(cmdbuf, cs, STOP_PRIMITIVE_CTRS);
+      }
+   }
+
+   if (query_type == VK_QUERY_TYPE_PIPELINE_STATISTICS) {
+      tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 3);
+      tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
+      tu_cs_emit(cs, 1);
+   }
+}
+
 static void
 emit_end_stat_query(struct tu_cmd_buffer *cmdbuf,
                     struct tu_query_pool *pool,
@@ -1119,9 +1246,21 @@ emit_end_stat_query(struct tu_cmd_buffer *cmdbuf,
    uint64_t stat_start_iova;
    uint64_t stat_stop_iova;
 
-   tu6_emit_event_write(cmdbuf, cs, STOP_PRIMITIVE_CTRS);
-   tu6_emit_event_write(cmdbuf, cs, RST_VTX_CNT);
-   tu6_emit_event_write(cmdbuf, cs, STAT_EVENT);
+   if (is_pipeline_query_with_vertex_stage(pool->pipeline_statistics)) {
+      /* No need to conditionally execute STOP_PRIMITIVE_CTRS when
+       * we are inside VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT inside of a
+       * renderpass, because it is already stopped.
+       */
+      emit_stop_primitive_ctrs(cmdbuf, cs, VK_QUERY_TYPE_PIPELINE_STATISTICS);
+   }
+
+   if (is_pipeline_query_with_fragment_stage(pool->pipeline_statistics)) {
+      tu6_emit_event_write(cmdbuf, cs, STOP_FRAGMENT_CTRS);
+   }
+
+   if (is_pipeline_query_with_compute_stage(pool->pipeline_statistics)) {
+      tu6_emit_event_write(cmdbuf, cs, STOP_COMPUTE_CTRS);
+   }
 
    tu_cs_emit_wfi(cs);
 
@@ -1293,14 +1432,20 @@ emit_end_prim_generated_query(struct tu_cmd_buffer *cmdbuf,
 {
    struct tu_cs *cs = cmdbuf->state.pass ? &cmdbuf->draw_cs : &cmdbuf->cs;
 
+   if (!cmdbuf->state.pass) {
+      cmdbuf->state.prim_generated_query_running_before_rp = false;
+   }
+
    uint64_t begin_iova = primitives_generated_query_iova(pool, query, begin);
    uint64_t end_iova = primitives_generated_query_iova(pool, query, end);
    uint64_t result_iova = primitives_generated_query_iova(pool, query, result);
    uint64_t available_iova = query_available_iova(pool, query);
 
-   tu6_emit_event_write(cmdbuf, cs, STOP_PRIMITIVE_CTRS);
-   tu6_emit_event_write(cmdbuf, cs, RST_VTX_CNT);
-   tu6_emit_event_write(cmdbuf, cs, STAT_EVENT);
+   if (cmdbuf->state.pass) {
+      tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(RENDER_MODE) |
+                             CP_COND_REG_EXEC_0_SYSMEM |
+                             CP_COND_REG_EXEC_0_BINNING);
+   }
 
    tu_cs_emit_wfi(cs);
 
@@ -1319,6 +1464,15 @@ emit_end_prim_generated_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_qw(cs, begin_iova);
 
    tu_cs_emit_pkt7(cs, CP_WAIT_MEM_WRITES, 0);
+
+   /* Should be after waiting for mem writes to have up to date info
+    * about which query is running.
+    */
+   emit_stop_primitive_ctrs(cmdbuf, cs, VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT);
+
+   if (cmdbuf->state.pass) {
+      tu_cond_exec_end(cs);
+   }
 
    if (cmdbuf->state.pass)
       cs = &cmdbuf->draw_epilogue_cs;
@@ -1425,10 +1579,10 @@ tu_CmdEndQueryIndexedEXT(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-tu_CmdWriteTimestamp(VkCommandBuffer commandBuffer,
-                     VkPipelineStageFlagBits pipelineStage,
-                     VkQueryPool queryPool,
-                     uint32_t query)
+tu_CmdWriteTimestamp2(VkCommandBuffer commandBuffer,
+                      VkPipelineStageFlagBits2 pipelineStage,
+                      VkQueryPool queryPool,
+                      uint32_t query)
 {
    TU_FROM_HANDLE(tu_cmd_buffer, cmd, commandBuffer);
    TU_FROM_HANDLE(tu_query_pool, pool, queryPool);
@@ -1443,9 +1597,9 @@ tu_CmdWriteTimestamp(VkCommandBuffer commandBuffer,
     * the REG_TO_MEM. DrawIndirect parameters are read by the CP, so the draw
     * indirect stage counts as top-of-pipe too.
     */
-   VkPipelineStageFlags top_of_pipe_flags =
-      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT |
-      VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+   VkPipelineStageFlags2 top_of_pipe_flags =
+      VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT |
+      VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
 
    if (pipelineStage & ~top_of_pipe_flags) {
       /* Execute a WFI so that all commands complete. Note that CP_REG_TO_MEM
@@ -1460,7 +1614,7 @@ tu_CmdWriteTimestamp(VkCommandBuffer commandBuffer,
    }
 
    tu_cs_emit_pkt7(cs, CP_REG_TO_MEM, 3);
-   tu_cs_emit(cs, CP_REG_TO_MEM_0_REG(REG_A6XX_CP_ALWAYS_ON_COUNTER_LO) |
+   tu_cs_emit(cs, CP_REG_TO_MEM_0_REG(REG_A6XX_CP_ALWAYS_ON_COUNTER) |
                   CP_REG_TO_MEM_0_CNT(2) |
                   CP_REG_TO_MEM_0_64B);
    tu_cs_emit_qw(cs, query_result_iova(pool, query, uint64_t, 0));
@@ -1525,7 +1679,7 @@ tu_EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
       for (int j = 0; j < group[i].num_countables; j++) {
 
          vk_outarray_append_typed(VkPerformanceCounterKHR, &out, counter) {
-            counter->scope = VK_QUERY_SCOPE_COMMAND_BUFFER_KHR;
+            counter->scope = VK_PERFORMANCE_COUNTER_SCOPE_COMMAND_BUFFER_KHR;
             counter->unit =
                   fd_perfcntr_type_to_vk_unit[group[i].countables[j].query_type];
             counter->storage =

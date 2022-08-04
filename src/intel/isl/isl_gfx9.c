@@ -132,7 +132,7 @@ isl_gfx9_choose_image_alignment_el(const struct isl_device *dev,
     *
     *    - For Sampling Engine and Render Target Surfaces: This field
     *      specifies the vertical alignment requirement in elements for the
-    *      surface. [...] An element is defined as a pixel in uncompresed
+    *      surface. [...] An element is defined as a pixel in uncompressed
     *      surface formats, and as a compression block in compressed surface
     *      formats. For MSFMT_DEPTH_STENCIL type multisampled surfaces, an
     *      element is a sample.
@@ -144,7 +144,7 @@ isl_gfx9_choose_image_alignment_el(const struct isl_device *dev,
     *
     *      See the appropriate Alignment  table in the "Surface Layout and
     *      Tiling" section under Common Surface Formats for the table of
-    *      alignment values for Tiled Resrouces.
+    *      alignment values for Tiled Resources.
     *
     *    - For uncompressed surfaces, the units of "j" are rows of pixels on
     *      the physical surface. For compressed texture formats, the units of

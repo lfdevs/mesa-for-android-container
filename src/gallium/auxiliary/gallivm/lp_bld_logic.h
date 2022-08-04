@@ -52,7 +52,7 @@ struct lp_build_context;
 LLVMValueRef
 lp_build_compare(struct gallivm_state *gallivm,
                  const struct lp_type type,
-                 unsigned func,
+                 enum pipe_compare_func func,
                  LLVMValueRef a,
                  LLVMValueRef b);
 
@@ -62,13 +62,13 @@ lp_build_compare(struct gallivm_state *gallivm,
  */
 LLVMValueRef
 lp_build_cmp(struct lp_build_context *bld,
-             unsigned func,
+             enum pipe_compare_func func,
              LLVMValueRef a,
              LLVMValueRef b);
 
 LLVMValueRef
 lp_build_cmp_ordered(struct lp_build_context *bld,
-                     unsigned func,
+                     enum pipe_compare_func func,
                      LLVMValueRef a,
                      LLVMValueRef b);
 

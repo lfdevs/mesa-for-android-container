@@ -33,12 +33,6 @@ if dep_libdrm.found()
   files_pipe_loader += files('pipe_loader_drm.c')
   libpipe_loader_links += libloader
 endif
-if with_dri
-  libpipe_loader_defines += '-DHAVE_PIPE_LOADER_DRI'
-endif
-if with_gallium_drisw_kms
-  libpipe_loader_defines += '-DHAVE_PIPE_LOADER_KMS'
-endif
 
 libpipe_loader_static = static_library(
   'pipe_loader_static',

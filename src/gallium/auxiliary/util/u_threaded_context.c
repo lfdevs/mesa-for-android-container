@@ -1048,7 +1048,12 @@ tc_bind_sampler_states(struct pipe_context *_pipe,
    memcpy(p->slot, states, count * sizeof(states[0]));
 }
 
-
+static void
+tc_link_shader(struct pipe_context *_pipe, void **shaders)
+{
+   struct threaded_context *tc = threaded_context(_pipe);
+   tc->pipe->link_shader(tc->pipe, shaders);
+}
 /********************************************************************
  * immediate states
  */
@@ -2365,8 +2370,14 @@ tc_transfer_flush_region(struct pipe_context *_pipe,
          tc_buffer_do_flush_region(tc, ttrans, &box);
       }
 
-      /* Staging transfers don't send the call to the driver. */
-      if (ttrans->staging)
+      /* Staging transfers don't send the call to the driver.
+       *
+       * Transfers using the CPU storage shouldn't call transfer_flush_region
+       * in the driver because the buffer is not really mapped on the driver
+       * side and the CPU storage always re-uploads everything (flush_region
+       * makes no difference).
+       */
+      if (ttrans->staging || ttrans->cpu_storage_mapped)
          return;
    }
 
@@ -2774,15 +2785,16 @@ tc_set_debug_callback(struct pipe_context *_pipe,
    struct threaded_context *tc = threaded_context(_pipe);
    struct pipe_context *pipe = tc->pipe;
 
+   tc_sync(tc);
+
    /* Drop all synchronous debug callbacks. Drivers are expected to be OK
     * with this. shader-db will use an environment variable to disable
     * the threaded context.
     */
-   if (cb && cb->debug_message && !cb->async)
-      return;
-
-   tc_sync(tc);
-   pipe->set_debug_callback(pipe, cb);
+   if (cb && !cb->async)
+      pipe->set_debug_callback(pipe, NULL);
+   else
+      pipe->set_debug_callback(pipe, cb);
 }
 
 static void
@@ -4303,8 +4315,6 @@ threaded_context_create(struct pipe_context *pipe,
    if (!pipe)
       return NULL;
 
-   util_cpu_detect();
-
    if (!debug_get_bool_option("GALLIUM_THREAD", util_get_cpu_caps()->nr_cpus > 1))
       return pipe;
 
@@ -4421,6 +4431,7 @@ threaded_context_create(struct pipe_context *pipe,
    CTX_INIT(create_depth_stencil_alpha_state);
    CTX_INIT(bind_depth_stencil_alpha_state);
    CTX_INIT(delete_depth_stencil_alpha_state);
+   CTX_INIT(link_shader);
    CTX_INIT(create_fs_state);
    CTX_INIT(bind_fs_state);
    CTX_INIT(delete_fs_state);

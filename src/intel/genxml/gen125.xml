@@ -6023,7 +6023,7 @@
     <field name="Max Inter MB Bit Count Check Enable" start="66" end="66" type="bool"/>
     <field name="Max Intra MB Bit Count Check Enable" start="67" end="67" type="bool"/>
     <field name="Intermediate Bit Buffer Overrun Enable" start="68" end="68" type="bool"/>
-    <field name="Final Bistream Buffer Overrun Enable" start="69" end="69" type="bool"/>
+    <field name="Final Bitstream Buffer Overrun Enable" start="69" end="69" type="bool"/>
     <field name="QIndex Clamp High for Underflow" start="70" end="70" type="bool"/>
     <field name="QIndex Clamp High for Overflow" start="71" end="71" type="bool"/>
     <field name="Max Inter MB Bit Count" start="96" end="107" type="uint"/>

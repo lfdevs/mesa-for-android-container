@@ -94,8 +94,6 @@ msm_pipe_get_param(struct fd_pipe *pipe, enum fd_param_id param,
       return query_param(pipe, MSM_PARAM_TIMESTAMP, value);
    case FD_NR_RINGS:
       return query_param(pipe, MSM_PARAM_NR_RINGS, value);
-   case FD_PP_PGTABLE:
-      return query_param(pipe, MSM_PARAM_PP_PGTABLE, value);
    case FD_CTX_FAULTS:
       return query_queue_param(pipe, MSM_SUBMITQUEUE_PARAM_FAULTS, value);
    case FD_GLOBAL_FAULTS:

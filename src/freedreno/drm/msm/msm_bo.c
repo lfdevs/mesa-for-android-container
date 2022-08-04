@@ -222,5 +222,7 @@ msm_bo_from_handle(struct fd_device *dev, uint32_t size, uint32_t handle)
    bo->handle = handle;
    bo->funcs = &funcs;
 
+   fd_bo_init_common(bo, dev);
+
    return bo;
 }

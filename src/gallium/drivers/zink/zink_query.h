@@ -25,6 +25,7 @@
 #define ZINK_QUERY_H
 
 #include <stdbool.h>
+#include <inttypes.h>
 
 struct zink_batch;
 struct zink_batch_state;
@@ -32,6 +33,7 @@ struct zink_context;
 struct zink_fence;
 struct zink_query;
 struct zink_screen;
+struct pipe_screen;
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -59,6 +61,8 @@ zink_check_conditional_render(struct zink_context *ctx);
 
 void
 zink_context_destroy_query_pools(struct zink_context *ctx);
+uint64_t
+zink_get_timestamp(struct pipe_screen *pscreen);
 #ifdef __cplusplus
 }
 #endif

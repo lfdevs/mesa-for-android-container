@@ -1,0 +1,14 @@
+# https://gitlab.freedesktop.org/mesa/mesa/-/issues/4167
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x10,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x5,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x6,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.10x8,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x10,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.12x12,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.4x4,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.5x4,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x5,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.6x6,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x5,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x6,Fail
+dEQP-GLES3.functional.texture.compressed.astc.void_extent_ldr.8x8,Fail

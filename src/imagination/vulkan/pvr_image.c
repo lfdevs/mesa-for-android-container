@@ -22,7 +22,9 @@
  */
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "pvr_csb.h"
 #include "pvr_device_info.h"
@@ -34,6 +36,7 @@
 #include "vk_format.h"
 #include "vk_image.h"
 #include "vk_log.h"
+#include "vk_object.h"
 #include "vk_util.h"
 #include "wsi_common.h"
 
@@ -264,6 +267,7 @@ VkResult pvr_CreateImageView(VkDevice _device,
    VkResult result;
 
    iview = vk_image_view_create(&device->vk,
+                                false /* driver_internal */,
                                 pCreateInfo,
                                 pAllocator,
                                 sizeof(*iview));
@@ -282,7 +286,7 @@ VkResult pvr_CreateImageView(VkDevice _device,
    info.offset = iview->vk.base_array_layer * image->layer_size +
                  image->mip_levels[info.base_level].offset;
    info.mipmaps_present = (image->vk.mip_levels > 1) ? true : false;
-   info.stride = image->physical_extent.width - 1;
+   info.stride = image->physical_extent.width;
    info.tex_state_type = PVR_TEXTURE_STATE_SAMPLE;
    info.mem_layout = image->memlayout;
    info.flags = 0;
@@ -327,7 +331,7 @@ VkResult pvr_CreateImageView(VkDevice _device,
 
    info.mip_levels = 1;
    info.mipmaps_present = false;
-   info.stride = u_minify(image->physical_extent.width, info.base_level) - 1;
+   info.stride = u_minify(image->physical_extent.width, info.base_level);
    info.base_level = 0;
    info.tex_state_type = PVR_TEXTURE_STATE_ATTACHMENT;
 
@@ -365,13 +369,78 @@ VkResult pvr_CreateBufferView(VkDevice _device,
                               const VkAllocationCallbacks *pAllocator,
                               VkBufferView *pView)
 {
-   assert(!"Unimplemented");
+   PVR_FROM_HANDLE(pvr_buffer, buffer, pCreateInfo->buffer);
+   PVR_FROM_HANDLE(pvr_device, device, _device);
+   struct pvr_texture_state_info info;
+   const uint8_t *format_swizzle;
+   struct pvr_buffer_view *bview;
+   VkResult result;
+
+   bview = vk_object_alloc(&device->vk,
+                           pAllocator,
+                           sizeof(*bview),
+                           VK_OBJECT_TYPE_BUFFER_VIEW);
+   if (!bview)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   bview->format = pCreateInfo->format;
+   bview->range =
+      vk_buffer_range(&buffer->vk, pCreateInfo->offset, pCreateInfo->range);
+
+   /* If the remaining size of the buffer is not a multiple of the element
+    * size of the format, the nearest smaller multiple is used.
+    */
+   bview->range -= bview->range % vk_format_get_blocksize(bview->format);
+
+   /* The range of the buffer view shouldn't be smaller than one texel. */
+   assert(bview->range >= vk_format_get_blocksize(bview->format));
+
+   info.base_level = 0U;
+   info.mip_levels = 1U;
+   info.mipmaps_present = false;
+   info.extent.width = 8192U;
+   info.extent.height = bview->range / vk_format_get_blocksize(bview->format);
+   info.extent.height = DIV_ROUND_UP(info.extent.height, info.extent.width);
+   info.extent.depth = 0U;
+   info.sample_count = 1U;
+   info.stride = info.extent.width;
+   info.offset = 0U;
+   info.addr = PVR_DEV_ADDR_OFFSET(buffer->dev_addr, pCreateInfo->offset);
+   info.mem_layout = PVR_MEMLAYOUT_LINEAR;
+   info.is_cube = false;
+   info.tex_state_type = PVR_TEXTURE_STATE_SAMPLE;
+   info.format = bview->format;
+   info.flags = PVR_TEXFLAGS_INDEX_LOOKUP;
+
+   if (PVR_HAS_FEATURE(&device->pdevice->dev_info, tpu_array_textures))
+      info.array_size = 1U;
+
+   format_swizzle = pvr_get_format_swizzle(info.format);
+   memcpy(info.swizzle, format_swizzle, sizeof(info.swizzle));
+
+   result = pvr_pack_tex_state(device, &info, bview->texture_state);
+   if (result != VK_SUCCESS)
+      goto err_vk_buffer_view_destroy;
+
+   *pView = pvr_buffer_view_to_handle(bview);
+
    return VK_SUCCESS;
+
+err_vk_buffer_view_destroy:
+   vk_object_free(&device->vk, pAllocator, bview);
+
+   return result;
 }
 
 void pvr_DestroyBufferView(VkDevice _device,
                            VkBufferView bufferView,
                            const VkAllocationCallbacks *pAllocator)
 {
-   assert(!"Unimplemented");
+   PVR_FROM_HANDLE(pvr_buffer_view, bview, bufferView);
+   PVR_FROM_HANDLE(pvr_device, device, _device);
+
+   if (!bview)
+      return;
+
+   vk_object_free(&device->vk, pAllocator, bview);
 }

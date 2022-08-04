@@ -1074,7 +1074,8 @@ static void r300_pick_vertex_shader(struct r300_context *r300)
             vs->first = vs->shader = CALLOC_STRUCT(r300_vertex_shader_code);
             vs->first->wpos = wpos;
             r300_translate_vertex_shader(r300, vs);
-            r300_mark_atom_dirty(r300, &r300->rs_block_state);
+            if (!vs->first->dummy)
+                r300_mark_atom_dirty(r300, &r300->rs_block_state);
             return;
         }
         /* Pick the vertex shader based on whether we need wpos */
@@ -1091,7 +1092,8 @@ static void r300_pick_vertex_shader(struct r300_context *r300)
                 vs->shader->wpos = wpos;
                 r300_translate_vertex_shader(r300, vs);
             }
-            r300_mark_atom_dirty(r300, &r300->rs_block_state);
+            if (!vs->first->dummy)
+                r300_mark_atom_dirty(r300, &r300->rs_block_state);
         }
     }
 }

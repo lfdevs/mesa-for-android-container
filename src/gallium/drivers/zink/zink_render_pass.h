@@ -40,7 +40,7 @@ struct zink_rt_attrib {
      bool fbfetch;
   };
   union {
-     bool swapchain;
+     bool invalid;
      bool needs_write;
   };
   bool resolve;
@@ -48,12 +48,16 @@ struct zink_rt_attrib {
 };
 
 struct zink_render_pass_state {
-   uint8_t num_cbufs : 5; /* PIPE_MAX_COLOR_BUFS = 8 */
-   uint8_t have_zsbuf : 1;
-   uint8_t samples:1; //for fs samplemask
-   uint8_t swapchain_init:1;
-   uint32_t num_zsresolves : 1;
-   uint32_t num_cresolves : 23; /* PIPE_MAX_COLOR_BUFS, but this is a struct hole */
+   union {
+      struct {
+         uint8_t num_cbufs : 5; /* PIPE_MAX_COLOR_BUFS = 8 */
+         uint8_t have_zsbuf : 1;
+         uint8_t samples:1; //for fs samplemask
+         uint32_t num_zsresolves : 1;
+         uint32_t num_cresolves : 24; /* PIPE_MAX_COLOR_BUFS, but this is a struct hole */
+      };
+      uint32_t val; //for comparison
+   };
    struct zink_rt_attrib rts[PIPE_MAX_COLOR_BUFS + 1];
    unsigned num_rts;
    uint32_t clears; //for extra verification and update flagging
@@ -93,6 +97,21 @@ void
 zink_destroy_render_pass(struct zink_screen *screen,
                          struct zink_render_pass *rp);
 
+
+unsigned
+zink_begin_render_pass(struct zink_context *ctx);
+void
+zink_end_render_pass(struct zink_context *ctx);
+
 VkImageLayout
-zink_render_pass_attachment_get_barrier_info(const struct zink_render_pass *rp, unsigned idx, VkPipelineStageFlags *pipeline, VkAccessFlags *access);
+zink_render_pass_attachment_get_barrier_info(const struct zink_rt_attrib *rt, bool color, VkPipelineStageFlags *pipeline, VkAccessFlags *access);
+
+bool
+zink_init_render_pass(struct zink_context *ctx);
+void
+zink_render_update_swapchain(struct zink_context *ctx);
+void
+zink_init_zs_attachment(struct zink_context *ctx, struct zink_rt_attrib *rt);
+void
+zink_init_color_attachment(struct zink_context *ctx, unsigned i, struct zink_rt_attrib *rt);
 #endif

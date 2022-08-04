@@ -58,7 +58,7 @@ radv_wsi_get_prime_blit_queue(VkDevice _device)
    if (device->private_sdma_queue != VK_NULL_HANDLE)
       return vk_queue_to_handle(&device->private_sdma_queue->vk);
 
-   if (device->physical_device->rad_info.chip_class >= GFX9 &&
+   if (device->physical_device->rad_info.gfx_level >= GFX9 &&
        !(device->physical_device->instance->debug_flags & RADV_DEBUG_NO_DMA_BLIT)) {
 
       device->physical_device->vk_queue_to_radv[device->physical_device->num_queues++] = RADV_QUEUE_TRANSFER;
@@ -96,11 +96,9 @@ radv_init_wsi(struct radv_physical_device *physical_device)
    if (result != VK_SUCCESS)
       return result;
 
-   physical_device->wsi_device.supports_modifiers = physical_device->rad_info.chip_class >= GFX9;
+   physical_device->wsi_device.supports_modifiers = physical_device->rad_info.gfx_level >= GFX9;
    physical_device->wsi_device.set_memory_ownership = radv_wsi_set_memory_ownership;
    physical_device->wsi_device.get_buffer_blit_queue = radv_wsi_get_prime_blit_queue;
-   physical_device->wsi_device.signal_semaphore_with_memory = true;
-   physical_device->wsi_device.signal_fence_with_memory = true;
 
    wsi_device_setup_syncobj_fd(&physical_device->wsi_device, physical_device->local_fd);
 

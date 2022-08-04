@@ -35,8 +35,8 @@ spec@arb_texture_rectangle@copyteximage rect samples=2
 spec@arb_texture_rectangle@copyteximage rect samples=4
 
 # Extensions not supported
+spec@arb_gpu_shader5.*
 spec@arb_gpu_shader_fp64.*
-spec@arb_gpu_shader_gpu5.*
 spec@arb_gpu_shader_int64.*
 spec@arb_tessellation_shader.*
 spec@arb_texture_cube_map.*

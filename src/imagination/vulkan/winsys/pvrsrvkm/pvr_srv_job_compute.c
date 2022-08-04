@@ -33,10 +33,11 @@
 #include "pvr_private.h"
 #include "pvr_srv.h"
 #include "pvr_srv_bridge.h"
-#include "pvr_srv_job_compute.h"
 #include "pvr_srv_job_common.h"
-#include "pvr_srv_syncobj.h"
+#include "pvr_srv_job_compute.h"
+#include "pvr_srv_sync.h"
 #include "pvr_winsys.h"
+#include "util/libsync.h"
 #include "util/macros.h"
 #include "vk_alloc.h"
 #include "vk_log.h"
@@ -59,9 +60,6 @@ VkResult pvr_srv_winsys_compute_ctx_create(
 {
    struct rogue_fwif_static_computecontext_state static_state = {
 		.ctx_switch_regs = {
-			.cdm_context_state_base_addr =
-				create_info->static_state.cdm_ctx_state_base_addr,
-
 			.cdm_context_pds0 = create_info->static_state.cdm_ctx_store_pds0,
 			.cdm_context_pds0_b =
 				create_info->static_state.cdm_ctx_store_pds0_b,
@@ -76,9 +74,7 @@ VkResult pvr_srv_winsys_compute_ctx_create(
 		},
 	};
 
-   struct rogue_fwif_rf_cmd reset_cmd = {
-      .flags = 0U,
-   };
+   struct rogue_fwif_rf_cmd reset_cmd = { 0 };
 
    struct pvr_srv_winsys *srv_ws = to_pvr_srv_winsys(ws);
    struct pvr_srv_winsys_compute_ctx *srv_ctx;
@@ -91,10 +87,13 @@ VkResult pvr_srv_winsys_compute_ctx_create(
    if (!srv_ctx)
       return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   srv_ctx->timeline = open(PVR_SRV_SYNC_DEV_PATH, O_CLOEXEC | O_RDWR);
-   if (srv_ctx->timeline < 0)
+   result = pvr_srv_create_timeline(srv_ws->render_fd, &srv_ctx->timeline);
+   if (result != VK_SUCCESS)
       goto err_free_srv_ctx;
 
+   /* TODO: Add support for reset framework. Currently we subtract
+    * reset_cmd.regs size from reset_cmd size to only pass empty flags field.
+    */
    result = pvr_srv_rgx_create_compute_context(
       srv_ws->render_fd,
       pvr_srv_from_winsys_priority(create_info->priority),
@@ -123,7 +122,7 @@ err_close_timeline:
 err_free_srv_ctx:
    vk_free(srv_ws->alloc, srv_ctx);
 
-   return vk_error(NULL, VK_ERROR_INITIALIZATION_FAILED);
+   return result;
 }
 
 void pvr_srv_winsys_compute_ctx_destroy(struct pvr_winsys_compute_ctx *ctx)
@@ -151,6 +150,8 @@ static void pvr_srv_compute_cmd_init(
    fw_regs->cdm_item = submit_info->regs.cdm_item;
    fw_regs->compute_cluster = submit_info->regs.compute_cluster;
    fw_regs->cdm_ctrl_stream_base = submit_info->regs.cdm_ctrl_stream_base;
+   fw_regs->cdm_context_state_base_addr =
+      submit_info->regs.cdm_ctx_state_base_addr;
    fw_regs->tpu = submit_info->regs.tpu;
    fw_regs->cdm_resume_pds1 = submit_info->regs.cdm_resume_pds1;
 
@@ -164,60 +165,52 @@ static void pvr_srv_compute_cmd_init(
 VkResult pvr_srv_winsys_compute_submit(
    const struct pvr_winsys_compute_ctx *ctx,
    const struct pvr_winsys_compute_submit_info *submit_info,
-   struct pvr_winsys_syncobj **const syncobj_out)
+   struct vk_sync *signal_sync)
 {
    const struct pvr_srv_winsys_compute_ctx *srv_ctx =
       to_pvr_srv_winsys_compute_ctx(ctx);
    const struct pvr_srv_winsys *srv_ws = to_pvr_srv_winsys(ctx->ws);
-
-   struct pvr_winsys_syncobj *signal_syncobj = NULL;
-   struct pvr_winsys_syncobj *wait_syncobj = NULL;
-   struct pvr_srv_winsys_syncobj *srv_syncobj;
-
    struct rogue_fwif_cmd_compute compute_cmd;
+   struct pvr_srv_sync *srv_signal_sync;
    VkResult result;
+   int in_fd = -1;
    int fence;
 
    pvr_srv_compute_cmd_init(submit_info, &compute_cmd);
 
-   for (uint32_t i = 0U; i < submit_info->semaphore_count; i++) {
-      PVR_FROM_HANDLE(pvr_semaphore, sem, submit_info->semaphores[i]);
+   for (uint32_t i = 0U; i < submit_info->wait_count; i++) {
+      struct pvr_srv_sync *srv_wait_sync = to_srv_sync(submit_info->waits[i]);
+      int ret;
 
-      if (!sem->syncobj)
+      if (!submit_info->waits[i] || srv_wait_sync->fd < 0)
          continue;
 
       if (submit_info->stage_flags[i] & PVR_PIPELINE_STAGE_COMPUTE_BIT) {
-         result = pvr_srv_winsys_syncobjs_merge(sem->syncobj,
-                                                wait_syncobj,
-                                                &wait_syncobj);
-         if (result != VK_SUCCESS)
-            goto err_destroy_wait_syncobj;
+         ret = sync_accumulate("", &in_fd, srv_wait_sync->fd);
+         if (ret) {
+            result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
+            goto err_close_in_fd;
+         }
 
          submit_info->stage_flags[i] &= ~PVR_PIPELINE_STAGE_COMPUTE_BIT;
       }
-
-      if (submit_info->stage_flags[i] == 0U) {
-         pvr_srv_winsys_syncobj_destroy(sem->syncobj);
-         sem->syncobj = NULL;
-      }
    }
-
-   srv_syncobj = to_pvr_srv_winsys_syncobj(wait_syncobj);
 
    do {
       result = pvr_srv_rgx_kick_compute2(srv_ws->render_fd,
                                          srv_ctx->handle,
-                                         /* No support cache operations. */
-                                         0U,
                                          0U,
                                          NULL,
                                          NULL,
                                          NULL,
-                                         wait_syncobj ? srv_syncobj->fd : -1,
+                                         in_fd,
                                          srv_ctx->timeline,
                                          sizeof(compute_cmd),
                                          (uint8_t *)&compute_cmd,
                                          submit_info->job_num,
+                                         0,
+                                         NULL,
+                                         NULL,
                                          0U,
                                          0U,
                                          0U,
@@ -227,27 +220,20 @@ VkResult pvr_srv_winsys_compute_submit(
    } while (result == VK_NOT_READY);
 
    if (result != VK_SUCCESS)
-      goto err_destroy_wait_syncobj;
+      goto err_close_in_fd;
 
-   /* Given job submission succeeded, we don't need to close wait fence and it
-    * should be consumed by the compute job itself.
-    */
-   if (wait_syncobj)
-      srv_syncobj->fd = -1;
-
-   if (fence != -1) {
-      result = pvr_srv_winsys_syncobj_create(ctx->ws, false, &signal_syncobj);
-      if (result != VK_SUCCESS)
-         goto err_destroy_wait_syncobj;
-
-      pvr_srv_set_syncobj_payload(signal_syncobj, fence);
+   if (signal_sync) {
+      srv_signal_sync = to_srv_sync(signal_sync);
+      pvr_srv_set_sync_payload(srv_signal_sync, fence);
+   } else if (fence != -1) {
+      close(fence);
    }
 
-   *syncobj_out = signal_syncobj;
+   return VK_SUCCESS;
 
-err_destroy_wait_syncobj:
-   if (wait_syncobj)
-      pvr_srv_winsys_syncobj_destroy(wait_syncobj);
+err_close_in_fd:
+   if (in_fd >= 0)
+      close(in_fd);
 
    return result;
 }

@@ -23,9 +23,6 @@ subdir('compiler')
 if with_microsoft_clc
   subdir('clc')
 endif
-if with_gallium_d3d12
-  subdir('resource_state_manager')
-endif
 if with_spirv_to_dxil or with_microsoft_vk
   subdir('spirv_to_dxil')
 endif

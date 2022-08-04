@@ -30,8 +30,6 @@
 #ifndef EGLIMAGE_INCLUDED
 #define EGLIMAGE_INCLUDED
 
-#include "c99_compat.h"
-
 #include "egltypedefs.h"
 #include "egldisplay.h"
 

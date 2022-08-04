@@ -32,6 +32,7 @@
 #include "util/u_memory.h"
 
 #include "vl/vl_winsys.h"
+#include "vl/vl_codec.h"
 
 #include "va_private.h"
 
@@ -56,8 +57,8 @@ vlVaQueryConfigProfiles(VADriverContextP ctx, VAProfile *profile_list, int *num_
       if (u_reduce_video_profile(p) == PIPE_VIDEO_FORMAT_MPEG4 && !debug_get_option_mpeg4())
          continue;
 
-      if (pscreen->get_video_param(pscreen, p, PIPE_VIDEO_ENTRYPOINT_BITSTREAM, PIPE_VIDEO_CAP_SUPPORTED) ||
-          pscreen->get_video_param(pscreen, p, PIPE_VIDEO_ENTRYPOINT_ENCODE, PIPE_VIDEO_CAP_SUPPORTED)) {
+      if (vl_codec_supported(pscreen, p, false) ||
+          vl_codec_supported(pscreen, p, true)) {
          vap = PipeToProfile(p);
          if (vap != VAProfileNone)
             profile_list[(*num_profiles)++] = vap;
@@ -94,12 +95,10 @@ vlVaQueryConfigEntrypoints(VADriverContextP ctx, VAProfile profile,
       return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
 
    pscreen = VL_VA_PSCREEN(ctx);
-   if (pscreen->get_video_param(pscreen, p, PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
-				PIPE_VIDEO_CAP_SUPPORTED))
+   if (vl_codec_supported(pscreen, p, false))
       entrypoint_list[(*num_entrypoints)++] = VAEntrypointVLD;
 
-   if (pscreen->get_video_param(pscreen, p, PIPE_VIDEO_ENTRYPOINT_ENCODE,
-				PIPE_VIDEO_CAP_SUPPORTED))
+   if (vl_codec_supported(pscreen, p, true))
       entrypoint_list[(*num_entrypoints)++] = VAEntrypointEncSlice;
 
    if (*num_entrypoints == 0)
@@ -125,8 +124,7 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
    for (i = 0; i < num_attribs; ++i) {
       unsigned int value;
       if ((entrypoint == VAEntrypointVLD) &&
-          (pscreen->get_video_param(pscreen, ProfileToPipe(profile),
-           PIPE_VIDEO_ENTRYPOINT_BITSTREAM, PIPE_VIDEO_CAP_SUPPORTED))) {
+          (vl_codec_supported(pscreen, ProfileToPipe(profile), false))) {
          switch (attrib_list[i].type) {
          case VAConfigAttribRTFormat:
             value = VA_RT_FORMAT_YUV420 | VA_RT_FORMAT_YUV422;
@@ -143,8 +141,7 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
             break;
          }
       } else if ((entrypoint == VAEntrypointEncSlice) &&
-                 (pscreen->get_video_param(pscreen, ProfileToPipe(profile),
-                  PIPE_VIDEO_ENTRYPOINT_ENCODE, PIPE_VIDEO_CAP_SUPPORTED))) {
+                 (vl_codec_supported(pscreen, ProfileToPipe(profile), true))) {
          switch (attrib_list[i].type) {
          case VAConfigAttribRTFormat:
             value = VA_RT_FORMAT_YUV420;
@@ -173,9 +170,43 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
             if (u_reduce_video_profile(ProfileToPipe(profile)) == PIPE_VIDEO_FORMAT_HEVC)
                value |= VA_ENC_PACKED_HEADER_SEQUENCE;
             break;
+         case VAConfigAttribEncMaxSlices:
+         {
+            /**
+             * \brief Maximum number of slices per frame. Read-only.
+             *
+             * This attribute determines the maximum number of slices the
+             * driver can support to encode a single frame.
+             */
+            int maxSlicesPerEncodedPic = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                             PIPE_VIDEO_CAP_ENC_MAX_SLICES_PER_FRAME);
+            if (maxSlicesPerEncodedPic <= 0)
+               value = VA_ATTRIB_NOT_SUPPORTED;
+            else
+               value = maxSlicesPerEncodedPic;
+         } break;
          case VAConfigAttribEncMaxRefFrames:
-            value = 1;
-            break;
+         {
+            int maxL0L1ReferencesPerFrame = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                             PIPE_VIDEO_CAP_ENC_MAX_REFERENCES_PER_FRAME);
+            if (maxL0L1ReferencesPerFrame <= 0)
+               value = 1;
+            else
+               value = maxL0L1ReferencesPerFrame;
+         } break;
+         case VAConfigAttribEncSliceStructure:
+         {
+            /* The VA enum values match the pipe_video_cap_slice_structure definitions*/
+            int supportedSliceStructuresFlagSet = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                             PIPE_VIDEO_CAP_ENC_SLICES_STRUCTURE);
+            if (supportedSliceStructuresFlagSet <= 0)
+               value = VA_ATTRIB_NOT_SUPPORTED;
+            else
+               value = supportedSliceStructuresFlagSet;
+         } break;
          default:
             value = VA_ATTRIB_NOT_SUPPORTED;
             break;
@@ -228,7 +259,7 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
          return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
       }
 
-      config->entrypoint = PIPE_VIDEO_ENTRYPOINT_UNKNOWN;
+      config->entrypoint = PIPE_VIDEO_ENTRYPOINT_PROCESSING;
       config->profile = PIPE_VIDEO_PROFILE_UNKNOWN;
       supported_rt_formats = VA_RT_FORMAT_YUV420 |
                              VA_RT_FORMAT_YUV420_10BPP |
@@ -271,8 +302,7 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
    switch (entrypoint) {
    case VAEntrypointVLD:
       supported_rt_formats = VA_RT_FORMAT_YUV420 | VA_RT_FORMAT_YUV422;
-      if (!pscreen->get_video_param(pscreen, p, PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
-				    PIPE_VIDEO_CAP_SUPPORTED)) {
+      if (!vl_codec_supported(pscreen, p, false)) {
          FREE(config);
          return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
       }
@@ -282,8 +312,7 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
 
    case VAEntrypointEncSlice:
       supported_rt_formats = VA_RT_FORMAT_YUV420;
-      if (!pscreen->get_video_param(pscreen, p, PIPE_VIDEO_ENTRYPOINT_ENCODE,
-				    PIPE_VIDEO_CAP_SUPPORTED)) {
+      if (!vl_codec_supported(pscreen, p, true)) {
          FREE(config);
          return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
       }
@@ -412,7 +441,7 @@ vlVaQueryConfigAttributes(VADriverContextP ctx, VAConfigID config_id, VAProfile 
    case PIPE_VIDEO_ENTRYPOINT_ENCODE:
       *entrypoint = VAEntrypointEncSlice;
       break;
-   case PIPE_VIDEO_ENTRYPOINT_UNKNOWN:
+   case PIPE_VIDEO_ENTRYPOINT_PROCESSING:
       *entrypoint = VAEntrypointVideoProc;
       break;
    default:

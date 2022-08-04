@@ -61,6 +61,10 @@ static const struct debug_named_value sfn_debug_options[] = {
    {"nomerge", SfnLog::nomerge, "Skip register merge step"},
    {"tex", SfnLog::tex, "Log texture ops"},
    {"trans", SfnLog::trans, "Log generic translation messages"},
+   {"schedule", SfnLog::schedule, "Log scheduling"},
+   {"opt", SfnLog::opt, "Log optimization"},
+   {"steps", SfnLog::steps, "Log shaders at transformation steps"},
+   {"noopt", SfnLog::noopt, "Don't run backend optimizations"},
    DEBUG_NAMED_VALUE_END
 };
 

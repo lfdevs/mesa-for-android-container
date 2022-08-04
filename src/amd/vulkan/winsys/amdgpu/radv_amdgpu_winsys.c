@@ -42,7 +42,7 @@
 static bool
 do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 {
-   if (!ac_query_gpu_info(fd, ws->dev, &ws->info, &ws->amdinfo))
+   if (!ac_query_gpu_info(fd, ws->dev, &ws->info))
       return false;
 
    if (ws->info.drm_minor < 23) {
@@ -56,10 +56,10 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
       return false;
    }
 
-   ws->info.num_rings[RING_DMA] = MIN2(ws->info.num_rings[RING_DMA], MAX_RINGS_PER_TYPE);
-   ws->info.num_rings[RING_COMPUTE] = MIN2(ws->info.num_rings[RING_COMPUTE], MAX_RINGS_PER_TYPE);
+   ws->info.ip[AMD_IP_SDMA].num_queues = MIN2(ws->info.ip[AMD_IP_SDMA].num_queues, MAX_RINGS_PER_TYPE);
+   ws->info.ip[AMD_IP_COMPUTE].num_queues = MIN2(ws->info.ip[AMD_IP_COMPUTE].num_queues, MAX_RINGS_PER_TYPE);
 
-   ws->use_ib_bos = ws->info.chip_class >= GFX7;
+   ws->use_ib_bos = ws->info.gfx_level >= GFX7;
    return true;
 }
 

@@ -28,7 +28,25 @@
 
 #include "lp_bld_format.h"
 
+LLVMTypeRef lp_build_format_cache_elem_type(struct gallivm_state *gallivm, enum cache_member member) {
+   assert(member == LP_BUILD_FORMAT_CACHE_MEMBER_DATA || member == LP_BUILD_FORMAT_CACHE_MEMBER_TAGS);
+   switch (member) {
+   case LP_BUILD_FORMAT_CACHE_MEMBER_DATA:
+      return LLVMInt32TypeInContext(gallivm->context);
+   case LP_BUILD_FORMAT_CACHE_MEMBER_TAGS:
+      return LLVMInt64TypeInContext(gallivm->context);
+   default:
+      unreachable("lp_build_format_cache_elem_type unhandled member type");
+   }
+}
 
+LLVMTypeRef lp_build_format_cache_member_type(struct gallivm_state *gallivm, enum cache_member member) {
+   assert(member == LP_BUILD_FORMAT_CACHE_MEMBER_DATA || member == LP_BUILD_FORMAT_CACHE_MEMBER_TAGS);
+   unsigned elem_count =
+         member == LP_BUILD_FORMAT_CACHE_MEMBER_DATA ? LP_BUILD_FORMAT_CACHE_SIZE * 16 :
+         member == LP_BUILD_FORMAT_CACHE_MEMBER_TAGS ? LP_BUILD_FORMAT_CACHE_SIZE : 0;
+   return LLVMArrayType(lp_build_format_cache_elem_type(gallivm, member), elem_count);
+}
 
 LLVMTypeRef
 lp_build_format_cache_type(struct gallivm_state *gallivm)
@@ -36,12 +54,12 @@ lp_build_format_cache_type(struct gallivm_state *gallivm)
    LLVMTypeRef elem_types[LP_BUILD_FORMAT_CACHE_MEMBER_COUNT];
    LLVMTypeRef s;
 
-   elem_types[LP_BUILD_FORMAT_CACHE_MEMBER_DATA] =
-         LLVMArrayType(LLVMInt32TypeInContext(gallivm->context),
-                       LP_BUILD_FORMAT_CACHE_SIZE * 16);
-   elem_types[LP_BUILD_FORMAT_CACHE_MEMBER_TAGS] =
-         LLVMArrayType(LLVMInt64TypeInContext(gallivm->context),
-                       LP_BUILD_FORMAT_CACHE_SIZE);
+   int members[] = {LP_BUILD_FORMAT_CACHE_MEMBER_DATA, LP_BUILD_FORMAT_CACHE_MEMBER_TAGS};
+   for (int i = 0; i < ARRAY_SIZE(members); ++i) {
+      int member = members[i];
+      elem_types[member] = lp_build_format_cache_member_type(gallivm, member);
+   }
+
 #if LP_BUILD_FORMAT_CACHE_DEBUG
    elem_types[LP_BUILD_FORMAT_CACHE_MEMBER_ACCESS_TOTAL] =
          LLVMInt64TypeInContext(gallivm->context);

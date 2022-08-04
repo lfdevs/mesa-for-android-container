@@ -25,7 +25,7 @@
 #include "tgsi/tgsi_text.h"
 #include "util/u_debug.h"
 
-#include "codegen/nv50_ir_driver.h"
+#include "nv50_ir_driver.h"
 #include "nv50/nv50_context.h"
 
 /* these headers weren't really meant to be included together */

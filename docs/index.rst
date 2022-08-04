@@ -72,9 +72,10 @@ Linux, FreeBSD, and other operating systems.
    osmesa
    debugging
    perf
-   perfetto
+   gpu-perf-tracing
    extensions
    application-issues
+   gallium-nine
    viewperf
    xlibdriver
 
@@ -84,6 +85,7 @@ Linux, FreeBSD, and other operating systems.
    :hidden:
 
    drivers/anv
+   drivers/asahi
    drivers/d3d12
    drivers/freedreno
    drivers/lima

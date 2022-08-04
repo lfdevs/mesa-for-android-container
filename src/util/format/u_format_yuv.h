@@ -48,6 +48,7 @@
 #include "pipe/p_compiler.h"
 #include "util/u_math.h"
 
+#include "c99_compat.h"
 
 /*
  * TODO: Ensure we use consistent and right floating formulas, with enough

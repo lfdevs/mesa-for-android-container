@@ -45,6 +45,8 @@ struct vk_shader_module {
    char data[0];
 };
 
+extern const uint8_t vk_shaderModuleIdentifierAlgorithmUUID[VK_UUID_SIZE];
+
 VK_DEFINE_NONDISP_HANDLE_CASTS(vk_shader_module, base, VkShaderModule,
                                VK_OBJECT_TYPE_SHADER_MODULE)
 
@@ -59,6 +61,9 @@ vk_shader_module_to_nir(struct vk_device *device,
                         const struct spirv_to_nir_options *spirv_options,
                         const struct nir_shader_compiler_options *nir_options,
                         void *mem_ctx, struct nir_shader **nir_out);
+
+struct vk_shader_module *vk_shader_module_clone(void *mem_ctx,
+                                                const struct vk_shader_module *src);
 
 /* this should only be used for stack-allocated, temporary objects */
 #define vk_shader_module_handle_from_nir(_nir) \

@@ -116,7 +116,7 @@ def process(filename):
         enum_dict[e.attrib['name']] = e
 
     # Structs are a bit annoying because they can refer to each other. We sort
-    # them alphabetically and then build a graph of depedencies. Finally we go
+    # them alphabetically and then build a graph of dependencies. Finally we go
     # through the alphabetically sorted list and print out dependencies first.
     structs = sorted(xml.findall('./struct'), key=get_name)
     wrapped_struct_dict = {}

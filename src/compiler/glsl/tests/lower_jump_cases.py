@@ -272,8 +272,7 @@ def bash_quote(*args):
 
 def create_test_case(input_sexp, expected_sexp, test_name,
                      pull_out_jumps=False, lower_sub_return=False,
-                     lower_main_return=False, lower_continue=False,
-                     lower_break=False):
+                     lower_main_return=False, lower_continue=False):
     """Create a test case that verifies that do_lower_jumps transforms
     the given code in the expected way.
     """
@@ -282,9 +281,9 @@ def create_test_case(input_sexp, expected_sexp, test_name,
     input_str = sexp_to_string(sort_decls(input_sexp))
     expected_output = sexp_to_string(sort_decls(expected_sexp)) # XXX: don't stringify this
     optimization = (
-        'do_lower_jumps({0:d}, {1:d}, {2:d}, {3:d}, {4:d})'.format(
+        'do_lower_jumps({0:d}, {1:d}, {2:d}, {3:d})'.format(
             pull_out_jumps, lower_sub_return, lower_main_return,
-            lower_continue, lower_break))
+            lower_continue))
 
     return (test_name, optimization, input_str, expected_output)
 
@@ -449,115 +448,6 @@ def test_lower_pulled_out_jump():
         input_sexp, expected_sexp, 'lower_pulled_out_jump',
         lower_main_return=True, pull_out_jumps=True)
 
-def test_lower_breaks_1():
-    """If a loop contains an unconditional break at the bottom of it, it should
-    not be lowered.
-    """
-    input_sexp = make_test_case('main', 'void', (
-            loop(assign_x('a', const_float(1)) +
-                 break_())
-            ))
-    expected_sexp = input_sexp
-    yield create_test_case(
-        input_sexp, expected_sexp, 'lower_breaks_1', lower_break=True)
-
-def test_lower_breaks_2():
-    """If a loop contains a conditional break at the bottom of it, it should
-    not be lowered if it is in the then-clause.
-    """
-    input_sexp = make_test_case('main', 'void', (
-            loop(assign_x('a', const_float(1)) +
-                 simple_if('b', break_()))
-            ))
-    expected_sexp = input_sexp
-    yield create_test_case(
-        input_sexp, expected_sexp, 'lower_breaks_2', lower_break=True)
-
-def test_lower_breaks_3():
-    """If a loop contains a conditional break at the bottom of it, it should
-    not be lowered if it is in the then-clause, even if there are statements
-    preceding the break.
-    """
-    input_sexp = make_test_case('main', 'void', (
-            loop(assign_x('a', const_float(1)) +
-                 simple_if('b', (assign_x('c', const_float(1)) +
-                                 break_())))
-            ))
-    expected_sexp = input_sexp
-    yield create_test_case(
-        input_sexp, expected_sexp, 'lower_breaks_3', lower_break=True)
-
-def test_lower_breaks_4():
-    """If a loop contains a conditional break at the bottom of it, it should
-    not be lowered if it is in the else-clause.
-    """
-    input_sexp = make_test_case('main', 'void', (
-            loop(assign_x('a', const_float(1)) +
-                 simple_if('b', [], break_()))
-            ))
-    expected_sexp = input_sexp
-    yield create_test_case(
-        input_sexp, expected_sexp, 'lower_breaks_4', lower_break=True)
-
-def test_lower_breaks_5():
-    """If a loop contains a conditional break at the bottom of it, it should
-    not be lowered if it is in the else-clause, even if there are statements
-    preceding the break.
-    """
-    input_sexp = make_test_case('main', 'void', (
-            loop(assign_x('a', const_float(1)) +
-                 simple_if('b', [], (assign_x('c', const_float(1)) +
-                                     break_())))
-            ))
-    expected_sexp = input_sexp
-    yield create_test_case(
-        input_sexp, expected_sexp, 'lower_breaks_5', lower_break=True)
-
-def test_lower_breaks_6():
-    """If a loop contains conditional breaks and continues, and ends in an
-    unconditional break, then the unconditional break needs to be lowered,
-    because it will no longer be at the end of the loop after the final break
-    is added.
-    """
-    input_sexp = make_test_case('main', 'void', (
-            loop(simple_if('a', (complex_if('b', continue_()) +
-                                 complex_if('c', break_()))) +
-                 break_())
-            ))
-    expected_sexp = make_test_case('main', 'void', (
-            declare_break_flag() +
-            loop(declare_execute_flag() +
-                 simple_if(
-                    'a',
-                    (complex_if('b', lowered_continue()) +
-                     if_execute_flag(
-                            complex_if('c', lowered_break())))) +
-                 if_execute_flag(lowered_break_simple()) +
-                 final_break())
-            ))
-    yield create_test_case(
-        input_sexp, expected_sexp, 'lower_breaks_6', lower_break=True,
-        lower_continue=True)
-
-def test_lower_guarded_conditional_break():
-    """Normally a conditional break at the end of a loop isn't lowered, however
-    if the conditional break gets placed inside an if(execute_flag) because of
-    earlier lowering of continues, then the break needs to be lowered.
-    """
-    input_sexp = make_test_case('main', 'void', (
-            loop(complex_if('a', continue_()) +
-                 simple_if('b', break_()))
-            ))
-    expected_sexp = make_test_case('main', 'void', (
-            declare_break_flag() +
-            loop(declare_execute_flag() +
-                 complex_if('a', lowered_continue()) +
-                 if_execute_flag(simple_if('b', lowered_break())) +
-                 final_break())
-            ))
-    yield create_test_case(
-        input_sexp, expected_sexp, 'lower_guarded_conditional_break',
-        lower_break=True, lower_continue=True)
 
 def test_remove_continue_at_end_of_loop():
     """Test that a redundant continue-statement at the end of a loop is
@@ -594,10 +484,7 @@ def test_lower_return_void_at_end_of_loop():
     yield create_test_case(
         input_sexp, expected_sexp, 'return_void_at_end_of_loop_lower_return',
         lower_main_return=True)
-    yield create_test_case(
-        input_sexp, expected_sexp,
-        'return_void_at_end_of_loop_lower_return_and_break',
-        lower_main_return=True, lower_break=True)
+
 
 def test_lower_return_non_void_at_end_of_loop():
     """Test that a non-void return at the end of a loop is properly lowered."""
@@ -626,15 +513,10 @@ def test_lower_return_non_void_at_end_of_loop():
     yield create_test_case(
         input_sexp, expected_sexp,
         'return_non_void_at_end_of_loop_lower_return', lower_sub_return=True)
-    yield create_test_case(
-        input_sexp, expected_sexp,
-        'return_non_void_at_end_of_loop_lower_return_and_break',
-        lower_sub_return=True, lower_break=True)
+
 
 CASES = [
-    test_lower_breaks_1, test_lower_breaks_2, test_lower_breaks_3,
-    test_lower_breaks_4, test_lower_breaks_5, test_lower_breaks_6,
-    test_lower_guarded_conditional_break, test_lower_pulled_out_jump,
+    test_lower_pulled_out_jump,
     test_lower_return_non_void_at_end_of_loop,
     test_lower_return_void_at_end_of_loop,
     test_lower_returns_1, test_lower_returns_2, test_lower_returns_3,

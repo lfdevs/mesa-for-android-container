@@ -181,7 +181,7 @@ lower_tex_prefetch_block(nir_block *block)
       int idx = nir_tex_instr_src_index(tex, nir_tex_src_coord);
       /* First source should be the sampling coordinate. */
       nir_tex_src *coord = &tex->src[idx];
-      debug_assert(coord->src.is_ssa);
+      assert(coord->src.is_ssa);
 
       if (ir3_nir_coord_offset(coord->src.ssa) >= 0) {
          tex->op = nir_texop_tex_prefetch;

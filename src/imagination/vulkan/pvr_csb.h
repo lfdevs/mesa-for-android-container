@@ -36,12 +36,16 @@
 #include <vulkan/vulkan.h>
 
 #include "pvr_bo.h"
+#include "pvr_types.h"
 #include "pvr_winsys.h"
 #include "util/list.h"
 #include "util/macros.h"
 
 #define __pvr_address_type pvr_dev_addr_t
 #define __pvr_get_address(pvr_dev_addr) (pvr_dev_addr).addr
+/* clang-format off */
+#define __pvr_make_address(addr_u64) PVR_DEV_ADDR(addr_u64)
+/* clang-format on */
 
 #include "csbgen/rogue_hwdefs.h"
 
@@ -85,7 +89,7 @@ struct pvr_csb {
  * \return VK_SUCCESS if the csb hasn't encountered any error or error code
  *         otherwise.
  */
-static inline VkResult pvr_csb_get_status(struct pvr_csb *csb)
+static inline VkResult pvr_csb_get_status(const struct pvr_csb *csb)
 {
    return csb->status;
 }
@@ -96,12 +100,13 @@ static inline VkResult pvr_csb_get_status(struct pvr_csb *csb)
  * \param[in] csb Control Stream Builder object.
  * \return true if csb is empty false otherwise.
  */
-static inline bool pvr_csb_is_empty(struct pvr_csb *csb)
+static inline bool pvr_csb_is_empty(const struct pvr_csb *csb)
 {
    return list_is_empty(&csb->pvr_bo_list);
 }
 
-static inline pvr_dev_addr_t pvr_csb_get_start_address(struct pvr_csb *csb)
+static inline pvr_dev_addr_t
+pvr_csb_get_start_address(const struct pvr_csb *csb)
 {
    if (!pvr_csb_is_empty(csb)) {
       struct pvr_bo *pvr_bo =
@@ -122,10 +127,13 @@ VkResult pvr_csb_emit_return(struct pvr_csb *csb);
 VkResult pvr_csb_emit_terminate(struct pvr_csb *csb);
 
 #define PVRX(x) ROGUE_##x
-#define pvr_cmd_struct(x) PVRX(x)
 #define pvr_cmd_length(x) PVRX(x##_length)
 #define pvr_cmd_header(x) PVRX(x##_header)
-#define pvr_cmd_pack(x) PVRX(x##_pack)
+
+/* This helper is internal to this header. It should only be used as part of
+ * the pvr_csb_*() macros below.
+ */
+#define __pvr_cmd_pack(x) PVRX(x##_pack)
 
 /**
  * \brief Packs a command/state into one or more dwords and stores them in the
@@ -139,12 +147,12 @@ VkResult pvr_csb_emit_terminate(struct pvr_csb *csb);
  *                     state information before it's packed.
  */
 #define pvr_csb_pack(_dst, cmd, name)                                 \
-   for (struct pvr_cmd_struct(cmd) name = { pvr_cmd_header(cmd) },    \
-                                   *_loop_terminate = &name;          \
+   for (struct PVRX(cmd) name = { pvr_cmd_header(cmd) },              \
+                         *_loop_terminate = &name;                    \
         __builtin_expect(_loop_terminate != NULL, 1);                 \
         ({                                                            \
            STATIC_ASSERT(sizeof(*(_dst)) == pvr_cmd_length(cmd) * 4); \
-           pvr_cmd_pack(cmd)((_dst), &name);                          \
+           __pvr_cmd_pack(cmd)((_dst), &name);                        \
            _loop_terminate = NULL;                                    \
         }))
 
@@ -179,12 +187,12 @@ VkResult pvr_csb_emit_terminate(struct pvr_csb *csb);
  *                     information before it's packed.
  */
 #define pvr_csb_emit(csb, cmd, name)                               \
-   for (struct pvr_cmd_struct(cmd)                                 \
+   for (struct PVRX(cmd)                                           \
            name = { pvr_cmd_header(cmd) },                         \
            *_dst = pvr_csb_alloc_dwords(csb, pvr_cmd_length(cmd)); \
         __builtin_expect(_dst != NULL, 1);                         \
         ({                                                         \
-           pvr_cmd_pack(cmd)(_dst, &name);                         \
+           __pvr_cmd_pack(cmd)(_dst, &name);                       \
            _dst = NULL;                                            \
         }))
 

@@ -65,9 +65,14 @@ agx_${opcode}${suffix}(agx_builder *b
    I->dest[${dest}] = dst${dest};
 % endfor
 
+% if srcs > 0:
+   I->src = ralloc_array(I, agx_index, ${srcs});
+   I->nr_srcs = ${srcs};
+
 % for src in range(srcs):
    I->src[${src}] = src${src};
 % endfor
+% endif
 
 % for imm in imms:
    I->${imm.name} = ${imm.name};
@@ -121,30 +126,6 @@ enum agx_bitop_table {
    AGX_BITOP_OR  = 0xE
 };
 
-#define UNOP_BITOP(name, table) \
-   static inline agx_instr * \
-   agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0) \
-   { \
-      return agx_bitop_to(b, dst0, src0, agx_zero(), AGX_BITOP_ ## table); \
-   }
-
-#define BINOP_BITOP(name, table) \
-   static inline agx_instr * \
-   agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1) \
-   { \
-      return agx_bitop_to(b, dst0, src0, src1, AGX_BITOP_ ## table); \
-   }
-
-UNOP_BITOP(mov, MOV)
-UNOP_BITOP(not, NOT)
-
-BINOP_BITOP(and, AND)
-BINOP_BITOP(xor, XOR)
-BINOP_BITOP(or, OR)
-
-#undef UNOP_BITOP
-#undef BINOP_BITOP
-
 static inline agx_instr *
 agx_fmov_to(agx_builder *b, agx_index dst0, agx_index src0)
 {
@@ -168,14 +149,6 @@ agx_ushr(agx_builder *b, agx_index s0, agx_index s1)
 {
     agx_index tmp = agx_temp(b->shader, s0.size);
     agx_ushr_to(b, tmp, s0, s1);
-    return tmp;
-}
-
-static inline agx_index
-agx_mov(agx_builder *b, enum agx_size size, agx_index s0)
-{
-    agx_index tmp = agx_temp(b->shader, size);
-    agx_mov_to(b, tmp, s0);
     return tmp;
 }
 

@@ -57,8 +57,8 @@ lookup_bo(struct hash_table *tbl, uint32_t key)
    return bo;
 }
 
-static void
-bo_init_common(struct fd_bo *bo, struct fd_device *dev)
+void
+fd_bo_init_common(struct fd_bo *bo, struct fd_device *dev)
 {
    /* Backend should have initialized these: */
    assert(bo->size);
@@ -89,8 +89,6 @@ bo_from_handle(struct fd_device *dev, uint32_t size, uint32_t handle)
       return NULL;
    }
 
-   bo_init_common(bo, dev);
-
    /* add ourself into the handle table: */
    _mesa_hash_table_insert(dev->handle_table, &bo->handle, bo);
 
@@ -114,8 +112,6 @@ bo_new(struct fd_device *dev, uint32_t size, uint32_t flags,
    bo = dev->funcs->bo_new(dev, size, flags);
    if (!bo)
       return NULL;
-
-   bo_init_common(bo, dev);
 
    simple_mtx_lock(&table_lock);
    /* add ourself into the handle table: */
@@ -350,6 +346,9 @@ cleanup_fences(struct fd_bo *bo, bool expired)
 void
 bo_del(struct fd_bo *bo)
 {
+   struct fd_device *dev = bo->dev;
+   uint32_t handle = bo->handle;
+
    VG_BO_FREE(bo);
 
    simple_mtx_assert_locked(&table_lock);
@@ -361,21 +360,20 @@ bo_del(struct fd_bo *bo)
    if (bo->map)
       os_munmap(bo->map, bo->size);
 
-   /* TODO probably bo's in bucket list get removed from
-    * handle table??
-    */
-
-   if (bo->handle) {
-      struct drm_gem_close req = {
-         .handle = bo->handle,
-      };
-      _mesa_hash_table_remove_key(bo->dev->handle_table, &bo->handle);
+   if (handle) {
+      _mesa_hash_table_remove_key(dev->handle_table, &handle);
       if (bo->name)
-         _mesa_hash_table_remove_key(bo->dev->name_table, &bo->name);
-      drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_CLOSE, &req);
+         _mesa_hash_table_remove_key(dev->name_table, &bo->name);
    }
 
    bo->funcs->destroy(bo);
+
+   if (handle) {
+      struct drm_gem_close req = {
+         .handle = handle,
+      };
+      drmIoctl(dev->fd, DRM_IOCTL_GEM_CLOSE, &req);
+   }
 }
 
 static void

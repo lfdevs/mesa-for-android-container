@@ -27,6 +27,7 @@
 #include <stdbool.h>
 
 #include "nir.h"
+#include "dxil_validator.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -80,6 +81,12 @@ enum dxil_environment {
    DXIL_ENVIRONMENT_VULKAN,
 };
 
+enum dxil_shader_model {
+   SHADER_MODEL_6_0 = 0x60000,
+   SHADER_MODEL_6_1,
+   SHADER_MODEL_6_2,
+};
+
 struct nir_to_dxil_options {
    bool interpolate_at_vertex;
    bool lower_int16;
@@ -90,6 +97,8 @@ struct nir_to_dxil_options {
    unsigned num_kernel_globals;
    unsigned input_clip_size;
    enum dxil_environment environment;
+   uint32_t shader_model_max;
+   uint32_t validator_version_max;
 };
 
 bool

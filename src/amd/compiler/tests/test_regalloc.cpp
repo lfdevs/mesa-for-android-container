@@ -35,12 +35,13 @@ BEGIN_TEST(regalloc.subdword_alloc.reuse_16bit_operands)
     * result in v0.
     */
 
-   for (chip_class cc = GFX8; cc < NUM_GFX_VERSIONS; cc = (chip_class)((unsigned)cc + 1)) {
+   /* TODO: is this possible to do on GFX11? */
+   for (amd_gfx_level cc = GFX8; cc <= GFX10_3; cc = (amd_gfx_level)((unsigned)cc + 1)) {
       for (bool pessimistic : { false, true }) {
          const char* subvariant = pessimistic ? "/pessimistic" : "/optimistic";
 
          //>> v1: %_:v[#a] = p_startpgm
-         if (!setup_cs("v1", (chip_class)cc, CHIP_UNKNOWN, subvariant))
+         if (!setup_cs("v1", (amd_gfx_level)cc, CHIP_UNKNOWN, subvariant))
             return;
 
          //! v2b: %_:v[#a][0:16], v2b: %res1:v[#a][16:32] = p_split_vector %_:v[#a]

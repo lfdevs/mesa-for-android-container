@@ -176,4 +176,10 @@ lp_build_const_func_pointer(struct gallivm_state *gallivm,
                             const char *name);
 
 
+LLVMValueRef
+lp_build_const_func_pointer_from_type(struct gallivm_state *gallivm,
+                            const void *ptr,
+                            LLVMTypeRef function_type,
+                            const char *name);
+
 #endif /* !LP_BLD_CONST_H */

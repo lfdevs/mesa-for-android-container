@@ -29,7 +29,7 @@
 
 #include "u_tracepoints.h"
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -91,6 +91,6 @@ trace_framebuffer_state(struct u_trace *ut, void *cs, const struct pipe_framebuf
    }
 }
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 }
 #endif

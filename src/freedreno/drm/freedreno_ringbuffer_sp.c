@@ -391,7 +391,7 @@ fd_submit_sp_destroy(struct fd_submit *submit)
 
    _mesa_hash_table_destroy(fd_submit->bo_table, NULL);
 
-   // TODO it would be nice to have a way to debug_assert() if all
+   // TODO it would be nice to have a way to assert() if all
    // rb's haven't been free'd back to the slab, because that is
    // an indication that we are leaking bo's
    slab_destroy_child(&fd_submit->ring_pool);
@@ -445,7 +445,7 @@ fd_pipe_sp_ringpool_fini(struct fd_pipe *pipe)
 static void
 finalize_current_cmd(struct fd_ringbuffer *ring)
 {
-   debug_assert(!(ring->flags & _FD_RINGBUFFER_OBJECT));
+   assert(!(ring->flags & _FD_RINGBUFFER_OBJECT));
 
    struct fd_ringbuffer_sp *fd_ring = to_fd_ringbuffer_sp(ring);
    APPEND(&fd_ring->u, cmds,
@@ -461,7 +461,7 @@ fd_ringbuffer_sp_grow(struct fd_ringbuffer *ring, uint32_t size)
    struct fd_ringbuffer_sp *fd_ring = to_fd_ringbuffer_sp(ring);
    struct fd_pipe *pipe = fd_ring->u.submit->pipe;
 
-   debug_assert(ring->flags & FD_RINGBUFFER_GROWABLE);
+   assert(ring->flags & FD_RINGBUFFER_GROWABLE);
 
    finalize_current_cmd(ring);
 
@@ -581,7 +581,7 @@ fd_ringbuffer_sp_init(struct fd_ringbuffer_sp *fd_ring, uint32_t size,
 {
    struct fd_ringbuffer *ring = &fd_ring->base;
 
-   debug_assert(fd_ring->ring_bo);
+   assert(fd_ring->ring_bo);
 
    uint8_t *base = fd_bo_map(fd_ring->ring_bo);
    ring->start = (void *)(base + fd_ring->offset);

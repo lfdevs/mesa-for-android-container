@@ -82,7 +82,7 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
     *    Engine, the actual URB space available for operation is only 60KB
     *    (per bank). Similarly when URB space programmed is 128KB (per bank)
     *    for render engine, the actual URB space available for operation is
-    *    only 124KB (per bank). More detailed descripton available in "L3
+    *    only 124KB (per bank). More detailed description available in "L3
     *    Cache" section of the B-Spec."
     */
    if (devinfo->verx10 == 120) {

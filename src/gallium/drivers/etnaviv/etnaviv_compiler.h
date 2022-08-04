@@ -52,6 +52,7 @@ struct etna_compiler {
    uint32_t shader_count;
    struct ra_regs *regs;
 
+   nir_shader_compiler_options options;
    struct disk_cache *disk_cache;
 };
 
@@ -146,10 +147,13 @@ struct etna_shader_link_info {
 };
 
 struct etna_compiler *
-etna_compiler_create(const char *renderer);
+etna_compiler_create(const char *renderer, const struct etna_specs *specs);
 
 void
 etna_compiler_destroy(const struct etna_compiler *compiler);
+
+const nir_shader_compiler_options *
+etna_compiler_get_options(struct etna_compiler *compiler);
 
 bool
 etna_compile_shader(struct etna_shader_variant *shader);

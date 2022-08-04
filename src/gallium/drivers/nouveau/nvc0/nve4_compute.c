@@ -25,7 +25,7 @@
 #include "nvc0/nvc0_context.h"
 #include "nvc0/nve4_compute.h"
 
-#include "codegen/nv50_ir_driver.h"
+#include "nv50_ir_driver.h"
 
 #include "drf.h"
 #include "qmd.h"

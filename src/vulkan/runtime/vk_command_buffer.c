@@ -38,6 +38,7 @@ vk_command_buffer_init(struct vk_command_buffer *command_buffer,
 
    command_buffer->pool = pool;
    command_buffer->level = level;
+   vk_dynamic_graphics_state_init(&command_buffer->dynamic_graphics_state);
    vk_cmd_queue_init(&command_buffer->cmd_queue, &pool->alloc);
    util_dynarray_init(&command_buffer->labels, NULL);
    command_buffer->region_begin = true;
@@ -50,6 +51,7 @@ vk_command_buffer_init(struct vk_command_buffer *command_buffer,
 void
 vk_command_buffer_reset(struct vk_command_buffer *command_buffer)
 {
+   vk_dynamic_graphics_state_clear(&command_buffer->dynamic_graphics_state);
    vk_command_buffer_reset_render_pass(command_buffer);
    vk_cmd_queue_reset(&command_buffer->cmd_queue);
    util_dynarray_clear(&command_buffer->labels);
@@ -80,4 +82,19 @@ vk_common_CmdExecuteCommands(VkCommandBuffer commandBuffer,
 
       vk_cmd_queue_execute(&secondary->cmd_queue, commandBuffer, disp);
    }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdBindVertexBuffers(VkCommandBuffer commandBuffer,
+                               uint32_t firstBinding,
+                               uint32_t bindingCount,
+                               const VkBuffer *pBuffers,
+                               const VkDeviceSize *pOffsets)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd_buffer, commandBuffer);
+   const struct vk_device_dispatch_table *disp =
+      &cmd_buffer->base.device->dispatch_table;
+
+   disp->CmdBindVertexBuffers2(commandBuffer, firstBinding, bindingCount,
+                               pBuffers, pOffsets, NULL, NULL);
 }

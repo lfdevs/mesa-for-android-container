@@ -29,6 +29,7 @@
 #include "util/set.h"
 #include "util/slab.h"
 #include "util/u_debug.h"
+#include "util/macros.h"
 #include "util/u_threaded_context.h"
 #include "intel/blorp/blorp.h"
 #include "intel/dev/intel_debug.h"
@@ -206,14 +207,23 @@ enum iris_nos_dep {
  * Program cache keys for state based recompiles.
  */
 
-struct iris_base_prog_key {
-   unsigned program_string_id;
-};
+/* Provide explicit padding for each member, to ensure that the compiler
+ * initializes every bit in the shader cache keys.  The keys will be compared
+ * with memcmp.
+ */
+PRAGMA_DIAGNOSTIC_PUSH
+PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 
 /**
  * Note, we need to take care to have padding explicitly declared
  * for key since we will directly memcmp the whole struct.
  */
+struct iris_base_prog_key {
+   unsigned program_string_id;
+   bool limit_trig_input_range;
+   unsigned padding:24;
+};
+
 struct iris_vue_prog_key {
    struct iris_base_prog_key base;
 
@@ -233,6 +243,7 @@ struct iris_tcs_prog_key {
    uint8_t input_vertices;
 
    bool quads_workaround;
+   unsigned padding:16;
 
    /** A bitfield of per-patch outputs written. */
    uint32_t patch_outputs_written;
@@ -258,6 +269,9 @@ struct iris_gs_prog_key {
 struct iris_fs_prog_key {
    struct iris_base_prog_key base;
 
+   uint64_t input_slots_valid;
+   uint8_t color_outputs_valid;
+
    unsigned nr_color_regions:5;
    bool flat_shade:1;
    bool alpha_test_replicate_alpha:1;
@@ -267,9 +281,7 @@ struct iris_fs_prog_key {
    bool multisample_fbo:1;
    bool force_dual_color_blend:1;
    bool coherent_fb_fetch:1;
-
-   uint8_t color_outputs_valid;
-   uint64_t input_slots_valid;
+   uint64_t padding:43;
 };
 
 struct iris_cs_prog_key {
@@ -286,6 +298,9 @@ union iris_any_prog_key {
    struct iris_fs_prog_key fs;
    struct iris_cs_prog_key cs;
 };
+
+/* Restore the pack alignment to default. */
+PRAGMA_DIAGNOSTIC_POP
 
 /** @} */
 

@@ -1,6 +1,10 @@
 Notes for macOS
 ================
 
+.. image:: https://github.com/mesa3d/mesa/actions/workflows/ci.yml/badge.svg
+    :target: https://github.com/mesa3d/mesa/actions/workflows/ci.yml
+    :alt: macOS CI
+
 Mesa builds on macOS without modifications. However, there are some details to
 be aware of.
 

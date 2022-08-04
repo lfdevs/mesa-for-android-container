@@ -1,6 +1,6 @@
 # Shared between windows and Linux
 .build-common:
-  extends: .ci-run-policy
+  extends: .build-rules
   # Cancel job if a newer commit is pushed to the same branch
   interruptible: true
   artifacts:
@@ -37,7 +37,7 @@
   tags:
     - windows
     - docker
-    - "1809"
+    - "2022"
     - mesa
   cache:
     key: ${CI_JOB_NAME}
@@ -51,6 +51,15 @@
   stage: build-x86_64
   variables:
     LLVM_VERSION: 11
+  script:
+    - .gitlab-ci/meson/build.sh
+
+.meson-build_mingw:
+  extends:
+    - .build-linux
+    - .use-debian/x86_build_mingw
+    - .use-wine
+  stage: build-x86_64
   script:
     - .gitlab-ci/meson/build.sh
 
@@ -72,8 +81,10 @@ debian-testing:
     VULKAN_DRIVERS: "swrast,amd,intel"
     BUILDTYPE: "debugoptimized"
     EXTRA_OPTION: >
+      -D spirv-to-dxil=true
       -D valgrind=false
     MINIO_ARTIFACT_NAME: mesa-amd64
+    LLVM_VERSION: "13"
   script:
     - .gitlab-ci/lava/lava-pytest.sh
     - .gitlab-ci/meson/build.sh
@@ -156,6 +167,7 @@ debian-gallium:
     GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,asahi,crocus"
     VULKAN_DRIVERS: swrast
     EXTRA_OPTION: >
+      -D spirv-to-dxil=true
       -D osmesa=true
       -D tools=drm-shim,etnaviv,freedreno,glsl,intel,intel-ui,nir,nouveau,xvmc,lima,panfrost,asahi
   script:
@@ -184,9 +196,10 @@ debian-release:
       -D gallium-opencl=disabled
       -D llvm=enabled
     GALLIUM_DRIVERS: "i915,iris,nouveau,kmsro,freedreno,r300,svga,swrast,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,crocus"
-    VULKAN_DRIVERS: "amd,imagination-experimental"
+    VULKAN_DRIVERS: "amd,imagination-experimental,microsoft-experimental"
     BUILDTYPE: "release"
     EXTRA_OPTION: >
+      -D spirv-to-dxil=true
       -D osmesa=true
       -D tools=all
       -D intel-clc=enabled
@@ -202,7 +215,6 @@ fedora-release:
     BUILDTYPE: "release"
     C_ARGS: >
       -Wno-error=array-bounds
-      -Wno-error=maybe-uninitialized
       -Wno-error=stringop-overread
       -Wno-error=uninitialized
     CPP_ARGS: >
@@ -317,7 +329,7 @@ debian-android:
     - debian/arm_build
   variables:
     VULKAN_DRIVERS: freedreno,broadcom
-    GALLIUM_DRIVERS: "etnaviv,freedreno,kmsro,lima,nouveau,panfrost,swrast,tegra,v3d,vc4"
+    GALLIUM_DRIVERS: "etnaviv,freedreno,kmsro,lima,nouveau,panfrost,swrast,tegra,v3d,vc4,zink"
     BUILDTYPE: "debugoptimized"
   tags:
     - aarch64
@@ -400,8 +412,9 @@ debian-clang:
     DRI_LOADERS: >
       -D glvnd=true
     GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus,i915,asahi"
-    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio-experimental,swrast,panfrost,imagination-experimental
+    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio-experimental,swrast,panfrost,imagination-experimental,microsoft-experimental
     EXTRA_OPTIONS:
+      -D spirv-to-dxil=true
       -D imagination-srv=true
     CC: clang
     CXX: clang++
@@ -413,7 +426,7 @@ windows-vs2019:
     - .windows-build-rules
   stage: build-misc
   script:
-    - . .\.gitlab-ci\windows\mesa_build.ps1
+    - pwsh -ExecutionPolicy RemoteSigned .\.gitlab-ci\windows\mesa_build.ps1
   artifacts:
     paths:
       - _build/meson-logs/*.txt
@@ -466,7 +479,7 @@ debian-vulkan:
       -D c_args=-fno-sanitize-recover=all
       -D cpp_args=-fno-sanitize-recover=all
     UBSAN_OPTIONS: "print_stacktrace=1"
-    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio-experimental,imagination-experimental
+    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio-experimental,imagination-experimental,microsoft-experimental
     EXTRA_OPTION: >
       -D vulkan-layers=device-select,overlay
       -D build-aco-tests=true
@@ -509,17 +522,39 @@ debian-ppc64el:
     VULKAN_DRIVERS: "amd,swrast"
 
 debian-mingw32-x86_64:
-  extends: .meson-build
+  extends: .meson-build_mingw
   stage: build-misc
   variables:
     UNWIND: "disabled"
     C_ARGS: >
       -Wno-error=format
       -Wno-error=format-extra-args
+      -Wno-error=deprecated-declarations
+      -Wno-error=unused-function
+      -Wno-error=unused-variable
+      -Wno-error=unused-but-set-variable
+      -Wno-error=unused-value
+      -Wno-error=switch
+      -Wno-error=parentheses
+      -Wno-error=missing-prototypes
+      -Wno-error=sign-compare
+      -Wno-error=narrowing
+      -Wno-error=overflow
     CPP_ARGS: $C_ARGS
-    GALLIUM_DRIVERS: "swrast"
+    GALLIUM_DRIVERS: "swrast,d3d12,zink"
+    VULKAN_DRIVERS: "swrast,amd,microsoft-experimental"
+    GALLIUM_ST: >
+      -D gallium-opencl=icd
+      -D opencl-spirv=true
+      -D microsoft-clc=enabled
+      -D static-libclc=all
+      -D llvm=enabled
     EXTRA_OPTION: >
-      -Dllvm=disabled
-      -Dzlib=disabled
-      -Dosmesa=true
+      -D spirv-to-dxil=true
+      -D gles1=enabled
+      -D gles2=enabled
+      -D osmesa=true
+      -D cpp_rtti=true
+      -D shared-glapi=enabled
+      -D zlib=enabled
       --cross-file=.gitlab-ci/x86_64-w64-mingw32

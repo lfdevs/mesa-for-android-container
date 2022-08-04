@@ -76,6 +76,8 @@ virtio_pipe_get_param(struct fd_pipe *pipe, enum fd_param_id param,
                    uint64_t *value)
 {
    struct virtio_pipe *virtio_pipe = to_virtio_pipe(pipe);
+   struct virtio_device *virtio_dev = to_virtio_device(pipe->dev);
+
    switch (param) {
    case FD_DEVICE_ID: // XXX probably get rid of this..
    case FD_GPU_ID:
@@ -91,17 +93,13 @@ virtio_pipe_get_param(struct fd_pipe *pipe, enum fd_param_id param,
       *value = virtio_pipe->chip_id;
       return 0;
    case FD_MAX_FREQ:
-      return query_param(pipe, MSM_PARAM_MAX_FREQ, value);
+      *value = virtio_dev->caps.u.msm.max_freq;
+      return 0;
    case FD_TIMESTAMP:
       return query_param(pipe, MSM_PARAM_TIMESTAMP, value);
    case FD_NR_RINGS:
-      /* TODO need to not rely on host egl ctx for fence if
-       * we want to support multiple priority levels
-       */
-      return 1;
-//      return query_param(pipe, MSM_PARAM_NR_RINGS, value);
-   case FD_PP_PGTABLE:
-      return query_param(pipe, MSM_PARAM_PP_PGTABLE, value);
+      *value = virtio_dev->caps.u.msm.priorities;
+      return 0;
    case FD_CTX_FAULTS:
       return query_queue_param(pipe, MSM_SUBMITQUEUE_PARAM_FAULTS, value);
    case FD_GLOBAL_FAULTS:
@@ -121,17 +119,24 @@ virtio_pipe_wait(struct fd_pipe *pipe, const struct fd_fence *fence, uint64_t ti
          .hdr = MSM_CCMD(WAIT_FENCE, sizeof(req)),
          .queue_id = to_virtio_pipe(pipe)->queue_id,
          .fence = fence->kfence,
-         .timeout = timeout,
    };
    struct msm_ccmd_submitqueue_query_rsp *rsp;
+   int64_t end_time = os_time_get_nano() + timeout;
+   int ret;
 
-   rsp = virtio_alloc_rsp(pipe->dev, &req.hdr, sizeof(*rsp));
+   do {
+      rsp = virtio_alloc_rsp(pipe->dev, &req.hdr, sizeof(*rsp));
 
-   int ret = virtio_execbuf(pipe->dev, &req.hdr, true);
-   if (ret)
-      goto out;
+      ret = virtio_execbuf(pipe->dev, &req.hdr, true);
+      if (ret)
+         goto out;
 
-   ret = rsp->ret;
+      if ((timeout != PIPE_TIMEOUT_INFINITE) &&
+          (os_time_get_nano() >= end_time))
+         break;
+
+      ret = rsp->ret;
+   } while (ret == -ETIMEDOUT);
 
 out:
    return ret;
@@ -140,6 +145,8 @@ out:
 static int
 open_submitqueue(struct fd_pipe *pipe, uint32_t prio)
 {
+   struct virtio_pipe *virtio_pipe = to_virtio_pipe(pipe);
+
    struct drm_msm_submitqueue req = {
       .flags = 0,
       .prio = prio,
@@ -157,7 +164,8 @@ open_submitqueue(struct fd_pipe *pipe, uint32_t prio)
       return ret;
    }
 
-   to_virtio_pipe(pipe)->queue_id = req.id;
+   virtio_pipe->queue_id = req.id;
+   virtio_pipe->ring_idx = req.prio + 1;
 
    return 0;
 }
@@ -173,6 +181,9 @@ virtio_pipe_destroy(struct fd_pipe *pipe)
 {
    struct virtio_pipe *virtio_pipe = to_virtio_pipe(pipe);
 
+   if (util_queue_is_initialized(&virtio_pipe->retire_queue))
+      util_queue_destroy(&virtio_pipe->retire_queue);
+
    close_submitqueue(pipe, virtio_pipe->queue_id);
    fd_pipe_sp_ringpool_fini(pipe);
    free(virtio_pipe);
@@ -187,18 +198,6 @@ static const struct fd_pipe_funcs funcs = {
    .destroy = virtio_pipe_destroy,
 };
 
-static uint64_t
-get_param(struct fd_pipe *pipe, uint32_t param)
-{
-   uint64_t value;
-   int ret = query_param(pipe, param, &value);
-   if (ret) {
-      ERROR_MSG("get-param failed! %d (%s)", ret, strerror(errno));
-      return 0;
-   }
-   return value;
-}
-
 static void
 init_shmem(struct fd_device *dev)
 {
@@ -210,11 +209,14 @@ init_shmem(struct fd_device *dev)
     * have to bypass/reinvent fd_bo_new()..
     */
    if (unlikely(!virtio_dev->shmem)) {
-      virtio_dev->shmem_bo = fd_bo_new(dev, sizeof(*virtio_dev->shmem),
+      virtio_dev->shmem_bo = fd_bo_new(dev, 0x4000,
                                        _FD_BO_VIRTIO_SHM, "shmem");
       virtio_dev->shmem = fd_bo_map(virtio_dev->shmem_bo);
-
       virtio_dev->shmem_bo->bo_reuse = NO_CACHE;
+
+      uint32_t offset = virtio_dev->shmem->rsp_mem_offset;
+      virtio_dev->rsp_mem_len = fd_bo_size(virtio_dev->shmem_bo) - offset;
+      virtio_dev->rsp_mem = &((uint8_t *)virtio_dev->shmem)[offset];
    }
 
    simple_mtx_unlock(&virtio_dev->rsp_lock);
@@ -227,6 +229,7 @@ virtio_pipe_new(struct fd_device *dev, enum fd_pipe_id id, uint32_t prio)
       [FD_PIPE_3D] = MSM_PIPE_3D0,
       [FD_PIPE_2D] = MSM_PIPE_2D0,
    };
+   struct virtio_device *virtio_dev = to_virtio_device(dev);
    struct virtio_pipe *virtio_pipe = NULL;
    struct fd_pipe *pipe = NULL;
 
@@ -246,16 +249,17 @@ virtio_pipe_new(struct fd_device *dev, enum fd_pipe_id id, uint32_t prio)
    pipe->dev = dev;
    virtio_pipe->pipe = pipe_id[id];
 
-   /* these params should be supported since the first version of drm/msm: */
-   virtio_pipe->gpu_id = get_param(pipe, MSM_PARAM_GPU_ID);
-   virtio_pipe->gmem = get_param(pipe, MSM_PARAM_GMEM_SIZE);
-   virtio_pipe->chip_id = get_param(pipe, MSM_PARAM_CHIP_ID);
+   virtio_pipe->gpu_id = virtio_dev->caps.u.msm.gpu_id;
+   virtio_pipe->gmem = virtio_dev->caps.u.msm.gmem_size;
+   virtio_pipe->gmem_base = virtio_dev->caps.u.msm.gmem_base;
+   virtio_pipe->chip_id = virtio_dev->caps.u.msm.chip_id;
 
-   if (fd_device_version(pipe->dev) >= FD_VERSION_GMEM_BASE)
-      virtio_pipe->gmem_base = get_param(pipe, MSM_PARAM_GMEM_BASE);
 
    if (!(virtio_pipe->gpu_id || virtio_pipe->chip_id))
       goto fail;
+
+   util_queue_init(&virtio_pipe->retire_queue, "rq", 8, 1,
+                   UTIL_QUEUE_INIT_RESIZE_IF_FULL, NULL);
 
    INFO_MSG("Pipe Info:");
    INFO_MSG(" GPU-id:          %d", virtio_pipe->gpu_id);

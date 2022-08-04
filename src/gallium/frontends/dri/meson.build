@@ -33,8 +33,6 @@ files_libdri = files(
   'dri_screen.h',
   'dri_util.c',
   'dri_util.h',
-  'utils.c',
-  'utils.h',
 )
 
 if with_dri

@@ -30,7 +30,7 @@
 #include "pvr_winsys.h"
 #include "util/macros.h"
 
-#define PVR_SRV_SYNC_DEV_PATH "/dev/pvr_sync"
+#include <vulkan/vulkan_core.h>
 
 static inline uint32_t
 pvr_srv_from_winsys_priority(enum pvr_winsys_ctx_priority priority)
@@ -46,5 +46,7 @@ pvr_srv_from_winsys_priority(enum pvr_winsys_ctx_priority priority)
       unreachable("Invalid winsys context priority.");
    }
 }
+
+VkResult pvr_srv_create_timeline(int render_fd, int *const fd_out);
 
 #endif /* PVR_SRV_JOB_COMMON_H */

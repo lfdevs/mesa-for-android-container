@@ -155,7 +155,7 @@ vec4_instruction::is_send_from_grf() const
    case VEC4_OPCODE_UNTYPED_SURFACE_READ:
    case VEC4_OPCODE_UNTYPED_SURFACE_WRITE:
    case VEC4_OPCODE_URB_READ:
-   case TCS_OPCODE_URB_WRITE:
+   case VEC4_TCS_OPCODE_URB_WRITE:
    case TCS_OPCODE_RELEASE_INPUT:
    case SHADER_OPCODE_BARRIER:
       return true;
@@ -187,8 +187,8 @@ bool
 vec4_instruction::has_source_and_destination_hazard() const
 {
    switch (opcode) {
-   case TCS_OPCODE_SET_INPUT_URB_OFFSETS:
-   case TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
+   case VEC4_TCS_OPCODE_SET_INPUT_URB_OFFSETS:
+   case VEC4_TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
    case TES_OPCODE_ADD_INDIRECT_URB_OFFSET:
       return true;
    default:
@@ -209,7 +209,7 @@ vec4_instruction::size_read(unsigned arg) const
    case VEC4_OPCODE_UNTYPED_ATOMIC:
    case VEC4_OPCODE_UNTYPED_SURFACE_READ:
    case VEC4_OPCODE_UNTYPED_SURFACE_WRITE:
-   case TCS_OPCODE_URB_WRITE:
+   case VEC4_TCS_OPCODE_URB_WRITE:
       if (arg == 0)
          return mlen * REG_SIZE;
       break;
@@ -283,8 +283,8 @@ vec4_instruction::can_do_writemask(const struct intel_device_info *devinfo)
    case VEC4_OPCODE_SET_HIGH_32BIT:
    case VS_OPCODE_PULL_CONSTANT_LOAD:
    case VS_OPCODE_PULL_CONSTANT_LOAD_GFX7:
-   case TCS_OPCODE_SET_INPUT_URB_OFFSETS:
-   case TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
+   case VEC4_TCS_OPCODE_SET_INPUT_URB_OFFSETS:
+   case VEC4_TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
    case TES_OPCODE_CREATE_INPUT_READ_HEADER:
    case TES_OPCODE_ADD_INDIRECT_URB_OFFSET:
    case VEC4_OPCODE_URB_READ:
@@ -343,7 +343,7 @@ vec4_instruction::implied_mrf_writes() const
    case SHADER_OPCODE_POW:
    case TCS_OPCODE_THREAD_END:
       return 2;
-   case VS_OPCODE_URB_WRITE:
+   case VEC4_VS_OPCODE_URB_WRITE:
       return 1;
    case VS_OPCODE_PULL_CONSTANT_LOAD:
       return 2;
@@ -351,13 +351,13 @@ vec4_instruction::implied_mrf_writes() const
       return 2;
    case SHADER_OPCODE_GFX4_SCRATCH_WRITE:
       return 3;
-   case GS_OPCODE_URB_WRITE:
-   case GS_OPCODE_URB_WRITE_ALLOCATE:
+   case VEC4_GS_OPCODE_URB_WRITE:
+   case VEC4_GS_OPCODE_URB_WRITE_ALLOCATE:
    case GS_OPCODE_THREAD_END:
       return 0;
    case GS_OPCODE_FF_SYNC:
       return 1;
-   case TCS_OPCODE_URB_WRITE:
+   case VEC4_TCS_OPCODE_URB_WRITE:
       return 0;
    case SHADER_OPCODE_TEX:
    case SHADER_OPCODE_TXL:
@@ -1321,7 +1321,7 @@ vec4_visitor::dump_instruction(const backend_instruction *be_inst, FILE *file) c
               pred_ctrl_align16[inst->predicate]);
    }
 
-   fprintf(file, "%s(%d)", brw_instruction_name(devinfo, inst->opcode),
+   fprintf(file, "%s(%d)", brw_instruction_name(&compiler->isa, inst->opcode),
            inst->exec_size);
    if (inst->saturate)
       fprintf(file, ".sat");
@@ -1697,7 +1697,7 @@ vec4_visitor::fixup_3src_null_dest()
    bool progress = false;
 
    foreach_block_and_inst_safe (block, vec4_instruction, inst, cfg) {
-      if (inst->is_3src(devinfo) && inst->dst.is_null()) {
+      if (inst->is_3src(compiler) && inst->dst.is_null()) {
          const unsigned size_written = type_sz(inst->dst.type);
          const unsigned num_regs = DIV_ROUND_UP(size_written, REG_SIZE);
 
@@ -1790,7 +1790,7 @@ vec4_visitor::convert_to_hw_regs()
             src.vstride = src.width + src.hstride;
       }
 
-      if (inst->is_3src(devinfo)) {
+      if (inst->is_3src(compiler)) {
          /* 3-src instructions with scalar sources support arbitrary subnr,
           * but don't actually use swizzles.  Convert swizzle into subnr.
           * Skip this for double-precision instructions: RepCtrl=1 is not
@@ -2329,7 +2329,7 @@ vec4_visitor::apply_logical_swizzle(struct brw_reg *hw_reg,
        * second half of a register and needs a vertical stride of 0 so we:
        *
        * 1. Don't violate register region restrictions.
-       * 2. Activate the gfx7 instruction decompresion bug exploit when
+       * 2. Activate the gfx7 instruction decompression bug exploit when
        *    execsize > 4
        */
       if (hw_reg->subnr % REG_SIZE == 16) {
@@ -2461,7 +2461,7 @@ vec4_visitor::run()
 
    OPT(lower_64bit_mad_to_mul_add);
 
-   /* Run this before payload setup because tesselation shaders
+   /* Run this before payload setup because tessellation shaders
     * rely on it to prevent cross dvec2 regioning on DF attributes
     * that are setup so that XY are on the second half of register and
     * ZW are in the first half of the next.

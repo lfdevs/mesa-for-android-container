@@ -36,6 +36,7 @@
 #include "u_debug_symbol.h"
 #include "u_debug_stack.h"
 #include "pipe/p_config.h"
+#include "c11/threads.h"
 
 #if defined(HAVE_LIBUNWIND)
 
@@ -186,7 +187,6 @@ debug_backtrace_print(FILE *f,
 #include <windows.h>
 #endif
 
-
 /**
  * Capture stack backtrace.
  *
@@ -296,17 +296,32 @@ debug_backtrace_capture(struct debug_stack_frame *backtrace,
 }
 
 
+static mtx_t backtrace_mutex;
+
+static void
+initialize_backtrace_mutex()
+{
+   static bool initialized = false;
+
+   if (!initialized) {
+      (void)mtx_init(&backtrace_mutex, mtx_plain);
+      initialized = true;
+   }
+}
+
 void
 debug_backtrace_dump(const struct debug_stack_frame *backtrace,
                      unsigned nr_frames)
 {
    unsigned i;
-
+   initialize_backtrace_mutex();
+   mtx_lock(&backtrace_mutex);
    for (i = 0; i < nr_frames; ++i) {
       if (!backtrace[i].function)
          break;
       debug_symbol_print(backtrace[i].function);
    }
+   mtx_unlock(&backtrace_mutex);
 }
 
 
@@ -317,6 +332,8 @@ debug_backtrace_print(FILE *f,
 {
    unsigned i;
 
+   initialize_backtrace_mutex();
+   mtx_lock(&backtrace_mutex);
    for (i = 0; i < nr_frames; ++i) {
       const char *symbol;
       if (!backtrace[i].function)
@@ -325,6 +342,8 @@ debug_backtrace_print(FILE *f,
       if (symbol)
          fprintf(f, "%s\n", symbol);
    }
+   fflush(f);
+   mtx_unlock(&backtrace_mutex);
 }
 
 #endif /* HAVE_LIBUNWIND */

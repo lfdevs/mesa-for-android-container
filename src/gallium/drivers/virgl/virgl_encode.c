@@ -999,7 +999,7 @@ int virgl_encode_sampler_view(struct virgl_context *ctx,
       virgl_encoder_write_dword(ctx->cbuf, (state->u.buf.offset + state->u.buf.size) / elem_size - 1);
    } else {
       if (res->metadata.plane) {
-         debug_assert(state->u.tex.first_layer == 0 && state->u.tex.last_layer == 0);
+         assert(state->u.tex.first_layer == 0 && state->u.tex.last_layer == 0);
          virgl_encoder_write_dword(ctx->cbuf, res->metadata.plane);
       } else {
          virgl_encoder_write_dword(ctx->cbuf, state->u.tex.first_layer | state->u.tex.last_layer << 16);

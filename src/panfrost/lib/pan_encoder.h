@@ -75,7 +75,7 @@ unsigned
 panfrost_get_total_stack_size(
                 unsigned thread_size,
                 unsigned threads_per_core,
-                unsigned core_count);
+                unsigned core_id_range);
 
 /* Attributes / instancing */
 

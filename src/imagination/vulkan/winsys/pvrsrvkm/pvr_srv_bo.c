@@ -33,6 +33,7 @@
 #include "pvr_srv.h"
 #include "pvr_srv_bo.h"
 #include "pvr_srv_bridge.h"
+#include "pvr_types.h"
 #include "pvr_winsys_helper.h"
 #include "util/u_atomic.h"
 #include "util/bitscan.h"
@@ -370,7 +371,6 @@ pvr_srv_heap_alloc_reserved(struct pvr_winsys_heap *heap,
    struct pvr_srv_winsys *srv_ws = to_pvr_srv_winsys(heap->ws);
    struct pvr_srv_winsys_vma *srv_vma;
    VkResult result;
-   uint64_t addr;
 
    assert(util_is_power_of_two_nonzero(alignment));
 
@@ -399,18 +399,16 @@ pvr_srv_heap_alloc_reserved(struct pvr_winsys_heap *heap,
        reserved_dev_addr.addr & ((srv_ws->base.page_size) - 1))
       goto err_vk_free_srv_vma;
 
-   addr = reserved_dev_addr.addr;
-
    /* Reserve the virtual range in the MMU and create a mapping structure */
    result = pvr_srv_int_reserve_addr(srv_ws->render_fd,
                                      srv_heap->server_heap,
-                                     (pvr_dev_addr_t){ .addr = addr },
+                                     reserved_dev_addr,
                                      size,
                                      &srv_vma->reservation);
    if (result != VK_SUCCESS)
       goto err_vk_free_srv_vma;
 
-   srv_vma->base.dev_addr.addr = addr;
+   srv_vma->base.dev_addr = reserved_dev_addr;
    srv_vma->base.bo = NULL;
    srv_vma->base.heap = heap;
    srv_vma->base.size = size;
@@ -522,7 +520,7 @@ pvr_dev_addr_t pvr_srv_winsys_vma_map(struct pvr_winsys_vma *vma,
       if (offset != 0 || bo->size != ALIGN_POT(size, srv_ws->base.page_size) ||
           vma->size != bo->size) {
          vk_error(NULL, VK_ERROR_MEMORY_MAP_FAILED);
-         return (pvr_dev_addr_t){ .addr = 0UL };
+         return PVR_DEV_ADDR_INVALID;
       }
 
       /* Map the requested pmr */
@@ -543,7 +541,7 @@ pvr_dev_addr_t pvr_srv_winsys_vma_map(struct pvr_winsys_vma *vma,
       if (ALIGN_POT(offset + size, vma->heap->page_size) > bo->size ||
           aligned_virt_size > vma->size) {
          vk_error(NULL, VK_ERROR_MEMORY_MAP_FAILED);
-         return (pvr_dev_addr_t){ .addr = 0UL };
+         return PVR_DEV_ADDR_INVALID;
       }
 
       /* Map the requested pages */
@@ -557,7 +555,7 @@ pvr_dev_addr_t pvr_srv_winsys_vma_map(struct pvr_winsys_vma *vma,
    }
 
    if (result != VK_SUCCESS)
-      return (pvr_dev_addr_t){ .addr = 0UL };
+      return PVR_DEV_ADDR_INVALID;
 
    buffer_acquire(srv_bo);
 
@@ -565,7 +563,7 @@ pvr_dev_addr_t pvr_srv_winsys_vma_map(struct pvr_winsys_vma *vma,
    vma->bo_offset = offset;
    vma->mapped_size = aligned_virt_size;
 
-   return (pvr_dev_addr_t){ .addr = vma->dev_addr.addr + virt_offset };
+   return PVR_DEV_ADDR_OFFSET(vma->dev_addr, virt_offset);
 }
 
 void pvr_srv_winsys_vma_unmap(struct pvr_winsys_vma *vma)

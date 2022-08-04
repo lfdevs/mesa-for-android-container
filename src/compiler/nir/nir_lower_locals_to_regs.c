@@ -200,7 +200,17 @@ lower_locals_to_regs_block(nir_block *block,
 
          nir_alu_instr *mov = nir_alu_instr_create(b->shader, nir_op_mov);
          mov->src[0].src = get_deref_reg_src(deref, state);
+
+         if (mov->src[0].src.reg.reg->num_array_elems != 0 &&
+             mov->src[0].src.reg.base_offset >= mov->src[0].src.reg.reg->num_array_elems) {
+            /* out-of-bounds read, return 0 instead. */
+            mov->src[0].src = nir_src_for_ssa(nir_imm_intN_t(b, 0, mov->src[0].src.reg.reg->bit_size));
+            for (int i = 0; i < intrin->num_components; i++)
+               mov->src[0].swizzle[i] = 0;
+         }
+
          mov->dest.write_mask = (1 << intrin->num_components) - 1;
+
          if (intrin->dest.is_ssa) {
             nir_ssa_dest_init(&mov->instr, &mov->dest.dest,
                               intrin->num_components,
@@ -225,6 +235,14 @@ lower_locals_to_regs_block(nir_block *block,
          b->cursor = nir_before_instr(&intrin->instr);
 
          nir_src reg_src = get_deref_reg_src(deref, state);
+
+         if (reg_src.reg.reg->num_array_elems != 0 &&
+             reg_src.reg.base_offset >= reg_src.reg.reg->num_array_elems) {
+            /* Out of bounds write, just eliminate it. */
+            nir_instr_remove(&intrin->instr);
+            state->progress = true;
+            break;
+         }
 
          nir_alu_instr *mov = nir_alu_instr_create(b->shader, nir_op_mov);
 

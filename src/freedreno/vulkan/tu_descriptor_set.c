@@ -58,6 +58,9 @@ descriptor_size(struct tu_device *dev, VkDescriptorType type)
 {
    switch (type) {
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+      if (unlikely(dev->instance->debug_flags & TU_DEBUG_DYNAMIC))
+         return A6XX_TEX_CONST_DWORDS * 4;
+
       /* Input attachment doesn't use descriptor sets at all */
       return 0;
    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
@@ -116,10 +119,10 @@ tu_CreateDescriptorSetLayout(
 
    assert(pCreateInfo->sType ==
           VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO);
-   const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT *variable_flags =
+   const VkDescriptorSetLayoutBindingFlagsCreateInfo *variable_flags =
       vk_find_struct_const(
          pCreateInfo->pNext,
-         DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT);
+         DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO);
    const VkMutableDescriptorTypeCreateInfoVALVE *mutable_info =
       vk_find_struct_const(
          pCreateInfo->pNext,
@@ -205,7 +208,7 @@ tu_CreateDescriptorSetLayout(
 
       if (variable_flags && binding->binding < variable_flags->bindingCount &&
           (variable_flags->pBindingFlags[binding->binding] &
-           VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT)) {
+           VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)) {
          assert(!binding->pImmutableSamplers); /* Terribly ill defined  how
                                                   many samplers are valid */
          assert(binding->binding == num_bindings - 1);
@@ -305,14 +308,14 @@ tu_GetDescriptorSetLayoutSupport(
       return;
    }
 
-   const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT *variable_flags =
+   const VkDescriptorSetLayoutBindingFlagsCreateInfo *variable_flags =
       vk_find_struct_const(
          pCreateInfo->pNext,
-         DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT);
-   VkDescriptorSetVariableDescriptorCountLayoutSupportEXT *variable_count =
+         DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO);
+   VkDescriptorSetVariableDescriptorCountLayoutSupport *variable_count =
       vk_find_struct(
          (void *) pCreateInfo->pNext,
-         DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT_EXT);
+         DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT);
    const VkMutableDescriptorTypeCreateInfoVALVE *mutable_info =
       vk_find_struct_const(
          pCreateInfo->pNext,
@@ -368,7 +371,7 @@ tu_GetDescriptorSetLayoutSupport(
       if (variable_flags && binding->binding < variable_flags->bindingCount &&
           variable_count &&
           (variable_flags->pBindingFlags[binding->binding] &
-           VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT)) {
+           VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)) {
          variable_count->maxVariableDescriptorCount =
             MIN2(UINT32_MAX, max_count);
       }
@@ -379,6 +382,50 @@ out:
    free(bindings);
 
    pSupport->supported = supported;
+}
+
+/* Note: we must hash any values used in tu_lower_io(). */
+
+#define SHA1_UPDATE_VALUE(ctx, x) _mesa_sha1_update(ctx, &(x), sizeof(x));
+
+static void
+sha1_update_ycbcr_sampler(struct mesa_sha1 *ctx,
+                          const struct tu_sampler_ycbcr_conversion *sampler)
+{
+   SHA1_UPDATE_VALUE(ctx, sampler->ycbcr_model);
+   SHA1_UPDATE_VALUE(ctx, sampler->ycbcr_range);
+   SHA1_UPDATE_VALUE(ctx, sampler->format);
+}
+
+static void
+sha1_update_descriptor_set_binding_layout(struct mesa_sha1 *ctx,
+   const struct tu_descriptor_set_binding_layout *layout,
+   const struct tu_descriptor_set_layout *set_layout)
+{
+   SHA1_UPDATE_VALUE(ctx, layout->type);
+   SHA1_UPDATE_VALUE(ctx, layout->offset);
+   SHA1_UPDATE_VALUE(ctx, layout->size);
+   SHA1_UPDATE_VALUE(ctx, layout->array_size);
+   SHA1_UPDATE_VALUE(ctx, layout->dynamic_offset_offset);
+   SHA1_UPDATE_VALUE(ctx, layout->immutable_samplers_offset);
+
+   const struct tu_sampler_ycbcr_conversion *ycbcr_samplers =
+      tu_immutable_ycbcr_samplers(set_layout, layout);
+
+   if (ycbcr_samplers) {
+      for (unsigned i = 0; i < layout->array_size; i++)
+         sha1_update_ycbcr_sampler(ctx, ycbcr_samplers + i);
+   }
+}
+
+
+static void
+sha1_update_descriptor_set_layout(struct mesa_sha1 *ctx,
+                                  const struct tu_descriptor_set_layout *layout)
+{
+   for (uint16_t i = 0; i < layout->binding_count; i++)
+      sha1_update_descriptor_set_binding_layout(ctx, &layout->binding[i],
+                                                layout);
 }
 
 /*
@@ -411,6 +458,8 @@ tu_CreatePipelineLayout(VkDevice _device,
    for (uint32_t set = 0; set < pCreateInfo->setLayoutCount; set++) {
       TU_FROM_HANDLE(tu_descriptor_set_layout, set_layout,
                      pCreateInfo->pSetLayouts[set]);
+
+      assert(set < MAX_SETS);
       layout->set[set].layout = set_layout;
       layout->set[set].dynamic_offset_start = dynamic_offset_size;
       tu_descriptor_set_layout_ref(set_layout);
@@ -428,6 +477,19 @@ tu_CreatePipelineLayout(VkDevice _device,
    }
 
    layout->push_constant_size = align(layout->push_constant_size, 16);
+
+   struct mesa_sha1 ctx;
+   _mesa_sha1_init(&ctx);
+   for (unsigned s = 0; s < layout->num_sets; s++) {
+      sha1_update_descriptor_set_layout(&ctx, layout->set[s].layout);
+      _mesa_sha1_update(&ctx, &layout->set[s].dynamic_offset_start,
+                        sizeof(layout->set[s].dynamic_offset_start));
+   }
+   _mesa_sha1_update(&ctx, &layout->num_sets, sizeof(layout->num_sets));
+   _mesa_sha1_update(&ctx, &layout->push_constant_size,
+                     sizeof(layout->push_constant_size));
+   _mesa_sha1_final(&ctx, layout->sha1);
+
    *pPipelineLayout = tu_pipeline_layout_to_handle(layout);
 
    return VK_SUCCESS;
@@ -765,8 +827,8 @@ tu_AllocateDescriptorSets(VkDevice _device,
    uint32_t i;
    struct tu_descriptor_set *set = NULL;
 
-   const VkDescriptorSetVariableDescriptorCountAllocateInfoEXT *variable_counts =
-      vk_find_struct_const(pAllocateInfo->pNext, DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT);
+   const VkDescriptorSetVariableDescriptorCountAllocateInfo *variable_counts =
+      vk_find_struct_const(pAllocateInfo->pNext, DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO);
    const uint32_t zero = 0;
 
    /* allocate a set of buffers for each shader to contain descriptors */
@@ -1020,6 +1082,8 @@ tu_update_descriptor_sets(const struct tu_device *device,
             break;
          case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
             /* nothing in descriptor set - framebuffer state is used instead */
+            if (unlikely(device->instance->debug_flags & TU_DEBUG_DYNAMIC))
+               write_image_descriptor(ptr, writeset->descriptorType, writeset->pImageInfo + j);
             break;
          default:
             unreachable("unimplemented descriptor type");
@@ -1092,8 +1156,7 @@ tu_CreateDescriptorUpdateTemplate(
    VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
 {
    TU_FROM_HANDLE(tu_device, device, _device);
-   TU_FROM_HANDLE(tu_descriptor_set_layout, set_layout,
-                  pCreateInfo->descriptorSetLayout);
+   struct tu_descriptor_set_layout *set_layout = NULL;
    const uint32_t entry_count = pCreateInfo->descriptorUpdateEntryCount;
    const size_t size =
       sizeof(struct tu_descriptor_update_template) +
@@ -1117,6 +1180,10 @@ tu_CreateDescriptorUpdateTemplate(
       set_layout = pipeline_layout->set[pCreateInfo->set].layout;
 
       templ->bind_point = pCreateInfo->pipelineBindPoint;
+   } else {
+      TU_FROM_HANDLE(tu_descriptor_set_layout, _set_layout,
+                     pCreateInfo->descriptorSetLayout);
+      set_layout = _set_layout;
    }
 
    for (uint32_t i = 0; i < entry_count; i++) {
@@ -1244,6 +1311,8 @@ tu_update_descriptor_set_with_template(
             break;
          case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
             /* nothing in descriptor set - framebuffer state is used instead */
+            if (unlikely(device->instance->debug_flags & TU_DEBUG_DYNAMIC))
+               write_image_descriptor(ptr, templ->entry[i].descriptor_type, src);
             break;
          default:
             unreachable("unimplemented descriptor type");

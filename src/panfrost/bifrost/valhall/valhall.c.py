@@ -38,7 +38,6 @@ SKIP = set([
         "IMUL.v4s8",
 
         # 64-bit support
-        "NOT.i64",
         "IADD.u64",
         "IADD.s64",
         "ISUB.u64",
@@ -66,19 +65,31 @@ SKIP = set([
         "CLPER.v2u16",
         "CLPER.v4u8",
 
+        # VAR_TEX
+        "VAR_TEX_SINGLE",
+        "VAR_TEX_GATHER",
+        "VAR_TEX_GRADIENT",
+        "VAR_TEX_DUAL",
+        "VAR_TEX_BUF_SINGLE",
+        "VAR_TEX_BUF_GATHER",
+        "VAR_TEX_BUF_GRADIENT",
+        "VAR_TEX_BUF_DUAL",
+
         # Special cased
         "FMA_RSCALE_N.f32",
         "FMA_RSCALE_LEFT.f32",
         "FMA_RSCALE_SCALE16.f32",
 
         # Deprecated instruction
-        "NOT.i32",
+        "NOT_OLD.i32",
+        "NOT_OLD.i64",
 
         # TODO
         "IDP.v4s8",
         "IDP.v4u8",
+        "FATAN_ASSIST.f32",
+        "SEG_ADD.u64",
         "TEX_DUAL",
-        "TODO.VAR_TEX",
     ])
 
 template = """
@@ -136,6 +147,7 @@ valhall_opcodes[BI_NUM_OPCODES] = {
         },
         .type_size = ${typesize(op.name)},
         .has_dest = ${ibool(len(op.dests) > 0)},
+        .is_signed = ${ibool(op.is_signed)},
         .unit = VA_UNIT_${op.unit},
         .nr_srcs = ${len(op.srcs)},
         .nr_staging_srcs = ${sum([sr.read for sr in op.staging])},

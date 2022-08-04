@@ -8,3 +8,8 @@ dEQP-EGL.functional.sharing.gles2.multithread.simple.programs.link
 
 glx@glx-multithread-clearbuffer
 glx@glx-multithread-shader-compile
+glx@glx-shader-sharing
+
+# The following tests started to flake after CI fix, see
+# https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/16325
+glx@glx-multi-context-single-window

@@ -1,0 +1,168 @@
+traces-db:
+  download-url: "http://192.168.40.131:8888/cache/?uri=https://minio-packet.freedesktop.org/mesa-tracie-public/"
+
+traces:
+  - path: 0ad/0ad.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 8bdca9e63f483ee71970075842f003db
+  - path: behdad-glyphy/glyphy.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: ea49462ff1545f21506dbd7b5028df45
+  - path: glmark2/desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: edd73dce91341dadad11e074048329e1
+  - path: glmark2/jellyfish.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: ab1e9d3bcbdfceb7087b2a84c8454d35
+  - path: glxgears/glxgears-2.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 2a9c5e35fa5693fd7d3a76f7b9746edb
+  - path: gputest/furmark.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 800b2be5981d7e1a6570643f7dfd9a33
+  # - path: gputest/gimark.trace
+  #   expectations:
+  #     # Requires GL 3.3
+  #     - device: broadcom-rpi4
+  #       checksum: e58167bd8eeb8952facbc00ff0449135
+  # - path: gputest/pixmark-julia-fp32.trace
+  #  expectations:
+  #    # This is flaking
+  #    - device: broadcom-rpi4
+  #      checksum: be70fc9e3829fff5ad1b6ecfb6fa551c
+  # - path: gputest/pixmark-julia-fp64.trace
+  #   expectations:
+  #     # Requires GL 4.0 (fp64)
+  #     - device: broadcom-rpi4
+  #       checksum: 7e4948c361528a7873dad9712f629770
+  - path: gputest/pixmark-volplosion.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 03f6b1c064af4e7eb117b800893cdba6
+  - path: gputest/plot3d.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: f8a9a5cd78646c89efe0df320755a3b2
+  # - path: gputest/tessmark.trace
+  #   expectations:
+  #     # Requires GL 4.0
+  #     - device: broadcom-rpi4
+  #       checksum: af356a98c4d55fb10613a11fbe687adb
+  - path: gputest/triangle.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: df6df2af5fecfa42b5c2c332b726e93c
+  # - path: humus/AmbientAperture.trace
+  #   expectations:
+  #     # Requires GLSL 1.30
+  #     - device: broadcom-rpi4
+  #       checksum: 5686175a74f9ef6a3b13d30f1bd32b16
+  - path: humus/CelShading.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 1135888a0e8723bbcded5ef9f0925964
+  # - path: humus/DynamicBranching3.trace
+  #   expectations:
+  #     # Requires GLSL 1.30
+  #     - device: broadcom-rpi4
+  #       checksum: 16e3458485d1ba75fe80f61f59d124be
+  # - path: humus/HDR.trace
+  #   expectations:
+  #     # Requires GLSL 1.30
+  #     - device: broadcom-rpi4
+  #       checksum: 0dfbc65adca38721831ffddf0ede2af6
+  - path: humus/Portals.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 269b9572113d6991cf58c96a833502bf
+  - path: humus/RaytracedShadows.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 6b572f241f4f9ee001ef849d10d03cc5
+  # - path: humus/VolumetricFogging2.trace
+  #   expectations:
+  #     # Requires GLSL 1.30
+  #     - device: broadcom-rpi4
+  #       checksum: a4f444b6ca337901ae080d8f2af812b4
+  - path: neverball/neverball.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 35ccaea492e4a865314e700b24514535
+  - path: nheko/nheko-colors.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 922597b0203ff18d6e430002bcf32ef4
+  # - path: paraview/pv-manyspheres.trace
+  #   expectations:
+  #     # Requires GL >= 3.3
+  #     - device: broadcom-rpi4
+  #       checksum: 73e5d34fb13268b0c7126297bfc34965
+  # - path: paraview/pv-waveletcontour.trace
+  #   expectations:
+  #     # Requires GL >= 3.3
+  #     - device: broadcom-rpi4
+  #       checksum: b384e3e81e4843fbd1d50e0c542e600a
+  # - path: paraview/pv-waveletvolume.trace
+  #   expectations:
+  #     # Requires GL >= 3.3
+  #     - device: broadcom-rpi4
+  #       checksum: 6ad068ac9f390bf42ab9e2db880ad07b
+  # - path: pathfinder/canvas_moire.trace
+  #   expectations:
+  #     # Requires GL 3.3
+  #     - device: broadcom-rpi4
+  #       checksum: 0e32ca8fc815a7250f38a07faeafb21b
+  # - path: pathfinder/canvas_text_v2.trace
+  #   expectations:
+  #     # Requires GL 3.3
+  #     - device: broadcom-rpi4
+  #       checksum: 448886e3b24f6408e013ea13f7c96d28
+  # - path: pathfinder/demo.trace
+  #   expectations:
+  #     # Requires GL 3.3
+  #     - device: broadcom-rpi4
+  #       checksum: d9b33f0a2efe17c21b7933242afd9ec7
+  # - path: ror/ror-default.trace
+  #   expectations:
+  #     # Expected GL 3.0, but got GL 2.1
+  #     - device: broadcom-rpi4
+  #       checksum: ff8b937b6aa03572eb947d899e4c7abb
+  - path: supertuxkart/supertuxkart-mansion-egl-gles.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 66c89a3fec11e8fc1c959fc8682a691d
+  # - path: valve/counterstrike-source-v2.trace
+  #   expectations:
+  #     # Timeout (5 min)
+  #     - device: broadcom-rpi4
+  #       checksum: 339dce29ae08569652438116829510c7
+  # - path: valve/half-life-2-v2.trace
+  #   expectations:
+  #     # Crash
+  #     - device: broadcom-rpi4
+  #       checksum: f7e6f426d7b9c82742f00baed830797f
+  - path: valve/counterstrike-v2.trace
+    expectations:
+      - device: broadcom-rpi4
+        checksum: 547f6435bf21458e518bbcb2161962ab
+  # - path: valve/half-life-2-v2.trace
+  #   expectations:
+  #     # Crash
+  #     - device: broadcom-rpi4
+  #       checksum: c67b47eeefb2b7a3b6667844758d4a95
+  # - path: valve/portal-2-v2.trace
+  #   expectations:
+  #     # Timeout (5 min)
+  #     - device: broadcom-rpi4
+  #       checksum: a3a9e158ccf7fa5ba978e045505a060e
+  # - path: xonotic/xonotic-keybench-high.trace
+  #   expectations:
+  #     # Requires GLSL 1.40
+  #     - device: broadcom-rpi4
+  #       checksum: 0efd30250af93d0b5f03eeabd079e8ee

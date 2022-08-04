@@ -927,7 +927,7 @@ wsi_display_surface_get_surface_counters(
    VkIcdSurfaceBase *surface_base,
    VkSurfaceCounterFlagsEXT *counters)
 {
-   *counters = VK_SURFACE_COUNTER_VBLANK_EXT;
+   *counters = VK_SURFACE_COUNTER_VBLANK_BIT_EXT;
    return VK_SUCCESS;
 }
 
@@ -997,7 +997,7 @@ wsi_display_surface_get_formats(VkIcdSurfaceBase *icd_surface,
    for (unsigned i = 0; i < ARRAY_SIZE(sorted_formats); i++) {
       vk_outarray_append_typed(VkSurfaceFormatKHR, &out, f) {
          f->format = sorted_formats[i];
-         f->colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+         f->colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
       }
    }
 
@@ -1021,7 +1021,7 @@ wsi_display_surface_get_formats2(VkIcdSurfaceBase *surface,
       vk_outarray_append_typed(VkSurfaceFormat2KHR, &out, f) {
          assert(f->sType == VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR);
          f->surfaceFormat.format = sorted_formats[i];
-         f->surfaceFormat.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+         f->surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
       }
    }
 
@@ -1104,11 +1104,8 @@ wsi_display_image_init(VkDevice device_h,
    memset(image->buffer, 0, sizeof (image->buffer));
 
    for (unsigned int i = 0; i < image->base.num_planes; i++) {
-      int ret = drmPrimeFDToHandle(wsi->fd, image->base.fds[i],
+      int ret = drmPrimeFDToHandle(wsi->fd, image->base.dma_buf_fd,
                                    &image->buffer[i]);
-
-      close(image->base.fds[i]);
-      image->base.fds[i] = -1;
       if (ret < 0)
          goto fail_handle;
    }
@@ -1136,10 +1133,6 @@ fail_handle:
    for (unsigned int i = 0; i < image->base.num_planes; i++) {
       if (image->buffer[i])
          wsi_display_destroy_buffer(wsi, image->buffer[i]);
-      if (image->base.fds[i] != -1) {
-         close(image->base.fds[i]);
-         image->base.fds[i] = -1;
-      }
    }
 
    wsi_destroy_image(&chain->base, &image->base);
@@ -1979,7 +1972,6 @@ wsi_display_surface_create_swapchain(
 
    result = wsi_configure_native_image(&chain->base, create_info,
                                        0, NULL, NULL,
-                                       NULL /* alloc_shm */,
                                        &chain->base.image_info);
    if (result != VK_SUCCESS) {
       vk_free(allocator, chain);

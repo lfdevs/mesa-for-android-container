@@ -39,35 +39,40 @@
 #include "tgsi/tgsi_util.h"
 #include "util/u_memory.h"
 
+
+// grow the instruction buffer by this number of instructions
+#define LP_NUM_INSTRUCTIONS 256
+
+
 /* The user is responsible for freeing list->instructions */
-unsigned lp_bld_tgsi_list_init(struct lp_build_tgsi_context * bld_base)
+unsigned
+lp_bld_tgsi_list_init(struct lp_build_tgsi_context *bld_base)
 {
    bld_base->instructions = (struct tgsi_full_instruction *)
-         MALLOC( LP_MAX_INSTRUCTIONS * sizeof(struct tgsi_full_instruction) );
+         MALLOC(LP_NUM_INSTRUCTIONS * sizeof(struct tgsi_full_instruction));
    if (!bld_base->instructions) {
       return 0;
    }
-   bld_base->max_instructions = LP_MAX_INSTRUCTIONS;
+   bld_base->max_instructions = LP_NUM_INSTRUCTIONS;
    return 1;
 }
 
 
-unsigned lp_bld_tgsi_add_instruction(
-   struct lp_build_tgsi_context * bld_base,
-   const struct tgsi_full_instruction *inst_to_add)
+unsigned
+lp_bld_tgsi_add_instruction(struct lp_build_tgsi_context *bld_base,
+                            const struct tgsi_full_instruction *inst_to_add)
 {
-
    if (bld_base->num_instructions == bld_base->max_instructions) {
-      struct tgsi_full_instruction *instructions;
-      instructions = REALLOC(bld_base->instructions, bld_base->max_instructions
-                                      * sizeof(struct tgsi_full_instruction),
-                                      (bld_base->max_instructions + LP_MAX_INSTRUCTIONS)
-                                      * sizeof(struct tgsi_full_instruction));
+      struct tgsi_full_instruction *instructions =
+         REALLOC(bld_base->instructions, bld_base->max_instructions
+                 * sizeof(struct tgsi_full_instruction),
+                 (bld_base->max_instructions + LP_NUM_INSTRUCTIONS)
+                 * sizeof(struct tgsi_full_instruction));
       if (!instructions) {
          return 0;
       }
       bld_base->instructions = instructions;
-      bld_base->max_instructions += LP_MAX_INSTRUCTIONS;
+      bld_base->max_instructions += LP_NUM_INSTRUCTIONS;
    }
    memcpy(bld_base->instructions + bld_base->num_instructions, inst_to_add,
           sizeof(bld_base->instructions[0]));
@@ -82,24 +87,24 @@ unsigned lp_bld_tgsi_add_instruction(
  * This function assumes that all the args in emit_data have been set.
  */
 static void
-lp_build_action_set_dst_type(
-   struct lp_build_emit_data * emit_data,
-   struct lp_build_tgsi_context *bld_base,
-   unsigned tgsi_opcode)
+lp_build_action_set_dst_type(struct lp_build_emit_data *emit_data,
+                             struct lp_build_tgsi_context *bld_base,
+                             unsigned tgsi_opcode)
 {
    if (emit_data->arg_count == 0) {
-      emit_data->dst_type = LLVMVoidTypeInContext(bld_base->base.gallivm->context);
+      emit_data->dst_type =
+         LLVMVoidTypeInContext(bld_base->base.gallivm->context);
    } else {
       /* XXX: Not all opcodes have the same src and dst types. */
       emit_data->dst_type = LLVMTypeOf(emit_data->args[0]);
    }
 }
 
+
 void
-lp_build_tgsi_intrinsic(
- const struct lp_build_tgsi_action * action,
- struct lp_build_tgsi_context * bld_base,
- struct lp_build_emit_data * emit_data)
+lp_build_tgsi_intrinsic(const struct lp_build_tgsi_action *action,
+                        struct lp_build_tgsi_context *bld_base,
+                        struct lp_build_emit_data *emit_data)
 {
    struct lp_build_context * base = &bld_base->base;
    emit_data->output[emit_data->chan] = lp_build_intrinsic(
@@ -107,11 +112,11 @@ lp_build_tgsi_intrinsic(
                emit_data->dst_type, emit_data->args, emit_data->arg_count, 0);
 }
 
+
 LLVMValueRef
-lp_build_emit_llvm(
-   struct lp_build_tgsi_context *bld_base,
-   unsigned tgsi_opcode,
-   struct lp_build_emit_data * emit_data)
+lp_build_emit_llvm(struct lp_build_tgsi_context *bld_base,
+                   unsigned tgsi_opcode,
+                   struct lp_build_emit_data *emit_data)
 {
    struct lp_build_tgsi_action * action = &bld_base->op_actions[tgsi_opcode];
    /* XXX: Assert that this is a componentwise or replicate instruction */
@@ -123,11 +128,11 @@ lp_build_emit_llvm(
    return emit_data->output[0];
 }
 
+
 LLVMValueRef
-lp_build_emit_llvm_unary(
-   struct lp_build_tgsi_context *bld_base,
-   unsigned tgsi_opcode,
-   LLVMValueRef arg0)
+lp_build_emit_llvm_unary(struct lp_build_tgsi_context *bld_base,
+                         unsigned tgsi_opcode,
+                         LLVMValueRef arg0)
 {
    struct lp_build_emit_data emit_data = {{0}};
    emit_data.info = tgsi_get_opcode_info(tgsi_opcode);
@@ -136,12 +141,12 @@ lp_build_emit_llvm_unary(
    return lp_build_emit_llvm(bld_base, tgsi_opcode, &emit_data);
 }
 
+
 LLVMValueRef
-lp_build_emit_llvm_binary(
-   struct lp_build_tgsi_context *bld_base,
-   unsigned tgsi_opcode,
-   LLVMValueRef arg0,
-   LLVMValueRef arg1)
+lp_build_emit_llvm_binary(struct lp_build_tgsi_context *bld_base,
+                          unsigned tgsi_opcode,
+                          LLVMValueRef arg0,
+                          LLVMValueRef arg1)
 {
    struct lp_build_emit_data emit_data = {{0}};
    emit_data.info = tgsi_get_opcode_info(tgsi_opcode);
@@ -151,13 +156,13 @@ lp_build_emit_llvm_binary(
    return lp_build_emit_llvm(bld_base, tgsi_opcode, &emit_data);
 }
 
+
 LLVMValueRef
-lp_build_emit_llvm_ternary(
-   struct lp_build_tgsi_context *bld_base,
-   unsigned tgsi_opcode,
-   LLVMValueRef arg0,
-   LLVMValueRef arg1,
-   LLVMValueRef arg2)
+lp_build_emit_llvm_ternary(struct lp_build_tgsi_context *bld_base,
+                           unsigned tgsi_opcode,
+                           LLVMValueRef arg0,
+                           LLVMValueRef arg1,
+                           LLVMValueRef arg2)
 {
    struct lp_build_emit_data emit_data = {{0}};
    emit_data.info = tgsi_get_opcode_info(tgsi_opcode);
@@ -168,22 +173,23 @@ lp_build_emit_llvm_ternary(
    return lp_build_emit_llvm(bld_base, tgsi_opcode, &emit_data);
 }
 
+
 /**
  * The default fetch implementation.
  */
-void lp_build_fetch_args(
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
+void
+lp_build_fetch_args(struct lp_build_tgsi_context *bld_base,
+                    struct lp_build_emit_data *emit_data)
 {
-   unsigned src;
-   for (src = 0; src < emit_data->info->num_src; src++) {
-      emit_data->args[src] = lp_build_emit_fetch(bld_base, emit_data->inst, src,
-                                                 emit_data->src_chan);
+   for (unsigned src = 0; src < emit_data->info->num_src; src++) {
+      emit_data->args[src] = lp_build_emit_fetch(bld_base, emit_data->inst,
+                                                 src, emit_data->src_chan);
    }
    emit_data->arg_count = emit_data->info->num_src;
    lp_build_action_set_dst_type(emit_data, bld_base,
-		emit_data->inst->Instruction.Opcode);
+                                emit_data->inst->Instruction.Opcode);
 }
+
 
 /**
  * with 64-bit src and dst channels aren't 1:1.
@@ -198,8 +204,9 @@ void lp_build_fetch_args(
  *    - map dst x,z to src xy;
  *    - map dst y,w to src zw;
  */
-static int get_src_chan_idx(enum tgsi_opcode opcode,
-                            int dst_chan_index)
+static int
+get_src_chan_idx(enum tgsi_opcode opcode,
+                 int dst_chan_index)
 {
    enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(opcode, 0);
    enum tgsi_opcode_type stype = tgsi_opcode_infer_src_type(opcode, 0);
@@ -224,18 +231,17 @@ static int get_src_chan_idx(enum tgsi_opcode opcode,
    return -1;
 }
 
+
 /* XXX: COMMENT
  * It should be assumed that this function ignores writemasks
  */
 boolean
-lp_build_tgsi_inst_llvm(
-   struct lp_build_tgsi_context * bld_base,
-   const struct tgsi_full_instruction * inst)
+lp_build_tgsi_inst_llvm(struct lp_build_tgsi_context *bld_base,
+                        const struct tgsi_full_instruction *inst)
 {
    enum tgsi_opcode opcode = inst->Instruction.Opcode;
-   const struct tgsi_opcode_info * info = tgsi_get_opcode_info(opcode);
-   const struct lp_build_tgsi_action * action =
-                                         &bld_base->op_actions[opcode];
+   const struct tgsi_opcode_info *info = tgsi_get_opcode_info(opcode);
+   const struct lp_build_tgsi_action *action = &bld_base->op_actions[opcode];
    struct lp_build_emit_data emit_data;
    unsigned chan_index;
    LLVMValueRef val;
@@ -247,7 +253,6 @@ lp_build_tgsi_inst_llvm(
 
    /* Ignore deprecated instructions */
    switch (inst->Instruction.Opcode) {
-
    case TGSI_OPCODE_UP2US:
    case TGSI_OPCODE_UP4B:
    case TGSI_OPCODE_UP4UB:
@@ -266,12 +271,12 @@ lp_build_tgsi_inst_llvm(
 
    assert(info->num_dst <= 2);
    if (info->num_dst) {
-      TGSI_FOR_EACH_DST0_ENABLED_CHANNEL( inst, chan_index ) {
+      TGSI_FOR_EACH_DST0_ENABLED_CHANNEL(inst, chan_index) {
          emit_data.output[chan_index] = bld_base->base.undef;
       }
 
       if (info->num_dst >= 2) {
-         TGSI_FOR_EACH_DST1_ENABLED_CHANNEL( inst, chan_index ) {
+         TGSI_FOR_EACH_DST1_ENABLED_CHANNEL(inst, chan_index) {
             emit_data.output1[chan_index] = bld_base->base.undef;
          }
       }
@@ -336,11 +341,10 @@ lp_build_tgsi_inst_llvm(
 
 
 LLVMValueRef
-lp_build_emit_fetch_src(
-   struct lp_build_tgsi_context *bld_base,
-   const struct tgsi_full_src_register *reg,
-   enum tgsi_opcode_type stype,
-   const unsigned chan_index)
+lp_build_emit_fetch_src(struct lp_build_tgsi_context *bld_base,
+                        const struct tgsi_full_src_register *reg,
+                        enum tgsi_opcode_type stype,
+                        const unsigned chan_index)
 {
    unsigned swizzle;
    LLVMValueRef res;
@@ -399,7 +403,7 @@ lp_build_emit_fetch_src(
       case TGSI_TYPE_FLOAT:
       case TGSI_TYPE_UNTYPED:
          /* modifiers on movs assume data is float */
-         res = lp_build_negate( &bld_base->base, res );
+         res = lp_build_negate(&bld_base->base, res);
          break;
       case TGSI_TYPE_DOUBLE:
          /* no double build context */
@@ -407,11 +411,11 @@ lp_build_emit_fetch_src(
          break;
       case TGSI_TYPE_SIGNED:
       case TGSI_TYPE_UNSIGNED:
-         res = lp_build_negate( &bld_base->int_bld, res );
+         res = lp_build_negate(&bld_base->int_bld, res);
          break;
       case TGSI_TYPE_SIGNED64:
       case TGSI_TYPE_UNSIGNED64:
-         res = lp_build_negate( &bld_base->int64_bld, res );
+         res = lp_build_negate(&bld_base->int64_bld, res);
          break;
       case TGSI_TYPE_VOID:
       default:
@@ -437,11 +441,10 @@ lp_build_emit_fetch_src(
 
 
 LLVMValueRef
-lp_build_emit_fetch(
-   struct lp_build_tgsi_context *bld_base,
-   const struct tgsi_full_instruction *inst,
-   unsigned src_op,
-   const unsigned chan_index)
+lp_build_emit_fetch(struct lp_build_tgsi_context *bld_base,
+                    const struct tgsi_full_instruction *inst,
+                    unsigned src_op,
+                    const unsigned chan_index)
 {
    const struct tgsi_full_src_register *reg = &inst->Src[src_op];
    enum tgsi_opcode_type stype =
@@ -452,11 +455,10 @@ lp_build_emit_fetch(
 
 
 LLVMValueRef
-lp_build_emit_fetch_texoffset(
-   struct lp_build_tgsi_context *bld_base,
-   const struct tgsi_full_instruction *inst,
-   unsigned tex_off_op,
-   const unsigned chan_index)
+lp_build_emit_fetch_texoffset(struct lp_build_tgsi_context *bld_base,
+                              const struct tgsi_full_instruction *inst,
+                              unsigned tex_off_op,
+                              const unsigned chan_index)
 {
    const struct tgsi_texture_offset *off = &inst->TexOffsets[tex_off_op];
    struct tgsi_full_src_register reg;
@@ -503,17 +505,13 @@ lp_build_emit_fetch_texoffset(
    }
 
    return res;
-
 }
 
 
 boolean
-lp_build_tgsi_llvm(
-   struct lp_build_tgsi_context * bld_base,
-   const struct tgsi_token *tokens)
+lp_build_tgsi_llvm(struct lp_build_tgsi_context *bld_base,
+                   const struct tgsi_token *tokens)
 {
-   struct tgsi_parse_context parse;
-
    if (bld_base->emit_prologue) {
       bld_base->emit_prologue(bld_base);
    }
@@ -522,30 +520,27 @@ lp_build_tgsi_llvm(
       return FALSE;
    }
 
-   tgsi_parse_init( &parse, tokens );
+   struct tgsi_parse_context parse;
+   tgsi_parse_init(&parse, tokens);
 
-   while( !tgsi_parse_end_of_tokens( &parse ) ) {
-      tgsi_parse_token( &parse );
+   while(!tgsi_parse_end_of_tokens(&parse)) {
+      tgsi_parse_token(&parse);
 
-      switch( parse.FullToken.Token.Type ) {
+      switch(parse.FullToken.Token.Type) {
       case TGSI_TOKEN_TYPE_DECLARATION:
          /* Inputs already interpolated */
          bld_base->emit_declaration(bld_base, &parse.FullToken.FullDeclaration);
          break;
-
       case TGSI_TOKEN_TYPE_INSTRUCTION:
          lp_bld_tgsi_add_instruction(bld_base, &parse.FullToken.FullInstruction);
          break;
-
       case TGSI_TOKEN_TYPE_IMMEDIATE:
          bld_base->emit_immediate(bld_base, &parse.FullToken.FullImmediate);
          break;
-
       case TGSI_TOKEN_TYPE_PROPERTY:
          break;
-
       default:
-         assert( 0 );
+         assert(0);
       }
    }
 

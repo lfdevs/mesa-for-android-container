@@ -73,7 +73,7 @@ debug_sampler_recompile(const struct brw_compiler *c, void *log,
    found |= check("ayuv image bound", ayuv_image_mask);
    found |= check("xyuv image bound", xyuv_image_mask);
 
-   for (unsigned i = 0; i < MAX_SAMPLERS; i++) {
+   for (unsigned i = 0; i < BRW_MAX_SAMPLERS; i++) {
       found |= check("EXT_texture_swizzle or DEPTH_TEXTURE_MODE", swizzles[i]);
       found |= check("textureGather workarounds", gfx6_gather_wa[i]);
       found |= check_float("scale factor", scale_factors[i]);

@@ -43,6 +43,20 @@ fs_visitor::validate()
 {
 #ifndef NDEBUG
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
+      if (inst->opcode == SHADER_OPCODE_URB_WRITE_LOGICAL) {
+         const unsigned header_size = 1 +
+            unsigned(inst->src[URB_LOGICAL_SRC_PER_SLOT_OFFSETS].file != BAD_FILE) +
+            unsigned(inst->src[URB_LOGICAL_SRC_CHANNEL_MASK].file != BAD_FILE);
+
+         unsigned data_size = 0;
+         for (unsigned i = header_size, j = 0; i < inst->mlen; i++, j++) {
+            fsv_assert(type_sz(offset(inst->src[URB_LOGICAL_SRC_DATA], bld, j).type) == 4);
+            data_size++;
+         }
+
+         fsv_assert(header_size + data_size == inst->mlen);
+      }
+
       if (inst->dst.file == VGRF) {
          fsv_assert(inst->dst.offset / REG_SIZE + regs_written(inst) <=
                     alloc.sizes[inst->dst.nr]);

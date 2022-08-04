@@ -71,6 +71,8 @@
 #define GFX12_OAG_PERF_A32(idx)            (0xda80 + (idx) * 4)
 #define GFX12_OAG_PERF_B32(idx)            (0xda94 + (idx) * 4)
 #define GFX12_OAG_PERF_C32(idx)            (0xdab4 + (idx) * 4)
+#define GFX125_OAG_PERF_A36                (0xdb20)
+#define GFX125_OAG_PERF_A37                (0xdb28)
 
 /* Pipeline statistic counters */
 #define IA_VERTICES_COUNT          0x2310

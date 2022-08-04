@@ -227,10 +227,14 @@ ADDR_E_RETURNCODE Lib::Create(
                         break;
                     case FAMILY_NV:
                     case FAMILY_VGH:
-                    case FAMILY_YC:
+                    case FAMILY_RMB:
                     case FAMILY_GC_10_3_6:
                     case FAMILY_GC_10_3_7:
                         pLib = Gfx10HwlInit(&client);
+                        break;
+                    case FAMILY_GFX1100:
+                    case FAMILY_GFX1103:
+                        pLib = Gfx11HwlInit(&client);
                         break;
                     default:
                         ADDR_ASSERT_ALWAYS();

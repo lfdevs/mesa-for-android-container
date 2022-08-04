@@ -277,6 +277,41 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
 {
    struct nir_builder *nb = &b->nb;
    const struct glsl_type *dest_type = vtn_get_type(b, w[1])->type;
+   struct vtn_value *dest_val = vtn_untyped_value(b, w[2]);
+
+   bool mediump_16bit;
+   switch (entrypoint) {
+   case GLSLstd450PackSnorm4x8:
+   case GLSLstd450PackUnorm4x8:
+   case GLSLstd450PackSnorm2x16:
+   case GLSLstd450PackUnorm2x16:
+   case GLSLstd450PackHalf2x16:
+   case GLSLstd450PackDouble2x32:
+   case GLSLstd450UnpackSnorm4x8:
+   case GLSLstd450UnpackUnorm4x8:
+   case GLSLstd450UnpackSnorm2x16:
+   case GLSLstd450UnpackUnorm2x16:
+   case GLSLstd450UnpackHalf2x16:
+   case GLSLstd450UnpackDouble2x32:
+      /* Asking for relaxed precision snorm 4x8 pack results (for example)
+       * doesn't even make sense.  The NIR opcodes have a fixed output size, so
+       * no trying to reduce precision.
+       */
+      mediump_16bit = false;
+      break;
+
+   case GLSLstd450Frexp:
+   case GLSLstd450FrexpStruct:
+   case GLSLstd450Modf:
+   case GLSLstd450ModfStruct:
+      /* Not sure how to detect the ->elems[i] destinations on these in vtn_upconvert_value(). */
+      mediump_16bit = false;
+      break;
+
+   default:
+      mediump_16bit = b->options->mediump_16bit_alu && vtn_value_is_relaxed_precision(b, dest_val);
+      break;
+   }
 
    /* Collect the various SSA sources */
    unsigned num_inputs = count - 5;
@@ -287,9 +322,14 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
          continue;
 
       src[i] = vtn_get_nir_ssa(b, w[i + 5]);
+      if (mediump_16bit) {
+         struct vtn_ssa_value *vtn_src = vtn_ssa_value(b, w[i + 5]);
+         src[i] = vtn_mediump_downconvert(b, glsl_get_base_type(vtn_src->type), src[i]);
+      }
    }
 
    struct vtn_ssa_value *dest = vtn_create_ssa_value(b, dest_type);
+
    vtn_handle_no_contraction(b, vtn_untyped_value(b, w[2]));
    switch (entrypoint) {
    case GLSLstd450Radians:
@@ -588,6 +628,9 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
    }
    }
    b->nb.exact = false;
+
+   if (mediump_16bit)
+      vtn_mediump_upconvert_value(b, dest);
 
    vtn_push_ssa_value(b, w[2], dest);
 }

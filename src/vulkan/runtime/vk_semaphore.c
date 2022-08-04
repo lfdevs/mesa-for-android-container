@@ -313,7 +313,7 @@ vk_common_WaitSemaphores(VkDevice _device,
 
       waits[i] = (struct vk_sync_wait) {
          .sync = vk_semaphore_get_active_sync(semaphore),
-         .stage_mask = ~(VkPipelineStageFlags2KHR)0,
+         .stage_mask = ~(VkPipelineStageFlags2)0,
          .wait_value = pWaitInfo->pValues[i],
       };
    }

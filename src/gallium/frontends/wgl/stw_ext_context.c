@@ -76,10 +76,12 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
    int majorVersion = 1, minorVersion = 0, layerPlane = 0;
    int contextFlags = 0x0;
    int profileMask = WGL_CONTEXT_CORE_PROFILE_BIT_ARB;
+   int resetStrategy = WGL_NO_RESET_NOTIFICATION_ARB;
    int i;
    BOOL done = FALSE;
    const int contextFlagsAll = (WGL_CONTEXT_DEBUG_BIT_ARB |
-                                WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB);
+                                WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB |
+                                WGL_CONTEXT_ROBUST_ACCESS_BIT_ARB);
 
    /* parse attrib_list */
    if (attribList) {
@@ -99,6 +101,9 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
             break;
          case WGL_CONTEXT_PROFILE_MASK_ARB:
             profileMask = attribList[++i];
+            break;
+         case WGL_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB:
+            resetStrategy = attribList[++i];
             break;
          case 0:
             /* end of list */
@@ -148,6 +153,12 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
        majorVersion < 3) {
       SetLastError(ERROR_INVALID_VERSION_ARB);
       return 0;
+   }
+
+   if (resetStrategy != WGL_NO_RESET_NOTIFICATION_ARB &&
+       resetStrategy != WGL_LOSE_CONTEXT_ON_RESET_ARB) {
+      SetLastError(ERROR_INVALID_PARAMETER);
+      return NULL;
    }
 
    /* Get pointer to OPENGL32.DLL's wglCreate/DeleteContext() functions */
@@ -201,7 +212,8 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
 
       struct stw_context *stw_ctx = stw_create_context_attribs(hDC, layerPlane, share_stw,
                                                                majorVersion, minorVersion,
-                                                               contextFlags, profileMask, 0);
+                                                               contextFlags, profileMask, 0,
+                                                               resetStrategy);
 
       if (!stw_ctx) {
          wglDeleteContext_func(context);

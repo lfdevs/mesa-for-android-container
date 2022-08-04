@@ -23,6 +23,7 @@
 
 #include "nir.h"
 #include "nir_control_flow.h"
+#include "nir_xfb_info.h"
 
 /* Secret Decoder Ring:
  *   clone_foo():
@@ -330,6 +331,7 @@ clone_deref_instr(clone_state *state, const nir_deref_instr *deref)
    case nir_deref_type_ptr_as_array:
       __clone_src(state, &nderef->instr,
                   &nderef->arr.index, &deref->arr.index);
+      nderef->arr.in_bounds = deref->arr.in_bounds;
       break;
 
    case nir_deref_type_array_wildcard:
@@ -447,7 +449,7 @@ clone_phi(clone_state *state, const nir_phi_instr *phi, nir_block *nblk)
     */
    nir_instr_insert_after_block(nblk, &nphi->instr);
 
-   foreach_list_typed(nir_phi_src, src, node, &phi->srcs) {
+   nir_foreach_phi_src(src, phi) {
       nir_phi_src *nsrc = nir_phi_instr_add_src(nphi, src->pred, src->src);
 
       /* Stash it in the list of phi sources.  We'll walk this list and fix up
@@ -783,6 +785,12 @@ nir_shader_clone(void *mem_ctx, const nir_shader *s)
    if (s->constant_data_size > 0) {
       ns->constant_data = ralloc_size(ns, s->constant_data_size);
       memcpy(ns->constant_data, s->constant_data, s->constant_data_size);
+   }
+
+   if (s->xfb_info) {
+      size_t size = nir_xfb_info_size(s->xfb_info->output_count);
+      ns->xfb_info = ralloc_size(ns, size);
+      memcpy(ns->xfb_info, s->xfb_info, size);
    }
 
    free_clone_state(&state);

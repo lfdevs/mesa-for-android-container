@@ -58,6 +58,7 @@ struct lp_velems_state;
 struct llvmpipe_context {
    struct pipe_context pipe;  /**< base class */
 
+   struct list_head list;
    /** Constant state objects */
    const struct pipe_blend_state *blend;
    struct pipe_sampler_state *samplers[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];

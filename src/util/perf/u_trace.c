@@ -108,6 +108,139 @@ struct u_trace_chunk {
    bool free_flush_data;
 };
 
+struct u_trace_printer {
+   void (*start)(struct u_trace_context *utctx);
+   void (*end)(struct u_trace_context *utctx);
+   void (*start_of_frame)(struct u_trace_context *utctx);
+   void (*end_of_frame)(struct u_trace_context *utctx);
+   void (*start_of_batch)(struct u_trace_context *utctx);
+   void (*end_of_batch)(struct u_trace_context *utctx);
+   void (*event)(struct u_trace_context *utctx,
+                 struct u_trace_chunk *chunk,
+                 const struct u_trace_event *evt,
+                 uint64_t ns, int32_t delta);
+};
+
+static void
+print_txt_start(struct u_trace_context *utctx)
+{
+
+}
+
+static void
+print_txt_end_of_frame(struct u_trace_context *utctx)
+{
+   fprintf(utctx->out, "END OF FRAME %u\n", utctx->frame_nr);
+}
+
+static void
+print_txt_start_of_batch(struct u_trace_context *utctx)
+{
+   fprintf(utctx->out, "+----- NS -----+ +-- Δ --+  +----- MSG -----\n");
+}
+
+static void
+print_txt_end_of_batch(struct u_trace_context *utctx)
+{
+   uint64_t elapsed = utctx->last_time_ns - utctx->first_time_ns;
+   fprintf(utctx->out, "ELAPSED: %"PRIu64" ns\n", elapsed);
+}
+
+static void
+print_txt_event(struct u_trace_context *utctx,
+                struct u_trace_chunk *chunk,
+                const struct u_trace_event *evt,
+                uint64_t ns, int32_t delta)
+{
+   if (evt->tp->print) {
+      fprintf(utctx->out, "%016"PRIu64" %+9d: %s: ", ns, delta, evt->tp->name);
+      evt->tp->print(utctx->out, evt->payload);
+   } else {
+      fprintf(utctx->out, "%016"PRIu64" %+9d: %s\n", ns, delta, evt->tp->name);
+   }
+}
+
+static struct u_trace_printer txt_printer = {
+   .start = &print_txt_start,
+   .end = &print_txt_start,
+   .start_of_frame = &print_txt_start,
+   .end_of_frame = &print_txt_end_of_frame,
+   .start_of_batch = &print_txt_start_of_batch,
+   .end_of_batch = &print_txt_end_of_batch,
+   .event = &print_txt_event,
+};
+
+static void
+print_json_start(struct u_trace_context *utctx)
+{
+   fprintf(utctx->out, "[\n");
+}
+
+static void
+print_json_end(struct u_trace_context *utctx)
+{
+   fprintf(utctx->out, "\n]");
+}
+
+static void
+print_json_start_of_frame(struct u_trace_context *utctx)
+{
+   if (utctx->frame_nr != 0)
+      fprintf(utctx->out, ",\n");
+   fprintf(utctx->out, "{\n\"frame\": %u,\n", utctx->frame_nr);
+   fprintf(utctx->out, "\"batches\": [\n");
+}
+
+static void
+print_json_end_of_frame(struct u_trace_context *utctx)
+{
+   fprintf(utctx->out, "]\n}\n");
+   fflush(utctx->out);
+}
+
+static void
+print_json_start_of_batch(struct u_trace_context *utctx)
+{
+   if (utctx->batch_nr != 0)
+      fprintf(utctx->out, ",\n");
+   fprintf(utctx->out, "{\n\"events\": [\n");
+}
+
+static void
+print_json_end_of_batch(struct u_trace_context *utctx)
+{
+   uint64_t elapsed = utctx->last_time_ns - utctx->first_time_ns;
+   fprintf(utctx->out, "],\n");
+   fprintf(utctx->out, "\"duration_ns\": %"PRIu64"\n", elapsed);
+   fprintf(utctx->out, "}\n");
+}
+
+static void
+print_json_event(struct u_trace_context *utctx,
+                 struct u_trace_chunk *chunk,
+                 const struct u_trace_event *evt,
+                 uint64_t ns, int32_t delta)
+{
+   if (utctx->event_nr != 0)
+      fprintf(utctx->out, ",\n");
+   fprintf(utctx->out, "{\n\"event\": \"%s\",\n", evt->tp->name);
+   fprintf(utctx->out, "\"time_ns\": \"%016"PRIu64"\",\n", ns);
+   fprintf(utctx->out, "\"params\": {");
+   if (evt->tp->print)
+      evt->tp->print_json(utctx->out, evt->payload);
+   fprintf(utctx->out, "}\n}\n");
+}
+
+static struct u_trace_printer json_printer = {
+   .start = print_json_start,
+   .end = print_json_end,
+   .start_of_frame = &print_json_start_of_frame,
+   .end_of_frame = &print_json_end_of_frame,
+   .start_of_batch = &print_json_start_of_batch,
+   .end_of_batch = &print_json_end_of_batch,
+   .event = &print_json_event,
+};
+
 static struct u_trace_payload_buf *
 u_trace_payload_buf_create(void)
 {
@@ -222,6 +355,7 @@ get_chunk(struct u_trace *ut, size_t payload_size)
 DEBUG_GET_ONCE_BOOL_OPTION(trace_instrument, "GPU_TRACE_INSTRUMENT", false)
 DEBUG_GET_ONCE_BOOL_OPTION(trace, "GPU_TRACE", false)
 DEBUG_GET_ONCE_FILE_OPTION(trace_file, "GPU_TRACEFILE", NULL, "w")
+DEBUG_GET_ONCE_OPTION(trace_format, "GPU_TRACE_FORMAT", "txt")
 
 static FILE *
 get_tracefile(void)
@@ -277,10 +411,20 @@ u_trace_context_init(struct u_trace_context *utctx,
    utctx->last_time_ns = 0;
    utctx->first_time_ns = 0;
    utctx->frame_nr = 0;
+   utctx->batch_nr = 0;
+   utctx->event_nr = 0;
+   utctx->start_of_frame = true;
 
    list_inithead(&utctx->flushed_trace_chunks);
 
    utctx->out = get_tracefile();
+
+   const char *trace_format = debug_get_option_trace_format();
+   if (strcmp(trace_format, "json") == 0) {
+      utctx->out_printer = &json_printer;
+   } else {
+      utctx->out_printer = &txt_printer;
+   }
 
 #ifdef HAVE_PERFETTO
    list_add(&utctx->node, &ctx_list);
@@ -290,6 +434,10 @@ u_trace_context_init(struct u_trace_context *utctx,
       return;
 
    queue_init(utctx);
+
+   if (utctx->out) {
+      utctx->out_printer->start(utctx);
+   }
 }
 
 void
@@ -298,11 +446,16 @@ u_trace_context_fini(struct u_trace_context *utctx)
 #ifdef HAVE_PERFETTO
    list_del(&utctx->node);
 #endif
+
+   if (utctx->out) {
+      utctx->out_printer->end(utctx);
+      fflush(utctx->out);
+   }
+
    if (!utctx->queue.jobs)
       return;
    util_queue_finish(&utctx->queue);
    util_queue_destroy(&utctx->queue);
-   fflush(utctx->out);
    free_chunks(&utctx->flushed_trace_chunks);
 }
 
@@ -329,9 +482,20 @@ process_chunk(void *job, void *gdata, int thread_index)
    struct u_trace_chunk *chunk = job;
    struct u_trace_context *utctx = chunk->utctx;
 
+   if (utctx->start_of_frame) {
+      utctx->start_of_frame = false;
+      utctx->batch_nr = 0;
+      if (utctx->out) {
+         utctx->out_printer->start_of_frame(utctx);
+      }
+   }
+
    /* For first chunk of batch, accumulated times will be zerod: */
-   if (utctx->out && !utctx->last_time_ns) {
-      fprintf(utctx->out, "+----- NS -----+ +-- Δ --+  +----- MSG -----\n");
+   if (!utctx->last_time_ns) {
+      utctx->event_nr = 0;
+      if (utctx->out) {
+         utctx->out_printer->start_of_batch(utctx);
+      }
    }
 
    for (unsigned idx = 0; idx < chunk->num_traces; idx++) {
@@ -358,36 +522,37 @@ process_chunk(void *job, void *gdata, int thread_index)
       }
 
       if (utctx->out) {
-         if (evt->tp->print) {
-            fprintf(utctx->out, "%016"PRIu64" %+9d: %s: ", ns, delta, evt->tp->name);
-            evt->tp->print(utctx->out, evt->payload);
-         } else {
-            fprintf(utctx->out, "%016"PRIu64" %+9d: %s\n", ns, delta, evt->tp->name);
-         }
+         utctx->out_printer->event(utctx, chunk, evt, ns, delta);
       }
 #ifdef HAVE_PERFETTO
       if (evt->tp->perfetto) {
          evt->tp->perfetto(utctx->pctx, ns, chunk->flush_data, evt->payload);
       }
 #endif
+
+      utctx->event_nr++;
    }
 
    if (chunk->last) {
       if (utctx->out) {
-         uint64_t elapsed = utctx->last_time_ns - utctx->first_time_ns;
-         fprintf(utctx->out, "ELAPSED: %"PRIu64" ns\n", elapsed);
+         utctx->out_printer->end_of_batch(utctx);
       }
 
+      utctx->batch_nr++;
       utctx->last_time_ns = 0;
       utctx->first_time_ns = 0;
    }
 
-   if (chunk->free_flush_data && utctx->delete_flush_data) {
-      utctx->delete_flush_data(utctx, chunk->flush_data);
+   if (chunk->eof) {
+      if (utctx->out) {
+         utctx->out_printer->end_of_frame(utctx);
+      }
+      utctx->frame_nr++;
+      utctx->start_of_frame = true;
    }
 
-   if (utctx->out && chunk->eof) {
-      fprintf(utctx->out, "END OF FRAME %u\n", utctx->frame_nr++);
+   if (chunk->free_flush_data && utctx->delete_flush_data) {
+      utctx->delete_flush_data(utctx, chunk->flush_data);
    }
 }
 
@@ -454,6 +619,9 @@ u_trace_begin_iterator(struct u_trace *ut)
    if (!ut->enabled)
       return (struct u_trace_iterator) {NULL, NULL, 0};
 
+   if (list_is_empty(&ut->trace_chunks))
+      return (struct u_trace_iterator) { ut, NULL, 0 };
+
    struct u_trace_chunk *first_chunk =
       list_first_entry(&ut->trace_chunks, struct u_trace_chunk, node);
 
@@ -466,16 +634,35 @@ u_trace_end_iterator(struct u_trace *ut)
    if (!ut->enabled)
       return (struct u_trace_iterator) {NULL, NULL, 0};
 
+   if (list_is_empty(&ut->trace_chunks))
+      return (struct u_trace_iterator) { ut, NULL, 0 };
+
    struct u_trace_chunk *last_chunk =
       list_last_entry(&ut->trace_chunks, struct u_trace_chunk, node);
 
    return (struct u_trace_iterator) { ut, last_chunk, last_chunk->num_traces};
 }
 
+/* If an iterator was created when there were no chunks and there are now
+ * chunks, "sanitize" it to include the first chunk.
+ */
+static struct u_trace_iterator
+sanitize_iterator(struct u_trace_iterator iter)
+{
+   if (iter.ut && !iter.chunk && !list_is_empty(&iter.ut->trace_chunks)) {
+      iter.chunk = list_first_entry(&iter.ut->trace_chunks, struct
+                                    u_trace_chunk, node);
+   }
+
+   return iter;
+}
+
 bool
 u_trace_iterator_equal(struct u_trace_iterator a,
                        struct u_trace_iterator b)
 {
+   a = sanitize_iterator(a);
+   b = sanitize_iterator(b);
    return a.ut == b.ut &&
           a.chunk == b.chunk &&
           a.event_idx == b.event_idx;
@@ -488,6 +675,9 @@ u_trace_clone_append(struct u_trace_iterator begin_it,
                      void *cmdstream,
                      u_trace_copy_ts_buffer copy_ts_buffer)
 {
+   begin_it = sanitize_iterator(begin_it);
+   end_it = sanitize_iterator(end_it);
+
    struct u_trace_chunk *from_chunk = begin_it.chunk;
    uint32_t from_idx = begin_it.event_idx;
 
@@ -528,7 +718,7 @@ u_trace_clone_append(struct u_trace_iterator begin_it,
             break;
 
          from_idx = 0;
-         from_chunk = LIST_ENTRY(struct u_trace_chunk, from_chunk->node.next, node);
+         from_chunk = list_entry(from_chunk->node.next, struct u_trace_chunk, node);
       }
    }
 }
@@ -537,6 +727,9 @@ void
 u_trace_disable_event_range(struct u_trace_iterator begin_it,
                             struct u_trace_iterator end_it)
 {
+   begin_it = sanitize_iterator(begin_it);
+   end_it = sanitize_iterator(end_it);
+
    struct u_trace_chunk *current_chunk = begin_it.chunk;
    uint32_t start_idx = begin_it.event_idx;
 
@@ -544,7 +737,7 @@ u_trace_disable_event_range(struct u_trace_iterator begin_it,
       memset(&current_chunk->traces[start_idx], 0,
              (current_chunk->num_traces - start_idx) * sizeof(struct u_trace_event));
       start_idx = 0;
-      current_chunk = LIST_ENTRY(struct u_trace_chunk, current_chunk->node.next, node);
+      current_chunk = list_entry(current_chunk->node.next, struct u_trace_chunk, node);
    }
 
    memset(&current_chunk->traces[start_idx], 0,

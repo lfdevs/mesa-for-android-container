@@ -27,6 +27,10 @@ traces:
         checksum: f7e6f426d7b9c82742f00baed830797f
       - device: freedreno-a630
         checksum: 14f7656971b98fdaaf00bf576ada7ccf
+      # ../src/mesa/main/renderbuffer.c:606:_mesa_update_renderbuffer_surface: Assertion `level <= resource->last_level' failed.
+      # https://gitlab.freedesktop.org/mesa/mesa/-/issues/6744
+      # - device: zink-a630
+      #   checksum: affab10e98c1415747b1dc38eb7f7d7d
   - path: valve/portal-2-v2.trace
     expectations:
       # Skipped since it's slow even on a530.
@@ -38,16 +42,24 @@ traces:
       # Floor splatter rendering failure, probably the same alpha test issue.
       - device: freedreno-a630
         checksum: a3a9e158ccf7fa5ba978e045505a060e
+      # big white region compared to freedreno.
+      # https://gitlab.freedesktop.org/mesa/mesa/-/issues/6240
+      - device: zink-a630
+        checksum: 373766698cc531aa52075a7e83086b0a
   - path: valve/counterstrike-source-v2.trace
     expectations:
       # Skipped since it's slow even on a530.
       # - device: freedreno-a306
       #   checksum: 4b707f385256b380c936186db8c251cb
-      # 1 minute
+      # 1 minute.  Broken minimap rendering since around !14643
       - device: freedreno-a530
-        checksum: a71d62bb2c0fabeca41468628777b441
+        checksum: a00c5007c26daab3eccb778e68fb2730
       - device: freedreno-a630
         checksum: 339dce29ae08569652438116829510c7
+      # ../src/mesa/main/renderbuffer.c:606:_mesa_update_renderbuffer_surface: Assertion `level <= resource->last_level' failed.
+      # https://gitlab.freedesktop.org/mesa/mesa/-/issues/6744
+      # - device: zink-a630
+      #   checksum: dc9a01cfe6f2e542756b4892d80ef49c
   - path: xonotic/xonotic-keybench-high.trace
     expectations:
       # Skipped since it's long on a530.
@@ -58,6 +70,8 @@ traces:
       #   checksum: 0fcb5afdad37f08b3f5bf26fbba752c1
       - device: freedreno-a630
         checksum: 0efd30250af93d0b5f03eeabd079e8ee
+      - device: zink-a630
+        checksum: 947da2890506f363d3aef0d1a981eec6
   - path: supertuxkart/supertuxkart-mansion-egl-gles.trace
     expectations:
       # Skipped since it's long on a530.
@@ -68,6 +82,8 @@ traces:
       #   checksum: 1ae49af7017ae2a08fbb1caf377ada91
       - device: freedreno-a630
         checksum: 47016a34553e5a28e2e1e0b92d11c92f
+      - device: zink-a630
+        checksum: 7ad069adec81baa8f249c45c0f4eec7a
   - path: 0ad/0ad.trace
     expectations:
       # triggers hangcheck on db410c
@@ -78,6 +94,9 @@ traces:
       #   checksum: b007061e6e93020ddf2aff6a0f32ed72
       - device: freedreno-a630
         checksum: c846e0721b7e7576e523eab6d3129e9c
+      # 5 minute timeout
+      # - device: zink-a630
+      #   checksum: c846e0721b7e7576e523eab6d3129e9c
   - path: valve/counterstrike-v2.trace
     expectations:
 # With the addition of userspace fences we start feeding the GPU fast
@@ -90,6 +109,8 @@ traces:
       #   checksum: 14e78caf29b6a3341081c8f2e678355f
       - device: freedreno-a630
         checksum: c8608d54cc6298476a2b60686d152dbc
+      - device: zink-a630
+        checksum: e4e5415f7a81a6bd14b7ff8f67083cbf
   # Disabled on all devices due to:
   # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4595
   # - path: minetest/minetest.trace
@@ -112,6 +133,8 @@ traces:
       #   checksum: 2a53e6086588f4675ae3dcda9f26603b
       - device: freedreno-a630
         checksum: 730692659fbb9eefa44d6b1a2df2fa8e
+      - device: zink-a630
+        checksum: 5a97da6dbb6c10d615f92030c03d116c
   - path: behdad-glyphy/glyphy.trace
     expectations:
       - device: freedreno-a306
@@ -119,6 +142,8 @@ traces:
       - device: freedreno-a530
         checksum: 3a37faf7ec62d48dada63f157f30d876
       - device: freedreno-a630
+        checksum: d25edb433abfcde517b626b3071906ff
+      - device: zink-a630
         checksum: d25edb433abfcde517b626b3071906ff
   - path: glmark2/buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false.trace
     expectations:
@@ -272,7 +297,7 @@ traces:
       - device: freedreno-a306
         checksum: c31e4b18d29e87751e4c30760ddfef18
       - device: freedreno-a530
-        checksum: 3272ac6018600da9cc61636416ed387e
+        checksum: a68a23264fb802d59c92b3a58753e6a4
       - device: freedreno-a630
         checksum: 2570e22fbb4ad1a68b45e4caf682d77d
   - path: glmark2/jellyfish.trace
@@ -334,8 +359,8 @@ traces:
     expectations:
       - device: freedreno-a306
         checksum: 7d3ee3db4f209066c380f1dcce2d4603
-    # Some speckling on the main specular highlight on a530/a630 that may just be
-    # mediump artifacts
+      # Some speckling on the main specular highlight on a530/a630 that may just be
+      # mediump artifacts
       - device: freedreno-a530
         checksum: 77018ae203d254fdb563de95f41cfb92
       - device: freedreno-a630
@@ -360,8 +385,8 @@ traces:
     expectations:
       - device: freedreno-a306
         checksum: 087367cffd0d45bec5622aa08fa75058
-    # Some speckling on the main specular highlight on a530/a630 that may just be
-    # mediump artifacts
+      # Some speckling on the main specular highlight on a530/a630 that may just be
+      # mediump artifacts
       - device: freedreno-a530
         checksum: 1fddb03346295d4a33e43f8762fc16b4
       - device: freedreno-a630
@@ -418,16 +443,22 @@ traces:
         checksum: ba53d1ffbe911171546a93259fb2e57c
       - device: freedreno-a630
         checksum: 313ef615f0f5a11eeaf95a2a87769a32
-# Note: Requires GL3.3
+      - device: zink-a630
+        checksum: fe317b1f69f9a2f3e20bf51f63753d2a
+  # Note: Requires GL3.3
   - path: gputest/gimark.trace
     expectations:
       - device: freedreno-a630
+        checksum: e58167bd8eeb8952facbc00ff0449135
+      - device: zink-a630
         checksum: e58167bd8eeb8952facbc00ff0449135
   - path: gputest/pixmark-julia-fp32.trace
     expectations:
       - device: freedreno-a630
         checksum: f83f7ad4b147607e2a7de65a48f8ed4d
-# Note: Requires GL4 (fp64).
+      - device: zink-a630
+        checksum: f83f7ad4b147607e2a7de65a48f8ed4d
+  # Note: Requires GL4 (fp64).
 #  - path: gputest/pixmark-julia-fp64.trace
 #    expectations:
 #      - device: freedreno-a630
@@ -449,6 +480,8 @@ traces:
       # Looks fine, but totally different shape from the rendering on i965.
       - device: freedreno-a630
         checksum: e4da2cf366cb68833569105d37aaa50d
+      - device: zink-a630
+        checksum: dbd6130eeae3eb6d5df73f3069beae28
   - path: gputest/plot3d.trace
     expectations:
       - device: freedreno-a306
@@ -457,10 +490,14 @@ traces:
         checksum: 4faafe5fab0d8ec6d7b549c94f663c92
       - device: freedreno-a630
         checksum: 0a6a16c394a413f02ec2ebcc3251e366
-# Note: Requires GL4 for tess.
+      - device: zink-a630
+        checksum: 42ec4a9cae7fe1eac6f8472269140fe5
+  # Note: Requires GL4 for tess.
   - path: gputest/tessmark.trace
     expectations:
       - device: freedreno-a630
+        checksum: af356a98c4d55fb10613a11fbe687adb
+      - device: zink-a630
         checksum: af356a98c4d55fb10613a11fbe687adb
   - path: gputest/triangle.trace
     expectations:
@@ -470,6 +507,8 @@ traces:
         checksum: a7142cfb819f5f45863ccca75a5e26a5
       - device: freedreno-a630
         checksum: 2cbd1de2e9ed281b3cd19c957858c81a
+      - device: zink-a630
+        checksum: 2cbd1de2e9ed281b3cd19c957858c81a
   - path: humus/AmbientAperture.trace
     expectations:
       - device: freedreno-a306
@@ -478,6 +517,8 @@ traces:
         checksum: aab5c853e383e1cda56663d65f6925ad
       - device: freedreno-a630
         checksum: 83fd7bce0fc1e1f30bd143b7d30ca890
+      - device: zink-a630
+        checksum: 5263f9d22462a6f48f5ca9e91d146f06
   - path: humus/CelShading.trace
     expectations:
       # Z or stencil failures or something on the cel shading outlines on a306
@@ -487,6 +528,10 @@ traces:
         checksum: c424072f305db125ffd9e3f5bebcb512
       - device: freedreno-a630
         checksum: b0ac8fb4b2b2268cfb87944730125886
+      # 0-width lines instead of wide, because tu doesn't expose wide lines
+      # (commit d8099df65a6bf25feb8971ac38d0400daea76ffc)
+      - device: zink-a630
+        checksum: bd713b79eaa2a7ebbf4ebebab3577e40
   - path: humus/DynamicBranching3.trace
     expectations:
       - device: freedreno-a306
@@ -494,6 +539,8 @@ traces:
       - device: freedreno-a530
         checksum: f4aa0730942c471759d6f9b929b9122a
       - device: freedreno-a630
+        checksum: 238f06550db39c36e5b880d3b3d7440f
+      - device: zink-a630
         checksum: 238f06550db39c36e5b880d3b3d7440f
   - path: humus/HDR.trace
     expectations:
@@ -504,6 +551,8 @@ traces:
         checksum: 22e849b9c7a91869729f4d2b73681d75
       - device: freedreno-a630
         checksum: 40387a4e89ef71c472a94413b175ff59
+      - device: zink-a630
+        checksum: d570eaea17c3f9bf1ad24c4af3836524
   # Started producing flaky results near that old gap in the upper right once
   # the parallel trace runner landed.
   #- path: humus/Portals.trace
@@ -519,6 +568,8 @@ traces:
         checksum: 0fb847eb10e74da0483a17e782f2a22a
       - device: freedreno-a630
         checksum: 5f1a655e62eab99d53dab88b634afed3
+      - device: zink-a630
+        checksum: 5f1a655e62eab99d53dab88b634afed3
   - path: humus/VolumetricFogging2.trace
     expectations:
       - device: freedreno-a306
@@ -526,6 +577,8 @@ traces:
       - device: freedreno-a530
         checksum: fa6ec09d80a2c42e3ed49f87b608e0c4
       - device: freedreno-a630
+        checksum: e5d2b54f49ba1c24279d5ff84e0f002b
+      - device: zink-a630
         checksum: e5d2b54f49ba1c24279d5ff84e0f002b
 # Unstable results
 #  - path: itoral-gl-terrain-demo/demo.trace
@@ -537,31 +590,94 @@ traces:
       # a306/a530 would need higher GL version to run
       - device: freedreno-a630
         checksum: 5567434cd44c5deda19e7a9619e1c8fd
+      - device: zink-a630
+        checksum: 5567434cd44c5deda19e7a9619e1c8fd
   - path: paraview/pv-waveletcontour.trace
     expectations:
       # a306/a530 would need higher GL version to run
       - device: freedreno-a630
+        checksum: 5ce2fde8189c8ef6665994fa9bed4cfc
+      - device: zink-a630
         checksum: 5ce2fde8189c8ef6665994fa9bed4cfc
   - path: paraview/pv-waveletvolume.trace
     expectations:
       # a306/a530 would need higher GL version to run
       - device: freedreno-a630
         checksum: dd05d3e98eb93c0e520c1359de18e9fb
+      - device: zink-a630
+        checksum: dd05d3e98eb93c0e520c1359de18e9fb
   - path: pathfinder/canvas_moire.trace
     expectations:
       # a306/a530 would need higher GL version to run
       - device: freedreno-a630
+        checksum: 0e32ca8fc815a7250f38a07faeafb21b
+      - device: zink-a630
         checksum: 0e32ca8fc815a7250f38a07faeafb21b
   - path: pathfinder/canvas_text_v2.trace
     expectations:
       # a306/a530 would need higher GL version to run
       - device: freedreno-a630
         checksum: c163253b33a93577600e2f1c0571737c
+      - device: zink-a630
+        checksum: c163253b33a93577600e2f1c0571737c
   - path: pathfinder/demo.trace
     expectations:
       # a306/a530 would need higher GL version to run
       - device: freedreno-a630
         checksum: f6661ed4de9e0a444c6338ebd0cd3768
+      - device: zink-a630
+        checksum: f6661ed4de9e0a444c6338ebd0cd3768
+  #- path: ror/ror-default.trace
+  #  expectations:
+      # crash
+      #- device: freedreno-a530
+      #  checksum: 0
+      # broken shadows
+      #- device: freedreno-a630
+      #  checksum: 0
+  #- path: nheko/nheko-colors.trace
+  #  expectations:
+      # timeout
+      #- device: freedreno-a530
+      #  checksum: 0
+      #- device: freedreno-a630
+      #  checksum: cd908b6ee9e79472716976854fbbcb21
+  #- path: blender/blender-demo-cube_diorama.trace
+  #  expectations:
+      # needs GL 4.5
+      #- device: freedreno-a530
+      # crash
+      #- device: freedreno-a630
+  #- path: blender/blender-demo-ellie_pose.trace
+  #  expectations:
+      # needs GL 4.5
+      #- device: freedreno-a530
+      # crash
+      #- device: freedreno-a630
+  - path: freedoom/freedoom-phase2-gl-high.trace
+    expectations:
+      # needs GL 4.6
+      #- device: freedreno-a530
+      - device: freedreno-a630
+        checksum: 2b96947d3eb3f623c4a387b2b7f80300
+  - path: unvanquished/unvanquished-lowest.trace
+    expectations:
+      # error: waffle_context_create failed
+      #- device: freedreno-a530
+      - device: freedreno-a630
+        checksum: ae37867b1a9a94d2be9ff6c7e2009813
+  - path: unvanquished/unvanquished-ultra.trace
+    expectations:
+      # error: waffle_context_create failed
+      #- device: freedreno-a530
+      - device: freedreno-a630
+        checksum: a71d1ad391162acef60cbb2804d0cf64
+  - path: warzone2100/warzone2100-default.trace
+    expectations:
+      # error: GLSL 1.50 is not supported.
+      #- device: freedreno-a530
+      - device: freedreno-a630
+        checksum: 85c2d8129d761db4d9332790f694431a
 #  Throws "Invalid state in _mesa_program_state_string" and
 #  GL_INVALID_OPERATION in glBindTexture(target mismatch), fails to produce
 #  a .png at all.  Renders fine on radeonsi.

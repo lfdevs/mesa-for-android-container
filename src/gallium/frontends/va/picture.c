@@ -86,6 +86,14 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
           context->target->buffer_format != PIPE_FORMAT_P016)
          return VA_STATUS_ERROR_UNIMPLEMENTED;
 
+      if (drv->pipe->screen->get_video_param(drv->pipe->screen,
+                              PIPE_VIDEO_PROFILE_UNKNOWN,
+                              PIPE_VIDEO_ENTRYPOINT_PROCESSING,
+                              PIPE_VIDEO_CAP_SUPPORTED)) {
+         context->needs_begin_frame = true;
+         context->vpp_needs_flush_on_endpic = true;
+      }
+
       return VA_STATUS_SUCCESS;
    }
 
@@ -822,6 +830,12 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
    } else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE &&
               u_reduce_video_profile(context->templat.profile) == PIPE_VIDEO_FORMAT_HEVC)
       context->desc.h265enc.frame_num++;
+   else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING &&
+            context->vpp_needs_flush_on_endpic) {
+      context->decoder->flush(context->decoder);
+      context->vpp_needs_flush_on_endpic = false;
+   }
+
    mtx_unlock(&drv->mutex);
    return VA_STATUS_SUCCESS;
 }

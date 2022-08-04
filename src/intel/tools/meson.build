@@ -135,7 +135,7 @@ if with_tools.contains('drm-shim')
   )
 
   libintel_stub_gpu = shared_library(
-    ['intel_noop_drm_shim'],
+    'intel_noop_drm_shim',
     'intel_noop_drm_shim.c',
     include_directories: [inc_include, inc_src, inc_intel],
     link_with: libintel_dev,

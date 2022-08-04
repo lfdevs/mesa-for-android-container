@@ -181,8 +181,6 @@ files_libgallium = files(
   'tgsi/tgsi_dynamic_indexing.c',
   'tgsi/tgsi_exec.c',
   'tgsi/tgsi_exec.h',
-  'tgsi/tgsi_emulate.c',
-  'tgsi/tgsi_emulate.h',
   'tgsi/tgsi_from_mesa.c',
   'tgsi/tgsi_from_mesa.h',
   'tgsi/tgsi_info.c',
@@ -240,8 +238,6 @@ files_libgallium = files(
   'util/u_debug_image.h',
   'util/u_dirty_flags.h',
   'util/u_dirty_surfaces.h',
-  'util/u_dl.c',
-  'util/u_dl.h',
   'util/u_draw.c',
   'util/u_draw.h',
   'util/u_draw_quad.c',
@@ -272,7 +268,6 @@ files_libgallium = files(
   'util/u_network.c',
   'util/u_network.h',
   'util/u_pack_color.h',
-  'util/u_pointer.h',
   'util/u_prim.h',
   'util/u_prim.c',
   'util/u_prim_restart.c',
@@ -426,6 +421,8 @@ endif
 files_libgalliumvl = files(
   'vl/vl_bicubic_filter.c',
   'vl/vl_bicubic_filter.h',
+  'vl/vl_codec.c',
+  'vl/vl_codec.h',
   'vl/vl_compositor.c',
   'vl/vl_compositor.h',
   'vl/vl_compositor_gfx.c',
@@ -473,6 +470,12 @@ if with_dri2 and with_platform_x11
     ]
     files_libgalliumvlwinsys += files('vl/vl_winsys_dri3.c')
   endif
+endif
+
+if with_glx == 'xlib' or with_glx == 'gallium-xlib'
+  files_libgalliumvlwinsys += files('vl/vl_winsys_xlib_swrast.c')
+else
+  files_libgalliumvlwinsys += files('vl/vl_winsys_dri_vgem.c')
 endif
 
 prog_enums2names = files('driver_trace/enums2names.py')

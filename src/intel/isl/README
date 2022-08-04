@@ -102,7 +102,7 @@ Errata
 ISL acquired the term 'surface element' from the Broadwell PRM [1], which
 defines it as follows:
 
-   An element is defined as a pixel in uncompresed surface formats, and as
+   An element is defined as a pixel in uncompressed surface formats, and as
    a compression block in compressed surface formats. For MSFMT_DEPTH_STENCIL
    type multisampled surfaces, an element is a sample.
 

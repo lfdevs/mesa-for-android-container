@@ -131,7 +131,7 @@ struct amdgpu_cs {
    struct amdgpu_ib main; /* must be first because this is inherited */
    struct amdgpu_winsys *ws;
    struct amdgpu_ctx *ctx;
-   enum ring_type ring_type;
+   enum amd_ip_type ip_type;
    struct drm_amdgpu_cs_chunk_fence fence_chunk;
 
    /* We flip between these two CS. While one is being consumed

@@ -268,6 +268,7 @@ struct r600_gs_rings_state {
 #define DBG_SB_DISASM	(1 << 27)
 #define DBG_SB_SAFEMATH	(1 << 28)
 #define DBG_NIR_SB	(1 << 28)
+#define DBG_USE_TGSI	(1 << 29)
 
 #define DBG_NIR_PREFERRED (DBG_NIR_SB | DBG_NIR)
 
@@ -684,11 +685,11 @@ evergreen_create_sampler_view_custom(struct pipe_context *ctx,
 				     unsigned force_level);
 void evergreen_init_common_regs(struct r600_context *ctx,
 				struct r600_command_buffer *cb,
-				enum chip_class ctx_chip_class,
+				enum amd_gfx_level ctx_chip_class,
 				enum radeon_family ctx_family,
 				int ctx_drm_minor);
 void cayman_init_common_regs(struct r600_command_buffer *cb,
-			     enum chip_class ctx_chip_class,
+			     enum amd_gfx_level ctx_chip_class,
 			     enum radeon_family ctx_family,
 			     int ctx_drm_minor);
 
@@ -850,7 +851,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen, enum pipe_format f
 				  const unsigned char *swizzle_view,
 				  uint32_t *word4_p, uint32_t *yuv_format_p,
 				  bool do_endian_swap);
-uint32_t r600_translate_colorformat(enum chip_class chip, enum pipe_format format,
+uint32_t r600_translate_colorformat(enum amd_gfx_level chip, enum pipe_format format,
 				  bool do_endian_swap);
 uint32_t r600_colorformat_endian_swap(uint32_t colorformat, bool do_endian_swap);
 

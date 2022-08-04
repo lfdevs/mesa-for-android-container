@@ -69,20 +69,26 @@ panvk_image_create(VkDevice _device,
                    const VkSubresourceLayout *plane_layouts)
 {
    VK_FROM_HANDLE(panvk_device, device, _device);
-   const struct panfrost_device *pdev = &device->physical_device->pdev;
    struct panvk_image *image = NULL;
 
    image = vk_image_create(&device->vk, pCreateInfo, alloc, sizeof(*image));
    if (!image)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   pan_image_layout_init(pdev, &image->pimage.layout, modifier,
-                         vk_format_to_pipe_format(image->vk.format),
-                         panvk_image_type_to_mali_tex_dim(image->vk.image_type),
-                         image->vk.extent.width, image->vk.extent.height,
-                         image->vk.extent.depth, image->vk.array_layers,
-                         image->vk.samples, image->vk.mip_levels,
-                         PAN_IMAGE_CRC_NONE, NULL);
+   image->pimage.layout = (struct pan_image_layout) {
+      .modifier = modifier,
+      .format = vk_format_to_pipe_format(image->vk.format),
+      .dim = panvk_image_type_to_mali_tex_dim(image->vk.image_type),
+      .width = image->vk.extent.width,
+      .height = image->vk.extent.height,
+      .depth = image->vk.extent.depth,
+      .array_size = image->vk.array_layers,
+      .nr_samples = image->vk.samples,
+      .nr_slices = image->vk.mip_levels,
+      .crc_mode = PAN_IMAGE_CRC_NONE
+   };
+
+   pan_image_layout_init(&image->pimage.layout, NULL);
 
    *pImage = panvk_image_to_handle(image);
    return VK_SUCCESS;
@@ -241,7 +247,7 @@ panvk_GetImageSubresourceLayout(VkDevice _device,
                      (pSubresource->arrayLayer *
                       image->pimage.layout.array_stride);
    pLayout->size = slice_layout->size;
-   pLayout->rowPitch = slice_layout->line_stride;
+   pLayout->rowPitch = slice_layout->row_stride;
    pLayout->arrayPitch = image->pimage.layout.array_stride;
    pLayout->depthPitch = slice_layout->surface_stride;
 }

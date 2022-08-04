@@ -225,9 +225,8 @@ lower_rt_io_and_scratch(nir_shader *nir)
 static void
 build_terminate_ray(nir_builder *b)
 {
-   nir_ssa_def *skip_closest_hit =
-      nir_i2b(b, nir_iand_imm(b, nir_load_ray_flags(b),
-                              BRW_RT_RAY_FLAG_SKIP_CLOSEST_HIT_SHADER));
+   nir_ssa_def *skip_closest_hit = nir_test_mask(b, nir_load_ray_flags(b),
+      BRW_RT_RAY_FLAG_SKIP_CLOSEST_HIT_SHADER);
    nir_push_if(b, skip_closest_hit);
    {
       /* The shader that calls traceRay() is unable to access any ray hit
@@ -308,9 +307,8 @@ lower_ray_walk_intrinsics(nir_shader *shader,
          case nir_intrinsic_accept_ray_intersection: {
             b.cursor = nir_instr_remove(&intrin->instr);
 
-            nir_ssa_def *terminate =
-               nir_i2b(&b, nir_iand_imm(&b, nir_load_ray_flags(&b),
-                                        BRW_RT_RAY_FLAG_TERMINATE_ON_FIRST_HIT));
+            nir_ssa_def *terminate = nir_test_mask(&b, nir_load_ray_flags(&b),
+               BRW_RT_RAY_FLAG_TERMINATE_ON_FIRST_HIT);
             nir_push_if(&b, terminate);
             {
                build_terminate_ray(&b);

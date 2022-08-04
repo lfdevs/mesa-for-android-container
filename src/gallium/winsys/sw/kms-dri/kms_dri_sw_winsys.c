@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <limits.h>
+#include <errno.h>
 
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -192,8 +193,10 @@ kms_sw_displaytarget_create(struct sw_winsys *ws,
    create_req.width = width;
    create_req.height = height;
    ret = drmIoctl(kms_sw->fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_req);
-   if (ret)
+   if (ret) {
+      fprintf(stderr, "KMS: DRM_IOCTL_MODE_CREATE_DUMB failed: %s\n", strerror(errno));
       goto free_bo;
+   }
 
    kms_sw_dt->size = create_req.size;
    kms_sw_dt->handle = create_req.handle;

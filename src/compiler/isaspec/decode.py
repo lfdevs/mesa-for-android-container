@@ -145,7 +145,7 @@ static const struct isa_case ${case.get_c_name()}_gen_${bitset.gen_min} = {
             .enums = &${isa.enums[field.type].get_c_name()},
 %      endif
 %      if field.get_c_typename() == 'TYPE_ASSERT':
-            .val.bitset = { ${', '.join(isa.split_bits(field.val))} },
+            .val.bitset = { ${', '.join(isa.split_bits(field.val, 32))} },
 %      endif
           },
 %   endfor
@@ -162,9 +162,9 @@ static const struct isa_bitset bitset_${bitset.get_c_name()}_gen_${bitset.gen_mi
            .min  = ${bitset.get_gen_min()},
            .max  = ${bitset.get_gen_max()},
        },
-       .match.bitset    = { ${', '.join(isa.split_bits(pattern.match))} },
-       .dontcare.bitset = { ${', '.join(isa.split_bits(pattern.dontcare))} },
-       .mask.bitset     = { ${', '.join(isa.split_bits(pattern.mask))} },
+       .match.bitset    = { ${', '.join(isa.split_bits(pattern.match, 32))} },
+       .dontcare.bitset = { ${', '.join(isa.split_bits(pattern.dontcare, 32))} },
+       .mask.bitset     = { ${', '.join(isa.split_bits(pattern.mask, 32))} },
        .num_cases = ${len(bitset.cases)},
        .cases    = {
 %   for case in bitset.cases:

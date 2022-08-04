@@ -285,7 +285,7 @@ setup_imm_df(const vec4_builder &bld, double v)
    const intel_device_info *devinfo = bld.shader->devinfo;
    assert(devinfo->ver == 7);
 
-   /* gfx7.5 does not support DF immediates straighforward but the DIM
+   /* gfx7.5 does not support DF immediates straightforward but the DIM
     * instruction allows to set the 64-bit immediate value.
     */
    if (devinfo->verx10 == 75) {
@@ -851,7 +851,7 @@ emit_find_msb_using_lzd(const vec4_builder &bld,
        * For all negative number cases, including 0x80000000 and
        * 0xffffffff, the correct value is obtained from LZD if instead of
        * negating the (already negative) value the logical-not is used.  A
-       * conditonal logical-not can be achieved in two instructions.
+       * conditional logical-not can be achieved in two instructions.
        */
       temp = src_reg(bld.vgrf(BRW_REGISTER_TYPE_D));
 
@@ -1302,7 +1302,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
        * turn that into a predicate.  This leads us to an XOR.l instruction.
        *
        * Technically, according to the PRM, you're not allowed to use .l on a
-       * XOR instruction.  However, emperical experiments and Curro's reading
+       * XOR instruction.  However, empirical experiments and Curro's reading
        * of the simulator source both indicate that it's safe.
        */
       src_reg tmp = src_reg(this, glsl_type::ivec4_type);
@@ -1897,10 +1897,10 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_fdiv:
-      unreachable("not reached: should be lowered by DIV_TO_MUL_RCP in the compiler");
+      unreachable("not reached: should be lowered by lower_fdiv in the compiler");
 
    case nir_op_fmod:
-      unreachable("not reached: should be lowered by MOD_TO_FLOOR in the compiler");
+      unreachable("not reached: should be lowered by lower_fmod in the compiler");
 
    case nir_op_fsub:
    case nir_op_isub:

@@ -29,12 +29,46 @@
 #include "radv_cs.h"
 #include "radv_meta.h"
 
+#include "radix_sort/radv_radix_sort.h"
+
+/* Min and max bounds of the bvh used to compute morton codes */
+#define SCRATCH_TOTAL_BOUNDS_SIZE (6 * sizeof(float))
+
+enum accel_struct_build {
+   accel_struct_build_unoptimized,
+   accel_struct_build_lbvh,
+};
+
+static enum accel_struct_build
+get_accel_struct_build(const struct radv_physical_device *pdevice,
+                       VkAccelerationStructureBuildTypeKHR buildType)
+{
+   return buildType == VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR
+             ? accel_struct_build_lbvh
+             : accel_struct_build_unoptimized;
+}
+
+static uint32_t
+get_node_id_stride(enum accel_struct_build build_mode)
+{
+   switch (build_mode) {
+   case accel_struct_build_unoptimized:
+      return 4;
+   case accel_struct_build_lbvh:
+      return 8;
+   default:
+      unreachable("Unhandled accel_struct_build!");
+   }
+}
+
 VKAPI_ATTR void VKAPI_CALL
 radv_GetAccelerationStructureBuildSizesKHR(
    VkDevice _device, VkAccelerationStructureBuildTypeKHR buildType,
    const VkAccelerationStructureBuildGeometryInfoKHR *pBuildInfo,
    const uint32_t *pMaxPrimitiveCounts, VkAccelerationStructureBuildSizesInfoKHR *pSizeInfo)
 {
+   RADV_FROM_HANDLE(radv_device, device, _device);
+
    uint64_t triangles = 0, boxes = 0, instances = 0;
 
    STATIC_ASSERT(sizeof(struct radv_bvh_triangle_node) == 64);
@@ -66,22 +100,42 @@ radv_GetAccelerationStructureBuildSizesKHR(
    }
 
    uint64_t children = boxes + instances + triangles;
-   uint64_t internal_nodes = 0;
+   /* Initialize to 1 to have enought space for the root node. */
+   uint64_t internal_nodes = 1;
    while (children > 1) {
       children = DIV_ROUND_UP(children, 4);
       internal_nodes += children;
    }
 
-   /* The stray 128 is to ensure we have space for a header
-    * which we'd want to use for some metadata (like the
-    * total AABB of the BVH) */
-   uint64_t size = boxes * 128 + instances * 128 + triangles * 64 + internal_nodes * 128 + 192;
+   uint64_t size = boxes * 128 + instances * 128 + triangles * 64 + internal_nodes * 128 +
+                   ALIGN(sizeof(struct radv_accel_struct_header), 64);
 
    pSizeInfo->accelerationStructureSize = size;
 
-   /* 2x the max number of nodes in a BVH layer (one uint32_t each) */
-   pSizeInfo->updateScratchSize = pSizeInfo->buildScratchSize =
-      MAX2(4096, 2 * (boxes + instances + triangles) * sizeof(uint32_t));
+   /* 2x the max number of nodes in a BVH layer and order information for sorting when using
+    * LBVH (one uint32_t each, two buffers) plus space to store the bounds.
+    * LBVH is only supported for device builds and hardware that supports global atomics.
+    */
+   enum accel_struct_build build_mode = get_accel_struct_build(device->physical_device, buildType);
+   uint32_t node_id_stride = get_node_id_stride(build_mode);
+
+   uint32_t leaf_count = boxes + instances + triangles;
+   VkDeviceSize scratchSize = 2 * leaf_count * node_id_stride;
+
+   if (build_mode == accel_struct_build_lbvh) {
+      radix_sort_vk_memory_requirements_t requirements;
+      radix_sort_vk_get_memory_requirements(device->meta_state.accel_struct_build.radix_sort,
+                                            leaf_count, &requirements);
+
+      /* Make sure we have the space required by the radix sort. */
+      scratchSize = MAX2(scratchSize, requirements.keyvals_size * 2);
+
+      scratchSize += requirements.internal_size + SCRATCH_TOTAL_BOUNDS_SIZE;
+   }
+
+   scratchSize = MAX2(4096, scratchSize);
+   pSizeInfo->updateScratchSize = scratchSize;
+   pSizeInfo->buildScratchSize = scratchSize;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -139,7 +193,7 @@ radv_WriteAccelerationStructuresPropertiesKHR(
    size_t dataSize, void *pData, size_t stride)
 {
    RADV_FROM_HANDLE(radv_device, device, _device);
-   char *data_out = (char*)pData;
+   char *data_out = (char *)pData;
 
    for (uint32_t i = 0; i < accelerationStructureCount; ++i) {
       RADV_FROM_HANDLE(radv_acceleration_structure, accel, pAccelerationStructures[i]);
@@ -147,7 +201,7 @@ radv_WriteAccelerationStructuresPropertiesKHR(
       if (!base_ptr)
          return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-      const struct radv_accel_struct_header *header = (const void*)(base_ptr + accel->mem_offset);
+      const struct radv_accel_struct_header *header = (const void *)(base_ptr + accel->mem_offset);
       if (stride * i + sizeof(VkDeviceSize) <= dataSize) {
          uint64_t value;
          switch (queryType) {
@@ -156,6 +210,12 @@ radv_WriteAccelerationStructuresPropertiesKHR(
             break;
          case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
             value = header->serialization_size;
+            break;
+         case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
+            value = header->instance_count;
+            break;
+         case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
+            value = header->size;
             break;
          default:
             unreachable("Unhandled acceleration structure query");
@@ -196,7 +256,7 @@ build_triangles(struct radv_bvh_build_ctx *ctx, const VkAccelerationStructureGeo
    }
 
    for (uint32_t p = 0; p < range->primitiveCount; ++p, ctx->curr_ptr += 64) {
-      struct radv_bvh_triangle_node *node = (void*)ctx->curr_ptr;
+      struct radv_bvh_triangle_node *node = (void *)ctx->curr_ptr;
       uint32_t node_offset = ctx->curr_ptr - ctx->base;
       uint32_t node_id = node_offset >> 3;
       *ctx->write_scratch++ = node_id;
@@ -356,9 +416,9 @@ build_instances(struct radv_device *device, struct radv_bvh_build_ctx *ctx,
          continue;
       }
 
-      struct radv_bvh_instance_node *node = (void*)ctx->curr_ptr;
+      struct radv_bvh_instance_node *node = (void *)ctx->curr_ptr;
       uint32_t node_offset = ctx->curr_ptr - ctx->base;
-      uint32_t node_id = (node_offset >> 3) | 6;
+      uint32_t node_id = (node_offset >> 3) | radv_bvh_node_instance;
       *ctx->write_scratch++ = node_id;
 
       float transform[16], inv_transform[16];
@@ -412,9 +472,9 @@ build_aabbs(struct radv_bvh_build_ctx *ctx, const VkAccelerationStructureGeometr
    const VkAccelerationStructureGeometryAabbsDataKHR *aabb_data = &geom->geometry.aabbs;
 
    for (uint32_t p = 0; p < range->primitiveCount; ++p, ctx->curr_ptr += 64) {
-      struct radv_bvh_aabb_node *node = (void*)ctx->curr_ptr;
+      struct radv_bvh_aabb_node *node = (void *)ctx->curr_ptr;
       uint32_t node_offset = ctx->curr_ptr - ctx->base;
-      uint32_t node_id = (node_offset >> 3) | 7;
+      uint32_t node_id = (node_offset >> 3) | radv_bvh_node_aabb;
       *ctx->write_scratch++ = node_id;
 
       const VkAabbPositionsKHR *aabb =
@@ -452,8 +512,8 @@ compute_bounds(const char *base_ptr, uint32_t node_id, float *bounds)
       bounds[3 + i] = -INFINITY;
 
    switch (node_id & 7) {
-   case 0: {
-      const struct radv_bvh_triangle_node *node = (const void*)(base_ptr + (node_id / 8 * 64));
+   case radv_bvh_node_triangle: {
+      const struct radv_bvh_triangle_node *node = (const void *)(base_ptr + (node_id / 8 * 64));
       for (unsigned v = 0; v < 3; ++v) {
          for (unsigned j = 0; j < 3; ++j) {
             bounds[j] = MIN2(bounds[j], node->coords[v][j]);
@@ -462,8 +522,8 @@ compute_bounds(const char *base_ptr, uint32_t node_id, float *bounds)
       }
       break;
    }
-   case 5: {
-      const struct radv_bvh_box32_node *node = (const void*)(base_ptr + (node_id / 8 * 64));
+   case radv_bvh_node_internal: {
+      const struct radv_bvh_box32_node *node = (const void *)(base_ptr + (node_id / 8 * 64));
       for (unsigned c2 = 0; c2 < 4; ++c2) {
          if (isnan(node->coords[c2][0][0]))
             continue;
@@ -474,16 +534,16 @@ compute_bounds(const char *base_ptr, uint32_t node_id, float *bounds)
       }
       break;
    }
-   case 6: {
-      const struct radv_bvh_instance_node *node = (const void*)(base_ptr + (node_id / 8 * 64));
+   case radv_bvh_node_instance: {
+      const struct radv_bvh_instance_node *node = (const void *)(base_ptr + (node_id / 8 * 64));
       for (unsigned j = 0; j < 3; ++j) {
          bounds[j] = MIN2(bounds[j], node->aabb[0][j]);
          bounds[3 + j] = MAX2(bounds[3 + j], node->aabb[1][j]);
       }
       break;
    }
-   case 7: {
-      const struct radv_bvh_aabb_node *node = (const void*)(base_ptr + (node_id / 8 * 64));
+   case radv_bvh_node_aabb: {
+      const struct radv_bvh_aabb_node *node = (const void *)(base_ptr + (node_id / 8 * 64));
       for (unsigned j = 0; j < 3; ++j) {
          bounds[j] = MIN2(bounds[j], node->aabb[0][j]);
          bounds[3 + j] = MAX2(bounds[3 + j], node->aabb[1][j]);
@@ -567,6 +627,24 @@ optimize_bvh(const char *base_ptr, uint32_t *node_ids, uint32_t node_count)
    free(entries);
 }
 
+static void
+fill_accel_struct_header(struct radv_accel_struct_header *header)
+{
+   /* 16 bytes per invocation, 64 invocations per workgroup */
+   header->copy_dispatch_size[0] = DIV_ROUND_UP(header->compacted_size, 16 * 64);
+   header->copy_dispatch_size[1] = 1;
+   header->copy_dispatch_size[2] = 1;
+
+   header->serialization_size =
+      header->compacted_size + align(sizeof(struct radv_accel_struct_serialization_header) +
+                                        sizeof(uint64_t) * header->instance_count,
+                                     128);
+
+   header->size = header->serialization_size -
+                  sizeof(struct radv_accel_struct_serialization_header) -
+                  sizeof(uint64_t) * header->instance_count;
+}
+
 static VkResult
 build_bvh(struct radv_device *device, const VkAccelerationStructureBuildGeometryInfoKHR *info,
           const VkAccelerationStructureBuildRangeInfoKHR *ranges)
@@ -578,12 +656,12 @@ build_bvh(struct radv_device *device, const VkAccelerationStructureBuildGeometry
    scratch[0] = info->scratchData.hostAddress;
    scratch[1] = scratch[0] + leaf_node_count(info, ranges);
 
-   char *base_ptr = (char*)device->ws->buffer_map(accel->bo);
+   char *base_ptr = (char *)device->ws->buffer_map(accel->bo);
    if (!base_ptr)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    base_ptr = base_ptr + accel->mem_offset;
-   struct radv_accel_struct_header *header = (void*)base_ptr;
+   struct radv_accel_struct_header *header = (void *)base_ptr;
    void *first_node_ptr = (char *)base_ptr + ALIGN(sizeof(*header), 64);
 
    struct radv_bvh_build_ctx ctx = {.write_scratch = scratch[0],
@@ -665,7 +743,7 @@ build_bvh(struct radv_device *device, const VkAccelerationStructureBuildGeometry
             uint32_t dst_id = (ctx.curr_ptr - base_ptr) / 64;
             dst_ids[dst_count] = dst_id * 8 + 5;
 
-            node = (void*)ctx.curr_ptr;
+            node = (void *)ctx.curr_ptr;
             ctx.curr_ptr += 128;
          }
 
@@ -691,15 +769,7 @@ build_bvh(struct radv_device *device, const VkAccelerationStructureBuildGeometry
    header->instance_count = instance_count;
    header->compacted_size = (char *)ctx.curr_ptr - base_ptr;
 
-   /* 16 bytes per invocation, 64 invocations per workgroup */
-   header->copy_dispatch_size[0] = DIV_ROUND_UP(header->compacted_size, 16 * 64);
-   header->copy_dispatch_size[1] = 1;
-   header->copy_dispatch_size[2] = 1;
-
-   header->serialization_size =
-      header->compacted_size + align(sizeof(struct radv_accel_struct_serialization_header) +
-                                        sizeof(uint64_t) * header->instance_count,
-                                     128);
+   fill_accel_struct_header(header);
 
 fail:
    device->ws->buffer_unmap(accel->bo);
@@ -752,6 +822,19 @@ radv_CopyAccelerationStructureKHR(VkDevice _device, VkDeferredOperationKHR defer
    return VK_SUCCESS;
 }
 
+static nir_builder
+create_accel_build_shader(struct radv_device *device, const char *name)
+{
+   nir_builder b = radv_meta_init_shader(device, MESA_SHADER_COMPUTE, "%s", name);
+   b.shader->info.workgroup_size[0] = 64;
+
+   assert(b.shader->info.workgroup_size[1] == 1);
+   assert(b.shader->info.workgroup_size[2] == 1);
+   assert(!b.shader->info.workgroup_size_variable);
+
+   return b;
+}
+
 static nir_ssa_def *
 get_indices(nir_builder *b, nir_ssa_def *addr, nir_ssa_def *type, nir_ssa_def *id)
 {
@@ -760,14 +843,13 @@ get_indices(nir_builder *b, nir_ssa_def *addr, nir_ssa_def *type, nir_ssa_def *i
       nir_variable_create(b->shader, nir_var_shader_temp, uvec3_type, "indices");
 
    nir_push_if(b, nir_ult(b, type, nir_imm_int(b, 2)));
-   nir_push_if(b, nir_ieq(b, type, nir_imm_int(b, VK_INDEX_TYPE_UINT16)));
+   nir_push_if(b, nir_ieq_imm(b, type, VK_INDEX_TYPE_UINT16));
    {
       nir_ssa_def *index_id = nir_umul24(b, id, nir_imm_int(b, 6));
       nir_ssa_def *indices[3];
       for (unsigned i = 0; i < 3; ++i) {
          indices[i] = nir_build_load_global(
-            b, 1, 16,
-            nir_iadd(b, addr, nir_u2u64(b, nir_iadd(b, index_id, nir_imm_int(b, 2 * i)))));
+            b, 1, 16, nir_iadd(b, addr, nir_u2u64(b, nir_iadd_imm(b, index_id, 2 * i))));
       }
       nir_store_var(b, result, nir_u2u32(b, nir_vec(b, indices, 3)), 7);
    }
@@ -784,11 +866,11 @@ get_indices(nir_builder *b, nir_ssa_def *addr, nir_ssa_def *type, nir_ssa_def *i
       nir_ssa_def *index_id = nir_umul24(b, id, nir_imm_int(b, 3));
       nir_ssa_def *indices[] = {
          index_id,
-         nir_iadd(b, index_id, nir_imm_int(b, 1)),
-         nir_iadd(b, index_id, nir_imm_int(b, 2)),
+         nir_iadd_imm(b, index_id, 1),
+         nir_iadd_imm(b, index_id, 2),
       };
 
-      nir_push_if(b, nir_ieq(b, type, nir_imm_int(b, VK_INDEX_TYPE_NONE_KHR)));
+      nir_push_if(b, nir_ieq_imm(b, type, VK_INDEX_TYPE_NONE_KHR));
       {
          nir_store_var(b, result, nir_vec(b, indices, 3), 7);
       }
@@ -835,7 +917,7 @@ get_vertices(nir_builder *b, nir_ssa_def *addresses, nir_ssa_def *format, nir_ss
 
    for (unsigned f = 0; f < ARRAY_SIZE(formats); ++f) {
       if (f + 1 < ARRAY_SIZE(formats))
-         nir_push_if(b, nir_ieq(b, format, nir_imm_int(b, formats[f])));
+         nir_push_if(b, nir_ieq_imm(b, format, formats[f]));
 
       for (unsigned i = 0; i < 3; ++i) {
          switch (formats[f]) {
@@ -871,8 +953,8 @@ get_vertices(nir_builder *b, nir_ssa_def *addresses, nir_ssa_def *format, nir_ss
                   values[j] = nir_ubfe(b, val, nir_imm_int(b, j * 10), nir_imm_int(b, 10));
             } else {
                for (unsigned j = 0; j < components; ++j)
-                  values[j] = nir_build_load_global(
-                     b, 1, comp_bits, nir_iadd(b, addr, nir_imm_int64(b, j * comp_bytes)));
+                  values[j] =
+                     nir_build_load_global(b, 1, comp_bits, nir_iadd_imm(b, addr, j * comp_bytes));
 
                for (unsigned j = components; j < 3; ++j)
                   values[j] = nir_imm_intN_t(b, 0, comp_bits);
@@ -943,6 +1025,21 @@ struct build_primitive_constants {
    };
 };
 
+struct bounds_constants {
+   uint64_t node_addr;
+   uint64_t scratch_addr;
+};
+
+struct morton_constants {
+   uint64_t node_addr;
+   uint64_t scratch_addr;
+};
+
+struct fill_constants {
+   uint64_t addr;
+   uint32_t value;
+};
+
 struct build_internal_constants {
    uint64_t node_dst_addr;
    uint64_t scratch_addr;
@@ -980,13 +1077,72 @@ nir_invert_3x3(nir_builder *b, nir_ssa_def *in[3][3], nir_ssa_def *out[3][3])
    }
 }
 
+static nir_ssa_def *
+id_to_node_id_offset(nir_builder *b, nir_ssa_def *global_id,
+                     const struct radv_physical_device *pdevice)
+{
+   uint32_t stride = get_node_id_stride(
+      get_accel_struct_build(pdevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR));
+
+   return nir_imul_imm(b, global_id, stride);
+}
+
+static nir_ssa_def *
+id_to_morton_offset(nir_builder *b, nir_ssa_def *global_id,
+                    const struct radv_physical_device *pdevice)
+{
+   enum accel_struct_build build_mode =
+      get_accel_struct_build(pdevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR);
+   assert(build_mode == accel_struct_build_lbvh);
+
+   uint32_t stride = get_node_id_stride(build_mode);
+
+   return nir_iadd_imm(b, nir_imul_imm(b, global_id, stride), sizeof(uint32_t));
+}
+
+static void
+atomic_fminmax(struct radv_device *dev, nir_builder *b, nir_ssa_def *addr, bool is_max,
+               nir_ssa_def *val)
+{
+   if (radv_has_shader_buffer_float_minmax(dev->physical_device)) {
+      if (is_max)
+         nir_global_atomic_fmax(b, 32, addr, val);
+      else
+         nir_global_atomic_fmin(b, 32, addr, val);
+      return;
+   }
+
+   /* Use an integer comparison to work correctly with negative zero. */
+   val = nir_bcsel(b, nir_ilt(b, val, nir_imm_int(b, 0)),
+                   nir_isub(b, nir_imm_int(b, -2147483648), val), val);
+
+   if (is_max)
+      nir_global_atomic_imax(b, 32, addr, val);
+   else
+      nir_global_atomic_imin(b, 32, addr, val);
+}
+
+static nir_ssa_def *
+read_fminmax_atomic(struct radv_device *dev, nir_builder *b, unsigned channels, nir_ssa_def *addr)
+{
+   nir_ssa_def *val = nir_build_load_global(b, channels, 32, addr,
+                                            .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER);
+
+   if (radv_has_shader_buffer_float_minmax(dev->physical_device))
+      return val;
+
+   return nir_bcsel(b, nir_ilt(b, val, nir_imm_int(b, 0)),
+                    nir_isub(b, nir_imm_int(b, -2147483648), val), val);
+}
+
 static nir_shader *
 build_leaf_shader(struct radv_device *dev)
 {
-   const struct glsl_type *vec3_type = glsl_vector_type(GLSL_TYPE_FLOAT, 3);
-   nir_builder b = radv_meta_init_shader(MESA_SHADER_COMPUTE, "accel_build_leaf_shader");
+   enum accel_struct_build build_mode =
+      get_accel_struct_build(dev->physical_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR);
 
-   b.shader->info.workgroup_size[0] = 64;
+   const struct glsl_type *vec3_type = glsl_vector_type(GLSL_TYPE_FLOAT, 3);
+   nir_builder b = create_accel_build_shader(dev, "accel_build_leaf_shader");
 
    nir_ssa_def *pconst0 =
       nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .base = 0, .range = 16);
@@ -996,37 +1152,43 @@ build_leaf_shader(struct radv_device *dev)
       nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .base = 32, .range = 16);
    nir_ssa_def *pconst3 =
       nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .base = 48, .range = 16);
-   nir_ssa_def *pconst4 =
+   nir_ssa_def *index_format =
       nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 0), .base = 64, .range = 4);
 
-   nir_ssa_def *geom_type = nir_channel(&b, pconst1, 2);
-   nir_ssa_def *node_dst_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 3));
-   nir_ssa_def *scratch_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 12));
+   nir_ssa_def *node_dst_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 0b0011));
+   nir_ssa_def *scratch_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 0b1100));
    nir_ssa_def *node_dst_offset = nir_channel(&b, pconst1, 0);
    nir_ssa_def *scratch_offset = nir_channel(&b, pconst1, 1);
+   nir_ssa_def *geom_type = nir_channel(&b, pconst1, 2);
    nir_ssa_def *geometry_id = nir_channel(&b, pconst1, 3);
 
    nir_ssa_def *global_id =
       nir_iadd(&b,
-               nir_umul24(&b, nir_channels(&b, nir_load_workgroup_id(&b, 32), 1),
-                          nir_imm_int(&b, b.shader->info.workgroup_size[0])),
+               nir_imul_imm(&b, nir_channels(&b, nir_load_workgroup_id(&b, 32), 1),
+                            b.shader->info.workgroup_size[0]),
                nir_channels(&b, nir_load_local_invocation_id(&b), 1));
-   scratch_addr = nir_iadd(
-      &b, scratch_addr,
-      nir_u2u64(&b, nir_iadd(&b, scratch_offset, nir_umul24(&b, global_id, nir_imm_int(&b, 4)))));
+   nir_ssa_def *scratch_dst_addr =
+      nir_iadd(&b, scratch_addr,
+               nir_u2u64(&b, nir_iadd(&b, scratch_offset,
+                                      id_to_node_id_offset(&b, global_id, dev->physical_device))));
+   if (build_mode != accel_struct_build_unoptimized)
+      scratch_dst_addr = nir_iadd_imm(&b, scratch_dst_addr, SCRATCH_TOTAL_BOUNDS_SIZE);
 
-   nir_push_if(&b, nir_ieq(&b, geom_type, nir_imm_int(&b, VK_GEOMETRY_TYPE_TRIANGLES_KHR)));
+   nir_variable *bounds[2] = {
+      nir_variable_create(b.shader, nir_var_shader_temp, vec3_type, "min_bound"),
+      nir_variable_create(b.shader, nir_var_shader_temp, vec3_type, "max_bound"),
+   };
+
+   nir_push_if(&b, nir_ieq_imm(&b, geom_type, VK_GEOMETRY_TYPE_TRIANGLES_KHR));
    { /* Triangles */
-      nir_ssa_def *vertex_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 3));
-      nir_ssa_def *index_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 12));
+      nir_ssa_def *vertex_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 0b0011));
+      nir_ssa_def *index_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 0b1100));
       nir_ssa_def *transform_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst3, 3));
       nir_ssa_def *vertex_stride = nir_channel(&b, pconst3, 2);
       nir_ssa_def *vertex_format = nir_channel(&b, pconst3, 3);
-      nir_ssa_def *index_format = nir_channel(&b, pconst4, 0);
       unsigned repl_swizzle[4] = {0, 0, 0, 0};
 
-      nir_ssa_def *node_offset =
-         nir_iadd(&b, node_dst_offset, nir_umul24(&b, global_id, nir_imm_int(&b, 64)));
+      nir_ssa_def *node_offset = nir_iadd(&b, node_dst_offset, nir_imul_imm(&b, global_id, 64));
       nir_ssa_def *triangle_node_dst_addr = nir_iadd(&b, node_dst_addr, nir_u2u64(&b, node_offset));
 
       nir_ssa_def *indices = get_indices(&b, index_addr, index_format, global_id);
@@ -1048,23 +1210,40 @@ build_leaf_shader(struct radv_device *dev)
       nir_store_var(&b, transform[1], nir_imm_vec4(&b, 0.0, 1.0, 0.0, 0.0), 0xf);
       nir_store_var(&b, transform[2], nir_imm_vec4(&b, 0.0, 0.0, 1.0, 0.0), 0xf);
 
-      nir_push_if(&b, nir_ine(&b, transform_addr, nir_imm_int64(&b, 0)));
-      nir_store_var(
-         &b, transform[0],
-         nir_build_load_global(&b, 4, 32, nir_iadd(&b, transform_addr, nir_imm_int64(&b, 0))), 0xf);
-      nir_store_var(
-         &b, transform[1],
-         nir_build_load_global(&b, 4, 32, nir_iadd(&b, transform_addr, nir_imm_int64(&b, 16))),
-         0xf);
-      nir_store_var(
-         &b, transform[2],
-         nir_build_load_global(&b, 4, 32, nir_iadd(&b, transform_addr, nir_imm_int64(&b, 32))),
-         0xf);
+      nir_push_if(&b, nir_ine_imm(&b, transform_addr, 0));
+      nir_store_var(&b, transform[0],
+                    nir_build_load_global(&b, 4, 32, nir_iadd_imm(&b, transform_addr, 0),
+                                          .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER),
+                    0xf);
+      nir_store_var(&b, transform[1],
+                    nir_build_load_global(&b, 4, 32, nir_iadd_imm(&b, transform_addr, 16),
+                                          .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER),
+                    0xf);
+      nir_store_var(&b, transform[2],
+                    nir_build_load_global(&b, 4, 32, nir_iadd_imm(&b, transform_addr, 32),
+                                          .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER),
+                    0xf);
       nir_pop_if(&b, NULL);
 
       for (unsigned i = 0; i < 3; ++i)
          for (unsigned j = 0; j < 3; ++j)
             node_data[i * 3 + j] = nir_fdph(&b, positions[i], nir_load_var(&b, transform[j]));
+
+      nir_ssa_def *min_bound = NULL;
+      nir_ssa_def *max_bound = NULL;
+      for (unsigned i = 0; i < 3; ++i) {
+         nir_ssa_def *position = nir_vec(&b, node_data + i * 3, 3);
+         if (min_bound) {
+            min_bound = nir_fmin(&b, min_bound, position);
+            max_bound = nir_fmax(&b, max_bound, position);
+         } else {
+            min_bound = position;
+            max_bound = position;
+         }
+      }
+
+      nir_store_var(&b, bounds[0], min_bound, 7);
+      nir_store_var(&b, bounds[1], max_bound, 7);
 
       node_data[12] = global_id;
       node_data[13] = geometry_id;
@@ -1075,32 +1254,36 @@ build_leaf_shader(struct radv_device *dev)
 
       for (unsigned i = 0; i < 4; ++i) {
          nir_build_store_global(&b, nir_vec(&b, node_data + i * 4, 4),
-                                nir_iadd(&b, triangle_node_dst_addr, nir_imm_int64(&b, i * 16)),
-                                .align_mul = 16);
+                                nir_iadd_imm(&b, triangle_node_dst_addr, i * 16), .align_mul = 16);
       }
 
-      nir_ssa_def *node_id = nir_ushr(&b, node_offset, nir_imm_int(&b, 3));
-      nir_build_store_global(&b, node_id, scratch_addr);
+      nir_ssa_def *node_id =
+         nir_iadd_imm(&b, nir_ushr_imm(&b, node_offset, 3), radv_bvh_node_triangle);
+      nir_build_store_global(&b, node_id, scratch_dst_addr);
    }
    nir_push_else(&b, NULL);
-   nir_push_if(&b, nir_ieq(&b, geom_type, nir_imm_int(&b, VK_GEOMETRY_TYPE_AABBS_KHR)));
+   nir_push_if(&b, nir_ieq_imm(&b, geom_type, VK_GEOMETRY_TYPE_AABBS_KHR));
    { /* AABBs */
-      nir_ssa_def *aabb_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 3));
+      nir_ssa_def *aabb_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 0b0011));
       nir_ssa_def *aabb_stride = nir_channel(&b, pconst2, 2);
 
-      nir_ssa_def *node_offset =
-         nir_iadd(&b, node_dst_offset, nir_umul24(&b, global_id, nir_imm_int(&b, 64)));
+      nir_ssa_def *node_offset = nir_iadd(&b, node_dst_offset, nir_imul_imm(&b, global_id, 64));
       nir_ssa_def *aabb_node_dst_addr = nir_iadd(&b, node_dst_addr, nir_u2u64(&b, node_offset));
-      nir_ssa_def *node_id =
-         nir_iadd(&b, nir_ushr(&b, node_offset, nir_imm_int(&b, 3)), nir_imm_int(&b, 7));
-      nir_build_store_global(&b, node_id, scratch_addr);
+
+      nir_ssa_def *node_id = nir_iadd_imm(&b, nir_ushr_imm(&b, node_offset, 3), radv_bvh_node_aabb);
+      nir_build_store_global(&b, node_id, scratch_dst_addr);
 
       aabb_addr = nir_iadd(&b, aabb_addr, nir_u2u64(&b, nir_imul(&b, aabb_stride, global_id)));
 
       nir_ssa_def *min_bound =
-         nir_build_load_global(&b, 3, 32, nir_iadd(&b, aabb_addr, nir_imm_int64(&b, 0)));
+         nir_build_load_global(&b, 3, 32, nir_iadd_imm(&b, aabb_addr, 0),
+                               .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER);
       nir_ssa_def *max_bound =
-         nir_build_load_global(&b, 3, 32, nir_iadd(&b, aabb_addr, nir_imm_int64(&b, 12)));
+         nir_build_load_global(&b, 3, 32, nir_iadd_imm(&b, aabb_addr, 12),
+                               .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER);
+
+      nir_store_var(&b, bounds[0], min_bound, 7);
+      nir_store_var(&b, bounds[1], max_bound, 7);
 
       nir_ssa_def *values[] = {nir_channel(&b, min_bound, 0),
                                nir_channel(&b, min_bound, 1),
@@ -1112,64 +1295,51 @@ build_leaf_shader(struct radv_device *dev)
                                geometry_id};
 
       nir_build_store_global(&b, nir_vec(&b, values + 0, 4),
-                             nir_iadd(&b, aabb_node_dst_addr, nir_imm_int64(&b, 0)),
-                             .align_mul = 16);
+                             nir_iadd_imm(&b, aabb_node_dst_addr, 0), .align_mul = 16);
       nir_build_store_global(&b, nir_vec(&b, values + 4, 4),
-                             nir_iadd(&b, aabb_node_dst_addr, nir_imm_int64(&b, 16)),
-                             .align_mul = 16);
+                             nir_iadd_imm(&b, aabb_node_dst_addr, 16), .align_mul = 16);
    }
    nir_push_else(&b, NULL);
    { /* Instances */
 
       nir_variable *instance_addr_var =
          nir_variable_create(b.shader, nir_var_shader_temp, glsl_uint64_t_type(), "instance_addr");
-      nir_push_if(&b, nir_ine(&b, nir_channel(&b, pconst2, 2), nir_imm_int(&b, 0)));
+      nir_push_if(&b, nir_ine_imm(&b, nir_channel(&b, pconst2, 2), 0));
       {
-         nir_ssa_def *ptr = nir_iadd(&b, nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 3)),
-                                     nir_u2u64(&b, nir_imul(&b, global_id, nir_imm_int(&b, 8))));
+         nir_ssa_def *ptr = nir_iadd(&b, nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 0b0011)),
+                                     nir_u2u64(&b, nir_imul_imm(&b, global_id, 8)));
          nir_ssa_def *addr =
             nir_pack_64_2x32(&b, nir_build_load_global(&b, 2, 32, ptr, .align_mul = 8));
          nir_store_var(&b, instance_addr_var, addr, 1);
       }
       nir_push_else(&b, NULL);
       {
-         nir_ssa_def *addr = nir_iadd(&b, nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 3)),
-                                      nir_u2u64(&b, nir_imul(&b, global_id, nir_imm_int(&b, 64))));
+         nir_ssa_def *addr = nir_iadd(&b, nir_pack_64_2x32(&b, nir_channels(&b, pconst2, 0b0011)),
+                                      nir_u2u64(&b, nir_imul_imm(&b, global_id, 64)));
          nir_store_var(&b, instance_addr_var, addr, 1);
       }
       nir_pop_if(&b, NULL);
       nir_ssa_def *instance_addr = nir_load_var(&b, instance_addr_var);
 
       nir_ssa_def *inst_transform[] = {
-         nir_build_load_global(&b, 4, 32, nir_iadd(&b, instance_addr, nir_imm_int64(&b, 0))),
-         nir_build_load_global(&b, 4, 32, nir_iadd(&b, instance_addr, nir_imm_int64(&b, 16))),
-         nir_build_load_global(&b, 4, 32, nir_iadd(&b, instance_addr, nir_imm_int64(&b, 32)))};
-      nir_ssa_def *inst3 =
-         nir_build_load_global(&b, 4, 32, nir_iadd(&b, instance_addr, nir_imm_int64(&b, 48)));
+         nir_build_load_global(&b, 4, 32, nir_iadd_imm(&b, instance_addr, 0)),
+         nir_build_load_global(&b, 4, 32, nir_iadd_imm(&b, instance_addr, 16)),
+         nir_build_load_global(&b, 4, 32, nir_iadd_imm(&b, instance_addr, 32))};
+      nir_ssa_def *inst3 = nir_build_load_global(&b, 4, 32, nir_iadd_imm(&b, instance_addr, 48));
 
-      nir_ssa_def *node_offset =
-         nir_iadd(&b, node_dst_offset, nir_umul24(&b, global_id, nir_imm_int(&b, 128)));
+      nir_ssa_def *node_offset = nir_iadd(&b, node_dst_offset, nir_imul_imm(&b, global_id, 128));
       node_dst_addr = nir_iadd(&b, node_dst_addr, nir_u2u64(&b, node_offset));
+
       nir_ssa_def *node_id =
-         nir_iadd(&b, nir_ushr(&b, node_offset, nir_imm_int(&b, 3)), nir_imm_int(&b, 6));
-      nir_build_store_global(&b, node_id, scratch_addr);
-
-      nir_variable *bounds[2] = {
-         nir_variable_create(b.shader, nir_var_shader_temp, vec3_type, "min_bound"),
-         nir_variable_create(b.shader, nir_var_shader_temp, vec3_type, "max_bound"),
-      };
-
-      nir_store_var(&b, bounds[0], nir_channels(&b, nir_imm_vec4(&b, NAN, NAN, NAN, NAN), 7), 7);
-      nir_store_var(&b, bounds[1], nir_channels(&b, nir_imm_vec4(&b, NAN, NAN, NAN, NAN), 7), 7);
+         nir_iadd_imm(&b, nir_ushr_imm(&b, node_offset, 3), radv_bvh_node_instance);
+      nir_build_store_global(&b, node_id, scratch_dst_addr);
 
       nir_ssa_def *header_addr = nir_pack_64_2x32(&b, nir_channels(&b, inst3, 12));
-      nir_push_if(&b, nir_ine(&b, header_addr, nir_imm_int64(&b, 0)));
+      nir_push_if(&b, nir_ine_imm(&b, header_addr, 0));
       nir_ssa_def *header_root_offset =
-         nir_build_load_global(&b, 1, 32, nir_iadd(&b, header_addr, nir_imm_int64(&b, 0)));
-      nir_ssa_def *header_min =
-         nir_build_load_global(&b, 3, 32, nir_iadd(&b, header_addr, nir_imm_int64(&b, 8)));
-      nir_ssa_def *header_max =
-         nir_build_load_global(&b, 3, 32, nir_iadd(&b, header_addr, nir_imm_int64(&b, 20)));
+         nir_build_load_global(&b, 1, 32, nir_iadd_imm(&b, header_addr, 0));
+      nir_ssa_def *header_min = nir_build_load_global(&b, 3, 32, nir_iadd_imm(&b, header_addr, 8));
+      nir_ssa_def *header_max = nir_build_load_global(&b, 3, 32, nir_iadd_imm(&b, header_addr, 20));
 
       nir_ssa_def *bound_defs[2][3];
       for (unsigned i = 0; i < 3; ++i) {
@@ -1195,7 +1365,7 @@ build_leaf_shader(struct radv_device *dev)
             vals[j] = nir_channel(&b, inst_transform[j], i);
 
          nir_build_store_global(&b, nir_vec(&b, vals, 3),
-                                nir_iadd(&b, node_dst_addr, nir_imm_int64(&b, 92 + 12 * i)));
+                                nir_iadd_imm(&b, node_dst_addr, 92 + 12 * i));
       }
 
       nir_ssa_def *m_in[3][3], *m_out[3][3], *m_vec[3][4];
@@ -1211,24 +1381,44 @@ build_leaf_shader(struct radv_device *dev)
 
       for (unsigned i = 0; i < 3; ++i) {
          nir_build_store_global(&b, nir_vec(&b, m_vec[i], 4),
-                                nir_iadd(&b, node_dst_addr, nir_imm_int64(&b, 16 + 16 * i)));
+                                nir_iadd_imm(&b, node_dst_addr, 16 + 16 * i));
       }
 
       nir_ssa_def *out0[4] = {
          nir_ior(&b, nir_channel(&b, nir_unpack_64_2x32(&b, header_addr), 0), header_root_offset),
          nir_channel(&b, nir_unpack_64_2x32(&b, header_addr), 1), nir_channel(&b, inst3, 0),
          nir_channel(&b, inst3, 1)};
-      nir_build_store_global(&b, nir_vec(&b, out0, 4),
-                             nir_iadd(&b, node_dst_addr, nir_imm_int64(&b, 0)));
-      nir_build_store_global(&b, global_id, nir_iadd(&b, node_dst_addr, nir_imm_int64(&b, 88)));
+      nir_build_store_global(&b, nir_vec(&b, out0, 4), nir_iadd_imm(&b, node_dst_addr, 0));
+      nir_build_store_global(&b, global_id, nir_iadd_imm(&b, node_dst_addr, 88));
       nir_pop_if(&b, NULL);
-      nir_build_store_global(&b, nir_load_var(&b, bounds[0]),
-                             nir_iadd(&b, node_dst_addr, nir_imm_int64(&b, 64)));
-      nir_build_store_global(&b, nir_load_var(&b, bounds[1]),
-                             nir_iadd(&b, node_dst_addr, nir_imm_int64(&b, 76)));
+      nir_build_store_global(&b, nir_load_var(&b, bounds[0]), nir_iadd_imm(&b, node_dst_addr, 64));
+      nir_build_store_global(&b, nir_load_var(&b, bounds[1]), nir_iadd_imm(&b, node_dst_addr, 76));
    }
    nir_pop_if(&b, NULL);
    nir_pop_if(&b, NULL);
+
+   if (build_mode != accel_struct_build_unoptimized) {
+      nir_ssa_def *min = nir_load_var(&b, bounds[0]);
+      nir_ssa_def *max = nir_load_var(&b, bounds[1]);
+
+      nir_ssa_def *min_reduced = nir_reduce(&b, min, .reduction_op = nir_op_fmin);
+      nir_ssa_def *max_reduced = nir_reduce(&b, max, .reduction_op = nir_op_fmax);
+
+      nir_push_if(&b, nir_elect(&b, 1));
+
+      atomic_fminmax(dev, &b, scratch_addr, false, nir_channel(&b, min_reduced, 0));
+      atomic_fminmax(dev, &b, nir_iadd_imm(&b, scratch_addr, 4), false,
+                     nir_channel(&b, min_reduced, 1));
+      atomic_fminmax(dev, &b, nir_iadd_imm(&b, scratch_addr, 8), false,
+                     nir_channel(&b, min_reduced, 2));
+
+      atomic_fminmax(dev, &b, nir_iadd_imm(&b, scratch_addr, 12), true,
+                     nir_channel(&b, max_reduced, 0));
+      atomic_fminmax(dev, &b, nir_iadd_imm(&b, scratch_addr, 16), true,
+                     nir_channel(&b, max_reduced, 1));
+      atomic_fminmax(dev, &b, nir_iadd_imm(&b, scratch_addr, 20), true,
+                     nir_channel(&b, max_reduced, 2));
+   }
 
    return b.shader;
 }
@@ -1237,17 +1427,15 @@ static void
 determine_bounds(nir_builder *b, nir_ssa_def *node_addr, nir_ssa_def *node_id,
                  nir_variable *bounds_vars[2])
 {
-   nir_ssa_def *node_type = nir_iand(b, node_id, nir_imm_int(b, 7));
-   node_addr = nir_iadd(
-      b, node_addr,
-      nir_u2u64(b, nir_ishl(b, nir_iand(b, node_id, nir_imm_int(b, ~7u)), nir_imm_int(b, 3))));
+   nir_ssa_def *node_type = nir_iand_imm(b, node_id, 7);
+   node_addr =
+      nir_iadd(b, node_addr, nir_u2u64(b, nir_ishl_imm(b, nir_iand_imm(b, node_id, ~7u), 3)));
 
-   nir_push_if(b, nir_ieq(b, node_type, nir_imm_int(b, 0)));
+   nir_push_if(b, nir_ieq_imm(b, node_type, radv_bvh_node_triangle));
    {
       nir_ssa_def *positions[3];
       for (unsigned i = 0; i < 3; ++i)
-         positions[i] =
-            nir_build_load_global(b, 3, 32, nir_iadd(b, node_addr, nir_imm_int64(b, i * 12)));
+         positions[i] = nir_build_load_global(b, 3, 32, nir_iadd_imm(b, node_addr, i * 12));
       nir_ssa_def *bounds[] = {positions[0], positions[0]};
       for (unsigned i = 1; i < 3; ++i) {
          bounds[0] = nir_fmin(b, bounds[0], positions[i]);
@@ -1257,13 +1445,13 @@ determine_bounds(nir_builder *b, nir_ssa_def *node_addr, nir_ssa_def *node_id,
       nir_store_var(b, bounds_vars[1], bounds[1], 7);
    }
    nir_push_else(b, NULL);
-   nir_push_if(b, nir_ieq(b, node_type, nir_imm_int(b, 5)));
+   nir_push_if(b, nir_ieq_imm(b, node_type, radv_bvh_node_internal));
    {
       nir_ssa_def *input_bounds[4][2];
       for (unsigned i = 0; i < 4; ++i)
          for (unsigned j = 0; j < 2; ++j)
-            input_bounds[i][j] = nir_build_load_global(
-               b, 3, 32, nir_iadd(b, node_addr, nir_imm_int64(b, 16 + i * 24 + j * 12)));
+            input_bounds[i][j] =
+               nir_build_load_global(b, 3, 32, nir_iadd_imm(b, node_addr, 16 + i * 24 + j * 12));
       nir_ssa_def *bounds[] = {input_bounds[0][0], input_bounds[0][1]};
       for (unsigned i = 1; i < 4; ++i) {
          bounds[0] = nir_fmin(b, bounds[0], input_bounds[i][0]);
@@ -1274,12 +1462,11 @@ determine_bounds(nir_builder *b, nir_ssa_def *node_addr, nir_ssa_def *node_id,
       nir_store_var(b, bounds_vars[1], bounds[1], 7);
    }
    nir_push_else(b, NULL);
-   nir_push_if(b, nir_ieq(b, node_type, nir_imm_int(b, 6)));
+   nir_push_if(b, nir_ieq_imm(b, node_type, radv_bvh_node_instance));
    { /* Instances */
       nir_ssa_def *bounds[2];
       for (unsigned i = 0; i < 2; ++i)
-         bounds[i] =
-            nir_build_load_global(b, 3, 32, nir_iadd(b, node_addr, nir_imm_int64(b, 64 + i * 12)));
+         bounds[i] = nir_build_load_global(b, 3, 32, nir_iadd_imm(b, node_addr, 64 + i * 12));
       nir_store_var(b, bounds_vars[0], bounds[0], 7);
       nir_store_var(b, bounds_vars[1], bounds[1], 7);
    }
@@ -1287,8 +1474,7 @@ determine_bounds(nir_builder *b, nir_ssa_def *node_addr, nir_ssa_def *node_id,
    { /* AABBs */
       nir_ssa_def *bounds[2];
       for (unsigned i = 0; i < 2; ++i)
-         bounds[i] =
-            nir_build_load_global(b, 3, 32, nir_iadd(b, node_addr, nir_imm_int64(b, i * 12)));
+         bounds[i] = nir_build_load_global(b, 3, 32, nir_iadd_imm(b, node_addr, i * 12));
       nir_store_var(b, bounds_vars[0], bounds[0], 7);
       nir_store_var(b, bounds_vars[1], bounds[1], 7);
    }
@@ -1297,13 +1483,93 @@ determine_bounds(nir_builder *b, nir_ssa_def *node_addr, nir_ssa_def *node_id,
    nir_pop_if(b, NULL);
 }
 
+/* https://developer.nvidia.com/blog/thinking-parallel-part-iii-tree-construction-gpu/ */
+static nir_ssa_def *
+build_morton_component(nir_builder *b, nir_ssa_def *x)
+{
+   x = nir_iand_imm(b, nir_imul_imm(b, x, 0x00000101u), 0x0F00F00Fu);
+   x = nir_iand_imm(b, nir_imul_imm(b, x, 0x00000011u), 0xC30C30C3u);
+   x = nir_iand_imm(b, nir_imul_imm(b, x, 0x00000005u), 0x49249249u);
+   return x;
+}
+
+static nir_shader *
+build_morton_shader(struct radv_device *dev)
+{
+   const struct glsl_type *vec3_type = glsl_vector_type(GLSL_TYPE_FLOAT, 3);
+
+   nir_builder b = create_accel_build_shader(dev, "accel_build_morton_shader");
+
+   /*
+    * push constants:
+    *   i32 x 2: node address
+    *   i32 x 2: scratch address
+    */
+   nir_ssa_def *pconst0 =
+      nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .base = 0, .range = 16);
+
+   nir_ssa_def *node_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 0b0011));
+   nir_ssa_def *scratch_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 0b1100));
+
+   nir_ssa_def *global_id =
+      nir_iadd(&b,
+               nir_imul_imm(&b, nir_channel(&b, nir_load_workgroup_id(&b, 32), 0),
+                            b.shader->info.workgroup_size[0]),
+               nir_load_local_invocation_index(&b));
+
+   nir_ssa_def *node_id_addr =
+      nir_iadd(&b, nir_iadd_imm(&b, scratch_addr, SCRATCH_TOTAL_BOUNDS_SIZE),
+               nir_u2u64(&b, id_to_node_id_offset(&b, global_id, dev->physical_device)));
+   nir_ssa_def *node_id =
+      nir_build_load_global(&b, 1, 32, node_id_addr, .align_mul = 4, .align_offset = 0);
+
+   nir_variable *node_bounds[2] = {
+      nir_variable_create(b.shader, nir_var_shader_temp, vec3_type, "min_bound"),
+      nir_variable_create(b.shader, nir_var_shader_temp, vec3_type, "max_bound"),
+   };
+
+   determine_bounds(&b, node_addr, node_id, node_bounds);
+
+   nir_ssa_def *node_min = nir_load_var(&b, node_bounds[0]);
+   nir_ssa_def *node_max = nir_load_var(&b, node_bounds[1]);
+   nir_ssa_def *node_pos =
+      nir_fmul(&b, nir_fadd(&b, node_min, node_max), nir_imm_vec3(&b, 0.5, 0.5, 0.5));
+
+   nir_ssa_def *bvh_min = read_fminmax_atomic(dev, &b, 3, scratch_addr);
+   nir_ssa_def *bvh_max = read_fminmax_atomic(dev, &b, 3, nir_iadd_imm(&b, scratch_addr, 12));
+   nir_ssa_def *bvh_size = nir_fsub(&b, bvh_max, bvh_min);
+
+   nir_ssa_def *normalized_node_pos = nir_fdiv(&b, nir_fsub(&b, node_pos, bvh_min), bvh_size);
+
+   nir_ssa_def *x_int =
+      nir_f2u32(&b, nir_fmul_imm(&b, nir_channel(&b, normalized_node_pos, 0), 255.0));
+   nir_ssa_def *x_morton = build_morton_component(&b, x_int);
+
+   nir_ssa_def *y_int =
+      nir_f2u32(&b, nir_fmul_imm(&b, nir_channel(&b, normalized_node_pos, 1), 255.0));
+   nir_ssa_def *y_morton = build_morton_component(&b, y_int);
+
+   nir_ssa_def *z_int =
+      nir_f2u32(&b, nir_fmul_imm(&b, nir_channel(&b, normalized_node_pos, 2), 255.0));
+   nir_ssa_def *z_morton = build_morton_component(&b, z_int);
+
+   nir_ssa_def *morton_code = nir_iadd(
+      &b, nir_iadd(&b, nir_ishl_imm(&b, x_morton, 2), nir_ishl_imm(&b, y_morton, 1)), z_morton);
+   nir_ssa_def *key = nir_ishl_imm(&b, morton_code, 8);
+
+   nir_ssa_def *dst_addr =
+      nir_iadd(&b, nir_iadd_imm(&b, scratch_addr, SCRATCH_TOTAL_BOUNDS_SIZE),
+               nir_u2u64(&b, id_to_morton_offset(&b, global_id, dev->physical_device)));
+   nir_build_store_global(&b, key, dst_addr, .align_mul = 4);
+
+   return b.shader;
+}
+
 static nir_shader *
 build_internal_shader(struct radv_device *dev)
 {
    const struct glsl_type *vec3_type = glsl_vector_type(GLSL_TYPE_FLOAT, 3);
-   nir_builder b = radv_meta_init_shader(MESA_SHADER_COMPUTE, "accel_build_internal_shader");
-
-   b.shader->info.workgroup_size[0] = 64;
+   nir_builder b = create_accel_build_shader(dev, "accel_build_internal_shader");
 
    /*
     * push constants:
@@ -1319,35 +1585,41 @@ build_internal_shader(struct radv_device *dev)
    nir_ssa_def *pconst1 =
       nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .base = 16, .range = 16);
 
-   nir_ssa_def *node_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 3));
-   nir_ssa_def *scratch_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 12));
+   nir_ssa_def *node_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 0b0011));
+   nir_ssa_def *scratch_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 0b1100));
    nir_ssa_def *node_dst_offset = nir_channel(&b, pconst1, 0);
    nir_ssa_def *dst_scratch_offset = nir_channel(&b, pconst1, 1);
    nir_ssa_def *src_scratch_offset = nir_channel(&b, pconst1, 2);
-   nir_ssa_def *src_node_count =
-      nir_iand(&b, nir_channel(&b, pconst1, 3), nir_imm_int(&b, 0x7FFFFFFFU));
+   nir_ssa_def *src_node_count = nir_iand_imm(&b, nir_channel(&b, pconst1, 3), 0x7FFFFFFFU);
    nir_ssa_def *fill_header =
-      nir_ine(&b, nir_iand(&b, nir_channel(&b, pconst1, 3), nir_imm_int(&b, 0x80000000U)),
-              nir_imm_int(&b, 0));
+      nir_ine_imm(&b, nir_iand_imm(&b, nir_channel(&b, pconst1, 3), 0x80000000U), 0);
 
    nir_ssa_def *global_id =
       nir_iadd(&b,
-               nir_umul24(&b, nir_channels(&b, nir_load_workgroup_id(&b, 32), 1),
-                          nir_imm_int(&b, b.shader->info.workgroup_size[0])),
+               nir_imul_imm(&b, nir_channels(&b, nir_load_workgroup_id(&b, 32), 1),
+                            b.shader->info.workgroup_size[0]),
                nir_channels(&b, nir_load_local_invocation_id(&b), 1));
-   nir_ssa_def *src_idx = nir_imul(&b, global_id, nir_imm_int(&b, 4));
+   nir_ssa_def *src_idx = nir_imul_imm(&b, global_id, 4);
    nir_ssa_def *src_count = nir_umin(&b, nir_imm_int(&b, 4), nir_isub(&b, src_node_count, src_idx));
 
-   nir_ssa_def *node_offset =
-      nir_iadd(&b, node_dst_offset, nir_ishl(&b, global_id, nir_imm_int(&b, 7)));
+   nir_ssa_def *node_offset = nir_iadd(&b, node_dst_offset, nir_ishl_imm(&b, global_id, 7));
    nir_ssa_def *node_dst_addr = nir_iadd(&b, node_addr, nir_u2u64(&b, node_offset));
-   nir_ssa_def *src_nodes = nir_build_load_global(
-      &b, 4, 32,
+
+   nir_ssa_def *src_base_addr =
       nir_iadd(&b, scratch_addr,
                nir_u2u64(&b, nir_iadd(&b, src_scratch_offset,
-                                      nir_ishl(&b, global_id, nir_imm_int(&b, 4))))));
+                                      id_to_node_id_offset(&b, src_idx, dev->physical_device))));
 
-   nir_build_store_global(&b, src_nodes, nir_iadd(&b, node_dst_addr, nir_imm_int64(&b, 0)));
+   enum accel_struct_build build_mode =
+      get_accel_struct_build(dev->physical_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR);
+   uint32_t node_id_stride = get_node_id_stride(build_mode);
+
+   nir_ssa_def *src_nodes[4];
+   for (uint32_t i = 0; i < 4; i++) {
+      src_nodes[i] =
+         nir_build_load_global(&b, 1, 32, nir_iadd_imm(&b, src_base_addr, i * node_id_stride));
+      nir_build_store_global(&b, src_nodes[i], nir_iadd_imm(&b, node_dst_addr, i * 4));
+   }
 
    nir_ssa_def *total_bounds[2] = {
       nir_channels(&b, nir_imm_vec4(&b, NAN, NAN, NAN, NAN), 7),
@@ -1363,27 +1635,28 @@ build_internal_shader(struct radv_device *dev)
       nir_store_var(&b, bounds[1], nir_channels(&b, nir_imm_vec4(&b, NAN, NAN, NAN, NAN), 7), 7);
 
       nir_push_if(&b, nir_ilt(&b, nir_imm_int(&b, i), src_count));
-      determine_bounds(&b, node_addr, nir_channel(&b, src_nodes, i), bounds);
+      determine_bounds(&b, node_addr, src_nodes[i], bounds);
       nir_pop_if(&b, NULL);
       nir_build_store_global(&b, nir_load_var(&b, bounds[0]),
-                             nir_iadd(&b, node_dst_addr, nir_imm_int64(&b, 16 + 24 * i)));
+                             nir_iadd_imm(&b, node_dst_addr, 16 + 24 * i));
       nir_build_store_global(&b, nir_load_var(&b, bounds[1]),
-                             nir_iadd(&b, node_dst_addr, nir_imm_int64(&b, 28 + 24 * i)));
+                             nir_iadd_imm(&b, node_dst_addr, 28 + 24 * i));
       total_bounds[0] = nir_fmin(&b, total_bounds[0], nir_load_var(&b, bounds[0]));
       total_bounds[1] = nir_fmax(&b, total_bounds[1], nir_load_var(&b, bounds[1]));
    }
 
    nir_ssa_def *node_id =
-      nir_iadd(&b, nir_ushr(&b, node_offset, nir_imm_int(&b, 3)), nir_imm_int(&b, 5));
-   nir_ssa_def *dst_scratch_addr = nir_iadd(
-      &b, scratch_addr,
-      nir_u2u64(&b, nir_iadd(&b, dst_scratch_offset, nir_ishl(&b, global_id, nir_imm_int(&b, 2)))));
+      nir_iadd_imm(&b, nir_ushr_imm(&b, node_offset, 3), radv_bvh_node_internal);
+   nir_ssa_def *dst_scratch_addr =
+      nir_iadd(&b, scratch_addr,
+               nir_u2u64(&b, nir_iadd(&b, dst_scratch_offset,
+                                      id_to_node_id_offset(&b, global_id, dev->physical_device))));
    nir_build_store_global(&b, node_id, dst_scratch_addr);
 
    nir_push_if(&b, fill_header);
    nir_build_store_global(&b, node_id, node_addr);
-   nir_build_store_global(&b, total_bounds[0], nir_iadd(&b, node_addr, nir_imm_int64(&b, 8)));
-   nir_build_store_global(&b, total_bounds[1], nir_iadd(&b, node_addr, nir_imm_int64(&b, 20)));
+   nir_build_store_global(&b, total_bounds[0], nir_iadd_imm(&b, node_addr, 8));
+   nir_build_store_global(&b, total_bounds[1], nir_iadd_imm(&b, node_addr, 20));
    nir_pop_if(&b, NULL);
    return b.shader;
 }
@@ -1403,8 +1676,7 @@ struct copy_constants {
 static nir_shader *
 build_copy_shader(struct radv_device *dev)
 {
-   nir_builder b = radv_meta_init_shader(MESA_SHADER_COMPUTE, "accel_copy");
-   b.shader->info.workgroup_size[0] = 64;
+   nir_builder b = create_accel_build_shader(dev, "accel_copy");
 
    nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
    nir_ssa_def *wg_id = nir_load_workgroup_id(&b, 32);
@@ -1417,18 +1689,18 @@ build_copy_shader(struct radv_device *dev)
 
    nir_variable *offset_var =
       nir_variable_create(b.shader, nir_var_shader_temp, glsl_uint_type(), "offset");
-   nir_ssa_def *offset = nir_imul(&b, global_id, nir_imm_int(&b, 16));
+   nir_ssa_def *offset = nir_imul_imm(&b, global_id, 16);
    nir_store_var(&b, offset_var, offset, 1);
 
-   nir_ssa_def *increment = nir_imul(&b, nir_channel(&b, nir_load_num_workgroups(&b, 32), 0),
-                                     nir_imm_int(&b, b.shader->info.workgroup_size[0] * 16));
+   nir_ssa_def *increment = nir_imul_imm(&b, nir_channel(&b, nir_load_num_workgroups(&b, 32), 0),
+                                         b.shader->info.workgroup_size[0] * 16);
 
    nir_ssa_def *pconst0 =
       nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .base = 0, .range = 16);
    nir_ssa_def *pconst1 =
       nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 0), .base = 16, .range = 4);
-   nir_ssa_def *src_base_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 3));
-   nir_ssa_def *dst_base_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 0xc));
+   nir_ssa_def *src_base_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 0b0011));
+   nir_ssa_def *dst_base_addr = nir_pack_64_2x32(&b, nir_channels(&b, pconst0, 0b1100));
    nir_ssa_def *mode = nir_channel(&b, pconst1, 0);
 
    nir_variable *compacted_size_var =
@@ -1444,98 +1716,87 @@ build_copy_shader(struct radv_device *dev)
    nir_variable *value_var =
       nir_variable_create(b.shader, nir_var_shader_temp, glsl_vec4_type(), "value");
 
-   nir_push_if(&b, nir_ieq(&b, mode, nir_imm_int(&b, COPY_MODE_SERIALIZE)));
+   nir_push_if(&b, nir_ieq_imm(&b, mode, COPY_MODE_SERIALIZE));
    {
       nir_ssa_def *instance_count = nir_build_load_global(
          &b, 1, 32,
-         nir_iadd(&b, src_base_addr,
-                  nir_imm_int64(&b, offsetof(struct radv_accel_struct_header, instance_count))));
+         nir_iadd_imm(&b, src_base_addr,
+                      offsetof(struct radv_accel_struct_header, instance_count)));
       nir_ssa_def *compacted_size = nir_build_load_global(
          &b, 1, 64,
-         nir_iadd(&b, src_base_addr,
-                  nir_imm_int64(&b, offsetof(struct radv_accel_struct_header, compacted_size))));
+         nir_iadd_imm(&b, src_base_addr,
+                      offsetof(struct radv_accel_struct_header, compacted_size)));
       nir_ssa_def *serialization_size = nir_build_load_global(
          &b, 1, 64,
-         nir_iadd(
-            &b, src_base_addr,
-            nir_imm_int64(&b, offsetof(struct radv_accel_struct_header, serialization_size))));
+         nir_iadd_imm(&b, src_base_addr,
+                      offsetof(struct radv_accel_struct_header, serialization_size)));
 
       nir_store_var(&b, compacted_size_var, compacted_size, 1);
-      nir_store_var(
-         &b, instance_offset_var,
-         nir_build_load_global(&b, 1, 32,
-                               nir_iadd(&b, src_base_addr,
-                                        nir_imm_int64(&b, offsetof(struct radv_accel_struct_header,
-                                                                   instance_offset)))),
-         1);
+      nir_store_var(&b, instance_offset_var,
+                    nir_build_load_global(
+                       &b, 1, 32,
+                       nir_iadd_imm(&b, src_base_addr,
+                                    offsetof(struct radv_accel_struct_header, instance_offset))),
+                    1);
       nir_store_var(&b, instance_count_var, instance_count, 1);
 
-      nir_ssa_def *dst_offset =
-         nir_iadd(&b, nir_imm_int(&b, sizeof(struct radv_accel_struct_serialization_header)),
-                  nir_imul(&b, instance_count, nir_imm_int(&b, sizeof(uint64_t))));
+      nir_ssa_def *dst_offset = nir_iadd_imm(&b, nir_imul_imm(&b, instance_count, sizeof(uint64_t)),
+                                             sizeof(struct radv_accel_struct_serialization_header));
       nir_store_var(&b, src_offset_var, nir_imm_int(&b, 0), 1);
       nir_store_var(&b, dst_offset_var, dst_offset, 1);
 
-      nir_push_if(&b, nir_ieq(&b, global_id, nir_imm_int(&b, 0)));
+      nir_push_if(&b, nir_ieq_imm(&b, global_id, 0));
       {
-         nir_build_store_global(
-            &b, serialization_size,
-            nir_iadd(&b, dst_base_addr,
-                     nir_imm_int64(&b, offsetof(struct radv_accel_struct_serialization_header,
-                                                serialization_size))));
+         nir_build_store_global(&b, serialization_size,
+                                nir_iadd_imm(&b, dst_base_addr,
+                                             offsetof(struct radv_accel_struct_serialization_header,
+                                                      serialization_size)));
          nir_build_store_global(
             &b, compacted_size,
-            nir_iadd(&b, dst_base_addr,
-                     nir_imm_int64(&b, offsetof(struct radv_accel_struct_serialization_header,
-                                                compacted_size))));
+            nir_iadd_imm(&b, dst_base_addr,
+                         offsetof(struct radv_accel_struct_serialization_header, compacted_size)));
          nir_build_store_global(
             &b, nir_u2u64(&b, instance_count),
-            nir_iadd(&b, dst_base_addr,
-                     nir_imm_int64(&b, offsetof(struct radv_accel_struct_serialization_header,
-                                                instance_count))));
+            nir_iadd_imm(&b, dst_base_addr,
+                         offsetof(struct radv_accel_struct_serialization_header, instance_count)));
       }
       nir_pop_if(&b, NULL);
    }
    nir_push_else(&b, NULL);
-   nir_push_if(&b, nir_ieq(&b, mode, nir_imm_int(&b, COPY_MODE_DESERIALIZE)));
+   nir_push_if(&b, nir_ieq_imm(&b, mode, COPY_MODE_DESERIALIZE));
    {
       nir_ssa_def *instance_count = nir_build_load_global(
          &b, 1, 32,
-         nir_iadd(&b, src_base_addr,
-                  nir_imm_int64(
-                     &b, offsetof(struct radv_accel_struct_serialization_header, instance_count))));
-      nir_ssa_def *src_offset =
-         nir_iadd(&b, nir_imm_int(&b, sizeof(struct radv_accel_struct_serialization_header)),
-                  nir_imul(&b, instance_count, nir_imm_int(&b, sizeof(uint64_t))));
+         nir_iadd_imm(&b, src_base_addr,
+                      offsetof(struct radv_accel_struct_serialization_header, instance_count)));
+      nir_ssa_def *src_offset = nir_iadd_imm(&b, nir_imul_imm(&b, instance_count, sizeof(uint64_t)),
+                                             sizeof(struct radv_accel_struct_serialization_header));
 
       nir_ssa_def *header_addr = nir_iadd(&b, src_base_addr, nir_u2u64(&b, src_offset));
-      nir_store_var(
-         &b, compacted_size_var,
-         nir_build_load_global(
-            &b, 1, 64,
-            nir_iadd(&b, header_addr,
-                     nir_imm_int64(&b, offsetof(struct radv_accel_struct_header, compacted_size)))),
-         1);
-      nir_store_var(
-         &b, instance_offset_var,
-         nir_build_load_global(&b, 1, 32,
-                               nir_iadd(&b, header_addr,
-                                        nir_imm_int64(&b, offsetof(struct radv_accel_struct_header,
-                                                                   instance_offset)))),
-         1);
+      nir_store_var(&b, compacted_size_var,
+                    nir_build_load_global(
+                       &b, 1, 64,
+                       nir_iadd_imm(&b, header_addr,
+                                    offsetof(struct radv_accel_struct_header, compacted_size))),
+                    1);
+      nir_store_var(&b, instance_offset_var,
+                    nir_build_load_global(
+                       &b, 1, 32,
+                       nir_iadd_imm(&b, header_addr,
+                                    offsetof(struct radv_accel_struct_header, instance_offset))),
+                    1);
       nir_store_var(&b, instance_count_var, instance_count, 1);
       nir_store_var(&b, src_offset_var, src_offset, 1);
       nir_store_var(&b, dst_offset_var, nir_imm_int(&b, 0), 1);
    }
    nir_push_else(&b, NULL); /* COPY_MODE_COPY */
    {
-      nir_store_var(
-         &b, compacted_size_var,
-         nir_build_load_global(
-            &b, 1, 64,
-            nir_iadd(&b, src_base_addr,
-                     nir_imm_int64(&b, offsetof(struct radv_accel_struct_header, compacted_size)))),
-         1);
+      nir_store_var(&b, compacted_size_var,
+                    nir_build_load_global(
+                       &b, 1, 64,
+                       nir_iadd_imm(&b, src_base_addr,
+                                    offsetof(struct radv_accel_struct_header, compacted_size))),
+                    1);
 
       nir_store_var(&b, src_offset_var, nir_imm_int(&b, 0), 1);
       nir_store_var(&b, dst_offset_var, nir_imm_int(&b, 0), 1);
@@ -1546,12 +1807,10 @@ build_copy_shader(struct radv_device *dev)
    nir_pop_if(&b, NULL);
 
    nir_ssa_def *instance_bound =
-      nir_imul(&b, nir_imm_int(&b, sizeof(struct radv_bvh_instance_node)),
-               nir_load_var(&b, instance_count_var));
+      nir_imul_imm(&b, nir_load_var(&b, instance_count_var), sizeof(struct radv_bvh_instance_node));
    nir_ssa_def *compacted_size = nir_build_load_global(
       &b, 1, 32,
-      nir_iadd(&b, src_base_addr,
-               nir_imm_int64(&b, offsetof(struct radv_accel_struct_header, compacted_size))));
+      nir_iadd_imm(&b, src_base_addr, offsetof(struct radv_accel_struct_header, compacted_size)));
 
    nir_push_loop(&b);
    {
@@ -1570,23 +1829,18 @@ build_copy_shader(struct radv_device *dev)
          nir_ssa_def *in_instance_bound =
             nir_iand(&b, nir_uge(&b, offset, nir_load_var(&b, instance_offset_var)),
                      nir_ult(&b, instance_offset, instance_bound));
-         nir_ssa_def *instance_start =
-            nir_ieq(&b,
-                    nir_iand(&b, instance_offset,
-                             nir_imm_int(&b, sizeof(struct radv_bvh_instance_node) - 1)),
-                    nir_imm_int(&b, 0));
+         nir_ssa_def *instance_start = nir_ieq_imm(
+            &b, nir_iand_imm(&b, instance_offset, sizeof(struct radv_bvh_instance_node) - 1), 0);
 
          nir_push_if(&b, nir_iand(&b, in_instance_bound, instance_start));
          {
-            nir_ssa_def *instance_id = nir_ushr(&b, instance_offset, nir_imm_int(&b, 7));
+            nir_ssa_def *instance_id = nir_ushr_imm(&b, instance_offset, 7);
 
-            nir_push_if(&b, nir_ieq(&b, mode, nir_imm_int(&b, COPY_MODE_SERIALIZE)));
+            nir_push_if(&b, nir_ieq_imm(&b, mode, COPY_MODE_SERIALIZE));
             {
-               nir_ssa_def *instance_addr =
-                  nir_imul(&b, instance_id, nir_imm_int(&b, sizeof(uint64_t)));
-               instance_addr =
-                  nir_iadd(&b, instance_addr,
-                           nir_imm_int(&b, sizeof(struct radv_accel_struct_serialization_header)));
+               nir_ssa_def *instance_addr = nir_imul_imm(&b, instance_id, sizeof(uint64_t));
+               instance_addr = nir_iadd_imm(&b, instance_addr,
+                                            sizeof(struct radv_accel_struct_serialization_header));
                instance_addr = nir_iadd(&b, dst_base_addr, nir_u2u64(&b, instance_addr));
 
                nir_build_store_global(&b, nir_channels(&b, value, 3), instance_addr,
@@ -1594,11 +1848,9 @@ build_copy_shader(struct radv_device *dev)
             }
             nir_push_else(&b, NULL);
             {
-               nir_ssa_def *instance_addr =
-                  nir_imul(&b, instance_id, nir_imm_int(&b, sizeof(uint64_t)));
-               instance_addr =
-                  nir_iadd(&b, instance_addr,
-                           nir_imm_int(&b, sizeof(struct radv_accel_struct_serialization_header)));
+               nir_ssa_def *instance_addr = nir_imul_imm(&b, instance_id, sizeof(uint64_t));
+               instance_addr = nir_iadd_imm(&b, instance_addr,
+                                            sizeof(struct radv_accel_struct_serialization_header));
                instance_addr = nir_iadd(&b, src_base_addr, nir_u2u64(&b, instance_addr));
 
                nir_ssa_def *instance_value =
@@ -1641,12 +1893,79 @@ radv_device_finish_accel_struct_build_state(struct radv_device *device)
                         &state->alloc);
    radv_DestroyPipeline(radv_device_to_handle(device), state->accel_struct_build.leaf_pipeline,
                         &state->alloc);
+   radv_DestroyPipeline(radv_device_to_handle(device), state->accel_struct_build.morton_pipeline,
+                        &state->alloc);
    radv_DestroyPipelineLayout(radv_device_to_handle(device),
                               state->accel_struct_build.copy_p_layout, &state->alloc);
    radv_DestroyPipelineLayout(radv_device_to_handle(device),
                               state->accel_struct_build.internal_p_layout, &state->alloc);
    radv_DestroyPipelineLayout(radv_device_to_handle(device),
                               state->accel_struct_build.leaf_p_layout, &state->alloc);
+   radv_DestroyPipelineLayout(radv_device_to_handle(device),
+                              state->accel_struct_build.morton_p_layout, &state->alloc);
+
+   if (state->accel_struct_build.radix_sort)
+      radix_sort_vk_destroy(state->accel_struct_build.radix_sort, radv_device_to_handle(device),
+                            &state->alloc);
+}
+
+static VkResult
+create_build_pipeline(struct radv_device *device, nir_shader *shader, unsigned push_constant_size,
+                      VkPipeline *pipeline, VkPipelineLayout *layout)
+{
+   const VkPipelineLayoutCreateInfo pl_create_info = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 0,
+      .pushConstantRangeCount = 1,
+      .pPushConstantRanges =
+         &(VkPushConstantRange){VK_SHADER_STAGE_COMPUTE_BIT, 0, push_constant_size},
+   };
+
+   VkResult result = radv_CreatePipelineLayout(radv_device_to_handle(device), &pl_create_info,
+                                               &device->meta_state.alloc, layout);
+   if (result != VK_SUCCESS) {
+      ralloc_free(shader);
+      return result;
+   }
+
+   VkPipelineShaderStageCreateInfo shader_stage = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+      .module = vk_shader_module_handle_from_nir(shader),
+      .pName = "main",
+      .pSpecializationInfo = NULL,
+   };
+
+   VkComputePipelineCreateInfo pipeline_info = {
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage = shader_stage,
+      .flags = 0,
+      .layout = *layout,
+   };
+
+   result = radv_CreateComputePipelines(radv_device_to_handle(device),
+                                        radv_pipeline_cache_to_handle(&device->meta_state.cache), 1,
+                                        &pipeline_info, &device->meta_state.alloc, pipeline);
+
+   if (result != VK_SUCCESS) {
+      ralloc_free(shader);
+      return result;
+   }
+
+   return VK_SUCCESS;
+}
+
+static void
+radix_sort_fill_buffer(VkCommandBuffer commandBuffer,
+                       radix_sort_vk_buffer_info_t const *buffer_info, VkDeviceSize offset,
+                       VkDeviceSize size, uint32_t data)
+{
+   RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
+
+   assert(size != VK_WHOLE_SIZE);
+
+   radv_fill_buffer(cmd_buffer, NULL, NULL, buffer_info->devaddr + buffer_info->offset + offset,
+                    size, data);
 }
 
 VkResult
@@ -1657,122 +1976,47 @@ radv_device_init_accel_struct_build_state(struct radv_device *device)
    nir_shader *internal_cs = build_internal_shader(device);
    nir_shader *copy_cs = build_copy_shader(device);
 
-   const VkPipelineLayoutCreateInfo leaf_pl_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 0,
-      .pushConstantRangeCount = 1,
-      .pPushConstantRanges = &(VkPushConstantRange){VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                                                    sizeof(struct build_primitive_constants)},
-   };
-
-   result = radv_CreatePipelineLayout(radv_device_to_handle(device), &leaf_pl_create_info,
-                                      &device->meta_state.alloc,
-                                      &device->meta_state.accel_struct_build.leaf_p_layout);
+   result = create_build_pipeline(device, leaf_cs, sizeof(struct build_primitive_constants),
+                                  &device->meta_state.accel_struct_build.leaf_pipeline,
+                                  &device->meta_state.accel_struct_build.leaf_p_layout);
    if (result != VK_SUCCESS)
-      goto fail;
+      return result;
 
-   VkPipelineShaderStageCreateInfo leaf_shader_stage = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-      .module = vk_shader_module_handle_from_nir(leaf_cs),
-      .pName = "main",
-      .pSpecializationInfo = NULL,
-   };
-
-   VkComputePipelineCreateInfo leaf_pipeline_info = {
-      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-      .stage = leaf_shader_stage,
-      .flags = 0,
-      .layout = device->meta_state.accel_struct_build.leaf_p_layout,
-   };
-
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), radv_pipeline_cache_to_handle(&device->meta_state.cache), 1,
-      &leaf_pipeline_info, NULL, &device->meta_state.accel_struct_build.leaf_pipeline);
+   result = create_build_pipeline(device, internal_cs, sizeof(struct build_internal_constants),
+                                  &device->meta_state.accel_struct_build.internal_pipeline,
+                                  &device->meta_state.accel_struct_build.internal_p_layout);
    if (result != VK_SUCCESS)
-      goto fail;
+      return result;
 
-   const VkPipelineLayoutCreateInfo internal_pl_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 0,
-      .pushConstantRangeCount = 1,
-      .pPushConstantRanges = &(VkPushConstantRange){VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                                                    sizeof(struct build_internal_constants)},
-   };
+   result = create_build_pipeline(device, copy_cs, sizeof(struct copy_constants),
+                                  &device->meta_state.accel_struct_build.copy_pipeline,
+                                  &device->meta_state.accel_struct_build.copy_p_layout);
 
-   result = radv_CreatePipelineLayout(radv_device_to_handle(device), &internal_pl_create_info,
-                                      &device->meta_state.alloc,
-                                      &device->meta_state.accel_struct_build.internal_p_layout);
    if (result != VK_SUCCESS)
-      goto fail;
+      return result;
 
-   VkPipelineShaderStageCreateInfo internal_shader_stage = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-      .module = vk_shader_module_handle_from_nir(internal_cs),
-      .pName = "main",
-      .pSpecializationInfo = NULL,
-   };
+   if (get_accel_struct_build(device->physical_device,
+                              VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR) ==
+       accel_struct_build_lbvh) {
+      nir_shader *morton_cs = build_morton_shader(device);
 
-   VkComputePipelineCreateInfo internal_pipeline_info = {
-      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-      .stage = internal_shader_stage,
-      .flags = 0,
-      .layout = device->meta_state.accel_struct_build.internal_p_layout,
-   };
+      result = create_build_pipeline(device, morton_cs, sizeof(struct morton_constants),
+                                     &device->meta_state.accel_struct_build.morton_pipeline,
+                                     &device->meta_state.accel_struct_build.morton_p_layout);
+      if (result != VK_SUCCESS)
+         return result;
 
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), radv_pipeline_cache_to_handle(&device->meta_state.cache), 1,
-      &internal_pipeline_info, NULL, &device->meta_state.accel_struct_build.internal_pipeline);
-   if (result != VK_SUCCESS)
-      goto fail;
+      device->meta_state.accel_struct_build.radix_sort =
+         radv_create_radix_sort_u64(radv_device_to_handle(device), &device->meta_state.alloc,
+                                    radv_pipeline_cache_to_handle(&device->meta_state.cache));
 
-   const VkPipelineLayoutCreateInfo copy_pl_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 0,
-      .pushConstantRangeCount = 1,
-      .pPushConstantRanges =
-         &(VkPushConstantRange){VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(struct copy_constants)},
-   };
+      struct radix_sort_vk_sort_devaddr_info *radix_sort_info =
+         &device->meta_state.accel_struct_build.radix_sort_info;
+      radix_sort_info->ext = NULL;
+      radix_sort_info->key_bits = 24;
+      radix_sort_info->fill_buffer = radix_sort_fill_buffer;
+   }
 
-   result = radv_CreatePipelineLayout(radv_device_to_handle(device), &copy_pl_create_info,
-                                      &device->meta_state.alloc,
-                                      &device->meta_state.accel_struct_build.copy_p_layout);
-   if (result != VK_SUCCESS)
-      goto fail;
-
-   VkPipelineShaderStageCreateInfo copy_shader_stage = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-      .module = vk_shader_module_handle_from_nir(copy_cs),
-      .pName = "main",
-      .pSpecializationInfo = NULL,
-   };
-
-   VkComputePipelineCreateInfo copy_pipeline_info = {
-      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-      .stage = copy_shader_stage,
-      .flags = 0,
-      .layout = device->meta_state.accel_struct_build.copy_p_layout,
-   };
-
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), radv_pipeline_cache_to_handle(&device->meta_state.cache), 1,
-      &copy_pipeline_info, NULL, &device->meta_state.accel_struct_build.copy_pipeline);
-   if (result != VK_SUCCESS)
-      goto fail;
-
-   ralloc_free(copy_cs);
-   ralloc_free(internal_cs);
-   ralloc_free(leaf_cs);
-
-   return VK_SUCCESS;
-
-fail:
-   radv_device_finish_accel_struct_build_state(device);
-   ralloc_free(copy_cs);
-   ralloc_free(internal_cs);
-   ralloc_free(leaf_cs);
    return result;
 }
 
@@ -1780,6 +2024,8 @@ struct bvh_state {
    uint32_t node_offset;
    uint32_t node_count;
    uint32_t scratch_offset;
+   uint32_t buffer_1_offset;
+   uint32_t buffer_2_offset;
 
    uint32_t instance_offset;
    uint32_t instance_count;
@@ -1794,12 +2040,42 @@ radv_CmdBuildAccelerationStructuresKHR(
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    struct radv_meta_saved_state saved_state;
 
+   enum radv_cmd_flush_bits flush_bits =
+      RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+      radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+                            NULL) |
+      radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+                            NULL);
+
+   enum accel_struct_build build_mode = get_accel_struct_build(
+      cmd_buffer->device->physical_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR);
+   uint32_t node_id_stride = get_node_id_stride(build_mode);
+
    radv_meta_save(
       &saved_state, cmd_buffer,
       RADV_META_SAVE_COMPUTE_PIPELINE | RADV_META_SAVE_DESCRIPTORS | RADV_META_SAVE_CONSTANTS);
    struct bvh_state *bvh_states = calloc(infoCount, sizeof(struct bvh_state));
 
-   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE,
+   if (build_mode != accel_struct_build_unoptimized) {
+      for (uint32_t i = 0; i < infoCount; ++i) {
+         if (radv_has_shader_buffer_float_minmax(cmd_buffer->device->physical_device)) {
+            /* Clear the bvh bounds with nan. */
+            si_cp_dma_clear_buffer(cmd_buffer, pInfos[i].scratchData.deviceAddress,
+                                   6 * sizeof(float), 0x7FC00000);
+         } else {
+            /* Clear the bvh bounds with int max/min. */
+            si_cp_dma_clear_buffer(cmd_buffer, pInfos[i].scratchData.deviceAddress,
+                                   3 * sizeof(float), 0x7fffffff);
+            si_cp_dma_clear_buffer(cmd_buffer,
+                                   pInfos[i].scratchData.deviceAddress + 3 * sizeof(float),
+                                   3 * sizeof(float), 0x80000000);
+         }
+      }
+
+      cmd_buffer->state.flush_bits |= flush_bits;
+   }
+
+   radv_CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                         cmd_buffer->device->meta_state.accel_struct_build.leaf_pipeline);
 
    for (uint32_t i = 0; i < infoCount; ++i) {
@@ -1820,9 +2096,11 @@ radv_CmdBuildAccelerationStructuresKHR(
             const VkAccelerationStructureGeometryKHR *geom =
                pInfos[i].pGeometries ? &pInfos[i].pGeometries[j] : pInfos[i].ppGeometries[j];
 
-            if ((inst && geom->geometryType != VK_GEOMETRY_TYPE_INSTANCES_KHR) ||
-                (!inst && geom->geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR))
+            if (!inst == (geom->geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR))
                continue;
+
+            const VkAccelerationStructureBuildRangeInfoKHR *buildRangeInfo =
+               &ppBuildRangeInfos[i][j];
 
             prim_consts.geometry_type = geom->geometryType;
             prim_consts.geometry_id = j | (geom->flags << 28);
@@ -1831,16 +2109,18 @@ radv_CmdBuildAccelerationStructuresKHR(
             case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
                prim_consts.vertex_addr =
                   geom->geometry.triangles.vertexData.deviceAddress +
-                  ppBuildRangeInfos[i][j].firstVertex * geom->geometry.triangles.vertexStride;
+                  buildRangeInfo->firstVertex * geom->geometry.triangles.vertexStride;
                prim_consts.index_addr = geom->geometry.triangles.indexData.deviceAddress;
 
                if (geom->geometry.triangles.indexType == VK_INDEX_TYPE_NONE_KHR)
-                  prim_consts.vertex_addr += ppBuildRangeInfos[i][j].primitiveOffset;
+                  prim_consts.vertex_addr += buildRangeInfo->primitiveOffset;
                else
-                  prim_consts.index_addr += ppBuildRangeInfos[i][j].primitiveOffset;
+                  prim_consts.index_addr += buildRangeInfo->primitiveOffset;
 
-               prim_consts.transform_addr = geom->geometry.triangles.transformData.deviceAddress +
-                                            ppBuildRangeInfos[i][j].transformOffset;
+               prim_consts.transform_addr = geom->geometry.triangles.transformData.deviceAddress;
+               if (prim_consts.transform_addr)
+                  prim_consts.transform_addr += buildRangeInfo->transformOffset;
+
                prim_consts.vertex_stride = geom->geometry.triangles.vertexStride;
                prim_consts.vertex_format = geom->geometry.triangles.vertexFormat;
                prim_consts.index_format = geom->geometry.triangles.indexType;
@@ -1848,35 +2128,105 @@ radv_CmdBuildAccelerationStructuresKHR(
                break;
             case VK_GEOMETRY_TYPE_AABBS_KHR:
                prim_consts.aabb_addr =
-                  geom->geometry.aabbs.data.deviceAddress + ppBuildRangeInfos[i][j].primitiveOffset;
+                  geom->geometry.aabbs.data.deviceAddress + buildRangeInfo->primitiveOffset;
                prim_consts.aabb_stride = geom->geometry.aabbs.stride;
                prim_size = 64;
                break;
             case VK_GEOMETRY_TYPE_INSTANCES_KHR:
-               prim_consts.instance_data = geom->geometry.instances.data.deviceAddress +
-                                           ppBuildRangeInfos[i][j].primitiveOffset;
+               prim_consts.instance_data =
+                  geom->geometry.instances.data.deviceAddress + buildRangeInfo->primitiveOffset;
                prim_consts.array_of_pointers = geom->geometry.instances.arrayOfPointers ? 1 : 0;
                prim_size = 128;
-               bvh_states[i].instance_count += ppBuildRangeInfos[i][j].primitiveCount;
+               bvh_states[i].instance_count += buildRangeInfo->primitiveCount;
                break;
             default:
                unreachable("Unknown geometryType");
             }
 
-            radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer),
-                                  cmd_buffer->device->meta_state.accel_struct_build.leaf_p_layout,
-                                  VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(prim_consts),
-                                  &prim_consts);
-            radv_unaligned_dispatch(cmd_buffer, ppBuildRangeInfos[i][j].primitiveCount, 1, 1);
-            prim_consts.dst_offset += prim_size * ppBuildRangeInfos[i][j].primitiveCount;
-            prim_consts.dst_scratch_offset += 4 * ppBuildRangeInfos[i][j].primitiveCount;
+            radv_CmdPushConstants(
+               commandBuffer, cmd_buffer->device->meta_state.accel_struct_build.leaf_p_layout,
+               VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(prim_consts), &prim_consts);
+            radv_unaligned_dispatch(cmd_buffer, buildRangeInfo->primitiveCount, 1, 1);
+            prim_consts.dst_offset += prim_size * buildRangeInfo->primitiveCount;
+            prim_consts.dst_scratch_offset += node_id_stride * buildRangeInfo->primitiveCount;
          }
       }
       bvh_states[i].node_offset = prim_consts.dst_offset;
-      bvh_states[i].node_count = prim_consts.dst_scratch_offset / 4;
+      bvh_states[i].node_count = prim_consts.dst_scratch_offset / node_id_stride;
    }
 
-   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE,
+   if (build_mode == accel_struct_build_lbvh) {
+      cmd_buffer->state.flush_bits |= flush_bits;
+
+      radv_CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                           cmd_buffer->device->meta_state.accel_struct_build.morton_pipeline);
+
+      for (uint32_t i = 0; i < infoCount; ++i) {
+         RADV_FROM_HANDLE(radv_acceleration_structure, accel_struct,
+                          pInfos[i].dstAccelerationStructure);
+
+         const struct morton_constants consts = {
+            .node_addr = radv_accel_struct_get_va(accel_struct),
+            .scratch_addr = pInfos[i].scratchData.deviceAddress,
+         };
+
+         radv_CmdPushConstants(commandBuffer,
+                               cmd_buffer->device->meta_state.accel_struct_build.morton_p_layout,
+                               VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(consts), &consts);
+         radv_unaligned_dispatch(cmd_buffer, bvh_states[i].node_count, 1, 1);
+      }
+
+      cmd_buffer->state.flush_bits |= flush_bits;
+
+      for (uint32_t i = 0; i < infoCount; ++i) {
+         struct radix_sort_vk_memory_requirements requirements;
+         radix_sort_vk_get_memory_requirements(
+            cmd_buffer->device->meta_state.accel_struct_build.radix_sort, bvh_states[i].node_count,
+            &requirements);
+
+         struct radix_sort_vk_sort_devaddr_info info =
+            cmd_buffer->device->meta_state.accel_struct_build.radix_sort_info;
+         info.count = bvh_states[i].node_count;
+
+         VkDeviceAddress base_addr =
+            pInfos[i].scratchData.deviceAddress + SCRATCH_TOTAL_BOUNDS_SIZE;
+
+         info.keyvals_even.buffer = VK_NULL_HANDLE;
+         info.keyvals_even.offset = 0;
+         info.keyvals_even.devaddr = base_addr;
+
+         info.keyvals_odd = base_addr + requirements.keyvals_size;
+
+         info.internal.buffer = VK_NULL_HANDLE;
+         info.internal.offset = 0;
+         info.internal.devaddr = base_addr + requirements.keyvals_size * 2;
+
+         VkDeviceAddress result_addr;
+         radix_sort_vk_sort_devaddr(cmd_buffer->device->meta_state.accel_struct_build.radix_sort,
+                                    &info, radv_device_to_handle(cmd_buffer->device), commandBuffer,
+                                    &result_addr);
+
+         assert(result_addr == info.keyvals_even.devaddr || result_addr == info.keyvals_odd);
+
+         if (result_addr == info.keyvals_even.devaddr) {
+            bvh_states[i].buffer_1_offset = SCRATCH_TOTAL_BOUNDS_SIZE;
+            bvh_states[i].buffer_2_offset = SCRATCH_TOTAL_BOUNDS_SIZE + requirements.keyvals_size;
+         } else {
+            bvh_states[i].buffer_1_offset = SCRATCH_TOTAL_BOUNDS_SIZE + requirements.keyvals_size;
+            bvh_states[i].buffer_2_offset = SCRATCH_TOTAL_BOUNDS_SIZE;
+         }
+         bvh_states[i].scratch_offset = bvh_states[i].buffer_1_offset;
+      }
+
+      cmd_buffer->state.flush_bits |= flush_bits;
+   } else {
+      for (uint32_t i = 0; i < infoCount; ++i) {
+         bvh_states[i].buffer_1_offset = 0;
+         bvh_states[i].buffer_2_offset = bvh_states[i].node_count * 4;
+      }
+   }
+
+   radv_CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                         cmd_buffer->device->meta_state.accel_struct_build.internal_pipeline);
    bool progress = true;
    for (unsigned iter = 0; progress; ++iter) {
@@ -1888,18 +2238,20 @@ radv_CmdBuildAccelerationStructuresKHR(
          if (iter && bvh_states[i].node_count == 1)
             continue;
 
-         if (!progress) {
-            cmd_buffer->state.flush_bits |=
-               RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-               radv_src_access_flush(cmd_buffer, VK_ACCESS_2_SHADER_WRITE_BIT, NULL) |
-               radv_dst_access_flush(cmd_buffer,
-                                     VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT, NULL);
-         }
+         if (!progress)
+            cmd_buffer->state.flush_bits |= flush_bits;
+
          progress = true;
+
          uint32_t dst_node_count = MAX2(1, DIV_ROUND_UP(bvh_states[i].node_count, 4));
          bool final_iter = dst_node_count == 1;
+
          uint32_t src_scratch_offset = bvh_states[i].scratch_offset;
-         uint32_t dst_scratch_offset = src_scratch_offset ? 0 : bvh_states[i].node_count * 4;
+         uint32_t buffer_1_offset = bvh_states[i].buffer_1_offset;
+         uint32_t buffer_2_offset = bvh_states[i].buffer_2_offset;
+         uint32_t dst_scratch_offset =
+            (src_scratch_offset == buffer_1_offset) ? buffer_2_offset : buffer_1_offset;
+
          uint32_t dst_node_offset = bvh_states[i].node_offset;
          if (final_iter)
             dst_node_offset = ALIGN(sizeof(struct radv_accel_struct_header), 64);
@@ -1913,7 +2265,7 @@ radv_CmdBuildAccelerationStructuresKHR(
             .fill_header = bvh_states[i].node_count | (final_iter ? 0x80000000U : 0),
          };
 
-         radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer),
+         radv_CmdPushConstants(commandBuffer,
                                cmd_buffer->device->meta_state.accel_struct_build.internal_p_layout,
                                VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(consts), &consts);
          radv_unaligned_dispatch(cmd_buffer, dst_node_count, 1, 1);
@@ -1933,15 +2285,7 @@ radv_CmdBuildAccelerationStructuresKHR(
       header.instance_count = bvh_states[i].instance_count;
       header.compacted_size = bvh_states[i].node_offset;
 
-      /* 16 bytes per invocation, 64 invocations per workgroup */
-      header.copy_dispatch_size[0] = DIV_ROUND_UP(header.compacted_size, 16 * 64);
-      header.copy_dispatch_size[1] = 1;
-      header.copy_dispatch_size[2] = 1;
-
-      header.serialization_size =
-         header.compacted_size + align(sizeof(struct radv_accel_struct_serialization_header) +
-                                          sizeof(uint64_t) * header.instance_count,
-                                       128);
+      fill_accel_struct_header(&header);
 
       radv_update_buffer_cp(cmd_buffer,
                             radv_buffer_get_va(accel_struct->bo) + accel_struct->mem_offset + base,

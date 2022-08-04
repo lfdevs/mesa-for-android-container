@@ -352,3 +352,89 @@ TEST_F(Optimizer, DoNotFuseSpecialComparisons)
    NEGCASE(bi_discard_b32(b, bi_fcmp_f32(b, x, y, BI_CMPF_GTLT, BI_RESULT_TYPE_F1)));
    NEGCASE(bi_discard_b32(b, bi_fcmp_f32(b, x, y, BI_CMPF_TOTAL, BI_RESULT_TYPE_F1)));
 }
+
+TEST_F(Optimizer, FuseResultType)
+{
+   CASE(bi_mux_i32_to(b, reg, bi_imm_f32(0.0), bi_imm_f32(1.0),
+                      bi_fcmp_f32(b, x, y, BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_fcmp_f32_to(b, reg, x, y, BI_CMPF_LE, BI_RESULT_TYPE_F1));
+
+   CASE(bi_mux_i32_to(b, reg, bi_imm_f32(0.0), bi_imm_f32(1.0),
+                      bi_fcmp_f32(b, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_fcmp_f32_to(b, reg, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_F1));
+
+   CASE(bi_mux_i32_to(b, reg, bi_imm_u32(0), bi_imm_u32(1),
+                      bi_fcmp_f32(b, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_fcmp_f32_to(b, reg, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_I1));
+
+   CASE(bi_mux_v2i16_to(b, reg, bi_imm_f16(0.0), bi_imm_f16(1.0),
+                      bi_fcmp_v2f16(b, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_fcmp_v2f16_to(b, reg, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_F1));
+
+   CASE(bi_mux_v2i16_to(b, reg, bi_imm_u16(0), bi_imm_u16(1),
+                      bi_fcmp_v2f16(b, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_fcmp_v2f16_to(b, reg, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_I1));
+
+   CASE(bi_mux_i32_to(b, reg, bi_imm_u32(0), bi_imm_u32(1),
+                      bi_icmp_u32(b, x, y, BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_icmp_u32_to(b, reg, x, y, BI_CMPF_LE, BI_RESULT_TYPE_I1));
+
+   CASE(bi_mux_v2i16_to(b, reg, bi_imm_u16(0), bi_imm_u16(1),
+                      bi_icmp_v2u16(b, x, y, BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_icmp_v2u16_to(b, reg, x, y, BI_CMPF_LE, BI_RESULT_TYPE_I1));
+
+   CASE(bi_mux_v4i8_to(b, reg, bi_imm_u8(0), bi_imm_u8(1),
+                      bi_icmp_v4u8(b, x, y, BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_icmp_v4u8_to(b, reg, x, y, BI_CMPF_LE, BI_RESULT_TYPE_I1));
+
+   CASE(bi_mux_i32_to(b, reg, bi_imm_u32(0), bi_imm_u32(1),
+                      bi_icmp_s32(b, x, y, BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_icmp_s32_to(b, reg, x, y, BI_CMPF_LE, BI_RESULT_TYPE_I1));
+
+   CASE(bi_mux_v2i16_to(b, reg, bi_imm_u16(0), bi_imm_u16(1),
+                      bi_icmp_v2s16(b, x, y, BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_icmp_v2s16_to(b, reg, x, y, BI_CMPF_LE, BI_RESULT_TYPE_I1));
+
+   CASE(bi_mux_v4i8_to(b, reg, bi_imm_u8(0), bi_imm_u8(1),
+                      bi_icmp_v4s8(b, x, y, BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO),
+        bi_icmp_v4s8_to(b, reg, x, y, BI_CMPF_LE, BI_RESULT_TYPE_I1));
+}
+
+TEST_F(Optimizer, DoNotFuseMixedSizeResultType)
+{
+   NEGCASE(bi_mux_i32_to(b, reg, bi_imm_f32(0.0), bi_imm_f32(1.0),
+                      bi_fcmp_v2f16(b, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO));
+
+   NEGCASE(bi_mux_v2i16_to(b, reg, bi_imm_f16(0.0), bi_imm_f16(1.0),
+                      bi_fcmp_f32(b, bi_abs(x), bi_neg(y), BI_CMPF_LE, BI_RESULT_TYPE_M1),
+                      BI_MUX_INT_ZERO));
+}
+
+TEST_F(Optimizer, VarTexCoord32)
+{
+   CASE({
+         bi_index ld = bi_ld_var_imm(b, bi_null(), BI_REGISTER_FORMAT_F32, BI_SAMPLE_CENTER, BI_UPDATE_STORE, BI_VECSIZE_V2, 0);
+
+         bi_index x = bi_temp(b->shader);
+         bi_index y = bi_temp(b->shader);
+         bi_instr *split = bi_split_i32_to(b, x, ld);
+         split->nr_dests = 2;
+         split->dest[1] = y;
+
+         bi_texs_2d_f32_to(b, reg, x, y, false, 0, 0);
+   }, {
+         bi_var_tex_f32_to(b, reg, false, BI_SAMPLE_CENTER, BI_UPDATE_STORE, 0, 0);
+   });
+}

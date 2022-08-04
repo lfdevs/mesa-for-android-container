@@ -81,6 +81,9 @@ public:
 
    void create_function(ir_function_signature *ir);
 
+   /* True if we have any output rvalues */
+   bool has_output_rvalue;
+
 private:
    void add_instr(nir_instr *instr, unsigned num_components, unsigned bit_size);
    nir_ssa_def *evaluate_rvalue(ir_rvalue *ir);
@@ -212,8 +215,7 @@ glsl_to_nir(const struct gl_constants *consts,
     * TODO: add missing glsl ir to nir support and remove this loop.
     */
    while (has_unsupported_function_param(sh->ir)) {
-      do_common_optimization(sh->ir, true, true, gl_options,
-                             consts->NativeIntegers);
+      do_common_optimization(sh->ir, true, gl_options, consts->NativeIntegers);
    }
 
    nir_shader *shader = nir_shader_create(NULL, stage, options,
@@ -254,19 +256,27 @@ glsl_to_nir(const struct gl_constants *consts,
    if (shader_prog->Label)
       shader->info.label = ralloc_strdup(shader, shader_prog->Label);
 
-   /* Check for transform feedback varyings specified via the API */
-   shader->info.has_transform_feedback_varyings =
-      shader_prog->TransformFeedback.NumVarying > 0;
-
-   /* Check for transform feedback varyings specified in the Shader */
-   if (shader_prog->last_vert_prog)
-      shader->info.has_transform_feedback_varyings |=
-         shader_prog->last_vert_prog->sh.LinkedTransformFeedback->NumVarying > 0;
+   shader->info.subgroup_size = SUBGROUP_SIZE_UNIFORM;
 
    if (shader->info.stage == MESA_SHADER_FRAGMENT) {
       shader->info.fs.pixel_center_integer = sh->Program->info.fs.pixel_center_integer;
       shader->info.fs.origin_upper_left = sh->Program->info.fs.origin_upper_left;
       shader->info.fs.advanced_blend_modes = sh->Program->info.fs.advanced_blend_modes;
+
+      nir_foreach_variable_with_modes(var, shader,
+                                      nir_var_shader_in |
+                                      nir_var_system_value) {
+         if (var->data.mode == nir_var_system_value &&
+             (var->data.location == SYSTEM_VALUE_SAMPLE_ID ||
+              var->data.location == SYSTEM_VALUE_SAMPLE_POS))
+            shader->info.fs.uses_sample_shading = true;
+
+         if (var->data.mode == nir_var_shader_in && var->data.sample)
+            shader->info.fs.uses_sample_shading = true;
+      }
+
+      if (v1.has_output_rvalue)
+         shader->info.fs.uses_sample_shading = true;
    }
 
    return shader;
@@ -277,6 +287,7 @@ nir_visitor::nir_visitor(const struct gl_constants *consts, nir_shader *shader)
    this->supports_std430 = consts->UseSTD430AsDefaultPacking;
    this->shader = shader;
    this->is_global = true;
+   this->has_output_rvalue = false;
    this->var_table = _mesa_pointer_hash_table_create(NULL);
    this->overload_table = _mesa_pointer_hash_table_create(NULL);
    this->sparse_variable_set = _mesa_pointer_set_create(NULL);
@@ -479,13 +490,6 @@ get_nir_how_declared(unsigned how_declared)
 void
 nir_visitor::visit(ir_variable *ir)
 {
-   /* TODO: In future we should switch to using the NIR lowering pass but for
-    * now just ignore these variables as GLSL IR should have lowered them.
-    * Anything remaining are just dead vars that weren't cleaned up.
-    */
-   if (ir->data.mode == ir_var_shader_shared)
-      return;
-
    /* FINISHME: inout parameters */
    assert(ir->data.mode != ir_var_function_inout);
 
@@ -496,6 +500,7 @@ nir_visitor::visit(ir_variable *ir)
    var->type = ir->type;
    var->name = ralloc_strdup(var, ir->name);
 
+   var->data.assigned = ir->data.assigned;
    var->data.always_active_io = ir->data.always_active_io;
    var->data.read_only = ir->data.read_only;
    var->data.centroid = ir->data.centroid;
@@ -504,6 +509,7 @@ nir_visitor::visit(ir_variable *ir)
    var->data.how_declared = get_nir_how_declared(ir->data.how_declared);
    var->data.invariant = ir->data.invariant;
    var->data.location = ir->data.location;
+   var->data.must_be_shader_input = ir->data.must_be_shader_input;
    var->data.stream = ir->data.stream;
    if (ir->data.stream & (1u << 31))
       var->data.stream |= NIR_STREAM_PACKED;
@@ -581,6 +587,10 @@ nir_visitor::visit(ir_variable *ir)
 
    case ir_var_system_value:
       var->data.mode = nir_var_system_value;
+      break;
+
+   case ir_var_shader_shared:
+      var->data.mode = nir_var_mem_shared;
       break;
 
    default:
@@ -668,6 +678,7 @@ nir_visitor::visit(ir_variable *ir)
    var->data.descriptor_set = 0;
    var->data.binding = ir->data.binding;
    var->data.explicit_binding = ir->data.explicit_binding;
+   var->data.explicit_offset = ir->data.explicit_xfb_offset;
    var->data.bindless = ir->data.bindless;
    var->data.offset = ir->data.offset;
    var->data.access = (gl_access_qualifier)mem_access;
@@ -1831,6 +1842,9 @@ nir_visitor::evaluate_rvalue(ir_rvalue* ir)
 
       enum gl_access_qualifier access = deref_get_qualifier(this->deref);
       this->result = nir_load_deref_with_access(&b, this->deref, access);
+
+      if (nir_deref_mode_is(this->deref, nir_var_shader_out))
+         this->has_output_rvalue = true;
    }
 
    return this->result;
@@ -1979,8 +1993,8 @@ nir_visitor::visit(ir_expression *ir)
    case ir_unop_rcp:  result = nir_frcp(&b, srcs[0]);  break;
    case ir_unop_rsq:  result = nir_frsq(&b, srcs[0]);  break;
    case ir_unop_sqrt: result = nir_fsqrt(&b, srcs[0]); break;
-   case ir_unop_exp:  unreachable("ir_unop_exp should have been lowered");
-   case ir_unop_log:  unreachable("ir_unop_log should have been lowered");
+   case ir_unop_exp:  result = nir_fexp2(&b, nir_fmul_imm(&b, srcs[0], M_LOG2E)); break;
+   case ir_unop_log:  result = nir_fmul_imm(&b, nir_flog2(&b, srcs[0]), 1.0 / M_LOG2E); break;
    case ir_unop_exp2: result = nir_fexp2(&b, srcs[0]); break;
    case ir_unop_log2: result = nir_flog2(&b, srcs[0]); break;
    case ir_unop_i2f:
@@ -2335,15 +2349,9 @@ nir_visitor::visit(ir_expression *ir)
    case ir_binop_dot:
       result = nir_fdot(&b, srcs[0], srcs[1]);
       break;
-   case ir_binop_vector_extract: {
-      result = nir_channel(&b, srcs[0], 0);
-      for (unsigned i = 1; i < ir->operands[0]->type->vector_elements; i++) {
-         nir_ssa_def *swizzled = nir_channel(&b, srcs[0], i);
-         result = nir_bcsel(&b, nir_ieq_imm(&b, srcs[1], i),
-                            swizzled, result);
-      }
+   case ir_binop_vector_extract:
+      result = nir_vector_extract(&b, srcs[0], srcs[1]);
       break;
-   }
 
    case ir_binop_atan2:
       result = nir_atan2(&b, srcs[0], srcs[1]);
@@ -2536,7 +2544,6 @@ nir_visitor::visit(ir_texture *ir)
 
             for (unsigned j = 0; j < 2; ++j) {
                int val = c->get_int_component(j);
-               assert(val <= 31 && val >= -32);
                instr->tg4_offsets[i][j] = val;
             }
          }

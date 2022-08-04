@@ -131,6 +131,12 @@ nouveau_fence_update(struct nouveau_screen *screen, bool flushed)
    struct nouveau_fence *next = NULL;
    u32 sequence = screen->fence.update(&screen->base);
 
+   /* If running under drm-shim, let all fences be signalled so things run to
+    * completion (avoids a hang at the end of shader-db).
+    */
+   if (unlikely(screen->disable_fences))
+      sequence = screen->fence.sequence;
+
    if (screen->fence.sequence_ack == sequence)
       return;
    screen->fence.sequence_ack = sequence;

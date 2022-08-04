@@ -284,7 +284,7 @@ print_instr_format_specific(const Instruction* instr, FILE* output)
       uint16_t imm = instr->sopp().imm;
       switch (instr->opcode) {
       case aco_opcode::s_waitcnt: {
-         /* we usually should check the chip class for vmcnt/lgkm, but
+         /* we usually should check the gfx level for vmcnt/lgkm, but
           * insert_waitcnt() should fill it in regardless. */
          unsigned vmcnt = (imm & 0xF) | ((imm & (0x3 << 14)) >> 10);
          if (vmcnt != 63)
@@ -420,8 +420,10 @@ print_instr_format_specific(const Instruction* instr, FILE* output)
          fprintf(output, " da");
       if (mimg.lwe)
          fprintf(output, " lwe");
-      if (mimg.r128 || mimg.a16)
-         fprintf(output, " r128/a16");
+      if (mimg.r128)
+        fprintf(output, " r128");
+      if (mimg.a16)
+         fprintf(output, " a16");
       if (mimg.d16)
          fprintf(output, " d16");
       if (mimg.disable_wqm)
@@ -482,7 +484,7 @@ print_instr_format_specific(const Instruction* instr, FILE* output)
    case Format::SCRATCH: {
       const FLAT_instruction& flat = instr->flatlike();
       if (flat.offset)
-         fprintf(output, " offset:%u", flat.offset);
+         fprintf(output, " offset:%d", flat.offset);
       if (flat.glc)
          fprintf(output, " glc");
       if (flat.dlc)

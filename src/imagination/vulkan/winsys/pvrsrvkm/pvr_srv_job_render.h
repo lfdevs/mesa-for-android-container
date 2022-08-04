@@ -34,8 +34,8 @@ struct pvr_winsys_render_ctx_create_info;
 struct pvr_winsys_render_submit_info;
 struct pvr_winsys_rt_dataset;
 struct pvr_winsys_rt_dataset_create_info;
-struct pvr_winsys_syncobj;
 struct pvr_winsys_vma;
+struct vk_sync;
 
 /*******************************************
    Function prototypes
@@ -68,7 +68,7 @@ void pvr_srv_winsys_render_ctx_destroy(struct pvr_winsys_render_ctx *ctx);
 VkResult pvr_srv_winsys_render_submit(
    const struct pvr_winsys_render_ctx *ctx,
    const struct pvr_winsys_render_submit_info *submit_info,
-   struct pvr_winsys_syncobj **const syncobj_geom_out,
-   struct pvr_winsys_syncobj **const syncobj_frag_out);
+   struct vk_sync *signal_sync_geom,
+   struct vk_sync *signal_sync_frag);
 
 #endif /* PVR_SRV_JOB_RENDER_H */

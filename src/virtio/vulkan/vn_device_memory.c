@@ -405,6 +405,7 @@ vn_AllocateMemory(VkDevice device,
                   const VkAllocationCallbacks *pAllocator,
                   VkDeviceMemory *pMemory)
 {
+   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    const VkAllocationCallbacks *alloc =
       pAllocator ? pAllocator : &dev->base.base.alloc;
@@ -486,6 +487,7 @@ vn_FreeMemory(VkDevice device,
               VkDeviceMemory memory,
               const VkAllocationCallbacks *pAllocator)
 {
+   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_device_memory *mem = vn_device_memory_from_handle(memory);
    const VkAllocationCallbacks *alloc =
@@ -534,6 +536,7 @@ vn_MapMemory(VkDevice device,
              VkMemoryMapFlags flags,
              void **ppData)
 {
+   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_device_memory *mem = vn_device_memory_from_handle(memory);
    const bool need_bo = !mem->base_bo;
@@ -581,6 +584,7 @@ vn_MapMemory(VkDevice device,
 void
 vn_UnmapMemory(VkDevice device, VkDeviceMemory memory)
 {
+   VN_TRACE_FUNC();
 }
 
 VkResult
@@ -588,6 +592,7 @@ vn_FlushMappedMemoryRanges(VkDevice device,
                            uint32_t memoryRangeCount,
                            const VkMappedMemoryRange *pMemoryRanges)
 {
+   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
 
    for (uint32_t i = 0; i < memoryRangeCount; i++) {
@@ -610,6 +615,7 @@ vn_InvalidateMappedMemoryRanges(VkDevice device,
                                 uint32_t memoryRangeCount,
                                 const VkMappedMemoryRange *pMemoryRanges)
 {
+   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
 
    for (uint32_t i = 0; i < memoryRangeCount; i++) {
@@ -646,6 +652,7 @@ vn_GetMemoryFdKHR(VkDevice device,
                   const VkMemoryGetFdInfoKHR *pGetFdInfo,
                   int *pFd)
 {
+   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_device_memory *mem =
       vn_device_memory_from_handle(pGetFdInfo->memory);
@@ -711,6 +718,7 @@ vn_GetMemoryFdPropertiesKHR(VkDevice device,
                             int fd,
                             VkMemoryFdPropertiesKHR *pMemoryFdProperties)
 {
+   VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
    uint64_t alloc_size = 0;
    uint32_t mem_type_bits = 0;

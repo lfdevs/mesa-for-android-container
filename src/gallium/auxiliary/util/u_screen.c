@@ -23,6 +23,7 @@
 
 #include "pipe/p_screen.h"
 #include "util/u_screen.h"
+#include "util/u_debug.h"
 
 /**
  * Helper to use from a pipe_screen->get_param() implementation to return
@@ -48,6 +49,7 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_GRAPHICS:
    case PIPE_CAP_GL_CLAMP:
    case PIPE_CAP_MAX_RENDER_TARGETS:
+   case PIPE_CAP_DITHERING:
       return 1;
 
    case PIPE_CAP_OCCLUSION_QUERY:
@@ -64,7 +66,6 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
-   case PIPE_CAP_VERTEX_SHADER_SATURATE:
    case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS: /* enables EXT_transform_feedback */
    case PIPE_CAP_PRIMITIVE_RESTART:
    case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
@@ -75,6 +76,11 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_FS_COORD_ORIGIN_LOWER_LEFT:
    case PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
    case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
+      return 0;
+
+   case PIPE_CAP_POINT_COORD_ORIGIN_UPPER_LEFT:
+      return 1;
+
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
    case PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE:
    case PIPE_CAP_DEPTH_CLAMP_ENABLE:
@@ -168,7 +174,7 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
       return 0;
 
-   case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
+   case PIPE_CAP_MAX_TEXEL_BUFFER_ELEMENTS_UINT:
       /* GL_EXT_texture_buffer minimum value. */
       return 65536;
 
@@ -253,6 +259,8 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_FS_POINT_IS_SYSVAL:
    case PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL:
       return 0;
+   case PIPE_CAP_MULTI_DRAW_INDIRECT_PARTIAL_STRIDE:
+      return 1;
 
    case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
       /* Enables GL_ARB_shader_storage_buffer_object */
@@ -292,7 +300,6 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_RASTERIZER_SUBPIXEL_BITS:
       return 4; /* GLES 2.0 minimum value */
 
-   case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
    case PIPE_CAP_PREFER_BACK_BUFFER_REUSE:
       return 1;
 
@@ -301,8 +308,9 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
 
    case PIPE_CAP_FBFETCH:
    case PIPE_CAP_FBFETCH_COHERENT:
+   case PIPE_CAP_FBFETCH_ZS:
    case PIPE_CAP_BLEND_EQUATION_ADVANCED:
-   case PIPE_CAP_TGSI_MUL_ZERO_WINS:
+   case PIPE_CAP_LEGACY_MATH_RULES:
    case PIPE_CAP_DOUBLES:
    case PIPE_CAP_INT64:
    case PIPE_CAP_INT64_DIVMOD:
@@ -359,7 +367,6 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTERS:
    case PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTER_BUFFERS:
    case PIPE_CAP_IMAGE_ATOMIC_FLOAT_ADD:
-   case PIPE_CAP_TGSI_SKIP_SHRINK_IO_ARRAYS:
    case PIPE_CAP_IMAGE_LOAD_FORMATTED:
    case PIPE_CAP_IMAGE_STORE_FORMATTED:
    case PIPE_CAP_PREFER_COMPUTE_FOR_MULTIMEDIA:
@@ -370,12 +377,13 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_IMAGE_ATOMIC_INC_WRAP:
    case PIPE_CAP_TGSI_TG4_COMPONENT_IN_SWIZZLE:
    case PIPE_CAP_GLSL_ZERO_INIT:
+   case PIPE_CAP_ALLOW_DRAW_OUT_OF_ORDER:
       return 0;
 
    case PIPE_CAP_MAX_GS_INVOCATIONS:
       return 32;
 
-   case PIPE_CAP_MAX_SHADER_BUFFER_SIZE:
+   case PIPE_CAP_MAX_SHADER_BUFFER_SIZE_UINT:
       return 1 << 27;
 
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
@@ -486,7 +494,28 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_SPARSE_TEXTURE_FULL_ARRAY_CUBE_MIPMAPS:
    case PIPE_CAP_QUERY_SPARSE_TEXTURE_RESIDENCY:
    case PIPE_CAP_CLAMP_SPARSE_TEXTURE_LOD:
+   case PIPE_CAP_TIMELINE_SEMAPHORE_IMPORT:
       return 0;
+
+   case PIPE_CAP_MAX_CONSTANT_BUFFER_SIZE_UINT:
+      return pscreen->get_shader_param(pscreen, PIPE_SHADER_FRAGMENT,
+                                       PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE);
+
+   case PIPE_CAP_HARDWARE_GL_SELECT: {
+      /* =0: on CPU, always disabled
+       * >0: on GPU, enable by default, user can disable it manually
+       * <0: unknown, disable by default, user can enable it manually
+       */
+      int accel = pscreen->get_param(pscreen, PIPE_CAP_ACCELERATED);
+
+      return !!accel && debug_get_bool_option("MESA_HW_ACCEL_SELECT", accel > 0) &&
+         /* internal geometry shader need indirect array access */
+         pscreen->get_shader_param(pscreen, PIPE_SHADER_GEOMETRY,
+                                   PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR) &&
+         /* internal geometry shader need SSBO support */
+         pscreen->get_shader_param(pscreen, PIPE_SHADER_GEOMETRY,
+                                   PIPE_SHADER_CAP_MAX_SHADER_BUFFERS);
+   }
 
    default:
       unreachable("bad PIPE_CAP_*");

@@ -39,7 +39,7 @@
  *
  * According to the specification, the shading rate output can be read &
  * written. A read after a write should report a different value if the
- * implemention decides on different primitive shading rate for some reason.
+ * implementation decides on different primitive shading rate for some reason.
  * This is never the case in our implementation.
  */
 
@@ -54,17 +54,24 @@ lower_shading_rate_output_instr(nir_builder *b, nir_instr *instr,
       return false;
 
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-   if (intrin->intrinsic != nir_intrinsic_load_output &&
-       intrin->intrinsic != nir_intrinsic_store_output)
+   nir_intrinsic_op op = intrin->intrinsic;
+
+   if (op != nir_intrinsic_load_output &&
+       op != nir_intrinsic_store_output &&
+       op != nir_intrinsic_load_per_primitive_output &&
+       op != nir_intrinsic_store_per_primitive_output)
       return false;
 
-   if (nir_intrinsic_base(intrin) != VARYING_SLOT_PRIMITIVE_SHADING_RATE)
+   struct nir_io_semantics io = nir_intrinsic_io_semantics(intrin);
+   if (io.location != VARYING_SLOT_PRIMITIVE_SHADING_RATE)
       return false;
 
-   b->cursor = intrin->intrinsic == nir_intrinsic_load_output ?
-      nir_after_instr(instr) : nir_before_instr(instr);
+   bool is_store = op == nir_intrinsic_store_output ||
+                   op == nir_intrinsic_store_per_primitive_output;
 
-   if (intrin->intrinsic == nir_intrinsic_store_output) {
+   b->cursor = is_store ? nir_before_instr(instr) : nir_after_instr(instr);
+
+   if (is_store) {
       assert(intrin->src[0].is_ssa);
       nir_ssa_def *bit_field = intrin->src[0].ssa;
       nir_ssa_def *fp16_x =
@@ -80,7 +87,6 @@ lower_shading_rate_output_instr(nir_builder *b, nir_instr *instr,
       nir_instr_rewrite_src(instr, &intrin->src[0],
                             nir_src_for_ssa(packed_fp16_xy));
    } else {
-      assert(intrin->intrinsic == nir_intrinsic_load_output);
       nir_ssa_def *packed_fp16_xy = &intrin->dest.ssa;
 
       nir_ssa_def *u32_x =
@@ -102,9 +108,6 @@ lower_shading_rate_output_instr(nir_builder *b, nir_instr *instr,
 bool
 brw_nir_lower_shading_rate_output(nir_shader *nir)
 {
-   /* TODO(mesh): Add Shading Rate support. */
-   assert(nir->info.stage != MESA_SHADER_MESH);
-
    return nir_shader_instructions_pass(nir, lower_shading_rate_output_instr,
                                        nir_metadata_block_index |
                                        nir_metadata_dominance, NULL);

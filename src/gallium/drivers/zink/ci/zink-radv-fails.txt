@@ -1,212 +1,21 @@
-# probable ACO bug: #6276
-KHR-GL46.gpu_shader_fp64.fp64.varyings,Fail
-KHR-GL46.shader_image_load_store.basic-allTargets-atomicCS,Fail
-KHR-GL46.shader_image_load_store.basic-allTargets-atomicGS,Fail
-KHR-GL46.shader_image_load_store.basic-allTargets-atomicVS,Fail
-KHR-GL46.shader_storage_buffer_object.advanced-readWrite-case1-cs,Fail
-KHR-GL46.shader_storage_buffer_object.basic-operations-case1-cs,Fail
-KHR-GL46.shader_storage_buffer_object.basic-operations-case1-vs,Fail
-
-# probable sparse binding bug: #6245
-KHR-GL46.sparse_buffer_tests.BufferStorageTest,Fail
-
 # 3D isn't supported by radv yet: #5822
 KHR-GL46.sparse_texture_tests.InternalFormatQueries,Fail
 KHR-GL46.sparse_texture_tests.SparseTextureAllocation,Fail
 KHR-GL46.sparse_texture_tests.SparseTextureCommitment,Fail
 
-#4562
-dEQP-GLES31.functional.image_load_store.3d.load_store.r32f_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.r32i_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.r32ui_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba16f_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba16i_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba16ui_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba32f_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba32i_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba32ui_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba8_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba8_snorm_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba8i_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.load_store.rgba8ui_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.r32f_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.r32i_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.r32ui_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba16f_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba16i_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba16ui_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba32f_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba32i_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba32ui_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba8_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba8_snorm_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba8i_single_layer,Fail
-dEQP-GLES31.functional.image_load_store.3d.store.rgba8ui_single_layer,Fail
-
-# probably fixed by EXT_2d_view_of_3d support
-KHR-GL46.shader_image_load_store.non-layered_binding,Fail
-
-# amd issue #6305
-KHR-GL46.shader_ballot_tests.ShaderBallotFunctionRead,Fail
-
-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
-dEQP-GLES2.functional.rasterization.primitives.line_loop_wide,Fail
-dEQP-GLES2.functional.rasterization.primitives.line_strip_wide,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.colorburn,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.colordodge,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.darken,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.difference,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.exclusion,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hardlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hsl_color,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hsl_hue,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hsl_luminosity,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.hsl_saturation,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.lighten,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.multiply,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.overlay,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.screen,Fail
-dEQP-GLES31.functional.blend_equation_advanced.barrier.softlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.colorburn,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.colordodge,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.darken,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.difference,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.exclusion,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hardlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hsl_color,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hsl_hue,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hsl_luminosity,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.hsl_saturation,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.lighten,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.multiply,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.overlay,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.screen,Fail
-dEQP-GLES31.functional.blend_equation_advanced.basic.softlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.colorburn,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.colordodge,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.darken,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.difference,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.exclusion,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hardlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_color,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_hue,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_luminosity,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_saturation,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.lighten,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.multiply,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.overlay,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.screen,Fail
-dEQP-GLES31.functional.blend_equation_advanced.msaa.softlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.colorburn,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.colordodge,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.darken,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.difference,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.exclusion,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hardlight,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hsl_color,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hsl_hue,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hsl_luminosity,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.hsl_saturation,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.lighten,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.multiply,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.overlay,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.screen,Fail
-dEQP-GLES31.functional.blend_equation_advanced.srgb.softlight,Fail
-dEQP-GLES31.functional.draw_buffers_indexed.overwrite_common.common_advanced_blend_eq_buffer_advanced_blend_eq,Fail
-dEQP-GLES31.functional.draw_buffers_indexed.overwrite_common.common_blend_eq_buffer_advanced_blend_eq,Fail
-dEQP-GLES31.functional.draw_buffers_indexed.overwrite_common.common_separate_blend_eq_buffer_advanced_blend_eq,Fail
-dEQP-GLES31.functional.draw_buffers_indexed.overwrite_indexed.common_advanced_blend_eq_buffer_advanced_blend_eq,Fail
-dEQP-GLES31.functional.draw_buffers_indexed.overwrite_indexed.common_advanced_blend_eq_buffer_blend_eq,Fail
-dEQP-GLES31.functional.draw_buffers_indexed.overwrite_indexed.common_advanced_blend_eq_buffer_separate_blend_eq,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.default_framebuffer_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.default_framebuffer_bbox_larger,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.fbo_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.global_state.vertex_tessellation_fragment.fbo_bbox_larger,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.default_framebuffer_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.default_framebuffer_bbox_larger,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.fbo_bbox_equal,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_draw.vertex_tessellation_fragment.fbo_bbox_larger,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.default_framebuffer,Fail
-dEQP-GLES31.functional.primitive_bounding_box.wide_points.tessellation_set_per_primitive.vertex_tessellation_fragment.fbo,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.non_multisample_buffer.sample_n_default_framebuffer,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.non_multisample_buffer.sample_n_singlesample_rbo,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.non_multisample_buffer.sample_n_singlesample_texture,Fail
-dEQP-GLES31.functional.stencil_texturing.render.depth24_stencil8_clear,Fail
-dEQP-GLES31.functional.stencil_texturing.render.depth32f_stencil8_clear,Fail
-dEQP-GLES31.functional.synchronization.in_invocation.ssbo_alias_write,Fail
-dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_alias_write,Fail
-dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_write_read,Fail
-dEQP-GLES31.functional.texture.border_clamp.formats.depth24_stencil8_sample_stencil.nearest_size_npot,Fail
-dEQP-GLES31.functional.texture.border_clamp.formats.depth24_stencil8_sample_stencil.nearest_size_pot,Fail
-dEQP-GLES31.functional.texture.border_clamp.formats.depth32f_stencil8_sample_stencil.nearest_size_npot,Fail
-dEQP-GLES31.functional.texture.border_clamp.formats.depth32f_stencil8_sample_stencil.nearest_size_pot,Fail
-dEQP-GLES31.functional.texture.border_clamp.formats.stencil_index8.nearest_size_npot,Fail
-dEQP-GLES31.functional.texture.border_clamp.formats.stencil_index8.nearest_size_pot,Fail
-dEQP-GLES31.functional.texture.border_clamp.per_axis_wrap_mode.texture_2d.uint_stencil.nearest.s_clamp_to_edge_t_clamp_to_border_npot,Fail
-dEQP-GLES31.functional.texture.border_clamp.per_axis_wrap_mode.texture_2d.uint_stencil.nearest.s_clamp_to_edge_t_clamp_to_border_pot,Fail
-dEQP-GLES31.functional.texture.border_clamp.per_axis_wrap_mode.texture_2d.uint_stencil.nearest.s_mirrored_repeat_t_clamp_to_border_npot,Fail
-dEQP-GLES31.functional.texture.border_clamp.per_axis_wrap_mode.texture_2d.uint_stencil.nearest.s_mirrored_repeat_t_clamp_to_border_pot,Fail
-dEQP-GLES31.functional.texture.border_clamp.per_axis_wrap_mode.texture_2d.uint_stencil.nearest.s_repeat_t_clamp_to_border_npot,Fail
-dEQP-GLES31.functional.texture.border_clamp.per_axis_wrap_mode.texture_2d.uint_stencil.nearest.s_repeat_t_clamp_to_border_pot,Fail
-dEQP-GLES31.functional.texture.border_clamp.range_clamp.nearest_unorm_depth,Fail
-dEQP-GLES31.functional.texture.border_clamp.range_clamp.nearest_unorm_depth_uint_stencil_sample_depth,Fail
-dEQP-GLES31.functional.texture.border_clamp.sampler.uint_stencil,Fail
-dEQP-GLES31.functional.texture.border_clamp.unused_channels.depth24_stencil8_sample_stencil,Fail
-dEQP-GLES31.functional.texture.border_clamp.unused_channels.depth32f_stencil8_sample_stencil,Fail
-dEQP-GLES31.functional.texture.border_clamp.unused_channels.stencil_index8,Fail
-dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_center,Fail
-dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_corner,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_center,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_corner,Fail
-dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_advanced_blend_eq_buffer_advanced_blend_eq,Fail
-dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_blend_eq_buffer_advanced_blend_eq,Fail
-dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_separate_blend_eq_buffer_advanced_blend_eq,Fail
-dEQP-GLES3.functional.draw_buffers_indexed.overwrite_indexed.common_advanced_blend_eq_buffer_advanced_blend_eq,Fail
-dEQP-GLES3.functional.draw_buffers_indexed.overwrite_indexed.common_advanced_blend_eq_buffer_blend_eq,Fail
-dEQP-GLES3.functional.draw_buffers_indexed.overwrite_indexed.common_advanced_blend_eq_buffer_separate_blend_eq,Fail
-dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth24_stencil8,Fail
-dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth32f_stencil8,Fail
-dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component24,Fail
-dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component32f,Fail
-dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth24_stencil8,Fail
-dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth32f_stencil8,Fail
-dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component24,Fail
-dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component32f,Fail
-dEQP-GLES3.functional.polygon_offset.fixed16_render_with_units,Fail
-dEQP-GLES3.functional.rasterization.primitives.line_loop_wide,Fail
-dEQP-GLES3.functional.rasterization.primitives.line_strip_wide,Fail
 dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler2dshadow_vertex,Fail
 dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.sampler2dshadow_vertex,Fail
 
-# cubes are hard #6270
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() cube,Fail
-spec@glsl-1.30@execution@tex-miplevel-selection texture() cube,Fail
-spec@glsl-1.30@execution@tex-miplevel-selection texture() cubearray,Fail
-spec@glsl-1.30@execution@tex-miplevel-selection texture() cubearrayshadow,Fail
-spec@glsl-1.30@execution@tex-miplevel-selection texture() cubeshadow,Fail
-spec@glsl-1.30@execution@tex-miplevel-selection texture(bias) cubeshadow,Fail
-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad cube,Fail
-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad cubearray,Fail
-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad cubeshadow,Fail
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb cube,Fail
-
 # kopper
-glx@glx-multi-window-single-context,Crash
-glx@glx-tfp,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export-tex,Crash
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_ust_test,Fail
 
-# #6264
-spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-read,Crash
-spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-write,Crash
+# #6115
+spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-float-index-rd,Crash
+spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec2-index-rd,Crash
+spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec3-index-rd,Crash
+spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec4-index-rd,Crash
 
-# maybe color_write_enable related?
-spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-frag
 
 glx@extension string sanity,Fail
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
@@ -226,14 +35,16 @@ glx@glx_ext_import_context@imported context has same context id,Fail
 glx@glx_ext_import_context@make current- multi process,Fail
 glx@glx_ext_import_context@make current- single process,Fail
 glx@glx_ext_import_context@query context info,Fail
-glx@glx-make-current,Crash
-glx@glx-multi-window-single-context,Fail
 glx@glx-swap-copy,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth,Crash
 glx@glx-visuals-depth -pixmap,Crash
-glx@glx-visuals-stencil,Crash
 glx@glx-visuals-stencil -pixmap,Crash
+
+# #6322
+spec@arb_framebuffer_object@fbo-attachments-blit-scaled-linear,Fail
+spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
+
 
 spec@arb_viewport_array@display-list,Fail
 shaders@glsl-fs-pointcoord,Fail
@@ -249,10 +60,7 @@ spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-non-const-uniform-index,Fail
 spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
 spec@arb_depth_texture@depth-tex-modes,Fail
-spec@arb_enhanced_layouts@execution@component-layout@vs-fs-array-dvec3,Crash
-spec@arb_enhanced_layouts@execution@component-layout@vs-gs-fs-double,Fail
-spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled,Fail
-spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled@GL_RGB565- swizzled- border color only,Fail
+spec@arb_enhanced_layouts@execution@component-layout@vs-fs-array-dvec3,Fail
 spec@arb_fragment_program_shadow@tex-shadow1d,Fail
 spec@arb_fragment_program_shadow@tex-shadow2d,Fail
 spec@arb_fragment_program_shadow@tex-shadow2drect,Fail
@@ -311,7 +119,6 @@ spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-double-fl
 spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec2-vec2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec3-vec3,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@vert-conversion-explicit-dvec4-vec4,Fail
-spec@arb_gpu_shader_fp64@execution@explicit-location-gs-fs-vs,Fail
 spec@arb_gpu_shader_int64@execution@conversion@frag-conversion-explicit-float-uint64_t,Fail
 spec@arb_gpu_shader_int64@execution@conversion@frag-conversion-explicit-vec2-u64vec2,Fail
 spec@arb_gpu_shader_int64@execution@conversion@frag-conversion-explicit-vec3-u64vec3,Fail
@@ -327,9 +134,6 @@ spec@arb_gpu_shader_int64@execution@conversion@vert-conversion-explicit-vec4-u64
 spec@arb_gpu_shader_int64@execution@fs-ishl-then-ishr,Fail
 spec@arb_gpu_shader_int64@execution@fs-ishl-then-ishr-loop,Fail
 spec@arb_gl_spirv@execution@xfb@vs_block_array,Fail
-spec@arb_point_parameters@arb_point_parameters-point-attenuation@Aliased combinations,Fail
-spec@arb_point_parameters@arb_point_parameters-point-attenuation@Antialiased combinations,Fail
-spec@arb_point_parameters@arb_point_parameters-point-attenuation,Fail
 spec@arb_point_sprite@arb_point_sprite-checkerboard,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
@@ -426,10 +230,6 @@ spec@arb_sample_shading@samplemask 8@sample mask_in_one,Fail
 
 spec@arb_shader_clock@execution@clock2x32,Fail
 spec@arb_shader_clock@execution@clock,Fail
-spec@arb_shader_image_load_store@layer,Fail
-spec@arb_shader_image_load_store@layer@image3D/non-layered binding test,Fail
-spec@arb_shader_image_load_store@level@3D level binding test,Fail
-spec@arb_shader_image_load_store@level,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-01,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-03,Fail
@@ -439,19 +239,8 @@ spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-cumulative,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@fs-packhalf2x16,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,Fail
 spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -scan 1 50,Crash
-spec@arb_tessellation_shader@execution@dmat-vs-gs-tcs-tes,Fail
-spec@arb_tessellation_shader@execution@dvec3-vs-tcs-tes,Fail
-spec@arb_tessellation_shader@execution@variable-indexing@tes-input-array-dvec4-index-rd,Fail
 spec@arb_texture_buffer_object@formats (fs- arb),Crash
 spec@arb_texture_buffer_object@formats (vs- arb),Crash
-spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled,Fail
-spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA_BPTC_UNORM- swizzled- border color only,Fail
-spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT- swizzled- border color only,Fail
-spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT- swizzled- border color only,Fail
-spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM- swizzled- border color only,Fail
-spec@arb_texture_compression@texwrap formats bordercolor-swizzled,Fail
-spec@arb_texture_compression@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA- swizzled- border color only,Fail
-spec@arb_texture_compression@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGB- swizzled- border color only,Fail
 spec@arb_texture_float@fbo-blending-formats,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_INTENSITY16F_ARB,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_INTENSITY32F_ARB,Fail
@@ -462,45 +251,15 @@ spec@arb_texture_float@multisample-formats 2 gl_arb_texture_float,Fail
 spec@arb_texture_float@multisample-formats 4 gl_arb_texture_float,Fail
 spec@arb_texture_float@multisample-formats 6 gl_arb_texture_float,Fail
 spec@arb_texture_float@multisample-formats 8 gl_arb_texture_float,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGB16F- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGB32F- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGBA16F- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGBA32F- swizzled- border color only,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-01,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-03,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-07,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-08,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drectproj,Fail
-spec@arb_texture_rgb10_a2ui@texwrap formats bordercolor-swizzled,Fail
-spec@arb_texture_rgb10_a2ui@texwrap formats bordercolor-swizzled@GL_RGB10_A2UI- swizzled- border color only,Fail
 spec@arb_texture_rg@execution@fs-shadow2d-red-01,Fail
 spec@arb_texture_rg@execution@fs-shadow2d-red-02,Fail
 spec@arb_texture_rg@execution@fs-shadow2d-red-03,Fail
-spec@arb_texture_rg@texwrap formats bordercolor-swizzled,Fail
-spec@arb_texture_rg@texwrap formats bordercolor-swizzled@GL_R16- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats bordercolor-swizzled@GL_R8- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats bordercolor-swizzled@GL_RG16- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats bordercolor-swizzled@GL_RG8- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_R16F- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_R32F- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_RG16F- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_RG32F- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_R16I- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_R16UI- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_R32I- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_R32UI- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_R8I- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_R8UI- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG16I- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG16UI- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG32I- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG32UI- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG8I- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG8UI- swizzled- border color only,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@egl_chromium_sync_control@conformance,Fail
@@ -509,10 +268,7 @@ spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
-spec@ext_framebuffer_multisample@alpha-to-coverage-no-draw-buffer-zero 2,Fail
-spec@ext_framebuffer_multisample@alpha-to-coverage-no-draw-buffer-zero 4,Fail
-spec@ext_framebuffer_multisample@alpha-to-coverage-no-draw-buffer-zero 6,Fail
-spec@ext_framebuffer_multisample@alpha-to-coverage-no-draw-buffer-zero 8,Fail
+
 spec@ext_framebuffer_multisample@alpha-to-one-dual-src-blend 2,Fail
 spec@ext_framebuffer_multisample@alpha-to-one-dual-src-blend 4,Fail
 spec@ext_framebuffer_multisample@alpha-to-one-dual-src-blend 6,Fail
@@ -553,7 +309,6 @@ spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE12,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE16,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB10,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export-tex,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p010,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p012,Fail
@@ -561,8 +316,6 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p016,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420,Fail
 spec@ext_packed_float@query-rgba-signed-components,Fail
-spec@ext_packed_float@texwrap formats bordercolor-swizzled,Fail
-spec@ext_packed_float@texwrap formats bordercolor-swizzled@GL_R11F_G11F_B10F- swizzled- border color only,Fail
 spec@ext_texture_array@glsl-fs-shadow1darray-01,Fail
 spec@ext_texture_array@glsl-fs-shadow1darray-03,Fail
 spec@ext_texture_array@glsl-fs-shadow1darray-07,Fail
@@ -574,30 +327,6 @@ spec@ext_texture_array@glsl-fs-shadow2darray-03,Fail
 spec@ext_texture_array@glsl-fs-shadow2darray-07,Fail
 spec@ext_texture_array@glsl-fs-shadow2darray-08,Fail
 spec@ext_texture_array@glsl-fs-shadow2darray,Fail
-spec@ext_texture_compression_rgtc@texwrap formats bordercolor-swizzled,Fail
-spec@ext_texture_compression_rgtc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RED_RGTC1- swizzled- border color only,Fail
-spec@ext_texture_compression_rgtc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RG_RGTC2- swizzled- border color only,Fail
-spec@ext_texture_compression_rgtc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_SIGNED_RG_RGTC2- swizzled- border color only,Fail
-spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled,Fail
-spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA_S3TC_DXT1_EXT- swizzled- border color only,Fail
-spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA_S3TC_DXT3_EXT- swizzled- border color only,Fail
-spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA_S3TC_DXT5_EXT- swizzled- border color only,Fail
-spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGB_S3TC_DXT1_EXT- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB16I- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB16UI- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB32I- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB32UI- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB8I- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGB8UI- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA16I- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA16UI- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA32I- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA32UI- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA8I- swizzled- border color only,Fail
-spec@ext_texture_integer@texwrap formats bordercolor-swizzled@GL_RGBA8UI- swizzled- border color only,Fail
-spec@ext_texture_shared_exponent@texwrap formats bordercolor-swizzled,Fail
-spec@ext_texture_shared_exponent@texwrap formats bordercolor-swizzled@GL_RGB9_E5- swizzled- border color only,Fail
 spec@ext_texture_snorm@fbo-blending-formats,Fail
 spec@ext_texture_snorm@fbo-blending-formats@GL_INTENSITY16_SNORM,Fail
 spec@ext_texture_snorm@fbo-blending-formats@GL_INTENSITY8_SNORM,Fail
@@ -605,25 +334,6 @@ spec@ext_texture_snorm@fbo-blending-formats@GL_INTENSITY_SNORM,Fail
 spec@ext_texture_snorm@fbo-blending-formats@GL_LUMINANCE16_SNORM,Fail
 spec@ext_texture_snorm@fbo-blending-formats@GL_LUMINANCE8_SNORM,Fail
 spec@ext_texture_snorm@fbo-blending-formats@GL_LUMINANCE_SNORM,Fail
-spec@ext_texture_snorm@texwrap formats bordercolor-swizzled,Fail
-spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_R16_SNORM- swizzled- border color only,Fail
-spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_R8_SNORM- swizzled- border color only,Fail
-spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_RG16_SNORM- swizzled- border color only,Fail
-spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_RG8_SNORM- swizzled- border color only,Fail
-spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_RGB16_SNORM- swizzled- border color only,Fail
-spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_RGB8_SNORM- swizzled- border color only,Fail
-spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_RGBA16_SNORM- swizzled- border color only,Fail
-spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_RGBA8_SNORM- swizzled- border color only,Fail
-spec@ext_texture_srgb@texwrap formats bordercolor-swizzled,Fail
-spec@ext_texture_srgb@texwrap formats bordercolor-swizzled@GL_SRGB8_ALPHA8- swizzled- border color only,Fail
-spec@ext_texture_srgb@texwrap formats bordercolor-swizzled@GL_SRGB8- swizzled- border color only,Fail
-spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled,Fail
-spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT- swizzled- border color only,Fail
-spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT- swizzled- border color only,Fail
-spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT- swizzled- border color only,Fail
-spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA- swizzled- border color only,Fail
-spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT- swizzled- border color only,Fail
-spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB- swizzled- border color only,Fail
 spec@ext_texture_swizzle@depth_texture_mode_and_swizzle,Fail
 spec@glsl-1.10@execution@glsl-fs-inline-explosion,Crash
 spec@glsl-1.10@execution@glsl-vs-inline-explosion,Crash
@@ -708,11 +418,6 @@ spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-rendermode-feedback,Crash
 spec@!opengl 1.0@rasterpos,Crash
-spec@!opengl 1.1@gl_select - alpha-test enabled,Crash
-spec@!opengl 1.1@gl_select - depth-test enabled,Crash
-spec@!opengl 1.1@gl_select - no test function,Crash
-spec@!opengl 1.1@gl_select - scissor-test enabled,Crash
-spec@!opengl 1.1@gl_select - stencil-test enabled,Crash
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
 spec@!opengl 1.1@linestipple@Factor 3x,Fail
 spec@!opengl 1.1@linestipple,Fail
@@ -733,22 +438,6 @@ spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on right edg
 spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on top edge,Fail
 spec@!opengl 1.1@polygon-mode-offset,Fail
 spec@!opengl 1.1@polygon-offset,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_R3_G3_B2- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB10_A2- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB10- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB12- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB16- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB4- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB5_A1- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB5- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB8- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA12- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA16- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA2- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA4- swizzled- border color only,Fail
-spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA8- swizzled- border color only,Fail
-spec@!opengl 1.4@gl-1.4-polygon-offset,Fail
 spec@!opengl 1.5@depth-tex-compare,Fail
 spec@!opengl 2.0@depth-tex-modes-glsl,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag,Fail
@@ -758,10 +447,4 @@ spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
 spec@!opengl es 2.0@glsl-fs-pointcoord,Fail
-spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail

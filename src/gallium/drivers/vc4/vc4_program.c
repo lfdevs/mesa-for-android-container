@@ -2262,6 +2262,7 @@ vc4_shader_ntq(struct vc4_context *vc4, enum qstage stage,
 
                 /* Apply swizzles to all samplers. */
                 .swizzle_result = ~0,
+                .lower_invalid_implicit_lod = true,
         };
 
         /* Lower the format swizzle and ARB_texture_swizzle-style swizzle.

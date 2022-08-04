@@ -445,6 +445,7 @@ enum virgl_formats {
 #define VIRGL_CAP_V2_IMPLICIT_MSAA        (1 << 6)
 #define VIRGL_CAP_V2_COPY_TRANSFER_BOTH_DIRECTIONS (1 << 7)
 #define VIRGL_CAP_V2_SCANOUT_USES_GBM     (1 << 8)
+#define VIRGL_CAP_V2_SSO                  (1 << 9)
 /* virgl bind flags - these are compatible with mesa 10.5 gallium.
  * but are fixed, no other should be passed to virgl either.
  */
@@ -601,6 +602,7 @@ struct virgl_caps_v2 {
         float max_anisotropy;
         uint32_t max_shader_sampler_views;
         struct virgl_supported_format_mask supported_multisample_formats;
+        uint32_t max_const_buffer_size[6]; // PIPE_SHADER_TYPES
 };
 
 union virgl_caps {

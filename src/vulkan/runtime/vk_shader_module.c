@@ -28,6 +28,8 @@
 #include "vk_device.h"
 #include "vk_log.h"
 #include "vk_nir.h"
+#include "vk_pipeline.h"
+#include "vk_util.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL
 vk_common_CreateShaderModule(VkDevice _device,
@@ -56,6 +58,28 @@ vk_common_CreateShaderModule(VkDevice _device,
     *pShaderModule = vk_shader_module_to_handle(module);
 
     return VK_SUCCESS;
+}
+
+const uint8_t vk_shaderModuleIdentifierAlgorithmUUID[VK_UUID_SIZE] = "MESA-SHA1";
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_GetShaderModuleIdentifierEXT(VkDevice _device,
+                                       VkShaderModule _module,
+                                       VkShaderModuleIdentifierEXT *pIdentifier)
+{
+   VK_FROM_HANDLE(vk_shader_module, module, _module);
+   memcpy(pIdentifier->identifier, module->sha1, sizeof(module->sha1));
+   pIdentifier->identifierSize = sizeof(module->sha1);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_GetShaderModuleCreateInfoIdentifierEXT(VkDevice _device,
+                                                 const VkShaderModuleCreateInfo *pCreateInfo,
+                                                 VkShaderModuleIdentifierEXT *pIdentifier)
+{
+   _mesa_sha1_compute(pCreateInfo->pCode, pCreateInfo->codeSize,
+                      pIdentifier->identifier);
+   pIdentifier->identifierSize = SHA1_DIGEST_LENGTH;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -100,34 +124,32 @@ vk_shader_module_to_nir(struct vk_device *device,
                         const nir_shader_compiler_options *nir_options,
                         void *mem_ctx, nir_shader **nir_out)
 {
-   if (mod->nir != NULL) {
-      assert(mod->nir->info.stage == stage);
-      assert(exec_list_length(&mod->nir->functions) == 1);
-      ASSERTED const char *nir_name =
-         nir_shader_get_entrypoint(mod->nir)->function->name;
-      assert(strcmp(nir_name, entrypoint_name) == 0);
+   const VkPipelineShaderStageCreateInfo info = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = mesa_to_vk_shader_stage(stage),
+      .module = vk_shader_module_to_handle((struct vk_shader_module *)mod),
+      .pName = entrypoint_name,
+      .pSpecializationInfo = spec_info,
+   };
+   return vk_pipeline_shader_stage_to_nir(device, &info,
+                                          spirv_options, nir_options,
+                                          mem_ctx, nir_out);
+}
 
-      nir_validate_shader(mod->nir, "internal shader");
+struct vk_shader_module *
+vk_shader_module_clone(void *mem_ctx, const struct vk_shader_module *src)
+{
+   struct vk_shader_module *dst =
+      ralloc_size(mem_ctx, sizeof(struct vk_shader_module) + src->size);
 
-      nir_shader *clone = nir_shader_clone(mem_ctx, mod->nir);
-      if (clone == NULL)
-         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   vk_object_base_init(src->base.device, &dst->base, VK_OBJECT_TYPE_SHADER_MODULE);
 
-      assert(clone->options == NULL || clone->options == nir_options);
-      clone->options = nir_options;
+   dst->nir = NULL;
 
-      *nir_out = clone;
-      return VK_SUCCESS;
-   } else {
-      nir_shader *nir = vk_spirv_to_nir(device,
-                                        (uint32_t *)mod->data, mod->size,
-                                        stage, entrypoint_name, spec_info,
-                                        spirv_options, nir_options,
-                                        mem_ctx);
-      if (nir == NULL)
-         return vk_errorf(device, VK_ERROR_UNKNOWN, "spirv_to_nir failed");
+   memcpy(dst->sha1, src->sha1, sizeof(src->sha1));
 
-      *nir_out = nir;
-      return VK_SUCCESS;
-   }
+   dst->size = src->size;
+   memcpy(dst->data, src->data, src->size);
+
+   return dst;
 }

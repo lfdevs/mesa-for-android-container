@@ -158,7 +158,7 @@ bi_print_block(bi_block *block, FILE *fp)
                 fprintf(fp, "\n");
         }
 
-        fprintf(fp, "block%u {\n", block->name);
+        fprintf(fp, "block%u {\n", block->index);
 
         if (block->scheduled) {
                 bi_foreach_clause_in_block(block, clause)
@@ -174,14 +174,14 @@ bi_print_block(bi_block *block, FILE *fp)
                 fprintf(fp, " -> ");
 
                 bi_foreach_successor((block), succ)
-                        fprintf(fp, "block%u ", succ->name);
+                        fprintf(fp, "block%u ", succ->index);
         }
 
-        if (block->predecessors->entries) {
+        if (bi_num_predecessors(block)) {
                 fprintf(fp, " from");
 
                 bi_foreach_predecessor(block, pred)
-                        fprintf(fp, " block%u", pred->name);
+                        fprintf(fp, " block%u", (*pred)->index);
         }
 
         if (block->scheduled) {

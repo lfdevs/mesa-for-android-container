@@ -28,14 +28,14 @@
 #include <vulkan/vulkan.h>
 
 struct pvr_compute_ctx;
-struct pvr_sub_cmd;
-struct pvr_winsys_syncobj;
+struct pvr_sub_cmd_compute;
+struct vk_sync;
 
 VkResult pvr_compute_job_submit(struct pvr_compute_ctx *ctx,
-                                struct pvr_sub_cmd *sub_cmd,
-                                const VkSemaphore *semaphores,
-                                uint32_t semaphore_count,
+                                struct pvr_sub_cmd_compute *sub_cmd,
+                                struct vk_sync **waits,
+                                uint32_t wait_count,
                                 uint32_t *stage_flags,
-                                struct pvr_winsys_syncobj **const syncobj_out);
+                                struct vk_sync *signal_sync);
 
 #endif /* PVR_JOB_COMPUTE_H */

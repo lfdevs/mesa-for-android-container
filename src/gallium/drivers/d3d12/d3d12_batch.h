@@ -28,12 +28,7 @@
 #include "util/hash_table.h"
 #include <stdint.h>
 
-#ifndef _WIN32
-#include <wsl/winadapter.h>
-#endif
-
-#define D3D12_IGNORE_SDK_LAYERS
-#include <directx/d3d12.h>
+#include "d3d12_common.h"
 
 struct d3d12_bo;
 struct d3d12_descriptor_heap;

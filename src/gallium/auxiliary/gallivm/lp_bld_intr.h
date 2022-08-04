@@ -78,6 +78,11 @@ lp_declare_intrinsic(LLVMModuleRef module,
                      LLVMTypeRef *arg_types,
                      unsigned num_args);
 
+LLVMValueRef
+lp_declare_intrinsic_with_type(LLVMModuleRef module,
+                     const char *name,
+                     LLVMTypeRef function_type);
+
 void
 lp_add_function_attr(LLVMValueRef function_or_call,
                      int attr_idx, enum lp_func_attr attr);

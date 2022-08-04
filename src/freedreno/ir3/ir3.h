@@ -1158,7 +1158,7 @@ dest_regs(struct ir3_instruction *instr)
    if (instr->dsts_count == 0)
       return 0;
 
-   debug_assert(instr->dsts_count == 1);
+   assert(instr->dsts_count == 1);
    return util_last_bit(instr->dsts[0]->wrmask);
 }
 
@@ -1843,7 +1843,6 @@ bool ir3_cf(struct ir3 *ir);
 
 /* copy-propagate: */
 bool ir3_cp(struct ir3 *ir, struct ir3_shader_variant *so);
-bool ir3_cp_postsched(struct ir3 *ir);
 
 /* common subexpression elimination: */
 bool ir3_cse(struct ir3 *ir);
@@ -1866,6 +1865,7 @@ bool ir3_lower_subgroups(struct ir3 *ir);
 
 /* legalize: */
 bool ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary);
+bool ir3_legalize_relative(struct ir3 *ir);
 
 static inline bool
 ir3_has_latency_to_hide(struct ir3 *ir)
@@ -1995,7 +1995,7 @@ ir3_MOV(struct ir3_block *block, struct ir3_instruction *src, type_t type)
    } else {
       __ssa_src(instr, src, src->dsts[0]->flags & IR3_REG_SHARED);
    }
-   debug_assert(!(src->dsts[0]->flags & IR3_REG_RELATIV));
+   assert(!(src->dsts[0]->flags & IR3_REG_RELATIV));
    instr->cat1.src_type = type;
    instr->cat1.dst_type = type;
    return instr;
@@ -2009,13 +2009,13 @@ ir3_COV(struct ir3_block *block, struct ir3_instruction *src, type_t src_type,
    unsigned dst_flags = (type_size(dst_type) < 32) ? IR3_REG_HALF : 0;
    unsigned src_flags = (type_size(src_type) < 32) ? IR3_REG_HALF : 0;
 
-   debug_assert((src->dsts[0]->flags & IR3_REG_HALF) == src_flags);
+   assert((src->dsts[0]->flags & IR3_REG_HALF) == src_flags);
 
    __ssa_dst(instr)->flags |= dst_flags;
    __ssa_src(instr, src, 0);
    instr->cat1.src_type = src_type;
    instr->cat1.dst_type = dst_type;
-   debug_assert(!(src->dsts[0]->flags & IR3_REG_ARRAY));
+   assert(!(src->dsts[0]->flags & IR3_REG_ARRAY));
    return instr;
 }
 

@@ -395,7 +395,7 @@ get_fast_clear_rect(const struct isl_device *dev,
        * Target(s)", beneath the "MSAA Compression" bullet (p326):
        *
        *     Clear pass for this case requires that scaled down primitive
-       *     is sent down with upper left co-ordinate to coincide with
+       *     is sent down with upper left coordinate to coincide with
        *     actual rectangle being cleared. For MSAA, clear rectangle’s
        *     height and width need to as show in the following table in
        *     terms of (width,height) of the RT.
@@ -406,7 +406,7 @@ get_fast_clear_rect(const struct isl_device *dev,
        *      8X     Ceil(1/2*width)      Ceil(1/2*height)
        *     16X         width            Ceil(1/2*height)
        *
-       * The text "with upper left co-ordinate to coincide with actual
+       * The text "with upper left coordinate to coincide with actual
        * rectangle being cleared" is a little confusing--it seems to imply
        * that to clear a rectangle from (x,y) to (x+w,y+h), one needs to
        * feed the pipeline using the rectangle (x,y) to
@@ -576,7 +576,7 @@ blorp_clear(struct blorp_batch *batch,
    if (compute)
       use_simd16_replicated_data = false;
 
-   /* Constant color writes ignore everyting in blend and color calculator
+   /* Constant color writes ignore everything in blend and color calculator
     * state.  This is not documented.
     */
    params.color_write_disable = color_write_disable & BITFIELD_MASK(4);
@@ -735,7 +735,7 @@ blorp_clear_stencil_as_rgba(struct blorp_batch *batch,
 
    /* W-tiles and Y-tiles have the same layout as far as cache lines are
     * concerned: both are 8x8 cache lines laid out Y-major.  The difference is
-    * entirely in how the data is arranged withing the cache line.  W-tiling
+    * entirely in how the data is arranged within the cache line.  W-tiling
     * is 8x8 pixels in a swizzled pattern while Y-tiling is 16B by 4 rows
     * regardless of image format size.  As long as everything is aligned to 8,
     * we can just treat the W-tiled image as Y-tiled, ignore the layout

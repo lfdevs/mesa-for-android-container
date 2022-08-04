@@ -680,7 +680,7 @@ isl_surf_choose_tiling(const struct isl_device *dev,
 
    #undef CHOOSE
 
-   /* No tiling mode accomodates the inputs. */
+   /* No tiling mode accommodates the inputs. */
    return false;
 }
 
@@ -877,7 +877,7 @@ isl_choose_image_alignment_el(const struct isl_device *dev,
          *image_align_el = isl_extent3d(1, 1, 1);
       } else if (ISL_GFX_VER(dev) < 12) {
          /* On gfx7+, HiZ surfaces are always aligned to 16x8 pixels in the
-          * primary surface which works out to 2x2 HiZ elments.
+          * primary surface which works out to 2x2 HiZ elements.
           */
          *image_align_el = isl_extent3d(2, 2, 1);
       } else {
@@ -1268,11 +1268,11 @@ isl_calc_phys_slice0_extent_sa_gfx4_2d(
        * alignment here is safe because we later align the row pitch and array
        * pitch to the tile boundary. It is safe even for
        * ISL_MSAA_LAYOUT_INTERLEAVED, because phys_level0_sa is already scaled
-       * to accomodate the interleaved samples.
+       * to accommodate the interleaved samples.
        *
        * For linear surfaces, reducing the alignment here permits us to later
        * choose an arbitrary, non-aligned row pitch. If the surface backs
-       * a VkBuffer, then an arbitrary pitch may be needed to accomodate
+       * a VkBuffer, then an arbitrary pitch may be needed to accommodate
        * VkBufferImageCopy::bufferRowLength.
        */
       *phys_slice0_sa = (struct isl_extent2d) {
@@ -2062,7 +2062,7 @@ isl_surf_get_hiz_surf(const struct isl_device *dev,
     * from Sandy Bridge through Broadwell, HiZ compresses samples in the
     * primary depth surface.  On Sky Lake and onward, HiZ compresses pixels.
     *
-    * There are a number of different ways that this discrepency could be
+    * There are a number of different ways that this discrepancy could be
     * handled.  The way we have chosen is to simply make MSAA HiZ have the
     * same number of samples as the parent surface pre-Sky Lake and always be
     * single-sampled on Sky Lake and above.  Since the block sizes of

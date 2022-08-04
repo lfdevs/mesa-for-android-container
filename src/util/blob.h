@@ -124,6 +124,16 @@ void
 blob_finish_get_buffer(struct blob *blob, void **buffer, size_t *size);
 
 /**
+ * Aligns the blob to the given alignment.
+ *
+ * \see blob_reader_align
+ *
+ * \return True unless allocation fails
+ */
+bool
+blob_align(struct blob *blob, size_t alignment);
+
+/**
  * Add some unstructured, fixed-size data to a blob.
  *
  * \return True unless allocation failed.
@@ -315,6 +325,17 @@ blob_write_string(struct blob *blob, const char *str);
  */
 void
 blob_reader_init(struct blob_reader *blob, const void *data, size_t size);
+
+/**
+ * Align the current offset of the blob reader to the given alignment.
+ *
+ * This may be useful if you need the result of blob_read_bytes to have a
+ * particular alignment.  Note that this only aligns relative to blob->data
+ * and the alignment of the resulting pointer is only guaranteed if blob->data
+ * is also aligned to the requested alignment.
+ */
+void
+blob_reader_align(struct blob_reader *blob, size_t alignment);
 
 /**
  * Read some unstructured, fixed-size data from the current location, (and

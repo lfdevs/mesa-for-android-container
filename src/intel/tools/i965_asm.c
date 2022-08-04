@@ -142,7 +142,7 @@ i965_postprocess_labels()
             int relative_offset = (tlabel->offset - ilabel->offset) / sizeof(brw_inst);
             relative_offset *= to_bytes_scale;
 
-            unsigned opcode = brw_inst_opcode(p->devinfo, inst);
+            unsigned opcode = brw_inst_opcode(p->isa, inst);
 
             if (ilabel->type == INSTR_LABEL_JIP) {
                switch (opcode) {
@@ -309,8 +309,11 @@ int main(int argc, char **argv)
       goto end;
    }
 
+   struct brw_isa_info isa;
+   brw_init_isa_info(&isa, devinfo);
+
    p = rzalloc(NULL, struct brw_codegen);
-   brw_init_codegen(devinfo, p, p);
+   brw_init_codegen(&isa, p, p);
    p->automatic_exec_sizes = false;
 
    err = yyparse();
@@ -322,7 +325,7 @@ int main(int argc, char **argv)
 
    store = p->store;
 
-   disasm_info = disasm_initialize(p->devinfo, NULL);
+   disasm_info = disasm_initialize(p->isa, NULL);
    if (!disasm_info) {
       fprintf(stderr, "Unable to initialize disasm_info struct instance\n");
       goto end;
@@ -331,7 +334,7 @@ int main(int argc, char **argv)
    if (output_type == OPT_OUTPUT_C_LITERAL)
       fprintf(output, "{\n");
 
-   brw_validate_instructions(p->devinfo, p->store, 0,
+   brw_validate_instructions(p->isa, p->store, 0,
                              p->next_insn_offset, disasm_info);
 
    const int nr_insn = (p->next_insn_offset - start_offset) / 16;

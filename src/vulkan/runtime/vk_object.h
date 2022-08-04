@@ -229,29 +229,29 @@ struct vk_private_data_slot {
    uint32_t index;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vk_private_data_slot, base,
-                               VkPrivateDataSlotEXT,
-                               VK_OBJECT_TYPE_PRIVATE_DATA_SLOT_EXT);
+                               VkPrivateDataSlot,
+                               VK_OBJECT_TYPE_PRIVATE_DATA_SLOT);
 
 VkResult
 vk_private_data_slot_create(struct vk_device *device,
-                            const VkPrivateDataSlotCreateInfoEXT* pCreateInfo,
+                            const VkPrivateDataSlotCreateInfo* pCreateInfo,
                             const VkAllocationCallbacks* pAllocator,
-                            VkPrivateDataSlotEXT* pPrivateDataSlot);
+                            VkPrivateDataSlot* pPrivateDataSlot);
 void
 vk_private_data_slot_destroy(struct vk_device *device,
-                             VkPrivateDataSlotEXT privateDataSlot,
+                             VkPrivateDataSlot privateDataSlot,
                              const VkAllocationCallbacks *pAllocator);
 VkResult
 vk_object_base_set_private_data(struct vk_device *device,
                                 VkObjectType objectType,
                                 uint64_t objectHandle,
-                                VkPrivateDataSlotEXT privateDataSlot,
+                                VkPrivateDataSlot privateDataSlot,
                                 uint64_t data);
 void
 vk_object_base_get_private_data(struct vk_device *device,
                                 VkObjectType objectType,
                                 uint64_t objectHandle,
-                                VkPrivateDataSlotEXT privateDataSlot,
+                                VkPrivateDataSlot privateDataSlot,
                                 uint64_t *pData);
 
 const char *

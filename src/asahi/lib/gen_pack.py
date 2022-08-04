@@ -117,8 +117,7 @@ __gen_unpack_sint(const uint8_t *restrict cl, uint32_t start, uint32_t end)
    int size = end - start + 1;
    int64_t val = __gen_unpack_uint(cl, start, end);
 
-   /* Get the sign bit extended. */
-   return (val << (64 - size)) >> (64 - size);
+   return util_sign_extend(val, size);
 }
 
 #define agx_prepare(dst, T)                                 \\

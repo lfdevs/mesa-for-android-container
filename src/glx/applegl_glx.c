@@ -49,13 +49,15 @@ applegl_destroy_context(struct glx_context *gc)
 }
 
 static int
-applegl_bind_context(struct glx_context *gc, struct glx_context *old,
-		     GLXDrawable draw, GLXDrawable read)
+applegl_bind_context(
+    struct glx_context *gc, struct glx_context *old,
+    GLXDrawable draw, GLXDrawable read)
 {
    Display *dpy = gc->psc->dpy;
-   bool error = apple_glx_make_current_context(dpy,
-					       (old && old != &dummyContext) ? old->driContext : NULL,
-					       gc ? gc->driContext : NULL, draw);
+   bool error = apple_glx_make_current_context(
+       dpy,
+       (old && old != &dummyContext) ? old->driContext : NULL,
+       gc ? gc->driContext : NULL, draw);
 
    apple_glx_diagnostic("%s: error %s\n", __func__, error ? "YES" : "NO");
    if (error)
@@ -82,9 +84,10 @@ applegl_unbind_context(struct glx_context *gc, struct glx_context *new)
 
    dpy = gc->psc->dpy;
 
-   error = apple_glx_make_current_context(dpy,
-					  (gc != &dummyContext) ? gc->driContext : NULL,
-					  NULL, None);
+   error = apple_glx_make_current_context(
+       dpy,
+       (gc != &dummyContext) ? gc->driContext : NULL,
+       NULL, None);
 
    apple_glx_diagnostic("%s: error %s\n", __func__, error ? "YES" : "NO");
 }
@@ -117,9 +120,10 @@ static const struct glx_context_vtable applegl_context_vtable = {
 };
 
 struct glx_context *
-applegl_create_context(struct glx_screen *psc,
-		       struct glx_config *config,
-		       struct glx_context *shareList, int renderType)
+applegl_create_context(
+    struct glx_screen *psc,
+    struct glx_config *config,
+    struct glx_context *shareList, int renderType)
 {
    struct glx_context *gc;
    int errorcode;
@@ -146,9 +150,9 @@ applegl_create_context(struct glx_screen *psc,
    gc->driContext = NULL;
 
    /* TODO: darwin: Integrate with above to do indirect */
-   if(apple_glx_create_context(&gc->driContext, dpy, screen, config, 
-			       shareList ? shareList->driContext : NULL,
-			       &errorcode, &x11error)) {
+   if (apple_glx_create_context(&gc->driContext, dpy, screen, config,
+                                shareList ? shareList->driContext : NULL,
+                                &errorcode, &x11error)) {
       __glXSendError(dpy, errorcode, 0, X_GLXCreateContext, x11error);
       gc->vtable->destroy(gc);
       return NULL;
@@ -158,7 +162,7 @@ applegl_create_context(struct glx_screen *psc,
    gc->config = config;
    gc->isDirect = GL_TRUE;
    gc->xid = 1; /* Just something not None, so we know when to destroy
-		 * it in MakeContextCurrent. */
+                 * it in MakeContextCurrent. */
 
    return gc;
 }

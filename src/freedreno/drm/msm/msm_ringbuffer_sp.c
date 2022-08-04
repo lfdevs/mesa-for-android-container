@@ -120,7 +120,7 @@ flush_submit_list(struct list_head *submit_list)
     * NOTE allocate on-stack in the common case, but with an upper-
     * bound to limit on-stack allocation to 4k:
     */
-   const unsigned bo_limit = sizeof(struct drm_msm_gem_submit_bo) / 4096;
+   const unsigned bo_limit = 4096 / sizeof(struct drm_msm_gem_submit_bo);
    bool bos_on_stack = fd_submit->nr_bos < bo_limit;
    struct drm_msm_gem_submit_bo
       _submit_bos[bos_on_stack ? fd_submit->nr_bos : 0];

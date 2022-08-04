@@ -341,11 +341,11 @@ lp_type_ufixed(unsigned width, unsigned total_width)
 
 
 LLVMTypeRef
-lp_build_elem_type(struct gallivm_state *gallivm, struct lp_type type);
+lp_build_elem_type(const struct gallivm_state *gallivm, struct lp_type type);
 
 
 LLVMTypeRef
-lp_build_vec_type(struct gallivm_state *gallivm, struct lp_type type);
+lp_build_vec_type(const struct gallivm_state *gallivm, struct lp_type type);
 
 
 boolean
@@ -361,11 +361,13 @@ lp_check_value(struct lp_type type, LLVMValueRef val);
 
 
 LLVMTypeRef
-lp_build_int_elem_type(struct gallivm_state *gallivm, struct lp_type type);
+lp_build_int_elem_type(const struct gallivm_state *gallivm,
+                       struct lp_type type);
 
 
 LLVMTypeRef
-lp_build_int_vec_type(struct gallivm_state *gallivm, struct lp_type type);
+lp_build_int_vec_type(const struct gallivm_state *gallivm,
+                      struct lp_type type);
 
 
 static inline struct lp_type

@@ -31,20 +31,18 @@ dzn_entrypoints = custom_target(
 )
 
 libdzn_files = files(
-  'dzn_cmd_buffer.cpp',
-  'dzn_descriptor_set.cpp',
-  'dzn_device.cpp',
-  'dzn_image.cpp',
-  'dzn_meta.cpp',
+  'dzn_cmd_buffer.c',
+  'dzn_descriptor_set.c',
+  'dzn_device.c',
+  'dzn_dxcore.cpp',
+  'dzn_image.c',
+  'dzn_meta.c',
   'dzn_nir.c',
-  'dzn_pass.cpp',
-  'dzn_pipeline_cache.cpp',
-  'dzn_pipeline.cpp',
-  'dzn_query.cpp',
-  'dzn_sync.cpp',
-  'dzn_util.cpp',
+  'dzn_pipeline.c',
+  'dzn_query.c',
+  'dzn_sync.c',
   'dzn_util.c',
-  'dzn_wsi.cpp',
+  'dzn_wsi.c',
 )
 
 dzn_deps = [
@@ -59,35 +57,40 @@ dzn_deps = [
 ]
 
 dzn_flags = [ ]
+dzn_cpp_flags = [ ]
 
 if with_platform_windows
   dzn_flags += '-DVK_USE_PLATFORM_WIN32_KHR'
+  libdzn_files += files('dzn_dxgi.c')
 endif
 
-if meson.version().version_compare('>= 0.60')
-  cpp_std = 'cpp_std=c++20'
-elif cpp.get_id() == 'msvc'
-  cpp_std = 'cpp_std=c++latest'
-else
-  cpp_std = 'cpp_std=c++2a'
+if cc.get_argument_syntax() != 'msvc'
+  dzn_flags_to_try = [
+    '-Werror=unused-variable',
+    '-Werror=unused-but-set-variable',
+    '-Werror=unused-value',
+    '-Werror=format',
+    '-Werror=switch',
+  ]
+  dzn_flags += cc.get_supported_arguments(dzn_flags_to_try)
+  dzn_cpp_flags = cpp.get_supported_arguments(['-Wno-error=unused-value'])
 endif
 
 libvulkan_dzn = shared_library(
   'vulkan_dzn',
   [libdzn_files, dzn_entrypoints, sha1_h],
-  vs_module_defs : 'vulkan_dzn.def',
+  vs_module_defs : vulkan_api_def,
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux,
     inc_compiler, inc_util
   ],
   dependencies : [dzn_deps, idep_vulkan_wsi],
   c_args : dzn_flags,
-  cpp_args : dzn_flags,
+  cpp_args : dzn_cpp_flags,
   gnu_symbol_visibility : 'hidden',
   link_args : [ld_args_bsymbolic, ld_args_gc_sections],
   name_prefix : host_machine.system() == 'windows' ? '' : 'lib',
   install : true,
-  override_options: [cpp_std]
 )
 
 icd_file_name = 'libvulkan_dzn.so'
@@ -97,16 +100,31 @@ if with_platform_windows
   icd_file_name = 'vulkan_dzn.dll'
 endif
 
+
+icd_command = [
+   prog_python, '@INPUT0@',
+   '--api-version', '1.1', '--xml', '@INPUT1@',
+   '--lib-path', join_paths(module_dir, icd_file_name),
+   '--out', '@OUTPUT@',
+]
+
+icd_dev_command = [
+   prog_python, '@INPUT0@',
+   '--api-version', '1.1', '--xml', '@INPUT1@',
+   '--lib-path', join_paths(meson.current_build_dir(), icd_file_name),
+   '--out', '@OUTPUT@',
+]
+
+if with_platform_windows
+  icd_command += '--use-backslash'
+  icd_dev_command += '--use-backslash'
+endif
+
 dzn_icd = custom_target(
   'dzn_icd',
   input : [vk_icd_gen, vk_api_xml],
   output : 'dzn_icd.@0@.json'.format(host_machine.cpu()),
-  command : [
-    prog_python, '@INPUT0@',
-    '--api-version', '1.2', '--xml', '@INPUT1@',
-    '--lib-path', join_paths(module_dir, icd_file_name),
-    '--out', '@OUTPUT@',
-  ],
+  command : icd_command,
   build_by_default : true,
   install_dir : with_vulkan_icd_dir,
   install : true,
@@ -118,12 +136,7 @@ if meson.version().version_compare('>= 0.58')
     'dzn_devenv_icd',
     input : [vk_icd_gen, vk_api_xml],
     output : _dev_icdname,
-    command : [
-      prog_python, '@INPUT0@',
-      '--api-version', '1.1', '--xml', '@INPUT1@',
-      '--lib-path', meson.current_build_dir() / icd_file_name,
-      '--out', '@OUTPUT@',
-    ],
+    command : icd_dev_command,
     build_by_default : true,
   )
 

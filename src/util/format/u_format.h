@@ -34,6 +34,8 @@
 #include "pipe/p_defines.h"
 #include "util/u_debug.h"
 
+#include "c99_compat.h"
+
 union pipe_color_union;
 struct pipe_screen;
 
@@ -841,7 +843,7 @@ util_format_get_blocksize(enum pipe_format format)
    uint bytes = bits / 8;
 
    assert(bits % 8 == 0);
-   assert(bytes > 0);
+   /* Some formats have bits set to 0, let's default to 1.*/
    if (bytes == 0) {
       bytes = 1;
    }
@@ -1672,8 +1674,7 @@ void util_format_unswizzle_4f(float *dst, const float *src,
                               const unsigned char swz[4]);
 
 enum pipe_format
-util_format_snorm8_to_sint8(enum pipe_format format) ATTRIBUTE_CONST;
-
+util_format_snorm_to_sint(enum pipe_format format) ATTRIBUTE_CONST;
 
 extern void
 util_copy_rect(ubyte * dst, enum pipe_format format,
@@ -1691,6 +1692,9 @@ util_format_rgb_to_bgr(enum pipe_format format);
 /* Returns the pipe format with SNORM formats cast to UNORM, otherwise the original pipe format. */
 enum pipe_format
 util_format_snorm_to_unorm(enum pipe_format format);
+
+enum pipe_format
+util_format_rgbx_to_rgba(enum pipe_format format);
 
 #ifdef __cplusplus
 } // extern "C" {

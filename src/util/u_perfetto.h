@@ -25,13 +25,13 @@
 #define _UTIL_PERFETTO_H
 
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
 void util_perfetto_init(void);
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 }
 #endif
 

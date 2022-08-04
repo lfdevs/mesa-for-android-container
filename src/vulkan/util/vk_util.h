@@ -37,13 +37,77 @@ extern "C" {
 
 #include <vulkan/vulkan.h>
 
-#define vk_foreach_struct(__iter, __start) \
-   for (struct VkBaseOutStructure *__iter = (struct VkBaseOutStructure *)(__start); \
-        __iter; __iter = __iter->pNext)
+struct vk_pnext_iterator {
+   VkBaseOutStructure *pos;
+#ifndef NDEBUG
+   VkBaseOutStructure *half_pos;
+   unsigned idx;
+#endif
+   bool done;
+};
 
-#define vk_foreach_struct_const(__iter, __start) \
-   for (const struct VkBaseInStructure *__iter = (const struct VkBaseInStructure *)(__start); \
-        __iter; __iter = __iter->pNext)
+static inline struct vk_pnext_iterator
+vk_pnext_iterator_init(void *start)
+{
+   struct vk_pnext_iterator iter;
+
+   iter.pos = (VkBaseOutStructure *)start;
+#ifndef NDEBUG
+   iter.half_pos = (VkBaseOutStructure *)start;
+   iter.idx = 0;
+#endif
+   iter.done = false;
+
+   return iter;
+}
+
+static inline struct vk_pnext_iterator
+vk_pnext_iterator_init_const(const void *start)
+{
+   return vk_pnext_iterator_init((void *)start);
+}
+
+static inline VkBaseOutStructure *
+vk_pnext_iterator_next(struct vk_pnext_iterator *iter)
+{
+   iter->pos = iter->pos->pNext;
+
+#ifndef NDEBUG
+   if (iter->idx++ & 1) {
+      /** This the "tortoise and the hare" algorithm.  We increment
+       * chaser->pNext every other time *iter gets incremented.  Because *iter
+       * is incrementing twice as fast as chaser->pNext, the distance between
+       * them in the list increases by one for each time we get here.  If we
+       * have a loop, eventually, both iterators will be inside the loop and
+       * this distance will be an integer multiple of the loop length, at
+       * which point the two pointers will be equal.
+       */
+      iter->half_pos = iter->half_pos->pNext;
+      if (iter->half_pos == iter->pos)
+         assert(!"Vulkan input pNext chain has a loop!");
+   }
+#endif
+
+   return iter->pos;
+}
+
+/* Because the outer loop only executes once, independently of what happens in
+ * the inner loop, breaks and continues should work exactly the same as if
+ * there were only one for loop.
+ */
+#define vk_foreach_struct(__e, __start) \
+   for (struct vk_pnext_iterator __iter = vk_pnext_iterator_init(__start); \
+        !__iter.done; __iter.done = true) \
+      for (VkBaseOutStructure *__e = __iter.pos; \
+           __e; __e = vk_pnext_iterator_next(&__iter))
+
+#define vk_foreach_struct_const(__e, __start) \
+   for (struct vk_pnext_iterator __iter = \
+            vk_pnext_iterator_init_const(__start); \
+        !__iter.done; __iter.done = true) \
+      for (const VkBaseInStructure *__e = (VkBaseInStructure *)__iter.pos; \
+           __e; __e = (VkBaseInStructure *)vk_pnext_iterator_next(&__iter))
+
 
 /**
  * A wrapper for a Vulkan output array. A Vulkan output array is one that

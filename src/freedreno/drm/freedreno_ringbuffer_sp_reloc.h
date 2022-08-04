@@ -41,7 +41,7 @@ static void X(emit_reloc_common)(struct fd_ringbuffer *ring,
 }
 
 static void X(fd_ringbuffer_sp_emit_reloc_nonobj)(struct fd_ringbuffer *ring,
-                                                   const struct fd_reloc *reloc)
+                                                  const struct fd_reloc *reloc)
 {
    X(emit_reloc_common)(ring, reloc);
 
@@ -55,7 +55,7 @@ static void X(fd_ringbuffer_sp_emit_reloc_nonobj)(struct fd_ringbuffer *ring,
 }
 
 static void X(fd_ringbuffer_sp_emit_reloc_obj)(struct fd_ringbuffer *ring,
-                                                const struct fd_reloc *reloc)
+                                               const struct fd_reloc *reloc)
 {
    X(emit_reloc_common)(ring, reloc);
 

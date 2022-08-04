@@ -128,9 +128,10 @@ get_shader_module_for_stage(struct zink_context *ctx, struct zink_screen *screen
       if (!zm) {
          return NULL;
       }
+      unsigned patch_vertices = state->shader_keys.key[PIPE_SHADER_TESS_CTRL ].key.tcs.patch_vertices;
       if (pstage == PIPE_SHADER_TESS_CTRL && zs->is_generated && zs->spirv) {
          assert(ctx); //TODO async
-         mod = zink_shader_tcs_compile(screen, zs, zink_get_tcs_key(ctx)->patch_vertices);
+         mod = zink_shader_tcs_compile(screen, zs, patch_vertices);
       } else {
          mod = zink_shader_compile(screen, zs, prog->nir[stage], key);
       }
@@ -156,7 +157,7 @@ get_shader_module_for_stage(struct zink_context *ctx, struct zink_screen *screen
       if (inline_size)
          memcpy(zm->key + key->size + nonseamless_size, key->base.inlined_uniform_values, inline_size * sizeof(uint32_t));
       if (pstage == PIPE_SHADER_TESS_CTRL && zs->is_generated)
-         zm->hash = zink_get_tcs_key(ctx)->patch_vertices;
+         zm->hash = patch_vertices;
       else
          zm->hash = shader_module_hash(zm);
       zm->default_variant = !inline_size && list_is_empty(&prog->shader_cache[pstage][0][0]);
@@ -240,7 +241,12 @@ equals_gfx_pipeline_state(const void *a, const void *b)
 {
    const struct zink_gfx_pipeline_state *sa = a;
    const struct zink_gfx_pipeline_state *sb = b;
-   if (!sa->have_EXT_extended_dynamic_state) {
+   if (sa->uses_dynamic_stride != sb->uses_dynamic_stride)
+      return false;
+   /* dynamic vs rp */
+   if (!!sa->render_pass != !!sb->render_pass)
+      return false;
+   if (!sa->have_EXT_extended_dynamic_state || !sa->uses_dynamic_stride) {
       if (sa->vertex_buffers_enabled_mask != sb->vertex_buffers_enabled_mask)
          return false;
       /* if we don't have dynamic states, we have to hash the enabled vertex buffer bindings */
@@ -252,7 +258,9 @@ equals_gfx_pipeline_state(const void *a, const void *b)
          if (sa->vertex_strides[idx_a] != sb->vertex_strides[idx_b])
             return false;
       }
-      if (sa->dyn_state1.front_face != sb->dyn_state1.front_face)
+   }
+   if (!sa->have_EXT_extended_dynamic_state) {
+      if (memcmp(&sa->dyn_state1, &sb->dyn_state1, offsetof(struct zink_pipeline_dynamic_state1, depth_stencil_alpha_state)))
          return false;
       if (!!sa->dyn_state1.depth_stencil_alpha_state != !!sb->dyn_state1.depth_stencil_alpha_state ||
           (sa->dyn_state1.depth_stencil_alpha_state &&
@@ -261,7 +269,10 @@ equals_gfx_pipeline_state(const void *a, const void *b)
          return false;
    }
    if (!sa->have_EXT_extended_dynamic_state2) {
-      if (sa->dyn_state2.primitive_restart != sb->dyn_state2.primitive_restart)
+      if (memcmp(&sa->dyn_state2, &sb->dyn_state2, sizeof(sa->dyn_state2)))
+         return false;
+   } else if (!sa->extendedDynamicState2PatchControlPoints) {
+      if (sa->dyn_state2.vertices_per_patch != sb->dyn_state2.vertices_per_patch)
          return false;
    }
    return !memcmp(sa->modules, sb->modules, sizeof(sa->modules)) &&
@@ -378,8 +389,9 @@ zink_pipeline_layout_create(struct zink_screen *screen, struct zink_program *pg,
    plci.pPushConstantRanges = &pcr[0];
 
    VkPipelineLayout layout;
-   if (VKSCR(CreatePipelineLayout)(screen->dev, &plci, NULL, &layout) != VK_SUCCESS) {
-      mesa_loge("vkCreatePipelineLayout failed");
+   VkResult result = VKSCR(CreatePipelineLayout)(screen->dev, &plci, NULL, &layout);
+   if (result != VK_SUCCESS) {
+      mesa_loge("vkCreatePipelineLayout failed (%s)", vk_Result_to_str(result));
       return VK_NULL_HANDLE;
    }
 
@@ -593,7 +605,7 @@ zink_program_get_descriptor_usage(struct zink_context *ctx, enum pipe_shader_typ
    case ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW:
       return BITSET_TEST_RANGE(zs->nir->info.textures_used, 0, PIPE_MAX_SAMPLERS - 1);
    case ZINK_DESCRIPTOR_TYPE_IMAGE:
-      return zs->nir->info.images_used;
+      return BITSET_TEST_RANGE(zs->nir->info.images_used, 0, PIPE_MAX_SAMPLERS - 1);
    default:
       unreachable("unknown descriptor type!");
    }
@@ -746,10 +758,10 @@ zink_destroy_compute_program(struct zink_context *ctx,
 static unsigned
 get_pipeline_idx(bool have_EXT_extended_dynamic_state, enum pipe_prim_type mode, VkPrimitiveTopology vkmode)
 {
-   /* VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT specifies that the topology state in
+   /* VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY specifies that the topology state in
     * VkPipelineInputAssemblyStateCreateInfo only specifies the topology class,
     * and the specific topology order and adjacency must be set dynamically
-    * with vkCmdSetPrimitiveTopologyEXT before any drawing commands.
+    * with vkCmdSetPrimitiveTopology before any drawing commands.
     */
    if (have_EXT_extended_dynamic_state) {
       if (mode == PIPE_PRIM_PATCHES)
@@ -765,7 +777,29 @@ get_pipeline_idx(bool have_EXT_extended_dynamic_state, enum pipe_prim_type mode,
    }
    return vkmode;
 }
-                 
+
+/*
+   VUID-vkCmdBindVertexBuffers2-pStrides-06209
+   If pStrides is not NULL each element of pStrides must be either 0 or greater than or equal
+   to the maximum extent of all vertex input attributes fetched from the corresponding
+   binding, where the extent is calculated as the VkVertexInputAttributeDescription::offset
+   plus VkVertexInputAttributeDescription::format size
+
+   * thus, if the stride doesn't meet the minimum requirement for a binding,
+   * disable the dynamic state here and use a fully-baked pipeline
+ */
+static bool
+check_vertex_strides(struct zink_context *ctx)
+{
+   const struct zink_vertex_elements_state *ves = ctx->element_state;
+   for (unsigned i = 0; i < ves->hw_state.num_bindings; i++) {
+      const struct pipe_vertex_buffer *vb = ctx->vertex_buffers + ves->binding_map[i];
+      unsigned stride = vb->buffer.resource ? vb->stride : 0;
+      if (stride && stride < ves->min_stride[i])
+         return false;
+   }
+   return true;
+}
 
 VkPipeline
 zink_get_gfx_pipeline(struct zink_context *ctx,
@@ -776,6 +810,7 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    const bool have_EXT_vertex_input_dynamic_state = screen->info.have_EXT_vertex_input_dynamic_state;
    const bool have_EXT_extended_dynamic_state = screen->info.have_EXT_extended_dynamic_state;
+   bool uses_dynamic_stride = state->uses_dynamic_stride;
 
    VkPrimitiveTopology vkmode = zink_primitive_topology(mode);
    const unsigned idx = get_pipeline_idx(screen->info.have_EXT_extended_dynamic_state, mode, vkmode);
@@ -797,7 +832,9 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
    if (!have_EXT_vertex_input_dynamic_state && ctx->vertex_state_changed) {
       if (state->pipeline)
          state->final_hash ^= state->vertex_hash;
-      if (!have_EXT_extended_dynamic_state) {
+      if (have_EXT_extended_dynamic_state)
+         uses_dynamic_stride = check_vertex_strides(ctx);
+      if (!uses_dynamic_stride) {
          uint32_t hash = 0;
          /* if we don't have dynamic states, we have to hash the enabled vertex buffer bindings */
          uint32_t vertex_buffers_enabled_mask = state->vertex_buffers_enabled_mask;
@@ -815,6 +852,7 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
       state->final_hash ^= state->vertex_hash;
    }
    state->modules_changed = false;
+   state->uses_dynamic_stride = uses_dynamic_stride;
    ctx->vertex_state_changed = false;
 
    entry = _mesa_hash_table_search_pre_hashed(&prog->pipelines[idx], state->final_hash, state);

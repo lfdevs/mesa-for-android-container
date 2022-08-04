@@ -436,7 +436,8 @@ v3dv_GetImageSubresourceLayout(VkDevice device,
    const struct v3d_resource_slice *slice =
       &image->slices[subresource->mipLevel];
    layout->offset =
-      v3dv_layer_offset(image, subresource->mipLevel, subresource->arrayLayer);
+      v3dv_layer_offset(image, subresource->mipLevel, subresource->arrayLayer) -
+      image->mem_offset;
    layout->rowPitch = slice->stride;
    layout->depthPitch = image->cube_map_stride;
    layout->arrayPitch = image->cube_map_stride;
@@ -491,18 +492,18 @@ v3dv_image_type_to_view_type(VkImageType type)
    }
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL
-v3dv_CreateImageView(VkDevice _device,
-                     const VkImageViewCreateInfo *pCreateInfo,
-                     const VkAllocationCallbacks *pAllocator,
-                     VkImageView *pView)
+static VkResult
+create_image_view(struct v3dv_device *device,
+                  bool driver_internal,
+                  const VkImageViewCreateInfo *pCreateInfo,
+                  const VkAllocationCallbacks *pAllocator,
+                  VkImageView *pView)
 {
-   V3DV_FROM_HANDLE(v3dv_device, device, _device);
    V3DV_FROM_HANDLE(v3dv_image, image, pCreateInfo->image);
    struct v3dv_image_view *iview;
 
-   iview = vk_image_view_create(&device->vk, pCreateInfo, pAllocator,
-                                sizeof(*iview));
+   iview = vk_image_view_create(&device->vk, driver_internal, pCreateInfo,
+                                pAllocator, sizeof(*iview));
    if (iview == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -560,6 +561,25 @@ v3dv_CreateImageView(VkDevice _device,
    *pView = v3dv_image_view_to_handle(iview);
 
    return VK_SUCCESS;
+}
+
+VkResult
+v3dv_create_image_view(struct v3dv_device *device,
+                       const VkImageViewCreateInfo *pCreateInfo,
+                       VkImageView *pView)
+{
+   return create_image_view(device, true, pCreateInfo, NULL, pView);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+v3dv_CreateImageView(VkDevice _device,
+                     const VkImageViewCreateInfo *pCreateInfo,
+                     const VkAllocationCallbacks *pAllocator,
+                     VkImageView *pView)
+{
+   V3DV_FROM_HANDLE(v3dv_device, device, _device);
+
+   return create_image_view(device, false, pCreateInfo, pAllocator, pView);
 }
 
 VKAPI_ATTR void VKAPI_CALL

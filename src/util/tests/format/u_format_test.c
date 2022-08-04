@@ -869,8 +869,6 @@ int main(int argc, char **argv)
 {
    boolean success;
 
-   util_cpu_detect();
-
    success = test_all();
 
    return success ? 0 : 1;

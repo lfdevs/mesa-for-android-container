@@ -35,6 +35,9 @@
 #define LAYOUT_CONVERT_THRESHOLD 8
 #define PAN_MAX_BATCHES 32
 
+#define PAN_BIND_SHARED_MASK (PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_SCANOUT | \
+                              PIPE_BIND_SHARED)
+
 struct panfrost_resource {
         struct pipe_resource base;
         struct {
@@ -81,6 +84,12 @@ struct panfrost_resource {
 
         /* Used to decide when to convert to another modifier */
         uint16_t modifier_updates;
+
+        /* Do all pixels have the same stencil value? */
+        bool constant_stencil;
+
+        /* The stencil value if constant_stencil is set */
+        uint8_t stencil_value;
 
         /* Cached min/max values for index buffers */
         struct panfrost_minmax_cache *index_cache;

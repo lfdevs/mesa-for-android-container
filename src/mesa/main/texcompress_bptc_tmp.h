@@ -818,16 +818,6 @@ decompress_rgba_unorm(int width, int height,
 }
 #endif // BPTC_BLOCK_DECODE
 
-static int32_t
-sign_extend(int32_t value,
-            int n_bits)
-{
-   assert(n_bits > 0 && n_bits < 32);
-
-   const unsigned n = 32 - n_bits;
-   return (int32_t)((uint32_t)value << n) >> n;
-}
-
 static int
 signed_unquantize(int value, int n_endpoint_bits)
 {
@@ -912,8 +902,8 @@ extract_float_endpoints(const struct bptc_float_mode *mode,
       /* The endpoints are specified as signed offsets from e0 */
       for (endpoint = 1; endpoint < n_endpoints; endpoint++) {
          for (component = 0; component < 3; component++) {
-            value = sign_extend(endpoints[endpoint][component],
-                                mode->n_delta_bits[component]);
+            value = util_sign_extend(endpoints[endpoint][component],
+                                     mode->n_delta_bits[component]);
             endpoints[endpoint][component] =
                ((endpoints[0][component] + value) &
                 ((1 << mode->n_endpoint_bits) - 1));
@@ -924,8 +914,8 @@ extract_float_endpoints(const struct bptc_float_mode *mode,
    if (is_signed) {
       for (endpoint = 0; endpoint < n_endpoints; endpoint++) {
          for (component = 0; component < 3; component++) {
-            value = sign_extend(endpoints[endpoint][component],
-                                mode->n_endpoint_bits);
+            value = util_sign_extend(endpoints[endpoint][component],
+                                     mode->n_endpoint_bits);
             endpoints[endpoint][component] =
                signed_unquantize(value, mode->n_endpoint_bits);
          }

@@ -362,9 +362,9 @@ struct sqtt_file_chunk_asic_info {
 static_assert(sizeof(struct sqtt_file_chunk_asic_info) == 720,
               "sqtt_file_chunk_asic_info doesn't match RGP spec");
 
-static enum sqtt_gfxip_level ac_chip_class_to_sqtt_gfxip_level(enum chip_class chip_class)
+static enum sqtt_gfxip_level ac_gfx_level_to_sqtt_gfxip_level(enum amd_gfx_level gfx_level)
 {
-   switch (chip_class) {
+   switch (gfx_level) {
    case GFX8:
       return SQTT_GFXIP_LEVEL_GFXIP_8;
    case GFX9:
@@ -374,7 +374,7 @@ static enum sqtt_gfxip_level ac_chip_class_to_sqtt_gfxip_level(enum chip_class c
    case GFX10_3:
       return SQTT_GFXIP_LEVEL_GFXIP_10_3;
    default:
-      unreachable("Invalid chip class");
+      unreachable("Invalid gfx level");
    }
 }
 
@@ -431,7 +431,7 @@ static uint32_t ac_memory_ops_per_clock(uint32_t vram_type)
 static void ac_sqtt_fill_asic_info(struct radeon_info *rad_info,
                                    struct sqtt_file_chunk_asic_info *chunk)
 {
-   bool has_wave32 = rad_info->chip_class >= GFX10;
+   bool has_wave32 = rad_info->gfx_level >= GFX10;
 
    chunk->header.chunk_id.type = SQTT_FILE_CHUNK_TYPE_ASIC_INFO;
    chunk->header.chunk_id.index = 0;
@@ -444,15 +444,15 @@ static void ac_sqtt_fill_asic_info(struct radeon_info *rad_info,
    /* All chips older than GFX9 are affected by the "SPI not
     * differentiating pkr_id for newwave commands" bug.
     */
-   if (rad_info->chip_class < GFX9)
+   if (rad_info->gfx_level < GFX9)
       chunk->flags |= SQTT_FILE_CHUNK_ASIC_INFO_FLAG_SC_PACKER_NUMBERING;
 
    /* Only GFX9+ support PS1 events. */
-   if (rad_info->chip_class >= GFX9)
+   if (rad_info->gfx_level >= GFX9)
       chunk->flags |= SQTT_FILE_CHUNK_ASIC_INFO_FLAG_PS1_EVENT_TOKENS_ENABLED;
 
-   chunk->trace_shader_core_clock = rad_info->max_shader_clock * 1000000;
-   chunk->trace_memory_clock = rad_info->max_memory_clock * 1000000;
+   chunk->trace_shader_core_clock = rad_info->max_gpu_freq_mhz * 1000000ull;
+   chunk->trace_memory_clock = rad_info->memory_freq_mhz * 1000000ull;
 
    /* RGP gets very confused if these clocks are 0. The numbers here are for profile_peak on
     * VGH since that is the chips where we've seen the need for this workaround. */
@@ -478,20 +478,20 @@ static void ac_sqtt_fill_asic_info(struct radeon_info *rad_info,
    chunk->hardware_contexts = 8;
    chunk->gpu_type =
       rad_info->has_dedicated_vram ? SQTT_GPU_TYPE_DISCRETE : SQTT_GPU_TYPE_INTEGRATED;
-   chunk->gfxip_level = ac_chip_class_to_sqtt_gfxip_level(rad_info->chip_class);
+   chunk->gfxip_level = ac_gfx_level_to_sqtt_gfxip_level(rad_info->gfx_level);
    chunk->gpu_index = 0;
 
    chunk->max_number_of_dedicated_cus = 0;
-   chunk->ce_ram_size = rad_info->ce_ram_size;
+   chunk->ce_ram_size = 0;
    chunk->ce_ram_size_graphics = 0;
    chunk->ce_ram_size_compute = 0;
 
-   chunk->vram_bus_width = rad_info->vram_bit_width;
-   chunk->vram_size = rad_info->vram_size;
+   chunk->vram_bus_width = rad_info->memory_bus_width;
+   chunk->vram_size = (uint64_t)rad_info->vram_size_kb * 1024;
    chunk->l2_cache_size = rad_info->l2_cache_size;
    chunk->l1_cache_size = rad_info->l1_cache_size;
    chunk->lds_size = rad_info->lds_size_per_workgroup;
-   if (rad_info->chip_class >= GFX10) {
+   if (rad_info->gfx_level >= GFX10) {
       /* RGP expects the LDS size in CU mode. */
       chunk->lds_size /= 2;
    }
@@ -501,13 +501,13 @@ static void ac_sqtt_fill_asic_info(struct radeon_info *rad_info,
    chunk->alu_per_clock = 0.0;
    chunk->texture_per_clock = 0.0;
    chunk->prims_per_clock = rad_info->max_se;
-   if (rad_info->chip_class == GFX10)
+   if (rad_info->gfx_level == GFX10)
       chunk->prims_per_clock *= 2;
    chunk->pixels_per_clock = 0.0;
 
    chunk->gpu_timestamp_frequency = rad_info->clock_crystal_freq * 1000;
-   chunk->max_shader_core_clock = rad_info->max_shader_clock * 1000000;
-   chunk->max_memory_clock = rad_info->max_memory_clock * 1000000;
+   chunk->max_shader_core_clock = rad_info->max_gpu_freq_mhz * 1000000;
+   chunk->max_memory_clock = rad_info->memory_freq_mhz * 1000000;
    chunk->memory_ops_per_clock = ac_memory_ops_per_clock(rad_info->vram_type);
    chunk->memory_chip_type = ac_vram_type_to_sqtt_memory_type(rad_info->vram_type);
    chunk->lds_granularity = rad_info->lds_encode_granularity;
@@ -722,9 +722,9 @@ struct sqtt_file_chunk_sqtt_desc {
 static_assert(sizeof(struct sqtt_file_chunk_sqtt_desc) == 32,
               "sqtt_file_chunk_sqtt_desc doesn't match RGP spec");
 
-static enum sqtt_version ac_chip_class_to_sqtt_version(enum chip_class chip_class)
+static enum sqtt_version ac_gfx_level_to_sqtt_version(enum amd_gfx_level gfx_level)
 {
-   switch (chip_class) {
+   switch (gfx_level) {
    case GFX8:
       return SQTT_VERSION_2_2;
    case GFX9:
@@ -734,7 +734,7 @@ static enum sqtt_version ac_chip_class_to_sqtt_version(enum chip_class chip_clas
    case GFX10_3:
       return SQTT_VERSION_2_4;
    default:
-      unreachable("Invalid chip class");
+      unreachable("Invalid gfx level");
    }
 }
 
@@ -749,7 +749,7 @@ static void ac_sqtt_fill_sqtt_desc(struct radeon_info *info,
    chunk->header.size_in_bytes = sizeof(*chunk);
 
    chunk->sqtt_version =
-      ac_chip_class_to_sqtt_version(info->chip_class);
+      ac_gfx_level_to_sqtt_version(info->gfx_level);
    chunk->shader_engine_index = shader_engine_index;
    chunk->v1.instrumentation_spec_version = 1;
    chunk->v1.instrumentation_api_version = 0;
@@ -877,9 +877,9 @@ enum elf_gfxip_level
    EF_AMDGPU_MACH_AMDGCN_GFX1030 = 0x036,
 };
 
-static enum elf_gfxip_level ac_chip_class_to_elf_gfxip_level(enum chip_class chip_class)
+static enum elf_gfxip_level ac_gfx_level_to_elf_gfxip_level(enum amd_gfx_level gfx_level)
 {
-   switch (chip_class) {
+   switch (gfx_level) {
    case GFX8:
       return EF_AMDGPU_MACH_AMDGCN_GFX801;
    case GFX9:
@@ -889,7 +889,7 @@ static enum elf_gfxip_level ac_chip_class_to_elf_gfxip_level(enum chip_class chi
    case GFX10_3:
       return EF_AMDGPU_MACH_AMDGCN_GFX1030;
    default:
-      unreachable("Invalid chip class");
+      unreachable("Invalid gfx level");
    }
 }
 
@@ -1049,7 +1049,7 @@ static void ac_sqtt_dump_data(struct radeon_info *rad_info,
       struct sqtt_file_chunk_code_object_database code_object;
       struct sqtt_code_object_database_record code_object_record;
       uint32_t elf_size_calc = 0;
-      uint32_t flags = ac_chip_class_to_elf_gfxip_level(rad_info->chip_class);
+      uint32_t flags = ac_gfx_level_to_elf_gfxip_level(rad_info->gfx_level);
 
       fseek(output, sizeof(struct sqtt_file_chunk_code_object_database), SEEK_CUR);
       file_offset += sizeof(struct sqtt_file_chunk_code_object_database);

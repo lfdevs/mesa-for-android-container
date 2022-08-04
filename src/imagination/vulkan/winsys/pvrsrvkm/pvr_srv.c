@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <xf86drm.h>
 
+#include "hwdef/rogue_hw_utils.h"
 #include "pvr_csb.h"
 #include "pvr_device_info.h"
 #include "pvr_private.h"
@@ -34,11 +35,15 @@
 #include "pvr_srv_bridge.h"
 #include "pvr_srv_job_compute.h"
 #include "pvr_srv_job_render.h"
+#include "pvr_srv_job_transfer.h"
 #include "pvr_srv_public.h"
-#include "pvr_srv_syncobj.h"
+#include "pvr_srv_sync.h"
+#include "pvr_srv_job_null.h"
+#include "pvr_types.h"
 #include "pvr_winsys.h"
 #include "pvr_winsys_helper.h"
 #include "util/log.h"
+#include "util/macros.h"
 #include "util/os_misc.h"
 #include "vk_log.h"
 
@@ -126,6 +131,7 @@ static VkResult pvr_srv_memctx_init(struct pvr_srv_winsys *srv_ws)
    const struct pvr_winsys_static_data_offsets no_static_data_offsets = { 0 };
 
    char heap_name[PVR_SRV_DEVMEM_HEAPNAME_MAXLENGTH];
+   int transfer_3d_heap_idx = -1;
    int vis_test_heap_idx = -1;
    int general_heap_idx = -1;
    int rgn_hdr_heap_idx = -1;
@@ -176,6 +182,11 @@ static VkResult pvr_srv_memctx_init(struct pvr_srv_winsys *srv_ws)
                          PVR_SRV_RGNHDR_BRN_63142_HEAP_IDENT,
                          sizeof(PVR_SRV_RGNHDR_BRN_63142_HEAP_IDENT)) == 0) {
          rgn_hdr_heap_idx = i;
+      } else if (transfer_3d_heap_idx == -1 &&
+                 strncmp(heap_name,
+                         PVR_SRV_TRANSFER_3D_HEAP_IDENT,
+                         sizeof(PVR_SRV_TRANSFER_3D_HEAP_IDENT)) == 0) {
+         transfer_3d_heap_idx = i;
       } else if (usc_heap_idx == -1 &&
                  strncmp(heap_name,
                          PVR_SRV_USCCODE_HEAP_IDENT,
@@ -190,7 +201,8 @@ static VkResult pvr_srv_memctx_init(struct pvr_srv_winsys *srv_ws)
    }
 
    /* Check for and initialise required heaps. */
-   if (general_heap_idx == -1 || pds_heap_idx == -1 || usc_heap_idx == -1 ||
+   if (general_heap_idx == -1 || pds_heap_idx == -1 ||
+       transfer_3d_heap_idx == -1 || usc_heap_idx == -1 ||
        vis_test_heap_idx == -1) {
       result = vk_error(NULL, VK_ERROR_INITIALIZATION_FAILED);
       goto err_pvr_srv_int_ctx_destroy;
@@ -211,11 +223,18 @@ static VkResult pvr_srv_memctx_init(struct pvr_srv_winsys *srv_ws)
       goto err_pvr_srv_heap_finish_general;
 
    result = pvr_srv_heap_init(srv_ws,
+                              &srv_ws->transfer_3d_heap,
+                              transfer_3d_heap_idx,
+                              &no_static_data_offsets);
+   if (result != VK_SUCCESS)
+      goto err_pvr_srv_heap_finish_pds;
+
+   result = pvr_srv_heap_init(srv_ws,
                               &srv_ws->usc_heap,
                               usc_heap_idx,
                               &usc_heap_static_data_offsets);
    if (result != VK_SUCCESS)
-      goto err_pvr_srv_heap_finish_pds;
+      goto err_pvr_srv_heap_finish_transfer_3d;
 
    result = pvr_srv_heap_init(srv_ws,
                               &srv_ws->vis_test_heap,
@@ -232,6 +251,7 @@ static VkResult pvr_srv_memctx_init(struct pvr_srv_winsys *srv_ws)
                                  &no_static_data_offsets);
       if (result != VK_SUCCESS)
          goto err_pvr_srv_heap_finish_vis_test;
+
       srv_ws->rgn_hdr_heap_present = true;
    } else {
       srv_ws->rgn_hdr_heap_present = false;
@@ -273,6 +293,9 @@ err_pvr_srv_heap_finish_vis_test:
 err_pvr_srv_heap_finish_usc:
    pvr_srv_heap_finish(srv_ws, &srv_ws->usc_heap);
 
+err_pvr_srv_heap_finish_transfer_3d:
+   pvr_srv_heap_finish(srv_ws, &srv_ws->transfer_3d_heap);
+
 err_pvr_srv_heap_finish_pds:
    pvr_srv_heap_finish(srv_ws, &srv_ws->pds_heap);
 
@@ -307,6 +330,12 @@ static void pvr_srv_memctx_finish(struct pvr_srv_winsys *srv_ws)
 
    if (!pvr_srv_heap_finish(srv_ws, &srv_ws->usc_heap))
       vk_errorf(NULL, VK_ERROR_UNKNOWN, "USC heap in use, can not deinit");
+
+   if (!pvr_srv_heap_finish(srv_ws, &srv_ws->transfer_3d_heap)) {
+      vk_errorf(NULL,
+                VK_ERROR_UNKNOWN,
+                "Transfer 3D heap in use, can not deinit");
+   }
 
    if (!pvr_srv_heap_finish(srv_ws, &srv_ws->pds_heap))
       vk_errorf(NULL, VK_ERROR_UNKNOWN, "PDS heap in use, can not deinit");
@@ -350,6 +379,125 @@ static void pvr_srv_winsys_destroy(struct pvr_winsys *ws)
    pvr_srv_connection_destroy(fd);
 }
 
+static uint64_t
+pvr_srv_get_min_free_list_size(const struct pvr_device_info *dev_info)
+{
+   uint64_t min_num_pages;
+
+   if (PVR_HAS_FEATURE(dev_info, roguexe)) {
+      if (PVR_HAS_QUIRK(dev_info, 66011))
+         min_num_pages = 40U;
+      else
+         min_num_pages = 25U;
+   } else {
+      min_num_pages = 50U;
+   }
+
+   return min_num_pages << ROGUE_BIF_PM_PHYSICAL_PAGE_SHIFT;
+}
+
+static inline uint64_t
+pvr_srv_get_num_phantoms(const struct pvr_device_info *dev_info)
+{
+   return DIV_ROUND_UP(PVR_GET_FEATURE_VALUE(dev_info, num_clusters, 1U), 4U);
+}
+
+/* Return the total reserved size of partition in dwords. */
+static inline uint64_t pvr_srv_get_total_reserved_partition_size(
+   const struct pvr_device_info *dev_info)
+{
+   uint32_t tile_size_x = PVR_GET_FEATURE_VALUE(dev_info, tile_size_x, 0);
+   uint32_t tile_size_y = PVR_GET_FEATURE_VALUE(dev_info, tile_size_y, 0);
+   uint32_t max_partitions = PVR_GET_FEATURE_VALUE(dev_info, max_partitions, 0);
+
+   if (tile_size_x == 16 && tile_size_y == 16) {
+      return tile_size_x * tile_size_y * max_partitions *
+             PVR_GET_FEATURE_VALUE(dev_info,
+                                   usc_min_output_registers_per_pix,
+                                   0);
+   }
+
+   return max_partitions * 1024U;
+}
+
+static inline uint64_t
+pvr_srv_get_reserved_shared_size(const struct pvr_device_info *dev_info)
+{
+   uint32_t common_store_size_in_dwords =
+      PVR_GET_FEATURE_VALUE(dev_info,
+                            common_store_size_in_dwords,
+                            512U * 4U * 4U);
+   uint32_t reserved_shared_size =
+      common_store_size_in_dwords - (256U * 4U) -
+      pvr_srv_get_total_reserved_partition_size(dev_info);
+
+   if (PVR_HAS_QUIRK(dev_info, 44079)) {
+      uint32_t common_store_split_point = (768U * 4U * 4U);
+
+      return MIN2(common_store_split_point - (256U * 4U), reserved_shared_size);
+   }
+
+   return reserved_shared_size;
+}
+
+static inline uint64_t
+pvr_srv_get_max_coeffs(const struct pvr_device_info *dev_info)
+{
+   uint32_t max_coeff_additional_portion = ROGUE_MAX_VERTEX_SHARED_REGISTERS;
+   uint32_t pending_allocation_shared_regs = 2U * 1024U;
+   uint32_t pending_allocation_coeff_regs = 0U;
+   uint32_t num_phantoms = pvr_srv_get_num_phantoms(dev_info);
+   uint32_t tiles_in_flight =
+      PVR_GET_FEATURE_VALUE(dev_info, isp_max_tiles_in_flight, 0);
+   uint32_t max_coeff_pixel_portion =
+      DIV_ROUND_UP(tiles_in_flight, num_phantoms);
+
+   max_coeff_pixel_portion *= ROGUE_MAX_PIXEL_SHARED_REGISTERS;
+
+   /* Compute tasks on cores with BRN48492 and without compute overlap may lock
+    * up without two additional lines of coeffs.
+    */
+   if (PVR_HAS_QUIRK(dev_info, 48492) &&
+       !PVR_HAS_FEATURE(dev_info, compute_overlap)) {
+      pending_allocation_coeff_regs = 2U * 1024U;
+   }
+
+   if (PVR_HAS_ERN(dev_info, 38748))
+      pending_allocation_shared_regs = 0U;
+
+   if (PVR_HAS_ERN(dev_info, 38020)) {
+      max_coeff_additional_portion +=
+         rogue_max_compute_shared_registers(dev_info);
+   }
+
+   return pvr_srv_get_reserved_shared_size(dev_info) +
+          pending_allocation_coeff_regs -
+          (max_coeff_pixel_portion + max_coeff_additional_portion +
+           pending_allocation_shared_regs);
+}
+
+static inline uint64_t
+pvr_srv_get_cdm_max_local_mem_size_regs(const struct pvr_device_info *dev_info)
+{
+   uint32_t available_coeffs_in_dwords = pvr_srv_get_max_coeffs(dev_info);
+
+   if (PVR_HAS_QUIRK(dev_info, 48492) && PVR_HAS_FEATURE(dev_info, roguexe) &&
+       !PVR_HAS_FEATURE(dev_info, compute_overlap)) {
+      /* Driver must not use the 2 reserved lines. */
+      available_coeffs_in_dwords -= ROGUE_CSRM_LINE_SIZE_IN_DWORDS * 2;
+   }
+
+   /* The maximum amount of local memory available to a kernel is the minimum
+    * of the total number of coefficient registers available and the max common
+    * store allocation size which can be made by the CDM.
+    *
+    * If any coeff lines are reserved for tessellation or pixel then we need to
+    * subtract those too.
+    */
+   return MIN2(available_coeffs_in_dwords,
+               ROGUE_MAX_PER_KERNEL_LOCAL_MEM_SIZE_REGS);
+}
+
 static int
 pvr_srv_winsys_device_info_init(struct pvr_winsys *ws,
                                 struct pvr_device_info *dev_info,
@@ -368,6 +516,16 @@ pvr_srv_winsys_device_info_init(struct pvr_winsys *ws,
                 PVR_BVNC_UNPACK_C(srv_ws->bvnc));
       return ret;
    }
+
+   runtime_info->min_free_list_size = pvr_srv_get_min_free_list_size(dev_info);
+   runtime_info->reserved_shared_size =
+      pvr_srv_get_reserved_shared_size(dev_info);
+   runtime_info->total_reserved_partition_size =
+      pvr_srv_get_total_reserved_partition_size(dev_info);
+   runtime_info->num_phantoms = pvr_srv_get_num_phantoms(dev_info);
+   runtime_info->max_coeffs = pvr_srv_get_max_coeffs(dev_info);
+   runtime_info->cdm_max_local_mem_size_regs =
+      pvr_srv_get_cdm_max_local_mem_size_regs(dev_info);
 
    if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
       result = pvr_srv_get_multicore_info(srv_ws->render_fd,
@@ -390,6 +548,7 @@ static void pvr_srv_winsys_get_heaps_info(struct pvr_winsys *ws,
 
    heaps->general_heap = &srv_ws->general_heap.base;
    heaps->pds_heap = &srv_ws->pds_heap.base;
+   heaps->transfer_3d_heap = &srv_ws->transfer_3d_heap.base;
    heaps->usc_heap = &srv_ws->usc_heap.base;
    heaps->vis_test_heap = &srv_ws->vis_test_heap.base;
 
@@ -413,12 +572,6 @@ static const struct pvr_winsys_ops srv_winsys_ops = {
    .heap_free = pvr_srv_winsys_heap_free,
    .vma_map = pvr_srv_winsys_vma_map,
    .vma_unmap = pvr_srv_winsys_vma_unmap,
-   .syncobj_create = pvr_srv_winsys_syncobj_create,
-   .syncobj_destroy = pvr_srv_winsys_syncobj_destroy,
-   .syncobjs_reset = pvr_srv_winsys_syncobjs_reset,
-   .syncobjs_signal = pvr_srv_winsys_syncobjs_signal,
-   .syncobjs_wait = pvr_srv_winsys_syncobjs_wait,
-   .syncobjs_merge = pvr_srv_winsys_syncobjs_merge,
    .free_list_create = pvr_srv_winsys_free_list_create,
    .free_list_destroy = pvr_srv_winsys_free_list_destroy,
    .render_target_dataset_create = pvr_srv_render_target_dataset_create,
@@ -429,6 +582,10 @@ static const struct pvr_winsys_ops srv_winsys_ops = {
    .compute_ctx_create = pvr_srv_winsys_compute_ctx_create,
    .compute_ctx_destroy = pvr_srv_winsys_compute_ctx_destroy,
    .compute_submit = pvr_srv_winsys_compute_submit,
+   .transfer_ctx_create = pvr_srv_winsys_transfer_ctx_create,
+   .transfer_ctx_destroy = pvr_srv_winsys_transfer_ctx_destroy,
+   .transfer_submit = pvr_srv_winsys_transfer_submit,
+   .null_job_submit = pvr_srv_winsys_null_job_submit,
 };
 
 static bool pvr_is_driver_compatible(int render_fd)
@@ -441,7 +598,7 @@ static bool pvr_is_driver_compatible(int render_fd)
 
    assert(strcmp(version->name, "pvr") == 0);
 
-   /* Only the 1.14 driver is supported for now. */
+   /* Only the 1.17 driver is supported for now. */
    if (version->version_major != PVR_SRV_VERSION_MAJ ||
        version->version_minor != PVR_SRV_VERSION_MIN) {
       vk_errorf(NULL,
@@ -470,6 +627,10 @@ struct pvr_winsys *pvr_srv_winsys_create(int master_fd,
    if (!pvr_is_driver_compatible(render_fd))
       return NULL;
 
+   result = pvr_srv_init_module(render_fd, PVR_SRVKM_MODULE_TYPE_SERVICES);
+   if (result != VK_SUCCESS)
+      return NULL;
+
    result = pvr_srv_connection_create(render_fd, &bvnc);
    if (result != VK_SUCCESS)
       return NULL;
@@ -486,6 +647,10 @@ struct pvr_winsys *pvr_srv_winsys_create(int master_fd,
    srv_ws->master_fd = master_fd;
    srv_ws->render_fd = render_fd;
    srv_ws->alloc = alloc;
+
+   srv_ws->base.syncobj_type = pvr_srv_sync_type;
+   srv_ws->base.sync_types[0] = &srv_ws->base.syncobj_type;
+   srv_ws->base.sync_types[1] = NULL;
 
    result = pvr_srv_memctx_init(srv_ws);
    if (result != VK_SUCCESS)

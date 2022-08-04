@@ -38,8 +38,7 @@ static bool
 has_sm3(struct pipe_screen *hal)
 {
     return hal->get_param(hal, PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD) &&
-           hal->get_param(hal, PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES) &&
-           hal->get_param(hal, PIPE_CAP_VERTEX_SHADER_SATURATE);
+           hal->get_param(hal, PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES);
 }
 
 HRESULT
@@ -75,9 +74,9 @@ NineAdapter9_ctor( struct NineAdapter9 *This,
     /* checks minimum requirements, most are vs3/ps3 strict requirements */
     if (!has_sm3(hal) ||
         hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
-                              PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) < 256 * sizeof(float[4]) ||
+                              PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE) < 256 * sizeof(float[4]) ||
         hal->get_shader_param(hal, PIPE_SHADER_FRAGMENT,
-                              PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) < 244 * sizeof(float[4]) ||
+                              PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE) < 244 * sizeof(float[4]) ||
         hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
                               PIPE_SHADER_CAP_MAX_TEMPS) < 32 ||
         hal->get_shader_param(hal, PIPE_SHADER_FRAGMENT,
@@ -94,7 +93,7 @@ NineAdapter9_ctor( struct NineAdapter9 *This,
     }
     /* for r500 */
     if (hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
-                              PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) < 276 * sizeof(float[4]) || /* we put bool and int constants with float constants */
+                              PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE) < 276 * sizeof(float[4]) || /* we put bool and int constants with float constants */
         hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
                               PIPE_SHADER_CAP_MAX_TEMPS) < 40 || /* we use some more temp registers */
         hal->get_shader_param(hal, PIPE_SHADER_FRAGMENT,

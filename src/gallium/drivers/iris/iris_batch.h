@@ -253,7 +253,7 @@ iris_get_command_space(struct iris_batch *batch, unsigned bytes)
 {
    if (!batch->begin_trace_recorded) {
       batch->begin_trace_recorded = true;
-      trace_intel_begin_batch(&batch->trace, batch);
+      trace_intel_begin_batch(&batch->trace);
    }
    iris_require_command_space(batch, bytes);
    void *map = batch->map_next;

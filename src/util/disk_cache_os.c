@@ -21,7 +21,6 @@
  * IN THE SOFTWARE.
  */
 
-#ifdef ENABLE_SHADER_CACHE
 
 #include <assert.h>
 #include <inttypes.h>
@@ -30,16 +29,58 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <dirent.h>
 #include <fcntl.h>
 
 #include "util/compress.h"
 #include "util/crc32.h"
+#include "util/disk_cache.h"
+#include "util/disk_cache_os.h"
 
 struct cache_entry_file_data {
    uint32_t crc32;
    uint32_t uncompressed_size;
 };
+
+#if DETECT_OS_WINDOWS
+
+bool
+disk_cache_get_function_identifier(void *ptr, struct mesa_sha1 *ctx)
+{
+   HMODULE mod = NULL;
+   GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      (LPCWSTR)ptr,
+                      &mod);
+   if (!mod)
+      return false;
+
+   WCHAR filename[MAX_PATH];
+   DWORD filename_length = GetModuleFileNameW(mod, filename, ARRAY_SIZE(filename));
+
+   if (filename_length == 0 || filename_length == ARRAY_SIZE(filename))
+      return false;
+
+   HANDLE mod_as_file = CreateFileW(
+        filename,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+   if (mod_as_file == INVALID_HANDLE_VALUE)
+      return false;
+
+   FILETIME time;
+   bool ret = GetFileTime(mod_as_file, NULL, NULL, &time);
+   if (ret)
+      _mesa_sha1_update(ctx, &time, sizeof(time));
+   CloseHandle(mod_as_file);
+   return ret;
+}
+
+#endif
+
+#ifdef ENABLE_SHADER_CACHE
 
 #if DETECT_OS_WINDOWS
 /* TODO: implement disk cache support on windows */
@@ -60,8 +101,6 @@ struct cache_entry_file_data {
 #include "util/blob.h"
 #include "util/crc32.h"
 #include "util/debug.h"
-#include "util/disk_cache.h"
-#include "util/disk_cache_os.h"
 #include "util/ralloc.h"
 #include "util/rand_xor.h"
 

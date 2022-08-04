@@ -380,6 +380,8 @@ enum fd_bo_state {
 };
 enum fd_bo_state fd_bo_state(struct fd_bo *bo);
 
+void fd_bo_init_common(struct fd_bo *bo, struct fd_device *dev);
+
 struct fd_bo *fd_bo_new_ring(struct fd_device *dev, uint32_t size);
 
 #define enable_debug 0 /* TODO make dynamic */

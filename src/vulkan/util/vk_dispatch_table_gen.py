@@ -28,7 +28,6 @@ import argparse
 import math
 import os
 
-from collections import OrderedDict, namedtuple
 from mako.template import Template
 
 # Mesa-local imports must be declared in meson variable
@@ -595,7 +594,7 @@ U32_MASK = 2**32 - 1
 PRIME_FACTOR = 5024183
 PRIME_STEP = 19
 
-class StringIntMapEntry(object):
+class StringIntMapEntry:
     def __init__(self, string, num):
         self.string = string
         self.num = num
@@ -611,10 +610,10 @@ class StringIntMapEntry(object):
 def round_to_pow2(x):
     return 2**int(math.ceil(math.log(x, 2)))
 
-class StringIntMap(object):
+class StringIntMap:
     def __init__(self):
         self.baked = False
-        self.strings = dict()
+        self.strings = {}
 
     def add_string(self, string, num):
         assert not self.baked

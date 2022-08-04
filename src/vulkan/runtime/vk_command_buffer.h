@@ -25,6 +25,7 @@
 #define VK_COMMAND_BUFFER_H
 
 #include "vk_cmd_queue.h"
+#include "vk_graphics_state.h"
 #include "vk_object.h"
 #include "util/list.h"
 #include "util/u_dynarray.h"
@@ -38,14 +39,10 @@ struct vk_framebuffer;
 struct vk_image_view;
 struct vk_render_pass;
 
-/* Since VkSubpassDescription2::viewMask is a 32-bit integer, there are a
- * maximum of 32 possible views.
- */
-#define MESA_VK_MAX_MULTIVIEW_VIEW_COUNT 32
-
 struct vk_attachment_view_state {
    VkImageLayout layout;
    VkImageLayout stencil_layout;
+   const VkSampleLocationsInfoEXT *sample_locations;
 };
 
 struct vk_attachment_state {
@@ -68,6 +65,8 @@ struct vk_command_buffer {
 
    /** VkCommandBufferAllocateInfo::level */
    VkCommandBufferLevel level;
+
+   struct vk_dynamic_graphics_state dynamic_graphics_state;
 
    /** Link in vk_command_pool::command_buffers if pool != NULL */
    struct list_head pool_link;
@@ -130,6 +129,8 @@ struct vk_command_buffer {
    /* This uses the same trick as STACK_ARRAY */
    struct vk_attachment_state *attachments;
    struct vk_attachment_state _attachments[8];
+
+   VkRenderPassSampleLocationsBeginInfoEXT *pass_sample_locations;
 };
 
 VK_DEFINE_HANDLE_CASTS(vk_command_buffer, base, VkCommandBuffer,

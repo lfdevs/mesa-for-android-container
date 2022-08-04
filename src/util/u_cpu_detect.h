@@ -38,10 +38,11 @@
 #include <stdbool.h>
 
 #include "pipe/p_config.h"
+#include "util/u_atomic.h"
 #include "util/u_thread.h"
 
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -60,6 +61,12 @@ enum cpu_family {
 typedef uint32_t util_affinity_mask[UTIL_MAX_CPUS / 32];
 
 struct util_cpu_caps_t {
+   /**
+    * Initialized to 0 and set to non-zero with an atomic after the entire
+    * struct has been initialized.
+    */
+   uint32_t detect_done;
+
    /**
     * Number of CPUs available to the process.
     *
@@ -127,23 +134,43 @@ struct util_cpu_caps_t {
 
 #define U_CPU_INVALID_L3 0xffff
 
-static inline const struct util_cpu_caps_t *
-util_get_cpu_caps(void)
-{
-	extern struct util_cpu_caps_t util_cpu_caps;
-
-	/* If you hit this assert, it means that something is using the
-	 * cpu-caps without having first called util_cpu_detect()
-	 */
-	assert(util_cpu_caps.nr_cpus >= 1);
-
-	return &util_cpu_caps;
-}
-
 void util_cpu_detect(void);
 
+static inline ATTRIBUTE_CONST const struct util_cpu_caps_t *
+util_get_cpu_caps(void)
+{
+   extern struct util_cpu_caps_t util_cpu_caps;
 
-#ifdef	__cplusplus
+   /* On most CPU architectures, an atomic read is simply a regular memory
+    * load instruction with some extra compiler magic to prevent code
+    * re-ordering around it.  The perf impact of doing this check should be
+    * negligible in most cases.
+    *
+    * Also, even though it looks like  a bit of a lie, we've declared this
+    * function with ATTRIBUTE_CONST.  The GCC docs say:
+    *
+    *    "Calls to functions whose return value is not affected by changes to
+    *    the observable state of the program and that have no observable
+    *    effects on such state other than to return a value may lend
+    *    themselves to optimizations such as common subexpression elimination.
+    *    Declaring such functions with the const attribute allows GCC to avoid
+    *    emitting some calls in repeated invocations of the function with the
+    *    same argument values."
+    *
+    * The word "observable" is important here.  With the exception of a
+    * llvmpipe debug flag behind an environment variable and a few unit tests,
+    * all of which emulate worse CPUs, this function neither affects nor is
+    * affected by any "observable" state.  It has its own internal state for
+    * sure, but that state is such that it appears to return exactly the same
+    * value with the same internal data every time.
+    */
+   if (unlikely(!p_atomic_read(&util_cpu_caps.detect_done)))
+      util_cpu_detect();
+
+   return &util_cpu_caps;
+}
+
+#ifdef __cplusplus
 }
 #endif
 

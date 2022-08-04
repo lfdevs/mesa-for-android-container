@@ -215,7 +215,7 @@ void lp_exec_mask_store(struct lp_exec_mask *mask,
    if (exec_mask) {
       LLVMValueRef res, dst;
 
-      dst = LLVMBuildLoad(builder, dst_ptr, "");
+      dst = LLVMBuildLoad2(builder, LLVMTypeOf(val), dst_ptr, "");
       if (bld_store->type.width < 32)
          exec_mask = LLVMBuildTrunc(builder, exec_mask, bld_store->vec_type, "");
       res = lp_build_select(bld_store, exec_mask, val, dst);
@@ -230,7 +230,7 @@ void lp_exec_bgnloop_post_phi(struct lp_exec_mask *mask)
    struct function_ctx *ctx = func_ctx(mask);
 
    if (ctx->loop_stack_size != ctx->bgnloop_stack_size) {
-      mask->break_mask = LLVMBuildLoad(builder, ctx->break_var, "");
+      mask->break_mask = LLVMBuildLoad2(builder, mask->int_vec_type, ctx->break_var, "");
       lp_exec_mask_update(mask);
       ctx->bgnloop_stack_size = ctx->loop_stack_size;
    }
@@ -303,7 +303,7 @@ void lp_exec_endloop(struct gallivm_state *gallivm,
    LLVMBuildStore(builder, mask->break_mask, ctx->break_var);
 
    /* Decrement the loop limiter */
-   limiter = LLVMBuildLoad(builder, ctx->loop_limiter, "");
+   limiter = LLVMBuildLoad2(builder, int_type, ctx->loop_limiter, "");
 
    limiter = LLVMBuildSub(
       builder,

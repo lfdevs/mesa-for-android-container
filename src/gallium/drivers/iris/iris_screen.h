@@ -181,6 +181,7 @@ struct iris_screen {
       bool disable_throttling;
       bool always_flush_cache;
       bool sync_compile;
+      bool limit_trig_input_range;
    } driconf;
 
    /** Does the kernel support various features (KERNEL_HAS_* bitfield)? */

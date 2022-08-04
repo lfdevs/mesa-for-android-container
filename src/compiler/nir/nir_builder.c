@@ -448,3 +448,40 @@ nir_type_convert(nir_builder *b,
 
    return nir_build_alu(b, opcode, src, NULL, NULL, NULL);
 }
+
+nir_ssa_def *
+nir_gen_rect_vertices(nir_builder *b, nir_ssa_def *z, nir_ssa_def *w)
+{
+   if (!z)
+      z = nir_imm_float(b, 0.0);
+   if (!w)
+      w = nir_imm_float(b, 1.0);
+
+   nir_ssa_def *vertex_id;
+   if (b->shader->options->vertex_id_zero_based)
+      vertex_id = nir_load_vertex_id_zero_base(b);
+   else
+      vertex_id = nir_load_vertex_id(b);
+
+   /* vertex 0: -1.0, -1.0
+    * vertex 1: -1.0,  1.0
+    * vertex 2:  1.0, -1.0
+    * vertex 3:  1.0,  1.0
+    *
+    * so:
+    *
+    * channel 0 is vertex_id < 2 ? -1.0 :  1.0
+    * channel 1 is vertex_id & 1 ?  1.0 : -1.0
+    */
+
+   nir_ssa_def *c0cmp = nir_ilt(b, vertex_id, nir_imm_int(b, 2));
+   nir_ssa_def *c1cmp = nir_test_mask(b, vertex_id, 1);
+
+   nir_ssa_def *comp[4];
+   comp[0] = nir_bcsel(b, c0cmp, nir_imm_float(b, -1.0), nir_imm_float(b, 1.0));
+   comp[1] = nir_bcsel(b, c1cmp, nir_imm_float(b, 1.0), nir_imm_float(b, -1.0));
+   comp[2] = z;
+   comp[3] = w;
+
+   return nir_vec(b, comp, 4);
+}

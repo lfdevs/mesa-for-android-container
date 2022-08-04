@@ -740,7 +740,7 @@ SpvId
 spirv_builder_emit_vote(struct spirv_builder *b, SpvOp op, SpvId src)
 {
    return spirv_builder_emit_binop(b, op, spirv_builder_type_bool(b),
-                                   spirv_builder_const_uint(b, 32, SpvScopeWorkgroup), src);
+                                   spirv_builder_const_uint(b, 32, SpvScopeSubgroup), src);
 }
 
 static SpvId

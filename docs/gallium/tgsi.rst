@@ -3783,8 +3783,8 @@ Threads per block in each dimension, if known at compile time. If the block size
 is known all three should be at least 1. If it is unknown they should all be set
 to 0 or not set.
 
-MUL_ZERO_WINS
-"""""""""""""
+LEGACY_MATH_RULES
+"""""""""""""""""
 
 The MUL TGSI operation (FP32 multiplication) will return 0 if either
 of the operands are equal to 0. That means that 0 * Inf = 0. This

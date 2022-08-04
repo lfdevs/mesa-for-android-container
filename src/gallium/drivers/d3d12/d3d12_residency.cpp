@@ -24,6 +24,7 @@
 #include "d3d12_batch.h"
 #include "d3d12_bufmgr.h"
 #include "d3d12_residency.h"
+#include "d3d12_resource.h"
 #include "d3d12_screen.h"
 
 #include "util/os_time.h"
@@ -168,8 +169,10 @@ d3d12_process_batch_residency(struct d3d12_screen *screen, struct d3d12_batch *b
    evict_aged_allocations(screen, completed_fence_value, current_time, grace_period);
 
    /* If there's nothing needing to be made newly resident, we're done once we've trimmed */
-   if (base_bo_set->entries == 0)
+   if (base_bo_set->entries == 0) {
+      _mesa_set_destroy(base_bo_set, nullptr);
       return;
+   }
 
    uint64_t residency_fence_value_snapshot = screen->residency_fence_value;
 
@@ -248,4 +251,38 @@ d3d12_init_residency(struct d3d12_screen *screen)
       return false;
 
    return true;
+}
+
+void
+d3d12_deinit_residency(struct d3d12_screen *screen)
+{
+   if (screen->residency_fence) {
+      screen->residency_fence->Release();
+      screen->residency_fence = nullptr;
+   }
+}
+
+void
+d3d12_promote_to_permanent_residency(struct d3d12_screen *screen, struct d3d12_resource* resource)
+{
+   mtx_lock(&screen->submit_mutex);
+   uint64_t offset;
+   struct d3d12_bo *base_bo = d3d12_bo_get_base(resource->bo, &offset);
+
+   /* Promote non-permanent resident resources to permanent residency*/
+   if(base_bo->residency_status != d3d12_permanently_resident) {
+
+      /* Mark as permanently resident*/
+      base_bo->residency_status = d3d12_permanently_resident;
+
+      /* If it wasn't made resident before, make it*/
+      bool was_made_resident = (base_bo->residency_status == d3d12_resident);
+      if(!was_made_resident) {
+         list_addtail(&base_bo->residency_list_entry, &screen->residency_list);
+         ID3D12Pageable *pageable = base_bo->res;
+         HRESULT hr = screen->dev->MakeResident(1, &pageable);
+         assert(SUCCEEDED(hr));
+      }
+   }
+   mtx_unlock(&screen->submit_mutex);
 }

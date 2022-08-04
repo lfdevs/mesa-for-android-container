@@ -47,10 +47,12 @@ panvk_CmdBindVertexBuffers(VkCommandBuffer commandBuffer,
    assert(firstBinding + bindingCount <= MAX_VBS);
 
    for (uint32_t i = 0; i < bindingCount; i++) {
-      struct panvk_buffer *buf = panvk_buffer_from_handle(pBuffers[i]);
+      VK_FROM_HANDLE(panvk_buffer, buffer, pBuffers[i]);
 
-      cmdbuf->state.vb.bufs[firstBinding + i].address = buf->bo->ptr.gpu + pOffsets[i];
-      cmdbuf->state.vb.bufs[firstBinding + i].size = buf->size - pOffsets[i];
+      cmdbuf->state.vb.bufs[firstBinding + i].address =
+         panvk_buffer_gpu_ptr(buffer, pOffsets[i]);
+      cmdbuf->state.vb.bufs[firstBinding + i].size =
+         panvk_buffer_range(buffer, pOffsets[i], VK_WHOLE_SIZE);
    }
 
    cmdbuf->state.vb.count = MAX2(cmdbuf->state.vb.count, firstBinding + bindingCount);
@@ -84,6 +86,26 @@ panvk_CmdBindIndexBuffer(VkCommandBuffer commandBuffer,
    default:
       unreachable("Invalid index type\n");
    }
+}
+
+static void
+panvk_set_dyn_ssbo_pointers(struct panvk_descriptor_state *desc_state,
+                            unsigned dyn_ssbo_offset,
+                            struct panvk_descriptor_set *set)
+{
+   struct panvk_sysvals *sysvals = &desc_state->sysvals;
+
+   for (unsigned i = 0; i < set->layout->num_dyn_ssbos; i++) {
+      const struct panvk_buffer_desc *ssbo =
+         &desc_state->dyn.ssbos[dyn_ssbo_offset + i];
+
+      sysvals->dyn_ssbos[dyn_ssbo_offset + i] = (struct panvk_ssbo_addr) {
+         .base_addr = panvk_buffer_gpu_ptr(ssbo->buffer, ssbo->offset),
+         .size = panvk_buffer_range(ssbo->buffer, ssbo->offset, ssbo->size),
+      };
+   }
+
+   desc_state->sysvals_ptr = 0;
 }
 
 void
@@ -132,11 +154,17 @@ panvk_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
          }
       }
 
-      if (set->layout->num_ssbos || set->layout->num_dyn_ssbos)
+      if (set->layout->num_dyn_ssbos) {
+         panvk_set_dyn_ssbo_pointers(descriptors_state,
+                                     playout->sets[idx].dyn_ssbo_offset,
+                                     set);
+      }
+
+      if (set->layout->num_dyn_ssbos)
          descriptors_state->dirty |= PANVK_DYNAMIC_SSBO;
 
       if (set->layout->num_ubos || set->layout->num_dyn_ubos ||
-          set->layout->num_ssbos || set->layout->num_dyn_ssbos)
+          set->layout->num_dyn_ssbos || set->layout->desc_ubo_size)
          descriptors_state->ubos = 0;
 
       if (set->layout->num_textures)
@@ -193,23 +221,24 @@ panvk_CmdBindPipeline(VkCommandBuffer commandBuffer,
 
    cmdbuf->bind_points[pipelineBindPoint].pipeline = pipeline;
    cmdbuf->state.fs_rsd = 0;
-   memset(cmdbuf->bind_points[pipelineBindPoint].desc_state.sysvals, 0,
-          sizeof(cmdbuf->bind_points[0].desc_state.sysvals));
 
    if (pipelineBindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS) {
       cmdbuf->state.varyings = pipeline->varyings;
 
-      if (!(pipeline->dynamic_state_mask & BITFIELD_BIT(VK_DYNAMIC_STATE_VIEWPORT)))
+      if (!(pipeline->dynamic_state_mask & BITFIELD_BIT(VK_DYNAMIC_STATE_VIEWPORT))) {
          cmdbuf->state.viewport = pipeline->viewport;
-      if (!(pipeline->dynamic_state_mask & BITFIELD_BIT(VK_DYNAMIC_STATE_SCISSOR)))
+         cmdbuf->state.dirty |= PANVK_DYNAMIC_VIEWPORT;
+      }
+      if (!(pipeline->dynamic_state_mask & BITFIELD_BIT(VK_DYNAMIC_STATE_SCISSOR))) {
          cmdbuf->state.scissor = pipeline->scissor;
+         cmdbuf->state.dirty |= PANVK_DYNAMIC_SCISSOR;
+      }
    }
 
    /* Sysvals are passed through UBOs, we need dirty the UBO array if the
     * pipeline contain shaders using sysvals.
     */
-   if (pipeline->num_sysvals)
-      cmdbuf->bind_points[pipelineBindPoint].desc_state.ubos = 0;
+   cmdbuf->bind_points[pipelineBindPoint].desc_state.ubos = 0;
 }
 
 void
@@ -493,19 +522,6 @@ panvk_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
    panvk_cmd_prepare_clear_values(cmdbuf, pRenderPassBegin->pClearValues);
    panvk_cmd_fb_info_init(cmdbuf);
    panvk_cmd_fb_info_set_subpass(cmdbuf);
-}
-
-void
-panvk_CmdBeginRenderPass(VkCommandBuffer cmd,
-                         const VkRenderPassBeginInfo *info,
-                         VkSubpassContents contents)
-{
-   VkSubpassBeginInfo subpass_info = {
-      .sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO,
-      .contents = contents
-   };
-
-   return panvk_CmdBeginRenderPass2(cmd, info, &subpass_info);
 }
 
 void

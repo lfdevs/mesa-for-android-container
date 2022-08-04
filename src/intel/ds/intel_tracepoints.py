@@ -152,7 +152,8 @@ def generate_code(args):
     from u_trace import utrace_generate_perfetto_utils
 
     utrace_generate(cpath=args.utrace_src, hpath=args.utrace_hdr,
-                    ctx_param='struct intel_ds_device *dev')
+                    ctx_param='struct intel_ds_device *dev',
+                    need_cs_param=False)
     utrace_generate_perfetto_utils(hpath=args.perfetto_hdr)
 
 

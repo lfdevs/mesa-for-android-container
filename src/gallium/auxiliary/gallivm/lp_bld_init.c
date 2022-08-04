@@ -31,7 +31,6 @@
 #include "util/u_cpu_detect.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
-#include "util/simple_list.h"
 #include "util/os_time.h"
 #include "lp_bld.h"
 #include "lp_bld_debug.h"
@@ -45,7 +44,9 @@
 #include <llvm-c/Transforms/Utils.h>
 #endif
 #include <llvm-c/BitWriter.h>
-#if GALLIVM_HAVE_CORO
+#if GALLIVM_USE_NEW_PASS == 1
+#include <llvm-c/Transforms/PassBuilder.h>
+#elif GALLIVM_HAVE_CORO == 1
 #if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_MIPS64))
 #include <llvm-c/Transforms/IPO.h>
 #endif
@@ -110,6 +111,7 @@ enum LLVM_CodeGenOpt_Level {
 static boolean
 create_pass_manager(struct gallivm_state *gallivm)
 {
+#if GALLIVM_USE_NEW_PASS == 0
    assert(!gallivm->passmgr);
    assert(gallivm->target);
 
@@ -117,7 +119,7 @@ create_pass_manager(struct gallivm_state *gallivm)
    if (!gallivm->passmgr)
       return FALSE;
 
-#if GALLIVM_HAVE_CORO
+#if GALLIVM_HAVE_CORO == 1
    gallivm->cgpassmgr = LLVMCreatePassManager();
 #endif
    /*
@@ -134,7 +136,7 @@ create_pass_manager(struct gallivm_state *gallivm)
       free(td_str);
    }
 
-#if GALLIVM_HAVE_CORO
+#if GALLIVM_HAVE_CORO == 1
 #if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_MIPS64))
    LLVMAddArgumentPromotionPass(gallivm->cgpassmgr);
    LLVMAddFunctionAttrsPass(gallivm->cgpassmgr);
@@ -181,13 +183,12 @@ create_pass_manager(struct gallivm_state *gallivm)
        */
       LLVMAddPromoteMemoryToRegisterPass(gallivm->passmgr);
    }
-#if GALLIVM_HAVE_CORO
+#if GALLIVM_HAVE_CORO == 1
    LLVMAddCoroCleanupPass(gallivm->passmgr);
 #endif
-
+#endif
    return TRUE;
 }
-
 
 /**
  * Free gallivm object's LLVM allocations, but not any generated code
@@ -196,14 +197,16 @@ create_pass_manager(struct gallivm_state *gallivm)
 void
 gallivm_free_ir(struct gallivm_state *gallivm)
 {
+#if GALLIVM_USE_NEW_PASS == 0
    if (gallivm->passmgr) {
       LLVMDisposePassManager(gallivm->passmgr);
    }
 
-#if GALLIVM_HAVE_CORO
+#if GALLIVM_HAVE_CORO == 1
    if (gallivm->cgpassmgr) {
       LLVMDisposePassManager(gallivm->cgpassmgr);
    }
+#endif
 #endif
 
    if (gallivm->engine) {
@@ -232,8 +235,12 @@ gallivm_free_ir(struct gallivm_state *gallivm)
    gallivm->target = NULL;
    gallivm->module = NULL;
    gallivm->module_name = NULL;
+#if GALLIVM_USE_NEW_PASS == 0
+#if GALLIVM_HAVE_CORO == 1
    gallivm->cgpassmgr = NULL;
+#endif
    gallivm->passmgr = NULL;
+#endif
    gallivm->context = NULL;
    gallivm->builder = NULL;
    gallivm->cache = NULL;
@@ -430,8 +437,6 @@ lp_build_init(void)
 
    lp_set_target_options();
 
-   util_cpu_detect();
-
    /* For simulating less capable machines */
 #ifdef DEBUG
    if (debug_get_bool_option("LP_FORCE_SSE2", FALSE)) {
@@ -571,7 +576,6 @@ gallivm_verify_function(struct gallivm_state *gallivm,
 void
 gallivm_compile_module(struct gallivm_state *gallivm)
 {
-   LLVMValueRef func;
    int64_t time_begin = 0;
 
    assert(!gallivm->compiled);
@@ -580,6 +584,13 @@ gallivm_compile_module(struct gallivm_state *gallivm)
       LLVMDisposeBuilder(gallivm->builder);
       gallivm->builder = NULL;
    }
+
+   LLVMSetDataLayout(gallivm->module, "");
+   assert(!gallivm->engine);
+   if (!init_gallivm_engine(gallivm)) {
+      assert(0);
+   }
+   assert(gallivm->engine);
 
    if (gallivm->cache && gallivm->cache->data_size) {
       goto skip_cached;
@@ -604,11 +615,33 @@ gallivm_compile_module(struct gallivm_state *gallivm)
    if (gallivm_debug & GALLIVM_DEBUG_PERF)
       time_begin = os_time_get();
 
-#if GALLIVM_HAVE_CORO
+#if GALLIVM_USE_NEW_PASS == 1
+   char passes[1024];
+   passes[0] = 0;
+
+   /*
+    * there should be some way to combine these two pass runs but I'm not seeing it,
+    * at the time of writing.
+    */
+   strcpy(passes, "default<O0>");
+
+   LLVMPassBuilderOptionsRef opts = LLVMCreatePassBuilderOptions();
+   LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
+
+   if (!(gallivm_perf & GALLIVM_PERF_NO_OPT))
+      strcpy(passes, "sroa,early-cse,simplifycfg,reassociate,mem2reg,constprop,instcombine,");
+   else
+      strcpy(passes, "mem2reg");
+
+   LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
+   LLVMDisposePassBuilderOptions(opts);
+#else
+#if GALLIVM_HAVE_CORO == 1
    LLVMRunPassManager(gallivm->cgpassmgr, gallivm->module);
 #endif
    /* Run optimization passes */
    LLVMInitializeFunctionPassManager(gallivm->passmgr);
+   LLVMValueRef func;
    func = LLVMGetFirstFunction(gallivm->module);
    while (func) {
       if (0) {
@@ -626,7 +659,7 @@ gallivm_compile_module(struct gallivm_state *gallivm)
       func = LLVMGetNextFunction(func);
    }
    LLVMFinalizeFunctionPassManager(gallivm->passmgr);
-
+#endif
    if (gallivm_debug & GALLIVM_DEBUG_PERF) {
       int64_t time_end = os_time_get();
       int time_msec = (int)((time_end - time_begin) / 1000);
@@ -653,12 +686,6 @@ gallivm_compile_module(struct gallivm_state *gallivm)
     * lp_build_create_jit_compiler_for_module()
     */
  skip_cached:
-   LLVMSetDataLayout(gallivm->module, "");
-   assert(!gallivm->engine);
-   if (!init_gallivm_engine(gallivm)) {
-      assert(0);
-   }
-   assert(gallivm->engine);
 
    ++gallivm->compiled;
 

@@ -27,7 +27,9 @@ files_libdxil_compiler = files(
   'dxil_function.c',
   'dxil_module.c',
   'dxil_nir.c',
+  'dxil_nir_lower_int_cubemaps.c',
   'dxil_nir_lower_int_samplers.c',
+  'dxil_nir_lower_vs_vertex_conversion.c',
   'dxil_signature.c',
   'dxil_nir_tess.c',
   'nir_to_dxil.c',
@@ -59,7 +61,7 @@ libdxil_compiler = static_library(
 
 idep_libdxil_compiler = declare_dependency(
   link_with : libdxil_compiler,
-  dependencies : [idep_mesautil],
+  dependencies : [idep_mesautil, dep_version],
   include_directories : include_directories('.')
 )
 

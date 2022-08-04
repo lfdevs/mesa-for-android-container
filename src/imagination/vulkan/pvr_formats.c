@@ -25,6 +25,7 @@
 
 #include "pvr_formats.h"
 #include "pvr_private.h"
+#include "vk_enum_to_str.h"
 #include "vk_format.h"
 #include "vk_log.h"
 #include "vk_util.h"
@@ -46,7 +47,17 @@ struct pvr_format {
 
 /* TODO: add all supported core formats */
 static const struct pvr_format pvr_format_table[] = {
+   /* VK_FORMAT_R8_UINT = 13. */
+   FORMAT(R8_UINT, U8, U8),
+   /* VK_FORMAT_B8G8R8A8_UNORM = 44. */
    FORMAT(B8G8R8A8_UNORM, U8U8U8U8, U8U8U8U8),
+   /* VK_FORMAT_R32_UINT = 98. */
+   FORMAT(R32_UINT, U32, U32),
+   /* VK_FORMAT_R32G32B32A32_UINT = 107. */
+   FORMAT(R32G32B32A32_UINT, U32U32U32U32, U32U32U32U32),
+   /* VK_FORMAT_R32G32B32A32_SFLOAT = 109. */
+   FORMAT(R32G32B32A32_SFLOAT, F32F32F32F32, F32F32F32F32),
+   /* VK_FORMAT_D32_SFLOAT = 126. */
    FORMAT(D32_SFLOAT, F32, F32),
 };
 
@@ -58,6 +69,10 @@ static inline const struct pvr_format *pvr_get_format(VkFormat vk_format)
        pvr_format_table[vk_format].supported) {
       return &pvr_format_table[vk_format];
    }
+
+   mesa_logd("Format %s(%d) not supported\n",
+             vk_Format_to_str(vk_format),
+             vk_format);
 
    return NULL;
 }
@@ -104,16 +119,8 @@ pvr_get_image_format_features(const struct pvr_format *pvr_format,
 const uint8_t *pvr_get_format_swizzle(VkFormat vk_format)
 {
    const struct util_format_description *vf = vk_format_description(vk_format);
-   static const uint8_t fallback[] = { PIPE_SWIZZLE_X,
-                                       PIPE_SWIZZLE_Y,
-                                       PIPE_SWIZZLE_Z,
-                                       PIPE_SWIZZLE_W };
 
-   if (vf)
-      return vf->swizzle;
-
-   assert(!"Unsupported format");
-   return fallback;
+   return vf->swizzle;
 }
 
 static VkFormatFeatureFlags
@@ -301,7 +308,7 @@ unsupported:
 
 bool pvr_format_is_pbe_downscalable(VkFormat vk_format)
 {
-   if (vk_format_is_pure_integer(vk_format)) {
+   if (vk_format_is_int(vk_format)) {
       /* PBE downscale behavior for integer formats does not match Vulkan
        * spec. Vulkan requires a single sample to be chosen instead of
        * taking the average sample color.

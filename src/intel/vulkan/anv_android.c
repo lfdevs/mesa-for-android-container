@@ -168,7 +168,7 @@ android_format_from_vk(unsigned vk_format)
 }
 
 static VkFormatFeatureFlags
-features2_to_features(VkFormatFeatureFlags2KHR features2)
+features2_to_features(VkFormatFeatureFlags2 features2)
 {
    return features2 & VK_ALL_FORMAT_FEATURE_FLAG_BITS;
 }
@@ -230,7 +230,7 @@ get_ahw_buffer_format_properties2(
     *  VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT"
     */
    p->formatFeatures |=
-      VK_FORMAT_FEATURE_2_MIDPOINT_CHROMA_SAMPLES_BIT_KHR;
+      VK_FORMAT_FEATURE_2_MIDPOINT_CHROMA_SAMPLES_BIT;
 
    /* "Implementations may not always be able to determine the color model,
     *  numerical range, or chroma offsets of the image contents, so the values
@@ -439,7 +439,7 @@ anv_create_ahw_memory(VkDevice device_h,
       usage = anv_ahw_usage_from_vk_usage(image->vk.create_flags, image->vk.usage);
    } else if (dedicated_info && dedicated_info->buffer) {
       ANV_FROM_HANDLE(anv_buffer, buffer, dedicated_info->buffer);
-      w = buffer->size;
+      w = buffer->vk.size;
       format = AHARDWAREBUFFER_FORMAT_BLOB;
       usage = AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
               AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;

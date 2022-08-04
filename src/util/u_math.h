@@ -39,10 +39,11 @@
 #define U_MATH_H
 
 
-#include "c99_math.h"
+#include "c99_compat.h"
 #include <assert.h>
 #include <float.h>
 #include <stdarg.h>
+#include <math.h>
 
 #include "bitscan.h"
 #include "u_endian.h" /* for UTIL_ARCH_BIG_ENDIAN */
@@ -579,17 +580,31 @@ util_bswap16(uint16_t n)
 }
 
 /**
- * Extend sign.
+ * Mask and sign-extend a number
+ *
+ * The bit at position `width - 1` is replicated to all the higher bits.
+ * This makes no assumptions about the high bits of the value and will
+ * overwrite them with the sign bit.
+ */
+static inline int64_t
+util_mask_sign_extend(uint64_t val, unsigned width)
+{
+   assert(width > 0 && width <= 64);
+   unsigned shift = 64 - width;
+   return (int64_t)(val << shift) >> shift;
+}
+
+/**
+ * Sign-extend a number
+ *
+ * The bit at position `width - 1` is replicated to all the higher bits.
+ * This assumes and asserts that the value fits into `width` bits.
  */
 static inline int64_t
 util_sign_extend(uint64_t val, unsigned width)
 {
-	assert(width > 0);
-	if (val & (UINT64_C(1) << (width - 1))) {
-		return -(int64_t)((UINT64_C(1) << width) - val);
-	} else {
-		return val;
-	}
+   assert(width == 64 || val < (UINT64_C(1) << width));
+   return util_mask_sign_extend(val, width);
 }
 
 static inline void*

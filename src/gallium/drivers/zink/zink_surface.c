@@ -165,7 +165,6 @@ create_surface(struct pipe_context *pctx,
    surface->base.u.tex.first_layer = templ->u.tex.first_layer;
    surface->base.u.tex.last_layer = templ->u.tex.last_layer;
    surface->obj = zink_resource(pres)->obj;
-   util_dynarray_init(&surface->framebuffer_refs, NULL);
    util_dynarray_init(&surface->desc_set_refs.refs, NULL);
 
    init_surface_info(surface, res, ivci);
@@ -173,9 +172,10 @@ create_surface(struct pipe_context *pctx,
    if (!actually)
       return surface;
    assert(ivci->image);
-   if (VKSCR(CreateImageView)(screen->dev, ivci, NULL,
-                         &surface->image_view) != VK_SUCCESS) {
-      mesa_loge("ZINK: vkCreateImageView failed");
+   VkResult result = VKSCR(CreateImageView)(screen->dev, ivci, NULL,
+                                            &surface->image_view);
+   if (result != VK_SUCCESS) {
+      mesa_loge("ZINK: vkCreateImageView failed (%s)", vk_Result_to_str(result));
       FREE(surface);
       return NULL;
    }
@@ -291,33 +291,6 @@ zink_create_surface(struct pipe_context *pctx,
    return &csurf->base;
 }
 
-/* framebuffers are owned by their surfaces, so each time a surface that's part of a cached fb
- * is destroyed, it has to unref all the framebuffers it's attached to in order to avoid leaking
- * all the framebuffers
- *
- * surfaces are always batch-tracked, so it is impossible for a framebuffer to be destroyed
- * while it is in use
- */
-static void
-surface_clear_fb_refs(struct zink_screen *screen, struct pipe_surface *psurface)
-{
-   struct zink_surface *surface = zink_surface(psurface);
-   util_dynarray_foreach(&surface->framebuffer_refs, struct zink_framebuffer*, fb_ref) {
-      struct zink_framebuffer *fb = *fb_ref;
-      for (unsigned i = 0; i < fb->state.num_attachments; i++) {
-         if (fb->surfaces[i] == psurface) {
-            simple_mtx_lock(&screen->framebuffer_mtx);
-            fb->surfaces[i] = NULL;
-            _mesa_hash_table_remove_key(&screen->framebuffer_cache, &fb->state);
-            zink_framebuffer_reference(screen, &fb, NULL);
-            simple_mtx_unlock(&screen->framebuffer_mtx);
-            break;
-         }
-      }
-   }
-   util_dynarray_fini(&surface->framebuffer_refs);
-}
-
 void
 zink_destroy_surface(struct zink_screen *screen, struct pipe_surface *psurface)
 {
@@ -336,10 +309,7 @@ zink_destroy_surface(struct zink_screen *screen, struct pipe_surface *psurface)
       _mesa_hash_table_remove(&res->surface_cache, he);
       simple_mtx_unlock(&res->surface_mtx);
    }
-   if (!screen->info.have_KHR_imageless_framebuffer)
-      surface_clear_fb_refs(screen, psurface);
    zink_descriptor_set_refs_clear(&surface->desc_set_refs, surface);
-   util_dynarray_fini(&surface->framebuffer_refs);
    if (surface->simage_view)
       VKSCR(DestroyImageView)(screen->dev, surface->simage_view, NULL);
    if (surface->is_swapchain) {
@@ -381,7 +351,6 @@ zink_rebind_surface(struct zink_context *ctx, struct pipe_surface **psurface)
    struct hash_entry *new_entry = _mesa_hash_table_search_pre_hashed(&res->surface_cache, hash, &ivci);
    if (zink_batch_usage_exists(surface->batch_uses))
       zink_batch_reference_surface(&ctx->batch, surface);
-   surface_clear_fb_refs(screen, *psurface);
    zink_descriptor_set_refs_clear(&surface->desc_set_refs, surface);
    if (new_entry) {
       /* reuse existing surface; old one will be cleaned up naturally */
@@ -395,8 +364,9 @@ zink_rebind_surface(struct zink_context *ctx, struct pipe_surface **psurface)
    assert(entry);
    _mesa_hash_table_remove(&res->surface_cache, entry);
    VkImageView image_view;
-   if (VKSCR(CreateImageView)(screen->dev, &ivci, NULL, &image_view) != VK_SUCCESS) {
-      mesa_loge("ZINK: failed to create new imageview");
+   VkResult result = VKSCR(CreateImageView)(screen->dev, &ivci, NULL, &image_view);
+   if (result != VK_SUCCESS) {
+      mesa_loge("ZINK: failed to create new imageview (%s)", vk_Result_to_str(result));
       simple_mtx_unlock(&res->surface_mtx);
       return false;
    }
@@ -473,7 +443,7 @@ zink_surface_swapchain_update(struct zink_context *ctx, struct zink_surface *sur
       init_surface_info(surface, res, &surface->ivci);
    }
    if (!surface->swapchain[res->obj->dt_idx]) {
-      assert(res->obj->image && cdt->swapchain->images[res->obj->dt_idx] == res->obj->image);
+      assert(res->obj->image && cdt->swapchain->images[res->obj->dt_idx].image == res->obj->image);
       surface->ivci.image = res->obj->image;
       assert(surface->ivci.image);
       VKSCR(CreateImageView)(screen->dev, &surface->ivci, NULL, &surface->swapchain[res->obj->dt_idx]);

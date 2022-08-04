@@ -39,12 +39,6 @@
 #include "util/macros.h"
 #include "drm-uapi/drm_fourcc.h"
 
-/* From driconf.h, user exposed so should be stable */
-#define DRI_CONF_VBLANK_NEVER 0
-#define DRI_CONF_VBLANK_DEF_INTERVAL_0 1
-#define DRI_CONF_VBLANK_DEF_INTERVAL_1 2
-#define DRI_CONF_VBLANK_ALWAYS_SYNC 3
-
 /**
  * A cached blit context.
  */
@@ -397,8 +391,6 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
    xcb_get_geometry_cookie_t cookie;
    xcb_get_geometry_reply_t *reply;
    xcb_generic_error_t *error;
-   GLint vblank_mode = DRI_CONF_VBLANK_DEF_INTERVAL_1;
-   int swap_interval;
 
    draw->conn = conn;
    draw->ext = ext;
@@ -425,9 +417,6 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
    if (draw->ext->config) {
       unsigned char adaptive_sync = 0;
 
-      draw->ext->config->configQueryi(draw->dri_screen,
-                                      "vblank_mode", &vblank_mode);
-
       draw->ext->config->configQueryb(draw->dri_screen,
                                       "adaptive_sync",
                                       &adaptive_sync);
@@ -438,18 +427,8 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
    if (!draw->adaptive_sync)
       set_adaptive_sync_property(conn, draw->drawable, false);
 
-   switch (vblank_mode) {
-   case DRI_CONF_VBLANK_NEVER:
-   case DRI_CONF_VBLANK_DEF_INTERVAL_0:
-      swap_interval = 0;
-      break;
-   case DRI_CONF_VBLANK_DEF_INTERVAL_1:
-   case DRI_CONF_VBLANK_ALWAYS_SYNC:
-   default:
-      swap_interval = 1;
-      break;
-   }
-   draw->swap_interval = swap_interval;
+   draw->swap_interval = dri_get_initial_swap_interval(draw->dri_screen,
+                                                       draw->ext->config);
 
    dri3_update_max_num_back(draw);
 
@@ -487,7 +466,7 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
     * Make sure server has the same swap interval we do for the new
     * drawable.
     */
-   loader_dri3_set_swap_interval(draw, swap_interval);
+   loader_dri3_set_swap_interval(draw, draw->swap_interval);
 
    return 0;
 }
@@ -1302,6 +1281,8 @@ dri3_cpp_for_format(uint32_t format) {
    case  __DRI_IMAGE_FORMAT_SABGR8:
    case  __DRI_IMAGE_FORMAT_SXRGB8:
       return 4;
+   case __DRI_IMAGE_FORMAT_ABGR16161616:
+   case __DRI_IMAGE_FORMAT_XBGR16161616:
    case __DRI_IMAGE_FORMAT_XBGR16161616F:
    case __DRI_IMAGE_FORMAT_ABGR16161616F:
       return 8;
@@ -1364,6 +1345,8 @@ image_format_to_fourcc(int format)
    case __DRI_IMAGE_FORMAT_ARGB2101010: return DRM_FORMAT_ARGB2101010;
    case __DRI_IMAGE_FORMAT_XBGR2101010: return DRM_FORMAT_XBGR2101010;
    case __DRI_IMAGE_FORMAT_ABGR2101010: return DRM_FORMAT_ABGR2101010;
+   case __DRI_IMAGE_FORMAT_ABGR16161616: return DRM_FORMAT_ABGR16161616;
+   case __DRI_IMAGE_FORMAT_XBGR16161616: return DRM_FORMAT_XBGR16161616;
    case __DRI_IMAGE_FORMAT_XBGR16161616F: return DRM_FORMAT_XBGR16161616F;
    case __DRI_IMAGE_FORMAT_ABGR16161616F: return DRM_FORMAT_ABGR16161616F;
    }

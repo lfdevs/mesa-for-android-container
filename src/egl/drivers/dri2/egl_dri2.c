@@ -68,6 +68,7 @@
 #include "util/u_vector.h"
 #include "mapi/glapi/glapi.h"
 #include "util/bitscan.h"
+#include "util/driconf.h"
 #include "util/u_math.h"
 
 #define NUM_ATTRIBS 12
@@ -2664,6 +2665,8 @@ dri2_num_fourcc_format_planes(EGLint format)
    case DRM_FORMAT_ABGR2101010:
    case DRM_FORMAT_RGBA1010102:
    case DRM_FORMAT_BGRA1010102:
+   case DRM_FORMAT_ABGR16161616:
+   case DRM_FORMAT_XBGR16161616:
    case DRM_FORMAT_XBGR16161616F:
    case DRM_FORMAT_ABGR16161616F:
    case DRM_FORMAT_YUYV:

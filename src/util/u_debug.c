@@ -121,16 +121,16 @@ debug_print_blob(const char *name, const void *blob, unsigned size)
 static bool
 debug_get_option_should_print(void)
 {
-   static bool first = true;
+   static bool initialized = false;
    static bool value = false;
 
-   if (!first)
+   if (initialized)
       return value;
 
    /* Oh hey this will call into this function,
     * but its cool since we set first to false
     */
-   first = false;
+   initialized = true;
    value = debug_get_bool_option("GALLIUM_PRINT_OPTIONS", false);
    /* XXX should we print this option? Currently it wont */
    return value;
@@ -324,16 +324,6 @@ debug_get_flags_option(const char *name,
    }
 
    return result;
-}
-
-
-void
-_debug_assert_fail(const char *expr, const char *file, unsigned line,
-                   const char *function)
-{
-   _debug_printf("%s:%u:%s: Assertion `%s' failed.\n",
-                 file, line, function, expr);
-   os_abort();
 }
 
 

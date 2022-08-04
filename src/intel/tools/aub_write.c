@@ -359,28 +359,28 @@ static const struct engine {
       .name = "RENDER",
       .engine_class = I915_ENGINE_CLASS_RENDER,
       .hw_class = 1,
-      .elsp_reg = EXECLIST_SUBMITPORT_RCSUNIT,
-      .elsq_reg = EXECLIST_SQ_CONTENTS0_RCSUNIT,
-      .status_reg = EXECLIST_STATUS_RCSUNIT,
-      .control_reg = EXECLIST_CONTROL_RCSUNIT,
+      .elsp_reg = RCSUNIT(EXECLIST_SUBMITPORT),
+      .elsq_reg = RCSUNIT(EXECLIST_SQ_CONTENTS),
+      .status_reg = RCSUNIT(EXECLIST_STATUS),
+      .control_reg = RCSUNIT(EXECLIST_CONTROL),
    },
    [I915_ENGINE_CLASS_VIDEO] = {
       .name = "VIDEO",
       .engine_class = I915_ENGINE_CLASS_VIDEO,
       .hw_class = 3,
-      .elsp_reg = EXECLIST_SUBMITPORT_VCSUNIT0,
-      .elsq_reg = EXECLIST_SQ_CONTENTS0_VCSUNIT0,
-      .status_reg = EXECLIST_STATUS_VCSUNIT0,
-      .control_reg = EXECLIST_CONTROL_VCSUNIT0,
+      .elsp_reg = VCSUNIT0(EXECLIST_SUBMITPORT),
+      .elsq_reg = VCSUNIT0(EXECLIST_SQ_CONTENTS),
+      .status_reg = VCSUNIT0(EXECLIST_STATUS),
+      .control_reg = VCSUNIT0(EXECLIST_CONTROL),
    },
    [I915_ENGINE_CLASS_COPY] = {
       .name = "BLITTER",
       .engine_class = I915_ENGINE_CLASS_COPY,
       .hw_class = 2,
-      .elsp_reg = EXECLIST_SUBMITPORT_BCSUNIT,
-      .elsq_reg = EXECLIST_SQ_CONTENTS0_BCSUNIT,
-      .status_reg = EXECLIST_STATUS_BCSUNIT,
-      .control_reg = EXECLIST_CONTROL_BCSUNIT,
+      .elsp_reg = BCSUNIT0(EXECLIST_SUBMITPORT),
+      .elsq_reg = BCSUNIT0(EXECLIST_SQ_CONTENTS),
+      .status_reg = BCSUNIT0(EXECLIST_STATUS),
+      .control_reg = BCSUNIT0(EXECLIST_CONTROL),
    },
 };
 
@@ -504,9 +504,9 @@ write_hwsp(struct aub_file *aub,
 {
    uint32_t reg = 0;
    switch (engine_class) {
-   case I915_ENGINE_CLASS_RENDER: reg = HWS_PGA_RCSUNIT; break;
-   case I915_ENGINE_CLASS_COPY: reg = HWS_PGA_BCSUNIT; break;
-   case I915_ENGINE_CLASS_VIDEO: reg = HWS_PGA_VCSUNIT0; break;
+   case I915_ENGINE_CLASS_RENDER:  reg = RCSUNIT (HWS_PGA); break;
+   case I915_ENGINE_CLASS_COPY:    reg = BCSUNIT0(HWS_PGA); break;
+   case I915_ENGINE_CLASS_VIDEO:   reg = VCSUNIT0(HWS_PGA); break;
    default:
       unreachable("unknown ring");
    }
@@ -571,9 +571,9 @@ write_engine_execlist_setup(struct aub_file *aub,
 static void
 write_execlists_default_setup(struct aub_file *aub)
 {
-   register_write_out(aub, GFX_MODE_RCSUNIT, 0x80008000 /* execlist enable */);
-   register_write_out(aub, GFX_MODE_VCSUNIT0, 0x80008000 /* execlist enable */);
-   register_write_out(aub, GFX_MODE_BCSUNIT, 0x80008000 /* execlist enable */);
+   register_write_out(aub, RCSUNIT(GFX_MODE), 0x80008000 /* execlist enable */);
+   register_write_out(aub, VCSUNIT0(GFX_MODE), 0x80008000 /* execlist enable */);
+   register_write_out(aub, BCSUNIT0(GFX_MODE), 0x80008000 /* execlist enable */);
 }
 
 static void write_legacy_default_setup(struct aub_file *aub)

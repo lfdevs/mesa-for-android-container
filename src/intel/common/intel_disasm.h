@@ -25,12 +25,13 @@
 #define INTEL_DISASM_H
 
 #include "intel/dev/intel_device_info.h"
+#include "compiler/brw_isa_info.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void intel_disassemble(const struct intel_device_info *devinfo,
+void intel_disassemble(const struct brw_isa_info *isa,
                        const void *assembly, int start, FILE *out);
 
 #ifdef __cplusplus

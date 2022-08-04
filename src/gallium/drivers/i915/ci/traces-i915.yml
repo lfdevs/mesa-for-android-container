@@ -5,54 +5,54 @@ traces-db:
 # Xorg in the x86 docker images we're using.
 
 traces:
-  - path: glxgears/glxgears-2.trace
+  - path: glxgears/glxgears-2-v2.trace
     expectations:
       - device: i915-g33
         checksum: ee8dcdb3b9eaef2b32a2914b89373419
-  - path: gputest/plot3d.trace
+  - path: gputest/plot3d-v2.trace
     expectations:
       - device: i915-g33
-        checksum: 6a3f62f1c6cc57c91188f93f37ebf9b4
-  - path: gputest/triangle.trace
+        checksum: 456d98a570563af3bc61d91fd1742868
+  - path: gputest/triangle-v2.trace
     expectations:
       # Weird white bar behind Tux's head.
       - device: i915-g33
         checksum: ef9b19e9a6dcd928d3bd44e7eee95029
   # Requires GLSL 1.30
-  #- path: humus/AmbientAperture.trace
+  #- path: humus/AmbientAperture-v2.trace
   #  expectations:
   #    - device: i915-g33
   #      checksum: 8d4c52f0af9c09710d358f24c73fae3c
-  - path: humus/CelShading.trace
+  - path: humus/CelShading-v2.trace
     # The cel shading is pretty chunky, but maybe that's just precision stuff.
     expectations:
       - device: i915-g33
         checksum: 7518414e4f1a4f1e07c04ec1500f53e7
   # Requires GLSL 1.30
-  #- path: humus/DynamicBranching3.trace
+  #- path: humus/DynamicBranching3-v2.trace
   #  expectations:
   #    - device: i915-g33
   #      checksum: 765fa742b87e411763921c6f988b2573
   # Requires GLSL 1.30
-  #- path: humus/HDR.trace
+  #- path: humus/HDR-v2.trace
   #  expectations:
   #    - device: i915-g33
   #      checksum: 80b164e85e96a413568d18ce308caae3
-  - path: humus/Portals.trace
+  - path: humus/Portals-v2.trace
     expectations:
       - device: i915-g33
         checksum: f782469019417923831d5d53dbe6a507
   # The shadow raytracing shader fails to compile
-  #- path: humus/RaytracedShadows.trace
+  #- path: humus/RaytracedShadows-v2.trace
   #  expectations:
   #    - device: i915-g33
   #      checksum: 5dc0af9fead0102a791784d0f6122096
   # Requires GLSL 1.30
-  #- path: humus/VolumetricFogging2.trace
+  #- path: humus/VolumetricFogging2-v2.trace
   #  expectations:
   #    - device: i915-g33
   #      checksum: aec880cec7ba460f3144b789bc517891
-  - path: neverball/neverball.trace
+  - path: neverball/neverball-v2.trace
     expectations:
       - device: i915-g33
         checksum: f925aa92da47ebc757285f826113f4db
@@ -61,3 +61,7 @@ traces:
     expectations:
       - device: i915-g33
         checksum: d17298ad3bb44b43b6c17e017f7c1e6a
+  # Error: waffle_context_create failed
+  #- path: ror/ror-default.trace
+  # User-errors, missing text in application
+  #- path: nheko/nheko-colors.trace

@@ -321,7 +321,8 @@ nir_find_inlinable_uniforms(nir_shader *shader)
 
    nir_foreach_function(function, shader) {
       if (function->impl) {
-         nir_metadata_require(function->impl, nir_metadata_loop_analysis, nir_var_all);
+         nir_metadata_require(function->impl, nir_metadata_loop_analysis,
+                              nir_var_all, false);
 
          foreach_list_typed(nir_cf_node, node, node, &function->impl->body)
             process_node(node, NULL, uni_offsets, &num_offsets);

@@ -69,6 +69,9 @@ static const struct debug_named_value panfrost_debug_options[] = {
         {"linear",    PAN_DBG_LINEAR,   "Force linear textures"},
         {"nocache",   PAN_DBG_NO_CACHE, "Disable BO cache"},
         {"dump",      PAN_DBG_DUMP,     "Dump all graphics memory"},
+#ifdef PAN_DBG_OVERFLOW
+        {"overflow",  PAN_DBG_OVERFLOW, "Check for buffer overflows in pool uploads"},
+#endif
         DEBUG_NAMED_VALUE_END
 };
 
@@ -105,12 +108,10 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         bool has_heap = dev->kernel_version->version_major > 1 ||
                         dev->kernel_version->version_minor >= 1;
 
-        /* Bifrost is WIP */
         switch (param) {
         case PIPE_CAP_NPOT_TEXTURES:
         case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
         case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
-        case PIPE_CAP_VERTEX_SHADER_SATURATE:
         case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
         case PIPE_CAP_POINT_SPRITE:
         case PIPE_CAP_DEPTH_CLIP_DISABLE:
@@ -122,6 +123,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
         case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
         case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
+        case PIPE_CAP_SHADER_PACK_HALF_FLOAT:
                 return 1;
 
         case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -196,12 +198,12 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
                 return is_gl3 ? 330 : 140;
         case PIPE_CAP_ESSL_FEATURE_LEVEL:
-                return pan_is_bifrost(dev) ? 320 : 310;
+                return dev->arch >= 6 ? 320 : 310;
 
         case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
                 return 16;
 
-        case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
+        case PIPE_CAP_MAX_TEXEL_BUFFER_ELEMENTS_UINT:
                 return 65536;
 
         /* Must be at least 64 for correct behaviour */
@@ -318,12 +320,21 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
 
         case PIPE_CAP_SUPPORTED_PRIM_MODES:
         case PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART: {
-                /* Mali supports GLES and QUADS. Midgard supports more */
+                /* Mali supports GLES and QUADS. Midgard and v6 Bifrost
+                 * support more */
                 uint32_t modes = BITFIELD_MASK(PIPE_PRIM_QUADS + 1);
 
-                if (dev->arch <= 5) {
+                if (dev->arch <= 6) {
                         modes |= BITFIELD_BIT(PIPE_PRIM_QUAD_STRIP);
                         modes |= BITFIELD_BIT(PIPE_PRIM_POLYGON);
+                }
+
+                if (dev->arch >= 9) {
+                        /* Although Valhall is supposed to support quads, they
+                         * don't seem to work correctly. Disable to fix
+                         * arb-provoking-vertex-render.
+                         */
+                        modes &= ~BITFIELD_BIT(PIPE_PRIM_QUADS);
                 }
 
                 return modes;
@@ -355,6 +366,16 @@ panfrost_get_shader_param(struct pipe_screen *screen,
                 return 0;
         }
 
+        /* We only allow observable side effects (memory writes) in compute and
+         * fragment shaders. Side effects in the geometry pipeline cause
+         * trouble with IDVS.
+         *
+         * This restriction doesn't apply to Midgard, which does not implement
+         * IDVS and therefore executes vertex shaders exactly once.
+         */
+        bool allow_side_effects = (shader != PIPE_SHADER_VERTEX) ||
+                                  (dev->arch <= 5);
+
         switch (param) {
         case PIPE_SHADER_CAP_MAX_INSTRUCTIONS:
         case PIPE_SHADER_CAP_MAX_ALU_INSTRUCTIONS:
@@ -375,14 +396,14 @@ panfrost_get_shader_param(struct pipe_screen *screen,
         case PIPE_SHADER_CAP_MAX_TEMPS:
                 return 256; /* arbitrary */
 
-        case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+        case PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE:
                 return 16 * 1024 * sizeof(float);
 
         case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
                 STATIC_ASSERT(PAN_MAX_CONST_BUFFERS < 0x100);
                 return PAN_MAX_CONST_BUFFERS;
 
-        case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
+        case PIPE_SHADER_CAP_CONT_SUPPORTED:
                 return 0;
 
         case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -391,7 +412,7 @@ panfrost_get_shader_param(struct pipe_screen *screen,
                 return 0;
 
         case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
-                return pan_is_bifrost(dev);
+                return dev->arch >= 6;
 
         case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
                 return 1;
@@ -414,17 +435,16 @@ panfrost_get_shader_param(struct pipe_screen *screen,
                 return !is_nofp16;
         case PIPE_SHADER_CAP_FP16_DERIVATIVES:
         case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
-                return pan_is_bifrost(dev) && !is_nofp16;
+                return dev->arch >= 6 && !is_nofp16;
         case PIPE_SHADER_CAP_INT16:
                 /* XXX: Advertise this CAP when a proper fix to lower_precision
                  * lands. GLSL IR validation failure in glmark2 -bterrain */
-                return pan_is_bifrost(dev) && !is_nofp16 && is_deqp;
+                return dev->arch >= 6 && !is_nofp16 && is_deqp;
 
         case PIPE_SHADER_CAP_INT64_ATOMICS:
-        case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
-        case PIPE_SHADER_CAP_TGSI_DFRACEXP_DLDEXP_SUPPORTED:
-        case PIPE_SHADER_CAP_TGSI_LDEXP_SUPPORTED:
-        case PIPE_SHADER_CAP_TGSI_FMA_SUPPORTED:
+        case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+        case PIPE_SHADER_CAP_DFRACEXP_DLDEXP_SUPPORTED:
+        case PIPE_SHADER_CAP_LDEXP_SUPPORTED:
         case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
                 return 0;
 
@@ -443,16 +463,13 @@ panfrost_get_shader_param(struct pipe_screen *screen,
                 return (1 << PIPE_SHADER_IR_NIR) | (1 << PIPE_SHADER_IR_NIR_SERIALIZED);
 
         case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
-                return 16;
+                return allow_side_effects ? 16 : 0;
 
         case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
-                return PIPE_MAX_SHADER_IMAGES;
+                return allow_side_effects ? PIPE_MAX_SHADER_IMAGES : 0;
 
-        case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
         case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
         case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
-        case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
-        case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
                 return 0;
 
         default:
@@ -527,9 +544,6 @@ panfrost_is_format_supported( struct pipe_screen *screen,
 
         format_desc = util_format_description(format);
 
-        if (!format_desc)
-                return false;
-
         /* MSAA 2x gets rounded up to 4x. MSAA 8x/16x only supported on v5+.
          * TODO: debug MSAA 8x/16x */
 
@@ -590,6 +604,7 @@ panfrost_walk_dmabuf_modifiers(struct pipe_screen *screen,
         struct panfrost_device *dev = pan_device(screen);
         bool afbc = dev->has_afbc && panfrost_format_supports_afbc(dev, format);
         bool ytr = panfrost_afbc_can_ytr(format);
+        bool tiled_afbc = panfrost_afbc_can_tile(dev);
 
         unsigned count = 0;
 
@@ -598,6 +613,9 @@ panfrost_walk_dmabuf_modifiers(struct pipe_screen *screen,
                         continue;
 
                 if ((pan_best_modifiers[i] & AFBC_FORMAT_MOD_YTR) && !ytr)
+                        continue;
+
+                if ((pan_best_modifiers[i] & AFBC_FORMAT_MOD_TILED) && !tiled_afbc)
                         continue;
 
                 if (test_modifier != DRM_FORMAT_MOD_INVALID &&
@@ -698,13 +716,13 @@ panfrost_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_t
 		RET((uint32_t []) { 800 /* MHz -- TODO */ });
 
 	case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
-		RET((uint32_t []) { 9999 });  // TODO
+		RET((uint32_t []) { dev->core_count });
 
 	case PIPE_COMPUTE_CAP_IMAGES_SUPPORTED:
 		RET((uint32_t []) { 1 });
 
 	case PIPE_COMPUTE_CAP_SUBGROUP_SIZE:
-		RET((uint32_t []) { dev->arch >= 7 ? 8 : 4 });
+		RET((uint32_t []) { pan_subgroup_size(dev->arch) });
 
 	case PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK:
 		RET((uint64_t []) { 1024 }); // TODO
@@ -855,12 +873,6 @@ panfrost_create_screen(int fd, struct renderonly *ro)
         if (dev->debug & PAN_DBG_NO_AFBC)
                 dev->has_afbc = false;
 
-        /* It's early days for Valhall support... disable AFBC for now to keep
-         * hardware bring-up simple
-         */
-        if (dev->arch >= 9)
-                dev->has_afbc = false;
-
         /* Bail early on unsupported hardware */
         if (dev->model == NULL) {
                 debug_printf("panfrost: Unsupported model %X", dev->gpu_id);
@@ -907,6 +919,8 @@ panfrost_create_screen(int fd, struct renderonly *ro)
                 panfrost_cmdstream_screen_init_v6(screen);
         else if (dev->arch == 7)
                 panfrost_cmdstream_screen_init_v7(screen);
+        else if (dev->arch == 9)
+                panfrost_cmdstream_screen_init_v9(screen);
         else
                 unreachable("Unhandled architecture major");
 

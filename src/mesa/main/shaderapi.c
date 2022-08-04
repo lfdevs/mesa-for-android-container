@@ -203,7 +203,6 @@ _mesa_init_shader_state(struct gl_context *ctx)
    int i;
 
    memset(&options, 0, sizeof(options));
-   options.MaxUnrollIterations = 32;
    options.MaxIfDepth = UINT_MAX;
 
    for (sh = 0; sh < MESA_SHADER_STAGES; ++sh)
@@ -2660,10 +2659,6 @@ _mesa_copy_linked_program_data(const struct gl_shader_program *src,
    }
    case MESA_SHADER_FRAGMENT: {
       dst->info.fs.depth_layout = src->FragDepthLayout;
-      break;
-   }
-   case MESA_SHADER_COMPUTE: {
-      dst->info.shared_size = src->Comp.SharedSize;
       break;
    }
    default:

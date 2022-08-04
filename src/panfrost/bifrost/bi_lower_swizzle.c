@@ -49,7 +49,7 @@ bi_lower_swizzle_16(bi_context *ctx, bi_instr *ins, unsigned src)
          * inherently interpret the data, so it can be used for v2f16
          * derivatives, which might require swizzle lowering */
         case BI_OPCODE_CLPER_I32:
-        case BI_OPCODE_CLPER_V6_I32:
+        case BI_OPCODE_CLPER_OLD_I32:
 
         /* Similarly, CSEL.i32 consumes a boolean as a 32-bit argument. If the
          * boolean is implemented as a 16-bit integer, the swizzle is needed
@@ -223,7 +223,7 @@ bi_instr_replicates(bi_instr *I, BITSET_WORD *replicates_16)
 
                 /* Replicated values */
                 if (bi_is_ssa(I->src[s]) &&
-                    BITSET_TEST(replicates_16, bi_word_node(I->src[s])))
+                    BITSET_TEST(replicates_16, I->src[s].value))
                         continue;
 
                 /* Replicated constants */
@@ -248,14 +248,14 @@ bi_lower_swizzle(bi_context *ctx)
         }
 
         /* Now that we've lowered swizzles, clean up the mess */
-        BITSET_WORD *replicates_16 = calloc(sizeof(bi_index), ((ctx->ssa_alloc + 1) << 2));
+        BITSET_WORD *replicates_16 = calloc(sizeof(bi_index), ctx->ssa_alloc);
 
         bi_foreach_instr_global(ctx, ins) {
                 if (bi_is_ssa(ins->dest[0]) && bi_instr_replicates(ins, replicates_16))
-                        BITSET_SET(replicates_16, bi_word_node(ins->dest[0]));
+                        BITSET_SET(replicates_16, ins->dest[0].value);
 
                 if (ins->op == BI_OPCODE_SWZ_V2I16 && bi_is_ssa(ins->src[0]) &&
-                    BITSET_TEST(replicates_16, bi_word_node(ins->src[0]))) {
+                    BITSET_TEST(replicates_16, ins->src[0].value)) {
                         ins->op = BI_OPCODE_MOV_I32;
                         ins->src[0].swizzle = BI_SWIZZLE_H01;
                 }

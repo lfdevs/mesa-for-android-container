@@ -42,7 +42,7 @@
 #include <stdio.h>
 
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -226,7 +226,7 @@ util_dump_blit_info(FILE *stream, const struct pipe_blit_info *info);
 /* FIXME: Move the other debug_dump_xxx functions out of u_debug.h into here. */
 
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 }
 #endif
 

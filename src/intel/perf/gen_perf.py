@@ -23,6 +23,7 @@ import argparse
 import builtins
 import collections
 import os
+import re
 import sys
 import textwrap
 
@@ -138,6 +139,22 @@ def emit_and(tmp_id, args):
     c("uint64_t tmp{0} = {1} & {2};".format(tmp_id, args[1], args[0]))
     return tmp_id + 1
 
+def emit_ulte(tmp_id, args):
+    c("uint64_t tmp{0} = {1} <= {2};".format(tmp_id, args[1], args[0]))
+    return tmp_id + 1
+
+def emit_ult(tmp_id, args):
+    c("uint64_t tmp{0} = {1} < {2};".format(tmp_id, args[1], args[0]))
+    return tmp_id + 1
+
+def emit_ugte(tmp_id, args):
+    c("uint64_t tmp{0} = {1} >= {2};".format(tmp_id, args[1], args[0]))
+    return tmp_id + 1
+
+def emit_ugt(tmp_id, args):
+    c("uint64_t tmp{0} = {1} > {2};".format(tmp_id, args[1], args[0]))
+    return tmp_id + 1
+
 ops = {}
 #             (n operands, emitter)
 ops["FADD"] = (2, emit_fadd)
@@ -154,6 +171,11 @@ ops["UMIN"] = (2, emit_umin)
 ops["<<"]   = (2, emit_lshft)
 ops[">>"]   = (2, emit_rshft)
 ops["AND"]  = (2, emit_and)
+ops["UGTE"] = (2, emit_ugte)
+ops["UGT"]  = (2, emit_ugt)
+ops["ULTE"] = (2, emit_ulte)
+ops["ULT"]  = (2, emit_ult)
+
 
 def brkt(subexp):
     if " " in subexp:
@@ -173,6 +195,12 @@ def splice_ult(args):
 def splice_ugte(args):
     return brkt(args[1]) + " >= " + brkt(args[0])
 
+def splice_ulte(args):
+    return brkt(args[1]) + " <= " + brkt(args[0])
+
+def splice_ugt(args):
+    return brkt(args[1]) + " > " + brkt(args[0])
+
 exp_ops = {}
 #                 (n operands, splicer)
 exp_ops["AND"]  = (2, splice_bitwise_and)
@@ -185,17 +213,32 @@ hw_vars = {}
 hw_vars["$EuCoresTotalCount"] = "perf->sys_vars.n_eus"
 hw_vars["$EuSlicesTotalCount"] = "perf->sys_vars.n_eu_slices"
 hw_vars["$EuSubslicesTotalCount"] = "perf->sys_vars.n_eu_sub_slices"
-hw_vars["$EuThreadsCount"] = "perf->sys_vars.eu_threads_count"
+hw_vars["$EuDualSubslicesTotalCount"] = "perf->sys_vars.n_eu_sub_slices"
+hw_vars["$EuDualSubslicesSlice0123Count"] = "perf->sys_vars.n_eu_slice0123"
+hw_vars["$EuThreadsCount"] = "perf->devinfo.num_thread_per_eu"
 hw_vars["$SliceMask"] = "perf->sys_vars.slice_mask"
 # subslice_mask is interchangeable with subslice/dual-subslice since Gfx12+
 # only has dual subslices which can be assimilated with 16EUs subslices.
 hw_vars["$SubsliceMask"] = "perf->sys_vars.subslice_mask"
 hw_vars["$DualSubsliceMask"] = "perf->sys_vars.subslice_mask"
-hw_vars["$GpuTimestampFrequency"] = "perf->sys_vars.timestamp_frequency"
+hw_vars["$GpuTimestampFrequency"] = "perf->devinfo.timestamp_frequency"
 hw_vars["$GpuMinFrequency"] = "perf->sys_vars.gt_min_freq"
 hw_vars["$GpuMaxFrequency"] = "perf->sys_vars.gt_max_freq"
-hw_vars["$SkuRevisionId"] = "perf->sys_vars.revision"
+hw_vars["$SkuRevisionId"] = "perf->devinfo.revision"
 hw_vars["$QueryMode"] = "perf->sys_vars.query_mode"
+
+def resolve_variable(name, set, allow_counters):
+    if name in hw_vars:
+        return hw_vars[name]
+    m = re.search('\$GtSlice([0-9]+)$', name)
+    if m:
+        return 'intel_device_info_slice_available(&perf->devinfo, {0})'.format(m.group(1))
+    m = re.search('\$GtSlice([0-9]+)DualSubslice([0-9]+)$', name)
+    if m:
+        return 'intel_device_info_subslice_available(&perf->devinfo, {0}, {1})'.format(m.group(1), m.group(2))
+    if allow_counters and name in set.counter_vars:
+        return set.read_funcs[name[1:]] + "(perf, query, results)"
+    return None
 
 def output_rpn_equation_code(set, counter, equation):
     c("/* RPN equation: " + equation + " */")
@@ -213,13 +256,10 @@ def output_rpn_equation_code(set, counter, equation):
             for i in range(0, argc):
                 operand = stack.pop()
                 if operand[0] == "$":
-                    if operand in hw_vars:
-                        operand = hw_vars[operand]
-                    elif operand in set.counter_vars:
-                        reference = set.counter_vars[operand]
-                        operand = set.read_funcs[operand[1:]] + "(perf, query, results)"
-                    else:
+                    resolved_variable = resolve_variable(operand, set, True)
+                    if resolved_variable == None:
                         raise Exception("Failed to resolve variable " + operand + " in equation " + equation + " for " + set.name + " :: " + counter.get('name'));
+                    operand = resolved_variable
                 args.append(operand)
 
             tmp_id = callback(tmp_id, args)
@@ -234,10 +274,11 @@ def output_rpn_equation_code(set, counter, equation):
 
     value = stack[-1]
 
-    if value in hw_vars:
-        value = hw_vars[value]
-    if value in set.counter_vars:
-        value = set.read_funcs[value[1:]] + "(perf, query, results)"
+    if value[0] == "$":
+        resolved_variable = resolve_variable(value, set, True)
+        if resolved_variable == None:
+            raise Exception("Failed to resolve variable " + operand + " in equation " + equation + " for " + set.name + " :: " + counter.get('name'));
+        value = resolved_variable
 
     c("\nreturn " + value + ";")
 
@@ -254,10 +295,10 @@ def splice_rpn_expression(set, counter, expression):
             for i in range(0, argc):
                 operand = stack.pop()
                 if operand[0] == "$":
-                    if operand in hw_vars:
-                        operand = hw_vars[operand]
-                    else:
-                        raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.name + " :: " + counter.get('name'));
+                    resolved_variable = resolve_variable(operand, set, False)
+                    if resolved_variable == None:
+                        raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.name + " :: " + counter.get('name'))
+                    operand = resolved_variable
                 args.append(operand)
 
             subexp = callback(args)
@@ -269,7 +310,15 @@ def splice_rpn_expression(set, counter, expression):
                 counter.get('name') + ".\nThis is probably due to some unhandled RPN operation, in the expression \"" +
                 expression + "\"")
 
-    return stack[-1]
+    value = stack[-1]
+
+    if value[0] == "$":
+        resolved_variable = resolve_variable(value, set, False)
+        if resolved_variable == None:
+            raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.name + " :: " + counter.get('name'))
+        value = resolved_variable
+
+    return value
 
 def output_counter_read(gen, set, counter):
     c("\n")
@@ -306,14 +355,14 @@ def output_counter_read(gen, set, counter):
 def output_counter_max(gen, set, counter):
     max_eq = counter.get('max_equation')
 
-    if not counter.has_max_func():
+    if not counter.has_custom_max_func():
         return
 
     c("\n")
     c("/* {0} :: {1} */".format(set.name, counter.get('name')))
 
     if counter.max_hash in hashed_funcs:
-        c("#define %s \\" % counter.max_sym())
+        c("#define %s \\" % counter.max_sym)
         c_indent(3)
         c("%s" % hashed_funcs[counter.max_hash])
         c_outdent(3)
@@ -323,14 +372,18 @@ def output_counter_max(gen, set, counter):
             ret_type = "uint64_t"
 
         c("static " + ret_type)
-        c(counter.max_sym() + "(struct intel_perf_config *perf)\n")
+        c(counter.max_sym + "(struct intel_perf_config *perf,\n")
+        c_indent(len(counter.read_sym) + 1)
+        c("const struct intel_perf_query_info *query,\n")
+        c("const struct intel_perf_query_result *results)\n")
+        c_outdent(len(counter.read_sym) + 1)
         c("{")
         c_indent(3)
         output_rpn_equation_code(set, counter, max_eq)
         c_outdent(3)
         c("}")
 
-        hashed_funcs[counter.max_hash] = counter.max_sym()
+        hashed_funcs[counter.max_hash] = counter.max_sym
 
 
 c_type_sizes = { "uint32_t": 4, "uint64_t": 8, "float": 4, "double": 8, "bool": 4 }
@@ -466,10 +519,17 @@ def output_counter_report(set, counter, counter_to_idx, current_offset):
 
     current_offset = pot_align(current_offset, sizeof(c_type))
 
-    c("intel_perf_query_add_counter(query, " + idx + ", " +
-        str(current_offset) + ", " +
-        set.max_values[counter.get('symbol_name')] + ", (oa_counter_read_func)" +
-        set.read_funcs[counter.get('symbol_name')] + ");\n")
+    if data_type == 'uint64':
+        c("intel_perf_query_add_counter_uint64(query, " + idx + ", " +
+          str(current_offset) + ", " +
+          set.max_funcs[counter.get('symbol_name')] + "," +
+          set.read_funcs[counter.get('symbol_name')] + ");\n")
+    else:
+        c("intel_perf_query_add_counter_float(query, " + idx + ", " +
+          str(current_offset) + ", " +
+          set.max_funcs[counter.get('symbol_name')] + "," +
+          set.read_funcs[counter.get('symbol_name')] + ");\n")
+
 
     if availability:
         c_outdent(3);
@@ -558,6 +618,7 @@ class Counter:
         self.read_sym = "{0}__{1}__{2}__read".format(self.set.gen.chipset,
                                                      self.set.underscore_name,
                                                      self.xml.get('underscore_name'))
+        self.max_sym = self.build_max_sym()
 
     def get(self, prop):
         return self.xml.get(prop)
@@ -583,45 +644,44 @@ class Counter:
         if max_eq:
             self.max_hash = ' '.join(map(replace_token, max_eq.split()))
 
-    def has_max_func(self):
+    def has_custom_max_func(self):
         max_eq = self.xml.get('max_equation')
         if not max_eq:
             return False
 
         try:
             val = float(max_eq)
-            return False
+            if val == 100:
+                return False
         except ValueError:
             pass
 
         for token in max_eq.split():
-            if token[0] == '$' and token not in hw_vars:
+            if token[0] == '$' and resolve_variable(token, self.set, True) == None:
+                print("unresolved token " + token)
                 return False
         return True
 
-    def max_sym(self):
-        assert self.has_max_func()
+    def build_max_sym(self):
+        max_eq = self.xml.get('max_equation')
+        if not max_eq:
+            return "NULL"
+
+        try:
+            val = float(max_eq)
+            if val == 100:
+                if self.xml.get('data_type') == 'uint64':
+                    return "percentage_max_uint64"
+                else:
+                    return "percentage_max_float"
+        except ValueError:
+            pass
+
+        assert self.has_custom_max_func()
         return "{0}__{1}__{2}__max".format(self.set.gen.chipset,
                                            self.set.underscore_name,
                                            self.xml.get('underscore_name'))
 
-    def max_value(self):
-        max_eq = self.xml.get('max_equation')
-        if not max_eq:
-            return "0 /* undefined */"
-
-        try:
-            return "{0}".format(float(max_eq))
-        except ValueError:
-            pass
-
-        for token in max_eq.split():
-            if token[0] == '$' and token not in hw_vars:
-                return "0 /* unsupported (varies over time) */"
-
-        return "{0}__{1}__{2}__max(perf)".format(self.set.gen.chipset,
-                                                 self.set.underscore_name,
-                                                 self.xml.get('underscore_name'))
 
 # Wraps a <set> element from the oa-*.xml files.
 class Set:
@@ -630,7 +690,7 @@ class Set:
         self.xml = xml
 
         self.counter_vars = {}
-        self.max_values = {}
+        self.max_funcs = {}
         self.read_funcs = {}
 
         xml_counters = self.xml.findall("counter")
@@ -638,9 +698,9 @@ class Set:
         for xml_counter in xml_counters:
             counter = Counter(self, xml_counter)
             self.counters.append(counter)
-            self.counter_vars["$" + counter.get('symbol_name')] = counter
+            self.counter_vars['$' + counter.get('symbol_name')] = counter
             self.read_funcs[counter.get('symbol_name')] = counter.read_sym
-            self.max_values[counter.get('symbol_name')] = counter.max_value()
+            self.max_funcs[counter.get('symbol_name')] = counter.max_sym
 
         for counter in self.counters:
             counter.compute_hashes()
@@ -807,13 +867,11 @@ def main():
     c("};\n\n")
 
     c(textwrap.dedent("""\
-        typedef uint64_t (*oa_counter_read_func)(struct intel_perf_config *perf,
-                                                 const struct intel_perf_query_info *query,
-                                                 const struct intel_perf_query_result *results);
         static void ATTRIBUTE_NOINLINE
-        intel_perf_query_add_counter(struct intel_perf_query_info *query,
-                                     int counter_idx, size_t offset,
-                                     uint64_t raw_max, oa_counter_read_func oa_counter_read_uint64)
+        intel_perf_query_add_counter_uint64(struct intel_perf_query_info *query,
+                                            int counter_idx, size_t offset,
+                                            intel_counter_read_uint64_t oa_counter_max,
+                                            intel_counter_read_uint64_t oa_counter_read)
         {
            struct intel_perf_query_counter *dest = &query->counters[query->n_counters++];
            const struct intel_perf_query_counter_data *counter = &counters[counter_idx];
@@ -822,13 +880,51 @@ def main():
            dest->desc = &desc[counter->desc_idx];
            dest->symbol_name = &symbol_name[counter->symbol_name_idx];
            dest->category = &category[counter->category_idx];
-           dest->raw_max = raw_max;
 
            dest->offset = offset;
            dest->type = counter->type;
            dest->data_type = counter->data_type;
            dest->units = counter->units;
-           dest->oa_counter_read_uint64 = oa_counter_read_uint64;
+           dest->oa_counter_max_uint64 = oa_counter_max;
+           dest->oa_counter_read_uint64 = oa_counter_read;
+        }
+
+        static void ATTRIBUTE_NOINLINE
+        intel_perf_query_add_counter_float(struct intel_perf_query_info *query,
+                                           int counter_idx, size_t offset,
+                                           intel_counter_read_float_t oa_counter_max,
+                                           intel_counter_read_float_t oa_counter_read)
+        {
+           struct intel_perf_query_counter *dest = &query->counters[query->n_counters++];
+           const struct intel_perf_query_counter_data *counter = &counters[counter_idx];
+
+           dest->name = &name[counter->name_idx];
+           dest->desc = &desc[counter->desc_idx];
+           dest->symbol_name = &symbol_name[counter->symbol_name_idx];
+           dest->category = &category[counter->category_idx];
+
+           dest->offset = offset;
+           dest->type = counter->type;
+           dest->data_type = counter->data_type;
+           dest->units = counter->units;
+           dest->oa_counter_max_float = oa_counter_max;
+           dest->oa_counter_read_float = oa_counter_read;
+        }
+
+        static float ATTRIBUTE_NOINLINE
+        percentage_max_float(struct intel_perf_config *perf,
+                             const struct intel_perf_query_info *query,
+                             const struct intel_perf_query_result *results)
+        {
+           return 100;
+        }
+
+        static uint64_t ATTRIBUTE_NOINLINE
+        percentage_max_uint64(struct intel_perf_config *perf,
+                              const struct intel_perf_query_info *query,
+                              const struct intel_perf_query_result *results)
+        {
+           return 100;
         }
         """))
 

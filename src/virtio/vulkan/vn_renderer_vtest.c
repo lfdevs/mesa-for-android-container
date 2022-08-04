@@ -927,6 +927,13 @@ vtest_init_renderer_info(struct vtest *vtest)
 {
    struct vn_renderer_info *info = &vtest->base.info;
 
+   info->drm.has_primary = false;
+   info->drm.primary_major = 0;
+   info->drm.primary_minor = 0;
+   info->drm.has_render = false;
+   info->drm.render_major = 0;
+   info->drm.render_minor = 0;
+
    info->pci.vendor_id = VTEST_PCI_VENDOR_ID;
    info->pci.device_id = VTEST_PCI_DEVICE_ID;
 
@@ -951,6 +958,8 @@ vtest_init_renderer_info(struct vtest *vtest)
                  sizeof(capset->vk_extension_mask1));
    memcpy(info->vk_extension_mask, capset->vk_extension_mask1,
           sizeof(capset->vk_extension_mask1));
+
+   info->allow_vk_wait_syncs = capset->allow_vk_wait_syncs;
 }
 
 static void

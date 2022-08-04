@@ -59,6 +59,7 @@ struct virgl_transform_context {
    bool cull_enabled;
    bool has_precise;
    bool fake_fp64;
+   bool is_separable;
 
    unsigned next_temp;
 
@@ -185,6 +186,14 @@ static void
 virgl_tgsi_transform_prolog(struct tgsi_transform_context * ctx)
 {
    struct virgl_transform_context *vtctx = (struct virgl_transform_context *)ctx;
+
+   if (vtctx->is_separable) {
+      struct tgsi_full_property prop = tgsi_default_full_property();
+      prop.Property.PropertyName = TGSI_PROPERTY_SEPARABLE_PROGRAM;
+      prop.Property.NrTokens += 1;
+      prop.u[0].Data = 1;
+      ctx->emit_property(ctx, &prop);
+   }
 
    vtctx->src_temp = vtctx->next_temp;
    vtctx->next_temp += 4;
@@ -379,8 +388,7 @@ virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
 
    /* virglrenderer doesn't resolve non-float output write properly,
     * so we have to first write to a temporary */
-   if ((inst->Src[0].Register.File == TGSI_FILE_CONSTANT ||
-        inst->Src[0].Register.File == TGSI_FILE_IMMEDIATE) &&
+   if (inst->Instruction.Opcode != TGSI_OPCODE_MOV &&
        !tgsi_get_opcode_info(inst->Instruction.Opcode)->is_tex &&
        !tgsi_get_opcode_info(inst->Instruction.Opcode)->is_store &&
        inst->Dst[0].Register.File == TGSI_FILE_OUTPUT &&
@@ -388,6 +396,8 @@ virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
       struct tgsi_full_instruction op_to_temp = *inst;
       op_to_temp.Dst[0].Register.File = TGSI_FILE_TEMPORARY;
       op_to_temp.Dst[0].Register.Index = vtctx->src_temp;
+      op_to_temp.Dst[0].Dimension.Indirect = 0;
+      op_to_temp.Dst[0].Register.Indirect = 0;
       ctx->emit_instruction(ctx, &op_to_temp);
 
       inst->Instruction.Opcode = TGSI_OPCODE_MOV;
@@ -417,7 +427,8 @@ virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
    }
 }
 
-struct tgsi_token *virgl_tgsi_transform(struct virgl_screen *vscreen, const struct tgsi_token *tokens_in)
+struct tgsi_token *virgl_tgsi_transform(struct virgl_screen *vscreen, const struct tgsi_token *tokens_in,
+                                        bool is_separable)
 {
    struct virgl_transform_context transform;
    const uint newLen = tgsi_num_tokens(tokens_in);
@@ -431,6 +442,7 @@ struct tgsi_token *virgl_tgsi_transform(struct virgl_screen *vscreen, const stru
    transform.has_precise = vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_TGSI_PRECISE;
    transform.fake_fp64 =
       vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_FAKE_FP64;
+   transform.is_separable = is_separable && (vscreen->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_SSO);
 
    for (int i = 0; i < ARRAY_SIZE(transform.input_temp); i++)
       transform.input_temp[i].index = ~0;

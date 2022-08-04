@@ -13,7 +13,7 @@ git submodule update --init
 cat "$SCRIPT_DIR"/.gitlab-ci/container/build-crosvm_*.patch |
     patch -p1
 
-VIRGLRENDERER_VERSION=0564c9a0c2f584e004a7d4864aee3b8ec9692105
+VIRGLRENDERER_VERSION=dd301caf7e05ec9c09634fb7872067542aad89b7
 rm -rf third_party/virglrenderer
 git clone --single-branch -b master --no-checkout https://gitlab.freedesktop.org/virgl/virglrenderer.git third_party/virglrenderer
 pushd third_party/virglrenderer

@@ -95,6 +95,18 @@ asahi_classify_attachment(enum pipe_format format)
       return AGX_IOGPU_ATTACHMENT_TYPE_COLOUR;
 }
 
+static uint64_t
+agx_map_surface_resource(struct pipe_surface *surf, struct agx_resource *rsrc)
+{
+   return agx_map_texture_gpu(rsrc, surf->u.tex.level, surf->u.tex.first_layer);
+}
+
+static uint64_t
+agx_map_surface(struct pipe_surface *surf)
+{
+   return agx_map_surface_resource(surf, agx_resource(surf->texture));
+}
+
 static void
 asahi_pack_iogpu_attachment(void *out, struct agx_resource *rsrc,
                             struct pipe_surface *surf,
@@ -105,12 +117,8 @@ asahi_pack_iogpu_attachment(void *out, struct agx_resource *rsrc,
 
    agx_pack(out, IOGPU_ATTACHMENT, cfg) {
       cfg.type = asahi_classify_attachment(rsrc->base.format);
-
-      cfg.address = agx_map_texture_gpu(rsrc, surf->u.tex.level,
-                                              surf->u.tex.first_layer);
-
+      cfg.address = agx_map_surface_resource(surf, rsrc);
       cfg.size = rsrc->slices[surf->u.tex.level].size;
-
       cfg.percent = (100 * cfg.size) / total_size;
    }
 }
@@ -154,61 +162,93 @@ demo_cmdbuf(uint64_t *buf, size_t size,
             uint64_t encoder_ptr,
             uint64_t encoder_id,
             uint64_t scissor_ptr,
-            uint32_t pipeline_null,
+            uint64_t depth_bias_ptr,
             uint32_t pipeline_clear,
+            uint32_t pipeline_load,
             uint32_t pipeline_store,
-            bool clear_pipeline_textures)
+            bool clear_pipeline_textures,
+            double clear_depth,
+            unsigned clear_stencil)
 {
    uint32_t *map = (uint32_t *) buf;
    memset(map, 0, 518 * 4);
 
-   map[54] = 0x6b0003;
-   map[55] = 0x3a0012;
-   map[56] = 1;
+   uint64_t deflake_buffer = demo_zero(pool, 0x7e0);
+   uint64_t deflake_1 = deflake_buffer + 0x2a0;
+   uint64_t deflake_2 = deflake_buffer + 0x20;
 
-   /* Unknown address at word 110 */
-
-   map[112] = 1;
-   map[114] = 0x1c;
-   map[118] = 0xffffffff;
-   map[119] = 0xffffffff;
-   map[120] = 0xffffffff;
-
-   uint64_t unk_buffer = demo_zero(pool, 0x1000);
    uint64_t unk_buffer_2 = demo_zero(pool, 0x8000);
+
+   uint64_t depth_buffer = 0;
+   uint64_t stencil_buffer = 0;
 
    agx_pack(map + 160, IOGPU_INTERNAL_PIPELINES, cfg) {
       cfg.clear_pipeline_bind = 0xffff8002 | (clear_pipeline_textures ? 0x210 : 0);
       cfg.clear_pipeline = pipeline_clear;
+
+      /* store pipeline used when entire frame completes */
       cfg.store_pipeline_bind = 0x12;
       cfg.store_pipeline = pipeline_store;
       cfg.scissor_array = scissor_ptr;
-      cfg.unknown_buffer = unk_buffer;
+      cfg.depth_bias_array = depth_bias_ptr;
+
+      if (framebuffer->zsbuf) {
+         struct pipe_surface *zsbuf = framebuffer->zsbuf;
+         const struct util_format_description *desc =
+            util_format_description(zsbuf->texture->format);
+
+         // note: setting 0x4 bit here breaks partial render with depth 
+         cfg.depth_flags = 0x80000; // no compression, clear
+
+         cfg.depth_width = framebuffer->width;
+         cfg.depth_height = framebuffer->height;
+
+         if (util_format_has_depth(desc)) {
+            depth_buffer = agx_map_surface(zsbuf);
+         } else {
+            stencil_buffer = agx_map_surface(zsbuf);
+         }
+
+         if (agx_resource(zsbuf->texture)->separate_stencil) {
+            stencil_buffer = agx_map_surface_resource(zsbuf,
+                  agx_resource(zsbuf->texture)->separate_stencil);
+         }
+
+         cfg.stencil_buffer = stencil_buffer;
+         cfg.stencil_buffer_2 = stencil_buffer;
+
+         cfg.depth_buffer = depth_buffer;
+         cfg.depth_buffer_if_clearing = depth_buffer;
+      }
    }
 
    agx_pack(map + 228, IOGPU_AUX_FRAMEBUFFER, cfg) {
       cfg.width = framebuffer->width;
       cfg.height = framebuffer->height;
-      cfg.z16_unorm_attachment = false;
       cfg.pointer = unk_buffer_2;
    }
 
    agx_pack(map + 292, IOGPU_CLEAR_Z_S, cfg) {
-      cfg.depth_clear_value = fui(1.0); // 32-bit float
-      cfg.stencil_clear_value = 0;
-      cfg.z16_unorm_attachment = false;
+      cfg.set_when_reloading_z_1 = clear_pipeline_textures;
+
+      cfg.depth_clear_value = fui(clear_depth);
+      cfg.stencil_clear_value = clear_stencil;
+
+      cfg.partial_reload_pipeline_bind = 0xffff8212;
+      cfg.partial_reload_pipeline = pipeline_load;
+
+      cfg.partial_store_pipeline_bind = 0x12;
+      cfg.partial_store_pipeline = pipeline_store;
    }
 
-   map[312] = 0xffff8212;
-   map[314] = pipeline_null | 0x4;
-   map[320] = 0x12;
-   map[322] = pipeline_store | 0x4;
-
    agx_pack(map + 356, IOGPU_MISC, cfg) {
+      cfg.depth_buffer = depth_buffer;
+      cfg.stencil_buffer = stencil_buffer;
       cfg.encoder_id = encoder_id;
       cfg.unknown_buffer = demo_unk6(pool);
       cfg.width = framebuffer->width;
       cfg.height = framebuffer->height;
+      cfg.unk_80 = clear_pipeline_textures ? 0x0 : 0x1;
    }
 
    unsigned offset_unk = (484 * 4);
@@ -229,8 +269,9 @@ demo_cmdbuf(uint64_t *buf, size_t size,
       cfg.unknown_offset = offset_unk;
       cfg.encoder = encoder_ptr;
 
-      cfg.deflake_1 = demo_zero(pool, 0x540);
-      cfg.deflake_2 = demo_zero(pool, 0x280);
+      cfg.deflake_1 = deflake_1;
+      cfg.deflake_2 = deflake_2;
+      cfg.deflake_3 = deflake_buffer;
    }
 
    return total_size;
@@ -239,17 +280,23 @@ demo_cmdbuf(uint64_t *buf, size_t size,
 static struct agx_map_header
 demo_map_header(uint64_t cmdbuf_id, uint64_t encoder_id, unsigned cmdbuf_size, unsigned count)
 {
+   /* Structure: header followed by resource groups. For now, we use a single
+    * resource group for every resource. This could be optimized.
+    */
+   unsigned length = sizeof(struct agx_map_header);
+   length += count * sizeof(struct agx_map_entry);
+   assert(length < 0x10000);
+
    return (struct agx_map_header) {
       .cmdbuf_id = cmdbuf_id,
-      .unk2 = 0x1,
-      .unk3 = 0x528, // 1320
+      .segment_count = 1,
+      .length = length,
       .encoder_id = encoder_id,
-      .unk6 = 0x0,
-      .cmdbuf_size = cmdbuf_size,
-
-      /* +1 for the sentinel ending */
-      .nr_entries = count,
-      .nr_handles = count,
+      .kernel_commands_start_offset = 0,
+      .kernel_commands_end_offset = cmdbuf_size,
+      .total_resources = count,
+      .resource_group_count = count,
+      .unk = 0x8000,
    };
 }
 
@@ -268,10 +315,10 @@ demo_mem_map(void *map, size_t size, unsigned *handles, unsigned count,
    for (unsigned i = 0; i < count; ++i) {
 	   assert((entries + i) < end);
       entries[i] = (struct agx_map_entry) {
-         .indices = {handles[i]},
-         .unkAAA = 0x20,
-         .unkBBB = 0x1,
-         .unka = 0x1ffff,
+         .resource_id = { handles[i] },
+         .resource_unk = { 0x20 },
+         .resource_flags = { 0x1 },
+         .resource_count = 1
       };
    }
 }

@@ -61,7 +61,6 @@ enum
    INTEL_swap_event_bit,
    MESA_copy_sub_buffer_bit,
    MESA_depth_float_bit,
-   MESA_multithread_makecurrent_bit,
    MESA_query_renderer_bit,
    MESA_swap_control_bit,
    MESA_swap_frame_usage_bit,

@@ -998,6 +998,7 @@ namespace {
       const tgl_pipe p = inferred_exec_pipe(devinfo, inst);
       const ordered_address jp = p ? ordered_address(p, jps[ip].jp[IDX(p)]) :
                                      ordered_address();
+      const bool is_ordered = ordered_unit(devinfo, inst, IDX(TGL_PIPE_ALL));
 
       /* Track any source registers that may be fetched asynchronously by this
        * instruction, otherwise clear the dependency in order to avoid
@@ -1007,8 +1008,7 @@ namespace {
          const dependency rd_dep =
             (inst->is_payload(i) ||
              inst->is_math()) ? dependency(TGL_SBID_SRC, ip, exec_all) :
-            ordered_unit(devinfo, inst, IDX(TGL_PIPE_ALL)) ?
-               dependency(TGL_REGDIST_SRC, jp, exec_all) :
+            is_ordered ? dependency(TGL_REGDIST_SRC, jp, exec_all) :
             dependency::done;
 
          for (unsigned j = 0; j < regs_read(inst, i); j++) {
@@ -1030,8 +1030,7 @@ namespace {
       /* Track any destination registers of this instruction. */
       const dependency wr_dep =
          is_unordered(inst) ? dependency(TGL_SBID_DST, ip, exec_all) :
-         ordered_unit(devinfo, inst, IDX(TGL_PIPE_ALL)) ?
-            dependency(TGL_REGDIST_DST, jp, exec_all) :
+         is_ordered ? dependency(TGL_REGDIST_DST, jp, exec_all) :
          dependency();
 
       if (inst->writes_accumulator_implicitly(devinfo))
@@ -1156,7 +1155,7 @@ namespace {
                   sb.get(brw_uvec_mrf(8, inst->base_mrf + j, 0))));
          }
 
-         if (is_unordered(inst))
+         if (is_unordered(inst) && !inst->eot)
             add_dependency(ids, deps[ip],
                            dependency(TGL_SBID_SET, ip, exec_all));
 

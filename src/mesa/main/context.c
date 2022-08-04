@@ -1077,7 +1077,7 @@ _mesa_initialize_context(struct gl_context *ctx,
       break;
    }
    ctx->VertexProgram.PointSizeEnabled = ctx->API == API_OPENGLES2;
-   ctx->PointSizeIsOne = GL_TRUE;
+   ctx->PointSizeIsSet = GL_TRUE;
 
    ctx->FirstTimeCurrent = GL_TRUE;
 
@@ -1136,6 +1136,7 @@ _mesa_free_context_data(struct gl_context *ctx, bool destroy_debug_output)
 
    _mesa_free_attrib_data(ctx);
    _mesa_free_eval_data( ctx );
+   _mesa_free_feedback(ctx);
    _mesa_free_texture_data( ctx );
    _mesa_free_image_textures(ctx);
    _mesa_free_matrix_data( ctx );
@@ -1167,6 +1168,7 @@ _mesa_free_context_data(struct gl_context *ctx, bool destroy_debug_output)
    free(ctx->Save);
    free(ctx->ContextLost);
    free(ctx->MarshalExec);
+   free(ctx->HWSelectModeBeginEnd);
 
    /* Shared context state (display lists, textures, etc) */
    _mesa_reference_shared_state(ctx, &ctx->Shared, NULL);

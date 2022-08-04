@@ -299,10 +299,12 @@ is_align1_opcode(unsigned opcode)
 }
 
 static bool
-try_copy_propagate(const struct intel_device_info *devinfo,
+try_copy_propagate(const struct brw_compiler *compiler,
                    vec4_instruction *inst, int arg,
                    const copy_entry *entry, int attributes_per_reg)
 {
+   const struct intel_device_info *devinfo = compiler->devinfo;
+
    /* Build up the value we are propagating as if it were the source of a
     * single MOV
     */
@@ -380,7 +382,7 @@ try_copy_propagate(const struct intel_device_info *devinfo,
    if (is_align1_opcode(inst->opcode) && composed_swizzle != BRW_SWIZZLE_XYZW)
       return false;
 
-   if (inst->is_3src(devinfo) &&
+   if (inst->is_3src(compiler) &&
        (value.file == UNIFORM ||
         (value.file == ATTR && attributes_per_reg != 1)) &&
        !brw_is_single_value_swizzle(composed_swizzle))
@@ -389,7 +391,7 @@ try_copy_propagate(const struct intel_device_info *devinfo,
    if (inst->is_send_from_grf())
       return false;
 
-   /* we can't generally copy-propagate UD negations becuse we
+   /* we can't generally copy-propagate UD negations because we
     * end up accessing the resulting values as signed integers
     * instead. See also resolve_ud_negate().
     */
@@ -503,7 +505,7 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 
          if (do_constant_prop && try_constant_propagate(inst, i, &entry))
             progress = true;
-         else if (try_copy_propagate(devinfo, inst, i, &entry, attributes_per_reg))
+         else if (try_copy_propagate(compiler, inst, i, &entry, attributes_per_reg))
 	    progress = true;
       }
 

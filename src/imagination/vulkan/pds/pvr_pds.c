@@ -481,7 +481,7 @@ void pvr_pds_setup_doutu(struct pvr_pds_usc_task_control *usc_task_control,
                          uint64_t execution_address,
                          uint32_t usc_temps,
                          uint32_t sample_rate,
-                         uint32_t phase_rate_change)
+                         bool phase_rate_change)
 {
    usc_task_control->src0 = UINT64_C(0);
 

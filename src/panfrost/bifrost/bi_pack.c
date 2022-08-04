@@ -22,6 +22,7 @@
  */
 
 #include "compiler.h"
+#include "bi_quirks.h"
 
 /* This file contains the final passes of the compiler. Running after
  * scheduling and RA, the IR is now finalized, so we need to emit it to actual
@@ -57,6 +58,7 @@ bi_pack_header(bi_clause *clause, bi_clause *next_1, bi_clause *next_2)
                 .dependency_slot = clause->scoreboard_id,
                 .message_type = clause->message_type,
                 .next_message_type = next_1 ? next_1->message_type : 0,
+                .flush_to_zero = clause->ftz ? BIFROST_FTZ_ALWAYS : BIFROST_FTZ_DISABLE
         };
 
         uint64_t u = 0;
@@ -643,6 +645,16 @@ bi_pack_clause(bi_context *ctx, bi_clause *clause,
                 unsigned prev = ((i == 0) ? clause->tuple_count : i) - 1;
                 ins[i] = bi_pack_tuple(clause, &clause->tuples[i],
                                 &clause->tuples[prev], i == 0, stage);
+
+                bi_instr *add = clause->tuples[i].add;
+
+                /* Different GPUs support different forms of the CLPER.i32
+                 * instruction. Check we use the right one for the target.
+                 */
+                if (add && add->op == BI_OPCODE_CLPER_OLD_I32)
+                        assert(ctx->quirks & BIFROST_LIMITED_CLPER);
+                else if (add && add->op == BI_OPCODE_CLPER_I32)
+                        assert(!(ctx->quirks & BIFROST_LIMITED_CLPER));
         }
 
         bool ec0_packed = bi_ec0_packed(clause->tuple_count);

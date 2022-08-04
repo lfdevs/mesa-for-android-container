@@ -308,19 +308,19 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
 
         if (s->info.stage != MESA_SHADER_VERTEX &&
             s->info.stage != MESA_SHADER_GEOMETRY) {
-                NIR_PASS_V(s, nir_lower_io,
-                           nir_var_shader_in | nir_var_shader_out,
-                           type_size, (nir_lower_io_options)0);
+                NIR_PASS(_, s, nir_lower_io,
+                         nir_var_shader_in | nir_var_shader_out,
+                         type_size, (nir_lower_io_options)0);
         }
 
-        NIR_PASS_V(s, nir_lower_regs_to_ssa);
-        NIR_PASS_V(s, nir_normalize_cubemap_coords);
+        NIR_PASS(_, s, nir_lower_regs_to_ssa);
+        NIR_PASS(_, s, nir_normalize_cubemap_coords);
 
-        NIR_PASS_V(s, nir_lower_load_const_to_scalar);
+        NIR_PASS(_, s, nir_lower_load_const_to_scalar);
 
         v3d_optimize_nir(NULL, s);
 
-        NIR_PASS_V(s, nir_remove_dead_variables, nir_var_function_temp, NULL);
+        NIR_PASS(_, s, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
         /* Garbage collect dead instructions */
         nir_sweep(s);

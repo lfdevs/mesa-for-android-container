@@ -962,7 +962,8 @@ st_AllocTextureImageBuffer(struct gl_context *ctx,
          */
          st_finish(st);
          if (!guess_and_alloc_texture(st, stObj, stImage)) {
-            _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTexImage");
+            _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTexImage(internalformat=%s)",
+                        _mesa_enum_to_string(stImage->InternalFormat));
             return GL_FALSE;
          }
       }
@@ -2167,7 +2168,9 @@ st_TexImage(struct gl_context * ctx, GLuint dims,
 
    /* allocate storage for texture data */
    if (!st_AllocTextureImageBuffer(ctx, texImage)) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTexImage%uD", dims);
+      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTexImage%uD(internalformat=%s)",
+                  dims, _mesa_enum_to_string(texImage->InternalFormat));
+
       return;
    }
 
@@ -2432,8 +2435,11 @@ st_GetTexSubImage(struct gl_context * ctx,
       goto non_blit_transfer;
    }
 
+   if (stImage->pt != stObj->pt)
+      goto non_blit_transfer;
+
    /* Handle non-finalized textures. */
-   if (!stImage->pt || stImage->pt != stObj->pt || !src) {
+   if (!stImage->pt || !src) {
       goto cpu_transfer;
    }
 

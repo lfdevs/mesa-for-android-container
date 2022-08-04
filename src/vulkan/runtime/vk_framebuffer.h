@@ -50,5 +50,5 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(vk_framebuffer, base, VkFramebuffer,
 }
 #endif
 
-#endif /* VK_RENDER_PASS_H */
+#endif /* VK_FRAMEBUFFER_H */
 

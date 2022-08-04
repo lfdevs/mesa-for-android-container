@@ -27,7 +27,7 @@
 #ifndef RADEON_DRM_WINSYS_H
 #define RADEON_DRM_WINSYS_H
 
-#include "gallium/drivers/radeon/radeon_winsys.h"
+#include "winsys/radeon_winsys.h"
 #include "pipebuffer/pb_cache.h"
 #include "pipebuffer/pb_slab.h"
 #include "util/u_queue.h"

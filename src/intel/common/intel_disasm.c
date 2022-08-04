@@ -25,6 +25,7 @@
 
 #include "compiler/brw_inst.h"
 #include "compiler/brw_eu.h"
+#include "compiler/brw_isa_info.h"
 
 #include "intel_disasm.h"
 
@@ -38,9 +39,10 @@ is_send(uint32_t opcode)
 }
 
 static int
-intel_disasm_find_end(const struct intel_device_info *devinfo,
+intel_disasm_find_end(const struct brw_isa_info *isa,
                       const void *assembly, int start)
 {
+   const struct intel_device_info *devinfo = isa->devinfo;
    int offset = start;
 
    /* This loop exits when send-with-EOT or when opcode is 0 */
@@ -54,7 +56,7 @@ intel_disasm_find_end(const struct intel_device_info *devinfo,
       }
 
       /* Simplistic, but efficient way to terminate disasm */
-      uint32_t opcode = brw_inst_opcode(devinfo, insn);
+      uint32_t opcode = brw_inst_opcode(isa, insn);
       if (opcode == 0 || (is_send(opcode) && brw_inst_eot(devinfo, insn))) {
          break;
       }
@@ -64,23 +66,23 @@ intel_disasm_find_end(const struct intel_device_info *devinfo,
 }
 
 void
-intel_disassemble(const struct intel_device_info *devinfo,
+intel_disassemble(const struct brw_isa_info *isa,
                   const void *assembly, int start, FILE *out)
 {
-   int end = intel_disasm_find_end(devinfo, assembly, start);
+   int end = intel_disasm_find_end(isa, assembly, start);
 
    /* Make a dummy disasm structure that brw_validate_instructions
     * can work from.
     */
-   struct disasm_info *disasm_info = disasm_initialize(devinfo, NULL);
+   struct disasm_info *disasm_info = disasm_initialize(isa, NULL);
    disasm_new_inst_group(disasm_info, start);
    disasm_new_inst_group(disasm_info, end);
 
-   brw_validate_instructions(devinfo, assembly, start, end, disasm_info);
+   brw_validate_instructions(isa, assembly, start, end, disasm_info);
 
    void *mem_ctx = ralloc_context(NULL);
    const struct brw_label *root_label =
-      brw_label_assembly(devinfo, assembly, start, end, mem_ctx);
+      brw_label_assembly(isa, assembly, start, end, mem_ctx);
 
    foreach_list_typed(struct inst_group, group, link,
                       &disasm_info->group_list) {
@@ -94,7 +96,7 @@ intel_disassemble(const struct intel_device_info *devinfo,
       int start_offset = group->offset;
       int end_offset = next->offset;
 
-      brw_disassemble(devinfo, assembly, start_offset, end_offset,
+      brw_disassemble(isa, assembly, start_offset, end_offset,
                       root_label, out);
 
       if (group->error) {

@@ -249,9 +249,10 @@
   },
   "FLOAT_MODE": {
    "entries": [
+    {"name": "FP_32_ROUND_TOWARDS_ZERO", "value": 3},
+    {"name": "FP_16_64_ROUND_TOWARDS_ZERO", "value": 12},
     {"name": "FP_32_DENORMS", "value": 48},
-    {"name": "FP_64_DENORMS", "value": 192},
-    {"name": "FP_ALL_DENORMS", "value": 240}
+    {"name": "FP_16_64_DENORMS", "value": 192}
    ]
   },
   "ForceControl": {
@@ -902,7 +903,7 @@
     {"name": "TESS_QUAD", "value": 2}
    ]
   },
-  "VRSCombinerMode": {
+  "VRSCombinerModeSC": {
    "entries": [
     {"name": "VRS_COMB_MODE_PASSTHRU", "value": 0},
     {"name": "VRS_COMB_MODE_OVERRIDE", "value": 1},
@@ -12831,7 +12832,7 @@
   },
   "DB_VRS_OVERRIDE_CNTL": {
    "fields": [
-    {"bits": [0, 2], "enum_ref": "VRSCombinerMode", "name": "VRS_OVERRIDE_RATE_COMBINER_MODE"},
+    {"bits": [0, 2], "enum_ref": "VRSCombinerModeSC", "name": "VRS_OVERRIDE_RATE_COMBINER_MODE"},
     {"bits": [4, 5], "name": "VRS_OVERRIDE_RATE_X"},
     {"bits": [6, 7], "name": "VRS_OVERRIDE_RATE_Y"}
    ]
@@ -13297,10 +13298,10 @@
   },
   "PA_CL_VRS_CNTL": {
    "fields": [
-    {"bits": [0, 2], "enum_ref": "VRSCombinerMode", "name": "VERTEX_RATE_COMBINER_MODE"},
-    {"bits": [3, 5], "enum_ref": "VRSCombinerMode", "name": "PRIMITIVE_RATE_COMBINER_MODE"},
-    {"bits": [6, 8], "enum_ref": "VRSCombinerMode", "name": "HTILE_RATE_COMBINER_MODE"},
-    {"bits": [9, 11], "enum_ref": "VRSCombinerMode", "name": "SAMPLE_ITER_COMBINER_MODE"},
+    {"bits": [0, 2], "enum_ref": "VRSCombinerModeSC", "name": "VERTEX_RATE_COMBINER_MODE"},
+    {"bits": [3, 5], "enum_ref": "VRSCombinerModeSC", "name": "PRIMITIVE_RATE_COMBINER_MODE"},
+    {"bits": [6, 8], "enum_ref": "VRSCombinerModeSC", "name": "HTILE_RATE_COMBINER_MODE"},
+    {"bits": [9, 11], "enum_ref": "VRSCombinerModeSC", "name": "SAMPLE_ITER_COMBINER_MODE"},
     {"bits": [13, 13], "name": "EXPOSE_VRS_PIXELS_MASK"},
     {"bits": [14, 14], "name": "CMASK_RATE_HINT_FORCE_ZERO"}
    ]

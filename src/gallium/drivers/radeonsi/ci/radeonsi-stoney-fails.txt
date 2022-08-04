@@ -12,6 +12,11 @@ spec@!opengl 1.0@rasterpos,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 
+spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail
+spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
+
+spec@nv_alpha_to_coverage_dither_control@nv_alpha_to_coverage_dither_control 0,Fail
+
 spec@arb_direct_state_access@gettextureimage-formats,Crash
 
 spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled,Fail
@@ -121,9 +126,6 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode ful
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp@sRGB decode full precision,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp,Fail
-spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3@oes_egl_image_external_essl3_imageLoad,Fail
-spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3@oes_egl_image_external_essl3_imageStore,Fail
-spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3,Fail
 
 CreateContext/VAAPICreateContext.CreateContext/1035,Crash
 CreateContext/VAAPICreateContext.CreateContext/1120,Crash
@@ -147,3 +149,28 @@ GetCreateConfig/VAAPIGetCreateConfig.CreateConfigWithAttributes/190,Fail
 GetCreateConfig/VAAPIGetCreateConfig.CreateConfigWithAttributes/195,Fail
 GetCreateConfig/VAAPIGetCreateConfig.CreateConfigWithAttributes/210,Fail
 GetCreateConfig/VAAPIGetCreateConfig.CreateConfigWithAttributes/215,Fail
+
+# The following tests started to crash after CI fix, see
+# https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/16325
+CreateContext/VAAPICreateContext.CreateContext/1460,Crash
+CreateContext/VAAPICreateContext.CreateContext/1630,Crash
+CreateContext/VAAPICreateContext.CreateContext/1800,Crash
+CreateContext/VAAPICreateContext.CreateContext/2990,Crash
+CreateContext/VAAPICreateContext.CreateContext/3160,Crash
+
+spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_R3_G3_B2- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB10- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB10_A2- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB12- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB16- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB4- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB5- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB5_A1- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGB8- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA12- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA16- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA2- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA4- swizzled- border color only,Fail
+spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA8- swizzled- border color only,Fail

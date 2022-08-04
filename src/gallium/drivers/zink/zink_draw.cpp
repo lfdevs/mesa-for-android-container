@@ -40,6 +40,7 @@ zink_emit_xfb_counter_barrier(struct zink_context *ctx)
          stage |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
       }
       zink_resource_buffer_barrier(ctx, res, access, stage);
+      res->obj->unordered_read = false;
    }
 }
 
@@ -85,6 +86,7 @@ check_buffer_barrier(struct zink_context *ctx, struct pipe_resource *pres, VkAcc
 {
    struct zink_resource *res = zink_resource(pres);
    zink_resource_buffer_barrier(ctx, res, flags, pipeline);
+   res->obj->unordered_read = false;
 }
 
 ALWAYS_INLINE static void
@@ -200,7 +202,7 @@ update_gfx_program(struct zink_context *ctx)
          ctx->dirty_shader_stages |= prog->stages_present;
       } else {
          ctx->dirty_shader_stages |= bits;
-         prog = zink_create_gfx_program(ctx, ctx->gfx_stages, ctx->gfx_pipeline_state.vertices_per_patch + 1);
+         prog = zink_create_gfx_program(ctx, ctx->gfx_stages, ctx->gfx_pipeline_state.dyn_state2.vertices_per_patch);
          _mesa_hash_table_insert_pre_hashed(ht, hash, prog->shaders, prog);
       }
       zink_update_gfx_program(ctx, prog);
@@ -323,31 +325,6 @@ draw(struct zink_context *ctx,
    }
 }
 
-/*
-   If a synchronization command includes a source stage mask, its first synchronization scope only
-   includes execution of the pipeline stages specified in that mask, and its first access scope only
-   includes memory accesses performed by pipeline stages specified in that mask.
-
-   If a synchronization command includes a destination stage mask, its second synchronization scope
-   only includes execution of the pipeline stages specified in that mask, and its second access scope
-   only includes memory access performed by pipeline stages specified in that mask.
-
-   - Chapter 7. Synchronization and Cache Control
-
- * thus, all stages must be added to ensure accurate synchronization
- */
-ALWAYS_INLINE static VkPipelineStageFlags
-find_pipeline_bits(uint32_t *mask)
-{
-   VkPipelineStageFlags pipeline = 0;
-   for (unsigned i = 0; i < ZINK_SHADER_COUNT; i++) {
-      if (mask[i]) {
-         pipeline |= zink_pipeline_flags_from_pipe_stage((enum pipe_shader_type)i);
-      }
-   }
-   return pipeline;
-}
-
 static void
 update_barriers(struct zink_context *ctx, bool is_compute,
                 struct pipe_resource *index, struct pipe_resource *indirect, struct pipe_resource *indirect_draw_count)
@@ -359,64 +336,19 @@ update_barriers(struct zink_context *ctx, bool is_compute,
    ctx->need_barriers[is_compute] = &ctx->update_barriers[is_compute][ctx->barrier_set_idx[is_compute]];
    set_foreach(need_barriers, he) {
       struct zink_resource *res = (struct zink_resource *)he->key;
-      bool is_buffer = res->obj->is_buffer;
-      VkPipelineStageFlags pipeline = 0;
-      VkAccessFlags access = 0;
-
-      if (res == zink_resource(index)) {
-         access |= VK_ACCESS_INDEX_READ_BIT;
-         pipeline |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-      } else if (res == zink_resource(indirect) || res == zink_resource(indirect_draw_count)) {
-         access |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-         pipeline |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
-      }
       if (res->bind_count[is_compute]) {
-         if (res->write_bind_count[is_compute])
-            access |= VK_ACCESS_SHADER_WRITE_BIT;
-         if (is_buffer) {
-            unsigned bind_count = res->bind_count[is_compute];
-            if (res->ubo_bind_count[is_compute])
-               access |= VK_ACCESS_UNIFORM_READ_BIT;
-            bind_count -= res->ubo_bind_count[is_compute];
-            if (!is_compute && res->vbo_bind_mask) {
-               access |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-               pipeline |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-               bind_count -= res->vbo_bind_count;
-            }
-            if (bind_count)
-               access |= VK_ACCESS_SHADER_READ_BIT;
-            if (!is_compute) {
-               pipeline |= find_pipeline_bits(res->ssbo_bind_mask);
-
-               if (res->ubo_bind_count[0] && (pipeline & GFX_SHADER_BITS) != GFX_SHADER_BITS)
-                  pipeline |= find_pipeline_bits(res->ubo_bind_mask);
-            }
-         } else {
-            if (res->bind_count[is_compute] != res->write_bind_count[is_compute])
-               access |= VK_ACCESS_SHADER_READ_BIT;
-            if (res->write_bind_count[is_compute])
-               access |= VK_ACCESS_SHADER_WRITE_BIT;
-         }
-         if (is_compute)
-            pipeline = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-         else {
-            VkPipelineStageFlags gfx_stages = pipeline & ~(VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
-            /* images always need gfx stages, and buffers need gfx stages if non-vbo binds exist */
-            bool needs_stages = !is_buffer || (res->bind_count[0] - res->vbo_bind_count > 0);
-            if (gfx_stages != GFX_SHADER_BITS && needs_stages) {
-               gfx_stages |= find_pipeline_bits(res->sampler_binds);
-               if (gfx_stages != GFX_SHADER_BITS) //must be a shader image
-                  gfx_stages |= find_pipeline_bits(res->image_binds);
-               pipeline |= gfx_stages;
-            }
-         }
+         VkPipelineStageFlagBits pipeline = is_compute ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : res->gfx_barrier;
          if (res->base.b.target == PIPE_BUFFER)
-            zink_resource_buffer_barrier(ctx, res, access, pipeline);
+            zink_resource_buffer_barrier(ctx, res, res->barrier_access[is_compute], pipeline);
          else {
             VkImageLayout layout = zink_descriptor_util_image_layout_eval(ctx, res, is_compute);
             if (layout != res->layout)
-               zink_resource_image_barrier(ctx, res, layout, access, pipeline);
+               zink_resource_image_barrier(ctx, res, layout, res->barrier_access[is_compute], pipeline);
          }
+         if (zink_resource_access_is_write(res->barrier_access[is_compute]))
+            res->obj->unordered_read = res->obj->unordered_write = false;
+         else
+            res->obj->unordered_read = false;
          /* always barrier on draw if this resource has either multiple image write binds or
           * image write binds and image read binds
           */
@@ -514,6 +446,11 @@ zink_draw(struct pipe_context *pctx,
       zink_rebind_all_buffers(ctx);
    }
 
+   if (unlikely(ctx->image_rebind_counter < screen->image_rebind_counter)) {
+      ctx->image_rebind_counter = screen->image_rebind_counter;
+      zink_rebind_all_images(ctx);
+   }
+
    unsigned index_offset = 0;
    unsigned index_size = dinfo->index_size;
    struct pipe_resource *index_buffer = NULL;
@@ -546,9 +483,12 @@ zink_draw(struct pipe_context *pctx,
           */
          for (unsigned i = 0; i < ctx->num_so_targets; i++) {
             struct zink_so_target *t = (struct zink_so_target *)ctx->so_targets[i];
-            if (t)
-               zink_resource_buffer_barrier(ctx, zink_resource(t->base.buffer),
+            if (t) {
+               struct zink_resource *res = zink_resource(t->base.buffer);
+               zink_resource_buffer_barrier(ctx, res,
                                             VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT);
+               res->obj->unordered_read = res->obj->unordered_write = false;
+            }
          }
       }
    }
@@ -560,12 +500,28 @@ zink_draw(struct pipe_context *pctx,
    /* ensure synchronization between doing streamout with counter buffer
     * and using counter buffer for indirect draw
     */
-   if (so_target && so_target->counter_buffer_valid)
-      zink_resource_buffer_barrier(ctx, zink_resource(so_target->counter_buffer),
+   if (so_target && so_target->counter_buffer_valid) {
+      struct zink_resource *res = zink_resource(so_target->counter_buffer);
+      zink_resource_buffer_barrier(ctx, res,
                                    VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT,
                                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
+      res->obj->unordered_read = false;
+   }
 
    zink_query_update_gs_states(ctx, dinfo->was_line_loop);
+
+   if (unlikely(zink_debug & ZINK_DEBUG_SYNC)) {
+      zink_batch_no_rp(ctx);
+      VkMemoryBarrier mb;
+      mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+      mb.pNext = NULL;
+      mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+      mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+      VKSCR(CmdPipelineBarrier)(ctx->batch.state->cmdbuf,
+                                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                0, 1, &mb, 0, NULL, 0, NULL);
+   }
 
    zink_batch_rp(ctx);
    /* check dead swapchain */
@@ -615,9 +571,7 @@ zink_draw(struct pipe_context *pctx,
    if (have_streamout && ctx->dirty_so_targets)
       zink_emit_stream_output_targets(pctx);
 
-   bool pipeline_changed = false;
-   if (DYNAMIC_STATE == ZINK_NO_DYNAMIC_STATE)
-      pipeline_changed = update_gfx_pipeline<BATCH_CHANGED>(ctx, batch->state, mode);
+   bool pipeline_changed = update_gfx_pipeline<BATCH_CHANGED>(ctx, batch->state, mode);
 
    if (BATCH_CHANGED || ctx->vp_state_changed || (DYNAMIC_STATE == ZINK_NO_DYNAMIC_STATE && pipeline_changed)) {
       VkViewport viewports[PIPE_MAX_VIEWPORTS];
@@ -713,8 +667,10 @@ zink_draw(struct pipe_context *pctx,
    ctx->dsa_state_changed = false;
 
    bool rast_state_changed = ctx->rast_state_changed;
-   if (DYNAMIC_STATE != ZINK_NO_DYNAMIC_STATE && (BATCH_CHANGED || rast_state_changed))
-      VKCTX(CmdSetFrontFaceEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.dyn_state1.front_face);
+   if (DYNAMIC_STATE != ZINK_NO_DYNAMIC_STATE && (BATCH_CHANGED || rast_state_changed)) {
+      VKCTX(CmdSetFrontFaceEXT)(batch->state->cmdbuf, (VkFrontFace)ctx->gfx_pipeline_state.dyn_state1.front_face);
+      VKCTX(CmdSetCullModeEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.dyn_state1.cull_mode);
+   }
    if ((BATCH_CHANGED || rast_state_changed) &&
        screen->info.have_EXT_line_rasterization && rast_state->base.line_stipple_enable)
       VKCTX(CmdSetLineStippleEXT)(batch->state->cmdbuf, rast_state->base.line_stipple_factor, rast_state->base.line_stipple_pattern);
@@ -767,18 +723,20 @@ zink_draw(struct pipe_context *pctx,
 
    if (DRAW_STATE)
       zink_bind_vertex_state(batch, ctx, vstate, partial_velem_mask);
-   else if (BATCH_CHANGED || ctx->vertex_buffers_dirty)
-      zink_bind_vertex_buffers<DYNAMIC_STATE>(batch, ctx);
+   else if (BATCH_CHANGED || ctx->vertex_buffers_dirty) {
+      if (DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT || ctx->gfx_pipeline_state.uses_dynamic_stride)
+         zink_bind_vertex_buffers<DYNAMIC_STATE>(batch, ctx);
+      else
+         zink_bind_vertex_buffers<ZINK_NO_DYNAMIC_STATE>(batch, ctx);
+   }
 
    if (BATCH_CHANGED) {
       ctx->pipeline_changed[0] = false;
       zink_select_draw_vbo(ctx);
    }
 
-   if (DYNAMIC_STATE != ZINK_NO_DYNAMIC_STATE) {
-      update_gfx_pipeline<BATCH_CHANGED>(ctx, batch->state, mode);
-      if (BATCH_CHANGED || mode_changed)
-         VKCTX(CmdSetPrimitiveTopologyEXT)(batch->state->cmdbuf, zink_primitive_topology(mode));
+   if (DYNAMIC_STATE != ZINK_NO_DYNAMIC_STATE && (BATCH_CHANGED || mode_changed)) {
+      VKCTX(CmdSetPrimitiveTopologyEXT)(batch->state->cmdbuf, zink_primitive_topology(mode));
    }
 
    if (DYNAMIC_STATE >= ZINK_DYNAMIC_STATE2 && (BATCH_CHANGED || ctx->primitive_restart != dinfo->primitive_restart)) {
@@ -820,6 +778,7 @@ zink_draw(struct pipe_context *pctx,
             struct zink_resource *res = zink_resource(t->counter_buffer);
             t->stride = ctx->last_vertex_stage->sinfo.so_info.stride[i] * sizeof(uint32_t);
             zink_batch_reference_resource_rw(batch, res, true);
+            res->obj->unordered_read = res->obj->unordered_write = false;
             if (t->counter_buffer_valid) {
                counter_buffers[i] = res->obj->buffer;
                counter_buffer_offsets[i] = t->counter_buffer_offset;
@@ -936,6 +895,7 @@ zink_draw_vertex_state(struct pipe_context *pctx,
    struct zink_resource *res = zink_resource(vstate->input.vbuffer.buffer.resource);
    zink_resource_buffer_barrier(ctx, res, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
                                 VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
+   res->obj->unordered_read = false;
    struct zink_vertex_elements_hw_state *hw_state = ctx->gfx_pipeline_state.element_state;
    ctx->gfx_pipeline_state.element_state = &((struct zink_vertex_state*)vstate)->velems.hw_state;
 
@@ -971,6 +931,19 @@ zink_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
    update_barriers(ctx, true, NULL, info->indirect, NULL);
    if (ctx->memory_barrier)
       zink_flush_memory_barrier(ctx, true);
+
+   if (unlikely(zink_debug & ZINK_DEBUG_SYNC)) {
+      zink_batch_no_rp(ctx);
+      VkMemoryBarrier mb;
+      mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+      mb.pNext = NULL;
+      mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+      mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+      VKSCR(CmdPipelineBarrier)(ctx->batch.state->cmdbuf,
+                                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                0, 1, &mb, 0, NULL, 0, NULL);
+   }
 
    if (zink_program_has_descriptors(&ctx->curr_compute->base))
       screen->descriptors_update(ctx, true);

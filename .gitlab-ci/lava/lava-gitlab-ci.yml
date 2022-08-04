@@ -1,6 +1,4 @@
 .lava-test:
-  extends:
-    - .ci-run-policy
   # Cancel job if a newer commit is pushed to the same branch
   interruptible: true
   variables:

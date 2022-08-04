@@ -82,15 +82,15 @@ INDEX = immediate("index")
 COMPONENT = immediate("component")
 CHANNELS = immediate("channels")
 TRUTH_TABLE = immediate("truth_table")
-ROUND = immediate("round")
+ROUND = immediate("round", "enum agx_round")
 SHIFT = immediate("shift")
 MASK = immediate("mask")
 BFI_MASK = immediate("bfi_mask")
 LOD_MODE = immediate("lod_mode", "enum agx_lod_mode")
 DIM = immediate("dim", "enum agx_dim")
 SCOREBOARD = immediate("scoreboard")
-ICOND = immediate("icond")
-FCOND = immediate("fcond")
+ICOND = immediate("icond", "enum agx_icond")
+FCOND = immediate("fcond", "enum agx_fcond")
 NEST = immediate("nest")
 INVERT_COND = immediate("invert_cond")
 NEST = immediate("nest")
@@ -245,5 +245,20 @@ op("stop", (0x88, 0xFFFF, 2, _), dests = 0, can_eliminate = False)
 op("trap", (0x08, 0xFFFF, 2, _), dests = 0, can_eliminate = False)
 op("writeout", (0x48, 0xFF, 4, _), dests = 0, imms = [WRITEOUT], can_eliminate = False)
 
+# Convenient aliases.
+op("mov", _, srcs = 1)
+op("not", _, srcs = 1)
+op("xor", _, srcs = 2)
+op("and", _, srcs = 2)
+op("or", _, srcs = 2)
+
+# Indicates the logical end of the block, before final branches/control flow
+op("p_logical_end", _, dests = 0, srcs = 0, can_eliminate = False)
+
 op("p_combine", _, srcs = 4)
+op("p_split", _, srcs = 1, dests = 4)
 op("p_extract", _, srcs = 1, imms = [COMPONENT])
+
+# Phis are special-cased in the IR as they (uniquely) can take an unbounded
+# number of source.
+op("phi", _, srcs = 0)

@@ -356,7 +356,7 @@ handle_instruction_gfx6(State& state, NOP_ctx_gfx6& ctx, aco_ptr<Instruction>& i
    int NOPs = 0;
 
    if (instr->isSMEM()) {
-      if (state.program->chip_class == GFX6) {
+      if (state.program->gfx_level == GFX6) {
          /* A read of an SGPR by SMRD instruction requires 4 wait states
           * when the SGPR was written by a VALU instruction. According to LLVM,
           * there is also an undocumented hardware behavior when the buffer
@@ -382,7 +382,7 @@ handle_instruction_gfx6(State& state, NOP_ctx_gfx6& ctx, aco_ptr<Instruction>& i
          NOPs = MAX2(NOPs, ctx.setreg_then_getsetreg);
       }
 
-      if (state.program->chip_class == GFX9) {
+      if (state.program->gfx_level == GFX9) {
          if (instr->opcode == aco_opcode::s_movrels_b32 ||
              instr->opcode == aco_opcode::s_movrels_b64 ||
              instr->opcode == aco_opcode::s_movreld_b32 ||
@@ -428,7 +428,7 @@ handle_instruction_gfx6(State& state, NOP_ctx_gfx6& ctx, aco_ptr<Instruction>& i
        * hangs on GFX6. Note that v_writelane_* is apparently not affected.
        * This hazard isn't documented anywhere but AMD confirmed that hazard.
        */
-      if (state.program->chip_class == GFX6 &&
+      if (state.program->gfx_level == GFX6 &&
           (instr->opcode == aco_opcode::v_readlane_b32 || /* GFX6 doesn't have v_readlane_b32_e64 */
            instr->opcode == aco_opcode::v_readfirstlane_b32)) {
          handle_vintrp_then_read_hazard(state, &NOPs, 1, instr->operands[0]);
@@ -448,7 +448,7 @@ handle_instruction_gfx6(State& state, NOP_ctx_gfx6& ctx, aco_ptr<Instruction>& i
    if (!instr->isSALU() && instr->format != Format::SMEM)
       NOPs = MAX2(NOPs, ctx.set_vskip_mode_then_vector);
 
-   if (state.program->chip_class == GFX9) {
+   if (state.program->gfx_level == GFX9) {
       bool lds_scratch_global = (instr->isScratch() || instr->isGlobal()) && instr->flatlike().lds;
       if (instr->isVINTRP() || lds_scratch_global ||
           instr->opcode == aco_opcode::ds_read_addtid_b32 ||
@@ -886,9 +886,9 @@ mitigate_hazards(Program* program)
 void
 insert_NOPs(Program* program)
 {
-   if (program->chip_class >= GFX10_3)
+   if (program->gfx_level >= GFX10_3)
       ; /* no hazards/bugs to mitigate */
-   else if (program->chip_class >= GFX10)
+   else if (program->gfx_level >= GFX10)
       mitigate_hazards<NOP_ctx_gfx10, handle_instruction_gfx10>(program);
    else
       mitigate_hazards<NOP_ctx_gfx6, handle_instruction_gfx6>(program);

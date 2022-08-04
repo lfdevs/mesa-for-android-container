@@ -58,12 +58,13 @@ sha1_h = custom_target(
 )
 
 subdir('gtest')
-if cc.get_id() == 'msvc'
+if cc.get_argument_syntax() == 'msvc'
   subdir('getopt')
 else
   idep_getopt = null_dep
 endif
 subdir('android_stub')
+subdir('c11/impl')
 subdir('util')
 subdir('mapi')
 # TODO: opengl
@@ -151,7 +152,7 @@ if with_glx != 'disabled' and not with_glvnd
     libraries : libgl,
     libraries_private : gl_priv_libs,
     requires_private : gl_priv_reqs,
-    variables : ['glx_tls=@0@'.format(use_elf_tls ? 'yes' : 'no')],
+    variables : ['glx_tls=yes'],
   )
 endif
 

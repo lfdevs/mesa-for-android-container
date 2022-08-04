@@ -183,7 +183,7 @@ print_cs_prog_data_fields(FILE *fp, const char *prefix, const char *pad,
 static void
 print_kernel(FILE *fp, const char *prefix,
              const struct brw_kernel *kernel,
-             const struct intel_device_info *devinfo)
+             const struct brw_isa_info *isa)
 {
    struct mesa_sha1 sha1_ctx;
    _mesa_sha1_init(&sha1_ctx);
@@ -231,7 +231,7 @@ print_kernel(FILE *fp, const char *prefix,
 
    fprintf(fp, "#if 0  /* BEGIN KERNEL ASSEMBLY */\n");
    fprintf(fp, "\n");
-   intel_disassemble(devinfo, kernel->code, 0, fp);
+   intel_disassemble(isa, kernel->code, 0, fp);
    fprintf(fp, "\n");
    fprintf(fp, "#endif /* END KERNEL ASSEMBLY */\n");
    print_u32_data(fp, prefix, "code", kernel->code,
@@ -386,6 +386,9 @@ int main(int argc, char **argv)
       return -1;
    }
 
+   struct brw_isa_info _isa, *isa = &_isa;
+   brw_init_isa_info(isa, devinfo);
+
    if (entry_point == NULL) {
       fprintf(stderr, "No entry-point name specified.\n");
       print_usage(argv[0], stderr);
@@ -427,6 +430,11 @@ int main(int argc, char **argv)
          .source = {
             .name = *infile,
             .value = map,
+         },
+         .features = {
+            .fp16 = true,
+            .intel_subgroups = true,
+            .subgroups = true,
          },
          .args = util_dynarray_begin(&clang_args),
          .num_args = util_dynarray_num_elements(&clang_args, char *),
@@ -554,10 +562,10 @@ int main(int argc, char **argv)
 
    if (outfile != NULL) {
       FILE *fp = fopen(outfile, "w");
-      print_kernel(fp, prefix, &kernel, devinfo);
+      print_kernel(fp, prefix, &kernel, isa);
       fclose(fp);
    } else {
-      print_kernel(stdout, prefix, &kernel, devinfo);
+      print_kernel(stdout, prefix, &kernel, isa);
    }
 
    ralloc_free(mem_ctx);

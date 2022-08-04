@@ -61,7 +61,7 @@ struct QoShaderModuleCreateInfo {
 };
 
 extern ac_shader_config config;
-extern radv_shader_info info;
+extern aco_shader_info info;
 extern std::unique_ptr<aco::Program> program;
 extern aco::Builder bld;
 extern aco::Temp inputs[16];
@@ -70,9 +70,9 @@ namespace aco {
 struct ra_test_policy;
 }
 
-void create_program(enum chip_class chip_class, aco::Stage stage,
+void create_program(enum amd_gfx_level gfx_level, aco::Stage stage,
                     unsigned wave_size=64, enum radeon_family family=CHIP_UNKNOWN);
-bool setup_cs(const char *input_spec, enum chip_class chip_class,
+bool setup_cs(const char *input_spec, enum amd_gfx_level gfx_level,
               enum radeon_family family=CHIP_UNKNOWN, const char* subvariant = "",
               unsigned wave_size=64);
 
@@ -104,7 +104,7 @@ aco::Temp ext_ushort(aco::Temp src, unsigned idx, aco::Builder b=bld);
 aco::Temp ext_ubyte(aco::Temp src, unsigned idx, aco::Builder b=bld);
 
 /* vulkan helpers */
-VkDevice get_vk_device(enum chip_class chip_class);
+VkDevice get_vk_device(enum amd_gfx_level gfx_level);
 VkDevice get_vk_device(enum radeon_family family);
 
 void print_pipeline_ir(VkDevice device, VkPipeline pipeline, VkShaderStageFlagBits stages,

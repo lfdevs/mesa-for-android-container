@@ -87,7 +87,7 @@ anv_descriptor_data_for_type(const struct anv_physical_device *device,
       data = ANV_DESCRIPTOR_SURFACE_STATE;
       break;
 
-   case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+   case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
       data = ANV_DESCRIPTOR_INLINE_UNIFORM;
       break;
 
@@ -113,6 +113,9 @@ anv_descriptor_data_for_type(const struct anv_physical_device *device,
     * Do not handle VK_DESCRIPTOR_TYPE_STORAGE_IMAGE and
     * VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT because they already must
     * have identity swizzle.
+    *
+    * TODO: We need to handle swizzle on buffer views too for those same
+    *       platforms.
     */
    if (device->info.verx10 == 70 &&
        (type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
@@ -133,7 +136,7 @@ anv_descriptor_data_for_mutable_type(const struct anv_physical_device *device,
       for(VkDescriptorType i = 0; i <= VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT; i++) {
          if (i == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
              i == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-             i == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+             i == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
             continue;
 
          desc_data |= anv_descriptor_data_for_type(device, i);
@@ -182,7 +185,7 @@ static bool
 anv_needs_descriptor_buffer(VkDescriptorType desc_type,
                             enum anv_descriptor_data desc_data)
 {
-   if (desc_type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT ||
+   if (desc_type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK ||
        anv_descriptor_data_size(desc_data) > 0)
       return true;
    return false;
@@ -223,7 +226,7 @@ anv_descriptor_size_for_mutable_type(const struct anv_physical_device *device,
 
          if (i == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
              i == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-             i == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+             i == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
             continue;
 
          enum anv_descriptor_data desc_data =
@@ -290,10 +293,10 @@ anv_descriptor_requires_bindless(const struct anv_physical_device *pdevice,
    if (pdevice->always_use_bindless)
       return anv_descriptor_supports_bindless(pdevice, binding, sampler);
 
-   static const VkDescriptorBindingFlagBitsEXT flags_requiring_bindless =
-      VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT |
-      VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT_EXT |
-      VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
+   static const VkDescriptorBindingFlagBits flags_requiring_bindless =
+      VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+      VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT |
+      VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
    return (binding->flags & flags_requiring_bindless) != 0;
 }
@@ -342,7 +345,7 @@ void anv_GetDescriptorSetLayoutSupport(
          /* There is no real limit on samplers */
          break;
 
-      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
          /* Inline uniforms don't use a binding */
          break;
 
@@ -382,7 +385,7 @@ void anv_GetDescriptorSetLayoutSupport(
       vk_find_struct(pSupport->pNext,
                      DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT);
    if (vdcls != NULL) {
-      if (varying_desc_type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) {
+      if (varying_desc_type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
          vdcls->maxVariableDescriptorCount = MAX_INLINE_UNIFORM_BLOCK_SIZE;
       } else if (varying_desc_type != VK_DESCRIPTOR_TYPE_MAX_ENUM) {
          vdcls->maxVariableDescriptorCount = UINT16_MAX;
@@ -436,7 +439,7 @@ VkResult anv_CreateDescriptorSetLayout(
          immutable_sampler_count += pCreateInfo->pBindings[j].descriptorCount;
    }
 
-   /* We need to allocate decriptor set layouts off the device allocator
+   /* We need to allocate descriptor set layouts off the device allocator
     * with DEVICE scope because they are reference counted and may not be
     * destroyed when vkDestroyDescriptorSetLayout is called.
     */
@@ -482,9 +485,9 @@ VkResult anv_CreateDescriptorSetLayout(
       set_layout->binding[b].immutable_samplers = (void *)(uintptr_t)(j + 1);
    }
 
-   const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT *binding_flags_info =
+   const VkDescriptorSetLayoutBindingFlagsCreateInfo *binding_flags_info =
       vk_find_struct_const(pCreateInfo->pNext,
-                           DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT);
+                           DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO);
 
    const VkMutableDescriptorTypeCreateInfoVALVE *mutable_info =
       vk_find_struct_const(pCreateInfo->pNext,
@@ -528,7 +531,7 @@ VkResult anv_CreateDescriptorSetLayout(
             assert(!(set_layout->binding[b].flags &
                (VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
                 VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT |
-                VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT)));
+                VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)));
          }
       }
 
@@ -593,7 +596,7 @@ VkResult anv_CreateDescriptorSetLayout(
          anv_descriptor_size(&set_layout->binding[b]);
 
       if (binding->descriptorType ==
-          VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) {
+          VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
          /* Inline uniform blocks are specified to use the descriptor array
           * size as the size in bytes of the block.
           */
@@ -653,7 +656,7 @@ set_layout_descriptor_count(const struct anv_descriptor_set_layout *set_layout,
    assert(var_desc_count <= dynamic_binding->array_size);
    uint32_t shrink = dynamic_binding->array_size - var_desc_count;
 
-   if (dynamic_binding->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+   if (dynamic_binding->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
       return set_layout->descriptor_count;
 
    return set_layout->descriptor_count - shrink;
@@ -690,7 +693,7 @@ anv_descriptor_set_layout_descriptor_buffer_size(const struct anv_descriptor_set
    uint32_t shrink = dynamic_binding->array_size - var_desc_count;
    uint32_t set_size;
 
-   if (dynamic_binding->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) {
+   if (dynamic_binding->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
       /* Inline uniform blocks are specified to use the descriptor array
        * size as the size in bytes of the block.
        */
@@ -797,12 +800,7 @@ VkResult anv_CreatePipelineLayout(
       anv_descriptor_set_layout_ref(set_layout);
 
       layout->set[set].dynamic_offset_start = dynamic_offset_count;
-      for (uint32_t b = 0; b < set_layout->binding_count; b++) {
-         if (set_layout->binding[b].dynamic_offset_index < 0)
-            continue;
-
-         dynamic_offset_count += set_layout->binding[b].array_size;
-      }
+      dynamic_offset_count += set_layout->dynamic_offset_count;
    }
    assert(dynamic_offset_count < MAX_DYNAMIC_BUFFERS);
 
@@ -846,11 +844,11 @@ void anv_DestroyPipelineLayout(
  * view surface state. The spec allows us to fail to allocate due to
  * fragmentation in all cases but two: 1) after pool reset, allocating up
  * until the pool size with no freeing must succeed and 2) allocating and
- * freeing only descriptor sets with the same layout. Case 1) is easy enogh,
+ * freeing only descriptor sets with the same layout. Case 1) is easy enough,
  * and the free lists lets us recycle blocks for case 2).
  */
 
-/* The vma heap reserves 0 to mean NULL; we have to offset by some ammount to
+/* The vma heap reserves 0 to mean NULL; we have to offset by some amount to
  * ensure we can allocate the entire BO without hitting zero.  The actual
  * amount doesn't matter.
  */
@@ -902,7 +900,7 @@ VkResult anv_CreateDescriptorPool(
          desc_data_size *= 3;
 
       if (pCreateInfo->pPoolSizes[i].type ==
-          VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) {
+          VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
          /* Inline uniform blocks are specified to use the descriptor array
           * size as the size in bytes of the block.
           */
@@ -1603,7 +1601,7 @@ anv_descriptor_set_write_buffer(struct anv_device *device,
    }
 
    struct anv_address bind_addr = anv_address_add(buffer->address, offset);
-   uint64_t bind_range = anv_buffer_get_range(buffer, offset, range);
+   uint64_t bind_range = vk_buffer_range(&buffer->vk, offset, range);
    enum anv_descriptor_data data =
       bind_layout->type == VK_DESCRIPTOR_TYPE_MUTABLE_VALVE ?
       anv_descriptor_data_for_type(device->physical, type) :
@@ -1769,7 +1767,7 @@ void anv_UpdateDescriptorSets(
          }
          break;
 
-      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT: {
+      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK: {
          const VkWriteDescriptorSetInlineUniformBlock *inline_write =
             vk_find_struct_const(write->pNext,
                                  WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK);
@@ -1949,7 +1947,7 @@ anv_descriptor_set_write_template(struct anv_device *device,
          }
          break;
 
-      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
          anv_descriptor_set_write_inline_uniform_data(device, set,
                                                       entry->binding,
                                                       data + entry->offset,

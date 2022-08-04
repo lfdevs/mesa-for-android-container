@@ -72,6 +72,28 @@ lp_build_struct_get(struct gallivm_state *gallivm,
                     const char *name);
 
 /**
+ * Get value pointer to a structure member.
+ * This takes the explicit LLVM type of ptr, as required by LLVM-15 opaque-pointers.
+ */
+LLVMValueRef
+lp_build_struct_get_ptr2(struct gallivm_state *gallivm,
+                        LLVMTypeRef ptr_type,
+                        LLVMValueRef ptr,
+                        unsigned member,
+                        const char *name);
+
+/**
+ * Get the value of a structure member.
+ * This takes the explicit LLVM type of ptr, as required by LLVM-15 opaque-pointers.
+ */
+LLVMValueRef
+lp_build_struct_get2(struct gallivm_state *gallivm,
+                    LLVMTypeRef ptr_type,
+                    LLVMValueRef ptr,
+                    unsigned member,
+                    const char *name);
+
+/**
  * Get value pointer to an array element.
  */
 LLVMValueRef

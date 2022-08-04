@@ -25,7 +25,7 @@ const __DRIextension **__driDriverGetExtensions_kms_swrast(void);
 
 PUBLIC const __DRIextension **__driDriverGetExtensions_kms_swrast(void)
 {
-   return dri_kms_driver_extensions;
+   return dri_swrast_kms_driver_extensions;
 }
 
 #endif
@@ -100,6 +100,7 @@ DEFINE_LOADER_DRM_ENTRYPOINT(ili9225)
 DEFINE_LOADER_DRM_ENTRYPOINT(ili9341)
 DEFINE_LOADER_DRM_ENTRYPOINT(imx_drm)
 DEFINE_LOADER_DRM_ENTRYPOINT(imx_dcss)
+DEFINE_LOADER_DRM_ENTRYPOINT(imx_lcdif)
 DEFINE_LOADER_DRM_ENTRYPOINT(ingenic_drm)
 DEFINE_LOADER_DRM_ENTRYPOINT(kirin)
 DEFINE_LOADER_DRM_ENTRYPOINT(komeda)

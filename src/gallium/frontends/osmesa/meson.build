@@ -20,7 +20,7 @@
 
 osmesa_st_c_args = []
 if with_platform_windows
-  osmesa_st_c_args += ['-DBUILD_GL32', '-DWIN32_LEAN_AND_MEAN']
+  osmesa_st_c_args += ['-DWIN32_LEAN_AND_MEAN']
   if not with_shared_glapi
     osmesa_st_c_args += ['-D_GLAPI_NO_EXPORTS']
   endif

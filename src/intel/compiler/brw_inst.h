@@ -35,6 +35,7 @@
 #include <stdint.h>
 
 #include "brw_eu_defines.h"
+#include "brw_isa_info.h"
 #include "brw_reg_type.h"
 #include "dev/intel_device_info.h"
 
@@ -1443,6 +1444,20 @@ FC(3src_hw_opcode,      /* 4+ */  6,  0, /* 12+ */  6,  0, devinfo->ver >= 8)
 /** @} */
 
 #undef F
+
+static inline void
+brw_inst_set_opcode(const struct brw_isa_info *isa,
+                    struct brw_inst *inst, enum opcode opcode)
+{
+   brw_inst_set_hw_opcode(isa->devinfo, inst, brw_opcode_encode(isa, opcode));
+}
+
+static inline enum opcode
+brw_inst_opcode(const struct brw_isa_info *isa,
+                const struct brw_inst *inst)
+{
+   return brw_opcode_decode(isa, brw_inst_hw_opcode(isa->devinfo, inst));
+}
 
 #ifdef __cplusplus
 }

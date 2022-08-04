@@ -30,7 +30,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include "c99_compat.h"
 #include "c11/threads.h"
 #include "util/u_thread.h"
 #include "util/u_string.h"
@@ -39,67 +38,9 @@
 #include "eglcurrent.h"
 #include "eglglobals.h"
 
-/* a fallback thread info to guarantee that every thread always has one */
-static _EGLThreadInfo dummy_thread;
-static mtx_t _egl_TSDMutex = _MTX_INITIALIZER_NP;
-static EGLBoolean _egl_TSDInitialized;
-static tss_t _egl_TSD;
-static void _eglDestroyThreadInfo(_EGLThreadInfo *t);
-
-#ifdef USE_ELF_TLS
-static __THREAD_INITIAL_EXEC const _EGLThreadInfo *_egl_TLS;
-#endif
-
-static inline void _eglSetTSD(const _EGLThreadInfo *t)
-{
-   tss_set(_egl_TSD, (void *) t);
-#ifdef USE_ELF_TLS
-   _egl_TLS = t;
-#endif
-}
-
-static inline _EGLThreadInfo *_eglGetTSD(void)
-{
-#ifdef USE_ELF_TLS
-   return (_EGLThreadInfo *) _egl_TLS;
-#else
-   return (_EGLThreadInfo *) tss_get(_egl_TSD);
-#endif
-}
-
-static inline void _eglFiniTSD(void)
-{
-   mtx_lock(&_egl_TSDMutex);
-   if (_egl_TSDInitialized) {
-      _EGLThreadInfo *t = _eglGetTSD();
-
-      _egl_TSDInitialized = EGL_FALSE;
-      _eglDestroyThreadInfo(t);
-      tss_delete(_egl_TSD);
-   }
-   mtx_unlock(&_egl_TSDMutex);
-}
-
-static inline EGLBoolean _eglInitTSD()
-{
-   if (!_egl_TSDInitialized) {
-      mtx_lock(&_egl_TSDMutex);
-
-      /* check again after acquiring lock */
-      if (!_egl_TSDInitialized) {
-         if (tss_create(&_egl_TSD, (void (*)(void *)) _eglDestroyThreadInfo) != thrd_success) {
-            mtx_unlock(&_egl_TSDMutex);
-            return EGL_FALSE;
-         }
-         _eglAddAtExitCall(_eglFiniTSD);
-         _egl_TSDInitialized = EGL_TRUE;
-      }
-
-      mtx_unlock(&_egl_TSDMutex);
-   }
-
-   return EGL_TRUE;
-}
+static __THREAD_INITIAL_EXEC _EGLThreadInfo _egl_TLS = {
+   .inited = false
+};
 
 static void
 _eglInitThreadInfo(_EGLThreadInfo *t)
@@ -111,69 +52,20 @@ _eglInitThreadInfo(_EGLThreadInfo *t)
 
 
 /**
- * Allocate and init a new _EGLThreadInfo object.
- */
-static _EGLThreadInfo *
-_eglCreateThreadInfo(void)
-{
-   _EGLThreadInfo *t = calloc(1, sizeof(_EGLThreadInfo));
-   if (!t)
-      t = &dummy_thread;
-
-   _eglInitThreadInfo(t);
-   return t;
-}
-
-
-/**
- * Delete/free a _EGLThreadInfo object.
- */
-static void
-_eglDestroyThreadInfo(_EGLThreadInfo *t)
-{
-   if (t != &dummy_thread) {
-      free(t);
-#ifdef USE_ELF_TLS
-      /* Reset the TLS also here, otherwise
-       * it will be having a dangling pointer */
-      _egl_TLS = NULL;
-#endif
-   }
-}
-
-
-/**
- * Make sure TSD is initialized and return current value.
- */
-static inline _EGLThreadInfo *
-_eglCheckedGetTSD(void)
-{
-   if (_eglInitTSD() != EGL_TRUE) {
-      _eglLog(_EGL_FATAL, "failed to initialize \"current\" system");
-      return NULL;
-   }
-
-   return _eglGetTSD();
-}
-
-
-/**
  * Return the calling thread's thread info.
  * If the calling thread nevers calls this function before, or if its thread
- * info was destroyed, a new one is created.  This function never returns NULL.
- * In the case allocation fails, a dummy one is returned.  See also
- * _eglIsCurrentThreadDummy.
+ * info was destroyed, reinitialize it.  This function never returns NULL.
  */
 _EGLThreadInfo *
 _eglGetCurrentThread(void)
 {
-   _EGLThreadInfo *t = _eglCheckedGetTSD();
-   if (!t) {
-      t = _eglCreateThreadInfo();
-      _eglSetTSD(t);
+   _EGLThreadInfo *current = &_egl_TLS;
+   if (unlikely(!current->inited)) {
+      memset(current, 0, sizeof(current[0]));
+      _eglInitThreadInfo(current);
+      current->inited = true;
    }
-
-   return t;
+   return current;
 }
 
 
@@ -183,25 +75,8 @@ _eglGetCurrentThread(void)
 void
 _eglDestroyCurrentThread(void)
 {
-   _EGLThreadInfo *t = _eglCheckedGetTSD();
-   if (t) {
-      _eglDestroyThreadInfo(t);
-      _eglSetTSD(NULL);
-   }
-}
-
-
-/**
- * Return true if the calling thread's thread info is dummy.
- * A dummy thread info is shared by all threads and should not be modified.
- * Functions like eglBindAPI or eglMakeCurrent should check for dummy-ness
- * before updating the thread info.
- */
-EGLBoolean
-_eglIsCurrentThreadDummy(void)
-{
-   _EGLThreadInfo *t = _eglCheckedGetTSD();
-   return (!t || t == &dummy_thread);
+   _EGLThreadInfo *t = _eglGetCurrentThread();
+   t->inited = false;
 }
 
 
@@ -223,9 +98,6 @@ static EGLBoolean
 _eglInternalError(EGLint errCode, const char *msg)
 {
    _EGLThreadInfo *t = _eglGetCurrentThread();
-
-   if (t == &dummy_thread)
-      return EGL_FALSE;
 
    t->LastError = errCode;
 

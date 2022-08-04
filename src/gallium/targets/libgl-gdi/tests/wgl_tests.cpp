@@ -41,6 +41,8 @@ public:
       ShowWindow(_window, SW_SHOW);
    }
 
+   void recreate_attribs(const int *attribList);
+
 private:
    HWND _window = nullptr;
    HDC _hdc = nullptr;
@@ -101,6 +103,22 @@ window::window(uint32_t width, uint32_t height)
    wglMakeCurrent(_hdc, _hglrc);
 }
 
+void window::recreate_attribs(const int *attribs)
+{
+   using pwglCreateContextAttribsARB = HGLRC(WINAPI*)(HDC, HGLRC, const int *);
+   auto wglCreateContextAttribsARB = (pwglCreateContextAttribsARB)wglGetProcAddress("wglCreateContextAttribsARB");
+   if (!wglCreateContextAttribsARB)
+      GTEST_FAIL() << "failed to get wglCreateContextAttribsARB";
+
+   wglMakeCurrent(nullptr, nullptr);
+   wglDeleteContext(_hglrc);
+   _hglrc = wglCreateContextAttribsARB(_hdc, nullptr, attribs);
+   if (!_hglrc)
+      return;
+
+   wglMakeCurrent(_hdc, _hglrc);
+}
+
 window::~window()
 {
    if (_hglrc) {
@@ -127,6 +145,7 @@ TEST(wgl, basic_create)
  * the environment isn't set up to run them.
  */
 #include <directx/d3d12.h>
+#include <dxguids/dxguids.h>
 #include <wrl/client.h>
 #include <memory>
 using Microsoft::WRL::ComPtr;
@@ -195,5 +214,55 @@ TEST_F(d3d12, swapchain_cleanup)
    }
 
    ASSERT_FALSE(info_queue_has_swapchain(debug_device.Get(), info_queue.Get()));
+}
+
+#define WGL_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB 0x8256
+#define WGL_LOSE_CONTEXT_ON_RESET_ARB               0x8252
+using pglGetGraphicsResetStatusARB = GLenum(APIENTRY*)();
+TEST_F(d3d12, context_reset)
+{
+   ComPtr<ID3D12Device5> device;
+   if (FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device))))
+      GTEST_SKIP();
+
+   const int attribs[] = { WGL_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB, WGL_LOSE_CONTEXT_ON_RESET_ARB, 0 };
+
+   {
+      window wnd;
+      wnd.recreate_attribs(attribs);
+      EXPECT_TRUE(wnd.valid());
+
+      wnd.show();
+      glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT);
+      SwapBuffers(wnd.get_hdc());
+
+      auto glGetGraphicsResetStatusARB = (pglGetGraphicsResetStatusARB)wglGetProcAddress("glGetGraphicsResetStatusARB");
+      if (!glGetGraphicsResetStatusARB)
+         GTEST_FAIL() << "Couldn't get reset function";
+
+      EXPECT_EQ(glGetGraphicsResetStatusARB(), NO_ERROR);
+
+      device->RemoveDevice();
+      device.Reset();
+
+      EXPECT_NE(glGetGraphicsResetStatusARB(), NO_ERROR);
+   }
+
+   {
+      window wnd;
+      EXPECT_TRUE(wnd.valid());
+
+      wnd.recreate_attribs(attribs);
+      EXPECT_TRUE(wnd.valid());
+
+      wnd.show();
+      auto glGetGraphicsResetStatusARB = (pglGetGraphicsResetStatusARB)wglGetProcAddress("glGetGraphicsResetStatusARB");
+      EXPECT_EQ(glGetGraphicsResetStatusARB(), NO_ERROR);
+
+      glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT);
+      SwapBuffers(wnd.get_hdc());
+   }
 }
 #endif

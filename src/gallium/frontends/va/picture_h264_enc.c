@@ -62,12 +62,20 @@ vlVaHandleVAEncPictureParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *cont
    else
       context->desc.h264enc.picture_type = PIPE_H2645_ENC_PICTURE_TYPE_P;
 
+   /* Initialize slice descriptors for this picture */
+   context->desc.h264enc.num_slice_descriptors = 0;
+   memset(&context->desc.h264enc.slices_descriptors, 0, sizeof(context->desc.h264enc.slices_descriptors));
+
    context->desc.h264enc.quant_i_frames = h264->pic_init_qp;
    context->desc.h264enc.quant_b_frames = h264->pic_init_qp;
    context->desc.h264enc.quant_p_frames = h264->pic_init_qp;
    context->desc.h264enc.gop_cnt++;
    if (context->desc.h264enc.gop_cnt == context->desc.h264enc.gop_size)
       context->desc.h264enc.gop_cnt = 0;
+
+   context->desc.h264enc.pic_ctrl.enc_cabac_enable = h264->pic_fields.bits.entropy_coding_mode_flag;
+   context->desc.h264enc.num_ref_idx_l0_active_minus1 = h264->num_ref_idx_l0_active_minus1;
+   context->desc.h264enc.num_ref_idx_l1_active_minus1 = h264->num_ref_idx_l1_active_minus1;
 
    return VA_STATUS_SUCCESS;
 }
@@ -78,33 +86,63 @@ vlVaHandleVAEncSliceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *contex
    VAEncSliceParameterBufferH264 *h264;
 
    h264 = buf->data;
-   context->desc.h264enc.ref_idx_l0 = VA_INVALID_ID;
-   context->desc.h264enc.ref_idx_l1 = VA_INVALID_ID;
+   memset(&context->desc.h264enc.ref_idx_l0_list, VA_INVALID_ID, sizeof(context->desc.h264enc.ref_idx_l0_list));
+   memset(&context->desc.h264enc.ref_idx_l1_list, VA_INVALID_ID, sizeof(context->desc.h264enc.ref_idx_l1_list));
+
+   if(h264->num_ref_idx_active_override_flag) {
+      context->desc.h264enc.num_ref_idx_l0_active_minus1 = h264->num_ref_idx_l0_active_minus1;
+      context->desc.h264enc.num_ref_idx_l1_active_minus1 = h264->num_ref_idx_l1_active_minus1;
+   }
 
    for (int i = 0; i < 32; i++) {
       if (h264->RefPicList0[i].picture_id != VA_INVALID_ID) {
-         if (context->desc.h264enc.ref_idx_l0 == VA_INVALID_ID)
-            context->desc.h264enc.ref_idx_l0 = PTR_TO_UINT(util_hash_table_get(context->desc.h264enc.frame_idx,
-									       UINT_TO_PTR(h264->RefPicList0[i].picture_id + 1)));
+               context->desc.h264enc.ref_idx_l0_list[i] = PTR_TO_UINT(util_hash_table_get(context->desc.h264enc.frame_idx,
+                                 UINT_TO_PTR(h264->RefPicList0[i].picture_id + 1)));
       }
       if (h264->RefPicList1[i].picture_id != VA_INVALID_ID && h264->slice_type == 1) {
-         if (context->desc.h264enc.ref_idx_l1 == VA_INVALID_ID)
-            context->desc.h264enc.ref_idx_l1 = PTR_TO_UINT(util_hash_table_get(context->desc.h264enc.frame_idx,
-									       UINT_TO_PTR(h264->RefPicList1[i].picture_id + 1)));
+            context->desc.h264enc.ref_idx_l1_list[i] = PTR_TO_UINT(util_hash_table_get(context->desc.h264enc.frame_idx,
+                                 UINT_TO_PTR(h264->RefPicList1[i].picture_id + 1)));
       }
    }
 
-   if (h264->slice_type == 1)
+   /**
+    *  VAEncSliceParameterBufferH264.slice_type
+    *  Slice type.
+    *  Range: 0..2, 5..7, i.e. no switching slices.
+   */
+   struct h264_slice_descriptor slice_descriptor = { };
+   slice_descriptor.macroblock_address = h264->macroblock_address;
+   slice_descriptor.num_macroblocks = h264->num_macroblocks;
+
+   if ((h264->slice_type == 1) || (h264->slice_type == 6)) {
       context->desc.h264enc.picture_type = PIPE_H2645_ENC_PICTURE_TYPE_B;
-   else if (h264->slice_type == 0)
+      slice_descriptor.slice_type = PIPE_H264_SLICE_TYPE_B;
+   } else if ((h264->slice_type == 0) || (h264->slice_type == 5)) {
       context->desc.h264enc.picture_type = PIPE_H2645_ENC_PICTURE_TYPE_P;
-   else if (h264->slice_type == 2) {
-      if (context->desc.h264enc.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR)
-         context->desc.h264enc.idr_pic_id++;
-	   else
+      slice_descriptor.slice_type = PIPE_H264_SLICE_TYPE_P;
+   } else if ((h264->slice_type == 2) || (h264->slice_type == 7)) {
+      if (context->desc.h264enc.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR) {
+         if (slice_descriptor.macroblock_address == 0) {
+            /* Increment it only for the first slice of the IDR frame */
+            context->desc.h264enc.idr_pic_id++;
+         }
+         slice_descriptor.slice_type = PIPE_H264_SLICE_TYPE_I;
+      } else {
          context->desc.h264enc.picture_type = PIPE_H2645_ENC_PICTURE_TYPE_I;
-   } else
+         slice_descriptor.slice_type = PIPE_H264_SLICE_TYPE_I;
+      }
+   } else {
       context->desc.h264enc.picture_type = PIPE_H2645_ENC_PICTURE_TYPE_SKIP;
+   }
+
+   context->desc.h264enc.pic_ctrl.enc_cabac_init_idc = h264->cabac_init_idc;
+
+   /* Handle the slice control parameters */
+   if (context->desc.h264enc.num_slice_descriptors < ARRAY_SIZE(context->desc.h264enc.slices_descriptors)) {
+      context->desc.h264enc.slices_descriptors[context->desc.h264enc.num_slice_descriptors++] = slice_descriptor;
+   } else {
+      return VA_STATUS_ERROR_NOT_ENOUGH_BUFFER;
+   }
 
    return VA_STATUS_SUCCESS;
 }
@@ -221,7 +259,6 @@ void getEncParamPresetH264(vlVaContext *context)
    context->desc.h264enc.motion_est.enc_ime2_search_range_y = 1;
 
    //pic control preset
-   context->desc.h264enc.pic_ctrl.enc_cabac_enable = 0x00000001;
    context->desc.h264enc.pic_ctrl.enc_constraint_set_flags = 0x00000040;
 
    //rate control

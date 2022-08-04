@@ -10,7 +10,6 @@ glsl-1.5
 glsl-3
 glsl-4
 glsl-es-3
-opengl 1
 opengl 3
 opengl 4
 opengl es 3
@@ -19,6 +18,12 @@ glx@
 # dmesg-fail
 spec@arb_draw_elements_base_vertex@arb_draw_elements_base_vertex-negative-index
 spec@arb_draw_elements_base_vertex@arb_draw_elements_base_vertex-negative-index-user_varrays
+spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count
+spec@!opengl 1.4@triangle-rasterization-overdraw
+
+# oom
+spec@!opengl 1.1@streaming-texture-leak
+spec@!opengl 1.2@tex3d-maxsize
 
 # slow
 shaders@glsl-predication-on-large-array
@@ -28,3 +33,6 @@ spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-giant-temp-array
 shaders@glsl-uniform-interstage-limits@subdivide 5
 shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges
 spec@arb_internalformat_query2@all internalformat_<x>_type pname checks
+
+# very large list of fails
+spec@!opengl 1.1@clipflat

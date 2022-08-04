@@ -36,9 +36,11 @@
 
 #define __pvr_address_type uint64_t
 #define __pvr_get_address(pvr_dev_addr) (pvr_dev_addr)
+#define __pvr_make_address(addr_u64) (addr_u64)
 
 #include "csbgen/rogue_pds.h"
 
+#undef __pvr_make_address
 #undef __pvr_get_address
 #undef __pvr_address_type
 

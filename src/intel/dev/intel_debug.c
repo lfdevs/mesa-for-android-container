@@ -93,6 +93,7 @@ static const struct debug_control debug_control[] = {
    { "rt",          DEBUG_RT },
    { "task",        DEBUG_TASK },
    { "mesh",        DEBUG_MESH },
+   { "stall",       DEBUG_STALL },
    { NULL,    0 }
 };
 

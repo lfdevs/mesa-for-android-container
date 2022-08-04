@@ -89,48 +89,28 @@ void rc_variable_change_dst(
 				src_index = rc_pair_get_src_index(
 						pair_inst, reader->U.P.Src);
 			}
-			/* Try to delete the old src, it is OK if this fails,
-			 * because rc_pair_alloc_source might be able to
-			 * find a source the ca be reused.
-			 */
-			if (rc_pair_remove_src(reader->Inst, src_type,
-							src_index, old_mask)) {
-				/* Reuse the source index of the source that
-				 * was just deleted and set its register
-				 * index.  We can't use rc_pair_alloc_source
-				 * for this because it might return a source
-				 * index that is already being used. */
-				if (src_type & RC_SOURCE_RGB) {
-					pair_inst->RGB.Src[src_index]
-						.Used =	1;
-					pair_inst->RGB.Src[src_index]
-						.Index = new_index;
-					pair_inst->RGB.Src[src_index]
-						.File = RC_FILE_TEMPORARY;
-				}
-				if (src_type & RC_SOURCE_ALPHA) {
-					pair_inst->Alpha.Src[src_index]
-						.Used = 1;
-					pair_inst->Alpha.Src[src_index]
-						.Index = new_index;
-					pair_inst->Alpha.Src[src_index]
-						.File = RC_FILE_TEMPORARY;
-				}
-			} else {
-				src_index = rc_pair_alloc_source(
-						&reader->Inst->U.P,
-						src_type & RC_SOURCE_RGB,
-						src_type & RC_SOURCE_ALPHA,
-						RC_FILE_TEMPORARY,
-						new_index);
-				if (src_index < 0) {
-					rc_error(var->C, "Rewrite of inst %u failed "
-						"Can't allocate source for "
-						"Inst %u src_type=%x "
-						"new_index=%u new_mask=%u\n",
-						var->Inst->IP, reader->Inst->IP, src_type, new_index, new_writemask);
-						continue;
-				}
+			rc_pair_remove_src(reader->Inst, src_type,
+							src_index);
+			/* Reuse the source index of the source that
+			 * was just deleted and set its register
+			 * index.  We can't use rc_pair_alloc_source
+			 * for this because it might return a source
+			 * index that is already being used. */
+			if (src_type & RC_SOURCE_RGB) {
+				pair_inst->RGB.Src[src_index]
+					.Used =	1;
+				pair_inst->RGB.Src[src_index]
+					.Index = new_index;
+				pair_inst->RGB.Src[src_index]
+					.File = RC_FILE_TEMPORARY;
+			}
+			if (src_type & RC_SOURCE_ALPHA) {
+				pair_inst->Alpha.Src[src_index]
+					.Used = 1;
+				pair_inst->Alpha.Src[src_index]
+					.Index = new_index;
+				pair_inst->Alpha.Src[src_index]
+					.File = RC_FILE_TEMPORARY;
 			}
 			reader->U.P.Arg->Swizzle = rc_rewrite_swizzle(
 				reader->U.P.Arg->Swizzle, conversion_swizzle);

@@ -85,7 +85,7 @@ fd5_emit_get_vp(struct fd5_emit *emit)
        * is what has all the outputs that might be involved in TFB.
        */
       if (emit->binning_pass &&
-          !emit->prog->vs->shader->stream_output.num_outputs)
+          !emit->prog->vs->stream_output.num_outputs)
          emit->vs = emit->prog->bs;
       else
          emit->vs = emit->prog->vs;

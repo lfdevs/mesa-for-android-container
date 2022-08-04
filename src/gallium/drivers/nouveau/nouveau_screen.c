@@ -202,14 +202,13 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
    if (nv_dbg)
       nouveau_mesa_debug = atoi(nv_dbg);
 
-   if (dev->chipset < 0x140)
-      screen->prefer_nir = debug_get_bool_option("NV50_PROG_USE_NIR", false);
-   else
-      screen->prefer_nir = true;
+   screen->prefer_nir = !debug_get_bool_option("NV50_PROG_USE_TGSI", false);
 
    screen->force_enable_cl = debug_get_bool_option("NOUVEAU_ENABLE_CL", false);
    if (screen->force_enable_cl)
       glsl_type_singleton_init_or_ref();
+
+   screen->disable_fences = debug_get_bool_option("NOUVEAU_DISABLE_FENCES", false);
 
    /* These must be set before any failure is possible, as the cleanup
     * paths assume they're responsible for deleting them.

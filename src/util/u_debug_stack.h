@@ -43,7 +43,7 @@
  */
 
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -85,7 +85,7 @@ debug_backtrace_print(FILE *f,
                       const struct debug_stack_frame *backtrace,
                       unsigned nr_frames);
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 }
 #endif
 

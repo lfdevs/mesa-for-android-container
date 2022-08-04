@@ -571,7 +571,7 @@ fd_set_stream_output_targets(struct pipe_context *pctx, unsigned num_targets,
    struct fd_streamout_stateobj *so = &ctx->streamout;
    unsigned i;
 
-   debug_assert(num_targets <= ARRAY_SIZE(so->targets));
+   assert(num_targets <= ARRAY_SIZE(so->targets));
 
    /* Older targets need sw stats enabled for streamout emulation in VS: */
    if (ctx->screen->gen < 5) {

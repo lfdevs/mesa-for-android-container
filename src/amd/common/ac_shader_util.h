@@ -90,20 +90,21 @@ enum ac_descriptor_type
    AC_DESC_PLANE_2,
 };
 
-unsigned ac_get_spi_shader_z_format(bool writes_z, bool writes_stencil, bool writes_samplemask);
+unsigned ac_get_spi_shader_z_format(bool writes_z, bool writes_stencil, bool writes_samplemask,
+                                    bool writes_mrt0_alpha);
 
 unsigned ac_get_cb_shader_mask(unsigned spi_shader_col_format);
 
-uint32_t ac_vgt_gs_mode(unsigned gs_max_vert_out, enum chip_class chip_class);
+uint32_t ac_vgt_gs_mode(unsigned gs_max_vert_out, enum amd_gfx_level gfx_level);
 
-unsigned ac_get_tbuffer_format(enum chip_class chip_class, unsigned dfmt, unsigned nfmt);
+unsigned ac_get_tbuffer_format(enum amd_gfx_level gfx_level, unsigned dfmt, unsigned nfmt);
 
 const struct ac_data_format_info *ac_get_data_format_info(unsigned dfmt);
 
-enum ac_image_dim ac_get_sampler_dim(enum chip_class chip_class, enum glsl_sampler_dim dim,
+enum ac_image_dim ac_get_sampler_dim(enum amd_gfx_level gfx_level, enum glsl_sampler_dim dim,
                                      bool is_array);
 
-enum ac_image_dim ac_get_image_dim(enum chip_class chip_class, enum glsl_sampler_dim sdim,
+enum ac_image_dim ac_get_image_dim(enum amd_gfx_level gfx_level, enum glsl_sampler_dim sdim,
                                    bool is_array);
 
 unsigned ac_get_fs_input_vgpr_cnt(const struct ac_shader_config *config,
@@ -119,12 +120,12 @@ void ac_compute_late_alloc(const struct radeon_info *info, bool ngg, bool ngg_cu
 
 unsigned ac_compute_cs_workgroup_size(uint16_t sizes[3], bool variable, unsigned max);
 
-unsigned ac_compute_lshs_workgroup_size(enum chip_class chip_class, gl_shader_stage stage,
+unsigned ac_compute_lshs_workgroup_size(enum amd_gfx_level gfx_level, gl_shader_stage stage,
                                         unsigned tess_num_patches,
                                         unsigned tess_patch_in_vtx,
                                         unsigned tess_patch_out_vtx);
 
-unsigned ac_compute_esgs_workgroup_size(enum chip_class chip_class, unsigned wave_size,
+unsigned ac_compute_esgs_workgroup_size(enum amd_gfx_level gfx_level, unsigned wave_size,
                                         unsigned es_verts, unsigned gs_inst_prims);
 
 unsigned ac_compute_ngg_workgroup_size(unsigned es_verts, unsigned gs_inst_prims,
@@ -134,7 +135,7 @@ void ac_set_reg_cu_en(void *cs, unsigned reg_offset, uint32_t value, uint32_t cl
                       unsigned value_shift, const struct radeon_info *info,
                       void set_sh_reg(void*, unsigned, uint32_t));
 
-void ac_get_scratch_tmpring_size(const struct radeon_info *info, unsigned max_scratch_waves,
+void ac_get_scratch_tmpring_size(const struct radeon_info *info, bool compute,
                                  unsigned bytes_per_wave, unsigned *max_seen_bytes_per_wave,
                                  uint32_t *tmpring_size);
 

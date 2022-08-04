@@ -38,7 +38,6 @@
 #include <unistd.h>
 
 #include "device_select.h"
-#include "c99_compat.h"
 #include "hash_table.h"
 #include "vk_util.h"
 #include "c11/threads.h"
@@ -48,7 +47,6 @@ struct instance_info {
    PFN_vkEnumeratePhysicalDevices EnumeratePhysicalDevices;
    PFN_vkEnumeratePhysicalDeviceGroups EnumeratePhysicalDeviceGroups;
    PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
-   PFN_GetPhysicalDeviceProcAddr  GetPhysicalDeviceProcAddr;
    PFN_vkEnumerateDeviceExtensionProperties EnumerateDeviceExtensionProperties;
    PFN_vkGetPhysicalDeviceProperties GetPhysicalDeviceProperties;
    PFN_vkGetPhysicalDeviceProperties2 GetPhysicalDeviceProperties2;
@@ -168,7 +166,6 @@ static VkResult device_select_CreateInstance(const VkInstanceCreateInfo *pCreate
    info->has_vulkan11 = pCreateInfo->pApplicationInfo &&
                         pCreateInfo->pApplicationInfo->apiVersion >= VK_MAKE_VERSION(1, 1, 0);
 
-   info->GetPhysicalDeviceProcAddr = (PFN_GetPhysicalDeviceProcAddr)info->GetInstanceProcAddr(*pInstance, "vk_layerGetPhysicalDeviceProcAddr");
 #define DEVSEL_GET_CB(func) info->func = (PFN_vk##func)info->GetInstanceProcAddr(*pInstance, "vk" #func)
    DEVSEL_GET_CB(DestroyInstance);
    DEVSEL_GET_CB(EnumeratePhysicalDevices);
@@ -207,8 +204,8 @@ static void print_gpu(const struct instance_info *info, unsigned index, VkPhysic
    VkPhysicalDevicePCIBusInfoPropertiesEXT ext_pci_properties = (VkPhysicalDevicePCIBusInfoPropertiesEXT) {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT
    };
-   VkPhysicalDeviceProperties2KHR properties = (VkPhysicalDeviceProperties2KHR){
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR
+   VkPhysicalDeviceProperties2 properties = (VkPhysicalDeviceProperties2){
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2
    };
    if (info->has_vulkan11 && info->has_pci_bus)
       properties.pNext = &ext_pci_properties;
@@ -249,8 +246,8 @@ static bool fill_drm_device_info(const struct instance_info *info,
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT
    };
 
-   VkPhysicalDeviceProperties2KHR properties = (VkPhysicalDeviceProperties2KHR){
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR
+   VkPhysicalDeviceProperties2 properties = (VkPhysicalDeviceProperties2){
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2
    };
 
    if (info->has_vulkan11 && info->has_pci_bus)
@@ -528,6 +525,11 @@ static VkResult device_select_EnumeratePhysicalDevices(VkInstance instance,
 
    assert(result == VK_SUCCESS);
 
+   /* do not give multiple device option to app if force default device */
+   const char *force_default_device = getenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE");
+   if (force_default_device && !strcmp(force_default_device, "1") && selected_physical_device_count != 0)
+      selected_physical_device_count = 1;
+
    for (unsigned i = 0; i < selected_physical_device_count; i++) {
       vk_outarray_append_typed(VkPhysicalDevice, &out, ent) {
          *ent = selected_physical_devices[i];
@@ -573,8 +575,8 @@ static VkResult device_select_EnumeratePhysicalDeviceGroups(VkInstance instance,
       bool group_has_cpu_device = false;
       for (unsigned j = 0; j < physical_device_groups[i].physicalDeviceCount; j++) {
          VkPhysicalDevice physical_device = physical_device_groups[i].physicalDevices[j];
-         VkPhysicalDeviceProperties2KHR properties = (VkPhysicalDeviceProperties2KHR){
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR
+         VkPhysicalDeviceProperties2 properties = (VkPhysicalDeviceProperties2){
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2
          };
          info->GetPhysicalDeviceProperties(physical_device, &properties.properties);
          group_has_cpu_device = properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
@@ -603,12 +605,6 @@ out:
    return result;
 }
 
-static void  (*get_pdevice_proc_addr(VkInstance instance, const char* name))()
-{
-   struct instance_info *info = device_select_layer_get_instance(instance);
-   return info->GetPhysicalDeviceProcAddr(instance, name);
-}
-
 static void  (*get_instance_proc_addr(VkInstance instance, const char* name))()
 {
    if (strcmp(name, "vkGetInstanceProcAddr") == 0)
@@ -633,7 +629,6 @@ VK_LAYER_EXPORT VkResult vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayer
    pVersionStruct->loaderLayerInterfaceVersion = 2;
 
    pVersionStruct->pfnGetInstanceProcAddr = get_instance_proc_addr;
-   pVersionStruct->pfnGetPhysicalDeviceProcAddr = get_pdevice_proc_addr;
 
    return VK_SUCCESS;
 }

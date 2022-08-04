@@ -203,7 +203,7 @@ blorp_params_init(struct blorp_params *params)
 static void
 blorp_init_base_prog_key(struct brw_base_prog_key *key)
 {
-   for (int i = 0; i < MAX_SAMPLERS; i++)
+   for (int i = 0; i < BRW_MAX_SAMPLERS; i++)
       key->tex.swizzles[i] = SWIZZLE_XYZW;
 }
 

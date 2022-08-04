@@ -26,11 +26,7 @@
 
 #include "util/u_inlines.h"
 
-#ifndef _WIN32
-#include <wsl/winadapter.h>
-#endif
-
-#include <directx/d3d12.h>
+#include "d3d12_common.h"
 
 struct pipe_screen;
 struct d3d12_screen;
@@ -52,6 +48,9 @@ d3d12_fence(struct pipe_fence_handle *pfence)
 
 struct d3d12_fence *
 d3d12_create_fence(struct d3d12_screen *screen);
+
+struct d3d12_fence *
+d3d12_open_fence(struct d3d12_screen *screen, HANDLE handle, const void *name);
 
 void
 d3d12_fence_reference(struct d3d12_fence **ptr, struct d3d12_fence *fence);

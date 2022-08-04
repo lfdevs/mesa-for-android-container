@@ -38,7 +38,7 @@ brw_compile_clip(const struct brw_compiler *compiler,
 
    /* Begin the compilation:
     */
-   brw_init_codegen(compiler->devinfo, &c.func, mem_ctx);
+   brw_init_codegen(&compiler->isa, &c.func, mem_ctx);
 
    c.func.single_program_flow = 1;
 
@@ -87,7 +87,7 @@ brw_compile_clip(const struct brw_compiler *compiler,
 
    if (INTEL_DEBUG(DEBUG_CLIP)) {
       fprintf(stderr, "clip:\n");
-      brw_disassemble_with_labels(compiler->devinfo,
+      brw_disassemble_with_labels(&compiler->isa,
                                   program, 0, *final_assembly_size, stderr);
       fprintf(stderr, "\n");
    }

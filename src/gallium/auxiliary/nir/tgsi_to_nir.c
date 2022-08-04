@@ -93,6 +93,7 @@ struct ttn_compile {
    bool cap_position_is_sysval;
    bool cap_point_is_sysval;
    bool cap_samplers_as_deref;
+   bool cap_integers;
 };
 
 #define ttn_swizzle(b, src, x, y, z, w) \
@@ -1262,6 +1263,7 @@ get_sampler_var(struct ttn_compile *c, int binding,
       BITSET_SET(c->build.shader->info.textures_used, binding);
       if (op == nir_texop_txf || op == nir_texop_txf_ms)
          BITSET_SET(c->build.shader->info.textures_used_by_txf, binding);
+      BITSET_SET(c->build.shader->info.samplers_used, binding);
    }
 
    return var;
@@ -1583,11 +1585,13 @@ ttn_txq(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
 
    txs = nir_tex_instr_create(b->shader, 2);
    txs->op = nir_texop_txs;
+   txs->dest_type = nir_type_uint32;
    get_texture_info(tgsi_inst->Texture.Texture,
                     &txs->sampler_dim, &txs->is_shadow, &txs->is_array);
 
    qlv = nir_tex_instr_create(b->shader, 1);
    qlv->op = nir_texop_query_levels;
+   qlv->dest_type = nir_type_uint32;
    get_texture_info(tgsi_inst->Texture.Texture,
                     &qlv->sampler_dim, &qlv->is_shadow, &qlv->is_array);
 
@@ -2276,7 +2280,14 @@ ttn_read_pipe_caps(struct ttn_compile *c,
    c->cap_face_is_sysval = screen->get_param(screen, PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL);
    c->cap_position_is_sysval = screen->get_param(screen, PIPE_CAP_FS_POSITION_IS_SYSVAL);
    c->cap_point_is_sysval = screen->get_param(screen, PIPE_CAP_FS_POINT_IS_SYSVAL);
+   c->cap_integers = screen->get_shader_param(screen, c->scan->processor, PIPE_SHADER_CAP_INTEGERS);
 }
+
+#define BITSET_SET32(bitset, u32_mask) do { \
+   STATIC_ASSERT(sizeof((bitset)[0]) >= sizeof(u32_mask)); \
+   BITSET_ZERO(bitset); \
+   (bitset)[0] = (u32_mask); \
+} while (0)
 
 /**
  * Initializes a TGSI-to-NIR compiler.
@@ -2314,6 +2325,8 @@ ttn_compile_init(const void *tgsi_tokens,
       c->cap_face_is_sysval = true;
    }
 
+   s->info.subgroup_size = SUBGROUP_SIZE_UNIFORM;
+
    if (s->info.stage == MESA_SHADER_FRAGMENT)
       s->info.fs.untyped_color_outputs = true;
 
@@ -2323,7 +2336,13 @@ ttn_compile_init(const void *tgsi_tokens,
    s->info.num_ssbos = util_last_bit(scan.shader_buffers_declared);
    s->info.num_ubos = util_last_bit(scan.const_buffers_declared >> 1);
    s->info.num_images = util_last_bit(scan.images_declared);
+   BITSET_SET32(s->info.images_used, scan.images_declared);
+   BITSET_SET32(s->info.image_buffers, scan.images_buffers);
+   BITSET_SET32(s->info.msaa_images, scan.msaa_images_declared);
    s->info.num_textures = util_last_bit(scan.samplers_declared);
+   BITSET_SET32(s->info.textures_used, scan.samplers_declared);
+   BITSET_ZERO(s->info.textures_used_by_txf); /* No scan information yet */
+   BITSET_SET32(s->info.samplers_used, scan.samplers_declared);
    s->info.internal = false;
 
    /* Default for TGSI is separate, this is assumed throughout the tree */
@@ -2377,6 +2396,9 @@ ttn_compile_init(const void *tgsi_tokens,
       case TGSI_PROPERTY_NUM_CLIPDIST_ENABLED:
          s->info.clip_distance_array_size = value;
          break;
+      case TGSI_PROPERTY_LEGACY_MATH_RULES:
+         s->info.use_legacy_math_rules = value;
+         break;
       default:
          if (value) {
             fprintf(stderr, "tgsi_to_nir: unhandled TGSI property %u = %u\n",
@@ -2417,13 +2439,28 @@ static void
 ttn_optimize_nir(nir_shader *nir)
 {
    bool progress;
+
    do {
       progress = false;
 
       NIR_PASS_V(nir, nir_lower_vars_to_ssa);
 
+      /* Linking deals with unused inputs/outputs, but here we can remove
+       * things local to the shader in the hopes that we can cleanup other
+       * things. This pass will also remove variables with only stores, so we
+       * might be able to make progress after it.
+       */
+      NIR_PASS(progress, nir, nir_remove_dead_variables,
+               nir_var_function_temp | nir_var_shader_temp |
+               nir_var_mem_shared,
+               NULL);
+
+      NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
+      NIR_PASS(progress, nir, nir_opt_dead_write_vars);
+
       if (nir->options->lower_to_scalar) {
-         NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
+         NIR_PASS_V(nir, nir_lower_alu_to_scalar,
+                    nir->options->lower_to_scalar_filter, NULL);
          NIR_PASS_V(nir, nir_lower_phis_to_scalar, false);
       }
 
@@ -2432,30 +2469,51 @@ ttn_optimize_nir(nir_shader *nir)
       NIR_PASS(progress, nir, nir_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_opt_dce);
-
       if (nir_opt_trivial_continues(nir)) {
          progress = true;
          NIR_PASS(progress, nir, nir_copy_prop);
          NIR_PASS(progress, nir, nir_opt_dce);
       }
-
       NIR_PASS(progress, nir, nir_opt_if, false);
       NIR_PASS(progress, nir, nir_opt_dead_cf);
       NIR_PASS(progress, nir, nir_opt_cse);
       NIR_PASS(progress, nir, nir_opt_peephole_select, 8, true, true);
 
+      NIR_PASS(progress, nir, nir_opt_phi_precision);
       NIR_PASS(progress, nir, nir_opt_algebraic);
       NIR_PASS(progress, nir, nir_opt_constant_folding);
 
+      if (!nir->info.flrp_lowered) {
+         unsigned lower_flrp =
+            (nir->options->lower_flrp16 ? 16 : 0) |
+            (nir->options->lower_flrp32 ? 32 : 0) |
+            (nir->options->lower_flrp64 ? 64 : 0);
+
+         if (lower_flrp) {
+            bool lower_flrp_progress = false;
+
+            NIR_PASS(lower_flrp_progress, nir, nir_lower_flrp,
+                     lower_flrp,
+                     false /* always_precise */);
+            if (lower_flrp_progress) {
+               NIR_PASS(progress, nir,
+                        nir_opt_constant_folding);
+               progress = true;
+            }
+         }
+
+         /* Nothing should rematerialize any flrps, so we only need to do this
+          * lowering once.
+          */
+         nir->info.flrp_lowered = true;
+      }
+
       NIR_PASS(progress, nir, nir_opt_undef);
       NIR_PASS(progress, nir, nir_opt_conditional_discard);
-
       if (nir->options->max_unroll_iterations) {
          NIR_PASS(progress, nir, nir_opt_loop_unroll);
       }
-
    } while (progress);
-
 }
 
 /**
@@ -2484,7 +2542,7 @@ ttn_finalize_nir(struct ttn_compile *c, struct pipe_screen *screen)
    }
 
    if (nir->options->lower_uniforms_to_ubo)
-      NIR_PASS_V(nir, nir_lower_uniforms_to_ubo, false, false);
+      NIR_PASS_V(nir, nir_lower_uniforms_to_ubo, false, !c->cap_integers);
 
    if (!c->cap_samplers_as_deref)
       NIR_PASS_V(nir, nir_lower_samplers);

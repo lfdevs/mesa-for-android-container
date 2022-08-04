@@ -1,7 +1,7 @@
 /*
  * Copyright 1998-1999 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -9,11 +9,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -31,7 +31,7 @@
  * driver doesn't really \e have to use any of this - it's optional.  But, some
  * useful stuff is done here that otherwise would have to be duplicated in most
  * drivers.
- * 
+ *
  * Basically, these utility functions take care of some of the dirty details of
  * screen initialization, context creation, context binding, DRM setup, etc.
  *
@@ -39,7 +39,7 @@
  * about them.
  *
  * \sa dri_util.c.
- * 
+ *
  * \author Kevin E. Martin <kevin@precisioninsight.com>
  * \author Brian Paul <brian@precisioninsight.com>
  */
@@ -56,13 +56,15 @@
 #include <GL/gl.h>
 #include <GL/internal/dri_interface.h>
 #include "kopper_interface.h"
-#include "main/menums.h"
 #include "main/formats.h"
+#include "main/glconfig.h"
+#include "main/menums.h"
 #include "util/xmlconfig.h"
 #include <stdbool.h>
 
-struct gl_config;
-struct gl_context;
+struct __DRIconfigRec {
+    struct gl_config modes;
+};
 
 /**
  * Extensions.
@@ -72,7 +74,6 @@ extern const __DRIswrastExtension driSWRastExtension;
 extern const __DRIdri2Extension driDRI2Extension;
 extern const __DRIdri2Extension swkmsDRI2Extension;
 extern const __DRI2configQueryExtension dri2ConfigQueryExtension;
-extern const __DRIcopySubBufferExtension driCopySubBufferExtension;
 extern const __DRI2flushControlExtension dri2FlushControlExtension;
 
 /**
@@ -161,7 +162,7 @@ struct __DRIscreenRec {
 
     /**
      * File descriptor returned when the kernel device driver is opened.
-     * 
+     *
      * Used to:
      *   - authenticate client to kernel
      *   - map the frame buffer, SAREA, etc.
@@ -171,7 +172,7 @@ struct __DRIscreenRec {
 
     /**
      * Device-dependent private information (not stored in the SAREA).
-     * 
+     *
      * This pointer is never touched by the DRI layer.
      */
     void *driverPrivate;
@@ -310,9 +311,6 @@ driGLFormatToSizedInternalGLFormat(mesa_format format);
 
 extern mesa_format
 driImageFormatToGLFormat(uint32_t image_format);
-
-extern void
-dri2InvalidateDrawable(__DRIdrawable *drawable);
 
 extern const __DRIimageDriverExtension driImageDriverExtension;
 

@@ -850,7 +850,9 @@ i915_translate_token(struct i915_fp_compile *p,
              token->FullProperty.Property.PropertyName ==
                 TGSI_PROPERTY_FS_COORD_PIXEL_CENTER ||
              token->FullProperty.Property.PropertyName ==
-                TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS);
+                TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS ||
+             token->FullProperty.Property.PropertyName ==
+                TGSI_PROPERTY_SEPARABLE_PROGRAM);
       break;
 
    case TGSI_TOKEN_TYPE_DECLARATION:

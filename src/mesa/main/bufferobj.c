@@ -145,6 +145,14 @@ bufferobj_get_subdata(struct gl_context *ctx,
                     offset, size, data);
 }
 
+void
+_mesa_bufferobj_get_subdata(struct gl_context *ctx,
+                            GLintptrARB offset,
+                            GLsizeiptrARB size,
+                            void *data, struct gl_buffer_object *obj)
+{
+   bufferobj_get_subdata(ctx, offset, size, data, obj);
+}
 
 /**
  * Return bitmask of PIPE_BIND_x flags corresponding a GL buffer target.

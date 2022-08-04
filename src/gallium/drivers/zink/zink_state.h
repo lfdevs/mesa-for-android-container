@@ -53,6 +53,7 @@ struct zink_vertex_elements_state {
    } bindings[PIPE_MAX_ATTRIBS];
    uint32_t divisor[PIPE_MAX_ATTRIBS];
    uint8_t binding_map[PIPE_MAX_ATTRIBS];
+   uint32_t min_stride[PIPE_MAX_ATTRIBS]; //for dynamic_state1
    uint32_t decomposed_attrs;
    unsigned decomposed_attrs_size;
    uint32_t decomposed_attrs_without_w;
@@ -68,15 +69,14 @@ struct zink_vertex_state {
 
 struct zink_rasterizer_hw_state {
    unsigned polygon_mode : 2; //VkPolygonMode
-   unsigned cull_mode : 2; //VkCullModeFlags
    unsigned line_mode : 2; //VkLineRasterizationModeEXT
-   unsigned depth_clamp:1;
+   unsigned depth_clip:1;
    unsigned pv_last:1;
    unsigned line_stipple_enable:1;
    unsigned force_persample_interp:1;
    unsigned clip_halfz:1;
 };
-#define ZINK_RAST_HW_STATE_SIZE 11
+#define ZINK_RAST_HW_STATE_SIZE 9
 
 
 struct zink_rasterizer_state {
@@ -85,6 +85,7 @@ struct zink_rasterizer_state {
    float offset_units, offset_clamp, offset_scale;
    float line_width;
    VkFrontFace front_face;
+   VkCullModeFlags cull_mode;
    struct zink_rasterizer_hw_state hw_state;
 };
 

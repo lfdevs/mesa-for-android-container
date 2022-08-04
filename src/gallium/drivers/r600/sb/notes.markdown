@@ -21,6 +21,7 @@ Debugging
     -   **sbnofallback** - Abort on errors instead of fallback
     -   **sbdisasm** - Use sb disassembler for shader dumps
     -   **sbsafemath** - Disable unsafe math optimizations
+    -   **use_tgsi** - Take in TGSI from the frontend instead of asking for NIR
 
 ### Regression debugging
 

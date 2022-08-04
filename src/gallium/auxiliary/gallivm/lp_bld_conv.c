@@ -229,7 +229,7 @@ lp_build_float_to_half(struct gallivm_state *gallivm,
          */
         LLVMValueRef f16 = lp_build_intrinsic_unary(builder, "llvm.convert.to.fp16", i16t, f32);
 #else
-        LLVMValueRef f16 = LLVMBuildCall(builder, func, &f32, 1, "");
+        LLVMValueRef f16 = LLVMBuildCall2(builder, func_type, func, &f32, 1, "");
 #endif
         ref_result = LLVMBuildInsertElement(builder, ref_result, f16, index, "");
      }

@@ -103,6 +103,10 @@ struct vk_device {
    /** Table of enabled extensions */
    struct vk_device_extension_table enabled_extensions;
 
+   struct {
+      bool robustBufferAccess;
+   } enabled_features;
+
    /** Device-level dispatch table */
    struct vk_device_dispatch_table dispatch_table;
 
@@ -164,22 +168,6 @@ struct vk_device {
                                       VkDeviceMemory memory,
                                       bool signal_memory,
                                       struct vk_sync **sync_out);
-
-   /** Increments the reference count on a pipeline layout
-    *
-    * This is required for vk_enqueue_CmdBindDescriptorSets() to avoid
-    * use-after-free problems with pipeline layouts.  If you're not using
-    * the command queue, you can ignore this.
-    */
-   void (*ref_pipeline_layout)(struct vk_device *device,
-                               VkPipelineLayout layout);
-
-   /** Decrements the reference count on a pipeline layout
-    *
-    * See ref_pipeline_layout above.
-    */
-   void (*unref_pipeline_layout)(struct vk_device *device,
-                                 VkPipelineLayout layout);
 
    /* Set by vk_device_set_drm_fd() */
    int drm_fd;

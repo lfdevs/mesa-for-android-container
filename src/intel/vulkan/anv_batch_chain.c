@@ -442,14 +442,14 @@ anv_batch_bo_finish(struct anv_batch_bo *bbo, struct anv_batch *batch)
 
 static VkResult
 anv_batch_bo_grow(struct anv_cmd_buffer *cmd_buffer, struct anv_batch_bo *bbo,
-                  struct anv_batch *batch, size_t aditional,
+                  struct anv_batch *batch, size_t additional,
                   size_t batch_padding)
 {
    assert(batch->start == bbo->bo->map);
    bbo->length = batch->next - batch->start;
 
    size_t new_size = bbo->bo->size;
-   while (new_size <= bbo->length + aditional + batch_padding)
+   while (new_size <= bbo->length + additional + batch_padding)
       new_size *= 2;
 
    if (new_size == bbo->bo->size)
@@ -553,7 +553,7 @@ anv_batch_bo_list_clone(const struct list_head *list,
 static struct anv_batch_bo *
 anv_cmd_buffer_current_batch_bo(struct anv_cmd_buffer *cmd_buffer)
 {
-   return LIST_ENTRY(struct anv_batch_bo, cmd_buffer->batch_bos.prev, link);
+   return list_entry(cmd_buffer->batch_bos.prev, struct anv_batch_bo, link);
 }
 
 struct anv_address
@@ -571,7 +571,7 @@ static void
 emit_batch_buffer_start(struct anv_cmd_buffer *cmd_buffer,
                         struct anv_bo *bo, uint32_t offset)
 {
-   /* In gfx8+ the address field grew to two dwords to accomodate 48 bit
+   /* In gfx8+ the address field grew to two dwords to accommodate 48 bit
     * offsets. The high 16 bits are in the last dword, so we can use the gfx8
     * version in either case, as long as we set the instruction length in the
     * header accordingly.  This means that we always emit three dwords here
@@ -1689,7 +1689,7 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
       /* Since we aren't in the softpin case, all of our STATE_BASE_ADDRESS BOs
        * will get added automatically by processing relocations on the batch
        * buffer.  We have to add the surface state BO manually because it has
-       * relocations of its own that we need to be sure are processsed.
+       * relocations of its own that we need to be sure are processed.
        */
       result = anv_execbuf_add_bo(cmd_buffer->device, execbuf,
                                   ss_pool->block_pool.bo,
@@ -1911,7 +1911,7 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
       anv_cmd_buffer_process_relocs(cmd_buffers[0], &cmd_buffers[0]->surface_relocs);
    }
 
-   if (!device->info.has_llc) {
+   if (device->physical->memory.need_clflush) {
       __builtin_ia32_mfence();
       for (uint32_t i = 0; i < num_cmd_buffers; i++) {
          u_vector_foreach(bbo, &cmd_buffers[i]->seen_bbos) {
@@ -1998,7 +1998,7 @@ setup_utrace_execbuf(struct anv_execbuf *execbuf, struct anv_queue *queue,
       flush->batch_bo->exec_obj_index = last_idx;
    }
 
-   if (!device->info.has_llc)
+   if (device->physical->memory.need_clflush)
       intel_flush_range(flush->batch_bo->map, flush->batch_bo->size);
 
    execbuf->execbuf = (struct drm_i915_gem_execbuffer2) {
@@ -2060,7 +2060,7 @@ anv_queue_exec_utrace_locked(struct anv_queue *queue,
  *     with our list of BOs out of sync with our list of gem handles.
  *
  *  2) The algorithm we use for building the list of unique buffers isn't
- *     thread-safe. While the client is supposed to syncronize around
+ *     thread-safe. While the client is supposed to synchronize around
  *     QueueSubmit, this would be extremely difficult to debug if it ever came
  *     up in the wild due to a broken app. It's better to play it safe and
  *     just lock around QueueSubmit.
@@ -2140,6 +2140,15 @@ anv_queue_exec_locked(struct anv_queue *queue,
          goto error;
    }
 
+   if (queue->sync) {
+      result = anv_execbuf_add_sync(device, &execbuf,
+                                    queue->sync,
+                                    true /* is_signal */,
+                                    0 /* signal_value */);
+      if (result != VK_SUCCESS)
+         goto error;
+   }
+
    if (cmd_buffer_count) {
       result = setup_execbuf_for_cmd_buffers(&execbuf, queue,
                                              cmd_buffers,
@@ -2160,8 +2169,9 @@ anv_queue_exec_locked(struct anv_queue *queue,
       for (uint32_t i = 0; i < execbuf.bo_count; i++) {
          const struct anv_bo *bo = execbuf.bos[i];
 
-         fprintf(stderr, "   BO: addr=0x%016"PRIx64" size=%010"PRIx64" handle=%05u name=%s\n",
-                 bo->offset, bo->size, bo->gem_handle, bo->name);
+         fprintf(stderr, "   BO: addr=0x%016"PRIx64"-0x%016"PRIx64" size=0x%010"PRIx64
+                 " handle=%05u name=%s\n",
+                 bo->offset, bo->offset + bo->size - 1, bo->size, bo->gem_handle, bo->name);
       }
    }
 
@@ -2253,6 +2263,15 @@ anv_queue_exec_locked(struct anv_queue *queue,
       anv_gem_execbuffer(queue->device, &execbuf.execbuf);
    if (ret)
       result = vk_queue_set_lost(&queue->vk, "execbuf2 failed: %m");
+
+   if (queue->sync) {
+      VkResult result = vk_sync_wait(&device->vk,
+                                     queue->sync, 0,
+                                     VK_SYNC_WAIT_COMPLETE,
+                                     UINT64_MAX);
+      if (result != VK_SUCCESS)
+         result = vk_queue_set_lost(&queue->vk, "sync wait failed");
+   }
 
    struct drm_i915_gem_exec_object2 *objects = execbuf.objects;
    for (uint32_t k = 0; k < execbuf.bo_count; k++) {
@@ -2416,7 +2435,7 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
       return result;
 
    memcpy(batch_bo->map, batch->start, batch_size);
-   if (!device->info.has_llc)
+   if (device->physical->memory.need_clflush)
       intel_flush_range(batch_bo->map, batch_size);
 
    struct anv_execbuf execbuf;
@@ -2427,6 +2446,13 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
    result = anv_execbuf_add_bo(device, &execbuf, batch_bo, NULL, 0);
    if (result != VK_SUCCESS)
       goto fail;
+
+   if (INTEL_DEBUG(DEBUG_BATCH)) {
+      intel_print_batch(&device->decoder_ctx,
+                        batch_bo->map,
+                        batch_bo->size,
+                        batch_bo->offset, false);
+   }
 
    execbuf.execbuf = (struct drm_i915_gem_execbuffer2) {
       .buffers_ptr = (uintptr_t) execbuf.objects,

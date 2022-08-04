@@ -34,6 +34,7 @@
 #include "program/program.h"
 
 #include "brw_clip.h"
+#include "brw_prim.h"
 
 
 /* This is performed against the original triangles, so no indirection

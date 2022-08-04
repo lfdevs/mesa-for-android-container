@@ -46,7 +46,7 @@ int virgl_debug = 0;
 static const struct debug_named_value virgl_debug_options[] = {
    { "verbose",   VIRGL_DEBUG_VERBOSE,             NULL },
    { "tgsi",      VIRGL_DEBUG_TGSI,                NULL },
-   { "nir",       VIRGL_DEBUG_NIR,                 NULL },
+   { "use_tgsi",  VIRGL_DEBUG_USE_TGSI,            NULL },
    { "noemubgra", VIRGL_DEBUG_NO_EMULATE_BGRA,     "Disable tweak to emulate BGRA as RGBA on GLES hosts"},
    { "nobgraswz", VIRGL_DEBUG_NO_BGRA_DEST_SWIZZLE,"Disable tweak to swizzle emulated BGRA on GLES hosts" },
    { "sync",      VIRGL_DEBUG_SYNC,                "Sync after every flush" },
@@ -83,7 +83,6 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
-   case PIPE_CAP_VERTEX_SHADER_SATURATE:
       return 1;
    case PIPE_CAP_ANISOTROPIC_FILTER:
       return vscreen->caps.caps.v2.max_anisotropy > 1.0;
@@ -219,7 +218,7 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return vscreen->caps.caps.v1.bset.texture_multisample;
    case PIPE_CAP_MAX_VIEWPORTS:
       return vscreen->caps.caps.v1.max_viewports;
-   case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
+   case PIPE_CAP_MAX_TEXEL_BUFFER_ELEMENTS_UINT:
       return vscreen->caps.caps.v1.max_tbo_size;
    case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
@@ -315,7 +314,6 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_PCI_BUS:
    case PIPE_CAP_PCI_DEVICE:
    case PIPE_CAP_PCI_FUNCTION:
-   case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
       return 0;
    case PIPE_CAP_CLEAR_TEXTURE:
@@ -324,14 +322,14 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_CLIP_HALFZ;
    case PIPE_CAP_MAX_GS_INVOCATIONS:
       return 32;
-   case PIPE_CAP_MAX_SHADER_BUFFER_SIZE:
+   case PIPE_CAP_MAX_SHADER_BUFFER_SIZE_UINT:
       return 1 << 27;
    case PIPE_CAP_VENDOR_ID:
       return 0x1af4;
    case PIPE_CAP_DEVICE_ID:
       return 0x1010;
    case PIPE_CAP_ACCELERATED:
-      return 1;
+      return -1; /* -1 means unknown */
    case PIPE_CAP_UMA:
    case PIPE_CAP_VIDEO_MEMORY:
       if (vscreen->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_VIDEO_MEMORY)
@@ -342,8 +340,6 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_DEST_SURFACE_SRGB_CONTROL:
       return (vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_SRGB_WRITE_CONTROL) ||
             (vscreen->caps.caps.v2.host_feature_check_version < 1);
-   case PIPE_CAP_TGSI_SKIP_SHRINK_IO_ARRAYS:
-      return vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_INDIRECT_INPUT_ADDR;
    case PIPE_CAP_SHAREABLE_SHADERS:
       /* Shader creation emits the shader through the context's command buffer
        * in virgl_encode_shader_state().
@@ -424,8 +420,10 @@ virgl_get_shader_param(struct pipe_screen *screen,
          return vscreen->caps.caps.v1.glsl_level >= 130;
       case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
          return 32;
-      case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
-         return 4096 * sizeof(float[4]);
+      case PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE:
+         if (vscreen->caps.caps.v2.host_feature_check_version < 12)
+            return 4096 * sizeof(float[4]);
+         return vscreen->caps.caps.v2.max_const_buffer_size[shader];
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
          if (shader == PIPE_SHADER_FRAGMENT || shader == PIPE_SHADER_COMPUTE)
             return vscreen->caps.caps.v2.max_shader_buffer_frag_compute;
@@ -437,15 +435,13 @@ virgl_get_shader_param(struct pipe_screen *screen,
          else
             return vscreen->caps.caps.v2.max_shader_image_other_stages;
       case PIPE_SHADER_CAP_PREFERRED_IR:
-         return (virgl_debug & VIRGL_DEBUG_NIR) ? PIPE_SHADER_IR_NIR : PIPE_SHADER_IR_TGSI;
+         return (virgl_debug & VIRGL_DEBUG_USE_TGSI) ? PIPE_SHADER_IR_TGSI : PIPE_SHADER_IR_NIR;
       case PIPE_SHADER_CAP_SUPPORTED_IRS:
-         return (1 << PIPE_SHADER_IR_TGSI) | ((virgl_debug & VIRGL_DEBUG_NIR) ? (1 << PIPE_SHADER_IR_NIR) : 0);
+         return (1 << PIPE_SHADER_IR_TGSI) | ((virgl_debug & VIRGL_DEBUG_USE_TGSI) ? 0 : (1 << PIPE_SHADER_IR_NIR));
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
          return vscreen->caps.caps.v2.max_atomic_counters[shader];
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
          return vscreen->caps.caps.v2.max_atomic_counter_buffers[shader];
-      case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
-      case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
       case PIPE_SHADER_CAP_INT64_ATOMICS:
       case PIPE_SHADER_CAP_FP16:
       case PIPE_SHADER_CAP_FP16_DERIVATIVES:
@@ -578,8 +574,6 @@ virgl_is_vertex_format_supported(struct pipe_screen *screen,
    int i;
 
    format_desc = util_format_description(format);
-   if (!format_desc)
-      return false;
 
    if (format == PIPE_FORMAT_R11G11B10_FLOAT) {
       int vformat = VIRGL_FORMAT_R11G11B10_FLOAT;
@@ -687,8 +681,6 @@ virgl_is_format_supported( struct pipe_screen *screen,
           target == PIPE_TEXTURE_CUBE_ARRAY);
 
    format_desc = util_format_description(format);
-   if (!format_desc)
-      return false;
 
    if (util_format_is_intensity(format))
       return false;
@@ -961,8 +953,12 @@ static void virgl_disk_cache_create(struct virgl_screen *screen)
    _mesa_sha1_init(&sha1_ctx);
    _mesa_sha1_update(&sha1_ctx, id_sha1, build_id_len);
 
-   uint32_t shader_debug_flags = virgl_debug & VIRGL_DEBUG_NIR;
+   uint32_t shader_debug_flags = virgl_debug & VIRGL_DEBUG_USE_TGSI;
    _mesa_sha1_update(&sha1_ctx, &shader_debug_flags, sizeof(shader_debug_flags));
+
+   /* When we switch the host the caps might change and then we might have to
+    * apply different lowering. */
+   _mesa_sha1_update(&sha1_ctx, &screen->caps, sizeof(screen->caps));
 
    uint8_t sha1[20];
    _mesa_sha1_final(&sha1_ctx, sha1);
@@ -1096,6 +1092,7 @@ virgl_create_screen(struct virgl_winsys *vws, const struct pipe_screen_config *c
        * ffract+fsub back into ffloor.
        */
       screen->compiler_options.lower_ffloor = true;
+      screen->compiler_options.lower_fneg = true;
    }
 
    slab_create_parent(&screen->transfer_pool, sizeof(struct virgl_transfer), 16);

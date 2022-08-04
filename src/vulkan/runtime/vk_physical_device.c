@@ -45,6 +45,9 @@ vk_physical_device_init(struct vk_physical_device *pdevice,
    vk_physical_device_dispatch_table_from_entrypoints(
       &pdevice->dispatch_table, &vk_common_physical_device_entrypoints, false);
 
+   /* TODO */
+   pdevice->disk_cache = NULL;
+
    return VK_SUCCESS;
 }
 
@@ -170,21 +173,7 @@ vk_common_GetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
 
    pdevice->dispatch_table.GetPhysicalDeviceMemoryProperties2(physicalDevice,
                                                               &props2);
-   /* dEQP-VK.api.info.get_physical_device_properties2.memory_properties memsets
-    * the struct to 0xcd and expects that the unused array elements are
-    * untouched.
-    */
-   pMemoryProperties->memoryHeapCount = props2.memoryProperties.memoryHeapCount;
-   for (int i = 0; i < pMemoryProperties->memoryHeapCount; i++) {
-      pMemoryProperties->memoryHeaps[i].flags = props2.memoryProperties.memoryHeaps[i].flags;
-      pMemoryProperties->memoryHeaps[i].size = props2.memoryProperties.memoryHeaps[i].size;
-   }
-
-   pMemoryProperties->memoryTypeCount = props2.memoryProperties.memoryTypeCount;
-   for (int i = 0; i < pMemoryProperties->memoryTypeCount; i++) {
-      pMemoryProperties->memoryTypes[i].heapIndex = props2.memoryProperties.memoryTypes[i].heapIndex;
-      pMemoryProperties->memoryTypes[i].propertyFlags = props2.memoryProperties.memoryTypes[i].propertyFlags;
-   }
+   *pMemoryProperties = props2.memoryProperties;
 }
 
 VKAPI_ATTR void VKAPI_CALL

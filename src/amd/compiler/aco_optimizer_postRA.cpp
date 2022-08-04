@@ -194,7 +194,7 @@ try_apply_branch_vcc(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
     */
 
    /* Don't try to optimize this on GFX6-7 because SMEM may corrupt the vccz bit. */
-   if (ctx.program->chip_class < GFX8)
+   if (ctx.program->gfx_level < GFX8)
       return;
 
    if (instr->format != Format::PSEUDO_BRANCH || instr->operands.size() == 0 ||

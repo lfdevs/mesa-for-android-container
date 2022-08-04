@@ -1,9 +1,9 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  * Copyright 2008 VMware, Inc.  All rights reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -11,11 +11,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -23,7 +23,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 /* Author:
@@ -36,7 +36,7 @@
 #include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
-#include "util/simple_list.h"
+#include "util/list.h"
 #include "util/u_upload_mgr.h"
 #include "lp_clear.h"
 #include "lp_context.h"
@@ -57,8 +57,12 @@
 static void llvmpipe_destroy( struct pipe_context *pipe )
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
+   struct llvmpipe_screen *lp_screen = llvmpipe_screen(pipe->screen);
    uint i;
 
+   mtx_lock(&lp_screen->ctx_mutex);
+   list_del(&llvmpipe->list);
+   mtx_unlock(&lp_screen->ctx_mutex);
    lp_print_counters();
 
    if (llvmpipe->csctx) {
@@ -189,8 +193,9 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
                         unsigned flags)
 {
    struct llvmpipe_context *llvmpipe;
+   struct llvmpipe_screen *lp_screen = llvmpipe_screen(screen);
 
-   if (!llvmpipe_screen_late_init(llvmpipe_screen(screen)))
+   if (!llvmpipe_screen_late_init(lp_screen))
       return NULL;
 
    llvmpipe = align_malloc(sizeof(struct llvmpipe_context), 16);
@@ -199,11 +204,11 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
 
    memset(llvmpipe, 0, sizeof *llvmpipe);
 
-   make_empty_list(&llvmpipe->fs_variants_list);
+   list_inithead(&llvmpipe->fs_variants_list.list);
 
-   make_empty_list(&llvmpipe->setup_variants_list);
+   list_inithead(&llvmpipe->setup_variants_list.list);
 
-   make_empty_list(&llvmpipe->cs_variants_list);
+   list_inithead(&llvmpipe->cs_variants_list.list);
 
    llvmpipe->pipe.screen = screen;
    llvmpipe->pipe.priv = priv;
@@ -245,6 +250,10 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    if (!llvmpipe->context)
       goto fail;
 
+#if LLVM_VERSION_MAJOR >= 15
+   LLVMContextSetOpaquePointers(llvmpipe->context, false);
+#endif
+
    /*
     * Create drawing context and plug our rendering stage into it.
     */
@@ -254,7 +263,7 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
       goto fail;
 
    draw_set_disk_cache_callbacks(llvmpipe->draw,
-                                 llvmpipe_screen(screen),
+                                 lp_screen,
                                  lp_draw_disk_cache_find_shader,
                                  lp_draw_disk_cache_insert_shader);
 
@@ -288,7 +297,7 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    draw_install_aapoint_stage(llvmpipe->draw, &llvmpipe->pipe);
    draw_install_pstipple_stage(llvmpipe->draw, &llvmpipe->pipe);
 
-   /* convert points and lines into triangles: 
+   /* convert points and lines into triangles:
     * (otherwise, draw points and lines natively)
     */
    draw_wide_point_sprites(llvmpipe->draw, FALSE);
@@ -307,6 +316,9 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
     */
    llvmpipe->dirty |= LP_NEW_SCISSOR;
 
+   mtx_lock(&lp_screen->ctx_mutex);
+   list_addtail(&llvmpipe->list, &lp_screen->ctx_list);
+   mtx_unlock(&lp_screen->ctx_mutex);
    return &llvmpipe->pipe;
 
  fail:

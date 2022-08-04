@@ -27,6 +27,7 @@
 
 #include <vulkan/vulkan_core.h>
 #include "util/format/u_format.h"
+#include "util/u_math.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -165,6 +166,15 @@ vk_format_description(VkFormat format)
 }
 
 static inline unsigned
+vk_format_get_component_bits(VkFormat format, enum util_format_colorspace colorspace,
+                             unsigned component)
+{
+   return util_format_get_component_bits(vk_format_to_pipe_format(format),
+                                         colorspace,
+                                         component);
+}
+
+static inline unsigned
 vk_format_get_nr_components(VkFormat format)
 {
    return util_format_get_nr_components(vk_format_to_pipe_format(format));
@@ -181,6 +191,18 @@ vk_format_get_blocksizebits(VkFormat format)
 {
    return util_format_get_blocksizebits(vk_format_to_pipe_format(format));
 }
+
+static inline unsigned
+vk_format_get_plane_count(VkFormat format)
+{
+   return util_format_get_num_planes(vk_format_to_pipe_format(format));
+}
+
+VkFormat
+vk_format_get_plane_format(VkFormat format, unsigned plane_id);
+
+VkFormat
+vk_format_get_aspect_format(VkFormat format, const VkImageAspectFlags aspect);
 
 #ifdef __cplusplus
 }

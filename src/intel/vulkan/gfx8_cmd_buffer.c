@@ -107,7 +107,8 @@ genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer, bool enable)
 }
 
 UNUSED static bool
-want_depth_pma_fix(struct anv_cmd_buffer *cmd_buffer)
+want_depth_pma_fix(struct anv_cmd_buffer *cmd_buffer,
+                   const struct vk_depth_stencil_state *ds)
 {
    assert(GFX_VER == 8);
 
@@ -174,7 +175,7 @@ want_depth_pma_fix(struct anv_cmd_buffer *cmd_buffer)
     */
 
    /* 3DSTATE_WM_DEPTH_STENCIL::DepthTestEnable */
-   if (!pipeline->depth_test_enable)
+   if (!ds->depth.test_enable)
       return false;
 
    /* (((3DSTATE_PS_EXTRA::PixelShaderKillsPixels ||
@@ -190,13 +191,14 @@ want_depth_pma_fix(struct anv_cmd_buffer *cmd_buffer)
     *     3DSTATE_STENCIL_BUFFER::STENCIL_BUFFER_ENABLE))) ||
     *  (3DSTATE_PS_EXTRA:: Pixel Shader Computed Depth mode != PSCDEPTH_OFF))
     */
-   return (pipeline->kill_pixel && (pipeline->writes_depth ||
-                                    pipeline->writes_stencil)) ||
+   return (pipeline->kill_pixel && (ds->depth.write_enable ||
+                                    ds->stencil.write_enable)) ||
           wm_prog_data->computed_depth_mode != PSCDEPTH_OFF;
 }
 
 UNUSED static bool
-want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer)
+want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer,
+                     const struct vk_depth_stencil_state *ds)
 {
    if (GFX_VER > 9)
       return false;
@@ -283,19 +285,13 @@ want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer)
    /* 3DSTATE_STENCIL_BUFFER::STENCIL_BUFFER_ENABLE &&
     * 3DSTATE_WM_DEPTH_STENCIL::StencilTestEnable
     */
-   const bool stc_test_en =
-      cmd_buffer->state.gfx.stencil_att.iview != NULL &&
-      pipeline->stencil_test_enable;
+   const bool stc_test_en = ds->stencil.test_enable;
 
    /* 3DSTATE_STENCIL_BUFFER::STENCIL_BUFFER_ENABLE &&
     * (3DSTATE_WM_DEPTH_STENCIL::Stencil Buffer Write Enable &&
     *  3DSTATE_DEPTH_BUFFER::STENCIL_WRITE_ENABLE)
     */
-   const bool stc_write_en =
-      cmd_buffer->state.gfx.stencil_att.iview != NULL &&
-      (cmd_buffer->state.gfx.dynamic.stencil_write_mask.front ||
-       cmd_buffer->state.gfx.dynamic.stencil_write_mask.back) &&
-      pipeline->writes_stencil;
+   const bool stc_write_en = ds->stencil.write_enable;
 
    /* STC_TEST_EN && 3DSTATE_PS_EXTRA::PixelShaderComputesStencil */
    const bool comp_stc_en = stc_test_en && wm_prog_data->computed_stencil;
@@ -320,54 +316,40 @@ void
 genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
-   struct anv_dynamic_state *d = &cmd_buffer->state.gfx.dynamic;
+   const struct vk_dynamic_graphics_state *dyn =
+      &cmd_buffer->vk.dynamic_graphics_state;
 
 #if GFX_VER >= 11
    if (cmd_buffer->device->vk.enabled_extensions.KHR_fragment_shading_rate &&
-       cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_SHADING_RATE)
-      genX(emit_shading_rate)(&cmd_buffer->batch, pipeline, d);
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_FSR))
+      genX(emit_shading_rate)(&cmd_buffer->batch, pipeline, &dyn->fsr);
 #endif /* GFX_VER >= 11 */
 
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
-                                      ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY)) {
-      uint32_t topology;
-      if (anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL))
-         topology = pipeline->topology;
-      else
-         topology = genX(vk_to_intel_primitive_type)[d->primitive_topology];
-
-      cmd_buffer->state.gfx.primitive_topology = topology;
-
-      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_TOPOLOGY), vft) {
-         vft.PrimitiveTopologyType = topology;
-      }
-   }
-
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
-                                      ANV_CMD_DIRTY_DYNAMIC_LINE_WIDTH)) {
+   if ((cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_LINE_WIDTH)) {
       uint32_t sf_dw[GENX(3DSTATE_SF_length)];
       struct GENX(3DSTATE_SF) sf = {
          GENX(3DSTATE_SF_header),
       };
 #if GFX_VER == 8
       if (cmd_buffer->device->info.platform == INTEL_PLATFORM_CHV) {
-         sf.CHVLineWidth = d->line_width;
+         sf.CHVLineWidth = dyn->rs.line.width;
       } else {
-         sf.LineWidth = d->line_width;
+         sf.LineWidth = dyn->rs.line.width;
       }
 #else
-      sf.LineWidth = d->line_width,
+      sf.LineWidth = dyn->rs.line.width,
 #endif
       GENX(3DSTATE_SF_pack)(NULL, sf_dw, &sf);
       anv_batch_emit_merge(&cmd_buffer->batch, sf_dw, pipeline->gfx8.sf);
    }
 
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
-                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS |
-                                      ANV_CMD_DIRTY_DYNAMIC_CULL_MODE |
-                                      ANV_CMD_DIRTY_DYNAMIC_FRONT_FACE |
-                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS_ENABLE |
-                                      ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY)) {
+   if ((cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_CULL_MODE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_FRONT_FACE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_DEPTH_BIAS_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_DEPTH_BIAS_FACTORS)) {
       /* Take dynamic primitive topology in to account with
        *    3DSTATE_RASTER::APIMode
        *    3DSTATE_RASTER::DXMultisampleRasterizationEnable
@@ -375,25 +357,17 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
        */
       uint32_t api_mode = 0;
       bool msaa_raster_enable = false;
-      bool aa_enable = 0;
 
-      if (cmd_buffer->state.gfx.pipeline->dynamic_states &
-          ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_TOPOLOGY) {
-         VkPrimitiveTopology primitive_topology =
-            cmd_buffer->state.gfx.dynamic.primitive_topology;
+      VkPolygonMode dynamic_raster_mode =
+         genX(raster_polygon_mode)(cmd_buffer->state.gfx.pipeline,
+                                   dyn->ia.primitive_topology);
 
-         VkPolygonMode dynamic_raster_mode =
-            genX(raster_polygon_mode)(cmd_buffer->state.gfx.pipeline,
-                                      primitive_topology);
+      genX(rasterization_mode)(dynamic_raster_mode,
+                               pipeline->line_mode, dyn->rs.line.width,
+                               &api_mode, &msaa_raster_enable);
 
-         genX(rasterization_mode)(
-            dynamic_raster_mode, pipeline->line_mode, d->line_width,
-            &api_mode, &msaa_raster_enable);
-
-         aa_enable =
-            anv_rasterization_aa_mode(dynamic_raster_mode,
-                                      pipeline->line_mode);
-      }
+      bool aa_enable = anv_rasterization_aa_mode(dynamic_raster_mode,
+                                                 pipeline->line_mode);
 
       uint32_t raster_dw[GENX(3DSTATE_RASTER_length)];
       struct GENX(3DSTATE_RASTER) raster = {
@@ -401,14 +375,14 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          .APIMode = api_mode,
          .DXMultisampleRasterizationEnable = msaa_raster_enable,
          .AntialiasingEnable = aa_enable,
-         .GlobalDepthOffsetConstant = d->depth_bias.bias,
-         .GlobalDepthOffsetScale = d->depth_bias.slope,
-         .GlobalDepthOffsetClamp = d->depth_bias.clamp,
-         .CullMode = genX(vk_to_intel_cullmode)[d->cull_mode],
-         .FrontWinding = genX(vk_to_intel_front_face)[d->front_face],
-         .GlobalDepthOffsetEnableSolid = d->depth_bias_enable,
-         .GlobalDepthOffsetEnableWireframe = d->depth_bias_enable,
-         .GlobalDepthOffsetEnablePoint = d->depth_bias_enable,
+         .CullMode     = genX(vk_to_intel_cullmode)[dyn->rs.cull_mode],
+         .FrontWinding = genX(vk_to_intel_front_face)[dyn->rs.front_face],
+         .GlobalDepthOffsetEnableSolid       = dyn->rs.depth_bias.enable,
+         .GlobalDepthOffsetEnableWireframe   = dyn->rs.depth_bias.enable,
+         .GlobalDepthOffsetEnablePoint       = dyn->rs.depth_bias.enable,
+         .GlobalDepthOffsetConstant          = dyn->rs.depth_bias.constant,
+         .GlobalDepthOffsetScale             = dyn->rs.depth_bias.slope,
+         .GlobalDepthOffsetClamp             = dyn->rs.depth_bias.clamp,
       };
       GENX(3DSTATE_RASTER_pack)(NULL, raster_dw, &raster);
       anv_batch_emit_merge(&cmd_buffer->batch, raster_dw,
@@ -421,19 +395,19 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
     * using a big old #if switch here.
     */
 #if GFX_VER == 8
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_DYNAMIC_BLEND_CONSTANTS |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE)) {
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_REFERENCE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_BLEND_CONSTANTS)) {
       struct anv_state cc_state =
          anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
                                             GENX(COLOR_CALC_STATE_length) * 4,
                                             64);
       struct GENX(COLOR_CALC_STATE) cc = {
-         .BlendConstantColorRed = d->blend_constants[0],
-         .BlendConstantColorGreen = d->blend_constants[1],
-         .BlendConstantColorBlue = d->blend_constants[2],
-         .BlendConstantColorAlpha = d->blend_constants[3],
-         .StencilReferenceValue = d->stencil_reference.front & 0xff,
-         .BackfaceStencilReferenceValue = d->stencil_reference.back & 0xff,
+         .BlendConstantColorRed = dyn->cb.blend_constants[0],
+         .BlendConstantColorGreen = dyn->cb.blend_constants[1],
+         .BlendConstantColorBlue = dyn->cb.blend_constants[2],
+         .BlendConstantColorAlpha = dyn->cb.blend_constants[3],
+         .StencilReferenceValue = dyn->ds.stencil.front.reference & 0xff,
+         .BackfaceStencilReferenceValue = dyn->ds.stencil.back.reference & 0xff,
       };
       GENX(COLOR_CALC_STATE_pack)(NULL, cc_state.map, &cc);
 
@@ -443,63 +417,62 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
       }
    }
 
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
-                                      ANV_CMD_DIRTY_RENDER_TARGETS |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK |
-                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_TEST_ENABLE |
-                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_WRITE_ENABLE |
-                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_COMPARE_OP |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_TEST_ENABLE |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_OP)) {
-      uint32_t wm_depth_stencil_dw[GENX(3DSTATE_WM_DEPTH_STENCIL_length)];
+   if ((cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
+                                       ANV_CMD_DIRTY_RENDER_TARGETS)) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_WRITE_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_COMPARE_OP) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_OP) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_COMPARE_MASK) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_WRITE_MASK)) {
+      VkImageAspectFlags ds_aspects = 0;
+      if (cmd_buffer->state.gfx.depth_att.vk_format != VK_FORMAT_UNDEFINED)
+         ds_aspects |= VK_IMAGE_ASPECT_DEPTH_BIT;
+      if (cmd_buffer->state.gfx.stencil_att.vk_format != VK_FORMAT_UNDEFINED)
+         ds_aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
-      struct GENX(3DSTATE_WM_DEPTH_STENCIL wm_depth_stencil) = {
-         GENX(3DSTATE_WM_DEPTH_STENCIL_header),
+      struct vk_depth_stencil_state opt_ds = dyn->ds;
+      vk_optimize_depth_stencil_state(&opt_ds, ds_aspects, true);
 
-         .StencilTestMask = d->stencil_compare_mask.front & 0xff,
-         .StencilWriteMask = d->stencil_write_mask.front & 0xff,
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_WM_DEPTH_STENCIL), ds) {
+         ds.DoubleSidedStencilEnable = true;
 
-         .BackfaceStencilTestMask = d->stencil_compare_mask.back & 0xff,
-         .BackfaceStencilWriteMask = d->stencil_write_mask.back & 0xff,
+         ds.StencilTestMask = opt_ds.stencil.front.compare_mask & 0xff;
+         ds.StencilWriteMask = opt_ds.stencil.front.write_mask & 0xff;
 
-         .StencilBufferWriteEnable =
-            (d->stencil_write_mask.front || d->stencil_write_mask.back) &&
-            d->stencil_test_enable,
+         ds.BackfaceStencilTestMask = opt_ds.stencil.back.compare_mask & 0xff;
+         ds.BackfaceStencilWriteMask = opt_ds.stencil.back.write_mask & 0xff;
 
-         .DepthTestEnable = d->depth_test_enable,
-         .DepthBufferWriteEnable = d->depth_test_enable && d->depth_write_enable,
-         .DepthTestFunction = genX(vk_to_intel_compare_op)[d->depth_compare_op],
-         .StencilTestEnable = d->stencil_test_enable,
-         .StencilFailOp = genX(vk_to_intel_stencil_op)[d->stencil_op.front.fail_op],
-         .StencilPassDepthPassOp = genX(vk_to_intel_stencil_op)[d->stencil_op.front.pass_op],
-         .StencilPassDepthFailOp = genX(vk_to_intel_stencil_op)[d->stencil_op.front.depth_fail_op],
-         .StencilTestFunction = genX(vk_to_intel_compare_op)[d->stencil_op.front.compare_op],
-         .BackfaceStencilFailOp = genX(vk_to_intel_stencil_op)[d->stencil_op.back.fail_op],
-         .BackfaceStencilPassDepthPassOp = genX(vk_to_intel_stencil_op)[d->stencil_op.back.pass_op],
-         .BackfaceStencilPassDepthFailOp = genX(vk_to_intel_stencil_op)[d->stencil_op.back.depth_fail_op],
-         .BackfaceStencilTestFunction = genX(vk_to_intel_compare_op)[d->stencil_op.back.compare_op],
-      };
-      GENX(3DSTATE_WM_DEPTH_STENCIL_pack)(NULL, wm_depth_stencil_dw,
-                                          &wm_depth_stencil);
+         ds.DepthTestEnable = opt_ds.depth.test_enable;
+         ds.DepthBufferWriteEnable = opt_ds.depth.write_enable;
+         ds.DepthTestFunction = genX(vk_to_intel_compare_op)[opt_ds.depth.compare_op];
+         ds.StencilTestEnable = opt_ds.stencil.test_enable;
+         ds.StencilBufferWriteEnable = opt_ds.stencil.write_enable;
+         ds.StencilFailOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.front.op.fail];
+         ds.StencilPassDepthPassOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.front.op.pass];
+         ds.StencilPassDepthFailOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.front.op.depth_fail];
+         ds.StencilTestFunction = genX(vk_to_intel_compare_op)[opt_ds.stencil.front.op.compare];
+         ds.BackfaceStencilFailOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.back.op.fail];
+         ds.BackfaceStencilPassDepthPassOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.back.op.pass];
+         ds.BackfaceStencilPassDepthFailOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.back.op.depth_fail];
+         ds.BackfaceStencilTestFunction = genX(vk_to_intel_compare_op)[opt_ds.stencil.back.op.compare];
+      }
 
-      anv_batch_emit_merge(&cmd_buffer->batch, wm_depth_stencil_dw,
-                           pipeline->gfx8.wm_depth_stencil);
-
-      genX(cmd_buffer_enable_pma_fix)(cmd_buffer,
-                                      want_depth_pma_fix(cmd_buffer));
+      const bool pma = want_depth_pma_fix(cmd_buffer, &opt_ds);
+      genX(cmd_buffer_enable_pma_fix)(cmd_buffer, pma);
    }
 #else
-   if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_BLEND_CONSTANTS) {
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_BLEND_CONSTANTS)) {
       struct anv_state cc_state =
          anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
                                             GENX(COLOR_CALC_STATE_length) * 4,
                                             64);
       struct GENX(COLOR_CALC_STATE) cc = {
-         .BlendConstantColorRed = d->blend_constants[0],
-         .BlendConstantColorGreen = d->blend_constants[1],
-         .BlendConstantColorBlue = d->blend_constants[2],
-         .BlendConstantColorAlpha = d->blend_constants[3],
+         .BlendConstantColorRed = dyn->cb.blend_constants[0],
+         .BlendConstantColorGreen = dyn->cb.blend_constants[1],
+         .BlendConstantColorBlue = dyn->cb.blend_constants[2],
+         .BlendConstantColorAlpha = dyn->cb.blend_constants[3],
       };
       GENX(COLOR_CALC_STATE_pack)(NULL, cc_state.map, &cc);
 
@@ -509,92 +482,109 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
       }
    }
 
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
-                                      ANV_CMD_DIRTY_RENDER_TARGETS |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE |
-                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_TEST_ENABLE |
-                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_WRITE_ENABLE |
-                                      ANV_CMD_DIRTY_DYNAMIC_DEPTH_COMPARE_OP |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_TEST_ENABLE |
-                                      ANV_CMD_DIRTY_DYNAMIC_STENCIL_OP)) {
-      uint32_t dwords[GENX(3DSTATE_WM_DEPTH_STENCIL_length)];
-      struct GENX(3DSTATE_WM_DEPTH_STENCIL) wm_depth_stencil = {
-         GENX(3DSTATE_WM_DEPTH_STENCIL_header),
+   if ((cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
+                                       ANV_CMD_DIRTY_RENDER_TARGETS)) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_WRITE_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_COMPARE_OP) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_OP) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_COMPARE_MASK) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_WRITE_MASK) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_REFERENCE)) {
+      VkImageAspectFlags ds_aspects = 0;
+      if (cmd_buffer->state.gfx.depth_att.vk_format != VK_FORMAT_UNDEFINED)
+         ds_aspects |= VK_IMAGE_ASPECT_DEPTH_BIT;
+      if (cmd_buffer->state.gfx.stencil_att.vk_format != VK_FORMAT_UNDEFINED)
+         ds_aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
-         .StencilTestMask = d->stencil_compare_mask.front & 0xff,
-         .StencilWriteMask = d->stencil_write_mask.front & 0xff,
+      struct vk_depth_stencil_state opt_ds = dyn->ds;
+      vk_optimize_depth_stencil_state(&opt_ds, ds_aspects, true);
 
-         .BackfaceStencilTestMask = d->stencil_compare_mask.back & 0xff,
-         .BackfaceStencilWriteMask = d->stencil_write_mask.back & 0xff,
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_WM_DEPTH_STENCIL), ds) {
+         ds.DoubleSidedStencilEnable = true;
 
-         .StencilReferenceValue = d->stencil_reference.front & 0xff,
-         .BackfaceStencilReferenceValue = d->stencil_reference.back & 0xff,
+         ds.StencilTestMask = opt_ds.stencil.front.compare_mask & 0xff;
+         ds.StencilWriteMask = opt_ds.stencil.front.write_mask & 0xff;
 
-         .StencilBufferWriteEnable =
-            (d->stencil_write_mask.front || d->stencil_write_mask.back) &&
-            d->stencil_test_enable,
+         ds.BackfaceStencilTestMask = opt_ds.stencil.back.compare_mask & 0xff;
+         ds.BackfaceStencilWriteMask = opt_ds.stencil.back.write_mask & 0xff;
 
-         .DepthTestEnable = d->depth_test_enable,
-         .DepthBufferWriteEnable = d->depth_test_enable && d->depth_write_enable,
-         .DepthTestFunction = genX(vk_to_intel_compare_op)[d->depth_compare_op],
-         .StencilTestEnable = d->stencil_test_enable,
-         .StencilFailOp = genX(vk_to_intel_stencil_op)[d->stencil_op.front.fail_op],
-         .StencilPassDepthPassOp = genX(vk_to_intel_stencil_op)[d->stencil_op.front.pass_op],
-         .StencilPassDepthFailOp = genX(vk_to_intel_stencil_op)[d->stencil_op.front.depth_fail_op],
-         .StencilTestFunction = genX(vk_to_intel_compare_op)[d->stencil_op.front.compare_op],
-         .BackfaceStencilFailOp = genX(vk_to_intel_stencil_op)[d->stencil_op.back.fail_op],
-         .BackfaceStencilPassDepthPassOp = genX(vk_to_intel_stencil_op)[d->stencil_op.back.pass_op],
-         .BackfaceStencilPassDepthFailOp = genX(vk_to_intel_stencil_op)[d->stencil_op.back.depth_fail_op],
-         .BackfaceStencilTestFunction = genX(vk_to_intel_compare_op)[d->stencil_op.back.compare_op],
+         ds.StencilReferenceValue = opt_ds.stencil.front.reference & 0xff;
+         ds.BackfaceStencilReferenceValue = opt_ds.stencil.back.reference & 0xff;
 
-      };
-      GENX(3DSTATE_WM_DEPTH_STENCIL_pack)(NULL, dwords, &wm_depth_stencil);
+         ds.DepthTestEnable = opt_ds.depth.test_enable;
+         ds.DepthBufferWriteEnable = opt_ds.depth.write_enable;
+         ds.DepthTestFunction = genX(vk_to_intel_compare_op)[opt_ds.depth.compare_op];
+         ds.StencilTestEnable = opt_ds.stencil.test_enable;
+         ds.StencilBufferWriteEnable = opt_ds.stencil.write_enable;
+         ds.StencilFailOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.front.op.fail];
+         ds.StencilPassDepthPassOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.front.op.pass];
+         ds.StencilPassDepthFailOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.front.op.depth_fail];
+         ds.StencilTestFunction = genX(vk_to_intel_compare_op)[opt_ds.stencil.front.op.compare];
+         ds.BackfaceStencilFailOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.back.op.fail];
+         ds.BackfaceStencilPassDepthPassOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.back.op.pass];
+         ds.BackfaceStencilPassDepthFailOp = genX(vk_to_intel_stencil_op)[opt_ds.stencil.back.op.depth_fail];
+         ds.BackfaceStencilTestFunction = genX(vk_to_intel_compare_op)[opt_ds.stencil.back.op.compare];
+      }
 
-      anv_batch_emit_merge(&cmd_buffer->batch, dwords,
-                           pipeline->gfx9.wm_depth_stencil);
-
-      genX(cmd_buffer_enable_pma_fix)(cmd_buffer,
-                                      want_stencil_pma_fix(cmd_buffer));
+      const bool pma = want_stencil_pma_fix(cmd_buffer, &opt_ds);
+      genX(cmd_buffer_enable_pma_fix)(cmd_buffer, pma);
    }
 #endif
 
 #if GFX_VER >= 12
-   if(cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS |
-                                     ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS_TEST_ENABLE)) {
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_BOUNDS)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_DEPTH_BOUNDS), db) {
-         db.DepthBoundsTestEnable = d->depth_bounds_test_enable;
-         db.DepthBoundsTestMinValue = d->depth_bounds.min;
-         db.DepthBoundsTestMaxValue = d->depth_bounds.max;
+         db.DepthBoundsTestEnable = dyn->ds.depth.bounds_test.enable;
+         db.DepthBoundsTestMinValue = dyn->ds.depth.bounds_test.min;
+         db.DepthBoundsTestMaxValue = dyn->ds.depth.bounds_test.max;
       }
    }
 #endif
 
-   if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE) {
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_LINE_STIPPLE)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_LINE_STIPPLE), ls) {
-         ls.LineStipplePattern = d->line_stipple.pattern;
+         ls.LineStipplePattern = dyn->rs.line.stipple.pattern;
          ls.LineStippleInverseRepeatCount =
-            1.0f / MAX2(1, d->line_stipple.factor);
-         ls.LineStippleRepeatCount = d->line_stipple.factor;
+            1.0f / MAX2(1, dyn->rs.line.stipple.factor);
+         ls.LineStippleRepeatCount = dyn->rs.line.stipple.factor;
       }
    }
 
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
-                                      ANV_CMD_DIRTY_INDEX_BUFFER |
-                                      ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_RESTART_ENABLE)) {
+   if ((cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
+                                       ANV_CMD_DIRTY_INDEX_BUFFER)) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF), vf) {
 #if GFX_VERx10 >= 125
          vf.GeometryDistributionEnable = true;
 #endif
-         vf.IndexedDrawCutIndexEnable  = d->primitive_restart_enable;
-         vf.CutIndex                   = cmd_buffer->state.restart_index;
+         vf.IndexedDrawCutIndexEnable  = dyn->ia.primitive_restart_enable;
+         vf.CutIndex                   = cmd_buffer->state.gfx.restart_index;
+      }
+   }
+
+   if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_INDEX_BUFFER) {
+      struct anv_buffer *buffer = cmd_buffer->state.gfx.index_buffer;
+      uint32_t offset = cmd_buffer->state.gfx.index_offset;
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_INDEX_BUFFER), ib) {
+         ib.IndexFormat           = cmd_buffer->state.gfx.index_type;
+         ib.MOCS                  = anv_mocs(cmd_buffer->device,
+                                             buffer->address.bo,
+                                             ISL_SURF_USAGE_INDEX_BUFFER_BIT);
+#if GFX_VER >= 12
+         ib.L3BypassDisable       = true;
+#endif
+         ib.BufferStartingAddress = anv_address_add(buffer->address, offset);
+         ib.BufferSize            = vk_buffer_range(&buffer->vk, offset,
+                                                    VK_WHOLE_SIZE);
       }
    }
 
 #if GFX_VERx10 >= 125
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
-                                      ANV_CMD_DIRTY_DYNAMIC_PRIMITIVE_RESTART_ENABLE)) {
+   if ((cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VFG), vfg) {
          /* If 3DSTATE_TE: TE Enable == 1 then RR_STRICT else RR_FREE*/
          vfg.DistributionMode =
@@ -604,7 +594,7 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          /* Wa_14014890652 */
          if (intel_device_info_is_dg2(&cmd_buffer->device->info))
             vfg.GranularityThresholdDisable = 1;
-         vfg.ListCutIndexEnable = d->primitive_restart_enable;
+         vfg.ListCutIndexEnable = dyn->ia.primitive_restart_enable;
          /* 192 vertices for TRILIST_ADJ */
          vfg.ListNBatchSizeScale = 0;
          /* Batch size of 384 vertices */
@@ -624,11 +614,11 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
 #endif
 
    if (pipeline->base.device->vk.enabled_extensions.EXT_sample_locations &&
-       cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_SAMPLE_LOCATIONS)
-      genX(emit_sample_pattern)(&cmd_buffer->batch, d);
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS))
+      genX(emit_sample_pattern)(&cmd_buffer->batch, dyn->ms.sample_locations);
 
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
-                                      ANV_CMD_DIRTY_DYNAMIC_COLOR_BLEND_STATE)) {
+   if ((cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_COLOR_WRITE_ENABLES)) {
       /* 3DSTATE_WM in the hope we can avoid spawning fragment shaders
        * threads.
        */
@@ -646,10 +636,10 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
       anv_batch_emit_merge(&cmd_buffer->batch, wm_dwords, pipeline->gfx8.wm);
    }
 
-   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
-                                      ANV_CMD_DIRTY_DYNAMIC_COLOR_BLEND_STATE |
-                                      ANV_CMD_DIRTY_DYNAMIC_LOGIC_OP)) {
-      const uint8_t color_writes = d->color_writes;
+   if ((cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_LOGIC_OP) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_COLOR_WRITE_ENABLES)) {
+      const uint8_t color_writes = dyn->cb.color_write_enables;
       const struct anv_cmd_graphics_state *state = &cmd_buffer->state.gfx;
       bool has_writeable_rt =
          anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT) &&
@@ -692,7 +682,7 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
             .WriteDisableBlue  = write_disabled ||
                                  (pipeline->color_comp_writes[i] &
                                   VK_COLOR_COMPONENT_B_BIT) == 0,
-            .LogicOpFunction   = genX(vk_to_intel_logic_op)[d->logic_op],
+            .LogicOpFunction   = genX(vk_to_intel_logic_op)[dyn->cb.logic_op],
          };
          GENX(BLEND_STATE_ENTRY_pack)(NULL, dws, &entry);
          dws += GENX(BLEND_STATE_ENTRY_length);
@@ -710,59 +700,7 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
       }
    }
 
+   /* When we're done, there is no more dirty gfx state. */
+   vk_dynamic_graphics_state_clear_dirty(&cmd_buffer->vk.dynamic_graphics_state);
    cmd_buffer->state.gfx.dirty = 0;
-}
-
-static uint32_t vk_to_intel_index_type(VkIndexType type)
-{
-   switch (type) {
-   case VK_INDEX_TYPE_UINT8_EXT:
-      return INDEX_BYTE;
-   case VK_INDEX_TYPE_UINT16:
-      return INDEX_WORD;
-   case VK_INDEX_TYPE_UINT32:
-      return INDEX_DWORD;
-   default:
-      unreachable("invalid index type");
-   }
-}
-
-static uint32_t restart_index_for_type(VkIndexType type)
-{
-   switch (type) {
-   case VK_INDEX_TYPE_UINT8_EXT:
-      return UINT8_MAX;
-   case VK_INDEX_TYPE_UINT16:
-      return UINT16_MAX;
-   case VK_INDEX_TYPE_UINT32:
-      return UINT32_MAX;
-   default:
-      unreachable("invalid index type");
-   }
-}
-
-void genX(CmdBindIndexBuffer)(
-    VkCommandBuffer                             commandBuffer,
-    VkBuffer                                    _buffer,
-    VkDeviceSize                                offset,
-    VkIndexType                                 indexType)
-{
-   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
-   ANV_FROM_HANDLE(anv_buffer, buffer, _buffer);
-
-   cmd_buffer->state.restart_index = restart_index_for_type(indexType);
-
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_INDEX_BUFFER), ib) {
-      ib.IndexFormat           = vk_to_intel_index_type(indexType);
-      ib.MOCS                  = anv_mocs(cmd_buffer->device,
-                                          buffer->address.bo,
-                                          ISL_SURF_USAGE_INDEX_BUFFER_BIT);
-#if GFX_VER >= 12
-      ib.L3BypassDisable       = true;
-#endif
-      ib.BufferStartingAddress = anv_address_add(buffer->address, offset);
-      ib.BufferSize            = buffer->size - offset;
-   }
-
-   cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_INDEX_BUFFER;
 }

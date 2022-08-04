@@ -45,23 +45,13 @@ glcpp_lex = custom_target(
   command : [prog_flex, '-o', '@OUTPUT@', '@INPUT@'],
 )
 
-_extra_args = []
-if cpp.get_id() == 'msvc'
-  # Flex relies on __STDC_VERSION__>=199901L to decide when to include C99
-  # inttypes.h.  We always have inttypes.h available with MSVC (either the one
-  # bundled with MSVC 2013, or the one we bundle ourselves), but we can't just
-  # define __STDC_VERSION__ without breaking stuff, as MSVC doesn't fully
-  # support C99.  There's also no way to premptively include stdint.
-  _extra_args += '-FIinttypes.h'
-endif
-
 libglcpp = static_library(
   'glcpp',
   [glcpp_lex, glcpp_parse, files('glcpp.h', 'pp.c')],
   dependencies : idep_mesautil,
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-  c_args : [no_override_init_args, c_msvc_compat_args, _extra_args],
-  cpp_args : [cpp_msvc_compat_args, _extra_args],
+  c_args : [no_override_init_args, c_msvc_compat_args],
+  cpp_args : [cpp_msvc_compat_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
@@ -72,8 +62,8 @@ libglcpp_standalone = static_library(
   link_with : libglcpp,
   dependencies : idep_mesautil,
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-  c_args : [no_override_init_args, c_msvc_compat_args, _extra_args],
-  cpp_args : [cpp_msvc_compat_args, _extra_args],
+  c_args : [no_override_init_args, c_msvc_compat_args],
+  cpp_args : [cpp_msvc_compat_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

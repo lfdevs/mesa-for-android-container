@@ -72,8 +72,8 @@ lp_cs_variant_key_images(const struct lp_compute_shader_variant_key *key)
 
 struct lp_cs_variant_list_item
 {
+   struct list_head list;
    struct lp_compute_shader_variant *base;
-   struct lp_cs_variant_list_item *next, *prev;
 };
 
 struct lp_compute_shader_variant

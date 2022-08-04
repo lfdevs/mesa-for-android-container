@@ -102,8 +102,13 @@ struct wsi_device {
 
    VkPhysicalDevicePCIBusInfoPropertiesEXT pci_bus_info;
 
+   VkExternalSemaphoreHandleTypeFlags semaphore_export_handle_types;
+
+   bool has_import_memory_host;
+
    bool supports_modifiers;
    uint32_t maxImageDimension2D;
+   uint32_t optimalBufferCopyRowPitchAlignment;
    VkPresentModeKHR override_present_mode;
    bool force_bgra8_unorm_first;
 
@@ -136,6 +141,9 @@ struct wsi_device {
    } x11;
 
    bool sw;
+
+   /* Set to true if the implementation is ok with linear WSI images. */
+   bool wants_linear;
 
    /* Signals the semaphore such that any wait on the semaphore will wait on
     * any reads or writes on the give memory object.  This is used to
@@ -209,6 +217,7 @@ struct wsi_device {
    WSI_CB(GetPhysicalDeviceFormatProperties);
    WSI_CB(GetPhysicalDeviceFormatProperties2KHR);
    WSI_CB(GetPhysicalDeviceImageFormatProperties2);
+   WSI_CB(GetSemaphoreFdKHR);
    WSI_CB(ResetFences);
    WSI_CB(QueueSubmit);
    WSI_CB(WaitForFences);

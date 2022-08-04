@@ -58,7 +58,7 @@ convert_to_soa(struct gallivm_state *gallivm,
    LLVMValueRef aos_channels[4];
    unsigned pixels_per_channel = soa_type.length / 4;
 
-   debug_assert((soa_type.length % 4) == 0);
+   assert((soa_type.length % 4) == 0);
 
    aos_channel_type.length >>= 1;
 

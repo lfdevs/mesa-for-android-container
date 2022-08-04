@@ -37,7 +37,6 @@ DEBUG_GET_ONCE_BOOL_OPTION(nosse, "GALLIUM_NOSSE", false);
 
 static const struct util_cpu_caps_t *get_cpu_caps(void)
 {
-   util_cpu_detect();
    return util_get_cpu_caps();
 }
 

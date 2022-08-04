@@ -37,7 +37,7 @@
  */
 
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -51,7 +51,7 @@ debug_symbol_name_cached(const void *addr);
 void
 debug_symbol_print(const void *addr);
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 }
 #endif
 

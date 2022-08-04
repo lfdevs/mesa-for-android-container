@@ -872,7 +872,7 @@ vulkan_descriptor_type_name(VkDescriptorType type)
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: return "UBO";
    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: return "SSBO";
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: return "input-att";
-   case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT: return "inline-UBO";
+   case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK: return "inline-UBO";
    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: return "accel-struct";
    default: return "unknown";
    }

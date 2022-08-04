@@ -28,12 +28,19 @@
 #include "u_perfetto.h"
 
 static void
+util_perfetto_fini(void)
+{
+   perfetto::Tracing::Shutdown();
+}
+
+static void
 util_perfetto_init_once(void)
 {
    // Connects to the system tracing service
    perfetto::TracingInitArgs args;
    args.backends = perfetto::kSystemBackend;
    perfetto::Tracing::Initialize(args);
+   atexit(&util_perfetto_fini);
 }
 
 static once_flag perfetto_once_flag = ONCE_FLAG_INIT;

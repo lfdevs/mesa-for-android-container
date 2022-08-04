@@ -28,6 +28,10 @@ struct vn_image_create_deferred_info {
    VkImageFormatListCreateInfo list;
    VkImageStencilUsageCreateInfo stencil;
 
+   /* True if VkImageCreateInfo::format is translated from a non-zero
+    * VkExternalFormatANDROID::externalFormat for the AHB image.
+    */
+   bool from_external_format;
    /* track whether vn_image_init_deferred succeeds */
    bool initialized;
 };

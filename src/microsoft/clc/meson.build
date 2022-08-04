@@ -42,5 +42,8 @@ if dep_dxheaders.found()
     include_directories : [inc_include, inc_src, inc_compiler, inc_spirv],
   )
 
-  test('clc_compiler_test', clc_compiler_test, timeout: 180, protocol : gtest_test_protocol)
+  if build_machine.system() == 'windows'
+    test('clc_compiler_test', clc_compiler_test, timeout: 180, protocol : gtest_test_protocol)
+  endif
+
 endif

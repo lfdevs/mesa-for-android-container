@@ -45,6 +45,18 @@
 
 #include "nir.h"
 #include "nir_builder.h"
+#include "util/u_math.h"
+
+/*
+ * Round up a vector size to a vector size that's valid in NIR. At present, NIR
+ * supports only vec2-5, vec8, and vec16. Attempting to generate other sizes
+ * will fail validation.
+ */
+static unsigned
+round_up_components(unsigned n)
+{
+   return (n > 5) ? util_next_power_of_two(n) : n;
+}
 
 static bool
 shrink_dest_to_read_mask(nir_ssa_def *def)
@@ -65,6 +77,10 @@ shrink_dest_to_read_mask(nir_ssa_def *def)
    /* If nothing was read, leave it up to DCE. */
    if (!mask)
       return false;
+
+   unsigned rounded = round_up_components(last_bit);
+   assert(rounded <= def->num_components);
+   last_bit = rounded;
 
    if (def->num_components > last_bit) {
       def->num_components = last_bit;
@@ -179,6 +195,10 @@ opt_shrink_vectors_alu(nir_builder *b, nir_alu_instr *instr)
    unsigned last_bit = util_last_bit(mask);
    unsigned num_components = util_bitcount(mask);
 
+   unsigned rounded = round_up_components(num_components);
+   assert(rounded <= def->num_components);
+   num_components = rounded;
+
    /* return, if there is nothing to do */
    if (mask == 0 || num_components == def->num_components)
       return false;
@@ -292,6 +312,10 @@ opt_shrink_vectors_load_const(nir_load_const_instr *instr)
          reswizzle[i] = num_components++;
       }
    }
+
+   unsigned rounded = round_up_components(num_components);
+   assert(rounded <= def->num_components);
+   num_components = rounded;
 
    if (num_components == def->num_components)
       return false;

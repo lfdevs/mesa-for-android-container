@@ -91,7 +91,7 @@ def parse_int(s, minimum, maximum):
     return number
 
 def encode_source(op, fau):
-    if op[0] == '`':
+    if op[0] == '^':
         die_if(op[1] != 'r', f"Expected register after discard {op}")
         return parse_int(op[2:], 0, 63) | 0x40
     elif op[0] == 'r':
@@ -216,8 +216,7 @@ def parse_asm(line):
         # Set a placeholder writemask to prevent encoding faults
         encoded |= (0xC0 << 40)
 
-    # TODO: Other messages
-    fau = FAUState(message = ins.name.startswith('LD_BUFFER'))
+    fau = FAUState(message = ins.message)
 
     for i, (op, src) in enumerate(zip(operands, ins.srcs)):
         parts = op.split('.')

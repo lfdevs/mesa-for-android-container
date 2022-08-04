@@ -139,7 +139,7 @@ del_drm_fd(int fd)
    }
 }
 
-/* Our goal is not to have noise good enough for cryto,
+/* Our goal is not to have noise good enough for crypto,
  * but instead values that are unique-ish enough that
  * it is incredibly unlikely that a buffer overwrite
  * will produce the exact same values.

@@ -40,11 +40,11 @@
 #include <unistd.h>
 
 static void
-iris_utrace_record_ts(struct u_trace *trace, void *_batch,
+iris_utrace_record_ts(struct u_trace *trace, void *cs,
                       void *timestamps, unsigned idx,
                       bool end_of_pipe)
 {
-   struct iris_batch *batch = _batch;
+   struct iris_batch *batch = container_of(trace, struct iris_batch, trace);
    struct iris_resource *res = (void *) timestamps;
    struct iris_bo *bo = res->bo;
 

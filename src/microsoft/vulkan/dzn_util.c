@@ -21,12 +21,19 @@
  * IN THE SOFTWARE.
  */
 
+#include "dzn_private.h"
+
 #define D3D12_IGNORE_SDK_LAYERS
+#define COBJMACROS
 #include <directx/d3d12.h>
 
 #include <vulkan/vulkan.h>
 
 #include "util/format/u_format.h"
+#include "util/log.h"
+
+#include <directx/d3d12sdklayers.h>
+#include <util/u_dl.h>
 
 static const DXGI_FORMAT formats[PIPE_FORMAT_COUNT] = {
 #define MAP_FORMAT_NORM(FMT) \
@@ -148,6 +155,59 @@ dzn_pipe_to_dxgi_format(enum pipe_format in)
    return formats[in];
 }
 
+DXGI_FORMAT
+dzn_get_typeless_dxgi_format(DXGI_FORMAT in)
+{
+   if (in >= DXGI_FORMAT_R32G32B32A32_TYPELESS && in <= DXGI_FORMAT_R32G32B32A32_SINT)
+      return DXGI_FORMAT_R32G32B32A32_TYPELESS;
+   if (in >= DXGI_FORMAT_R32G32B32_TYPELESS && in <= DXGI_FORMAT_R32G32B32_SINT)
+      return DXGI_FORMAT_R32G32B32_TYPELESS;
+   if (in >= DXGI_FORMAT_R16G16B16A16_TYPELESS && in <= DXGI_FORMAT_R16G16B16A16_SINT)
+      return DXGI_FORMAT_R16G16B16A16_TYPELESS;
+   if (in >= DXGI_FORMAT_R32G32_TYPELESS && in <= DXGI_FORMAT_R32G32_SINT)
+      return DXGI_FORMAT_R32G32_TYPELESS;
+   if (in >= DXGI_FORMAT_R32G8X24_TYPELESS && in <= DXGI_FORMAT_X32_TYPELESS_G8X24_UINT)
+      return DXGI_FORMAT_R32G8X24_TYPELESS;
+   if (in >= DXGI_FORMAT_R10G10B10A2_TYPELESS && in <= DXGI_FORMAT_R10G10B10A2_UINT)
+      return DXGI_FORMAT_R10G10B10A2_TYPELESS;
+   if (in >= DXGI_FORMAT_R8G8B8A8_TYPELESS && in <= DXGI_FORMAT_R8G8B8A8_SINT)
+      return DXGI_FORMAT_R8G8B8A8_TYPELESS;
+   if (in >= DXGI_FORMAT_R16G16_TYPELESS && in <= DXGI_FORMAT_R16G16_SINT)
+      return DXGI_FORMAT_R16G16_TYPELESS;
+   if (in >= DXGI_FORMAT_R32_TYPELESS && in <= DXGI_FORMAT_R32_SINT)
+      return DXGI_FORMAT_R32_TYPELESS;
+   if (in >= DXGI_FORMAT_R24G8_TYPELESS && in <= DXGI_FORMAT_X24_TYPELESS_G8_UINT)
+      return DXGI_FORMAT_R24G8_TYPELESS;
+   if (in >= DXGI_FORMAT_R8G8_TYPELESS && in <= DXGI_FORMAT_R8G8_SINT)
+      return DXGI_FORMAT_R8G8_TYPELESS;
+   if (in >= DXGI_FORMAT_R16_TYPELESS && in <= DXGI_FORMAT_R16_SINT)
+      return DXGI_FORMAT_R16_TYPELESS;
+   if (in >= DXGI_FORMAT_R8_TYPELESS && in <= DXGI_FORMAT_R8_SINT)
+      return DXGI_FORMAT_R8_TYPELESS;
+   if (in >= DXGI_FORMAT_BC1_TYPELESS && in <= DXGI_FORMAT_BC1_UNORM_SRGB)
+      return DXGI_FORMAT_BC1_TYPELESS;
+   if (in >= DXGI_FORMAT_BC2_TYPELESS && in <= DXGI_FORMAT_BC2_UNORM_SRGB)
+      return DXGI_FORMAT_BC2_TYPELESS;
+   if (in >= DXGI_FORMAT_BC3_TYPELESS && in <= DXGI_FORMAT_BC3_UNORM_SRGB)
+      return DXGI_FORMAT_BC3_TYPELESS;
+   if (in >= DXGI_FORMAT_BC4_TYPELESS && in <= DXGI_FORMAT_BC4_SNORM)
+      return DXGI_FORMAT_BC4_TYPELESS;
+   if (in >= DXGI_FORMAT_BC5_TYPELESS && in <= DXGI_FORMAT_BC5_SNORM)
+      return DXGI_FORMAT_BC5_TYPELESS;
+   if (in == DXGI_FORMAT_B8G8R8A8_UNORM ||
+       (in >= DXGI_FORMAT_B8G8R8A8_TYPELESS && in <= DXGI_FORMAT_B8G8R8A8_UNORM_SRGB))
+      return DXGI_FORMAT_B8G8R8A8_TYPELESS;
+   if (in == DXGI_FORMAT_B8G8R8X8_UNORM ||
+       (in >= DXGI_FORMAT_B8G8R8X8_TYPELESS && in <= DXGI_FORMAT_B8G8R8X8_UNORM_SRGB))
+      return DXGI_FORMAT_B8G8R8X8_TYPELESS;
+   if (in >= DXGI_FORMAT_BC6H_TYPELESS && in <= DXGI_FORMAT_BC6H_SF16)
+      return DXGI_FORMAT_BC6H_TYPELESS;
+   if (in >= DXGI_FORMAT_BC7_TYPELESS && in <= DXGI_FORMAT_BC7_UNORM_SRGB)
+      return DXGI_FORMAT_BC7_TYPELESS;
+
+   return in;
+}
+
 struct dzn_sampler_filter_info {
    VkFilter min, mag;
    VkSamplerMipmapMode mipmap;
@@ -174,7 +234,7 @@ static const struct dzn_sampler_filter_info filter_table[] = {
 D3D12_FILTER
 dzn_translate_sampler_filter(const VkSamplerCreateInfo *create_info)
 {
-   D3D12_FILTER filter;
+   D3D12_FILTER filter = (D3D12_FILTER)0;
 
    if (!create_info->anisotropyEnable) {
       unsigned i;
@@ -221,7 +281,7 @@ dzn_translate_viewport(D3D12_VIEWPORT *out,
    out->TopLeftX = in->x;
    out->TopLeftY = in->height < 0 ? in->height + in->y : in->y;
    out->Width = in->width;
-   out->Height = abs(in->height);
+   out->Height = fabs(in->height);
    out->MinDepth = MIN2(in->minDepth, in->maxDepth);
    out->MaxDepth = MAX2(in->maxDepth, in->minDepth);
 }
@@ -234,4 +294,111 @@ dzn_translate_rect(D3D12_RECT *out,
    out->top = in->offset.y;
    out->right = in->offset.x + in->extent.width;
    out->bottom = in->offset.y + in->extent.height;
+}
+
+static ID3D12Debug *
+get_debug_interface()
+{
+   typedef HRESULT(WINAPI *PFN_D3D12_GET_DEBUG_INTERFACE)(REFIID riid, void **ppFactory);
+   PFN_D3D12_GET_DEBUG_INTERFACE D3D12GetDebugInterface;
+
+   struct util_dl_library *d3d12_mod = util_dl_open(UTIL_DL_PREFIX "d3d12" UTIL_DL_EXT);
+   if (!d3d12_mod) {
+      mesa_loge("failed to load D3D12\n");
+      return NULL;
+   }
+
+   D3D12GetDebugInterface = (PFN_D3D12_GET_DEBUG_INTERFACE)util_dl_get_proc_address(d3d12_mod, "D3D12GetDebugInterface");
+   if (!D3D12GetDebugInterface) {
+      mesa_loge("failed to load D3D12GetDebugInterface from D3D12.DLL\n");
+      return NULL;
+   }
+
+   ID3D12Debug *debug;
+   if (FAILED(D3D12GetDebugInterface(&IID_ID3D12Debug, (void **)&debug))) {
+      mesa_loge("D3D12GetDebugInterface failed\n");
+      return NULL;
+   }
+
+   return debug;
+}
+
+void
+d3d12_enable_debug_layer(void)
+{
+   ID3D12Debug *debug = get_debug_interface();
+   if (debug) {
+      ID3D12Debug_EnableDebugLayer(debug);
+      ID3D12Debug_Release(debug);
+   }
+}
+
+void
+d3d12_enable_gpu_validation(void)
+{
+   ID3D12Debug *debug = get_debug_interface();
+   if (debug) {
+      ID3D12Debug3 *debug3;
+      if (SUCCEEDED(ID3D12Debug_QueryInterface(debug,
+                                               &IID_ID3D12Debug3,
+                                               (void **)&debug3))) {
+         ID3D12Debug3_SetEnableGPUBasedValidation(debug3, true);
+         ID3D12Debug3_Release(debug3);
+      }
+      ID3D12Debug_Release(debug);
+   }
+}
+
+ID3D12Device2 *
+d3d12_create_device(IUnknown *adapter, bool experimental_features)
+{
+   typedef HRESULT(WINAPI *PFN_D3D12CREATEDEVICE)(IUnknown *, D3D_FEATURE_LEVEL, REFIID, void **);
+   PFN_D3D12CREATEDEVICE D3D12CreateDevice;
+
+   struct util_dl_library *d3d12_mod = util_dl_open(UTIL_DL_PREFIX "d3d12" UTIL_DL_EXT);
+   if (!d3d12_mod) {
+      mesa_loge("failed to load D3D12\n");
+      return NULL;
+   }
+
+#ifdef _WIN32
+   if (experimental_features)
+#endif
+   {
+      typedef HRESULT(WINAPI *PFN_D3D12ENABLEEXPERIMENTALFEATURES)(UINT, const IID *, void *, UINT *);
+      PFN_D3D12ENABLEEXPERIMENTALFEATURES D3D12EnableExperimentalFeatures =
+         (PFN_D3D12ENABLEEXPERIMENTALFEATURES)util_dl_get_proc_address(d3d12_mod, "D3D12EnableExperimentalFeatures");
+      if (FAILED(D3D12EnableExperimentalFeatures(1, &D3D12ExperimentalShaderModels, NULL, NULL))) {
+         mesa_loge("failed to enable experimental shader models\n");
+         return NULL;
+      }
+   }
+
+   D3D12CreateDevice = (PFN_D3D12CREATEDEVICE)util_dl_get_proc_address(d3d12_mod, "D3D12CreateDevice");
+   if (!D3D12CreateDevice) {
+      mesa_loge("failed to load D3D12CreateDevice from D3D12\n");
+      return NULL;
+   }
+
+   ID3D12Device2 *dev;
+   if (SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0,
+                 &IID_ID3D12Device2,
+                 (void **)&dev)))
+      return dev;
+
+   mesa_loge("D3D12CreateDevice failed\n");
+   return NULL;
+}
+
+PFN_D3D12_SERIALIZE_VERSIONED_ROOT_SIGNATURE
+d3d12_get_serialize_root_sig(void)
+{
+   struct util_dl_library *d3d12_mod = util_dl_open(UTIL_DL_PREFIX "d3d12" UTIL_DL_EXT);
+   if (!d3d12_mod) {
+      mesa_loge("failed to load D3D12\n");
+      return NULL;
+   }
+
+   return (PFN_D3D12_SERIALIZE_VERSIONED_ROOT_SIGNATURE)
+      util_dl_get_proc_address(d3d12_mod, "D3D12SerializeVersionedRootSignature");
 }

@@ -200,11 +200,13 @@ want a pass-through HTTP cache.  On your runner box, install nginx:
 
 Add the server setup files:
 
-.. literalinclude: fdo-cache:
+.. literalinclude:: fdo-cache
    :name: /etc/nginx/sites-available/fdo-cache
+   :caption: /etc/nginx/sites-available/fdo-cache
 
-.. literalinclude: uri-caching.conf:
-   :name: /etc/nginx/sites-available/snippets/uri-caching.conf
+.. literalinclude:: uri-caching.conf
+   :name: /etc/nginx/snippets/uri-caching.conf
+   :caption: /etc/nginx/snippets/uri-caching.conf
 
 Edit the listener addresses in fdo-cache to suit the ethernet interface that
 your devices are on.

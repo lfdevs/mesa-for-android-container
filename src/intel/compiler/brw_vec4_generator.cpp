@@ -1523,7 +1523,7 @@ generate_code(struct brw_codegen *p,
 {
    const struct intel_device_info *devinfo = p->devinfo;
    const char *stage_abbrev = _mesa_shader_stage_to_abbrev(nir->info.stage);
-   struct disasm_info *disasm_info = disasm_initialize(devinfo, cfg);
+   struct disasm_info *disasm_info = disasm_initialize(p->isa, cfg);
 
    /* `send_count` explicitly does not include spills or fills, as we'd
     * like to use it as a metric for intentional memory access or other
@@ -1815,7 +1815,7 @@ generate_code(struct brw_codegen *p,
          send_count++;
          break;
 
-      case VS_OPCODE_URB_WRITE:
+      case VEC4_VS_OPCODE_URB_WRITE:
          generate_vs_urb_write(p, inst);
          send_count++;
          break;
@@ -1840,12 +1840,12 @@ generate_code(struct brw_codegen *p,
          send_count++;
          break;
 
-      case GS_OPCODE_URB_WRITE:
+      case VEC4_GS_OPCODE_URB_WRITE:
          generate_gs_urb_write(p, inst);
          send_count++;
          break;
 
-      case GS_OPCODE_URB_WRITE_ALLOCATE:
+      case VEC4_GS_OPCODE_URB_WRITE_ALLOCATE:
          generate_gs_urb_write_allocate(p, inst);
          send_count++;
          break;
@@ -1932,14 +1932,9 @@ generate_code(struct brw_codegen *p,
          send_count++;
          break;
 
-      case SHADER_OPCODE_FIND_LIVE_CHANNEL: {
-         const struct brw_reg mask =
-            brw_stage_has_packed_dispatch(devinfo, nir->info.stage,
-                                          &prog_data->base) ? brw_imm_ud(~0u) :
-            brw_dmask_reg();
-         brw_find_live_channel(p, dst, mask, false);
+      case SHADER_OPCODE_FIND_LIVE_CHANNEL:
+         brw_find_live_channel(p, dst, false);
          break;
-      }
 
       case SHADER_OPCODE_BROADCAST:
          assert(inst->force_writemask_all);
@@ -1992,7 +1987,7 @@ generate_code(struct brw_codegen *p,
          brw_set_default_access_mode(p, BRW_ALIGN_1);
 
          /* When converting from DF->F, we set destination's stride as 2 as an
-          * aligment requirement. But in IVB/BYT, each DF implicitly writes
+          * alignment requirement. But in IVB/BYT, each DF implicitly writes
           * two floats, being the first one the converted value. So we don't
           * need to explicitly set stride 2, but 1.
           */
@@ -2110,7 +2105,7 @@ generate_code(struct brw_codegen *p,
          generate_zero_oob_push_regs(p, &prog_data->base, dst, src[0]);
          break;
 
-      case TCS_OPCODE_URB_WRITE:
+      case VEC4_TCS_OPCODE_URB_WRITE:
          generate_tcs_urb_write(p, inst, src[0]);
          send_count++;
          break;
@@ -2120,11 +2115,11 @@ generate_code(struct brw_codegen *p,
          send_count++;
          break;
 
-      case TCS_OPCODE_SET_INPUT_URB_OFFSETS:
+      case VEC4_TCS_OPCODE_SET_INPUT_URB_OFFSETS:
          generate_tcs_input_urb_offsets(p, dst, src[0], src[1]);
          break;
 
-      case TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
+      case VEC4_TCS_OPCODE_SET_OUTPUT_URB_OFFSETS:
          generate_tcs_output_urb_offsets(p, dst, src[0], src[1]);
          break;
 
@@ -2216,7 +2211,7 @@ generate_code(struct brw_codegen *p,
 #else
    if (unlikely(debug_enabled))
 #endif
-      brw_validate_instructions(devinfo, p->store,
+      brw_validate_instructions(&compiler->isa, p->store,
                                 0, p->next_insn_offset,
                                 disasm_info);
 
@@ -2283,7 +2278,7 @@ brw_vec4_generate_assembly(const struct brw_compiler *compiler,
                            bool debug_enabled)
 {
    struct brw_codegen *p = rzalloc(mem_ctx, struct brw_codegen);
-   brw_init_codegen(compiler->devinfo, p, mem_ctx);
+   brw_init_codegen(&compiler->isa, p, mem_ctx);
    brw_set_default_access_mode(p, BRW_ALIGN_16);
 
    generate_code(p, compiler, log_data, nir, prog_data, cfg, perf, stats,

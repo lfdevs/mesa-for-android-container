@@ -22,11 +22,11 @@
  */
 
 #include <assert.h>
-#include <stdlib.h>
 #include <stdarg.h>
-#include <stdio.h>
-#include <string.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "util/macros.h"
 #include "util/u_math.h"
@@ -41,20 +41,14 @@
  * 64-bit), avoiding performance penalities on x86 and alignment faults on
  * ARM.
  */
-struct
-#ifdef _MSC_VER
-#if _WIN64
-__declspec(align(16))
-#else
- __declspec(align(8))
-#endif
-#elif defined(__LP64__)
- __attribute__((aligned(16)))
-#else
- __attribute__((aligned(8)))
-#endif
-   ralloc_header
+struct ralloc_header
 {
+#if defined(__LP64__) || defined(_WIN64)
+   alignas(16)
+#else
+   alignas(8)
+#endif
+
 #ifndef NDEBUG
    /* A canary value used to determine whether a pointer is ralloc'd. */
    unsigned canary;
@@ -554,15 +548,15 @@ ralloc_vasprintf_rewrite_tail(char **str, size_t *start, const char *fmt,
 #define SUBALLOC_ALIGNMENT 8
 #define LMAGIC 0x87b9c7d3
 
-struct
-#ifdef _MSC_VER
- __declspec(align(8))
-#elif defined(__LP64__)
- __attribute__((aligned(16)))
+struct linear_header {
+
+   /* align first member to align struct */
+#if defined(__LP64__) || defined(_WIN64)
+   alignas(16)
 #else
- __attribute__((aligned(8)))
+   alignas(8)
 #endif
-   linear_header {
+
 #ifndef NDEBUG
    unsigned magic;   /* for debugging */
 #endif

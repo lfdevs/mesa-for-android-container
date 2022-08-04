@@ -27,7 +27,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define ALIGN(x) __attribute__((aligned(x)))
+#define ALIGN_ATTR(x) __attribute__((aligned(x)))
+
+/** Indicates the number of RTDATAs per RTDATASET. */
+#define ROGUE_FWIF_NUM_RTDATAS 2U
+#define ROGUE_FWIF_NUM_GEOMDATAS 1U
+#define ROGUE_FWIF_NUM_RTDATA_FREELISTS 2U
+#define ROGUE_NUM_GEOM_CORES 1U
+
+#define ROGUE_NUM_GEOM_CORES_SIZE 2U
 
 /**
  * Maximum number of UFOs in a CCB command.
@@ -50,22 +58,23 @@
  */
 #define ROGUE_FWIF_DM_INDEPENDENT_KICK_CMD_SIZE (1024U)
 
-#define ROGUE_FWIF_PRBUFFER_START (0)
-#define ROGUE_FWIF_PRBUFFER_ZSBUFFER (0)
-#define ROGUE_FWIF_PRBUFFER_MSAABUFFER (1)
-#define ROGUE_FWIF_PRBUFFER_MAXSUPPORTED (2)
-
 struct rogue_fwif_dev_addr {
    uint32_t addr;
 };
 
 struct rogue_fwif_dma_addr {
-   uint64_t ALIGN(8) dev_vaddr;
+   uint64_t ALIGN_ATTR(8) dev_vaddr;
    struct rogue_fwif_dev_addr fw_addr;
-} ALIGN(8);
+   uint32_t padding;
+} ALIGN_ATTR(8);
 
+/**
+ * \brief Command data for fence & update types Client CCB commands.
+ */
 struct rogue_fwif_ufo {
+   /** Address to be checked/updated. */
    struct rogue_fwif_dev_addr ufo_addr;
+   /** Value to check-against/update-to. */
    uint32_t value;
 };
 
@@ -75,7 +84,35 @@ struct rogue_fwif_cleanup_ctl {
 
    /** Number of commands executed by the FW. */
    uint32_t executed_cmds;
-} ALIGN(8);
+} ALIGN_ATTR(8);
+
+#define ROGUE_FWIF_PRBUFFER_START 0U
+#define ROGUE_FWIF_PRBUFFER_ZSBUFFER 0U
+#define ROGUE_FWIF_PRBUFFER_MSAABUFFER 1U
+#define ROGUE_FWIF_PRBUFFER_MAXSUPPORTED 2U
+
+enum rogue_fwif_prbuffer_state {
+   ROGUE_FWIF_PRBUFFER_UNBACKED = 0,
+   ROGUE_FWIF_PRBUFFER_BACKED,
+   ROGUE_FWIF_PRBUFFER_BACKING_PENDING,
+   ROGUE_FWIF_PRBUFFER_UNBACKING_PENDING,
+};
+
+/**
+ * \brief On-demand Z/S/MSAA buffers.
+ */
+struct rogue_fwif_prbuffer {
+   /** Buffer ID. */
+   uint32_t buffer_id;
+   /** Needs on-demand Z/S/MSAA buffer allocation. */
+   bool ALIGN_ATTR(4) on_demand;
+   /** Z/S/MSAA - Buffer state. */
+   enum rogue_fwif_prbuffer_state state;
+   /** Cleanup state. */
+   struct rogue_fwif_cleanup_ctl cleanup_state;
+   /** Compatibility and other flags. */
+   uint32_t pr_buffer_flags;
+} ALIGN_ATTR(8);
 
 /**
  * Used to share frame numbers across UM-KM-FW,
@@ -146,26 +183,47 @@ struct rogue_fwif_cccb_ctl {
 
    /** Offset wrapping mask, total capacity in bytes of the CCB-1. */
    uint32_t wrap_mask;
-} ALIGN(8);
+
+   /* Only used if SUPPORT_AGP is present. */
+   uint32_t read_offset2;
+
+   /* Only used if SUPPORT_AGP4 is present. */
+   uint32_t read_offset3;
+   /* Only used if SUPPORT_AGP4 is present. */
+   uint32_t read_offset4;
+
+   uint32_t padding;
+} ALIGN_ATTR(8);
 
 #define ROGUE_FW_LOCAL_FREELIST 0U
 #define ROGUE_FW_GLOBAL_FREELIST 1U
-#define ROGUE_FW_FREELIST_TYPE_LAST ROGUE_FW_GLOBAL_FREELIST
-#define ROGUE_FW_MAX_FREELISTS (ROGUE_FW_FREELIST_TYPE_LAST + 1U)
+#define ROGUE_FW_MAX_FREELISTS (ROGUE_FW_GLOBAL_FREELIST + 1U)
+#define ROGUE_FW_MAX_HWFREELISTS 2U
 
+/**
+ * \brief Geom DM or TA register controls for context switch.
+ */
 struct rogue_fwif_ta_regs_cswitch {
+   /** The base address of the VDM's context state buffer. */
    uint64_t vdm_context_state_base_addr;
    uint64_t vdm_context_state_resume_addr;
+   /** The base address of the TA's context state buffer. */
    uint64_t ta_context_state_base_addr;
 
    struct {
+      /** VDM context store task 0. */
       uint64_t vdm_context_store_task0;
+      /** VDM context store task 1. */
       uint64_t vdm_context_store_task1;
+      /** VDM context store task 2. */
       uint64_t vdm_context_store_task2;
 
       /* VDM resume state update controls. */
+      /** VDM context resume task 0. */
       uint64_t vdm_context_resume_task0;
+      /** VDM context resume task 1. */
       uint64_t vdm_context_resume_task1;
+      /** VDM context resume task 2. */
       uint64_t vdm_context_resume_task2;
 
       uint64_t vdm_context_store_task3;
@@ -180,7 +238,6 @@ struct rogue_fwif_ta_regs_cswitch {
    sizeof(struct rogue_fwif_taregisters_cswitch)
 
 struct rogue_fwif_cdm_regs_cswitch {
-   uint64_t cdm_context_state_base_addr;
    uint64_t cdm_context_pds0;
    uint64_t cdm_context_pds1;
    uint64_t cdm_terminate_pds;
@@ -192,9 +249,13 @@ struct rogue_fwif_cdm_regs_cswitch {
    uint64_t cdm_resume_pds0_b;
 };
 
+/**
+ * \brief Render context static register controls for context switch.
+ */
 struct rogue_fwif_static_rendercontext_state {
    /** Geom registers for ctx switch. */
-   struct rogue_fwif_ta_regs_cswitch ALIGN(8) ctx_switch_regs;
+   struct rogue_fwif_ta_regs_cswitch
+      ALIGN_ATTR(8) ctx_switch_geom_regs[ROGUE_NUM_GEOM_CORES_SIZE];
 };
 
 #define ROGUE_FWIF_STATIC_RENDERCONTEXT_SIZE \
@@ -202,33 +263,15 @@ struct rogue_fwif_static_rendercontext_state {
 
 struct rogue_fwif_static_computecontext_state {
    /** CDM registers for ctx switch. */
-   struct rogue_fwif_cdm_regs_cswitch ALIGN(8) ctx_switch_regs;
+   struct rogue_fwif_cdm_regs_cswitch ALIGN_ATTR(8) ctx_switch_regs;
 };
 
 #define ROGUE_FWIF_STATIC_COMPUTECONTEXT_SIZE \
    sizeof(struct rogue_fwif_static_computecontext_state)
 
-enum rogue_fwif_prbuffer_state {
-   ROGUE_FWIF_PRBUFFER_UNBACKED = 0,
-   ROGUE_FWIF_PRBUFFER_BACKED,
-   ROGUE_FWIF_PRBUFFER_BACKING_PENDING,
-   ROGUE_FWIF_PRBUFFER_UNBACKING_PENDING,
-};
-
-struct rogue_fwif_prbuffer {
-   /** Buffer ID. */
-   uint32_t buffer_id;
-   /** Needs On-demand Z/S/MSAA Buffer allocation. */
-   bool ALIGN(4) on_demand;
-   /** Z/S/MSAA -Buffer state. */
-   enum rogue_fwif_prbuffer_state state;
-   /** Cleanup state. */
-   struct rogue_fwif_cleanup_ctl cleanup_state;
-   /** Compatibility and other flags. */
-   uint32_t pr_buffer_flags;
-} ALIGN(8);
-
-/* Last reset reason for a context. */
+/**
+ * /brief Context reset reason. Last reset reason for a reset context.
+ */
 enum rogue_context_reset_reason {
    /** No reset reason recorded. */
    ROGUE_CONTEXT_RESET_REASON_NONE = 0,
@@ -242,10 +285,23 @@ enum rogue_context_reset_reason {
    ROGUE_CONTEXT_RESET_REASON_INNOCENT_OVERRUNING = 4,
    /** Forced reset to ensure scheduling requirements. */
    ROGUE_CONTEXT_RESET_REASON_HARD_CONTEXT_SWITCH = 5,
+   /** FW page fault (no HWR). */
+   ROGUE_CONTEXT_RESET_REASON_FW_PAGEFAULT = 13,
+   /** FW execution error (GPU reset requested). */
+   ROGUE_CONTEXT_RESET_REASON_FW_EXEC_ERR = 14,
+   /** Host watchdog detected FW error. */
+   ROGUE_CONTEXT_RESET_REASON_HOST_WDG_FW_ERR = 15,
+   /** Geometry DM OOM event is not allowed. */
+   ROGUE_CONTEXT_GEOM_OOM_DISABLED = 16,
 };
 
+/**
+ * \brief Context reset data shared with the host.
+ */
 struct rogue_context_reset_reason_data {
+   /** Reset reason. */
    enum rogue_context_reset_reason reset_reason;
+   /** External Job ID. */
    uint32_t reset_ext_job_ref;
 };
 

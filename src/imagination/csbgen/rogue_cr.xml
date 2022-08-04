@@ -53,8 +53,8 @@ SOFTWARE.
 
 	<enum name="ISP_RENDER_MODE_TYPE">
 		<value name="NORM"       value="0"/>
-		<value name="FAST_2D"    value="1"/>
-		<value name="FAST_SCALE" value="2"/>
+		<value name="FAST_2D"    value="2"/>
+		<value name="FAST_SCALE" value="3"/>
 	</enum>
 
 	<enum name="MEMLAYOUT">

@@ -121,7 +121,7 @@ resolve_image_views(struct iris_context *ice,
                     bool *draw_aux_buffer_disabled,
                     bool consider_framebuffer)
 {
-   uint32_t views = info ? (shs->bound_image_views & info->images_used) : 0;
+   uint32_t views = info ? (shs->bound_image_views & info->images_used[0]) : 0;
 
    while (views) {
       const int i = u_bit_scan(&views);

@@ -94,6 +94,8 @@ brw_vec4_alloc_reg_set(struct brw_compiler *compiler)
    int base_reg_count =
       compiler->devinfo->ver >= 7 ? GFX7_MRF_HACK_START : BRW_MAX_GRF;
 
+   assert(compiler->devinfo->ver < 8);
+
    /* After running split_virtual_grfs(), almost all VGRFs will be of size 1.
     * SEND-from-GRF sources cannot be split, so we also need classes for each
     * potential message length.
@@ -162,6 +164,8 @@ vec4_visitor::reg_allocate()
     */
    if (0)
       return reg_allocate_trivial();
+
+   assert(devinfo->ver < 8);
 
    const vec4_live_variables &live = live_analysis.require();
    int node_count = alloc.count;

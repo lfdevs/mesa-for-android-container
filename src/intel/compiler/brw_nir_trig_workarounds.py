@@ -33,12 +33,17 @@
 
 import argparse
 import sys
+from math import pi
 
 TRIG_WORKAROUNDS = [
     (('fsin', 'x(is_not_const)'), ('fmul', ('fsin', 'x'), 0.99997)),
     (('fcos', 'x(is_not_const)'), ('fmul', ('fcos', 'x'), 0.99997)),
 ]
 
+LIMIT_TRIG_INPUT_RANGE_WORKAROUND = [
+    (('fsin', 'x(is_not_const)'), ('fsin', ('fmod', 'x', 2.0 * pi))),
+    (('fcos', 'x(is_not_const)'), ('fcos', ('fmod', 'x', 2.0 * pi))),
+]
 
 def main():
     parser = argparse.ArgumentParser()
@@ -54,6 +59,8 @@ def run():
     print('#include "brw_nir.h"')
     print(nir_algebraic.AlgebraicPass("brw_nir_apply_trig_workarounds",
                                       TRIG_WORKAROUNDS).render())
+    print(nir_algebraic.AlgebraicPass("brw_nir_limit_trig_input_range_workaround",
+                                      LIMIT_TRIG_INPUT_RANGE_WORKAROUND).render())
 
 
 if __name__ == '__main__':

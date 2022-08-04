@@ -361,11 +361,11 @@ static inline uint64_t xgetbv(void)
 #if defined(PIPE_ARCH_X86)
 PIPE_ALIGN_STACK static inline boolean sse2_has_daz(void)
 {
-   struct {
+   alignas(16) struct {
       uint32_t pad1[7];
       uint32_t mxcsr_mask;
       uint32_t pad2[128-8];
-   } PIPE_ALIGN_VAR(16) fxarea;
+   } fxarea;
 
    fxarea.mxcsr_mask = 0;
 #if defined(PIPE_CC_GCC)
@@ -860,6 +860,9 @@ util_cpu_detect_once(void)
       printf("util_cpu_caps.num_L3_caches = %u\n", util_cpu_caps.num_L3_caches);
       printf("util_cpu_caps.num_cpu_mask_bits = %u\n", util_cpu_caps.num_cpu_mask_bits);
    }
+
+   /* This must happen at the end as it's used to guard everything else */
+   p_atomic_set(&util_cpu_caps.detect_done, 1);
 }
 
 static once_flag cpu_once_flag = ONCE_FLAG_INIT;

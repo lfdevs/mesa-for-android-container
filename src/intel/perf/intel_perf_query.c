@@ -382,8 +382,16 @@ intel_perf_open(struct intel_perf_context *perf_ctx,
    properties[p++] = DRM_I915_PERF_PROP_OA_EXPONENT;
    properties[p++] = period_exponent;
 
-   /* SSEU configuration */
-   if (intel_perf_has_global_sseu(perf_ctx->perf)) {
+   /* If global SSEU is available, pin it to the default. This will ensure on
+    * Gfx11 for instance we use the full EU array. Initially when perf was
+    * enabled we would use only half on Gfx11 because of functional
+    * requirements.
+    *
+    * Temporary disable this option on Gfx12.5+, kernel doesn't appear to
+    * support it.
+    */
+   if (intel_perf_has_global_sseu(perf_ctx->perf) &&
+       perf_ctx->devinfo->verx10 < 125) {
       properties[p++] = DRM_I915_PERF_PROP_GLOBAL_SSEU;
       properties[p++] = to_user_pointer(&perf_ctx->perf->sseu);
    }
@@ -735,6 +743,7 @@ snapshot_query_layout(struct intel_perf_context *perf_ctx,
          break;
       case INTEL_PERF_QUERY_FIELD_TYPE_SRM_PERFCNT:
       case INTEL_PERF_QUERY_FIELD_TYPE_SRM_RPSTAT:
+      case INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_A:
       case INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_B:
       case INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_C:
          perf_cfg->vtbl.store_register_mem(perf_ctx->ctx, query->oa.bo,
@@ -1374,7 +1383,6 @@ accumulate_oa_reports(struct intel_perf_context *perf_ctx,
             if (add) {
                intel_perf_query_result_accumulate(&query->oa.result,
                                                 query->queryinfo,
-                                                devinfo,
                                                 last, report);
             } else {
                /* We're not adding the delta because we've identified it's not
@@ -1403,7 +1411,7 @@ accumulate_oa_reports(struct intel_perf_context *perf_ctx,
 end:
 
    intel_perf_query_result_accumulate(&query->oa.result, query->queryinfo,
-                                    devinfo, last, end);
+                                    last, end);
 
    query->oa.results_accumulated = true;
    drop_from_unaccumulated_query_list(perf_ctx, query);
@@ -1574,7 +1582,6 @@ intel_perf_get_query_data(struct intel_perf_context *perf_ctx,
          uint32_t *end_report = query->oa.map + perf_cfg->query_layout.size;
          intel_perf_query_result_accumulate_fields(&query->oa.result,
                                                  query->queryinfo,
-                                                 perf_ctx->devinfo,
                                                  begin_report,
                                                  end_report,
                                                  true /* no_oa_accumulate */);

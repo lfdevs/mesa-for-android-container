@@ -283,7 +283,8 @@ st_update_blend( struct st_context *st )
       /* no blending / logicop */
    }
 
-   blend->dither = ctx->Color.DitherFlag;
+   if (st->can_dither)
+      blend->dither = ctx->Color.DitherFlag;
 
    if (_mesa_is_multisample_enabled(ctx) &&
        !(ctx->DrawBuffer->_IntegerBuffers & 0x1)) {

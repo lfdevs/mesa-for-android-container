@@ -30,12 +30,14 @@
 
 #include "hwdef/rogue_hw_defs.h"
 #include "pvr_limits.h"
-#include "pvr_winsys.h"
+#include "pvr_types.h"
 
 struct pvr_device;
 struct pvr_free_list;
 struct pvr_render_ctx;
 struct pvr_rt_dataset;
+struct pvr_winsys_job_bo;
+struct vk_sync;
 
 /* FIXME: Turn 'struct pvr_sub_cmd' into 'struct pvr_job' and change 'struct
  * pvr_render_job' to subclass it? This is approximately what v3dv does
@@ -114,15 +116,14 @@ pvr_render_target_dataset_create(struct pvr_device *device,
                                  struct pvr_rt_dataset **const rt_dataset_out);
 void pvr_render_target_dataset_destroy(struct pvr_rt_dataset *dataset);
 
-VkResult
-pvr_render_job_submit(struct pvr_render_ctx *ctx,
-                      struct pvr_render_job *job,
-                      const struct pvr_winsys_job_bo *bos,
-                      uint32_t bo_count,
-                      const VkSemaphore *semaphores,
-                      uint32_t semaphore_count,
-                      uint32_t *stage_flags,
-                      struct pvr_winsys_syncobj **const syncobj_geom_out,
-                      struct pvr_winsys_syncobj **const syncobj_frag_out);
+VkResult pvr_render_job_submit(struct pvr_render_ctx *ctx,
+                               struct pvr_render_job *job,
+                               const struct pvr_winsys_job_bo *bos,
+                               uint32_t bo_count,
+                               struct vk_sync **waits,
+                               uint32_t wait_count,
+                               uint32_t *stage_flags,
+                               struct vk_sync *signal_sync_geom,
+                               struct vk_sync *signal_sync_frag);
 
 #endif /* PVR_JOB_RENDER_H */
