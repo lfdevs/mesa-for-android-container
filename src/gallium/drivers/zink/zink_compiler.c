@@ -2851,7 +2851,7 @@ match_tex_dests_instr(nir_builder *b, nir_instr *in, void *data)
    unsigned dest_size = nir_dest_bit_size(tex->dest);
    b->cursor = nir_after_instr(in);
    unsigned num_components = nir_dest_num_components(tex->dest);
-   bool rewrite_depth = tex->is_shadow && num_components > 1 && tex->op != nir_texop_tg4;
+   bool rewrite_depth = tex->is_shadow && num_components > 1 && tex->op != nir_texop_tg4 && !tex->is_sparse;
    if (bit_size == dest_size && !rewrite_depth)
       return false;
    nir_ssa_def *dest = &tex->dest.ssa;

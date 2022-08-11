@@ -79,7 +79,7 @@ TEST_F(nir_opt_if_test, opt_if_simplification)
 
    nir_pop_if(&bld, NULL);
 
-   ASSERT_TRUE(nir_opt_if(bld.shader, false));
+   ASSERT_TRUE(nir_opt_if(bld.shader, nir_opt_if_optimize_phi_true_false));
 
    nir_validate_shader(bld.shader, NULL);
 
@@ -130,7 +130,7 @@ TEST_F(nir_opt_if_test, opt_if_simplification_single_source_phi_after_if)
 
    nir_builder_instr_insert(&bld, &phi->instr);
 
-   ASSERT_TRUE(nir_opt_if(bld.shader, false));
+   ASSERT_TRUE(nir_opt_if(bld.shader, nir_opt_if_optimize_phi_true_false));
 
    nir_validate_shader(bld.shader, NULL);
 
@@ -169,7 +169,7 @@ TEST_F(nir_opt_if_test, opt_if_alu_of_phi_progress)
 
    int progress_count = 0;
    for (int i = 0; i < 10; i++) {
-      progress = nir_opt_if(bld.shader, false);
+      progress = nir_opt_if(bld.shader, nir_opt_if_optimize_phi_true_false);
       if (progress)
          progress_count++;
       else

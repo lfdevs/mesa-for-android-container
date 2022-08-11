@@ -80,7 +80,10 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
       NIR_PASS(progress, nir, nir_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_opt_dce);
-      NIR_PASS(lower_phis_to_scalar, nir, nir_opt_if, true);
+      /* nir_opt_if_optimize_phi_true_false is disabled on LLVM14 (#6976) */
+      NIR_PASS(lower_phis_to_scalar, nir, nir_opt_if,
+         nir_opt_if_aggressive_last_continue |
+            (LLVM_VERSION_MAJOR == 14 ? 0 : nir_opt_if_optimize_phi_true_false));
       NIR_PASS(progress, nir, nir_opt_dead_cf);
 
       if (lower_alu_to_scalar)

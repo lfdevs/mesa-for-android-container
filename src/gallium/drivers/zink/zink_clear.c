@@ -553,6 +553,10 @@ zink_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *dst,
       ctx->render_condition_active = false;
    }
    bool cur_attachment = zink_csurface(ctx->fb_state.zsbuf) == zink_csurface(dst);
+   if (dstx > ctx->fb_state.width || dsty > ctx->fb_state.height ||
+       dstx + width > ctx->fb_state.width ||
+       dsty + height > ctx->fb_state.height)
+      cur_attachment = false;
    if (!cur_attachment) {
       util_blitter_save_framebuffer(ctx->blitter, &ctx->fb_state);
       set_clear_fb(pctx, NULL, dst);

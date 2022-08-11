@@ -1214,7 +1214,7 @@ nir_lower_shader_calls(nir_shader *shader,
       replace_resume_with_halt(resume_shaders[i], resume_instr);
       nir_opt_remove_phis(resume_shaders[i]);
       /* Remove the dummy blocks added by flatten_resume_if_ladder() */
-      nir_opt_if(resume_shaders[i], false);
+      nir_opt_if(resume_shaders[i], nir_opt_if_optimize_phi_true_false);
    }
 
    *resume_shaders_out = resume_shaders;

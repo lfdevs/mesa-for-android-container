@@ -972,6 +972,7 @@ radv_pipeline_has_dynamic_ds_states(const struct radv_graphics_pipeline *pipelin
                                          RADV_DYNAMIC_DEPTH_WRITE_ENABLE |
                                          RADV_DYNAMIC_DEPTH_COMPARE_OP |
                                          RADV_DYNAMIC_STENCIL_TEST_ENABLE |
+                                         RADV_DYNAMIC_STENCIL_WRITE_MASK |
                                          RADV_DYNAMIC_STENCIL_OP));
 }
 

@@ -325,7 +325,7 @@ nir_optimize(nir_shader *nir, bool allow_copies)
 
       OPT(nir_opt_remove_phis);
       OPT(nir_opt_gcm, false);
-      OPT(nir_opt_if, false);
+      OPT(nir_opt_if, nir_opt_if_optimize_phi_true_false);
       OPT(nir_opt_undef);
       OPT(nir_lower_pack);
 

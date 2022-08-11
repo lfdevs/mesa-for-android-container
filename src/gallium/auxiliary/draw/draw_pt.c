@@ -153,7 +153,7 @@ draw_pt_arrays(struct draw_context *draw,
       if (count >= first)
          frontend->run(frontend, draw_info[i].start, count);
 
-      if (draw->pt.user.increment_draw_id)
+      if (num_draws > 1 && draw->pt.user.increment_draw_id)
          draw->pt.user.drawid++;
    }
 
@@ -525,11 +525,14 @@ draw_vbo(struct draw_context *draw,
       num_draws = 1;
    }
 
-   if (info->index_size)
+   if (info->index_size) {
       assert(draw->pt.user.elts);
-
-   draw->pt.user.min_index = use_info->index_bounds_valid ? use_info->min_index : 0;
-   draw->pt.user.max_index = use_info->index_bounds_valid ? use_info->max_index : ~0;
+      draw->pt.user.min_index = use_info->index_bounds_valid ? use_info->min_index : 0;
+      draw->pt.user.max_index = use_info->index_bounds_valid ? use_info->max_index : ~0;
+   } else {
+      draw->pt.user.min_index = 0;
+      draw->pt.user.max_index = ~0;
+   }
    draw->pt.user.eltSize = use_info->index_size ? draw->pt.user.eltSizeIB : 0;
    draw->pt.user.drawid = drawid_offset;
    draw->pt.user.increment_draw_id = use_info->increment_draw_id;

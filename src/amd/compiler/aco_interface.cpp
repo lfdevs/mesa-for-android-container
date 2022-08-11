@@ -244,6 +244,9 @@ aco_compile_shader(const struct aco_compiler_options* options,
    std::vector<uint32_t> code;
    unsigned exec_size = aco::emit_program(program.get(), code);
 
+   if (program->collect_statistics)
+      aco::collect_postasm_stats(program.get(), code);
+
    bool get_disasm = options->dump_shader || options->record_ir;
 
    std::string disasm;

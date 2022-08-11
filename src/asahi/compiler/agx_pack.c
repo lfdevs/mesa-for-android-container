@@ -597,7 +597,7 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups, agx
             (((uint64_t) q3) << 43) |
             (((uint64_t) I->mask) << 48) |
             (((uint64_t) I->lod_mode) << 52) |
-            (((uint64_t) (S & BITFIELD_MASK(6))) << 32) |
+            (((uint64_t) (S & BITFIELD_MASK(6))) << 56) |
             (((uint64_t) St) << 62) |
             (((uint64_t) q5) << 63);
 

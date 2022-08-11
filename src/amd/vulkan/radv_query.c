@@ -1501,6 +1501,12 @@ radv_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPoo
    radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, pool->bo);
    radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, dst_buffer->bo);
 
+   /* Workaround engines that forget to properly specify WAIT_BIT because some driver implicitly
+    * synchronizes before query copy.
+    */
+   if (cmd_buffer->device->instance->flush_before_query_copy)
+      cmd_buffer->state.flush_bits |= cmd_buffer->active_query_flush_bits;
+
    /* From the Vulkan spec 1.1.108:
     *
     * "vkCmdCopyQueryPoolResults is guaranteed to see the effect of

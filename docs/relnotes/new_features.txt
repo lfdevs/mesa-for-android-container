@@ -14,3 +14,4 @@ VK_EXT_multisampled_render_to_single_sampled on lavapipe
 VK_EXT_shader_subgroup_vote/ballot on lavapipe
 EGL_KHR_context_flush_control for all drivers
 GLX_ARB_context_flush_control for all drivers
+VK_EXT_attachment_feedback_loop_layout on RADV

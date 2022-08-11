@@ -2917,6 +2917,7 @@ tu_clear_sysmem_attachment(struct tu_cmd_buffer *cmd,
     */
    if (vk_format_is_depth_or_stencil(attachment->format)) {
       tu6_emit_event_write(cmd, cs, PC_CCU_FLUSH_COLOR_TS);
+      tu6_emit_event_write(cmd, cs, PC_CCU_FLUSH_DEPTH_TS);
       tu6_emit_event_write(cmd, cs, PC_CCU_INVALIDATE_DEPTH);
    } else {
       tu6_emit_event_write(cmd, cs, PC_CCU_FLUSH_COLOR_TS);

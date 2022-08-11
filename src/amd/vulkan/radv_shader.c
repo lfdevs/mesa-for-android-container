@@ -197,7 +197,8 @@ radv_optimize_nir(struct nir_shader *shader, bool optimize_conservatively, bool 
          NIR_PASS(progress, shader, nir_opt_remove_phis);
          NIR_PASS(progress, shader, nir_opt_dce);
       }
-      NIR_PASS(progress, shader, nir_opt_if, true);
+      NIR_PASS(progress, shader, nir_opt_if,
+               nir_opt_if_aggressive_last_continue | nir_opt_if_optimize_phi_true_false);
       NIR_PASS(progress, shader, nir_opt_dead_cf);
       NIR_PASS(progress, shader, nir_opt_cse);
       NIR_PASS(progress, shader, nir_opt_peephole_select, 8, true, true);
@@ -654,6 +655,16 @@ lower_sincos(struct nir_builder *b, nir_instr *instr, void *_)
    return sincos->op == nir_op_fsin ? nir_fsin_amd(b, src) : nir_fcos_amd(b, src);
 }
 
+static bool
+is_not_xfb_output(nir_variable *var, void *data)
+{
+   if (var->data.mode != nir_var_shader_out)
+      return true;
+
+   return !var->data.explicit_xfb_buffer &&
+          !var->data.explicit_xfb_stride;
+}
+
 nir_shader *
 radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_pipeline_stage *stage,
                          const struct radv_pipeline_key *key)
@@ -837,9 +848,12 @@ radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_pipeline_
                      .use_layer_id_sysval = false,
                   });
 
+      nir_remove_dead_variables_options dead_vars_opts = {
+         .can_remove_var = is_not_xfb_output,
+      };
       NIR_PASS(_, nir, nir_remove_dead_variables,
                nir_var_shader_in | nir_var_shader_out | nir_var_system_value | nir_var_mem_shared,
-               NULL);
+               &dead_vars_opts);
 
       /* Variables can make nir_propagate_invariant more conservative
        * than it needs to be.
@@ -850,6 +864,11 @@ radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_pipeline_
       NIR_PASS(_, nir, nir_propagate_invariant, key->invariant_geom);
 
       NIR_PASS(_, nir, nir_lower_clip_cull_distance_arrays);
+
+      if (nir->info.stage == MESA_SHADER_VERTEX ||
+          nir->info.stage == MESA_SHADER_TESS_EVAL ||
+          nir->info.stage == MESA_SHADER_GEOMETRY)
+         NIR_PASS_V(nir, nir_shader_gather_xfb_info);
 
       NIR_PASS(_, nir, nir_lower_discard_or_demote, key->ps.lower_discard_to_demote);
 
@@ -1038,10 +1057,6 @@ radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_pipeline_
       radv_optimize_nir(nir, false, false);
    }
 
-   if (nir->info.stage == MESA_SHADER_VERTEX ||
-       nir->info.stage == MESA_SHADER_TESS_EVAL ||
-       nir->info.stage == MESA_SHADER_GEOMETRY)
-      NIR_PASS_V(nir, nir_shader_gather_xfb_info);
 
    return nir;
 }

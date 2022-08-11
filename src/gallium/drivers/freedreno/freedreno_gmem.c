@@ -433,7 +433,7 @@ gmem_stateobj_init(struct fd_screen *screen, struct gmem_key *key)
     */
    if (!FD_DBG(NOSBIN)) {
       for (i = 0; i < gmem->nbins_y; i+=2) {
-         unsigned col0 = gmem->nbins_y * i;
+         unsigned col0 = gmem->nbins_x * i;
          for (j = 0; j < gmem->nbins_x/2; j++) {
             swap(gmem->tile[col0 + j], gmem->tile[col0 + gmem->nbins_x - j - 1]);
          }

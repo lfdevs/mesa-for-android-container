@@ -1884,7 +1884,7 @@ endif
 # Be explicit about only using this lib on Windows, to avoid picking
 # up random libs with the generic name 'libversion'
 dep_version = null_dep
-if with_opencl_spirv and host_machine.system() == 'windows'
+if host_machine.system() == 'windows'
   dep_version = cpp.find_library('version')
 endif
 

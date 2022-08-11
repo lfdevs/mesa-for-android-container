@@ -169,7 +169,7 @@ ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
          OPT(s, nir_copy_prop);
          OPT(s, nir_opt_dce);
       }
-      progress |= OPT(s, nir_opt_if, false);
+      progress |= OPT(s, nir_opt_if, nir_opt_if_optimize_phi_true_false);
       progress |= OPT(s, nir_opt_loop_unroll);
       progress |= OPT(s, nir_lower_64bit_phis);
       progress |= OPT(s, nir_opt_remove_phis);

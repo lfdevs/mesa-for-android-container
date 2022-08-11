@@ -560,7 +560,7 @@ optimize_once(nir_shader *shader)
            NIR_PASS(progress, shader, nir_opt_dce);
    }
 
-   NIR_PASS(progress, shader, nir_opt_if, false);
+   NIR_PASS(progress, shader, nir_opt_if, nir_opt_if_optimize_phi_true_false);
    NIR_PASS(progress, shader, nir_opt_dead_cf);
    NIR_PASS(progress, shader, nir_opt_cse);
    NIR_PASS(progress, shader, nir_opt_peephole_select, 200, true, true);

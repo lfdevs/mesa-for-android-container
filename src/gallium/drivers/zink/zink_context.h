@@ -269,6 +269,7 @@ struct zink_context {
       VkRenderingInfo info;
    } dynamic_fb;
    uint32_t fb_layer_mismatch; //bitmask
+   unsigned depth_bias_scale_factor;
    struct set rendering_state_cache;
    struct set render_pass_state_cache;
    struct hash_table *render_pass_cache;

@@ -142,7 +142,7 @@ find_in_bucket(struct fd_bo_bucket *bucket, uint32_t flags)
          break;
       if (entry->alloc_flags == flags) {
          bo = entry;
-         list_del(&bo->list);
+         list_delinit(&bo->list);
          break;
       }
    }

@@ -147,6 +147,14 @@ create_surface(struct pipe_context *pctx,
                                 screen->format_props[templ->format].linearTilingFeatures;
    VkImageUsageFlags attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
    usage_info.usage = res->obj->vkusage & ~attachment;
+   if (res->obj->modifier_aspect) {
+      feats = res->obj->vkfeats;
+      /* intersect format features for current modifier */
+      for (unsigned i = 0; i < screen->modifier_props[templ->format].drmFormatModifierCount; i++) {
+         if (res->obj->modifier == screen->modifier_props[templ->format].pDrmFormatModifierProperties[i].drmFormatModifier)
+            feats &= screen->modifier_props[templ->format].pDrmFormatModifierProperties[i].drmFormatModifierTilingFeatures;
+      }
+   }
    if ((res->obj->vkusage & attachment) &&
        !(feats & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
       ivci->pNext = &usage_info;

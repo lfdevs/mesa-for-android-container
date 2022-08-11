@@ -519,6 +519,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .KHR_workgroup_memory_explicit_layout = true,
       .KHR_zero_initialize_workgroup_memory = true,
       .EXT_4444_formats = true,
+      .EXT_attachment_feedback_loop_layout = true,
       .EXT_border_color_swizzle = device->rad_info.gfx_level >= GFX10,
       .EXT_buffer_device_address = true,
       .EXT_calibrated_timestamps = RADV_SUPPORT_CALIBRATED_TIMESTAMPS,
@@ -1037,6 +1038,7 @@ static const driOptionDescription radv_dri_options[] = {
       DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(false)
       DRI_CONF_RADV_DISABLE_SINKING_LOAD_INPUT_FS(false)
       DRI_CONF_RADV_DGC(false)
+      DRI_CONF_RADV_FLUSH_BEFORE_QUERY_COPY(false)
    DRI_CONF_SECTION_END
 };
 // clang-format on
@@ -1085,6 +1087,9 @@ radv_init_dri_options(struct radv_instance *instance)
 
    instance->disable_sinking_load_input_fs =
       driQueryOptionb(&instance->dri_options, "radv_disable_sinking_load_input_fs");
+
+   instance->flush_before_query_copy =
+      driQueryOptionb(&instance->dri_options, "radv_flush_before_query_copy");
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -1849,6 +1854,12 @@ radv_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
             (VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV *)ext;
          features->deviceGeneratedCommands = true;
          break;
+      }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT: {
+         VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT *features =
+            (VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT *)ext;
+         features->attachmentFeedbackLoopLayout = true;
+	 break;
       }
       default:
          break;

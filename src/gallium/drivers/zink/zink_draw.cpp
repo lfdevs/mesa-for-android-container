@@ -588,6 +588,15 @@ zink_draw(struct pipe_context *pctx,
             CLAMP(ctx->vp_state.viewport_states[i].translate[2] + ctx->vp_state.viewport_states[i].scale[2],
                   0, 1)
          };
+         if (!ctx->rast_state->base.half_pixel_center) {
+             /* magic constant value from dxvk */
+             float cf = 0.5f - (1.0f / 128.0f);
+             viewport.x += cf;
+             if (viewport.height < 0)
+                viewport.y += cf;
+             else
+                viewport.y -= cf;
+         }
          viewports[i] = viewport;
       }
       if (DYNAMIC_STATE != ZINK_NO_DYNAMIC_STATE)
@@ -675,7 +684,7 @@ zink_draw(struct pipe_context *pctx,
        screen->info.have_EXT_line_rasterization && rast_state->base.line_stipple_enable)
       VKCTX(CmdSetLineStippleEXT)(batch->state->cmdbuf, rast_state->base.line_stipple_factor, rast_state->base.line_stipple_pattern);
 
-   if (BATCH_CHANGED || ctx->rast_state_changed || mode_changed) {
+   if (BATCH_CHANGED || ctx->rast_state_changed) {
       enum pipe_prim_type reduced_prim = ctx->last_vertex_stage->reduced_prim;
       if (reduced_prim == PIPE_PRIM_MAX)
          reduced_prim = u_reduced_prim(mode);
@@ -699,10 +708,15 @@ zink_draw(struct pipe_context *pctx,
       }
 
       VKCTX(CmdSetLineWidth)(batch->state->cmdbuf, rast_state->line_width);
-      if (depth_bias)
-         VKCTX(CmdSetDepthBias)(batch->state->cmdbuf, rast_state->offset_units, rast_state->offset_clamp, rast_state->offset_scale);
-      else
+      if (depth_bias) {
+         if (rast_state->base.offset_units_unscaled) {
+            VKCTX(CmdSetDepthBias)(batch->state->cmdbuf, rast_state->offset_units * ctx->depth_bias_scale_factor, rast_state->offset_clamp, rast_state->offset_scale);
+         } else {
+            VKCTX(CmdSetDepthBias)(batch->state->cmdbuf, rast_state->offset_units, rast_state->offset_clamp, rast_state->offset_scale);
+         }
+      } else {
          VKCTX(CmdSetDepthBias)(batch->state->cmdbuf, 0.0f, 0.0f, 0.0f);
+      }
    }
    ctx->rast_state_changed = false;
 

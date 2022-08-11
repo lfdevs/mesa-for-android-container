@@ -787,6 +787,9 @@ handle_instruction_gfx10(State& state, NOP_ctx_gfx10& ctx, aco_ptr<Instruction>&
       wait->definitions[0] = Definition(sgpr_null, s1);
       wait->imm = 0;
       new_instructions.emplace_back(std::move(wait));
+
+      ctx.has_VMEM = instr->isVMEM() || instr->isGlobal() || instr->isScratch();
+      ctx.has_DS = instr->isDS();
    }
 
    /* NSAToVMEMBug

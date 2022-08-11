@@ -61,6 +61,7 @@ static void *
 svga_create_tcs_state(struct pipe_context *pipe,
                       const struct pipe_shader_state *templ)
 {
+   struct svga_context *svga = svga_context(pipe);
    struct svga_tcs_shader *tcs;
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_CREATETCS);
@@ -73,6 +74,8 @@ svga_create_tcs_state(struct pipe_context *pipe,
 
 done:
    SVGA_STATS_TIME_POP(svga_sws(svga));
+   (void) svga; /* silence unused var warning */
+
    return tcs;
 }
 
@@ -137,6 +140,7 @@ static void *
 svga_create_tes_state(struct pipe_context *pipe,
                       const struct pipe_shader_state *templ)
 {
+   struct svga_context *svga = svga_context(pipe);
    struct svga_tes_shader *tes;
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_CREATETES);
@@ -150,6 +154,8 @@ svga_create_tes_state(struct pipe_context *pipe,
 
 done:
    SVGA_STATS_TIME_POP(svga_sws(svga));
+   (void) svga; /* silence unused var warning */
+
    return tes;
 }
 

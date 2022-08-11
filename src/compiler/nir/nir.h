@@ -5500,7 +5500,12 @@ bool nir_opt_gcm(nir_shader *shader, bool value_number);
 
 bool nir_opt_idiv_const(nir_shader *shader, unsigned min_bit_size);
 
-bool nir_opt_if(nir_shader *shader, bool aggressive_last_continue);
+typedef enum {
+   nir_opt_if_aggressive_last_continue = (1 << 0),
+   nir_opt_if_optimize_phi_true_false = (1 << 1),
+} nir_opt_if_options;
+
+bool nir_opt_if(nir_shader *shader, nir_opt_if_options options);
 
 bool nir_opt_intrinsics(nir_shader *shader);
 

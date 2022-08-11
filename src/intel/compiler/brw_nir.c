@@ -625,7 +625,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
          OPT(nir_copy_prop);
          OPT(nir_opt_dce);
       }
-      OPT(nir_opt_if, false);
+      OPT(nir_opt_if, nir_opt_if_optimize_phi_true_false);
       OPT(nir_opt_conditional_discard);
       if (nir->options->max_unroll_iterations != 0) {
          OPT(nir_opt_loop_unroll);

@@ -493,6 +493,18 @@ virgl_resource_transfer_map(struct pipe_context *ctx,
    /* Multisampled resources require resolve before mapping. */
    assert(resource->nr_samples <= 1);
 
+   /* If virgl resource was created using persistence and coherency flags,
+    * then its memory mapping can be only made in accordance to these
+    * flags. We record the "usage" flags in struct virgl_transfer and
+    * then virgl_buffer_transfer_unmap() uses them to differentiate
+    * unmapping of a host blob resource from guest.
+    */
+   if (resource->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
+      usage |= PIPE_MAP_PERSISTENT;
+
+   if (resource->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT)
+      usage |= PIPE_MAP_COHERENT;
+
    trans = virgl_resource_create_transfer(vctx, resource,
                                           &vres->metadata, level, usage, box);
 

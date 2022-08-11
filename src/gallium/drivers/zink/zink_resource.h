@@ -98,6 +98,7 @@ struct zink_resource_object {
    VkDeviceSize offset, size, alignment;
    VkImageCreateFlags vkflags;
    VkImageUsageFlags vkusage;
+   VkFormatFeatureFlags vkfeats;
    uint64_t modifier;
    VkImageAspectFlags modifier_aspect;
    VkSamplerYcbcrConversion sampler_conversion;

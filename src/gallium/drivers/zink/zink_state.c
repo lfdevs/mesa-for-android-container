@@ -611,7 +611,9 @@ zink_create_rasterizer_state(struct pipe_context *pctx,
    state->offset_point = rs_state->offset_point;
    state->offset_line = rs_state->offset_line;
    state->offset_tri = rs_state->offset_tri;
-   state->offset_units = rs_state->offset_units * 2;
+   state->offset_units = rs_state->offset_units;
+   if (!rs_state->offset_units_unscaled)
+      state->offset_units *= 2;
    state->offset_clamp = rs_state->offset_clamp;
    state->offset_scale = rs_state->offset_scale;
 
@@ -633,6 +635,7 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
    bool force_persample_interp = ctx->rast_state ? ctx->rast_state->hw_state.force_persample_interp : false;
    bool clip_halfz = ctx->rast_state ? ctx->rast_state->hw_state.clip_halfz : false;
    bool rasterizer_discard = ctx->rast_state ? ctx->rast_state->base.rasterizer_discard : false;
+   bool half_pixel_center = ctx->rast_state ? ctx->rast_state->base.half_pixel_center : true;
    ctx->rast_state = cso;
 
    if (ctx->rast_state) {
@@ -676,6 +679,9 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
 
       if (ctx->rast_state->base.force_persample_interp != force_persample_interp)
          zink_set_fs_key(ctx)->force_persample_interp = ctx->rast_state->base.force_persample_interp;
+
+      if (ctx->rast_state->base.half_pixel_center != half_pixel_center)
+         ctx->vp_state_changed = true;
    }
 }
 

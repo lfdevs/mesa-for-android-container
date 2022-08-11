@@ -1597,7 +1597,7 @@ opt_if_merge(nir_if *nif)
 
 static bool
 opt_if_cf_list(nir_builder *b, struct exec_list *cf_list,
-               bool aggressive_last_continue)
+               nir_opt_if_options options)
 {
    bool progress = false;
    foreach_list_typed(nir_cf_node, cf_node, node, cf_list) {
@@ -1608,23 +1608,24 @@ opt_if_cf_list(nir_builder *b, struct exec_list *cf_list,
       case nir_cf_node_if: {
          nir_if *nif = nir_cf_node_as_if(cf_node);
          progress |= opt_if_cf_list(b, &nif->then_list,
-                                    aggressive_last_continue);
+                                    options);
          progress |= opt_if_cf_list(b, &nif->else_list,
-                                    aggressive_last_continue);
+                                    options);
          progress |= opt_if_loop_terminator(nif);
          progress |= opt_if_merge(nif);
          progress |= opt_if_simplification(b, nif);
-         progress |= opt_if_phi_is_condition(b, nif);
+         if (options & nir_opt_if_optimize_phi_true_false)
+            progress |= opt_if_phi_is_condition(b, nif);
          break;
       }
 
       case nir_cf_node_loop: {
          nir_loop *loop = nir_cf_node_as_loop(cf_node);
          progress |= opt_if_cf_list(b, &loop->body,
-                                    aggressive_last_continue);
+                                    options);
          progress |= opt_simplify_bcsel_of_phi(b, loop);
          progress |= opt_if_loop_last_continue(loop,
-                                               aggressive_last_continue);
+                                               options & nir_opt_if_aggressive_last_continue);
          break;
       }
 
@@ -1717,7 +1718,7 @@ opt_if_safe_cf_list(nir_builder *b, struct exec_list *cf_list)
 }
 
 bool
-nir_opt_if(nir_shader *shader, bool aggressive_last_continue)
+nir_opt_if(nir_shader *shader, nir_opt_if_options options)
 {
    bool progress = false;
 
@@ -1736,7 +1737,7 @@ nir_opt_if(nir_shader *shader, bool aggressive_last_continue)
 
       bool preserve = true;
 
-      if (opt_if_cf_list(&b, &function->impl->body, aggressive_last_continue)) {
+      if (opt_if_cf_list(&b, &function->impl->body, options)) {
          preserve = false;
          progress = true;
       }

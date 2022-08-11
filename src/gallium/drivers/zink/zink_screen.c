@@ -242,7 +242,6 @@ cache_put_job(void *data, void *gdata, int thread_index)
 void
 zink_screen_update_pipeline_cache(struct zink_screen *screen, struct zink_program *pg)
 {
-   util_queue_fence_init(&pg->cache_fence);
    if (!screen->disk_cache)
       return;
 
@@ -465,6 +464,9 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
       return screen->info.have_KHR_sampler_mirror_clamp_to_edge;
 
+   case PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED:
+      return 1;
+
    case PIPE_CAP_POLYGON_OFFSET_CLAMP:
       return screen->info.feats.features.depthBiasClamp;
 
@@ -587,7 +589,7 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return screen->info.props.limits.maxImageArrayLayers;
 
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
-      return screen->info.feats.features.depthClamp;
+      return !screen->driver_workarounds.depth_clip_control_missing;
 
    case PIPE_CAP_SHADER_STENCIL_EXPORT:
       return screen->info.have_EXT_shader_stencil_export;
@@ -1511,7 +1513,8 @@ zink_get_format(struct zink_screen *screen, enum pipe_format format)
 {
    VkFormat ret = zink_pipe_format_to_vk_format(emulate_x8(format));
 
-   if (format == PIPE_FORMAT_X32_S8X24_UINT)
+   if (format == PIPE_FORMAT_X32_S8X24_UINT &&
+       screen->have_D32_SFLOAT_S8_UINT)
       return VK_FORMAT_D32_SFLOAT_S8_UINT;
 
    if (format == PIPE_FORMAT_X24S8_UINT)
@@ -1527,8 +1530,7 @@ zink_get_format(struct zink_screen *screen, enum pipe_format format)
 
    if (ret == VK_FORMAT_D24_UNORM_S8_UINT &&
        !screen->have_D24_UNORM_S8_UINT) {
-      assert(zink_is_depth_format_supported(screen,
-                                            VK_FORMAT_D32_SFLOAT_S8_UINT));
+      assert(screen->have_D32_SFLOAT_S8_UINT);
       return VK_FORMAT_D32_SFLOAT_S8_UINT;
    }
 
@@ -2111,6 +2113,17 @@ init_driver_workarounds(struct zink_screen *screen)
       /* performance */
       screen->info.border_color_feats.customBorderColorWithoutFormat = VK_FALSE;
    }
+   if (screen->info.driver_props.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE || 
+       screen->info.driver_props.driverID == VK_DRIVER_ID_AMD_PROPRIETARY || 
+       screen->info.driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY || 
+       screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_RADV)
+      screen->driver_workarounds.z24_unscaled_bias = 1<<23;
+   else
+      screen->driver_workarounds.z24_unscaled_bias = 1<<24;
+   if (screen->info.driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY)
+      screen->driver_workarounds.z16_unscaled_bias = 1<<15;
+   else
+      screen->driver_workarounds.z16_unscaled_bias = 1<<16;
 }
 
 static struct zink_screen *
@@ -2182,6 +2195,8 @@ zink_internal_create_screen(const struct pipe_screen_config *config)
                                               VK_FORMAT_X8_D24_UNORM_PACK32);
    screen->have_D24_UNORM_S8_UINT = zink_is_depth_format_supported(screen,
                                               VK_FORMAT_D24_UNORM_S8_UINT);
+   screen->have_D32_SFLOAT_S8_UINT = zink_is_depth_format_supported(screen,
+                                              VK_FORMAT_D32_SFLOAT_S8_UINT);
 
    if (!zink_get_physical_device_info(screen)) {
       debug_printf("ZINK: failed to detect features\n");

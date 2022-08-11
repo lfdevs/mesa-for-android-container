@@ -75,7 +75,7 @@ gl_nir_opts(nir_shader *nir)
          NIR_PASS(progress, nir, nir_copy_prop);
          NIR_PASS(progress, nir, nir_opt_dce);
       }
-      NIR_PASS(progress, nir, nir_opt_if, false);
+      NIR_PASS(progress, nir, nir_opt_if, 0);
       NIR_PASS(progress, nir, nir_opt_dead_cf);
       NIR_PASS(progress, nir, nir_opt_cse);
       NIR_PASS(progress, nir, nir_opt_peephole_select, 8, true, true);

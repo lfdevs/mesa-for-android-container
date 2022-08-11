@@ -437,6 +437,7 @@ zink_create_gfx_program(struct zink_context *ctx,
       goto fail;
 
    pipe_reference_init(&prog->base.reference, 1);
+   util_queue_fence_init(&prog->base.cache_fence);
 
    for (int i = 0; i < ZINK_SHADER_COUNT; ++i) {
       list_inithead(&prog->shader_cache[i][0][0]);
@@ -548,6 +549,7 @@ zink_create_compute_program(struct zink_context *ctx, struct zink_shader *shader
       goto fail;
 
    pipe_reference_init(&comp->base.reference, 1);
+   util_queue_fence_init(&comp->base.cache_fence);
    comp->base.is_compute = true;
 
    comp->curr = comp->module = CALLOC_STRUCT(zink_shader_module);

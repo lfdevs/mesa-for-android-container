@@ -1544,6 +1544,7 @@ static struct pb_buffer *amdgpu_bo_from_handle(struct radeon_winsys *rws,
        * if it can be used for scanout.
        */
       flags |= RADEON_FLAG_ENCRYPTED;
+      *((bool*)&rws->uses_secure_bos) = true;
    }
 
    /* Initialize the structure. */
