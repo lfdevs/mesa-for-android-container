@@ -402,6 +402,7 @@ Architecture: amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libvulkan1,
+ python3:any | python3-minimal:any,
  ${shlibs:Depends},
  ${misc:Depends}
 Provides: vulkan-icd

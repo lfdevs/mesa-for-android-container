@@ -209,7 +209,8 @@
         <glx rop="236"/>
     </function>
 
-    <function name="DeleteFramebuffers" es2="2.0">
+    <function name="DeleteFramebuffers" es2="2.0"
+              marshal_call_after="_mesa_glthread_DeleteFramebuffers(ctx, n, framebuffers);">
         <param name="n" type="GLsizei" counter="true"/>
         <param name="framebuffers" type="const GLuint *" count="n"/>
 	<glx rop="4320"/>

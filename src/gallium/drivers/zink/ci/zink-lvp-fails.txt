@@ -137,10 +137,6 @@ spec@arb_sample_shading@samplemask 4 all@noms partition,Fail
 spec@arb_sample_shading@samplemask 4 all@sample mask_in_one,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 spec@arb_texture_float@fbo-blending-formats,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_INTENSITY16F_ARB,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_INTENSITY32F_ARB,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_LUMINANCE16F_ARB,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_LUMINANCE32F_ARB,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_RGB32F,Fail
 
 spec@egl 1.4@eglterminate then unbind context,Fail
@@ -165,13 +161,6 @@ spec@ext_framebuffer_multisample@interpolation 4 centroid-edges,Fail
 spec@ext_framebuffer_multisample@interpolation 4 non-centroid-deriv-disabled,Fail
 spec@ext_framebuffer_multisample@interpolation 4 non-centroid-disabled,Fail
 spec@ext_framebuffer_object@fbo-blending-formats,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY12,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY16,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY4,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY8,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE12,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE16,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB10,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-intel_external_sampler_only,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-invalid_attributes,Fail
@@ -201,13 +190,6 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-unsupported_format,Fail
 spec@ext_packed_float@query-rgba-signed-components,Fail
-spec@ext_texture_snorm@fbo-blending-formats,Fail
-spec@ext_texture_snorm@fbo-blending-formats@GL_INTENSITY16_SNORM,Fail
-spec@ext_texture_snorm@fbo-blending-formats@GL_INTENSITY8_SNORM,Fail
-spec@ext_texture_snorm@fbo-blending-formats@GL_INTENSITY_SNORM,Fail
-spec@ext_texture_snorm@fbo-blending-formats@GL_LUMINANCE16_SNORM,Fail
-spec@ext_texture_snorm@fbo-blending-formats@GL_LUMINANCE8_SNORM,Fail
-spec@ext_texture_snorm@fbo-blending-formats@GL_LUMINANCE_SNORM,Fail
 spec@ext_texture_swizzle@depth_texture_mode_and_swizzle,Fail
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 spec@khr_texture_compression_astc@array-gl,Fail

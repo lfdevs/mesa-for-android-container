@@ -5116,7 +5116,7 @@
     </function>
 
     <function name="DeleteBuffers" es1="1.1" es2="2.0" no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_DeleteBuffers(ctx, n, buffer);">
+              marshal_call_after="_mesa_glthread_DeleteBuffers(ctx, n, buffer);">
         <param name="n" type="GLsizei" counter="true"/>
         <param name="buffer" type="const GLuint *" count="n"/>
         <glx ignore="true"/>

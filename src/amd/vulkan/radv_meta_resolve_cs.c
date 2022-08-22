@@ -61,9 +61,10 @@ radv_meta_build_resolve_srgb_conversion(nir_builder *b, nir_ssa_def *input)
 static nir_shader *
 build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_srgb, int samples)
 {
+   enum glsl_base_type img_base_type = is_integer ? GLSL_TYPE_UINT : GLSL_TYPE_FLOAT;
    const struct glsl_type *sampler_type =
-      glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false, GLSL_TYPE_FLOAT);
-   const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D, false, GLSL_TYPE_FLOAT);
+      glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false, img_base_type);
+   const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D, false, img_base_type);
    nir_builder b = radv_meta_init_shader(dev, MESA_SHADER_COMPUTE, "meta_resolve_cs-%d-%s", samples,
                                          is_integer ? "int" : (is_srgb ? "srgb" : "float"));
    b.shader->info.workgroup_size[0] = 8;
@@ -130,9 +131,10 @@ static nir_shader *
 build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples, int index,
                                            VkResolveModeFlagBits resolve_mode)
 {
+   enum glsl_base_type img_base_type = index == DEPTH_RESOLVE ? GLSL_TYPE_FLOAT : GLSL_TYPE_UINT;
    const struct glsl_type *sampler_type =
-      glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, true, GLSL_TYPE_FLOAT);
-   const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D, true, GLSL_TYPE_FLOAT);
+      glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, true, img_base_type);
+   const struct glsl_type *img_type = glsl_image_type(GLSL_SAMPLER_DIM_2D, true, img_base_type);
 
    nir_builder b = radv_meta_init_shader(dev, MESA_SHADER_COMPUTE, "meta_resolve_cs_%s-%s-%d",
                                          index == DEPTH_RESOLVE ? "depth" : "stencil",

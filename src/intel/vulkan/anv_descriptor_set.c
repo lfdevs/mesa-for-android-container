@@ -954,7 +954,7 @@ VkResult anv_CreateDescriptorPool(
                                             &pool->bo);
       if (result != VK_SUCCESS) {
          vk_object_free(&device->vk, pAllocator, pool);
-         return result;
+         return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
       }
 
       util_vma_heap_init(&pool->bo_heap, POOL_HEAP_OFFSET, descriptor_bo_size);

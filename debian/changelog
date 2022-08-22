@@ -1,3 +1,11 @@
+mesa (22.2.0~rc3-1) unstable; urgency=medium
+
+  * New upstream release candidate.
+  * rules: Enable video codecs. (Closes: #1016687)
+  * control: Add python3 to mesa-vulkan-drivers depends.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 22 Aug 2022 13:28:16 +0300
+
 mesa (22.2.0~rc2-1) unstable; urgency=medium
 
   * New upstream release candidate. (Closes: #1016801)

@@ -779,6 +779,20 @@ _mesa_glthread_DeleteLists(struct gl_context *ctx, GLsizei range)
    _mesa_glthread_flush_batch(ctx);
 }
 
+static inline void
+_mesa_glthread_DeleteFramebuffers(struct gl_context *ctx, GLsizei n,
+                                  const GLuint *ids)
+{
+   if (ctx->GLThread.CurrentDrawFramebuffer) {
+      for (int i = 0; i < n; i++) {
+         if (ctx->GLThread.CurrentDrawFramebuffer == ids[i]) {
+            ctx->GLThread.CurrentDrawFramebuffer = 0;
+            break;
+         }
+      }
+   }
+}
+
 struct marshal_cmd_CallList
 {
    struct marshal_cmd_base cmd_base;

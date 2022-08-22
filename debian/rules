@@ -132,6 +132,7 @@ else
 
   ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
 	confflags_GALLIUM += -Dgallium-va=enabled
+	confflags_GALLIUM += -Dvideo-codecs="vc1dec, h264dec, h264enc, h265dec, h265enc"
   endif
 endif
 

@@ -907,8 +907,6 @@ radv_device_init_meta_query_state_internal(struct radv_device *device)
       &pg_pipeline_info, NULL, &device->meta_state.query.pg_query_pipeline);
 
 fail:
-   if (result != VK_SUCCESS)
-      radv_device_finish_meta_query_state(device);
    ralloc_free(occlusion_cs);
    ralloc_free(pipeline_statistics_cs);
    ralloc_free(tfb_cs);

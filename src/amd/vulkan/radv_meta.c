@@ -770,7 +770,7 @@ radv_meta_build_resolve_shader_core(nir_builder *b, bool is_integer, int samples
    tex->src[1].src = nir_src_for_ssa(nir_imm_int(b, 0));
    tex->src[2].src_type = nir_tex_src_texture_deref;
    tex->src[2].src = nir_src_for_ssa(input_img_deref);
-   tex->dest_type = nir_type_float32;
+   tex->dest_type = nir_get_nir_type_for_glsl_base_type(glsl_get_sampler_result_type(input_img->type));
    tex->is_array = false;
    tex->coord_components = 2;
 

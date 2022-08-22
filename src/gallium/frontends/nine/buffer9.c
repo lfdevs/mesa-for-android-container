@@ -272,6 +272,7 @@ NineBuffer9_Lock( struct NineBuffer9 *This,
     if (!(This->base.usage & D3DUSAGE_DYNAMIC) && This->base.pool == D3DPOOL_DEFAULT)
         SizeToLock = This->size - OffsetToLock;
 
+    SizeToLock = MIN2(SizeToLock, This->size - OffsetToLock); /* Do not read or track out of the buffer */
     u_box_1d(OffsetToLock, SizeToLock, &box);
 
     if (This->base.pool != D3DPOOL_DEFAULT) {

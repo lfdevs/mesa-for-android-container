@@ -1718,6 +1718,7 @@ if with_gallium_opencl
 endif
 if with_clc
   llvm_modules += ['coverage', 'target', 'linker', 'irreader', 'option', 'libdriver', 'lto']
+  llvm_optional_modules += ['all-targets']
 endif
 if with_tests or with_gallium_softpipe
   llvm_modules += 'native'

@@ -563,6 +563,9 @@ static VkResult device_select_EnumeratePhysicalDeviceGroups(VkInstance instance,
       goto out;
    }
 
+   for (unsigned i = 0; i < physical_device_group_count; i++)
+      physical_device_groups[i].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES;
+
    result = info->EnumeratePhysicalDeviceGroups(instance, &physical_device_group_count, physical_device_groups);
    if (result != VK_SUCCESS)
       goto out;

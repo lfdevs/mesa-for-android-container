@@ -33,9 +33,10 @@
 static nir_shader *
 build_resolve_fragment_shader(struct radv_device *dev, bool is_integer, int samples)
 {
+   enum glsl_base_type img_base_type = is_integer ? GLSL_TYPE_UINT : GLSL_TYPE_FLOAT;
    const struct glsl_type *vec4 = glsl_vec4_type();
    const struct glsl_type *sampler_type =
-      glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false, GLSL_TYPE_FLOAT);
+      glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false, img_base_type);
 
    nir_builder b = radv_meta_init_shader(dev, MESA_SHADER_FRAGMENT, "meta_resolve_fs-%d-%s",
                                          samples, is_integer ? "int" : "float");
@@ -250,9 +251,10 @@ static nir_shader *
 build_depth_stencil_resolve_fragment_shader(struct radv_device *dev, int samples, int index,
                                             VkResolveModeFlagBits resolve_mode)
 {
+   enum glsl_base_type img_base_type = index == DEPTH_RESOLVE ? GLSL_TYPE_FLOAT : GLSL_TYPE_UINT;
    const struct glsl_type *vec4 = glsl_vec4_type();
    const struct glsl_type *sampler_type =
-      glsl_sampler_type(GLSL_SAMPLER_DIM_2D, false, false, GLSL_TYPE_FLOAT);
+      glsl_sampler_type(GLSL_SAMPLER_DIM_2D, false, false, img_base_type);
 
    nir_builder b = radv_meta_init_shader(dev, MESA_SHADER_FRAGMENT, "meta_resolve_fs_%s-%s-%d",
                                          index == DEPTH_RESOLVE ? "depth" : "stencil",

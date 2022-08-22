@@ -1437,11 +1437,8 @@ CSMT_ITEM_NO_WAIT(nine_context_set_render_state,
         }
     }
     if (unlikely(State == D3DRS_ALPHATESTENABLE && (context->rs[NINED3DRS_ALPHACOVERAGE] & 2))) {
-        DWORD alphacoverage_prev = context->rs[NINED3DRS_ALPHACOVERAGE];
         context->rs[NINED3DRS_ALPHACOVERAGE] &= 6;
-        context->rs[NINED3DRS_ALPHACOVERAGE] |= (context->rs[D3DRS_ALPHATESTENABLE] ? 1 : 0);
-        if (context->rs[NINED3DRS_ALPHACOVERAGE] != alphacoverage_prev)
-            context->changed.group |= NINE_STATE_BLEND;
+        context->rs[NINED3DRS_ALPHACOVERAGE] |= (Value ? 1 : 0);
     }
 
     context->rs[State] = nine_fix_render_state_value(State, Value);
@@ -2384,6 +2381,9 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_primitive,
     struct pipe_draw_info info;
     struct pipe_draw_start_count_bias draw;
 
+    if (context->vs && context->vs->swvp_only && !context->swvp)
+        return;
+
     nine_update_state(device);
 
     init_draw_info(&info, &draw, device, PrimitiveType, PrimitiveCount);
@@ -2408,6 +2408,9 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive,
     struct nine_context *context = &device->context;
     struct pipe_draw_info info;
     struct pipe_draw_start_count_bias draw;
+
+    if (context->vs && context->vs->swvp_only && !context->swvp)
+        return;
 
     nine_update_state(device);
 
@@ -2438,6 +2441,9 @@ CSMT_ITEM_NO_WAIT(nine_context_draw_indexed_primitive_from_vtxbuf_idxbuf,
     struct nine_context *context = &device->context;
     struct pipe_draw_info info;
     struct pipe_draw_start_count_bias draw;
+
+    if (context->vs && context->vs->swvp_only && !context->swvp)
+        return;
 
     nine_update_state(device);
 
@@ -2835,10 +2841,10 @@ void nine_state_restore_non_cso(struct NineDevice9 *device)
 {
     struct nine_context *context = &device->context;
 
-    context->changed.group = NINE_STATE_ALL;
+    context->changed.group = NINE_STATE_ALL; /* TODO: we can remove states that have prepared commits */
     context->changed.vtxbuf = (1ULL << device->caps.MaxStreams) - 1;
     context->changed.ucp = TRUE;
-    context->commit |= NINE_STATE_COMMIT_CONST_VS | NINE_STATE_COMMIT_CONST_PS;
+    context->commit |= 0xffffffff; /* re-commit everything */
     context->enabled_sampler_count_vs = 0;
     context->enabled_sampler_count_ps = 0;
 }

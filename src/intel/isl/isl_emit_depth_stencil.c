@@ -170,7 +170,7 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
 #if GFX_VER >= 6
    struct GENX(3DSTATE_STENCIL_BUFFER) sb = {
       GENX(3DSTATE_STENCIL_BUFFER_header),
-      sb.MOCS = info->mocs,
+      .MOCS = info->mocs,
    };
 #else
 #  define sb db

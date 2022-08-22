@@ -574,8 +574,6 @@ spec@arb_texture_cube_map_array@fbo-generatemipmap-cubemap array s3tc_dxt1,Fail
 spec@arb_texture_float@fbo-blending-formats,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_ALPHA16F_ARB,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_ALPHA32F_ARB,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_INTENSITY16F_ARB,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_INTENSITY32F_ARB,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_RGB32F,Fail
 spec@arb_texture_float@fbo-clear-formats,Fail
 spec@arb_texture_float@fbo-clear-formats@GL_ALPHA16F_ARB,Fail
@@ -773,10 +771,6 @@ spec@ext_texture_shared_exponent@texwrap formats bordercolor,Fail
 spec@ext_texture_shared_exponent@texwrap formats bordercolor-swizzled,Fail
 spec@ext_texture_shared_exponent@texwrap formats bordercolor-swizzled@GL_RGB9_E5- swizzled- border color only,Fail
 spec@ext_texture_shared_exponent@texwrap formats bordercolor@GL_RGB9_E5- border color only,Fail
-spec@ext_texture_snorm@fbo-blending-formats,Fail
-spec@ext_texture_snorm@fbo-blending-formats@GL_INTENSITY16_SNORM,Fail
-spec@ext_texture_snorm@fbo-blending-formats@GL_INTENSITY8_SNORM,Fail
-spec@ext_texture_snorm@fbo-blending-formats@GL_INTENSITY_SNORM,Fail
 spec@ext_texture_snorm@texwrap formats bordercolor,Fail
 spec@ext_texture_snorm@texwrap formats bordercolor-swizzled,Fail
 spec@ext_texture_snorm@texwrap formats bordercolor-swizzled@GL_ALPHA16_SNORM- swizzled- border color only,Fail

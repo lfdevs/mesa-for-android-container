@@ -1294,6 +1294,22 @@ st_ChooseTextureFormat(struct gl_context *ctx, GLenum target,
             internalFormat == GL_R8UI)
       bindings |= PIPE_BIND_RENDER_TARGET;
 
+   if ((_mesa_is_desktop_gl(ctx) && ctx->Version >= 30) &&
+       (internalFormat == GL_ALPHA4 ||
+        internalFormat == GL_ALPHA8 ||
+        internalFormat == GL_ALPHA12 ||
+        internalFormat == GL_ALPHA16 ||
+        /* ARB_texture_float */
+        internalFormat == GL_ALPHA32F_ARB ||
+        internalFormat == GL_INTENSITY32F_ARB ||
+        internalFormat == GL_LUMINANCE32F_ARB ||
+        internalFormat == GL_LUMINANCE_ALPHA32F_ARB ||
+        internalFormat == GL_ALPHA16F_ARB ||
+        internalFormat == GL_INTENSITY16F_ARB ||
+        internalFormat == GL_LUMINANCE16F_ARB ||
+        internalFormat == GL_LUMINANCE_ALPHA16F_ARB))
+      bindings |= PIPE_BIND_RENDER_TARGET;
+
    /* GLES allows the driver to choose any format which matches
     * the format+type combo, because GLES only supports unsized internal
     * formats and expects the driver to choose whatever suits it.

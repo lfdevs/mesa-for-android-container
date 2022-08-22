@@ -144,9 +144,7 @@ spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_texture_float@fbo-blending-formats,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_ALPHA32F_ARB,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_INTENSITY16F_ARB,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_INTENSITY32F_ARB,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_LUMINANCE16F_ARB,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_LUMINANCE32F_ARB,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_LUMINANCE_ALPHA32F_ARB,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_RGB16F,Fail

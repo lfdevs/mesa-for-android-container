@@ -56,11 +56,8 @@ static struct wgl_egl_config *
 wgl_add_config(_EGLDisplay *disp, const struct stw_pixelformat_info *stw_config, int id, EGLint surface_type)
 {
    struct wgl_egl_config *conf;
-   struct wgl_egl_display *wgl_dpy = wgl_egl_display(disp);
    _EGLConfig base;
    unsigned int double_buffer;
-   int wgl_shifts[4] = { -1, -1, -1, -1 };
-   unsigned int wgl_sizes[4] = { 0, 0, 0, 0 };
    _EGLConfig *matching_config;
    EGLint num_configs = 0;
    EGLint config_id;
@@ -72,21 +69,11 @@ wgl_add_config(_EGLDisplay *disp, const struct stw_pixelformat_info *stw_config,
    if (stw_config->pfd.iPixelType != PFD_TYPE_RGBA)
       return NULL;
 
-   wgl_sizes[0] = stw_config->pfd.cRedBits;
-   wgl_sizes[1] = stw_config->pfd.cGreenBits;
-   wgl_sizes[2] = stw_config->pfd.cBlueBits;
-   wgl_sizes[3] = stw_config->pfd.cAlphaBits;
-
    base.RedSize = stw_config->pfd.cRedBits;
    base.GreenSize = stw_config->pfd.cGreenBits;
    base.BlueSize = stw_config->pfd.cBlueBits;
    base.AlphaSize = stw_config->pfd.cAlphaBits;
    base.BufferSize = stw_config->pfd.cColorBits;
-
-   wgl_shifts[0] = stw_config->pfd.cRedShift;
-   wgl_shifts[1] = stw_config->pfd.cGreenShift;
-   wgl_shifts[2] = stw_config->pfd.cBlueShift;
-   wgl_shifts[3] = stw_config->pfd.cAlphaShift;
 
    if (stw_config->pfd.cAccumBits) {
       /* Don't expose visuals with the accumulation buffer. */
@@ -148,7 +135,7 @@ wgl_add_config(_EGLDisplay *disp, const struct stw_pixelformat_info *stw_config,
          return NULL;
    }
    else if (num_configs == 0) {
-      conf = calloc(1, sizeof * conf);
+      conf = calloc(1, sizeof(*conf));
       if (conf == NULL)
          return NULL;
 
@@ -204,7 +191,7 @@ wgl_initialize_impl(_EGLDisplay *disp, HDC hdc)
    struct wgl_egl_display *wgl_dpy;
    const char* err;
 
-   wgl_dpy = calloc(1, sizeof * wgl_dpy);
+   wgl_dpy = calloc(1, sizeof(*wgl_dpy));
    if (!wgl_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
@@ -367,7 +354,7 @@ wgl_create_context(_EGLDisplay *disp, _EGLConfig *conf,
    struct wgl_egl_config *wgl_config = wgl_egl_config(conf);
    const struct stw_pixelformat_info *stw_config;
 
-   wgl_ctx = malloc(sizeof * wgl_ctx);
+   wgl_ctx = malloc(sizeof(*wgl_ctx));
    if (!wgl_ctx) {
       _eglError(EGL_BAD_ALLOC, "eglCreateContext");
       return NULL;
@@ -473,7 +460,6 @@ static EGLBoolean
 wgl_destroy_context(_EGLDisplay *disp, _EGLContext *ctx)
 {
    struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
-   struct wgl_egl_display *wgl_dpy = wgl_egl_display(disp);
 
    if (_eglPutContext(ctx)) {
       stw_destroy_context(wgl_ctx->ctx);
@@ -527,7 +513,6 @@ wgl_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
    struct wgl_egl_display *wgl_dpy = wgl_egl_display(disp);
    struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
    _EGLDisplay *old_disp = NULL;
-   struct wgl_egl_display *old_wgl_dpy = NULL;
    _EGLContext *old_ctx;
    _EGLSurface *old_dsurf, *old_rsurf;
    _EGLSurface *tmp_dsurf, *tmp_rsurf;
@@ -545,21 +530,9 @@ wgl_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
    if (old_ctx) {
       struct stw_context *old_cctx = wgl_egl_context(old_ctx)->ctx;
       old_disp = old_ctx->Resource.Display;
-      old_wgl_dpy = wgl_egl_display(old_disp);
 
       /* flush before context switch */
       wgl_gl_flush();
-
-#if 0
-      if (old_dsurf)
-         wgl_surf_update_fence_fd(old_ctx, disp, old_dsurf);
-
-      /* Disable shared buffer mode */
-      if (old_dsurf && _eglSurfaceInSharedBufferMode(old_dsurf) &&
-         old_wgl_dpy->vtbl->set_shared_buffer_mode) {
-         old_wgl_dpy->vtbl->set_shared_buffer_mode(old_disp, old_dsurf, false);
-      }
-#endif
 
       stw_unbind_context(old_cctx);
    }
@@ -598,13 +571,6 @@ wgl_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
 
          /* undo the previous wgl_dpy->core->unbindContext */
          if (stw_make_current(ddraw, rdraw, cctx)) {
-#if 0
-            if (old_dsurf && _eglSurfaceInSharedBufferMode(old_dsurf) &&
-               old_wgl_dpy->vtbl->set_shared_buffer_mode) {
-               old_wgl_dpy->vtbl->set_shared_buffer_mode(old_disp, old_dsurf, true);
-            }
-#endif
-
             return _eglError(egl_error, "eglMakeCurrent");
          }
 
@@ -643,20 +609,6 @@ wgl_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
    if (egl_error != EGL_SUCCESS)
       return _eglError(egl_error, "eglMakeCurrent");
 
-#if 0
-   if (dsurf && _eglSurfaceHasMutableRenderBuffer(dsurf) &&
-      wgl_dpy->vtbl->set_shared_buffer_mode) {
-      /* Always update the shared buffer mode. This is obviously needed when
-       * the active EGL_RENDER_BUFFER is EGL_SINGLE_BUFFER. When
-       * EGL_RENDER_BUFFER is EGL_BACK_BUFFER, the update protects us in the
-       * case where external non-EGL API may have changed window's shared
-       * buffer mode since we last saw it.
-       */
-      bool mode = (dsurf->ActiveRenderBuffer == EGL_SINGLE_BUFFER);
-      wgl_dpy->vtbl->set_shared_buffer_mode(disp, dsurf, mode);
-   }
-#endif
-
    return EGL_TRUE;
 }
 
@@ -691,7 +643,6 @@ wgl_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
 static EGLBoolean
 wgl_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
 {
-   struct wgl_egl_display *wgl_disp = wgl_egl_display(disp);
    struct wgl_egl_surface *wgl_surf = wgl_egl_surface(draw);
 
    stw_framebuffer_lock(wgl_surf->fb);

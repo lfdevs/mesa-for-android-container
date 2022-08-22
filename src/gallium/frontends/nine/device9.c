@@ -2983,7 +2983,9 @@ NineTrackSystemmemDynamic( struct NineBuffer9 *This, unsigned start, unsigned wi
 {
     struct pipe_box box;
 
-    u_box_1d(start, width, &box);
+    if (start >= This->size)
+        return; /* outside bounds, nothing to do */
+    u_box_1d(start, MIN2(width, This->size-start), &box);
     u_box_union_1d(&This->managed.required_valid_region,
                    &This->managed.required_valid_region,
                    &box);

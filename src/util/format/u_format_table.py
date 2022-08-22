@@ -185,7 +185,7 @@ def write_format_table(formats):
         print()
 
     def generate_function_getter(func):
-        print("ATTRIBUTE_RETURNS_NONNULL util_format_%s_func_ptr" % func)
+        print("util_format_%s_func_ptr" % func)
         print("util_format_%s_func(enum pipe_format format)" % (func))
         print("{")
         print("   assert(format < PIPE_FORMAT_COUNT);")

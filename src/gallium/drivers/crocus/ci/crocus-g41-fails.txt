@@ -129,8 +129,6 @@ spec@arb_texture_cube_map@copyteximage cube,Fail
 # 16-bit so that texture filtering worked, since GL 2.1 let you do that.
 # Crocus instead decided to follow r300 and other GL2 hardware in using the
 # requested size for storage even if the HW can't filter textures with it.
-spec@arb_texture_float@fbo-blending-formats,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_LUMINANCE32F_ARB,Fail
 spec@arb_texture_rg@fbo-blending-formats-float,Fail
 spec@arb_texture_rg@fbo-blending-formats-float@GL_RG32F,Fail
 spec@arb_texture_float@texwrap formats bordercolor,Fail

@@ -1,38 +1,111 @@
 /*
  * Copyright © 2019 Google LLC
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
+
 #ifndef TU_CS_H
 #define TU_CS_H
 
-#include "tu_private.h"
-
-#include "adreno_pm4.xml.h"
+#include "tu_common.h"
 
 #include "freedreno_pm4.h"
+
+#include "tu_drm.h"
 
 /* For breadcrumbs we may open a network socket based on the envvar,
  * it's not something that should be enabled by default.
  */
 #define TU_BREADCRUMBS_ENABLED 0
+
+enum tu_cs_mode
+{
+
+   /*
+    * A command stream in TU_CS_MODE_GROW mode grows automatically whenever it
+    * is full.  tu_cs_begin must be called before command packet emission and
+    * tu_cs_end must be called after.
+    *
+    * This mode may create multiple entries internally.  The entries must be
+    * submitted together.
+    */
+   TU_CS_MODE_GROW,
+
+   /*
+    * A command stream in TU_CS_MODE_EXTERNAL mode wraps an external,
+    * fixed-size buffer.  tu_cs_begin and tu_cs_end are optional and have no
+    * effect on it.
+    *
+    * This mode does not create any entry or any BO.
+    */
+   TU_CS_MODE_EXTERNAL,
+
+   /*
+    * A command stream in TU_CS_MODE_SUB_STREAM mode does not support direct
+    * command packet emission.  tu_cs_begin_sub_stream must be called to get a
+    * sub-stream to emit comamnd packets to.  When done with the sub-stream,
+    * tu_cs_end_sub_stream must be called.
+    *
+    * This mode does not create any entry internally.
+    */
+   TU_CS_MODE_SUB_STREAM,
+};
+
+struct tu_cs_entry
+{
+   /* No ownership */
+   const struct tu_bo *bo;
+
+   uint32_t size;
+   uint32_t offset;
+};
+
+struct tu_cs_memory {
+   uint32_t *map;
+   uint64_t iova;
+};
+
+struct tu_draw_state {
+   uint64_t iova : 48;
+   uint32_t size : 16;
+};
+
+#define TU_COND_EXEC_STACK_SIZE 4
+
+struct tu_cs
+{
+   uint32_t *start;
+   uint32_t *cur;
+   uint32_t *reserved_end;
+   uint32_t *end;
+
+   struct tu_device *device;
+   enum tu_cs_mode mode;
+   uint32_t next_bo_size;
+
+   struct tu_cs_entry *entries;
+   uint32_t entry_count;
+   uint32_t entry_capacity;
+
+   struct tu_bo **bos;
+   uint32_t bo_count;
+   uint32_t bo_capacity;
+
+   /* Optional BO that this CS is sub-allocated from for TU_CS_MODE_SUB_STREAM */
+   struct tu_bo *refcount_bo;
+
+   /* state for cond_exec_start/cond_exec_end */
+   uint32_t cond_stack_depth;
+   uint32_t cond_flags[TU_COND_EXEC_STACK_SIZE];
+   uint32_t *cond_dwords[TU_COND_EXEC_STACK_SIZE];
+
+   uint32_t breadcrumb_emit_after;
+};
+
+void
+tu_breadcrumbs_init(struct tu_device *device);
+
+void
+tu_breadcrumbs_finish(struct tu_device *device);
 
 void
 tu_cs_init(struct tu_cs *cs,
@@ -338,10 +411,22 @@ tu_cond_exec_end(struct tu_cs *cs)
       cs->cur - cs->cond_dwords[cs->cond_stack_depth] - 1;
 }
 
+/* Temporary struct for tracking a register state to be written, used by
+ * a6xx-pack.h and tu_cs_emit_regs()
+ */
+struct tu_reg_value {
+   uint32_t reg;
+   uint64_t value;
+   bool is_address;
+   struct tu_bo *bo;
+   bool bo_write;
+   uint32_t bo_offset;
+   uint32_t bo_shift;
+};
+
 #define fd_reg_pair tu_reg_value
 #define __bo_type struct tu_bo *
 
-#include "a6xx.xml.h"
 #include "a6xx-pack.xml.h"
 
 #define __assert_eq(a, b)                                               \

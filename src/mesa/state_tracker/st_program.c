@@ -502,6 +502,7 @@ st_create_nir_shader(struct st_context *st, struct pipe_shader_state *state)
 
    assert(state->type == PIPE_SHADER_IR_NIR);
    nir_shader *nir = state->ir.nir;
+   struct shader_info info = nir->info;
    gl_shader_stage stage = nir->info.stage;
    enum pipe_shader_type sh = pipe_shader_type_from_mesa(stage);
 
@@ -548,7 +549,7 @@ st_create_nir_shader(struct st_context *st, struct pipe_shader_state *state)
    case MESA_SHADER_COMPUTE: {
       struct pipe_compute_state cs = {0};
       cs.ir_type = state->type;
-      cs.req_local_mem = nir->info.shared_size;
+      cs.req_local_mem = info.shared_size;
 
       if (state->type == PIPE_SHADER_IR_NIR)
          cs.prog = state->ir.nir;

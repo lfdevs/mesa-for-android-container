@@ -1,38 +1,19 @@
 /*
  * Copyright © 2021 Igalia S.L.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef TU_AUTOTUNE_H
 #define TU_AUTOTUNE_H
 
+#include "tu_common.h"
+
 #include "util/hash_table.h"
-#include "util/list.h"
 #include "util/rwlock.h"
 
-struct tu_device;
-struct tu_cmd_buffer;
+#include "tu_suballoc.h"
 
 struct tu_renderpass_history;
-struct tu_renderpass_result;
 
 /**
  * "autotune" our decisions about bypass vs GMEM rendering, based on historical
@@ -110,6 +91,27 @@ struct tu_renderpass_samples {
    uint64_t __pad0;
    uint64_t samples_end;
    uint64_t __pad1;
+};
+
+/**
+ * Tracks the results from an individual renderpass. Initially created
+ * per renderpass, and appended to the tail of at->pending_results. At a later
+ * time, when the GPU has finished writing the results, we fill samples_passed.
+ */
+struct tu_renderpass_result {
+   /* Points into GPU memory */
+   struct tu_renderpass_samples* samples;
+
+   struct tu_suballoc_bo bo;
+
+   /*
+    * Below here, only used internally within autotune
+    */
+   uint64_t rp_key;
+   struct tu_renderpass_history *history;
+   struct list_head node;
+   uint32_t fence;
+   uint64_t samples_passed;
 };
 
 VkResult tu_autotune_init(struct tu_autotune *at, struct tu_device *dev);

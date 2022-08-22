@@ -106,7 +106,7 @@ build_fmask_copy_compute_shader(struct radv_device *dev, int samples)
       frag_fetch->src[2].src = nir_src_for_ssa(input_img_deref);
       frag_fetch->src[3].src_type = nir_tex_src_ms_index;
       frag_fetch->src[3].src = nir_src_for_ssa(sample_id);
-      frag_fetch->dest_type = nir_type_uint32;
+      frag_fetch->dest_type = nir_type_float32;
       frag_fetch->is_array = false;
       frag_fetch->coord_components = 2;
 

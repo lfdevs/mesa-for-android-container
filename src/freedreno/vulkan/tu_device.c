@@ -1,53 +1,39 @@
 /*
  * Copyright © 2016 Red Hat.
  * Copyright © 2016 Bas Nieuwenhuizen
+ * SPDX-License-Identifier: MIT
  *
  * based in part on anv driver which is:
  * Copyright © 2015 Intel Corporation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
  */
 
-#include "tu_private.h"
-#include "tu_cs.h"
-#include "tu_tracepoints.h"
-#include "git_sha1.h"
+#include "tu_device.h"
 
 #include <fcntl.h>
 #include <poll.h>
-#include <stdbool.h>
-#include <string.h>
 #include <sys/sysinfo.h>
-#include <unistd.h>
 
+#include "git_sha1.h"
 #include "util/debug.h"
 #include "util/disk_cache.h"
 #include "util/driconf.h"
 #include "util/os_misc.h"
-#include "util/u_atomic.h"
-#include "vk_format.h"
 #include "vk_sampler.h"
 #include "vk_util.h"
 
 /* for fd_get_driver/device_uuid() */
 #include "freedreno/common/freedreno_uuid.h"
+
+#include "tu_clear_blit.h"
+#include "tu_cmd_buffer.h"
+#include "tu_cs.h"
+#include "tu_descriptor_set.h"
+#include "tu_dynamic_rendering.h"
+#include "tu_image.h"
+#include "tu_pass.h"
+#include "tu_query.h"
+#include "tu_tracepoints.h"
+#include "tu_wsi.h"
 
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR) || \
      defined(VK_USE_PLATFORM_XCB_KHR) || \

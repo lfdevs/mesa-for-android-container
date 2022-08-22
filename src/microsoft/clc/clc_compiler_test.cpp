@@ -1319,7 +1319,7 @@ TEST_F(ComputeTest, log2)
    }\n";
    auto inout = ShaderArg<float>({ 0.0f, 1.0f, 2.0f, 3.0f }, SHADER_ARG_INOUT);
    const float expected[] = {
-      log(0.0f) / log(2), log(1.0f) / log(2), log(2.0f) / log(2), log(3.0f) / log(2)
+      log(0.0f) / log(2.0f), log(1.0f) / log(2.0f), log(2.0f) / log(2.0f), log(3.0f) / log(2.0f)
    };
    run_shader(kernel_source, inout.size(), 1, 1, inout);
    for (int i = 0; i < inout.size(); ++i)
@@ -2303,7 +2303,7 @@ TEST_F(ComputeTest, spec_constant)
    const uint32_t expected[] = {
       0x00000005, 0x60000006, 0x000e000e, 0x20081018
    };
-   CompileArgs args = { inout.size(), 1, 1 };
+   CompileArgs args = { (unsigned)inout.size(), 1, 1 };
    run_shader(spec_shader, args, inout);
    for (int i = 0; i < inout.size(); ++i)
       EXPECT_EQ(inout[i], expected[i]);
