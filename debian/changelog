@@ -1,3 +1,10 @@
+mesa (22.2.0~rc3-2) unstable; urgency=medium
+
+  * nv50-ir-fix-OP_UNION-resolving-when-used-for-vector.diff: Fix a
+    regression on nouveau. (Closes: #1017499)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 20 Sep 2022 13:25:59 +0300
+
 mesa (22.2.0~rc3-1) unstable; urgency=medium
 
   * New upstream release candidate.
