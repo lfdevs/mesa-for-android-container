@@ -435,7 +435,8 @@ send_restrictions(const struct brw_isa_info *isa,
                brw_inst_send_src1_reg_nr(devinfo, inst) < 112,
                "send with EOT must use g112-g127");
 
-      if (brw_inst_send_src1_reg_file(devinfo, inst) == BRW_GENERAL_REGISTER_FILE) {
+      if (brw_inst_send_src0_reg_file(devinfo, inst) == BRW_GENERAL_REGISTER_FILE &&
+          brw_inst_send_src1_reg_file(devinfo, inst) == BRW_GENERAL_REGISTER_FILE) {
          /* Assume minimums if we don't know */
          unsigned mlen = 1;
          if (!brw_inst_send_sel_reg32_desc(devinfo, inst)) {

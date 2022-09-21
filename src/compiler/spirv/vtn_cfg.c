@@ -921,34 +921,18 @@ vtn_handle_phis_first_pass(struct vtn_builder *b, SpvOp opcode,
     * algorithm all over again.  It's easier if we just let
     * lower_vars_to_ssa do that for us instead of repeating it here.
     */
-   bool relaxed_precision = false;
-   if (b->options->mediump_16bit_alu) {
-      struct vtn_value *phi_val = vtn_untyped_value(b, w[2]);
-      relaxed_precision = vtn_value_is_relaxed_precision(b, phi_val);
-   }
+   struct vtn_type *type = vtn_get_type(b, w[1]);
+   nir_variable *phi_var =
+      nir_local_variable_create(b->nb.impl, type->type, "phi");
 
-   const struct glsl_type *dest_type = vtn_get_type(b, w[1])->type;
-   const struct glsl_type *type = dest_type;
-   if (relaxed_precision) {
-      if (glsl_get_base_type(type) == GLSL_TYPE_FLOAT)
-         type = glsl_float16_type(type);
-      else if (glsl_get_base_type(type) == GLSL_TYPE_INT)
-         type = glsl_int16_type(type);
-      else if (glsl_get_base_type(type) == GLSL_TYPE_UINT)
-         type = glsl_uint16_type(type);
-   }
+   struct vtn_value *phi_val = vtn_untyped_value(b, w[2]);
+   if (vtn_value_is_relaxed_precision(b, phi_val))
+      phi_var->data.precision = GLSL_PRECISION_MEDIUM;
 
-   nir_variable *phi_var = nir_local_variable_create(b->nb.impl, type, "phi");
    _mesa_hash_table_insert(b->phi_table, w, phi_var);
 
-   struct vtn_ssa_value *dest =
-      vtn_local_load(b, nir_build_deref_var(&b->nb, phi_var), 0);
-
-   if (relaxed_precision) {
-      dest->type = dest_type;
-      vtn_mediump_upconvert_value(b, dest);
-   }
-   vtn_push_ssa_value(b, w[2], dest);
+   vtn_push_ssa_value(b, w[2],
+      vtn_local_load(b, nir_build_deref_var(&b->nb, phi_var), 0));
 
    return true;
 }
@@ -969,12 +953,6 @@ vtn_handle_phi_second_pass(struct vtn_builder *b, SpvOp opcode,
    if (phi_entry == NULL)
       return true;
 
-   bool relaxed_precision = false;
-   if (b->options->mediump_16bit_alu) {
-      struct vtn_value *phi_val = vtn_untyped_value(b, w[2]);
-      relaxed_precision = vtn_value_is_relaxed_precision(b, phi_val);
-   }
-
    nir_variable *phi_var = phi_entry->data;
 
    for (unsigned i = 3; i < count; i += 2) {
@@ -988,8 +966,6 @@ vtn_handle_phi_second_pass(struct vtn_builder *b, SpvOp opcode,
       b->nb.cursor = nir_after_instr(&pred->end_nop->instr);
 
       struct vtn_ssa_value *src = vtn_ssa_value(b, w[i]);
-      if (relaxed_precision)
-         src = vtn_mediump_downconvert_value(b, src);
 
       vtn_local_store(b, src, nir_build_deref_var(&b->nb, phi_var), 0);
    }

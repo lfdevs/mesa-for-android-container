@@ -2471,9 +2471,13 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
          kill = ir3_KILL(b, cond, 0);
       }
 
-      /* Side-effects should not be moved on a different side of the kill */
-      kill->barrier_class = IR3_BARRIER_IMAGE_W | IR3_BARRIER_BUFFER_W;
-      kill->barrier_conflict = IR3_BARRIER_IMAGE_W | IR3_BARRIER_BUFFER_W;
+      /* - Side-effects should not be moved on a different side of the kill
+       * - Instructions that depend on active fibers should not be reordered
+       */
+      kill->barrier_class = IR3_BARRIER_IMAGE_W | IR3_BARRIER_BUFFER_W |
+                            IR3_BARRIER_ACTIVE_FIBERS_W;
+      kill->barrier_conflict = IR3_BARRIER_IMAGE_W | IR3_BARRIER_BUFFER_W |
+                               IR3_BARRIER_ACTIVE_FIBERS_R;
       kill->srcs[0]->num = regid(REG_P0, 0);
       array_insert(ctx->ir, ctx->ir->predicates, kill);
 
@@ -2566,6 +2570,10 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
          array_insert(ctx->ir, ctx->ir->predicates, ballot);
          ctx->max_stack = MAX2(ctx->max_stack, ctx->stack + 1);
       }
+
+      ballot->barrier_class = IR3_BARRIER_ACTIVE_FIBERS_R;
+      ballot->barrier_conflict = IR3_BARRIER_ACTIVE_FIBERS_W;
+
       ir3_split_dest(ctx->block, dst, ballot, 0, components);
       break;
    }

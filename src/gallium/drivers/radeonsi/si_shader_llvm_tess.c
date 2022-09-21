@@ -81,8 +81,7 @@ static LLVMValueRef get_tcs_out_patch_stride(struct si_shader_context *ctx)
 
 static LLVMValueRef get_tcs_out_patch0_patch_data_offset(struct si_shader_context *ctx)
 {
-   return LLVMBuildMul(ctx->ac.builder, si_unpack_param(ctx, ctx->tcs_out_lds_offsets, 16, 16),
-                       LLVMConstInt(ctx->ac.i32, 4, 0), "");
+   return si_unpack_param(ctx, ctx->tcs_out_lds_offsets, 16, 16);
 }
 
 static LLVMValueRef get_tcs_out_current_patch_data_offset(struct si_shader_context *ctx)

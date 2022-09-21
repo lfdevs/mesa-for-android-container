@@ -1546,13 +1546,13 @@ vk_dynamic_graphics_state_copy(struct vk_dynamic_graphics_state *dst,
    COPY_IF_SET(VP_VIEWPORT_COUNT, vp.viewport_count);
    if (IS_SET_IN_SRC(VP_VIEWPORTS)) {
       assert(IS_SET_IN_SRC(VP_VIEWPORT_COUNT));
-      COPY_ARRAY(VP_VIEWPORT_COUNT, vp.viewports, src->vp.viewport_count);
+      COPY_ARRAY(VP_VIEWPORTS, vp.viewports, src->vp.viewport_count);
    }
 
    COPY_IF_SET(VP_SCISSOR_COUNT, vp.scissor_count);
    if (IS_SET_IN_SRC(VP_SCISSORS)) {
       assert(IS_SET_IN_SRC(VP_SCISSOR_COUNT));
-      COPY_ARRAY(VP_SCISSOR_COUNT, vp.scissors, src->vp.scissor_count);
+      COPY_ARRAY(VP_SCISSORS, vp.scissors, src->vp.scissor_count);
    }
 
    if (IS_SET_IN_SRC(DR_RECTANGLES)) {

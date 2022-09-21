@@ -947,7 +947,7 @@ void si_update_ps_colorbuf0_slot(struct si_context *sctx)
    struct pipe_surface *surf = NULL;
 
    /* si_texture_disable_dcc can get us here again. */
-   if (sctx->in_update_ps_colorbuf0_slot) {
+   if (sctx->in_update_ps_colorbuf0_slot || sctx->blitter_running) {
       assert(!sctx->ps_uses_fbfetch || sctx->framebuffer.state.cbufs[0]);
       return;
    }

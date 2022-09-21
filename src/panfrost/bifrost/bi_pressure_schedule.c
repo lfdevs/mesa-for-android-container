@@ -144,6 +144,20 @@ create_dag(bi_context *ctx, bi_block *block, void *memctx)
 
                         break;
 
+                case BIFROST_MESSAGE_ATTRIBUTE:
+                        /* Regular attribute loads can be reordered, but
+                         * writeable attributes can't be. Our one use of
+                         * writeable attributes are images.
+                         */
+                        if ((I->op == BI_OPCODE_LD_TEX) ||
+                            (I->op == BI_OPCODE_LD_TEX_IMM) ||
+                            (I->op == BI_OPCODE_LD_ATTR_TEX)) {
+                                add_dep(node, memory_store);
+                                memory_load = node;
+                        }
+
+                        break;
+
                 case BIFROST_MESSAGE_STORE:
                         assert(I->seg != BI_SEG_UBO);
                         add_dep(node, memory_load);

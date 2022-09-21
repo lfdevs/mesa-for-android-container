@@ -92,7 +92,6 @@ bool FragmentShader::load_input(nir_intrinsic_instr *intr)
          emit_instruction(ir);
       }
       ir->set_alu_flag(alu_last_instr);
-      set_input_gpr(nir_intrinsic_base(intr), m_pos_input[0]->sel());
       return true;
    }
 
@@ -102,7 +101,6 @@ bool FragmentShader::load_input(nir_intrinsic_instr *intr)
                              m_face_input,
                              vf.inline_const(ALU_SRC_0, 0),
                              AluInstr::last_write);
-      set_input_gpr(nir_intrinsic_base(intr), m_face_input->sel());
       emit_instruction(ir);
       return true;
    }
@@ -114,23 +112,11 @@ bool FragmentShader::store_output(nir_intrinsic_instr *intr)
 {
    auto location = nir_intrinsic_io_semantics(intr).location;
 
-   if (location == FRAG_RESULT_COLOR) {
-      if (!m_dual_source_blend) {
+   if (location == FRAG_RESULT_COLOR && !m_dual_source_blend) {
          m_fs_write_all = true;
-      }
-
-      return emit_export_pixel(*intr, m_dual_source_blend ? 1 : m_max_color_exports);
    }
 
-   if ((location >= FRAG_RESULT_DATA0 &&
-        location <= FRAG_RESULT_DATA7) ||
-       location == FRAG_RESULT_DEPTH ||
-       location == FRAG_RESULT_STENCIL ||
-       location == FRAG_RESULT_SAMPLE_MASK)
-      return emit_export_pixel(*intr, 1);
-
-   sfn_log << SfnLog::err << "r600-NIR: Unimplemented store_output for " << location << ")\n";
-   return false;
+   return emit_export_pixel(*intr);
 }
 
 unsigned
@@ -230,18 +216,19 @@ bool FragmentShader::load_interpolated_input(nir_intrinsic_instr *intr)
 
 int FragmentShader::do_allocate_reserved_registers()
 {
-   int next_register = allocate_interpolators();
+   int next_register = allocate_interpolators_or_inputs();
 
    if (m_sv_values.test(es_pos)) {
+      set_input_gpr(m_pos_driver_loc, next_register);
       m_pos_input = value_factory().allocate_pinned_vec4(next_register++, false);
       for (int i = 0; i < 4; ++i)
          m_pos_input[i]->pin_live_range(true);
-   }
 
-   next_register = allocate_register_inputs(next_register);
+   }
 
    int face_reg_index = -1;
    if (m_sv_values.test(es_face)) {
+      set_input_gpr(m_face_driver_loc, next_register);
       face_reg_index = next_register++;
       m_face_input = value_factory().allocate_pinned_register(face_reg_index, 0);
       m_face_input->pin_live_range(true);
@@ -356,6 +343,7 @@ bool FragmentShader::scan_input(nir_intrinsic_instr *intr, int index_src_id)
    auto index = nir_src_as_const_value(intr->src[index_src_id]);
    assert(index);
 
+   const unsigned location_offset = chip_class() < ISA_CC_EVERGREEN ? 32 : 0; 
    bool uses_interpol_at_centroid = false;
 
    unsigned location = nir_intrinsic_io_semantics(intr).location  + index->u32;
@@ -366,7 +354,8 @@ bool FragmentShader::scan_input(nir_intrinsic_instr *intr, int index_src_id)
 
    if (location == VARYING_SLOT_POS) {
       m_sv_values.set(es_pos);
-      ShaderInput pos_input(driver_location, name);
+      m_pos_driver_loc = driver_location + location_offset;
+      ShaderInput pos_input(m_pos_driver_loc, name);
       pos_input.set_sid(sid);
       pos_input.set_interpolator(TGSI_INTERPOLATE_LINEAR, TGSI_INTERPOLATE_LOC_CENTER, false);
       add_input(pos_input);
@@ -375,7 +364,8 @@ bool FragmentShader::scan_input(nir_intrinsic_instr *intr, int index_src_id)
 
    if (location == VARYING_SLOT_FACE) {
       m_sv_values.set(es_face);
-      ShaderInput face_input(driver_location, name);
+      m_face_driver_loc = driver_location + location_offset;
+      ShaderInput face_input(m_face_driver_loc, name);
       face_input.set_sid(sid);
       add_input(face_input);
       return true;
@@ -469,7 +459,7 @@ bool FragmentShader::scan_input(nir_intrinsic_instr *intr, int index_src_id)
    }
 }
 
-bool FragmentShader::emit_export_pixel(nir_intrinsic_instr& intr, int num_outputs)
+bool FragmentShader::emit_export_pixel(nir_intrinsic_instr& intr)
 {
    RegisterVec4::Swizzle swizzle;
    auto semantics = nir_intrinsic_io_semantics(&intr);
@@ -501,7 +491,10 @@ bool FragmentShader::emit_export_pixel(nir_intrinsic_instr& intr, int num_output
       ShaderOutput output(driver_location, TGSI_SEMANTIC_COLOR, write_mask);
       add_output(output);
 
-      for (int k = 0 ; k < num_outputs; ++k) {
+      unsigned color_outputs = m_fs_write_all && chip_class() >= ISA_CC_R700 ?
+                                  m_max_color_exports : 1;
+
+      for (unsigned k = 0; k < color_outputs; ++k) {
 
          unsigned location = (m_dual_source_blend && (semantics.location == FRAG_RESULT_COLOR)
                               ? semantics.dual_source_blend_index : driver_location) + k - m_depth_exports;
@@ -512,7 +505,7 @@ bool FragmentShader::emit_export_pixel(nir_intrinsic_instr& intr, int num_output
             sfn_log << SfnLog::io << "Pixel output loc:" << location
                     << " dl:" << driver_location
                     << " skipped  because  we have only "   << m_max_color_exports << " CBs\n";
-            continue;
+            return true; ;
          }
 
          m_last_pixel_export = new ExportInstr(ExportInstr::pixel, location, value);
@@ -534,8 +527,7 @@ bool FragmentShader::emit_export_pixel(nir_intrinsic_instr& intr, int num_output
          m_color_export_mask |= mask;
 
          emit_instruction(m_last_pixel_export);
-
-      };
+      }
    } else if (semantics.location == FRAG_RESULT_DEPTH ||
               semantics.location == FRAG_RESULT_STENCIL ||
               semantics.location == FRAG_RESULT_SAMPLE_MASK) {
@@ -616,9 +608,9 @@ void FragmentShader::do_print_properties(std::ostream& os) const
    os << "PROP WRITE_ALL_COLORS:" << m_fs_write_all << "\n";
 }
 
-int FragmentShaderR600::allocate_register_inputs(int first_register)
+int FragmentShaderR600::allocate_interpolators_or_inputs()
 {
-   int pos = first_register;
+   int pos = 0;
    auto& vf = value_factory();
    for (auto& [index, inp]: inputs()) {
       if (inp.need_lds_pos()) {
@@ -639,11 +631,6 @@ int FragmentShaderR600::allocate_register_inputs(int first_register)
       }
    }
    return pos;
-}
-
-int FragmentShaderR600::allocate_interpolators()
-{
-   return 0;
 }
 
 bool FragmentShaderR600::load_input_hw(nir_intrinsic_instr *intr)
@@ -716,12 +703,7 @@ bool FragmentShaderEG::load_input_hw(nir_intrinsic_instr *intr)
    return true;
 }
 
-int FragmentShaderEG::allocate_register_inputs(int first_register)
-{
-   return first_register;
-}
-
-int FragmentShaderEG::allocate_interpolators()
+int FragmentShaderEG::allocate_interpolators_or_inputs()
 {
    for (unsigned i = 0; i < s_max_interpolators; ++i) {
       if (interpolators_used(i)) {

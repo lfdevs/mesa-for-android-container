@@ -51,6 +51,7 @@
 #include "lp_limits.h"
 #include "lp_rast.h"
 #include "lp_cs_tpool.h"
+#include "lp_flush.h"
 
 #include "frontend/sw_winsys.h"
 
@@ -832,8 +833,12 @@ llvmpipe_flush_frontbuffer(struct pipe_screen *_screen,
    struct llvmpipe_resource *texture = llvmpipe_resource(resource);
 
    assert(texture->dt);
-   if (texture->dt)
+
+   if (texture->dt) {
+      if (_pipe)
+         llvmpipe_flush_resource(_pipe, resource, 0, true, true, false, "frontbuffer");
       winsys->displaytarget_display(winsys, texture->dt, context_private, sub_box);
+   }
 }
 
 static void

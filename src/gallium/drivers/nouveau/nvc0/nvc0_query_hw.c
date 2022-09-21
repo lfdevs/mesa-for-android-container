@@ -55,7 +55,7 @@ nvc0_hw_query_allocate(struct nvc0_context *nvc0, struct nvc0_query *q,
          return false;
       hq->offset = hq->base_offset;
 
-      ret = nouveau_bo_map(hq->bo, 0, screen->base.client);
+      ret = nouveau_bo_map(hq->bo, 0, nvc0->base.client);
       if (ret) {
          nvc0_hw_query_allocate(nvc0, q, 0);
          return false;
@@ -319,7 +319,7 @@ nvc0_hw_get_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
       return hq->funcs->get_query_result(nvc0, hq, wait, result);
 
    if (hq->state != NVC0_HW_QUERY_STATE_READY)
-      nvc0_hw_query_update(nvc0->screen->base.client, q);
+      nvc0_hw_query_update(nvc0->base.client, q);
 
    if (hq->state != NVC0_HW_QUERY_STATE_READY) {
       if (!wait) {
@@ -330,7 +330,7 @@ nvc0_hw_get_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
          }
          return false;
       }
-      if (nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, nvc0->screen->base.client))
+      if (nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, nvc0->base.client))
          return false;
       NOUVEAU_DRV_STAT(&nvc0->screen->base, query_sync_count, 1);
    }
@@ -403,7 +403,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    if (index == -1) {
       /* TODO: Use a macro to write the availability of the query */
       if (hq->state != NVC0_HW_QUERY_STATE_READY)
-         nvc0_hw_query_update(nvc0->screen->base.client, q);
+         nvc0_hw_query_update(nvc0->base.client, q);
       uint32_t ready[2] = {hq->state == NVC0_HW_QUERY_STATE_READY};
       nvc0->base.push_cb(&nvc0->base, buf, offset,
                          result_type >= PIPE_QUERY_TYPE_I64 ? 2 : 1,
@@ -430,7 +430,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
     * outputs the difference (no need to worry about 64-bit clamping).
     */
    if (hq->state != NVC0_HW_QUERY_STATE_READY)
-      nvc0_hw_query_update(nvc0->screen->base.client, q);
+      nvc0_hw_query_update(nvc0->base.client, q);
 
    if ((flags & PIPE_QUERY_WAIT) && hq->state != NVC0_HW_QUERY_STATE_READY)
       nvc0_hw_query_fifo_wait(nvc0, q);

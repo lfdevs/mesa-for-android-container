@@ -441,11 +441,7 @@ void nv50_validate_samplers(struct nv50_context *nv50)
       need_flush |= nv50_validate_tsc(nv50, s);
 
    if (need_flush) {
-      if (unlikely(s == NV50_SHADER_STAGE_COMPUTE))
-         // TODO(pmoreau): Is this needed? Not done on nvc0
-         BEGIN_NV04(nv50->base.pushbuf, NV50_CP(TSC_FLUSH), 1);
-      else
-         BEGIN_NV04(nv50->base.pushbuf, NV50_3D(TSC_FLUSH), 1);
+      BEGIN_NV04(nv50->base.pushbuf, NV50_3D(TSC_FLUSH), 1);
       PUSH_DATA (nv50->base.pushbuf, 0);
    }
 

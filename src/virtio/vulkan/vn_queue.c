@@ -538,6 +538,9 @@ vn_fence_feedback_init(struct vn_device *dev,
    VkCommandBuffer *cmd_handles;
    VkResult result;
 
+   if (fence->is_external)
+      return VK_SUCCESS;
+
    /* Fence feedback implementation relies on vkWaitForFences to cover the gap
     * between feedback slot signaling and the actual fence signal operation.
     */

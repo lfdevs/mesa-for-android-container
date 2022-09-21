@@ -216,7 +216,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-      return !is_a2xx(screen);
+      return is_a2xx(screen);
 
    case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
       return is_a2xx(screen);

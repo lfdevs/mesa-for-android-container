@@ -22,7 +22,9 @@ files_mesa_util_c11 = files(
   'time.c',
 )
 
-if host_machine.system() == 'windows'
+if with_c11_threads
+  # no need implement c11 threads
+elif host_machine.system() == 'windows'
   files_mesa_util_c11 += 'threads_win32.c'
 else
   files_mesa_util_c11 += 'threads_posix.c'

@@ -237,7 +237,6 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FS_FINE_DERIVATIVE:
    case PIPE_CAP_SHADER_PACK_HALF_FLOAT:
    case PIPE_CAP_ACCELERATED:
-   case PIPE_CAP_UMA:
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_CLIP_HALFZ:
    case PIPE_CAP_TGSI_TEXCOORD:
@@ -291,6 +290,8 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_IMAGE_STORE_FORMATTED:
    case PIPE_CAP_LEGACY_MATH_RULES:
       return true;
+   case PIPE_CAP_UMA:
+      return iris_bufmgr_vram_size(screen->bufmgr) == 0;
    case PIPE_CAP_PREFER_BACK_BUFFER_REUSE:
       return false;
    case PIPE_CAP_FBFETCH:

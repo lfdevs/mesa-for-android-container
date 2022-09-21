@@ -2566,7 +2566,7 @@ anv_image_fill_surface_state(struct anv_device *device,
           */
          assert(isl_formats_have_same_bits_per_channel(lower_format,
                                                        view.format) ||
-                isl_swizzle_is_identity(view.swizzle));
+                isl_swizzle_is_identity_for_format(view.format, view.swizzle));
 
          view.format = lower_format;
       }

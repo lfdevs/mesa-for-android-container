@@ -1139,11 +1139,7 @@ spec@glsl-1.10@execution@built-in-functions@vs-tan-float,Fail
 spec@glsl-1.10@execution@built-in-functions@vs-tan-vec2,Fail
 spec@glsl-1.10@execution@built-in-functions@vs-tan-vec3,Fail
 spec@glsl-1.10@execution@built-in-functions@vs-tan-vec4,Fail
-spec@glsl-1.10@execution@fs-texture-select,Fail
 spec@glsl-1.10@execution@glsl-fs-convolution-2,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-sampler-numbering-2,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-sampler-numbering-3,Fail
-spec@glsl-1.10@execution@samplers@in-parameter-array,Fail
 spec@glsl-1.20@built-in constants,Fail
 spec@glsl-1.20@built-in constants@gl_MaxVertexAttribs,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-max,Fail

@@ -2701,7 +2701,7 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
       return;
    } else if (opcode == SpvOpImageSparseTexelsResident) {
       nir_ssa_def *code = vtn_get_nir_ssa(b, w[3]);
-      vtn_push_nir_ssa(b, w[2], nir_is_sparse_texels_resident(&b->nb, code));
+      vtn_push_nir_ssa(b, w[2], nir_is_sparse_texels_resident(&b->nb, 1, code));
       return;
    }
 

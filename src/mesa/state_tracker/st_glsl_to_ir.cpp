@@ -94,8 +94,6 @@ link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
          lower_packing_builtins(ir, lower_inst);
       }
 
-      if (!pscreen->get_param(pscreen, PIPE_CAP_TEXTURE_GATHER_OFFSETS))
-         lower_offset_arrays(ir);
       do_mat_op_to_vec(ir);
 
       if (stage == MESA_SHADER_FRAGMENT && pscreen->get_param(pscreen, PIPE_CAP_FBFETCH))

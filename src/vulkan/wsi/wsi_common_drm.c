@@ -400,7 +400,9 @@ wsi_configure_native_image(const struct wsi_swapchain *chain,
          result = wsi->GetPhysicalDeviceImageFormatProperties2(wsi->pdevice,
                                                                &format_info,
                                                                &format_props);
-         if (result == VK_SUCCESS)
+         if (result == VK_SUCCESS &&
+             pCreateInfo->imageExtent.width <= format_props.imageFormatProperties.maxExtent.width &&
+             pCreateInfo->imageExtent.height <= format_props.imageFormatProperties.maxExtent.height)
             info->modifier_props[info->modifier_prop_count++] = info->modifier_props[i];
       }
 

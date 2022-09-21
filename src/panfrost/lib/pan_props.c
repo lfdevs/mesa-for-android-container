@@ -284,11 +284,16 @@ panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
         dev->memctx = memctx;
         dev->gpu_id = panfrost_query_gpu_version(fd);
         dev->arch = pan_arch(dev->gpu_id);
-        dev->core_count = panfrost_query_core_count(fd, &dev->core_id_range);
-        dev->thread_tls_alloc = panfrost_query_thread_tls_alloc(fd, dev->arch);
         dev->kernel_version = drmGetVersion(fd);
         dev->revision = panfrost_query_gpu_revision(fd);
         dev->model = panfrost_get_model(dev->gpu_id);
+
+        /* If we don't recognize the model, bail early */
+        if (!dev->model)
+                return;
+
+        dev->core_count = panfrost_query_core_count(fd, &dev->core_id_range);
+        dev->thread_tls_alloc = panfrost_query_thread_tls_alloc(fd, dev->arch);
         dev->optimal_tib_size = panfrost_query_optimal_tib_size(dev);
         dev->compressed_formats = panfrost_query_compressed_formats(fd);
         dev->tiler_features = panfrost_query_tiler_features(fd);
@@ -329,11 +334,17 @@ panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
 void
 panfrost_close_device(struct panfrost_device *dev)
 {
-        pthread_mutex_destroy(&dev->submit_lock);
-        panfrost_bo_unreference(dev->tiler_heap);
-        panfrost_bo_cache_evict_all(dev);
-        pthread_mutex_destroy(&dev->bo_cache.lock);
+        /* If we don't recognize the model, the rest of the device won't exist,
+         * we will have early-exited the device open.
+         */
+        if (dev->model) {
+                pthread_mutex_destroy(&dev->submit_lock);
+                panfrost_bo_unreference(dev->tiler_heap);
+                panfrost_bo_cache_evict_all(dev);
+                pthread_mutex_destroy(&dev->bo_cache.lock);
+                util_sparse_array_finish(&dev->bo_map);
+        }
+
         drmFreeVersion(dev->kernel_version);
-        util_sparse_array_finish(&dev->bo_map);
         close(dev->fd);
 }

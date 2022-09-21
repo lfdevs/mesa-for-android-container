@@ -671,9 +671,11 @@ iris_resource_configure_main(const struct iris_screen *screen,
    } else if (templ->usage == PIPE_USAGE_STAGING ||
               templ->bind & (PIPE_BIND_LINEAR | PIPE_BIND_CURSOR)) {
       tiling_flags = ISL_TILING_LINEAR_BIT;
+   } else if (!screen->devinfo.has_tiling_uapi &&
+              (templ->bind & (PIPE_BIND_SCANOUT | PIPE_BIND_SHARED))) {
+      tiling_flags = ISL_TILING_LINEAR_BIT;
    } else if (templ->bind & PIPE_BIND_SCANOUT) {
-      tiling_flags = screen->devinfo.has_tiling_uapi ?
-                     ISL_TILING_X_BIT : ISL_TILING_LINEAR_BIT;
+      tiling_flags = ISL_TILING_X_BIT;
    } else {
       tiling_flags = ISL_TILING_ANY_MASK;
    }

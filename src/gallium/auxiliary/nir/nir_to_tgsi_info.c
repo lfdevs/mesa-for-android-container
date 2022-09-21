@@ -783,9 +783,6 @@ void nir_tgsi_scan_shader(const struct nir_shader *nir,
    info->num_outputs = num_outputs;
 
    info->const_file_max[0] = nir->num_uniforms - 1;
-   info->const_buffers_declared = u_bit_consecutive(1, nir->info.num_ubos);
-   if (nir->num_uniforms > 0)
-      info->const_buffers_declared |= 1;
    info->images_declared = nir->info.images_used[0];
    info->samplers_declared = nir->info.textures_used[0];
 

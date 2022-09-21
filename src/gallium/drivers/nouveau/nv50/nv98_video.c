@@ -85,7 +85,8 @@ struct pipe_video_codec *
 nv98_create_decoder(struct pipe_context *context,
                     const struct pipe_video_codec *templ)
 {
-   struct nouveau_screen *screen = &((struct nv50_context *)context)->screen->base;
+   struct nv50_context *nv50 = nv50_context(context);
+   struct nouveau_screen *screen = &nv50->screen->base;
    struct nouveau_vp3_decoder *dec;
    struct nouveau_pushbuf **push;
    struct nv04_fifo nv04_data = {.vram = 0xbeef0201, .gart = 0xbeef0202};
@@ -106,7 +107,7 @@ nv98_create_decoder(struct pipe_context *context,
    dec = CALLOC_STRUCT(nouveau_vp3_decoder);
    if (!dec)
       return NULL;
-   dec->client = screen->client;
+   dec->client = nv50->base.client;
    dec->base = *templ;
    nouveau_vp3_decoder_init_common(&dec->base);
 
@@ -119,7 +120,7 @@ nv98_create_decoder(struct pipe_context *context,
                             &nv04_data, sizeof(nv04_data), &dec->channel[0]);
 
    if (!ret)
-      ret = nouveau_pushbuf_new(screen->client, dec->channel[0], 4,
+      ret = nouveau_pushbuf_new(nv50->base.client, dec->channel[0], 4,
                                 32 * 1024, true, &dec->pushbuf[0]);
 
    for (i = 1; i < 3; ++i) {

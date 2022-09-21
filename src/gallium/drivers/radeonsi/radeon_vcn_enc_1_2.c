@@ -1161,14 +1161,14 @@ static void radeon_enc_encode_params(struct radeon_encoder *enc)
 
    enc->enc_pic.enc_params.allowed_max_bitstream_size = enc->bs_size;
    enc->enc_pic.enc_params.input_pic_luma_pitch = enc->luma->u.gfx9.surf_pitch;
-   enc->enc_pic.enc_params.input_pic_chroma_pitch = enc->chroma ? enc->chroma->u.gfx9.surf_pitch : 0;
+   enc->enc_pic.enc_params.input_pic_chroma_pitch = enc->chroma->u.gfx9.surf_pitch;
    enc->enc_pic.enc_params.input_pic_swizzle_mode = enc->luma->u.gfx9.swizzle_mode;
 
    RADEON_ENC_BEGIN(enc->cmd.enc_params);
    RADEON_ENC_CS(enc->enc_pic.enc_params.pic_type);
    RADEON_ENC_CS(enc->enc_pic.enc_params.allowed_max_bitstream_size);
    RADEON_ENC_READ(enc->handle, RADEON_DOMAIN_VRAM, enc->luma->u.gfx9.surf_offset);
-   RADEON_ENC_READ(enc->handle, RADEON_DOMAIN_VRAM, enc->chroma ? enc->chroma->u.gfx9.surf_offset : 0);
+   RADEON_ENC_READ(enc->handle, RADEON_DOMAIN_VRAM, enc->chroma->u.gfx9.surf_offset);
    RADEON_ENC_CS(enc->enc_pic.enc_params.input_pic_luma_pitch);
    RADEON_ENC_CS(enc->enc_pic.enc_params.input_pic_chroma_pitch);
    RADEON_ENC_CS(enc->enc_pic.enc_params.input_pic_swizzle_mode);

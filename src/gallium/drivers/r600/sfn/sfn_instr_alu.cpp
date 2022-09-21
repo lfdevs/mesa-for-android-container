@@ -622,23 +622,23 @@ void ResolveIndirectArrayAddr::visit(const UniformValue& value)
    }
 }
 
-std::pair<PRegister, bool> AluInstr::indirect_addr() const
+std::tuple<PRegister, bool, bool> AluInstr::indirect_addr() const
 {
    ResolveIndirectArrayAddr visitor;
 
    if (m_dest) {
       m_dest->accept(visitor);
       if (visitor.addr)
-         return {visitor.addr, false};
+         return {visitor.addr, false, false};
    }
 
    for (auto s: m_src) {
       s->accept(visitor);
       if (visitor.addr) {
-         return {visitor.addr, visitor.is_index};
+         return {visitor.addr, !visitor.is_index, visitor.is_index};
       }
    }
-   return {nullptr, false};
+   return {nullptr, false, false};
 }
 
 AluGroup *AluInstr::split(ValueFactory& vf)
@@ -1234,15 +1234,29 @@ bool AluInstr::from_nir(nir_alu_instr *alu, Shader& shader)
          default:
             ;
          }
-      } else {
+      } 
+      
+      if (shader.chip_class() >= ISA_CC_R700) {
          switch (alu->op) {
-         case nir_op_f2i32: return emit_alu_trans_op1_eg(*alu, op1_flt_to_int, shader);
-         case nir_op_f2u32: return emit_alu_trans_op1_eg(*alu, op1_flt_to_uint, shader);
+         case nir_op_ishl: return emit_alu_op2_int(*alu, op2_lshl_int, shader);
+         case nir_op_ishr: return emit_alu_op2_int(*alu, op2_ashr_int, shader);
+         case nir_op_ushr: return emit_alu_op2_int(*alu, op2_lshr_int, shader);
          default:
             ;
-         }
+         }         
+      } else  {
+         switch (alu->op) {
+         case nir_op_ishl: return emit_alu_trans_op2_eg(*alu, op2_lshl_int, shader);
+         case nir_op_ishr: return emit_alu_trans_op2_eg(*alu, op2_ashr_int, shader);
+         case nir_op_ushr: return emit_alu_trans_op2_eg(*alu, op2_lshr_int, shader);
+         default:
+            ;
+         }                  
       }
+      
       switch (alu->op) {
+      case nir_op_f2i32: return emit_alu_trans_op1_eg(*alu, op1_flt_to_int, shader);
+      case nir_op_f2u32: return emit_alu_trans_op1_eg(*alu, op1_flt_to_uint, shader);         
       case nir_op_fcos_amd: return emit_alu_trans_op1_eg(*alu, op1_cos, shader);
       case nir_op_fexp2: return emit_alu_trans_op1_eg(*alu, op1_exp_ieee, shader);
       case nir_op_flog2: return emit_alu_trans_op1_eg(*alu, op1_log_clamped, shader);
@@ -1347,8 +1361,6 @@ bool AluInstr::from_nir(nir_alu_instr *alu, Shader& shader)
    case nir_op_ineg: return emit_alu_comb_with_zero(*alu, op2_sub_int, shader);
    case nir_op_inot: return emit_alu_op1(*alu, op1_not_int, shader);
    case nir_op_ior: return emit_alu_op2_int(*alu, op2_or_int, shader);
-   case nir_op_ishl: return emit_alu_op2_int(*alu, op2_lshl_int, shader);
-   case nir_op_ishr: return emit_alu_op2_int(*alu, op2_ashr_int, shader);
    case nir_op_isub: return emit_alu_op2_int(*alu, op2_sub_int, shader);
    case nir_op_ixor: return emit_alu_op2_int(*alu, op2_xor_int, shader);
    case nir_op_pack_64_2x32: return emit_pack_64_2x32(*alu, shader);
@@ -1367,7 +1379,6 @@ bool AluInstr::from_nir(nir_alu_instr *alu, Shader& shader)
    case nir_op_umax: return emit_alu_op2_int(*alu, op2_max_uint, shader);
    case nir_op_umin: return emit_alu_op2_int(*alu, op2_min_uint, shader);
    case nir_op_umul24: return emit_alu_op2(*alu, op2_mul_uint24, shader);
-   case nir_op_ushr: return emit_alu_op2_int(*alu, op2_lshr_int, shader);
    case nir_op_unpack_64_2x32_split_x: return emit_unpack_64_2x32_split(*alu, 0, shader);
    case nir_op_unpack_64_2x32_split_y: return emit_unpack_64_2x32_split(*alu, 1, shader);
    case nir_op_unpack_half_2x16_split_x: return emit_unpack_32_2x16_split_x(*alu, shader);

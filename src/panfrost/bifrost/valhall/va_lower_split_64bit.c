@@ -67,7 +67,7 @@ va_lower_split_64bit(bi_context *ctx)
 {
    bi_foreach_instr_global(ctx, I) {
       bi_foreach_src(I, s) {
-         if (bi_is_null(I->src[s]))
+         if (bi_is_null(I->src[s]) || s >= 4)
             continue;
 
          struct va_src_info info = va_src_info(I->op, s);

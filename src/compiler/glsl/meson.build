@@ -164,7 +164,6 @@ files_libglsl = files(
   'lower_int64.cpp',
   'lower_jumps.cpp',
   'lower_mat_op_to_vec.cpp',
-  'lower_offset_array.cpp',
   'lower_named_interface_blocks.cpp',
   'lower_packing_builtins.cpp',
   'lower_precision.cpp',

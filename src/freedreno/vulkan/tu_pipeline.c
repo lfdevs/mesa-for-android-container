@@ -157,6 +157,15 @@ tu6_emit_load_state(struct tu_pipeline *pipeline,
             binding->shader_stages & VK_SHADER_STAGE_COMPUTE_BIT :
             binding->shader_stages & VK_SHADER_STAGE_ALL_GRAPHICS;
          unsigned count = binding->array_size;
+
+         /* If this is a variable-count descriptor, then the array_size is an
+          * upper bound on the size, but we don't know how many descriptors
+          * will actually be used. Therefore we can't pre-load them here.
+          */
+         if (j == set_layout->binding_count - 1 &&
+             set_layout->has_variable_descriptors)
+            continue;
+
          if (count == 0 || stages == 0)
             continue;
          switch (binding->type) {
@@ -3568,7 +3577,7 @@ tu_pipeline_builder_parse_depth_stencil(struct tu_pipeline_builder *builder,
 
    if (builder->shaders->variants[MESA_SHADER_FRAGMENT]) {
       const struct ir3_shader_variant *fs = builder->shaders->variants[MESA_SHADER_FRAGMENT];
-      if (fs->has_kill || fs->no_earlyz || fs->writes_pos) {
+      if (fs->has_kill || builder->alpha_to_coverage) {
          pipeline->lrz.force_disable_mask |= TU_LRZ_FORCE_DISABLE_WRITE;
       }
       if (fs->no_earlyz || fs->writes_pos) {

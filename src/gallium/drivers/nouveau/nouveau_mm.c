@@ -1,6 +1,7 @@
 
 #include <inttypes.h>
 
+#include "util/simple_mtx.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/list.h"
@@ -29,6 +30,7 @@ struct mm_bucket {
    struct list_head used;
    struct list_head full;
    int num_free;
+   simple_mtx_t lock;
 };
 
 struct nouveau_mman {
@@ -124,6 +126,8 @@ mm_slab_new(struct nouveau_mman *cache, struct mm_bucket *bucket, int chunk_orde
    int words, ret;
    const uint32_t size = mm_default_slab_size(chunk_order);
 
+   simple_mtx_assert_locked(&bucket->lock);
+
    words = ((size >> chunk_order) + 31) / 32;
    assert(words);
 
@@ -151,7 +155,7 @@ mm_slab_new(struct nouveau_mman *cache, struct mm_bucket *bucket, int chunk_orde
    assert(bucket == mm_bucket_by_order(cache, chunk_order));
    list_add(&slab->head, &bucket->free);
 
-   cache->allocated += size;
+   p_atomic_add(&cache->allocated, size);
 
    if (nouveau_mesa_debug)
       debug_printf("MM: new slab, total memory = %"PRIu64" KiB\n",
@@ -182,6 +186,11 @@ nouveau_mm_allocate(struct nouveau_mman *cache,
       return NULL;
    }
 
+   alloc = MALLOC_STRUCT(nouveau_mm_allocation);
+   if (!alloc)
+      return NULL;
+
+   simple_mtx_lock(&bucket->lock);
    if (!list_is_empty(&bucket->used)) {
       slab = list_entry(bucket->used.next, struct mm_slab, head);
    } else {
@@ -196,16 +205,13 @@ nouveau_mm_allocate(struct nouveau_mman *cache,
 
    *offset = mm_slab_alloc(slab) << slab->order;
 
-   alloc = MALLOC_STRUCT(nouveau_mm_allocation);
-   if (!alloc)
-      return NULL;
-
    nouveau_bo_ref(slab->bo, bo);
 
    if (slab->free == 0) {
       list_del(&slab->head);
       list_add(&slab->head, &bucket->full);
    }
+   simple_mtx_unlock(&bucket->lock);
 
    alloc->offset = *offset;
    alloc->priv = (void *)slab;
@@ -219,6 +225,7 @@ nouveau_mm_free(struct nouveau_mm_allocation *alloc)
    struct mm_slab *slab = (struct mm_slab *)alloc->priv;
    struct mm_bucket *bucket = mm_bucket_by_order(slab->cache, slab->order);
 
+   simple_mtx_lock(&bucket->lock);
    mm_slab_free(slab, alloc->offset >> slab->order);
 
    if (slab->free == slab->count) {
@@ -229,6 +236,7 @@ nouveau_mm_free(struct nouveau_mm_allocation *alloc)
       list_del(&slab->head);
       list_addtail(&slab->head, &bucket->used);
    }
+   simple_mtx_unlock(&bucket->lock);
 
    FREE(alloc);
 }
@@ -258,6 +266,7 @@ nouveau_mm_create(struct nouveau_device *dev, uint32_t domain,
       list_inithead(&cache->bucket[i].free);
       list_inithead(&cache->bucket[i].used);
       list_inithead(&cache->bucket[i].full);
+      simple_mtx_init(&cache->bucket[i].lock, mtx_plain);
    }
 
    return cache;
@@ -292,6 +301,7 @@ nouveau_mm_destroy(struct nouveau_mman *cache)
       nouveau_mm_free_slabs(&cache->bucket[i].free);
       nouveau_mm_free_slabs(&cache->bucket[i].used);
       nouveau_mm_free_slabs(&cache->bucket[i].full);
+      simple_mtx_destroy(&cache->bucket[i].lock);
    }
 
    FREE(cache);

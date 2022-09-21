@@ -992,7 +992,7 @@ split_pred(struct ir3_sched_ctx *ctx)
             /* original pred is scheduled, but new one isn't: */
             new_pred->flags &= ~IR3_INSTR_MARK;
          }
-         predicated->srcs[0]->instr = new_pred;
+         predicated->srcs[0]->def->instr = new_pred;
          /* don't need to remove old dag edge since old pred is
           * already scheduled:
           */

@@ -414,6 +414,11 @@ spirv_builder_type_function(struct spirv_builder *b, SpvId return_type,
                             size_t num_parameter_types);
 
 SpvId
+spirv_builder_function_call(struct spirv_builder *b, SpvId result_type,
+                            SpvId function, const SpvId arguments[],
+                            size_t num_arguments);
+
+SpvId
 spirv_builder_const_bool(struct spirv_builder *b, bool val);
 
 SpvId

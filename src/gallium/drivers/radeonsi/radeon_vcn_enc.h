@@ -128,29 +128,6 @@
 
 #define RENCODE_MAX_NUM_TEMPORAL_LAYERS                                             4
 
-typedef enum {
-   RENCODE_COLOR_SPACE_YUV,
-   RENCODE_COLOR_SPACE_RGB
-} RENCODE_COLOR_SPACE;
-
-typedef enum {
-   RENCODE_CHROMA_SUBSAMPLING_4_2_0,
-   RENCODE_CHROMA_SUBSAMPLING_4_4_4
-} RENCODE_CHROMA_SUBSAMPLING;
-
-typedef enum {
-   RENCODE_COLOR_BIT_DEPTH_8_BIT,
-   RENCODE_COLOR_BIT_DEPTH_10_BIT
-} RENCODE_COLOR_BIT_DEPTH;
-
-typedef enum {
-   RENCODE_COLOR_PACKING_FORMAT_NV12,
-   RENCODE_COLOR_PACKING_FORMAT_P010,
-   RENCODE_COLOR_PACKING_FORMAT_A8R8G8B8 = 4,
-   RENCODE_COLOR_PACKING_FORMAT_A8B8G8R8 = 7,
-} RENCODE_COLOR_PACKING_FORMAT;
-
-
 #define RADEON_ENC_CS(value) (enc->cs.current.buf[enc->cs.current.cdw++] = (value))
 #define RADEON_ENC_BEGIN(cmd)                                                                      \
    {                                                                                               \
@@ -399,7 +376,7 @@ typedef struct rvcn_enc_encode_context_buffer_s {
    uint32_t pre_encode_picture_chroma_pitch;
    rvcn_enc_reconstructed_picture_t
       pre_encode_reconstructed_pictures[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
-   rvcn_enc_pre_encode_input_picture_t pre_encode_input_picture;
+   rvcn_enc_reconstructed_picture_t pre_encode_input_picture;
    uint32_t two_pass_search_center_map_offset;
    uint32_t colloc_buffer_offset;
 } rvcn_enc_encode_context_buffer_t;
@@ -447,36 +424,7 @@ typedef struct rvcn_enc_cmd_s {
    uint32_t deblocking_filter_h264;
    uint32_t input_format;
    uint32_t output_format;
-   uint32_t efc_params;
 } rvcn_enc_cmd_t;
-
-typedef struct rvcn_enc_efc_config_s
-{
-   uint32_t coef_buffer_address_hi;
-   uint32_t coef_buffer_address_lo;
-   uint32_t coef_buffer_size;
-   uint32_t cm_program_register_data_size;
-} rvcn_enc_efc_config_t;
-
-
-typedef struct rvcn_enc_input_format_s
-{
-   uint32_t input_color_volume;
-   RENCODE_COLOR_SPACE input_color_space;
-   uint32_t input_color_range;
-   RENCODE_CHROMA_SUBSAMPLING input_chroma_subsampling;
-   uint32_t input_chroma_location;
-   RENCODE_COLOR_BIT_DEPTH input_color_bit_depth;
-   RENCODE_COLOR_PACKING_FORMAT input_color_packing_format;
-} rvcn_enc_input_format_t;
-
-typedef struct rvcn_enc_output_format_s
-{
-   uint32_t output_color_volume;
-   uint32_t output_color_range;
-   uint32_t output_chroma_location;
-   RENCODE_COLOR_BIT_DEPTH output_color_bit_depth;
-} rvcn_enc_output_format_t;
 
 typedef void (*radeon_enc_get_buffer)(struct pipe_resource *resource, struct pb_buffer **handle,
                                       struct radeon_surf **surface);
@@ -548,9 +496,6 @@ struct radeon_enc_pic {
    rvcn_enc_feedback_buffer_t fb_buf;
    rvcn_enc_intra_refresh_t intra_ref;
    rvcn_enc_encode_params_t enc_params;
-   rvcn_enc_efc_config_t efc_params;
-   rvcn_enc_input_format_t input_format;
-   rvcn_enc_output_format_t output_format;
 };
 
 struct radeon_encoder {
@@ -594,7 +539,6 @@ struct radeon_encoder {
    void (*encode_headers)(struct radeon_encoder *enc);
    void (*input_format)(struct radeon_encoder *enc);
    void (*output_format)(struct radeon_encoder *enc);
-   void (*efc_params)(struct radeon_encoder *enc);
    /* mq is used for preversing multiple queue ibs */
    void (*mq_begin)(struct radeon_encoder *enc);
    void (*mq_encode)(struct radeon_encoder *enc);
@@ -638,7 +582,6 @@ struct radeon_encoder {
    bool need_feedback;
    unsigned dpb_size;
    rvcn_enc_picture_info_t dpb[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
-   struct rvid_buffer *efc;
 };
 
 void radeon_enc_add_buffer(struct radeon_encoder *enc, struct pb_buffer *buf,

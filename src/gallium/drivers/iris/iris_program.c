@@ -1280,8 +1280,6 @@ iris_schedule_compile(struct iris_screen *screen,
                       util_queue_execute_func execute)
 
 {
-   util_queue_fence_init(ready_fence);
-
    struct util_async_debug_callback async_debug;
 
    if (dbg) {
@@ -2456,6 +2454,7 @@ iris_create_uncompiled_shader(struct iris_screen *screen,
    pipe_reference_init(&ish->ref, 1);
    list_inithead(&ish->variants);
    simple_mtx_init(&ish->lock, mtx_plain);
+   util_queue_fence_init(&ish->ready);
 
    ish->uses_atomic_load_store = iris_uses_image_atomic(nir);
 

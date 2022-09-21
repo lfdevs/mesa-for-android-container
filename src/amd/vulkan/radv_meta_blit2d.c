@@ -298,6 +298,8 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
                },
                .layerCount = 1,
                .pDepthAttachment = &depth_att_info,
+               .pStencilAttachment = (dst->image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT) ?
+                                     &depth_att_info : NULL,
             };
 
             radv_CmdBeginRendering(radv_cmd_buffer_to_handle(cmd_buffer), &rendering_info);
@@ -329,6 +331,8 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
                   .extent = { rects[r].width, rects[r].height },
                },
                .layerCount = 1,
+               .pDepthAttachment = (dst->image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) ?
+                                   &stencil_att_info : NULL,
                .pStencilAttachment = &stencil_att_info,
             };
 

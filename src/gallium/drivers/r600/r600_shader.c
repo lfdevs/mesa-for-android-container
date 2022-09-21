@@ -260,6 +260,9 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 	use_sb &= !shader->shader.uses_images;
 	use_sb &= !shader->shader.uses_helper_invocation;
 
+	/* SB can't handle READ_SCRATCH properly */
+	use_sb &= !(shader->shader.needs_scratch_space && rscreen->b.gfx_level < R700);
+
 	/* sb has bugs in array reg allocation
 	 * (dEQP-GLES2.functional.shaders.struct.local.struct_array_dynamic_index_fragment
 	 * with NTT)

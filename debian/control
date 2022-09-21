@@ -398,7 +398,7 @@ Description: Mesa VDPAU video acceleration drivers
 
 Package: mesa-vulkan-drivers
 Section: libs
-Architecture: amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64 x32
+Architecture: amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libvulkan1,

@@ -633,8 +633,13 @@ create_conversion_shader(struct st_context *st, enum pipe_texture_target target,
                            nir_channel(&b, start, 1),
                            nir_channel(&b, global_id, 2));
    }
-   nir_ssa_def *max = nir_iadd(&b, nir_pad_vector_imm_int(&b, sd.offset, 0, 3), sd.range);
-   nir_push_if(&b, nir_ball(&b, nir_ilt(&b, coord, nir_trim_vector(&b, max, coord_components))));
+   coord = nir_trim_vector(&b, coord, coord_components);
+   nir_ssa_def *offset = coord_components > 2 ?
+                         nir_pad_vector_imm_int(&b, sd.offset, 0, 3) :
+                         nir_trim_vector(&b, sd.offset, coord_components);
+   nir_ssa_def *range = nir_trim_vector(&b, sd.range, coord_components);
+   nir_ssa_def *max = nir_iadd(&b, offset, range);
+   nir_push_if(&b, nir_ball(&b, nir_ilt(&b, coord, max)));
    nir_tex_instr *txf = nir_tex_instr_create(b.shader, 3);
    txf->is_array = glsl_sampler_type_is_array(sampler->type);
    txf->op = nir_texop_txf;
@@ -790,10 +795,10 @@ download_texture_compute(struct st_context *st,
    /* Upload constants */
    {
       struct pipe_constant_buffer cb;
-      assert(view_target != PIPE_TEXTURE_1D_ARRAY || !yoffset);
+      assert(view_target != PIPE_TEXTURE_1D_ARRAY || !zoffset);
       struct pbo_data pd = {
          .x = xoffset,
-         .y = yoffset,
+         .y = view_target == PIPE_TEXTURE_1D_ARRAY ? 0 : yoffset,
          .width = width, .height = height, .depth = depth,
          .invert = pack->Invert,
          .blocksize = util_format_get_blocksize(dst_format) - 1,

@@ -368,7 +368,7 @@ private:
       void visit(LDSAtomicInstr *instr) override {(void) instr;}
       void visit(LDSReadInstr *instr) override {(void) instr;}
 
-      void visit(WriteScratchInstr *instr) override;
+      void visit(ScratchIOInstr *instr) override;
       void visit(GDSInstr *instr) override;
       void visit(RatInstr *instr) override;
 

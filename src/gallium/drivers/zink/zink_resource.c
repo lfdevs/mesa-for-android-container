@@ -657,7 +657,11 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
       bool success = false;
       VkImageCreateInfo ici;
       enum pipe_format srgb = PIPE_FORMAT_NONE;
-      if (screen->info.have_KHR_swapchain_mutable_format) {
+      /* We use modifiers as a proxy for "this surface is used as a window system render target".
+       * For winsys, we need to be able to mutate between srgb and linear, but we don't need general
+       * image view/shader image format compatibility (that path means losing fast clears or compression on some hardware).
+       */
+      if (ici_modifier_count) {
          srgb = util_format_is_srgb(templ->format) ? util_format_linear(templ->format) : util_format_srgb(templ->format);
          /* why do these helpers have different default return values? */
          if (srgb == templ->format)

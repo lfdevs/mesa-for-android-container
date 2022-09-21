@@ -1,4 +1,3 @@
-GTF-GL46.gtf21.GL3Tests.texture_lod_bias.texture_lod_bias_all,Fail
 GTF-GL46.gtf30.GL3Tests.framebuffer_blit.framebuffer_blit_functionality_multisampled_to_singlesampled_blit,Fail
 GTF-GL46.gtf30.GL3Tests.sgis_texture_lod.sgis_texture_lod_basic_lod_selection,Fail
 GTF-GL46.gtf32.GL3Tests.draw_elements_base_vertex.draw_elements_base_vertex_invalid_mode,Fail

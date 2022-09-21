@@ -5093,16 +5093,6 @@ bi_compile_variant_nir(nir_shader *nir,
         if (bifrost_debug & BIFROST_DBG_SHADERS && !skip_internal)
                 bi_print_shader(ctx, stdout);
 
-        if (ctx->arch <= 8) {
-                bi_lower_fau(ctx);
-        }
-
-        /* Lowering FAU can create redundant moves. Run CSE+DCE to clean up. */
-        if (likely(optimize)) {
-                bi_opt_cse(ctx);
-                bi_opt_dead_code_eliminate(ctx);
-        }
-
         /* Analyze before register allocation to avoid false dependencies. The
          * skip bit is a function of only the data flow graph and is invariant
          * under valid scheduling. Helpers are only defined for fragment
@@ -5115,6 +5105,19 @@ bi_compile_variant_nir(nir_shader *nir,
          * doesn't have to know about dual textures */
         if (likely(optimize)) {
                 bi_opt_fuse_dual_texture(ctx);
+        }
+
+        /* Lower FAU after fusing dual texture, because fusing dual texture
+         * creates new immediates that themselves may need lowering.
+         */
+        if (ctx->arch <= 8) {
+                bi_lower_fau(ctx);
+        }
+
+        /* Lowering FAU can create redundant moves. Run CSE+DCE to clean up. */
+        if (likely(optimize)) {
+                bi_opt_cse(ctx);
+                bi_opt_dead_code_eliminate(ctx);
         }
 
         if (likely(!(bifrost_debug & BIFROST_DBG_NOPSCHED)))

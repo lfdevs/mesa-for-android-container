@@ -1714,7 +1714,9 @@ lp_setup_end_query(struct lp_setup_context *setup, struct llvmpipe_query *pq)
    }
    else {
       struct llvmpipe_screen *screen = llvmpipe_screen(setup->pipe->screen);
+      mtx_lock(&screen->rast_mutex);
       lp_rast_fence(screen->rast, &pq->fence);
+      mtx_unlock(&screen->rast_mutex);
    }
 
 fail:

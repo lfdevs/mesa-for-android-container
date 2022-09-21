@@ -629,8 +629,8 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 		int ir = 0;
 		if (shader == PIPE_SHADER_COMPUTE)
 			ir = 1 << PIPE_SHADER_IR_NATIVE;
+		ir |= 1 << PIPE_SHADER_IR_TGSI;
 		if (is_nir_enabled(&rscreen->b)) {
-			ir |= 1 << PIPE_SHADER_IR_TGSI;
 			ir |= 1 << PIPE_SHADER_IR_NIR;
 		}
 		return ir;

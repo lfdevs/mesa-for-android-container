@@ -518,12 +518,12 @@ TEST_F(TestInstrFromString, test_write_scratch_to_offset)
 {
    add_dest_vec4_from_string("R1.xyzw");
    string init = "WRITE_SCRATCH 20 R1.xyzw AL:4 ALO:16";
-   WriteScratchInstr expect(RegisterVec4(1), 20, 4, 16, 0xf);
+   ScratchIOInstr expect(RegisterVec4(1), 20, 4, 16, 0xf);
    check(init, expect);
 
    add_dest_vec4_from_string("R2.xyzw");
    string init2 = "WRITE_SCRATCH 10 R2.xy_w AL:8 ALO:8";
-   WriteScratchInstr expect2(RegisterVec4(2), 10, 8, 8, 0xb);
+   ScratchIOInstr expect2(RegisterVec4(2), 10, 8, 8, 0xb);
    check(init2, expect2);
 }
 
@@ -532,13 +532,13 @@ TEST_F(TestInstrFromString, test_write_scratch_to_index)
    add_dest_vec4_from_string("R1.xyzw");
    add_dest_from_string("R3.x");
    string init = "WRITE_SCRATCH @R3.x[10] R1.xyzw AL:4 ALO:16";
-   WriteScratchInstr expect(RegisterVec4(1), new Register(3, 0, pin_none), 4, 16, 0xf, 10);
+   ScratchIOInstr expect(RegisterVec4(1), new Register(3, 0, pin_none), 4, 16, 0xf, 10);
    check(init, expect);
 
    add_dest_vec4_from_string("R2.xyzw");
    add_dest_from_string("R4.x");
    string init2 = "WRITE_SCRATCH @R4.x[20] R2.xy__ AL:4 ALO:16";
-   WriteScratchInstr expect2(RegisterVec4(2), new Register(4, 0, pin_none), 4, 16, 0x3, 20);
+   ScratchIOInstr expect2(RegisterVec4(2), new Register(4, 0, pin_none), 4, 16, 0x3, 20);
    check(init2, expect2);
 
 

@@ -145,7 +145,7 @@ public:
    static const std::set<AluModifiers> last;
    static const std::set<AluModifiers> last_write;
 
-   std::pair<PRegister, bool> indirect_addr() const;
+   std::tuple<PRegister, bool, bool> indirect_addr() const;
 
    void add_extra_dependency(PVirtualValue reg);
 
@@ -204,7 +204,7 @@ public:
    void visit(ExportInstr *instr) override {(void)instr;}
    void visit(FetchInstr *instr) override {(void)instr;}
    void visit(ControlFlowInstr *instr) override {(void)instr;}
-   void visit(WriteScratchInstr *instr) override {(void)instr;}
+   void visit(ScratchIOInstr *instr) override {(void)instr;}
    void visit(StreamOutInstr *instr) override {(void)instr;}
    void visit(MemRingOutInstr *instr) override {(void)instr;}
    void visit(EmitVertexInstr *instr) override {(void)instr;}

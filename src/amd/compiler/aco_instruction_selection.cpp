@@ -590,6 +590,17 @@ byte_align_vector(isel_context* ctx, Temp vec, Operand offset, Temp dst, unsigne
 }
 
 Temp
+get_ssa_temp_tex(struct isel_context* ctx, nir_ssa_def* def, bool is_16bit)
+{
+   RegClass rc = RegClass::get(RegType::vgpr, (is_16bit ? 2 : 4) * def->num_components);
+   Temp tmp = get_ssa_temp(ctx, def);
+   if (tmp.bytes() != rc.bytes())
+      return emit_extract_vector(ctx, tmp, 0, rc);
+   else
+      return tmp;
+}
+
+Temp
 bool_to_vector_condition(isel_context* ctx, Temp val, Temp dst = Temp(0, s2))
 {
    Builder bld(ctx->program, ctx->block);
@@ -5538,25 +5549,22 @@ visit_load_input(isel_context* ctx, nir_intrinsic_instr* instr)
       while (channel_start < num_channels) {
          unsigned fetch_component = num_channels - channel_start;
          unsigned fetch_offset = attrib_offset + channel_start * vtx_info->chan_byte_size;
-         bool expanded = false;
 
          /* use MUBUF when possible to avoid possible alignment issues */
          /* TODO: we could use SDWA to unpack 8/16-bit attributes without extra instructions */
          bool use_mubuf =
             (nfmt == V_008F0C_BUF_NUM_FORMAT_FLOAT || nfmt == V_008F0C_BUF_NUM_FORMAT_UINT ||
              nfmt == V_008F0C_BUF_NUM_FORMAT_SINT) &&
-            vtx_info->chan_byte_size == 4;
+            vtx_info->chan_byte_size == 4 && bitsize != 16;
          unsigned fetch_dfmt = V_008F0C_BUF_DATA_FORMAT_INVALID;
          if (!use_mubuf) {
             fetch_dfmt =
                get_fetch_data_format(ctx, vtx_info, fetch_offset, &fetch_component,
                                      vtx_info->num_channels - channel_start, binding_align);
          } else {
-            if (fetch_component == 3 && ctx->options->gfx_level == GFX6) {
-               /* GFX6 only supports loading vec3 with MTBUF, expand to vec4. */
-               fetch_component = 4;
-               expanded = true;
-            }
+            /* GFX6 only supports loading vec3 with MTBUF, split to vec2,scalar. */
+            if (fetch_component == 3 && ctx->options->gfx_level == GFX6)
+               fetch_component = 2;
          }
 
          unsigned fetch_bytes = fetch_component * bitsize / 8;
@@ -5616,8 +5624,7 @@ visit_load_input(isel_context* ctx, nir_intrinsic_instr* instr)
          }
 
          Temp fetch_dst;
-         if (channel_start == 0 && fetch_bytes == dst.bytes() && !expanded &&
-             num_channels <= 3) {
+         if (channel_start == 0 && fetch_bytes == dst.bytes() && num_channels <= 3) {
             direct_fetch = true;
             fetch_dst = dst;
          } else {
@@ -5636,7 +5643,7 @@ visit_load_input(isel_context* ctx, nir_intrinsic_instr* instr)
             mtbuf->mtbuf().vtx_binding = attrib_binding + 1;
          }
 
-         emit_split_vector(ctx, fetch_dst, fetch_dst.size());
+         emit_split_vector(ctx, fetch_dst, fetch_dst.bytes() * 8 / bitsize);
 
          if (fetch_component == 1) {
             channels[channel_start] = fetch_dst;
@@ -5668,11 +5675,11 @@ visit_load_input(isel_context* ctx, nir_intrinsic_instr* instr)
                num_temp++;
                elems[i] = channel;
             } else if (is_float && idx == 3) {
-               vec->operands[i] = Operand::c32(0x3f800000u);
+               vec->operands[i] = bitsize == 16 ? Operand::c16(0x3c00u) : Operand::c32(0x3f800000u);
             } else if (!is_float && idx == 3) {
-               vec->operands[i] = Operand::c32(1u);
+               vec->operands[i] = Operand::get_const(ctx->options->gfx_level, 1u, bitsize / 8u);
             } else {
-               vec->operands[i] = Operand::zero();
+               vec->operands[i] = Operand::zero(bitsize / 8u);
             }
          }
          vec->definitions[0] = Definition(dst);
@@ -9292,7 +9299,7 @@ build_cube_select(isel_context* ctx, Temp ma, Temp id, Temp deriv, Temp* out_ma,
 
    Temp is_ma_z = bld.vopc(aco_opcode::v_cmp_le_f32, bld.def(bld.lm), four, id);
    Temp is_ma_y = bld.vopc(aco_opcode::v_cmp_le_f32, bld.def(bld.lm), two, id);
-   is_ma_y = bld.sop2(Builder::s_andn2, bld.def(bld.lm), is_ma_y, is_ma_z);
+   is_ma_y = bld.sop2(Builder::s_andn2, bld.def(bld.lm), bld.def(s1, scc), is_ma_y, is_ma_z);
    Temp is_not_ma_x =
       bld.sop2(aco_opcode::s_or_b64, bld.def(bld.lm), bld.def(s1, scc), is_ma_z, is_ma_y);
 
@@ -9447,11 +9454,12 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
       switch (instr->src[i].src_type) {
       case nir_tex_src_coord: {
          assert(instr->src[i].src.ssa->bit_size == (a16 ? 16 : 32));
-         coord = get_ssa_temp(ctx, instr->src[i].src.ssa);
+         coord = get_ssa_temp_tex(ctx, instr->src[i].src.ssa, a16);
          break;
       }
       case nir_tex_src_bias:
          assert(instr->src[i].src.ssa->bit_size == (a16 ? 16 : 32));
+         /* Doesn't need get_ssa_temp_tex because we pack it into its own dword anyway. */
          bias = get_ssa_temp(ctx, instr->src[i].src.ssa);
          has_bias = true;
          break;
@@ -9460,14 +9468,14 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
             level_zero = true;
          } else {
             assert(instr->src[i].src.ssa->bit_size == (a16 ? 16 : 32));
-            lod = get_ssa_temp(ctx, instr->src[i].src.ssa);
+            lod = get_ssa_temp_tex(ctx, instr->src[i].src.ssa, a16);
             has_lod = true;
          }
          break;
       }
       case nir_tex_src_min_lod:
          assert(instr->src[i].src.ssa->bit_size == (a16 ? 16 : 32));
-         clamped_lod = get_ssa_temp(ctx, instr->src[i].src.ssa);
+         clamped_lod = get_ssa_temp_tex(ctx, instr->src[i].src.ssa, a16);
          has_clamped_lod = true;
          break;
       case nir_tex_src_comparator:
@@ -9485,17 +9493,17 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
          break;
       case nir_tex_src_ddx:
          assert(instr->src[i].src.ssa->bit_size == (g16 ? 16 : 32));
-         ddx = get_ssa_temp(ctx, instr->src[i].src.ssa);
+         ddx = get_ssa_temp_tex(ctx, instr->src[i].src.ssa, g16);
          has_ddx = true;
          break;
       case nir_tex_src_ddy:
          assert(instr->src[i].src.ssa->bit_size == (g16 ? 16 : 32));
-         ddy = get_ssa_temp(ctx, instr->src[i].src.ssa);
+         ddy = get_ssa_temp_tex(ctx, instr->src[i].src.ssa, g16);
          has_ddy = true;
          break;
       case nir_tex_src_ms_index:
          assert(instr->src[i].src.ssa->bit_size == (a16 ? 16 : 32));
-         sample_index = get_ssa_temp(ctx, instr->src[i].src.ssa);
+         sample_index = get_ssa_temp_tex(ctx, instr->src[i].src.ssa, a16);
          has_sample_index = true;
          break;
       case nir_tex_src_texture_offset:

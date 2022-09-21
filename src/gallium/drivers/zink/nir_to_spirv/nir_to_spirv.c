@@ -107,6 +107,8 @@ struct ntv_context {
          subgroup_le_mask_var,
          subgroup_lt_mask_var,
          subgroup_size_var;
+
+   SpvId discard_func;
 };
 
 static SpvId
@@ -551,6 +553,7 @@ emit_input(struct ntv_context *ctx, struct nir_variable *var)
          spirv_builder_emit_decoration(&ctx->builder, var_id, SpvDecorationCentroid);
       else if (var->data.sample)
          spirv_builder_emit_decoration(&ctx->builder, var_id, SpvDecorationSample);
+      emit_interpolation(ctx, var_id, var->data.interpolation);
    } else if (ctx->stage < MESA_SHADER_FRAGMENT) {
       switch (var->data.location) {
       HANDLE_EMIT_BUILTIN(POS, Position);
@@ -579,8 +582,6 @@ emit_input(struct ntv_context *ctx, struct nir_variable *var)
 
    if (var->data.patch)
       spirv_builder_emit_decoration(&ctx->builder, var_id, SpvDecorationPatch);
-
-   emit_interpolation(ctx, var_id, var->data.interpolation);
 
    _mesa_hash_table_insert(ctx->vars, var, (void *)(intptr_t)var_id);
 
@@ -629,6 +630,7 @@ emit_output(struct ntv_context *ctx, struct nir_variable *var)
          ctx->so_output_gl_types[idx] = var->type;
          ctx->so_output_types[idx] = var_type;
       }
+      emit_interpolation(ctx, var_id, var->data.interpolation);
    } else {
       if (var->data.location >= FRAG_RESULT_DATA0) {
          spirv_builder_emit_location(&ctx->builder, var_id,
@@ -665,8 +667,6 @@ emit_output(struct ntv_context *ctx, struct nir_variable *var)
       spirv_builder_emit_component(&ctx->builder, var_id,
                                    var->data.location_frac);
 
-   emit_interpolation(ctx, var_id, var->data.interpolation);
-
    if (var->data.patch)
       spirv_builder_emit_decoration(&ctx->builder, var_id, SpvDecorationPatch);
 
@@ -699,8 +699,6 @@ emit_temp(struct ntv_context *ctx, struct nir_variable *var)
       spirv_builder_emit_name(&ctx->builder, var_id, var->name);
 
    _mesa_hash_table_insert(ctx->vars, var, (void *)(intptr_t)var_id);
-   assert(ctx->num_entry_ifaces < ARRAY_SIZE(ctx->entry_ifaces));
-   ctx->entry_ifaces[ctx->num_entry_ifaces++] = var_id;
 }
 
 static SpvDim
@@ -2124,9 +2122,6 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
    BINOP(nir_op_fge, SpvOpFOrdGreaterThanEqual)
    BINOP(nir_op_feq, SpvOpFOrdEqual)
    BINOP(nir_op_fneu, SpvOpFUnordNotEqual)
-   BINOP(nir_op_ishl, SpvOpShiftLeftLogical)
-   BINOP(nir_op_ishr, SpvOpShiftRightArithmetic)
-   BINOP(nir_op_ushr, SpvOpShiftRightLogical)
    BINOP(nir_op_frem, SpvOpFRem)
 #undef BINOP
 
@@ -2145,6 +2140,23 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
    BINOP_LOG(nir_op_ine, SpvOpINotEqual, SpvOpLogicalNotEqual)
    BINOP_LOG(nir_op_ixor, SpvOpBitwiseXor, SpvOpLogicalNotEqual)
 #undef BINOP_LOG
+
+#define BINOP_SHIFT(nir_op, spirv_op) \
+   case nir_op: { \
+      assert(nir_op_infos[alu->op].num_inputs == 2); \
+      int shift_bit_size = nir_src_bit_size(alu->src[1].src); \
+      nir_alu_type shift_nir_type = nir_alu_type_get_base_type(nir_op_infos[alu->op].input_types[1]); \
+      SpvId shift_type = get_alu_type(ctx, shift_nir_type, num_components, shift_bit_size); \
+      SpvId shift_mask = get_ivec_constant(ctx, shift_bit_size, num_components, bit_size - 1); \
+      SpvId shift_count = emit_binop(ctx, SpvOpBitwiseAnd, shift_type, src[1], shift_mask); \
+      result = emit_binop(ctx, spirv_op, dest_type, src[0], shift_count); \
+      break; \
+   }
+
+   BINOP_SHIFT(nir_op_ishl, SpvOpShiftLeftLogical)
+   BINOP_SHIFT(nir_op_ishr, SpvOpShiftRightArithmetic)
+   BINOP_SHIFT(nir_op_ushr, SpvOpShiftRightLogical)
+#undef BINOP_SHIFT
 
 #define BUILTIN_BINOP(nir_op, spirv_op) \
    case nir_op: \
@@ -2331,11 +2343,10 @@ emit_load_const(struct ntv_context *ctx, nir_load_const_instr *load_const)
 static void
 emit_discard(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 {
-   assert(ctx->block_started);
-   spirv_builder_emit_kill(&ctx->builder);
-   /* discard is weird in NIR, so let's just create an unreachable block after
-      it and hope that the vulkan driver will DCE any instructinos in it. */
-   spirv_builder_label(&ctx->builder, spirv_builder_new_id(&ctx->builder));
+   assert(ctx->discard_func);
+   SpvId type_void = spirv_builder_type_void(&ctx->builder);
+   spirv_builder_function_call(&ctx->builder, type_void,
+                               ctx->discard_func, NULL, 0);
 }
 
 static void
@@ -2402,7 +2413,9 @@ emit_store_deref(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 
    }
    SpvId result;
-   if (ctx->stage == MESA_SHADER_FRAGMENT && var->data.location == FRAG_RESULT_SAMPLE_MASK) {
+   if (ctx->stage == MESA_SHADER_FRAGMENT &&
+       var->data.mode == nir_var_shader_out &&
+       var->data.location == FRAG_RESULT_SAMPLE_MASK) {
       src = emit_bitcast(ctx, type, src);
       /* SampleMask is always an array in spirv, so we need to construct it into one */
       result = spirv_builder_emit_composite_construct(&ctx->builder, ctx->sample_mask_type, &src, 1);
@@ -4256,8 +4269,8 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
    }
 
    SpvId type_void = spirv_builder_type_void(&ctx.builder);
-   SpvId type_main = spirv_builder_type_function(&ctx.builder, type_void,
-                                                 NULL, 0);
+   SpvId type_void_func = spirv_builder_type_function(&ctx.builder, type_void,
+                                                      NULL, 0);
    SpvId entry_point = spirv_builder_new_id(&ctx.builder);
    spirv_builder_emit_name(&ctx.builder, entry_point, "main");
 
@@ -4397,9 +4410,22 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
       spirv_builder_emit_exec_mode(&ctx.builder, entry_point,
                                    SpvExecutionModeXfb);
    }
+
+   if (s->info.stage == MESA_SHADER_FRAGMENT && s->info.fs.uses_discard) {
+      ctx.discard_func = spirv_builder_new_id(&ctx.builder);
+      spirv_builder_emit_name(&ctx.builder, ctx.discard_func, "discard");
+      spirv_builder_function(&ctx.builder, ctx.discard_func, type_void,
+                             SpvFunctionControlMaskNone,
+                             type_void_func);
+      SpvId label = spirv_builder_new_id(&ctx.builder);
+      spirv_builder_label(&ctx.builder, label);
+      spirv_builder_emit_kill(&ctx.builder);
+      spirv_builder_function_end(&ctx.builder);
+   }
+
    spirv_builder_function(&ctx.builder, entry_point, type_void,
-                                            SpvFunctionControlMaskNone,
-                                            type_main);
+                          SpvFunctionControlMaskNone,
+                          type_void_func);
 
    nir_function_impl *entry = nir_shader_get_entrypoint(s);
    nir_metadata_require(entry, nir_metadata_block_index);

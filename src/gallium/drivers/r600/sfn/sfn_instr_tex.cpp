@@ -682,7 +682,7 @@ bool TexInstr::emit_tex_txd(nir_tex_instr *tex, Inputs& src, Shader& shader)
                  << "' (" << __func__ << ")\n";
 
    auto dst = vf.dest_vec4(tex->dest, pin_group);
-   RegisterVec4 empty_dst(126, false, {0,0,0,0}, pin_group);
+   RegisterVec4 empty_dst(0, false, {0,0,0,0}, pin_group);
 
    auto swizzle = src.swizzle_from_ncomps(tex->coord_components);
 

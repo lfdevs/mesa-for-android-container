@@ -63,7 +63,7 @@ nv50_hw_query_allocate(struct nv50_context *nv50, struct nv50_query *q,
          return false;
       hq->offset = hq->base_offset;
 
-      ret = nouveau_bo_map(hq->bo, 0, screen->base.client);
+      ret = nouveau_bo_map(hq->bo, 0, nv50->base.client);
       if (ret) {
          nv50_hw_query_allocate(nv50, q, 0);
          return false;
@@ -294,7 +294,7 @@ nv50_hw_get_query_result(struct nv50_context *nv50, struct nv50_query *q,
          }
          return false;
       }
-      if (nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, nv50->screen->base.client))
+      if (nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, nv50->base.client))
          return false;
    }
    hq->state = NV50_HW_QUERY_STATE_READY;

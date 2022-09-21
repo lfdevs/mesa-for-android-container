@@ -81,11 +81,12 @@ agx_is_fmov(agx_instr *def)
 static agx_index
 agx_compose_float_src(agx_index to, agx_index from)
 {
-   if (to.abs)
+   if (to.abs) {
       from.neg = false;
+      from.abs = true;
+   }
 
-   from.abs |= to.abs;
-   from.neg |= to.neg;
+   from.neg ^= to.neg;
 
    return from;
 }

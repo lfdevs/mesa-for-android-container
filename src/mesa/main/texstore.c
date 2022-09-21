@@ -449,7 +449,7 @@ _mesa_texstore_s8_z24(TEXSTORE_PARAMS)
             /* the 24 depth bits will be in the low position: */
             _mesa_unpack_depth_span(ctx, srcWidth,
                                     GL_UNSIGNED_INT, /* dst type */
-                                    keepstencil ? depth : dstRow, /* dst addr */
+                                    depth, /* dst addr */
                                     depthScale,
                                     srcType, src, srcPacking);
 
@@ -463,7 +463,9 @@ _mesa_texstore_s8_z24(TEXSTORE_PARAMS)
 
          /* merge stencil values into depth values */
          for (i = 0; i < srcWidth; i++) {
-            if (keepstencil)
+            if (!keepstencil && !keepdepth)
+               dstRow[i] = depth[i] | (stencil[i] << 24);
+            else if (keepstencil)
                dstRow[i] = depth[i] | (dstRow[i] & 0xFF000000);
             else
                dstRow[i] = (dstRow[i] & 0xFFFFFF) | (stencil[i] << 24);

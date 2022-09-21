@@ -199,6 +199,17 @@ static void si_launch_grid_internal(struct si_context *sctx, const struct pipe_g
          sctx->flags |= sctx->gfx_level <= GFX8 ? SI_CONTEXT_WB_L2 : 0;
          /* Make sure image stores are visible to all CUs. */
          sctx->flags |= SI_CONTEXT_INV_VCACHE;
+         /* Make sure RBs see our DCC changes. */
+         if (sctx->gfx_level >= GFX10 && sctx->screen->info.tcc_rb_non_coherent) {
+            unsigned enabled_mask = sctx->images[PIPE_SHADER_COMPUTE].enabled_mask;
+            while (enabled_mask) {
+               int i = u_bit_scan(&enabled_mask);
+               if (sctx->images[PIPE_SHADER_COMPUTE].views[i].access & SI_IMAGE_ACCESS_ALLOW_DCC_STORE) {
+                  sctx->flags |= SI_CONTEXT_INV_L2;
+                  break;
+               }
+            }
+         }
       } else {
          /* Make sure buffer stores are visible to all CUs. */
          sctx->flags |= SI_CONTEXT_INV_SCACHE | SI_CONTEXT_INV_VCACHE | SI_CONTEXT_PFP_SYNC_ME;

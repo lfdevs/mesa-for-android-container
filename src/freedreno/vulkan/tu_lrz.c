@@ -271,8 +271,14 @@ tu_lrz_begin_resumed_renderpass(struct tu_cmd_buffer *cmd,
 {
     /* Track LRZ valid state */
    memset(&cmd->state.lrz, 0, sizeof(cmd->state.lrz));
-   uint32_t a = cmd->state.subpass->depth_stencil_attachment.attachment;
-   if (a != VK_ATTACHMENT_UNUSED) {
+
+   uint32_t a;
+   for (a = 0; a < cmd->state.pass->attachment_count; a++) {
+      if (cmd->state.attachments[a]->image->lrz_height)
+         break;
+   }
+
+   if (a != cmd->state.pass->attachment_count) {
       const struct tu_render_pass_attachment *att = &cmd->state.pass->attachments[a];
       tu_lrz_init_state(cmd, att, cmd->state.attachments[a]);
       if (att->clear_mask & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT)) {
@@ -312,6 +318,14 @@ tu_lrz_begin_renderpass(struct tu_cmd_buffer *cmd,
          struct tu_image *image = cmd->state.attachments[i]->image;
          tu_disable_lrz(cmd, &cmd->cs, image);
       }
+
+      /* We need a valid LRZ fast-clear base, in case the render pass contents
+       * are in secondaries that enable LRZ, so that they can read that LRZ is
+       * dynamically disabled. It doesn't matter which we use, so just leave
+       * the last one as emitted in tu_disable_lrz().
+       */
+      memset(&cmd->state.lrz, 0, sizeof(cmd->state.lrz));
+      return;
    }
 
     /* Track LRZ valid state */

@@ -854,7 +854,7 @@ split(struct ir3_register *def, unsigned offset,
    assert(!(def->flags & IR3_REG_ARRAY));
    assert(def->merge_set);
    struct ir3_instruction *split =
-      ir3_instr_create(after->block, OPC_META_SPLIT, 1, 1);
+      ir3_instr_create(block, OPC_META_SPLIT, 1, 1);
    struct ir3_register *dst = __ssa_dst(split);
    dst->flags |= def->flags & IR3_REG_HALF;
    struct ir3_register *src = ir3_src_create(split, INVALID_REG, def->flags);
@@ -874,16 +874,20 @@ extract(struct ir3_register *parent_def, unsigned offset, unsigned elems,
    if (offset == 0 && elems == reg_elems(parent_def))
       return parent_def;
 
+   struct ir3_register *srcs[elems];
+   for (unsigned i = 0; i < elems; i++) {
+      srcs[i] = split(parent_def, offset + i, after, block);
+   }
+
    struct ir3_instruction *collect =
-      ir3_instr_create(after->block, OPC_META_COLLECT, 1, elems);
+      ir3_instr_create(block, OPC_META_COLLECT, 1, elems);
    struct ir3_register *dst = __ssa_dst(collect);
    dst->flags |= parent_def->flags & IR3_REG_HALF;
    dst->wrmask = MASK(elems);
    add_to_merge_set(parent_def->merge_set, dst, parent_def->merge_set_offset);
 
    for (unsigned i = 0; i < elems; i++) {
-      ir3_src_create(collect, INVALID_REG, parent_def->flags)->def =
-         split(parent_def, offset + i, after, block);
+      ir3_src_create(collect, INVALID_REG, parent_def->flags)->def = srcs[i];
    }
 
    if (after)

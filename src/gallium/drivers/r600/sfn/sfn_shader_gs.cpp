@@ -179,6 +179,15 @@ int GeometryShader::do_allocate_reserved_registers()
 
    m_ring_item_sizes[0] = m_next_input_ring_offset;
 
+
+   /* GS thread with no output workaround - emit a cut at start of GS */
+   if (chip_class() == ISA_CC_R600) {
+      emit_instruction(new EmitVertexInstr(0, true));
+      start_new_block(0);
+   }
+
+
+
    if (m_tri_strip_adj_fix)
       emit_adj_fix();
 

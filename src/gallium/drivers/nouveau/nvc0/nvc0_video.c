@@ -91,7 +91,8 @@ struct pipe_video_codec *
 nvc0_create_decoder(struct pipe_context *context,
                     const struct pipe_video_codec *templ)
 {
-   struct nouveau_screen *screen = &((struct nvc0_context *)context)->screen->base;
+   struct nvc0_context *nvc0 = nvc0_context(context);
+   struct nouveau_screen *screen = &nvc0->screen->base;
    struct nouveau_vp3_decoder *dec;
    struct nouveau_pushbuf **push;
    union nouveau_bo_config cfg;
@@ -116,7 +117,7 @@ nvc0_create_decoder(struct pipe_context *context,
    dec = CALLOC_STRUCT(nouveau_vp3_decoder);
    if (!dec)
       return NULL;
-   dec->client = screen->client;
+   dec->client = nvc0->base.client;
    dec->base = *templ;
    nouveau_vp3_decoder_init_common(&dec->base);
 
@@ -160,7 +161,7 @@ nvc0_create_decoder(struct pipe_context *context,
                                   data, size, &dec->channel[i]);
 
          if (!ret)
-            ret = nouveau_pushbuf_new(screen->client, dec->channel[i], 4,
+            ret = nouveau_pushbuf_new(nvc0->base.client, dec->channel[i], 4,
                                    32 * 1024, true, &dec->pushbuf[i]);
          if (ret)
             break;

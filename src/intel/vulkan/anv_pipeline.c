@@ -1755,8 +1755,9 @@ done:
    if (create_feedback) {
       *create_feedback->pPipelineCreationFeedback = pipeline_feedback;
 
-      assert(info->stageCount == create_feedback->pipelineStageCreationFeedbackCount);
-      for (uint32_t i = 0; i < info->stageCount; i++) {
+      uint32_t stage_count = create_feedback->pipelineStageCreationFeedbackCount;
+      assert(stage_count == 0 || info->stageCount == stage_count);
+      for (uint32_t i = 0; i < stage_count; i++) {
          gl_shader_stage s = vk_to_mesa_shader_stage(info->pStages[i].stage);
          create_feedback->pPipelineStageCreationFeedbacks[i] = stages[s].feedback;
       }
@@ -1933,8 +1934,10 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
    if (create_feedback) {
       *create_feedback->pPipelineCreationFeedback = pipeline_feedback;
 
-      assert(create_feedback->pipelineStageCreationFeedbackCount == 1);
-      create_feedback->pPipelineStageCreationFeedbacks[0] = stage.feedback;
+      if (create_feedback->pipelineStageCreationFeedbackCount) {
+         assert(create_feedback->pipelineStageCreationFeedbackCount == 1);
+         create_feedback->pPipelineStageCreationFeedbacks[0] = stage.feedback;
+      }
    }
 
    pipeline->cs = bin;
@@ -2668,8 +2671,9 @@ anv_pipeline_compile_ray_tracing(struct anv_ray_tracing_pipeline *pipeline,
    if (create_feedback) {
       *create_feedback->pPipelineCreationFeedback = pipeline_feedback;
 
-      assert(info->stageCount == create_feedback->pipelineStageCreationFeedbackCount);
-      for (uint32_t i = 0; i < info->stageCount; i++) {
+      uint32_t stage_count = create_feedback->pipelineStageCreationFeedbackCount;
+      assert(stage_count == 0 || info->stageCount == stage_count);
+      for (uint32_t i = 0; i < stage_count; i++) {
          gl_shader_stage s = vk_to_mesa_shader_stage(info->pStages[i].stage);
          create_feedback->pPipelineStageCreationFeedbacks[i] = stages[s].feedback;
       }
@@ -3054,6 +3058,14 @@ VkResult anv_GetPipelineExecutableStatisticsKHR(
    }
    case ANV_PIPELINE_COMPUTE: {
       prog_data = anv_pipeline_to_compute(pipeline)->cs->prog_data;
+      break;
+   }
+   case ANV_PIPELINE_RAY_TRACING: {
+      struct anv_shader_bin **shader =
+         util_dynarray_element(&anv_pipeline_to_ray_tracing(pipeline)->shaders,
+                               struct anv_shader_bin *,
+                               pExecutableInfo->executableIndex);
+      prog_data = (*shader)->prog_data;
       break;
    }
    default:

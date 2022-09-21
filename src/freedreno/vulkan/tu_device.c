@@ -1474,6 +1474,20 @@ tu_queue_init(struct tu_device *device,
               int idx,
               const VkDeviceQueueCreateInfo *create_info)
 {
+
+   /* Match the default priority of fd_context_init.  We ignore
+    * pQueuePriorities because the spec says
+    *
+    *   An implementation may allow a higher-priority queue to starve a
+    *   lower-priority queue on the same VkDevice until the higher-priority
+    *   queue has no further commands to execute. The relationship of queue
+    *   priorities must not cause queues on one VkDevice to starve queues on
+    *   another VkDevice.
+    *
+    * We cannot let one VkDevice starve another.
+    */
+   const int priority = 1;
+
    VkResult result = vk_queue_init(&queue->vk, &device->vk, create_info, idx);
    if (result != VK_SUCCESS)
       return result;
@@ -1483,7 +1497,7 @@ tu_queue_init(struct tu_device *device,
    queue->vk.driver_submit = tu_queue_submit;
 #endif
 
-   int ret = tu_drm_submitqueue_new(device, 0, &queue->msm_queue_id);
+   int ret = tu_drm_submitqueue_new(device, priority, &queue->msm_queue_id);
    if (ret)
       return vk_startup_errorf(device->instance, VK_ERROR_INITIALIZATION_FAILED,
                                "submitqueue create failed");

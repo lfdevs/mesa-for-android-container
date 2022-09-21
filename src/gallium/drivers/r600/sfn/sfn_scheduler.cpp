@@ -87,7 +87,7 @@ public:
       m_cf_instr = instr;
    }
 
-   void visit(WriteScratchInstr *instr) override {
+   void visit(ScratchIOInstr *instr) override {
       mem_write_instr.push_back(instr);
    }
 
@@ -148,7 +148,7 @@ public:
 
 class BlockSheduler {
 public:
-   BlockSheduler( bool eg_t_slot_handling);
+   BlockSheduler(r600_chip_class chip_class);
    void run(Shader *shader);
 
    void finalize();
@@ -218,7 +218,7 @@ private:
 
    int m_lds_addr_count{0};
    int m_alu_groups_schduled{0};
-   bool m_eg_t_slot_handling;
+   r600_chip_class m_chip_class;
 
 };
 
@@ -238,7 +238,7 @@ Shader *schedule(Shader *original)
    // to be able to re-start scheduling
 
    auto scheduled_shader = original;
-   BlockSheduler s(original->chip_class() >= ISA_CC_EVERGREEN);
+   BlockSheduler s(original->chip_class());
    s.run(scheduled_shader);
    s.finalize();
 
@@ -252,13 +252,13 @@ Shader *schedule(Shader *original)
    return scheduled_shader;
 }
 
-BlockSheduler::BlockSheduler(bool eg_t_slot_handling):
+BlockSheduler::BlockSheduler(r600_chip_class chip_class):
    current_shed(sched_alu),
    m_last_pos(nullptr),
    m_last_pixel(nullptr),
    m_last_param(nullptr),
    m_current_block(nullptr),
-   m_eg_t_slot_handling(eg_t_slot_handling)
+   m_chip_class(chip_class)
 {
 }
 
@@ -329,12 +329,10 @@ void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_bl
       if (!m_current_block->lds_group_active()) {
          if (last_shed != sched_free && memops_ready.size() > 8)
             current_shed = sched_free;
-         else if (mem_ring_writes_ready.size() > 5)
+         else if (mem_ring_writes_ready.size() > 15)
             current_shed = sched_mem_ring;
          else if (rat_instr_ready.size() > 3)
             current_shed = sched_rat;
-         else if (gds_ready.size() > 3)
-            current_shed = sched_gds;
          else if (tex_ready.size() > 3)
             current_shed = sched_tex;         
       }
@@ -823,8 +821,8 @@ bool BlockSheduler::collect_ready_alu_vec(std::list<AluInstr *>& ready, std::lis
          else if (AluGroup::has_t()) {
             auto opinfo = alu_ops.find((*i)->opcode());
             assert(opinfo != alu_ops.end());
-            if (opinfo->second.can_channel(AluOp::t, m_eg_t_slot_handling) &&
-                !(*i)->indirect_addr().first)
+            if (opinfo->second.can_channel(AluOp::t, m_chip_class) &&
+                !std::get<0>((*i)->indirect_addr()))
                priority = -1;
          }
 
@@ -915,7 +913,8 @@ bool BlockSheduler::collect_ready_type(std::list<T *>& ready, std::list<T *>& av
    auto i = available.begin();
    auto e = available.end();
 
-   while (i != e) {
+   int lookahead = 16;
+   while (i != e && ready.size() < 16 && lookahead-- > 0) {
       if ((*i)->ready()) {
          ready.push_back(*i);
          auto old_i = i;

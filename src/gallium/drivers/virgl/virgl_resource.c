@@ -253,11 +253,6 @@ virgl_resource_transfer_prepare(struct virgl_context *vctx,
          else
             return VIRGL_TRANSFER_MAP_WRITE_TO_STAGING_WITH_READBACK;
       }
-      /* Readback is yet another command and is transparent to the state
-       * trackers.  It should be waited for in all cases, including when
-       * PIPE_MAP_UNSYNCHRONIZED is set.
-       */
-      wait = true;
 
       /* When the transfer queue has pending writes to this transfer's region,
        * we have to flush before readback.
@@ -281,8 +276,16 @@ virgl_resource_transfer_prepare(struct virgl_context *vctx,
       return VIRGL_TRANSFER_MAP_ERROR;
 
    if (readback) {
+      /* Readback is yet another command and is transparent to the state
+       * trackers.  It should be waited for in all cases, including when
+       * PIPE_MAP_UNSYNCHRONIZED is set.
+       */
+      vws->resource_wait(vws, res->hw_res);
       vws->transfer_get(vws, res->hw_res, &xfer->base.box, xfer->base.stride,
                         xfer->l_stride, xfer->offset, xfer->base.level);
+      /* transfer_get puts the resource into a maybe_busy state, so we will have
+       * to wait another time if we want to use that resource. */
+      wait = true;
    }
 
    if (wait)

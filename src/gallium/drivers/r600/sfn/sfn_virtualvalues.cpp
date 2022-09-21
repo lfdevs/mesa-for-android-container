@@ -433,7 +433,7 @@ int RegisterVec4::sel() const
    int comp = 0;
    while (comp < 4 && m_values[comp]->value()->chan() > 3)
       ++comp;
-   return m_values[comp < 4 ? comp : 0]->value()->sel();
+   return comp < 4 ? m_values[comp]->value()->sel() : 0;
 }
 
 bool RegisterVec4::ready(int block_id, int index) const

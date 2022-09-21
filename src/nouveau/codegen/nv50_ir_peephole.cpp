@@ -53,7 +53,7 @@ Instruction::isNop() const
       if (!getDef(0)->equals(getSrc(0)))
          return false;
       if (op == OP_UNION)
-         if (!def(0).rep()->equals(getSrc(1)))
+         if (!getDef(0)->equals(getSrc(1)))
             return false;
       return true;
    }

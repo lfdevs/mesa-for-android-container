@@ -188,8 +188,6 @@ struct iris_screen {
    unsigned kernel_features;
 #define KERNEL_HAS_WAIT_FOR_SUBMIT (1<<0)
 
-   uint64_t aperture_bytes;
-
    /**
     * Last sequence number allocated by the cache tracking mechanism.
     *

@@ -413,6 +413,7 @@ struct svga_shader_emitter_v10
       boolean vertices_order_cw;
       boolean point_mode;
       unsigned tesscoord_sys_index;
+      unsigned swizzle_max;
       unsigned prim_id_index;                /* primitive id */
       struct {
          unsigned in_index;       /* real tessinner input register */
@@ -1780,6 +1781,14 @@ emit_src_register(struct svga_shader_emitter_v10 *emit,
             operand0.numComponents = VGPU10_OPERAND_4_COMPONENT;
             operand0.operandType = VGPU10_OPERAND_TYPE_INPUT_DOMAIN_POINT;
             index = 0;
+
+            /* Make sure swizzles are of those components allowed according
+             * to the tessellator domain.
+             */
+            swizzleX = MIN2(swizzleX, emit->tes.swizzle_max);
+            swizzleY = MIN2(swizzleY, emit->tes.swizzle_max);
+            swizzleZ = MIN2(swizzleZ, emit->tes.swizzle_max);
+            swizzleW = MIN2(swizzleW, emit->tes.swizzle_max);
          }
          else if (index == emit->tes.inner.tgsi_index) {
             file = TGSI_FILE_TEMPORARY;
@@ -3145,6 +3154,12 @@ emit_domain_shader_declarations(struct svga_shader_emitter_v10 *emit)
    end_emit_instruction(emit);
 
    emit_tessellator_domain(emit, emit->tes.prim_mode);
+
+   /* Specify a max for swizzles of the domain point according to the
+    * tessellator domain type.
+    */
+   emit->tes.swizzle_max = emit->tes.prim_mode == PIPE_PRIM_TRIANGLES ?
+                              TGSI_SWIZZLE_Z : TGSI_SWIZZLE_Y;
 }
 
 

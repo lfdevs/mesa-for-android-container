@@ -196,8 +196,8 @@ struct ir3_register {
       } array;
    };
 
-   /* For IR3_REG_DEST, pointer back to the instruction containing this
-    * register.
+   /* For IR3_REG_SSA, dst registers contain pointer back to the instruction
+    * containing this register.
     */
    struct ir3_instruction *instr;
 
@@ -483,6 +483,8 @@ struct ir3_instruction {
       IR3_BARRIER_PRIVATE_R = 1 << 9,
       IR3_BARRIER_PRIVATE_W = 1 << 10,
       IR3_BARRIER_CONST_W = 1 << 11,
+      IR3_BARRIER_ACTIVE_FIBERS_R = 1 << 12,
+      IR3_BARRIER_ACTIVE_FIBERS_W = 1 << 13,
    } barrier_class,
       barrier_conflict;
 

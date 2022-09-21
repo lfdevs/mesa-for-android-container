@@ -60,7 +60,6 @@ spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-non-const-uniform-index,Fail
 spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
 spec@arb_depth_texture@depth-tex-modes,Fail
-spec@arb_enhanced_layouts@execution@component-layout@vs-fs-array-dvec3,Fail
 spec@arb_fragment_program_shadow@tex-shadow1d,Fail
 spec@arb_fragment_program_shadow@tex-shadow2d,Fail
 spec@arb_fragment_program_shadow@tex-shadow2drect,Fail

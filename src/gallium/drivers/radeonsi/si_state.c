@@ -5359,6 +5359,10 @@ static void si_memory_barrier(struct pipe_context *ctx, unsigned flags)
        * automatically at end of shader, but the contents of other
        * L1 caches might still be stale. */
       sctx->flags |= SI_CONTEXT_INV_VCACHE;
+
+      if (flags & (PIPE_BARRIER_IMAGE | PIPE_BARRIER_TEXTURE) &&
+          sctx->screen->info.tcc_rb_non_coherent)
+         sctx->flags |= SI_CONTEXT_INV_L2;
    }
 
    if (flags & PIPE_BARRIER_INDEX_BUFFER) {

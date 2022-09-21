@@ -654,6 +654,7 @@ vn_fix_command_buffer_begin_info(struct vn_command_buffer *cmd,
    const bool has_continue =
       begin_info->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
    const bool has_renderpass =
+      is_cmd_secondary &&
       begin_info->pInheritanceInfo->renderPass != VK_NULL_HANDLE;
 
    /* Can early-return if dynamic rendering is used and no structures need to

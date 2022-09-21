@@ -763,8 +763,8 @@ static void si_emit_derived_tess_state(struct si_context *sctx, unsigned *num_pa
    assert(((output_vertex_size / 4) & ~0xff) == 0);
    assert(((input_patch_size / 4) & ~0x1fff) == 0);
    assert(((output_patch_size / 4) & ~0x1fff) == 0);
-   assert(((output_patch0_offset / 16) & ~0xffff) == 0);
-   assert(((perpatch_output_offset / 16) & ~0xffff) == 0);
+   assert(((output_patch0_offset / 4) & ~0xffff) == 0);
+   assert(((perpatch_output_offset / 4) & ~0xffff) == 0);
    assert(num_tcs_input_cp <= 32);
    assert(num_tcs_output_cp <= 32);
    assert(*num_patches <= 64);
@@ -775,7 +775,7 @@ static void si_emit_derived_tess_state(struct si_context *sctx, unsigned *num_pa
    assert((ring_va & u_bit_consecutive(0, 19)) == 0);
 
    unsigned tcs_out_layout = (output_patch_size / 4) | (num_tcs_input_cp << 13) | ring_va;
-   unsigned tcs_out_offsets = (output_patch0_offset / 16) | ((perpatch_output_offset / 16) << 16);
+   unsigned tcs_out_offsets = (output_patch0_offset / 4) | ((perpatch_output_offset / 4) << 16);
    unsigned offchip_layout =
       (*num_patches - 1) | ((num_tcs_output_cp - 1) << 6) |
       ((pervertex_output_patch_size * *num_patches) << 11);

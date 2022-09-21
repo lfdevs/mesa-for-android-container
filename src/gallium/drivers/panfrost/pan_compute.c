@@ -123,8 +123,17 @@ panfrost_set_global_binding(struct pipe_context *pctx,
                 util_range_add(&rsrc->base, &rsrc->valid_buffer_range,
                                 0, rsrc->base.width0);
 
-                /* The handle points to uint32_t, but space is allocated for 64 bits */
-                memcpy(handles[i], &rsrc->image.data.bo->ptr.gpu, sizeof(mali_ptr));
+                /* The handle points to uint32_t, but space is allocated for 64
+                 * bits. We need to respect the offset passed in. This interface
+                 * is so bad.
+                 */
+                mali_ptr addr = 0;
+                static_assert(sizeof(addr) == 8, "size out of sync");
+
+                memcpy(&addr, handles[i], sizeof(addr));
+                addr += rsrc->image.data.bo->ptr.gpu;
+
+                memcpy(handles[i], &addr, sizeof(addr));
         }
 }
 

@@ -137,6 +137,8 @@ int device_select_find_wayland_pci_default(struct device_pci_info *devices, uint
 	 if (default_idx != -1)
 	    break;
       }
+
+      drmFreeDevice(&info.dev_info);
    }
 
    if (info.wl_drm)

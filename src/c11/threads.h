@@ -47,6 +47,20 @@
 #  error Not supported on this platform.
 #endif
 
+#if defined(HAVE_THRD_CREATE)
+#include <threads.h>
+
+#if defined(ANDROID)
+/* Currently, only Android are verified that it's thrd_t are typedef of pthread_t
+ * So we can define _MTX_INITIALIZER_NP to PTHREAD_MUTEX_INITIALIZER
+ * FIXME: temporary non-standard hack to ease transition
+ */
+#  define _MTX_INITIALIZER_NP PTHREAD_MUTEX_INITIALIZER
+#else
+#error Can not define _MTX_INITIALIZER_NP properly for this platform
+#endif
+#else
+
 /*---------------------------- macros ---------------------------*/
 
 #ifndef _Thread_local
@@ -181,5 +195,7 @@ int tss_set(tss_t, void *);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* HAVE_THRD_CREATE */
 
 #endif /* C11_THREADS_H_INCLUDED_ */

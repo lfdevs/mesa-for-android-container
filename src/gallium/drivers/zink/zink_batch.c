@@ -91,7 +91,8 @@ zink_reset_batch_state(struct zink_context *ctx, struct zink_batch_state *bs)
 
    bs->resource_size = 0;
    bs->signal_semaphore = VK_NULL_HANDLE;
-   util_dynarray_clear(&bs->wait_semaphores);
+   while (util_dynarray_contains(&bs->wait_semaphores, VkSemaphore))
+      VKSCR(DestroySemaphore)(screen->dev, util_dynarray_pop(&bs->wait_semaphores, VkSemaphore), NULL);
    util_dynarray_clear(&bs->wait_semaphore_stages);
 
    bs->present = VK_NULL_HANDLE;

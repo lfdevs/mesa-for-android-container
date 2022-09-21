@@ -559,12 +559,6 @@ bool RatInstr::emit_ssbo_load(nir_intrinsic_instr *intr, Shader& shader)
 
 bool RatInstr::emit_ssbo_store(nir_intrinsic_instr *instr, Shader& shader)
 {
-
-   /* Forche the scheduler to not move the preparation too far away, by starting
-    * a new block (TODO: better priority handling in the scheduler)*/
-   if (nir_src_num_components(instr->src[0]) > 2)
-      shader.start_new_block(0);
-
    auto &vf = shader.value_factory();
    auto orig_addr = vf.src(instr->src[2], 0);
 

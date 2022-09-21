@@ -77,7 +77,7 @@ public:
 
    void visit(ControlFlowInstr *instr) override {(void)instr;};
    void visit(IfInstr *instr) override {(void)instr;};
-   void visit(WriteScratchInstr *instr) override {(void)instr;};
+   void visit(ScratchIOInstr *instr) override {(void)instr;};
    void visit(StreamOutInstr *instr) override {(void)instr;};
    void visit(MemRingOutInstr *instr) override {(void)instr;};
    void visit(EmitVertexInstr *instr) override {(void)instr;};
@@ -249,7 +249,7 @@ public:
    void visit(Block *instr) override;
    void visit(ControlFlowInstr *instr) override {(void)instr;}
    void visit(IfInstr *instr) override {(void)instr;}
-   void visit(WriteScratchInstr *instr) override {(void)instr;}
+   void visit(ScratchIOInstr *instr) override {(void)instr;}
    void visit(StreamOutInstr *instr) override {(void)instr;}
    void visit(MemRingOutInstr *instr) override {(void)instr;}
    void visit(EmitVertexInstr *instr) override {(void)instr;}
@@ -277,7 +277,7 @@ public:
    void visit(Block *instr) override;
    void visit(ControlFlowInstr *instr) override {(void)instr;}
    void visit(IfInstr *instr) override {(void)instr;}
-   void visit(WriteScratchInstr *instr) override {(void)instr;}
+   void visit(ScratchIOInstr *instr) override {(void)instr;}
    void visit(StreamOutInstr *instr) override {(void)instr;}
    void visit(MemRingOutInstr *instr) override {(void)instr;}
    void visit(EmitVertexInstr *instr) override {(void)instr;}
@@ -493,7 +493,7 @@ public:
    void visit(Block *instr) override;
    void visit(ControlFlowInstr *instr) override;
    void visit(IfInstr *instr) override;
-   void visit(WriteScratchInstr *instr) override;
+   void visit(ScratchIOInstr *instr) override;
    void visit(StreamOutInstr *instr) override;
    void visit(MemRingOutInstr *instr) override;
    void visit(EmitVertexInstr *instr) override {(void)instr;}
@@ -525,7 +525,7 @@ void SimplifySourceVecVisitor::visit(TexInstr *instr)
    }
 }
 
-void SimplifySourceVecVisitor::visit(WriteScratchInstr *instr)
+void SimplifySourceVecVisitor::visit(ScratchIOInstr *instr)
 {
    (void) instr;
 }

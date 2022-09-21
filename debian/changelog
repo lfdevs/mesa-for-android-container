@@ -1,3 +1,13 @@
+mesa (22.2.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * nv50-ir-fix-OP_UNION-resolving-when-used-for-vector.diff: Dropped,
+    upstream.
+  * rules: Enable svga (vmwgfx) for armhf/arm64. (LP: #1989830)
+  * control: Drop x32 from mesa-vulkan-drivers archs. (Closes: #1020386)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 21 Sep 2022 12:57:22 +0300
+
 mesa (22.2.0~rc3-2) unstable; urgency=medium
 
   * nv50-ir-fix-OP_UNION-resolving-when-used-for-vector.diff: Fix a

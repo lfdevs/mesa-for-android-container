@@ -591,6 +591,10 @@ zink_kopper_acquire_submit(struct zink_screen *screen, struct zink_resource *res
    if (cdt->swapchain->images[res->obj->dt_idx].dt_has_data)
       return VK_NULL_HANDLE;
    assert(res->obj->dt_idx != UINT32_MAX);
+   if (cdt->swapchain->images[res->obj->dt_idx].acquired) {
+      assert(!cdt->swapchain->images[res->obj->dt_idx].acquire);
+      return VK_NULL_HANDLE;
+   }
    assert(cdt->swapchain->images[res->obj->dt_idx].acquire);
    cdt->swapchain->images[res->obj->dt_idx].acquired = true;
    /* this is now owned by the batch */

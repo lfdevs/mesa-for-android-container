@@ -1173,6 +1173,7 @@ select_shader_variant(struct d3d12_selection_context *sel_ctx, d3d12_shader_sele
       tex_options.saturate_r = key.tex_saturate_r;
       tex_options.saturate_t = key.tex_saturate_t;
       tex_options.lower_invalid_implicit_lod = true;
+      tex_options.lower_tg4_offsets = true;
 
       NIR_PASS_V(new_nir_variant, nir_lower_tex, &tex_options);
    }

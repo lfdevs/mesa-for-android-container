@@ -2334,7 +2334,7 @@ lower_to_hw_instr(Program* program)
 
                Operand scratch_addr = instr->operands[0];
                Operand scratch_addr_lo(scratch_addr.physReg(), s1);
-               if (program->stage != compute_cs) {
+               if (program->stage.hw != HWStage::CS) {
                   bld.smem(aco_opcode::s_load_dwordx2, instr->definitions[0], scratch_addr,
                            Operand::zero());
                   scratch_addr_lo.setFixed(instr->definitions[0].physReg());

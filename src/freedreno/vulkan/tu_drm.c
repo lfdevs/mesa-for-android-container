@@ -144,9 +144,12 @@ tu_drm_submitqueue_new(const struct tu_device *dev,
                        int priority,
                        uint32_t *queue_id)
 {
+   uint64_t nr_rings = 1;
+   tu_drm_get_param(dev->physical_device, MSM_PARAM_NR_RINGS, &nr_rings);
+
    struct drm_msm_submitqueue req = {
       .flags = 0,
-      .prio = priority,
+      .prio = MIN2(priority, MAX2(nr_rings, 1) - 1),
    };
 
    int ret = drmCommandWriteRead(dev->fd,

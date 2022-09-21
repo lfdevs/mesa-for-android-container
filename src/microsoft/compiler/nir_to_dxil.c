@@ -5649,9 +5649,9 @@ void dxil_fill_validation_state(struct ntd_context *ctx,
          ctx->mod.info.has_per_sample_input;
       break;
    case DXIL_COMPUTE_SHADER:
-      state->state.num_threads_x = ctx->shader->info.workgroup_size[0];
-      state->state.num_threads_y = ctx->shader->info.workgroup_size[1];
-      state->state.num_threads_z = ctx->shader->info.workgroup_size[2];
+      state->state.num_threads_x = MAX2(ctx->shader->info.workgroup_size[0], 1);
+      state->state.num_threads_y = MAX2(ctx->shader->info.workgroup_size[1], 1);
+      state->state.num_threads_z = MAX2(ctx->shader->info.workgroup_size[2], 1);
       break;
    case DXIL_GEOMETRY_SHADER:
       state->state.psv1.max_vertex_count = ctx->shader->info.gs.vertices_out;

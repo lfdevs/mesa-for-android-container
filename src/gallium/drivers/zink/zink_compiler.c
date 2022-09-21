@@ -1396,11 +1396,14 @@ assign_producer_var_io(gl_shader_stage stage, nir_variable *var, unsigned *reser
       }
       if (slot_map[slot] == 0xff) {
          assert(*reserved < MAX_VARYING);
-         slot_map[slot] = *reserved;
-         if (stage == MESA_SHADER_TESS_EVAL && var->data.mode == nir_var_shader_in && !var->data.patch)
-            *reserved += glsl_count_vec4_slots(glsl_get_array_element(var->type), false, false);
+         unsigned num_slots;
+         if (nir_is_arrayed_io(var, stage))
+            num_slots = glsl_count_vec4_slots(glsl_get_array_element(var->type), false, false);
          else
-            *reserved += glsl_count_vec4_slots(var->type, false, false);
+            num_slots = glsl_count_vec4_slots(var->type, false, false);
+         assert(*reserved + num_slots <= MAX_VARYING);
+         for (unsigned i = 0; i < num_slots; i++)
+            slot_map[slot + i] = (*reserved)++;
       }
       slot = slot_map[slot];
       assert(slot < MAX_VARYING);
@@ -2792,11 +2795,46 @@ scan_nir(struct zink_screen *screen, nir_shader *shader, struct zink_shader *zs)
 }
 
 static bool
+is_residency_code(nir_ssa_def *src)
+{
+   nir_instr *parent = src->parent_instr;
+   while (1) {
+      if (parent->type == nir_instr_type_intrinsic) {
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(parent);
+         assert(intr->intrinsic == nir_intrinsic_is_sparse_texels_resident);
+         return false;
+      }
+      if (parent->type == nir_instr_type_tex)
+         return true;
+      assert(parent->type == nir_instr_type_alu);
+      nir_alu_instr *alu = nir_instr_as_alu(parent);
+      parent = alu->src[0].src.ssa->parent_instr;
+   }
+}
+
+static bool
 lower_sparse_instr(nir_builder *b, nir_instr *in, void *data)
 {
    if (in->type != nir_instr_type_intrinsic)
       return false;
    nir_intrinsic_instr *instr = nir_instr_as_intrinsic(in);
+   if (instr->intrinsic == nir_intrinsic_sparse_residency_code_and) {
+      b->cursor = nir_before_instr(&instr->instr);
+      nir_ssa_def *src0;
+      if (is_residency_code(instr->src[0].ssa))
+         src0 = nir_is_sparse_texels_resident(b, 1, instr->src[0].ssa);
+      else
+         src0 = instr->src[0].ssa;
+      nir_ssa_def *src1;
+      if (is_residency_code(instr->src[1].ssa))
+         src1 = nir_is_sparse_texels_resident(b, 1, instr->src[1].ssa);
+      else
+         src1 = instr->src[1].ssa;
+      nir_ssa_def *def = nir_iand(b, src0, src1);
+      nir_ssa_def_rewrite_uses_after(&instr->dest.ssa, def, in);
+      nir_instr_remove(in);
+      return true;
+   }
    if (instr->intrinsic != nir_intrinsic_is_sparse_texels_resident)
       return false;
 
@@ -2806,10 +2844,31 @@ lower_sparse_instr(nir_builder *b, nir_instr *in, void *data)
     */
    b->cursor = nir_before_instr(&instr->instr);
    nir_instr *parent = instr->src[0].ssa->parent_instr;
-   assert(parent->type == nir_instr_type_alu);
-   nir_alu_instr *alu = nir_instr_as_alu(parent);
-   nir_ssa_def_rewrite_uses_after(instr->src[0].ssa, nir_channel(b, alu->src[0].src.ssa, 0), parent);
-   nir_instr_remove(parent);
+   if (is_residency_code(instr->src[0].ssa)) {
+      assert(parent->type == nir_instr_type_alu);
+      nir_alu_instr *alu = nir_instr_as_alu(parent);
+      nir_ssa_def_rewrite_uses_after(instr->src[0].ssa, nir_channel(b, alu->src[0].src.ssa, 0), parent);
+      nir_instr_remove(parent);
+   } else {
+      nir_ssa_def *src;
+      if (parent->type == nir_instr_type_intrinsic) {
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(parent);
+         assert(intr->intrinsic == nir_intrinsic_is_sparse_texels_resident);
+         src = intr->src[0].ssa;
+      } else {
+         assert(parent->type == nir_instr_type_alu);
+         nir_alu_instr *alu = nir_instr_as_alu(parent);
+         src = alu->src[0].src.ssa;
+      }
+      if (instr->dest.ssa.bit_size != 32) {
+         if (instr->dest.ssa.bit_size == 1)
+            src = nir_ieq_imm(b, src, 1);
+         else
+            src = nir_u2uN(b, src, instr->dest.ssa.bit_size);
+      }
+      nir_ssa_def_rewrite_uses(&instr->dest.ssa, src);
+      nir_instr_remove(in);
+   }
    return true;
 }
 
@@ -2825,7 +2884,7 @@ match_tex_dests_instr(nir_builder *b, nir_instr *in, void *data)
    if (in->type != nir_instr_type_tex)
       return false;
    nir_tex_instr *tex = nir_instr_as_tex(in);
-   if (tex->op == nir_texop_txs)
+   if (tex->op == nir_texop_txs || tex->op == nir_texop_lod)
       return false;
    int handle = nir_tex_instr_src_index(tex, nir_tex_src_texture_handle);
    nir_variable *var = NULL;

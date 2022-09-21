@@ -246,24 +246,6 @@ ntq_store_dest(struct vc4_compile *c, nir_dest *dest, int chan,
         }
 }
 
-static struct qreg *
-ntq_get_dest(struct vc4_compile *c, nir_dest *dest)
-{
-        if (dest->is_ssa) {
-                struct qreg *qregs = ntq_init_ssa_def(c, &dest->ssa);
-                for (int i = 0; i < dest->ssa.num_components; i++)
-                        qregs[i] = c->undef;
-                return qregs;
-        } else {
-                nir_register *reg = dest->reg.reg;
-                assert(dest->reg.base_offset == 0);
-                assert(reg->num_array_elems == 0);
-                struct hash_entry *entry =
-                        _mesa_hash_table_search(c->def_ht, reg);
-                return entry->data;
-        }
-}
-
 static struct qreg
 ntq_get_src(struct vc4_compile *c, nir_src src, int i)
 {
@@ -523,7 +505,6 @@ ntq_emit_tex(struct vc4_compile *c, nir_tex_instr *instr)
 
         enum pipe_format format = c->key->tex[unit].format;
 
-        struct qreg *dest = ntq_get_dest(c, &instr->dest);
         if (util_format_is_depth_or_stencil(format)) {
                 struct qreg normalized = ntq_scale_depth_texture(c, tex);
                 struct qreg depth_output;
@@ -577,10 +558,12 @@ ntq_emit_tex(struct vc4_compile *c, nir_tex_instr *instr)
                 }
 
                 for (int i = 0; i < 4; i++)
-                        dest[i] = depth_output;
+                        ntq_store_dest(c, &instr->dest, i,
+                                       qir_MOV(c, depth_output));
         } else {
                 for (int i = 0; i < 4; i++)
-                        dest[i] = qir_UNPACK_8_F(c, tex, i);
+                        ntq_store_dest(c, &instr->dest, i,
+                                       qir_UNPACK_8_F(c, tex, i));
         }
 }
 

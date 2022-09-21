@@ -5205,24 +5205,26 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       assert(nir_dest_num_components(instr->dest) == 1);
       assert(nir_dest_bit_size(instr->dest) <= 32);
       assert(nir_intrinsic_align(instr) > 0);
-      if (devinfo->verx10 >= 125) {
-         assert(nir_dest_bit_size(instr->dest) == 32 &&
-                nir_intrinsic_align(instr) >= 4);
+      if (nir_dest_bit_size(instr->dest) == 32 &&
+          nir_intrinsic_align(instr) >= 4) {
+         if (devinfo->verx10 >= 125) {
+            assert(nir_dest_bit_size(instr->dest) == 32 &&
+                   nir_intrinsic_align(instr) >= 4);
 
-         srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
-            swizzle_nir_scratch_addr(bld, nir_addr, false);
-         srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(1);
+            srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
+               swizzle_nir_scratch_addr(bld, nir_addr, false);
+            srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(1);
 
-         bld.emit(SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL,
-                  dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
-      } else if (nir_dest_bit_size(instr->dest) >= 4 &&
-                 nir_intrinsic_align(instr) >= 4) {
-         /* The offset for a DWORD scattered message is in dwords. */
-         srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
-            swizzle_nir_scratch_addr(bld, nir_addr, true);
+            bld.emit(SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL,
+                     dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
+         } else {
+            /* The offset for a DWORD scattered message is in dwords. */
+            srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
+               swizzle_nir_scratch_addr(bld, nir_addr, true);
 
-         bld.emit(SHADER_OPCODE_DWORD_SCATTERED_READ_LOGICAL,
-                  dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
+            bld.emit(SHADER_OPCODE_DWORD_SCATTERED_READ_LOGICAL,
+                     dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
+         }
       } else {
          srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
             swizzle_nir_scratch_addr(bld, nir_addr, false);
@@ -5276,27 +5278,27 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       assert(nir_src_bit_size(instr->src[0]) <= 32);
       assert(nir_intrinsic_write_mask(instr) == 1);
       assert(nir_intrinsic_align(instr) > 0);
-      if (devinfo->verx10 >= 125) {
-         assert(nir_src_bit_size(instr->src[0]) == 32 &&
-                nir_intrinsic_align(instr) >= 4);
-         srcs[SURFACE_LOGICAL_SRC_DATA] = data;
+      if (nir_src_bit_size(instr->src[0]) == 32 &&
+          nir_intrinsic_align(instr) >= 4) {
+         if (devinfo->verx10 >= 125) {
+            srcs[SURFACE_LOGICAL_SRC_DATA] = data;
 
-         srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
-            swizzle_nir_scratch_addr(bld, nir_addr, false);
-         srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(1);
+            srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
+               swizzle_nir_scratch_addr(bld, nir_addr, false);
+            srcs[SURFACE_LOGICAL_SRC_IMM_ARG] = brw_imm_ud(1);
 
-         bld.emit(SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL,
-                  dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
-      } else if (nir_src_bit_size(instr->src[0]) == 32 &&
-                 nir_intrinsic_align(instr) >= 4) {
-         srcs[SURFACE_LOGICAL_SRC_DATA] = data;
+            bld.emit(SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL,
+                     dest, srcs, SURFACE_LOGICAL_NUM_SRCS);
+         } else {
+            srcs[SURFACE_LOGICAL_SRC_DATA] = data;
 
-         /* The offset for a DWORD scattered message is in dwords. */
-         srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
-            swizzle_nir_scratch_addr(bld, nir_addr, true);
+            /* The offset for a DWORD scattered message is in dwords. */
+            srcs[SURFACE_LOGICAL_SRC_ADDRESS] =
+               swizzle_nir_scratch_addr(bld, nir_addr, true);
 
-         bld.emit(SHADER_OPCODE_DWORD_SCATTERED_WRITE_LOGICAL,
-                  fs_reg(), srcs, SURFACE_LOGICAL_NUM_SRCS);
+            bld.emit(SHADER_OPCODE_DWORD_SCATTERED_WRITE_LOGICAL,
+                     fs_reg(), srcs, SURFACE_LOGICAL_NUM_SRCS);
+         }
       } else {
          srcs[SURFACE_LOGICAL_SRC_DATA] = bld.vgrf(BRW_REGISTER_TYPE_UD);
          bld.MOV(srcs[SURFACE_LOGICAL_SRC_DATA], data);

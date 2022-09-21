@@ -362,15 +362,11 @@ bool ac_get_supported_modifiers(const struct radeon_info *info,
                  AMD_FMT_MOD_SET(DCC_RETILE, 1) |
                  AMD_FMT_MOD_SET(DCC_INDEPENDENT_128B, 1) |
                  AMD_FMT_MOD_SET(DCC_MAX_COMPRESSED_BLOCK, AMD_FMT_MOD_DCC_BLOCK_128B))
-      }
-
-      if (info->family == CHIP_NAVI12 || info->family == CHIP_NAVI14 || info->gfx_level >= GFX10_3) {
-         bool independent_128b = info->gfx_level >= GFX10_3;
 
          ADD_MOD(AMD_FMT_MOD | common_dcc |
                  AMD_FMT_MOD_SET(DCC_RETILE, 1) |
                  AMD_FMT_MOD_SET(DCC_INDEPENDENT_64B, 1) |
-                 AMD_FMT_MOD_SET(DCC_INDEPENDENT_128B, independent_128b) |
+                 AMD_FMT_MOD_SET(DCC_INDEPENDENT_128B, 1) |
                  AMD_FMT_MOD_SET(DCC_MAX_COMPRESSED_BLOCK, AMD_FMT_MOD_DCC_BLOCK_64B))
       }
 
@@ -413,6 +409,10 @@ bool ac_get_supported_modifiers(const struct radeon_info *info,
             swizzle_r_x = !i ? AMD_FMT_MOD_TILE_GFX11_256K_R_X : AMD_FMT_MOD_TILE_GFX9_64K_R_X;
          else
             swizzle_r_x = !i ? AMD_FMT_MOD_TILE_GFX9_64K_R_X : AMD_FMT_MOD_TILE_GFX11_256K_R_X;
+
+         /* Disable 256K on APUs because it doesn't work with DAL. */
+         if (!info->has_dedicated_vram && swizzle_r_x == AMD_FMT_MOD_TILE_GFX11_256K_R_X)
+            continue;
 
          uint64_t modifier_r_x = AMD_FMT_MOD |
                                  AMD_FMT_MOD_SET(TILE_VERSION, AMD_FMT_MOD_TILE_VER_GFX11) |
@@ -1432,8 +1432,15 @@ static int gfx9_get_preferred_swizzle_mode(ADDR_HANDLE addrlib, const struct rad
    /* TODO: We could allow some of these: */
    sin.forbiddenBlock.micro = 1; /* don't allow the 256B swizzle modes */
 
-   if (info->gfx_level < GFX11)
+   if (info->gfx_level >= GFX11) {
+      /* Disable 256K on APUs because it doesn't work with DAL. */
+      if (!info->has_dedicated_vram) {
+         sin.forbiddenBlock.gfx11.thin256KB = 1;
+         sin.forbiddenBlock.gfx11.thick256KB = 1;
+      }
+   } else {
       sin.forbiddenBlock.var = 1;   /* don't allow the variable-sized swizzle modes */
+   }
 
    sin.bpp = in->bpp;
    sin.width = in->width;
@@ -1873,14 +1880,19 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
          surf->tile_swizzle = xout.pipeBankXor;
       }
 
+      bool use_dcc = false;
+      if (surf->modifier != DRM_FORMAT_MOD_INVALID) {
+         use_dcc = ac_modifier_has_dcc(surf->modifier);
+      } else {
+         use_dcc = info->has_graphics && !(surf->flags & RADEON_SURF_DISABLE_DCC) && !compressed &&
+                   is_dcc_supported_by_CB(info, in->swizzleMode) &&
+                   (!in->flags.display ||
+                    is_dcc_supported_by_DCN(info, config, surf, !in->flags.metaRbUnaligned,
+                                            !in->flags.metaPipeUnaligned));
+      }
+
       /* DCC */
-      if (info->has_graphics && !(surf->flags & RADEON_SURF_DISABLE_DCC) && !compressed &&
-          is_dcc_supported_by_CB(info, in->swizzleMode) &&
-          (!in->flags.display ||
-           is_dcc_supported_by_DCN(info, config, surf, !in->flags.metaRbUnaligned,
-                                   !in->flags.metaPipeUnaligned)) &&
-          (surf->modifier == DRM_FORMAT_MOD_INVALID ||
-           ac_modifier_has_dcc(surf->modifier))) {
+      if (use_dcc) {
          ADDR2_COMPUTE_DCCINFO_INPUT din = {0};
          ADDR2_COMPUTE_DCCINFO_OUTPUT dout = {0};
          ADDR2_META_MIP_INFO meta_mip_info[RADEON_SURF_MAX_LEVELS] = {0};
@@ -2381,7 +2393,7 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
       assert(is_dcc_supported_by_L2(info, surf));
       if (AddrSurfInfoIn.flags.color)
          assert(is_dcc_supported_by_CB(info, surf->u.gfx9.swizzle_mode));
-      if (AddrSurfInfoIn.flags.display) {
+      if (AddrSurfInfoIn.flags.display && surf->modifier == DRM_FORMAT_MOD_INVALID) {
          assert(is_dcc_supported_by_DCN(info, config, surf, surf->u.gfx9.color.dcc.rb_aligned,
                                         surf->u.gfx9.color.dcc.pipe_aligned));
       }
@@ -2392,8 +2404,7 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
        (1 << surf->surf_alignment_log2) >= 64 * 1024 && /* 64KB tiling */
        !(surf->flags & (RADEON_SURF_DISABLE_DCC | RADEON_SURF_FORCE_SWIZZLE_MODE |
                         RADEON_SURF_FORCE_MICRO_TILE_MODE)) &&
-       (surf->modifier == DRM_FORMAT_MOD_INVALID ||
-        ac_modifier_has_dcc(surf->modifier)) &&
+       surf->modifier == DRM_FORMAT_MOD_INVALID &&
        is_dcc_supported_by_DCN(info, config, surf, surf->u.gfx9.color.dcc.rb_aligned,
                                surf->u.gfx9.color.dcc.pipe_aligned)) {
       /* Validate that DCC is enabled if DCN can do it. */
@@ -2410,6 +2421,10 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
    if (!surf->meta_size) {
       /* Unset this if HTILE is not present. */
       surf->flags &= ~RADEON_SURF_TC_COMPATIBLE_HTILE;
+   }
+
+   if (surf->modifier != DRM_FORMAT_MOD_INVALID) {
+      assert((surf->num_meta_levels != 0) == ac_modifier_has_dcc(surf->modifier));
    }
 
    switch (surf->u.gfx9.swizzle_mode) {

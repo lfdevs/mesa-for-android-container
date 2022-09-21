@@ -58,7 +58,7 @@ public:
    void visit(const Block& instr) override;
    void visit(const IfInstr& instr) override;
    void visit(const ControlFlowInstr& instr) override;
-   void visit(const WriteScratchInstr& instr) override;
+   void visit(const ScratchIOInstr& instr) override;
    void visit(const StreamOutInstr& instr) override;
    void visit(const MemRingOutInstr& instr) override;
    void visit(const EmitVertexInstr& instr) override;
@@ -413,7 +413,7 @@ void AssamblerVisitor::visit(const AluGroup& group)
             m_last_addr = addr.first;
             m_bc->ar_loaded = 0;
 
-            r600_load_ar(m_bc);
+            r600_load_ar(m_bc, group.addr_for_src());
          }
       } else {
          emit_index_reg(*addr.first, 0);
@@ -535,7 +535,7 @@ void AssamblerVisitor::visit(const ExportInstr& exi)
    }
 }
 
-void AssamblerVisitor::visit(const WriteScratchInstr& instr)
+void AssamblerVisitor::visit(const ScratchIOInstr& instr)
 {
    clear_states(sf_all);
 
@@ -546,27 +546,27 @@ void AssamblerVisitor::visit(const WriteScratchInstr& instr)
    cf.op = CF_OP_MEM_SCRATCH;
    cf.elem_size = 3;
    cf.gpr = instr.value().sel();
-   cf.mark = 1;
-   cf.comp_mask = instr.write_mask();
+   cf.mark = !instr.is_read();
+   cf.comp_mask = instr.is_read() ? 0xf : instr.write_mask();
    cf.swizzle_x = 0;
    cf.swizzle_y = 1;
    cf.swizzle_z = 2;
    cf.swizzle_w = 3;
    cf.burst_count = 1;
 
+   assert(!instr.is_read() || m_bc->gfx_level < R700);
+
    if (instr.address()) {
-      cf.type = 3;
+      cf.type = instr.is_read() || m_bc->gfx_level > R600 ? 3 : 1;
       cf.index_gpr = instr.address()->sel();
 
       /* The docu seems to be wrong here: In indirect addressing the
        * address_base seems to be the array_size */
       cf.array_size = instr.array_size();
    } else {
-      cf.type = 2;
+      cf.type = instr.is_read() || m_bc->gfx_level > R600 ? 2 : 0;
       cf.array_base = instr.location();
    }
-   /* This should be 0, but the address calculation is apparently wrong */
-
 
    if (r600_bytecode_add_output(m_bc, &cf)){
       R600_ERR("shader_from_nir: Error creating SCRATCH_WR assembly instruction\n");
@@ -849,7 +849,7 @@ void AssamblerVisitor::visit(const IfInstr& instr)
    }
 
    auto pred = instr.predicate();
-   auto [addr, dummy ] = pred->indirect_addr(); {}
+   auto [addr, dummy0, dummy1 ] = pred->indirect_addr(); {}
    if (addr) {
       if (!m_last_addr || !m_bc->ar_loaded ||
           !m_last_addr->equal_to(*addr)) {
@@ -858,7 +858,7 @@ void AssamblerVisitor::visit(const IfInstr& instr)
             m_last_addr = addr;
             m_bc->ar_loaded = 0;
 
-            r600_load_ar(m_bc);
+            r600_load_ar(m_bc, true);
       }
    }
 

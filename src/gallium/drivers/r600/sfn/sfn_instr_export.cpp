@@ -147,40 +147,52 @@ ExportInstr::Pointer ExportInstr::from_string_impl(std::istream& is, ValueFactor
    return new ExportInstr( type, pos, value);
 }
 
-WriteScratchInstr::WriteScratchInstr(const RegisterVec4& value, PRegister addr,
-                                     int align, int align_offset, int writemask, int array_size):
+ScratchIOInstr::ScratchIOInstr(const RegisterVec4& value, PRegister addr,
+                               int align, int align_offset, int writemask,
+                               int array_size, bool is_read):
    WriteOutInstr(value),
    m_address(addr),
    m_align(align),
    m_align_offset(align_offset),
    m_writemask(writemask),
-   m_array_size(array_size - 1)
+   m_array_size(array_size - 1),
+   m_read(is_read)
 {
    addr->add_use(this);
+   if (m_read) {
+      for (int i = 0; i < 4; ++i)
+         value[i]->add_parent(this);
+   }
 }
 
-WriteScratchInstr::WriteScratchInstr(const RegisterVec4& value, int loc,
-                                     int align, int align_offset,int writemask):
+ScratchIOInstr::ScratchIOInstr(const RegisterVec4& value, int loc,
+                               int align, int align_offset,int writemask,
+                               bool is_read):
    WriteOutInstr(value),
    m_loc(loc),
    m_align(align),
    m_align_offset(align_offset),
-   m_writemask(writemask)
+   m_writemask(writemask),
+   m_read(is_read)
 {
+   if (m_read) {
 
+      for (int i = 0; i < 4; ++i)
+         value[i]->add_parent(this);
+   }
 }
 
-void WriteScratchInstr::accept(ConstInstrVisitor& visitor) const
+void ScratchIOInstr::accept(ConstInstrVisitor& visitor) const
 {
    visitor.visit(*this);
 }
 
-void WriteScratchInstr::accept(InstrVisitor& visitor)
+void ScratchIOInstr::accept(InstrVisitor& visitor)
 {
    visitor.visit(this);
 }
 
-bool WriteScratchInstr::is_equal_to(const WriteScratchInstr& lhs) const
+bool ScratchIOInstr::is_equal_to(const ScratchIOInstr& lhs) const
 {
    if (m_address) {
       if (!lhs.m_address)
@@ -198,28 +210,40 @@ bool WriteScratchInstr::is_equal_to(const WriteScratchInstr& lhs) const
          value().sel() == lhs.value().sel();
 }
 
-bool WriteScratchInstr::do_ready() const
+bool ScratchIOInstr::do_ready() const
 {
-   return value().ready(block_id(), index()) &&
-         (!m_address || m_address->ready(block_id(), index()));
+   bool address_ready = !m_address || m_address->ready(block_id(), index());
+   if (is_read())
+      return address_ready;
+   else
+      return address_ready && value().ready(block_id(), index());
 }
 
-void WriteScratchInstr::do_print(std::ostream& os) const
+void ScratchIOInstr::do_print(std::ostream& os) const
 {
    char buf[6];
 
-   os << "WRITE_SCRATCH ";
+   os << (is_read() ? "READ_SCRATCH " : "WRITE_SCRATCH ");
+
+   if (is_read()) {
+      os << (value()[0]->is_ssa() ? " S" : " R")
+         << value().sel() << "." << writemask_to_swizzle(m_writemask, buf)
+         << " ";
+   }
+
    if (m_address)
       os << "@" << *m_address << "[" << m_array_size + 1<<"]";
    else
       os << m_loc;
 
-   os << (value()[0]->is_ssa() ? " S" : " R")
-      << value().sel() << "." << writemask_to_swizzle(m_writemask, buf)
-      << " " << "AL:" << m_align << " ALO:" << m_align_offset;
+   if (!is_read())
+      os << (value()[0]->is_ssa() ? " S" : " R")
+            << value().sel() << "." << writemask_to_swizzle(m_writemask, buf);
+
+   os << " " << "AL:" << m_align << " ALO:" << m_align_offset;
 }
 
-auto WriteScratchInstr::from_string(std::istream& is, ValueFactory &vf) -> Pointer
+auto ScratchIOInstr::from_string(std::istream& is, ValueFactory &vf) -> Pointer
 {
    string loc_str;
    string value_str;
@@ -261,10 +285,10 @@ auto WriteScratchInstr::from_string(std::istream& is, ValueFactory &vf) -> Point
       loc_ss >> array_size;
       loc_ss >> c;
       assert(c == ']');
-      return new WriteScratchInstr(value, addr_reg->as_register(), align, align_offset, writemask, array_size);
+      return new ScratchIOInstr(value, addr_reg->as_register(), align, align_offset, writemask, array_size);
    } else {
       loc_ss >> offset;
-      return new WriteScratchInstr(value, offset, align, align_offset, writemask);
+      return new ScratchIOInstr(value, offset, align, align_offset, writemask);
    }
 }
 

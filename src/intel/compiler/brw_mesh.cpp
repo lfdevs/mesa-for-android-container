@@ -911,7 +911,7 @@ emit_urb_direct_writes(const fs_builder &bld, nir_intrinsic_instr *instr,
          srcs[URB_LOGICAL_SRC_CHANNEL_MASK] = brw_imm_ud(first_mask << 16);
          srcs[URB_LOGICAL_SRC_DATA] = fs_reg(VGRF, bld.shader->alloc.allocate(length),
                                              BRW_REGISTER_TYPE_F);
-         bld.LOAD_PAYLOAD(srcs[URB_LOGICAL_SRC_DATA], payload_srcs, length, 0);
+         bld8.LOAD_PAYLOAD(srcs[URB_LOGICAL_SRC_DATA], payload_srcs, length, 0);
 
          fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_WRITE_LOGICAL,
                                    reg_undef, srcs, ARRAY_SIZE(srcs));
@@ -939,7 +939,7 @@ emit_urb_direct_writes(const fs_builder &bld, nir_intrinsic_instr *instr,
          srcs[URB_LOGICAL_SRC_CHANNEL_MASK] = brw_imm_ud(second_mask << 16);
          srcs[URB_LOGICAL_SRC_DATA] = fs_reg(VGRF, bld.shader->alloc.allocate(length),
                                              BRW_REGISTER_TYPE_F);
-         bld.LOAD_PAYLOAD(srcs[URB_LOGICAL_SRC_DATA], payload_srcs, length, 0);
+         bld8.LOAD_PAYLOAD(srcs[URB_LOGICAL_SRC_DATA], payload_srcs, length, 0);
 
          fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_WRITE_LOGICAL,
                                    reg_undef, srcs, ARRAY_SIZE(srcs));
@@ -1005,7 +1005,7 @@ emit_urb_indirect_writes(const fs_builder &bld, nir_intrinsic_instr *instr,
          srcs[URB_LOGICAL_SRC_CHANNEL_MASK] = mask;
          srcs[URB_LOGICAL_SRC_DATA] = fs_reg(VGRF, bld.shader->alloc.allocate(length),
                                              BRW_REGISTER_TYPE_F);
-         bld.LOAD_PAYLOAD(srcs[URB_LOGICAL_SRC_DATA], payload_srcs, length, 0);
+         bld8.LOAD_PAYLOAD(srcs[URB_LOGICAL_SRC_DATA], payload_srcs, length, 0);
 
          fs_inst *inst = bld8.emit(SHADER_OPCODE_URB_WRITE_LOGICAL,
                                    reg_undef, srcs, ARRAY_SIZE(srcs));

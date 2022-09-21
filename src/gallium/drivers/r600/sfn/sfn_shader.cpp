@@ -932,7 +932,7 @@ bool Shader::emit_store_scratch(nir_intrinsic_instr *intr)
    int align = nir_intrinsic_align_mul(intr);
    int align_offset = nir_intrinsic_align_offset(intr);
 
-   WriteScratchInstr *ws_ir = nullptr;
+   ScratchIOInstr *ws_ir = nullptr;
 
    int offset = -1;
    if (address->as_literal()) {
@@ -946,14 +946,14 @@ bool Shader::emit_store_scratch(nir_intrinsic_instr *intr)
    }
 
    if (offset >= 0) {
-      ws_ir = new WriteScratchInstr(value, offset, align, align_offset, writemask);
+      ws_ir = new ScratchIOInstr(value, offset, align, align_offset, writemask);
    } else {
       auto addr_temp  = vf.temp_register(0);      
       auto load_addr = new AluInstr(op1_mov, addr_temp, address, AluInstr::last_write);
       load_addr->set_alu_flag(alu_no_schedule_bias);
       emit_instruction(load_addr);
 
-      ws_ir = new WriteScratchInstr(value, addr_temp, align, align_offset, writemask, m_scratch_size);
+      ws_ir = new ScratchIOInstr(value, addr_temp, align, align_offset, writemask, m_scratch_size);
    }
    emit_instruction(ws_ir);
 
@@ -964,18 +964,48 @@ bool Shader::emit_store_scratch(nir_intrinsic_instr *intr)
 bool Shader::emit_load_scratch(nir_intrinsic_instr *intr)
 {
    auto addr = value_factory().src(intr->src[0], 0);
-
-   RegisterVec4::Swizzle dest_swz = {7,7,7,7};
-
-   for (unsigned i = 0; i < intr->num_components; ++i)
-      dest_swz[i] = i;
-
    auto dest = value_factory().dest_vec4(intr->dest, pin_group);
 
-   auto ir = new LoadFromScratch(dest, dest_swz, addr, m_scratch_size);
-   emit_instruction(ir);
+   if (chip_class() >= ISA_CC_R700) {
+      RegisterVec4::Swizzle dest_swz = {7,7,7,7};
 
-   chain_scratch_read(ir);
+      for (unsigned i = 0; i < intr->num_components; ++i)
+         dest_swz[i] = i;
+
+      auto *ir = new LoadFromScratch(dest, dest_swz, addr, m_scratch_size);
+      emit_instruction(ir);
+      chain_scratch_read(ir);
+   } else {
+      int align = nir_intrinsic_align_mul(intr);
+      int align_offset = nir_intrinsic_align_offset(intr);
+
+
+      int offset = -1;
+      if (addr->as_literal()) {
+         offset = addr->as_literal()->value();
+      } else if (addr->as_inline_const()) {
+         auto il = addr->as_inline_const();
+         if (il->sel() == ALU_SRC_0)
+            offset = 0;
+         else if (il->sel() == ALU_SRC_1_INT)
+            offset = 1;
+      }
+
+      ScratchIOInstr *ir = nullptr;
+      if (offset >= 0) {
+         ir = new ScratchIOInstr(dest, offset, align, align_offset, 0xf, true);
+      } else {
+         auto addr_temp  = value_factory().temp_register(0);
+         auto load_addr = new AluInstr(op1_mov, addr_temp, addr, AluInstr::last_write);
+         load_addr->set_alu_flag(alu_no_schedule_bias);
+         emit_instruction(load_addr);
+
+         ir = new ScratchIOInstr(dest, addr_temp, align, align_offset, 0xf,
+                                 m_scratch_size, true);
+      }
+      emit_instruction(ir);
+   }
+
 
    m_flags.set(sh_needs_scratch_space);
 
@@ -1033,7 +1063,7 @@ bool Shader::emit_wait_ack()
    return true;
 }
 
-void Shader::InstructionChain::visit(WriteScratchInstr *instr)
+void Shader::InstructionChain::visit(ScratchIOInstr *instr)
 {
    apply(instr, &last_scratch_instr);
 }
@@ -1055,6 +1085,9 @@ void Shader::InstructionChain::visit(RatInstr *instr)
 
    if (prepare_mem_barrier)
       instr->set_ack();
+
+   if (this_shader->m_current_block->inc_rat_emitted() > 15)
+      this_shader->start_new_block(0);
 }
 
 void Shader::InstructionChain::apply(Instr *current, Instr **last) {

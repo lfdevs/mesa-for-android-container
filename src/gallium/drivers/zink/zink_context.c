@@ -384,7 +384,10 @@ zink_create_sampler_state(struct pipe_context *pctx,
    } else {
       sci.addressModeU = sci.addressModeV = sci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
    }
-   sci.mipLodBias = state->lod_bias;
+
+   sci.mipLodBias = CLAMP(state->lod_bias,
+                          -screen->info.props.limits.maxSamplerLodBias,
+                          screen->info.props.limits.maxSamplerLodBias);
 
    need_custom |= wrap_needs_border_color(state->wrap_s);
    need_custom |= wrap_needs_border_color(state->wrap_t);

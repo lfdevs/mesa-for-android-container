@@ -978,6 +978,9 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
       shader->info.tess.tcs_cross_invocation_inputs_read = 0;
       shader->info.tess.tcs_cross_invocation_outputs_read = 0;
    }
+   if (shader->info.stage == MESA_SHADER_MESH) {
+      shader->info.mesh.ms_cross_invocation_output_access = 0;
+   }
 
    if (shader->info.stage != MESA_SHADER_FRAGMENT)
       shader->info.writes_memory = shader->info.has_transform_feedback_varyings;

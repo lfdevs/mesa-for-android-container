@@ -852,7 +852,7 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info)
       info->gfx_level = GFX10_3;
    else if (info->ip[AMD_IP_GFX].ver_major == 10 && info->ip[AMD_IP_GFX].ver_minor == 1)
       info->gfx_level = GFX10;
-   else if (info->ip[AMD_IP_GFX].ver_major == 9)
+   else if (info->ip[AMD_IP_GFX].ver_major == 9 || info->ip[AMD_IP_COMPUTE].ver_major == 9)
       info->gfx_level = GFX9;
    else if (info->ip[AMD_IP_GFX].ver_major == 8)
       info->gfx_level = GFX8;

@@ -458,7 +458,7 @@ public:
    DECLARE_MEMBER(Block);
    DECLARE_MEMBER(ControlFlowInstr);
    DECLARE_MEMBER(IfInstr);
-   DECLARE_MEMBER(WriteScratchInstr);
+   DECLARE_MEMBER(ScratchIOInstr);
    DECLARE_MEMBER(StreamOutInstr);
    DECLARE_MEMBER(MemRingOutInstr);
    DECLARE_MEMBER(EmitVertexInstr);
@@ -504,7 +504,7 @@ public:
       m_comparer = InstrComparer(&instr);
    }
 
-   void visit(const WriteScratchInstr& instr) override {
+   void visit(const ScratchIOInstr& instr) override {
       m_comparer = InstrComparer(&instr);
    }
 

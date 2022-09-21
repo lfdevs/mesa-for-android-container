@@ -2357,6 +2357,22 @@ isl_swizzle_is_identity(struct isl_swizzle swizzle)
           swizzle.a == ISL_CHANNEL_SELECT_ALPHA;
 }
 
+static inline bool
+isl_swizzle_is_identity_for_format(enum isl_format format,
+                                   struct isl_swizzle swizzle)
+{
+   const struct isl_format_layout *layout = isl_format_get_layout(format);
+
+#define channel_id_or_zero(name, ID)                 \
+   (swizzle.name == ISL_CHANNEL_SELECT_##ID ||       \
+    layout->channels.name.bits == 0)
+   return channel_id_or_zero(r, RED) &&
+          channel_id_or_zero(g, GREEN) &&
+          channel_id_or_zero(b, BLUE) &&
+          channel_id_or_zero(a, ALPHA);
+#undef channel_id_or_zero
+}
+
 bool
 isl_swizzle_supports_rendering(const struct intel_device_info *devinfo,
                                struct isl_swizzle swizzle);

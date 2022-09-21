@@ -194,7 +194,6 @@ private:
    int m_element_size{3};
    bool m_need_ack{false};
    bool m_need_mark{false};
-
 };
 
 

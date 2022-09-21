@@ -74,6 +74,12 @@ supported:
   * `VK_EXT_transform_feedback`_
   * `VK_EXT_conditional_rendering`_
 
+* Formats requiring ``VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT``:
+
+   * ``VK_FORMAT_BC4_UNORM_BLOCK``
+   * ``VK_FORMAT_BC4_SNORM_BLOCK``
+   * ``VK_FORMAT_BC5_UNORM_BLOCK``
+   * ``VK_FORMAT_BC5_SNORM_BLOCK``
 
 OpenGL 3.1
 ^^^^^^^^^^

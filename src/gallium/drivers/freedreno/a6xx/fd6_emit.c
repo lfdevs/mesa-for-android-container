@@ -646,7 +646,8 @@ compute_lrz_state(struct fd6_emit *emit, bool binning_pass) assert_dt
    lrz = zsa->lrz;
 
    /* normalize lrz state: */
-   if (blend->reads_dest || fs->writes_pos || fs->no_earlyz || fs->has_kill) {
+   if (blend->reads_dest || fs->writes_pos || fs->no_earlyz || fs->has_kill ||
+       blend->base.alpha_to_coverage) {
       lrz.write = false;
       if (binning_pass)
          lrz.enable = false;

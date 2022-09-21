@@ -118,7 +118,6 @@ bool lower_vector_insert(exec_list *instructions, bool lower_nonconstant_index);
 bool lower_vector_derefs(gl_linked_shader *shader);
 void lower_named_interface_blocks(void *mem_ctx, gl_linked_shader *shader);
 bool optimize_split_arrays(exec_list *instructions, bool linked);
-bool lower_offset_arrays(exec_list *instructions);
 void optimize_dead_builtin_variables(exec_list *instructions,
                                      enum ir_variable_mode other);
 bool lower_tess_level(gl_linked_shader *shader);

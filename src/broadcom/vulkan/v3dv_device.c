@@ -63,7 +63,12 @@
 #include "wayland-drm-client-protocol.h"
 #endif
 
-#define V3DV_API_VERSION VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
+#ifndef ANDROID
+#   define V3DV_API_VERSION VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
+#else
+/* Android CDD require additional extensions for API v1.1+ */
+#   define V3DV_API_VERSION VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION)
+#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL
 v3dv_EnumerateInstanceVersion(uint32_t *pApiVersion)
@@ -863,6 +868,7 @@ physical_device_init(struct v3dv_physical_device *device,
     */
    device->drm_syncobj_type.features &= ~VK_SYNC_FEATURE_TIMELINE;
 
+#ifndef ANDROID
    /* Sync file export is incompatible with the current model of execution
     * where some jobs may run on the CPU.  There are CTS tests which do the
     * following:
@@ -888,6 +894,7 @@ physical_device_init(struct v3dv_physical_device *device,
     */
    device->drm_syncobj_type.import_sync_file = NULL;
    device->drm_syncobj_type.export_sync_file = NULL;
+#endif
 
    /* Multiwait is required for emulated timeline semaphores and is supported
     * by the v3d kernel interface.

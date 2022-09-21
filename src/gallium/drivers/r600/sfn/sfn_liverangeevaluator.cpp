@@ -53,7 +53,7 @@ public:
    void visit(Block *instr) override;
    void visit(ControlFlowInstr *instr) override;
    void visit(IfInstr *instr) override;
-   void visit(WriteScratchInstr *instr) override;
+   void visit(ScratchIOInstr *instr) override;
    void visit(StreamOutInstr *instr) override;
    void visit(MemRingOutInstr *instr) override;
    void visit(EmitVertexInstr *instr) override {(void)instr;}
@@ -287,12 +287,15 @@ void LiveRangeInstrVisitor::visit(Block *instr)
    sfn_log << SfnLog::merge << "End block\n";
 }
 
-void LiveRangeInstrVisitor::visit(WriteScratchInstr *instr)
+void LiveRangeInstrVisitor::visit(ScratchIOInstr *instr)
 {
    auto& src = instr->value();
    for (int i = 0; i < 4; ++i) {
       if ((1 << i) & instr->write_mask()) {
-         record_read(src[i], LiveRangeEntry::use_unspecified);
+         if (instr->is_read())
+            record_write(src[i]);
+         else
+            record_read(src[i], LiveRangeEntry::use_unspecified);
       }
    }
 
@@ -305,14 +308,14 @@ void LiveRangeInstrVisitor::visit(StreamOutInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    auto src = instr->value();
-   record_read(src, LiveRangeEntry::use_export);
+   record_read(src, LiveRangeEntry::use_unspecified);
 }
 
 void LiveRangeInstrVisitor::visit(MemRingOutInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    auto src = instr->value();
-   record_read(src, LiveRangeEntry::use_export);
+   record_read(src, LiveRangeEntry::use_unspecified);
 
    auto idx = instr->export_index();
    if (idx && idx->as_register())

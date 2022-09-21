@@ -92,7 +92,7 @@ PInst InstrFactory::from_string(const std::string& s, int nesting_depth)
    } else if (type == "IF") {
       result = IfInstr::from_string(is, m_value_factory);
    } else if (type == "WRITE_SCRATCH") {
-      result = WriteScratchInstr::from_string(is, m_value_factory);
+      result = ScratchIOInstr::from_string(is, m_value_factory);
    } else if (type == "MEM_RING") {
       result = MemRingOutInstr::from_string(is, m_value_factory);
    } else if (type == "EMIT_VERTEX") {

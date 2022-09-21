@@ -101,7 +101,9 @@ etna_screen_resource_alloc_ts(struct pipe_screen *pscreen,
     * the size of the resource might also determine if we want to use it or not
     */
    if (VIV_FEATURE(screen, chipMinorFeatures6, CACHE128B256BPERLINE) &&
-       ts_compress_fmt >= 0)
+       ts_compress_fmt >= 0 &&
+       (rsc->layout != ETNA_LAYOUT_LINEAR ||
+        rsc->levels[0].stride % 256 == 0) )
          ts_mode = TS_MODE_256B;
 
    ts_layer_stride = align(DIV_ROUND_UP(rsc->levels[0].layer_stride,

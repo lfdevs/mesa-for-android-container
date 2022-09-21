@@ -404,6 +404,28 @@ spirv_builder_function_end(struct spirv_builder *b)
    spirv_buffer_emit_word(&b->instructions, SpvOpFunctionEnd | (1 << 16));
 }
 
+SpvId
+spirv_builder_function_call(struct spirv_builder *b, SpvId result_type,
+                            SpvId function, const SpvId arguments[],
+                            size_t num_arguments)
+{
+   SpvId result = spirv_builder_new_id(b);
+
+   int words = 4 + num_arguments;
+   spirv_buffer_prepare(&b->instructions, b->mem_ctx, words);
+   spirv_buffer_emit_word(&b->instructions,
+                          SpvOpFunctionCall | (words << 16));
+   spirv_buffer_emit_word(&b->instructions, result_type);
+   spirv_buffer_emit_word(&b->instructions, result);
+   spirv_buffer_emit_word(&b->instructions, function);
+
+   for (int i = 0; i < num_arguments; ++i)
+      spirv_buffer_emit_word(&b->instructions, arguments[i]);
+
+   return result;
+}
+
+
 void
 spirv_builder_label(struct spirv_builder *b, SpvId label)
 {

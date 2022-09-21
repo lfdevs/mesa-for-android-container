@@ -198,20 +198,24 @@ bi_helper_block_update(BITSET_WORD *deps, bi_block *block)
         bool progress = false;
 
         bi_foreach_instr_in_block_rev(block, I) {
-                /* If our destination is required by helper invocation... */
-                if (I->dest[0].type != BI_INDEX_NORMAL)
-                        continue;
+                /* If a destination is required by helper invocation... */
+                bi_foreach_dest(I, d) {
+                        if (bi_is_null(I->dest[d]))
+                                continue;
 
-                if (!BITSET_TEST(deps, bi_get_node(I->dest[0])))
-                        continue;
+                        if (!BITSET_TEST(deps, bi_get_node(I->dest[d])))
+                                continue;
 
-                /* ...so are our sources */
-                bi_foreach_src(I, s) {
-                        if (I->src[s].type == BI_INDEX_NORMAL) {
-                                unsigned node = bi_get_node(I->src[s]);
-                                progress |= !BITSET_TEST(deps, node);
-                                BITSET_SET(deps, node);
+                        /* ...so are the sources */
+                        bi_foreach_src(I, s) {
+                                if (I->src[s].type == BI_INDEX_NORMAL) {
+                                        unsigned node = bi_get_node(I->src[s]);
+                                        progress |= !BITSET_TEST(deps, node);
+                                        BITSET_SET(deps, node);
+                                }
                         }
+
+                        break;
                 }
         }
 
@@ -228,7 +232,6 @@ bi_analyze_helper_requirements(bi_context *ctx)
          * derivatives */
 
         bi_foreach_instr_global(ctx, I) {
-                if (I->dest[0].type != BI_INDEX_NORMAL) continue;
                 if (!bi_instr_uses_helpers(I)) continue;
 
                 bi_foreach_src(I, s) {
@@ -260,9 +263,15 @@ bi_analyze_helper_requirements(bi_context *ctx)
 
         bi_foreach_instr_global(ctx, I) {
                 if (!bi_has_skip_bit(I->op)) continue;
-                if (I->dest[0].type != BI_INDEX_NORMAL) continue;
 
-                I->skip = !BITSET_TEST(deps, bi_get_node(I->dest[0]));
+                bool exec = false;
+
+                bi_foreach_dest(I, d) {
+                        if (I->dest[d].type == BI_INDEX_NORMAL)
+                                exec |= BITSET_TEST(deps, bi_get_node(I->dest[d]));
+                }
+
+                I->skip = !exec;
         }
 
         free(deps);

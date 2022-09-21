@@ -73,7 +73,6 @@ files_libradeonsi = files(
   'si_texture.c',
   'si_uvd.c',
   'pspdecryptionparam.h',
-  'radeon_efc.h',
   'radeon_temporal.h',
   'radeon_uvd.c',
   'radeon_uvd.h',

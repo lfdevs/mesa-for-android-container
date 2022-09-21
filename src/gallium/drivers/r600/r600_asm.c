@@ -1196,7 +1196,7 @@ static int insert_nop_r6xx(struct r600_bytecode *bc, int max_slots)
 }
 
 /* load AR register from gpr (bc->ar_reg) with MOVA_INT */
-static int load_ar_r6xx(struct r600_bytecode *bc)
+static int load_ar_r6xx(struct r600_bytecode *bc, bool for_src)
 {
 	struct r600_bytecode_alu alu;
 	int r;
@@ -1207,6 +1207,10 @@ static int load_ar_r6xx(struct r600_bytecode *bc)
 	/* hack to avoid making MOVA the last instruction in the clause */
 	if ((bc->cf_last->ndw>>1) >= 110)
 		bc->force_add_cf = 1;
+   else if (for_src) {
+      insert_nop_r6xx(bc, 4);
+      bc->nalu_groups++;
+   }
 
 	memset(&alu, 0, sizeof(alu));
 	alu.op = ALU_OP1_MOVA_GPR_INT;
@@ -1224,13 +1228,13 @@ static int load_ar_r6xx(struct r600_bytecode *bc)
 }
 
 /* load AR register from gpr (bc->ar_reg) with MOVA_INT */
-int r600_load_ar(struct r600_bytecode *bc)
+int r600_load_ar(struct r600_bytecode *bc, bool for_src)
 {
 	struct r600_bytecode_alu alu;
 	int r;
 
 	if (bc->ar_handling)
-		return load_ar_r6xx(bc);
+		return load_ar_r6xx(bc, for_src);
 
 	if (bc->ar_loaded)
 		return 0;
@@ -1306,10 +1310,10 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 	/* Check AR usage and load it if required */
 	for (i = 0; i < 3; i++)
 		if (nalu->src[i].rel && !bc->ar_loaded)
-			r600_load_ar(bc);
+			r600_load_ar(bc, true);
 
 	if (nalu->dst.rel && !bc->ar_loaded)
-		r600_load_ar(bc);
+		r600_load_ar(bc, false);
 
 	/* Setup the kcache for this ALU instruction. This will start a new
 	 * ALU clause if needed. */

@@ -124,7 +124,7 @@ nv30_render_draw_elements(struct vbuf_render *render,
 {
    struct nv30_render *r = nv30_render(render);
    struct nv30_context *nv30 = r->nv30;
-   struct nouveau_pushbuf *push = nv30->screen->base.pushbuf;
+   struct nouveau_pushbuf *push = nv30->base.pushbuf;
    unsigned i;
 
    BEGIN_NV04(push, NV30_3D(VTXBUF(0)), r->vertex_info.num_attribs);
@@ -280,7 +280,7 @@ nv30_render_validate(struct nv30_context *nv30)
    struct nv30_render *r = nv30_render(nv30->draw->render);
    struct nv30_rasterizer_stateobj *rast = nv30->rast;
    struct pipe_screen *pscreen = &nv30->screen->base.base;
-   struct nouveau_pushbuf *push = nv30->screen->base.pushbuf;
+   struct nouveau_pushbuf *push = nv30->base.pushbuf;
    struct nouveau_object *eng3d = nv30->screen->eng3d;
    struct nv30_vertprog *vp = nv30->vertprog.program;
    struct vertex_info *vinfo = &r->vertex_info;

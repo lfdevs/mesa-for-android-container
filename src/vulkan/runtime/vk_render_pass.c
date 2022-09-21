@@ -1839,22 +1839,24 @@ begin_subpass(struct vk_command_buffer *cmd_buffer,
 
          if (depth_resolve_mode != VK_RESOLVE_MODE_NONE) {
             depth_attachment.resolveMode = depth_resolve_mode;
-            if (sp_att->resolve)
+            if (sp_att->resolve) {
                depth_attachment.resolveImageView =
                   vk_image_view_to_handle(res_att_state->image_view);
-            depth_attachment.resolveImageLayout =
-               sp_att->resolve->layout;
+               depth_attachment.resolveImageLayout =
+                  sp_att->resolve->layout;
+            }
 
             resolved_aspects |= VK_IMAGE_ASPECT_DEPTH_BIT;
          }
 
          if (stencil_resolve_mode != VK_RESOLVE_MODE_NONE) {
             stencil_attachment.resolveMode = stencil_resolve_mode;
-            if (sp_att->resolve)
+            if (sp_att->resolve) {
                stencil_attachment.resolveImageView =
                   vk_image_view_to_handle(res_att_state->image_view);
-            stencil_attachment.resolveImageLayout =
-               sp_att->resolve->stencil_layout;
+               stencil_attachment.resolveImageLayout =
+                  sp_att->resolve->stencil_layout;
+            }
 
             resolved_aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
          }

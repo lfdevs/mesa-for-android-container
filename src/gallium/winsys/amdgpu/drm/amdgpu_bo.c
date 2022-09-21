@@ -1145,7 +1145,7 @@ amdgpu_bo_sparse_create(struct amdgpu_winsys *ws, uint64_t size,
    if (r)
       goto error_va_alloc;
 
-   r = amdgpu_bo_va_op_raw(ws->dev, NULL, 0, size, bo->va,
+   r = amdgpu_bo_va_op_raw(ws->dev, NULL, 0, map_size, bo->va,
                            AMDGPU_VM_PAGE_PRT, AMDGPU_VA_OP_MAP);
    if (r)
       goto error_va_map;

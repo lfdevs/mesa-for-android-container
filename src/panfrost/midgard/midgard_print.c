@@ -293,8 +293,22 @@ mir_print_instruction(midgard_instruction *ins)
                 mir_print_src(ins, 1);
 
         if (is_alu) {
-                /* ALU ops are all 2-src */
-                assert(ins->src[2] == ~0);
+                /* ALU ops are all 2-src, though CSEL is treated like a 3-src
+                 * pseudo op with the third source scheduler lowered
+                 */
+                switch (ins->op) {
+                case midgard_alu_op_icsel:
+                case midgard_alu_op_fcsel:
+                case midgard_alu_op_icsel_v:
+                case midgard_alu_op_fcsel_v:
+                        printf(", ");
+                        mir_print_src(ins, 2);
+                        break;
+                default:
+                        assert(ins->src[2] == ~0);
+                        break;
+                }
+
                 assert(ins->src[3] == ~0);
         } else {
                 for (unsigned c = 2; c <= 3; ++c) {
