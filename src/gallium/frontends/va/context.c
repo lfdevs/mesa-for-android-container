@@ -35,7 +35,9 @@
 #include "vl/vl_winsys.h"
 
 #include "va_private.h"
+#ifdef HAVE_DRISW_KMS
 #include "loader/loader.h"
+#endif
 
 #include <va/va_drmcommon.h>
 
@@ -142,12 +144,14 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
          FREE(drv);
          return VA_STATUS_ERROR_INVALID_PARAMETER;
       }
+#ifdef HAVE_DRISW_KMS
       char* drm_driver_name = loader_get_driver_for_fd(drm_info->fd);
       if(drm_driver_name) {
          if (strcmp(drm_driver_name, "vgem") == 0)
             drv->vscreen = vl_vgem_drm_screen_create(drm_info->fd);
          FREE(drm_driver_name);
       }
+#endif
       if(!drv->vscreen)
          drv->vscreen = vl_drm_screen_create(drm_info->fd);
       break;

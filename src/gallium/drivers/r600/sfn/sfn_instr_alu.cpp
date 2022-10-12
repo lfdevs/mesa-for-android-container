@@ -1223,6 +1223,9 @@ bool AluInstr::from_nir(nir_alu_instr *alu, Shader& shader)
       case nir_op_umul_high: return emit_alu_trans_op2_cayman(*alu, op2_mulhi_uint, shader);
       case nir_op_f2u32: return emit_alu_op1(*alu, op1_flt_to_uint, shader);
       case nir_op_f2i32: return emit_alu_op1(*alu, op1_flt_to_int, shader);
+      case nir_op_ishl: return emit_alu_op2_int(*alu, op2_lshl_int, shader);
+      case nir_op_ishr: return emit_alu_op2_int(*alu, op2_ashr_int, shader);
+      case nir_op_ushr: return emit_alu_op2_int(*alu, op2_lshr_int, shader);
       default:
          ;
       }

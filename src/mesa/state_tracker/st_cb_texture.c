@@ -1782,6 +1782,7 @@ try_pbo_download(struct st_context *st,
       struct pipe_sampler_view templ;
       struct pipe_sampler_view *sampler_view;
       struct pipe_sampler_state sampler = {0};
+      sampler.normalized_coords = true;
       const struct pipe_sampler_state *samplers[1] = {&sampler};
       unsigned level = texImage->TexObject->Attrib.MinLevel + texImage->Level;
       unsigned max_layer = util_max_layer(texture, level);

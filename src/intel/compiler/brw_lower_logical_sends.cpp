@@ -1910,7 +1910,7 @@ emit_a64_oword_block_header(const fs_builder &bld, const fs_reg &addr)
       /* We can't do stride 1 with the UNIFORM file, it requires stride 0 */
       expanded_addr = ubld.vgrf(BRW_REGISTER_TYPE_UQ);
       expanded_addr.stride = 0;
-      ubld.MOV(expanded_addr, addr);
+      ubld.MOV(expanded_addr, retype(addr, BRW_REGISTER_TYPE_UQ));
    }
 
    fs_reg header = ubld.vgrf(BRW_REGISTER_TYPE_UD);

@@ -27,8 +27,10 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
+#ifndef _WIN32
 #include <gelf.h>
 #include <libelf.h>
+#endif
 #include <sid.h>
 #include <stdio.h>
 

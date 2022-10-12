@@ -25,6 +25,28 @@
 #include "brw_nir_rt_builder.h"
 #include "nir_phi_builder.h"
 
+UNUSED static bool
+no_load_scratch_base_ptr_intrinsic(nir_shader *shader)
+{
+   nir_foreach_function(func, shader) {
+      if (!func->impl)
+         continue;
+
+      nir_foreach_block(block, func->impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+            if (intrin->intrinsic == nir_intrinsic_load_scratch_base_ptr)
+               return false;
+         }
+      }
+   }
+
+   return true;
+}
+
 /** Insert the appropriate return instruction at the end of the shader */
 void
 brw_nir_lower_shader_returns(nir_shader *shader)
@@ -46,9 +68,9 @@ brw_nir_lower_shader_returns(nir_shader *shader)
     * This isn't needed for ray-gen shaders because they end the thread and
     * never return to the calling trampoline shader.
     */
-   assert(shader->scratch_size == 0);
+   assert(no_load_scratch_base_ptr_intrinsic(shader));
    if (shader->info.stage != MESA_SHADER_RAYGEN)
-      shader->scratch_size = BRW_BTD_STACK_CALLEE_DATA_SIZE;
+      shader->scratch_size += BRW_BTD_STACK_CALLEE_DATA_SIZE;
 
    nir_builder b;
    nir_builder_init(&b, impl);

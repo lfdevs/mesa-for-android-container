@@ -1215,12 +1215,12 @@ can_eliminate_and_exec(opt_ctx& ctx, Temp tmp, unsigned pass_flags)
    }
    if (ctx.info[tmp.id()].is_bitwise()) {
       Instruction* instr = ctx.info[tmp.id()].instr;
-      if (instr->pass_flags != pass_flags)
+      if (instr->operands.size() != 2 || instr->pass_flags != pass_flags)
          return false;
-      return std::all_of(
-         instr->operands.begin(), instr->operands.end(),
-         [&](const Operand& op)
-         { return op.isTemp() && can_eliminate_and_exec(ctx, op.getTemp(), pass_flags); });
+      if (!(instr->operands[0].isTemp() && instr->operands[1].isTemp()))
+         return false;
+      return can_eliminate_and_exec(ctx, instr->operands[0].getTemp(), pass_flags) &&
+             can_eliminate_and_exec(ctx, instr->operands[1].getTemp(), pass_flags);
    }
    return false;
 }

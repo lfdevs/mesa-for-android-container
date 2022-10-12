@@ -1305,9 +1305,20 @@ VkResult anv_AllocateDescriptorSets(
       pDescriptorSets[i] = anv_descriptor_set_to_handle(set);
    }
 
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS) {
       anv_FreeDescriptorSets(_device, pAllocateInfo->descriptorPool,
                              i, pDescriptorSets);
+      /* The Vulkan 1.3.228 spec, section 14.2.3. Allocation of Descriptor Sets:
+       *
+       *   "If the creation of any of those descriptor sets fails, then the
+       *    implementation must destroy all successfully created descriptor
+       *    set objects from this command, set all entries of the
+       *    pDescriptorSets array to VK_NULL_HANDLE and return the error."
+       */
+      for (i = 0; i < pAllocateInfo->descriptorSetCount; i++)
+         pDescriptorSets[i] = VK_NULL_HANDLE;
+
+   }
 
    return result;
 }

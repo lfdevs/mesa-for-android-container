@@ -76,6 +76,7 @@
  */
 #define p_atomic_cmpxchg(v, old, _new) \
    __sync_val_compare_and_swap((v), (old), (_new))
+#define p_atomic_cmpxchg_ptr(v, old, _new) p_atomic_cmpxchg(v, old, _new)
 
 #endif
 
@@ -100,6 +101,7 @@
 #define p_atomic_add_return(_v, _i) (*(_v) = *(_v) + (_i))
 #define p_atomic_fetch_add(_v, _i) (*(_v) = *(_v) + (_i), *(_v) - (_i))
 #define p_atomic_cmpxchg(_v, _old, _new) (*(_v) == (_old) ? (*(_v) = (_new), (_old)) : *(_v))
+#define p_atomic_cmpxchg_ptr(_v, _old, _new) p_atomic_cmpxchg(_v, _old, _new)
 
 #endif
 
@@ -173,6 +175,12 @@
    sizeof *(_v) == sizeof(long)    ? _InterlockedCompareExchange  ((long *)   (_v), (long)   (_new), (long)   (_old)) : \
    sizeof *(_v) == sizeof(__int64) ? InterlockedCompareExchange64 ((__int64 *)(_v), (__int64)(_new), (__int64)(_old)) : \
                                      (assert(!"should not get here"), 0))
+
+#if defined(_WIN64)
+#define p_atomic_cmpxchg_ptr(_v, _old, _new) (void *)InterlockedCompareExchange64((__int64 *)(_v), (__int64)(_new), (__int64)(_old))
+#else
+#define p_atomic_cmpxchg_ptr(_v, _old, _new) (void *)InterlockedCompareExchange((long *)(_v), (long)(_new), (long)(_old))
+#endif
 
 #define PIPE_NATIVE_ATOMIC_XCHG
 #define p_atomic_xchg(_v, _new) (\
@@ -254,6 +262,12 @@
    sizeof(*v) == sizeof(uint32_t) ? atomic_cas_32((uint32_t *)(v), (uint32_t)(old), (uint32_t)(_new)) : \
    sizeof(*v) == sizeof(uint64_t) ? atomic_cas_64((uint64_t *)(v), (uint64_t)(old), (uint64_t)(_new)) : \
                                     (assert(!"should not get here"), 0))
+
+#if INTPTR_MAX == INT32_MAX
+#define p_atomic_cmpxchg_ptr(v, old, _new) (__typeof(*v))(atomic_cas_32((uint32_t *)(v), (uint32_t)(old), (uint32_t)(_new)))
+#else
+#define p_atomic_cmpxchg_ptr(v, old, _new) (__typeof(*v))(atomic_cas_64((uint64_t *)(v), (uint64_t)(old), (uint64_t)(_new)))
+#endif
 
 #endif
 

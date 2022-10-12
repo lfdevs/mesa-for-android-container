@@ -220,7 +220,7 @@ VMEM/FLAT/GLOBAL/SCRATCH/DS instruction reads an SGPR (or EXEC, or M0).
 Then, a SALU/SMEM instruction writes the same SGPR.
 
 Mitigated by:
-A VALU instruction or an `s_waitcnt vmcnt(0)` between the two instructions.
+A VALU instruction or an `s_waitcnt` between the two instructions.
 
 ### SMEMtoVectorWriteHazard
 

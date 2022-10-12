@@ -34,6 +34,9 @@ namespace aco {
 namespace {
 
 constexpr const size_t max_reg_cnt = 512;
+constexpr const size_t max_sgpr_cnt = 128;
+constexpr const size_t min_vgpr = 256;
+constexpr const size_t max_vgpr_cnt = 256;
 
 struct Idx {
    bool operator==(const Idx& other) const { return block == other.block && instr == other.instr; }
@@ -66,17 +69,46 @@ struct pr_opt_ctx {
          std::fill(instr_idx_by_regs[block->index].begin(), instr_idx_by_regs[block->index].end(),
                    not_written_in_block);
       } else {
-         unsigned first_pred = block->linear_preds[0];
-         for (unsigned i = 0; i < max_reg_cnt; i++) {
-            bool all_same = std::all_of(
-               std::next(block->linear_preds.begin()), block->linear_preds.end(),
-               [&](unsigned pred)
-               { return instr_idx_by_regs[pred][i] == instr_idx_by_regs[first_pred][i]; });
+         const uint32_t first_linear_pred = block->linear_preds[0];
+         const std::vector<uint32_t>& linear_preds = block->linear_preds;
+
+         for (unsigned i = 0; i < max_sgpr_cnt; i++) {
+            const bool all_same = std::all_of(
+               std::next(linear_preds.begin()), linear_preds.end(),
+               [=](unsigned pred)
+               { return instr_idx_by_regs[pred][i] == instr_idx_by_regs[first_linear_pred][i]; });
 
             if (all_same)
-               instr_idx_by_regs[block->index][i] = instr_idx_by_regs[first_pred][i];
+               instr_idx_by_regs[block->index][i] = instr_idx_by_regs[first_linear_pred][i];
             else
-               instr_idx_by_regs[block->index][i] = not_written_in_block;
+               instr_idx_by_regs[block->index][i] = written_by_multiple_instrs;
+         }
+
+         if (!block->logical_preds.empty()) {
+            /* We assume that VGPRs are only read by blocks which have a logical predecessor,
+             * ie. any block that reads any VGPR has at least 1 logical predecessor.
+             */
+            const unsigned first_logical_pred = block->logical_preds[0];
+            const std::vector<uint32_t>& logical_preds = block->logical_preds;
+
+            for (unsigned i = min_vgpr; i < (min_vgpr + max_vgpr_cnt); i++) {
+               const bool all_same = std::all_of(
+                  std::next(logical_preds.begin()), logical_preds.end(),
+                  [=](unsigned pred) {
+                     return instr_idx_by_regs[pred][i] == instr_idx_by_regs[first_logical_pred][i];
+                  });
+
+               if (all_same)
+                  instr_idx_by_regs[block->index][i] = instr_idx_by_regs[first_logical_pred][i];
+               else
+                  instr_idx_by_regs[block->index][i] = written_by_multiple_instrs;
+            }
+         } else {
+            /* If a block has no logical predecessors, it is not part of the
+             * logical CFG and therefore it also won't have any logical successors.
+             * Such a block does not write any VGPRs ever.
+             */
+            assert(block->logical_succs.empty());
          }
       }
    }
@@ -127,16 +159,7 @@ last_writer_idx(pr_opt_ctx& ctx, const Operand& op)
    if (op.isConstant() || op.isUndefined())
       return const_or_undef;
 
-   assert(op.physReg().reg() < max_reg_cnt);
-   Idx instr_idx = ctx.instr_idx_by_regs[ctx.current_block->index][op.physReg().reg()];
-
-#ifndef NDEBUG
-   /* Debug mode:  */
-   instr_idx = last_writer_idx(ctx, op.physReg(), op.regClass());
-   assert(instr_idx != written_by_multiple_instrs);
-#endif
-
-   return instr_idx;
+   return last_writer_idx(ctx, op.physReg(), op.regClass());
 }
 
 bool

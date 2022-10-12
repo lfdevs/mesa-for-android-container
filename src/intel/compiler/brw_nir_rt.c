@@ -489,6 +489,7 @@ brw_nir_create_raygen_trampoline(const struct brw_compiler *compiler,
 
    NIR_PASS_V(nir, brw_nir_lower_rt_intrinsics, devinfo);
 
+   nir_builder_init(&b, nir_shader_get_entrypoint(b.shader));
    /* brw_nir_lower_rt_intrinsics will leave us with a btd_global_arg_addr
     * intrinsic which doesn't exist in compute shaders.  We also created one
     * above when we generated the BTD spawn intrinsic.  Now we go through and

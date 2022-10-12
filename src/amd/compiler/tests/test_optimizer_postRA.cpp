@@ -369,14 +369,16 @@ BEGIN_TEST(optimizer_postRA.dpp)
 
    /* control flow */
    //! BB1
-   //! /* logical preds: / linear preds: BB0, / kind: uniform, */
+   //! /* logical preds: BB0, / linear preds: BB0, / kind: uniform, */
    //! v1: %res10:v[2] = v_add_f32 %a:v[0], %b:v[1] row_mirror bound_ctrl:1
    //! p_unit_test 10, %res10:v[2]
    Temp tmp10 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
 
    bld.reset(program->create_and_insert_block());
    program->blocks[0].linear_succs.push_back(1);
+   program->blocks[0].logical_succs.push_back(1);
    program->blocks[1].linear_preds.push_back(0);
+   program->blocks[1].logical_preds.push_back(0);
 
    Temp res10 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp10, reg_v2), b);
    writeout(10, Operand(res10, reg_v2));

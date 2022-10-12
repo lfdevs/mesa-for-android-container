@@ -193,7 +193,7 @@ if gallium_drivers.contains('auto')
       ]
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
       gallium_drivers = [
-        'v3d', 'vc4', 'freedreno', 'etnaviv', 'nouveau',
+        'v3d', 'vc4', 'freedreno', 'etnaviv', 'nouveau', 'svga',
         'tegra', 'virgl', 'lima', 'panfrost', 'swrast'
       ]
     elif ['mips', 'mips64', 'riscv32', 'riscv64'].contains(host_machine.cpu_family())
@@ -1903,12 +1903,8 @@ with_opencl_native = _opencl != 'disabled' and get_option('opencl-native')
 if (with_amd_vk or with_gallium_radeonsi or
     (with_gallium_opencl and with_opencl_native) or
     (with_gallium_r600 and with_llvm))
-  if with_platform_windows
-    dep_elf = dependency('libelf', required : false, fallback : ['libelf', 'libelf_dep'])
-  else
-    dep_elf = dependency('libelf', required : false)
-  endif
-  if not dep_elf.found()
+  dep_elf = dependency('libelf', required : false)
+  if not with_platform_windows and not dep_elf.found()
     dep_elf = cc.find_library('elf')
   endif
 else

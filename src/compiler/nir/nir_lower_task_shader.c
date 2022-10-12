@@ -398,7 +398,8 @@ nir_lower_task_shader(nir_shader *shader,
        * If the shader already had a launch_mesh_workgroups by any chance,
        * this will be removed.
        */
-      builder.cursor = nir_after_cf_list(&builder.impl->body);
+      nir_block *last_block = nir_impl_last_block(impl);
+      builder.cursor = nir_after_block_before_jump(last_block);
       nir_launch_mesh_workgroups(&builder, nir_imm_zero(&builder, 3, 32));
    }
 

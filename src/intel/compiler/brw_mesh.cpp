@@ -530,8 +530,6 @@ brw_nir_lower_mue_outputs(nir_shader *nir, const struct brw_mue_map *map)
 
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_out,
             type_size_scalar_dwords, nir_lower_io_lower_64bit_to_32);
-
-   NIR_PASS(_, nir, brw_nir_lower_shading_rate_output);
 }
 
 static void

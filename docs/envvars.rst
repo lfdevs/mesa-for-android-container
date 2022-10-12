@@ -596,17 +596,17 @@ LLVMpipe driver environment variables
 VMware SVGA driver environment variables
 ----------------------------------------
 
-:envvar`SVGA_FORCE_SWTNL`
+:envvar:`SVGA_FORCE_SWTNL`
    force use of software vertex transformation
-:envvar`SVGA_NO_SWTNL`
+:envvar:`SVGA_NO_SWTNL`
    don't allow software vertex transformation fallbacks (will often
    result in incorrect rendering).
-:envvar`SVGA_DEBUG`
+:envvar:`SVGA_DEBUG`
    for dumping shaders, constant buffers, etc. See the code for details.
-:envvar`SVGA_EXTRA_LOGGING`
+:envvar:`SVGA_EXTRA_LOGGING`
    if set, enables extra logging to the ``vmware.log`` file, such as the
    OpenGL program's name and command line arguments.
-:envvar`SVGA_NO_LOGGING`
+:envvar:`SVGA_NO_LOGGING`
    if set, disables logging to the ``vmware.log`` file. This is useful
    when using Valgrind because it otherwise crashes when initializing
    the host log feature.

@@ -140,7 +140,7 @@ do {                       \
  * value.  As a result, calls to it can be CSEed.  Note that using memory
  * pointed to by the arguments is not allowed for const functions.
  */
-#ifdef HAVE_FUNC_ATTRIBUTE_CONST
+#if !defined(__clang__) && defined(HAVE_FUNC_ATTRIBUTE_CONST)
 #define ATTRIBUTE_CONST __attribute__((__const__))
 #else
 #define ATTRIBUTE_CONST

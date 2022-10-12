@@ -57,7 +57,7 @@ typedef struct nir_xfb_info {
    uint8_t streams_written;
 
    nir_xfb_buffer_info buffers[NIR_MAX_XFB_BUFFERS];
-   uint8_t buffer_to_stream[NIR_MAX_XFB_STREAMS];
+   uint8_t buffer_to_stream[NIR_MAX_XFB_BUFFERS];
 
    uint16_t output_count;
    nir_xfb_output_info outputs[0];

@@ -404,7 +404,7 @@ pipe_loader_sw_get_driconf(struct pipe_loader_device *dev, unsigned *count)
 
 #if defined(HAVE_DRI) && defined(HAVE_ZINK)
 static const driOptionDescription zink_driconf[] = {
-      #include "zink/driinfo_zink.h"
+      #include "gallium/drivers/zink/driinfo_zink.h"
 };
 
 static const struct driOptionDescription *

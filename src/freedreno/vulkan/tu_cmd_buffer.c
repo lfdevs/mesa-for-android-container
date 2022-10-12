@@ -4273,13 +4273,13 @@ tu6_writes_stencil(struct tu_cmd_buffer *cmd)
       (cmd->state.rb_stencil_cntl & A6XX_RB_STENCIL_CONTROL_ZFAIL_BF__MASK) >> A6XX_RB_STENCIL_CONTROL_ZFAIL_BF__SHIFT;
 
    bool stencil_front_op_writes =
-      front_pass_op != VK_STENCIL_OP_KEEP &&
-      front_fail_op != VK_STENCIL_OP_KEEP &&
+      front_pass_op != VK_STENCIL_OP_KEEP ||
+      front_fail_op != VK_STENCIL_OP_KEEP ||
       front_depth_fail_op != VK_STENCIL_OP_KEEP;
 
    bool stencil_back_op_writes =
-      back_pass_op != VK_STENCIL_OP_KEEP &&
-      back_fail_op != VK_STENCIL_OP_KEEP &&
+      back_pass_op != VK_STENCIL_OP_KEEP ||
+      back_fail_op != VK_STENCIL_OP_KEEP ||
       back_depth_fail_op != VK_STENCIL_OP_KEEP;
 
    return stencil_test_enable &&

@@ -119,22 +119,24 @@ clear_in_rp(struct pipe_context *pctx,
 }
 
 static struct zink_framebuffer_clear_data *
+add_new_clear(struct zink_framebuffer_clear *fb_clear)
+{
+   struct zink_framebuffer_clear_data cd = {0};
+   util_dynarray_append(&fb_clear->clears, struct zink_framebuffer_clear_data, cd);
+   return zink_fb_clear_element(fb_clear, zink_fb_clear_count(fb_clear) - 1);
+}
+
+static struct zink_framebuffer_clear_data *
 get_clear_data(struct zink_context *ctx, struct zink_framebuffer_clear *fb_clear, const struct pipe_scissor_state *scissor_state)
 {
-   struct zink_framebuffer_clear_data *clear = NULL;
    unsigned num_clears = zink_fb_clear_count(fb_clear);
    if (num_clears) {
       struct zink_framebuffer_clear_data *last_clear = zink_fb_clear_element(fb_clear, num_clears - 1);
       /* if we're completely overwriting the previous clear, merge this into the previous clear */
       if (!scissor_state || (last_clear->has_scissor && scissor_states_equal(&last_clear->scissor, scissor_state)))
-         clear = last_clear;
+         return last_clear;
    }
-   if (!clear) {
-      struct zink_framebuffer_clear_data cd = {0};
-      util_dynarray_append(&fb_clear->clears, struct zink_framebuffer_clear_data, cd);
-      clear = zink_fb_clear_element(fb_clear, zink_fb_clear_count(fb_clear) - 1);
-   }
-   return clear;
+   return add_new_clear(fb_clear);
 }
 
 static void
@@ -247,7 +249,30 @@ zink_clear(struct pipe_context *pctx,
       union pipe_color_union color;
       color.f[0] = color.f[1] = color.f[2] = 0;
       color.f[3] = 1.0;
-      pctx->clear(pctx, void_clears, NULL, &color, 0, 0);
+      for (unsigned i = 0; i < fb->nr_cbufs; i++) {
+         if ((void_clears & (PIPE_CLEAR_COLOR0 << i)) && fb->cbufs[i]) {
+            struct zink_framebuffer_clear *fb_clear = &ctx->fb_clears[i];
+            unsigned num_clears = zink_fb_clear_count(fb_clear);
+            if (num_clears) {
+               if (zink_fb_clear_first_needs_explicit(fb_clear)) {
+                  /* a scissored clear exists:
+                   * - extend the clear array
+                   * - shift existing clears back by one position
+                   * - inject void clear base of array
+                   */
+                  add_new_clear(fb_clear);
+                  struct zink_framebuffer_clear_data *clear = fb_clear->clears.data;
+                  memcpy(clear + 1, clear, num_clears);
+                  memcpy(&clear->color, &color, sizeof(color));
+               } else {
+                  /* no void clear needed */
+               }
+               void_clears &= ~(PIPE_CLEAR_COLOR0 << i);
+            }
+         }
+      }
+      if (void_clears)
+         pctx->clear(pctx, void_clears, NULL, &color, 0, 0);
    }
 
    if (buffers & PIPE_CLEAR_COLOR) {

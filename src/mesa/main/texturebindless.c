@@ -240,6 +240,7 @@ new_texture_handle(struct gl_context *ctx, struct gl_texture_object *texObj,
                                                     true, false);
    } else {
       view = st_get_buffer_sampler_view_from_stobj(st, texObj, false);
+      sampler.normalized_coords = 1;
    }
 
    return pipe->create_texture_handle(pipe, view, &sampler);

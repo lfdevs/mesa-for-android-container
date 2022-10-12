@@ -31,9 +31,12 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info, bool *
        info->alpha_blend)
       return false;
 
-   if (info->src.box.width != info->dst.box.width ||
-       info->src.box.height != info->dst.box.height ||
-       info->src.box.depth != info->dst.box.depth)
+   if (info->src.box.width < 0 ||
+       info->dst.box.width < 0 ||
+       info->src.box.height < 0 ||
+       info->dst.box.height < 0 ||
+       info->src.box.depth < 0 ||
+       info->dst.box.depth < 0)
       return false;
 
    if (info->render_condition_enable &&

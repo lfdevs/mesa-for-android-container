@@ -790,6 +790,7 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
             pipeline->line_rectangular = p->line_rectangular;
             pipeline->last_vertex = p->last_vertex;
             memcpy(&pipeline->stream_output, &p->stream_output, sizeof(p->stream_output));
+            memcpy(&pipeline->access, &p->access, sizeof(p->access));
          }
          if (p->stages & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
             pipeline->force_min_sample = p->force_min_sample;

@@ -782,7 +782,8 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
 
    const char *marketing_name = device->ws->get_chip_name(device->ws);
    snprintf(device->marketing_name, sizeof(device->name), "%s (RADV %s%s)",
-            marketing_name, device->rad_info.name, radv_get_compiler_string(device));
+            marketing_name ? marketing_name : "AMD Unknown", device->rad_info.name,
+            radv_get_compiler_string(device));
 
 #ifdef ENABLE_SHADER_CACHE
    if (radv_device_get_cache_uuid(device, device->cache_uuid)) {

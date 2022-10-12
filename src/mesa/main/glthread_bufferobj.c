@@ -208,7 +208,7 @@ _mesa_glthread_DeleteBuffers(struct gl_context *ctx, GLsizei n,
 {
    struct glthread_state *glthread = &ctx->GLThread;
 
-   if (!buffers)
+   if (!buffers || n < 0)
       return;
 
    for (unsigned i = 0; i < n; i++) {

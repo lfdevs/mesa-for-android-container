@@ -106,7 +106,8 @@ nir_lower_to_source_mods_block(nir_block *block,
             continue;
 
          if (!lower_abs && (parent->op == nir_op_fabs ||
-                            parent->op == nir_op_iabs))
+                            parent->op == nir_op_iabs ||
+                            parent->src[0].abs))
             continue;
 
          nir_instr_rewrite_src(instr, &alu->src[i].src, parent->src[0].src);

@@ -773,6 +773,19 @@ iris_init_identifier_bo(struct iris_screen *screen)
 struct pipe_screen *
 iris_screen_create(int fd, const struct pipe_screen_config *config)
 {
+   struct iris_screen *screen = rzalloc(NULL, struct iris_screen);
+   if (!screen)
+      return NULL;
+
+   if (!intel_get_device_info_from_fd(fd, &screen->devinfo))
+      return NULL;
+   screen->pci_id = screen->devinfo.pci_device_id;
+
+   p_atomic_set(&screen->refcount, 1);
+
+   if (screen->devinfo.ver < 8 || screen->devinfo.platform == INTEL_PLATFORM_CHV)
+      return NULL;
+
    /* Here are the i915 features we need for Iris (in chronological order) :
     *    - I915_PARAM_HAS_EXEC_NO_RELOC     (3.10)
     *    - I915_PARAM_HAS_EXEC_HANDLE_LUT   (3.10)
@@ -786,19 +799,6 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
       debug_error("Kernel is too old for Iris. Consider upgrading to kernel v4.16.\n");
       return NULL;
    }
-
-   struct iris_screen *screen = rzalloc(NULL, struct iris_screen);
-   if (!screen)
-      return NULL;
-
-   if (!intel_get_device_info_from_fd(fd, &screen->devinfo))
-      return NULL;
-   screen->pci_id = screen->devinfo.pci_device_id;
-
-   p_atomic_set(&screen->refcount, 1);
-
-   if (screen->devinfo.ver < 8 || screen->devinfo.platform == INTEL_PLATFORM_CHV)
-      return NULL;
 
    driParseConfigFiles(config->options, config->options_info, 0, "iris",
                        NULL, NULL, NULL, 0, NULL, 0);
@@ -825,7 +825,7 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    screen->id = iris_bufmgr_create_screen_id(screen->bufmgr);
 
    screen->workaround_bo =
-      iris_bo_alloc(screen->bufmgr, "workaround", 4096, 1,
+      iris_bo_alloc(screen->bufmgr, "workaround", 4096, 4096,
                     IRIS_MEMZONE_OTHER, BO_ALLOC_NO_SUBALLOC);
    if (!screen->workaround_bo)
       return NULL;

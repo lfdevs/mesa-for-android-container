@@ -36,12 +36,16 @@ struct lowering_state {
 
    struct brw_nir_rt_globals_defs globals;
    nir_ssa_def *rq_globals;
+
+   uint32_t state_scratch_base_offset;
 };
 
 struct brw_ray_query {
    nir_variable *opaque_var;
    uint32_t id;
 };
+
+#define SIZEOF_QUERY_STATE (sizeof(uint32_t))
 
 static bool
 need_spill_fill(struct lowering_state *state)
@@ -91,7 +95,7 @@ static nir_ssa_def *
 get_ray_query_shadow_addr(nir_builder *b,
                           nir_deref_instr *deref,
                           struct lowering_state *state,
-                          nir_ssa_def **out_state_addr)
+                          nir_ssa_def **out_state_offset)
 {
    nir_deref_path path;
    nir_deref_path_init(&path, deref, NULL);
@@ -111,14 +115,8 @@ get_ray_query_shadow_addr(nir_builder *b,
                    brw_rt_ray_queries_shadow_stack_size(state->devinfo) * rq->id);
 
    bool spill_fill = need_spill_fill(state);
-   *out_state_addr =
-      spill_fill ?
-      nir_iadd_imm(b,
-                   state->globals.resume_sbt_addr,
-                   brw_rt_ray_queries_shadow_stack_size(state->devinfo) *
-                   b->shader->info.ray_queries +
-                   4 * rq->id) :
-      state->globals.resume_sbt_addr;
+   *out_state_offset = nir_imm_int(b, state->state_scratch_base_offset +
+                                      SIZEOF_QUERY_STATE * rq->id);
 
    if (!spill_fill)
       return NULL;
@@ -130,11 +128,11 @@ get_ray_query_shadow_addr(nir_builder *b,
          nir_ssa_def *index = nir_ssa_for_src(b, (*p)->arr.index, 1);
 
          /**/
-         uint32_t local_state_offset = 4 * MAX2(1, glsl_get_aoa_size((*p)->type));
-         *out_state_addr =
-            nir_iadd(b, *out_state_addr,
-                        nir_i2i64(b,
-                                  nir_imul_imm(b, index, local_state_offset)));
+         uint32_t local_state_offset = SIZEOF_QUERY_STATE *
+                                       MAX2(1, glsl_get_aoa_size((*p)->type));
+         *out_state_offset =
+            nir_iadd(b, *out_state_offset,
+                        nir_imul_imm(b, index, local_state_offset));
 
          /**/
          uint64_t size = MAX2(1, glsl_get_aoa_size((*p)->type)) *
@@ -168,13 +166,13 @@ get_ray_query_shadow_addr(nir_builder *b,
 
 static void
 update_trace_ctrl_level(nir_builder *b,
-                        nir_ssa_def *state_addr,
+                        nir_ssa_def *state_scratch_offset,
                         nir_ssa_def **out_old_ctrl,
                         nir_ssa_def **out_old_level,
                         nir_ssa_def *new_ctrl,
                         nir_ssa_def *new_level)
 {
-   nir_ssa_def *old_value = brw_nir_rt_load(b, state_addr, 4, 1, 32);
+   nir_ssa_def *old_value = nir_load_scratch(b, 1, 32, state_scratch_offset, 4);
    nir_ssa_def *old_ctrl = nir_ishr_imm(b, old_value, 2);
    nir_ssa_def *old_level = nir_iand_imm(b, old_value, 0x3);
 
@@ -190,7 +188,7 @@ update_trace_ctrl_level(nir_builder *b,
          new_level = old_level;
 
       nir_ssa_def *new_value = nir_ior(b, nir_ishl_imm(b, new_ctrl, 2), new_level);
-      brw_nir_rt_store(b, state_addr, 4, new_value, 0x1);
+      nir_store_scratch(b, new_value, state_scratch_offset, 4, 0x1);
    }
 }
 
@@ -200,20 +198,8 @@ fill_query(nir_builder *b,
            nir_ssa_def *shadow_stack_addr,
            nir_ssa_def *ctrl)
 {
-   brw_nir_memcpy_global(b,
-                         brw_nir_rt_mem_hit_addr_from_addr(b, hw_stack_addr, false), 16,
-                         brw_nir_rt_mem_hit_addr_from_addr(b, shadow_stack_addr, false), 16,
-                         BRW_RT_SIZEOF_HIT_INFO);
-   brw_nir_memcpy_global(b,
-                         brw_nir_rt_mem_hit_addr_from_addr(b, hw_stack_addr, true), 16,
-                         brw_nir_rt_mem_hit_addr_from_addr(b, shadow_stack_addr, true), 16,
-                         BRW_RT_SIZEOF_HIT_INFO);
-   brw_nir_memcpy_global(b,
-                         brw_nir_rt_mem_ray_addr(b, hw_stack_addr,
-                                                 BRW_RT_BVH_LEVEL_WORLD), 16,
-                         brw_nir_rt_mem_ray_addr(b, shadow_stack_addr,
-                                                 BRW_RT_BVH_LEVEL_WORLD), 16,
-                         BRW_RT_SIZEOF_RAY);
+   brw_nir_memcpy_global(b, hw_stack_addr, 64, shadow_stack_addr, 64,
+                         BRW_RT_SIZEOF_RAY_QUERY);
 }
 
 static void
@@ -221,24 +207,8 @@ spill_query(nir_builder *b,
             nir_ssa_def *hw_stack_addr,
             nir_ssa_def *shadow_stack_addr)
 {
-   struct brw_nir_rt_mem_hit_defs committed_hit = {};
-   brw_nir_rt_load_mem_hit_from_addr(b, &committed_hit, hw_stack_addr, true);
-
-   /* Always copy the potential hit back */
-   brw_nir_memcpy_global(b,
-                         brw_nir_rt_mem_hit_addr_from_addr(b, shadow_stack_addr, false), 16,
-                         brw_nir_rt_mem_hit_addr_from_addr(b, hw_stack_addr, false), 16,
-                         BRW_RT_SIZEOF_HIT_INFO);
-
-   /* Also copy the committed hit back if it is valid */
-   nir_push_if(b, committed_hit.valid);
-   {
-      brw_nir_memcpy_global(b,
-                            brw_nir_rt_mem_hit_addr_from_addr(b, shadow_stack_addr, true), 16,
-                            brw_nir_rt_mem_hit_addr_from_addr(b, hw_stack_addr, true), 16,
-                            BRW_RT_SIZEOF_HIT_INFO);
-   }
-   nir_pop_if(b, NULL);
+   brw_nir_memcpy_global(b, shadow_stack_addr, 64, hw_stack_addr, 64,
+                         BRW_RT_SIZEOF_RAY_QUERY);
 }
 
 
@@ -339,7 +309,7 @@ lower_ray_query_intrinsic(nir_builder *b,
          update_trace_ctrl_level(b, ctrl_level_addr,
                                  NULL, NULL,
                                  nir_imm_int(b, GEN_RT_TRACE_RAY_CONTINUE),
-                                 nir_imm_int(b, BRW_RT_BVH_LEVEL_OBJECT));
+                                 hit_in.bvh_level);
 
          not_done_then = nir_inot(b, hit_in.done);
       }
@@ -568,15 +538,20 @@ brw_nir_lower_ray_queries(nir_shader *shader,
          maybe_create_brw_var(instr, &state);
    }
 
-   bool progress = _mesa_hash_table_num_entries(state.queries) > 0;
+   bool progress = state.n_queries > 0;
 
    if (progress) {
+      state.state_scratch_base_offset = shader->scratch_size;
+      shader->scratch_size += SIZEOF_QUERY_STATE * state.n_queries;
+
       lower_ray_query_impl(impl, &state);
 
       nir_remove_dead_derefs(shader);
       nir_remove_dead_variables(shader,
                                 nir_var_shader_temp | nir_var_function_temp,
                                 NULL);
+
+      nir_metadata_preserve(impl, nir_metadata_none);
    }
 
    ralloc_free(state.queries);

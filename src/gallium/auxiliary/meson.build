@@ -474,7 +474,7 @@ endif
 
 if with_glx == 'xlib' or with_glx == 'gallium-xlib'
   files_libgalliumvlwinsys += files('vl/vl_winsys_xlib_swrast.c')
-else
+elif with_gallium_drisw_kms
   files_libgalliumvlwinsys += files('vl/vl_winsys_dri_vgem.c')
 endif
 

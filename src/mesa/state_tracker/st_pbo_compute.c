@@ -835,6 +835,7 @@ download_texture_compute(struct st_context *st,
       struct pipe_sampler_view templ;
       struct pipe_sampler_view *sampler_view;
       struct pipe_sampler_state sampler = {0};
+      sampler.normalized_coords = true;
       const struct pipe_sampler_state *samplers[1] = {&sampler};
       const struct util_format_description *desc = util_format_description(dst_format);
 
@@ -986,9 +987,9 @@ fail:
    /* Unbind all because st/mesa won't do it if the current shader doesn't
     * use them.
     */
-   pipe->set_sampler_views(pipe, PIPE_SHADER_COMPUTE, 0, 0, false,
+   pipe->set_sampler_views(pipe, PIPE_SHADER_COMPUTE, 0, 0,
                            st->state.num_sampler_views[PIPE_SHADER_COMPUTE],
-                           NULL);
+                           false, NULL);
    st->state.num_sampler_views[PIPE_SHADER_COMPUTE] = 0;
    pipe->set_shader_buffers(pipe, PIPE_SHADER_COMPUTE, 0, 1, NULL, 0);
 

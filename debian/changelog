@@ -1,3 +1,16 @@
+mesa (22.2.1-1) unstable; urgency=medium
+
+  [ Zhang Boyang ]
+  * control, rules: Re-enable LLVM support on riscv64. (LP: #1980386)
+
+  [ Timo Aaltonen ]
+  * control: Bump build-dep on directx-headers-dev.
+  * New upstream release.
+  * control, rules: Migrate to llvm-15.
+  * control: Add riscv64 to mesa-vulkan-drivers archs.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 12 Oct 2022 11:48:24 +0300
+
 mesa (22.2.0-1) unstable; urgency=medium
 
   * New upstream release.

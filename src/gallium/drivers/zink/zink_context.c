@@ -800,7 +800,7 @@ create_bvci(struct zink_context *ctx, struct zink_resource *res, enum pipe_forma
       if (bvci.offset + bvci.range >= res->base.b.width0)
          bvci.range = VK_WHOLE_SIZE;
    }
-   uint32_t clamp = blocksize * screen->info.props.limits.maxTexelBufferElements;
+   uint64_t clamp = blocksize * screen->info.props.limits.maxTexelBufferElements;
    if (bvci.range == VK_WHOLE_SIZE && res->base.b.width0 > clamp)
       bvci.range = clamp;
    bvci.flags = 0;
@@ -2775,8 +2775,10 @@ unbind_fb_surface(struct zink_context *ctx, struct pipe_surface *surf, unsigned 
    res->fb_binds--;
    if (!res->fb_binds) {
       check_resource_for_batch_ref(ctx, res);
-      if (res->sampler_bind_count[0])
+      if (res->sampler_bind_count[0]) {
          update_res_sampler_layouts(ctx, res);
+         _mesa_set_add(ctx->need_barriers[0], res);
+      }
    }
 }
 
@@ -4192,11 +4194,11 @@ zink_resource_copy_region(struct pipe_context *pctx,
       region.extent.height = src_box->height;
 
       struct zink_batch *batch = &ctx->batch;
+      zink_resource_setup_transfer_layouts(ctx, src, dst);
       VkCommandBuffer cmdbuf = zink_get_cmdbuf(ctx, src, dst);
       zink_batch_reference_resource_rw(batch, src, false);
       zink_batch_reference_resource_rw(batch, dst, true);
 
-      zink_resource_setup_transfer_layouts(ctx, src, dst);
       VKCTX(CmdCopyImage)(cmdbuf, src->obj->image, src->layout,
                      dst->obj->image, dst->layout,
                      1, &region);

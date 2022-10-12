@@ -90,8 +90,6 @@ brw_load_eu_thread_simd(nir_builder *b)
 static inline nir_ssa_def *
 brw_nir_rt_async_stack_id(nir_builder *b)
 {
-   assert(gl_shader_stage_is_callable(b->shader->info.stage) ||
-          b->shader->info.stage == MESA_SHADER_RAYGEN);
    return nir_iadd(b, nir_umul_32x16(b, nir_load_ray_num_dss_rt_stacks_intel(b),
                                         brw_load_btd_dss_id(b)),
                       nir_load_btd_stack_id_intel(b));
@@ -147,7 +145,6 @@ brw_nir_btd_retire(nir_builder *b)
 static inline void
 brw_nir_btd_return(struct nir_builder *b)
 {
-   assert(b->shader->scratch_size == BRW_BTD_STACK_CALLEE_DATA_SIZE);
    nir_ssa_def *resume_addr =
       brw_nir_rt_load_scratch(b, BRW_BTD_STACK_RESUME_BSR_ADDR_OFFSET,
                               8 /* align */, 1, 64);
@@ -374,6 +371,25 @@ brw_nir_rt_unpack_leaf_ptr(nir_builder *b, nir_ssa_def *vec2)
    return nir_pack_64_2x32_split(b, ptr_lo, ptr_hi);
 }
 
+/**
+ * MemHit memory layout (BSpec 47547) :
+ *
+ *      name            bits    description
+ *    - t               32      hit distance of current hit (or initial traversal distance)
+ *    - u               32      barycentric hit coordinates
+ *    - v               32      barycentric hit coordinates
+ *    - primIndexDelta  16      prim index delta for compressed meshlets and quads
+ *    - valid            1      set if there is a hit
+ *    - leafType         3      type of node primLeafPtr is pointing to
+ *    - primLeafIndex    4      index of the hit primitive inside the leaf
+ *    - bvhLevel         3      the instancing level at which the hit occured
+ *    - frontFace        1      whether we hit the front-facing side of a triangle (also used to pass opaque flag when calling intersection shaders)
+ *    - pad0             4      unused bits
+ *    - primLeafPtr     42      pointer to BVH leaf node (multiple of 64 bytes)
+ *    - hitGroupRecPtr0 22      LSB of hit group record of the hit triangle (multiple of 16 bytes)
+ *    - instLeafPtr     42      pointer to BVH instance leaf node (in multiple of 64 bytes)
+ *    - hitGroupRecPtr1 22      MSB of hit group record of the hit triangle (multiple of 32 bytes)
+ */
 struct brw_nir_rt_mem_hit_defs {
    nir_ssa_def *t;
    nir_ssa_def *tri_bary; /**< Only valid for triangle geometry */
@@ -574,41 +590,61 @@ brw_nir_rt_commit_hit(nir_builder *b)
 static inline void
 brw_nir_rt_generate_hit_addr(nir_builder *b, nir_ssa_def *stack_addr, nir_ssa_def *t_val)
 {
-   nir_ssa_def *dst_addr =
+   nir_ssa_def *committed_addr =
       brw_nir_rt_mem_hit_addr_from_addr(b, stack_addr, true /* committed */);
-   nir_ssa_def *src_addr =
+   nir_ssa_def *potential_addr =
       brw_nir_rt_mem_hit_addr_from_addr(b, stack_addr, false /* committed */);
 
-   /* Load 2 vec4 */
-   nir_ssa_def *potential_data[2] = {
-      brw_nir_rt_load(b, src_addr, 16, 4, 32),
-      brw_nir_rt_load(b, nir_iadd_imm(b, src_addr, 16), 16, 4, 32),
-   };
-
-   /* Update the potential hit distance */
-   brw_nir_rt_store(b, src_addr, 4, t_val, 0x1);
-   /* Also mark the potential hit as valid */
-   brw_nir_rt_store(b, nir_iadd_imm(b, src_addr, 12), 4,
-                    nir_ior_imm(b, nir_channel(b, potential_data[0], 3),
-                                   (0x1 << 16) /* valid */), 0x1);
-
-   /* Now write the committed hit. */
-   nir_ssa_def *committed_data[2] = {
+   /* Set:
+    *
+    *   potential.t     = t_val;
+    *   potential.valid = true;
+    */
+   nir_ssa_def *potential_hit_dwords_0_3 =
+      brw_nir_rt_load(b, potential_addr, 16, 4, 32);
+   potential_hit_dwords_0_3 =
       nir_vec4(b,
                t_val,
-               nir_imm_float(b, 0.0f), /* barycentric */
-               nir_imm_float(b, 0.0f), /* barycentric */
-               nir_ior_imm(b,
-                           /* Just keep leaf_type */
-                           nir_iand_imm(b, nir_channel(b, potential_data[0], 3), 0x0000e000),
-                           (0x1 << 16) /* valid */ |
-                           (BRW_RT_BVH_LEVEL_OBJECT << 5))),
-      potential_data[1],
-   };
+               nir_channel(b, potential_hit_dwords_0_3, 1),
+               nir_channel(b, potential_hit_dwords_0_3, 2),
+               nir_ior_imm(b, nir_channel(b, potential_hit_dwords_0_3, 3),
+                           (0x1 << 16) /* valid */));
+   brw_nir_rt_store(b, potential_addr, 16, potential_hit_dwords_0_3, 0xf /* write_mask */);
 
-   brw_nir_rt_store(b, dst_addr, 16, committed_data[0], 0xf /* write_mask */);
-   brw_nir_rt_store(b, nir_iadd_imm(b, dst_addr, 16), 16,
-                    committed_data[1], 0xf /* write_mask */);
+   /* Set:
+    *
+    *   committed.t               = t_val;
+    *   committed.u               = 0.0f;
+    *   committed.v               = 0.0f;
+    *   committed.valid           = true;
+    *   committed.leaf_type       = potential.leaf_type;
+    *   committed.bvh_level       = BRW_RT_BVH_LEVEL_OBJECT;
+    *   committed.front_face      = false;
+    *   committed.prim_leaf_index = 0;
+    *   committed.done            = false;
+    */
+   nir_ssa_def *committed_hit_dwords_0_3 =
+      brw_nir_rt_load(b, committed_addr, 16, 4, 32);
+   committed_hit_dwords_0_3 =
+      nir_vec4(b,
+               t_val,
+               nir_imm_float(b, 0.0f),
+               nir_imm_float(b, 0.0f),
+               nir_ior_imm(b,
+                           nir_ior_imm(b, nir_channel(b, potential_hit_dwords_0_3, 3), 0x000e0000),
+                           (0x1 << 16)                     /* valid */ |
+                           (BRW_RT_BVH_LEVEL_OBJECT << 24) /* leaf_type */));
+   brw_nir_rt_store(b, committed_addr, 16, committed_hit_dwords_0_3, 0xf /* write_mask */);
+
+   /* Set:
+    *
+    *   committed.prim_leaf_ptr   = potential.prim_leaf_ptr;
+    *   committed.inst_leaf_ptr   = potential.inst_leaf_ptr;
+    */
+   brw_nir_memcpy_global(b,
+                         nir_iadd_imm(b, committed_addr, 16), 16,
+                         nir_iadd_imm(b, potential_addr, 16), 16,
+                         16);
 }
 
 struct brw_nir_rt_mem_ray_defs {

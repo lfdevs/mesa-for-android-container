@@ -487,10 +487,13 @@ tu_timeline_sync_reset(struct vk_device *vk_device,
 static VkResult
 drm_syncobj_wait(struct tu_device *device,
                  uint32_t *handles, uint32_t count_handles,
-                 int64_t timeout_nsec, bool wait_all)
+                 uint64_t timeout_nsec, bool wait_all)
 {
    uint32_t syncobj_wait_flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT;
    if (wait_all) syncobj_wait_flags |= DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL;
+
+   /* syncobj absolute timeouts are signed.  clamp OS_TIMEOUT_INFINITE down. */
+   timeout_nsec = MIN2(timeout_nsec, (uint64_t)INT64_MAX);
 
    int err = drmSyncobjWait(device->fd, handles,
                             count_handles, timeout_nsec,

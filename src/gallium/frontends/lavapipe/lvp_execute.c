@@ -378,7 +378,7 @@ static void emit_compute_state(struct rendering_state *state)
    if (state->sb_dirty[PIPE_SHADER_COMPUTE]) {
       state->pctx->set_shader_buffers(state->pctx, PIPE_SHADER_COMPUTE,
                                       0, state->num_shader_buffers[PIPE_SHADER_COMPUTE],
-                                      state->sb[PIPE_SHADER_COMPUTE], 0);
+                                      state->sb[PIPE_SHADER_COMPUTE], state->access[MESA_SHADER_COMPUTE].buffers_written);
       state->sb_dirty[PIPE_SHADER_COMPUTE] = false;
    }
 
@@ -1528,7 +1528,7 @@ static struct pipe_surface *create_img_surface_bo(struct rendering_state *state,
    template.width = width;
    template.height = height;
    template.u.tex.first_layer = range->baseArrayLayer + base_layer;
-   template.u.tex.last_layer = range->baseArrayLayer + layer_count;
+   template.u.tex.last_layer = range->baseArrayLayer + base_layer + layer_count - 1;
    template.u.tex.level = range->baseMipLevel + level;
 
    if (template.format == PIPE_FORMAT_NONE)
@@ -1552,12 +1552,20 @@ static struct pipe_surface *create_img_surface(struct rendering_state *state,
 }
 
 static void add_img_view_surface(struct rendering_state *state,
-                                 struct lvp_image_view *imgv, int width, int height)
+                                 struct lvp_image_view *imgv, int width, int height,
+                                 int layer_count)
 {
+   if (imgv->surface) {
+      if (imgv->surface->width != width ||
+          imgv->surface->height != height ||
+          (imgv->surface->u.tex.last_layer - imgv->surface->u.tex.first_layer) != (layer_count - 1))
+         pipe_surface_reference(&imgv->surface, NULL);
+   }
+
    if (!imgv->surface) {
       imgv->surface = create_img_surface(state, imgv, imgv->vk.format,
                                          width, height,
-                                         0, imgv->vk.layer_count - 1);
+                                         0, layer_count);
    }
 }
 
@@ -1589,7 +1597,7 @@ static void clear_attachment_layers(struct rendering_state *state,
                                                         state->framebuffer.width,
                                                         state->framebuffer.height,
                                                         base_layer,
-                                                        base_layer + layer_count - 1);
+                                                        layer_count);
 
    if (ds_clear_flags) {
       state->pctx->clear_depth_stencil(state->pctx,
@@ -1968,7 +1976,7 @@ static void handle_begin_rendering(struct vk_cmd_queue_entry *cmd,
                               info->renderArea.extent.width;
    state->framebuffer.height = info->renderArea.offset.y +
                                info->renderArea.extent.height;
-   state->framebuffer.layers = info->layerCount;
+   state->framebuffer.layers = info->viewMask ? util_last_bit(info->viewMask) : info->layerCount;
    state->framebuffer.nr_cbufs = info->colorAttachmentCount;
 
    state->color_att_count = info->colorAttachmentCount;
@@ -1978,7 +1986,8 @@ static void handle_begin_rendering(struct vk_cmd_queue_entry *cmd,
       if (state->color_att[i].imgv) {
          struct lvp_image_view *imgv = state->color_att[i].imgv;
          add_img_view_surface(state, imgv,
-                              state->framebuffer.width, state->framebuffer.height);
+                              state->framebuffer.width, state->framebuffer.height,
+                              state->framebuffer.layers);
          if (state->forced_sample_count && imgv->image->vk.samples == 1)
             state->color_att[i].imgv = create_multisample_surface(state, imgv, state->forced_sample_count,
                                                                   att_needs_replicate(state, imgv, state->color_att[i].load_op));
@@ -1998,7 +2007,8 @@ static void handle_begin_rendering(struct vk_cmd_queue_entry *cmd,
                                                state->stencil_att.imgv;
       struct lvp_image_view *imgv = state->ds_imgv;
       add_img_view_surface(state, imgv,
-                           state->framebuffer.width, state->framebuffer.height);
+                           state->framebuffer.width, state->framebuffer.height,
+                           state->framebuffer.layers);
       if (state->forced_sample_count && imgv->image->vk.samples == 1) {
          VkAttachmentLoadOp load_op;
          if (state->depth_att.load_op == VK_ATTACHMENT_LOAD_OP_CLEAR ||
@@ -3095,15 +3105,20 @@ static void handle_clear_ds_image(struct vk_cmd_queue_entry *cmd,
       uint32_t level_count = vk_image_subresource_level_count(&image->vk, range);
       for (unsigned j = 0; j < level_count; j++) {
          struct pipe_surface *surf;
-         unsigned width, height;
-
+         unsigned width, height, depth;
          width = u_minify(image->bo->width0, range->baseMipLevel + j);
          height = u_minify(image->bo->height0, range->baseMipLevel + j);
+
+         if (image->bo->target == PIPE_TEXTURE_3D)
+            depth = u_minify(image->bo->depth0, range->baseMipLevel + j);
+         else {
+            depth = vk_image_subresource_layer_count(&image->vk, range);
+         }
 
          surf = create_img_surface_bo(state, range,
                                       image->bo, image->bo->format,
                                       width, height,
-                                      0, vk_image_subresource_layer_count(&image->vk, range) - 1, j);
+                                      0, depth, j);
 
          state->pctx->clear_depth_stencil(state->pctx,
                                           surf,

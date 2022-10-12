@@ -130,7 +130,7 @@ stages:
     - .build-rules
   script:
   - apk --no-cache add graphviz doxygen
-  - pip3 install sphinx breathe mako sphinx_rtd_theme
+  - pip3 install sphinx===5.1.1 breathe===4.34.0 mako===1.2.3 sphinx_rtd_theme===1.0.0
   - docs/doxygen-wrapper.py --out-dir=docs/doxygen_xml
   - sphinx-build -W -b html docs public
 
