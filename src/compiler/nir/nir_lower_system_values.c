@@ -463,11 +463,9 @@ lower_compute_system_value_instr(nir_builder *b,
           *    gl_WorkGroupSize.x + gl_LocalInvocationID.x"
           */
          nir_ssa_def *local_id = nir_load_local_invocation_id(b);
-
-         nir_ssa_def *size_x =
-            nir_imm_int(b, b->shader->info.workgroup_size[0]);
-         nir_ssa_def *size_y =
-            nir_imm_int(b, b->shader->info.workgroup_size[1]);
+         nir_ssa_def *local_size = nir_load_workgroup_size(b);
+         nir_ssa_def *size_x = nir_channel(b, local_size, 0);
+         nir_ssa_def *size_y = nir_channel(b, local_size, 1);
 
          /* Because no hardware supports a local workgroup size greater than
           * about 1K, this calculation can be done in 32-bit and can save some

@@ -984,6 +984,7 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
    pass->attachments = cmd_buffer->dynamic_rp_attachments;
 
    subpass->color_count = subpass->resolve_count = info->colorAttachmentCount;
+   subpass->resolve_depth_stencil = false;
    subpass->color_attachments = cmd_buffer->dynamic_color_attachments;
    subpass->resolve_attachments = cmd_buffer->dynamic_resolve_attachments;
    subpass->feedback_invalidate = false;
@@ -1102,6 +1103,7 @@ tu_setup_dynamic_inheritance(struct tu_cmd_buffer *cmd_buffer,
 
    subpass->color_count = info->colorAttachmentCount;
    subpass->resolve_count = 0;
+   subpass->resolve_depth_stencil = false;
    subpass->color_attachments = cmd_buffer->dynamic_color_attachments;
    subpass->resolve_attachments = NULL;
    subpass->feedback_invalidate = false;

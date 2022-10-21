@@ -535,6 +535,8 @@ d3d12_screen_get_video_param_decode(struct pipe_screen *pscreen,
          return true;
       case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
          return true;
+      case PIPE_VIDEO_SUPPORTS_CONTIGUOUS_PLANES_MAP:
+         return true;
          break;
       default:
          debug_printf("[d3d12_screen_get_video_param] unknown video param: %d\n", param);
@@ -608,6 +610,7 @@ d3d12_screen_get_video_param_postproc(struct pipe_screen *pscreen,
       case PIPE_VIDEO_CAP_PREFERED_FORMAT:
       case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
       case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
+      case PIPE_VIDEO_SUPPORTS_CONTIGUOUS_PLANES_MAP:
       case PIPE_VIDEO_CAP_VPP_MAX_INPUT_WIDTH:
       case PIPE_VIDEO_CAP_VPP_MAX_INPUT_HEIGHT:
       case PIPE_VIDEO_CAP_VPP_MIN_INPUT_WIDTH:
@@ -652,6 +655,8 @@ d3d12_screen_get_video_param_postproc(struct pipe_screen *pscreen,
                return supportCaps.InputSample.Width;
             } else if (param == PIPE_VIDEO_CAP_MAX_HEIGHT) {
                return supportCaps.InputSample.Height;
+            } else if (param == PIPE_VIDEO_SUPPORTS_CONTIGUOUS_PLANES_MAP) {
+               return true;
             } else if (param == PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE) {
                return true;
             } else if (param == PIPE_VIDEO_CAP_VPP_MAX_INPUT_WIDTH) {
@@ -754,6 +759,8 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
       case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
          return false;
       case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
+         return true;
+      case PIPE_VIDEO_SUPPORTS_CONTIGUOUS_PLANES_MAP:
          return true;
       default:
          debug_printf("[d3d12_screen_get_video_param] unknown video param: %d\n", param);

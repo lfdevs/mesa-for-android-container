@@ -178,6 +178,7 @@ bool FragmentShader::process_stage_intrinsic(nir_intrinsic_instr *intr)
                                     value_factory().zero(),
                                     value_factory().zero(),
                                     {AluInstr::last}));
+      start_new_block(0);
       return true;
    case nir_intrinsic_load_sample_mask_in:
       if (m_apply_sample_mask) {

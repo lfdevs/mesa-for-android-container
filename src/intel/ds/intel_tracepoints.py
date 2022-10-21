@@ -61,8 +61,7 @@ def define_tracepoints(args):
                  tp_args=[Arg(type='uint16_t', var='width', c_format='%hu'),
                           Arg(type='uint16_t', var='height', c_format='%hu'),
                           Arg(type='uint8_t', var='att_count', c_format='%hhu'),
-                          Arg(type='uint8_t', var='msaa', c_format='%hhu'),
-                          Arg(type='uint32_t', var='subpass_count', c_format='%u'),])
+                          Arg(type='uint8_t', var='msaa', c_format='%hhu'),])
 
     begin_end_tp('dyn_render_pass',
                  tp_args=[Arg(type='uint16_t', var='width', c_format='%hu'),

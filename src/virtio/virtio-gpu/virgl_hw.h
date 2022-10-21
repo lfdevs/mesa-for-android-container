@@ -603,6 +603,7 @@ struct virgl_caps_v2 {
         uint32_t max_shader_sampler_views;
         struct virgl_supported_format_mask supported_multisample_formats;
         uint32_t max_const_buffer_size[6]; // PIPE_SHADER_TYPES
+        uint32_t max_uniform_block_size;
 };
 
 union virgl_caps {

@@ -294,7 +294,6 @@ void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_bl
    bool have_instr = collect_ready(cir);
 
    m_current_block = new Block(in_block.nesting_depth(), in_block.id());
-
    assert(m_current_block->id() >= 0);
 
    while (have_instr) {
@@ -568,6 +567,13 @@ bool BlockSheduler::schedule_alu(Shader::ShaderBlocks& out_blocks)
 
    if (group->has_lds_group_end())
       m_current_block->lds_group_end();
+
+   if (group->has_kill_op()) {
+      assert(!group->has_lds_group_start());
+      start_new_block(out_blocks, Block::alu);
+      m_current_block->set_instr_flag(Instr::force_cf);
+   }
+
 
    return success;
 }

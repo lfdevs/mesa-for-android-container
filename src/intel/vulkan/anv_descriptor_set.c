@@ -784,8 +784,8 @@ VkResult anv_CreatePipelineLayout(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
 
-   layout = vk_object_alloc(&device->vk, pAllocator, sizeof(*layout),
-                            VK_OBJECT_TYPE_PIPELINE_LAYOUT);
+   layout = vk_object_zalloc(&device->vk, pAllocator, sizeof(*layout),
+                             VK_OBJECT_TYPE_PIPELINE_LAYOUT);
    if (layout == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 

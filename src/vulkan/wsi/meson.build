@@ -84,6 +84,8 @@ else
     # Instruct users of this library to link with --whole-archive.  Otherwise,
     # our weak function overloads may not resolve properly.
     link_whole : libvulkan_wsi,
-    dependencies : idep_vulkan_wsi_headers
+    dependencies : [
+      idep_vulkan_wsi_headers, dep_libudev
+    ]
   )
 endif

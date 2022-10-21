@@ -212,11 +212,22 @@ void ReplaceIfPredicate::visit(AluInstr *alu)
    if (new_op == op0_nop)
       return;
 
-   /* Have to figure out how to pass the dependency correctly */
-   /*for (auto& s : alu->sources()) {
-      if (s->as_register() && s->as_register()->addr())
+   for (auto& s : alu->sources()) {
+      auto reg = s->as_register();
+      /* Protext against propagating
+       *
+       *   V = COND(R, X)
+       *   R = SOME_OP
+       *   IF (V)
+       *
+       * to
+       *
+       *   R = SOME_OP
+       *   IF (COND(R, X))
+       */
+      if (reg && !reg->is_ssa())
          return;
-   }*/
+   }
 
    m_pred->set_op(new_op);
    m_pred->set_sources(alu->sources());

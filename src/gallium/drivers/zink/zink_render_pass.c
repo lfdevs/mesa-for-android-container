@@ -631,6 +631,8 @@ begin_render_pass(struct zink_context *ctx)
    infos.pAttachments = att;
    if (!prep_fb_attachments(ctx, att))
       return 0;
+   /* this can be set if fbfetch is activated */
+   ctx->rp_changed = false;
 #ifndef NDEBUG
    const unsigned cresolve_offset = ctx->fb_state.nr_cbufs + !!ctx->fb_state.zsbuf;
    for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {

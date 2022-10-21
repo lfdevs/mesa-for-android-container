@@ -423,9 +423,12 @@ nvc0_miptree_select_best_modifier(struct pipe_screen *pscreen,
 
    for (i = 0u; i < count; i++) {
       for (p = 0; p < ARRAY_SIZE(prio_supported_mods); p++) {
-         if (prio_supported_mods[p] == modifiers[i]) {
-            if (top_mod_slot > p) top_mod_slot = p;
-            break;
+         if (prio_supported_mods[p] != DRM_FORMAT_MOD_INVALID) {
+            if (modifiers[i] == DRM_FORMAT_MOD_INVALID ||
+                prio_supported_mods[p] == modifiers[i]) {
+               if (top_mod_slot > p) top_mod_slot = p;
+               break;
+            }
          }
       }
    }

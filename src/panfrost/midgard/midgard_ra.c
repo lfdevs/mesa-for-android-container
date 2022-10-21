@@ -518,6 +518,18 @@ allocate_registers(compiler_context *ctx, bool *spilled)
                         }
                 }
 
+                /* Anything read as 16-bit needs proper alignment to ensure the
+                 * resulting code can be packed.
+                 */
+                mir_foreach_src(ins, s) {
+                        unsigned src_size = nir_alu_type_get_type_size(ins->src_types[s]);
+                        if (src_size == 16 && ins->src[s] < SSA_FIXED_MINIMUM)
+                                min_bound[ins->src[s]] = MAX2(min_bound[ins->src[s]], 8);
+                }
+
+                /* Everything after this concerns only the destination, not the
+                 * sources.
+                 */
                 if (ins->dest >= SSA_FIXED_MINIMUM) continue;
 
                 unsigned size = nir_alu_type_get_type_size(ins->dest_type);
@@ -546,12 +558,6 @@ allocate_registers(compiler_context *ctx, bool *spilled)
                 /* We can't cross xy/zw boundaries. TODO: vec8 can */
                 if (size == 16 && min_alignment[dest] != 4)
                         min_bound[dest] = 8;
-
-                mir_foreach_src(ins, s) {
-                        unsigned src_size = nir_alu_type_get_type_size(ins->src_types[s]);
-                        if (src_size == 16 && ins->src[s] < SSA_FIXED_MINIMUM)
-                                min_bound[ins->src[s]] = MAX2(min_bound[ins->src[s]], 8);
-                }
 
                 /* We don't have a swizzle for the conditional and we don't
                  * want to muck with the conditional itself, so just force

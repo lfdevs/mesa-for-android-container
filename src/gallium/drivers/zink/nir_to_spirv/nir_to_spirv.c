@@ -445,8 +445,11 @@ get_glsl_type(struct ntv_context *ctx, const struct glsl_type *type)
          types[i] = get_glsl_type(ctx, glsl_get_struct_field(type, i));
       ret = spirv_builder_type_struct(&ctx->builder, types,
                                       glsl_get_length(type));
-      for (unsigned i = 0; i < glsl_get_length(type); i++)
-         spirv_builder_emit_member_offset(&ctx->builder, ret, i, glsl_get_struct_field_offset(type, i));
+      for (unsigned i = 0; i < glsl_get_length(type); i++) {
+         int32_t offset = glsl_get_struct_field_offset(type, i);
+         if (offset >= 0)
+            spirv_builder_emit_member_offset(&ctx->builder, ret, i, offset);
+      }
    } else
       unreachable("Unhandled GLSL type");
 
@@ -1808,29 +1811,29 @@ alu_instr_src_components(const nir_alu_instr *instr, unsigned src)
 }
 
 static SpvId
-get_alu_src(struct ntv_context *ctx, nir_alu_instr *alu, unsigned src)
+get_alu_src(struct ntv_context *ctx, nir_alu_instr *alu, unsigned src, SpvId *raw_value)
 {
-   SpvId raw_value = get_alu_src_raw(ctx, alu, src);
+   *raw_value = get_alu_src_raw(ctx, alu, src);
 
    unsigned num_components = alu_instr_src_components(alu, src);
    unsigned bit_size = nir_src_bit_size(alu->src[src].src);
    nir_alu_type type = nir_op_infos[alu->op].input_types[src];
 
    if (bit_size == 1)
-      return raw_value;
+      return *raw_value;
    else {
       switch (nir_alu_type_get_base_type(type)) {
       case nir_type_bool:
          unreachable("bool should have bit-size 1");
 
       case nir_type_int:
-         return bitcast_to_ivec(ctx, raw_value, bit_size, num_components);
+         return bitcast_to_ivec(ctx, *raw_value, bit_size, num_components);
 
       case nir_type_uint:
-         return raw_value;
+         return *raw_value;
 
       case nir_type_float:
-         return bitcast_to_fvec(ctx, raw_value, bit_size, num_components);
+         return bitcast_to_fvec(ctx, *raw_value, bit_size, num_components);
 
       default:
          unreachable("unknown nir_alu_type");
@@ -1905,8 +1908,9 @@ static void
 emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
 {
    SpvId src[NIR_MAX_VEC_COMPONENTS];
+   SpvId raw_src[NIR_MAX_VEC_COMPONENTS];
    for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++)
-      src[i] = get_alu_src(ctx, alu, i);
+      src[i] = get_alu_src(ctx, alu, i, &raw_src[i]);
 
    SpvId dest_type = get_dest_type(ctx, &alu->dest.dest,
                                    nir_op_infos[alu->op].output_type);
@@ -2083,8 +2087,6 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
    BINOP(nir_op_uge, SpvOpUGreaterThanEqual)
    BINOP(nir_op_flt, SpvOpFOrdLessThan)
    BINOP(nir_op_fge, SpvOpFOrdGreaterThanEqual)
-   BINOP(nir_op_feq, SpvOpFOrdEqual)
-   BINOP(nir_op_fneu, SpvOpFUnordNotEqual)
    BINOP(nir_op_frem, SpvOpFRem)
 #undef BINOP
 
@@ -2148,6 +2150,23 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
    case nir_op_slt:
    case nir_op_sge:
       unreachable("should already be lowered away");
+
+   case nir_op_fneu:
+      assert(nir_op_infos[alu->op].num_inputs == 2);
+      if (raw_src[0] == raw_src[1])
+         result =  emit_unop(ctx, SpvOpIsNan, dest_type, src[0]);
+      else
+         result = emit_binop(ctx, SpvOpFUnordNotEqual, dest_type, src[0], src[1]);
+      break;
+
+   case nir_op_feq:
+      assert(nir_op_infos[alu->op].num_inputs == 2);
+      if (raw_src[0] == raw_src[1])
+         result =  emit_unop(ctx, SpvOpLogicalNot, dest_type,
+                             emit_unop(ctx, SpvOpIsNan, dest_type, src[0]));
+      else
+         result = emit_binop(ctx, SpvOpFOrdEqual, dest_type, src[0], src[1]);
+      break;
 
    case nir_op_flrp:
       assert(nir_op_infos[alu->op].num_inputs == 3);

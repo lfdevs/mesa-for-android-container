@@ -35,6 +35,25 @@ AluGroup::AluGroup()
    std::fill(m_slots.begin(), m_slots.end(), nullptr);
 }
 
+static bool is_kill(EAluOp op)
+{
+   switch (op) {
+   case op2_kille:
+   case op2_kille_int:
+   case op2_killne:
+   case op2_killne_int:
+   case op2_killge:
+   case op2_killge_int:
+   case op2_killge_uint:
+   case op2_killgt:
+   case op2_killgt_int:
+   case op2_killgt_uint:
+      return true;
+   default:
+      return false;
+   }
+}
+
 bool AluGroup::add_instruction(AluInstr *instr)
 {
    /* we can only schedule one op that accesses LDS or
@@ -45,12 +64,17 @@ bool AluGroup::add_instruction(AluInstr *instr)
    if (instr->has_alu_flag(alu_is_trans)) {
       auto opinfo = alu_ops.find(instr->opcode());
       assert(opinfo->second.can_channel(AluOp::t, s_chip_class));
-      if (add_trans_instructions(instr))
+      if (add_trans_instructions(instr)) {
+         if (is_kill(instr->opcode()))
+            m_has_kill_op = true;
          return true;
+      }
    }
 
    if (add_vec_instructions(instr) && !instr->has_alu_flag(alu_is_trans)) {
       instr->set_parent_group(this);
+      if (!instr->has_alu_flag(alu_is_lds) && is_kill(instr->opcode()))
+         m_has_kill_op = true;
       return true;
    }
 
@@ -61,6 +85,8 @@ bool AluGroup::add_instruction(AluInstr *instr)
        opinfo->second.can_channel(AluOp::t, s_chip_class) &&
        add_trans_instructions(instr)) {
       instr->set_parent_group(this);
+      if (is_kill(instr->opcode()))
+         m_has_kill_op = true;
       return true;
    }
 

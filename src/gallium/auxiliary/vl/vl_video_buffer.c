@@ -77,7 +77,9 @@ vl_video_buffer_plane_order(enum pipe_format format)
 
    case PIPE_FORMAT_NV12:
    case PIPE_FORMAT_R8G8B8A8_UNORM:
+   case PIPE_FORMAT_R8G8B8X8_UNORM:
    case PIPE_FORMAT_B8G8R8A8_UNORM:
+   case PIPE_FORMAT_B8G8R8X8_UNORM:
    case PIPE_FORMAT_YUYV:
    case PIPE_FORMAT_UYVY:
    case PIPE_FORMAT_P010:

@@ -604,7 +604,7 @@ zink_create_rasterizer_state(struct pipe_context *pctx,
    }
 
    if (!rs_state->line_stipple_enable) {
-      state->base.line_stipple_factor = 0;
+      state->base.line_stipple_factor = 1;
       state->base.line_stipple_pattern = UINT16_MAX;
    }
 

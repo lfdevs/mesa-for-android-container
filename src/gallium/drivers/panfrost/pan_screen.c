@@ -697,7 +697,15 @@ panfrost_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_t
 		RET(((uint64_t []) { 256, 256, 256 }));
 
 	case PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK:
-		RET((uint64_t []) { 256 });
+                /* On Bifrost and newer, all GPUs can support at least 256 threads
+                 * regardless of register usage, so we report 256.
+                 *
+                 * On Midgard, with maximum register usage, the maximum
+                 * thread count is only 64. We would like to report 64 here, but
+                 * the GLES3.1 spec minimum is 128, so we report 128 and limit
+                 * the register allocation of affected compute kernels.
+                 */
+		RET((uint64_t []) { dev->arch >= 6 ? 256 : 128 });
 
 	case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:
 		RET((uint64_t []) { 1024*1024*512 /* Maybe get memory */ });

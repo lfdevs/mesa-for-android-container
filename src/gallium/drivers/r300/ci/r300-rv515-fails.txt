@@ -25,19 +25,7 @@ dEQP-GLES2.functional.polygon_offset.fixed16_displacement_with_units,Fail
 dEQP-GLES2.functional.polygon_offset.fixed16_render_with_units,Fail
 dEQP-GLES2.functional.polygon_offset.fixed16_factor_1_slope,Fail
 
-# Minor errors around the edges
-dEQP-GLES2.functional.rasterization.interpolation.basic.lines_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.basic.line_strip_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.basic.line_loop_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.projected.lines_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.projected.line_strip_wide,Fail
-dEQP-GLES2.functional.rasterization.interpolation.projected.line_loop_wide,Fail
-
 # "Invalid line width at (119, 179) - (119, 180). Detected width of 2, expected 1"
-dEQP-GLES2.functional.rasterization.primitives.lines,Fail
-dEQP-GLES2.functional.rasterization.primitives.line_strip,Fail
-dEQP-GLES2.functional.rasterization.primitives.line_loop,Fail
-dEQP-GLES2.functional.rasterization.primitives.lines_wide,Fail
 dEQP-GLES2.functional.rasterization.primitives.line_strip_wide,Fail,Fail
 dEQP-GLES2.functional.rasterization.primitives.line_loop_wide,Fail
 

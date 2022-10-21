@@ -1630,7 +1630,7 @@ endif
 dep_futex = null_dep
 if host_machine.system() == 'windows'
   if (get_option('min-windows-version') < 8)
-    dep_futex = declare_dependency(compile_args : ['-DWINDOWS_NO_FUTEX'])
+    pre_args += '-DWINDOWS_NO_FUTEX'
   else
     dep_futex = cc.find_library('synchronization', required : true)
   endif
@@ -1876,7 +1876,7 @@ if with_clc
 
   dep_clang = cpp.find_library('clang-cpp', dirs : llvm_libdir, required : false)
 
-  if not dep_clang.found()
+  if not dep_clang.found() or not _shared_llvm
     clang_modules = [
       'clangBasic', 'clangAST', 'clangCodeGen', 'clangLex',
       'clangDriver', 'clangFrontend', 'clangFrontendTool',

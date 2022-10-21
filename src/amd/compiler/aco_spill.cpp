@@ -920,8 +920,10 @@ add_coupling_code(spill_ctx& ctx, Block* block, unsigned block_idx)
                   pred.instructions[idx]->opcode != aco_opcode::p_logical_end);
          std::vector<aco_ptr<Instruction>>::iterator it = std::next(pred.instructions.begin(), idx);
          pred.instructions.insert(it, std::move(spill));
+
+         /* Add the original name to predecessor's spilled variables */
          if (spill_op.isTemp())
-            ctx.spills_exit[pred_idx][spill_op.getTemp()] = spill_id;
+            ctx.spills_exit[pred_idx][phi->operands[i].getTemp()] = spill_id;
       }
 
       /* remove phi from instructions */

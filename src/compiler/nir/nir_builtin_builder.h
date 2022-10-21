@@ -62,9 +62,10 @@ nir_nan_check2(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y, nir_ssa_def *res)
 static inline nir_ssa_def *
 nir_fmax_abs_vec_comp(nir_builder *b, nir_ssa_def *vec)
 {
-   nir_ssa_def *res = nir_channel(b, vec, 0);
+   nir_ssa_def *abs = nir_fabs(b, vec);
+   nir_ssa_def *res = nir_channel(b, abs, 0);
    for (unsigned i = 1; i < vec->num_components; ++i)
-      res = nir_fmax(b, res, nir_fabs(b, nir_channel(b, vec, i)));
+      res = nir_fmax(b, res, nir_channel(b, abs, i));
    return res;
 }
 

@@ -337,7 +337,7 @@ vk_pipeline_cache_lookup_object(struct vk_pipeline_cache *cache,
    if (object == NULL) {
 #ifdef ENABLE_SHADER_CACHE
       struct disk_cache *disk_cache = cache->base.device->physical->disk_cache;
-      if (disk_cache != NULL) {
+      if (disk_cache != NULL && cache->object_cache != NULL) {
          cache_key cache_key;
          disk_cache_compute_key(disk_cache, key_data, key_size, cache_key);
 

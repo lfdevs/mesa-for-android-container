@@ -87,6 +87,7 @@ public:
    static bool has_t() { return s_max_slots == 5;}
 
    bool addr_for_src() const { return m_addr_for_src;}
+   bool has_kill_op() const {return m_has_kill_op;}
 
 private:
    void forward_set_blockid(int id, int index) override;
@@ -111,6 +112,7 @@ private:
    bool m_has_lds_op{false};
    bool m_addr_is_index{false};
    bool m_addr_for_src{false};
+   bool m_has_kill_op{false};
 };
 
 

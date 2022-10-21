@@ -58,7 +58,7 @@ if can_check_clang
 else
   dep_clang_usable = true
 endif
-if not (dep_clang.found() and dep_clang_usable)
+if not _shared_llvm or not (dep_clang.found() and dep_clang_usable)
   dep_clang = [
     cpp.find_library('clangCodeGen', dirs : llvm_libdir),
     cpp.find_library('clangFrontendTool', dirs : llvm_libdir),

@@ -855,7 +855,8 @@ _mesa_Begin(GLenum mode)
     * leave dlist.c's dispatch table in place.
     */
    if (ctx->GLThread.enabled) {
-      ctx->CurrentServerDispatch = ctx->Exec;
+      if (ctx->CurrentServerDispatch == ctx->OutsideBeginEnd)
+         ctx->CurrentServerDispatch = ctx->Exec;
    } else if (ctx->CurrentClientDispatch == ctx->OutsideBeginEnd) {
       ctx->CurrentClientDispatch = ctx->CurrentServerDispatch = ctx->Exec;
       _glapi_set_dispatch(ctx->CurrentClientDispatch);
@@ -914,7 +915,10 @@ _mesa_End(void)
    ctx->Exec = ctx->OutsideBeginEnd;
 
    if (ctx->GLThread.enabled) {
-      ctx->CurrentServerDispatch = ctx->Exec;
+      if (ctx->CurrentServerDispatch == ctx->BeginEnd ||
+          ctx->CurrentServerDispatch == ctx->HWSelectModeBeginEnd) {
+         ctx->CurrentServerDispatch = ctx->Exec;
+      }
    } else if (ctx->CurrentClientDispatch == ctx->BeginEnd ||
               ctx->CurrentClientDispatch == ctx->HWSelectModeBeginEnd) {
       ctx->CurrentClientDispatch = ctx->CurrentServerDispatch = ctx->Exec;

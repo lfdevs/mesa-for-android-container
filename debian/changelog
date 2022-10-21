@@ -1,3 +1,10 @@
+mesa (22.2.2-1) unstable; urgency=medium
+
+  * control: Bump build-depends on wayland-protocols. (Closes: #1021666)
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 21 Oct 2022 10:17:18 +0300
+
 mesa (22.2.1-1) unstable; urgency=medium
 
   [ Zhang Boyang ]

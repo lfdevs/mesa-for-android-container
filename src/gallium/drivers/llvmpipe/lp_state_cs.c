@@ -133,7 +133,7 @@ generate_compute(struct llvmpipe_context *lp,
 
    coro = LLVMAddFunction(gallivm->module, func_name_coro, coro_func_type);
    LLVMSetFunctionCallConv(coro, LLVMCCallConv);
-   LLVMAddTargetDependentFunctionAttr(coro, "coroutine.presplit", "0");
+   lp_build_coro_add_presplit(coro);
 
    variant->function = function;
 

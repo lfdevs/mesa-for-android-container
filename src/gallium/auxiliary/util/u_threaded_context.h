@@ -532,7 +532,6 @@ struct threaded_context {
    uint32_t image_buffers[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_IMAGES];
    uint32_t shader_buffers_writeable_mask[PIPE_SHADER_TYPES];
    uint64_t image_buffers_writeable_mask[PIPE_SHADER_TYPES];
-   /* Don't use PIPE_MAX_SHADER_SAMPLER_VIEWS because it's too large. */
    uint32_t sampler_buffers[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    struct tc_batch batch_slots[TC_MAX_BATCHES];

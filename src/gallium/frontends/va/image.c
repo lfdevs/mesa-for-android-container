@@ -256,9 +256,12 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
                                    PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE))
          return VA_STATUS_ERROR_OPERATION_FAILED;
    } else {
-      for (i = 0; i < ARRAY_SIZE(derive_progressive_disallowlist); i++)
-         if ((strcmp(derive_progressive_disallowlist[i], proc) == 0))
-            return VA_STATUS_ERROR_OPERATION_FAILED;
+         if(!screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
+                                   PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                   PIPE_VIDEO_SUPPORTS_CONTIGUOUS_PLANES_MAP))
+            for (i = 0; i < ARRAY_SIZE(derive_progressive_disallowlist); i++)
+               if ((strcmp(derive_progressive_disallowlist[i], proc) == 0))
+                  return VA_STATUS_ERROR_OPERATION_FAILED;
    }
 
    surfaces = surf->buffer->get_surfaces(surf->buffer);
