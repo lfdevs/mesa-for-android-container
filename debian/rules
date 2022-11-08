@@ -47,7 +47,7 @@ confflags_DRI3 = -Ddri3=disabled
 confflags_OSMESA =  -Dosmesa=true
 confflags_SSE2 = -Dsse2=true
 
-NO_RUSTC_ARCHS = powerpc ppc64 riscv64 sparc64
+NO_RUSTC_ARCHS = alpha arc hppa hurd-i386 ia64 kfreebsd-amd64 kfreebsd-i386 m68k powerpc ppc64 riscv64 sh4 sparc64 x32
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)

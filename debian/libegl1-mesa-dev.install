@@ -1,2 +1,2 @@
 usr/include/EGL/eglmesaext.h
-usr/include/EGL/eglextchromium.h
+usr/include/EGL/eglext_angle.h

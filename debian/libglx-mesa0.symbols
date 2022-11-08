@@ -420,6 +420,7 @@ libGLX_mesa.so.0 libglx-mesa0
  glGetMinmaxParameteriv@Base 0
  glGetMultisamplefv@Base 0
  glGetObjectLabel@Base 0
+ glGetObjectLabelEXT@Base 22.3.0~rc1
  glGetObjectParameterfvARB@Base 0
  glGetObjectParameterivARB@Base 0
  glGetObjectPtrLabel@Base 0
@@ -572,6 +573,7 @@ libGLX_mesa.so.0 libglx-mesa0
  glIsTextureEXT@Base 0
  glIsTransformFeedback@Base 0
  glIsVertexArray@Base 0
+ glLabelObjectEXT@Base 22.3.0~rc1
  glLightModelf@Base 0
  glLightModelfv@Base 0
  glLightModeli@Base 0
