@@ -39,7 +39,7 @@
 #include "state_tracker/st_context.h"
 
 #include "util/u_memory.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 
 GLboolean
 dri_create_context(gl_api api, const struct gl_config * visual,
@@ -50,7 +50,6 @@ dri_create_context(gl_api api, const struct gl_config * visual,
 {
    __DRIscreen *sPriv = cPriv->driScreenPriv;
    struct dri_screen *screen = dri_screen(sPriv);
-   struct st_api *stapi = screen->st_api;
    struct dri_context *ctx = NULL;
    struct st_context_iface *st_share = NULL;
    struct st_context_attribs attribs;
@@ -69,6 +68,9 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       allowed_flags |= __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS;
       allowed_attribs |= __DRIVER_CONTEXT_ATTRIB_RESET_STRATEGY;
    }
+
+   if (screen->has_protected_context)
+      allowed_attribs |= __DRIVER_CONTEXT_ATTRIB_PROTECTED;
 
    if (ctx_config->flags & ~allowed_flags) {
       *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
@@ -138,6 +140,9 @@ dri_create_context(gl_api api, const struct gl_config * visual,
        && (ctx_config->release_behavior == __DRI_CTX_RELEASE_BEHAVIOR_NONE))
       attribs.flags |= ST_CONTEXT_FLAG_RELEASE_NONE;
 
+   if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_PROTECTED)
+      attribs.flags |= ST_CONTEXT_FLAG_PROTECTED;
+
    struct dri_context *share_ctx = NULL;
    if (sharedContextPrivate) {
       share_ctx = (struct dri_context *)sharedContextPrivate;
@@ -157,7 +162,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    /* KHR_no_error is likely to crash, overflow memory, etc if an application
     * has errors so don't enable it for setuid processes.
     */
-   if (env_var_as_boolean("MESA_NO_ERROR", false) ||
+   if (debug_get_bool_option("MESA_NO_ERROR", false) ||
        driQueryOptionb(&screen->dev->option_cache, "mesa_no_error"))
 #if !defined(_WIN32)
       if (geteuid() == getuid())
@@ -166,7 +171,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
 
    attribs.options = screen->options;
    dri_fill_st_visual(&attribs.visual, screen, visual);
-   ctx->st = stapi->create_context(stapi, &screen->base, &attribs, &ctx_err,
+   ctx->st = st_api_create_context(&screen->base, &attribs, &ctx_err,
 				   st_share);
    if (ctx->st == NULL) {
       switch (ctx_err) {
@@ -195,7 +200,6 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       goto fail;
    }
    ctx->st->st_manager_private = (void *) ctx;
-   ctx->stapi = stapi;
 
    if (ctx->st->cso_context) {
       ctx->pp = pp_init(ctx->st->pipe, screen->pp_enabled, ctx->st->cso_context,
@@ -206,20 +210,18 @@ dri_create_context(gl_api api, const struct gl_config * visual,
 
    /* Do this last. */
    if (ctx->st->start_thread &&
-         driQueryOptionb(&screen->dev->option_cache, "mesa_glthread")) {
+       driQueryOptionb(&screen->dev->option_cache, "mesa_glthread")) {
+      bool safe = true;
 
-      if (backgroundCallable && backgroundCallable->base.version >= 2 &&
-            backgroundCallable->isThreadSafe) {
+      /* This is only needed by X11/DRI2, which can be unsafe. */
+      if (backgroundCallable &&
+          backgroundCallable->base.version >= 2 &&
+          backgroundCallable->isThreadSafe &&
+          !backgroundCallable->isThreadSafe(cPriv->loaderPrivate))
+         safe = false;
 
-         if (backgroundCallable->isThreadSafe(cPriv->loaderPrivate))
-            ctx->st->start_thread(ctx->st);
-         else
-            fprintf(stderr, "dri_create_context: glthread isn't thread safe "
-                  "- missing call XInitThreads\n");
-      } else {
-         fprintf(stderr, "dri_create_context: requested glthread but driver "
-               "is missing backgroundCallable V2 extension\n");
-      }
+      if (safe)
+         ctx->st->start_thread(ctx->st);
    }
 
    *error = __DRI_CTX_ERROR_SUCCESS;
@@ -237,6 +239,12 @@ void
 dri_destroy_context(__DRIcontext * cPriv)
 {
    struct dri_context *ctx = dri_context(cPriv);
+
+   /* Wait for glthread to finish because we can't use pipe_context from
+    * multiple threads.
+    */
+   if (ctx->st->thread_finish)
+      ctx->st->thread_finish(ctx->st);
 
    if (ctx->hud) {
       hud_destroy(ctx->hud, ctx->st->cso_context);
@@ -260,12 +268,10 @@ GLboolean
 dri_unbind_context(__DRIcontext * cPriv)
 {
    /* dri_util.c ensures cPriv is not null */
-   struct dri_screen *screen = dri_screen(cPriv->driScreenPriv);
    struct dri_context *ctx = dri_context(cPriv);
    struct st_context_iface *st = ctx->st;
-   struct st_api *stapi = screen->st_api;
 
-   if (st == stapi->get_current(stapi)) {
+   if (st == st_api_get_current()) {
       if (st->thread_finish)
          st->thread_finish(st);
 
@@ -273,7 +279,7 @@ dri_unbind_context(__DRIcontext * cPriv)
       if (ctx->hud)
          hud_record_only(ctx->hud, st->pipe);
 
-      stapi->make_current(stapi, NULL, NULL, NULL);
+      st_api_make_current(NULL, NULL, NULL);
    }
    ctx->dPriv = NULL;
    ctx->rPriv = NULL;
@@ -291,8 +297,14 @@ dri_make_current(__DRIcontext * cPriv,
    struct dri_drawable *draw = dri_drawable(driDrawPriv);
    struct dri_drawable *read = dri_drawable(driReadPriv);
 
+   /* Wait for glthread to finish because we can't use st_context from
+    * multiple threads.
+    */
+   if (ctx->st->thread_finish)
+      ctx->st->thread_finish(ctx->st);
+
    if (!draw && !read)
-      return ctx->stapi->make_current(ctx->stapi, ctx->st, NULL, NULL);
+      return st_api_make_current(ctx->st, NULL, NULL);
    else if (!draw || !read)
       return GL_FALSE;
 
@@ -305,7 +317,7 @@ dri_make_current(__DRIcontext * cPriv,
       read->texture_stamp = driReadPriv->lastStamp - 1;
    }
 
-   ctx->stapi->make_current(ctx->stapi, ctx->st, &draw->base, &read->base);
+   st_api_make_current(ctx->st, &draw->base, &read->base);
 
    /* This is ok to call here. If they are already init, it's a no-op. */
    if (ctx->pp && draw->textures[ST_ATTACHMENT_BACK_LEFT])
@@ -318,11 +330,7 @@ dri_make_current(__DRIcontext * cPriv,
 struct dri_context *
 dri_get_current(__DRIscreen *sPriv)
 {
-   struct dri_screen *screen = dri_screen(sPriv);
-   struct st_api *stapi = screen->st_api;
-   struct st_context_iface *st;
-
-   st = stapi->get_current(stapi);
+   struct st_context_iface *st = st_api_get_current();
 
    return (struct dri_context *) st ? st->st_manager_private : NULL;
 }

@@ -431,36 +431,6 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
       }
       break;
 
-   case ir_unop_logic_not: {
-      enum ir_expression_operation new_op = ir_unop_logic_not;
-
-      if (op_expr[0] == NULL)
-	 break;
-
-      switch (op_expr[0]->operation) {
-      case ir_binop_less:    new_op = ir_binop_gequal;  break;
-      case ir_binop_gequal:  new_op = ir_binop_less;    break;
-      case ir_binop_equal:   new_op = ir_binop_nequal;  break;
-      case ir_binop_nequal:  new_op = ir_binop_equal;   break;
-      case ir_binop_all_equal:   new_op = ir_binop_any_nequal;  break;
-      case ir_binop_any_nequal:  new_op = ir_binop_all_equal;   break;
-
-      default:
-	 /* The default case handler is here to silence a warning from GCC.
-	  */
-	 break;
-      }
-
-      if (new_op != ir_unop_logic_not) {
-	 return new(mem_ctx) ir_expression(new_op,
-					   ir->type,
-					   op_expr[0]->operands[0],
-					   op_expr[0]->operands[1]);
-      }
-
-      break;
-   }
-
    case ir_unop_saturate:
       if (op_expr[0] && op_expr[0]->operation == ir_binop_add) {
          ir_expression *b2f_0 = op_expr[0]->operands[0]->as_expression();

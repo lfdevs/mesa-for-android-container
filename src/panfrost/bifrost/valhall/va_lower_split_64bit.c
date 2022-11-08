@@ -47,11 +47,8 @@ lower_split_src(bi_context *ctx, bi_instr *I, unsigned s)
    /* Allocate temporary before the instruction */
    bi_builder b = bi_init_builder(ctx, bi_before_instr(I));
    bi_index vec = bi_temp(ctx);
-   bi_instr *collect = bi_collect_i32_to(&b, vec);
-   collect->nr_srcs = 2;
-
-   bi_instr *split = bi_split_i32_to(&b, bi_null(), vec);
-   split->nr_dests = 2;
+   bi_instr *collect = bi_collect_i32_to(&b, vec, 2);
+   bi_instr *split = bi_split_i32_to(&b, 2, vec);
 
    /* Emit collect */
    for (unsigned w = 0; w < 2; ++w) {

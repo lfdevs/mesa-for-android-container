@@ -49,6 +49,8 @@ static const VAImageFormat formats[] =
    {VA_FOURCC('Y','U','Y','V')},
    {VA_FOURCC('Y','U','Y','2')},
    {VA_FOURCC('U','Y','V','Y')},
+   {VA_FOURCC('Y','8','0','0')},
+   {VA_FOURCC('4','4','4','P')},
    {.fourcc = VA_FOURCC('B','G','R','A'), .byte_order = VA_LSB_FIRST, 32, 32,
     0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000},
    {.fourcc = VA_FOURCC('R','G','B','A'), .byte_order = VA_LSB_FIRST, 32, 32,
@@ -179,6 +181,24 @@ vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int heig
       img->data_size  = w * h * 4;
       break;
 
+   case VA_FOURCC('Y','8','0','0'):
+      img->num_planes = 1;
+      img->pitches[0] = w;
+      img->offsets[0] = 0;
+      img->data_size  = w * h;
+      break;
+
+   case VA_FOURCC('4','4','4', 'P'):
+      img->num_planes = 3;
+      img->offsets[0] = 0;
+      img->offsets[1] = w * h;
+      img->offsets[2] = w * h * 2;
+      img->pitches[0] = w;
+      img->pitches[1] = w;
+      img->pitches[2] = w;
+      img->data_size  = w * h * 3;
+      break;
+
    default:
       return VA_STATUS_ERROR_INVALID_IMAGE_FORMAT;
    }
@@ -258,7 +278,7 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
    } else {
          if(!screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
                                    PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
-                                   PIPE_VIDEO_SUPPORTS_CONTIGUOUS_PLANES_MAP))
+                                   PIPE_VIDEO_CAP_SUPPORTS_CONTIGUOUS_PLANES_MAP))
             for (i = 0; i < ARRAY_SIZE(derive_progressive_disallowlist); i++)
                if ((strcmp(derive_progressive_disallowlist[i], proc) == 0))
                   return VA_STATUS_ERROR_OPERATION_FAILED;
@@ -474,7 +494,7 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
    struct pipe_sampler_view **views;
    enum pipe_format format;
    bool convert = false;
-   void *data[3];
+   uint8_t *data[3];
    unsigned pitches[3], i, j;
 
    if (!ctx)
@@ -551,7 +571,7 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
    }
 
    for (i = 0; i < vaimage->num_planes; i++) {
-      data[i] = img_buf->data + vaimage->offsets[i];
+      data[i] = ((uint8_t*)img_buf->data) + vaimage->offsets[i];
       pitches[i] = vaimage->pitches[i];
    }
    if (vaimage->format.fourcc == VA_FOURCC('I','4','2','0')) {
@@ -589,11 +609,11 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
          }
 
          if (i == 1 && convert) {
-            u_copy_nv12_to_yv12(data, pitches, i, j,
+            u_copy_nv12_to_yv12((void *const *)data, pitches, i, j,
                transfer->stride, views[i]->texture->array_size,
                map, box.width, box.height);
          } else {
-            util_copy_rect(data[i] + pitches[i] * j,
+            util_copy_rect((uint8_t*)(data[i] + pitches[i] * j),
                views[i]->texture->format,
                pitches[i] * views[i]->texture->array_size, 0, 0,
                box.width, box.height, map, transfer->stride, 0, 0);
@@ -617,7 +637,7 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
    VAImage *vaimage;
    struct pipe_sampler_view **views;
    enum pipe_format format;
-   void *data[3];
+   uint8_t *data[3];
    unsigned pitches[3], i, j;
 
    if (!ctx)
@@ -685,7 +705,7 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
    }
 
    for (i = 0; i < vaimage->num_planes; i++) {
-      data[i] = img_buf->data + vaimage->offsets[i];
+      data[i] = ((uint8_t*)img_buf->data) + vaimage->offsets[i];
       pitches[i] = vaimage->pitches[i];
    }
    if (vaimage->format.fourcc == VA_FOURCC('I','4','2','0')) {

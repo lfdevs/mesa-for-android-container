@@ -100,7 +100,7 @@ alpha_to_one
    alpha_to_coverage, this step happens regardless of whether multisample
    is enabled or the destination buffer is multisampled.
 max_rt
-   The index of the max render target (irrespecitive of whether independent
+   The index of the max render target (irrespective of whether independent
    blend is enabled), i.e. the number of MRTs minus one.  This is provided
    so that the driver can avoid the overhead of programming unused MRTs.
 
@@ -113,11 +113,11 @@ blend_enable
    functions and source/destination factors. Otherwise, the incoming fragment
    color gets passed unmodified (but colormask still applies).
 rgb_func
-   The blend function to use for rgb channels. One of PIPE_BLEND.
+   The blend function to use for RGB channels. One of PIPE_BLEND.
 rgb_src_factor
-   The blend source factor to use for rgb channels. One of PIPE_BLENDFACTOR.
+   The blend source factor to use for RGB channels. One of PIPE_BLENDFACTOR.
 rgb_dst_factor
-   The blend destination factor to use for rgb channels. One of PIPE_BLENDFACTOR.
+   The blend destination factor to use for RGB channels. One of PIPE_BLENDFACTOR.
 alpha_func
    The blend function to use for the alpha channel. One of PIPE_BLEND.
 alpha_src_factor

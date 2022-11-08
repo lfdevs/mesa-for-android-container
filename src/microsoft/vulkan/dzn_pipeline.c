@@ -338,6 +338,14 @@ adjust_var_bindings(nir_shader *shader,
                                        nir_metadata_all, (void *)layout);
 }
 
+enum dxil_shader_model
+   dzn_get_shader_model(const struct dzn_physical_device *pdev)
+{
+   static_assert(D3D_SHADER_MODEL_6_0 == 0x60 && SHADER_MODEL_6_0 == 0x60000, "Validating math below");
+   static_assert(D3D_SHADER_MODEL_6_7 == 0x67 && SHADER_MODEL_6_7 == 0x60007, "Validating math below");
+   return ((pdev->shader_model & 0xf0) << 12) | (pdev->shader_model & 0xf);
+}
+
 static VkResult
 dzn_pipeline_compile_shader(struct dzn_device *device,
                             nir_shader *nir,
@@ -345,9 +353,11 @@ dzn_pipeline_compile_shader(struct dzn_device *device,
 {
    struct dzn_instance *instance =
       container_of(device->vk.physical->instance, struct dzn_instance, vk);
+   struct dzn_physical_device *pdev =
+      container_of(device->vk.physical, struct dzn_physical_device, vk);
    struct nir_to_dxil_options opts = {
       .environment = DXIL_ENVIRONMENT_VULKAN,
-      .shader_model_max = SHADER_MODEL_6_2,
+      .shader_model_max = dzn_get_shader_model(pdev),
 #ifdef _WIN32
       .validator_version_max = dxil_get_validator_version(instance->dxil_validator),
 #endif
@@ -358,7 +368,7 @@ dzn_pipeline_compile_shader(struct dzn_device *device,
    if (instance->debug_flags & DZN_DEBUG_NIR)
       nir_print_shader(nir, stderr);
 
-   if (nir_to_dxil(nir, &opts, &dxil_blob)) {
+   if (nir_to_dxil(nir, &opts, NULL, &dxil_blob)) {
       blob_finish_get_buffer(&dxil_blob, (void **)&slot->pShaderBytecode,
                              (size_t *)&slot->BytecodeLength);
    } else {
@@ -753,7 +763,7 @@ dzn_graphics_pipeline_compile_shaders(struct dzn_device *device,
       _mesa_sha1_update(&pipeline_hash_ctx, &force_sample_rate_shading, sizeof(force_sample_rate_shading));
 
       u_foreach_bit(stage, active_stage_mask) {
-         vk_pipeline_hash_shader_stage(stages[stage].info, stages[stage].spirv_hash);
+         vk_pipeline_hash_shader_stage(stages[stage].info, NULL, stages[stage].spirv_hash);
          _mesa_sha1_update(&pipeline_hash_ctx, stages[stage].spirv_hash, sizeof(stages[stage].spirv_hash));
          _mesa_sha1_update(&pipeline_hash_ctx, layout->stages[stage].hash, sizeof(layout->stages[stage].hash));
       }
@@ -2087,7 +2097,7 @@ dzn_compute_pipeline_compile_shader(struct dzn_device *device,
       struct mesa_sha1 pipeline_hash_ctx;
 
       _mesa_sha1_init(&pipeline_hash_ctx);
-      vk_pipeline_hash_shader_stage(&info->stage, spirv_hash);
+      vk_pipeline_hash_shader_stage(&info->stage, NULL, spirv_hash);
       _mesa_sha1_update(&pipeline_hash_ctx, spirv_hash, sizeof(spirv_hash));
       _mesa_sha1_update(&pipeline_hash_ctx, layout->stages[MESA_SHADER_COMPUTE].hash,
                         sizeof(layout->stages[MESA_SHADER_COMPUTE].hash));

@@ -2968,7 +2968,7 @@ glsl_type::count_dword_slots(bool is_bindless) const
    case GLSL_TYPE_UINT16:
    case GLSL_TYPE_INT16:
    case GLSL_TYPE_FLOAT16:
-      return DIV_ROUND_UP(this->components(), 2);
+      return DIV_ROUND_UP(this->vector_elements, 2) * this->matrix_columns;
    case GLSL_TYPE_UINT8:
    case GLSL_TYPE_INT8:
       return DIV_ROUND_UP(this->components(), 4);

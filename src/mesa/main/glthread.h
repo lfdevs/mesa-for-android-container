@@ -52,6 +52,7 @@
 #include "GL/gl.h"
 #include "compiler/shader_enums.h"
 #include "main/config.h"
+#include "glheader.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,6 +61,7 @@ extern "C" {
 struct gl_context;
 struct gl_buffer_object;
 struct _mesa_HashTable;
+struct _glapi_table;
 
 struct glthread_attrib_binding {
    struct gl_buffer_object *buffer; /**< where non-VBO data was uploaded */
@@ -128,9 +130,12 @@ struct glthread_client_attrib {
 struct glthread_attrib_node {
    GLbitfield Mask;
    int ActiveTexture;
-   GLenum MatrixMode;
+   GLenum16 MatrixMode;
+   bool Blend;
    bool CullFace;
    bool DepthTest;
+   bool Lighting;
+   bool PolygonStipple;
 };
 
 typedef enum {
@@ -154,9 +159,10 @@ struct glthread_state
 
    /** Whether GLThread is enabled. */
    bool enabled;
+   bool inside_begin_end;
 
    /** Display lists. */
-   GLenum ListMode; /**< Zero if not inside display list, else list mode. */
+   GLenum16 ListMode; /**< Zero if not inside display list, else list mode. */
    unsigned ListBase;
    unsigned ListCallDepth;
 
@@ -186,7 +192,6 @@ struct glthread_state
 
    /** Caps. */
    GLboolean SupportsBufferUploads;
-   GLboolean SupportsNonVBOUploads;
 
    /** Primitive restart state. */
    bool PrimitiveRestart;
@@ -225,22 +230,47 @@ struct glthread_state
 
    /** Basic matrix state tracking. */
    int ActiveTexture;
-   GLenum MatrixMode;
+   GLenum16 MatrixMode;
    gl_matrix_index MatrixIndex;
    struct glthread_attrib_node AttribStack[MAX_ATTRIB_STACK_DEPTH];
    int AttribStackDepth;
    int MatrixStackDepth[M_NUM_MATRIX_STACKS];
 
    /** Enable states. */
+   bool Blend;
    bool DepthTest;
    bool CullFace;
+   bool Lighting;
+   bool PolygonStipple;
 
    GLuint CurrentDrawFramebuffer;
+   GLuint CurrentReadFramebuffer;
    GLuint CurrentProgram;
+
+   /** The last added call of the given function. */
+   struct marshal_cmd_CallList *LastCallList;
+   struct marshal_cmd_BindBuffer *LastBindBuffer;
 };
 
 void _mesa_glthread_init(struct gl_context *ctx);
 void _mesa_glthread_destroy(struct gl_context *ctx, const char *reason);
+
+void _mesa_glthread_init_dispatch0(struct gl_context *ctx,
+                                   struct _glapi_table *table);
+void _mesa_glthread_init_dispatch1(struct gl_context *ctx,
+                                   struct _glapi_table *table);
+void _mesa_glthread_init_dispatch2(struct gl_context *ctx,
+                                   struct _glapi_table *table);
+void _mesa_glthread_init_dispatch3(struct gl_context *ctx,
+                                   struct _glapi_table *table);
+void _mesa_glthread_init_dispatch4(struct gl_context *ctx,
+                                   struct _glapi_table *table);
+void _mesa_glthread_init_dispatch5(struct gl_context *ctx,
+                                   struct _glapi_table *table);
+void _mesa_glthread_init_dispatch6(struct gl_context *ctx,
+                                   struct _glapi_table *table);
+void _mesa_glthread_init_dispatch7(struct gl_context *ctx,
+                                   struct _glapi_table *table);
 
 void _mesa_glthread_flush_batch(struct gl_context *ctx);
 void _mesa_glthread_finish(struct gl_context *ctx);
@@ -248,14 +278,13 @@ void _mesa_glthread_finish_before(struct gl_context *ctx, const char *func);
 void _mesa_glthread_upload(struct gl_context *ctx, const void *data,
                            GLsizeiptr size, unsigned *out_offset,
                            struct gl_buffer_object **out_buffer,
-                           uint8_t **out_ptr);
+                           uint8_t **out_ptr,
+                           unsigned start_offset);
 void _mesa_glthread_reset_vao(struct glthread_vao *vao);
 void _mesa_error_glthread_safe(struct gl_context *ctx, GLenum error,
                                bool glthread, const char *format, ...);
 void _mesa_glthread_execute_list(struct gl_context *ctx, GLuint list);
 
-void _mesa_glthread_BindBuffer(struct gl_context *ctx, GLenum target,
-                               GLuint buffer);
 void _mesa_glthread_DeleteBuffers(struct gl_context *ctx, GLsizei n,
                                   const GLuint *buffers);
 

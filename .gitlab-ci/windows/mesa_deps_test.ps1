@@ -79,7 +79,7 @@ Pop-Location
 Get-Date
 Write-Host "Cloning Vulkan and GL Conformance Tests"
 $deqp_source = "C:\src\VK-GL-CTS\"
-git clone --no-progress --single-branch https://github.com/lfrb/VK-GL-CTS.git -b windows-flush $deqp_source
+git clone --no-progress --single-branch https://github.com/KhronosGroup/VK-GL-CTS.git -b vulkan-cts-1.3.4 $deqp_source
 if (!$?) {
   Write-Host "Failed to clone deqp repository"
   Exit 1
@@ -115,10 +115,10 @@ Copy-Item -Path "$($deqp_source)\doc\testlog-stylesheet\testlog.xsl" -Destinatio
 
 # Copy Vulkan must-pass list
 $deqp_mustpass = New-Item -ItemType Directory -Path $deqp_build -Name "mustpass"
-$root_mustpass = Join-Path -Path $deqp_source -ChildPath "external\vulkancts\mustpass\master"
+$root_mustpass = Join-Path -Path $deqp_source -ChildPath "external\vulkancts\mustpass\main"
 $files = Get-Content "$($root_mustpass)\vk-default.txt"
 foreach($file in $files) {
-  Get-Content "$($root_mustpass)\$($file)" | Add-Content -Path "$($deqp_mustpass)\vk-master.txt"
+  Get-Content "$($root_mustpass)\$($file)" | Add-Content -Path "$($deqp_mustpass)\vk-main.txt"
 }
 Remove-Item -Force -Recurse $deqp_source
 

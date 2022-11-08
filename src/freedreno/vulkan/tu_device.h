@@ -12,11 +12,15 @@
 
 #include "tu_common.h"
 
+#include "vk_buffer.h"
+
 #include "tu_autotune.h"
 #include "tu_pass.h"
 #include "tu_perfetto.h"
 #include "tu_suballoc.h"
 #include "tu_util.h"
+
+#include "util/vma.h"
 
 /* queue types */
 #define TU_QUEUE_GENERAL 0
@@ -53,6 +57,7 @@ enum tu_debug_flags
    TU_DEBUG_PERF = 1 << 18,
    TU_DEBUG_NOLRZFC = 1 << 19,
    TU_DEBUG_DYNAMIC = 1 << 20,
+   TU_DEBUG_BOS = 1 << 21,
 };
 
 enum global_shader {
@@ -107,6 +112,10 @@ struct tu_physical_device
    uint32_t ccu_offset_gmem;
    uint32_t ccu_offset_bypass;
 
+   bool has_set_iova;
+   uint64_t va_start;
+   uint64_t va_size;
+
    struct fd_dev_id dev_id;
    const struct fd_dev_info *info;
 
@@ -116,7 +125,12 @@ struct tu_physical_device
    /* Address space and global fault count for this local_fd with DRM backend */
    uint64_t fault_count;
 
+   /* with 0 being the highest priority */
+   uint32_t submitqueue_priority_count;
+
    struct tu_memory_heap heap;
+   mtx_t                 vma_mutex;
+   struct util_vma_heap  vma;
 
    struct vk_sync_type syncobj_type;
    struct vk_sync_timeline_type timeline_type;
@@ -130,8 +144,6 @@ struct tu_instance
    struct vk_instance vk;
 
    uint32_t api_version;
-   int physical_device_count;
-   struct tu_physical_device physical_devices[TU_MAX_DRM_DEVICES];
 
    struct driOptionCache dri_options;
    struct driOptionCache available_dri_options;
@@ -228,6 +240,12 @@ struct tu_device
       bool initialized;
    } scratch_bos[48 - MIN_SCRATCH_BO_SIZE_LOG2];
 
+   struct tu_pvtmem_bo {
+      mtx_t mtx;
+      struct tu_bo *bo;
+      uint32_t per_fiber_size, per_sp_size;
+   } fiber_pvtmem_bo, wave_pvtmem_bo;
+
    struct tu_bo *global_bo;
 
    uint32_t implicit_sync_bo_count;
@@ -267,6 +285,9 @@ struct tu_device
    mtx_t bo_mutex;
    /* protects imported BOs creation/freeing */
    struct u_rwlock dma_bo_lock;
+
+   /* Tracking of name -> size allocated for TU_DEBUG_BOS */
+   struct hash_table *bo_sizes;
 
    /* This array holds all our 'struct tu_bo' allocations. We use this
     * so we can add a refcount to our BOs and check if a particular BO
@@ -335,17 +356,12 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(tu_device_memory, base, VkDeviceMemory,
 
 struct tu_buffer
 {
-   struct vk_object_base base;
-
-   VkDeviceSize size;
-
-   VkBufferUsageFlags usage;
-   VkBufferCreateFlags flags;
+   struct vk_buffer vk;
 
    struct tu_bo *bo;
    uint64_t iova;
 };
-VK_DEFINE_NONDISP_HANDLE_CASTS(tu_buffer, base, VkBuffer,
+VK_DEFINE_NONDISP_HANDLE_CASTS(tu_buffer, vk.base, VkBuffer,
                                VK_OBJECT_TYPE_BUFFER)
 
 struct tu_attachment_info
@@ -483,5 +499,12 @@ void
 tu_u_trace_submission_data_finish(
    struct tu_device *device,
    struct tu_u_trace_submission_data *submission_data);
+
+const char *
+tu_debug_bos_add(struct tu_device *dev, uint64_t size, const char *name);
+void
+tu_debug_bos_del(struct tu_device *dev, struct tu_bo *bo);
+void
+tu_debug_bos_print_stats(struct tu_device *dev);
 
 #endif /* TU_DEVICE_H */

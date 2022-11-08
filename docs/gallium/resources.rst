@@ -46,7 +46,7 @@ Buffer resource: can be used as a vertex, index, constant buffer
 Buffers do not really have a format, it's just bytes, but they are required
 to have their type set to a R8 format (without a specific "just byte" format,
 R8_UINT would probably make the most sense, but for historic reasons R8_UNORM
-is ok too). (This is just to make some shared buffer/texture code easier so
+is OK too). (This is just to make some shared buffer/texture code easier so
 format size can be queried.)
 width0 serves as size, most other resource properties don't apply but must be
 set appropriately (depth0/height0/array_size must be 1, last_level 0).

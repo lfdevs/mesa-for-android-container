@@ -540,12 +540,6 @@ droid_window_enqueue_buffer(_EGLDisplay *disp, struct dri2_egl_surface *dri2_sur
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
-   /* To avoid blocking other EGL calls, release the display mutex before
-    * we enter droid_window_enqueue_buffer() and re-acquire the mutex upon
-    * return.
-    */
-   mtx_unlock(&disp->Mutex);
-
    /* Queue the buffer with stored out fence fd. The ANativeWindow or buffer
     * consumer may choose to wait for the fence to signal before accessing
     * it. If fence fd value is -1, buffer can be accessed by consumer
@@ -562,8 +556,6 @@ droid_window_enqueue_buffer(_EGLDisplay *disp, struct dri2_egl_surface *dri2_sur
 
    dri2_surf->buffer = NULL;
    dri2_surf->back = NULL;
-
-   mtx_lock(&disp->Mutex);
 
    if (dri2_surf->dri_image_back) {
       dri2_dpy->image->destroyImage(dri2_surf->dri_image_back);

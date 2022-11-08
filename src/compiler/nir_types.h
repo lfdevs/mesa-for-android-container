@@ -241,6 +241,7 @@ const struct glsl_type *glsl_channel_type(const struct glsl_type *type);
 const struct glsl_type *glsl_float16_type(const struct glsl_type *type);
 const struct glsl_type *glsl_int16_type(const struct glsl_type *type);
 const struct glsl_type *glsl_uint16_type(const struct glsl_type *type);
+const struct glsl_type *glsl_type_to_16bit(const struct glsl_type *old_type);
 
 void glsl_get_natural_size_align_bytes(const struct glsl_type *type,
                                        unsigned *size, unsigned *align);

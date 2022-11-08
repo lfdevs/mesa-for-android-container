@@ -27,13 +27,12 @@
 #ifndef ALUGROUP_H
 #define ALUGROUP_H
 
-#include "sfn_instr_alu.h"
 #include "sfn_alu_readport_validation.h"
+#include "sfn_instr_alu.h"
 
 namespace r600 {
 
-class AluGroup : public Instr
-{
+class AluGroup : public Instr {
 public:
    using Slots = std::array<AluInstr *, 5>;
 
@@ -51,16 +50,16 @@ public:
    void accept(ConstInstrVisitor& visitor) const override;
    void accept(InstrVisitor& visitor) override;
 
-   auto begin() {return m_slots.begin(); }
-   auto end() {return m_slots.begin() + s_max_slots; }
-   auto begin() const {return m_slots.begin(); }
-   auto end() const {return m_slots.begin() + s_max_slots; }
+   auto begin() { return m_slots.begin(); }
+   auto end() { return m_slots.begin() + s_max_slots; }
+   auto begin() const { return m_slots.begin(); }
+   auto end() const { return m_slots.begin() + s_max_slots; }
 
    bool end_group() const override { return true; }
 
    void set_scheduled() override;
 
-   void set_nesting_depth(int depth) {m_nesting_depth = depth;}
+   void set_nesting_depth(int depth) { m_nesting_depth = depth; }
 
    void fix_last_flag();
 
@@ -68,26 +67,29 @@ public:
 
    int free_slots() const;
 
-   auto addr() const {return std::make_pair(m_addr_used, m_addr_is_index);}
+   auto addr() const { return std::make_pair(m_addr_used, m_addr_is_index); }
 
    uint32_t slots() const override;
 
    AluInstr::SrcValues get_kconsts() const;
 
-   bool has_lds_group_start() const { return m_slots[0] ?
-            m_slots[0]->has_alu_flag(alu_lds_group_start) : false;}
+   bool has_lds_group_start() const
+   {
+      return m_slots[0] ? m_slots[0]->has_alu_flag(alu_lds_group_start) : false;
+   }
 
    bool has_lds_group_end() const;
 
    const auto& readport_reserer() const { return m_readports_evaluator; }
-   void set_readport_reserer(const AluReadportReservation& rr) {
-       m_readports_evaluator = rr;
+   void set_readport_reserer(const AluReadportReservation& rr)
+   {
+      m_readports_evaluator = rr;
    };
 
-   static bool has_t() { return s_max_slots == 5;}
+   static bool has_t() { return s_max_slots == 5; }
 
-   bool addr_for_src() const { return m_addr_for_src;}
-   bool has_kill_op() const {return m_has_kill_op;}
+   bool addr_for_src() const { return m_addr_for_src; }
+   bool has_kill_op() const { return m_has_kill_op; }
 
 private:
    void forward_set_blockid(int id, int index) override;
@@ -115,7 +117,6 @@ private:
    bool m_has_kill_op{false};
 };
 
-
-}
+} // namespace r600
 
 #endif // ALUGROUP_H

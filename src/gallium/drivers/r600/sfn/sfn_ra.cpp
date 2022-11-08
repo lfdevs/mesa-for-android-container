@@ -24,21 +24,23 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "sfn_debug.h"
 #include "sfn_ra.h"
+
+#include "sfn_debug.h"
 
 #include <cassert>
 #include <queue>
 
 namespace r600 {
 
-void ComponentInterference::prepare_row(int row)
+void
+ComponentInterference::prepare_row(int row)
 {
    m_rows.resize(row + 1);
-
 }
 
-void ComponentInterference::add(size_t idx1, size_t idx2)
+void
+ComponentInterference::add(size_t idx1, size_t idx2)
 {
    assert(idx1 > idx2);
    assert(m_rows.size() > idx1);
@@ -46,30 +48,30 @@ void ComponentInterference::add(size_t idx1, size_t idx2)
    m_rows[idx2].push_back(idx1);
 }
 
-
 Interference::Interference(LiveRangeMap& map):
-   m_map(map)
+    m_map(map)
 {
    initialize();
 }
 
-void Interference::initialize()
+void
+Interference::initialize()
 {
-   for(int i = 0; i < 4; ++i) {
+   for (int i = 0; i < 4; ++i) {
       initialize(m_components_maps[i], m_map.component(i));
    }
 }
 
-void Interference::initialize(ComponentInterference& comp_interference,
-                              LiveRangeMap::ChannelLiveRange& clr)
+void
+Interference::initialize(ComponentInterference& comp_interference,
+                         LiveRangeMap::ChannelLiveRange& clr)
 {
    for (size_t row = 0; row < clr.size(); ++row) {
       auto& row_entry = clr[row];
       comp_interference.prepare_row(row);
       for (size_t col = 0; col < row; ++col) {
          auto& col_entry = clr[col];
-         if (row_entry.m_end >= col_entry.m_start &&
-             row_entry.m_start <= col_entry.m_end)
+         if (row_entry.m_end >= col_entry.m_start && row_entry.m_start <= col_entry.m_end)
             comp_interference.add(row, col);
       }
    }
@@ -80,7 +82,8 @@ struct Group {
    std::array<PRegister, 4> channels;
 };
 
-static inline bool operator < (const Group& lhs, const Group& rhs)
+static inline bool
+operator<(const Group& lhs, const Group& rhs)
 {
    return lhs.priority < rhs.priority;
 }
@@ -88,7 +91,9 @@ static inline bool operator < (const Group& lhs, const Group& rhs)
 using GroupRegisters = std::priority_queue<Group>;
 
 static bool
-group_allocation (LiveRangeMap& lrm, const Interference&  interference, GroupRegisters& groups)
+group_allocation(LiveRangeMap& lrm,
+                 const Interference& interference,
+                 GroupRegisters& groups)
 {
    int color = 0;
    // allocate grouped registers
@@ -100,7 +105,8 @@ group_allocation (LiveRangeMap& lrm, const Interference&  interference, GroupReg
       while (!group.channels[start_comp])
          ++start_comp;
 
-      sfn_log << SfnLog::merge << "Color group with " << *group.channels[start_comp] << "\n";
+      sfn_log << SfnLog::merge << "Color group with " << *group.channels[start_comp]
+              << "\n";
 
       // don't restart registers for exports, we may be able tp merge the
       // export calls, is fthe registers are consecutive
@@ -115,7 +121,7 @@ group_allocation (LiveRangeMap& lrm, const Interference&  interference, GroupReg
          auto& adjecency = interference.row(start_comp, group.channels[comp]->index());
          auto& regs = lrm.component(comp);
 
-         sfn_log << SfnLog::merge << "Try color "<< color;
+         sfn_log << SfnLog::merge << "Try color " << color;
 
          for (auto adj : adjecency) {
             if (regs[adj].m_color == color) {
@@ -130,7 +136,8 @@ group_allocation (LiveRangeMap& lrm, const Interference&  interference, GroupReg
             continue;
          }
 
-         /* First channel color found, check whether it can be used for all channels */
+         /* First channel color found, check whether it can be used for all
+          * channels */
          while (comp < 4) {
             sfn_log << SfnLog::merge << " interference: ";
             if (group.channels[comp]) {
@@ -138,7 +145,8 @@ group_allocation (LiveRangeMap& lrm, const Interference&  interference, GroupReg
                auto& adjecencies = interference.row(comp, group.channels[comp]->index());
 
                for (auto adj_index : adjecencies) {
-                  sfn_log << SfnLog::merge << *component_life_ranges[adj_index].m_register << " ";
+                  sfn_log << SfnLog::merge << *component_life_ranges[adj_index].m_register
+                          << " ";
                   if (component_life_ranges[adj_index].m_color == color) {
                      color_in_use = true;
                      sfn_log << SfnLog::merge << "used";
@@ -180,7 +188,7 @@ group_allocation (LiveRangeMap& lrm, const Interference&  interference, GroupReg
 }
 
 static bool
-scalar_allocation (LiveRangeMap& lrm, const Interference&  interference)
+scalar_allocation(LiveRangeMap& lrm, const Interference& interference)
 {
    for (int comp = 0; comp < 4; ++comp) {
       auto& live_ranges = lrm.component(comp);
@@ -188,8 +196,7 @@ scalar_allocation (LiveRangeMap& lrm, const Interference&  interference)
          if (r.m_color != -1)
             continue;
 
-         if (r.m_start == -1 &&
-             r.m_end == -1)
+         if (r.m_start == -1 && r.m_end == -1)
             continue;
 
          sfn_log << SfnLog::merge << "Color " << *r.m_register << "\n";
@@ -222,7 +229,8 @@ scalar_allocation (LiveRangeMap& lrm, const Interference&  interference)
    return true;
 }
 
-bool register_allocation(LiveRangeMap& lrm)
+bool
+register_allocation(LiveRangeMap& lrm)
 {
    Interference interference(lrm);
 
@@ -232,9 +240,8 @@ bool register_allocation(LiveRangeMap& lrm)
    for (int i = 0; i < 4; ++i) {
       auto& comp = lrm.component(i);
       for (auto& entry : comp) {
-         sfn_log << SfnLog::merge << "Prepare RA for "
-                 << *entry.m_register
-                 << " [" << entry.m_start << ", " << entry.m_end << "]\n";
+         sfn_log << SfnLog::merge << "Prepare RA for " << *entry.m_register << " ["
+                 << entry.m_start << ", " << entry.m_end << "]\n";
          auto pin = entry.m_register->pin();
          if (entry.m_start == -1 && entry.m_end == -1) {
             if (pin == pin_group || pin == pin_chgr)
@@ -245,23 +252,30 @@ bool register_allocation(LiveRangeMap& lrm)
          auto sel = entry.m_register->sel();
          /* fully pinned registers contain system values with the
           * definite register index, and array values are allocated
-          * right after the system registers, so just reuse the IDs (for now)  */
+          * right after the system registers, so just reuse the IDs (for now) */
          if (pin == pin_fully || pin == pin_array) {
             /* Must set all array element entries */
-            sfn_log << SfnLog::merge << "Pin color " << sel << " to " << *entry.m_register << "\n";
+            sfn_log << SfnLog::merge << "Pin color " << sel << " to " << *entry.m_register
+                    << "\n";
             entry.m_color = sel;
          } else if (pin == pin_group || pin == pin_chgr) {
-            /* Groups must all have the same sel() value, because they are used
-             * as vec4 registers */
+            /* Groups must all have the same sel() value, because they are
+             * used as vec4 registers */
             auto igroup = groups.find(sel);
             if (igroup != groups.end()) {
                igroup->second.channels[i] = entry.m_register;
-               assert(comp[entry.m_register->index()].m_register->index() == entry.m_register->index());
+               assert(comp[entry.m_register->index()].m_register->index() ==
+                      entry.m_register->index());
             } else {
-               int priority = entry.m_use.test(LiveRangeEntry::use_export) ? - entry.m_end : entry.m_start;
-               Group group{priority, {nullptr, nullptr, nullptr, nullptr}};
+               int priority = entry.m_use.test(LiveRangeEntry::use_export)
+                                 ? -entry.m_end
+                                 : entry.m_start;
+               Group group{
+                  priority, {nullptr, nullptr, nullptr, nullptr}
+               };
                group.channels[i] = entry.m_register;
-               assert(comp[group.channels[i]->index()].m_register->index() == entry.m_register->index());
+               assert(comp[group.channels[i]->index()].m_register->index() ==
+                      entry.m_register->index());
                groups[sel] = group;
             }
          }
@@ -272,7 +286,7 @@ bool register_allocation(LiveRangeMap& lrm)
    for (auto& [sel, group] : groups)
       groups_sorted.push(group);
 
-   if (!group_allocation (lrm, interference, groups_sorted))
+   if (!group_allocation(lrm, interference, groups_sorted))
       return false;
 
    if (!scalar_allocation(lrm, interference))
@@ -291,4 +305,4 @@ bool register_allocation(LiveRangeMap& lrm)
    return true;
 }
 
-}
+} // namespace r600

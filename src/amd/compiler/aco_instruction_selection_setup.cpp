@@ -247,9 +247,10 @@ get_reg_class(isel_context* ctx, RegType type, unsigned components, unsigned bit
 }
 
 void
-setup_vs_output_info(isel_context* ctx, nir_shader* nir,
-                     const aco_vp_output_info* outinfo)
+setup_vs_output_info(isel_context* ctx, nir_shader* nir)
 {
+   const aco_vp_output_info* outinfo = &ctx->program->info.outinfo;
+
    ctx->export_clip_dists = outinfo->export_clip_dists;
    ctx->num_clip_distances = util_bitcount(outinfo->clip_dist_mask);
    ctx->num_cull_distances = util_bitcount(outinfo->cull_dist_mask);
@@ -269,11 +270,7 @@ void
 setup_vs_variables(isel_context* ctx, nir_shader* nir)
 {
    if (ctx->stage == vertex_vs || ctx->stage == vertex_ngg) {
-      setup_vs_output_info(ctx, nir, &ctx->program->info.vs.outinfo);
-
-      /* TODO: NGG streamout */
-      if (ctx->stage.hw == HWStage::NGG)
-         assert(!ctx->program->info.so.num_outputs);
+      setup_vs_output_info(ctx, nir);
    }
 
    if (ctx->stage == vertex_ngg) {
@@ -291,7 +288,7 @@ setup_gs_variables(isel_context* ctx, nir_shader* nir)
       ctx->program->config->lds_size =
          ctx->program->info.gfx9_gs_ring_lds_size; /* Already in units of the alloc granularity */
    } else if (ctx->stage == vertex_geometry_ngg || ctx->stage == tess_eval_geometry_ngg) {
-      setup_vs_output_info(ctx, nir, &ctx->program->info.vs.outinfo);
+      setup_vs_output_info(ctx, nir);
 
       ctx->program->config->lds_size =
          DIV_ROUND_UP(nir->info.shared_size, ctx->program->dev.lds_encoding_granule);
@@ -303,21 +300,14 @@ setup_tcs_info(isel_context* ctx, nir_shader* nir, nir_shader* vs)
 {
    ctx->tcs_in_out_eq = ctx->program->info.vs.tcs_in_out_eq;
    ctx->tcs_temp_only_inputs = ctx->program->info.vs.tcs_temp_only_input_mask;
-   ctx->tcs_num_patches = ctx->program->info.num_tess_patches;
    ctx->program->config->lds_size = ctx->program->info.tcs.num_lds_blocks;
 }
 
 void
 setup_tes_variables(isel_context* ctx, nir_shader* nir)
 {
-   ctx->tcs_num_patches = ctx->program->info.num_tess_patches;
-
    if (ctx->stage == tess_eval_vs || ctx->stage == tess_eval_ngg) {
-      setup_vs_output_info(ctx, nir, &ctx->program->info.tes.outinfo);
-
-      /* TODO: NGG streamout */
-      if (ctx->stage.hw == HWStage::NGG)
-         assert(!ctx->program->info.so.num_outputs);
+      setup_vs_output_info(ctx, nir);
    }
 
    if (ctx->stage == tess_eval_ngg) {
@@ -331,7 +321,7 @@ setup_tes_variables(isel_context* ctx, nir_shader* nir)
 void
 setup_ms_variables(isel_context* ctx, nir_shader* nir)
 {
-   setup_vs_output_info(ctx, nir, &ctx->program->info.ms.outinfo);
+   setup_vs_output_info(ctx, nir);
 
    ctx->program->config->lds_size =
       DIV_ROUND_UP(nir->info.shared_size, ctx->program->dev.lds_encoding_granule);
@@ -415,30 +405,19 @@ init_context(isel_context* ctx, nir_shader* shader)
    ctx->ub_config.max_workgroup_size[1] = 2048;
    ctx->ub_config.max_workgroup_size[2] = 2048;
    for (unsigned i = 0; i < MAX_VERTEX_ATTRIBS; i++) {
-      unsigned attrib_format = ctx->options->key.vs.vertex_attribute_formats[i];
-      unsigned dfmt = attrib_format & 0xf;
-      unsigned nfmt = (attrib_format >> 4) & 0x7;
+      pipe_format format = (pipe_format)ctx->options->key.vs.vertex_attribute_formats[i];
+      const struct util_format_description* desc = util_format_description(format);
 
-      uint32_t max = UINT32_MAX;
-      if (nfmt == V_008F0C_BUF_NUM_FORMAT_UNORM) {
+      uint32_t max;
+      if (desc->channel[0].type != UTIL_FORMAT_TYPE_UNSIGNED) {
+         max = UINT32_MAX;
+      } else if (desc->channel[0].normalized) {
          max = 0x3f800000u;
-      } else if (nfmt == V_008F0C_BUF_NUM_FORMAT_UINT || nfmt == V_008F0C_BUF_NUM_FORMAT_USCALED) {
-         bool uscaled = nfmt == V_008F0C_BUF_NUM_FORMAT_USCALED;
-         switch (dfmt) {
-         case V_008F0C_BUF_DATA_FORMAT_8:
-         case V_008F0C_BUF_DATA_FORMAT_8_8:
-         case V_008F0C_BUF_DATA_FORMAT_8_8_8_8: max = uscaled ? 0x437f0000u : UINT8_MAX; break;
-         case V_008F0C_BUF_DATA_FORMAT_10_10_10_2:
-         case V_008F0C_BUF_DATA_FORMAT_2_10_10_10: max = uscaled ? 0x447fc000u : 1023; break;
-         case V_008F0C_BUF_DATA_FORMAT_10_11_11:
-         case V_008F0C_BUF_DATA_FORMAT_11_11_10: max = uscaled ? 0x44ffe000u : 2047; break;
-         case V_008F0C_BUF_DATA_FORMAT_16:
-         case V_008F0C_BUF_DATA_FORMAT_16_16:
-         case V_008F0C_BUF_DATA_FORMAT_16_16_16_16: max = uscaled ? 0x477fff00u : UINT16_MAX; break;
-         case V_008F0C_BUF_DATA_FORMAT_32:
-         case V_008F0C_BUF_DATA_FORMAT_32_32:
-         case V_008F0C_BUF_DATA_FORMAT_32_32_32:
-         case V_008F0C_BUF_DATA_FORMAT_32_32_32_32: max = uscaled ? 0x4f800000u : UINT32_MAX; break;
+      } else {
+         max = 0;
+         for (unsigned j = 0; j < desc->nr_channels; j++) {
+            uint32_t chan_max = u_uintN_max(desc->channel[0].size);
+            max = MAX2(max, desc->channel[j].pure_integer ? chan_max : fui(chan_max));
          }
       }
       ctx->ub_config.vertex_attrib_max[i] = max;
@@ -536,8 +515,10 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_op_sad_u8x4:
                case nir_op_udot_4x8_uadd:
                case nir_op_sdot_4x8_iadd:
+               case nir_op_sudot_4x8_iadd:
                case nir_op_udot_4x8_uadd_sat:
                case nir_op_sdot_4x8_iadd_sat:
+               case nir_op_sudot_4x8_iadd_sat:
                case nir_op_udot_2x16_uadd:
                case nir_op_sdot_2x16_iadd:
                case nir_op_udot_2x16_uadd_sat:
@@ -616,8 +597,6 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_first_invocation:
                case nir_intrinsic_ballot:
                case nir_intrinsic_bindless_image_samples:
-               case nir_intrinsic_has_input_vertex_amd:
-               case nir_intrinsic_has_input_primitive_amd:
                case nir_intrinsic_load_force_vrs_rates_amd:
                case nir_intrinsic_load_scalar_arg_amd:
                case nir_intrinsic_load_smem_amd: type = RegType::sgpr; break;
@@ -704,7 +683,8 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_load_initial_edgeflags_amd:
                case nir_intrinsic_gds_atomic_add_amd:
                case nir_intrinsic_bvh64_intersect_ray_amd:
-               case nir_intrinsic_load_vector_arg_amd: type = RegType::vgpr; break;
+               case nir_intrinsic_load_vector_arg_amd:
+               case nir_intrinsic_ordered_xfb_counter_add_amd: type = RegType::vgpr; break;
                case nir_intrinsic_load_shared:
                case nir_intrinsic_load_shared2_amd:
                   /* When the result of these loads is only used by cross-lane instructions,
@@ -920,7 +900,7 @@ setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* c
    unsigned scratch_size = 0;
    if (program->stage == gs_copy_vs) {
       assert(shader_count == 1);
-      setup_vs_output_info(&ctx, shaders[0], &program->info.vs.outinfo);
+      setup_vs_output_info(&ctx, shaders[0]);
    } else {
       for (unsigned i = 0; i < shader_count; i++) {
          nir_shader* nir = shaders[i];
@@ -933,6 +913,10 @@ setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* c
 
    ctx.program->config->scratch_bytes_per_wave = align(scratch_size * ctx.program->wave_size, 1024);
 
+   unsigned nir_num_blocks = 0;
+   for (unsigned i = 0; i < shader_count; i++)
+      nir_num_blocks += nir_shader_get_entrypoint(shaders[i])->num_blocks;
+   ctx.program->blocks.reserve(nir_num_blocks * 2);
    ctx.block = ctx.program->create_and_insert_block();
    ctx.block->kind = block_kind_top_level;
 

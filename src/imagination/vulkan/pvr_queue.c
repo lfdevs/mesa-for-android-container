@@ -64,6 +64,8 @@ static VkResult pvr_queue_init(struct pvr_device *device,
    struct pvr_render_ctx *gfx_ctx;
    VkResult result;
 
+   *queue = (struct pvr_queue){ 0 };
+
    result =
       vk_queue_init(&queue->vk, &device->vk, pCreateInfo, index_in_family);
    if (result != VK_SUCCESS)
@@ -90,9 +92,6 @@ static VkResult pvr_queue_init(struct pvr_device *device,
    queue->gfx_ctx = gfx_ctx;
    queue->compute_ctx = compute_ctx;
    queue->transfer_ctx = transfer_ctx;
-
-   for (uint32_t i = 0; i < ARRAY_SIZE(queue->completion); i++)
-      queue->completion[i] = NULL;
 
    return VK_SUCCESS;
 
@@ -147,6 +146,11 @@ err_queues_finish:
 
 static void pvr_queue_finish(struct pvr_queue *queue)
 {
+   for (uint32_t i = 0; i < ARRAY_SIZE(queue->job_dependancy); i++) {
+      if (queue->job_dependancy[i])
+         vk_sync_destroy(&queue->device->vk, queue->job_dependancy[i]);
+   }
+
    for (uint32_t i = 0; i < ARRAY_SIZE(queue->completion); i++) {
       if (queue->completion[i])
          vk_sync_destroy(&queue->device->vk, queue->completion[i]);
@@ -194,6 +198,8 @@ pvr_process_graphics_cmd(struct pvr_device *device,
                          struct pvr_queue *queue,
                          struct pvr_cmd_buffer *cmd_buffer,
                          struct pvr_sub_cmd_gfx *sub_cmd,
+                         struct vk_sync *barrier_geom,
+                         struct vk_sync *barrier_frag,
                          struct vk_sync **waits,
                          uint32_t wait_count,
                          uint32_t *stage_flags,
@@ -202,12 +208,7 @@ pvr_process_graphics_cmd(struct pvr_device *device,
    const struct pvr_framebuffer *framebuffer = sub_cmd->framebuffer;
    struct vk_sync *sync_geom;
    struct vk_sync *sync_frag;
-   uint32_t bo_count = 0;
    VkResult result;
-
-   STACK_ARRAY(struct pvr_winsys_job_bo, bos, framebuffer->attachment_count);
-   if (!bos)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    result = vk_sync_create(&device->vk,
                            &device->pdevice->ws->syncobj_type,
@@ -235,27 +236,15 @@ pvr_process_graphics_cmd(struct pvr_device *device,
    if (sub_cmd->job.run_frag && framebuffer->layers > 1)
       pvr_finishme("Split job submission for framebuffers with > 1 layers");
 
-   /* Get any imported buffers used in framebuffer attachments. */
-   for (uint32_t i = 0U; i < framebuffer->attachment_count; i++) {
-      if (!framebuffer->attachments[i]->image->vma->bo->is_imported)
-         continue;
-
-      bos[bo_count].bo = framebuffer->attachments[i]->image->vma->bo;
-      bos[bo_count].flags = PVR_WINSYS_JOB_BO_FLAG_WRITE;
-      bo_count++;
-   }
-
-   /* This passes ownership of the wait fences to pvr_render_job_submit(). */
    result = pvr_render_job_submit(queue->gfx_ctx,
                                   &sub_cmd->job,
-                                  bos,
-                                  bo_count,
+                                  barrier_geom,
+                                  barrier_frag,
                                   waits,
                                   wait_count,
                                   stage_flags,
                                   sync_geom,
                                   sync_frag);
-   STACK_ARRAY_FINISH(bos);
    if (result != VK_SUCCESS) {
       vk_sync_destroy(&device->vk, sync_geom);
       vk_sync_destroy(&device->vk, sync_frag);
@@ -282,6 +271,7 @@ static VkResult
 pvr_process_compute_cmd(struct pvr_device *device,
                         struct pvr_queue *queue,
                         struct pvr_sub_cmd_compute *sub_cmd,
+                        struct vk_sync *barrier,
                         struct vk_sync **waits,
                         uint32_t wait_count,
                         uint32_t *stage_flags,
@@ -298,9 +288,9 @@ pvr_process_compute_cmd(struct pvr_device *device,
    if (result != VK_SUCCESS)
       return result;
 
-   /* This passes ownership of the wait fences to pvr_compute_job_submit(). */
    result = pvr_compute_job_submit(queue->compute_ctx,
                                    sub_cmd,
+                                   barrier,
                                    waits,
                                    wait_count,
                                    stage_flags,
@@ -323,6 +313,7 @@ static VkResult
 pvr_process_transfer_cmds(struct pvr_device *device,
                           struct pvr_queue *queue,
                           struct pvr_sub_cmd_transfer *sub_cmd,
+                          struct vk_sync *barrier,
                           struct vk_sync **waits,
                           uint32_t wait_count,
                           uint32_t *stage_flags,
@@ -339,10 +330,10 @@ pvr_process_transfer_cmds(struct pvr_device *device,
    if (result != VK_SUCCESS)
       return result;
 
-   /* This passes ownership of the wait fences to pvr_transfer_job_submit(). */
    result = pvr_transfer_job_submit(device,
                                     queue->transfer_ctx,
                                     sub_cmd,
+                                    barrier,
                                     waits,
                                     wait_count,
                                     stage_flags,
@@ -359,6 +350,193 @@ pvr_process_transfer_cmds(struct pvr_device *device,
    completions[PVR_JOB_TYPE_TRANSFER] = sync;
 
    return result;
+}
+
+static VkResult pvr_process_event_cmd_barrier(
+   struct pvr_device *device,
+   struct pvr_sub_cmd_event *sub_cmd,
+   struct vk_sync *barriers[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *per_cmd_buffer_syncobjs[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *per_submit_syncobjs[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *queue_syncobjs[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *previous_queue_syncobjs[static PVR_JOB_TYPE_MAX])
+{
+   const uint32_t src_mask = sub_cmd->barrier.wait_for_stage_mask;
+   const uint32_t dst_mask = sub_cmd->barrier.wait_at_stage_mask;
+   const bool in_render_pass = sub_cmd->barrier.in_render_pass;
+   struct vk_sync *new_barriers[PVR_JOB_TYPE_MAX] = { 0 };
+   struct vk_sync *completions[PVR_JOB_TYPE_MAX] = { 0 };
+   struct vk_sync *src_syncobjs[PVR_JOB_TYPE_MAX];
+   uint32_t src_syncobj_count = 0;
+   VkResult result;
+
+   assert(!(src_mask & ~PVR_PIPELINE_STAGE_ALL_BITS));
+   assert(!(dst_mask & ~PVR_PIPELINE_STAGE_ALL_BITS));
+
+   /* TODO: We're likely over synchronizing here, but the kernel doesn't
+    * guarantee that jobs submitted on a context will execute and complete in
+    * order, even though in practice they will, so we play it safe and don't
+    * make any assumptions. If the kernel starts to offer this guarantee then
+    * remove the extra dependencies being added here.
+    */
+
+   u_foreach_bit (stage, src_mask) {
+      struct vk_sync *syncobj;
+
+      syncobj = per_cmd_buffer_syncobjs[stage];
+
+      if (!in_render_pass & !syncobj) {
+         if (per_submit_syncobjs[stage])
+            syncobj = per_submit_syncobjs[stage];
+         else if (queue_syncobjs[stage])
+            syncobj = queue_syncobjs[stage];
+         else if (previous_queue_syncobjs[stage])
+            syncobj = previous_queue_syncobjs[stage];
+      }
+
+      if (!syncobj)
+         continue;
+
+      src_syncobjs[src_syncobj_count++] = syncobj;
+   }
+
+   /* No previous src jobs that need finishing so no need for a barrier. */
+   if (src_syncobj_count == 0)
+      return VK_SUCCESS;
+
+   u_foreach_bit (stage, dst_mask) {
+      struct vk_sync *completion;
+
+      result = vk_sync_create(&device->vk,
+                              &device->pdevice->ws->syncobj_type,
+                              0U,
+                              0UL,
+                              &completion);
+      if (result != VK_SUCCESS)
+         goto err_destroy_completions;
+
+      result = device->ws->ops->null_job_submit(device->ws,
+                                                src_syncobjs,
+                                                src_syncobj_count,
+                                                completion);
+      if (result != VK_SUCCESS) {
+         vk_sync_destroy(&device->vk, completion);
+
+         goto err_destroy_completions;
+      }
+
+      completions[stage] = completion;
+   }
+
+   u_foreach_bit (stage, dst_mask) {
+      struct vk_sync *barrier_src_syncobjs[2];
+      uint32_t barrier_src_syncobj_count = 0;
+      struct vk_sync *barrier;
+      VkResult result;
+
+      assert(completions[stage]);
+      barrier_src_syncobjs[barrier_src_syncobj_count++] = completions[stage];
+
+      /* If there is a previous barrier we want to merge it with the new one.
+       *
+       * E.g.
+       *    A <compute>, B <compute>,
+       *       X <barrier src=compute, dst=graphics>,
+       *    C <transfer>
+       *       Y <barrier src=transfer, dst=graphics>,
+       *    D <graphics>
+       *
+       * X barriers A and B at D. Y barriers C at D. So we want to merge both
+       * X and Y graphics vk_sync barriers to pass to D.
+       *
+       * Note that this is the same as:
+       *    A <compute>, B <compute>, C <transfer>
+       *       X <barrier src=compute, dst=graphics>,
+       *       Y <barrier src=transfer, dst=graphics>,
+       *    D <graphics>
+       *
+       */
+      if (barriers[stage])
+         barrier_src_syncobjs[barrier_src_syncobj_count++] = barriers[stage];
+
+      result = vk_sync_create(&device->vk,
+                              &device->pdevice->ws->syncobj_type,
+                              0U,
+                              0UL,
+                              &barrier);
+      if (result != VK_SUCCESS)
+         goto err_destroy_new_barriers;
+
+      result = device->ws->ops->null_job_submit(device->ws,
+                                                barrier_src_syncobjs,
+                                                barrier_src_syncobj_count,
+                                                barrier);
+      if (result != VK_SUCCESS) {
+         vk_sync_destroy(&device->vk, barrier);
+
+         goto err_destroy_new_barriers;
+      }
+
+      new_barriers[stage] = barrier;
+   }
+
+   u_foreach_bit (stage, dst_mask) {
+      if (per_cmd_buffer_syncobjs[stage])
+         vk_sync_destroy(&device->vk, per_cmd_buffer_syncobjs[stage]);
+
+      per_cmd_buffer_syncobjs[stage] = completions[stage];
+
+      if (barriers[stage])
+         vk_sync_destroy(&device->vk, barriers[stage]);
+
+      barriers[stage] = new_barriers[stage];
+   }
+
+   return VK_SUCCESS;
+
+err_destroy_new_barriers:
+   u_foreach_bit (stage, dst_mask) {
+      if (new_barriers[stage])
+         vk_sync_destroy(&device->vk, new_barriers[stage]);
+   }
+
+err_destroy_completions:
+   u_foreach_bit (stage, dst_mask) {
+      if (completions[stage])
+         vk_sync_destroy(&device->vk, completions[stage]);
+   }
+
+   return result;
+}
+
+static VkResult pvr_process_event_cmd(
+   struct pvr_device *device,
+   struct pvr_sub_cmd_event *sub_cmd,
+   struct vk_sync *barriers[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *per_cmd_buffer_syncobjs[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *per_submit_syncobjs[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *queue_syncobjs[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *previous_queue_syncobjs[static PVR_JOB_TYPE_MAX])
+{
+   switch (sub_cmd->type) {
+   case PVR_EVENT_TYPE_SET:
+   case PVR_EVENT_TYPE_RESET:
+   case PVR_EVENT_TYPE_WAIT:
+      pvr_finishme("Add support for event sub command type: %d", sub_cmd->type);
+      return VK_SUCCESS;
+
+   case PVR_EVENT_TYPE_BARRIER:
+      return pvr_process_event_cmd_barrier(device,
+                                           sub_cmd,
+                                           barriers,
+                                           per_cmd_buffer_syncobjs,
+                                           per_submit_syncobjs,
+                                           queue_syncobjs,
+                                           previous_queue_syncobjs);
+
+   default:
+      unreachable("Invalid event sub-command type.");
+   };
 }
 
 static VkResult
@@ -453,15 +631,33 @@ pvr_set_fence_payload(struct pvr_device *device,
    return result;
 }
 
-static VkResult
-pvr_process_cmd_buffer(struct pvr_device *device,
-                       struct pvr_queue *queue,
-                       VkCommandBuffer commandBuffer,
-                       struct vk_sync **waits,
-                       uint32_t wait_count,
-                       uint32_t *stage_flags,
-                       struct vk_sync *completions[static PVR_JOB_TYPE_MAX])
+static void pvr_update_syncobjs(struct pvr_device *device,
+                                struct vk_sync *src[static PVR_JOB_TYPE_MAX],
+                                struct vk_sync *dst[static PVR_JOB_TYPE_MAX])
 {
+   for (uint32_t i = 0; i < PVR_JOB_TYPE_MAX; i++) {
+      if (src[i]) {
+         if (dst[i])
+            vk_sync_destroy(&device->vk, dst[i]);
+
+         dst[i] = src[i];
+      }
+   }
+}
+
+static VkResult pvr_process_cmd_buffer(
+   struct pvr_device *device,
+   struct pvr_queue *queue,
+   VkCommandBuffer commandBuffer,
+   struct vk_sync *barriers[static PVR_JOB_TYPE_MAX],
+   struct vk_sync **waits,
+   uint32_t wait_count,
+   uint32_t *stage_flags,
+   struct vk_sync *per_submit_syncobjs[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *queue_syncobjs[static PVR_JOB_TYPE_MAX],
+   struct vk_sync *previous_queue_syncobjs[static PVR_JOB_TYPE_MAX])
+{
+   struct vk_sync *per_cmd_buffer_syncobjs[PVR_JOB_TYPE_MAX] = {};
    PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
    VkResult result;
 
@@ -477,35 +673,49 @@ pvr_process_cmd_buffer(struct pvr_device *device,
                                            queue,
                                            cmd_buffer,
                                            &sub_cmd->gfx,
+                                           barriers[PVR_JOB_TYPE_GEOM],
+                                           barriers[PVR_JOB_TYPE_FRAG],
                                            waits,
                                            wait_count,
                                            stage_flags,
-                                           completions);
+                                           per_cmd_buffer_syncobjs);
          break;
 
       case PVR_SUB_CMD_TYPE_COMPUTE:
          result = pvr_process_compute_cmd(device,
                                           queue,
                                           &sub_cmd->compute,
+                                          barriers[PVR_JOB_TYPE_COMPUTE],
                                           waits,
                                           wait_count,
                                           stage_flags,
-                                          completions);
+                                          per_cmd_buffer_syncobjs);
          break;
 
       case PVR_SUB_CMD_TYPE_TRANSFER:
          result = pvr_process_transfer_cmds(device,
                                             queue,
                                             &sub_cmd->transfer,
+                                            barriers[PVR_JOB_TYPE_TRANSFER],
                                             waits,
                                             wait_count,
                                             stage_flags,
-                                            completions);
+                                            per_cmd_buffer_syncobjs);
+         break;
+
+      case PVR_SUB_CMD_TYPE_EVENT:
+         result = pvr_process_event_cmd(device,
+                                        &sub_cmd->event,
+                                        barriers,
+                                        per_cmd_buffer_syncobjs,
+                                        per_submit_syncobjs,
+                                        queue_syncobjs,
+                                        previous_queue_syncobjs);
          break;
 
       default:
-         pvr_finishme("Unsupported sub-command type %d", sub_cmd->type);
-         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+         mesa_loge("Unsupported sub-command type %d", sub_cmd->type);
+         result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
       }
 
       if (result != VK_SUCCESS) {
@@ -515,6 +725,8 @@ pvr_process_cmd_buffer(struct pvr_device *device,
 
       p_atomic_inc(&device->global_queue_job_count);
    }
+
+   pvr_update_syncobjs(device, per_cmd_buffer_syncobjs, per_submit_syncobjs);
 
    return VK_SUCCESS;
 }
@@ -573,20 +785,6 @@ err_destroy_completion_syncs:
    return result;
 }
 
-static void pvr_update_syncobjs(struct pvr_device *device,
-                                struct vk_sync *src[static PVR_JOB_TYPE_MAX],
-                                struct vk_sync *dst[static PVR_JOB_TYPE_MAX])
-{
-   for (uint32_t i = 0; i < PVR_JOB_TYPE_MAX; i++) {
-      if (src[i]) {
-         if (dst[i])
-            vk_sync_destroy(&device->vk, dst[i]);
-
-         dst[i] = src[i];
-      }
-   }
-}
-
 VkResult pvr_QueueSubmit(VkQueue _queue,
                          uint32_t submitCount,
                          const VkSubmitInfo *pSubmits,
@@ -625,10 +823,13 @@ VkResult pvr_QueueSubmit(VkQueue _queue,
             result = pvr_process_cmd_buffer(device,
                                             queue,
                                             desc->pCommandBuffers[j],
+                                            queue->job_dependancy,
                                             waits,
                                             wait_count,
                                             stage_flags,
-                                            per_submit_completion_syncobjs);
+                                            per_submit_completion_syncobjs,
+                                            completion_syncobjs,
+                                            queue->completion);
             if (result != VK_SUCCESS)
                return result;
          }

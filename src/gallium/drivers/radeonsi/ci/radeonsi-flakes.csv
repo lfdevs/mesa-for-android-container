@@ -1,0 +1,14 @@
+# piglit
+
+glx@glx-visuals-depth -pixmap
+glx@glx-visuals-stencil -pixmap
+spec@egl_mesa_configless_context@basic
+glx@glx-visuals-depth -pixmap
+glx@glx-visuals-stencil -pixmap
+spec@egl_mesa_configless_context@basic
+spec@egl_chromium_sync_control@conformance
+spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
+
+# glcts
+
+KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup

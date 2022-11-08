@@ -26,6 +26,28 @@
 #include "ir_optimization.h"
 #include "ir_rvalue_visitor.h"
 
+enum lower_packing_builtins_op {
+   LOWER_PACK_UNPACK_NONE               = 0x0000,
+
+   LOWER_PACK_SNORM_2x16                = 0x0001,
+   LOWER_UNPACK_SNORM_2x16              = 0x0002,
+
+   LOWER_PACK_UNORM_2x16                = 0x0004,
+   LOWER_UNPACK_UNORM_2x16              = 0x0008,
+
+   LOWER_PACK_HALF_2x16                 = 0x0010,
+   LOWER_UNPACK_HALF_2x16               = 0x0020,
+
+   LOWER_PACK_SNORM_4x8                 = 0x0040,
+   LOWER_UNPACK_SNORM_4x8               = 0x0080,
+
+   LOWER_PACK_UNORM_4x8                 = 0x0100,
+   LOWER_UNPACK_UNORM_4x8               = 0x0200,
+
+   LOWER_PACK_USE_BFI                   = 0x0400,
+   LOWER_PACK_USE_BFE                   = 0x0800,
+};
+
 namespace {
 
 using namespace ir_builder;
@@ -1299,12 +1321,31 @@ private:
 
 /**
  * \brief Lower the builtin packing functions.
- *
- * \param op_mask is a bitmask of `enum lower_packing_builtins_op`.
  */
 bool
-lower_packing_builtins(exec_list *instructions, int op_mask)
+lower_packing_builtins(exec_list *instructions,
+                       bool has_shading_language_packing,
+                       bool has_gpu_shader5,
+                       bool has_half_float_packing)
 {
+   if (!has_shading_language_packing)
+      return false;
+
+   int op_mask = LOWER_PACK_SNORM_2x16 |
+                 LOWER_UNPACK_SNORM_2x16 |
+                 LOWER_PACK_UNORM_2x16 |
+                 LOWER_UNPACK_UNORM_2x16 |
+                 LOWER_PACK_SNORM_4x8 |
+                 LOWER_UNPACK_SNORM_4x8 |
+                 LOWER_UNPACK_UNORM_4x8 |
+                 LOWER_PACK_UNORM_4x8;
+
+   if (has_gpu_shader5)
+      op_mask |= LOWER_PACK_USE_BFI | LOWER_PACK_USE_BFE;
+
+   if (!has_half_float_packing)
+      op_mask |= LOWER_PACK_HALF_2x16 | LOWER_UNPACK_HALF_2x16;
+
    lower_packing_builtins_visitor v(op_mask);
    visit_list_elements(&v, instructions, true);
    return v.get_progress();

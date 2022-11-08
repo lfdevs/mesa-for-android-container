@@ -68,29 +68,66 @@ pvr_pack_tex_state(struct pvr_device *device,
                    uint64_t state[static const ROGUE_NUM_TEXSTATE_IMAGE_WORDS])
 {
    const struct pvr_device_info *dev_info = &device->pdevice->dev_info;
-   uint32_t texture_type;
+   enum pvr_memlayout mem_layout;
+   VkImageViewType iview_type;
+
+   if (info->type == VK_IMAGE_VIEW_TYPE_1D &&
+       info->mem_layout == PVR_MEMLAYOUT_LINEAR) {
+      /* Change the memory layout to twiddled as there isn't a TEXSTATE_TEXTYPE
+       * for 1D linear and 1D twiddled is equivalent.
+       */
+      mem_layout = PVR_MEMLAYOUT_TWIDDLED;
+   } else {
+      mem_layout = info->mem_layout;
+   }
+
+   if (info->is_cube && info->tex_state_type != PVR_TEXTURE_STATE_SAMPLE)
+      iview_type = VK_IMAGE_VIEW_TYPE_2D;
+   else
+      iview_type = info->type;
 
    pvr_csb_pack (&state[0], TEXSTATE_IMAGE_WORD0, word0) {
-      /* Determine texture type */
-      if (info->is_cube && info->tex_state_type == PVR_TEXTURE_STATE_SAMPLE) {
-         word0.textype = texture_type = PVRX(TEXSTATE_TEXTYPE_CUBE);
-      } else if (info->mem_layout == PVR_MEMLAYOUT_TWIDDLED ||
-                 info->mem_layout == PVR_MEMLAYOUT_3DTWIDDLED) {
-         if (info->type == VK_IMAGE_VIEW_TYPE_3D) {
-            word0.textype = texture_type = PVRX(TEXSTATE_TEXTYPE_3D);
-         } else if (info->type == VK_IMAGE_VIEW_TYPE_1D ||
-                    info->type == VK_IMAGE_VIEW_TYPE_1D_ARRAY) {
-            word0.textype = texture_type = PVRX(TEXSTATE_TEXTYPE_1D);
-         } else if (info->type == VK_IMAGE_VIEW_TYPE_2D ||
-                    info->type == VK_IMAGE_VIEW_TYPE_2D_ARRAY) {
-            word0.textype = texture_type = PVRX(TEXSTATE_TEXTYPE_2D);
-         } else {
+      if (mem_layout == PVR_MEMLAYOUT_LINEAR) {
+         switch (iview_type) {
+         case VK_IMAGE_VIEW_TYPE_2D:
+         case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
+            word0.textype = PVRX(TEXSTATE_TEXTYPE_STRIDE);
+            break;
+
+         default:
             return vk_error(device, VK_ERROR_FORMAT_NOT_SUPPORTED);
          }
-      } else if (info->mem_layout == PVR_MEMLAYOUT_LINEAR) {
-         word0.textype = texture_type = PVRX(TEXSTATE_TEXTYPE_STRIDE);
+      } else if (mem_layout == PVR_MEMLAYOUT_TWIDDLED) {
+         switch (iview_type) {
+         case VK_IMAGE_VIEW_TYPE_1D:
+         case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
+            word0.textype = PVRX(TEXSTATE_TEXTYPE_1D);
+            break;
+
+         case VK_IMAGE_VIEW_TYPE_2D:
+         case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
+            word0.textype = PVRX(TEXSTATE_TEXTYPE_2D);
+            break;
+
+         case VK_IMAGE_VIEW_TYPE_CUBE:
+         case VK_IMAGE_VIEW_TYPE_CUBE_ARRAY:
+            word0.textype = PVRX(TEXSTATE_TEXTYPE_CUBE);
+            break;
+
+         default:
+            return vk_error(device, VK_ERROR_FORMAT_NOT_SUPPORTED);
+         }
+      } else if (mem_layout == PVR_MEMLAYOUT_3DTWIDDLED) {
+         switch (iview_type) {
+         case VK_IMAGE_VIEW_TYPE_3D:
+            word0.textype = PVRX(TEXSTATE_TEXTYPE_3D);
+            break;
+
+         default:
+            return vk_error(device, VK_ERROR_FORMAT_NOT_SUPPORTED);
+         }
       } else {
-         return vk_error(device, VK_ERROR_FORMAT_NOT_SUPPORTED);
+         unreachable("Unknown memory layout");
       }
 
       word0.texformat = pvr_get_tex_format(info->format);
@@ -128,13 +165,12 @@ pvr_pack_tex_state(struct pvr_device *device,
       }
 
       word0.width = info->extent.width - 1;
-      if (info->type != VK_IMAGE_VIEW_TYPE_1D &&
-          info->type != VK_IMAGE_VIEW_TYPE_1D_ARRAY)
+      if (iview_type != VK_IMAGE_VIEW_TYPE_1D &&
+          iview_type != VK_IMAGE_VIEW_TYPE_1D_ARRAY)
          word0.height = info->extent.height - 1;
    }
 
-   /* Texture type specific stuff (word 1) */
-   if (texture_type == PVRX(TEXSTATE_TEXTYPE_STRIDE)) {
+   if (mem_layout == PVR_MEMLAYOUT_LINEAR) {
       pvr_csb_pack (&state[1], TEXSTATE_STRIDE_IMAGE_WORD1, word1) {
          assert(info->stride > 0U);
          word1.stride = info->stride - 1U;
@@ -167,13 +203,13 @@ pvr_pack_tex_state(struct pvr_device *device,
          word1.mipmaps_present = info->mipmaps_present;
          word1.baselevel = info->base_level;
 
-         if (info->extent.depth > 0) {
-            word1.depth = info->extent.depth - 1;
+         if (iview_type == VK_IMAGE_VIEW_TYPE_3D) {
+            if (info->extent.depth > 0)
+               word1.depth = info->extent.depth - 1;
          } else if (PVR_HAS_FEATURE(dev_info, tpu_array_textures)) {
             uint32_t array_layers = info->array_size;
 
-            if (info->type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY &&
-                info->tex_state_type == PVR_TEXTURE_STATE_SAMPLE)
+            if (iview_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)
                array_layers /= 6;
 
             word1.depth = array_layers - 1;

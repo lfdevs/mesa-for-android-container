@@ -12,8 +12,6 @@
 #include <util/ralloc.h>
 #include <utility>
 
-#include "drm-uapi/i915_drm.h"
-
 #include <pps/pps.h>
 #include <pps/pps_device.h>
 

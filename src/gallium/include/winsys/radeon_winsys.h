@@ -83,6 +83,34 @@ enum radeon_bo_flag
   RADEON_FLAG_MALL_NOALLOC = (1 << 11), /* don't cache in the infinity cache */
 };
 
+static inline void
+si_res_print_flags(enum radeon_bo_flag flags) {
+   if (flags & RADEON_FLAG_GTT_WC)
+      fprintf(stderr, "GTT_WC ");
+   if (flags & RADEON_FLAG_NO_CPU_ACCESS)
+      fprintf(stderr, "NO_CPU_ACCESS ");
+   if (flags & RADEON_FLAG_NO_SUBALLOC)
+      fprintf(stderr, "NO_SUBALLOC ");
+   if (flags & RADEON_FLAG_SPARSE)
+      fprintf(stderr, "SPARSE ");
+   if (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING)
+      fprintf(stderr, "NO_INTERPROCESS_SHARING ");
+   if (flags & RADEON_FLAG_READ_ONLY)
+      fprintf(stderr, "READ_ONLY ");
+   if (flags & RADEON_FLAG_32BIT)
+      fprintf(stderr, "32BIT ");
+   if (flags & RADEON_FLAG_ENCRYPTED)
+      fprintf(stderr, "ENCRYPTED ");
+   if (flags & RADEON_FLAG_GL2_BYPASS)
+      fprintf(stderr, "GL2_BYPASS ");
+   if (flags & RADEON_FLAG_DRIVER_INTERNAL)
+      fprintf(stderr, "DRIVER_INTERNAL ");
+   if (flags & RADEON_FLAG_DISCARDABLE)
+      fprintf(stderr, "DISCARDABLE ");
+   if (flags & RADEON_FLAG_MALL_NOALLOC)
+      fprintf(stderr, "MALL_NOALLOC ");
+}
+
 enum radeon_map_flags
 {
    /* Indicates that the caller will unmap the buffer.
@@ -129,6 +157,16 @@ enum radeon_ctx_priority
    RADEON_CTX_PRIORITY_HIGH,
    RADEON_CTX_PRIORITY_REALTIME,
 };
+
+enum radeon_ctx_pstate
+{
+   RADEON_CTX_PSTATE_NONE = 0,
+   RADEON_CTX_PSTATE_STANDARD,
+   RADEON_CTX_PSTATE_MIN_SCLK,
+   RADEON_CTX_PSTATE_MIN_MCLK,
+   RADEON_CTX_PSTATE_PEAK,
+};
+
 
 /* Each group of two has the same priority. */
 #define RADEON_PRIO_FENCE_TRACE (1 << 0)
@@ -503,7 +541,7 @@ struct radeon_winsys {
                      struct radeon_winsys_ctx *ctx, enum amd_ip_type amd_ip_type,
                      void (*flush)(void *ctx, unsigned flags,
                                    struct pipe_fence_handle **fence),
-                     void *flush_ctx, bool stop_exec_on_failure);
+                     void *flush_ctx, bool allow_context_lost);
 
    /**
     * Set or change the CS preamble, which is a sequence of packets that is executed before
@@ -705,6 +743,11 @@ struct radeon_winsys {
     * Secure context
     */
    bool (*cs_is_secure)(struct radeon_cmdbuf *cs);
+
+   /**
+    * Stable pstate
+    */
+   bool (*cs_set_pstate)(struct radeon_cmdbuf *cs, enum radeon_ctx_pstate state);
 };
 
 static inline bool radeon_emitted(struct radeon_cmdbuf *cs, unsigned num_dw)

@@ -42,6 +42,7 @@
 #include "mipmap.h"
 #include "texcompress.h"
 #include "util/rgtc.h"
+#include "util/format/u_format_rgtc.h"
 #include "texcompress_rgtc.h"
 #include "texstore.h"
 
@@ -53,22 +54,22 @@ static void extractsrc_u( GLubyte srcpixels[4][4], const GLubyte *srcaddr,
    for (j = 0; j < numypixels; j++) {
       curaddr = srcaddr + j * srcRowStride * comps;
       for (i = 0; i < numxpixels; i++) {
-	 srcpixels[j][i] = *curaddr;
-	 curaddr += comps;
+         srcpixels[j][i] = *curaddr;
+         curaddr += comps;
       }
    }
 }
 
-static void extractsrc_s( GLbyte srcpixels[4][4], const GLfloat *srcaddr,
+static void extractsrc_s( GLbyte srcpixels[4][4], const GLbyte *srcaddr,
 			  GLint srcRowStride, GLint numxpixels, GLint numypixels, GLint comps)
 {
    GLubyte i, j;
-   const GLfloat *curaddr;
+   const GLbyte *curaddr;
    for (j = 0; j < numypixels; j++) {
       curaddr = srcaddr + j * srcRowStride * comps;
       for (i = 0; i < numxpixels; i++) {
-	 srcpixels[j][i] = FLOAT_TO_BYTE_TEX(*curaddr);
-	 curaddr += comps;
+         srcpixels[j][i] = *curaddr;
+         curaddr += comps;
       }
    }
 }
@@ -112,12 +113,12 @@ _mesa_texstore_red_rgtc1(TEXSTORE_PARAMS)
       else numypixels = srcHeight - j;
       srcaddr = tempImage + j * srcWidth;
       for (i = 0; i < srcWidth; i += 4) {
-	 if (srcWidth > i + 3) numxpixels = 4;
-	 else numxpixels = srcWidth - i;
-	 extractsrc_u(srcpixels, srcaddr, srcWidth, numxpixels, numypixels, 1);
-	 util_format_unsigned_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
-	 srcaddr += numxpixels;
-	 blkaddr += 8;
+         if (srcWidth > i + 3) numxpixels = 4;
+         else numxpixels = srcWidth - i;
+         extractsrc_u(srcpixels, srcaddr, srcWidth, numxpixels, numypixels, 1);
+         util_format_unsigned_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
+         srcaddr += numxpixels;
+         blkaddr += 8;
       }
       blkaddr += dstRowDiff;
    }
@@ -131,26 +132,26 @@ GLboolean
 _mesa_texstore_signed_red_rgtc1(TEXSTORE_PARAMS)
 {
    GLbyte *dst;
-   const GLfloat *tempImage = NULL;
+   const GLbyte *tempImage = NULL;
    int i, j;
    int numxpixels, numypixels;
-   const GLfloat *srcaddr;
+   const GLbyte *srcaddr;
    GLbyte srcpixels[4][4];
    GLbyte *blkaddr;
    GLint dstRowDiff, redRowStride;
-   GLfloat *tempImageSlices[1];
+   GLbyte *tempImageSlices[1];
 
    assert(dstFormat == MESA_FORMAT_R_RGTC1_SNORM ||
           dstFormat == MESA_FORMAT_L_LATC1_SNORM);
 
-   redRowStride = 1 * srcWidth * sizeof(GLfloat);
-   tempImage = malloc(srcWidth * srcHeight * 1 * sizeof(GLfloat));
+   redRowStride = 1 * srcWidth * sizeof(GLbyte);
+   tempImage = malloc(srcWidth * srcHeight * 1 * sizeof(GLbyte));
    if (!tempImage)
       return GL_FALSE; /* out of memory */
-   tempImageSlices[0] = (GLfloat *) tempImage;
+   tempImageSlices[0] = (GLbyte *) tempImage;
    _mesa_texstore(ctx, dims,
                   baseInternalFormat,
-                  MESA_FORMAT_R_FLOAT32,
+                  MESA_FORMAT_R_SNORM8,
                   redRowStride, (GLubyte **)tempImageSlices,
                   srcWidth, srcHeight, srcDepth,
                   srcFormat, srcType, srcAddr,
@@ -165,12 +166,12 @@ _mesa_texstore_signed_red_rgtc1(TEXSTORE_PARAMS)
       else numypixels = srcHeight - j;
       srcaddr = tempImage + j * srcWidth;
       for (i = 0; i < srcWidth; i += 4) {
-	 if (srcWidth > i + 3) numxpixels = 4;
-	 else numxpixels = srcWidth - i;
-	 extractsrc_s(srcpixels, srcaddr, srcWidth, numxpixels, numypixels, 1);
-	 util_format_signed_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
-	 srcaddr += numxpixels;
-	 blkaddr += 8;
+         if (srcWidth > i + 3) numxpixels = 4;
+         else numxpixels = srcWidth - i;
+         extractsrc_s(srcpixels, srcaddr, srcWidth, numxpixels, numypixels, 1);
+         util_format_signed_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
+         srcaddr += numxpixels;
+         blkaddr += 8;
       }
       blkaddr += dstRowDiff;
    }
@@ -224,18 +225,18 @@ _mesa_texstore_rg_rgtc2(TEXSTORE_PARAMS)
       else numypixels = srcHeight - j;
       srcaddr = tempImage + j * srcWidth * 2;
       for (i = 0; i < srcWidth; i += 4) {
-	 if (srcWidth > i + 3) numxpixels = 4;
-	 else numxpixels = srcWidth - i;
-	 extractsrc_u(srcpixels, srcaddr, srcWidth, numxpixels, numypixels, 2);
-	 util_format_unsigned_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
+         if (srcWidth > i + 3) numxpixels = 4;
+         else numxpixels = srcWidth - i;
+         extractsrc_u(srcpixels, srcaddr, srcWidth, numxpixels, numypixels, 2);
+         util_format_unsigned_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
 
-	 blkaddr += 8;
-	 extractsrc_u(srcpixels, (GLubyte *)srcaddr + 1, srcWidth, numxpixels, numypixels, 2);
-	 util_format_unsigned_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
+         blkaddr += 8;
+         extractsrc_u(srcpixels, (GLubyte *)srcaddr + 1, srcWidth, numxpixels, numypixels, 2);
+         util_format_unsigned_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
 
-	 blkaddr += 8;
+         blkaddr += 8;
 
-	 srcaddr += numxpixels * 2;
+         srcaddr += numxpixels * 2;
       }
       blkaddr += dstRowDiff;
    }
@@ -249,29 +250,29 @@ GLboolean
 _mesa_texstore_signed_rg_rgtc2(TEXSTORE_PARAMS)
 {
    GLbyte *dst;
-   const GLfloat *tempImage = NULL;
+   const GLbyte *tempImage = NULL;
    int i, j;
    int numxpixels, numypixels;
-   const GLfloat *srcaddr;
+   const GLbyte *srcaddr;
    GLbyte srcpixels[4][4];
    GLbyte *blkaddr;
    GLint dstRowDiff, rgRowStride;
    mesa_format tempFormat;
-   GLfloat *tempImageSlices[1];
+   GLbyte *tempImageSlices[1];
 
    assert(dstFormat == MESA_FORMAT_RG_RGTC2_SNORM ||
           dstFormat == MESA_FORMAT_LA_LATC2_SNORM);
 
    if (baseInternalFormat == GL_RG)
-      tempFormat = MESA_FORMAT_RG_FLOAT32;
+      tempFormat = MESA_FORMAT_RG_SNORM8;
    else
-      tempFormat = MESA_FORMAT_LA_FLOAT32;
+      tempFormat = MESA_FORMAT_LA_SNORM8;
 
-   rgRowStride = 2 * srcWidth * sizeof(GLfloat);
-   tempImage = malloc(srcWidth * srcHeight * 2 * sizeof(GLfloat));
+   rgRowStride = 2 * srcWidth * sizeof(GLbyte);
+   tempImage = malloc(srcWidth * srcHeight * 2 * sizeof(GLbyte));
    if (!tempImage)
       return GL_FALSE; /* out of memory */
-   tempImageSlices[0] = (GLfloat *) tempImage;
+   tempImageSlices[0] = (GLbyte *) tempImage;
    _mesa_texstore(ctx, dims,
                   baseInternalFormat,
                   tempFormat,
@@ -289,19 +290,18 @@ _mesa_texstore_signed_rg_rgtc2(TEXSTORE_PARAMS)
       else numypixels = srcHeight - j;
       srcaddr = tempImage + j * srcWidth * 2;
       for (i = 0; i < srcWidth; i += 4) {
-	 if (srcWidth > i + 3) numxpixels = 4;
-	 else numxpixels = srcWidth - i;
+         if (srcWidth > i + 3) numxpixels = 4;
+         else numxpixels = srcWidth - i;
 
-	 extractsrc_s(srcpixels, srcaddr, srcWidth, numxpixels, numypixels, 2);
-	 util_format_signed_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
-	 blkaddr += 8;
+         extractsrc_s(srcpixels, srcaddr, srcWidth, numxpixels, numypixels, 2);
+         util_format_signed_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
+         blkaddr += 8;
 
-	 extractsrc_s(srcpixels, srcaddr + 1, srcWidth, numxpixels, numypixels, 2);
-	 util_format_signed_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
-	 blkaddr += 8;
+         extractsrc_s(srcpixels, srcaddr + 1, srcWidth, numxpixels, numypixels, 2);
+         util_format_signed_encode_rgtc_ubyte(blkaddr, srcpixels, numxpixels, numypixels);
+         blkaddr += 8;
 
-	 srcaddr += numxpixels * 2;
-
+         srcaddr += numxpixels * 2;
       }
       blkaddr += dstRowDiff;
    }
@@ -454,5 +454,48 @@ _mesa_get_compressed_rgtc_func(mesa_format format)
       return fetch_signed_la_latc2;
    default:
       return NULL;
+   }
+}
+
+void
+_mesa_unpack_rgtc(uint8_t *dst_row,
+                  unsigned dst_stride,
+                  const uint8_t *src_row,
+                  unsigned src_stride,
+                  unsigned src_width,
+                  unsigned src_height,
+                  mesa_format format)
+{
+   switch (format) {
+   case MESA_FORMAT_R_RGTC1_UNORM:
+   case MESA_FORMAT_L_LATC1_UNORM:
+      util_format_rgtc1_unorm_unpack_r_8unorm(dst_row, dst_stride,
+                                              src_row, src_stride,
+                                              src_width, src_height);
+      break;
+
+   case MESA_FORMAT_R_RGTC1_SNORM:
+   case MESA_FORMAT_L_LATC1_SNORM:
+      util_format_rgtc1_snorm_unpack_r_8snorm((int8_t *)dst_row, dst_stride,
+                                              src_row, src_stride,
+                                              src_width, src_height);
+      break;
+
+   case MESA_FORMAT_RG_RGTC2_UNORM:
+   case MESA_FORMAT_LA_LATC2_UNORM:
+      util_format_rgtc2_unorm_unpack_rg_8unorm(dst_row, dst_stride,
+                                               src_row, src_stride,
+                                               src_width, src_height);
+      break;
+
+   case MESA_FORMAT_RG_RGTC2_SNORM:
+   case MESA_FORMAT_LA_LATC2_SNORM:
+      util_format_rgtc2_snorm_unpack_rg_8snorm((int8_t *)dst_row, dst_stride,
+                                               src_row, src_stride,
+                                               src_width, src_height);
+      break;
+
+   default:
+      unreachable("unexpected format");
    }
 }

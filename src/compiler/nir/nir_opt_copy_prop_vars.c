@@ -1255,6 +1255,9 @@ copy_prop_vars_cf_node(struct copy_prop_var_state *state,
 
       invalidate_copies_for_cf_node(state, copies, cf_node);
 
+      util_dynarray_fini(&then_copies);
+      util_dynarray_fini(&else_copies);
+
       break;
    }
 
@@ -1272,6 +1275,8 @@ copy_prop_vars_cf_node(struct copy_prop_var_state *state,
 
       foreach_list_typed_safe(nir_cf_node, cf_node, node, &loop->body)
          copy_prop_vars_cf_node(state, &loop_copies, cf_node);
+
+      util_dynarray_fini(&loop_copies);
 
       break;
    }

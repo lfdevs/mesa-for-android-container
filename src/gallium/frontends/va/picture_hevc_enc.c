@@ -46,6 +46,7 @@ vlVaHandleVAEncPictureParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *cont
 
    h265 = buf->data;
    context->desc.h265enc.decoded_curr_pic = h265->decoded_curr_pic.picture_id;
+   context->desc.h265enc.not_referenced = !h265->pic_fields.bits.reference_pic_flag;
 
    for (i = 0; i < 15; i++)
       context->desc.h265enc.reference_frames[i] = h265->reference_frames[i].picture_id;
@@ -61,6 +62,8 @@ vlVaHandleVAEncPictureParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *cont
    context->desc.h265enc.pic.log2_parallel_merge_level_minus2 = h265->log2_parallel_merge_level_minus2;
    context->desc.h265enc.pic.nal_unit_type = h265->nal_unit_type;
    context->desc.h265enc.rc.quant_i_frames = h265->pic_init_qp;
+   context->desc.h265enc.rc.quant_p_frames = h265->pic_init_qp;
+   context->desc.h265enc.rc.quant_b_frames = h265->pic_init_qp;
 
    switch(h265->pic_fields.bits.coding_type) {
    case 1:
@@ -75,15 +78,24 @@ vlVaHandleVAEncPictureParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *cont
    case 3:
    case 4:
    case 5:
-      return VA_STATUS_ERROR_UNIMPLEMENTED; //no b frame support
+      context->desc.h265enc.picture_type = PIPE_H2645_ENC_PICTURE_TYPE_B;
       break;
    }
 
    context->desc.h265enc.pic.constrained_intra_pred_flag = h265->pic_fields.bits.constrained_intra_pred_flag;
+   context->desc.h265enc.pic.pps_loop_filter_across_slices_enabled_flag = h265->pic_fields.bits.pps_loop_filter_across_slices_enabled_flag;
+   context->desc.h265enc.pic.transform_skip_enabled_flag = h265->pic_fields.bits.transform_skip_enabled_flag;
 
    _mesa_hash_table_insert(context->desc.h265enc.frame_idx,
                        UINT_TO_PTR(h265->decoded_curr_pic.picture_id + 1),
                        UINT_TO_PTR(context->desc.h265enc.frame_num));
+
+   /* Initialize slice descriptors for this picture */
+   context->desc.h265enc.num_slice_descriptors = 0;
+   memset(&context->desc.h265enc.slices_descriptors, 0, sizeof(context->desc.h265enc.slices_descriptors));
+
+   context->desc.h265enc.num_ref_idx_l0_active_minus1 = h265->num_ref_idx_l0_default_active_minus1;
+   context->desc.h265enc.num_ref_idx_l1_active_minus1 = h265->num_ref_idx_l1_default_active_minus1;
 
    return VA_STATUS_SUCCESS;
 }
@@ -94,19 +106,22 @@ vlVaHandleVAEncSliceParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *contex
    VAEncSliceParameterBufferHEVC *h265;
 
    h265 = buf->data;
-   context->desc.h265enc.ref_idx_l0 = VA_INVALID_ID;
-   context->desc.h265enc.ref_idx_l1 = VA_INVALID_ID;
+   memset(&context->desc.h265enc.ref_idx_l0_list, VA_INVALID_ID, sizeof(context->desc.h265enc.ref_idx_l0_list));
+   memset(&context->desc.h265enc.ref_idx_l1_list, VA_INVALID_ID, sizeof(context->desc.h265enc.ref_idx_l1_list));
+
+   if (h265->slice_fields.bits.num_ref_idx_active_override_flag) {
+      context->desc.h265enc.num_ref_idx_l0_active_minus1 = h265->num_ref_idx_l0_active_minus1;
+      context->desc.h265enc.num_ref_idx_l1_active_minus1 = h265->num_ref_idx_l1_active_minus1;
+   }
 
    for (int i = 0; i < 15; i++) {
       if (h265->ref_pic_list0[i].picture_id != VA_INVALID_ID) {
-         if (context->desc.h265enc.ref_idx_l0 == VA_INVALID_ID)
-            context->desc.h265enc.ref_idx_l0 = PTR_TO_UINT(util_hash_table_get(context->desc.h265enc.frame_idx,
-                                               UINT_TO_PTR(h265->ref_pic_list0[i].picture_id + 1)));
+         context->desc.h265enc.ref_idx_l0_list[i] = PTR_TO_UINT(util_hash_table_get(context->desc.h265enc.frame_idx,
+                                 UINT_TO_PTR(h265->ref_pic_list0[i].picture_id + 1)));
       }
-      if (h265->ref_pic_list1[i].picture_id != VA_INVALID_ID && h265->slice_type == 1) {
-         if (context->desc.h265enc.ref_idx_l1 == VA_INVALID_ID)
-            context->desc.h265enc.ref_idx_l1 = PTR_TO_UINT(util_hash_table_get(context->desc.h265enc.frame_idx,
-                                               UINT_TO_PTR(h265->ref_pic_list1[i].picture_id + 1)));
+      if (h265->ref_pic_list1[i].picture_id != VA_INVALID_ID && h265->slice_type == PIPE_H265_SLICE_TYPE_B) {
+         context->desc.h265enc.ref_idx_l1_list[i] = PTR_TO_UINT(util_hash_table_get(context->desc.h265enc.frame_idx,
+                                 UINT_TO_PTR(h265->ref_pic_list1[i].picture_id + 1)));
       }
    }
 
@@ -119,6 +134,19 @@ vlVaHandleVAEncSliceParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *contex
    context->desc.h265enc.slice.slice_deblocking_filter_disabled_flag = h265->slice_fields.bits.slice_deblocking_filter_disabled_flag;
    context->desc.h265enc.slice.slice_loop_filter_across_slices_enabled_flag = h265->slice_fields.bits.slice_loop_filter_across_slices_enabled_flag;
 
+   /* Handle the slice control parameters */
+   struct h265_slice_descriptor slice_descriptor;
+   memset(&slice_descriptor, 0, sizeof(slice_descriptor));
+   slice_descriptor.slice_segment_address = h265->slice_segment_address;
+   slice_descriptor.num_ctu_in_slice = h265->num_ctu_in_slice;
+   slice_descriptor.slice_type = h265->slice_type;
+   assert(slice_descriptor.slice_type <= PIPE_H265_SLICE_TYPE_I);
+
+   if (context->desc.h265enc.num_slice_descriptors < ARRAY_SIZE(context->desc.h265enc.slices_descriptors))
+      context->desc.h265enc.slices_descriptors[context->desc.h265enc.num_slice_descriptors++] = slice_descriptor;
+   else
+      return VA_STATUS_ERROR_NOT_ENOUGH_BUFFER;
+
    return VA_STATUS_SUCCESS;
 }
 
@@ -126,20 +154,24 @@ VAStatus
 vlVaHandleVAEncSequenceParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
    VAEncSequenceParameterBufferHEVC *h265 = (VAEncSequenceParameterBufferHEVC *)buf->data;
+   uint32_t num_units_in_tick = 0, time_scale = 0;
 
    if (!context->decoder) {
-      context->templat.max_references = 1;
+      context->templat.max_references = PIPE_H265_MAX_REFERENCES;
       context->templat.level = h265->general_level_idc;
       context->decoder = drv->pipe->create_video_codec(drv->pipe, &context->templat);
 
       if (!context->decoder)
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
+
+      getEncParamPresetH265(context);
    }
 
    context->desc.h265enc.seq.general_profile_idc = h265->general_profile_idc;
    context->desc.h265enc.seq.general_level_idc = h265->general_level_idc;
    context->desc.h265enc.seq.general_tier_flag = h265->general_tier_flag;
    context->desc.h265enc.seq.intra_period = h265->intra_period;
+   context->desc.h265enc.seq.ip_period = h265->ip_period;
    context->desc.h265enc.seq.pic_width_in_luma_samples = h265->pic_width_in_luma_samples;
    context->desc.h265enc.seq.pic_height_in_luma_samples = h265->pic_height_in_luma_samples;
    context->desc.h265enc.seq.chroma_format_idc = h265->seq_fields.bits.chroma_format_idc;
@@ -156,8 +188,32 @@ vlVaHandleVAEncSequenceParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *con
    context->desc.h265enc.seq.log2_diff_max_min_transform_block_size = h265->log2_diff_max_min_transform_block_size;
    context->desc.h265enc.seq.max_transform_hierarchy_depth_inter = h265->max_transform_hierarchy_depth_inter;
    context->desc.h265enc.seq.max_transform_hierarchy_depth_intra = h265->max_transform_hierarchy_depth_intra;
-   context->desc.h265enc.rc.frame_rate_num = h265->vui_time_scale;
-   context->desc.h265enc.rc.frame_rate_den = h265->vui_num_units_in_tick;
+
+   context->desc.h265enc.seq.vui_parameters_present_flag = h265->vui_parameters_present_flag;
+   if (h265->vui_parameters_present_flag) {
+      context->desc.h265enc.seq.vui_flags.aspect_ratio_info_present_flag =
+         h265->vui_fields.bits.aspect_ratio_info_present_flag;
+         context->desc.h265enc.seq.aspect_ratio_idc = h265->aspect_ratio_idc;
+      context->desc.h265enc.seq.sar_width = h265->sar_width;
+      context->desc.h265enc.seq.sar_height = h265->sar_height;
+
+      context->desc.h265enc.seq.vui_flags.timing_info_present_flag =
+         h265->vui_fields.bits.vui_timing_info_present_flag;
+      num_units_in_tick = h265->vui_num_units_in_tick;
+      time_scale  = h265->vui_time_scale;
+   } else
+      context->desc.h265enc.seq.vui_flags.timing_info_present_flag = 0;
+
+   if (!context->desc.h265enc.seq.vui_flags.timing_info_present_flag) {
+      /* if not present, set default value */
+      num_units_in_tick = PIPE_DEFAULT_FRAME_RATE_DEN;
+      time_scale  = PIPE_DEFAULT_FRAME_RATE_NUM;
+   }
+
+   context->desc.h265enc.seq.num_units_in_tick = num_units_in_tick;
+   context->desc.h265enc.seq.time_scale = time_scale;
+   context->desc.h265enc.rc.frame_rate_num = time_scale;
+   context->desc.h265enc.rc.frame_rate_den = num_units_in_tick;
 
    return VA_STATUS_SUCCESS;
 }
@@ -178,6 +234,11 @@ vlVaHandleVAEncMiscParameterTypeRateControlHEVC(vlVaContext *context, VAEncMiscP
    else
       context->desc.h265enc.rc.vbv_buffer_size = context->desc.h265enc.rc.target_bitrate;
 
+   context->desc.h265enc.rc.fill_data_enable = !(rc->rc_flags.bits.disable_bit_stuffing);
+   context->desc.h265enc.rc.skip_frame_enable = !(rc->rc_flags.bits.disable_frame_skip);
+   context->desc.h265enc.rc.max_qp = rc->max_qp;
+   context->desc.h265enc.rc.min_qp = rc->min_qp;
+
    return VA_STATUS_SUCCESS;
 }
 
@@ -193,6 +254,16 @@ vlVaHandleVAEncMiscParameterTypeFrameRateHEVC(vlVaContext *context, VAEncMiscPar
       context->desc.h265enc.rc.frame_rate_num = fr->framerate;
       context->desc.h265enc.rc.frame_rate_den = 1;
    }
+
+   return VA_STATUS_SUCCESS;
+}
+
+VAStatus
+vlVaHandleVAEncMiscParameterTypeQualityLevelHEVC(vlVaContext *context, VAEncMiscParameterBuffer *misc)
+{
+   VAEncMiscParameterBufferQualityLevel *ql = (VAEncMiscParameterBufferQualityLevel *)misc->data;
+   vlVaHandleVAEncMiscParameterTypeQualityLevel(&context->desc.h265enc.quality_modes,
+                               (vlVaQualityBits *)&ql->quality_level);
 
    return VA_STATUS_SUCCESS;
 }
@@ -319,6 +390,27 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeHEVC(vlVaContext *context, vlVaBuffer *
    return VA_STATUS_SUCCESS;
 }
 
+VAStatus
+vlVaHandleVAEncMiscParameterTypeMaxFrameSizeHEVC(vlVaContext *context, VAEncMiscParameterBuffer *misc)
+{
+   VAEncMiscParameterBufferMaxFrameSize *ms = (VAEncMiscParameterBufferMaxFrameSize *)misc->data;
+   context->desc.h265enc.rc.max_au_size = ms->max_frame_size;
+   return VA_STATUS_SUCCESS;
+}
+
+VAStatus
+vlVaHandleVAEncMiscParameterTypeHRDHEVC(vlVaContext *context, VAEncMiscParameterBuffer *misc)
+{
+   VAEncMiscParameterHRD *ms = (VAEncMiscParameterHRD *)misc->data;
+
+   if (ms->buffer_size) {
+      context->desc.h265enc.rc.vbv_buffer_size = ms->buffer_size;
+      context->desc.h265enc.rc.vbv_buf_lv = (ms->initial_buffer_fullness << 6 ) / ms->buffer_size;
+   }
+
+   return VA_STATUS_SUCCESS;
+}
+
 void getEncParamPresetH265(vlVaContext *context)
 {
    //rate control
@@ -326,6 +418,9 @@ void getEncParamPresetH265(vlVaContext *context)
    context->desc.h265enc.rc.vbv_buf_lv = 48;
    context->desc.h265enc.rc.fill_data_enable = 1;
    context->desc.h265enc.rc.enforce_hrd = 1;
+   context->desc.h265enc.rc.max_qp = 51;
+   context->desc.h265enc.rc.min_qp = 0;
+
    if (context->desc.h265enc.rc.frame_rate_num == 0 ||
        context->desc.h265enc.rc.frame_rate_den == 0) {
       context->desc.h265enc.rc.frame_rate_num = 30;

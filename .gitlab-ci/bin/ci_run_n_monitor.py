@@ -4,7 +4,6 @@
 #   Tomeu Vizoso <tomeu.vizoso@collabora.com>
 #   David Heidelberg <david.heidelberg@collabora.com>
 #
-# TODO GraphQL for dependencies
 # SPDX-License-Identifier: MIT
 
 """
@@ -12,18 +11,19 @@ Helper script to restrict running only required CI jobs
 and show the job(s) logs.
 """
 
-from typing import Optional
-from functools import partial
-from concurrent.futures import ThreadPoolExecutor
-
-import os
-import re
-import time
 import argparse
+import re
 import sys
-import gitlab
+import time
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from itertools import chain
+from typing import Optional
 
+import gitlab
 from colorama import Fore, Style
+from gitlab_common import get_gitlab_project, read_token, wait_for_pipeline
+from gitlab_gql import GitlabGQL, create_job_needs_dag, filter_dag, print_dag
 
 REFRESH_WAIT_LOG = 10
 REFRESH_WAIT_JOBS = 6
@@ -42,42 +42,7 @@ STATUS_COLORS = {
     "skipped": "",
 }
 
-# TODO: This hardcoded list should be replaced by querying the pipeline's
-# dependency graph to see which jobs the target jobs need
-DEPENDENCIES = [
-    "debian/x86_build-base",
-    "debian/x86_build",
-    "debian/x86_test-base",
-    "debian/x86_test-gl",
-    "debian/arm_build",
-    "debian/arm_test",
-    "kernel+rootfs_amd64",
-    "kernel+rootfs_arm64",
-    "kernel+rootfs_armhf",
-    "debian-testing",
-    "debian-arm64",
-]
-
 COMPLETED_STATUSES = ["success", "failed"]
-
-
-def get_gitlab_project(glab, name: str):
-    """Finds a specified gitlab project for given user"""
-    glab.auth()
-    username = glab.user.username
-    return glab.projects.get(f"{username}/mesa")
-
-
-def wait_for_pipeline(project, sha: str):
-    """await until pipeline appears in Gitlab"""
-    print("⏲ for the pipeline to appear..", end="")
-    while True:
-        pipelines = project.pipelines.list(sha=sha)
-        if pipelines:
-            print("", flush=True)
-            return pipelines[0]
-        print("", end=".", flush=True)
-        time.sleep(1)
 
 
 def print_job_status(job) -> None:
@@ -120,15 +85,18 @@ def pretty_wait(sec: int) -> None:
 
 
 def monitor_pipeline(
-    project, pipeline, target_job: Optional[str], dependencies, force_manual: bool
+    project,
+    pipeline,
+    target_job: Optional[str],
+    dependencies,
+    force_manual: bool,
+    stress: bool,
 ) -> tuple[Optional[int], Optional[int]]:
     """Monitors pipeline and delegate canceling jobs"""
     statuses = {}
     target_statuses = {}
-
-    if not dependencies:
-        dependencies = []
-    dependencies.extend(DEPENDENCIES)
+    stress_succ = 0
+    stress_fail = 0
 
     if target_job:
         target_jobs_regex = re.compile(target_job.strip())
@@ -140,6 +108,13 @@ def monitor_pipeline(
             if target_job and target_jobs_regex.match(job.name):
                 if force_manual and job.status == "manual":
                     enable_job(project, job, True)
+
+                if stress and job.status in ["success", "failed"]:
+                    if job.status == "success":
+                        stress_succ += 1
+                    if job.status == "failed":
+                        stress_fail += 1
+                    retry_job(project, job)
 
                 if (job.id not in target_statuses) or (
                     job.status not in target_statuses[job.id]
@@ -172,6 +147,14 @@ def monitor_pipeline(
         if target_job:
             cancel_jobs(project, to_cancel)
 
+        if stress:
+            print(
+                "∑ succ: " + str(stress_succ) + "; fail: " + str(stress_fail),
+                flush=False,
+            )
+            pretty_wait(REFRESH_WAIT_JOBS)
+            continue
+
         print("---------------------------------", flush=False)
 
         if len(target_statuses) == 1 and {"running"}.intersection(
@@ -196,6 +179,14 @@ def enable_job(project, job, target: bool) -> None:
         jtype = "🞋 "
     else:
         jtype = "(dependency)"
+    print(Fore.MAGENTA + f"{jtype} job {job.name} manually enabled" + Style.RESET_ALL)
+
+
+def retry_job(project, job) -> None:
+    """retry job"""
+    pjob = project.jobs.get(job.id, lazy=True)
+    pjob.retry()
+    jtype = "↻"
     print(Fore.MAGENTA + f"{jtype} job {job.name} manually enabled" + Style.RESET_ALL)
 
 
@@ -243,7 +234,6 @@ def parse_args() -> None:
         + '--target ".*traces" ',
     )
     parser.add_argument("--target", metavar="target-job", help="Target job")
-    parser.add_argument("--deps", nargs="+", help="Job dependencies")
     parser.add_argument(
         "--rev", metavar="revision", help="repository git revision", required=True
     )
@@ -255,18 +245,23 @@ def parse_args() -> None:
     parser.add_argument(
         "--force-manual", action="store_true", help="Force jobs marked as manual"
     )
+    parser.add_argument("--stress", action="store_true", help="Stresstest job(s)")
     return parser.parse_args()
 
 
-def read_token(token_arg: Optional[str]) -> str:
-    """pick token from args or file"""
-    if token_arg:
-        return token_arg
-    return (
-        open(os.path.expanduser("~/.config/gitlab-token"), encoding="utf-8")
-        .readline()
-        .rstrip()
+def find_dependencies(target_job: str, project_path: str, sha: str) -> set[str]:
+    gql_instance = GitlabGQL()
+    dag, _ = create_job_needs_dag(
+        gql_instance, {"projectPath": project_path.path_with_namespace, "sha": sha}
     )
+
+    target_dep_dag = filter_dag(dag, target_job)
+    print(Fore.YELLOW)
+    print("Detected job dependencies:")
+    print()
+    print_dag(target_dep_dag)
+    print(Fore.RESET)
+    return set(chain.from_iterable(target_dep_dag.values()))
 
 
 if __name__ == "__main__":
@@ -284,11 +279,14 @@ if __name__ == "__main__":
         print(f"Revision: {args.rev}")
         pipe = wait_for_pipeline(cur_project, args.rev)
         print(f"Pipeline: {pipe.web_url}")
+        deps = set()
         if args.target:
             print("🞋 job: " + Fore.BLUE + args.target + Style.RESET_ALL)
-        print(f"Extra dependencies: {args.deps}")
+            deps = find_dependencies(
+                target_job=args.target, sha=args.rev, project_path=cur_project
+            )
         target_job_id, ret = monitor_pipeline(
-            cur_project, pipe, args.target, args.deps, args.force_manual
+            cur_project, pipe, args.target, deps, args.force_manual, args.stress
         )
 
         if target_job_id:

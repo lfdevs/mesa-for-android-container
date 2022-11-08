@@ -107,8 +107,7 @@ glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
-# X error 167 (GLXBadFBConfig (9)) was generated, but X error 8 was expected.
-glx@glx_arb_create_context_no_error@no error,Crash
+glx@glx_arb_create_context_no_error@no error,Fail
 
 glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
@@ -124,7 +123,6 @@ shaders@glsl-bug-110796,Fail
 shaders@glsl-max-vertex-attrib,Fail
 shaders@glsl-predication-on-large-array,Fail
 spec@!opengl 1.0@gl-1.0-bitmap-heart-dance,Fail
-spec@!opengl 1.0@gl-1.0-dlist-bitmap,Crash
 spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
@@ -936,7 +934,7 @@ spec@arb_framebuffer_object@fbo-mipmap-copypix,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels draw stencil,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels read stencil,Fail
 spec@arb_framebuffer_object@mixed-buffer-sizes,Fail
-spec@arb_framebuffer_object@same-attachment-glframebuffertexture2d-gl_depth_stencil_attachment,Fail
+spec@arb_framebuffer_object@same-attachment-tex2d-depth_stencil,Fail
 spec@arb_framebuffer_srgb@arb_framebuffer_srgb-srgb_conformance,Fail
 spec@arb_internalformat_query2@all internalformat_<x>_size pname checks,Fail
 spec@arb_internalformat_query2@all internalformat_<x>_size pname checks@GL_INTERNALFORMAT_ALPHA_SIZE,Fail
@@ -1073,6 +1071,24 @@ spec@ext_texture_srgb@texwrap formats@GL_SRGB8- swizzled,Fail
 spec@ext_texture_srgb@texwrap formats@GL_SRGB8_ALPHA8,Fail
 spec@ext_texture_srgb@texwrap formats@GL_SRGB8_ALPHA8- NPOT,Fail
 spec@ext_texture_srgb@texwrap formats@GL_SRGB8_ALPHA8- swizzled,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SLUMINANCE- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SLUMINANCE_ALPHA- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SLUMINANCE- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SLUMINANCE_ALPHA- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT- border color only,Fail
 spec@glsl-1.10@built-in constants,Fail
 spec@glsl-1.10@built-in constants@gl_MaxVertexAttribs,Fail
 spec@glsl-1.10@execution@built-in-functions@fs-cos-float,Fail
@@ -1187,3 +1203,13 @@ spec@oes_compressed_etc1_rgb8_texture@miptree,Fail
 spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
+
+# see https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/730
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgb_s3tc_dxt1_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt1_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt5_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt1_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt3_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt5_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_s3tc_dxt1_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt3_ext,Fail

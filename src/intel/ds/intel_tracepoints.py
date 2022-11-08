@@ -57,6 +57,9 @@ def define_tracepoints(args):
                  tp_args=[Arg(type='uint8_t', var='level', c_format='%hhu'),],
                  end_pipelined=False)
 
+    begin_end_tp('xfb',
+                 end_pipelined=False)
+
     begin_end_tp('render_pass',
                  tp_args=[Arg(type='uint16_t', var='width', c_format='%hu'),
                           Arg(type='uint16_t', var='height', c_format='%hu'),
@@ -72,12 +75,14 @@ def define_tracepoints(args):
                           Arg(type='uint8_t', var='resume', c_format='%hhu'),])
 
     begin_end_tp('blorp',
-                 tp_args=[Arg(type='uint32_t', name='width', var='width', c_format='%u'),
+                 tp_args=[Arg(type='enum blorp_op', name='op', var='op', c_format='%s', to_prim_type='blorp_op_to_name({})'),
+                          Arg(type='uint32_t', name='width', var='width', c_format='%u'),
                           Arg(type='uint32_t', name='height', var='height', c_format='%u'),
-                          Arg(type='enum isl_aux_op', name='hiz_op', var='hiz_op', c_format='%s', to_prim_type='isl_aux_op_to_name({})'),
-                          Arg(type='enum isl_aux_op', name='fast_clear_op', var='fast_clear_op', c_format='%s', to_prim_type='isl_aux_op_to_name({})'),
-                          Arg(type='enum blorp_shader_type', name='blorp_type', var='shader_type', c_format='%s', to_prim_type='blorp_shader_type_to_name({})'),
-                          Arg(type='enum blorp_shader_pipeline', name='blorp_pipe', var='shader_pipe', c_format='%s', to_prim_type='blorp_shader_pipeline_to_name({})'),])
+                          Arg(type='uint32_t', name='samples', var='samples', c_format='%u'),
+                          Arg(type='enum blorp_shader_pipeline', name='blorp_pipe', var='shader_pipe', c_format='%s', to_prim_type='blorp_shader_pipeline_to_name({})'),
+                          Arg(type='enum isl_format', name='dst_fmt', var='dst_fmt', c_format='%s', to_prim_type='isl_format_get_short_name({})'),
+                          Arg(type='enum isl_format', name='src_fmt', var='src_fmt', c_format='%s', to_prim_type='isl_format_get_short_name({})'),
+                          ])
 
     begin_end_tp('draw',
                  tp_args=[Arg(type='uint32_t', var='count', c_format='%u')])
@@ -96,6 +101,16 @@ def define_tracepoints(args):
     begin_end_tp('draw_indirect_count',
                  tp_args=[Arg(type='uint32_t', var='max_draw_count', c_format='%u'),])
     begin_end_tp('draw_indexed_indirect_count',
+                 tp_args=[Arg(type='uint32_t', var='max_draw_count', c_format='%u'),])
+
+    begin_end_tp('draw_mesh',
+                 tp_args=[Arg(type='uint32_t', var='group_x', c_format='%u'),
+                          Arg(type='uint32_t', var='group_y', c_format='%u'),
+                          Arg(type='uint32_t', var='group_z', c_format='%u'),],
+                 tp_print=['group=%ux%ux%u', '__entry->group_x', '__entry->group_y', '__entry->group_z'])
+    begin_end_tp('draw_mesh_indirect',
+                 tp_args=[Arg(type='uint32_t', var='draw_count', c_format='%u'),])
+    begin_end_tp('draw_mesh_indirect_count',
                  tp_args=[Arg(type='uint32_t', var='max_draw_count', c_format='%u'),])
 
     begin_end_tp('compute',

@@ -74,6 +74,11 @@ struct tu_autotune {
     */
    struct list_head pending_submission_data;
 
+   /**
+    * List of per-submission data that has been finished and can be reused.
+    */
+   struct list_head submission_data_pool;
+
    uint32_t fence_counter;
    uint32_t idx_counter;
 };

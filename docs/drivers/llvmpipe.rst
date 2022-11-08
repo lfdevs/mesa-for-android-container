@@ -4,11 +4,11 @@ LLVMpipe
 Introduction
 ------------
 
-The Gallium llvmpipe driver is a software rasterizer that uses LLVM to
+The Gallium LLVMpipe driver is a software rasterizer that uses LLVM to
 do runtime code generation. Shaders, point/line/triangle rasterization
 and vertex processing are implemented with LLVM IR which is translated
 to x86, x86-64, or ppc64le machine code. Also, the driver is
-multithreaded to take advantage of multiple CPU cores (up to 8 at this
+multithreaded to take advantage of multiple CPU cores (up to 32 at this
 time). It's the fastest software rasterizer for Mesa.
 
 Requirements
@@ -46,6 +46,10 @@ Requirements
 
       yum install llvm-devel
 
+   If you want development snapshot builds of LLVM for Fedora, you can
+   use the Copr repository at `fedora-llvm-team/llvm-snapshots <https://copr.fedorainfracloud.org/coprs/g/fedora-llvm-team/llvm-snapshots/>`__,
+   which is maintained by Red Hat's LLVM team.
+
    For Windows you will need to build LLVM from source with MSVC or
    MINGW (either natively or through cross compilers) and CMake, and set
    the ``LLVM`` environment variable to the directory you installed it
@@ -65,7 +69,7 @@ Requirements
    +-----------------+--------------------------------+-------------------------------+
 
    You can build only the x86 target by passing
-   ``-DLLVM_TARGETS_TO_BUILD=X86`` to cmake.
+   ``-DLLVM_TARGETS_TO_BUILD=X86`` to CMake.
 
 Building
 --------
@@ -76,12 +80,35 @@ To build everything on Linux invoke meson as:
 
    mkdir build
    cd build
-   meson -D glx=gallium-xlib -D gallium-drivers=swrast
+   meson -D glx=xlib -D gallium-drivers=swrast
    ninja
 
 
 Using
 -----
+
+Environment variables
+~~~~~~~~~~~~~~~~~~~~~
+
+``LP_NATIVE_VECTOR_WIDTH``
+   We can use it to override vector bits. Because sometimes it turns
+   out LLVMpipe can be fastest by using 128 bit vectors,
+   yet use AVX instructions.
+``GALLIUM_OVERRIDE_CPU_CAPS``
+   Override CPU capabilities for LLVMpipe and Softpipe, possible values for x86:
+   `nosse`
+   `sse`
+   `sse2`
+   `sse3`
+   `ssse3`
+   `sse4.1`
+   `avx`
+``GALLIUM_NOSSE``
+   Deprecated in favor of `GALLIUM_OVERRIDE_CPU_CAPS`,
+   use `GALLIUM_OVERRIDE_CPU_CAPS=nosse` instead.
+``LP_FORCE_SSE2``
+   Deprecated in favor of `GALLIUM_OVERRIDE_CPU_CAPS`
+   use `GALLIUM_OVERRIDE_CPU_CAPS=sse2` instead.
 
 Linux
 ~~~~~
@@ -113,7 +140,7 @@ be used by replacing the native ICD driver, but it's quite an advanced usage, so
 you need to ask, don't even try it.
 
 There is however an easy way to replace the OpenGL software renderer
-that comes with Microsoft Windows 7 (or later) with llvmpipe (that is,
+that comes with Microsoft Windows 7 (or later) with LLVMpipe (that is,
 on systems without any OpenGL drivers):
 
 -  copy
@@ -150,7 +177,7 @@ On Linux, it is possible to have symbol resolution of JIT code with
    perf record -g /my/application
    perf report
 
-When run inside Linux perf, llvmpipe will create a
+When run inside Linux perf, LLVMpipe will create a
 ``/tmp/perf-XXXXX.map`` file with symbol address table. It also dumps
 assembly code to ``/tmp/perf-XXXXX.map.asm``, which can be used by the
 ``bin/perf-annotate-jit.py`` script to produce disassembly of the

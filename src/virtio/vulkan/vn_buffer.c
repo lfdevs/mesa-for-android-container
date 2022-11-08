@@ -15,8 +15,8 @@
 
 #include "vn_android.h"
 #include "vn_device.h"
-#include "vn_physical_device.h"
 #include "vn_device_memory.h"
+#include "vn_physical_device.h"
 
 /* buffer commands */
 
@@ -169,8 +169,8 @@ vn_buffer_get_max_buffer_size(struct vn_device *dev,
    uint8_t begin = 0;
    uint8_t end = 64;
 
-   if (pdev->features.maintenance4.maintenance4) {
-      *out_max_buffer_size = pdev->properties.maintenance4.maxBufferSize;
+   if (pdev->features.vulkan_1_3.maintenance4) {
+      *out_max_buffer_size = pdev->properties.vulkan_1_3.maxBufferSize;
       return VK_SUCCESS;
    }
 
@@ -284,6 +284,35 @@ vn_buffer_cache_get_memory_requirements(
    }
 
    return false;
+}
+
+static void
+vn_copy_cached_memory_requirements(
+   const struct vn_buffer_memory_requirements *cached,
+   VkMemoryRequirements2 *out_mem_req)
+{
+   union {
+      VkBaseOutStructure *pnext;
+      VkMemoryRequirements2 *two;
+      VkMemoryDedicatedRequirements *dedicated;
+   } u = { .two = out_mem_req };
+
+   while (u.pnext) {
+      switch (u.pnext->sType) {
+      case VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2:
+         u.two->memoryRequirements = cached->memory.memoryRequirements;
+         break;
+      case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS:
+         u.dedicated->prefersDedicatedAllocation =
+            cached->dedicated.prefersDedicatedAllocation;
+         u.dedicated->requiresDedicatedAllocation =
+            cached->dedicated.requiresDedicatedAllocation;
+         break;
+      default:
+         break;
+      }
+      u.pnext = u.pnext->pNext;
+   }
 }
 
 static VkResult
@@ -431,29 +460,9 @@ vn_GetBufferMemoryRequirements2(VkDevice device,
                                 VkMemoryRequirements2 *pMemoryRequirements)
 {
    const struct vn_buffer *buf = vn_buffer_from_handle(pInfo->buffer);
-   union {
-      VkBaseOutStructure *pnext;
-      VkMemoryRequirements2 *two;
-      VkMemoryDedicatedRequirements *dedicated;
-   } u = { .two = pMemoryRequirements };
 
-   while (u.pnext) {
-      switch (u.pnext->sType) {
-      case VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2:
-         u.two->memoryRequirements =
-            buf->requirements.memory.memoryRequirements;
-         break;
-      case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS:
-         u.dedicated->prefersDedicatedAllocation =
-            buf->requirements.dedicated.prefersDedicatedAllocation;
-         u.dedicated->requiresDedicatedAllocation =
-            buf->requirements.dedicated.requiresDedicatedAllocation;
-         break;
-      default:
-         break;
-      }
-      u.pnext = u.pnext->pNext;
-   }
+   vn_copy_cached_memory_requirements(&buf->requirements,
+                                      pMemoryRequirements);
 }
 
 VkResult
@@ -551,8 +560,15 @@ vn_GetDeviceBufferMemoryRequirements(
    VkMemoryRequirements2 *pMemoryRequirements)
 {
    struct vn_device *dev = vn_device_from_handle(device);
+   struct vn_buffer_memory_requirements cached;
 
-   /* TODO per-device cache */
+   if (vn_buffer_cache_get_memory_requirements(&dev->buffer_cache,
+                                               pInfo->pCreateInfo, &cached)) {
+      vn_copy_cached_memory_requirements(&cached, pMemoryRequirements);
+      return;
+   }
+
+   /* make the host call if not found in cache */
    vn_call_vkGetDeviceBufferMemoryRequirements(dev->instance, device, pInfo,
                                                pMemoryRequirements);
 }

@@ -163,11 +163,7 @@ nv50_miptree_destroy(struct pipe_screen *pscreen, struct pipe_resource *pt)
 {
    struct nv50_miptree *mt = nv50_miptree(pt);
 
-   if (mt->base.fence && mt->base.fence->state < NOUVEAU_FENCE_STATE_FLUSHED)
-      nouveau_fence_work(mt->base.fence, nouveau_fence_unref_bo, mt->base.bo);
-   else
-      nouveau_bo_ref(NULL, &mt->base.bo);
-
+   nouveau_fence_work(mt->base.fence, nouveau_fence_unref_bo, mt->base.bo);
    nouveau_fence_ref(NULL, &mt->base.fence);
    nouveau_fence_ref(NULL, &mt->base.fence_wr);
 

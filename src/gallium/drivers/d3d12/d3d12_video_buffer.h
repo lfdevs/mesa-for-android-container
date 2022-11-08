@@ -40,6 +40,14 @@ struct pipe_video_buffer *
 d3d12_video_buffer_create(struct pipe_context *pipe, const struct pipe_video_buffer *tmpl);
 
 /**
+ * creates a video buffer from a handle
+ */
+struct pipe_video_buffer *
+d3d12_video_buffer_from_handle( struct pipe_context *pipe,
+                           const struct pipe_video_buffer *tmpl,
+                           struct winsys_handle *handle,
+                           unsigned usage);
+/**
  * destroy this video buffer
  */
 void

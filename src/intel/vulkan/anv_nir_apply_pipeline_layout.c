@@ -1016,21 +1016,7 @@ lower_image_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
 
    b->cursor = nir_before_instr(&intrin->instr);
 
-   ASSERTED const bool use_bindless = state->pdevice->has_bindless_images;
-
-   if (intrin->intrinsic == nir_intrinsic_image_deref_load_param_intel) {
-      b->cursor = nir_instr_remove(&intrin->instr);
-
-      assert(!use_bindless); /* Otherwise our offsets would be wrong */
-      const unsigned param = nir_intrinsic_base(intrin);
-
-      nir_ssa_def *desc =
-         build_load_var_deref_descriptor_mem(b, deref, param * 16,
-                                             intrin->dest.ssa.num_components,
-                                             intrin->dest.ssa.bit_size, state);
-
-      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, desc);
-   } else if (binding_offset > MAX_BINDING_TABLE_SIZE) {
+   if (binding_offset > MAX_BINDING_TABLE_SIZE) {
       const unsigned desc_comp =
          image_binding_needs_lowered_surface(var) ? 1 : 0;
       nir_ssa_def *desc =
@@ -1071,35 +1057,24 @@ lower_load_constant(nir_builder *b, nir_intrinsic_instr *intrin,
    nir_ssa_def *offset = nir_iadd_imm(b, nir_ssa_for_src(b, intrin->src[0], 1),
                                       nir_intrinsic_base(intrin));
 
-   nir_ssa_def *data;
-   if (!anv_use_relocations(state->pdevice)) {
-      unsigned load_size = intrin->dest.ssa.num_components *
-                           intrin->dest.ssa.bit_size / 8;
-      unsigned load_align = intrin->dest.ssa.bit_size / 8;
+   unsigned load_size = intrin->dest.ssa.num_components *
+                        intrin->dest.ssa.bit_size / 8;
+   unsigned load_align = intrin->dest.ssa.bit_size / 8;
 
-      assert(load_size < b->shader->constant_data_size);
-      unsigned max_offset = b->shader->constant_data_size - load_size;
-      offset = nir_umin(b, offset, nir_imm_int(b, max_offset));
+   assert(load_size < b->shader->constant_data_size);
+   unsigned max_offset = b->shader->constant_data_size - load_size;
+   offset = nir_umin(b, offset, nir_imm_int(b, max_offset));
 
-      nir_ssa_def *const_data_base_addr = nir_pack_64_2x32_split(b,
-         nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW),
-         nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_CONST_DATA_ADDR_HIGH));
+   nir_ssa_def *const_data_base_addr = nir_pack_64_2x32_split(b,
+      nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW),
+      nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_CONST_DATA_ADDR_HIGH));
 
-      data = nir_load_global_constant(b, nir_iadd(b, const_data_base_addr,
-                                                     nir_u2u64(b, offset)),
-                                      load_align,
-                                      intrin->dest.ssa.num_components,
-                                      intrin->dest.ssa.bit_size);
-   } else {
-      nir_ssa_def *index = nir_imm_int(b, state->constants_offset);
-
-      data = nir_load_ubo(b, intrin->num_components, intrin->dest.ssa.bit_size,
-                          index, offset,
-                          .align_mul = intrin->dest.ssa.bit_size / 8,
-                          .align_offset =  0,
-                          .range_base = nir_intrinsic_base(intrin),
-                          .range = nir_intrinsic_range(intrin));
-   }
+   nir_ssa_def *data =
+      nir_load_global_constant(b, nir_iadd(b, const_data_base_addr,
+                                              nir_u2u64(b, offset)),
+                               load_align,
+                               intrin->dest.ssa.num_components,
+                               intrin->dest.ssa.bit_size);
 
    nir_ssa_def_rewrite_uses(&intrin->dest.ssa, data);
 
@@ -1234,84 +1209,11 @@ build_def_array_select(nir_builder *b, nir_ssa_def **srcs, nir_ssa_def *idx,
    }
 }
 
-static void
-lower_gfx7_tex_swizzle(nir_builder *b, nir_tex_instr *tex, unsigned plane,
-                       struct apply_pipeline_layout_state *state)
-{
-   assert(state->pdevice->info.verx10 == 70);
-   if (tex->sampler_dim == GLSL_SAMPLER_DIM_BUF ||
-       nir_tex_instr_is_query(tex) ||
-       tex->op == nir_texop_tg4 || /* We can't swizzle TG4 */
-       (tex->is_shadow && tex->is_new_style_shadow))
-      return;
-
-   int deref_src_idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_deref);
-   assert(deref_src_idx >= 0);
-
-   nir_deref_instr *deref = nir_src_as_deref(tex->src[deref_src_idx].src);
-   nir_variable *var = nir_deref_instr_get_variable(deref);
-
-   unsigned set = var->data.descriptor_set;
-   unsigned binding = var->data.binding;
-   const struct anv_descriptor_set_binding_layout *bind_layout =
-      &state->layout->set[set].layout->binding[binding];
-
-   if ((bind_layout->data & ANV_DESCRIPTOR_TEXTURE_SWIZZLE) == 0)
-      return;
-
-   b->cursor = nir_before_instr(&tex->instr);
-
-   const unsigned plane_offset =
-      plane * sizeof(struct anv_texture_swizzle_descriptor);
-   nir_ssa_def *swiz =
-      build_load_var_deref_descriptor_mem(b, deref, plane_offset,
-                                          1, 32, state);
-
-   b->cursor = nir_after_instr(&tex->instr);
-
-   assert(tex->dest.ssa.bit_size == 32);
-   assert(tex->dest.ssa.num_components == 4);
-
-   /* Initializing to undef is ok; nir_opt_undef will clean it up. */
-   nir_ssa_def *undef = nir_ssa_undef(b, 1, 32);
-   nir_ssa_def *comps[8];
-   for (unsigned i = 0; i < ARRAY_SIZE(comps); i++)
-      comps[i] = undef;
-
-   comps[ISL_CHANNEL_SELECT_ZERO] = nir_imm_int(b, 0);
-   if (nir_alu_type_get_base_type(tex->dest_type) == nir_type_float)
-      comps[ISL_CHANNEL_SELECT_ONE] = nir_imm_float(b, 1);
-   else
-      comps[ISL_CHANNEL_SELECT_ONE] = nir_imm_int(b, 1);
-   comps[ISL_CHANNEL_SELECT_RED] = nir_channel(b, &tex->dest.ssa, 0);
-   comps[ISL_CHANNEL_SELECT_GREEN] = nir_channel(b, &tex->dest.ssa, 1);
-   comps[ISL_CHANNEL_SELECT_BLUE] = nir_channel(b, &tex->dest.ssa, 2);
-   comps[ISL_CHANNEL_SELECT_ALPHA] = nir_channel(b, &tex->dest.ssa, 3);
-
-   nir_ssa_def *swiz_comps[4];
-   for (unsigned i = 0; i < 4; i++) {
-      nir_ssa_def *comp_swiz = nir_extract_u8(b, swiz, nir_imm_int(b, i));
-      swiz_comps[i] = build_def_array_select(b, comps, comp_swiz, 0, 8);
-   }
-   nir_ssa_def *swiz_tex_res = nir_vec(b, swiz_comps, 4);
-
-   /* Rewrite uses before we insert so we don't rewrite this use */
-   nir_ssa_def_rewrite_uses_after(&tex->dest.ssa,
-                                  swiz_tex_res,
-                                  swiz_tex_res->parent_instr);
-}
-
 static bool
 lower_tex(nir_builder *b, nir_tex_instr *tex,
           struct apply_pipeline_layout_state *state)
 {
    unsigned plane = tex_instr_get_and_remove_plane_src(tex);
-
-   /* On Ivy Bridge and Bay Trail, we have to swizzle in the shader.  Do this
-    * before we lower the derefs away so we can still find the descriptor.
-    */
-   if (state->pdevice->info.verx10 == 70)
-      lower_gfx7_tex_swizzle(b, tex, plane, state);
 
    b->cursor = nir_before_instr(&tex->instr);
 
@@ -1449,18 +1351,12 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
          map->surface_to_descriptor[map->surface_count] =
             (struct anv_pipeline_binding) {
                .set = ANV_DESCRIPTOR_SET_DESCRIPTORS,
+               .binding = UINT32_MAX,
                .index = s,
             };
          state.set[s].desc_offset = map->surface_count;
          map->surface_count++;
       }
-   }
-
-   if (state.uses_constants && anv_use_relocations(pdevice)) {
-      state.constants_offset = map->surface_count;
-      map->surface_to_descriptor[map->surface_count].set =
-         ANV_DESCRIPTOR_SET_SHADER_CONSTANTS;
-      map->surface_count++;
    }
 
    unsigned used_binding_count = 0;
@@ -1545,6 +1441,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
                      map->surface_to_descriptor[map->surface_count++] =
                         (struct anv_pipeline_binding) {
                            .set = set,
+                           .binding = b,
                            .index = binding->descriptor_index + i,
                            .plane = p,
                         };
@@ -1555,6 +1452,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
                   map->surface_to_descriptor[map->surface_count++] =
                      (struct anv_pipeline_binding) {
                         .set = set,
+                        .binding = b,
                         .index = binding->descriptor_index + i,
                         .dynamic_offset_index =
                            layout->set[set].dynamic_offset_start +
@@ -1588,6 +1486,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
                   map->sampler_to_descriptor[map->sampler_count++] =
                      (struct anv_pipeline_binding) {
                         .set = set,
+                        .binding = b,
                         .index = binding->descriptor_index + i,
                         .plane = p,
                      };

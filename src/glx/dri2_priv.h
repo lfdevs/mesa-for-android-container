@@ -60,12 +60,6 @@ struct dri2_screen {
    int show_fps_interval;
 };
 
-struct dri2_context
-{
-   struct glx_context base;
-   __DRIcontext *driContext;
-};
-
 _X_HIDDEN int
 dri2_query_renderer_integer(struct glx_screen *base, int attribute,
                             unsigned int *value);
@@ -82,6 +76,11 @@ _X_HIDDEN int
 dri2_interop_export_object(struct glx_context *ctx,
                            struct mesa_glinterop_export_in *in,
                            struct mesa_glinterop_export_out *out);
+
+_X_HIDDEN int
+dri2_interop_flush_objects(struct glx_context *ctx,
+                           unsigned count, struct mesa_glinterop_export_in *objects,
+                           GLsync *sync);
 
 #ifdef __cplusplus
 }

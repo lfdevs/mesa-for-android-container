@@ -69,6 +69,7 @@ nv84_load_firmwares(struct nouveau_device *dev, struct nv84_decoder *dec,
 {
    int ret, size1, size2 = 0;
    struct nouveau_bo *fw;
+   struct nouveau_screen *screen = nouveau_screen(dec->base.context->screen);
 
    size1 = filesize(fw1);
    if (fw2)
@@ -81,7 +82,7 @@ nv84_load_firmwares(struct nouveau_device *dev, struct nv84_decoder *dec,
    ret = nouveau_bo_new(dev, NOUVEAU_BO_VRAM, 0, dec->vp_fw2_offset + size2, NULL, &fw);
    if (ret)
       return NULL;
-   ret = nouveau_bo_map(fw, NOUVEAU_BO_WR, dec->client);
+   ret = BO_MAP(screen, fw, NOUVEAU_BO_WR, dec->client);
    if (ret)
       goto error;
 
@@ -183,11 +184,12 @@ nv84_decoder_begin_frame_mpeg12(struct pipe_video_codec *decoder,
                               struct pipe_video_buffer *target,
                               struct pipe_picture_desc *picture)
 {
+   struct nouveau_screen *screen = nouveau_screen(decoder->context->screen);
    struct nv84_decoder *dec = (struct nv84_decoder *)decoder;
    struct pipe_mpeg12_picture_desc *desc = (struct pipe_mpeg12_picture_desc *)picture;
    int i;
 
-   nouveau_bo_wait(dec->mpeg12_bo, NOUVEAU_BO_RDWR, dec->client);
+   BO_WAIT(screen, dec->mpeg12_bo, NOUVEAU_BO_RDWR, dec->client);
    dec->mpeg12_mb_info = dec->mpeg12_bo->map + 0x100;
    dec->mpeg12_data = dec->mpeg12_bo->map + 0x100 +
       align(0x20 * mb(dec->base.width) * mb(dec->base.height), 0x100);
@@ -247,11 +249,11 @@ nv84_decoder_destroy(struct pipe_video_codec *decoder)
    nouveau_object_del(&dec->vp);
 
    nouveau_bufctx_del(&dec->bsp_bufctx);
-   nouveau_pushbuf_del(&dec->bsp_pushbuf);
+   nouveau_pushbuf_destroy(&dec->bsp_pushbuf);
    nouveau_object_del(&dec->bsp_channel);
 
    nouveau_bufctx_del(&dec->vp_bufctx);
-   nouveau_pushbuf_del(&dec->vp_pushbuf);
+   nouveau_pushbuf_destroy(&dec->vp_pushbuf);
    nouveau_object_del(&dec->vp_channel);
 
    nouveau_client_del(&dec->client);
@@ -275,9 +277,6 @@ nv84_create_decoder(struct pipe_context *context,
    int ret, i;
    int is_h264 = u_reduce_video_profile(templ->profile) == PIPE_VIDEO_FORMAT_MPEG4_AVC;
    int is_mpeg12 = u_reduce_video_profile(templ->profile) == PIPE_VIDEO_FORMAT_MPEG12;
-
-   if (getenv("XVMC_VL"))
-      return vl_create_decoder(context, templ);
 
    if ((is_h264 && templ->entrypoint != PIPE_VIDEO_ENTRYPOINT_BITSTREAM) ||
        (is_mpeg12 && templ->entrypoint > PIPE_VIDEO_ENTRYPOINT_IDCT)) {
@@ -335,8 +334,8 @@ nv84_create_decoder(struct pipe_context *context,
       if (ret)
          goto fail;
 
-      ret = nouveau_pushbuf_new(dec->client, dec->bsp_channel, 4,
-                                32 * 1024, true, &dec->bsp_pushbuf);
+      ret = nouveau_pushbuf_create(screen, &nv50->base, dec->client, dec->bsp_channel,
+                                   4, 32 * 1024, true, &dec->bsp_pushbuf);
       if (ret)
          goto fail;
 
@@ -350,8 +349,8 @@ nv84_create_decoder(struct pipe_context *context,
                             &nv04_data, sizeof(nv04_data), &dec->vp_channel);
    if (ret)
       goto fail;
-   ret = nouveau_pushbuf_new(dec->client, dec->vp_channel, 4,
-                             32 * 1024, true, &dec->vp_pushbuf);
+   ret = nouveau_pushbuf_create(screen, &nv50->base, dec->client, dec->vp_channel,
+                                4, 32 * 1024, true, &dec->vp_pushbuf);
    if (ret)
       goto fail;
 
@@ -406,14 +405,14 @@ nv84_create_decoder(struct pipe_context *context,
                            NULL, &dec->bitstream);
       if (ret)
          goto fail;
-      ret = nouveau_bo_map(dec->bitstream, NOUVEAU_BO_WR, dec->client);
+      ret = BO_MAP(screen, dec->bitstream, NOUVEAU_BO_WR, dec->client);
       if (ret)
          goto fail;
       ret = nouveau_bo_new(screen->device, NOUVEAU_BO_GART,
                            0, 0x2000, NULL, &dec->vp_params);
       if (ret)
          goto fail;
-      ret = nouveau_bo_map(dec->vp_params, NOUVEAU_BO_WR, dec->client);
+      ret = BO_MAP(screen, dec->vp_params, NOUVEAU_BO_WR, dec->client);
       if (ret)
          goto fail;
    }
@@ -425,7 +424,7 @@ nv84_create_decoder(struct pipe_context *context,
                            NULL, &dec->mpeg12_bo);
       if (ret)
          goto fail;
-      ret = nouveau_bo_map(dec->mpeg12_bo, NOUVEAU_BO_WR, dec->client);
+      ret = BO_MAP(screen, dec->mpeg12_bo, NOUVEAU_BO_WR, dec->client);
       if (ret)
          goto fail;
    }
@@ -434,7 +433,7 @@ nv84_create_decoder(struct pipe_context *context,
                         0, 0x1000, NULL, &dec->fence);
    if (ret)
       goto fail;
-   ret = nouveau_bo_map(dec->fence, NOUVEAU_BO_WR, dec->client);
+   ret = BO_MAP(screen, dec->fence, NOUVEAU_BO_WR, dec->client);
    if (ret)
       goto fail;
    *(uint32_t *)dec->fence->map = 0;
@@ -494,7 +493,7 @@ nv84_create_decoder(struct pipe_context *context,
       context->clear_render_target(context, &surf.base, &color, 0, 0, 1024, 1, false);
 
       PUSH_SPACE(nv50->base.pushbuf, 5);
-      PUSH_REFN(nv50->base.pushbuf, dec->fence, NOUVEAU_BO_VRAM | NOUVEAU_BO_RDWR);
+      PUSH_REF1(nv50->base.pushbuf, dec->fence, NOUVEAU_BO_VRAM | NOUVEAU_BO_RDWR);
       /* The clear_render_target is done via 3D engine, so use it to write to a
        * sempahore to indicate that it's done.
        */
@@ -612,7 +611,7 @@ nv84_video_buffer_create(struct pipe_context *pipe,
    union nouveau_bo_config cfg;
    unsigned bo_size;
 
-   if (getenv("XVMC_VL") || template->buffer_format != PIPE_FORMAT_NV12)
+   if (template->buffer_format != PIPE_FORMAT_NV12)
       return vl_video_buffer_create(pipe, template);
 
    if (!template->interlaced) {

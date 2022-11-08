@@ -99,19 +99,6 @@ option(
   description : 'path to put vdpau libraries. defaults to $libdir/vdpau.'
 )
 option(
-  'gallium-xvmc',
-  type : 'combo',
-  value : 'auto',
-  choices : ['auto', 'true', 'false', 'enabled', 'disabled'],
-  description : 'enable gallium xvmc frontend.',
-)
-option(
-  'xvmc-libs-path',
-  type : 'string',
-  value : '',
-  description : 'path to put xvmc libraries. defaults to $libdir.'
-)
-option(
   'gallium-omx',
   type : 'combo',
   value : 'auto',
@@ -164,16 +151,22 @@ option(
   description : 'build gallium "clover" OpenCL frontend.',
 )
 option(
+  'gallium-rusticl',
+  type : 'boolean',
+  value : false,
+  description : 'build gallium "rusticl" OpenCL frontend.',
+)
+option(
+  'gallium-windows-dll-name',
+  type : 'string',
+  value : 'libgallium_wgl',
+  description : 'name of gallium megadriver DLL built for Windows. defaults to libgallium_wgl.dll to match DRI',
+)
+option(
   'opencl-spirv',
   type : 'boolean',
   value : false,
   description : 'build gallium "clover" OpenCL frontend with SPIR-V binary support.',
-)
-option(
-  'opencl-native',
-  type : 'boolean',
-  value : true,
-  description : 'build gallium "clover" OpenCL frontend with native LLVM codegen support.',
 )
 option(
   'static-libclc',
@@ -192,7 +185,7 @@ option(
   'vulkan-drivers',
   type : 'array',
   value : ['auto'],
-  choices : ['auto', 'amd', 'broadcom', 'freedreno', 'imagination-experimental', 'intel', 'microsoft-experimental', 'panfrost', 'swrast', 'virtio-experimental'],
+  choices : ['auto', 'amd', 'broadcom', 'freedreno', 'imagination-experimental', 'intel', 'intel_hasvk', 'microsoft-experimental', 'panfrost', 'swrast', 'virtio-experimental'],
   description : 'List of vulkan drivers to build. If this is set to auto all drivers applicable to the target OS/architecture will be built'
 )
 option(
@@ -388,6 +381,12 @@ option(
   description : 'Build unit tests. Currently this will build *all* unit tests except the ACO tests, which may build more than expected.'
 )
 option(
+  'enable-glcpp-tests',
+  type : 'boolean',
+  value : true,
+  description : 'Build glcpp unit tests. These are flaky on CI.'
+)
+option(
   'build-aco-tests',
   type : 'boolean',
   value : false,
@@ -429,7 +428,7 @@ option(
   'tools',
   type : 'array',
   value : [],
-  choices : ['drm-shim', 'etnaviv', 'freedreno', 'glsl', 'intel', 'intel-ui', 'nir', 'nouveau', 'xvmc', 'lima', 'panfrost', 'asahi', 'imagination', 'all', 'dlclose-skip'],
+  choices : ['drm-shim', 'etnaviv', 'freedreno', 'glsl', 'intel', 'intel-ui', 'nir', 'nouveau', 'lima', 'panfrost', 'asahi', 'imagination', 'all', 'dlclose-skip'],
   description : 'List of tools to build. (Note: `intel-ui` selects `intel`)',
 )
 option(
@@ -525,7 +524,7 @@ option(
   'intel-clc',
   type : 'feature',
   value : 'disabled',
-  description : 'Build the intel-clc compiler (required for ray queries).'
+  description : 'Build the intel-clc compiler (enables Vulkan Intel Ray Tracing on supported hardware).'
 )
 option(
   'video-codecs',

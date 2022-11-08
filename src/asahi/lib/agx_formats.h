@@ -29,7 +29,8 @@
 #include "asahi/compiler/agx_compile.h"
 
 struct agx_pixel_format_entry {
-   uint16_t hw;
+   uint8_t channels;
+   uint8_t type;
    bool renderable : 1;
    enum agx_format internal : 4;
 };
@@ -44,7 +45,7 @@ static inline bool
 agx_is_valid_pixel_format(enum pipe_format format)
 {
    struct agx_pixel_format_entry entry = agx_pixel_format[format];
-   return (entry.hw != 0) || entry.renderable;
+   return ((entry.channels | entry.type) != 0) || entry.renderable;
 }
 
 #endif

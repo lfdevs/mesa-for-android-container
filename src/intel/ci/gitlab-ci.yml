@@ -35,7 +35,7 @@
   variables:
     DEVICE_TYPE: asus-cx9400-volteer
     GPU_VERSION: anv-tgl
-    FDO_CI_CONCURRENT: 8
+    FDO_CI_CONCURRENT: 9
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-cx9400-volteer
 
 anv-tgl-vk:
@@ -56,6 +56,7 @@ anv-tgl-vk:
     DEVICE_TYPE: asus-C523NA-A20057-coral
     GPU_VERSION: iris-apl
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C523NA-A20057-coral
+    FDO_CI_CONCURRENT: 5
 
 # 4 boards
 .iris-glk-test:
@@ -65,6 +66,7 @@ anv-tgl-vk:
     DEVICE_TYPE: hp-x360-12b-ca0010nr-n4020-octopus
     GPU_VERSION: iris-glk
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-12b-ca0010nr-n4020-octopus
+    FDO_CI_CONCURRENT: 3
 
 # 5 boards, manual for now due to the GPU being occasionally stuck
 .iris-amly-test:
@@ -75,6 +77,7 @@ anv-tgl-vk:
     DEVICE_TYPE: asus-C433TA-AJ0005-rammus
     GPU_VERSION: iris-amly
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
+    FDO_CI_CONCURRENT: 5
 
 # 7 boards
 .iris-kbl-test:
@@ -84,6 +87,7 @@ anv-tgl-vk:
     DEVICE_TYPE: hp-x360-14-G1-sona
     GPU_VERSION: iris-kbl
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-14-G1-sona
+    FDO_CI_CONCURRENT: 9
 
 # 5 boards
 .iris-whl-test:
@@ -93,6 +97,7 @@ anv-tgl-vk:
     DEVICE_TYPE: dell-latitude-5400-8665U-sarien
     GPU_VERSION: iris-whl
     RUNNER_TAG: mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
+    FDO_CI_CONCURRENT: 9
 
 # 5 boards
 .iris-cml-test:
@@ -102,6 +107,17 @@ anv-tgl-vk:
     DEVICE_TYPE: asus-C436FA-Flip-hatch
     GPU_VERSION: iris-cml
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
+    FDO_CI_CONCURRENT: 9
+
+# 8 boards
+.iris-jsl-test:
+  extends:
+    - .iris-test
+  variables:
+    DEVICE_TYPE: acer-cb317-1h-c3z6-dedede
+    GPU_VERSION: iris-jsl
+    RUNNER_TAG: mesa-ci-x86-64-lava-acer-cb317-1h-c3z6-dedede
+    FDO_CI_CONCURRENT: 3
 
 iris-apl-deqp:
   extends:
@@ -161,6 +177,13 @@ iris-cml-deqp:
   variables:
     DEQP_SUITE: iris-cml
   parallel: 4
+
+iris-jsl-deqp:
+  extends:
+    - .iris-jsl-test
+  variables:
+    DEQP_SUITE: iris-jsl
+  parallel: 8
 
 iris-amly-egl:
   extends:

@@ -135,6 +135,14 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
                                                    ProfileToPipe(profile),
                                                    PIPE_VIDEO_ENTRYPOINT_BITSTREAM))
                value |= VA_RT_FORMAT_YUV420_10BPP;
+            if (pscreen->is_video_format_supported(pscreen, PIPE_FORMAT_Y8_400_UNORM,
+                                                   ProfileToPipe(profile),
+                                                   PIPE_VIDEO_ENTRYPOINT_BITSTREAM))
+               value |= VA_RT_FORMAT_YUV400;
+            if (pscreen->is_video_format_supported(pscreen, PIPE_FORMAT_Y8_U8_V8_444_UNORM,
+                                                   ProfileToPipe(profile),
+                                                   PIPE_VIDEO_ENTRYPOINT_BITSTREAM))
+               value |= VA_RT_FORMAT_YUV444;
             break;
          default:
             value = VA_ATTRIB_NOT_SUPPORTED;
@@ -207,6 +215,122 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
             else
                value = supportedSliceStructuresFlagSet;
          } break;
+         case VAConfigAttribEncQualityRange:
+         {
+            /*
+             * this quality range provides different options within the range; and it isn't strictly
+             * faster when higher value used.
+             * 0, not used; 1, default value; others are using vlVaQualityBits for different modes.
+             */
+            int quality_range = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                 PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                 PIPE_VIDEO_CAP_ENC_QUALITY_LEVEL);
+            value = quality_range ? quality_range : VA_ATTRIB_NOT_SUPPORTED;
+         } break;
+         case VAConfigAttribMaxFrameSize:
+         {
+            /* Max Frame Size can be used to control picture level frame size.
+             * This frame size is in bits.
+             */
+            value = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                             PIPE_VIDEO_CAP_ENC_SUPPORTS_MAX_FRAME_SIZE);
+            value = value ? value : VA_ATTRIB_NOT_SUPPORTED;
+         } break;
+#if VA_CHECK_VERSION(1, 12, 0)
+         case VAConfigAttribEncHEVCFeatures:
+         {
+            union pipe_h265_enc_cap_features pipe_features;
+            pipe_features.value = 0u;
+            /* get_video_param sets pipe_features.bits.config_supported = 1
+               to distinguish between supported cap with all bits off and unsupported by driver
+               with value = 0
+            */
+            int supportedHEVCEncFeaturesFlagSet = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                             PIPE_VIDEO_CAP_ENC_HEVC_FEATURE_FLAGS);
+            if (supportedHEVCEncFeaturesFlagSet <= 0)
+               value = VA_ATTRIB_NOT_SUPPORTED;
+            else {
+               /* Assign unsigned typed variable "value" after checking supportedHEVCEncFeaturesFlagSet > 0 */
+               pipe_features.value = supportedHEVCEncFeaturesFlagSet;
+               VAConfigAttribValEncHEVCFeatures va_features;
+               va_features.value = 0;
+               va_features.bits.separate_colour_planes = pipe_features.bits.separate_colour_planes;
+               va_features.bits.scaling_lists = pipe_features.bits.scaling_lists;
+               va_features.bits.amp = pipe_features.bits.amp;
+               va_features.bits.sao = pipe_features.bits.sao;
+               va_features.bits.pcm = pipe_features.bits.pcm;
+               va_features.bits.temporal_mvp = pipe_features.bits.temporal_mvp;
+               va_features.bits.strong_intra_smoothing = pipe_features.bits.strong_intra_smoothing;
+               va_features.bits.dependent_slices = pipe_features.bits.dependent_slices;
+               va_features.bits.sign_data_hiding = pipe_features.bits.sign_data_hiding;
+               va_features.bits.constrained_intra_pred = pipe_features.bits.constrained_intra_pred;
+               va_features.bits.transform_skip = pipe_features.bits.transform_skip;
+               va_features.bits.cu_qp_delta = pipe_features.bits.cu_qp_delta;
+               va_features.bits.weighted_prediction = pipe_features.bits.weighted_prediction;
+               va_features.bits.transquant_bypass = pipe_features.bits.transquant_bypass;
+               va_features.bits.deblocking_filter_disable = pipe_features.bits.deblocking_filter_disable;
+               value = va_features.value;
+            }
+         } break;
+         case VAConfigAttribEncHEVCBlockSizes:
+         {
+            union pipe_h265_enc_cap_block_sizes pipe_block_sizes;
+            pipe_block_sizes.value = 0;
+            /* get_video_param sets pipe_block_sizes.bits.config_supported = 1
+               to distinguish between supported cap with all bits off and unsupported by driver
+               with value = 0
+            */
+            int supportedHEVCEncBlockSizes = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                             PIPE_VIDEO_CAP_ENC_HEVC_BLOCK_SIZES);
+            if (supportedHEVCEncBlockSizes <= 0)
+               value = VA_ATTRIB_NOT_SUPPORTED;
+            else {
+               /* Assign unsigned typed variable "value" after checking supportedHEVCEncBlockSizes > 0 */
+               pipe_block_sizes.value = supportedHEVCEncBlockSizes;
+               VAConfigAttribValEncHEVCBlockSizes va_block_sizes;
+               va_block_sizes.value = 0;
+               va_block_sizes.bits.log2_max_coding_tree_block_size_minus3 =
+                              pipe_block_sizes.bits.log2_max_coding_tree_block_size_minus3;
+               va_block_sizes.bits.log2_min_coding_tree_block_size_minus3 =
+                              pipe_block_sizes.bits.log2_min_coding_tree_block_size_minus3;
+               va_block_sizes.bits.log2_min_luma_coding_block_size_minus3 =
+                              pipe_block_sizes.bits.log2_min_luma_coding_block_size_minus3;
+               va_block_sizes.bits.log2_max_luma_transform_block_size_minus2 =
+                              pipe_block_sizes.bits.log2_max_luma_transform_block_size_minus2;
+               va_block_sizes.bits.log2_min_luma_transform_block_size_minus2 =
+                              pipe_block_sizes.bits.log2_min_luma_transform_block_size_minus2;
+               va_block_sizes.bits.max_max_transform_hierarchy_depth_inter =
+                              pipe_block_sizes.bits.max_max_transform_hierarchy_depth_inter;
+               va_block_sizes.bits.min_max_transform_hierarchy_depth_inter =
+                              pipe_block_sizes.bits.min_max_transform_hierarchy_depth_inter;
+               va_block_sizes.bits.max_max_transform_hierarchy_depth_intra =
+                              pipe_block_sizes.bits.max_max_transform_hierarchy_depth_intra;
+               va_block_sizes.bits.min_max_transform_hierarchy_depth_intra =
+                              pipe_block_sizes.bits.min_max_transform_hierarchy_depth_intra;
+               va_block_sizes.bits.log2_max_pcm_coding_block_size_minus3 =
+                              pipe_block_sizes.bits.log2_max_pcm_coding_block_size_minus3;
+               va_block_sizes.bits.log2_min_pcm_coding_block_size_minus3 =
+                              pipe_block_sizes.bits.log2_min_pcm_coding_block_size_minus3;
+               value = va_block_sizes.value;
+            }
+         } break;
+#endif
+#if VA_CHECK_VERSION(1, 6, 0)
+         case VAConfigAttribPredictionDirection:
+         {
+            /* The VA enum values match the pipe_h265_enc_pred_direction definitions*/
+            int h265_enc_pred_direction = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
+                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                                             PIPE_VIDEO_CAP_ENC_HEVC_PREDICTION_DIRECTION);
+            if (h265_enc_pred_direction <= 0)
+               value = VA_ATTRIB_NOT_SUPPORTED;
+            else
+               value = h265_enc_pred_direction;
+         } break;
+#endif
          default:
             value = VA_ATTRIB_NOT_SUPPORTED;
             break;
@@ -331,6 +455,14 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
        pscreen->is_video_format_supported(pscreen, PIPE_FORMAT_P016, p,
          config->entrypoint))
       supported_rt_formats |= VA_RT_FORMAT_YUV420_10BPP;
+   if (pscreen->is_video_format_supported(pscreen, PIPE_FORMAT_Y8_400_UNORM,
+                                          ProfileToPipe(profile),
+                                          config->entrypoint))
+      supported_rt_formats |= VA_RT_FORMAT_YUV400;
+   if (pscreen->is_video_format_supported(pscreen, PIPE_FORMAT_Y8_U8_V8_444_UNORM,
+                                          ProfileToPipe(profile),
+                                          config->entrypoint))
+      supported_rt_formats |= VA_RT_FORMAT_YUV444;
 
    for (int i = 0; i <num_attribs ; i++) {
       if (attrib_list[i].type != VAConfigAttribRTFormat &&

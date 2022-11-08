@@ -1,4 +1,7 @@
 #!/bin/bash
+# shellcheck disable=SC2086 # we want word splitting
+
+set -e
 
 # Pull packages from msys2 repository that can be directly used.
 # We can use https://packages.msys2.org/ to retrieve the newest package

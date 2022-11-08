@@ -36,6 +36,8 @@ dzn_meta_compile_shader(struct dzn_device *device, nir_shader *nir,
 {
    struct dzn_instance *instance =
       container_of(device->vk.physical->instance, struct dzn_instance, vk);
+   struct dzn_physical_device *pdev =
+      container_of(device->vk.physical, struct dzn_physical_device, vk);
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
@@ -45,13 +47,13 @@ dzn_meta_compile_shader(struct dzn_device *device, nir_shader *nir,
 
    struct nir_to_dxil_options opts = {
       .environment = DXIL_ENVIRONMENT_VULKAN,
-      .shader_model_max = SHADER_MODEL_6_2,
+      .shader_model_max = dzn_get_shader_model(pdev),
 #ifdef _WIN32
       .validator_version_max = dxil_get_validator_version(instance->dxil_validator),
 #endif
    };
    struct blob dxil_blob;
-   ASSERTED bool ret = nir_to_dxil(nir, &opts, &dxil_blob);
+   ASSERTED bool ret = nir_to_dxil(nir, &opts, NULL, &dxil_blob);
    assert(ret);
 
 #ifdef _WIN32

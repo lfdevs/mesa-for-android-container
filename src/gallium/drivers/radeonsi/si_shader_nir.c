@@ -48,8 +48,15 @@ static uint8_t si_vectorize_callback(const nir_instr *instr, const void *data)
       return 0;
 
    nir_alu_instr *alu = nir_instr_as_alu(instr);
-   if (nir_dest_bit_size(alu->dest.dest) == 16)
-      return 2;
+   if (nir_dest_bit_size(alu->dest.dest) == 16) {
+      switch (alu->op) {
+      case nir_op_unpack_32_2x16_split_x:
+      case nir_op_unpack_32_2x16_split_y:
+         return 1;
+      default:
+         return 2;
+      }
+   }
 
    return 1;
 }
@@ -334,6 +341,8 @@ char *si_finalize_nir(struct pipe_screen *screen, void *nirptr)
    struct nir_shader *nir = (struct nir_shader *)nirptr;
 
    nir_lower_io_passes(nir);
+
+   NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_shared, nir_address_format_32bit_offset);
 
    /* Remove dead derefs, so that we can remove uniforms. */
    NIR_PASS_V(nir, nir_opt_dce);

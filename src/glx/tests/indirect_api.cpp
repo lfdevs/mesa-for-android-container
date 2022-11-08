@@ -590,7 +590,7 @@ void __indirect_glSecondaryColor3us(GLushort red, GLushort green, GLushort blue)
 void __indirect_glSecondaryColor3usv(const GLushort *v) { }
 void __indirect_glSecondaryColorPointer(GLint size, GLenum type, GLsizei stride, const void *pointer) { }
 void __indirect_glMultiDrawArrays(GLenum mode, const GLint *first, const GLsizei *count, GLsizei drawcount) { }
-void __indirect_glMultiDrawElementsEXT(GLenum mode, const GLsizei *count, GLenum type, const void *const*indices, GLsizei primcount) { }
+void __indirect_glMultiDrawElements(GLenum mode, const GLsizei *count, GLenum type, const void *const*indices, GLsizei primcount) { }
 void __indirect_glFogCoordPointer(GLenum type, GLsizei stride, const void *pointer) { }
 void __indirect_glFogCoordd(GLdouble coord) { }
 void __indirect_glFogCoorddv(const GLdouble *coord) { }
@@ -1363,7 +1363,7 @@ TEST_F(IndirectAPI, EXT_secondary_color)
 TEST_F(IndirectAPI, EXT_multi_draw_arrays)
 {
    EXPECT_EQ((_glapi_proc) __indirect_glMultiDrawArrays, table[_glapi_get_proc_offset("glMultiDrawArraysEXT")]);
-   EXPECT_EQ((_glapi_proc) __indirect_glMultiDrawElementsEXT, table[_glapi_get_proc_offset("glMultiDrawElementsEXT")]);
+   EXPECT_EQ((_glapi_proc) __indirect_glMultiDrawElements, table[_glapi_get_proc_offset("glMultiDrawElementsEXT")]);
 }
 
 TEST_F(IndirectAPI, EXT_fog_coord)

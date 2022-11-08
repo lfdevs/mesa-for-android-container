@@ -89,6 +89,7 @@ nv84_decoder_bsp(struct nv84_decoder *dec,
                  const unsigned *num_bytes,
                  struct nv84_video_buffer *dest)
 {
+   struct nouveau_screen *screen = nouveau_screen(dec->base.context->screen);
    struct iparm params;
    uint32_t more_params[0x44 / 4] = {0};
    unsigned total_bytes = 0;
@@ -103,7 +104,7 @@ nv84_decoder_bsp(struct nv84_decoder *dec,
       { dec->fence, NOUVEAU_BO_RDWR | NOUVEAU_BO_VRAM },
    };
 
-   nouveau_bo_wait(dec->fence, NOUVEAU_BO_RDWR, dec->client);
+   BO_WAIT(screen, dec->fence, NOUVEAU_BO_RDWR, dec->client);
 
    STATIC_ASSERT(sizeof(struct iparm) == 0x530);
 
@@ -200,7 +201,7 @@ nv84_decoder_bsp(struct nv84_decoder *dec,
    memcpy(dec->bitstream->map + 0x600, more_params, sizeof(more_params));
 
    PUSH_SPACE(push, 5 + 21 + 3 + 2 + 4 + 2);
-   nouveau_pushbuf_refn(push, bo_refs, ARRAY_SIZE(bo_refs));
+   PUSH_REFN(push, bo_refs, ARRAY_SIZE(bo_refs));
 
    /* Wait for the fence = 1 */
    BEGIN_NV04(push, SUBC_BSP(0x10), 4);

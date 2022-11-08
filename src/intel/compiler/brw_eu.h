@@ -1587,6 +1587,7 @@ brw_send_indirect_split_message(struct brw_codegen *p,
                                 unsigned desc_imm,
                                 struct brw_reg ex_desc,
                                 unsigned ex_desc_imm,
+                                bool ex_desc_scratch,
                                 bool eot);
 
 void brw_ff_sync(struct brw_codegen *p,

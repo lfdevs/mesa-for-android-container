@@ -157,7 +157,6 @@ util_pstipple_create_sampler(struct pipe_context *pipe)
    templat.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
    templat.min_img_filter = PIPE_TEX_FILTER_NEAREST;
    templat.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
-   templat.normalized_coords = 1;
    templat.min_lod = 0.0f;
    templat.max_lod = 0.0f;
 

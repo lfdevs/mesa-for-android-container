@@ -101,6 +101,10 @@ static struct VADriverVTable vtable =
    NULL, /* vaQueryProcessingRate */
    &vlVaExportSurfaceHandle,
 #endif
+#if VA_CHECK_VERSION(1, 15, 0)
+   NULL, /* vaSyncSurface2 */
+   &vlVaSyncBuffer,
+#endif
 };
 
 static struct VADriverVTableVPP vtable_vpp =
@@ -124,6 +128,12 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
 
    switch (ctx->display_type) {
+#ifdef _WIN32
+   case VA_DISPLAY_WIN32: {
+      drv->vscreen = vl_win32_screen_create(ctx->native_dpy);
+      break;
+   }
+#else
    case VA_DISPLAY_ANDROID:
       FREE(drv);
       return VA_STATUS_ERROR_UNIMPLEMENTED;
@@ -156,6 +166,7 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
          drv->vscreen = vl_drm_screen_create(drm_info->fd);
       break;
    }
+#endif
    default:
       FREE(drv);
       return VA_STATUS_ERROR_INVALID_DISPLAY;

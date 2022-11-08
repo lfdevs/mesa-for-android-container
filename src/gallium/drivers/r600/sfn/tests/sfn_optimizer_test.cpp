@@ -1,9 +1,9 @@
 
-#include "sfn_test_shaders.h"
-#include "../sfn_shader.h"
 #include "../sfn_optimizer.h"
 #include "../sfn_ra.h"
 #include "../sfn_scheduler.h"
+#include "../sfn_shader.h"
+#include "sfn_test_shaders.h"
 
 using namespace r600;
 using std::ostringstream;
@@ -11,11 +11,9 @@ using std::ostringstream;
 class TestShaderFromNir : public TestShader {
 
 protected:
-
    void check(Shader *s, const char *expect_str);
    void ra_check(Shader *s, const char *expect_str);
 };
-
 
 TEST_F(TestShaderFromNir, SimpleDCE)
 {
@@ -24,7 +22,6 @@ TEST_F(TestShaderFromNir, SimpleDCE)
 
    check(sh, red_triangle_fs_expect_from_nir_dce);
 }
-
 
 TEST_F(TestShaderFromNir, CopyPropagationForwardBackward)
 {
@@ -48,7 +45,6 @@ TEST_F(TestShaderFromNir, CopyPropagationBackwardDCE)
    dead_code_elimination(*sh);
    check(sh, add_add_1_expect_from_nir_copy_prop_fwd_dce_bwd);
 }
-
 
 TEST_F(TestShaderFromNir, FullOPtimize)
 {
@@ -83,7 +79,6 @@ TEST_F(TestShaderFromNir, CombinePinFlags)
 
    check(sh, shader_group_chan_pin_combined);
 }
-
 
 TEST_F(TestShaderFromNir, FullOPtimizeLoop)
 {
@@ -121,7 +116,6 @@ TEST_F(TestShaderFromNir, RA_with_dest_array)
    auto lrm = r600::LiveRangeEvaluator().run(*sh);
    EXPECT_TRUE(r600::register_allocation(lrm));
 
-
    ra_check(sh, shader_with_dest_array2_scheduled_ra);
 }
 
@@ -133,7 +127,6 @@ TEST_F(TestShaderFromNir, RA_with_chan_group)
    EXPECT_TRUE(r600::register_allocation(lrm));
    ra_check(sh, shader_group_chan_pin_combined_sheduled_ra);
 }
-
 
 TEST_F(TestShaderFromNir, TES_opt)
 {
@@ -150,7 +143,6 @@ TEST_F(TestShaderFromNir, TES_scheduled)
 
    check(schedule(sh), tes_optimized_sched);
 }
-
 
 /*
 TEST_F(TestShaderFromNir, ShaderClone)
@@ -176,7 +168,6 @@ TEST_F(TestShaderFromNir, ShaderSchedule)
    auto sh = from_string(basic_interpolation_orig);
 
    check(schedule(sh), basic_interpolation_expect_from_nir_sched);
-
 }
 
 TEST_F(TestShaderFromNir, ShaderScheduleCayman)
@@ -185,7 +176,6 @@ TEST_F(TestShaderFromNir, ShaderScheduleCayman)
 
    check(schedule(sh), basic_interpolation_expect_from_nir_sched_cayman);
 }
-
 
 TEST_F(TestShaderFromNir, ShaderScheduleOptimizedCayman)
 {
@@ -196,17 +186,15 @@ TEST_F(TestShaderFromNir, ShaderScheduleOptimizedCayman)
    check(schedule(sh), basic_interpolation_expect_opt_sched_cayman);
 }
 
-
 TEST_F(TestShaderFromNir, CopyPropLegalConst)
 {
-     auto sh = from_string(dot4_pre);
+   auto sh = from_string(dot4_pre);
 
-     copy_propagation_fwd(*sh);
-     dead_code_elimination(*sh);
+   copy_propagation_fwd(*sh);
+   dead_code_elimination(*sh);
 
-     check(sh, dot4_copy_prop_dce);
+   check(sh, dot4_copy_prop_dce);
 }
-
 
 TEST_F(TestShaderFromNir, FullOPtimize_glxgears_vs2)
 {
@@ -231,8 +219,6 @@ TEST_F(TestShaderFromNir, test_dont_kill_dual_use)
    check(schedule(sh), shader_copy_prop_dont_kill_double_use_expect);
 }
 
-
-
 TEST_F(TestShaderFromNir, test_schedule_with_bany)
 {
 
@@ -240,7 +226,6 @@ TEST_F(TestShaderFromNir, test_schedule_with_bany)
    optimize(*sh);
    check(schedule(sh), shader_with_bany_expect_opt_sched_eg);
 }
-
 
 TEST_F(TestShaderFromNir, GroupAndChanCombine)
 {
@@ -268,8 +253,23 @@ TEST_F(TestShaderFromNir, ScheduleVSforTCS)
    check(schedule(sh), vtx_for_tcs_sched);
 }
 
+TEST_F(TestShaderFromNir, fs_opt_tex_coord)
+{
+   auto sh = from_string(fs_opt_tex_coord_init);
 
-void TestShaderFromNir::check(Shader *s, const char *expect_orig)
+   optimize(*sh);
+
+   check(sh, fs_opt_tex_coord_expect);
+}
+
+TEST_F(TestShaderFromNir, fs_shed_tex_coord)
+{
+   auto sh = from_string(fs_sched_tex_coord_init);
+   check(schedule(sh), fs_sched_tex_coord_expect);
+}
+
+void
+TestShaderFromNir::check(Shader *s, const char *expect_orig)
 {
    ostringstream test_str;
    s->print(test_str);
@@ -282,7 +282,8 @@ void TestShaderFromNir::check(Shader *s, const char *expect_orig)
    EXPECT_EQ(test_str.str(), expect_str.str());
 }
 
-void TestShaderFromNir::ra_check(Shader *s, const char *expect_orig)
+void
+TestShaderFromNir::ra_check(Shader *s, const char *expect_orig)
 {
    s->value_factory().clear_pins();
    ostringstream test_str;
@@ -296,5 +297,3 @@ void TestShaderFromNir::ra_check(Shader *s, const char *expect_orig)
 
    EXPECT_EQ(test_str.str(), expect_str.str());
 }
-
-

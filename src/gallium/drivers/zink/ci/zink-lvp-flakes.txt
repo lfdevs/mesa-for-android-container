@@ -23,3 +23,5 @@ glx@glx-shader-sharing
 spec@arb_fragment_program@no-newline
 # glx-destroycontext-1: ../../src/xcb_conn.c:215: write_vec: Assertion `!c->out.queue_len' failed.
 glx@glx-destroycontext-1
+
+glx@glx-multithread-texture

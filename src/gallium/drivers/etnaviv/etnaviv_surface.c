@@ -50,7 +50,8 @@ etna_render_handle_incompatible(struct pipe_context *pctx,
    struct etna_resource *res = etna_resource(prsc);
    bool need_multitiled = screen->specs.pixel_pipes > 1 && !screen->specs.single_buffer;
    bool want_supertiled = screen->specs.can_supertile;
-   unsigned int min_tilesize = etna_screen_get_tile_size(screen, TS_MODE_128B);
+   unsigned int min_tilesize = etna_screen_get_tile_size(screen, TS_MODE_128B,
+                                                         prsc->nr_samples > 1);
 
    /* Resource is compatible if it is tiled or PE is able to render to linear
     * and has multi tiling when required.
@@ -114,7 +115,10 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
        /* needs to be RS/BLT compatible for transfer_map/unmap */
        (rsc->levels[level].padded_width & ETNA_RS_WIDTH_MASK) == 0 &&
        (rsc->levels[level].padded_height & ETNA_RS_HEIGHT_MASK) == 0 &&
-       etna_resource_hw_tileable(screen->specs.use_blt, prsc)) {
+       etna_resource_hw_tileable(screen->specs.use_blt, prsc) &&
+       /* Multi-layer resources would need to keep much more state (TS valid and
+        * clear color per layer) and are unlikely to profit from TS usage. */
+       prsc->depth0 == 1 && prsc->array_size == 1) {
       etna_screen_resource_alloc_ts(pctx->screen, rsc);
    }
 

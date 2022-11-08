@@ -277,6 +277,7 @@ crocus_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    crocus_init_program_functions(ctx);
    crocus_init_resource_functions(ctx);
    crocus_init_flush_functions(ctx);
+   crocus_init_perfquery_functions(ctx);
 
    crocus_init_program_cache(ice);
 

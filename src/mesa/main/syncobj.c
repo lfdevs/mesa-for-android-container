@@ -268,8 +268,8 @@ _mesa_DeleteSync(GLsync sync)
 }
 
 
-static GLsync
-fence_sync(struct gl_context *ctx, GLenum condition, GLbitfield flags)
+GLsync
+_mesa_fence_sync(struct gl_context *ctx, GLenum condition, GLbitfield flags)
 {
    struct gl_sync_object *syncObj;
 
@@ -308,7 +308,7 @@ GLsync GLAPIENTRY
 _mesa_FenceSync_no_error(GLenum condition, GLbitfield flags)
 {
    GET_CURRENT_CONTEXT(ctx);
-   return fence_sync(ctx, condition, flags);
+   return _mesa_fence_sync(ctx, condition, flags);
 }
 
 
@@ -329,7 +329,7 @@ _mesa_FenceSync(GLenum condition, GLbitfield flags)
       return 0;
    }
 
-   return fence_sync(ctx, condition, flags);
+   return _mesa_fence_sync(ctx, condition, flags);
 }
 
 

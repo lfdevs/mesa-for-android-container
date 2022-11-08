@@ -62,8 +62,7 @@ FUNC(FUNC_VARS)
    /* no splitting required */
    if (count <= max_count_simple) {
       SEGMENT_SIMPLE(0x0, start, count);
-   }
-   else {
+   } else {
       const unsigned rollback = first - incr;
       unsigned flags = DRAW_SPLIT_AFTER, seg_start = 0, seg_max;
 
@@ -108,8 +107,7 @@ FUNC(FUNC_VARS)
                seg_start += seg_max - rollback;
 
                flags |= DRAW_SPLIT_BEFORE;
-            }
-            else {
+            } else {
                flags &= ~DRAW_SPLIT_AFTER;
 
                SEGMENT_SIMPLE(flags, start + seg_start, remaining);
@@ -130,8 +128,7 @@ FUNC(FUNC_VARS)
                seg_start += seg_max - rollback;
 
                flags |= DRAW_SPLIT_BEFORE;
-            }
-            else {
+            } else {
                flags &= ~DRAW_SPLIT_AFTER;
 
                SEGMENT_LOOP(flags, start + seg_start, remaining, start);
@@ -153,8 +150,7 @@ FUNC(FUNC_VARS)
                seg_start += seg_max - rollback;
 
                flags |= DRAW_SPLIT_BEFORE;
-            }
-            else {
+            } else {
                flags &= ~DRAW_SPLIT_AFTER;
 
                SEGMENT_FAN(flags, start + seg_start, remaining, start);

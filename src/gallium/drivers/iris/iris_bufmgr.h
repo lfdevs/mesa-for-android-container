@@ -285,6 +285,9 @@ struct iris_bo {
 
          /** Boolean of whether this buffer points into user memory */
          bool userptr;
+
+         /** Boolean of whether this buffer is protected (HW encryption) */
+         bool protected;
       } real;
       struct {
          struct pb_slab_entry entry;
@@ -299,6 +302,7 @@ struct iris_bo {
 #define BO_ALLOC_SCANOUT     (1<<3)
 #define BO_ALLOC_NO_SUBALLOC (1<<4)
 #define BO_ALLOC_LMEM        (1<<5)
+#define BO_ALLOC_PROTECTED   (1<<6)
 
 /**
  * Allocate a buffer object.
@@ -491,9 +495,7 @@ struct iris_bo *iris_bo_gem_create_from_name(struct iris_bufmgr *bufmgr,
 
 void* iris_bufmgr_get_aux_map_context(struct iris_bufmgr *bufmgr);
 
-int iris_bo_wait(struct iris_bo *bo, int64_t timeout_ns);
-
-uint32_t iris_create_hw_context(struct iris_bufmgr *bufmgr);
+uint32_t iris_create_hw_context(struct iris_bufmgr *bufmgr, bool protected);
 uint32_t iris_clone_hw_context(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
 int iris_kernel_context_get_priority(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
 
@@ -528,8 +530,6 @@ int iris_bo_export_gem_handle_for_device(struct iris_bo *bo, int drm_fd,
                                          uint32_t *out_handle);
 
 uint32_t iris_bo_export_gem_handle(struct iris_bo *bo);
-
-int iris_reg_read(struct iris_bufmgr *bufmgr, uint32_t offset, uint64_t *out);
 
 /**
  * Returns the BO's address relative to the appropriate base address.

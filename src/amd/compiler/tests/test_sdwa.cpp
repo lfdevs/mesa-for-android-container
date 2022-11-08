@@ -496,17 +496,15 @@ BEGIN_TEST(optimize.sdwa.insert)
       bld.pseudo(ins, bld.def(v1), val, Operand::c32(1u), Operand::c32(16u));
       writeout(10, val);
 
-      //~gfx8! v1: %tmp11 = v_sub_i16 %a, %b
-      //~gfx8! v1: %res11 = p_insert %tmp11, 0, 16
-      //~gfx(9|10)! v1: %res11 = v_sub_i16 %a, %b
-      //~gfx(8|9|10)! p_unit_test 11, %res11
+      //~gfx[^7]! v1: %tmp11 = v_sub_i16 %a, %b
+      //~gfx[^7]! v1: %res11 = p_insert %tmp11, 0, 16
+      //~gfx[^7]! p_unit_test 11, %res11
       val = bld.vop3(aco_opcode::v_sub_i16, bld.def(v1), inputs[0], inputs[1]);
       writeout(11, bld.pseudo(ins, bld.def(v1), val, Operand::zero(), Operand::c32(16u)));
 
-      //~gfx8! v1: %tmp12 = v_sub_i16 %a, %b
-      //~gfx8! v1: %res12 = p_insert %tmp12, 1, 16
-      //~gfx(9|10)! v1: %res12 = v_sub_i16 %a, %b opsel_hi
-      //~gfx(8|9|10)! p_unit_test 12, %res12
+      //~gfx[^7]! v1: %tmp12 = v_sub_i16 %a, %b
+      //~gfx[^7]! v1: %res12 = p_insert %tmp12, 1, 16
+      //~gfx[^7]! p_unit_test 12, %res12
       val = bld.vop3(aco_opcode::v_sub_i16, bld.def(v1), inputs[0], inputs[1]);
       writeout(12, bld.pseudo(ins, bld.def(v1), val, Operand::c32(1u), Operand::c32(16u)));
 

@@ -70,9 +70,6 @@ static bool
 bi_writes_reg(const bi_instr *I, unsigned reg)
 {
    bi_foreach_dest(I, d) {
-      if (bi_is_null(I->dest[d]))
-         continue;
-
       assert(I->dest[d].type == BI_INDEX_REGISTER);
 
       unsigned count = bi_count_write_registers(I, d);

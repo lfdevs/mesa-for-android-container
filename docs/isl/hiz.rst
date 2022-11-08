@@ -11,7 +11,7 @@ From the Sandy Bridge PRM Vol. 2, Pt. 1, 7.5.3 "Hierarchical Depth Buffer" (p.
 312):
 
    The hierarchical depth buffer does not support the LOD field, it is assumed
-   by hardware to be zero. A separate hierarachical depth buffer is required
+   by hardware to be zero. A separate hierarchical depth buffer is required
    for each LOD used, and the corresponding buffer’s state delivered to
    hardware each time a new depth buffer state with modified LOD is delivered.
 

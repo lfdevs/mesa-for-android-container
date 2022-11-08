@@ -92,16 +92,15 @@ struct gallivm_state;
 
 struct pipe_context;
 struct draw_vertex_shader;
-struct draw_context;
 struct draw_stage;
+struct draw_pt_front_end;
+struct draw_assembler;
+struct draw_llvm;
 struct vbuf_render;
 struct tgsi_exec_machine;
 struct tgsi_sampler;
 struct tgsi_image;
 struct tgsi_buffer;
-struct draw_pt_front_end;
-struct draw_assembler;
-struct draw_llvm;
 struct lp_cached_code;
 
 /**
@@ -113,8 +112,8 @@ struct draw_vertex_buffer {
 };
 
 /**
- * Basic vertex info.
- * Carry some useful information around with the vertices in the prim pipe.
+ * Basic vertex info.  Used to represent vertices after VS (through GS, TESS,
+ * etc.) to vbuf output.
  */
 struct vertex_header {
    unsigned clipmask:DRAW_TOTAL_CLIP_PLANES;
@@ -123,10 +122,7 @@ struct vertex_header {
    unsigned vertex_id:16;
 
    float clip_pos[4];
-
-   /* This will probably become float (*data)[4] soon:
-    */
-   float data[][4];
+   float data[][4]; // the vertex attributes
 };
 
 /* NOTE: It should match vertex_id size above */
@@ -177,7 +173,6 @@ struct draw_context
       unsigned vertex_stride;
       unsigned vertex_count;
    } pipeline;
-
 
    struct vbuf_render *render;
 
@@ -234,7 +229,7 @@ struct draw_context
          /** vertex arrays */
          struct draw_vertex_buffer vbuffer[PIPE_MAX_ATTRIBS];
 
-         /** constant buffers (for vertex/geometry shader) */
+         /** constant buffers for each shader stage */
          const void *vs_constants[PIPE_MAX_CONSTANT_BUFFERS];
          unsigned vs_constants_size[PIPE_MAX_CONSTANT_BUFFERS];
          const void *gs_constants[PIPE_MAX_CONSTANT_BUFFERS];
@@ -244,7 +239,7 @@ struct draw_context
          const void *tes_constants[PIPE_MAX_CONSTANT_BUFFERS];
          unsigned tes_constants_size[PIPE_MAX_CONSTANT_BUFFERS];
 
-         /** shader buffers (for vertex/geometry shader) */
+         /** shader buffers for each shader stage */
          const void *vs_ssbos[PIPE_MAX_SHADER_BUFFERS];
          unsigned vs_ssbos_size[PIPE_MAX_SHADER_BUFFERS];
          const void *gs_ssbos[PIPE_MAX_SHADER_BUFFERS];
@@ -340,7 +335,6 @@ struct draw_context
          struct tgsi_image *image;
          struct tgsi_buffer *buffer;
       } tgsi;
-
    } gs;
 
    /* Tessellation state */

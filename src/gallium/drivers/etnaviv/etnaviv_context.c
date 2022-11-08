@@ -55,6 +55,7 @@
 #include "util/u_memory.h"
 #include "util/u_prim.h"
 #include "util/u_upload_mgr.h"
+#include "util/u_debug_cb.h"
 
 #include "hw/common.xml.h"
 
@@ -160,11 +161,11 @@ etna_update_state_for_draw(struct etna_context *ctx, const struct pipe_draw_info
 }
 
 static bool
-etna_get_vs(struct etna_context *ctx, struct etna_shader_key key)
+etna_get_vs(struct etna_context *ctx, struct etna_shader_key* const key)
 {
    const struct etna_shader_variant *old = ctx->shader.vs;
 
-   ctx->shader.vs = etna_shader_variant(ctx->shader.bind_vs, key, &ctx->debug);
+   ctx->shader.vs = etna_shader_variant(ctx->shader.bind_vs, key, &ctx->base.debug);
 
    if (!ctx->shader.vs)
       return false;
@@ -176,7 +177,7 @@ etna_get_vs(struct etna_context *ctx, struct etna_shader_key key)
 }
 
 static bool
-etna_get_fs(struct etna_context *ctx, struct etna_shader_key key)
+etna_get_fs(struct etna_context *ctx, struct etna_shader_key* const key)
 {
    const struct etna_shader_variant *old = ctx->shader.fs;
 
@@ -188,19 +189,19 @@ etna_get_fs(struct etna_context *ctx, struct etna_shader_key key)
          if (ctx->sampler[i]->compare_mode == PIPE_TEX_COMPARE_NONE)
             continue;
 
-         key.has_sample_tex_compare = 1;
-         key.num_texture_states = ctx->num_fragment_sampler_views;
+         key->has_sample_tex_compare = 1;
+         key->num_texture_states = ctx->num_fragment_sampler_views;
 
-         key.tex_swizzle[i].swizzle_r = ctx->sampler_view[i]->swizzle_r;
-         key.tex_swizzle[i].swizzle_g = ctx->sampler_view[i]->swizzle_g;
-         key.tex_swizzle[i].swizzle_b = ctx->sampler_view[i]->swizzle_b;
-         key.tex_swizzle[i].swizzle_a = ctx->sampler_view[i]->swizzle_a;
+         key->tex_swizzle[i].swizzle_r = ctx->sampler_view[i]->swizzle_r;
+         key->tex_swizzle[i].swizzle_g = ctx->sampler_view[i]->swizzle_g;
+         key->tex_swizzle[i].swizzle_b = ctx->sampler_view[i]->swizzle_b;
+         key->tex_swizzle[i].swizzle_a = ctx->sampler_view[i]->swizzle_a;
 
-         key.tex_compare_func[i] = ctx->sampler[i]->compare_func;
+         key->tex_compare_func[i] = ctx->sampler[i]->compare_func;
       }
    }
 
-   ctx->shader.fs = etna_shader_variant(ctx->shader.bind_fs, key, &ctx->debug);
+   ctx->shader.fs = etna_shader_variant(ctx->shader.bind_fs, key, &ctx->base.debug);
 
    if (!ctx->shader.fs)
       return false;
@@ -296,7 +297,7 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    if (pfb->cbufs[0])
       key.frag_rb_swap = !!translate_pe_format_rb_swap(pfb->cbufs[0]->format);
 
-   if (!etna_get_vs(ctx, key) || !etna_get_fs(ctx, key)) {
+   if (!etna_get_vs(ctx, &key) || !etna_get_fs(ctx, &key)) {
       BUG("compiled shaders are not okay");
       return;
    }
@@ -517,6 +518,7 @@ etna_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
       struct pipe_resource *prsc = (struct pipe_resource *)entry->key;
 
       pctx->flush_resource(pctx, prsc);
+      pipe_resource_reference(&prsc, NULL);
    }
    _mesa_set_clear(ctx->flush_resources, NULL);
 
@@ -552,11 +554,7 @@ etna_set_debug_callback(struct pipe_context *pctx,
    struct etna_screen *screen = ctx->screen;
 
    util_queue_finish(&screen->shader_compiler_queue);
-
-   if (cb)
-      ctx->debug = *cb;
-   else
-      memset(&ctx->debug, 0, sizeof(ctx->debug));
+   u_default_set_debug_callback(pctx, cb);
 }
 
 struct pipe_context *

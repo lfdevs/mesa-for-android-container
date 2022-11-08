@@ -31,6 +31,7 @@
 
 #include <GL/gl.h>
 #include <GL/wglext.h>
+#include <GL/mesa_glinterop.h>
 
 #include "glapi/glapi.h"
 #include "stw_device.h"
@@ -82,6 +83,11 @@ static const struct stw_extension_entry stw_extension_entries[] = {
    /*  WGL_ARB_make_current_read */
    STW_EXTENSION_ENTRY( wglMakeContextCurrentARB ),
    STW_EXTENSION_ENTRY( wglGetCurrentReadDCARB ),
+
+   /* Unnamed */
+   STW_EXTENSION_ENTRY( wglMesaGLInteropQueryDeviceInfo ),
+   STW_EXTENSION_ENTRY( wglMesaGLInteropExportObject ),
+   STW_EXTENSION_ENTRY( wglMesaGLInteropFlushObjects ),
    { NULL, NULL }
 };
 

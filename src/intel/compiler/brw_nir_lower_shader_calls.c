@@ -85,12 +85,18 @@ brw_nir_lower_shader_returns(nir_shader *shader)
           * it ends, we retire the bindless stack ID and no further shaders
           * will be executed.
           */
+         assert(impl->end_block->predecessors->entries == 1);
          brw_nir_btd_retire(&b);
          break;
 
       case MESA_SHADER_ANY_HIT:
          /* The default action of an any-hit shader is to accept the ray
-          * intersection.
+          * intersection.  Any-hit shaders may have more than one exit.  Only
+          * the final "normal" exit will actually need to accept the
+          * intersection as any others should come from nir_jump_halt
+          * instructions inserted after ignore_ray_intersection or
+          * terminate_ray or the like.  However, inserting an accept after
+          * the ignore or terminate is safe because it'll get deleted later.
           */
          nir_accept_ray_intersection(&b);
          break;
@@ -102,6 +108,7 @@ brw_nir_lower_shader_returns(nir_shader *shader)
           * action at the end.  They simply return back to the previous shader
           * in the call stack.
           */
+         assert(impl->end_block->predecessors->entries == 1);
          brw_nir_btd_return(&b);
          break;
 
@@ -112,9 +119,6 @@ brw_nir_lower_shader_returns(nir_shader *shader)
       default:
          unreachable("Invalid callable shader stage");
       }
-
-      assert(impl->end_block->predecessors->entries == 1);
-      break;
    }
 
    nir_metadata_preserve(impl, nir_metadata_block_index |
@@ -149,6 +153,8 @@ store_resume_addr(nir_builder *b, nir_intrinsic_instr *call)
 static bool
 lower_shader_trace_ray_instr(struct nir_builder *b, nir_instr *instr, void *data)
 {
+   struct brw_bs_prog_key *key = data;
+
    if (instr->type != nir_instr_type_intrinsic)
       return false;
 
@@ -219,7 +225,10 @@ lower_shader_trace_ray_instr(struct nir_builder *b, nir_instr *instr, void *data
 
    struct brw_nir_rt_mem_ray_defs ray_defs = {
       .root_node_ptr = root_node_ptr,
-      .ray_flags = nir_u2u16(b, ray_flags),
+      /* Combine the shader value given to traceRayEXT() with the pipeline
+       * creation value VkPipelineCreateFlags.
+       */
+      .ray_flags = nir_ior_imm(b, nir_u2u16(b, ray_flags), key->pipeline_ray_flags),
       .ray_mask = cull_mask,
       .hit_group_sr_base_ptr = hit_sbt_addr,
       .hit_group_sr_stride = nir_u2u16(b, hit_sbt_stride_B),
@@ -229,6 +238,13 @@ lower_shader_trace_ray_instr(struct nir_builder *b, nir_instr *instr, void *data
       .dir = ray_dir,
       .t_far = ray_t_max,
       .shader_index_multiplier = sbt_stride,
+      /* The instance leaf pointer is unused in the top level BVH traversal
+       * since we always start from the root node. We can reuse that field to
+       * store the ray_flags handed to traceRayEXT(). This will be reloaded
+       * when the shader accesses gl_IncomingRayFlagsEXT (see
+       * nir_intrinsic_load_ray_flags brw_nir_lower_rt_intrinsic.c)
+       */
+      .inst_leaf_ptr = nir_u2u64(b, ray_flags),
    };
    brw_nir_rt_store_mem_ray(b, &ray_defs, BRW_RT_BVH_LEVEL_WORLD);
 
@@ -268,13 +284,13 @@ lower_shader_call_instr(struct nir_builder *b, nir_instr *instr, void *data)
 }
 
 bool
-brw_nir_lower_shader_calls(nir_shader *shader)
+brw_nir_lower_shader_calls(nir_shader *shader, struct brw_bs_prog_key *key)
 {
    return
       nir_shader_instructions_pass(shader,
                                    lower_shader_trace_ray_instr,
                                    nir_metadata_none,
-                                   NULL) |
+                                   key) |
       nir_shader_instructions_pass(shader,
                                    lower_shader_call_instr,
                                    nir_metadata_block_index |
@@ -358,7 +374,8 @@ brw_nir_create_trivial_return_shader(const struct brw_compiler *compiler,
 
          nir_trace_ray_intel(b,
                              nir_load_btd_global_arg_addr_intel(b),
-                             ray_level, ray_op);
+                             ray_level, ray_op,
+                             .synchronous = false);
       }
       nir_push_else(b, NULL);
       {

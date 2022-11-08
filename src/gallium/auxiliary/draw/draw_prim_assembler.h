@@ -34,11 +34,11 @@
  * geometry shader always decomposes them for us, but without geometry
  * shader we were passing unchanged adjacency primitives to the
  * rest of the pipeline and causing crashes everywhere.
- * If geometry shader is missing and the input primitive is one of 
+ * If geometry shader is missing and the input primitive is one of
  * the adjacency primitives we use the code from this file to
- * decompose them into something that the rest of the pipeline can 
+ * decompose them into something that the rest of the pipeline can
  * understand.
- * 
+ *
  */
 
 #ifndef DRAW_PRIM_ASSEMBLER_H

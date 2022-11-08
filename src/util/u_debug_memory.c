@@ -38,6 +38,7 @@
 
 #include "os/os_thread.h"
 
+#include "util/simple_mtx.h"
 #include "util/u_debug.h"
 #include "util/u_debug_stack.h"
 #include "util/list.h"
@@ -87,7 +88,7 @@ struct debug_memory_footer
 
 static struct list_head list = { &list, &list };
 
-static mtx_t list_mutex = _MTX_INITIALIZER_NP;
+static simple_mtx_t list_mutex = SIMPLE_MTX_INITIALIZER;
 
 static unsigned long last_no = 0;
 
@@ -153,9 +154,9 @@ debug_malloc(const char *file, unsigned line, const char *function,
    ftr = footer_from_header(hdr);
    ftr->magic = DEBUG_MEMORY_MAGIC;
 
-   mtx_lock(&list_mutex);
+   simple_mtx_lock(&list_mutex);
    list_addtail(&hdr->head, &list);
-   mtx_unlock(&list_mutex);
+   simple_mtx_unlock(&list_mutex);
 
    return data_from_header(hdr);
 }
@@ -198,9 +199,9 @@ debug_free(const char *file, unsigned line, const char *function,
    /* set freed memory to special value */
    memset(ptr, DEBUG_FREED_BYTE, hdr->size);
 #else
-   mtx_lock(&list_mutex);
+   simple_mtx_lock(&list_mutex);
    list_del(&hdr->head);
-   mtx_unlock(&list_mutex);
+   simple_mtx_unlock(&list_mutex);
    hdr->magic = 0;
    ftr->magic = 0;
 
@@ -273,9 +274,9 @@ debug_realloc(const char *file, unsigned line, const char *function,
    new_ftr = footer_from_header(new_hdr);
    new_ftr->magic = DEBUG_MEMORY_MAGIC;
 
-   mtx_lock(&list_mutex);
+   simple_mtx_lock(&list_mutex);
    list_replace(&old_hdr->head, &new_hdr->head);
-   mtx_unlock(&list_mutex);
+   simple_mtx_unlock(&list_mutex);
 
    /* copy data */
    new_ptr = data_from_header(new_hdr);

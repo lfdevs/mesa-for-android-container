@@ -237,10 +237,24 @@ VkResult pvr_srv_winsys_transfer_submit(
          ret = sync_accumulate("", &in_fd, srv_wait_sync->fd);
          if (ret) {
             result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
-            goto err_close_in_fd;
+            goto end_close_in_fd;
          }
 
          submit_info->stage_flags[i] &= ~PVR_PIPELINE_STAGE_TRANSFER_BIT;
+      }
+   }
+
+   if (submit_info->barrier) {
+      struct pvr_srv_sync *srv_wait_sync = to_srv_sync(submit_info->barrier);
+
+      if (srv_wait_sync->fd >= 0) {
+         int ret;
+
+         ret = sync_accumulate("", &in_fd, srv_wait_sync->fd);
+         if (ret) {
+            result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
+            goto end_close_in_fd;
+         }
       }
    }
 
@@ -262,7 +276,6 @@ VkResult pvr_srv_winsys_transfer_submit(
                                             (uint8_t **)cmds_ptr_arr,
                                             cmd_flags,
                                             job_num,
-                                            /* TODO: Add sync PMR support. */
                                             0U,
                                             NULL,
                                             NULL,
@@ -271,7 +284,7 @@ VkResult pvr_srv_winsys_transfer_submit(
    } while (result == VK_NOT_READY);
 
    if (result != VK_SUCCESS)
-      goto err_close_in_fd;
+      goto end_close_in_fd;
 
    if (signal_sync) {
       srv_signal_sync = to_srv_sync(signal_sync);
@@ -280,11 +293,7 @@ VkResult pvr_srv_winsys_transfer_submit(
       close(fence);
    }
 
-   STACK_ARRAY_FINISH(transfer_cmds);
-
-   return VK_SUCCESS;
-
-err_close_in_fd:
+end_close_in_fd:
    if (in_fd >= 0)
       close(in_fd);
 

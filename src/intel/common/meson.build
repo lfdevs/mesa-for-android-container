@@ -26,6 +26,8 @@ files_libintel_common = files(
   'intel_decoder.h',
   'intel_disasm.c',
   'intel_disasm.h',
+  'intel_engine.c',
+  'intel_engine.h',
   'intel_gem.c',
   'intel_gem.h',
   'intel_guardband.h',

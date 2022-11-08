@@ -48,6 +48,9 @@ extern "C" {
 #define ATI_VENDOR_ID         0x1002
 #define SI_NOT_QUERY          0xffffffff
 
+/* special primitive types */
+#define SI_PRIM_RECTANGLE_LIST PIPE_PRIM_MAX
+
 /* The base vertex and primitive restart can be any number, but we must pick
  * one which will mean "unknown" for the purpose of state tracking and
  * the number shouldn't be a commonly-used one. */
@@ -909,6 +912,13 @@ struct si_saved_cs {
    int64_t time_flush;
 };
 
+struct si_sqtt_fake_pipeline {
+   struct si_pm4_state pm4; /* base class */
+   uint64_t code_hash;
+   struct si_resource *bo;
+   uint32_t offset[SI_NUM_GRAPHICS_SHADERS];
+};
+
 struct si_small_prim_cull_info {
    float scale[2], translate[2];
    float scale_no_aa[2], translate_no_aa[2];
@@ -984,6 +994,7 @@ struct si_context {
    void *cs_clear_12bytes_buffer;
    void *cs_dcc_retile[32];
    void *cs_fmask_expand[3][2]; /* [log2(samples)-1][is_array] */
+   struct hash_table *cs_blit_shaders;
    struct si_screen *screen;
    struct util_debug_callback debug;
    struct ac_llvm_compiler compiler; /* only non-threaded compilation */
@@ -1054,10 +1065,10 @@ struct si_context {
    union {
       struct {
          struct si_shader_ctx_state vs;
-         struct si_shader_ctx_state ps;
-         struct si_shader_ctx_state gs;
          struct si_shader_ctx_state tcs;
          struct si_shader_ctx_state tes;
+         struct si_shader_ctx_state gs;
+         struct si_shader_ctx_state ps;
       } shader;
       /* indexed access using pipe_shader_type (not by MESA_SHADER_*) */
       struct si_shader_ctx_state shaders[SI_NUM_GRAPHICS_SHADERS];
@@ -1110,14 +1121,14 @@ struct si_context {
 
    /* Vertex buffers. */
    bool vertex_buffers_dirty;
-   bool vertex_buffer_pointer_dirty;
-   bool vertex_buffer_user_sgprs_dirty;
-   struct pipe_vertex_buffer vertex_buffer[SI_NUM_VERTEX_BUFFERS];
    uint16_t vertex_buffer_unaligned; /* bitmask of not dword-aligned buffers */
-   uint32_t *vb_descriptors_gpu_list;
-   struct si_resource *vb_descriptors_buffer;
-   unsigned vb_descriptors_offset;
-   unsigned vb_descriptor_user_sgprs[5 * 4];
+   struct pipe_vertex_buffer vertex_buffer[SI_NUM_VERTEX_BUFFERS];
+
+   /* Even though we don't need this variable, u_upload_alloc has an optimization that skips
+    * reference counting when the new upload buffer is the same as the last one. So keep
+    * the last upload buffer here and always pass &last_const_upload_buffer to u_upload_alloc.
+    */
+   struct si_resource *last_const_upload_buffer;
 
    /* MSAA config state. */
    int ps_iter_samples;
@@ -1162,6 +1173,7 @@ struct si_context {
    unsigned last_vs_state;
    unsigned last_gs_state;
    enum pipe_prim_type current_rast_prim; /* primitive type after TES, GS */
+   unsigned gs_out_prim;
 
    struct si_small_prim_cull_info last_small_prim_cull_info;
    struct si_resource *small_prim_cull_info_buf;
@@ -1182,7 +1194,7 @@ struct si_context {
    unsigned last_num_tcs_input_cp;
    unsigned last_tes_sh_base;
    bool last_tess_uses_primid;
-   unsigned last_num_patches;
+   unsigned num_patches_per_workgroup;
    unsigned last_ls_hs_config;
 
    /* Debug state. */
@@ -1436,6 +1448,7 @@ void si_retile_dcc(struct si_context *sctx, struct si_texture *tex);
 void gfx9_clear_dcc_msaa(struct si_context *sctx, struct pipe_resource *res, uint32_t clear_value,
                          unsigned flags, enum si_coherency coher);
 void si_compute_expand_fmask(struct pipe_context *ctx, struct pipe_resource *tex);
+bool si_compute_blit(struct si_context *sctx, const struct pipe_blit_info *info);
 void si_init_compute_blit_functions(struct si_context *sctx);
 
 /* si_cp_dma.c */
@@ -1547,6 +1560,31 @@ void *si_create_dcc_retile_cs(struct si_context *sctx, struct radeon_surf *surf)
 void *gfx9_create_clear_dcc_msaa_cs(struct si_context *sctx, struct si_texture *tex);
 void *si_create_passthrough_tcs(struct si_context *sctx);
 
+union si_compute_blit_shader_key {
+   struct {
+      /* The key saved in _mesa_hash_table_create_u32_keys() can't be 0. */
+      bool always_true:1;
+      /* Declaration modifiers. */
+      bool src_is_1d:1;
+      bool dst_is_1d:1;
+      bool src_is_msaa:1;
+      bool dst_is_msaa:1;
+      uint8_t log2_samples:4;
+      bool sample0_only:1; /* src is MSAA, dst is not MSAA, log2_samples is ignored */
+      /* Source coordinate modifiers. */
+      bool flip_x:1;
+      bool flip_y:1;
+      /* Output modifiers. */
+      bool sint_to_uint:1;
+      bool uint_to_sint:1;
+      bool dst_is_srgb:1;
+      bool fp16_rtz:1; /* only for equality with pixel shaders, not necessary otherwise */
+   };
+   uint32_t key;
+};
+
+void *si_create_blit_cs(struct si_context *sctx, const union si_compute_blit_shader_key *options);
+
 /* si_shaderlib_tgsi.c */
 void *si_get_blitter_vs(struct si_context *sctx, enum blitter_attrib_type type,
                         unsigned num_layers);
@@ -1615,7 +1653,7 @@ void si_sqtt_write_event_marker(struct si_context* sctx, struct radeon_cmdbuf *r
                                 uint32_t vertex_offset_user_data,
                                 uint32_t instance_offset_user_data,
                                 uint32_t draw_index_user_data);
-bool si_sqtt_register_pipeline(struct si_context* sctx, uint64_t pipeline_hash, uint64_t base_address, bool is_compute);
+bool si_sqtt_register_pipeline(struct si_context* sctx, struct si_sqtt_fake_pipeline *pipeline, bool is_compute);
 bool si_sqtt_pipeline_is_registered(struct ac_thread_trace_data *thread_trace_data,
                                     uint64_t pipeline_hash);
 void si_sqtt_describe_pipeline_bind(struct si_context* sctx, uint64_t pipeline_hash, int bind_point);
@@ -2074,6 +2112,52 @@ void si_check_dirty_buffers_textures(struct si_context *sctx)
    }
 }
 
+/* Update these two GS_STATE fields. They depend on whatever the last shader before PS is
+ * and the rasterizer state.
+ *
+ * It's expected that hw_vs and ngg are inline constants in draw_vbo after optimizations.
+ */
+static inline void
+si_update_ngg_prim_state_sgpr(struct si_context *sctx, struct si_shader *hw_vs, bool ngg)
+{
+   if (!ngg || !hw_vs)
+      return;
+
+   if (hw_vs->uses_vs_state_provoking_vertex) {
+      unsigned vtx_index = sctx->queued.named.rasterizer->flatshade_first ? 0 : sctx->gs_out_prim;
+
+      SET_FIELD(sctx->current_gs_state, GS_STATE_PROVOKING_VTX_INDEX, vtx_index);
+   }
+
+   if (hw_vs->uses_gs_state_outprim) {
+      SET_FIELD(sctx->current_gs_state, GS_STATE_OUTPRIM, sctx->gs_out_prim);
+   }
+}
+
+/* Set the primitive type seen by the rasterizer. GS and tessellation affect this.
+ * It's expected that hw_vs and ngg are inline constants in draw_vbo after optimizations.
+ */
+static inline void
+si_set_rasterized_prim(struct si_context *sctx, enum pipe_prim_type rast_prim,
+                       struct si_shader *hw_vs, bool ngg)
+{
+   if (rast_prim != sctx->current_rast_prim) {
+      bool is_rect = rast_prim == SI_PRIM_RECTANGLE_LIST;
+      bool is_points = rast_prim == PIPE_PRIM_POINTS;
+      bool is_lines = util_prim_is_lines(rast_prim);
+      bool is_triangles = util_rast_prim_is_triangles(rast_prim);
+
+      if ((is_points || is_lines) != util_prim_is_points_or_lines(sctx->current_rast_prim))
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.guardband);
+
+      sctx->current_rast_prim = rast_prim;
+      sctx->gs_out_prim = is_triangles ? V_028A6C_TRISTRIP :
+                          is_lines ? V_028A6C_LINESTRIP :
+                          is_rect ? V_028A6C_RECTLIST : V_028A6C_POINTLIST;
+      sctx->do_update_shaders = true;
+      si_update_ngg_prim_state_sgpr(sctx, hw_vs, ngg);
+   }
+}
 
 #define PRINT_ERR(fmt, args...)                                                                    \
    fprintf(stderr, "EE %s:%d %s - " fmt, __FILE__, __LINE__, __func__, ##args)

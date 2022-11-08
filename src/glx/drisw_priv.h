@@ -35,13 +35,6 @@ struct drisw_display
    bool zink;
 };
 
-struct drisw_context
-{
-   struct glx_context base;
-   __DRIcontext *driContext;
-
-};
-
 struct drisw_screen
 {
    struct glx_screen base;

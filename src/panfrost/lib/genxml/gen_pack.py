@@ -42,44 +42,11 @@ pack_header = """
 #define PAN_PACK_H
 
 #include <stdio.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <assert.h>
-#include <math.h>
 #include <inttypes.h>
-#include "util/macros.h"
-#include "util/u_math.h"
+
+#include "util/bitpack_helpers.h"
 
 #define __gen_unpack_float(x, y, z) uif(__gen_unpack_uint(x, y, z))
-
-static inline uint64_t
-__gen_uint(uint64_t v, uint32_t start, uint32_t end)
-{
-#ifndef NDEBUG
-   const int width = end - start + 1;
-   if (width < 64) {
-      const uint64_t max = (1ull << width) - 1;
-      assert(v <= max);
-   }
-#endif
-
-   return v << start;
-}
-
-static inline uint32_t
-__gen_sint(int32_t v, uint32_t start, uint32_t end)
-{
-#ifndef NDEBUG
-   const int width = end - start + 1;
-   if (width < 64) {
-      const int64_t max = (1ll << (width - 1)) - 1;
-      const int64_t min = -(1ll << (width - 1));
-      assert(min <= v && v <= max);
-   }
-#endif
-
-   return (((uint32_t) v) << start) & ((2ll << end) - 1);
-}
 
 static inline uint32_t
 __gen_padded(uint32_t v, uint32_t start, uint32_t end)
@@ -94,7 +61,7 @@ __gen_padded(uint32_t v, uint32_t start, uint32_t end)
     assert((end - start + 1) == 8);
 #endif
 
-    return __gen_uint(shift | (odd << 5), start, end);
+    return util_bitpack_uint(shift | (odd << 5), start, end);
 }
 
 
@@ -134,9 +101,6 @@ __gen_unpack_padded(const uint8_t *restrict cl, uint32_t start, uint32_t end)
 #define PREFIX1(A) MALI_ ## A
 #define PREFIX2(A, B) MALI_ ## A ## _ ## B
 #define PREFIX4(A, B, C, D) MALI_ ## A ## _ ## B ## _ ## C ## _ ## D
-
-#define pan_prepare(dst, T)                                 \\
-   *(dst) = (struct PREFIX1(T)){ PREFIX2(T, header) }
 
 #define pan_pack(dst, T, name)                              \\
    for (struct PREFIX1(T) name = { PREFIX2(T, header) }, \\
@@ -262,13 +226,6 @@ def prefixed_upper_name(prefix, name):
 def enum_name(name):
     return "{}_{}".format(global_prefix, safe_name(name)).lower()
 
-def num_from_str(num_str):
-    if num_str.lower().startswith('0x'):
-        return int(num_str, base=16)
-    else:
-        assert(not num_str.startswith('0') and 'octals numbers not allowed')
-        return int(num_str)
-
 MODIFIERS = ["shr", "minus", "align", "log2"]
 
 def parse_modifier(modifier):
@@ -355,11 +312,6 @@ class Field(object):
         else:
             self.prefix = None
 
-        if "exact" in attrs:
-            self.exact = int(attrs["exact"])
-        else:
-            self.exact = None
-
         self.default = attrs.get("default")
 
         # Map enum values
@@ -430,9 +382,6 @@ class Group(object):
                 print("   int dummy;")
 
             for field in self.fields:
-                if field.exact is not None:
-                    continue
-
                 field.emit_template_struct(dim)
 
     class Word:
@@ -491,8 +440,6 @@ class Group(object):
             if field.modifier is None:
                 continue
 
-            assert(field.exact is None)
-
             if field.modifier[0] == "shr":
                 shift = field.modifier[1]
                 mask = hex((1 << shift) - 1)
@@ -524,7 +471,7 @@ class Group(object):
                 start -= contrib_word_start
                 end -= contrib_word_start
 
-                value = str(field.exact) if field.exact is not None else "values->{}".format(contributor.path)
+                value = "values->{}".format(contributor.path)
                 if field.modifier is not None:
                     if field.modifier[0] == "shr":
                         value = "{} >> {}".format(value, field.modifier[1])
@@ -536,23 +483,23 @@ class Group(object):
                         value = "util_logbase2({})".format(value)
 
                 if field.type in ["uint", "hex", "uint/float", "address", "Pixel Format"]:
-                    s = "__gen_uint(%s, %d, %d)" % \
+                    s = "util_bitpack_uint(%s, %d, %d)" % \
                         (value, start, end)
                 elif field.type == "padded":
                     s = "__gen_padded(%s, %d, %d)" % \
                         (value, start, end)
                 elif field.type in self.parser.enums:
-                    s = "__gen_uint(%s, %d, %d)" % \
+                    s = "util_bitpack_uint(%s, %d, %d)" % \
                         (value, start, end)
                 elif field.type == "int":
-                    s = "__gen_sint(%s, %d, %d)" % \
+                    s = "util_bitpack_sint(%s, %d, %d)" % \
                         (value, start, end)
                 elif field.type == "bool":
-                    s = "__gen_uint(%s, %d, %d)" % \
+                    s = "util_bitpack_uint(%s, %d, %d)" % \
                         (value, start, end)
                 elif field.type == "float":
                     assert(start == 0 and end == 31)
-                    s = "__gen_uint(fui({}), 0, 32)".format(value)
+                    s = "util_bitpack_float({})".format(value)
                 else:
                     s = "#error unhandled field {}, type {}".format(contributor.path, field.type)
 

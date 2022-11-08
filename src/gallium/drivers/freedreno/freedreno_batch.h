@@ -161,6 +161,9 @@ struct fd_batch {
    /* Track the maximal bounds of the scissor of all the draws within a
     * batch.  Used at the tile rendering step (fd_gmem_render_tiles(),
     * mem2gmem/gmem2mem) to avoid needlessly moving data in/out of gmem.
+    *
+    * Note that unlike gallium state, maxx/maxy are inclusive (for
+    * fully covered 512x512 the scissor would be 0,0+511,511)
     */
    struct pipe_scissor_state max_scissor;
 
@@ -207,6 +210,9 @@ struct fd_batch {
    struct fd_ringbuffer *prologue;
 
    /** epilogue cmdstream (executed after each tile): */
+   struct fd_ringbuffer *tile_epilogue;
+
+   /** epilogue cmdstream (executed after all tiles): */
    struct fd_ringbuffer *epilogue;
 
    struct fd_ringbuffer *tile_setup;
@@ -261,6 +267,7 @@ struct fd_batch *fd_batch_create(struct fd_context *ctx, bool nondraw);
 
 void fd_batch_reset(struct fd_batch *batch) assert_dt;
 void fd_batch_flush(struct fd_batch *batch) assert_dt;
+bool fd_batch_has_dep(struct fd_batch *batch, struct fd_batch *dep) assert_dt;
 void fd_batch_add_dep(struct fd_batch *batch, struct fd_batch *dep) assert_dt;
 void fd_batch_resource_write(struct fd_batch *batch,
                              struct fd_resource *rsc) assert_dt;
@@ -397,6 +404,18 @@ fd_event_write(struct fd_batch *batch, struct fd_ringbuffer *ring,
 }
 
 /* Get per-tile epilogue */
+static inline struct fd_ringbuffer *
+fd_batch_get_tile_epilogue(struct fd_batch *batch)
+{
+   if (batch->tile_epilogue == NULL) {
+      batch->tile_epilogue = fd_submit_new_ringbuffer(batch->submit, 0x1000,
+                                                 FD_RINGBUFFER_GROWABLE);
+   }
+
+   return batch->tile_epilogue;
+}
+
+/* Get epilogue run after all tiles*/
 static inline struct fd_ringbuffer *
 fd_batch_get_epilogue(struct fd_batch *batch)
 {

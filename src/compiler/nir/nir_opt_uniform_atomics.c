@@ -337,7 +337,7 @@ nir_opt_uniform_atomics(nir_shader *shader)
 
       if (opt_uniform_atomics(function->impl)) {
          progress = true;
-         nir_metadata_preserve(function->impl, 0);
+         nir_metadata_preserve(function->impl, nir_metadata_none);
       } else {
          nir_metadata_preserve(function->impl, nir_metadata_all);
       }

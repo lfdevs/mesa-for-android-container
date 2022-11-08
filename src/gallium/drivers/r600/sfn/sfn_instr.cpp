@@ -25,16 +25,17 @@
  */
 
 #include "sfn_instr_alugroup.h"
+#include "sfn_instr_controlflow.h"
 #include "sfn_instr_export.h"
 #include "sfn_instr_fetch.h"
-#include "sfn_instr_mem.h"
 #include "sfn_instr_lds.h"
+#include "sfn_instr_mem.h"
 #include "sfn_instr_tex.h"
-#include "sfn_instr_controlflow.h"
 
 #include <iostream>
-#include <sstream>
+#include <limits>
 #include <numeric>
+#include <sstream>
 
 namespace r600 {
 
@@ -42,23 +43,22 @@ using std::string;
 using std::vector;
 
 Instr::Instr():
-   m_use_count(0),
-   m_block_id(std::numeric_limits<int>::max()),
-   m_index(std::numeric_limits<int>::max())
+    m_use_count(0),
+    m_block_id(std::numeric_limits<int>::max()),
+    m_index(std::numeric_limits<int>::max())
 {
 }
 
-Instr::~Instr()
-{
+Instr::~Instr() {}
 
-}
-
-void Instr::print(std::ostream& os) const
+void
+Instr::print(std::ostream& os) const
 {
    do_print(os);
 }
 
-bool Instr::ready() const
+bool
+Instr::ready() const
 {
    for (auto& i : m_required_instr)
       if (!i->ready())
@@ -66,7 +66,8 @@ bool Instr::ready() const
    return do_ready();
 }
 
-int int_from_string_with_prefix(const std::string& str, const std::string& prefix)
+int
+int_from_string_with_prefix(const std::string& str, const std::string& prefix)
 {
    if (str.substr(0, prefix.length()) != prefix) {
       std::cerr << "Expect '" << prefix << "' as start of '" << str << "'\n";
@@ -79,7 +80,8 @@ int int_from_string_with_prefix(const std::string& str, const std::string& prefi
    return retval;
 }
 
-int sel_and_szw_from_string(const std::string& str, RegisterVec4::Swizzle &swz, bool& is_ssa)
+int
+sel_and_szw_from_string(const std::string& str, RegisterVec4::Swizzle& swz, bool& is_ssa)
 {
    assert(str[0] == 'R' || str[0] == '_' || str[0] == 'S');
    int sel = 0;
@@ -104,13 +106,27 @@ int sel_and_szw_from_string(const std::string& str, RegisterVec4::Swizzle &swz, 
    int i = 0;
    while (istr != str.end()) {
       switch (*istr) {
-      case 'x': swz[i] = 0; break;
-      case 'y': swz[i] = 1; break;
-      case 'z': swz[i] = 2; break;
-      case 'w': swz[i] = 3; break;
-      case '0': swz[i] = 4; break;
-      case '1': swz[i] = 5; break;
-      case '_': swz[i] = 7; break;
+      case 'x':
+         swz[i] = 0;
+         break;
+      case 'y':
+         swz[i] = 1;
+         break;
+      case 'z':
+         swz[i] = 2;
+         break;
+      case 'w':
+         swz[i] = 3;
+         break;
+      case '0':
+         swz[i] = 4;
+         break;
+      case '1':
+         swz[i] = 5;
+         break;
+      case '_':
+         swz[i] = 7;
+         break;
       default:
          unreachable("Unknown swizzle character");
       }
@@ -123,12 +139,14 @@ int sel_and_szw_from_string(const std::string& str, RegisterVec4::Swizzle &swz, 
    return sel;
 }
 
-bool Instr::is_last() const
+bool
+Instr::is_last() const
 {
    return true;
 }
 
-bool Instr::set_dead()
+bool
+Instr::set_dead()
 {
    if (m_instr_flags.test(always_keep))
       return false;
@@ -137,26 +155,30 @@ bool Instr::set_dead()
    return is_dead;
 }
 
-bool Instr::propagate_death()
+bool
+Instr::propagate_death()
 {
    return true;
 }
 
-bool Instr::replace_source(PRegister old_src, PVirtualValue new_src)
+bool
+Instr::replace_source(PRegister old_src, PVirtualValue new_src)
 {
    (void)old_src;
    (void)new_src;
    return false;
 }
 
-void Instr::add_required_instr(Instr *instr)
+void
+Instr::add_required_instr(Instr *instr)
 {
    assert(instr);
    m_required_instr.push_back(instr);
    instr->m_dependend_instr.push_back(this);
 }
 
-void Instr::replace_required_instr(Instr *old_instr, Instr *new_instr)
+void
+Instr::replace_required_instr(Instr *old_instr, Instr *new_instr)
 {
 
    for (auto i = m_required_instr.begin(); i != m_required_instr.end(); ++i) {
@@ -165,31 +187,36 @@ void Instr::replace_required_instr(Instr *old_instr, Instr *new_instr)
    }
 }
 
-bool Instr::replace_dest(PRegister new_dest, r600::AluInstr *move_instr)
+bool
+Instr::replace_dest(PRegister new_dest, r600::AluInstr *move_instr)
 {
    (void)new_dest;
    (void)move_instr;
    return false;
 }
 
-void Instr::set_blockid(int id, int index)
+void
+Instr::set_blockid(int id, int index)
 {
    m_block_id = id;
    m_index = index;
    forward_set_blockid(id, index);
 }
 
-
-void Instr::forward_set_blockid(int id, int index)
+void
+Instr::forward_set_blockid(int id, int index)
 {
    (void)id;
    (void)index;
 }
 
 InstrWithVectorResult::InstrWithVectorResult(const RegisterVec4& dest,
-                                             const RegisterVec4::Swizzle& dest_swizzle):
-   m_dest(dest),
-   m_dest_swizzle(dest_swizzle)
+                                             const RegisterVec4::Swizzle& dest_swizzle,
+                                             int resource_base,
+                                             PRegister resource_offset):
+    InstrWithResource(resource_base, resource_offset),
+    m_dest(dest),
+    m_dest_swizzle(dest_swizzle)
 {
    for (int i = 0; i < 4; ++i) {
       if (m_dest_swizzle[i] < 6)
@@ -197,18 +224,20 @@ InstrWithVectorResult::InstrWithVectorResult(const RegisterVec4& dest,
    }
 }
 
-void InstrWithVectorResult::print_dest(std::ostream& os) const
+void
+InstrWithVectorResult::print_dest(std::ostream& os) const
 {
-   os << (m_dest[0]->is_ssa() ? 'S' : 'R' ) << m_dest.sel();
+   os << (m_dest[0]->is_ssa() ? 'S' : 'R') << m_dest.sel();
    os << ".";
    for (int i = 0; i < 4; ++i)
       os << VirtualValue::chanchar[m_dest_swizzle[i]];
 }
 
-bool InstrWithVectorResult::comp_dest(const RegisterVec4& dest,
-                                      const RegisterVec4::Swizzle& dest_swizzle) const
+bool
+InstrWithVectorResult::comp_dest(const RegisterVec4& dest,
+                                 const RegisterVec4::Swizzle& dest_swizzle) const
 {
-   for(int i = 0; i < 4; ++i) {
+   for (int i = 0; i < 4; ++i) {
       if (!m_dest[i]->equal_to(*dest[i])) {
          return false;
       }
@@ -218,7 +247,8 @@ bool InstrWithVectorResult::comp_dest(const RegisterVec4& dest,
    return true;
 }
 
-void Block::do_print(std::ostream& os) const
+void
+Block::do_print(std::ostream& os) const
 {
    for (int j = 0; j < 2 * m_nesting_depth; ++j)
       os << ' ';
@@ -233,7 +263,8 @@ void Block::do_print(std::ostream& os) const
    os << "BLOCK END\n";
 }
 
-bool Block::is_equal_to(const Block& lhs) const
+bool
+Block::is_equal_to(const Block& lhs) const
 {
    if (m_id != lhs.m_id || m_nesting_depth != lhs.m_nesting_depth)
       return false;
@@ -241,53 +272,64 @@ bool Block::is_equal_to(const Block& lhs) const
    if (m_instructions.size() != lhs.m_instructions.size())
       return false;
 
-   return std::inner_product(m_instructions.begin(), m_instructions.end(), lhs.m_instructions.begin(),
-                             true,
-                             [] (bool l, bool r) { return l && r;},
-   [](PInst l, PInst r) { return l->equal_to(*r);});
+   return std::inner_product(
+      m_instructions.begin(),
+      m_instructions.end(),
+      lhs.m_instructions.begin(),
+      true,
+      [](bool l, bool r) { return l && r; },
+      [](PInst l, PInst r) { return l->equal_to(*r); });
 }
 
-inline bool operator != (const Block& lhs, const Block& rhs)
+inline bool
+operator!=(const Block& lhs, const Block& rhs)
 {
    return !lhs.is_equal_to(rhs);
 }
 
-void Block::erase(iterator node)
+void
+Block::erase(iterator node)
 {
    m_instructions.erase(node);
 }
 
-void Block::set_type(Type t)
+void
+Block::set_type(Type t)
 {
    m_blocK_type = t;
    switch (t) {
    case vtx:
    case gds:
-   case tex: m_remaining_slots = 8; break; /* TODO: 16 for >= EVERGREEN */
+   case tex:
+      m_remaining_slots = 8;
+      break; /* TODO: 16 for >= EVERGREEN */
    default:
       m_remaining_slots = 0xffff;
    }
 }
 
 Block::Block(int nesting_depth, int id):
-   m_nesting_depth(nesting_depth),
-   m_id(id),
-   m_next_index(0)
+    m_nesting_depth(nesting_depth),
+    m_id(id),
+    m_next_index(0)
 {
    assert(!has_instr_flag(force_cf));
 }
 
-void Block::accept(ConstInstrVisitor& visitor) const
+void
+Block::accept(ConstInstrVisitor& visitor) const
 {
    visitor.visit(*this);
 }
 
-void Block::accept(InstrVisitor& visitor)
+void
+Block::accept(InstrVisitor& visitor)
 {
    visitor.visit(this);
 }
 
-void Block::push_back(PInst instr)
+void
+Block::push_back(PInst instr)
 {
    instr->set_blockid(m_id, m_next_index++);
    if (m_remaining_slots != 0xffff) {
@@ -300,12 +342,13 @@ void Block::push_back(PInst instr)
    m_instructions.push_back(instr);
 }
 
-bool Block::try_reserve_kcache(const AluGroup& group)
+bool
+Block::try_reserve_kcache(const AluGroup& group)
 {
    auto kcache = m_kcache;
 
    auto kcache_constants = group.get_kconsts();
-   for (auto& kc : kcache_constants)  {
+   for (auto& kc : kcache_constants) {
       auto u = kc->as_uniform();
       assert(u);
       if (!try_reserve_kcache(*u, kcache)) {
@@ -319,7 +362,8 @@ bool Block::try_reserve_kcache(const AluGroup& group)
    return true;
 }
 
-bool Block::try_reserve_kcache(const AluInstr& instr)
+bool
+Block::try_reserve_kcache(const AluInstr& instr)
 {
    auto kcache = m_kcache;
 
@@ -337,7 +381,8 @@ bool Block::try_reserve_kcache(const AluInstr& instr)
    return true;
 }
 
-void Block::set_chipclass(r600_chip_class chip_class)
+void
+Block::set_chipclass(r600_chip_class chip_class)
 {
    if (chip_class < ISA_CC_EVERGREEN)
       s_max_kcache_banks = 2;
@@ -347,13 +392,13 @@ void Block::set_chipclass(r600_chip_class chip_class)
 
 unsigned Block::s_max_kcache_banks = 4;
 
-bool Block::try_reserve_kcache(const UniformValue& u,
-                               std::array<KCacheLine, 4>& kcache) const
+bool
+Block::try_reserve_kcache(const UniformValue& u, std::array<KCacheLine, 4>& kcache) const
 {
    const int kcache_banks = s_max_kcache_banks; // TODO: handle pre-evergreen
 
    int bank = u.kcache_bank();
-   int sel  = (u.sel() - 512);
+   int sel = (u.sel() - 512);
    int line = sel >> 4;
 
    bool found = false;
@@ -363,13 +408,14 @@ bool Block::try_reserve_kcache(const UniformValue& u,
          if (kcache[i].bank < bank)
             continue;
 
-         if ((kcache[i].bank == bank &&
-              kcache[i].addr > line  + 1) ||
+         if ((kcache[i].bank == bank && kcache[i].addr > line + 1) ||
              kcache[i].bank > bank) {
             if (kcache[kcache_banks - 1].mode)
                return false;
 
-            memmove(&kcache[i+1],&kcache[i], (kcache_banks-i-1)*sizeof(KCacheLine));
+            memmove(&kcache[i + 1],
+                    &kcache[i],
+                    (kcache_banks - i - 1) * sizeof(KCacheLine));
             kcache[i].mode = KCacheLine::lock_1;
             kcache[i].bank = bank;
             kcache[i].addr = line;
@@ -409,14 +455,16 @@ bool Block::try_reserve_kcache(const UniformValue& u,
    return false;
 }
 
-void Block::lds_group_start(AluInstr *alu)
+void
+Block::lds_group_start(AluInstr *alu)
 {
    assert(!m_lds_group_start);
    m_lds_group_start = alu;
    m_lds_group_requirement = 0;
 }
 
-void Block::lds_group_end()
+void
+Block::lds_group_end()
 {
    assert(m_lds_group_start);
    m_lds_group_start->set_required_slots(m_lds_group_requirement);
@@ -424,31 +472,29 @@ void Block::lds_group_end()
 }
 
 InstrWithVectorResult::InstrWithVectorResult(const InstrWithVectorResult& orig):
-   m_dest(orig.m_dest),
-   m_dest_swizzle(orig.m_dest_swizzle)
+    InstrWithResource(orig),
+    m_dest(orig.m_dest),
+    m_dest_swizzle(orig.m_dest_swizzle)
 {
 }
 
 class InstrComparer : public ConstInstrVisitor {
 public:
    InstrComparer() = default;
-   bool result {false};
+   bool result{false};
 
-#define DECLARE_MEMBER(TYPE)         \
-    InstrComparer(const TYPE *instr) \
-    {                                \
-       this_ ## TYPE = instr;        \
-    }                                \
-                                     \
-    void visit(const TYPE& instr)    \
-    {                                \
-       result = false;               \
-       if (!this_ ## TYPE)           \
-         return;                     \
-      result = this_ ## TYPE->is_equal_to(instr); \
-   }                                 \
-                                     \
-   const TYPE *this_ ## TYPE{nullptr};
+#define DECLARE_MEMBER(TYPE)                                                             \
+   InstrComparer(const TYPE *instr) { this_##TYPE = instr; }                             \
+                                                                                         \
+   void visit(const TYPE& instr)                                                         \
+   {                                                                                     \
+      result = false;                                                                    \
+      if (!this_##TYPE)                                                                  \
+         return;                                                                         \
+      result = this_##TYPE->is_equal_to(instr);                                          \
+   }                                                                                     \
+                                                                                         \
+   const TYPE *this_##TYPE{nullptr};
 
    DECLARE_MEMBER(AluInstr);
    DECLARE_MEMBER(AluGroup);
@@ -469,82 +515,65 @@ public:
    DECLARE_MEMBER(RatInstr);
 };
 
-class InstrCompareForward: public ConstInstrVisitor {
+class InstrCompareForward : public ConstInstrVisitor {
 public:
+   void visit(const AluInstr& instr) override { m_comparer = InstrComparer(&instr); }
 
-   void visit(const AluInstr& instr) override {
+   void visit(const AluGroup& instr) override { m_comparer = InstrComparer(&instr); }
+
+   void visit(const TexInstr& instr) override { m_comparer = InstrComparer(&instr); }
+
+   void visit(const ExportInstr& instr) override { m_comparer = InstrComparer(&instr); }
+
+   void visit(const FetchInstr& instr) override { m_comparer = InstrComparer(&instr); }
+
+   void visit(const Block& instr) override { m_comparer = InstrComparer(&instr); }
+
+   void visit(const ControlFlowInstr& instr) override
+   {
       m_comparer = InstrComparer(&instr);
    }
 
-   void visit(const AluGroup& instr) override {
+   void visit(const IfInstr& instr) override { m_comparer = InstrComparer(&instr); }
+
+   void visit(const ScratchIOInstr& instr) override
+   {
       m_comparer = InstrComparer(&instr);
    }
 
-   void visit(const TexInstr& instr) override {
+   void visit(const StreamOutInstr& instr) override
+   {
       m_comparer = InstrComparer(&instr);
    }
 
-   void visit(const ExportInstr& instr) override {
+   void visit(const MemRingOutInstr& instr) override
+   {
       m_comparer = InstrComparer(&instr);
    }
 
-   void visit(const FetchInstr& instr) override {
+   void visit(const EmitVertexInstr& instr) override
+   {
       m_comparer = InstrComparer(&instr);
    }
 
-   void visit(const Block& instr) override {
+   void visit(const GDSInstr& instr) override { m_comparer = InstrComparer(&instr); }
+
+   void visit(const WriteTFInstr& instr) override { m_comparer = InstrComparer(&instr); }
+
+   void visit(const LDSAtomicInstr& instr) override
+   {
       m_comparer = InstrComparer(&instr);
    }
 
-   void visit(const ControlFlowInstr& instr) override {
-      m_comparer = InstrComparer(&instr);
-   }
+   void visit(const LDSReadInstr& instr) override { m_comparer = InstrComparer(&instr); }
 
-   void visit(const IfInstr& instr) override {
-      m_comparer = InstrComparer(&instr);
-   }
-
-   void visit(const ScratchIOInstr& instr) override {
-      m_comparer = InstrComparer(&instr);
-   }
-
-   void visit(const StreamOutInstr& instr) override {
-      m_comparer = InstrComparer(&instr);
-   }
-
-   void visit(const MemRingOutInstr& instr) override {
-      m_comparer = InstrComparer(&instr);
-   }
-
-   void visit(const EmitVertexInstr& instr) override {
-      m_comparer = InstrComparer(&instr);
-   }
-
-   void visit(const GDSInstr& instr) override {
-      m_comparer = InstrComparer(&instr);
-   }
-
-   void visit(const WriteTFInstr& instr) override {
-      m_comparer = InstrComparer(&instr);
-   }
-
-   void visit(const LDSAtomicInstr& instr) override {
-      m_comparer = InstrComparer(&instr);
-   }
-
-   void visit(const LDSReadInstr& instr) override {
-         m_comparer = InstrComparer(&instr);
-   }
-
-   void visit(const RatInstr& instr) override {
-         m_comparer = InstrComparer(&instr);
-   }
+   void visit(const RatInstr& instr) override { m_comparer = InstrComparer(&instr); }
 
    InstrComparer m_comparer;
 };
 
-
-bool Instr::equal_to(const Instr& lhs) const
+bool
+Instr::equal_to(const Instr& lhs) const
 {
    InstrCompareForward cmp;
    accept(cmp);
@@ -553,7 +582,4 @@ bool Instr::equal_to(const Instr& lhs) const
    return cmp.m_comparer.result;
 }
 
-
-
-
-} // ns r600
+} // namespace r600

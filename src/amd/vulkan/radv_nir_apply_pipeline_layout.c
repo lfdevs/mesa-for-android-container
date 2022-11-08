@@ -366,7 +366,13 @@ update_image_intrinsic(nir_builder *b, apply_layout_state *state, nir_intrinsic_
    nir_ssa_def *desc = get_sampler_desc(
       b, state, deref, dim == GLSL_SAMPLER_DIM_BUF ? AC_DESC_BUFFER : AC_DESC_IMAGE,
       nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM, NULL, !is_load);
-   nir_rewrite_image_intrinsic(intrin, desc, true);
+
+   if (intrin->intrinsic == nir_intrinsic_image_deref_descriptor_amd) {
+      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, desc);
+      nir_instr_remove(&intrin->instr);
+   } else {
+      nir_rewrite_image_intrinsic(intrin, desc, true);
+   }
 }
 
 static void
@@ -429,6 +435,7 @@ apply_layout_to_intrin(nir_builder *b, apply_layout_state *state, nir_intrinsic_
    case nir_intrinsic_image_deref_atomic_dec_wrap:
    case nir_intrinsic_image_deref_size:
    case nir_intrinsic_image_deref_samples:
+   case nir_intrinsic_image_deref_descriptor_amd:
       update_image_intrinsic(b, state, intrin);
       break;
    default:
@@ -505,6 +512,12 @@ apply_layout_to_tex(nir_builder *b, apply_layout_state *state, nir_tex_instr *te
 
          sampler = nir_vec(b, comp, 4);
       }
+   }
+
+   if (tex->op == nir_texop_descriptor_amd) {
+      nir_ssa_def_rewrite_uses(&tex->dest.ssa, image);
+      nir_instr_remove(&tex->instr);
+      return;
    }
 
    for (unsigned i = 0; i < tex->num_srcs; i++) {

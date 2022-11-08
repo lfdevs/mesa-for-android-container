@@ -695,6 +695,7 @@ static uint32_t pvr_pds_get_bank_based_constants(uint32_t num_backs,
  * \returns Pointer to just beyond the buffer for the data - i.e the value
  *          of the buffer after writing its contents.
  */
+/* FIXME: Implement PDS_GENERATE_CODEDATA_SEGMENTS? */
 uint32_t *
 pvr_pds_vertex_shader(struct pvr_pds_vertex_shader_program *restrict program,
                       uint32_t *restrict buffer,
@@ -2679,7 +2680,8 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
    assert((((uintptr_t)buffer) & (PDS_ROGUE_TA_STATE_PDS_ADDR_ALIGNSIZE - 1)) ==
           0);
 
-   assert(gen_mode != PDS_GENERATE_DATA_SEGMENT);
+   assert((gen_mode == PDS_GENERATE_CODE_SEGMENT && buffer) ||
+          gen_mode == PDS_GENERATE_SIZES);
 
    /* clang-format off */
    /* Shape of code segment (note: clear is different)
@@ -2717,7 +2719,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
       uint32_t control_word_constant1 =
          pvr_pds_get_constants(&next_constant, 2, &data_size);
 
-      if (gen_mode == PDS_GENERATE_CODE_SEGMENT && instruction) {
+      if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
          /* DOUTW the clear color to the USC constants. Predicate with
           * uniform loading flag (IF0).
           */
@@ -2749,7 +2751,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
             pvr_pds_get_constants(&next_constant, 2, &data_size);
          color_constant4 = pvr_pds_get_constants(&next_constant, 2, &data_size);
 
-         if (gen_mode == PDS_GENERATE_CODE_SEGMENT && instruction) {
+         if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
             /* DOUTW the clear color to the USSE constants. Predicate with
              * uniform loading flag (IF0).
              */
@@ -2789,7 +2791,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
          control_word_last_constant =
             pvr_pds_get_constants(&next_constant, 2, &data_size);
 
-         if (gen_mode == PDS_GENERATE_CODE_SEGMENT && instruction) {
+         if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
             /* DOUTW the clear color to the USSE constants. Predicate with
              * uniform loading flag (IF0).
              */
@@ -2819,7 +2821,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
          doutu_constant64 =
             pvr_pds_get_constants(&next_constant, 2, &data_size);
 
-         if (gen_mode == PDS_GENERATE_CODE_SEGMENT && instruction) {
+         if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
             /* Issue the task to the USC.
              *
              * dout ds1[constant_use], ds0[constant_use],
@@ -2835,7 +2837,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
          code_size += 1;
       }
 
-      if (gen_mode == PDS_GENERATE_CODE_SEGMENT && instruction) {
+      if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
          /* End the program. */
          *instruction++ = pvr_pds_inst_encode_halt(0);
       }
@@ -2854,7 +2856,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
           * it. We therefore don't need to branch when there is only a
           * texture OR a uniform update program.
           */
-         if (gen_mode == PDS_GENERATE_CODE_SEGMENT && instruction) {
+         if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
             uint32_t branch_address =
                MAX2(1 + program->num_texture_dma_kicks, 2);
 
@@ -2881,7 +2883,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
 
          for (uint32_t dma = 0; dma < program->num_texture_dma_kicks; dma++) {
             code_size += 1;
-            if (gen_mode != PDS_GENERATE_CODE_SEGMENT || !instruction)
+            if (gen_mode != PDS_GENERATE_CODE_SEGMENT)
                continue;
 
             /* DMA the state into the secondary attributes. */
@@ -2897,7 +2899,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
             dma_control_constant32 += 1;
          }
       } else if (both_textures_and_uniforms) {
-         if (gen_mode == PDS_GENERATE_CODE_SEGMENT && instruction) {
+         if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
             /* End the program. */
             *instruction++ = pvr_pds_inst_encode_halt(0);
          }
@@ -2966,7 +2968,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
          for (uint32_t dma = 0; dma < program->num_uniform_dma_kicks; dma++) {
             code_size += 1;
 
-            if (gen_mode != PDS_GENERATE_CODE_SEGMENT || !instruction)
+            if (gen_mode != PDS_GENERATE_CODE_SEGMENT)
                continue;
 
             bool last_instruction = false;
@@ -2990,7 +2992,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
       }
 
       if (program->kick_usc) {
-         if (gen_mode == PDS_GENERATE_CODE_SEGMENT && instruction) {
+         if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
             /* Issue the task to the USC.
              *
              * dout ds1[constant_use], ds0[constant_use],
@@ -3005,7 +3007,7 @@ uint32_t *pvr_pds_pixel_shader_uniform_texture_code(
 
          code_size += 1;
       } else if (program->num_uniform_dma_kicks == 0 && total_num_doutw == 0) {
-         if (gen_mode == PDS_GENERATE_CODE_SEGMENT && instruction) {
+         if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
             /* End the program. */
             *instruction++ = pvr_pds_inst_encode_halt(0);
          }

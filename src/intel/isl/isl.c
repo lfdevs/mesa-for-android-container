@@ -36,6 +36,12 @@
 #include "isl_gfx12.h"
 #include "isl_priv.h"
 
+isl_genX_declare_get_func(surf_fill_state_s)
+isl_genX_declare_get_func(buffer_fill_state_s)
+isl_genX_declare_get_func(emit_depth_stencil_hiz_s)
+isl_genX_declare_get_func(null_fill_state_s)
+isl_genX_declare_get_func(emit_cpb_control_s)
+
 void
 isl_memcpy_linear_to_tiled(uint32_t xt1, uint32_t xt2,
                            uint32_t yt1, uint32_t yt2,
@@ -98,6 +104,8 @@ __isl_finishme(const char *file, int line, const char *fmt, ...)
 static void
 isl_device_setup_mocs(struct isl_device *dev)
 {
+   dev->mocs.protected_mask = 0;
+
    if (dev->info->ver >= 12) {
       if (intel_device_info_is_dg2(dev->info)) {
          /* L3CC=WB; BSpec: 45101 */
@@ -143,6 +151,8 @@ isl_device_setup_mocs(struct isl_device *dev)
          /* L1 - HDC:L1 + L3 + LLC */
          dev->mocs.l1_hdc_l3_llc = 48 << 1;
       }
+      /* Protected is just an additional flag. */
+      dev->mocs.protected_mask = 1 << 0;
    } else if (dev->info->ver >= 9) {
       /* TC=LLC/eLLC, LeCC=PTE, LRUM=3, L3CC=WB */
       dev->mocs.external = 1 << 1;
@@ -191,12 +201,15 @@ uint32_t
 isl_mocs(const struct isl_device *dev, isl_surf_usage_flags_t usage,
          bool external)
 {
+   uint32_t mask = (usage & ISL_SURF_USAGE_PROTECTED_BIT) ?
+      dev->mocs.protected_mask : 0;
+
    if (external)
-      return dev->mocs.external;
+      return dev->mocs.external | mask;
 
    if (dev->info->verx10 == 120 && dev->info->platform != INTEL_PLATFORM_DG1) {
       if (usage & ISL_SURF_USAGE_STAGING_BIT)
-         return dev->mocs.internal;
+         return dev->mocs.internal | mask;
 
       if (usage & ISL_SURF_USAGE_CPB_BIT)
          return dev->mocs.internal;
@@ -207,15 +220,15 @@ isl_mocs(const struct isl_device *dev, isl_surf_usage_flags_t usage,
        * continue with ordinary internal MOCS for now.
        */
       if (usage & ISL_SURF_USAGE_STORAGE_BIT)
-         return dev->mocs.internal;
+         return dev->mocs.internal | mask;
 
       if (usage & (ISL_SURF_USAGE_CONSTANT_BUFFER_BIT |
                    ISL_SURF_USAGE_RENDER_TARGET_BIT |
                    ISL_SURF_USAGE_TEXTURE_BIT))
-         return dev->mocs.l1_hdc_l3_llc;
+         return dev->mocs.l1_hdc_l3_llc | mask;
    }
 
-   return dev->mocs.internal;
+   return dev->mocs.internal | mask;
 }
 
 void
@@ -315,6 +328,12 @@ isl_device_init(struct isl_device *dev,
       _3DSTATE_CPSIZE_CONTROL_BUFFER_SurfaceBaseAddress_start(info) / 8;
 
    isl_device_setup_mocs(dev);
+
+   dev->surf_fill_state_s = isl_surf_fill_state_s_get_func(dev);
+   dev->buffer_fill_state_s = isl_buffer_fill_state_s_get_func(dev);
+   dev->emit_depth_stencil_hiz_s = isl_emit_depth_stencil_hiz_s_get_func(dev);
+   dev->null_fill_state_s = isl_null_fill_state_s_get_func(dev);
+   dev->emit_cpb_control_s = isl_emit_cpb_control_s_get_func(dev);
 }
 
 /**
@@ -2409,98 +2428,6 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
    default:                                        \
       assert(!"Unknown hardware generation");      \
    }
-
-void
-isl_surf_fill_state_s(const struct isl_device *dev, void *state,
-                      const struct isl_surf_fill_state_info *restrict info)
-{
-#ifndef NDEBUG
-   isl_surf_usage_flags_t _base_usage =
-      info->view->usage & (ISL_SURF_USAGE_RENDER_TARGET_BIT |
-                           ISL_SURF_USAGE_TEXTURE_BIT |
-                           ISL_SURF_USAGE_STORAGE_BIT);
-   /* They may only specify one of the above bits at a time */
-   assert(__builtin_popcount(_base_usage) == 1);
-   /* The only other allowed bit is ISL_SURF_USAGE_CUBE_BIT */
-   assert((info->view->usage & ~ISL_SURF_USAGE_CUBE_BIT) == _base_usage);
-#endif
-
-   if (info->surf->dim == ISL_SURF_DIM_3D) {
-      assert(info->view->base_array_layer + info->view->array_len <=
-             info->surf->logical_level0_px.depth);
-   } else {
-      assert(info->view->base_array_layer + info->view->array_len <=
-             info->surf->logical_level0_px.array_len);
-   }
-
-   isl_genX_call(dev, surf_fill_state_s, dev, state, info);
-}
-
-void
-isl_buffer_fill_state_s(const struct isl_device *dev, void *state,
-                        const struct isl_buffer_fill_state_info *restrict info)
-{
-   isl_genX_call(dev, buffer_fill_state_s, dev, state, info);
-}
-
-void
-isl_null_fill_state_s(const struct isl_device *dev, void *state,
-                      const struct isl_null_fill_state_info *restrict info)
-{
-   isl_genX_call(dev, null_fill_state, dev, state, info);
-}
-
-void
-isl_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
-                             const struct isl_depth_stencil_hiz_emit_info *restrict info)
-{
-   if (info->depth_surf && info->stencil_surf) {
-      if (!dev->info->has_hiz_and_separate_stencil) {
-         assert(info->depth_surf == info->stencil_surf);
-         assert(info->depth_address == info->stencil_address);
-      }
-      assert(info->depth_surf->dim == info->stencil_surf->dim);
-   }
-
-   if (info->depth_surf) {
-      assert((info->depth_surf->usage & ISL_SURF_USAGE_DEPTH_BIT));
-      if (info->depth_surf->dim == ISL_SURF_DIM_3D) {
-         assert(info->view->base_array_layer + info->view->array_len <=
-                info->depth_surf->logical_level0_px.depth);
-      } else {
-         assert(info->view->base_array_layer + info->view->array_len <=
-                info->depth_surf->logical_level0_px.array_len);
-      }
-   }
-
-   if (info->stencil_surf) {
-      assert((info->stencil_surf->usage & ISL_SURF_USAGE_STENCIL_BIT));
-      if (info->stencil_surf->dim == ISL_SURF_DIM_3D) {
-         assert(info->view->base_array_layer + info->view->array_len <=
-                info->stencil_surf->logical_level0_px.depth);
-      } else {
-         assert(info->view->base_array_layer + info->view->array_len <=
-                info->stencil_surf->logical_level0_px.array_len);
-      }
-   }
-
-   isl_genX_call(dev, emit_depth_stencil_hiz_s, dev, batch, info);
-}
-
-void
-isl_emit_cpb_control_s(const struct isl_device *dev, void *batch,
-                       const struct isl_cpb_emit_info *restrict info)
-{
-   if (info->surf) {
-      assert((info->surf->usage & ISL_SURF_USAGE_CPB_BIT));
-      assert(info->surf->dim != ISL_SURF_DIM_3D);
-      assert(info->surf->tiling == ISL_TILING_4 ||
-             info->surf->tiling == ISL_TILING_64);
-      assert(info->surf->format == ISL_FORMAT_R8_UINT);
-   }
-
-   isl_genX_call(dev, emit_cpb_control_s, dev, batch, info);
-}
 
 /**
  * A variant of isl_surf_get_image_offset_sa() specific to

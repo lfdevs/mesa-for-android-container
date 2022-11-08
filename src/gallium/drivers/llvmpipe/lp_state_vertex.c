@@ -1,5 +1,5 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 /* Authors:  Keith Whitwell <keithw@vmware.com>
@@ -53,6 +53,7 @@ llvmpipe_create_vertex_elements_state(struct pipe_context *pipe,
    return velems;
 }
 
+
 static void
 llvmpipe_bind_vertex_elements_state(struct pipe_context *pipe,
                                     void *velems)
@@ -65,14 +66,17 @@ llvmpipe_bind_vertex_elements_state(struct pipe_context *pipe,
    llvmpipe->dirty |= LP_NEW_VERTEX;
 
    if (velems)
-      draw_set_vertex_elements(llvmpipe->draw, lp_velems->count, lp_velems->velem);
+      draw_set_vertex_elements(llvmpipe->draw, lp_velems->count,
+                               lp_velems->velem);
 }
+
 
 static void
 llvmpipe_delete_vertex_elements_state(struct pipe_context *pipe, void *velems)
 {
-   FREE( velems );
+   FREE(velems);
 }
+
 
 static void
 llvmpipe_set_vertex_buffers(struct pipe_context *pipe,

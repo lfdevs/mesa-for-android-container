@@ -33,6 +33,7 @@
 #include "nv30/nv30-40_3d.xml.h"
 #include "nv30/nv30_context.h"
 #include "nv30/nv30_resource.h"
+#include "nv30/nv30_winsys.h"
 
 struct push_context {
    struct nouveau_pushbuf *push;

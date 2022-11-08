@@ -131,13 +131,10 @@ agx_optimizer_inline_imm(agx_instr **defs, agx_instr *I,
          float f = fp16 ? _mesa_half_to_float(def->imm) : uif(def->imm);
          if (!agx_minifloat_exact(f)) continue;
 
-         value = agx_minifloat_encode(f);
-      } else if (value != def->imm) {
-         continue;
+         I->src[s] = agx_immediate_f(f);
+      } else if (value == def->imm) {
+         I->src[s] = agx_immediate(value);
       }
-
-      I->src[s].type = AGX_INDEX_IMMEDIATE;
-      I->src[s].value = value;
    }
 }
 
@@ -173,6 +170,28 @@ agx_optimizer_copyprop(agx_instr **defs, agx_instr *I)
       /* Immediate inlining happens elsewhere */
       if (def->src[0].type == AGX_INDEX_IMMEDIATE) continue;
 
+      /* Not all instructions can take uniforms. Memory instructions can take
+       * uniforms, but only for their base (first) source and only in the
+       * low-half of the uniform file.
+       */
+      if (def->src[0].type == AGX_INDEX_UNIFORM &&
+          (I->op == AGX_OPCODE_TEXTURE_LOAD ||
+           I->op == AGX_OPCODE_TEXTURE_SAMPLE ||
+           (I->op == AGX_OPCODE_DEVICE_LOAD &&
+            (s != 0 || def->src[0].value >= 256)) ||
+           I->op == AGX_OPCODE_PHI ||
+           I->op == AGX_OPCODE_ST_TILE ||
+           I->op == AGX_OPCODE_LD_TILE ||
+           /*I->op == AGX_OPCODE_DEVICE_STORE ||*/
+           I->op == AGX_OPCODE_UNIFORM_STORE ||
+           I->op == AGX_OPCODE_ST_VARY))
+          continue;
+
+      /* ALU instructions cannot take 64-bit */
+      if (def->src[0].size == AGX_SIZE_64 &&
+          !(I->op == AGX_OPCODE_DEVICE_LOAD && s == 0))
+         continue;
+
       I->src[s] = agx_replace_index(src, def->src[0]);
    }
 }
@@ -198,7 +217,9 @@ agx_optimizer_forward(agx_context *ctx)
          agx_optimizer_fmov(defs, I);
 
       /* Inline immediates if we can. TODO: systematic */
-      if (I->op != AGX_OPCODE_ST_VARY && I->op != AGX_OPCODE_ST_TILE && I->op != AGX_OPCODE_P_EXTRACT && I->op != AGX_OPCODE_P_COMBINE)
+      if (I->op != AGX_OPCODE_ST_VARY && I->op != AGX_OPCODE_ST_TILE &&
+          I->op != AGX_OPCODE_COLLECT && I->op != AGX_OPCODE_TEXTURE_SAMPLE &&
+          I->op != AGX_OPCODE_TEXTURE_LOAD && I->op != AGX_OPCODE_UNIFORM_STORE)
          agx_optimizer_inline_imm(defs, I, info.nr_srcs, info.is_float);
    }
 

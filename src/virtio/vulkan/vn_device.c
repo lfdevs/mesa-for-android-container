@@ -22,9 +22,13 @@
 static void
 vn_queue_fini(struct vn_queue *queue)
 {
+   VkDevice dev_handle = vn_device_to_handle(queue->device);
+
    if (queue->wait_fence != VK_NULL_HANDLE) {
-      vn_DestroyFence(vn_device_to_handle(queue->device), queue->wait_fence,
-                      NULL);
+      vn_DestroyFence(dev_handle, queue->wait_fence, NULL);
+   }
+   if (queue->sync_fence != VK_NULL_HANDLE) {
+      vn_DestroyFence(dev_handle, queue->sync_fence, NULL);
    }
    vn_object_base_fini(&queue->base);
 }
@@ -52,23 +56,6 @@ vn_queue_init(struct vn_device *dev,
    queue->family = queue_info->queueFamilyIndex;
    queue->index = queue_index;
    queue->flags = queue_info->flags;
-
-   const VkExportFenceCreateInfo export_fence_info = {
-      .sType = VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO,
-      .pNext = NULL,
-      .handleTypes = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
-   };
-   const VkFenceCreateInfo fence_info = {
-      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-      .pNext = dev->instance->experimental.globalFencing == VK_TRUE
-                  ? &export_fence_info
-                  : NULL,
-      .flags = 0,
-   };
-   VkResult result = vn_CreateFence(vn_device_to_handle(dev), &fence_info,
-                                    NULL, &queue->wait_fence);
-   if (result != VK_SUCCESS)
-      return result;
 
    return VK_SUCCESS;
 }
@@ -220,11 +207,7 @@ vn_device_fix_create_info(const struct vn_device *dev,
       app_exts->KHR_swapchain || app_exts->ANDROID_native_buffer ||
       app_exts->ANDROID_external_memory_android_hardware_buffer;
    if (has_wsi) {
-      /* KHR_swapchain may be advertised without the renderer support for
-       * EXT_image_drm_format_modifier
-       */
-      if (!app_exts->EXT_image_drm_format_modifier &&
-          physical_dev->renderer_extensions.EXT_image_drm_format_modifier) {
+      if (!app_exts->EXT_image_drm_format_modifier) {
          extra_exts[extra_count++] =
             VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME;
 
@@ -235,11 +218,7 @@ vn_device_fix_create_info(const struct vn_device *dev,
          }
       }
 
-      /* XXX KHR_swapchain may be advertised without the renderer support for
-       * EXT_queue_family_foreign
-       */
-      if (!app_exts->EXT_queue_family_foreign &&
-          physical_dev->renderer_extensions.EXT_queue_family_foreign) {
+      if (!app_exts->EXT_queue_family_foreign) {
          extra_exts[extra_count++] =
             VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME;
       }
@@ -253,8 +232,16 @@ vn_device_fix_create_info(const struct vn_device *dev,
             VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME;
       }
 
-      if (app_exts->ANDROID_native_buffer)
+      if (app_exts->ANDROID_native_buffer) {
+         if (!app_exts->KHR_external_fence_fd &&
+             (physical_dev->renderer_sync_fd_fence_features &
+              VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT)) {
+            extra_exts[extra_count++] =
+               VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME;
+         }
+
          block_exts[block_count++] = VK_ANDROID_NATIVE_BUFFER_EXTENSION_NAME;
+      }
 
       if (app_exts->ANDROID_external_memory_android_hardware_buffer) {
          block_exts[block_count++] =
@@ -291,9 +278,21 @@ vn_device_fix_create_info(const struct vn_device *dev,
       }
    }
 
+   /* see vn_queue_submission_count_batch_semaphores */
+   if (!app_exts->KHR_external_semaphore_fd &&
+       (physical_dev->renderer_sync_fd_semaphore_features &
+        VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT)) {
+      extra_exts[extra_count++] = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
+   }
+
    if (app_exts->EXT_physical_device_drm) {
       /* see vn_physical_device_get_native_extensions */
       block_exts[block_count++] = VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME;
+   }
+
+   if (app_exts->EXT_tooling_info) {
+      /* see vn_physical_device_get_native_extensions */
+      block_exts[block_count++] = VK_EXT_TOOLING_INFO_EXTENSION_NAME;
    }
 
    assert(extra_count <= ARRAY_SIZE(extra_exts));
@@ -548,8 +547,53 @@ vn_GetCalibratedTimestampsEXT(
    uint64_t *pMaxDeviation)
 {
    struct vn_device *dev = vn_device_from_handle(device);
+   uint64_t begin, end, max_clock_period = 0;
+   VkResult ret;
+   int domain;
 
-   return vn_call_vkGetCalibratedTimestampsEXT(
-      dev->instance, device, timestampCount, pTimestampInfos, pTimestamps,
-      pMaxDeviation);
+#ifdef CLOCK_MONOTONIC_RAW
+   begin = vk_clock_gettime(CLOCK_MONOTONIC_RAW);
+#else
+   begin = vk_clock_gettime(CLOCK_MONOTONIC);
+#endif
+
+   for (domain = 0; domain < timestampCount; domain++) {
+      switch (pTimestampInfos[domain].timeDomain) {
+      case VK_TIME_DOMAIN_DEVICE_EXT: {
+         uint64_t device_max_deviation = 0;
+
+         ret = vn_call_vkGetCalibratedTimestampsEXT(
+            dev->instance, device, 1, &pTimestampInfos[domain],
+            &pTimestamps[domain], &device_max_deviation);
+
+         if (ret != VK_SUCCESS)
+            return vn_error(dev->instance, ret);
+
+         max_clock_period = MAX2(max_clock_period, device_max_deviation);
+         break;
+      }
+      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT:
+         pTimestamps[domain] = vk_clock_gettime(CLOCK_MONOTONIC);
+         max_clock_period = MAX2(max_clock_period, 1);
+         break;
+#ifdef CLOCK_MONOTONIC_RAW
+      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT:
+         pTimestamps[domain] = begin;
+         break;
+#endif
+      default:
+         pTimestamps[domain] = 0;
+         break;
+      }
+   }
+
+#ifdef CLOCK_MONOTONIC_RAW
+   end = vk_clock_gettime(CLOCK_MONOTONIC_RAW);
+#else
+   end = vk_clock_gettime(CLOCK_MONOTONIC);
+#endif
+
+   *pMaxDeviation = vk_time_max_deviation(begin, end, max_clock_period);
+
+   return VK_SUCCESS;
 }

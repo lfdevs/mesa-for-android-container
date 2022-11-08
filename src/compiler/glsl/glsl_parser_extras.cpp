@@ -782,6 +782,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(NV_image_formats),
    EXT(NV_shader_atomic_float),
    EXT(NV_shader_atomic_int64),
+   EXT(NV_shader_noperspective_interpolation),
    EXT(NV_viewport_array2),
 };
 
@@ -2380,12 +2381,9 @@ do_common_optimization(exec_list *ir, bool linked,
       }                                                                 \
    } while (false)
 
-   OPT(lower_instructions, ir, SUB_TO_ADD_NEG);
-
    if (linked) {
       OPT(do_function_inlining, ir);
       OPT(do_dead_functions, ir);
-      OPT(do_structure_splitting, ir);
    }
    OPT(propagate_invariance, ir);
    OPT(do_if_simplification, ir);
@@ -2412,22 +2410,7 @@ do_common_optimization(exec_list *ir, bool linked,
    OPT(do_algebraic, ir, native_integers, options);
    OPT(do_lower_jumps, ir, true, true, options->EmitNoMainReturn,
        options->EmitNoCont);
-   OPT(do_vec_index_to_swizzle, ir);
    OPT(lower_vector_insert, ir, false);
-
-   /* Some drivers only call do_common_optimization() once rather than in a
-    * loop, and split arrays causes each element of a constant array to
-    * dereference is own copy of the entire array initilizer. This IR is not
-    * something that can be generated manually in a shader and is not
-    * accounted for by NIR optimisations, the result is an exponential slow
-    * down in compilation speed as a constant arrays element count grows. To
-    * avoid that here we make sure to always clean up the mess split arrays
-    * causes to constant arrays.
-    */
-   bool array_split = optimize_split_arrays(ir, linked);
-   if (array_split)
-      do_constant_propagation(ir);
-   progress |= array_split;
 
    /* If an optimization pass fails to preserve the invariant flag, calling
     * the pass only once earlier may result in incorrect code generation. Always call

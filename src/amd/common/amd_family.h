@@ -171,6 +171,20 @@ enum amd_ip_type
    AMD_NUM_IP_TYPES,
 };
 
+enum amd_vram_type {
+   AMD_VRAM_TYPE_UNKNOWN = 0,
+   AMD_VRAM_TYPE_GDDR1,
+   AMD_VRAM_TYPE_DDR2,
+   AMD_VRAM_TYPE_GDDR3,
+   AMD_VRAM_TYPE_GDDR4,
+   AMD_VRAM_TYPE_GDDR5,
+   AMD_VRAM_TYPE_HBM,
+   AMD_VRAM_TYPE_DDR3,
+   AMD_VRAM_TYPE_DDR4,
+   AMD_VRAM_TYPE_GDDR6,
+   AMD_VRAM_TYPE_DDR5,
+};
+
 const char *ac_get_family_name(enum radeon_family family);
 
 #ifdef __cplusplus

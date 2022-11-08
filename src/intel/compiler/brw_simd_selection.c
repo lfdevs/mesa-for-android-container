@@ -60,8 +60,9 @@ brw_simd_should_compile(void *mem_ctx,
 
    const unsigned width = 8u << simd;
 
-   /* For shaders with variable size workgroup, we will always compile all the
-    * variants, since the choice will happen only at dispatch time.
+   /* For shaders with variable size workgroup, in most cases we can compile
+    * all the variants (exceptions are bindless dispatch & ray queries), since
+    * the choice will happen only at dispatch time.
     */
    const bool workgroup_size_variable = prog_data->local_size[0] == 0;
 
@@ -111,6 +112,20 @@ brw_simd_should_compile(void *mem_ctx,
             return false;
          }
       }
+   }
+
+   if (width == 32 && prog_data->base.ray_queries > 0) {
+      *error = ralloc_asprintf(
+         mem_ctx, "SIMD%u skipped because of ray queries",
+         width);
+      return false;
+   }
+
+   if (width == 32 && prog_data->uses_btd_stack_ids) {
+      *error = ralloc_asprintf(
+         mem_ctx, "SIMD%u skipped because of bindless shader calls",
+         width);
+      return false;
    }
 
    const bool env_skip[3] = {

@@ -464,9 +464,11 @@ lower_doubles_instr_to_soft(nir_builder *b, nir_alu_instr *instr,
    if (!(options & nir_lower_fp64_full_software))
       return NULL;
 
+
    assert(instr->dest.dest.is_ssa);
 
    const char *name;
+   const char *mangled_name;
    const struct glsl_type *return_type = glsl_uint64_t_type();
 
    switch (instr->op) {
@@ -474,114 +476,149 @@ lower_doubles_instr_to_soft(nir_builder *b, nir_alu_instr *instr,
       if (instr->src[0].src.ssa->bit_size != 64)
          return false;
       name = "__fp64_to_int64";
+      mangled_name = "__fp64_to_int64(u641;";
       return_type = glsl_int64_t_type();
       break;
    case nir_op_f2u64:
       if (instr->src[0].src.ssa->bit_size != 64)
          return false;
       name = "__fp64_to_uint64";
+      mangled_name = "__fp64_to_uint64(u641;";
       break;
    case nir_op_f2f64:
       name = "__fp32_to_fp64";
+      mangled_name = "__fp32_to_fp64(f1;";
       break;
    case nir_op_f2f32:
       name = "__fp64_to_fp32";
+      mangled_name = "__fp64_to_fp32(u641;";
       return_type = glsl_float_type();
       break;
    case nir_op_f2i32:
       name = "__fp64_to_int";
+      mangled_name = "__fp64_to_int(u641;";
       return_type = glsl_int_type();
       break;
    case nir_op_f2u32:
       name = "__fp64_to_uint";
+      mangled_name = "__fp64_to_uint(u641;";
       return_type = glsl_uint_type();
       break;
    case nir_op_f2b1:
    case nir_op_f2b32:
       name = "__fp64_to_bool";
+      mangled_name = "__fp64_to_bool(u641;";
       return_type = glsl_bool_type();
       break;
    case nir_op_b2f64:
       name = "__bool_to_fp64";
+      mangled_name = "__bool_to_fp64(b1;";
       break;
    case nir_op_i2f64:
-      if (instr->src[0].src.ssa->bit_size == 64)
+      if (instr->src[0].src.ssa->bit_size == 64) {
          name = "__int64_to_fp64";
-      else
+         mangled_name = "__int64_to_fp64(i641;";
+      }
+      else {
          name = "__int_to_fp64";
+         mangled_name = "__int_to_fp64(i1;";
+      }
       break;
    case nir_op_u2f64:
-      if (instr->src[0].src.ssa->bit_size == 64)
+      if (instr->src[0].src.ssa->bit_size == 64) {
          name = "__uint64_to_fp64";
-      else
+         mangled_name = "__uint64_to_fp64(u641;";
+      }
+      else {
          name = "__uint_to_fp64";
+         mangled_name = "__uint_to_fp64(u1;";
+      }
       break;
    case nir_op_fabs:
       name = "__fabs64";
+      mangled_name = "__fabs64(u641;";
       break;
    case nir_op_fneg:
       name = "__fneg64";
+      mangled_name = "__fneg64(u641;";
       break;
    case nir_op_fround_even:
       name = "__fround64";
+      mangled_name = "__fround64(u641;";
       break;
    case nir_op_ftrunc:
       name = "__ftrunc64";
+      mangled_name = "__ftrunc64(u641;";
       break;
    case nir_op_ffloor:
       name = "__ffloor64";
+      mangled_name = "__ffloor64(u641;";
       break;
    case nir_op_ffract:
       name = "__ffract64";
+      mangled_name = "__ffract64(u641;";
       break;
    case nir_op_fsign:
       name = "__fsign64";
+      mangled_name = "__fsign64(u641;";
       break;
    case nir_op_feq:
       name = "__feq64";
+      mangled_name = "__feq64(u641;u641;";
       return_type = glsl_bool_type();
       break;
    case nir_op_fneu:
       name = "__fneu64";
+      mangled_name = "__fneu64(u641;u641;";
       return_type = glsl_bool_type();
       break;
    case nir_op_flt:
       name = "__flt64";
+      mangled_name = "__flt64(u641;u641;";
       return_type = glsl_bool_type();
       break;
    case nir_op_fge:
       name = "__fge64";
+      mangled_name = "__fge64(u641;u641;";
       return_type = glsl_bool_type();
       break;
    case nir_op_fmin:
       name = "__fmin64";
+      mangled_name = "__fmin64(u641;u641;";
       break;
    case nir_op_fmax:
       name = "__fmax64";
+      mangled_name = "__fmax64(u641;u641;";
       break;
    case nir_op_fadd:
       name = "__fadd64";
+      mangled_name = "__fadd64(u641;u641;";
       break;
    case nir_op_fmul:
       name = "__fmul64";
+      mangled_name = "__fmul64(u641;u641;";
       break;
    case nir_op_ffma:
       name = "__ffma64";
+      mangled_name = "__ffma64(u641;u641;u641;";
       break;
    case nir_op_fsat:
       name = "__fsat64";
+      mangled_name = "__fsat64(u641;";
       break;
    default:
       return false;
    }
 
-   nir_function *func = NULL;
-   nir_foreach_function(function, softfp64) {
-      if (strcmp(function->name, name) == 0) {
-         func = function;
-         break;
-      }
-   }
+   assert(softfp64 != NULL);
+   nir_function *func = nir_shader_get_function_for_name(softfp64, name);
+
+   /* Another attempt, but this time with mangled names if softfp64
+    * shader is taken from SPIR-V.
+    */
+   if (!func)
+      func = nir_shader_get_function_for_name(softfp64, mangled_name);
+
    if (!func || !func->impl) {
       fprintf(stderr, "Cannot find function \"%s\"\n", name);
       assert(func);

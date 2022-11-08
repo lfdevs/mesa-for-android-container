@@ -45,6 +45,7 @@
 
 #define FIXED15_ONE 0x7fff
 
+
 /* Translate floating point value to 1.15 unsigned fixed-point.
  */
 static inline ushort
@@ -90,6 +91,7 @@ interp_0_8(struct lp_linear_elem *elem)
    return interp->row;
 }
 
+
 static const uint32_t *
 interp_noop(struct lp_linear_elem *elem)
 {
@@ -106,6 +108,7 @@ interp_check(struct lp_linear_elem *elem)
    return interp->row;
 }
 
+
 /* Not quite a noop - we use row[0] to track whether this gets called
  * or not, so we can optimize which interpolants we care about.
  */
@@ -115,6 +118,7 @@ lp_linear_init_noop_interp(struct lp_linear_interp *interp)
    interp->row[0] = 0;
    interp->base.fetch = interp_check;
 }
+
 
 boolean
 lp_linear_init_interp(struct lp_linear_interp *interp,
@@ -224,7 +228,8 @@ lp_linear_init_interp(struct lp_linear_interp *interp,
    return TRUE;
 }
 
-#else
+#else //PIPE_ARCH_SSE
+
 boolean
 lp_linear_init_interp(struct lp_linear_interp *interp,
                       int x, int y, int width, int height,
@@ -237,4 +242,5 @@ lp_linear_init_interp(struct lp_linear_interp *interp,
 {
    return FALSE;
 }
-#endif
+
+#endif //PIPE_ARCH_SSE

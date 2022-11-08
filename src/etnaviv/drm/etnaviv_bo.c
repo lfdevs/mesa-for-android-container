@@ -30,7 +30,7 @@
 #include "etnaviv_priv.h"
 #include "etnaviv_drmif.h"
 
-simple_mtx_t etna_device_lock = _SIMPLE_MTX_INITIALIZER_NP;
+simple_mtx_t etna_device_lock = SIMPLE_MTX_INITIALIZER;
 
 /* set buffer name, and add to table, call w/ etna_drm_table_lock held: */
 static void set_name(struct etna_bo *bo, uint32_t name)

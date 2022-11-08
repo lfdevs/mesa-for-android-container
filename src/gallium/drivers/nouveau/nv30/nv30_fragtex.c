@@ -29,6 +29,7 @@
 #include "nv30/nv30-40_3d.xml.h"
 #include "nv30/nv30_context.h"
 #include "nv30/nv30_format.h"
+#include "nv30/nv30_winsys.h"
 
 void
 nv30_fragtex_validate(struct nv30_context *nv30)
@@ -96,24 +97,24 @@ nv30_fragtex_validate(struct nv30_context *nv30)
              */
             if (ss->pipe.compare_mode != PIPE_TEX_COMPARE_R_TO_TEXTURE) {
                if (fmt->nv30 == NV30_3D_TEX_FORMAT_FORMAT_Z16) {
-                  if (ss->pipe.normalized_coords)
+                  if (!ss->pipe.unnormalized_coords)
                      format |= NV30_3D_TEX_FORMAT_FORMAT_A8L8;
                   else
                      format |= NV30_3D_TEX_FORMAT_FORMAT_A8L8_RECT;
                } else
                if (fmt->nv30 == NV30_3D_TEX_FORMAT_FORMAT_Z24) {
-                  if (ss->pipe.normalized_coords)
+                  if (!ss->pipe.unnormalized_coords)
                      format |= NV30_3D_TEX_FORMAT_FORMAT_HILO16;
                   else
                      format |= NV30_3D_TEX_FORMAT_FORMAT_HILO16_RECT;
                } else {
-                  if (ss->pipe.normalized_coords)
+                  if (!ss->pipe.unnormalized_coords)
                      format |= fmt->nv30;
                   else
                      format |= fmt->nv30_rect;
                }
             } else {
-               if (ss->pipe.normalized_coords)
+               if (!ss->pipe.unnormalized_coords)
                   format |= fmt->nv30;
                else
                   format |= fmt->nv30_rect;

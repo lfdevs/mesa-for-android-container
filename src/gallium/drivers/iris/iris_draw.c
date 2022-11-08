@@ -87,8 +87,8 @@ iris_update_draw_info(struct iris_context *ice,
       ice->state.vertices_per_patch = ice->state.patch_vertices;
       ice->state.dirty |= IRIS_DIRTY_VF_TOPOLOGY;
 
-      /* 8_PATCH TCS needs this for key->input_vertices */
-      if (compiler->use_tcs_8_patch)
+      /* MULTI_PATCH TCS needs this for key->input_vertices */
+      if (compiler->use_tcs_multi_patch)
          ice->state.stage_dirty |= IRIS_STAGE_DIRTY_UNCOMPILED_TCS;
 
       /* Flag constants dirty for gl_PatchVerticesIn if needed. */

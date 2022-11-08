@@ -292,7 +292,6 @@ vl_bicubic_filter_init(struct vl_bicubic_filter *filter, struct pipe_context *pi
    sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
    sampler.compare_mode = PIPE_TEX_COMPARE_NONE;
    sampler.compare_func = PIPE_FUNC_ALWAYS;
-   sampler.normalized_coords = 1;
    filter->sampler = pipe->create_sampler_state(pipe, &sampler);
    if (!filter->sampler)
       goto error_sampler;

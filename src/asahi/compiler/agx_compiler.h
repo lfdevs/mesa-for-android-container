@@ -45,12 +45,16 @@ enum agx_dbg {
    AGX_DBG_VERBOSE     = BITFIELD_BIT(3),
    AGX_DBG_INTERNAL    = BITFIELD_BIT(4),
    AGX_DBG_NOVALIDATE  = BITFIELD_BIT(5),
+   AGX_DBG_NOOPT       = BITFIELD_BIT(6),
 };
 
 extern int agx_debug;
 
 /* r0-r127 inclusive, as pairs of 16-bits, gives 256 registers */
 #define AGX_NUM_REGS (256)
+
+/* u0-u255 inclusive, as pairs of 16-bits */
+#define AGX_NUM_UNIFORMS (512)
 
 enum agx_index_type {
    AGX_INDEX_NULL = 0,
@@ -110,11 +114,13 @@ agx_get_index(unsigned value, enum agx_size size)
 }
 
 static inline agx_index
-agx_immediate(uint16_t imm)
+agx_immediate(uint32_t imm)
 {
+   assert(imm < (1 << 16) && "overflowed immediate");
+
    return (agx_index) {
       .value = imm,
-      .size = AGX_SIZE_32,
+      .size = AGX_SIZE_16,
       .type = AGX_INDEX_IMMEDIATE,
    };
 }
@@ -128,8 +134,10 @@ agx_immediate_f(float f)
 
 /* in half-words, specify r0h as 1, r1 as 2... */
 static inline agx_index
-agx_register(uint8_t imm, enum agx_size size)
+agx_register(uint32_t imm, enum agx_size size)
 {
+   assert(imm < AGX_NUM_REGS);
+
    return (agx_index) {
       .value = imm,
       .size = size,
@@ -139,8 +147,10 @@ agx_register(uint8_t imm, enum agx_size size)
 
 /* Also in half-words */
 static inline agx_index
-agx_uniform(uint8_t imm, enum agx_size size)
+agx_uniform(uint32_t imm, enum agx_size size)
 {
+   assert(imm < AGX_NUM_UNIFORMS);
+
    return (agx_index) {
       .value = imm,
       .size = size,
@@ -208,9 +218,6 @@ agx_is_equiv(agx_index left, agx_index right)
    return (left.type == right.type) && (left.value == right.value);
 }
 
-#define AGX_MAX_DESTS 4
-#define AGX_MAX_SRCS 5
-
 enum agx_icond {
    AGX_ICOND_UEQ = 0,
    AGX_ICOND_ULT = 1,
@@ -255,19 +262,8 @@ enum agx_lod_mode {
    AGX_LOD_MODE_AUTO_LOD = 0,
    AGX_LOD_MODE_AUTO_LOD_BIAS = 5,
    AGX_LOD_MODE_LOD_MIN = 6,
-   AGX_LOD_GRAD = 8,
-   AGX_LOD_GRAD_MIN = 12
-};
-
-enum agx_dim {
-   AGX_DIM_TEX_1D = 0,
-   AGX_DIM_TEX_1D_ARRAY = 1,
-   AGX_DIM_TEX_2D = 2,
-   AGX_DIM_TEX_2D_ARRAY = 3,
-   AGX_DIM_TEX_2D_MS = 4,
-   AGX_DIM_TEX_3D = 5,
-   AGX_DIM_TEX_CUBE = 6,
-   AGX_DIM_TEX_CUBE_ARRAY = 7
+   AGX_LOD_MODE_LOD_GRAD = 4,
+   AGX_LOD_MODE_LOD_GRAD_MIN = 12
 };
 
 /* Forward declare for branch target */
@@ -287,15 +283,16 @@ typedef struct {
       nir_phi_instr *phi;
    };
 
+   /* Data flow */
+   agx_index *dest;
+
    enum agx_opcode op;
 
-   /* Data flow */
-   agx_index dest[AGX_MAX_DESTS];
-
-   unsigned nr_srcs;
+   uint8_t nr_dests;
+   uint8_t nr_srcs;
 
    union {
-      uint32_t imm;
+      uint64_t imm;
       uint32_t writeout;
       uint32_t truth_table;
       uint32_t component;
@@ -318,6 +315,8 @@ typedef struct {
 
    /* TODO: Handle tex ops more efficient */
    enum agx_dim dim : 3;
+   bool offset : 1;
+   bool shadow : 1;
 
    /* Final st_vary op */
    bool last : 1;
@@ -375,12 +374,6 @@ typedef struct {
    struct agx_shader_info *out;
    struct agx_shader_key *key;
 
-   /* Remapping table for varyings indexed by driver_location */
-   unsigned varyings[AGX_MAX_VARYINGS];
-
-   /* Place to start pushing new values */
-   unsigned push_base;
-
    /* Maximum block index */
    unsigned num_blocks;
 
@@ -409,10 +402,16 @@ typedef struct {
     * components, populated by a split. */
    struct hash_table_u64 *allocated_vec;
 
+   /* During instruction selection, preloaded values,
+    * or NULL if it hasn't been preloaded
+    */
+   agx_index vertex_id, instance_id;
+
    /* Stats for shader-db */
    unsigned loop_count;
    unsigned spills;
    unsigned fills;
+   unsigned max_reg;
 } agx_context;
 
 static inline void
@@ -467,6 +466,20 @@ static inline agx_index
 agx_vec_for_intr(agx_context *ctx, nir_intrinsic_instr *instr)
 {
    return agx_vec_for_dest(ctx, &instr->dest);
+}
+
+static inline unsigned
+agx_num_predecessors(agx_block *block)
+{
+   return util_dynarray_num_elements(&block->predecessors, agx_block *);
+}
+
+static inline agx_block *
+agx_start_block(agx_context *ctx)
+{
+   agx_block *first = list_first_entry(&ctx->blocks, agx_block, link);
+   assert(agx_num_predecessors(first) == 0);
+   return first;
 }
 
 /* Iterators for AGX IR */
@@ -534,7 +547,21 @@ agx_vec_for_intr(agx_context *ctx, nir_intrinsic_instr *instr)
    for (unsigned v = 0; v < ins->nr_srcs; ++v)
 
 #define agx_foreach_dest(ins, v) \
-   for (unsigned v = 0; v < ARRAY_SIZE(ins->dest); ++v)
+   for (unsigned v = 0; v < ins->nr_dests; ++v)
+
+/* Phis only come at the start so we stop as soon as we hit a non-phi */
+#define agx_foreach_phi_in_block(block, v) \
+   agx_foreach_instr_in_block(block, v) \
+      if (v->op != AGX_OPCODE_PHI) \
+         break; \
+      else
+
+/* Everything else comes after, so we stop as soon as we hit a phi in reverse */
+#define agx_foreach_non_phi_in_block_rev(block, v) \
+   agx_foreach_instr_in_block_rev(block, v) \
+      if (v->op == AGX_OPCODE_PHI) \
+         break; \
+      else
 
 /*
  * Find the index of a predecessor, used as the implicit order of phi sources.
@@ -641,12 +668,31 @@ agx_after_block_logical(agx_block *block)
 {
    /* Search for a p_logical_end */
    agx_foreach_instr_in_block_rev(block, I) {
-      if (I->op == AGX_OPCODE_P_LOGICAL_END)
+      if (I->op == AGX_OPCODE_LOGICAL_END)
          return agx_before_instr(I);
    }
 
    /* If there's no p_logical_end, use the physical end */
    return agx_after_block(block);
+}
+
+
+static inline agx_cursor
+agx_before_nonempty_block(agx_block *block)
+{
+   agx_instr *I = list_first_entry(&block->instructions, agx_instr, link);
+   assert(I != NULL);
+
+   return agx_before_instr(I);
+}
+
+static inline agx_cursor
+agx_before_block(agx_block *block)
+{
+   if (list_is_empty(&block->instructions))
+      return agx_after_block(block);
+   else
+      return agx_before_nonempty_block(block);
 }
 
 /* IR builder in terms of cursor infrastructure */
@@ -698,6 +744,9 @@ agx_index
 agx_indexed_sysval(agx_context *ctx, enum agx_push_type type, enum agx_size size,
       unsigned index, unsigned length);
 
+agx_index
+agx_vbo_base(agx_context *ctx, unsigned vbo);
+
 /* Routines defined for AIR */
 
 void agx_print_instr(agx_instr *I, FILE *fp);
@@ -707,6 +756,7 @@ void agx_optimizer(agx_context *ctx);
 void agx_lower_pseudo(agx_context *ctx);
 void agx_dce(agx_context *ctx);
 void agx_ra(agx_context *ctx);
+void agx_lower_64bit_postra(agx_context *ctx);
 void agx_pack_binary(agx_context *ctx, struct util_dynarray *emission);
 
 #ifndef NDEBUG
@@ -721,8 +771,9 @@ struct agx_copy {
    /* Base register destination of the copy */
    unsigned dest;
 
-   /* Base register source of the copy */
+   /* Base register source (or uniform base) of the copy */
    unsigned src;
+   bool is_uniform;
 
    /* Size of the copy */
    enum agx_size size;
@@ -736,6 +787,10 @@ agx_emit_parallel_copies(agx_builder *b, struct agx_copy *copies, unsigned n);
 
 void agx_compute_liveness(agx_context *ctx);
 void agx_liveness_ins_update(BITSET_WORD *live, agx_instr *I);
+
+bool agx_lower_resinfo(nir_shader *s);
+bool agx_nir_lower_array_texture(nir_shader *s);
+bool agx_nir_opt_preamble(nir_shader *s, unsigned *preamble_size);
 
 #ifdef __cplusplus
 } /* extern C */

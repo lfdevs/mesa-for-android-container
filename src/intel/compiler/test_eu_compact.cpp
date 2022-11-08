@@ -235,7 +235,7 @@ protected:
 
 class Instructions : public CompactTestFixture {};
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
    CompactTest,
    Instructions,
    testing::Values(
@@ -253,7 +253,7 @@ INSTANTIATE_TEST_CASE_P(
 
 class InstructionsBeforeIvyBridge : public CompactTestFixture {};
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
    CompactTest,
    InstructionsBeforeIvyBridge,
    testing::Values(

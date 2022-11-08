@@ -114,6 +114,7 @@ struct llvmpipe_transfer
    struct pipe_transfer base;
 };
 
+
 struct llvmpipe_memory_object
 {
    struct pipe_memory_object b;
@@ -142,6 +143,7 @@ llvmpipe_transfer(struct pipe_transfer *pt)
 {
    return (struct llvmpipe_transfer *) pt;
 }
+
 
 static inline struct llvmpipe_memory_object *
 llvmpipe_memory_object(struct pipe_memory_object *pt)
@@ -217,12 +219,14 @@ llvmpipe_resource_stride(struct pipe_resource *resource,
    return lpr->row_stride[level];
 }
 
+
 static inline unsigned
 llvmpipe_sample_stride(struct pipe_resource *resource)
 {
    struct llvmpipe_resource *lpr = llvmpipe_resource(resource);
    return lpr->sample_stride;
 }
+
 
 void *
 llvmpipe_resource_map(struct pipe_resource *resource,
@@ -257,20 +261,23 @@ llvmpipe_print_resources(void);
 #define LP_REFERENCED_FOR_READ  (1 << 0)
 #define LP_REFERENCED_FOR_WRITE (1 << 1)
 
+
 unsigned int
-llvmpipe_is_resource_referenced( struct pipe_context *pipe,
-                                 struct pipe_resource *presource,
-                                 unsigned level);
+llvmpipe_is_resource_referenced(struct pipe_context *pipe,
+                                struct pipe_resource *presource,
+                                unsigned level);
 
 unsigned
 llvmpipe_get_format_alignment(enum pipe_format format);
 
+
 void *
-llvmpipe_transfer_map_ms( struct pipe_context *pipe,
-			  struct pipe_resource *resource,
-			  unsigned level,
-			  unsigned usage,
-			  unsigned sample,
-			  const struct pipe_box *box,
-			  struct pipe_transfer **transfer );
+llvmpipe_transfer_map_ms(struct pipe_context *pipe,
+                         struct pipe_resource *resource,
+                         unsigned level,
+                         unsigned usage,
+                         unsigned sample,
+                         const struct pipe_box *box,
+                         struct pipe_transfer **transfer);
+
 #endif /* LP_TEXTURE_H */

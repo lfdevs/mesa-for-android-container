@@ -280,6 +280,27 @@ trace_screen_is_format_supported(struct pipe_screen *_screen,
 }
 
 static void
+trace_screen_driver_thread_add_job(struct pipe_screen *_screen,
+                                   void *data, struct util_queue_fence *fence,
+                                   pipe_driver_thread_func execute,
+                                   pipe_driver_thread_func cleanup,
+                                   const size_t job_size)
+{
+   struct trace_screen *tr_scr = trace_screen(_screen);
+   struct pipe_screen *screen = tr_scr->screen;
+
+   trace_dump_call_begin("pipe_screen", "driver_thread_add_job");
+
+   trace_dump_arg(ptr, screen);
+   trace_dump_arg(ptr, data);
+   trace_dump_arg(ptr, fence);
+
+   screen->driver_thread_add_job(screen, data, fence, execute, cleanup, job_size);
+
+   trace_dump_call_end();
+}
+
+static void
 trace_context_replace_buffer_storage(struct pipe_context *_pipe,
                                      struct pipe_resource *dst,
                                      struct pipe_resource *src,
@@ -1453,6 +1474,7 @@ trace_screen_create(struct pipe_screen *screen)
    tr_scr->base.transfer_helper = screen->transfer_helper;
    SCR_INIT(get_sparse_texture_virtual_page_size);
    SCR_INIT(set_fence_timeline_value);
+   SCR_INIT(driver_thread_add_job);
 
    tr_scr->screen = screen;
 

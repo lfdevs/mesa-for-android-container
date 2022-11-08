@@ -111,6 +111,7 @@ lp_setup_alloc_triangle(struct lp_scene *scene,
    return tri;
 }
 
+
 void
 lp_setup_print_vertex(struct lp_setup_context *setup,
                       const char *name,
@@ -240,7 +241,7 @@ check_opaque(const struct lp_setup_context *setup,
 
    const struct lp_tgsi_channel_info *alpha_info = &variant->shader->info.cbuf[0][3];
    if (alpha_info->file == TGSI_FILE_CONSTANT) {
-      const float *constants = setup->fs.current.jit_context.constants[0];
+      const float *constants = setup->fs.current.jit_context.constants[0].f;
       float alpha = constants[alpha_info->u.index*4 +
                               alpha_info->swizzle];
       return alpha == 1.0f;
@@ -304,12 +305,16 @@ do_triangle_ccw(struct lp_setup_context *setup,
       int adj = (setup->bottom_edge_rule != 0) ? 1 : 0;
 
       /* Inclusive x0, exclusive x1 */
-      bbox.x0 =  MIN3(position->x[0], position->x[1], position->x[2]) >> FIXED_ORDER;
-      bbox.x1 = (MAX3(position->x[0], position->x[1], position->x[2]) - 1) >> FIXED_ORDER;
+      bbox.x0 =  MIN3(position->x[0], position->x[1],
+                      position->x[2]) >> FIXED_ORDER;
+      bbox.x1 = (MAX3(position->x[0], position->x[1],
+                      position->x[2]) - 1) >> FIXED_ORDER;
 
       /* Inclusive / exclusive depending upon adj (bottom-left or top-right) */
-      bbox.y0 = (MIN3(position->y[0], position->y[1], position->y[2]) + adj) >> FIXED_ORDER;
-      bbox.y1 = (MAX3(position->y[0], position->y[1], position->y[2]) - 1 + adj) >> FIXED_ORDER;
+      bbox.y0 = (MIN3(position->y[0], position->y[1],
+                      position->y[2]) + adj) >> FIXED_ORDER;
+      bbox.y1 = (MAX3(position->y[0], position->y[1],
+                      position->y[2]) - 1 + adj) >> FIXED_ORDER;
    }
 
    if (!u_rect_test_intersection(&setup->draw_regions[viewport_index], &bbox)) {
@@ -398,13 +403,13 @@ do_triangle_ccw(struct lp_setup_context *setup,
       float dist2 = v2[0][0] * v2[0][0] + v2[0][1] * v2[0][1];
       if (dist0 > dist1 && dist1 < dist2) {
          const float (*vt)[4];
-         int x, y;
          vt = v0;
          v0 = v1;
          v1 = v2;
          v2 = vt;
-         x = position->x[0];
-         y = position->y[0];
+         // rotate positions
+         int x = position->x[0];
+         int y = position->y[0];
          position->x[0] = position->x[1];
          position->y[0] = position->y[1];
          position->x[1] = position->x[2];
@@ -418,13 +423,13 @@ do_triangle_ccw(struct lp_setup_context *setup,
          position->dy01 = position->y[0] - position->y[1];
       } else if (dist0 > dist2) {
          const float (*vt)[4];
-         int x, y;
          vt = v0;
          v0 = v2;
          v2 = v1;
          v1 = vt;
-         x = position->x[0];
-         y = position->y[0];
+         // rotate positions
+         int x = position->x[0];
+         int y = position->y[0];
          position->x[0] = position->x[2];
          position->y[0] = position->y[2];
          position->x[2] = position->x[1];
@@ -728,7 +733,8 @@ do_triangle_ccw(struct lp_setup_context *setup,
    }
 
    if (nr_planes > 3) {
-      lp_setup_add_scissor_planes(scissor, &plane[3], s_planes, setup->multisample);
+      lp_setup_add_scissor_planes(scissor, &plane[3],
+                                  s_planes, setup->multisample);
    }
 
    return lp_setup_bin_triangle(setup, tri, use_32bits,
@@ -875,8 +881,10 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
          cmd = lp_rast_ms_tri_tab[nr_planes];
       else
          cmd = use_32bits ? lp_rast_32_tri_tab[nr_planes] : lp_rast_tri_tab[nr_planes];
-      return lp_scene_bin_cmd_with_state(scene, ix0, iy0, setup->fs.stored, cmd,
-                                  lp_rast_arg_triangle(tri, (1<<nr_planes)-1));
+      return lp_scene_bin_cmd_with_state(scene, ix0, iy0, setup->fs.stored,
+                                         cmd,
+                                         lp_rast_arg_triangle(tri,
+                                                              (1<<nr_planes)-1));
    } else {
       struct lp_rast_plane *plane = GET_PLANES(tri);
       int64_t c[MAX_PLANES];
@@ -885,7 +893,6 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
       int64_t eo[MAX_PLANES];
       int64_t xstep[MAX_PLANES];
       int64_t ystep[MAX_PLANES];
-      int x, y;
 
       const int ix0 = trimmed_box.x0 / TILE_SIZE;
       const int iy0 = trimmed_box.y0 / TILE_SIZE;
@@ -913,16 +920,15 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
        * contained inside the tri, bin an lp_rast_shade_tile command.
        * Else, bin a lp_rast_triangle command.
        */
-      for (y = iy0; y <= iy1; y++) {
+      for (int y = iy0; y <= iy1; y++) {
          boolean in = FALSE;  /* are we inside the triangle? */
          int64_t cx[MAX_PLANES];
 
          for (int i = 0; i < nr_planes; i++)
             cx[i] = c[i];
 
-         for (x = ix0; x <= ix1; x++) {
-            int out = 0;
-            int partial = 0;
+         for (int x = ix0; x <= ix1; x++) {
+            int out = 0, partial = 0;
 
             for (int i = 0; i < nr_planes; i++) {
                int64_t planeout = cx[i] + eo[i];
@@ -1135,7 +1141,7 @@ triangle_cw(struct lp_setup_context *setup,
             const float (*v2)[4])
 {
    alignas(16) struct fixed_position position;
-   struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
+   struct llvmpipe_context *lp_context = llvmpipe_context(setup->pipe);
 
    if (lp_context->active_statistics_queries) {
       lp_context->pipeline_statistics.c_primitives++;
@@ -1146,10 +1152,12 @@ triangle_cw(struct lp_setup_context *setup,
    if (area_sign < 0) {
       if (setup->flatshade_first) {
          rotate_fixed_position_12(&position);
-         retry_triangle_ccw(setup, &position, v0, v2, v1, !setup->ccw_is_frontface);
+         retry_triangle_ccw(setup, &position, v0, v2, v1,
+                            !setup->ccw_is_frontface);
       } else {
          rotate_fixed_position_01(&position);
-         retry_triangle_ccw(setup, &position, v1, v0, v2, !setup->ccw_is_frontface);
+         retry_triangle_ccw(setup, &position, v1, v0, v2,
+                            !setup->ccw_is_frontface);
       }
    }
 }
@@ -1162,7 +1170,7 @@ triangle_ccw(struct lp_setup_context *setup,
              const float (*v2)[4])
 {
    alignas(16) struct fixed_position position;
-   struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
+   struct llvmpipe_context *lp_context = llvmpipe_context(setup->pipe);
 
    if (lp_context->active_statistics_queries) {
       lp_context->pipeline_statistics.c_primitives++;
@@ -1185,7 +1193,7 @@ triangle_both(struct lp_setup_context *setup,
               const float (*v2)[4])
 {
    alignas(16) struct fixed_position position;
-   struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
+   struct llvmpipe_context *lp_context = llvmpipe_context(setup->pipe);
 
    if (lp_context->active_statistics_queries) {
       lp_context->pipeline_statistics.c_primitives++;
@@ -1203,14 +1211,17 @@ triangle_both(struct lp_setup_context *setup,
    }
 
    if (area_sign > 0) {
-      retry_triangle_ccw(setup, &position, v0, v1, v2, setup->ccw_is_frontface);
+      retry_triangle_ccw(setup, &position, v0, v1, v2,
+                         setup->ccw_is_frontface);
    } else if (area_sign < 0) {
       if (setup->flatshade_first) {
          rotate_fixed_position_12(&position);
-         retry_triangle_ccw(setup, &position, v0, v2, v1, !setup->ccw_is_frontface);
+         retry_triangle_ccw(setup, &position, v0, v2, v1,
+                            !setup->ccw_is_frontface);
       } else {
          rotate_fixed_position_01(&position);
-         retry_triangle_ccw(setup, &position, v1, v0, v2, !setup->ccw_is_frontface);
+         retry_triangle_ccw(setup, &position, v1, v0, v2,
+                            !setup->ccw_is_frontface);
       }
    }
 }

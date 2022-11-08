@@ -69,11 +69,13 @@ struct readonly_image_lower_options {
 };
 
 static bool
-is_readonly_image_op(const nir_instr *instr, const void *context)
+lower_readonly_image_instr(nir_builder *b, nir_instr *instr, void *context)
 {
    struct readonly_image_lower_options *options = (struct readonly_image_lower_options *)context;
+
    if (instr->type != nir_instr_type_intrinsic)
       return false;
+
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    if (intrin->intrinsic != nir_intrinsic_image_deref_load &&
        intrin->intrinsic != nir_intrinsic_image_deref_size)
@@ -93,19 +95,12 @@ is_readonly_image_op(const nir_instr *instr, const void *context)
    if (options->per_variable) {
       if (var)
          access = var->data.access;
-   } else
+   } else {
       access = nir_intrinsic_access(intrin);
-   if (access & ACCESS_NON_WRITEABLE)
-      return true;
+   }
+   if (!(access & ACCESS_NON_WRITEABLE))
+      return false;
 
-   return false;
-}
-
-static nir_ssa_def *
-lower_readonly_image_op(nir_builder *b, nir_instr *instr, void *context)
-{
-   struct readonly_image_lower_options *options = (struct readonly_image_lower_options *)context;
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    unsigned num_srcs;
    nir_texop texop;
    switch (intrin->intrinsic) {
@@ -118,10 +113,10 @@ lower_readonly_image_op(nir_builder *b, nir_instr *instr, void *context)
       num_srcs = 2;
       break;
    default:
-      unreachable("Filtered above");
+      unreachable("Unsupported intrinsic");
    }
 
-   nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
+   b->cursor = nir_before_instr(&intrin->instr);
 
    nir_tex_instr *tex = nir_tex_instr_create(b->shader, num_srcs);
    tex->op = texop;
@@ -137,7 +132,7 @@ lower_readonly_image_op(nir_builder *b, nir_instr *instr, void *context)
 
    tex->src[0].src_type = nir_tex_src_texture_deref;
    tex->src[0].src = nir_src_for_ssa(&deref->dest.ssa);
-         
+
    if (options->per_variable) {
       assert(nir_deref_instr_get_variable(deref));
       replace_image_type_with_sampler(deref);
@@ -184,32 +179,33 @@ lower_readonly_image_op(nir_builder *b, nir_instr *instr, void *context)
 
    nir_builder_instr_insert(b, &tex->instr);
 
-   nir_ssa_def *res = &tex->dest.ssa;
-   if (res->num_components != intrin->dest.ssa.num_components) {
-      unsigned num_components = intrin->dest.ssa.num_components;
-      res = nir_trim_vector(b, res, num_components);
-   }
+   nir_ssa_def *res = nir_trim_vector(b, &tex->dest.ssa,
+                                      intrin->dest.ssa.num_components);
 
-   return res;
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, res);
+   nir_instr_remove(&intrin->instr);
+
+   return true;
 }
 
 /** Lowers image ops to texture ops for read-only images
-  * 
-  * If per_variable is set:
-  * - Variable access is used to indicate read-only instead of intrinsic access
-  * - Variable/deref types will be changed from image types to sampler types
-  * 
-  * per_variable should not be set for OpenCL, because all image types will be void-returning,
-  * and there is no corresponding valid sampler type, and it will collide with the "bare" sampler type.
-  */
+ *
+ * If per_variable is set:
+ * - Variable access is used to indicate read-only instead of intrinsic access
+ * - Variable/deref types will be changed from image types to sampler types
+ *
+ * per_variable should not be set for OpenCL, because all image types will be
+ * void-returning, and there is no corresponding valid sampler type, and it
+ * will collide with the "bare" sampler type.
+ */
 bool
 nir_lower_readonly_images_to_tex(nir_shader *shader, bool per_variable)
 {
    assert(shader->info.stage != MESA_SHADER_KERNEL || !per_variable);
 
    struct readonly_image_lower_options options = { per_variable };
-   return nir_shader_lower_instructions(shader,
-                                        is_readonly_image_op,
-                                        lower_readonly_image_op,
-                                        &options);
+   return nir_shader_instructions_pass(shader, lower_readonly_image_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       &options);
 }

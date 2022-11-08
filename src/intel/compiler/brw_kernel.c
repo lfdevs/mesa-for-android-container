@@ -299,6 +299,11 @@ brw_kernel_from_spirv(struct brw_compiler *compiler,
 
    spirv_options.clc_shader = load_clc_shader(compiler, disk_cache,
                                               nir_options, &spirv_options);
+   if (spirv_options.clc_shader == NULL) {
+      fprintf(stderr, "ERROR: libclc shader missing."
+              " Consider installing the libclc package\n");
+      abort();
+   }
 
    assert(spirv_size % 4 == 0);
    nir_shader *nir =

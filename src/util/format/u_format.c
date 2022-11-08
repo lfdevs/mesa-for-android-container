@@ -32,9 +32,9 @@
  * @author Jose Fonseca <jfonseca@vmware.com>
  */
 
+#include "c11/threads.h"
 #include "util/format/u_format.h"
 #include "util/format/u_format_s3tc.h"
-#include "util/u_cpu_detect.h"
 #include "util/u_math.h"
 
 #include "pipe/p_defines.h"
@@ -1354,7 +1354,7 @@ util_format_rgbx_to_rgba(enum pipe_format format)
    case PIPE_FORMAT_B10G10R10X2_SINT:
       return PIPE_FORMAT_B10G10R10A2_SINT;
    default: {
-      const struct util_format_description *desc = util_format_description(format);
+      ASSERTED const struct util_format_description *desc = util_format_description(format);
 
       /* Assert that the format doesn't contain X instead of A. */
       assert(desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS ||

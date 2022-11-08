@@ -496,6 +496,7 @@
    "fields": [
     {"bits": [0, 19], "name": "IB_SIZE"},
     {"bits": [20, 20], "name": "CHAIN"},
+    {"bits": [21, 21], "name": "PRE_ENA"},
     {"bits": [23, 23], "name": "VALID"}
    ]
   },

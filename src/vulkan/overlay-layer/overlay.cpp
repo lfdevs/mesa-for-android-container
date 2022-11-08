@@ -34,7 +34,7 @@
 
 #include "overlay_params.h"
 
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/hash_table.h"
 #include "util/list.h"
 #include "util/ralloc.h"
@@ -216,7 +216,7 @@ static const VkQueryPipelineStatisticFlags overlay_query_flags =
 #define OVERLAY_QUERY_COUNT (11)
 
 static struct hash_table_u64 *vk_object_to_data = NULL;
-static simple_mtx_t vk_object_to_data_mutex = _SIMPLE_MTX_INITIALIZER_NP;
+static simple_mtx_t vk_object_to_data_mutex = SIMPLE_MTX_INITIALIZER;
 
 thread_local ImGuiContext* __MesaImGui;
 

@@ -99,6 +99,13 @@ pan_is_format_native(const struct util_format_description *desc, bool broken_ld_
         if (desc->format == PIPE_FORMAT_R11G11B10_FLOAT)
                 return false;
 
+        if (desc->is_array) {
+                int c = util_format_get_first_non_void_channel(desc->format);
+                assert(c >= 0);
+                if (desc->channel[c].size > 8)
+                        return false;
+        }
+
         return true;
 }
 
@@ -116,12 +123,6 @@ pan_replicate(nir_builder *b, nir_ssa_def *v, unsigned num_components)
                 replicated[i] = nir_channel(b, v, i % num_components);
 
         return nir_vec(b, replicated, 4);
-}
-
-static nir_ssa_def *
-pan_unpack_pure_32(nir_builder *b, nir_ssa_def *pack, unsigned num_components)
-{
-        return nir_channels(b, pack, (1 << num_components) - 1);
 }
 
 /* Pure x16 formats are x16 unpacked, so it's similar, but we need to pack
@@ -205,6 +206,24 @@ pan_unpack_pure_8(nir_builder *b, nir_ssa_def *pack, unsigned num_components)
         return nir_channels(b, unpacked, (1 << num_components) - 1);
 }
 
+static nir_ssa_def *
+pan_fsat(nir_builder *b, nir_ssa_def *v, bool is_signed)
+{
+        if (is_signed)
+                return nir_fsat_signed_mali(b, v);
+        else
+                return nir_fsat(b, v);
+}
+
+static float
+norm_scale(bool snorm, unsigned bits)
+{
+        if (snorm)
+                return (1 << (bits - 1)) - 1;
+        else
+                return (1 << bits) - 1;
+}
+
 /* For <= 8-bits per channel, [U,S]NORM formats are packed like [U,S]NORM 8,
  * with zeroes spacing out each component as needed */
 
@@ -226,11 +245,7 @@ pan_pack_norm(nir_builder *b, nir_ssa_def *v,
 
         /* If a channel has N bits, we pad out to the byte by (8 - N) bits */
         nir_ssa_def *shifts = nir_imm_ivec4(b, 8 - x, 8 - y, 8 - z, 8 - w);
-
-        nir_ssa_def *clamped =
-                is_signed ?
-                nir_fsat_signed_mali(b, nir_pad_vec4(b, v)) :
-                nir_fsat(b, nir_pad_vec4(b, v));
+        nir_ssa_def *clamped = pan_fsat(b, nir_pad_vec4(b, v), is_signed);
 
         nir_ssa_def *f = nir_fmul(b, clamped, scales);
         nir_ssa_def *u8 = nir_f2u8(b, nir_fround_even(b, f));
@@ -371,6 +386,21 @@ pan_linear_to_srgb(nir_builder *b, nir_ssa_def *linear)
         return nir_vec(b, comp, 4);
 }
 
+static nir_ssa_def *
+pan_unpack_pure(nir_builder *b, nir_ssa_def *packed, unsigned size, unsigned nr)
+{
+        switch (size) {
+        case 32:
+                return nir_trim_vector(b, packed, nr);
+        case 16:
+                return pan_unpack_pure_16(b, packed, nr);
+        case 8:
+                return pan_unpack_pure_8(b, packed, nr);
+        default:
+                unreachable("Unrenderable size");
+        }
+}
+
 /* Generic dispatches for un/pack regardless of format */
 
 static nir_ssa_def *
@@ -382,18 +412,23 @@ pan_unpack(nir_builder *b,
                 int c = util_format_get_first_non_void_channel(desc->format);
                 assert(c >= 0);
                 struct util_format_channel_description d = desc->channel[c];
+                nir_ssa_def *unpacked = pan_unpack_pure(b, packed, d.size, desc->nr_channels);
 
-                if (d.size == 32 || d.size == 16) {
-                        assert(!d.normalized);
-                        assert(d.type == UTIL_FORMAT_TYPE_FLOAT || d.pure_integer);
+                /* Normalized formats are unpacked as integers. We need to
+                 * convert to float for the final result.
+                 */
+                if (d.normalized) {
+                        bool snorm = desc->is_snorm;
+                        unsigned float_sz = (d.size <= 8 ? 16 : 32);
+                        float multiplier = norm_scale(snorm, d.size);
 
-                        return d.size == 32 ? pan_unpack_pure_32(b, packed, desc->nr_channels) :
-                                pan_unpack_pure_16(b, packed, desc->nr_channels);
-                } else if (d.size == 8) {
-                        assert(d.pure_integer);
-                        return pan_unpack_pure_8(b, packed, desc->nr_channels);
+                        nir_ssa_def *as_float =
+                                snorm ? nir_i2fN(b, unpacked, float_sz) :
+                                        nir_u2fN(b, unpacked, float_sz);
+
+                        return nir_fmul_imm(b, as_float, 1.0 / multiplier);
                 } else {
-                        unreachable("Unrenderable size");
+                        return unpacked;
                 }
         }
 
@@ -422,28 +457,33 @@ pan_pack(nir_builder *b,
         if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)
                 unpacked = pan_linear_to_srgb(b, unpacked);
 
-        if (util_format_is_unorm8(desc))
-                return pan_pack_unorm(b, unpacked, 8, 8, 8, 8);
-
-        if (util_format_is_snorm8(desc->format))
-                return pan_pack_snorm(b, unpacked, 8, 8, 8, 8);
-
         if (desc->is_array) {
                 int c = util_format_get_first_non_void_channel(desc->format);
                 assert(c >= 0);
                 struct util_format_channel_description d = desc->channel[c];
 
-                if (d.size == 32 || d.size == 16) {
-                        assert(!d.normalized);
-                        assert(d.type == UTIL_FORMAT_TYPE_FLOAT || d.pure_integer);
+                /* Pure formats are packed as-is */
+                nir_ssa_def *raw = unpacked;
 
-                        return d.size == 32 ?
-                                pan_replicate(b, unpacked, desc->nr_channels) :
-                                pan_pack_pure_16(b, unpacked, desc->nr_channels);
-                } else if (d.size == 8) {
-                        assert(d.pure_integer);
-                        return pan_pack_pure_8(b, unpacked, desc->nr_channels);
-                } else {
+                /* Normalized formats get normalized first */
+                if (d.normalized) {
+                        bool snorm = desc->is_snorm;
+                        float multiplier = norm_scale(snorm, d.size);
+                        nir_ssa_def *clamped = pan_fsat(b, unpacked, snorm);
+                        nir_ssa_def *normed = nir_fmul_imm(b, clamped, multiplier);
+
+                        raw = nir_f2uN(b, normed, d.size);
+                }
+
+                /* Pack the raw format */
+                switch (d.size) {
+                case 32:
+                        return pan_replicate(b, raw, desc->nr_channels);
+                case 16:
+                        return pan_pack_pure_16(b, raw, desc->nr_channels);
+                case 8:
+                        return pan_pack_pure_8(b, raw, desc->nr_channels);
+                default:
                         unreachable("Unrenderable size");
                 }
         }
@@ -514,11 +554,15 @@ pan_lower_fb_load(nir_shader *shader,
                 nir_intrinsic_instr *intr,
                 const struct util_format_description *desc,
                 bool reorder_comps,
-                unsigned base, int sample)
+                int sample)
 {
+        nir_io_semantics sem = {
+                .location = nir_intrinsic_get_var(intr, 0)->data.location,
+        };
+
         nir_ssa_def *packed =
                 nir_load_raw_output_pan(b, 4, 32, pan_sample_id(b, sample),
-                                        .base = base);
+                                        .io_semantics = sem);
 
         /* Convert the raw value */
         nir_ssa_def *unpacked = pan_unpack(b, desc, packed);
@@ -581,7 +625,6 @@ pan_lower_framebuffer(nir_shader *shader, const enum pipe_format *rt_fmts,
                                 if (var->data.location < FRAG_RESULT_DATA0)
                                         continue;
 
-                                unsigned base = var->data.driver_location;
                                 unsigned rt = var->data.location - FRAG_RESULT_DATA0;
 
                                 if (rt_fmts[rt] == PIPE_FORMAT_NONE)
@@ -609,7 +652,7 @@ pan_lower_framebuffer(nir_shader *shader, const enum pipe_format *rt_fmts,
                                         pan_lower_fb_store(shader, &b, intr, desc, reorder_comps);
                                 } else {
                                         b.cursor = nir_after_instr(instr);
-                                        pan_lower_fb_load(shader, &b, intr, desc, reorder_comps, base, sample);
+                                        pan_lower_fb_load(shader, &b, intr, desc, reorder_comps, sample);
                                 }
 
                                 nir_instr_remove(instr);

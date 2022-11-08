@@ -450,6 +450,7 @@ nv50_switch_pipe_context(struct nv50_context *ctx_to)
 {
    struct nv50_context *ctx_from = ctx_to->screen->cur_ctx;
 
+   simple_mtx_assert_locked(&ctx_to->screen->state_lock);
    if (ctx_from)
       ctx_to->state = ctx_from->state;
    else
@@ -536,6 +537,8 @@ nv50_state_validate(struct nv50_context *nv50, uint32_t mask,
    int ret;
    unsigned i;
 
+   simple_mtx_assert_locked(&nv50->screen->state_lock);
+
    if (nv50->screen->cur_ctx != nv50)
       nv50_switch_pipe_context(nv50);
 
@@ -556,10 +559,10 @@ nv50_state_validate(struct nv50_context *nv50, uint32_t mask,
          PUSH_DATA (nv50->base.pushbuf, 0);
       }
 
-      nv50_bufctx_fence(bufctx, false);
+      nv50_bufctx_fence(nv50, bufctx, false);
    }
    nouveau_pushbuf_bufctx(nv50->base.pushbuf, bufctx);
-   ret = nouveau_pushbuf_validate(nv50->base.pushbuf);
+   ret = PUSH_VAL(nv50->base.pushbuf);
 
    return !ret;
 }
@@ -575,7 +578,7 @@ nv50_state_validate_3d(struct nv50_context *nv50, uint32_t mask)
 
    if (unlikely(nv50->state.flushed)) {
       nv50->state.flushed = false;
-      nv50_bufctx_fence(nv50->bufctx_3d, true);
+      nv50_bufctx_fence(nv50, nv50->bufctx_3d, true);
    }
    return ret;
 }

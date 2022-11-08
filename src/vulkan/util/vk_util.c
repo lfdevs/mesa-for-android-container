@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "vk_util.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 
 #include "compiler/spirv/nir_spirv.h"
 
@@ -75,7 +75,7 @@ uint32_t vk_get_version_override(void)
 void
 vk_warn_non_conformant_implementation(const char *driver_name)
 {
-   if (env_var_as_boolean("MESA_VK_IGNORE_CONFORMANCE_WARNING", false))
+   if (debug_get_bool_option("MESA_VK_IGNORE_CONFORMANCE_WARNING", false))
       return;
 
    fprintf(stderr, "WARNING: %s is not a conformant Vulkan implementation, "

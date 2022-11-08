@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2086 # we want word splitting
 
 set -ex
 
@@ -19,7 +20,7 @@ rm $ndk.zip
 # duplicate files.  Turn them into hardlinks to save on container space.
 rdfind -makehardlinks true -makeresultsfile false /android-ndk-r21d/
 # Drop some large tools we won't use in this build.
-find /android-ndk-r21d/ -type f | egrep -i "clang-check|clang-tidy|lldb" | xargs rm -f
+find /android-ndk-r21d/ -type f | grep -E -i "clang-check|clang-tidy|lldb" | xargs rm -f
 
 sh .gitlab-ci/container/create-android-ndk-pc.sh /$ndk zlib.pc "" "-lz" "1.2.3"
 

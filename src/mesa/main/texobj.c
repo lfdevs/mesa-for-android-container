@@ -262,6 +262,57 @@ _mesa_get_texobj_by_target_and_texunit(struct gl_context *ctx, GLenum target,
    return texUnit->CurrentTex[targetIndex];
 }
 
+/**
+ * Return swizzle1(swizzle2)
+ */
+static unsigned
+swizzle_swizzle(unsigned swizzle1, unsigned swizzle2)
+{
+   unsigned i, swz[4];
+
+   if (swizzle1 == SWIZZLE_XYZW) {
+      /* identity swizzle, no change to swizzle2 */
+      return swizzle2;
+   }
+
+   for (i = 0; i < 4; i++) {
+      unsigned s = GET_SWZ(swizzle1, i);
+      switch (s) {
+      case SWIZZLE_X:
+      case SWIZZLE_Y:
+      case SWIZZLE_Z:
+      case SWIZZLE_W:
+         swz[i] = GET_SWZ(swizzle2, s);
+         break;
+      case SWIZZLE_ZERO:
+         swz[i] = SWIZZLE_ZERO;
+         break;
+      case SWIZZLE_ONE:
+         swz[i] = SWIZZLE_ONE;
+         break;
+      default:
+         assert(!"Bad swizzle term");
+         swz[i] = SWIZZLE_X;
+      }
+   }
+
+   return MAKE_SWIZZLE4(swz[0], swz[1], swz[2], swz[3]);
+}
+
+void
+_mesa_update_texture_object_swizzle(struct gl_context *ctx,
+                                    struct gl_texture_object *texObj)
+{
+   if (texObj->Attrib.BaseLevel >= MAX_TEXTURE_LEVELS)
+      return;
+   const struct gl_texture_image *img = texObj->Image[0][texObj->Attrib.BaseLevel];
+   if (!img)
+      return;
+
+   /* Combine the texture format swizzle with user's swizzle */
+   texObj->Swizzle = swizzle_swizzle(texObj->Attrib._Swizzle, img->FormatSwizzle);
+   texObj->SwizzleGLSL130 = swizzle_swizzle(texObj->Attrib._Swizzle, img->FormatSwizzleGLSL130);
+}
 
 /**
  * Initialize a new texture object to default values.
@@ -1034,7 +1085,7 @@ _mesa_get_fallback_texture(struct gl_context *ctx, gl_texture_index tex)
                                     (dims > 2) ? depth : 1,
                                     0, /* border */
                                     GL_RGBA, texFormat);
-
+         _mesa_update_texture_object_swizzle(ctx, texObj);
          st_TexImage(ctx, dims, texImage,
                      GL_RGBA, GL_UNSIGNED_BYTE, texel,
                      &ctx->DefaultPacking);
@@ -2340,7 +2391,7 @@ texture_page_commitment(struct gl_context *ctx, GLenum target,
    }
 
    int px, py, pz;
-   bool ret = st_GetSparseTextureVirtualPageSize(
+   ASSERTED bool ret = st_GetSparseTextureVirtualPageSize(
       ctx, target, image->TexFormat, tex_obj->VirtualPageSizeIndex, &px, &py, &pz);
    assert(ret);
 

@@ -12,6 +12,8 @@ KHR-GL45.copy_image.functional
 KHR-GL45.texture_size_promotion.functional
 KHR-GL45.texture_swizzle.functional
 KHR-GL45.texture_swizzle.smoke
+KHR-Single-GL45.arrays_of_arrays_gl.SubroutineArgumentAliasing3
+KHR-Single-GL45.arrays_of_arrays_gl.SubroutineArgumentAliasing4
 KHR-GLES31.core.arrays_of_arrays.InteractionFunctionCalls2
 arb_pipeline_statistics_query-comp
 gl-1.0-blend-func

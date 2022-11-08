@@ -87,16 +87,8 @@ agx_compute_liveness(agx_context *ctx)
       /* Update its liveness information */
       memcpy(blk->live_in, blk->live_out, words * sizeof(BITSET_WORD));
 
-      agx_foreach_instr_in_block_rev(blk, I) {
-         /* Phi nodes are handled separately, so we skip them. As phi nodes are at
-          * the beginning and we're iterating backwards, we stop as soon as we hit
-          * a phi node.
-          */
-         if (I->op == AGX_OPCODE_PHI)
-            break;
-
+      agx_foreach_non_phi_in_block_rev(blk, I)
          agx_liveness_ins_update(blk->live_in, I);
-      }
 
       /* Propagate the live in of the successor (blk) to the live out of
        * predecessors.
@@ -110,18 +102,14 @@ agx_compute_liveness(agx_context *ctx)
          memcpy(live, blk->live_in, words * sizeof(BITSET_WORD));
 
          /* Kill write */
-         agx_foreach_instr_in_block(blk, I) {
-            if (I->op != AGX_OPCODE_PHI) break;
-
-            assert(I->dest[0].type == AGX_INDEX_NORMAL);
-            BITSET_CLEAR(live, I->dest[0].value);
+         agx_foreach_phi_in_block(blk, phi) {
+            assert(phi->dest[0].type == AGX_INDEX_NORMAL);
+            BITSET_CLEAR(live, phi->dest[0].value);
          }
 
          /* Make live the corresponding source */
-         agx_foreach_instr_in_block(blk, I) {
-            if (I->op != AGX_OPCODE_PHI) break;
-
-            agx_index operand = I->src[agx_predecessor_index(blk, *pred)];
+         agx_foreach_phi_in_block(blk, phi) {
+            agx_index operand = phi->src[agx_predecessor_index(blk, *pred)];
             assert(operand.type == AGX_INDEX_NORMAL);
             BITSET_SET(live, operand.value);
          }

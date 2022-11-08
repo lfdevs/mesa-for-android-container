@@ -402,12 +402,14 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
    draw->is_different_gpu = is_different_gpu;
    draw->multiplanes_available = multiplanes_available;
    draw->prefer_back_buffer_reuse = prefer_back_buffer_reuse;
+   draw->queries_buffer_age = false;
 
    draw->have_back = 0;
    draw->have_fake_front = 0;
    draw->first_init = true;
    draw->adaptive_sync = false;
    draw->adaptive_sync_active = false;
+   draw->block_on_depleted_buffers = false;
 
    draw->cur_blit_source = -1;
    draw->back_format = __DRI_IMAGE_FORMAT_NONE;
@@ -416,12 +418,19 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
 
    if (draw->ext->config) {
       unsigned char adaptive_sync = 0;
+      unsigned char block_on_depleted_buffers = 0;
 
       draw->ext->config->configQueryb(draw->dri_screen,
                                       "adaptive_sync",
                                       &adaptive_sync);
 
       draw->adaptive_sync = adaptive_sync;
+
+      draw->ext->config->configQueryb(draw->dri_screen,
+                                      "block_on_depleted_buffers",
+                                      &block_on_depleted_buffers);
+
+      draw->block_on_depleted_buffers = block_on_depleted_buffers;
    }
 
    if (!draw->adaptive_sync)
@@ -975,6 +984,7 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
 {
    struct loader_dri3_buffer *back;
    int64_t ret = 0;
+   bool wait_for_next_buffer = false;
 
    /* GLX spec:
     *   void glXSwapBuffers(Display *dpy, GLXDrawable draw);
@@ -1198,9 +1208,33 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
    if (draw->stamp)
       ++(*draw->stamp);
 
+   /* Waiting on a buffer is only sensible if all buffers are in use and the
+    * client doesn't use the buffer age extension. In this case a client is
+    * relying on it receiving back control immediately.
+    *
+    * As waiting on a buffer can at worst make us miss a frame the option has
+    * to be enabled explicitly with the block_on_depleted_buffers DRI option.
+    */
+   wait_for_next_buffer = draw->cur_num_back == draw->max_num_back &&
+      !draw->queries_buffer_age && draw->block_on_depleted_buffers;
+
    mtx_unlock(&draw->mtx);
 
    draw->ext->flush->invalidate(draw->dri_drawable);
+
+   /* Clients that use up all available buffers usually regulate their drawing
+    * through swapchain contention backpressure. In such a scenario the client
+    * draws whenever control returns to it. Its event loop is slowed down only
+    * by us waiting on buffers becoming available again.
+    *
+    * By waiting here on a new buffer and only then returning back to the client
+    * we ensure the client begins drawing only when the next buffer is available
+    * and not draw first and then wait a refresh cycle on the next available
+    * buffer to show it. This way we can reduce the latency between what is
+    * being drawn by the client and what is shown on the screen by one frame.
+    */
+   if (wait_for_next_buffer)
+      dri3_find_back(draw, draw->prefer_back_buffer_reuse);
 
    return ret;
 }
@@ -1209,11 +1243,12 @@ int
 loader_dri3_query_buffer_age(struct loader_dri3_drawable *draw)
 {
    struct loader_dri3_buffer *back = dri3_find_back_alloc(draw);
-   int ret;
+   int ret = 0;
 
    mtx_lock(&draw->mtx);
-   ret = (!back || back->last_swap == 0) ? 0 :
-      draw->send_sbc - back->last_swap + 1;
+   draw->queries_buffer_age = true;
+   if (back && back->last_swap != 0)
+      ret = draw->send_sbc - back->last_swap + 1;
    mtx_unlock(&draw->mtx);
 
    return ret;
@@ -1239,10 +1274,8 @@ loader_dri3_open(xcb_connection_t *conn,
                           provider);
 
    reply = xcb_dri3_open_reply(conn, cookie, NULL);
-   if (!reply)
-      return -1;
 
-   if (reply->nfd != 1) {
+   if (!reply || reply->nfd != 1) {
       free(reply);
       return -1;
    }
@@ -1478,7 +1511,6 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
             count = mod_reply->num_screen_modifiers;
             modifiers = malloc(count * sizeof(uint64_t));
             if (!modifiers) {
-               free(modifiers);
                free(mod_reply);
                goto no_image;
             }

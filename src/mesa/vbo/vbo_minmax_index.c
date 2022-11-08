@@ -353,48 +353,6 @@ vbo_get_minmax_index(struct gl_context *ctx, struct gl_buffer_object *obj,
 }
 
 /**
- * Compute min and max elements for nr_prims
- */
-void
-vbo_get_minmax_indices(struct gl_context *ctx,
-                       const struct _mesa_prim *prims,
-                       const struct _mesa_index_buffer *ib,
-                       GLuint *min_index,
-                       GLuint *max_index,
-                       GLuint nr_prims,
-                       bool primitive_restart,
-                       unsigned restart_index)
-{
-   GLuint tmp_min, tmp_max;
-   GLuint i;
-   GLuint count;
-
-   *min_index = ~0;
-   *max_index = 0;
-
-   for (i = 0; i < nr_prims; i++) {
-      const struct _mesa_prim *start_prim;
-
-      start_prim = &prims[i];
-      count = start_prim->count;
-      /* Do combination if possible to reduce map/unmap count */
-      while ((i + 1 < nr_prims) &&
-             (prims[i].start + prims[i].count == prims[i+1].start)) {
-         count += prims[i+1].count;
-         i++;
-      }
-      vbo_get_minmax_index(ctx, ib->obj, ib->ptr,
-                           (ib->obj ? (GLintptr)ib->ptr : 0) +
-                           (start_prim->start << ib->index_size_shift),
-                           count, 1 << ib->index_size_shift,
-                           primitive_restart, restart_index,
-                           &tmp_min, &tmp_max);
-      *min_index = MIN2(*min_index, tmp_min);
-      *max_index = MAX2(*max_index, tmp_max);
-   }
-}
-
-/**
  * Same as vbo_get_minmax_index, but using gallium draw structures.
  */
 bool

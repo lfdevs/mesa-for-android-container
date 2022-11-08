@@ -33,7 +33,7 @@
 extern "C" {
 #endif
 
-#define SI_NUM_GRAPHICS_SHADERS (PIPE_SHADER_TESS_EVAL + 1)
+#define SI_NUM_GRAPHICS_SHADERS (PIPE_SHADER_FRAGMENT + 1)
 #define SI_NUM_SHADERS          (PIPE_SHADER_COMPUTE + 1)
 
 #define SI_NUM_VERTEX_BUFFERS SI_MAX_ATTRIBS
@@ -168,7 +168,6 @@ struct si_vertex_elements {
 
    uint8_t count;
 
-   uint16_t first_vb_use_mask;
    /* Vertex buffer descriptor list size aligned for optimal prefetch. */
    uint16_t vb_desc_list_alloc_size;
    uint16_t instance_divisor_is_one;     /* bitmask of inputs */
@@ -188,6 +187,7 @@ union si_state {
       struct si_pm4_state *vgt_shader_config;
       struct si_shader *vs;
       struct si_shader *ps;
+      struct si_sqtt_fake_pipeline *sqtt_pipeline;
    } named;
    struct si_pm4_state *array[sizeof(struct si_state_named) / sizeof(struct si_pm4_state *)];
 };

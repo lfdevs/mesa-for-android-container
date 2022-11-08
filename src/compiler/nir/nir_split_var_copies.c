@@ -87,55 +87,31 @@ split_deref_copy_instr(nir_builder *b,
 }
 
 static bool
-split_var_copies_impl(nir_function_impl *impl)
+split_var_copies_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
 {
-   bool progress = false;
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_intrinsic_instr *copy = nir_instr_as_intrinsic(instr);
+   if (copy->intrinsic != nir_intrinsic_copy_deref)
+      return false;
 
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         if (instr->type != nir_instr_type_intrinsic)
-            continue;
+   b->cursor = nir_instr_remove(&copy->instr);
 
-         nir_intrinsic_instr *copy = nir_instr_as_intrinsic(instr);
-         if (copy->intrinsic != nir_intrinsic_copy_deref)
-            continue;
+   nir_deref_instr *dst = nir_instr_as_deref(copy->src[0].ssa->parent_instr);
+   nir_deref_instr *src = nir_instr_as_deref(copy->src[1].ssa->parent_instr);
+   split_deref_copy_instr(b, dst, src,
+                          nir_intrinsic_dst_access(copy),
+                          nir_intrinsic_src_access(copy));
 
-         b.cursor = nir_instr_remove(&copy->instr);
-
-         nir_deref_instr *dst =
-            nir_instr_as_deref(copy->src[0].ssa->parent_instr);
-         nir_deref_instr *src =
-            nir_instr_as_deref(copy->src[1].ssa->parent_instr);
-         split_deref_copy_instr(&b, dst, src,
-                                nir_intrinsic_dst_access(copy),
-                                nir_intrinsic_src_access(copy));
-
-         progress = true;
-      }
-   }
-
-   if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
-   } else {
-      nir_metadata_preserve(impl, nir_metadata_all);
-   }
-
-   return progress;
+   return true;
 }
 
 bool
 nir_split_var_copies(nir_shader *shader)
 {
-   bool progress = false;
-
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress = split_var_copies_impl(function->impl) || progress;
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, split_var_copies_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

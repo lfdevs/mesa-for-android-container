@@ -534,14 +534,6 @@ dzn_image_layout_to_state(const struct dzn_image *image,
                           VkImageLayout layout,
                           VkImageAspectFlagBits aspect)
 {
-   /* Handle VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA separately to
-    * silence -Wswitch warnings (VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA is
-    * not part of the official VkImageLayout enum, it's a define in
-    * vk_render_pass.h)
-    */
-   if (layout == VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA)
-      return D3D12_RESOURCE_STATE_COMMON;
-
    D3D12_RESOURCE_STATES shaders_access =
       (image->desc.Flags & D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE) ?
       0 : D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
@@ -584,6 +576,9 @@ dzn_image_layout_to_state(const struct dzn_image *image,
 
    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
       return D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+
+   case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
+      return D3D12_RESOURCE_STATE_COMMON;
 
    default:
       unreachable("not implemented");

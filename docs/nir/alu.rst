@@ -14,7 +14,7 @@ enum, that describes what it does as well as how many arguments it takes.
 Associated with each opcode is an metadata structure,
 :cpp:struct:`nir_op_info`, which shows how many arguments the opcode takes,
 information about data types, and algebraic properties such as associativity
-and commutivity. The info structure for each opcode may be accessed through
+and commutativity. The info structure for each opcode may be accessed through
 a global :cpp:var:`nir_op_infos` array that’s indexed by the opcode.
 
 ALU operations are typeless, meaning that they're only defined to convert

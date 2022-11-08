@@ -67,6 +67,7 @@ const struct drm_driver_descriptor descriptor_name = {         \
 #undef GALLIUM_ETNAVIV
 #undef GALLIUM_PANFROST
 #undef GALLIUM_LIMA
+#undef GALLIUM_ASAHI
 #endif
 
 #ifdef GALLIUM_I915
@@ -353,6 +354,23 @@ DRM_DRIVER_DESCRIPTOR(panfrost, NULL, 0)
 
 #else
 DRM_DRIVER_DESCRIPTOR_STUB(panfrost)
+#endif
+
+#ifdef GALLIUM_ASAHI
+#include "asahi/drm/asahi_drm_public.h"
+
+static struct pipe_screen *
+pipe_asahi_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   struct pipe_screen *screen;
+
+   screen = asahi_drm_screen_create(fd);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+DRM_DRIVER_DESCRIPTOR(asahi, NULL, 0)
+
+#else
+DRM_DRIVER_DESCRIPTOR_STUB(asahi)
 #endif
 
 #ifdef GALLIUM_ETNAVIV

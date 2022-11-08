@@ -137,7 +137,7 @@ create_expand_depth_stencil_compute(struct radv_device *device)
    };
 
    result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), radv_pipeline_cache_to_handle(&device->meta_state.cache), 1,
+      radv_device_to_handle(device), device->meta_state.cache, 1,
       &vk_pipeline_info, NULL,
       &device->meta_state.expand_depth_stencil_compute_pipeline);
    if (result != VK_SUCCESS)
@@ -291,7 +291,7 @@ create_pipeline(struct radv_device *device, uint32_t samples, VkPipelineLayout l
    };
 
    result = radv_graphics_pipeline_create(
-      device_h, radv_pipeline_cache_to_handle(&device->meta_state.cache), &pipeline_create_info,
+      device_h, device->meta_state.cache, &pipeline_create_info,
       &extra, &device->meta_state.alloc, pipeline);
 
 cleanup:
@@ -369,14 +369,14 @@ radv_get_depth_pipeline(struct radv_cmd_buffer *cmd_buffer, struct radv_image *i
       ret = create_pipeline(cmd_buffer->device, samples, state->depth_decomp[samples_log2].p_layout,
                             DEPTH_DECOMPRESS, &state->depth_decomp[samples_log2].decompress_pipeline);
       if (ret != VK_SUCCESS) {
-         cmd_buffer->record_result = ret;
+         vk_command_buffer_set_error(&cmd_buffer->vk, ret);
          return NULL;
       }
 
       ret = create_pipeline(cmd_buffer->device, samples, state->depth_decomp[samples_log2].p_layout,
                             DEPTH_RESUMMARIZE, &state->depth_decomp[samples_log2].resummarize_pipeline);
       if (ret != VK_SUCCESS) {
-         cmd_buffer->record_result = ret;
+         vk_command_buffer_set_error(&cmd_buffer->vk, ret);
          return NULL;
       }
    }
@@ -470,7 +470,7 @@ radv_process_depth_stencil(struct radv_cmd_buffer *cmd_buffer, struct radv_image
 
    radv_meta_save(
       &saved_state, cmd_buffer,
-      RADV_META_SAVE_GRAPHICS_PIPELINE | RADV_META_SAVE_SAMPLE_LOCATIONS | RADV_META_SAVE_PASS);
+      RADV_META_SAVE_GRAPHICS_PIPELINE | RADV_META_SAVE_RENDER);
 
    pipeline = radv_get_depth_pipeline(cmd_buffer, image, subresourceRange, op);
 

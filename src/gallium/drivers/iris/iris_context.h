@@ -48,13 +48,12 @@ struct blorp_batch;
 struct blorp_params;
 
 #define IRIS_MAX_TEXTURE_BUFFER_SIZE (1 << 27)
-#define IRIS_MAX_TEXTURE_SAMPLERS 32
 /* IRIS_MAX_ABOS and IRIS_MAX_SSBOS must be the same. */
 #define IRIS_MAX_ABOS 16
 #define IRIS_MAX_SSBOS 16
 #define IRIS_MAX_VIEWPORTS 16
 #define IRIS_MAX_CLIP_PLANES 8
-#define IRIS_MAX_GLOBAL_BINDINGS 32
+#define IRIS_MAX_GLOBAL_BINDINGS 128
 
 enum iris_param_domain {
    BRW_PARAM_DOMAIN_BUILTIN = 0,
@@ -358,6 +357,7 @@ enum pipe_control_flags
    PIPE_CONTROL_FLUSH_HDC                       = (1 << 26),
    PIPE_CONTROL_PSS_STALL_SYNC                  = (1 << 27),
    PIPE_CONTROL_L3_READ_ONLY_CACHE_INVALIDATE   = (1 << 28),
+   PIPE_CONTROL_UNTYPED_DATAPORT_CACHE_FLUSH    = (1 << 29),
 };
 
 #define PIPE_CONTROL_CACHE_FLUSH_BITS \
@@ -365,6 +365,7 @@ enum pipe_control_flags
     PIPE_CONTROL_DATA_CACHE_FLUSH |   \
     PIPE_CONTROL_TILE_CACHE_FLUSH |   \
     PIPE_CONTROL_FLUSH_HDC | \
+    PIPE_CONTROL_UNTYPED_DATAPORT_CACHE_FLUSH |   \
     PIPE_CONTROL_RENDER_TARGET_FLUSH)
 
 #define PIPE_CONTROL_CACHE_INVALIDATE_BITS  \
@@ -451,7 +452,8 @@ enum iris_surface_group {
    IRIS_SURFACE_GROUP_RENDER_TARGET,
    IRIS_SURFACE_GROUP_RENDER_TARGET_READ,
    IRIS_SURFACE_GROUP_CS_WORK_GROUPS,
-   IRIS_SURFACE_GROUP_TEXTURE,
+   IRIS_SURFACE_GROUP_TEXTURE_LOW64,
+   IRIS_SURFACE_GROUP_TEXTURE_HIGH64,
    IRIS_SURFACE_GROUP_IMAGE,
    IRIS_SURFACE_GROUP_UBO,
    IRIS_SURFACE_GROUP_SSBO,
@@ -475,6 +477,8 @@ struct iris_binding_table {
 
    /** Mask of surfaces used in each group. */
    uint64_t used_mask[IRIS_SURFACE_GROUP_COUNT];
+
+   uint64_t samplers_used_mask;
 };
 
 /**
@@ -557,18 +561,18 @@ struct iris_shader_state {
    struct iris_image_view image[PIPE_MAX_SHADER_IMAGES];
 
    struct iris_state_ref sampler_table;
-   struct iris_sampler_state *samplers[IRIS_MAX_TEXTURE_SAMPLERS];
-   struct iris_sampler_view *textures[IRIS_MAX_TEXTURE_SAMPLERS];
+   struct iris_sampler_state *samplers[IRIS_MAX_SAMPLERS];
+   struct iris_sampler_view *textures[IRIS_MAX_TEXTURES];
 
    /** Bitfield of which constant buffers are bound (non-null). */
    uint32_t bound_cbufs;
    uint32_t dirty_cbufs;
 
    /** Bitfield of which image views are bound (non-null). */
-   uint32_t bound_image_views;
+   uint64_t bound_image_views;
 
    /** Bitfield of which sampler views are bound (non-null). */
-   uint32_t bound_sampler_views;
+   BITSET_DECLARE(bound_sampler_views, IRIS_MAX_TEXTURES);
 
    /** Bitfield of which shader storage buffers are bound (non-null). */
    uint32_t bound_ssbos;
@@ -604,6 +608,9 @@ struct iris_context {
 
    /** A debug callback for KHR_debug output. */
    struct util_debug_callback dbg;
+
+   /** Whether the context protected (through EGL_EXT_protected_content) */
+   bool protected;
 
    /** A device reset status callback for notifying that the GPU is hosed. */
    struct pipe_device_reset_callback reset;

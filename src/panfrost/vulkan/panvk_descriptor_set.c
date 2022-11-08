@@ -322,33 +322,6 @@ panvk_FreeDescriptorSets(VkDevice _device,
 }
 
 VkResult
-panvk_CreateDescriptorUpdateTemplate(VkDevice _device,
-                                     const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
-                                     const VkAllocationCallbacks *pAllocator,
-                                     VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
-{
-   panvk_stub();
-   return VK_SUCCESS;
-}
-
-void
-panvk_DestroyDescriptorUpdateTemplate(VkDevice _device,
-                                      VkDescriptorUpdateTemplate descriptorUpdateTemplate,
-                                      const VkAllocationCallbacks *pAllocator)
-{
-   panvk_stub();
-}
-
-void
-panvk_UpdateDescriptorSetWithTemplate(VkDevice _device,
-                                      VkDescriptorSet descriptorSet,
-                                      VkDescriptorUpdateTemplate descriptorUpdateTemplate,
-                                      const void *pData)
-{
-   panvk_stub();
-}
-
-VkResult
 panvk_CreateSamplerYcbcrConversion(VkDevice device,
                                    const VkSamplerYcbcrConversionCreateInfo *pCreateInfo,
                                    const VkAllocationCallbacks *pAllocator,

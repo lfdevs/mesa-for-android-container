@@ -1318,7 +1318,7 @@ TESTS = [
                  color *= borrow;
          }
          """,
-         r'expression uint \+ \(var_ref x\) \(expression uint neg'),
+         r'expression uint \- \(var_ref x\) \(var_ref y'),
     Test("imulExtended",
          """
          #version 310 es

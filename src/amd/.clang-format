@@ -81,6 +81,10 @@ ForEachMacros:
   - set_foreach
   - u_foreach_bit
   - u_foreach_bit64
+  - PHASE
+
+TypenameMacros:
+  - REF
 
 IncludeBlocks: Preserve
 IncludeCategories:

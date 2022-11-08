@@ -24,6 +24,7 @@
 from jinja2 import Environment, FileSystemLoader
 from argparse import ArgumentParser
 from os import environ, path
+import json
 
 
 parser = ArgumentParser()
@@ -69,7 +70,10 @@ values['log_level'] = args.log_level
 values['poweroff_delay'] = args.poweroff_delay
 values['session_end_regex'] = args.session_end_regex
 values['session_reboot_regex'] = args.session_reboot_regex
-values['tags'] = args.tags
+try:
+    values['tags'] = json.loads(args.tags)
+except json.decoder.JSONDecodeError:
+    values['tags'] = args.tags.split(",")
 values['template'] = args.template
 values['timeout_boot_minutes'] = args.timeout_boot_minutes
 values['timeout_boot_retries'] = args.timeout_boot_retries

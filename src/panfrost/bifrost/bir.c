@@ -25,6 +25,7 @@
  */
 
 #include "compiler.h"
+#include "bi_builder.h"
 
 bool
 bi_has_arg(const bi_instr *ins, bi_index arg)
@@ -105,6 +106,7 @@ bi_count_write_registers(const bi_instr *ins, unsigned d)
         if (d == 0 && bi_opcode_props[ins->op].sr_write) {
                 switch (ins->op) {
                 case BI_OPCODE_TEXC:
+                case BI_OPCODE_TEXC_DUAL:
                         if (ins->sr_count_2)
                                 return ins->sr_count;
                         else
@@ -131,7 +133,7 @@ bi_count_write_registers(const bi_instr *ins, unsigned d)
                 }
         } else if (ins->op == BI_OPCODE_SEG_ADD_I64) {
                 return 2;
-        } else if (ins->op == BI_OPCODE_TEXC && d == 1) {
+        } else if (ins->op == BI_OPCODE_TEXC_DUAL && d == 1) {
                 return ins->sr_count_2;
         } else if (ins->op == BI_OPCODE_COLLECT_I32 && d == 0) {
                 return ins->nr_srcs;
@@ -228,21 +230,10 @@ bi_side_effects(const bi_instr *I)
 bool
 bi_reconverge_branches(bi_block *block)
 {
-        /* Last block of a program */
-        if (!block->successors[0]) {
-                assert(!block->successors[1]);
+        if (bi_num_successors(block) == 1)
+                return bi_num_predecessors(block->successors[0]) > 1;
+        else
                 return true;
-        }
-
-        /* Multiple successors? We're branching */
-        if (block->successors[1])
-                return true;
-
-        /* Must have at least one successor */
-        struct bi_block *succ = block->successors[0];
-
-        /* Reconverge if the successor has multiple predecessors */
-        return bi_num_predecessors(succ) > 1;
 }
 
 /*
@@ -286,18 +277,17 @@ bi_csel_for_mux(bool must_sign, bool b32, enum bi_mux mux)
         }
 }
 
-void
-bi_replace_mux_with_csel(bi_instr *I, bool must_sign)
+bi_instr *
+bi_csel_from_mux(bi_builder *b, const bi_instr *I, bool must_sign)
 {
         assert(I->op == BI_OPCODE_MUX_I32 || I->op == BI_OPCODE_MUX_V2I16);
-        I->op = bi_csel_for_mux(must_sign, I->op == BI_OPCODE_MUX_I32, I->mux);
-        I->cmpf = (I->mux == BI_MUX_NEG) ? BI_CMPF_LT : BI_CMPF_EQ;
-        I->mux = 0;
 
-        bi_index vTrue = I->src[0], vFalse = I->src[1], cond = I->src[2];
+        /* Build a new CSEL */
+        enum bi_cmpf cmpf = (I->mux == BI_MUX_NEG) ? BI_CMPF_LT : BI_CMPF_EQ;
+        bi_instr *csel = bi_csel_u32_to(b, I->dest[0], I->src[2], bi_zero(),
+                                        I->src[0], I->src[1], cmpf);
 
-        I->src[0] = cond;
-        I->src[1] = bi_zero();
-        I->src[2] = vTrue;
-        I->src[3] = vFalse;
+        /* Fixup the opcode and use it */
+        csel->op = bi_csel_for_mux(must_sign, I->op == BI_OPCODE_MUX_I32, I->mux);
+        return csel;
 }

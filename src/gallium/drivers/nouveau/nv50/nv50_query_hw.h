@@ -52,7 +52,7 @@ nv50_hw_get_driver_query_info(struct nv50_screen *, unsigned,
 bool
 nv50_hw_query_allocate(struct nv50_context *, struct nv50_query *, int);
 void
-nv50_hw_query_pushbuf_submit(struct nouveau_pushbuf *, uint16_t,
+nv50_hw_query_pushbuf_submit(struct nv50_context *, uint16_t,
                              struct nv50_query *, unsigned);
 void
 nv84_hw_query_fifo_wait(struct nouveau_pushbuf *, struct nv50_query *);

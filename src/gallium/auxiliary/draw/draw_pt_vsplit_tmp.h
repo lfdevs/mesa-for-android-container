@@ -43,7 +43,6 @@ CONCAT(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
    const int elt_bias = draw->pt.user.eltBias;
    unsigned fetch_start, fetch_count;
    const ushort *draw_elts = NULL;
-   unsigned i;
    const unsigned start = istart;
    const unsigned end = istart + icount;
 
@@ -58,15 +57,14 @@ CONCAT(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
       if (icount > vsplit->max_vertices)
          return FALSE;
 
-      for (i = 0; i < icount; i++) {
+      for (unsigned i = 0; i < icount; i++) {
          ELT_TYPE idx = DRAW_GET_IDX(ib, start + i);
          if (idx < min_index || idx > max_index) {
             debug_printf("warning: index out of range\n");
          }
       }
       draw_elts = (const ushort *) (ib + istart);
-   }
-   else {
+   } else {
       /* have to go through vsplit->draw_elts */
       if (icount > vsplit->segment_size)
          return FALSE;
@@ -80,7 +78,7 @@ CONCAT(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
       return FALSE;
 
    /* why this check? */
-   for (i = 0; i < draw->pt.nr_vertex_elements; i++) {
+   for (unsigned i = 0; i < draw->pt.nr_vertex_elements; i++) {
       if (draw->pt.vertex_element[i].instance_divisor)
          return FALSE;
    }
@@ -94,7 +92,7 @@ CONCAT(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
 
    if (!draw_elts) {
       if (min_index == 0) {
-         for (i = 0; i < icount; i++) {
+         for (unsigned i = 0; i < icount; i++) {
             ELT_TYPE idx = DRAW_GET_IDX(ib, i + start);
 
             if (idx < min_index || idx > max_index) {
@@ -102,9 +100,8 @@ CONCAT(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
             }
             vsplit->draw_elts[i] = (ushort) idx;
          }
-      }
-      else {
-         for (i = 0; i < icount; i++) {
+      } else {
+         for (unsigned i = 0; i < icount; i++) {
             ELT_TYPE idx = DRAW_GET_IDX(ib, i + start);
 
             if (idx < min_index || idx > max_index) {
@@ -122,6 +119,7 @@ CONCAT(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
                                           draw_elts, icount, 0x0);
 }
 
+
 /**
  * Use the cache to prepare the fetch and draw elements, and flush.
  *
@@ -138,7 +136,6 @@ CONCAT(vsplit_segment_cache_, ELT_TYPE)(struct vsplit_frontend *vsplit,
    struct draw_context *draw = vsplit->draw;
    const ELT_TYPE *ib = (const ELT_TYPE *) draw->pt.user.elts;
    const int ibias = draw->pt.user.eltBias;
-   unsigned i;
 
    assert(icount + !!close <= vsplit->segment_size);
 
@@ -149,18 +146,17 @@ CONCAT(vsplit_segment_cache_, ELT_TYPE)(struct vsplit_frontend *vsplit,
       if (spoken)
          ADD_CACHE(vsplit, ib, 0, ispoken, 0);
 
-      for (i = spoken; i < icount; i++) {
+      for (unsigned i = spoken; i < icount; i++) {
          ADD_CACHE(vsplit, ib, istart, i, 0);
       }
 
       if (close)
          ADD_CACHE(vsplit, ib, 0, iclose, 0);
-   }
-   else {
+   } else {
       if (spoken)
          ADD_CACHE(vsplit, ib, 0, ispoken, ibias);
 
-      for (i = spoken; i < icount; i++)
+      for (unsigned i = spoken; i < icount; i++)
          ADD_CACHE(vsplit, ib, istart, i, ibias);
 
       if (close)
@@ -169,6 +165,7 @@ CONCAT(vsplit_segment_cache_, ELT_TYPE)(struct vsplit_frontend *vsplit,
 
    vsplit_flush_cache(vsplit, flags);
 }
+
 
 static void
 CONCAT(vsplit_segment_simple_, ELT_TYPE)(struct vsplit_frontend *vsplit,
@@ -179,6 +176,7 @@ CONCAT(vsplit_segment_simple_, ELT_TYPE)(struct vsplit_frontend *vsplit,
    CONCAT(vsplit_segment_cache_, ELT_TYPE)(vsplit,
          flags, istart, icount, FALSE, 0, FALSE, 0);
 }
+
 
 static void
 CONCAT(vsplit_segment_loop_, ELT_TYPE)(struct vsplit_frontend *vsplit,
@@ -193,6 +191,7 @@ CONCAT(vsplit_segment_loop_, ELT_TYPE)(struct vsplit_frontend *vsplit,
          flags, istart, icount, FALSE, 0, close_loop, i0);
 }
 
+
 static void
 CONCAT(vsplit_segment_fan_, ELT_TYPE)(struct vsplit_frontend *vsplit,
                                       unsigned flags,
@@ -205,6 +204,7 @@ CONCAT(vsplit_segment_fan_, ELT_TYPE)(struct vsplit_frontend *vsplit,
    CONCAT(vsplit_segment_cache_, ELT_TYPE)(vsplit,
          flags, istart, icount, use_spoken, i0, FALSE, 0);
 }
+
 
 #define LOCAL_VARS                                                         \
    struct vsplit_frontend *vsplit = (struct vsplit_frontend *) frontend;   \
@@ -226,6 +226,7 @@ vsplit_segment_simple_linear(struct vsplit_frontend *vsplit, unsigned flags,
    vsplit->middle->run_linear(vsplit->middle, istart, icount, flags);
 }
 
+
 static void
 vsplit_segment_loop_linear(struct vsplit_frontend *vsplit, unsigned flags,
                            unsigned istart, unsigned icount, unsigned i0)
@@ -245,34 +246,34 @@ vsplit_segment_loop_linear(struct vsplit_frontend *vsplit, unsigned flags,
 
       vsplit->middle->run(vsplit->middle, vsplit->fetch_elts, nr,
             vsplit->identity_draw_elts, nr, flags);
-   }
-   else {
+   } else {
       vsplit->middle->run_linear(vsplit->middle, istart, icount, flags);
    }
 }
+
 
 static void
 vsplit_segment_fan_linear(struct vsplit_frontend *vsplit, unsigned flags,
                           unsigned istart, unsigned icount, unsigned i0)
 {
    boolean use_spoken = ((flags & DRAW_SPLIT_BEFORE) != 0);
-   unsigned nr = 0, i;
+   unsigned nr = 0;
 
    assert(icount <= vsplit->segment_size);
 
    if (use_spoken) {
       /* replace istart by i0 */
       vsplit->fetch_elts[nr++] = i0;
-      for (i = 1 ; i < icount; i++)
+      for (unsigned i = 1 ; i < icount; i++)
          vsplit->fetch_elts[nr++] = istart + i;
 
       vsplit->middle->run(vsplit->middle, vsplit->fetch_elts, nr,
             vsplit->identity_draw_elts, nr, flags);
-   }
-   else {
+   } else {
       vsplit->middle->run_linear(vsplit->middle, istart, icount, flags);
    }
 }
+
 
 #define LOCAL_VARS                                                         \
    struct vsplit_frontend *vsplit = (struct vsplit_frontend *) frontend;   \

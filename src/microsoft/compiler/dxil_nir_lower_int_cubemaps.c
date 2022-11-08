@@ -27,7 +27,7 @@
 #include "nir_builtin_builder.h"
 
 static bool
-type_needs_lowering(const struct glsl_type *type)
+type_needs_lowering(const struct glsl_type *type, bool lower_samplers)
 {
    type = glsl_without_array(type);
    if (!glsl_type_is_image(type) && !glsl_type_is_sampler(type))
@@ -36,7 +36,7 @@ type_needs_lowering(const struct glsl_type *type)
       return false;
    if (glsl_type_is_image(type))
       return true;
-   return glsl_base_type_is_integer(glsl_get_sampler_result_type(type));
+   return lower_samplers && glsl_base_type_is_integer(glsl_get_sampler_result_type(type));
 }
 
 static bool
@@ -89,7 +89,7 @@ lower_int_cubmap_to_array_filter(const nir_instr *instr,
       }
    } else if (instr->type == nir_instr_type_deref) {
       nir_deref_instr *deref = nir_instr_as_deref(instr);
-      return type_needs_lowering(deref->type);
+      return type_needs_lowering(deref->type, lower_samplers);
    } else if (instr->type == nir_instr_type_tex && lower_samplers) {
       nir_tex_instr *tex = nir_instr_as_tex(instr);
 
@@ -210,7 +210,7 @@ create_array_tex_from_cube_tex(nir_builder *b, nir_tex_instr *tex, nir_ssa_def *
       nir_src *psrc = (tex->src[i].src_type == nir_tex_src_coord) ?
                          &coord_src : &tex->src[i].src;
 
-      nir_src_copy(&array_tex->src[i].src, psrc);
+      nir_src_copy(&array_tex->src[i].src, psrc, &array_tex->instr);
       array_tex->src[i].src_type = tex->src[i].src_type;
    }
 
@@ -570,7 +570,7 @@ dxil_nir_lower_int_cubemaps(nir_shader *s, bool lower_samplers)
 
    if (result) {
       nir_foreach_variable_with_modes_safe(var, s, nir_var_uniform | nir_var_image) {
-         if (!type_needs_lowering(var->type))
+         if (!type_needs_lowering(var->type, lower_samplers))
             continue;
          bool is_image = glsl_type_is_image(glsl_without_array(var->type));
          var->type = make_2darray_from_cubemap_with_array(var->type, is_image);

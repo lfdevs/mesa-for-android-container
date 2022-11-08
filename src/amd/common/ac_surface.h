@@ -415,6 +415,17 @@ struct ac_surf_config {
    unsigned is_cube : 1;
 };
 
+/* Output parameters for ac_surface_compute_nbc_view */
+struct ac_surf_nbc_view {
+   bool valid;
+   uint32_t width;
+   uint32_t height;
+   uint32_t level;
+   uint32_t max_mip; /* Used for max_mip in the resource descriptor */
+   uint8_t tile_swizzle;
+   uint64_t base_address_offset;
+};
+
 struct ac_addrlib *ac_addrlib_create(const struct radeon_info *info, uint64_t *max_alignment);
 void ac_addrlib_destroy(struct ac_addrlib *addrlib);
 void *ac_addrlib_get_handle(struct ac_addrlib *addrlib);
@@ -469,6 +480,15 @@ uint64_t ac_surface_get_plane_stride(enum amd_gfx_level gfx_level,
 /* Of the whole miplevel, not an individual layer */
 uint64_t ac_surface_get_plane_size(const struct radeon_surf *surf,
                                    unsigned plane);
+
+uint64_t ac_surface_addr_from_coord(struct ac_addrlib *addrlib, const struct radeon_info *info,
+                                    const struct radeon_surf *surf,
+                                    const struct ac_surf_info *surf_info, unsigned level,
+                                    unsigned x, unsigned y, unsigned layer, bool is_3d);
+void ac_surface_compute_nbc_view(struct ac_addrlib *addrlib, const struct radeon_info *info,
+                                 const struct radeon_surf *surf,
+                                 const struct ac_surf_info *surf_info, unsigned level,
+                                 unsigned layer, struct ac_surf_nbc_view *out);
 
 void ac_surface_print_info(FILE *out, const struct radeon_info *info,
                            const struct radeon_surf *surf);

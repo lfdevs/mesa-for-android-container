@@ -56,15 +56,10 @@ blend_factor(VkBlendFactor factor, bool dst_alpha_one, bool *needs_constants)
    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
    case VK_BLEND_FACTOR_SRC1_ALPHA:
    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
-      assert(!"Invalid blend factor: dual source blending not supported.");
+      unreachable("Invalid blend factor: dual source blending not supported.");
    default:
-      assert(!"Unknown blend factor.");
+      unreachable("Unknown blend factor.");
    }
-
-   /* Should be handled by the switch, added to avoid a "end of non-void
-    * function" error
-    */
-   unreachable("Unknown blend factor.");
 }
 
 static void

@@ -195,7 +195,7 @@ merge_discard(bi_block *block)
          /* If there's nowhere to merge and this is the end of the shader, just
           * remove the discard.
           */
-         if (!block->successors[0] && !block->successors[1]) {
+         if (bi_num_successors(block) == 0) {
             bi_remove_instruction(I);
             continue;
          }

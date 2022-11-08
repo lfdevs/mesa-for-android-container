@@ -226,6 +226,7 @@ ForEachMacros: [
   'nir_foreach_use',
   'nir_foreach_use_safe',
   'nir_foreach_variable_with_modes',
+  'u_foreach_bit',
   'u_vector_foreach',
   'util_dynarray_foreach',
   'vk_foreach_struct',

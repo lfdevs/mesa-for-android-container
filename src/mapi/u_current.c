@@ -72,34 +72,42 @@ extern void (*__glapi_noop_table[])(void);
  *
  * Depending on whether or not multithreading is support, and the type of
  * support available, several variables are used to store the current context
- * pointer and the current dispatch table pointer.  In the non-threaded case,
+ * pointer and the current dispatch table pointer. In the non-threaded case,
  * the variables \c _glapi_Dispatch and \c _glapi_Context are used for this
  * purpose.
  *
- * In the "normal" threaded case, the variables \c _glapi_Dispatch and
- * \c _glapi_Context will be \c NULL if an application is detected as being
- * multithreaded.  Single-threaded applications will use \c _glapi_Dispatch
- * and \c _glapi_Context just like the case without any threading support.
- * When \c _glapi_Dispatch and \c _glapi_Context are \c NULL, the thread state
- * data \c _gl_DispatchTSD and \c ContextTSD are used.  Drivers and the
+ * In multi threaded case, The TLS variables \c _glapi_tls_Dispatch and
+ * \c _glapi_tls_Context are used. Having \c _glapi_Dispatch and \c _glapi_Context
+ * be hardcoded to \c NULL maintains binary compatability between TLS enabled
+ * loaders and non-TLS DRI drivers. When \c _glapi_Dispatch and \c _glapi_Context
+ * are \c NULL, the thread state data \c ContextTSD are used. Drivers and the
  * static dispatch functions access these variables via \c _glapi_get_dispatch
  * and \c _glapi_get_context.
- *
- *
- * In the TLS case, the variables \c _glapi_Dispatch and \c _glapi_Context are
- * hardcoded to \c NULL.  Instead the TLS variables \c _glapi_tls_Dispatch and
- * \c _glapi_tls_Context are used.  Having \c _glapi_Dispatch and
- * \c _glapi_Context be hardcoded to \c NULL maintains binary compatability
- * between TLS enabled loaders and non-TLS DRI drivers.
  */
 /*@{*/
 
-__THREAD_INITIAL_EXEC struct _glapi_table *u_current_table
-    = (struct _glapi_table *) table_noop_array;
+__THREAD_INITIAL_EXEC struct _glapi_table *_glapi_tls_Dispatch
+   = (struct _glapi_table *) table_noop_array;
 
-__THREAD_INITIAL_EXEC void *u_current_context;
+__THREAD_INITIAL_EXEC void *_glapi_tls_Context;
+
+/* not used, but defined for compatibility */
+const struct _glapi_table *_glapi_Dispatch;
+const void *_glapi_Context;
 
 /*@}*/
+
+/* not used, but defined for compatibility */
+void
+_glapi_destroy_multithread(void)
+{
+}
+
+/* not used, but defined for compatibility */
+void
+_glapi_check_multithread(void)
+{
+}
 
 /**
  * Set the current context pointer for this thread.
@@ -107,9 +115,9 @@ __THREAD_INITIAL_EXEC void *u_current_context;
  * void from the real context pointer type.
  */
 void
-u_current_set_context(const void *ptr)
+_glapi_set_context(void *ptr)
 {
-   u_current_context = (void *) ptr;
+   _glapi_tls_Context = ptr;
 }
 
 /**
@@ -118,9 +126,9 @@ u_current_set_context(const void *ptr)
  * void to the real context pointer type.
  */
 void *
-u_current_get_context_internal(void)
+_glapi_get_context(void)
 {
-   return u_current_context;
+   return _glapi_tls_Context;
 }
 
 /**
@@ -129,21 +137,21 @@ u_current_get_context_internal(void)
  * table (__glapi_noop_table).
  */
 void
-u_current_set_table(const struct _glapi_table *tbl)
+_glapi_set_dispatch(struct _glapi_table *tbl)
 {
    stub_init_once();
 
    if (!tbl)
-      tbl = (const struct _glapi_table *) table_noop_array;
+      tbl = (struct _glapi_table *) table_noop_array;
 
-   u_current_table = (struct _glapi_table *) tbl;
+   _glapi_tls_Dispatch = tbl;
 }
 
 /**
  * Return pointer to current dispatch table for calling thread.
  */
 struct _glapi_table *
-u_current_get_table_internal(void)
+_glapi_get_dispatch(void)
 {
-   return u_current_table;
+   return _glapi_tls_Dispatch;
 }

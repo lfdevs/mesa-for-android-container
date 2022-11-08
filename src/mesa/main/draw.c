@@ -156,9 +156,9 @@ valid_prim_mode_custom(struct gl_context *ctx, GLenum mode,
                        GLbitfield valid_prim_mask)
 {
 #if DEBUG
-   unsigned mask = ctx->ValidPrimMask;
-   unsigned mask_indexed = ctx->ValidPrimMaskIndexed;
-   bool drawpix_valid = ctx->DrawPixValid;
+   ASSERTED unsigned mask = ctx->ValidPrimMask;
+   ASSERTED unsigned mask_indexed = ctx->ValidPrimMaskIndexed;
+   ASSERTED bool drawpix_valid = ctx->DrawPixValid;
    _mesa_update_valid_to_render_state(ctx);
    assert(mask == ctx->ValidPrimMask &&
           mask_indexed == ctx->ValidPrimMaskIndexed &&
@@ -924,175 +924,26 @@ _mesa_validate_MultiDrawElementsIndirectCount(struct gl_context *ctx,
    return !error;
 }
 
-
-#define MAX_ALLOCA_PRIMS(prim) (50000 / sizeof(*prim))
-
-/* Use calloc for large allocations and alloca for small allocations. */
-/* We have to use a macro because alloca is local within the function. */
-#define ALLOC_PRIMS(prim, primcount, func) do { \
-   if (unlikely(primcount > MAX_ALLOCA_PRIMS(prim))) { \
-      prim = calloc(primcount, sizeof(*prim)); \
-      if (!prim) { \
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, func); \
-         return; \
-      } \
-   } else { \
-      prim = alloca(primcount * sizeof(*prim)); \
-   } \
-} while (0)
-
-#define FREE_PRIMS(prim, primcount) do { \
-   if (primcount > MAX_ALLOCA_PRIMS(prim)) \
-      free(prim); \
-} while (0)
-
-
-/**
- * Called via Driver.DrawGallium. This is a fallback invoking Driver.Draw.
- */
-void
-_mesa_draw_gallium_fallback(struct gl_context *ctx,
-                            struct pipe_draw_info *info,
-                            unsigned drawid_offset,
-                            const struct pipe_draw_start_count_bias *draws,
-                            unsigned num_draws)
+static inline struct pipe_draw_start_count_bias *
+get_temp_draws(struct gl_context *ctx, unsigned primcount)
 {
-   struct _mesa_index_buffer ib;
-   unsigned index_size = info->index_size;
-   unsigned min_index = 0, max_index = ~0u;
-   bool index_bounds_valid = false;
+   if (primcount > ctx->num_tmp_draws) {
+      struct pipe_draw_start_count_bias *tmp =
+         realloc(ctx->tmp_draws, primcount * sizeof(ctx->tmp_draws[0]));
 
-   if (!info->instance_count)
-      return;
-
-   if (index_size) {
-      if (info->index_bounds_valid) {
-         min_index = info->min_index;
-         max_index = info->max_index;
-         index_bounds_valid = true;
-      }
-   } else {
-      /* The index_bounds_valid field and min/max_index are not used for
-       * non-indexed draw calls (they are undefined), but classic drivers
-       * need the index bounds. They will be computed manually.
-       */
-      index_bounds_valid = true;
-   }
-
-   ib.index_size_shift = util_logbase2(index_size);
-
-   /* Single draw or a fallback for user indices. */
-   if (num_draws == 1) {
-      if (!draws[0].count)
-         return;
-
-      if (index_size) {
-         ib.count = draws[0].count;
-
-         if (info->has_user_indices) {
-            ib.obj = NULL;
-            ib.ptr = (const char*)info->index.user;
-         } else {
-            ib.obj = info->index.gl_bo;
-            ib.ptr = NULL;
-         }
-      }
-
-      struct _mesa_prim prim;
-      prim.mode = info->mode;
-      prim.begin = 1;
-      prim.end = 1;
-      prim.start = draws[0].start;
-      prim.count = draws[0].count;
-      prim.basevertex = index_size ? draws[0].index_bias : 0;
-      prim.draw_id = drawid_offset;
-
-      if (!index_size) {
-         min_index = draws[0].start;
-         max_index = draws[0].start + draws[0].count - 1;
-      }
-
-      st_feedback_draw_vbo(ctx, &prim, 1, index_size ? &ib : NULL,
-                           index_bounds_valid, info->primitive_restart,
-                           info->restart_index, min_index, max_index,
-                           info->instance_count, info->start_instance);
-      return;
-   }
-
-   struct _mesa_prim *prim;
-   unsigned max_count = 0;
-   unsigned num_prims = 0;
-
-   ALLOC_PRIMS(prim, num_draws, "DrawGallium");
-
-   min_index = ~0u;
-   max_index = 0;
-
-   for (unsigned i = 0; i < num_draws; i++) {
-      if (!draws[i].count)
-         continue;
-
-      prim[num_prims].mode = info->mode;
-      prim[num_prims].begin = 1;
-      prim[num_prims].end = 1;
-      prim[num_prims].start = draws[i].start;
-      prim[num_prims].count = draws[i].count;
-      prim[num_prims].basevertex = info->index_size ? draws[i].index_bias : 0;
-      prim[num_prims].draw_id = drawid_offset + (info->increment_draw_id ? i : 0);
-
-      if (!index_size) {
-         min_index = MIN2(min_index, draws[i].start);
-         max_index = MAX2(max_index, draws[i].start + draws[i].count - 1);
-      }
-
-      max_count = MAX2(max_count, prim[num_prims].count);
-      num_prims++;
-   }
-
-   if (info->index_size) {
-      ib.count = max_count;
-      ib.index_size_shift = util_logbase2(index_size);
-
-      if (info->has_user_indices) {
-         ib.obj = NULL;
-         ib.ptr = (const char*)info->index.user;
+      if (tmp) {
+         ctx->tmp_draws = tmp;
+         ctx->num_tmp_draws = primcount;
       } else {
-         ib.obj = info->index.gl_bo;
-         ib.ptr = NULL;
+         _mesa_error(ctx, GL_OUT_OF_MEMORY, "can't alloc tmp_draws");
+         free(ctx->tmp_draws); /* realloc doesn't free on failure */
+         ctx->tmp_draws = NULL;
+         ctx->num_tmp_draws = 0;
       }
    }
-
-   if (num_prims)
-      st_feedback_draw_vbo(ctx, prim, num_prims, index_size ? &ib : NULL,
-                           index_bounds_valid, info->primitive_restart,
-                           info->restart_index, min_index, max_index,
-                           info->instance_count, info->start_instance);
-   FREE_PRIMS(prim, num_draws);
+   return ctx->tmp_draws;
 }
 
-
-/**
- * Called via Driver.DrawGallium. This is a fallback invoking Driver.Draw.
- */
-void
-_mesa_draw_gallium_multimode_fallback(struct gl_context *ctx,
-                                      struct pipe_draw_info *info,
-                                      const struct pipe_draw_start_count_bias *draws,
-                                      const unsigned char *mode,
-                                      unsigned num_draws)
-{
-   unsigned i, first;
- 
-   /* Find consecutive draws where mode doesn't vary. */
-   for (i = 0, first = 0; i <= num_draws; i++) {
-      if (i == num_draws || mode[i] != mode[first]) {
-         info->mode = mode[first];
-         ctx->Driver.DrawGallium(ctx, info, 0, &draws[first], i - first);
-         first = i;
-      }
-   }
-}
- 
 /**
  * Check that element 'j' of the array has reasonable data.
  * Map VBO if needed.
@@ -1542,8 +1393,8 @@ _mesa_DrawArrays(GLenum mode, GLint start, GLsizei count)
  * display list mode).
  */
 void GLAPIENTRY
-_mesa_DrawArraysInstancedARB(GLenum mode, GLint start, GLsizei count,
-                             GLsizei numInstances)
+_mesa_DrawArraysInstanced(GLenum mode, GLint start, GLsizei count,
+                          GLsizei numInstances)
 {
    GET_CURRENT_CONTEXT(ctx);
    FLUSH_FOR_DRAW(ctx);
@@ -1625,9 +1476,9 @@ _mesa_MultiDrawArrays(GLenum mode, const GLint *first,
       return;
 
    struct pipe_draw_info info;
-   struct pipe_draw_start_count_bias *draw;
-
-   ALLOC_PRIMS(draw, primcount, "glMultiDrawElements");
+   struct pipe_draw_start_count_bias *draw = get_temp_draws(ctx, primcount);
+   if (!draw)
+      return;
 
    info.mode = mode;
    info.index_size = 0;
@@ -1653,8 +1504,6 @@ _mesa_MultiDrawArrays(GLenum mode, const GLint *first,
 
    if (MESA_DEBUG_FLAGS & DEBUG_ALWAYS_FLUSH)
       _mesa_flush(ctx);
-
-   FREE_PRIMS(draw, primcount);
 }
 
 
@@ -1986,8 +1835,8 @@ _mesa_DrawElementsBaseVertex(GLenum mode, GLsizei count, GLenum type,
  * Called by glDrawElementsInstanced() in immediate mode.
  */
 void GLAPIENTRY
-_mesa_DrawElementsInstancedARB(GLenum mode, GLsizei count, GLenum type,
-                               const GLvoid * indices, GLsizei numInstances)
+_mesa_DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type,
+                            const GLvoid * indices, GLsizei numInstances)
 {
    GET_CURRENT_CONTEXT(ctx);
    FLUSH_FOR_DRAW(ctx);
@@ -2177,9 +2026,9 @@ _mesa_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
          * greater than UINT32_MAX bytes.
          */
         max_index_ptr - min_index_ptr <= UINT32_MAX)) {
-      struct pipe_draw_start_count_bias *draw;
-
-      ALLOC_PRIMS(draw, primcount, "glMultiDrawElements");
+      struct pipe_draw_start_count_bias *draw = get_temp_draws(ctx, primcount);
+      if (!draw)
+         return;
 
       if (info.has_user_indices) {
          for (int i = 0; i < primcount; i++) {
@@ -2198,7 +2047,6 @@ _mesa_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
       }
 
       ctx->Driver.DrawGallium(ctx, &info, 0, draw, primcount);
-      FREE_PRIMS(draw, primcount);
    } else {
       /* draw[i].start would overflow. Draw one at a time. */
       assert(info.has_user_indices);
@@ -2228,8 +2076,8 @@ _mesa_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
 
 
 void GLAPIENTRY
-_mesa_MultiDrawElementsEXT(GLenum mode, const GLsizei *count, GLenum type,
-                           const GLvoid * const *indices, GLsizei primcount)
+_mesa_MultiDrawElements(GLenum mode, const GLsizei *count, GLenum type,
+                        const GLvoid * const *indices, GLsizei primcount)
 {
    GET_CURRENT_CONTEXT(ctx);
    FLUSH_FOR_DRAW(ctx);
@@ -2369,56 +2217,6 @@ _mesa_DrawTransformFeedbackStreamInstanced(GLenum mode, GLuint name,
 }
 
 
-static void
-_mesa_validated_multidrawarraysindirect(struct gl_context *ctx, GLenum mode,
-                                        GLintptr indirect,
-                                        GLintptr drawcount_offset,
-                                        GLsizei drawcount, GLsizei stride,
-                                        struct gl_buffer_object *drawcount_buffer)
-{
-   /* If drawcount_buffer is set, drawcount is the maximum draw count.*/
-   if (drawcount == 0)
-      return;
-
-   st_indirect_draw_vbo(ctx, mode, ctx->DrawIndirectBuffer, indirect,
-                        drawcount, stride, drawcount_buffer,
-                        drawcount_offset, NULL, false, 0);
-
-   if (MESA_DEBUG_FLAGS & DEBUG_ALWAYS_FLUSH)
-      _mesa_flush(ctx);
-}
-
-
-static void
-_mesa_validated_multidrawelementsindirect(struct gl_context *ctx,
-                                          GLenum mode, GLenum type,
-                                          GLintptr indirect,
-                                          GLintptr drawcount_offset,
-                                          GLsizei drawcount, GLsizei stride,
-                                          struct gl_buffer_object *drawcount_buffer)
-{
-   /* If drawcount_buffer is set, drawcount is the maximum draw count.*/
-   if (drawcount == 0)
-      return;
-
-   /* NOTE: IndexBufferObj is guaranteed to be a VBO. */
-   struct _mesa_index_buffer ib;
-   ib.count = 0;                /* unknown */
-   ib.obj = ctx->Array.VAO->IndexBufferObj;
-   ib.ptr = NULL;
-   ib.index_size_shift = get_index_size_shift(type);
-
-   st_indirect_draw_vbo(ctx, mode, ctx->DrawIndirectBuffer, indirect,
-                        drawcount, stride, drawcount_buffer,
-                        drawcount_offset, &ib,
-                        ctx->Array._PrimitiveRestart[ib.index_size_shift],
-                        ctx->Array._RestartIndex[ib.index_size_shift]);
-
-   if (MESA_DEBUG_FLAGS & DEBUG_ALWAYS_FLUSH)
-      _mesa_flush(ctx);
-}
-
-
 /**
  * Like [Multi]DrawArrays/Elements, but they take most arguments from
  * a buffer object.
@@ -2457,8 +2255,7 @@ _mesa_DrawArraysIndirect(GLenum mode, const GLvoid *indirect)
        !_mesa_validate_DrawArraysIndirect(ctx, mode, indirect))
       return;
 
-   _mesa_validated_multidrawarraysindirect(ctx, mode, (GLintptr)indirect,
-                                           0, 1, 16, NULL);
+   st_indirect_draw_vbo(ctx, mode, 0, (GLintptr)indirect, 0, 1, 16);
 }
 
 
@@ -2516,9 +2313,7 @@ _mesa_DrawElementsIndirect(GLenum mode, GLenum type, const GLvoid *indirect)
        !_mesa_validate_DrawElementsIndirect(ctx, mode, type, indirect))
       return;
 
-   _mesa_validated_multidrawelementsindirect(ctx, mode, type,
-                                             (GLintptr)indirect, 0,
-                                             1, 20, NULL);
+   st_indirect_draw_vbo(ctx, mode, type, (GLintptr)indirect, 0, 1, 20);
 }
 
 
@@ -2593,8 +2388,7 @@ _mesa_MultiDrawArraysIndirect(GLenum mode, const GLvoid *indirect,
                                                primcount, stride))
       return;
 
-   _mesa_validated_multidrawarraysindirect(ctx, mode, (GLintptr)indirect, 0,
-                                           primcount, stride, NULL);
+   st_indirect_draw_vbo(ctx, mode, 0, (GLintptr)indirect, 0, primcount, stride);
 }
 
 
@@ -2688,9 +2482,7 @@ _mesa_MultiDrawElementsIndirect(GLenum mode, GLenum type,
                                                  primcount, stride))
       return;
 
-   _mesa_validated_multidrawelementsindirect(ctx, mode, type,
-                                             (GLintptr)indirect, 0, primcount,
-                                             stride, NULL);
+   st_indirect_draw_vbo(ctx, mode, type, (GLintptr)indirect, 0, primcount, stride);
 }
 
 
@@ -2718,9 +2510,8 @@ _mesa_MultiDrawArraysIndirectCountARB(GLenum mode, GLintptr indirect,
                                                     maxdrawcount, stride))
       return;
 
-   _mesa_validated_multidrawarraysindirect(ctx, mode, indirect,
-                                           drawcount_offset, maxdrawcount,
-                                           stride, ctx->ParameterBuffer);
+   st_indirect_draw_vbo(ctx, mode, 0, (GLintptr)indirect, drawcount_offset,
+                        maxdrawcount, stride);
 }
 
 
@@ -2750,9 +2541,8 @@ _mesa_MultiDrawElementsIndirectCountARB(GLenum mode, GLenum type,
                                                       maxdrawcount, stride))
       return;
 
-   _mesa_validated_multidrawelementsindirect(ctx, mode, type, indirect,
-                                             drawcount_offset, maxdrawcount,
-                                             stride, ctx->ParameterBuffer);
+   st_indirect_draw_vbo(ctx, mode, type, (GLintptr)indirect, drawcount_offset,
+                        maxdrawcount, stride);
 }
 
 

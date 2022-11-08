@@ -70,7 +70,6 @@
 #include "postprocess/postprocess.h"
 
 #include "frontend/api.h"
-#include "state_tracker/st_gl_api.h"
 
 
 
@@ -132,7 +131,6 @@ osmesa_st_get_param(struct st_manager *smapi, enum st_manager_param param)
 }
 
 static struct st_manager *stmgr = NULL;
-static struct st_api *stapi = NULL;
 
 static void
 destroy_st_manager(void)
@@ -141,10 +139,6 @@ destroy_st_manager(void)
       if (stmgr->screen)
          stmgr->screen->destroy(stmgr->screen);
       FREE(stmgr);
-   }
-
-   if (stapi && stapi->destroy) {
-      stapi->destroy(stapi);
    }
 }
 
@@ -160,8 +154,6 @@ create_st_manager(void)
       stmgr->get_param = osmesa_st_get_param;
       stmgr->get_egl_image = NULL;
    }
-
-   stapi = st_gl_api_create();
 }
 
 /**
@@ -175,16 +167,6 @@ get_st_manager(void)
    call_once(&create_once_flag, create_st_manager);
 
    return stmgr;
-}
-
-/**
- * Create/return singleton st_api object.
- */
-static struct st_api *
-get_st_api(void)
-{
-   get_st_manager();
-   return stapi;
 }
 
 /* Reads the color or depth buffer from the backing context to either the user storage
@@ -521,7 +503,7 @@ osmesa_destroy_buffer(struct osmesa_buffer *osbuffer)
     * Notify the state manager that the associated framebuffer interface
     * is no longer valid.
     */
-   stapi->destroy_drawable(stapi, osbuffer->stfb);
+   st_api_destroy_drawable(osbuffer->stfb);
 
    FREE(osbuffer->stfb);
    FREE(osbuffer);
@@ -587,7 +569,6 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
    struct st_context_iface *st_shared;
    enum st_context_error st_error = 0;
    struct st_context_attribs attribs;
-   struct st_api *stapi = get_st_api();
    GLenum format = GL_RGBA;
    int depthBits = 0, stencilBits = 0, accumBits = 0;
    int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
@@ -698,7 +679,7 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
                          osmesa->depth_stencil_format,
                          osmesa->accum_format);
 
-   osmesa->stctx = stapi->create_context(stapi, get_st_manager(),
+   osmesa->stctx = st_api_create_context(get_st_manager(),
                                          &attribs, &st_error, st_shared);
    if (!osmesa->stctx) {
       FREE(osmesa);
@@ -759,11 +740,10 @@ GLAPI GLboolean GLAPIENTRY
 OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
                   GLsizei width, GLsizei height)
 {
-   struct st_api *stapi = get_st_api();
    enum pipe_format color_format;
 
    if (!osmesa && !buffer) {
-      stapi->make_current(stapi, NULL, NULL, NULL);
+      st_api_make_current(NULL, NULL, NULL);
       return GL_TRUE;
    }
 
@@ -802,7 +782,7 @@ OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
 
    osmesa->type = type;
 
-   stapi->make_current(stapi, osmesa->stctx, osbuffer->stfb, osbuffer->stfb);
+   st_api_make_current(osmesa->stctx, osbuffer->stfb, osbuffer->stfb);
 
    /* XXX: We should probably load the current color value into the buffer here
     * to match classic swrast behavior (context's fb starts with the contents of
@@ -841,8 +821,7 @@ OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
 GLAPI OSMesaContext GLAPIENTRY
 OSMesaGetCurrentContext(void)
 {
-   struct st_api *stapi = get_st_api();
-   struct st_context_iface *st = stapi->get_current(stapi);
+   struct st_context_iface *st = st_api_get_current();
    return st ? (OSMesaContext) st->st_manager_private : NULL;
 }
 

@@ -92,14 +92,32 @@ def to_suffix(op):
 static inline
 bi_instr * bi_${opcode.replace('.', '_').lower()}${to_suffix(ops[opcode])}(${signature(ops[opcode], modifiers)})
 {
-    bi_instr *I = rzalloc(b->shader, bi_instr);
+<%
+    op = ops[opcode]
+    nr_dests = "nr_dests" if op["variable_dests"] else op["dests"]
+    nr_srcs = "nr_srcs" if op["variable_srcs"] else src_count(op)
+%>
+    size_t size = sizeof(bi_instr) + sizeof(bi_index) * (${nr_dests} + ${nr_srcs});
+    bi_instr *I = (bi_instr *) rzalloc_size(b->shader, size);
+
     I->op = BI_OPCODE_${opcode.replace('.', '_').upper()};
-% for dest in range(ops[opcode]["dests"]):
+    I->nr_dests = ${nr_dests};
+    I->nr_srcs = ${nr_srcs};
+    I->dest = (bi_index *) (&I[1]);
+    I->src = I->dest + ${nr_dests};
+
+% if not op["variable_dests"]:
+% for dest in range(op["dests"]):
     I->dest[${dest}] = dest${dest};
 % endfor
-% for src in range(src_count(ops[opcode])):
+%endif
+
+% if not op["variable_srcs"]:
+% for src in range(src_count(op)):
     I->src[${src}] = src${src};
 % endfor
+% endif
+
 % for mod in ops[opcode]["modifiers"]:
 % if not should_skip(mod, opcode):
     I->${mod} = ${mod};
@@ -118,7 +136,7 @@ bi_instr * bi_${opcode.replace('.', '_').lower()}${to_suffix(ops[opcode])}(${sig
     return I;
 }
 
-% if ops[opcode]["dests"] == 1:
+% if ops[opcode]["dests"] == 1 and not ops[opcode]["variable_dests"]:
 static inline
 bi_index bi_${opcode.replace('.', '_').lower()}(${signature(ops[opcode], modifiers, no_dests=True)})
 {
@@ -191,8 +209,10 @@ def signature(op, modifiers, typeful = False, sized = False, no_dests = False):
         ["bi_builder *b"] +
         (["nir_alu_type type"] if typeful == True else []) +
         (["unsigned bitsize"] if sized == True else []) +
-        ["bi_index dest{}".format(i) for i in range(0 if no_dests else op["dests"])] +
-        ["bi_index src{}".format(i) for i in range(src_count(op))] +
+        (["unsigned nr_dests"] if op["variable_dests"] else
+            ["bi_index dest{}".format(i) for i in range(0 if no_dests else op["dests"])]) +
+        (["unsigned nr_srcs"] if op["variable_srcs"] else
+            ["bi_index src{}".format(i) for i in range(src_count(op))]) +
         ["{} {}".format(
         "bool" if len(modifiers[T[0:-1]] if T[-1] in "0123" else modifiers[T]) == 2 else
         "enum bi_" + T[0:-1] if T[-1] in "0123" else
@@ -201,12 +221,18 @@ def signature(op, modifiers, typeful = False, sized = False, no_dests = False):
         ["uint32_t {}".format(imm) for imm in op["immediates"]])
 
 def arguments(op, temp_dest = True):
-    return ", ".join(
-        ["b"] +
-        ["bi_temp(b->shader)" if temp_dest else 'dest{}'.format(i) for i in range(op["dests"])] +
-        ["src{}".format(i) for i in range(src_count(op))] +
-        modifier_signature(op) +
-        op["immediates"])
+    dest_pattern = "bi_temp(b->shader)" if temp_dest else 'dest{}'
+    dests = [dest_pattern.format(i) for i in range(op["dests"])]
+    srcs = ["src{}".format(i) for i in range(src_count(op))]
+
+    # Variable source/destinations just pass in the count
+    if op["variable_dests"]:
+        dests = ["nr_dests"]
+
+    if op["variable_srcs"]:
+        srcs = ["nr_srcs"]
+
+    return ", ".join(["b"] + dests + srcs + modifier_signature(op) + op["immediates"])
 
 print(Template(COPYRIGHT + TEMPLATE).render(ops = ir_instructions, modifiers =
     modifier_lists, signature = signature, arguments = arguments, src_count =

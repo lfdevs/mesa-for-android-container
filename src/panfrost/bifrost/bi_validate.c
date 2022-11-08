@@ -39,15 +39,14 @@ bi_validate_initialization(bi_context *ctx)
 
         /* Calculate the live set */
         bi_block *entry = bi_entry_block(ctx);
-        unsigned temp_count = bi_max_temp(ctx);
-        bi_compute_liveness(ctx);
+        bi_compute_liveness_ssa(ctx);
 
         /* Validate that the live set is indeed empty */
-        for (unsigned i = 0; i < temp_count; ++i) {
-                if (entry->live_in[i] == 0) continue;
-
-                fprintf(stderr, "%s%u\n", (i & PAN_IS_REG) ? "r" : "", i >> 1);
-                success = false;
+        for (unsigned i = 0; i < ctx->ssa_alloc; ++i) {
+                if (BITSET_TEST(entry->ssa_live_in, i)) {
+                        fprintf(stderr, "%u\n", i);
+                        success = false;
+                }
         }
 
         return success;
@@ -117,8 +116,7 @@ bi_validate_width(bi_context *ctx)
 
         bi_foreach_instr_global(ctx, I) {
                 bi_foreach_dest(I, d) {
-                        if (bi_is_null(I->dest[d])) continue;
-                        if (!bi_is_ssa(I->dest[d])) continue;
+                        assert(bi_is_ssa(I->dest[d]));
 
                         unsigned v = I->dest[d].value;
                         assert(width[v] == 0 && "broken SSA");
@@ -128,9 +126,7 @@ bi_validate_width(bi_context *ctx)
         }
 
         bi_foreach_instr_global(ctx, I) {
-                bi_foreach_src(I, s) {
-                        if (!bi_is_ssa(I->src[s])) continue;
-
+                bi_foreach_ssa_src(I, s) {
                         unsigned v = I->src[s].value;
                         unsigned n = bi_count_read_registers(I, s);
 
@@ -147,6 +143,48 @@ bi_validate_width(bi_context *ctx)
 
         free(width);
         return succ;
+}
+
+/*
+ * Validate that all destinations of the instruction are present.
+ */
+static bool
+bi_validate_dest(bi_context *ctx)
+{
+        bool succ = true;
+
+        bi_foreach_instr_global(ctx, I) {
+                bi_foreach_dest(I, d) {
+                        if (bi_is_null(I->dest[d])) {
+                                succ = false;
+                                fprintf(stderr, "expected dest %u", d);
+                                bi_print_instr(I, stderr);
+                                fprintf(stderr, "\n");
+                        }
+                }
+        }
+
+        return succ;
+}
+
+/*
+ * Validate that phis only appear at the beginning of blocks.
+ */
+static bool
+bi_validate_phi_ordering(bi_context *ctx)
+{
+        bi_foreach_block(ctx, block) {
+                bool start = true;
+
+                bi_foreach_instr_in_block(block, I) {
+                        if (start)
+                                start = I->op == BI_OPCODE_PHI;
+                        else if (I->op == BI_OPCODE_PHI)
+                                return false;
+                }
+        }
+
+        return true;
 }
 
 void
@@ -169,6 +207,16 @@ bi_validate(bi_context *ctx, const char *after)
 
         if (!bi_validate_width(ctx)) {
                 fprintf(stderr, "Unexpected vector with after %s\n", after);
+                fail = true;
+        }
+
+        if (!bi_validate_dest(ctx)) {
+                fprintf(stderr, "Unexpected source/dest after %s\n", after);
+                fail = true;
+        }
+
+        if (!bi_validate_phi_ordering(ctx)) {
+                fprintf(stderr, "Unexpected phi ordering after %s\n", after);
                 fail = true;
         }
 

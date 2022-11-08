@@ -28,7 +28,7 @@ difference is QPitch which specifies the distance between array slices.  On
 Broadwell and earlier, QPitch field in :c:expr:`RENDER_SURFACE_STATE` was in
 rows of samples.  For block-compressed images, this meant it had to be
 a multiple of the block height.  On Skylake, it changed to always being in rows
-of elements so you have to divide the pitch in samples by the compresssion
+of elements so you have to divide the pitch in samples by the compression
 block height.  Since the old surface state code tries to store things in
 hardware units, everyone who ever reads :cpp:expr:`brw_mipmap_tree::qpitch` has
 to change their interpretation based on hardware generation and whether or not

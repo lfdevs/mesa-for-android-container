@@ -41,6 +41,8 @@ etna_compiler_create(const char *renderer, const struct etna_specs *specs)
       .fuse_ffma16 = true,
       .fuse_ffma32 = true,
       .fuse_ffma64 = true,
+      .lower_uadd_carry = true,
+      .lower_mul_high = true,
       .lower_bitops = true,
       .lower_all_io_to_temps = true,
       .vertex_id_zero_based = true,

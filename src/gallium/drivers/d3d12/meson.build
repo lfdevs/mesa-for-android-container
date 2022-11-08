@@ -63,6 +63,13 @@ if with_gallium_d3d12_video
     'd3d12_video_array_of_textures_dpb_manager.cpp',
     'd3d12_video_screen.cpp',
     'd3d12_video_proc.cpp',
+    'd3d12_video_dec_hevc.cpp',
+    'd3d12_video_enc_hevc.cpp',
+    'd3d12_video_encoder_bitstream_builder_hevc.cpp',
+    'd3d12_video_encoder_nalu_writer_hevc.cpp',
+    'd3d12_video_encoder_references_manager_hevc.cpp',
+    'd3d12_video_dec_av1.cpp',
+    'd3d12_video_dec_vp9.cpp',
   ]
 endif
 
@@ -80,5 +87,5 @@ libd3d12 = static_library(
 
 driver_d3d12 = declare_dependency(
   compile_args : '-DGALLIUM_D3D12',
-  link_with : [libd3d12],
+  link_with : [libd3d12, libgalliumvl],
 )

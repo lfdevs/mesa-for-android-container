@@ -40,6 +40,7 @@
 deqp = "/deqp/external/openglcts/modules/glcts"
 caselists = [
     "/deqp/mustpass/gl46-master.txt",
+    "/deqp/mustpass/gl46-khr-single.txt",
 ]
 deqp_args = [
     "--deqp-surface-width=256",

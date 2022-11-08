@@ -39,6 +39,7 @@ timeout = 180.0
 deqp = "/deqp/external/openglcts/modules/glcts"
 caselists = [
     "/deqp/mustpass/gl43-master.txt",
+    "/deqp/mustpass/gl43-khr-single.txt",
 ]
 deqp_args = [
     "--deqp-surface-width=256",

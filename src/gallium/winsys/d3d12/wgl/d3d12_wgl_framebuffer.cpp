@@ -150,7 +150,7 @@ d3d12_wgl_framebuffer_resize(stw_winsys_framebuffer *fb,
 }
 
 static boolean
-d3d12_wgl_framebuffer_present(stw_winsys_framebuffer *fb)
+d3d12_wgl_framebuffer_present(stw_winsys_framebuffer *fb, int interval)
 {
    auto framebuffer = d3d12_wgl_framebuffer(fb);
    if (!framebuffer->swapchain) {
@@ -158,10 +158,10 @@ d3d12_wgl_framebuffer_present(stw_winsys_framebuffer *fb)
       return false;
    }
 
-   if (stw_dev->swap_interval < 1)
+   if (interval < 1)
       return S_OK == framebuffer->swapchain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
    else
-       return S_OK == framebuffer->swapchain->Present(stw_dev->swap_interval, 0);
+      return S_OK == framebuffer->swapchain->Present(interval, 0);
 }
 
 static struct pipe_resource *
@@ -225,6 +225,12 @@ d3d12_wgl_create_framebuffer(struct pipe_screen *screen,
       stw_pixelformat_get_info(iPixelFormat);
    if (!(pfi->pfd.dwFlags & PFD_DOUBLEBUFFER) ||
        (pfi->pfd.dwFlags & PFD_SUPPORT_GDI))
+      return NULL;
+
+   if (pfi->stvis.color_format != PIPE_FORMAT_B8G8R8A8_UNORM &&
+       pfi->stvis.color_format != PIPE_FORMAT_R8G8B8A8_UNORM &&
+       pfi->stvis.color_format != PIPE_FORMAT_R10G10B10A2_UNORM &&
+       pfi->stvis.color_format != PIPE_FORMAT_R16G16B16A16_FLOAT)
       return NULL;
 
    struct d3d12_wgl_framebuffer *fb = CALLOC_STRUCT(d3d12_wgl_framebuffer);

@@ -84,7 +84,7 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
                 */
                nir_store_deref(b, commit, nir_imm_false(b), 0x1);
                nir_push_if(b, nir_imm_true(b));
-               nir_jump(b, nir_jump_halt);
+               nir_jump(b, nir_jump_return);
                nir_pop_if(b, NULL);
                break;
 
@@ -109,6 +109,18 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
             default:
                break;
             }
+            break;
+         }
+
+         case nir_instr_type_jump: {
+            /* Stomp any halts to returns since they only return from the
+             * any-hit shader and not necessarily from the intersection
+             * shader.  This is safe to do because we've already asserted
+             * that we only have the one function.
+             */
+            nir_jump_instr *jump = nir_instr_as_jump(instr);
+            if (jump->type == nir_jump_halt)
+               jump->type = nir_jump_return;
             break;
          }
 

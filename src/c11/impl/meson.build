@@ -26,6 +26,7 @@ if with_c11_threads
   # no need implement c11 threads
 elif host_machine.system() == 'windows'
   files_mesa_util_c11 += 'threads_win32.c'
+  files_mesa_util_c11 += 'threads_win32_tls_callback.cpp'
 else
   files_mesa_util_c11 += 'threads_posix.c'
 endif

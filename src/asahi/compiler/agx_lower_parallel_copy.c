@@ -40,22 +40,31 @@
  * We only handles register-register copies, not general agx_index sources. This
  * suffices for its internal use for register allocation.
  */
+static agx_index
+copy_src(const struct agx_copy *copy)
+{
+   if (copy->is_uniform)
+      return agx_uniform(copy->src, copy->size);
+   else
+      return agx_register(copy->src, copy->size);
+}
 
 static void
 do_copy(agx_builder *b, const struct agx_copy *copy)
 {
-   agx_mov_to(b, agx_register(copy->dest, copy->size),
-                 agx_register(copy->src, copy->size));
+   agx_mov_to(b, agx_register(copy->dest, copy->size), copy_src(copy));
 }
 
 static void
 do_swap(agx_builder *b, const struct agx_copy *copy)
 {
+   assert(!copy->is_uniform && "cannot swap uniform with GPR");
+
    if (copy->dest == copy->src)
       return;
 
    agx_index x = agx_register(copy->dest, copy->size);
-   agx_index y = agx_register(copy->src, copy->size);
+   agx_index y = copy_src(copy);
 
    agx_xor_to(b, x, x, y);
    agx_xor_to(b, y, x, y);
@@ -92,8 +101,7 @@ entry_blocked(struct agx_copy *entry, struct copy_ctx *ctx)
 static bool
 is_real(struct agx_copy *entry)
 {
-   /* TODO: Allow immediates in agx_copy */
-   return true;
+   return !entry->is_uniform;
 }
 
 /* TODO: Generalize to other bit sizes */

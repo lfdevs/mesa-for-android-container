@@ -23,7 +23,7 @@
 
 #include <perfetto.h>
 
-#include "util/u_perfetto.h"
+#include "util/perf/u_perfetto.h"
 
 #include "freedreno_tracepoints.h"
 
@@ -263,6 +263,9 @@ sync_timestamp(struct fd_context *ctx)
       PERFETTO_ELOG("Could not sync CPU and GPU clocks");
       return;
    }
+
+   /* get cpu timestamp again because FD_TIMESTAMP can take >100us */
+   cpu_ts = perfetto::base::GetBootTimeNs().count();
 
    /* convert GPU ts into ns: */
    gpu_ts = ctx->ts_to_ns(gpu_ts);

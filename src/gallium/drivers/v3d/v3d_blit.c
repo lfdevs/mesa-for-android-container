@@ -479,8 +479,7 @@ v3d_tlb_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         if (is_color_blit)
                 surfaces[0] = dst_surf;
 
-        bool double_buffer =
-                 unlikely(V3D_DEBUG & V3D_DEBUG_DOUBLE_BUFFER) && !msaa;
+        bool double_buffer = V3D_DBG(DOUBLE_BUFFER) && !msaa;
 
         uint32_t tile_width, tile_height, max_bpp;
         v3d_get_tile_buffer_size(msaa, double_buffer,

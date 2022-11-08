@@ -205,14 +205,14 @@ do_triangle(struct draw_context *draw,
 
 #define FUNC pipe_run_elts
 #define FUNC_VARS                               \
-    struct draw_context *draw,                  \
-    enum pipe_prim_type prim,                   \
-    unsigned prim_flags,                        \
-    struct vertex_header *vertices,             \
-    unsigned stride,                            \
-    const ushort *elts,                         \
-    unsigned count,                             \
-    unsigned max_index
+   struct draw_context *draw,                  \
+   enum pipe_prim_type prim,                   \
+   unsigned prim_flags,                        \
+   struct vertex_header *vertices,             \
+   unsigned stride,                            \
+   const ushort *elts,                         \
+   unsigned count,                             \
+   unsigned max_index
 
 #include "draw_pt_decompose.h"
 
@@ -302,13 +302,13 @@ draw_pipeline_run(struct draw_context *draw,
 #define GET_ELT(idx) (idx)
 
 #define FUNC pipe_run_linear
-#define FUNC_VARS                      \
-    struct draw_context *draw,         \
-    enum pipe_prim_type prim,          \
-    unsigned prim_flags,               \
-    struct vertex_header *vertices,    \
-    unsigned stride,                   \
-    unsigned count
+#define FUNC_VARS                     \
+   struct draw_context *draw,         \
+   enum pipe_prim_type prim,          \
+   unsigned prim_flags,               \
+   struct vertex_header *vertices,    \
+   unsigned stride,                   \
+   unsigned count
 
 #include "draw_pt_decompose.h"
 
@@ -321,9 +321,7 @@ draw_pipeline_run_linear(struct draw_context *draw,
                          const struct draw_vertex_info *vert_info,
                          const struct draw_prim_info *prim_info)
 {
-   unsigned i, start;
-
-   for (start = i = 0;
+   for (unsigned start = 0, i = 0;
         i < prim_info->primitive_count;
         start += prim_info->primitive_lengths[i], i++) {
       unsigned count = prim_info->primitive_lengths[i];

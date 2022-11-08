@@ -37,7 +37,7 @@
 #include "pipe/p_screen.h"
 #include "util/u_atomic.h"
 #include "util/u_upload_mgr.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/u_prim.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
@@ -356,8 +356,6 @@ crocus_fix_edge_flags(nir_shader *nir)
                                nir_metadata_dominance |
                                nir_metadata_live_ssa_defs |
                                nir_metadata_loop_analysis);
-      } else {
-         nir_metadata_preserve(f->impl, nir_metadata_all);
       }
    }
 
@@ -792,7 +790,7 @@ skip_compacting_binding_tables(void)
 {
    static int skip = -1;
    if (skip < 0)
-      skip = env_var_as_boolean("INTEL_DISABLE_COMPACT_BINDING_TABLE", false);
+      skip = debug_get_bool_option("INTEL_DISABLE_COMPACT_BINDING_TABLE", false);
    return skip;
 }
 

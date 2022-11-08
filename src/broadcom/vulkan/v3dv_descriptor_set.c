@@ -339,6 +339,7 @@ v3dv_CreatePipelineLayout(VkDevice _device,
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    layout->num_sets = pCreateInfo->setLayoutCount;
+   layout->ref_cnt = 1;
 
    uint32_t dynamic_offset_count = 0;
    for (uint32_t set = 0; set < pCreateInfo->setLayoutCount; set++) {
@@ -381,6 +382,19 @@ v3dv_CreatePipelineLayout(VkDevice _device,
    return VK_SUCCESS;
 }
 
+void
+v3dv_pipeline_layout_destroy(struct v3dv_device *device,
+                             struct v3dv_pipeline_layout *layout,
+                             const VkAllocationCallbacks *alloc)
+{
+   assert(layout);
+
+   for (uint32_t i = 0; i < layout->num_sets; i++)
+      v3dv_descriptor_set_layout_unref(device, layout->set[i].layout);
+
+   vk_object_free(&device->vk, alloc, layout);
+}
+
 VKAPI_ATTR void VKAPI_CALL
 v3dv_DestroyPipelineLayout(VkDevice _device,
                           VkPipelineLayout _pipelineLayout,
@@ -392,10 +406,7 @@ v3dv_DestroyPipelineLayout(VkDevice _device,
    if (!pipeline_layout)
       return;
 
-   for (uint32_t i = 0; i < pipeline_layout->num_sets; i++)
-      v3dv_descriptor_set_layout_unref(device, pipeline_layout->set[i].layout);
-
-   vk_object_free(&device->vk, pAllocator, pipeline_layout);
+   v3dv_pipeline_layout_unref(device, pipeline_layout, pAllocator);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -504,6 +515,8 @@ v3dv_CreateDescriptorPool(VkDevice _device,
       pool->bo = NULL;
    }
 
+   list_inithead(&pool->set_list);
+
    *pDescriptorPool = v3dv_descriptor_pool_to_handle(pool);
 
    return VK_SUCCESS;
@@ -520,8 +533,6 @@ descriptor_set_destroy(struct v3dv_device *device,
                        bool free_bo)
 {
    assert(!pool->host_memory_base);
-
-   v3dv_descriptor_set_layout_unref(device, set->layout);
 
    if (free_bo && !pool->host_memory_base) {
       for (uint32_t i = 0; i < pool->entry_count; i++) {
@@ -547,6 +558,11 @@ v3dv_DestroyDescriptorPool(VkDevice _device,
    if (!pool)
       return;
 
+   list_for_each_entry_safe(struct v3dv_descriptor_set, set,
+                            &pool->set_list, pool_link) {
+      v3dv_descriptor_set_layout_unref(device, set->layout);
+   }
+
    if (!pool->host_memory_base) {
       for(int i = 0; i < pool->entry_count; ++i) {
          descriptor_set_destroy(device, pool, pool->entries[i].set, false);
@@ -568,6 +584,12 @@ v3dv_ResetDescriptorPool(VkDevice _device,
 {
    V3DV_FROM_HANDLE(v3dv_device, device, _device);
    V3DV_FROM_HANDLE(v3dv_descriptor_pool, pool, descriptorPool);
+
+   list_for_each_entry_safe(struct v3dv_descriptor_set, set,
+                            &pool->set_list, pool_link) {
+      v3dv_descriptor_set_layout_unref(device, set->layout);
+   }
+   list_inithead(&pool->set_list);
 
    if (!pool->host_memory_base) {
       for(int i = 0; i < pool->entry_count; ++i) {
@@ -898,6 +920,8 @@ descriptor_set_create(struct v3dv_device *device,
    }
 
    v3dv_descriptor_set_layout_ref(layout);
+   list_addtail(&set->pool_link, &pool->set_list);
+
    *out_set = set;
 
    return VK_SUCCESS;
@@ -948,8 +972,13 @@ v3dv_FreeDescriptorSets(VkDevice _device,
 
    for (uint32_t i = 0; i < count; i++) {
       V3DV_FROM_HANDLE(v3dv_descriptor_set, set, pDescriptorSets[i]);
-      if (set && !pool->host_memory_base)
-         descriptor_set_destroy(device, pool, set, true);
+
+      if (set) {
+         v3dv_descriptor_set_layout_unref(device, set->layout);
+         list_del(&set->pool_link);
+         if (!pool->host_memory_base)
+            descriptor_set_destroy(device, pool, set, true);
+      }
    }
 
    return VK_SUCCESS;

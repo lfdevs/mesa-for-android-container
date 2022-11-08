@@ -119,27 +119,41 @@ etna_configure_sampler_ts(struct etna_sampler_ts *sts, struct pipe_sampler_view 
 static bool
 etna_can_use_sampler_ts(struct pipe_sampler_view *view, int num)
 {
-    /* Can use sampler TS when:
-     * - the hardware supports sampler TS.
-     * - the sampler view will be bound to sampler <VIVS_TS_SAMPLER__LEN.
-     *   HALTI5 adds a mapping from sampler to sampler TS unit, but this is AFAIK
-     *   absent on earlier models.
-     * - it is a texture, not a buffer.
-     * - the sampler view has a supported format for sampler TS.
-     * - the sampler will have one LOD, and it happens to be level 0.
-     *   (it is not sure if the hw supports it for other levels, but available
-     *   state strongly suggests only one at a time).
-     * - the resource TS is valid for level 0.
-     */
    struct etna_resource *rsc = etna_resource(view->texture);
    struct etna_screen *screen = etna_screen(rsc->base.screen);
 
-   return VIV_FEATURE(screen, chipMinorFeatures2, TEXTURE_TILED_READ) &&
-      num < VIVS_TS_SAMPLER__LEN &&
-      rsc->base.target != PIPE_BUFFER &&
-      (rsc->levels[0].ts_compress_fmt < 0 || screen->specs.v4_compression) &&
-      view->u.tex.first_level == 0 && MIN2(view->u.tex.last_level, rsc->base.last_level) == 0 &&
-      rsc->levels[0].ts_valid;
+   /* Sampler TS can be used under the following conditions: */
+
+   /* The hardware supports it. */
+   if (!VIV_FEATURE(screen, chipMinorFeatures2, TEXTURE_TILED_READ))
+      return false;
+
+   /* The sampler view will be bound to sampler < VIVS_TS_SAMPLER__LEN.
+    * HALTI5 adds a mapping from sampler to sampler TS unit, but this is AFAIK
+    * absent on earlier models. */
+   if (num >= VIVS_TS_SAMPLER__LEN)
+      return false;
+
+   /* It is a texture, not a buffer. */
+   if (rsc->base.target == PIPE_BUFFER)
+      return false;
+
+   /* Does not use compression or the hardware supports V4 compression. */
+   if (rsc->levels[0].ts_compress_fmt >= 0 && !screen->specs.v4_compression)
+      return false;
+
+   /* The sampler will have one LOD, and it happens to be level 0.
+    * (It is not sure if the hw supports it for other levels, but available
+    *  state strongly suggests only one at a time). */
+   if (view->u.tex.first_level != 0 ||
+       MIN2(view->u.tex.last_level, rsc->base.last_level) != 0)
+      return false;
+
+   /* The resource TS is valid for level 0. */
+   if (!rsc->levels[0].ts_valid)
+      return false;
+
+   return true;
 }
 
 void

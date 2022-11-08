@@ -29,7 +29,7 @@
 #include "freedreno_drmif.h"
 #include "freedreno_priv.h"
 
-simple_mtx_t table_lock = _SIMPLE_MTX_INITIALIZER_NP;
+simple_mtx_t table_lock = SIMPLE_MTX_INITIALIZER;
 void bo_del(struct fd_bo *bo);
 
 /* set buffer name, and add to table, call w/ table_lock held: */
@@ -253,14 +253,6 @@ void
 fd_bo_mark_for_dump(struct fd_bo *bo)
 {
    bo->reloc_flags |= FD_RELOC_DUMP;
-}
-
-uint64_t
-fd_bo_get_iova(struct fd_bo *bo)
-{
-   /* ancient kernels did not support this */
-   assert(bo->iova != 0);
-   return bo->iova;
 }
 
 struct fd_bo *
@@ -487,14 +479,23 @@ fd_bo_map(struct fd_bo *bo)
 }
 
 void
-fd_bo_upload(struct fd_bo *bo, void *src, unsigned len)
+fd_bo_upload(struct fd_bo *bo, void *src, unsigned off, unsigned len)
 {
    if (bo->funcs->upload) {
-      bo->funcs->upload(bo, src, len);
+      bo->funcs->upload(bo, src, off, len);
       return;
    }
 
-   memcpy(bo_map(bo), src, len);
+   memcpy((uint8_t *)bo_map(bo) + off, src, len);
+}
+
+bool
+fd_bo_prefer_upload(struct fd_bo *bo, unsigned len)
+{
+   if (bo->funcs->prefer_upload)
+      return bo->funcs->prefer_upload(bo, len);
+
+   return false;
 }
 
 /* a bit odd to take the pipe as an arg, but it's a, umm, quirk of kgsl.. */
@@ -526,10 +527,15 @@ fd_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
     */
    bo_flush(bo);
 
+   op &= ~FD_BO_PREP_FLUSH;
+
+   if (!op)
+      return 0;
+
    /* FD_BO_PREP_FLUSH is purely a frontend flag, and is not seen/handled
     * by backend or kernel:
     */
-   return bo->funcs->cpu_prep(bo, pipe, op & ~FD_BO_PREP_FLUSH);
+   return bo->funcs->cpu_prep(bo, pipe, op);
 }
 
 void

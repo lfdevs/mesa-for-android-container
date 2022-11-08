@@ -470,7 +470,6 @@ bind_samplers(struct xa_context *ctx,
 	src_sampler.min_img_filter = filter;
 	src_sampler.mag_img_filter = filter;
 	src_sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NEAREST;
-	src_sampler.normalized_coords = 1;
 	samplers[0] = &src_sampler;
 	u_sampler_view_default_template(&view_templ,
 					src_pic->srf->tex,+					src_pic->srf->tex->format);
@@ -491,7 +490,6 @@ bind_samplers(struct xa_context *ctx,
 	mask_sampler.min_img_filter = filter;
 	mask_sampler.mag_img_filter = filter;
 	src_sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NEAREST;
-	mask_sampler.normalized_coords = 1;
         samplers[num_samplers] = &mask_sampler;
 	u_sampler_view_default_template(&view_templ,
 					mask_pic->srf->tex,

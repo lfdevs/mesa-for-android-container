@@ -14,11 +14,12 @@
   </enum>
 
   <enum name="Attribute Special">
+    <value name="Point Coord Min Y" value="33"/>
     <value name="Vertex ID" value="34"/>
     <value name="Instance ID" value="36"/>
     <value name="Frag Coord" value="37"/>
     <value name="Front Facing" value="38"/>
-    <value name="Point Coord" value="97"/>
+    <value name="Point Coord Max Y" value="97"/>
   </enum>
 
   <enum name="Channel">

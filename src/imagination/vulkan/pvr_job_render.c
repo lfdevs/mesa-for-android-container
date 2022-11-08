@@ -370,12 +370,12 @@ pvr_rt_get_isp_region_size(struct pvr_device *device,
 {
    const struct pvr_device_info *dev_info = &device->pdevice->dev_info;
    uint64_t rgn_size =
-      mtile_info->tiles_per_mtile_x * mtile_info->tiles_per_mtile_y;
+      (uint64_t)mtile_info->tiles_per_mtile_x * mtile_info->tiles_per_mtile_y;
 
    if (PVR_HAS_FEATURE(dev_info, simple_internal_parameter_format)) {
       uint32_t version;
 
-      rgn_size *= mtile_info->mtiles_x * mtile_info->mtiles_y;
+      rgn_size *= (uint64_t)mtile_info->mtiles_x * mtile_info->mtiles_y;
 
       if (PVR_FEATURE_VALUE(dev_info,
                             simple_parameter_format_version,
@@ -476,7 +476,7 @@ pvr_rt_get_tail_ptr_stride_size(const struct pvr_device *device,
    max_num_mtiles = MAX2(util_next_power_of_two64(num_mtiles_x),
                          util_next_power_of_two64(num_mtiles_y));
 
-   size = max_num_mtiles * max_num_mtiles;
+   size = (uint64_t)max_num_mtiles * max_num_mtiles;
 
    if (PVR_FEATURE_VALUE(&device->pdevice->dev_info,
                          simple_parameter_format_version,
@@ -573,7 +573,7 @@ static void pvr_rt_get_region_headers_stride_size(
 {
    const struct pvr_device_info *dev_info = &device->pdevice->dev_info;
    const uint32_t rgn_header_size = rogue_get_region_header_size(dev_info);
-   uint32_t rgn_headers_size;
+   uint64_t rgn_headers_size;
    uint32_t num_tiles_x;
    uint32_t num_tiles_y;
    uint32_t group_size;
@@ -587,8 +587,10 @@ static void pvr_rt_get_region_headers_stride_size(
    num_tiles_x = mtile_info->mtiles_x * mtile_info->tiles_per_mtile_x;
    num_tiles_y = mtile_info->mtiles_y * mtile_info->tiles_per_mtile_y;
 
-   rgn_headers_size =
-      (num_tiles_x / group_size) * (num_tiles_y / group_size) * rgn_header_size;
+   rgn_headers_size = (uint64_t)num_tiles_x / group_size;
+   /* Careful here. We want the division to happen first. */
+   rgn_headers_size *= num_tiles_y / group_size;
+   rgn_headers_size *= rgn_header_size;
 
    if (PVR_HAS_FEATURE(dev_info, simple_internal_parameter_format)) {
       rgn_headers_size =
@@ -1051,6 +1053,8 @@ pvr_render_target_dataset_create(struct pvr_device *device,
                                  uint32_t layers,
                                  struct pvr_rt_dataset **const rt_dataset_out)
 {
+   struct pvr_device_runtime_info *runtime_info =
+      &device->pdevice->dev_runtime_info;
    const struct pvr_device_info *dev_info = &device->pdevice->dev_info;
    struct pvr_winsys_rt_dataset_create_info rt_dataset_create_info;
    struct pvr_rt_mtile_info mtile_info;
@@ -1084,8 +1088,8 @@ pvr_render_target_dataset_create(struct pvr_device *device,
     * details.
     */
    result = pvr_free_list_create(device,
-                                 rogue_get_min_free_list_size(dev_info),
-                                 rogue_get_min_free_list_size(dev_info),
+                                 runtime_info->min_free_list_size,
+                                 runtime_info->min_free_list_size,
                                  0 /* grow_size */,
                                  0 /* grow_threshold */,
                                  rt_dataset->global_free_list,
@@ -1503,8 +1507,8 @@ pvr_render_job_ws_fragment_state_init(struct pvr_render_ctx *ctx,
 static void pvr_render_job_ws_submit_info_init(
    struct pvr_render_ctx *ctx,
    struct pvr_render_job *job,
-   const struct pvr_winsys_job_bo *bos,
-   uint32_t bo_count,
+   struct vk_sync *barrier_geom,
+   struct vk_sync *barrier_frag,
    struct vk_sync **waits,
    uint32_t wait_count,
    uint32_t *stage_flags,
@@ -1520,14 +1524,12 @@ static void pvr_render_job_ws_submit_info_init(
 
    submit_info->run_frag = job->run_frag;
 
-   submit_info->bos = bos;
-   submit_info->bo_count = bo_count;
+   submit_info->barrier_geom = barrier_geom;
+   submit_info->barrier_frag = barrier_frag;
 
    submit_info->waits = waits;
    submit_info->wait_count = wait_count;
    submit_info->stage_flags = stage_flags;
-
-   /* FIXME: add WSI image bos. */
 
    pvr_render_job_ws_geometry_state_init(ctx, job, &submit_info->geometry);
    pvr_render_job_ws_fragment_state_init(ctx, job, &submit_info->fragment);
@@ -1538,8 +1540,8 @@ static void pvr_render_job_ws_submit_info_init(
 
 VkResult pvr_render_job_submit(struct pvr_render_ctx *ctx,
                                struct pvr_render_job *job,
-                               const struct pvr_winsys_job_bo *bos,
-                               uint32_t bo_count,
+                               struct vk_sync *barrier_geom,
+                               struct vk_sync *barrier_frag,
                                struct vk_sync **waits,
                                uint32_t wait_count,
                                uint32_t *stage_flags,
@@ -1553,8 +1555,8 @@ VkResult pvr_render_job_submit(struct pvr_render_ctx *ctx,
 
    pvr_render_job_ws_submit_info_init(ctx,
                                       job,
-                                      bos,
-                                      bo_count,
+                                      barrier_geom,
+                                      barrier_frag,
                                       waits,
                                       wait_count,
                                       stage_flags,

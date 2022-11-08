@@ -797,6 +797,7 @@ add_branch_code(exec_ctx& ctx, Block* block)
       assert(block->linear_succs.size() == 2);
       assert(block->instructions.back()->opcode == aco_opcode::p_cbranch_z);
       Temp cond = block->instructions.back()->operands[0].getTemp();
+      nir_selection_control sel_ctrl = block->instructions.back()->branch().selection_control;
       block->instructions.pop_back();
 
       uint8_t mask_type = ctx.info[idx].exec.back().second & (mask_type_wqm | mask_type_exact);
@@ -812,22 +813,25 @@ add_branch_code(exec_ctx& ctx, Block* block)
       /* add next current exec to the stack */
       ctx.info[idx].exec.emplace_back(Operand(bld.lm), mask_type);
 
-      bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), Operand(exec, bld.lm),
-                 block->linear_succs[1], block->linear_succs[0]);
+      Builder::Result r = bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), Operand(exec, bld.lm),
+                                     block->linear_succs[1], block->linear_succs[0]);
+      r.instr->branch().selection_control = sel_ctrl;
       return;
    }
 
    if (block->kind & block_kind_invert) {
       // exec = s_andn2_b64 (original_exec, exec)
       assert(block->instructions.back()->opcode == aco_opcode::p_branch);
+      nir_selection_control sel_ctrl = block->instructions.back()->branch().selection_control;
       block->instructions.pop_back();
       assert(ctx.info[idx].exec.size() >= 2);
       Operand orig_exec = ctx.info[idx].exec[ctx.info[idx].exec.size() - 2].first;
       bld.sop2(Builder::s_andn2, Definition(exec, bld.lm), bld.def(s1, scc), orig_exec,
                Operand(exec, bld.lm));
 
-      bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), Operand(exec, bld.lm),
-                 block->linear_succs[1], block->linear_succs[0]);
+      Builder::Result r = bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), Operand(exec, bld.lm),
+                                     block->linear_succs[1], block->linear_succs[0]);
+      r.instr->branch().selection_control = sel_ctrl;
       return;
    }
 

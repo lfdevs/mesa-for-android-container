@@ -43,9 +43,6 @@ class AddImm : public testing::Test {
 protected:
    AddImm() {
       mem_ctx = ralloc_context(NULL);
-
-      /* For bi_imm_f16 */
-      util_cpu_detect();
    }
 
    ~AddImm() {

@@ -93,6 +93,7 @@ amd_common_files = files(
   'ac_nir_cull.c',
   'ac_nir_lower_esgs_io_to_mem.c',
   'ac_nir_lower_global_access.c',
+  'ac_nir_lower_resinfo.c',
   'ac_nir_lower_taskmesh_io_to_mem.c',
   'ac_nir_lower_tess_io_to_mem.c',
   'ac_nir_lower_ngg.c',
@@ -101,7 +102,7 @@ amd_common_files = files(
   'ac_perfcounter.h',
 )
 
-if not with_platform_windows
+if dep_elf.found()
   amd_common_files += files(
     'ac_rtld.c',
     'ac_rtld.h',

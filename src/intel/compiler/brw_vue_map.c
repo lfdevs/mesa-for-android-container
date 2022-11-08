@@ -206,6 +206,7 @@ brw_compute_vue_map(const struct intel_device_info *devinfo,
    }
 
    vue_map->num_slots = slot;
+   vue_map->num_pos_slots = pos_slots;
    vue_map->num_per_vertex_slots = 0;
    vue_map->num_per_patch_slots = 0;
 }
@@ -275,6 +276,7 @@ brw_compute_tess_vue_map(struct brw_vue_map *vue_map,
    }
 
    vue_map->num_per_vertex_slots = slot - vue_map->num_per_patch_slots;
+   vue_map->num_pos_slots = 0;
    vue_map->num_slots = slot;
 }
 

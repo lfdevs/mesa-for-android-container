@@ -226,12 +226,32 @@ namespace {
       // class to recognize it as an OpenCL source file.
 #if LLVM_VERSION_MAJOR >= 12
       std::vector<const char *> copts;
-#if LLVM_VERSION_MAJOR >= 15
-      // Since LLVM commit 702d5de4 opaque pointers are enabled by default:
-      // https://gitlab.freedesktop.org/mesa/mesa/-/issues/6342
-      // A better implementation may be doable following suggestions from there:
-      // https://github.com/llvm/llvm-project/issues/54970#issuecomment-1102254254
-      copts.push_back("-no-opaque-pointers");
+#if LLVM_VERSION_MAJOR == 15 || LLVM_VERSION_MAJOR == 16
+      // Before LLVM commit 702d5de4 opaque pointers were supported but not enabled
+      // by default when building LLVM. They were made default in commit 702d5de4.
+      // LLVM commit d69e9f9d introduced -opaque-pointers/-no-opaque-pointers cc1
+      // options to enable or disable them whatever the LLVM default is.
+
+      // Those two commits follow llvmorg-15-init and precede llvmorg-15.0.0-rc1 tags.
+
+      // Since LLVM commit d785a8ea, the CLANG_ENABLE_OPAQUE_POINTERS build option of
+      // LLVM is removed, meaning there is no way to build LLVM with opaque pointers
+      // enabled by default.
+      // It was said at the time it was still possible to explicitly disable opaque
+      // pointers via cc1 -no-opaque-pointers option, but it is known a later commit
+      // broke backward compatibility provided by -no-opaque-pointers as verified with
+      // arbitrary commit d7d586e5, so there is no way to use opaque pointers starting
+      // with LLVM 16.
+
+      // Those two commits follow llvmorg-16-init and precede llvmorg-16.0.0-rc1 tags.
+
+      // Since Mesa commit 977dbfc9 opaque pointers are properly implemented in Clover
+      // and used.
+
+      // If we don't pass -opaque-pointers to Clang on LLVM versions supporting opaque
+      // pointers but disabling them by default, there will be an API mismatch between
+      // Mesa and LLVM and Clover will not work.
+      copts.push_back("-opaque-pointers");
 #endif
       for (auto &opt : opts) {
          if (opt == "-cl-denorms-are-zero")

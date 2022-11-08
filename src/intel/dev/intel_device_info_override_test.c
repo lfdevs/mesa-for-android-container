@@ -71,6 +71,7 @@ main(int argc, char *argv[])
       fprintf(stderr, "%u\n", devinfo.verx10);
       assert(devinfo.verx10 == verx10);
       verify_device_info(&devinfo);
+      assert(devinfo.engine_class_prefetch[INTEL_ENGINE_CLASS_RENDER] > 0);
    }
 
    return 0;

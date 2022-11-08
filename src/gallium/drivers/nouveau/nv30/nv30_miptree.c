@@ -33,6 +33,7 @@
 #include "nv30/nv30_context.h"
 #include "nv30/nv30_resource.h"
 #include "nv30/nv30_transfer.h"
+#include "nv30/nv30_winsys.h"
 
 static inline unsigned
 layer_offset(struct pipe_resource *pt, unsigned level, unsigned layer)
@@ -359,7 +360,7 @@ nv30_miptree_transfer_map(struct pipe_context *pipe, struct pipe_resource *pt,
    if (usage & PIPE_MAP_WRITE)
       access |= NOUVEAU_BO_WR;
 
-   ret = nouveau_bo_map(tx->tmp.bo, access, nv30->base.client);
+   ret = BO_MAP(nv30->base.screen, tx->tmp.bo, access, nv30->base.client);
    if (ret) {
       pipe_resource_reference(&tx->base.resource, NULL);
       FREE(tx);
@@ -393,7 +394,7 @@ nv30_miptree_transfer_unmap(struct pipe_context *pipe,
       }
 
       /* Allow the copies above to finish executing before freeing the source */
-      nouveau_fence_work(nv30->screen->base.fence.current,
+      nouveau_fence_work(nv30->base.fence,
                          nouveau_fence_unref_bo, tx->tmp.bo);
    } else {
       nouveau_bo_ref(NULL, &tx->tmp.bo);

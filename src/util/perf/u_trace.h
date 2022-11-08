@@ -28,6 +28,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "util/macros.h"
+#include "util/u_atomic.h"
 #include "util/u_queue.h"
 
 #ifdef __cplusplus
@@ -187,8 +189,6 @@ struct u_trace {
    struct u_trace_context *utctx;
 
    struct list_head trace_chunks;  /* list of unflushed trace chunks in fifo order */
-
-   bool enabled;
 };
 
 void u_trace_context_init(struct u_trace_context *utctx,
@@ -272,12 +272,6 @@ void u_trace_disable_event_range(struct u_trace_iterator begin_it,
  */
 void u_trace_flush(struct u_trace *ut, void *flush_data, bool free_data);
 
-/**
- * Whether command buffers should be instrumented even if not collecting
- * traces.
- */
-extern bool ut_trace_instrument;
-
 #ifdef HAVE_PERFETTO
 extern int ut_perfetto_enabled;
 
@@ -287,16 +281,21 @@ void u_trace_perfetto_stop(void);
 #  define ut_perfetto_enabled 0
 #endif
 
+/**
+ * Return whether instrumentations should be enabled or not.  This is called
+ * from tracepoints.
+ */
+static ALWAYS_INLINE bool
+u_trace_instrument(void)
+{
+   extern int _u_trace_instrument;
+   return p_atomic_read_relaxed(&_u_trace_instrument);
+}
+
 static inline bool
 u_trace_context_actively_tracing(struct u_trace_context *utctx)
 {
    return !!utctx->out || (ut_perfetto_enabled > 0);
-}
-
-static inline bool
-u_trace_context_instrumenting(struct u_trace_context *utctx)
-{
-   return !!utctx->out || ut_trace_instrument || (ut_perfetto_enabled > 0);
 }
 
 #ifdef __cplusplus

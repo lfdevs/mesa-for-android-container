@@ -67,7 +67,8 @@ struct rastpos_stage
 
    /* vertex attrib info we can setup once and re-use */
    struct gl_vertex_array_object *VAO;
-   struct _mesa_prim prim;
+   struct pipe_draw_info info;
+   struct pipe_draw_start_count_bias draw;
 };
 
 
@@ -208,11 +209,9 @@ new_draw_rastpos_stage(struct gl_context *ctx, struct draw_context *draw)
                              GL_RGBA, GL_FALSE, GL_FALSE, GL_FALSE, 0);
    _mesa_enable_vertex_array_attrib(ctx, rs->VAO, 0);
 
-   rs->prim.mode = GL_POINTS;
-   rs->prim.begin = 1;
-   rs->prim.end = 1;
-   rs->prim.start = 0;
-   rs->prim.count = 1;
+   rs->info.mode = PIPE_PRIM_POINTS;
+   rs->info.instance_count = 1;
+   rs->draw.count = 1;
 
    return rs;
 }
@@ -267,8 +266,7 @@ st_RasterPos(struct gl_context *ctx, const GLfloat v[4])
       rs->VAO->NewVertexElements = true;
    _mesa_set_draw_vao(ctx, rs->VAO, VERT_BIT_POS);
 
-   /* Draw the point. */
-   st_feedback_draw_vbo(ctx, &rs->prim, 1, NULL, true, false, 0, 0, 1, 1, 0);
+   st_feedback_draw_vbo(ctx, &rs->info, 0, &rs->draw, 1);
 
    /* restore draw's rasterization stage depending on rendermode */
    if (ctx->RenderMode == GL_FEEDBACK) {

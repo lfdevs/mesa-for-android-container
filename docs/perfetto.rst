@@ -14,14 +14,14 @@ data-sources for things like:
 
 As well as various domain specific producers.
 
-The mesa perfetto support adds additional producers, to allow for visualizing
+The mesa Perfetto support adds additional producers, to allow for visualizing
 GPU performance (frequency, utilization, performance counters, etc) on the
 same timeline, to better understand and tune/debug system level performance:
 
 - pps-producer: A systemwide daemon that can collect global performance
   counters.
 - mesa: Per-process producer within mesa to capture render-stage traces
-  on the GPU timeline, track events, etc.
+  on the GPU timeline, track events on the CPU timeline, etc.
 
 The exact supported features vary per driver:
 
@@ -36,10 +36,10 @@ The exact supported features vary per driver:
      - ``gpu.renderstages.msm``
    * - Turnip
      - ``gpu.counters.msm``
-     -
+     - ``gpu.renderstages.msm``
    * - Intel
      - ``gpu.counters.i915``
-     -
+     - ``gpu.renderstages.i915``
    * - Panfrost
      - ``gpu.counters.panfrost``
      -
@@ -47,9 +47,9 @@ The exact supported features vary per driver:
 Run
 ---
 
-To capture a trace with perfetto you need to take the following steps:
+To capture a trace with Perfetto you need to take the following steps:
 
-1. Build perfetto from sources available at ``subprojects/perfetto`` following
+1. Build Perfetto from sources available at ``subprojects/perfetto`` following
    `this guide <https://perfetto.dev/docs/quickstart/linux-tracing>`__.
 
 2. Create a `trace config <https://perfetto.dev/#/trace-config.md>`__, which is
@@ -104,13 +104,21 @@ the steps above :
 
    # Back in the perfetto tmux, press enter to start the capture
 
+CPU Tracing
+~~~~~~~~~~~
+
+Mesa's CPU tracepoints (``MESA_TRACE_*``) use Perfetto track events when
+Perfetto is enabled.  They use ``mesa.default`` and ``mesa.slow`` categories.
+
+Currently, only EGL and Freedreno have CPU tracepoints.
+
 Vulkan data sources
 ~~~~~~~~~~~~~~~~~~~
 
 The Vulkan API gives the application control over recording of command
 buffers as well as when they are submitted to the hardware. As a
 consequence, we need to ensure command buffers are properly
-instrumented for the perfetto driver data sources prior to Perfetto
+instrumented for the Perfetto driver data sources prior to Perfetto
 actually collecting traces.
 
 This can be achieved by setting the ``GPU_TRACE_INSTRUMENT``

@@ -1,0 +1,2 @@
+spec@arb_shader_image_load_store@host-mem-barrier
+spec@arb_shader_image_load_store@host-mem-barrier@Vertex array/RaW/one bit barrier test/64x64

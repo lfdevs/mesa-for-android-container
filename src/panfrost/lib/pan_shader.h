@@ -27,6 +27,7 @@
 
 #include "compiler/nir/nir.h"
 #include "panfrost/util/pan_ir.h"
+#include "panfrost/util/pan_lower_framebuffer.h"
 
 #include "pan_device.h"
 #include "genxml/gen_macros.h"
@@ -42,6 +43,11 @@ GENX(pan_shader_compile)(nir_shader *nir,
                          struct panfrost_compile_inputs *inputs,
                          struct util_dynarray *binary,
                          struct pan_shader_info *info);
+
+#if PAN_ARCH >= 6 && PAN_ARCH <= 7
+enum mali_register_file_format
+GENX(pan_fixup_blend_type)(nir_alu_type T_size, enum pipe_format format);
+#endif
 
 #if PAN_ARCH >= 9
 static inline enum mali_shader_stage

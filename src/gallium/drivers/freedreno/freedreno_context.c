@@ -591,15 +591,15 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 {
    struct fd_screen *screen = fd_screen(pscreen);
    struct pipe_context *pctx;
-   unsigned prio = 1;
+   unsigned prio = screen->prio_norm;
 
    /* lower numerical value == higher priority: */
    if (FD_DBG(HIPRIO))
-      prio = 0;
+      prio = screen->prio_high;
    else if (flags & PIPE_CONTEXT_HIGH_PRIORITY)
-      prio = 0;
+      prio = screen->prio_high;
    else if (flags & PIPE_CONTEXT_LOW_PRIORITY)
-      prio = 2;
+      prio = screen->prio_low;
 
    /* Some of the stats will get printed out at context destroy, so
     * make sure they are collected:
@@ -665,7 +665,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
    list_add(&ctx->node, &ctx->screen->context_list);
    fd_screen_unlock(ctx->screen);
 
-   ctx->current_scissor = &ctx->disabled_scissor;
+   ctx->current_scissor = ctx->disabled_scissor;
 
    fd_gpu_tracepoint_config_variable();
    u_trace_pipe_context_init(&ctx->trace_context, pctx,
@@ -701,6 +701,7 @@ fd_context_init_tc(struct pipe_context *pctx, unsigned flags)
          .create_fence = fd_fence_create_unflushed,
          .is_resource_busy = fd_resource_busy,
          .unsynchronized_get_device_reset_status = true,
+         .unsynchronized_create_fence_fd = true,
       },
       &ctx->tc);
 

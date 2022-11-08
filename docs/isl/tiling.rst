@@ -158,7 +158,7 @@ X-tiling so we have historically used X-tiling for all window-system buffers
 Bit-6 Swizzling
 ^^^^^^^^^^^^^^^
 
-When bit-6 swizzling is enabled, bits 9 and 10 are XOR'd in with bit 6 of the
+When bit-6 swizzling is enabled, bits 9 and 10 are XORed in with bit 6 of the
 tiled address:
 
 .. code-block:: c
@@ -201,7 +201,7 @@ Starting with Sky Lake, we can scan out from Y-tiled buffers.
 Bit-6 Swizzling
 ^^^^^^^^^^^^^^^
 
-When bit-6 swizzling is enabled, bit 9 is XOR'd in with bit 6 of the tiled
+When bit-6 swizzling is enabled, bit 9 is XORed in with bit 6 of the tiled
 address:
 
 .. code-block:: c

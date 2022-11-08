@@ -342,7 +342,7 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
    Display *dpy = gc->psc->dpy;
    struct glx_display *const priv = __glXInitialize(dpy);
    __GLXDRIdrawable *pdraw;
-   struct glx_screen *psc;
+   struct glx_screen *psc = gc->psc;
    struct glx_config *config = gc->config;
    unsigned int type;
 
@@ -352,7 +352,6 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
    if (glxDrawable == None)
       return NULL;
 
-   psc = priv->screens[gc->screen];
    if (priv->drawHash == NULL)
       return NULL;
 
@@ -366,7 +365,7 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
 
    /* if this is a no-config context, infer the fbconfig from the drawable */
    if (config == NULL)
-      config = driInferDrawableConfig(gc->psc, glxDrawable);
+      config = driInferDrawableConfig(psc, glxDrawable);
    if (config == NULL)
       return NULL;
 

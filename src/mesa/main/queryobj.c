@@ -321,10 +321,9 @@ get_query_result(struct pipe_context *pipe,
    if (q->Target == GL_TIME_ELAPSED &&
        q->type == PIPE_QUERY_TIMESTAMP) {
       /* Calculate the elapsed time from the two timestamp queries */
-      GLuint64EXT Result0 = 0;
       assert(q->pq_begin);
-      pipe->get_query_result(pipe, q->pq_begin, TRUE, (void *)&Result0);
-      q->Result -= Result0;
+      pipe->get_query_result(pipe, q->pq_begin, TRUE, &data);
+      q->Result -= data.u64;
    } else {
       assert(!q->pq_begin);
    }

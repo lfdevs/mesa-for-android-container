@@ -136,7 +136,7 @@ copy_buffer_to_image(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *buf
                                                          cmd_buffer->qf);
       bool compressed =
          radv_layout_dcc_compressed(cmd_buffer->device, image, region->imageSubresource.mipLevel,
-                                    layout, false, queue_mask);
+                                    layout, queue_mask);
       if (compressed) {
          radv_decompress_dcc(cmd_buffer, image,
                              &(VkImageSubresourceRange){
@@ -285,7 +285,7 @@ copy_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *buf
                                                          cmd_buffer->qf);
       bool compressed =
          radv_layout_dcc_compressed(cmd_buffer->device, image, region->imageSubresource.mipLevel,
-                                    layout, false, queue_mask);
+                                    layout, queue_mask);
       if (compressed) {
          radv_decompress_dcc(cmd_buffer, image,
                              &(VkImageSubresourceRange){
@@ -383,7 +383,7 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
                                                          cmd_buffer->qf);
 
       if (radv_layout_is_htile_compressed(cmd_buffer->device, dst_image, dst_image_layout,
-                                          false, queue_mask) &&
+                                          queue_mask) &&
           (region->dstOffset.x || region->dstOffset.y || region->dstOffset.z ||
            region->extent.width != dst_image->info.width ||
            region->extent.height != dst_image->info.height ||
@@ -433,12 +433,12 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
          dst_image, cmd_buffer->qf, cmd_buffer->qf);
       bool dst_compressed = radv_layout_dcc_compressed(cmd_buffer->device, dst_image,
                                                        region->dstSubresource.mipLevel,
-                                                       dst_image_layout, false, dst_queue_mask);
+                                                       dst_image_layout, dst_queue_mask);
       uint32_t src_queue_mask = radv_image_queue_family_mask(
          src_image, cmd_buffer->qf, cmd_buffer->qf);
       bool src_compressed = radv_layout_dcc_compressed(cmd_buffer->device, src_image,
                                                        region->srcSubresource.mipLevel,
-                                                       src_image_layout, false, src_queue_mask);
+                                                       src_image_layout, src_queue_mask);
       bool need_dcc_sign_reinterpret = false;
 
       if (!src_compressed ||
@@ -537,7 +537,7 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
                                                          cmd_buffer->qf);
 
       if (radv_layout_is_htile_compressed(cmd_buffer->device, dst_image, dst_image_layout,
-                                          false, queue_mask)) {
+                                          queue_mask)) {
 
          cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE;
 

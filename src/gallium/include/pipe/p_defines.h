@@ -30,6 +30,8 @@
 
 #include "p_compiler.h"
 
+#include "compiler/shader_enums.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -441,6 +443,15 @@ enum pipe_flush_flags
 #define PIPE_CONTEXT_LOSE_CONTEXT_ON_RESET (1 << 6)
 
 /**
+ * Create a protected context to access protected content (surfaces,
+ * textures, ...)
+ *
+ * This is required to access protected images and surfaces if
+ * EGL_EXT_protected_surface is not supported.
+ */
+#define PIPE_CONTEXT_PROTECTED         (1 << 7)
+
+/**
  * Flags for pipe_context::memory_barrier.
  */
 #define PIPE_BARRIER_MAPPED_BUFFER     (1 << 0)
@@ -517,6 +528,7 @@ enum pipe_flush_flags
 #define PIPE_BIND_SAMPLER_REDUCTION_MINMAX (1 << 23) /* PIPE_CAP_SAMPLER_REDUCTION_MINMAX */
 /* Resource is the DRI_PRIME blit destination. Only set on on the render GPU. */
 #define PIPE_BIND_PRIME_BLIT_DST (1 << 24)
+#define PIPE_BIND_USE_FRONT_RENDERING (1 << 25) /* Resource may be used for frontbuffer rendering */
 
 
 /**
@@ -544,19 +556,6 @@ enum pipe_resource_usage {
    PIPE_USAGE_DYNAMIC,        /* uploaded data is used multiple times */
    PIPE_USAGE_STREAM,         /* uploaded data is used once */
    PIPE_USAGE_STAGING,        /* fast CPU access */
-};
-
-/**
- * Shaders
- */
-enum pipe_shader_type {
-   PIPE_SHADER_VERTEX,
-   PIPE_SHADER_FRAGMENT,
-   PIPE_SHADER_GEOMETRY,
-   PIPE_SHADER_TESS_CTRL,
-   PIPE_SHADER_TESS_EVAL,
-   PIPE_SHADER_COMPUTE,
-   PIPE_SHADER_TYPES,
 };
 
 /**
@@ -740,7 +739,6 @@ enum pipe_cap
    PIPE_CAP_NPOT_TEXTURES,
    PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS,
    PIPE_CAP_ANISOTROPIC_FILTER,
-   PIPE_CAP_POINT_SPRITE,
    PIPE_CAP_MAX_RENDER_TARGETS,
    PIPE_CAP_OCCLUSION_QUERY,
    PIPE_CAP_QUERY_TIME_ELAPSED,
@@ -766,7 +764,6 @@ enum pipe_cap
    PIPE_CAP_FS_COORD_ORIGIN_LOWER_LEFT,
    PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER,
    PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER,
-   PIPE_CAP_POINT_COORD_ORIGIN_UPPER_LEFT,
    PIPE_CAP_DEPTH_CLIP_DISABLE,
    PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE,
    PIPE_CAP_DEPTH_CLAMP_ENABLE,
@@ -840,7 +837,6 @@ enum pipe_cap
    PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE,
    PIPE_CAP_SAMPLER_VIEW_TARGET,
    PIPE_CAP_CLIP_HALFZ,
-   PIPE_CAP_VERTEXID_NOBASE,
    PIPE_CAP_POLYGON_OFFSET_CLAMP,
    PIPE_CAP_MULTISAMPLE_Z_RESOLVE,
    PIPE_CAP_RESOURCE_FROM_USER_MEMORY,
@@ -949,7 +945,6 @@ enum pipe_cap
    PIPE_CAP_PREFER_COMPUTE_FOR_MULTIMEDIA,
    PIPE_CAP_FRAGMENT_SHADER_INTERLOCK,
    PIPE_CAP_FBFETCH_COHERENT,
-   PIPE_CAP_CS_DERIVED_SYSTEM_VALUES_SUPPORTED,
    PIPE_CAP_ATOMIC_FLOAT_MINMAX,
    PIPE_CAP_TGSI_DIV,
    PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD,
@@ -988,7 +983,8 @@ enum pipe_cap
    PIPE_CAP_NO_CLIP_ON_COPY_TEX,
    PIPE_CAP_MAX_TEXTURE_MB,
    PIPE_CAP_SHADER_ATOMIC_INT64,
-   PIPE_CAP_DEVICE_PROTECTED_CONTENT,
+   /** For EGL_EXT_protected_surface */
+   PIPE_CAP_DEVICE_PROTECTED_SURFACE,
    PIPE_CAP_PREFER_REAL_BUFFER_IN_CONSTBUF0,
    PIPE_CAP_GL_CLAMP,
    PIPE_CAP_TEXRECT,
@@ -1013,6 +1009,9 @@ enum pipe_cap
    PIPE_CAP_DITHERING,
    PIPE_CAP_FBFETCH_ZS,
    PIPE_CAP_TIMELINE_SEMAPHORE_IMPORT,
+   PIPE_CAP_QUERY_TIMESTAMP_BITS,
+   /** For EGL_EXT_protected_content */
+   PIPE_CAP_DEVICE_PROTECTED_CONTEXT,
 
    PIPE_CAP_LAST,
    /* XXX do not add caps after PIPE_CAP_LAST! */
@@ -1035,9 +1034,12 @@ enum pipe_texture_transfer_mode {
 #define PIPE_CONTEXT_PRIORITY_MEDIUM  (1 << 1)
 #define PIPE_CONTEXT_PRIORITY_HIGH    (1 << 2)
 
-#define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 (1 << 0)
-#define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_R600 (1 << 1)
-#define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_FREEDRENO (1 << 2)
+enum pipe_quirk_texture_border_color_swizzle {
+   PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 = (1 << 0),
+   PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_R600 = (1 << 1),
+   PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_FREEDRENO = (1 << 2),
+   PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_ALPHA_NOT_W = (1 << 3),
+};
 
 enum pipe_endian
 {

@@ -525,7 +525,7 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
         if (job->bo_space > 128 * 1024 * 1024)
                 vc4_flush(pctx);
 
-        if (vc4_debug & VC4_DEBUG_ALWAYS_FLUSH)
+        if (VC4_DBG(ALWAYS_FLUSH))
                 vc4_flush(pctx);
 }
 

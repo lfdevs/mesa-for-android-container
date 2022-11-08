@@ -71,6 +71,7 @@ nvc0_program_sp_start_id(struct nvc0_context *nvc0, int stage,
 {
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
 
+   simple_mtx_assert_locked(&nvc0->screen->state_lock);
    if (nvc0->screen->eng3d->oclass < GV100_3D_CLASS) {
       BEGIN_NVC0(push, NVC0_3D(SP_START_ID(stage)), 1);
       PUSH_DATA (push, prog->code_base);
@@ -338,6 +339,8 @@ nvc0_tfb_validate(struct nvc0_context *nvc0)
          }
       }
    }
+
+   simple_mtx_assert_locked(&nvc0->screen->state_lock);
    nvc0->state.tfb = tfb;
 
    if (!(nvc0->dirty_3d & NVC0_NEW_3D_TFB_TARGETS))
@@ -364,7 +367,7 @@ nvc0_tfb_validate(struct nvc0_context *nvc0)
 
       if (!targ->clean)
          nvc0_hw_query_fifo_wait(nvc0, nvc0_query(targ->pq));
-      nouveau_pushbuf_space(push, 0, 0, 1);
+      PUSH_SPACE_EX(push, 0, 0, 1);
       BEGIN_NVC0(push, NVC0_3D(TFB_BUFFER_ENABLE(b)), 5);
       PUSH_DATA (push, 1);
       PUSH_DATAh(push, buf->address + targ->pipe.buffer_offset);

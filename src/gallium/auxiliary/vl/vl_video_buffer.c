@@ -195,7 +195,7 @@ vl_video_buffer_template(struct pipe_resource *templ,
    templ->height0 = height;
 }
 
-static void
+void
 vl_video_buffer_destroy(struct pipe_video_buffer *buffer)
 {
    struct vl_video_buffer *buf = (struct vl_video_buffer *)buffer;

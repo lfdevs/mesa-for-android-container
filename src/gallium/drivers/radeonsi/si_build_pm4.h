@@ -73,6 +73,14 @@
    __cs_num += __n; \
 } while (0)
 
+/* Instead of writing into the command buffer, return the pointer to the command buffer and
+ * assume that the caller will fill the specified number of elements.
+ */
+#define radeon_emit_array_get_ptr(num, ptr) do { \
+   *(ptr) = __cs_buf + __cs_num; \
+   __cs_num += (num); \
+} while (0)
+
 #define radeon_set_config_reg_seq(reg, num) do { \
    SI_CHECK_SHADOWED_REGS(reg, num); \
    assert((reg) < SI_CONTEXT_REG_OFFSET); \

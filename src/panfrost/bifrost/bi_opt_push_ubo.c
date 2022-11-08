@@ -160,10 +160,10 @@ bi_opt_push_ubo(bi_context *ctx)
                 /* Replace the UBO load with moves from FAU */
                 bi_builder b = bi_init_builder(ctx, bi_after_instr(ins));
 
-                bi_instr *vec = bi_collect_i32_to(&b, ins->dest[0]);
-                vec->nr_srcs = bi_opcode_props[ins->op].sr_count;
+                unsigned nr = bi_opcode_props[ins->op].sr_count;
+                bi_instr *vec = bi_collect_i32_to(&b, ins->dest[0], nr);
 
-                for (unsigned w = 0; w < vec->nr_srcs; ++w) {
+                bi_foreach_src(vec, w) {
                         /* FAU is grouped in pairs (2 x 4-byte) */
                         unsigned base =
                                 pan_lookup_pushed_ubo(ctx->info.push, ubo,

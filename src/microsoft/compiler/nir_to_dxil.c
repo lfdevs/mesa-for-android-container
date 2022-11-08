@@ -32,6 +32,7 @@
 #include "dxil_signature.h"
 
 #include "nir/nir_builder.h"
+#include "util/ralloc.h"
 #include "util/u_debug.h"
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
@@ -55,13 +56,27 @@ dxil_debug_options[] = {
 
 DEBUG_GET_ONCE_FLAGS_OPTION(debug_dxil, "DXIL_DEBUG", dxil_debug_options, 0)
 
-#define NIR_INSTR_UNSUPPORTED(instr) \
-   if (debug_dxil & DXIL_DEBUG_VERBOSE) \
-   do { \
-      fprintf(stderr, "Unsupported instruction:"); \
-      nir_print_instr(instr, stderr); \
-      fprintf(stderr, "\n"); \
-   } while (0)
+static void
+log_nir_instr_unsupported(const struct dxil_logger *logger,
+                          const char *message_prefix, const nir_instr *instr)
+{
+   char *msg = NULL;
+   char *instr_str = nir_instr_as_str(instr, NULL);
+   asprintf(&msg, "%s: %s\n", message_prefix, instr_str);
+   ralloc_free(instr_str);
+   assert(msg);
+   logger->log(logger->priv, msg);
+   free(msg);
+}
+
+static void
+default_logger_func(void *priv, const char *msg)
+{
+   fprintf(stderr, "%s", msg);
+   unreachable("Unhandled error");
+}
+
+static const struct dxil_logger default_logger = { .priv = NULL, .log = default_logger_func };
 
 #define TRACE_CONVERSION(instr) \
    if (debug_dxil & DXIL_DEBUG_TRACE) \
@@ -102,6 +117,9 @@ nir_options = {
    .lower_uadd_carry = true,
    .lower_mul_high = true,
    .lower_rotate = true,
+   .lower_pack_half_2x16 = true,
+   .lower_pack_unorm_4x8 = true,
+   .lower_pack_snorm_4x8 = true,
    .lower_pack_64_2x32_split = true,
    .lower_pack_32_2x16_split = true,
    .lower_unpack_64_2x32_split = true,
@@ -312,6 +330,11 @@ enum dxil_intr {
    DXIL_INTR_LEGACY_F16TOF32 = 131,
 
    DXIL_INTR_ATTRIBUTE_AT_VERTEX = 137,
+
+   DXIL_INTR_ANNOTATE_HANDLE = 216,
+   DXIL_INTR_CREATE_HANDLE_FROM_BINDING = 217,
+
+   DXIL_INTR_IS_HELPER_LANE = 221,
 };
 
 enum dxil_atomic_op {
@@ -425,7 +448,6 @@ emit_sampler_metadata(struct dxil_module *m, const struct dxil_type *struct_type
    const struct glsl_type *type = glsl_without_array(var->type);
 
    fill_resource_metadata(m, fields, struct_type, var->name, layout);
-   fields[6] = dxil_get_metadata_int32(m, DXIL_SAMPLER_KIND_DEFAULT); // sampler kind
    enum dxil_sampler_kind sampler_kind = glsl_sampler_type_is_shadow(type) ?
           DXIL_SAMPLER_KIND_COMPARISON : DXIL_SAMPLER_KIND_DEFAULT;
    fields[6] = dxil_get_metadata_int32(m, sampler_kind); // sampler kind
@@ -487,6 +509,8 @@ struct ntd_context {
    struct dxil_func_def *main_func_def;
    struct dxil_func_def *tess_ctrl_patch_constant_func_def;
    unsigned unnamed_ubo_count;
+
+   const struct dxil_logger *logger;
 };
 
 static const char*
@@ -822,11 +846,14 @@ emit_atomic_cmpxchg(struct ntd_context *ctx,
 }
 
 static const struct dxil_value *
-emit_createhandle_call(struct ntd_context *ctx,
-                       enum dxil_resource_class resource_class,
-                       unsigned resource_range_id,
-                       const struct dxil_value *resource_range_index,
-                       bool non_uniform_resource_index)
+emit_createhandle_call_pre_6_6(struct ntd_context *ctx,
+                               enum dxil_resource_class resource_class,
+                               unsigned lower_bound,
+                               unsigned upper_bound,
+                               unsigned space,
+                               unsigned resource_range_id,
+                               const struct dxil_value *resource_range_index,
+                               bool non_uniform_resource_index)
 {
    const struct dxil_value *opcode = dxil_module_get_int32_const(&ctx->mod, DXIL_INTR_CREATE_HANDLE);
    const struct dxil_value *resource_class_value = dxil_module_get_int8_const(&ctx->mod, resource_class);
@@ -854,8 +881,111 @@ emit_createhandle_call(struct ntd_context *ctx,
 }
 
 static const struct dxil_value *
+emit_annotate_handle(struct ntd_context *ctx,
+                     enum dxil_resource_class resource_class,
+                     unsigned resource_range_id,
+                     const struct dxil_value *unannotated_handle)
+{
+   const struct dxil_value *opcode = dxil_module_get_int32_const(&ctx->mod, DXIL_INTR_ANNOTATE_HANDLE);
+   if (!opcode)
+      return NULL;
+
+   const struct util_dynarray *mdnodes;
+   switch (resource_class) {
+   case DXIL_RESOURCE_CLASS_SRV:
+      mdnodes = &ctx->srv_metadata_nodes;
+      break;
+   case DXIL_RESOURCE_CLASS_UAV:
+      mdnodes = &ctx->uav_metadata_nodes;
+      break;
+   case DXIL_RESOURCE_CLASS_CBV:
+      mdnodes = &ctx->cbv_metadata_nodes;
+      break;
+   case DXIL_RESOURCE_CLASS_SAMPLER:
+      mdnodes = &ctx->sampler_metadata_nodes;
+      break;
+   default:
+      unreachable("Invalid resource class");
+   }
+
+   const struct dxil_mdnode *mdnode = *util_dynarray_element(mdnodes, const struct dxil_mdnode *, resource_range_id);
+   const struct dxil_value *res_props = dxil_module_get_res_props_const(&ctx->mod, resource_class, mdnode);
+   if (!res_props)
+      return NULL;
+
+   const struct dxil_value *args[] = {
+      opcode,
+      unannotated_handle,
+      res_props
+   };
+
+   const struct dxil_func *func =
+      dxil_get_function(&ctx->mod, "dx.op.annotateHandle", DXIL_NONE);
+
+   if (!func)
+      return NULL;
+
+   return dxil_emit_call(&ctx->mod, func, args, ARRAY_SIZE(args));
+}
+
+static const struct dxil_value *
+emit_createhandle_and_annotate(struct ntd_context *ctx,
+                               enum dxil_resource_class resource_class,
+                               unsigned lower_bound,
+                               unsigned upper_bound,
+                               unsigned space,
+                               unsigned resource_range_id,
+                               const struct dxil_value *resource_range_index,
+                               bool non_uniform_resource_index)
+{
+   const struct dxil_value *opcode = dxil_module_get_int32_const(&ctx->mod, DXIL_INTR_CREATE_HANDLE_FROM_BINDING);
+   const struct dxil_value *res_bind = dxil_module_get_res_bind_const(&ctx->mod, lower_bound, upper_bound, space, resource_class);
+   const struct dxil_value *non_uniform_resource_index_value = dxil_module_get_int1_const(&ctx->mod, non_uniform_resource_index);
+   if (!opcode || !res_bind || !non_uniform_resource_index_value)
+      return NULL;
+
+   const struct dxil_value *args[] = {
+      opcode,
+      res_bind,
+      resource_range_index,
+      non_uniform_resource_index_value
+   };
+
+   const struct dxil_func *func =
+      dxil_get_function(&ctx->mod, "dx.op.createHandleFromBinding", DXIL_NONE);
+
+   if (!func)
+      return NULL;
+
+   const struct dxil_value *unannotated_handle = dxil_emit_call(&ctx->mod, func, args, ARRAY_SIZE(args));
+   if (!unannotated_handle)
+      return NULL;
+
+   return emit_annotate_handle(ctx, resource_class, resource_range_id, unannotated_handle);
+}
+
+static const struct dxil_value *
+emit_createhandle_call(struct ntd_context *ctx,
+                       enum dxil_resource_class resource_class,
+                       unsigned lower_bound,
+                       unsigned upper_bound,
+                       unsigned space,
+                       unsigned resource_range_id,
+                       const struct dxil_value *resource_range_index,
+                       bool non_uniform_resource_index)
+{
+   if (ctx->mod.minor_version < 6)
+      return emit_createhandle_call_pre_6_6(ctx, resource_class, lower_bound, upper_bound, space, resource_range_id, resource_range_index, non_uniform_resource_index);
+   else
+      return emit_createhandle_and_annotate(ctx, resource_class, lower_bound, upper_bound, space, resource_range_id, resource_range_index, non_uniform_resource_index);
+}
+
+static const struct dxil_value *
 emit_createhandle_call_const_index(struct ntd_context *ctx,
                                    enum dxil_resource_class resource_class,
+                                   unsigned lower_bound,
+                                   unsigned upper_bound,
+                                   unsigned space,
                                    unsigned resource_range_id,
                                    unsigned resource_range_index,
                                    bool non_uniform_resource_index)
@@ -865,8 +995,8 @@ emit_createhandle_call_const_index(struct ntd_context *ctx,
    if (!resource_range_index_value)
       return NULL;
 
-   return emit_createhandle_call(ctx, resource_class, resource_range_id,
-                                 resource_range_index_value,
+   return emit_createhandle_call(ctx, resource_class, lower_bound, upper_bound, space,
+                                 resource_range_id, resource_range_index_value,
                                  non_uniform_resource_index);
 }
 
@@ -909,9 +1039,13 @@ add_resource(struct ntd_context *ctx, enum dxil_resource_type type,
    }
 }
 
-static unsigned
-get_resource_id(struct ntd_context *ctx, enum dxil_resource_class class,
-                unsigned space, unsigned binding)
+static const struct dxil_value *
+emit_createhandle_call_dynamic(struct ntd_context *ctx,
+                               enum dxil_resource_class resource_class,
+                               unsigned space,
+                               unsigned binding,
+                               const struct dxil_value *resource_range_index,
+                               bool non_uniform_resource_index)
 {
    unsigned offset = 0;
    unsigned count = 0;
@@ -921,7 +1055,7 @@ get_resource_id(struct ntd_context *ctx, enum dxil_resource_class class,
    unsigned num_cbvs = util_dynarray_num_elements(&ctx->cbv_metadata_nodes, const struct dxil_mdnode *);
    unsigned num_samplers = util_dynarray_num_elements(&ctx->sampler_metadata_nodes, const struct dxil_mdnode *);
 
-   switch (class) {
+   switch (resource_class) {
    case DXIL_RESOURCE_CLASS_UAV:
       offset = num_srvs + num_samplers + num_cbvs;
       count = num_uavs;
@@ -948,12 +1082,15 @@ get_resource_id(struct ntd_context *ctx, enum dxil_resource_class class,
       if (resource->space == space &&
           resource->lower_bound <= binding &&
           resource->upper_bound >= binding) {
-         return i - offset;
+         return emit_createhandle_call(ctx, resource_class, resource->lower_bound,
+                                       resource->upper_bound, space,
+                                       i - offset,
+                                       resource_range_index,
+                                       non_uniform_resource_index);
       }
    }
 
    unreachable("Resource access for undeclared range");
-   return 0;
 }
 
 static bool
@@ -1338,7 +1475,14 @@ emit_static_indexing_handles(struct ntd_context *ctx)
          continue;
 
       for (unsigned i = res->lower_bound; i <= res->upper_bound; ++i) {
-         handle_array[i] = emit_createhandle_call_const_index(ctx, res_class, id, i, false);
+         handle_array[i] = emit_createhandle_call_const_index(ctx,
+                                                              res_class,
+                                                              res->lower_bound,
+                                                              res->upper_bound,
+                                                              res->space,
+                                                              id,
+                                                              i,
+                                                              false);
          if (!handle_array[i])
             return false;
       }
@@ -1493,6 +1637,14 @@ get_module_flags(struct ntd_context *ctx)
 
    if (ctx->opts->disable_math_refactoring)
       flags |= (1 << 1);
+
+   /* Work around https://github.com/microsoft/DirectXShaderCompiler/issues/4616
+    * When targeting SM6.7 and with at least one UAV, if no other flags are present,
+    * set the resources-may-not-alias flag, or else the DXIL validator may end up
+    * with uninitialized memory which will fail validation, due to missing that flag.
+    */
+   if (flags == 0 && ctx->mod.minor_version >= 7 && ctx->num_uavs > 0)
+      flags |= (1ull << 33);
 
    return flags;
 }
@@ -2503,8 +2655,8 @@ emit_alu(struct ntd_context *ctx, nir_alu_instr *alu)
    case nir_op_b2f32: return emit_b2f32(ctx, alu, src[0]);
    case nir_op_b2f64: return emit_b2f64(ctx, alu, src[0]);
    default:
-      NIR_INSTR_UNSUPPORTED(&alu->instr);
-      assert("Unimplemented ALU instruction");
+      log_nir_instr_unsupported(ctx->logger, "Unimplemented ALU instruction",
+                                &alu->instr);
       return false;
    }
 }
@@ -2883,8 +3035,8 @@ get_resource_handle(struct ntd_context *ctx, nir_src *src, enum dxil_resource_cl
        class == DXIL_RESOURCE_CLASS_CBV)
       base_binding = 1;
 
-   const struct dxil_value *handle = emit_createhandle_call(ctx, class, 
-      get_resource_id(ctx, class, space, base_binding), value, !const_block_index);
+   const struct dxil_value *handle = emit_createhandle_call_dynamic(ctx, class,
+      space, base_binding, value, !const_block_index);
    if (handle_entry)
       *handle_entry = handle;
 
@@ -4143,9 +4295,7 @@ emit_load_vulkan_descriptor(struct ntd_context *ctx, nir_intrinsic_instr *intr)
    if (!index_value)
       return false;
 
-   handle = emit_createhandle_call(ctx, resource_class,
-      get_resource_id(ctx, resource_class, space, binding),
-      index_value, false);
+   handle = emit_createhandle_call_dynamic(ctx, resource_class, space, binding, index_value, false);
 
    store_dest_value(ctx, &intr->dest, 0, handle);
    store_dest(ctx, &intr->dest, 1, get_src(ctx, &intr->src[0], 1, nir_type_uint32), nir_type_uint32);
@@ -4397,11 +4547,15 @@ emit_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
    case nir_intrinsic_load_sample_pos_from_id:
       return emit_load_sample_pos_from_id(ctx, intr);
 
+   case nir_intrinsic_load_helper_invocation:
+      return emit_load_unary_external_function(
+         ctx, intr, "dx.op.isHelperLane", DXIL_INTR_IS_HELPER_LANE);
+
    case nir_intrinsic_load_num_workgroups:
    case nir_intrinsic_load_workgroup_size:
    default:
-      NIR_INSTR_UNSUPPORTED(&intr->instr);
-      unreachable("Unimplemented intrinsic instruction");
+      log_nir_instr_unsupported(
+         ctx->logger, "Unimplemented intrinsic instruction", &intr->instr);
       return false;
    }
 }
@@ -4512,8 +4666,8 @@ emit_deref(struct ntd_context* ctx, nir_deref_instr* instr)
    
    unsigned descriptor_set = ctx->opts->environment == DXIL_ENVIRONMENT_VULKAN ?
       var->data.descriptor_set : (glsl_type_is_image(type) ? 1 : 0);
-   const struct dxil_value *handle = emit_createhandle_call(ctx, res_class,
-      get_resource_id(ctx, res_class, descriptor_set, binding_val), binding, false);
+   const struct dxil_value *handle = emit_createhandle_call_dynamic(ctx, res_class,
+      descriptor_set, binding_val, binding, false);
    if (!handle)
       return false;
 
@@ -4909,8 +5063,8 @@ emit_tex(struct ntd_context *ctx, nir_tex_instr *instr)
          break;
 
       case nir_tex_src_texture_offset:
-         params.tex = emit_createhandle_call(ctx, DXIL_RESOURCE_CLASS_SRV,
-            get_resource_id(ctx, DXIL_RESOURCE_CLASS_SRV, 0, instr->texture_index),
+         params.tex = emit_createhandle_call_dynamic(ctx, DXIL_RESOURCE_CLASS_SRV,
+            0, instr->texture_index,
             dxil_emit_binop(&ctx->mod, DXIL_BINOP_ADD,
                get_src_ssa(ctx, instr->src[i].src.ssa, 0),
                dxil_module_get_int32_const(&ctx->mod, instr->texture_index), 0),
@@ -4919,8 +5073,8 @@ emit_tex(struct ntd_context *ctx, nir_tex_instr *instr)
 
       case nir_tex_src_sampler_offset:
          if (nir_tex_instr_need_sampler(instr)) {
-            params.sampler = emit_createhandle_call(ctx, DXIL_RESOURCE_CLASS_SAMPLER,
-               get_resource_id(ctx, DXIL_RESOURCE_CLASS_SAMPLER, 0, instr->sampler_index),
+            params.sampler = emit_createhandle_call_dynamic(ctx, DXIL_RESOURCE_CLASS_SAMPLER,
+               0, instr->sampler_index,
                dxil_emit_binop(&ctx->mod, DXIL_BINOP_ADD,
                   get_src_ssa(ctx, instr->src[i].src.ssa, 0),
                   dxil_module_get_int32_const(&ctx->mod, instr->sampler_index), 0),
@@ -5050,8 +5204,8 @@ static bool emit_instr(struct ntd_context *ctx, struct nir_instr* instr)
    case nir_instr_type_ssa_undef:
       return emit_undefined(ctx, nir_instr_as_ssa_undef(instr));
    default:
-      NIR_INSTR_UNSUPPORTED(instr);
-      unreachable("Unimplemented instruction type");
+      log_nir_instr_unsupported(ctx->logger, "Unimplemented instruction type",
+                                instr);
       return false;
    }
 }
@@ -5529,8 +5683,11 @@ emit_module(struct ntd_context *ctx, const struct nir_to_dxil_options *opts)
          ctx->mod.feats.array_layer_from_vs_or_ds = true;
    }
 
-   if (ctx->mod.feats.native_low_precision)
-      ctx->mod.minor_version = MAX2(ctx->mod.minor_version, 2);
+   if (ctx->mod.feats.native_low_precision && ctx->mod.minor_version < 2) {
+      ctx->logger->log(ctx->logger->priv,
+                       "Shader uses 16bit, which requires shader model 6.2, but 6.2 is unsupported\n");
+      return false;
+   }
 
    return emit_metadata(ctx) &&
           dxil_emit_module(&ctx->mod);
@@ -5785,27 +5942,31 @@ type_size_vec4(const struct glsl_type *type, bool bindless)
    return glsl_count_attribute_slots(type, false);
 }
 
-static bool
-dxil_validator_can_validate_shader_model(unsigned sm_minor, unsigned val_minor)
-{
-   /* Currently the validators are versioned such that val 1.x is needed for SM6.x */
-   return sm_minor <= val_minor;
-}
-
 static const unsigned dxil_validator_min_capable_version = DXIL_VALIDATOR_1_4;
 static const unsigned dxil_validator_max_capable_version = DXIL_VALIDATOR_1_7;
+static const unsigned dxil_min_shader_model = SHADER_MODEL_6_1;
+static const unsigned dxil_max_shader_model = SHADER_MODEL_6_7;
 
 bool
 nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
-            struct blob *blob)
+            const struct dxil_logger *logger, struct blob *blob)
 {
    assert(opts);
    bool retval = true;
    debug_dxil = (int)debug_get_option_debug_dxil();
    blob_init(blob);
 
-   if (opts->shader_model_max < SHADER_MODEL_6_1) {
-      debug_printf("D3D12: cannot support emitting shader model 6.0 or lower\n");
+   if (opts->shader_model_max < dxil_min_shader_model) {
+      debug_printf("D3D12: cannot support emitting shader models lower than %d.%d\n",
+                   dxil_min_shader_model >> 16,
+                   dxil_min_shader_model & 0xffff);
+      return false;
+   }
+
+   if (opts->shader_model_max > dxil_max_shader_model) {
+      debug_printf("D3D12: cannot support emitting higher than shader model %d.%d\n",
+                   dxil_max_shader_model >> 16,
+                   dxil_max_shader_model & 0xffff);
       return false;
    }
 
@@ -5831,6 +5992,7 @@ nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
 
    ctx->opts = opts;
    ctx->shader = s;
+   ctx->logger = logger ? logger : &default_logger;
 
    ctx->ralloc_ctx = ralloc_context(NULL);
    if (!ctx->ralloc_ctx) {
@@ -5846,7 +6008,9 @@ nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
    dxil_module_init(&ctx->mod, ctx->ralloc_ctx);
    ctx->mod.shader_kind = get_dxil_shader_kind(s);
    ctx->mod.major_version = 6;
-   ctx->mod.minor_version = 1;
+   /* Use the highest shader model that's supported and can be validated */
+   ctx->mod.minor_version =
+      MIN2(opts->shader_model_max & 0xffff, validator_version & 0xffff);
    ctx->mod.major_validator = validator_version >> 16;
    ctx->mod.minor_validator = validator_version & 0xffff;
 
@@ -5897,20 +6061,6 @@ nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
 
    if (!emit_module(ctx, opts)) {
       debug_printf("D3D12: dxil_container_add_module failed\n");
-      retval = false;
-      goto out;
-   }
-
-   assert(ctx->mod.major_version == 6 && ctx->mod.minor_version >= 1);
-   if ((ctx->mod.major_version << 16 | ctx->mod.minor_version) > opts->shader_model_max) {
-      debug_printf("D3D12: max shader model exceeded\n");
-      retval = false;
-      goto out;
-   }
-
-   assert(ctx->mod.major_validator == 1);
-   if (!dxil_validator_can_validate_shader_model(ctx->mod.minor_version, ctx->mod.minor_validator)) {
-      debug_printf("D3D12: shader model exceeds max that can be validated\n");
       retval = false;
       goto out;
    }

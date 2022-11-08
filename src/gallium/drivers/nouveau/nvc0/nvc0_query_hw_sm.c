@@ -2636,7 +2636,7 @@ nvc0_hw_sm_query_read_data(uint32_t count[32][8],
          if (hq->data[b + 8] != hq->sequence) {
             if (!wait)
                return false;
-            if (nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, nvc0->base.client))
+            if (BO_WAIT(&nvc0->screen->base, hq->bo, NOUVEAU_BO_RD, nvc0->base.client))
                return false;
          }
          count[p][c] = hq->data[b + hsq->ctr[c]] * (1 << c);
@@ -2664,7 +2664,7 @@ nve4_hw_sm_query_read_data(uint32_t count[32][8],
             if (hq->data[b + 20 + d] != hq->sequence) {
                if (!wait)
                   return false;
-               if (nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, nvc0->base.client))
+               if (BO_WAIT(&nvc0->screen->base, hq->bo, NOUVEAU_BO_RD, nvc0->base.client))
                   return false;
             }
             if (hsq->ctr[c] & ~0x3)

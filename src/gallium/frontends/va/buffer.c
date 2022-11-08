@@ -35,6 +35,10 @@
 
 #include "va_private.h"
 
+#ifdef _WIN32
+#include <va/va_win32.h>
+#endif
+
 VAStatus
 vlVaCreateBuffer(VADriverContextP ctx, VAContextID context, VABufferType type,
                  unsigned int size, unsigned int num_elements, void *data,
@@ -126,7 +130,7 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
 
    if (buf->derived_surface.resource) {
       struct pipe_resource *resource;
-      struct pipe_box box = {};
+      struct pipe_box box;
       void *(*map_func)(struct pipe_context *,
              struct pipe_resource *resource,
              unsigned level,
@@ -134,6 +138,7 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
              const struct pipe_box *,
              struct pipe_transfer **out_transfer);
 
+      memset(&box, 0, sizeof(box));
       resource = buf->derived_surface.resource;
       box.width = resource->width0;
       box.height = resource->height0;
@@ -277,7 +282,12 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
 
    /* List of supported memory types, in preferred order. */
    static const uint32_t mem_types[] = {
+#ifdef _WIN32
+      VA_SURFACE_ATTRIB_MEM_TYPE_NTHANDLE,
+      VA_SURFACE_ATTRIB_MEM_TYPE_D3D12_RESOURCE,
+#else
       VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME,
+#endif
       0
    };
 
@@ -324,7 +334,13 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
       VABufferInfo * const buf_info = &buf->export_state;
 
       switch (mem_type) {
-      case VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME: {
+#ifdef _WIN32
+      case VA_SURFACE_ATTRIB_MEM_TYPE_D3D12_RESOURCE:
+      case VA_SURFACE_ATTRIB_MEM_TYPE_NTHANDLE:
+#else
+      case VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME:
+#endif
+      {
          struct winsys_handle whandle;
 
          mtx_lock(&drv->mutex);
@@ -333,6 +349,10 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
          memset(&whandle, 0, sizeof(whandle));
          whandle.type = WINSYS_HANDLE_TYPE_FD;
 
+#ifdef _WIN32
+         if (mem_type == VA_SURFACE_ATTRIB_MEM_TYPE_D3D12_RESOURCE)
+            whandle.type = WINSYS_HANDLE_TYPE_D3D12_RES;
+#endif
          if (!screen->resource_get_handle(screen, drv->pipe,
                                           buf->derived_surface.resource,
                                           &whandle, PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE)) {
@@ -343,6 +363,11 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
          mtx_unlock(&drv->mutex);
 
          buf_info->handle = (intptr_t)whandle.handle;
+
+#ifdef _WIN32
+         if (mem_type == VA_SURFACE_ATTRIB_MEM_TYPE_D3D12_RESOURCE)
+            buf_info->handle = (intptr_t)whandle.com_obj;
+#endif
          break;
       }
       default:
@@ -385,9 +410,18 @@ vlVaReleaseBufferHandle(VADriverContextP ctx, VABufferID buf_id)
       VABufferInfo * const buf_info = &buf->export_state;
 
       switch (buf_info->mem_type) {
+#ifdef _WIN32
+      case VA_SURFACE_ATTRIB_MEM_TYPE_D3D12_RESOURCE:
+         // Do nothing for this case.
+         break;
+      case VA_SURFACE_ATTRIB_MEM_TYPE_NTHANDLE:
+         CloseHandle((HANDLE) buf_info->handle);
+      break;
+#else
       case VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME:
          close((intptr_t)buf_info->handle);
          break;
+#endif
       default:
          return VA_STATUS_ERROR_INVALID_BUFFER;
       }
@@ -397,3 +431,81 @@ vlVaReleaseBufferHandle(VADriverContextP ctx, VABufferID buf_id)
 
    return VA_STATUS_SUCCESS;
 }
+
+#if VA_CHECK_VERSION(1, 15, 0)
+VAStatus
+vlVaSyncBuffer(VADriverContextP ctx, VABufferID buf_id, uint64_t timeout_ns)
+{
+   vlVaDriver *drv;
+   vlVaContext *context;
+   vlVaBuffer *buf;
+
+   if (!ctx)
+      return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+   drv = VL_VA_DRIVER(ctx);
+   if (!drv)
+      return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+   /* Some apps like ffmpeg check for vaSyncBuffer to be present
+      to do async enqueuing of multiple vaEndPicture encode calls
+      before calling vaSyncBuffer with a pre-defined latency
+      If vaSyncBuffer is not implemented, they fallback to the
+      usual synchronous pairs of { vaEndPicture + vaSyncSurface }
+
+      As this might require the driver to support multiple
+      operations and/or store multiple feedback values before sync
+      fallback to backward compatible behaviour unless driver
+      explicitly supports PIPE_VIDEO_CAP_ENC_SUPPORTS_ASYNC_OPERATION
+   */
+   if (!drv->pipe->screen->get_video_param(drv->pipe->screen,
+                              PIPE_VIDEO_PROFILE_UNKNOWN,
+                              PIPE_VIDEO_ENTRYPOINT_ENCODE,
+                              PIPE_VIDEO_CAP_ENC_SUPPORTS_ASYNC_OPERATION))
+      return VA_STATUS_ERROR_UNIMPLEMENTED;
+
+   /* vaSyncBuffer spec states that "If timeout is zero, the function returns immediately." */
+   if (timeout_ns == 0)
+      return VA_STATUS_ERROR_TIMEDOUT;
+
+   if (timeout_ns != VA_TIMEOUT_INFINITE)
+      return VA_STATUS_ERROR_UNIMPLEMENTED;
+
+   mtx_lock(&drv->mutex);
+   buf = handle_table_get(drv->htab, buf_id);
+
+   if (!buf) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_INVALID_BUFFER;
+   }
+
+   if (!buf->feedback) {
+      /* No outstanding operation: nothing to do. */
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_SUCCESS;
+   }
+
+   context = handle_table_get(drv->htab, buf->ctx);
+   if (!context) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_INVALID_CONTEXT;
+   }
+
+   vlVaSurface* surf = handle_table_get(drv->htab, buf->associated_encode_input_surf);
+
+   if ((buf->feedback) && (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE)) {
+      context->decoder->get_feedback(context->decoder, buf->feedback, &(buf->coded_size));
+      buf->feedback = NULL;
+      /* Also mark the associated render target (encode source texture) surface as done
+         in case they call vaSyncSurface on it to avoid getting the feedback twice*/
+      if(surf)
+      {
+         surf->feedback = NULL;
+         buf->associated_encode_input_surf = VA_INVALID_ID;
+      }
+   }
+
+   mtx_unlock(&drv->mutex);
+   return VA_STATUS_SUCCESS;
+}
+#endif

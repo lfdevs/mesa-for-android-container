@@ -888,6 +888,27 @@ dxil_module_get_samplepos_type(struct dxil_module *m)
 }
 
 const struct dxil_type *
+dxil_module_get_res_bind_type(struct dxil_module *mod)
+{
+   /* %dx.types.ResBind = type { i32, i32, i32, i8 } */
+   const struct dxil_type *int32_type = dxil_module_get_int_type(mod, 32);
+   const struct dxil_type *int8_type = dxil_module_get_int_type(mod, 8);
+   const struct dxil_type *fields[4] = { int32_type, int32_type, int32_type, int8_type };
+
+   return dxil_module_get_struct_type(mod, "dx.types.ResBind", fields, 4);
+}
+
+const struct dxil_type *
+dxil_module_get_res_props_type(struct dxil_module *mod)
+{
+   /* %dx.types.ResourceProperties = type { i32, i32 } */
+   const struct dxil_type *int32_type = dxil_module_get_int_type(mod, 32);
+   const struct dxil_type *fields[2] = { int32_type, int32_type };
+
+   return dxil_module_get_struct_type(mod, "dx.types.ResourceProperties", fields, 2);
+}
+
+const struct dxil_type *
 dxil_module_add_function_type(struct dxil_module *m,
                               const struct dxil_type *ret_type,
                               const struct dxil_type **arg_types,
@@ -1560,6 +1581,14 @@ get_int_const(struct dxil_module *m, const struct dxil_type *type,
    return &c->value;
 }
 
+static intmax_t
+get_int_from_const_value(const struct dxil_value *value)
+{
+   assert(value->type->type == TYPE_INTEGER);
+   const struct dxil_const *c = container_of(value, const struct dxil_const, value);
+   return c->int_value;
+}
+
 const struct dxil_value *
 dxil_module_get_int1_const(struct dxil_module *m, bool value)
 {
@@ -1755,6 +1784,214 @@ dxil_module_get_undef(struct dxil_module *m, const struct dxil_type *type)
 
    c = create_const(m, type, true);
    return c ? &c->value : NULL;
+}
+
+static const struct dxil_value *
+get_struct_const(struct dxil_module *m, const struct dxil_type *type,
+                 const struct dxil_value **values)
+{
+   assert(type->type == TYPE_STRUCT);
+   unsigned int num_values = type->struct_def.elem.num_types;
+
+   struct dxil_const *c;
+   LIST_FOR_EACH_ENTRY(c, &m->const_list, head) {
+      if (c->value.type != type || c->undef)
+         continue;
+
+      if (!memcmp(c->struct_values, values, sizeof(*values) * num_values))
+         return &c->value;
+   }
+
+   c = create_const(m, type, false);
+   if (!c)
+      return NULL;
+   void *tmp =
+      ralloc_array(m->ralloc_ctx, struct dxil_value *, num_values);
+   memcpy(tmp, values, sizeof(*values) * num_values);
+   c->struct_values = tmp;
+
+   return &c->value;
+}
+
+const struct dxil_value *
+dxil_module_get_res_bind_const(struct dxil_module *m,
+                               uint32_t lower_bound,
+                               uint32_t upper_bound,
+                               uint32_t space,
+                               uint8_t class)
+{
+   const struct dxil_type *type = dxil_module_get_res_bind_type(m);
+   const struct dxil_type *int32_type = dxil_module_get_int_type(m, 32);
+   const struct dxil_type *int8_type = dxil_module_get_int_type(m, 8);
+   if (!type || !int32_type || !int8_type)
+      return NULL;
+
+   const struct dxil_value *values[4] = {
+      get_int_const(m, int32_type, lower_bound),
+      get_int_const(m, int32_type, upper_bound),
+      get_int_const(m, int32_type, space),
+      get_int_const(m, int8_type, class),
+   };
+   if (!values[0] || !values[1] || !values[2] || !values[3])
+      return NULL;
+
+   return get_struct_const(m, type, values);
+}
+
+static uint32_t
+get_basic_srv_uav_res_props_dword(bool uav,
+                                  bool rov,
+                                  bool globally_coherent,
+                                  bool has_counter,
+                                  enum dxil_resource_kind kind)
+{
+   union {
+      uint32_t raw;
+      struct {
+         uint8_t kind;
+
+         uint8_t base_align_log2 : 4;
+         uint8_t uav : 1;
+         uint8_t rov : 1;
+         uint8_t globally_coherent : 1;
+         uint8_t has_counter : 1;
+      };
+   } basic;
+   basic.raw = 0;
+   basic.kind = kind;
+   basic.uav = uav;
+   basic.rov = rov;
+   basic.globally_coherent = globally_coherent;
+   basic.has_counter = has_counter;
+   return basic.raw;
+}
+
+static uint32_t
+get_typed_srv_uav_res_props_dword(enum dxil_component_type comp_type,
+                                  uint8_t num_components,
+                                  uint8_t sample_count)
+{
+   union {
+      uint32_t raw;
+      struct {
+         uint8_t comp_type;
+         uint8_t num_components;
+         uint8_t sample_count;
+      };
+   } type;
+   type.raw = 0;
+   type.comp_type = comp_type;
+   type.num_components = num_components;
+   type.sample_count = sample_count;
+   return type.raw;
+}
+
+static uint32_t
+get_sampler_res_props_dword(bool comparison)
+{
+   union {
+      uint32_t raw;
+      struct {
+         uint8_t kind;
+
+         uint8_t padding : 7;
+         uint8_t comparison : 1;
+      };
+   } basic;
+   basic.raw = 0;
+   basic.kind = DXIL_RESOURCE_KIND_SAMPLER;
+   basic.comparison = comparison;
+   return basic.raw;
+}
+
+static intmax_t
+get_int_from_mdnode(const struct dxil_mdnode *mdnode, int subnode)
+{
+   assert(mdnode->type == MD_NODE);
+   assert(mdnode->node.subnodes[subnode]->type == MD_VALUE);
+   return get_int_from_const_value(mdnode->node.subnodes[subnode]->value.value);
+}
+
+static void
+fill_res_props_dwords(uint32_t dwords[2],
+                      enum dxil_resource_class class,
+                      const struct dxil_mdnode *mdnode)
+{
+   enum dxil_resource_kind kind = DXIL_RESOURCE_KIND_INVALID;
+   uint32_t sample_count = 0;
+   switch (class) {
+   case DXIL_RESOURCE_CLASS_SRV:
+      kind = (enum dxil_resource_kind)get_int_from_mdnode(mdnode, 6);
+      dwords[0] = get_basic_srv_uav_res_props_dword(false, false, false, false, kind);
+      sample_count = get_int_from_mdnode(mdnode, 7);
+      break;
+   case DXIL_RESOURCE_CLASS_UAV:
+      kind = (enum dxil_resource_kind)get_int_from_mdnode(mdnode, 6);
+      dwords[0] = get_basic_srv_uav_res_props_dword(true,
+         get_int_from_mdnode(mdnode, 9),
+         get_int_from_mdnode(mdnode, 7),
+         get_int_from_mdnode(mdnode, 6),
+         kind);
+      break;
+   case DXIL_RESOURCE_CLASS_CBV:
+      kind = DXIL_RESOURCE_KIND_CBUFFER;
+      dwords[0] = kind;
+      break;
+   case DXIL_RESOURCE_CLASS_SAMPLER:
+      kind = DXIL_RESOURCE_KIND_SAMPLER;
+      dwords[0] = get_sampler_res_props_dword(get_int_from_mdnode(mdnode, 6) == DXIL_SAMPLER_KIND_COMPARISON);
+      break;
+   default:
+      unreachable("Unexpected resource class");
+   }
+
+   switch (kind) {
+   case DXIL_RESOURCE_KIND_STRUCTURED_BUFFER:
+   case DXIL_RESOURCE_KIND_INVALID:
+      unreachable("Unimplemented");
+   case DXIL_RESOURCE_KIND_RAW_BUFFER:
+   case DXIL_RESOURCE_KIND_SAMPLER:
+      dwords[1] = 0;
+      break;
+   case DXIL_RESOURCE_KIND_CBUFFER:
+      dwords[1] = get_int_from_mdnode(mdnode, 6);
+      break;
+   default: {
+      unsigned tag_array_index = class == DXIL_RESOURCE_CLASS_SRV ? 8 : 10;
+      const struct dxil_type *res_ptr_type = mdnode->node.subnodes[1]->value.type;
+      const struct dxil_type *res_type = res_ptr_type->ptr_target_type->type == TYPE_ARRAY ?
+         res_ptr_type->ptr_target_type->array_or_vector_def.elem_type : res_ptr_type->ptr_target_type;
+      const struct dxil_type *vec_type = res_type->struct_def.elem.types[0];
+      dwords[1] = get_typed_srv_uav_res_props_dword(
+         (enum dxil_component_type)get_int_from_mdnode(
+            mdnode->node.subnodes[tag_array_index], 1),
+         vec_type->array_or_vector_def.num_elems,
+         sample_count);
+      break;
+      }
+   }
+}
+
+const struct dxil_value *
+dxil_module_get_res_props_const(struct dxil_module *m,
+                                enum dxil_resource_class class,
+                                const struct dxil_mdnode *mdnode)
+{
+   const struct dxil_type *type = dxil_module_get_res_props_type(m);
+   if (!type)
+      return NULL;
+
+   uint32_t dwords[2];
+   fill_res_props_dwords(dwords, class, mdnode);
+
+   const struct dxil_value *values[2] = {
+      dxil_module_get_int32_const(m, dwords[0]),
+      dxil_module_get_int32_const(m, dwords[1])
+   };
+   if (!values[0] || !values[1])
+      return NULL;
+
+   return get_struct_const(m, type, values);
 }
 
 enum dxil_module_code {
@@ -2180,6 +2417,12 @@ emit_consts(struct dxil_module *m)
       case TYPE_ARRAY:
          if (!emit_aggregate_values(m, c->array_values,
                                     c->value.type->array_or_vector_def.num_elems))
+            return false;
+         break;
+
+      case TYPE_STRUCT:
+         if (!emit_aggregate_values(m, c->struct_values,
+                                    c->value.type->struct_def.elem.num_types))
             return false;
          break;
 

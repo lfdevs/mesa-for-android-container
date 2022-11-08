@@ -30,7 +30,6 @@ files_libzink = files(
   'zink_context.c',
   'zink_kopper.c',
   'zink_descriptors.c',
-  'zink_descriptors_lazy.c',
   'zink_draw.cpp',
   'zink_fence.c',
   'zink_format.c',
@@ -68,8 +67,7 @@ zink_nir_algebraic_c = custom_target(
   input : 'nir_to_spirv/zink_nir_algebraic.py',
   output : 'zink_nir_algebraic.c',
   command : [
-    prog_python, '@INPUT@',
-    '-p', join_paths(meson.source_root(), 'src/compiler/nir/'),
+    prog_python, '@INPUT@', '-p', dir_compiler_nir,
   ],
   capture : true,
   depend_files : nir_algebraic_depends,

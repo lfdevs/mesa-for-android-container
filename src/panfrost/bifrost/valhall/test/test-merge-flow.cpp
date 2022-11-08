@@ -53,6 +53,7 @@ class MergeFlow : public testing::Test {
 protected:
    MergeFlow() {
       mem_ctx = ralloc_context(NULL);
+      atest = bi_fau(BIR_FAU_ATEST_PARAM, false);
    }
 
    ~MergeFlow() {
@@ -61,6 +62,7 @@ protected:
 
    void *mem_ctx;
    bi_instr *I;
+   bi_index atest;
 };
 
 TEST_F(MergeFlow, End) {
@@ -101,12 +103,12 @@ TEST_F(MergeFlow, TrivialWait) {
    CASE({
         bi_fadd_f32_to(b, bi_register(0), bi_register(0), bi_register(0));
         flow(WAIT0126);
-        bi_atest_to(b, bi_register(0), bi_register(4), bi_register(5));
+        bi_atest_to(b, bi_register(0), bi_register(4), bi_register(5), atest);
    },
    {
         I = bi_fadd_f32_to(b, bi_register(0), bi_register(0), bi_register(0));
         I->flow = VA_FLOW_WAIT0126;
-        bi_atest_to(b, bi_register(0), bi_register(4), bi_register(5));
+        bi_atest_to(b, bi_register(0), bi_register(4), bi_register(5), atest);
    });
 }
 
@@ -269,7 +271,7 @@ TEST_F(MergeFlow, DeletePointlessDiscard) {
          flow(DISCARD);
          flow(WAIT0);
          flow(WAIT0126);
-         bi_atest_to(b, bi_register(0), bi_register(4), bi_register(5));
+         bi_atest_to(b, bi_register(0), bi_register(4), bi_register(5), atest);
          flow(WAIT);
          bi_blend_to(b, bi_register(0), bi_register(4), bi_register(5),
                      bi_register(6), bi_register(7), bi_register(8),
@@ -283,7 +285,7 @@ TEST_F(MergeFlow, DeletePointlessDiscard) {
                           BI_REGISTER_FORMAT_F32, false, false,
                           BI_VA_LOD_MODE_COMPUTED_LOD, BI_WRITE_MASK_RGBA, 4);
          I->flow = VA_FLOW_WAIT0126;
-         I = bi_atest_to(b, bi_register(0), bi_register(4), bi_register(5));
+         I = bi_atest_to(b, bi_register(0), bi_register(4), bi_register(5), atest);
          I->flow = VA_FLOW_WAIT;
          I = bi_blend_to(b, bi_register(0), bi_register(4), bi_register(5),
                          bi_register(6), bi_register(7), bi_register(8),

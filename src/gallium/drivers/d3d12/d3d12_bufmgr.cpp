@@ -100,7 +100,7 @@ d3d12_bo_wrap_res(struct d3d12_screen *screen, ID3D12Resource *res, enum d3d12_r
    bo->residency_status = residency;
    bo->last_used_timestamp = 0;
    screen->dev->GetCopyableFootprints(&desc, 0, total_subresources, 0, nullptr, nullptr, nullptr, &bo->estimated_size);
-   if (residency != d3d12_evicted) {
+   if (residency == d3d12_resident) {
       mtx_lock(&screen->submit_mutex);
       list_add(&bo->residency_list_entry, &screen->residency_list);
       mtx_unlock(&screen->submit_mutex);
@@ -187,7 +187,7 @@ d3d12_bo_unreference(struct d3d12_bo *bo)
 
       mtx_lock(&bo->screen->submit_mutex);
 
-      if (bo->residency_status != d3d12_evicted)
+      if (bo->residency_status == d3d12_resident)
          list_del(&bo->residency_list_entry);
 
       /* MSVC's offsetof fails when the name is ambiguous between struct and function */
@@ -320,10 +320,6 @@ d3d12_bufmgr_create_buffer(struct pb_manager *pmgr,
    buf = CALLOC_STRUCT(d3d12_buffer);
    if (!buf)
       return NULL;
-
-   // Align the buffer to D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT
-   // in case it is to be used as a CBV.
-   size = align64(size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
 
    pipe_reference_init(&buf->base.reference, 1);
    buf->base.alignment_log2 = util_logbase2(pb_desc->alignment);

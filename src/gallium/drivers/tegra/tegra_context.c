@@ -210,7 +210,7 @@ tegra_create_sampler_state(struct pipe_context *pcontext,
 }
 
 static void
-tegra_bind_sampler_states(struct pipe_context *pcontext, unsigned shader,
+tegra_bind_sampler_states(struct pipe_context *pcontext, enum pipe_shader_type shader,
                           unsigned start_slot, unsigned num_samplers,
                           void **samplers)
 {
@@ -475,7 +475,7 @@ tegra_set_clip_state(struct pipe_context *pcontext,
 }
 
 static void
-tegra_set_constant_buffer(struct pipe_context *pcontext, unsigned int shader,
+tegra_set_constant_buffer(struct pipe_context *pcontext, enum pipe_shader_type shader,
                           unsigned int index, bool take_ownership,
                           const struct pipe_constant_buffer *buf)
 {
@@ -559,7 +559,7 @@ tegra_set_viewport_states(struct pipe_context *pcontext, unsigned start_slot,
 }
 
 static void
-tegra_set_sampler_views(struct pipe_context *pcontext, unsigned shader,
+tegra_set_sampler_views(struct pipe_context *pcontext, enum pipe_shader_type shader,
                         unsigned start_slot, unsigned num_views,
                         unsigned unbind_num_trailing_slots,
                         bool take_ownership,
@@ -610,7 +610,7 @@ tegra_set_debug_callback(struct pipe_context *pcontext,
 }
 
 static void
-tegra_set_shader_buffers(struct pipe_context *pcontext, unsigned int shader,
+tegra_set_shader_buffers(struct pipe_context *pcontext, enum pipe_shader_type shader,
                          unsigned start, unsigned count,
                          const struct pipe_shader_buffer *buffers,
                          unsigned writable_bitmask)
@@ -622,7 +622,7 @@ tegra_set_shader_buffers(struct pipe_context *pcontext, unsigned int shader,
 }
 
 static void
-tegra_set_shader_images(struct pipe_context *pcontext, unsigned int shader,
+tegra_set_shader_images(struct pipe_context *pcontext, enum pipe_shader_type shader,
                         unsigned start, unsigned count,
                         unsigned unbind_num_trailing_slots,
                         const struct pipe_image_view *images)

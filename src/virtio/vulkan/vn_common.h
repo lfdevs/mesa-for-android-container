@@ -26,9 +26,11 @@
 #include "util/bitscan.h"
 #include "util/bitset.h"
 #include "util/compiler.h"
+#include "util/libsync.h"
 #include "util/list.h"
 #include "util/macros.h"
 #include "util/os_time.h"
+#include "util/perf/cpu_trace.h"
 #include "util/simple_mtx.h"
 #include "util/u_math.h"
 #include "util/xmlconfig.h"
@@ -52,51 +54,10 @@
 #define vn_result(instance, result)                                          \
    ((result) >= VK_SUCCESS ? (result) : vn_error((instance), (result)))
 
-#ifdef ANDROID
-
-#include <cutils/trace.h>
-
-#define VN_TRACE_BEGIN(name) atrace_begin(ATRACE_TAG_GRAPHICS, name)
-#define VN_TRACE_END() atrace_end(ATRACE_TAG_GRAPHICS)
-
-#else
-
-/* XXX we would like to use perfetto, but it lacks a C header */
-#define VN_TRACE_BEGIN(name)
-#define VN_TRACE_END()
-
-#endif /* ANDROID */
-
-#if __has_attribute(cleanup) && __has_attribute(unused)
-
-#define VN_TRACE_SCOPE_VAR_CONCAT(name, suffix) name##suffix
-#define VN_TRACE_SCOPE_VAR(suffix)                                           \
-   VN_TRACE_SCOPE_VAR_CONCAT(_vn_trace_scope_, suffix)
-#define VN_TRACE_SCOPE(name)                                                 \
-   int VN_TRACE_SCOPE_VAR(__LINE__)                                          \
-      __attribute__((cleanup(vn_trace_scope_end), unused)) =                 \
-         vn_trace_scope_begin(name)
-
-static inline int
-vn_trace_scope_begin(const char *name)
-{
-   VN_TRACE_BEGIN(name);
-   return 0;
-}
-
-static inline void
-vn_trace_scope_end(int *scope)
-{
-   VN_TRACE_END();
-}
-
-#else
-
-#define VN_TRACE_SCOPE(name)
-
-#endif /* __has_attribute(cleanup) && __has_attribute(unused) */
-
-#define VN_TRACE_FUNC() VN_TRACE_SCOPE(__func__)
+#define VN_TRACE_BEGIN(name) MESA_TRACE_BEGIN(name)
+#define VN_TRACE_END() MESA_TRACE_END()
+#define VN_TRACE_SCOPE(name) MESA_TRACE_SCOPE(name)
+#define VN_TRACE_FUNC() MESA_TRACE_SCOPE(__func__)
 
 struct vn_instance;
 struct vn_physical_device;
@@ -205,7 +166,10 @@ vn_log_result(struct vn_instance *instance,
               const char *where);
 
 #define VN_REFCOUNT_INIT(val)                                                \
-   (struct vn_refcount) { .count = (val) }
+   (struct vn_refcount)                                                      \
+   {                                                                         \
+      .count = (val),                                                        \
+   }
 
 static inline int
 vn_refcount_load_relaxed(const struct vn_refcount *ref)

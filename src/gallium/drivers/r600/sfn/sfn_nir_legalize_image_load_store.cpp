@@ -24,15 +24,13 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-
-#include "sfn_nir.h"
-
 #include "nir.h"
 #include "nir_builder.h"
-
+#include "sfn_nir.h"
 
 static nir_ssa_def *
-r600_legalize_image_load_store_impl(nir_builder *b, nir_instr *instr,
+r600_legalize_image_load_store_impl(nir_builder *b,
+                                    nir_instr *instr,
                                     UNUSED void *_options)
 {
    b->cursor = nir_before_instr(instr);
@@ -45,10 +43,11 @@ r600_legalize_image_load_store_impl(nir_builder *b, nir_instr *instr,
    bool load_value = ir->intrinsic != nir_intrinsic_image_store;
 
    if (load_value)
-      default_value = nir_imm_zero(b, nir_dest_num_components(ir->dest),
-                                   nir_dest_bit_size(ir->dest));
+      default_value =
+         nir_imm_zero(b, nir_dest_num_components(ir->dest), nir_dest_bit_size(ir->dest));
 
-   auto image_exists = nir_ult(b, ir->src[0].ssa, nir_imm_int(b, b->shader->info.num_images));
+   auto image_exists =
+      nir_ult(b, ir->src[0].ssa, nir_imm_int(b, b->shader->info.num_images));
 
    nir_if *if_exists = nir_push_if(b, image_exists);
 
@@ -57,8 +56,8 @@ r600_legalize_image_load_store_impl(nir_builder *b, nir_instr *instr,
    if (ir->intrinsic != nir_intrinsic_image_size) {
 
       /*  Image exists start */
-      auto new_index = nir_umin(b, ir->src[0].ssa,
-            nir_imm_int(b, b->shader->info.num_images - 1));
+      auto new_index =
+         nir_umin(b, ir->src[0].ssa, nir_imm_int(b, b->shader->info.num_images - 1));
       nir_instr_rewrite_src_ssa(instr, &ir->src[0], new_index);
 
       enum glsl_sampler_dim dim = nir_intrinsic_image_dim(ir);
@@ -67,13 +66,16 @@ r600_legalize_image_load_store_impl(nir_builder *b, nir_instr *instr,
       switch (dim) {
       case GLSL_SAMPLER_DIM_BUF:
       case GLSL_SAMPLER_DIM_1D:
-         num_components = 1; break;
+         num_components = 1;
+         break;
       case GLSL_SAMPLER_DIM_2D:
       case GLSL_SAMPLER_DIM_RECT:
       case GLSL_SAMPLER_DIM_CUBE:
-         num_components = 2; break;
+         num_components = 2;
+         break;
       case GLSL_SAMPLER_DIM_3D:
-         num_components = 3; break;
+         num_components = 3;
+         break;
       default:
          unreachable("Unexpected image size");
       }
@@ -81,10 +83,15 @@ r600_legalize_image_load_store_impl(nir_builder *b, nir_instr *instr,
       if (num_components < 3 && nir_intrinsic_image_array(ir))
          num_components++;
 
-      auto img_size = nir_image_size(b, num_components, 32, ir->src[0].ssa, nir_imm_int(b, 0),
-            dim, nir_intrinsic_image_array(ir),
-            nir_intrinsic_format(ir),
-            nir_intrinsic_access(ir));
+      auto img_size = nir_image_size(b,
+                                     num_components,
+                                     32,
+                                     ir->src[0].ssa,
+                                     nir_imm_int(b, 0),
+                                     dim,
+                                     nir_intrinsic_image_array(ir),
+                                     nir_intrinsic_format(ir),
+                                     nir_intrinsic_access(ir));
 
       unsigned mask = (1 << num_components) - 1;
       unsigned num_src1_comp = MIN2(ir->src[1].ssa->num_components, num_components);
@@ -95,10 +102,12 @@ r600_legalize_image_load_store_impl(nir_builder *b, nir_instr *instr,
                               nir_channels(b, img_size, mask));
 
       switch (num_components) {
-      case 2: in_range = nir_iand(b, nir_channel(b, in_range, 0),  nir_channel(b, in_range, 1)); break;
+      case 2:
+         in_range = nir_iand(b, nir_channel(b, in_range, 0), nir_channel(b, in_range, 1));
+         break;
       case 3: {
-         auto tmp = nir_iand(b, nir_channel(b, in_range, 0),  nir_channel(b, in_range, 1));
-         in_range = nir_iand(b, tmp,  nir_channel(b, in_range, 2));
+         auto tmp = nir_iand(b, nir_channel(b, in_range, 0), nir_channel(b, in_range, 1));
+         in_range = nir_iand(b, tmp, nir_channel(b, in_range, 2));
          break;
       }
       }
@@ -144,8 +153,7 @@ r600_legalize_image_load_store_impl(nir_builder *b, nir_instr *instr,
 }
 
 static bool
-r600_legalize_image_load_store_filter(const nir_instr *instr,
-                                      UNUSED const void *_options)
+r600_legalize_image_load_store_filter(const nir_instr *instr, UNUSED const void *_options)
 {
    if (instr->type != nir_instr_type_intrinsic)
       return false;

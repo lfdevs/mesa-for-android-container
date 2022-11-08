@@ -56,6 +56,8 @@ get_texture_size(struct ycbcr_state *state, nir_deref_instr *texture)
    nir_ssa_dest_init(&tex->instr, &tex->dest, nir_tex_instr_dest_size(tex), 32, NULL);
    nir_builder_instr_insert(b, &tex->instr);
 
+   state->builder->shader->info.uses_resource_info_query = true;
+
    return nir_i2f32(b, &tex->dest.ssa);
 }
 
@@ -132,7 +134,7 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state, uint32_t plane)
          }
       FALLTHROUGH;
       default:
-         nir_src_copy(&tex->src[i].src, &old_tex->src[i].src);
+         nir_src_copy(&tex->src[i].src, &old_tex->src[i].src, &tex->instr);
          break;
       }
    }
@@ -298,35 +300,22 @@ try_lower_tex_ycbcr(const struct radv_pipeline_layout *layout, nir_builder *buil
    return true;
 }
 
+static bool
+radv_nir_lower_ycbcr_textures_instr(nir_builder *b, nir_instr *instr, void *layout)
+{
+   if (instr->type != nir_instr_type_tex)
+      return false;
+
+   nir_tex_instr *tex = nir_instr_as_tex(instr);
+   return try_lower_tex_ycbcr(layout, b, tex);
+}
+
 bool
 radv_nir_lower_ycbcr_textures(nir_shader *shader, const struct radv_pipeline_layout *layout)
 {
-   bool progress = false;
-
-   nir_foreach_function (function, shader) {
-      if (!function->impl)
-         continue;
-
-      bool function_progress = false;
-      nir_builder builder;
-      nir_builder_init(&builder, function->impl);
-
-      nir_foreach_block (block, function->impl) {
-         nir_foreach_instr_safe (instr, block) {
-            if (instr->type != nir_instr_type_tex)
-               continue;
-
-            nir_tex_instr *tex = nir_instr_as_tex(instr);
-            function_progress |= try_lower_tex_ycbcr(layout, &builder, tex);
-         }
-      }
-
-      if (function_progress) {
-         nir_metadata_preserve(function->impl, nir_metadata_block_index | nir_metadata_dominance);
-      }
-
-      progress |= function_progress;
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader,
+                                       radv_nir_lower_ycbcr_textures_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       (void *)layout);
 }

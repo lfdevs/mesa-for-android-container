@@ -41,7 +41,7 @@
 static void
 v3d_debug_resource_layout(struct v3d_resource *rsc, const char *caller)
 {
-        if (!(unlikely(V3D_DEBUG & V3D_DEBUG_SURFACE)))
+        if (!V3D_DBG(SURFACE))
                 return;
 
         struct pipe_resource *prsc = &rsc->base;
@@ -1178,9 +1178,8 @@ v3d_resource_screen_init(struct pipe_screen *pscreen)
         pscreen->resource_get_param = v3d_resource_get_param;
         pscreen->resource_destroy = u_transfer_helper_resource_destroy;
         pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl,
-                                                            true, false,
-                                                            true, true,
-                                                            false);
+                                                            U_TRANSFER_HELPER_SEPARATE_Z32S8 |
+                                                            U_TRANSFER_HELPER_MSAA_MAP);
 }
 
 void

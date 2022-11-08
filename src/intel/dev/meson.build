@@ -66,15 +66,18 @@ if with_tests and with_tools.contains('drm-shim') and with_tools.contains('intel
     include_directories : [inc_include, inc_src],
     link_with : libintel_dev,
   )
+  intel_drm_ld_preload = join_paths(meson.current_build_dir(), '..', 'tools', 'libintel_noop_drm_shim.so')
   foreach _gens : platforms
     gen = _gens[0]
     foreach p : _gens[1]
               test('intel_device_info_override_test_@0@'.format(p),
                    intel_devinfo_override_test,
                    args : '@0@'.format(gen),
-                   env : [ 'LD_PRELOAD=@0@'.format(join_paths(
-                     meson.current_build_dir(), '../tools/libintel_noop_drm_shim.so')),
-                           'INTEL_STUB_GPU_PLATFORM=@0@'.format(p) ],
+                   env : [
+                      'LD_PRELOAD=@0@'.format(intel_drm_ld_preload),
+                      'INTEL_STUB_GPU_PLATFORM=@0@'.format(p),
+                      'STRACEDIR=meson-logs/strace/intel_device_info_override_test_@0@'.format(p),
+                   ],
                    suite : ['intel'],
                   )
     endforeach

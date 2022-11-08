@@ -37,7 +37,6 @@
 #include <windows.h>
 
 #include "util/u_debug.h"
-#include "util/debug.h"
 #include "stw_winsys.h"
 #include "stw_device.h"
 #include "gdi/gdi_sw_winsys.h"
@@ -115,7 +114,7 @@ static struct pipe_screen *
 wgl_screen_create(HDC hDC)
 {
    struct sw_winsys *winsys;
-   UNUSED bool sw_only = env_var_as_boolean("LIBGL_ALWAYS_SOFTWARE", false);
+   UNUSED bool sw_only = debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
 
    winsys = gdi_create_sw_winsys();
    if (!winsys)

@@ -9,7 +9,6 @@
 #include "nouveau_screen.h"
 #include "nouveau_fence.h"
 #include "nouveau_heap.h"
-#include "nv30/nv30_winsys.h"
 #include "nv30/nv30_resource.h"
 #include "compiler/nir/nir.h"
 

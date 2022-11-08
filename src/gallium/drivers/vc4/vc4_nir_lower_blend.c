@@ -49,7 +49,7 @@ static bool
 blend_depends_on_dst_color(struct vc4_compile *c)
 {
         return (c->fs_key->blend.blend_enable ||
-                c->fs_key->blend.colormask != 0xf ||
+                c->fs_key->blend.colormask != PIPE_MASK_RGBA ||
                 c->fs_key->logicop_func != PIPE_LOGICOP_COPY);
 }
 

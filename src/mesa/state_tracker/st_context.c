@@ -156,9 +156,6 @@ st_invalidate_state(struct gl_context *ctx)
        st_user_clip_planes_enabled(ctx))
       st->dirty |= ST_NEW_CLIP_STATE;
 
-   if (new_state & _NEW_POINT && st->lower_texcoord_replace)
-      st->dirty |= ST_NEW_FS_STATE;
-
    if (new_state & _NEW_PIXEL)
       st->dirty |= ST_NEW_PIXEL_TRANSFER;
 
@@ -559,6 +556,9 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
                                   PIPE_TEXTURE_2D, 0, 0,
                                   PIPE_BIND_SAMPLER_VIEW);
 
+   ctx->Const.QueryCounterBits.Timestamp =
+      screen->get_param(screen, PIPE_CAP_QUERY_TIMESTAMP_BITS);
+
    st->has_stencil_export =
       screen->get_param(screen, PIPE_CAP_SHADER_STENCIL_EXPORT);
    st->has_etc1 = screen->is_format_supported(screen, PIPE_FORMAT_ETC1_RGB8,
@@ -584,6 +584,18 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->has_astc_5x5_ldr =
       screen->is_format_supported(screen, PIPE_FORMAT_ASTC_5x5_SRGB,
                                   PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW);
+   st->has_s3tc = screen->is_format_supported(screen, PIPE_FORMAT_DXT5_RGBA,
+                                              PIPE_TEXTURE_2D, 0, 0,
+                                              PIPE_BIND_SAMPLER_VIEW);
+   st->has_rgtc = screen->is_format_supported(screen, PIPE_FORMAT_RGTC2_UNORM,
+                                              PIPE_TEXTURE_2D, 0, 0,
+                                              PIPE_BIND_SAMPLER_VIEW);
+   st->has_latc = screen->is_format_supported(screen, PIPE_FORMAT_LATC2_UNORM,
+                                              PIPE_TEXTURE_2D, 0, 0,
+                                              PIPE_BIND_SAMPLER_VIEW);
+   st->has_bptc = screen->is_format_supported(screen, PIPE_FORMAT_BPTC_SRGBA,
+                                              PIPE_TEXTURE_2D, 0, 0,
+                                              PIPE_BIND_SAMPLER_VIEW);
    st->force_persample_in_shader =
       screen->get_param(screen, PIPE_CAP_SAMPLE_SHADING) &&
       !screen->get_param(screen, PIPE_CAP_FORCE_PERSAMPLE_INTERP);
@@ -598,6 +610,9 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->use_format_with_border_color =
       !!(screen->get_param(screen, PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK) &
          PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_FREEDRENO);
+   st->alpha_border_color_is_not_w =
+      !!(screen->get_param(screen, PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK) &
+         PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_ALPHA_NOT_W);
    st->emulate_gl_clamp =
       !screen->get_param(screen, PIPE_CAP_GL_CLAMP);
    st->texture_buffer_sampler =
@@ -632,8 +647,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       screen->get_param(screen, PIPE_CAP_PREFER_REAL_BUFFER_IN_CONSTBUF0);
    st->has_conditional_render =
       screen->get_param(screen, PIPE_CAP_CONDITIONAL_RENDER);
-   st->lower_texcoord_replace =
-      !screen->get_param(screen, PIPE_CAP_POINT_SPRITE);
    st->lower_rect_tex =
       !screen->get_param(screen, PIPE_CAP_TEXRECT);
    st->allow_st_finalize_nir_twice = screen->finalize_nir != NULL;
@@ -687,11 +700,11 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    ctx->Point.MaxSize = MAX2(ctx->Const.MaxPointSize,
                              ctx->Const.MaxPointSizeAA);
 
-   ctx->Const.PointCoordOriginUpperLeft =
-      screen->get_param(screen, PIPE_CAP_POINT_COORD_ORIGIN_UPPER_LEFT);
-
    ctx->Const.NoClippingOnCopyTex = screen->get_param(screen,
                                                       PIPE_CAP_NO_CLIP_ON_COPY_TEX);
+
+   ctx->Const.ForceFloat32TexNearest =
+      !screen->get_param(screen, PIPE_CAP_TEXTURE_FLOAT_LINEAR);
 
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].PositionAlwaysInvariant = options->vs_position_always_invariant;
 
@@ -718,8 +731,7 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
          !st->lower_alpha_test &&
          !st->clamp_frag_color_in_shader &&
          !st->force_persample_in_shader &&
-         !st->lower_two_sided_color &&
-         !st->lower_texcoord_replace;
+         !st->lower_two_sided_color;
 
    st->shader_has_one_variant[MESA_SHADER_TESS_CTRL] = st->has_shareable_shaders;
    st->shader_has_one_variant[MESA_SHADER_TESS_EVAL] =

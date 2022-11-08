@@ -224,10 +224,12 @@ vn_instance_init_experimental_features(struct vn_instance *instance)
              "VkVenusExperimentalFeatures100000MESA is as below:"
              "\n\tmemoryResourceAllocationSize = %u"
              "\n\tglobalFencing = %u"
-             "\n\tlargeRing = %u",
+             "\n\tlargeRing = %u"
+             "\n\tsyncFdFencing = %u",
              instance->experimental.memoryResourceAllocationSize,
              instance->experimental.globalFencing,
-             instance->experimental.largeRing);
+             instance->experimental.largeRing,
+             instance->experimental.syncFdFencing);
    }
 
    return VK_SUCCESS;

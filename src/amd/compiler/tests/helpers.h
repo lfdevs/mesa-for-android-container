@@ -26,6 +26,7 @@
 
 #include "framework.h"
 #include "vulkan/vulkan.h"
+#include <functional>
 
 enum QoShaderDeclType {
    QoShaderDeclType_ubo,
@@ -82,6 +83,7 @@ void finish_opt_test();
 void finish_ra_test(aco::ra_test_policy, bool lower=false);
 void finish_optimizer_postRA_test();
 void finish_to_hw_instr_test();
+void finish_waitcnt_test();
 void finish_insert_nops_test();
 void finish_form_hard_clause_test();
 void finish_assembler_test();
@@ -102,6 +104,8 @@ aco::Temp fma(aco::Temp src0, aco::Temp src1, aco::Temp src2, aco::Builder b=bld
 aco::Temp fsat(aco::Temp src, aco::Builder b=bld);
 aco::Temp ext_ushort(aco::Temp src, unsigned idx, aco::Builder b=bld);
 aco::Temp ext_ubyte(aco::Temp src, unsigned idx, aco::Builder b=bld);
+void emit_divergent_if_else(aco::Program* prog, aco::Builder& b, aco::Operand cond, std::function<void()> then,
+                            std::function<void()> els);
 
 /* vulkan helpers */
 VkDevice get_vk_device(enum amd_gfx_level gfx_level);

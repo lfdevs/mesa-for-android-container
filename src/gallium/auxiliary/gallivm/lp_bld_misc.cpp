@@ -379,11 +379,10 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 
    llvm::SmallVector<std::string, 16> MAttrs;
 
-#if LLVM_VERSION_MAJOR >= 4 && (defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64) || defined(PIPE_ARCH_ARM))
-   /* llvm-3.3+ implements sys::getHostCPUFeatures for Arm
-    * and llvm-3.7+ for x86, which allows us to enable/disable
-    * code generation based on the results of cpuid on these
-    * architectures.
+#if defined(PIPE_ARCH_ARM)
+   /* llvm-3.3+ implements sys::getHostCPUFeatures for Arm,
+    * which allows us to enable/disable code generation based
+    * on the results of cpuid on these architectures.
     */
    llvm::StringMap<bool> features;
    llvm::sys::getHostCPUFeatures(features);
@@ -395,13 +394,9 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    }
 #elif defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
    /*
-    * We need to unset attributes because sometimes LLVM mistakenly assumes
-    * certain features are present given the processor name.
-    *
-    * https://bugs.freedesktop.org/show_bug.cgi?id=92214
-    * http://llvm.org/PR25021
-    * http://llvm.org/PR19429
-    * http://llvm.org/PR16721
+    * Because we can override cpu caps with environment variables,
+    * so we do not use llvm::sys::getHostCPUFeatures to detect cpu features
+    * but using util_get_cpu_caps() instead.
     */
    MAttrs.push_back(util_get_cpu_caps()->has_sse    ? "+sse"    : "-sse"   );
    MAttrs.push_back(util_get_cpu_caps()->has_sse2   ? "+sse2"   : "-sse2"  );
@@ -419,14 +414,15 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    MAttrs.push_back(util_get_cpu_caps()->has_f16c ? "+f16c" : "-f16c");
    MAttrs.push_back(util_get_cpu_caps()->has_fma  ? "+fma"  : "-fma");
    MAttrs.push_back(util_get_cpu_caps()->has_avx2 ? "+avx2" : "-avx2");
-   /* disable avx512 and all subvariants */
-   MAttrs.push_back("-avx512cd");
-   MAttrs.push_back("-avx512er");
-   MAttrs.push_back("-avx512f");
-   MAttrs.push_back("-avx512pf");
-   MAttrs.push_back("-avx512bw");
-   MAttrs.push_back("-avx512dq");
-   MAttrs.push_back("-avx512vl");
+
+   /* All avx512 have avx512f */
+   MAttrs.push_back(util_get_cpu_caps()->has_avx512f ? "+avx512f"  : "-avx512f");
+   MAttrs.push_back(util_get_cpu_caps()->has_avx512cd ? "+avx512cd"  : "-avx512cd");
+   MAttrs.push_back(util_get_cpu_caps()->has_avx512er ? "+avx512er"  : "-avx512er");
+   MAttrs.push_back(util_get_cpu_caps()->has_avx512pf ? "+avx512pf"  : "-avx512pf");
+   MAttrs.push_back(util_get_cpu_caps()->has_avx512bw ? "+avx512bw"  : "-avx512bw");
+   MAttrs.push_back(util_get_cpu_caps()->has_avx512dq ? "+avx512dq"  : "-avx512dq");
+   MAttrs.push_back(util_get_cpu_caps()->has_avx512vl ? "+avx512vl"  : "-avx512vl");
 #endif
 #if defined(PIPE_ARCH_ARM)
    if (!util_get_cpu_caps()->has_neon) {
@@ -438,19 +434,6 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 
 #if defined(PIPE_ARCH_PPC)
    MAttrs.push_back(util_get_cpu_caps()->has_altivec ? "+altivec" : "-altivec");
-#if (LLVM_VERSION_MAJOR < 4)
-   /*
-    * Make sure VSX instructions are disabled
-    * See LLVM bugs:
-    * https://llvm.org/bugs/show_bug.cgi?id=25503#c7 (fixed in 3.8.1)
-    * https://llvm.org/bugs/show_bug.cgi?id=26775 (fixed in 3.8.1)
-    * https://llvm.org/bugs/show_bug.cgi?id=33531 (fixed in 4.0)
-    * https://llvm.org/bugs/show_bug.cgi?id=34647 (llc performance on certain unusual shader IR; intro'd in 4.0, pending as of 5.0)
-    */
-   if (util_get_cpu_caps()->has_altivec) {
-      MAttrs.push_back("-vsx");
-   }
-#else
    /*
     * Bug 25503 is fixed, by the same fix that fixed
     * bug 26775, in versions of LLVM later than 3.8 (starting with 3.8.1).
@@ -464,7 +447,6 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    if (util_get_cpu_caps()->has_altivec) {
       MAttrs.push_back(util_get_cpu_caps()->has_vsx ? "+vsx" : "-vsx");
    }
-#endif
 #endif
 
 #if defined(PIPE_ARCH_MIPS64)

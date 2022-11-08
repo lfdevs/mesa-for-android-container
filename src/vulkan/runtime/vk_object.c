@@ -52,6 +52,15 @@ vk_object_base_finish(struct vk_object_base *base)
       vk_free(&base->device->alloc, base->object_name);
 }
 
+void
+vk_object_base_recycle(struct vk_object_base *base)
+{
+   struct vk_device *device = base->device;
+   VkObjectType obj_type = base->type;
+   vk_object_base_finish(base);
+   vk_object_base_init(device, base, obj_type);
+}
+
 void *
 vk_object_alloc(struct vk_device *device,
                 const VkAllocationCallbacks *alloc,

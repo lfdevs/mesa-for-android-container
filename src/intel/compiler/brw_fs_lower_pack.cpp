@@ -41,6 +41,13 @@ fs_visitor::lower_pack()
       fs_reg dst = inst->dst;
 
       const fs_builder ibld(this, block, inst);
+      /* The lowering generates 2 instructions for what was previously 1. This
+       * can trick the IR to believe we're doing partial writes, but the
+       * register is actually fully written. Mark it as undef to help the IR
+       * reduce the liveness of the register.
+       */
+      if (!inst->is_partial_write())
+         ibld.emit_undef_for_dst(inst);
       for (unsigned i = 0; i < inst->sources; i++)
          ibld.MOV(subscript(dst, inst->src[i].type, i), inst->src[i]);
 

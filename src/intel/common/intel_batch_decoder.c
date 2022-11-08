@@ -51,7 +51,7 @@ intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,
    ctx->fp = fp;
    ctx->flags = flags;
    ctx->max_vbo_decoded_lines = -1; /* No limit! */
-   ctx->engine = I915_ENGINE_CLASS_RENDER;
+   ctx->engine = INTEL_ENGINE_CLASS_RENDER;
 
    if (xml_path == NULL)
       ctx->spec = intel_spec_load(devinfo);

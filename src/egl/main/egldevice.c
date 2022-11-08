@@ -86,14 +86,14 @@ _eglCheckDeviceHandle(EGLDeviceEXT device)
 {
    _EGLDevice *cur;
 
-   mtx_lock(_eglGlobal.Mutex);
+   simple_mtx_lock(_eglGlobal.Mutex);
    cur = _eglGlobal.DeviceList;
    while (cur) {
       if (cur == (_EGLDevice *) device)
          break;
       cur = cur->Next;
    }
-   mtx_unlock(_eglGlobal.Mutex);
+   simple_mtx_unlock(_eglGlobal.Mutex);
    return (cur != NULL);
 }
 
@@ -168,7 +168,7 @@ _eglAddDevice(int fd, bool software)
 {
    _EGLDevice *dev;
 
-   mtx_lock(_eglGlobal.Mutex);
+   simple_mtx_lock(_eglGlobal.Mutex);
    dev = _eglGlobal.DeviceList;
 
    /* The first device is always software */
@@ -194,7 +194,7 @@ _eglAddDevice(int fd, bool software)
 #endif
 
 out:
-   mtx_unlock(_eglGlobal.Mutex);
+   simple_mtx_unlock(_eglGlobal.Mutex);
    return dev;
 }
 
@@ -328,7 +328,7 @@ _eglQueryDevicesEXT(EGLint max_devices,
    if ((devices && max_devices <= 0) || !num_devices)
       return _eglError(EGL_BAD_PARAMETER, "eglQueryDevicesEXT");
 
-   mtx_lock(_eglGlobal.Mutex);
+   simple_mtx_lock(_eglGlobal.Mutex);
 
    num_devs = _eglRefreshDeviceList();
    devs = _eglGlobal.DeviceList;
@@ -359,7 +359,7 @@ _eglQueryDevicesEXT(EGLint max_devices,
    }
 
 out:
-   mtx_unlock(_eglGlobal.Mutex);
+   simple_mtx_unlock(_eglGlobal.Mutex);
 
    return EGL_TRUE;
 }

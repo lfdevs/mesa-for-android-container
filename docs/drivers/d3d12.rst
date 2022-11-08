@@ -55,7 +55,7 @@ Environment variables that control the behavior of the D3D12 driver.
 
 .. envvar:: MESA_D3D12_DEFAULT_ADAPTER_NAME <string> ("")
 
-Specifies a substring to search for when chosing a default adapter to run on. 
-The first adapter matching the substring is chosen. The substring is not
-case sensitive.
+Specifies a substring to search for when choosing a default adapter to
+run on. The first adapter matching the substring is chosen. The substring
+is not case sensitive.
 

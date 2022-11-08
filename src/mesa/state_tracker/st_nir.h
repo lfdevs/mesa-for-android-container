@@ -59,6 +59,8 @@ void st_nir_lower_samplers(struct pipe_screen *screen, struct nir_shader *nir,
                            struct gl_program *prog);
 void st_nir_lower_uniforms(struct st_context *st, struct nir_shader *nir);
 
+void
+st_nir_finish_builtin_nir(struct st_context *st, struct nir_shader *nir);
 struct pipe_shader_state *
 st_nir_finish_builtin_shader(struct st_context *st,
                              struct nir_shader *nir);

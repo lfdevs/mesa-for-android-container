@@ -125,4 +125,8 @@ void pvr_hard_code_get_idfwdf_program(
    uint32_t *usc_shareds_out,
    uint32_t *usc_temps_out);
 
+void pvr_hard_code_get_passthrough_vertex_shader(
+   const struct pvr_device_info *const dev_info,
+   const struct rogue_shader_binary **const program_out);
+
 #endif /* PVR_HARDCODE_SHADERS_H */

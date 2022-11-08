@@ -65,7 +65,7 @@ list_iterators_node_inherite::TearDown()
    mem_ctx = NULL;
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
    list_iterators_node_inherite,
    list_iterators_node_inherite,
    ::testing::Values(0, 1, 10)
@@ -184,7 +184,7 @@ list_iterators_node_embed::TearDown()
    mem_ctx = NULL;
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
    list_iterators_node_embed,
    list_iterators_node_embed,
    ::testing::Values(0, 1, 10)

@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/macros.h"
 #include "util/u_math.h"
 #include "compiler/shader_enums.h"
@@ -333,7 +333,7 @@ intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
       static int task_urb_share_percentage = -1;
       if (task_urb_share_percentage < 0) {
          task_urb_share_percentage =
-            MIN2(env_var_as_unsigned("INTEL_MESH_TASK_URB_SHARE", 10), 100);
+            MIN2(debug_get_num_option("INTEL_MESH_TASK_URB_SHARE", 10), 100);
       }
       task_urb_share = task_urb_share_percentage / 100.0f;
    }

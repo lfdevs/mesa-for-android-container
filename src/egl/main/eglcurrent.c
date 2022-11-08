@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+
 #include "c11/threads.h"
 #include "util/u_thread.h"
 #include "util/u_string.h"
@@ -181,11 +182,11 @@ _eglDebugReport(EGLenum error, const char *funcName,
    if (funcName == NULL)
       funcName = thr->CurrentFuncName;
 
-   mtx_lock(_eglGlobal.Mutex);
+   simple_mtx_lock(_eglGlobal.Mutex);
    if (_eglGlobal.debugTypesEnabled & DebugBitFromType(type))
       callback = _eglGlobal.debugCallback;
 
-   mtx_unlock(_eglGlobal.Mutex);
+   simple_mtx_unlock(_eglGlobal.Mutex);
 
    char *message_buf = NULL;
    if (message != NULL) {

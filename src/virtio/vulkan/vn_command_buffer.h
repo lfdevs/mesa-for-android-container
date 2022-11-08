@@ -36,9 +36,14 @@ enum vn_command_buffer_state {
 };
 
 struct vn_command_buffer_builder {
-   /* for scrubbing VK_IMAGE_LAYOUT_PRESENT_SRC_KHR */
-   uint32_t image_barrier_count;
-   VkImageMemoryBarrier *image_barriers;
+   /* Temporary storage for scrubbing VK_IMAGE_LAYOUT_PRESENT_SRC_KHR. The
+    * storage's lifetime is the command buffer's lifetime. We increase the
+    * storage as needed, but never shrink it.
+    */
+   struct {
+      void *data;
+      size_t size;
+   } tmp;
 
    const struct vn_render_pass *render_pass;
    const struct vn_framebuffer *framebuffer;

@@ -13,7 +13,7 @@ u_trace is useful when one needs to quickly identify performance bottleneck,
 or to build a tool to analyze the raw performance data.
 
 Drivers which support u_trace:
-   - Intel drivers: Anv, Iris
+   - Intel drivers: ANV, Iris
    - Adreno drivers: Freedreno, Turnip
 
 Usage
@@ -35,7 +35,7 @@ u_trace is controlled by environment variables:
    ``json``
       json format, suitable for parsing. Application should appropriately
       finish its rendering in order for trace's json to be valid.
-      For Vulkan api it is expected to destroy the device, for GL it is
+      For Vulkan API it is expected to destroy the device, for GL it is
       expected to destroy the context.
 
 :envvar:`GPU_TRACE_INSTRUMENT`

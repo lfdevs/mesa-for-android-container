@@ -37,7 +37,7 @@
 #include "util/u_debug.h"
 #include "c11/threads.h"
 
-uint32_t V3D_DEBUG = 0;
+uint32_t v3d_mesa_debug = 0;
 
 static const struct debug_named_value debug_control[] = {
         { "cl",          V3D_DEBUG_CL,
@@ -103,7 +103,7 @@ static const struct debug_named_value debug_control[] = {
 
 DEBUG_GET_ONCE_FLAGS_OPTION(v3d_debug, "V3D_DEBUG", debug_control, 0)
 
-uint32_t
+bool
 v3d_debug_flag_for_shader_stage(gl_shader_stage stage)
 {
         uint32_t flags[] = {
@@ -115,11 +115,11 @@ v3d_debug_flag_for_shader_stage(gl_shader_stage stage)
                 [MESA_SHADER_COMPUTE] = V3D_DEBUG_CS,
         };
         STATIC_ASSERT(MESA_SHADER_STAGES == 6);
-        return flags[stage];
+        return v3d_mesa_debug & flags[stage];
 }
 
 void
 v3d_process_debug_variable(void)
 {
-        V3D_DEBUG = debug_get_option_v3d_debug();
+        v3d_mesa_debug = debug_get_option_v3d_debug();
 }

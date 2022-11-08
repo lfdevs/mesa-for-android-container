@@ -31,8 +31,7 @@
 
 namespace r600 {
 
-class ControlFlowInstr : public Instr
-{
+class ControlFlowInstr : public Instr {
 public:
    enum CFType {
       cf_else,
@@ -54,13 +53,13 @@ public:
    void accept(ConstInstrVisitor& visitor) const override;
    void accept(InstrVisitor& visitor) override;
 
-   CFType cf_type() const { return m_type;}
+   CFType cf_type() const { return m_type; }
 
    int nesting_corr() const override;
 
    static Instr::Pointer from_string(std::string type_str);
 
-   bool end_block() const override { return true;}
+   bool end_block() const override { return true; }
 
    int nesting_offset() const override;
 
@@ -73,7 +72,6 @@ private:
 
 class IfInstr : public Instr {
 public:
-
    IfInstr(AluInstr *pred);
    IfInstr(const IfInstr& orig);
 
@@ -88,10 +86,10 @@ public:
 
    bool replace_source(PRegister old_src, PVirtualValue new_src) override;
 
-   static Instr::Pointer from_string(std::istream &is, ValueFactory& value_factory);
+   static Instr::Pointer from_string(std::istream& is, ValueFactory& value_factory);
 
-   bool end_block() const override { return true;}
-   int nesting_offset() const override { return 1;}
+   bool end_block() const override { return true; }
+   int nesting_offset() const override { return 1; }
 
 private:
    bool do_ready() const override;
@@ -102,6 +100,6 @@ private:
    AluInstr *m_predicate;
 };
 
-}
+} // namespace r600
 
 #endif // CONTROLFLOWINSTR_H

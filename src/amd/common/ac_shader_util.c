@@ -421,6 +421,114 @@ const struct ac_data_format_info *ac_get_data_format_info(unsigned dfmt)
    return &data_format_table[dfmt];
 }
 
+#define DUP2(v) v, v
+#define DUP3(v) v, v, v
+#define DUP4(v) v, v, v, v
+
+#define FMT(dfmt, nfmt) 0xb, {HW_FMT(dfmt, nfmt), HW_FMT(dfmt##_##dfmt, nfmt), HW_FMT_INVALID, HW_FMT(dfmt##_##dfmt##_##dfmt##_##dfmt, nfmt)}
+#define FMT_32(nfmt) 0xf, {HW_FMT(32, nfmt), HW_FMT(32_32, nfmt), HW_FMT(32_32_32, nfmt), HW_FMT(32_32_32_32, nfmt)}
+#define FMT_64(nfmt) 0x3, {HW_FMT(32_32, nfmt), HW_FMT(32_32_32_32, nfmt), DUP2(HW_FMT_INVALID)}
+#define FMTP(dfmt, nfmt) 0xf, {DUP4(HW_FMT(dfmt, nfmt))}
+
+#define DST_SEL(x, y, z, w) \
+   (S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_##x) | S_008F0C_DST_SEL_Y(V_008F0C_SQ_SEL_##y) | \
+    S_008F0C_DST_SEL_Z(V_008F0C_SQ_SEL_##z) | S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_##w))
+
+#define LIST_NFMT_8_16(nfmt) \
+   [(int)PIPE_FORMAT_R8_##nfmt] = {DST_SEL(X,0,0,1), 1, 1, 1, FMT(8, nfmt)}, \
+   [(int)PIPE_FORMAT_R8G8_##nfmt] = {DST_SEL(X,Y,0,1), 2, 2, 1, FMT(8, nfmt)}, \
+   [(int)PIPE_FORMAT_R8G8B8_##nfmt] = {DST_SEL(X,Y,Z,1), 3, 3, 1, FMT(8, nfmt)}, \
+   [(int)PIPE_FORMAT_B8G8R8_##nfmt] = {DST_SEL(Z,Y,X,1), 3, 3, 1, FMT(8, nfmt)}, \
+   [(int)PIPE_FORMAT_R8G8B8A8_##nfmt] = {DST_SEL(X,Y,Z,W), 4, 4, 1, FMT(8, nfmt)}, \
+   [(int)PIPE_FORMAT_B8G8R8A8_##nfmt] = {DST_SEL(Z,Y,X,W), 4, 4, 1, FMT(8, nfmt)}, \
+   [(int)PIPE_FORMAT_R16_##nfmt] = {DST_SEL(X,0,0,1), 2, 1, 2, FMT(16, nfmt)}, \
+   [(int)PIPE_FORMAT_R16G16_##nfmt] = {DST_SEL(X,Y,0,1), 4, 2, 2, FMT(16, nfmt)}, \
+   [(int)PIPE_FORMAT_R16G16B16_##nfmt] = {DST_SEL(X,Y,Z,1), 6, 3, 2, FMT(16, nfmt)}, \
+   [(int)PIPE_FORMAT_R16G16B16A16_##nfmt] = {DST_SEL(X,Y,Z,W), 8, 4, 2, FMT(16, nfmt)},
+
+#define LIST_NFMT_32_64(nfmt) \
+   [(int)PIPE_FORMAT_R32_##nfmt] = {DST_SEL(X,0,0,1), 4, 1, 4, FMT_32(nfmt)}, \
+   [(int)PIPE_FORMAT_R32G32_##nfmt] = {DST_SEL(X,Y,0,1), 8, 2, 4, FMT_32(nfmt)}, \
+   [(int)PIPE_FORMAT_R32G32B32_##nfmt] = {DST_SEL(X,Y,Z,1), 12, 3, 4, FMT_32(nfmt)}, \
+   [(int)PIPE_FORMAT_R32G32B32A32_##nfmt] = {DST_SEL(X,Y,Z,W), 16, 4, 4, FMT_32(nfmt)}, \
+   [(int)PIPE_FORMAT_R64_##nfmt] = {DST_SEL(X,Y,0,0), 8, 1, 8, FMT_64(nfmt)}, \
+   [(int)PIPE_FORMAT_R64G64_##nfmt] = {DST_SEL(X,Y,Z,W), 16, 2, 8, FMT_64(nfmt)}, \
+   [(int)PIPE_FORMAT_R64G64B64_##nfmt] = {DST_SEL(X,Y,Z,W), 24, 3, 8, FMT_64(nfmt)}, \
+   [(int)PIPE_FORMAT_R64G64B64A64_##nfmt] = {DST_SEL(X,Y,Z,W), 32, 4, 8, FMT_64(nfmt)}, \
+
+#define VB_FORMATS \
+   [(int)PIPE_FORMAT_NONE] = {DST_SEL(0,0,0,1), 0, 4, 0, 0xf, {DUP4(HW_FMT_INVALID)}}, \
+   LIST_NFMT_8_16(UNORM) \
+   LIST_NFMT_8_16(SNORM) \
+   LIST_NFMT_8_16(USCALED) \
+   LIST_NFMT_8_16(SSCALED) \
+   LIST_NFMT_8_16(UINT) \
+   LIST_NFMT_8_16(SINT) \
+   LIST_NFMT_32_64(UINT) \
+   LIST_NFMT_32_64(SINT) \
+   LIST_NFMT_32_64(FLOAT) \
+   [(int)PIPE_FORMAT_R16_FLOAT] = {DST_SEL(X,0,0,1), 2, 1, 2, FMT(16, FLOAT)}, \
+   [(int)PIPE_FORMAT_R16G16_FLOAT] = {DST_SEL(X,Y,0,1), 4, 2, 2, FMT(16, FLOAT)}, \
+   [(int)PIPE_FORMAT_R16G16B16_FLOAT] = {DST_SEL(X,Y,Z,1), 6, 3, 2, FMT(16, FLOAT)}, \
+   [(int)PIPE_FORMAT_R16G16B16A16_FLOAT] = {DST_SEL(X,Y,Z,W), 8, 4, 2, FMT(16, FLOAT)}, \
+   [(int)PIPE_FORMAT_B10G10R10A2_UNORM] = {DST_SEL(Z,Y,X,W), 4, 4, 0, FMTP(2_10_10_10, UNORM)}, \
+   [(int)PIPE_FORMAT_B10G10R10A2_SNORM] = {DST_SEL(Z,Y,X,W), 4, 4, 0, FMTP(2_10_10_10, SNORM), \
+                                           AA(AC_ALPHA_ADJUST_SNORM)}, \
+   [(int)PIPE_FORMAT_B10G10R10A2_USCALED] = {DST_SEL(Z,Y,X,W), 4, 4, 0, FMTP(2_10_10_10, USCALED)}, \
+   [(int)PIPE_FORMAT_B10G10R10A2_SSCALED] = {DST_SEL(Z,Y,X,W), 4, 4, 0, FMTP(2_10_10_10, SSCALED), \
+                                             AA(AC_ALPHA_ADJUST_SSCALED)}, \
+   [(int)PIPE_FORMAT_B10G10R10A2_UINT] = {DST_SEL(Z,Y,X,W), 4, 4, 0, FMTP(2_10_10_10, UINT)}, \
+   [(int)PIPE_FORMAT_B10G10R10A2_SINT] = {DST_SEL(Z,Y,X,W), 4, 4, 0, FMTP(2_10_10_10, SINT), \
+                                          AA(AC_ALPHA_ADJUST_SINT)}, \
+   [(int)PIPE_FORMAT_R10G10B10A2_UNORM] = {DST_SEL(X,Y,Z,W), 4, 4, 0, FMTP(2_10_10_10, UNORM)}, \
+   [(int)PIPE_FORMAT_R10G10B10A2_SNORM] = {DST_SEL(X,Y,Z,W), 4, 4, 0, FMTP(2_10_10_10, SNORM), \
+                                           AA(AC_ALPHA_ADJUST_SNORM)}, \
+   [(int)PIPE_FORMAT_R10G10B10A2_USCALED] = {DST_SEL(X,Y,Z,W), 4, 4, 0, FMTP(2_10_10_10, USCALED)}, \
+   [(int)PIPE_FORMAT_R10G10B10A2_SSCALED] = {DST_SEL(X,Y,Z,W), 4, 4, 0, FMTP(2_10_10_10, SSCALED), \
+                                             AA(AC_ALPHA_ADJUST_SSCALED)}, \
+   [(int)PIPE_FORMAT_R10G10B10A2_UINT] = {DST_SEL(X,Y,Z,W), 4, 4, 0, FMTP(2_10_10_10, UINT)}, \
+   [(int)PIPE_FORMAT_R10G10B10A2_SINT] = {DST_SEL(X,Y,Z,W), 4, 4, 0, FMTP(2_10_10_10, SINT), \
+                                          AA(AC_ALPHA_ADJUST_SINT)}, \
+   [(int)PIPE_FORMAT_R11G11B10_FLOAT] = {DST_SEL(X,Y,Z,W), 4, 3, 0, FMTP(10_11_11, FLOAT)}, \
+
+#define HW_FMT(dfmt, nfmt) (V_008F0C_BUF_DATA_FORMAT_##dfmt | (V_008F0C_BUF_NUM_FORMAT_##nfmt << 4))
+#define HW_FMT_INVALID (V_008F0C_BUF_DATA_FORMAT_INVALID | (V_008F0C_BUF_NUM_FORMAT_UNORM << 4))
+#define AA(v) v
+static const struct ac_vtx_format_info vb_formats_gfx6_alpha_adjust[] = {VB_FORMATS};
+#undef AA
+
+#define AA(v) AC_ALPHA_ADJUST_NONE
+static const struct ac_vtx_format_info vb_formats_gfx6[] = {VB_FORMATS};
+#undef HW_FMT_INVALID
+#undef HW_FMT
+
+#define HW_FMT(dfmt, nfmt) V_008F0C_GFX10_FORMAT_##dfmt##_##nfmt
+#define HW_FMT_INVALID V_008F0C_GFX10_FORMAT_INVALID
+static const struct ac_vtx_format_info vb_formats_gfx10[] = {VB_FORMATS};
+#undef HW_FMT_INVALID
+#undef HW_FMT
+
+#define HW_FMT(dfmt, nfmt) V_008F0C_GFX11_FORMAT_##dfmt##_##nfmt
+#define HW_FMT_INVALID V_008F0C_GFX11_FORMAT_INVALID
+static const struct ac_vtx_format_info vb_formats_gfx11[] = {VB_FORMATS};
+
+const struct ac_vtx_format_info *
+ac_get_vtx_format_info_table(enum amd_gfx_level level, enum radeon_family family)
+{
+   if (level >= GFX11)
+      return vb_formats_gfx11;
+   else if (level >= GFX10)
+      return vb_formats_gfx10;
+   bool alpha_adjust = level <= GFX8 && family != CHIP_STONEY;
+   return alpha_adjust ? vb_formats_gfx6_alpha_adjust : vb_formats_gfx6;
+}
+
+const struct ac_vtx_format_info *
+ac_get_vtx_format_info(enum amd_gfx_level level, enum radeon_family family, enum pipe_format fmt)
+{
+   return &ac_get_vtx_format_info_table(level, family)[fmt];
+}
+
 enum ac_image_dim ac_get_sampler_dim(enum amd_gfx_level gfx_level, enum glsl_sampler_dim dim,
                                      bool is_array)
 {
@@ -720,7 +828,7 @@ void ac_compute_late_alloc(const struct radeon_info *info, bool ngg, bool ngg_cu
       *late_alloc_wave64 = MIN2(*late_alloc_wave64, G_00B11C_LIMIT(~0u));
 }
 
-unsigned ac_compute_cs_workgroup_size(uint16_t sizes[3], bool variable, unsigned max)
+unsigned ac_compute_cs_workgroup_size(const uint16_t sizes[3], bool variable, unsigned max)
 {
    if (variable)
       return max;

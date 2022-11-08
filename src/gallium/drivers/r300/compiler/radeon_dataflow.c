@@ -688,7 +688,7 @@ static void get_readers_for_single_write(
 	unsigned int branch_depth = 0;
 	struct rc_instruction * endloop = NULL;
 	unsigned int abort_on_read_at_endloop = 0;
-	int readers_before_endloop = -1;
+	unsigned int abort_on_read_at_break = 0;
 	struct get_readers_callback_data * d = userdata;
 
 	d->ReaderData->Writer = writer;
@@ -696,7 +696,6 @@ static void get_readers_for_single_write(
 	d->ReaderData->AbortOnWrite = 0;
 	d->ReaderData->LoopDepth = 0;
 	d->ReaderData->InElse = 0;
-	d->ReaderData->ReadersAfterEndloop = false;
 	d->DstFile = dst_file;
 	d->DstIndex = dst_index;
 	d->DstMask = dst_mask;
@@ -743,6 +742,27 @@ static void get_readers_for_single_write(
 				continue;
 			}
 			break;
+		case RC_OPCODE_BRK:
+			if (branch_depth == 0 && d->ReaderData->LoopDepth == 0) {
+				tmp = rc_match_bgnloop(tmp);
+				d->ReaderData->AbortOnRead = d->AliveWriteMask;
+			} else {
+				struct branch_write_mask * masks = &d->BranchMasks[branch_depth];
+				if (masks->HasElse) {
+					/* Abort on read for components that were written in the IF
+					 * block. */
+					abort_on_read_at_break |=
+						masks->IfWriteMask & ~masks->ElseWriteMask;
+					/* Abort on read for components that were written in the ELSE
+					 * block. */
+					abort_on_read_at_break |=
+						masks->ElseWriteMask & ~d->AliveWriteMask;
+				} else {
+					abort_on_read_at_break |=
+						masks->IfWriteMask & ~d->AliveWriteMask;
+				}
+			}
+			break;
 		case RC_OPCODE_IF:
 			push_branch_mask(d, &branch_depth);
 			break;
@@ -782,19 +802,12 @@ static void get_readers_for_single_write(
 				get_readers_pair_read_callback, d);
 		}
 
-		/* Writer was in loop and we have some readers after it.
-		 * Set a flag so we can be extra careful in copy propagate.
-		 */
-		if (readers_before_endloop != -1 &&
-			d->ReaderData->ReaderCount > readers_before_endloop)
-			d->ReaderData->ReadersAfterEndloop = true;
-
 		/* This can happen when we jump from an ENDLOOP to BGNLOOP */
 		if (tmp == writer) {
 			tmp = endloop;
 			endloop = NULL;
-			d->ReaderData->AbortOnRead = abort_on_read_at_endloop;
-			readers_before_endloop = d->ReaderData->ReaderCount;
+			d->ReaderData->AbortOnRead = abort_on_read_at_endloop
+							| abort_on_read_at_break;
 			continue;
 		}
 		rc_for_all_writes_mask(tmp, get_readers_write_callback, d);

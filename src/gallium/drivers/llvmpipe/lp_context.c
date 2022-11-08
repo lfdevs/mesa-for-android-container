@@ -54,9 +54,11 @@
 #define USE_GLOBAL_LLVM_CONTEXT
 #endif
 
-static void llvmpipe_destroy( struct pipe_context *pipe )
+
+static void
+llvmpipe_destroy(struct pipe_context *pipe)
 {
-   struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
+   struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
    struct llvmpipe_screen *lp_screen = llvmpipe_screen(pipe->screen);
    uint i;
 
@@ -78,7 +80,7 @@ static void llvmpipe_destroy( struct pipe_context *pipe )
    /* This will also destroy llvmpipe->setup:
     */
    if (llvmpipe->draw)
-      draw_destroy( llvmpipe->draw );
+      draw_destroy(llvmpipe->draw);
 
    for (i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
       pipe_surface_reference(&llvmpipe->framebuffer.cbufs[i], NULL);
@@ -112,16 +114,18 @@ static void llvmpipe_destroy( struct pipe_context *pipe )
 #endif
    llvmpipe->context = NULL;
 
-   align_free( llvmpipe );
+   align_free(llvmpipe);
 }
 
+
 static void
-do_flush( struct pipe_context *pipe,
-          struct pipe_fence_handle **fence,
-          unsigned flags)
+do_flush(struct pipe_context *pipe,
+         struct pipe_fence_handle **fence,
+         unsigned flags)
 {
    llvmpipe_flush(pipe, fence, __FUNCTION__);
 }
+
 
 static void
 llvmpipe_fence_server_sync(struct pipe_context *pipe,
@@ -134,18 +138,20 @@ llvmpipe_fence_server_sync(struct pipe_context *pipe,
    lp_fence_wait(f);
 }
 
+
 static void
 llvmpipe_render_condition(struct pipe_context *pipe,
                           struct pipe_query *query,
                           bool condition,
                           enum pipe_render_cond_flag mode)
 {
-   struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
+   struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
    llvmpipe->render_cond_query = query;
    llvmpipe->render_cond_mode = mode;
    llvmpipe->render_cond_cond = condition;
 }
+
 
 static void
 llvmpipe_render_condition_mem(struct pipe_context *pipe,
@@ -153,12 +159,13 @@ llvmpipe_render_condition_mem(struct pipe_context *pipe,
                               unsigned offset,
                               bool condition)
 {
-   struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
+   struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
    llvmpipe->render_cond_buffer = llvmpipe_resource(buffer);
    llvmpipe->render_cond_offset = offset;
    llvmpipe->render_cond_cond = condition;
 }
+
 
 static void
 llvmpipe_texture_barrier(struct pipe_context *pipe, unsigned flags)
@@ -166,27 +173,33 @@ llvmpipe_texture_barrier(struct pipe_context *pipe, unsigned flags)
    llvmpipe_finish(pipe, "barrier");
 }
 
-static void lp_draw_disk_cache_find_shader(void *cookie,
-                                           struct lp_cached_code *cache,
-                                           unsigned char ir_sha1_cache_key[20])
+
+static void
+lp_draw_disk_cache_find_shader(void *cookie,
+                               struct lp_cached_code *cache,
+                               unsigned char ir_sha1_cache_key[20])
 {
    struct llvmpipe_screen *screen = cookie;
    lp_disk_cache_find_shader(screen, cache, ir_sha1_cache_key);
 }
 
-static void lp_draw_disk_cache_insert_shader(void *cookie,
-                                             struct lp_cached_code *cache,
-                                             unsigned char ir_sha1_cache_key[20])
+
+static void
+lp_draw_disk_cache_insert_shader(void *cookie,
+                                 struct lp_cached_code *cache,
+                                 unsigned char ir_sha1_cache_key[20])
 {
    struct llvmpipe_screen *screen = cookie;
    lp_disk_cache_insert_shader(screen, cache, ir_sha1_cache_key);
 }
+
 
 static enum pipe_reset_status
 llvmpipe_get_device_reset_status(struct pipe_context *pipe)
 {
    return PIPE_NO_RESET;
 }
+
 
 struct pipe_context *
 llvmpipe_create_context(struct pipe_screen *screen, void *priv,
@@ -230,7 +243,7 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    llvmpipe_init_draw_funcs(llvmpipe);
    llvmpipe_init_compute_funcs(llvmpipe);
    llvmpipe_init_sampler_funcs(llvmpipe);
-   llvmpipe_init_query_funcs( llvmpipe );
+   llvmpipe_init_query_funcs(llvmpipe);
    llvmpipe_init_vertex_funcs(llvmpipe);
    llvmpipe_init_so_funcs(llvmpipe);
    llvmpipe_init_fs_funcs(llvmpipe);
@@ -238,7 +251,7 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    llvmpipe_init_gs_funcs(llvmpipe);
    llvmpipe_init_tess_funcs(llvmpipe);
    llvmpipe_init_rasterizer_funcs(llvmpipe);
-   llvmpipe_init_context_resource_funcs( &llvmpipe->pipe );
+   llvmpipe_init_context_resource_funcs(&llvmpipe->pipe);
    llvmpipe_init_surface_functions(llvmpipe);
 
 #ifdef USE_GLOBAL_LLVM_CONTEXT
@@ -267,21 +280,23 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
                                  lp_draw_disk_cache_find_shader,
                                  lp_draw_disk_cache_insert_shader);
 
-   draw_set_constant_buffer_stride(llvmpipe->draw, lp_get_constant_buffer_stride(screen));
+   draw_set_constant_buffer_stride(llvmpipe->draw,
+                                   lp_get_constant_buffer_stride(screen));
 
    /* FIXME: devise alternative to draw_texture_samplers */
 
-   llvmpipe->setup = lp_setup_create( &llvmpipe->pipe,
-                                      llvmpipe->draw );
+   llvmpipe->setup = lp_setup_create(&llvmpipe->pipe, llvmpipe->draw);
    if (!llvmpipe->setup)
       goto fail;
 
-   llvmpipe->csctx = lp_csctx_create( &llvmpipe->pipe );
+   llvmpipe->csctx = lp_csctx_create(&llvmpipe->pipe);
    if (!llvmpipe->csctx)
       goto fail;
+
    llvmpipe->pipe.stream_uploader = u_upload_create_default(&llvmpipe->pipe);
    if (!llvmpipe->pipe.stream_uploader)
       goto fail;
+
    llvmpipe->pipe.const_uploader = llvmpipe->pipe.stream_uploader;
 
    llvmpipe->blitter = util_blitter_create(&llvmpipe->pipe);
@@ -325,4 +340,3 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    llvmpipe_destroy(&llvmpipe->pipe);
    return NULL;
 }
-

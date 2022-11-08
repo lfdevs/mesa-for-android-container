@@ -254,12 +254,30 @@ nv50_context_shader_stage(unsigned pipe)
    }
 }
 
+static inline void
+nv50_resource_validate(struct nv50_context *context, struct nv04_resource *res, uint32_t flags)
+{
+   if (likely(res->bo)) {
+      if (flags & NOUVEAU_BO_WR)
+         res->status |= NOUVEAU_BUFFER_STATUS_GPU_WRITING |
+            NOUVEAU_BUFFER_STATUS_DIRTY;
+      if (flags & NOUVEAU_BO_RD)
+         res->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
+
+      if (res->mm) {
+         nouveau_fence_ref(context->base.fence, &res->fence);
+         if (flags & NOUVEAU_BO_WR)
+            nouveau_fence_ref(context->base.fence, &res->fence_wr);
+      }
+   }
+}
+
 /* nv50_context.c */
 struct pipe_context *nv50_create(struct pipe_screen *, void *, unsigned flags);
 
-void nv50_bufctx_fence(struct nouveau_bufctx *, bool on_flush);
+void nv50_bufctx_fence(struct nv50_context *, struct nouveau_bufctx *, bool on_flush);
 
-void nv50_default_kick_notify(struct nouveau_pushbuf *);
+void nv50_default_kick_notify(struct nouveau_context *);
 
 /* nv50_draw.c */
 extern struct draw_stage *nv50_draw_render_stage(struct nv50_context *);

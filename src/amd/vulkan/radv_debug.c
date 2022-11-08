@@ -225,7 +225,7 @@ radv_dump_descriptor_set(struct radv_device *device, struct radv_descriptor_set 
          break;
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-      case VK_DESCRIPTOR_TYPE_MUTABLE_VALVE:
+      case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
       case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
          /* todo */
          break;

@@ -670,7 +670,7 @@ ir3_nir_lower_tess_ctrl(nir_shader *shader, struct ir3_shader_variant *v,
 {
    struct state state = {.topology = topology};
 
-   if (shader_debug_enabled(shader->info.stage)) {
+   if (shader_debug_enabled(shader->info.stage, shader->info.internal)) {
       mesa_logi("NIR (before tess lowering) for %s shader:",
                 _mesa_shader_stage_to_string(shader->info.stage));
       nir_log_shaderi(shader);
@@ -828,7 +828,7 @@ ir3_nir_lower_tess_eval(nir_shader *shader, struct ir3_shader_variant *v,
 {
    struct state state = {.topology = topology};
 
-   if (shader_debug_enabled(shader->info.stage)) {
+   if (shader_debug_enabled(shader->info.stage, shader->info.internal)) {
       mesa_logi("NIR (before tess lowering) for %s shader:",
                 _mesa_shader_stage_to_string(shader->info.stage));
       nir_log_shaderi(shader);
@@ -929,7 +929,7 @@ ir3_nir_lower_gs(nir_shader *shader)
       if (var->data.location == VARYING_SLOT_GS_VERTEX_FLAGS_IR3)
          return;
 
-   if (shader_debug_enabled(shader->info.stage)) {
+   if (shader_debug_enabled(shader->info.stage, shader->info.internal)) {
       mesa_logi("NIR (before gs lowering):");
       nir_log_shaderi(shader);
    }
@@ -1045,7 +1045,7 @@ ir3_nir_lower_gs(nir_shader *shader)
 
    nir_fixup_deref_modes(shader);
 
-   if (shader_debug_enabled(shader->info.stage)) {
+   if (shader_debug_enabled(shader->info.stage, shader->info.internal)) {
       mesa_logi("NIR (after gs lowering):");
       nir_log_shaderi(shader);
    }

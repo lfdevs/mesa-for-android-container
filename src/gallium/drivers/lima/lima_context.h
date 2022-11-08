@@ -280,8 +280,6 @@ struct lima_context {
 
    int id;
 
-   struct util_debug_callback debug;
-
    unsigned index_offset;
    struct lima_resource *index_res;
 };

@@ -27,6 +27,10 @@
 
 #include <stdlib.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 bool
 u_memstream_open(struct u_memstream *mem, char **bufp, size_t *sizep)
 {
@@ -51,8 +55,6 @@ u_memstream_open(struct u_memstream *mem, char **bufp, size_t *sizep)
    }
 
    return success;
-#elif defined(__APPLE__)
-   return false;
 #else
    FILE *const f = open_memstream(bufp, sizep);
    mem->f = f;
@@ -68,9 +70,12 @@ u_memstream_close(struct u_memstream *mem)
 #ifdef _WIN32
    long size = ftell(f);
    if (size > 0) {
-      char *buf = malloc(size);
+      /* reserve space for the null terminator */
+      char *buf = malloc(size + 1);
       fseek(f, 0, SEEK_SET);
       fread(buf, 1, size, f);
+      /* insert null terminator */
+      buf[size] = '\0';
 
       *mem->bufp = buf;
       *mem->sizep = size;

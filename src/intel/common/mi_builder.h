@@ -208,7 +208,11 @@ static inline uint32_t
 _mi_value_as_gpr(struct mi_value val)
 {
    assert(mi_value_is_gpr(val));
-   assert(val.reg % 8 == 0);
+   /* Some of the GRL metakernels will generate 64bit value in a GP register,
+    * then use only half of that as the last operation on that value. So allow
+    * unref on part of a GP register.
+    */
+   assert(val.reg % 4 == 0);
    return (val.reg - _MI_BUILDER_GPR_BASE) / 8;
 }
 
@@ -220,6 +224,21 @@ mi_new_gpr(struct mi_builder *b)
    assert(b->gpr_refs[gpr] == 0);
    b->gprs |= (1u << gpr);
    b->gpr_refs[gpr] = 1;
+
+   return (struct mi_value) {
+      .type = MI_VALUE_TYPE_REG64,
+      .reg = _MI_BUILDER_GPR_BASE + gpr * 8,
+   };
+}
+
+static inline struct mi_value
+mi_reserve_gpr(struct mi_builder *b, unsigned gpr)
+{
+   assert(gpr < MI_BUILDER_NUM_ALLOC_GPRS);
+   assert(!(b->gprs & (1 << gpr)));
+   assert(b->gpr_refs[gpr] == 0);
+   b->gprs |= (1u << gpr);
+   b->gpr_refs[gpr] = 128; /* Enough that we won't unref it */
 
    return (struct mi_value) {
       .type = MI_VALUE_TYPE_REG64,
@@ -238,8 +257,8 @@ mi_new_gpr(struct mi_builder *b)
  * are responsible for calling mi_value_ref() to get a second reference
  * because the mi_* math function will consume it twice.
  */
-static inline struct mi_value
-mi_value_ref(struct mi_builder *b, struct mi_value val)
+static inline void
+mi_value_add_refs(struct mi_builder *b, struct mi_value val, unsigned num_refs)
 {
 #if GFX_VERx10 >= 75
    if (_mi_value_is_allocated_gpr(val)) {
@@ -247,12 +266,18 @@ mi_value_ref(struct mi_builder *b, struct mi_value val)
       assert(gpr < MI_BUILDER_NUM_ALLOC_GPRS);
       assert(b->gprs & (1u << gpr));
       assert(b->gpr_refs[gpr] < UINT8_MAX);
-      b->gpr_refs[gpr]++;
+      b->gpr_refs[gpr] += num_refs;
    }
 #endif /* GFX_VERx10 >= 75 */
+}
 
+static inline struct mi_value
+mi_value_ref(struct mi_builder *b, struct mi_value val)
+{
+   mi_value_add_refs(b, val, 1);
    return val;
 }
+
 
 /** Drop a reference to a mi_value
  *
@@ -1164,7 +1189,7 @@ mi_store_address(struct mi_builder *b, struct mi_value addr_reg)
 }
 
 static inline void
-mi_self_mod_barrier(struct mi_builder *b)
+mi_self_mod_barrier(struct mi_builder *b, unsigned cs_prefetch_size)
 {
    /* First make sure all the memory writes from previous modifying commands
     * have landed. We want to do this before going through the CS cache,
@@ -1177,7 +1202,7 @@ mi_self_mod_barrier(struct mi_builder *b)
     * but experiment show it doesn't work properly, so for now just get over
     * the CS prefetch.
     */
-   for (uint32_t i = 0; i < (b->devinfo->cs_prefetch_size / 4); i++)
+   for (uint32_t i = 0; i < (cs_prefetch_size / 4); i++)
       mi_builder_emit(b, GENX(MI_NOOP), noop);
 }
 

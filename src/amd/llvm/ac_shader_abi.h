@@ -34,6 +34,12 @@
 
 #define AC_LLVM_MAX_OUTPUTS (VARYING_SLOT_VAR31 + 1)
 
+enum ac_prim_count {
+   ac_prim_count_gs_emit,
+   ac_prim_count_gen,
+   ac_prim_count_xfb,
+};
+
 /* Document the shader ABI during compilation. This is what allows radeonsi and
  * radv to share a compiler backend.
  */
@@ -49,6 +55,14 @@ struct ac_shader_abi {
    LLVMValueRef color0, color1;
    LLVMValueRef user_data;
 
+   /* replaced registers when culling enabled */
+   LLVMValueRef vertex_id_replaced;
+   LLVMValueRef instance_id_replaced;
+   LLVMValueRef tes_u_replaced;
+   LLVMValueRef tes_v_replaced;
+   LLVMValueRef tes_rel_patch_id_replaced;
+   LLVMValueRef tes_patch_id_replaced;
+
    /* Varying -> attribute number mapping. Also NIR-only */
    unsigned fs_input_attr_indices[MAX_VARYING];
 
@@ -60,6 +74,9 @@ struct ac_shader_abi {
 
    void (*emit_vertex_with_counter)(struct ac_shader_abi *abi, unsigned stream,
                                     LLVMValueRef vertexidx, LLVMValueRef *addrs);
+
+   void (*atomic_add_prim_count)(struct ac_shader_abi *abi, unsigned stream,
+                                 LLVMValueRef prim_count, enum ac_prim_count count_type);
 
    LLVMValueRef (*load_inputs)(struct ac_shader_abi *abi,
                                unsigned driver_location, unsigned component,
@@ -100,6 +117,10 @@ struct ac_shader_abi {
                                      bool image, bool write, bool bindless);
 
    LLVMValueRef (*load_sample_position)(struct ac_shader_abi *abi, LLVMValueRef sample_id);
+
+   LLVMValueRef (*load_user_clip_plane)(struct ac_shader_abi *abi, unsigned ucp_id);
+
+   LLVMValueRef (*load_streamout_buffer)(struct ac_shader_abi *abi, unsigned buffer);
 
    LLVMValueRef (*emit_fbfetch)(struct ac_shader_abi *abi);
 

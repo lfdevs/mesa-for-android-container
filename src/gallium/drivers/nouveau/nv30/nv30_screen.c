@@ -39,6 +39,7 @@
 #include "nv30/nv30_context.h"
 #include "nv30/nv30_resource.h"
 #include "nv30/nv30_format.h"
+#include "nv30/nv30_winsys.h"
 
 #define RANKINE_0397_CHIPSET 0x00000003
 #define RANKINE_0497_CHIPSET 0x000001e0
@@ -84,7 +85,6 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    /* supported capabilities */
    case PIPE_CAP_ANISOTROPIC_FILTER:
-   case PIPE_CAP_POINT_SPRITE:
    case PIPE_CAP_OCCLUSION_QUERY:
    case PIPE_CAP_QUERY_TIME_ELAPSED:
    case PIPE_CAP_QUERY_TIMESTAMP:
@@ -101,6 +101,7 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
+   case PIPE_CAP_QUERY_MEMORY_INFO:
       return 1;
    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
       return PIPE_TEXTURE_TRANSFER_BLIT;
@@ -178,7 +179,6 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_SAMPLER_VIEW_TARGET:
    case PIPE_CAP_CLIP_HALFZ:
-   case PIPE_CAP_VERTEXID_NOBASE:
    case PIPE_CAP_POLYGON_OFFSET_CLAMP:
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
@@ -202,7 +202,6 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
    case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
-   case PIPE_CAP_QUERY_MEMORY_INFO:
    case PIPE_CAP_PCI_GROUP:
    case PIPE_CAP_PCI_BUS:
    case PIPE_CAP_PCI_DEVICE:
@@ -519,10 +518,11 @@ nv30_screen_get_compiler_options(struct pipe_screen *pscreen,
 }
 
 static void
-nv30_screen_fence_emit(struct pipe_screen *pscreen, uint32_t *sequence)
+nv30_screen_fence_emit(struct pipe_context *pcontext, uint32_t *sequence)
 {
-   struct nv30_screen *screen = nv30_screen(pscreen);
-   struct nouveau_pushbuf *push = screen->base.pushbuf;
+   struct nv30_context *nv30 = nv30_context(pcontext);
+   struct nv30_screen *screen = nv30->screen;
+   struct nouveau_pushbuf *push = nv30->base.pushbuf;
 
    *sequence = ++screen->base.fence.sequence;
 
@@ -548,8 +548,6 @@ nv30_screen_destroy(struct pipe_screen *pscreen)
 
    if (!nouveau_drm_screen_unref(&screen->base))
       return;
-
-   nouveau_fence_cleanup(&screen->base);
 
    nouveau_bo_ref(NULL, &screen->notify);
 
@@ -732,7 +730,7 @@ nv30_screen_create(struct nouveau_device *dev)
 
    ret = nouveau_bo_wrap(screen->base.device, fifo->notify, &screen->notify);
    if (ret == 0)
-      ret = nouveau_bo_map(screen->notify, 0, screen->base.client);
+      ret = BO_MAP(&screen->base, screen->notify, 0, screen->base.client);
    if (ret)
       FAIL_SCREEN_INIT("error mapping notifier memory: %d\n", ret);
 
@@ -859,9 +857,7 @@ nv30_screen_create(struct nouveau_device *dev)
    PUSH_DATA (push, screen->ntfy->handle);
    BEGIN_NV04(push, NV05_SIFM(COLOR_CONVERSION), 1);
    PUSH_DATA (push, NV05_SIFM_COLOR_CONVERSION_TRUNCATE);
+   PUSH_KICK (push);
 
-   nouveau_pushbuf_kick(push, push->channel);
-
-   nouveau_fence_new(&screen->base, &screen->base.fence.current);
    return &screen->base;
 }

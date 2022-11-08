@@ -12,7 +12,19 @@ Features
 --------
 
 The feature-level of Zink depends on two things; what's implemented in Zink,
-as well as the features of the Vulkan driver.
+as well as the capabilities of the Vulkan driver. 
+
+The feature-levels implemented by Zink are exposed by 
+`Vulkan Profiles<https://dev.vulkan.org/tools#vulkan-profiles>` in the 
+`VP_ZINK_requirements.json<src/gallium/drivers/zink/VP_ZINK_requirements.json>`
+profiles file.
+
+Used with the `Vulkan Profiles tools<https://github.com/KhronosGroup/Vulkan-Profiles>`, 
+we can compare the ZINK profiles with Vulkan devices profiles generated with 
+`Vulkaninfo<https://vulkan.lunarg.com/doc/view/latest/windows/vulkaninfo.html>`
+or downloaded from 
+`GPUinfo.org<https://www.saschawillems.de/blog/2022/03/12/vulkan-profiles-support-for-the-vulkan-hardware-capability-viewer-and-database/>`
+to establish the feature-levels supported by these drivers.
 
 OpenGL 2.1
 ^^^^^^^^^^
@@ -51,6 +63,7 @@ Here's a list of those requirements:
 
   * `VK_KHR_swapchain_mutable_format`_
   * `VK_EXT_border_color_swizzle`_
+  * `VK_KHR_descriptor_update_template`_
 
 In addition to this, `VK_KHR_external_memory`_ is required to support the
 DRI code-path.
@@ -73,13 +86,6 @@ supported:
 
   * `VK_EXT_transform_feedback`_
   * `VK_EXT_conditional_rendering`_
-
-* Formats requiring ``VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT``:
-
-   * ``VK_FORMAT_BC4_UNORM_BLOCK``
-   * ``VK_FORMAT_BC4_SNORM_BLOCK``
-   * ``VK_FORMAT_BC5_UNORM_BLOCK``
-   * ``VK_FORMAT_BC5_SNORM_BLOCK``
 
 OpenGL 3.1
 ^^^^^^^^^^
@@ -185,13 +191,6 @@ supported:
 
     * `VK_KHR_shader_draw_parameters`_
 
-* Formats requiring ``VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT``:
-
-   * ``VK_FORMAT_BC7_UNORM_BLOCK``
-   * ``VK_FORMAT_BC7_SRGB_BLOCK``
-   * ``VK_FORMAT_BC6H_SFLOAT_BLOCK``
-   * ``VK_FORMAT_BC6H_UFLOAT_BLOCK``
-
 OpenGL 4.3
 ^^^^^^^^^^
 
@@ -261,11 +260,7 @@ changing the descriptor manager may improve performance:
 ``auto``
    Automatically detect best mode. This is the default.
 ``lazy``
-   Disable caching and attempt to use the least amount of CPU.
-``cached``
-   Use caching to reuse descriptor sets.
-``notemplates``
-   The same as `auto`, but disables the use of `VK_KHR_descriptor_templates`.
+   Attempt to use the least amount of CPU by binding descriptors opportunistically.
 
 Debugging
 ---------
@@ -290,6 +285,8 @@ variable:
    Use a maximum of 4 descriptor sets
 ``noreorder``
    Do not reorder or optimize GL command streams
+``gpl``
+   Force using Graphics Pipeline Library for all shaders
 
 Vulkan Validation Layers
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -332,3 +329,4 @@ questions, don't hesitate to visit `#zink on OFTC
 .. _VK_KHR_swapchain_mutable_format: https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VK_KHR_swapchain_mutable_format.html
 .. _VK_EXT_border_color_swizzle: https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VK_EXT_border_color_swizzle.html
 .. _VK_EXT_depth_clip_enable: https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VK_EXT_depth_clip_enable.html
+.. _VK_KHR_descriptor_update_template: https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VK_KHR_descriptor_update_template.html

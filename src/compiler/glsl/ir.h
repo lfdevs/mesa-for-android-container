@@ -2513,10 +2513,6 @@ _mesa_glsl_initialize_variables(exec_list *instructions,
 extern void
 reparent_ir(exec_list *list, void *mem_ctx);
 
-extern void
-do_set_program_inouts(exec_list *instructions, struct gl_program *prog,
-                      gl_shader_stage shader_stage);
-
 extern char *
 prototype_string(const glsl_type *return_type, const char *name,
 		 exec_list *parameters);

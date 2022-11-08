@@ -79,9 +79,6 @@ struct fd6_context {
    /* Is there current VS driver-param state set? */
    bool has_dp_state;
 
-   /* number of active samples-passed queries: */
-   int samples_passed_queries;
-
    /* cached stateobjs to avoid hashtable lookup when not dirty: */
    const struct fd6_program_state *prog;
 

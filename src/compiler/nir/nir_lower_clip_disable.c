@@ -61,8 +61,14 @@ recursive_if_chain(nir_builder *b, nir_deref_instr *deref, nir_ssa_def *value, u
  * so we rewrite disabled clip planes to a zero value in order to disable them
  */
 static bool
-lower_clip_plane_store(nir_intrinsic_instr *instr, unsigned clip_plane_enable, nir_builder *b)
+lower_clip_plane_store(nir_builder *b, nir_instr *instr_, void *cb_data)
 {
+   if (instr_->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *instr = nir_instr_as_intrinsic(instr_);
+
+   unsigned clip_plane_enable = *(unsigned *)cb_data;
    nir_variable *out;
    unsigned plane;
 
@@ -117,30 +123,14 @@ lower_clip_plane_store(nir_intrinsic_instr *instr, unsigned clip_plane_enable, n
 bool
 nir_lower_clip_disable(nir_shader *shader, unsigned clip_plane_enable)
 {
-   bool progress = false;
-
    /* if all user planes are enabled in API that are written in the array, always ignore;
     * this explicitly covers the 2x vec4 case
     */
    if (clip_plane_enable == u_bit_consecutive(0, shader->info.clip_distance_array_size))
       return false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_builder builder;
-         nir_builder_init(&builder, function->impl);
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               if (instr->type == nir_instr_type_intrinsic)
-                  progress |= lower_clip_plane_store(nir_instr_as_intrinsic(instr),
-                                                     clip_plane_enable,
-                                                     &builder);
-            }
-         }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index | nir_metadata_dominance);
-      }
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, lower_clip_plane_store,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       &clip_plane_enable);
 }

@@ -68,7 +68,7 @@ llvmpipe_create_tcs_state(struct pipe_context *pipe,
    return state;
 
 no_dgs:
-   FREE( state );
+   FREE(state);
 no_state:
    return NULL;
 }
@@ -136,7 +136,7 @@ llvmpipe_create_tes_state(struct pipe_context *pipe,
    return state;
 
 no_dgs:
-   FREE( state );
+   FREE(state);
 no_state:
    return NULL;
 }

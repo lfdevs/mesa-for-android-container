@@ -22,6 +22,9 @@
  *
  */
 #include "helpers.h"
+#include "sid.h"
+
+#include <llvm/Config/llvm-config.h>
 
 using namespace aco;
 
@@ -226,6 +229,39 @@ BEGIN_TEST(assembler.long_jump.constaddr)
    finish_assembler_test();
 END_TEST
 
+BEGIN_TEST(assembler.long_jump.discard_early_exit)
+   if (!setup_cs(NULL, (amd_gfx_level)GFX10))
+      return;
+
+   //! BB0:
+   //! s_cbranch_scc1 BB1                                          ; bf850006
+   //! s_getpc_b64 s[0:1]                                          ; be801f00
+   //! s_addc_u32 s0, s0, 0x20014                                  ; 8200ff00 00020014
+   //! s_bitcmp1_b32 s0, 0                                         ; bf0d8000
+   //! s_bitset0_b32 s0, 0                                         ; be801b80
+   //! s_setpc_b64 s[0:1]                                          ; be802000
+   bld.sopp(aco_opcode::s_cbranch_scc0, 2);
+
+   bld.reset(program->create_and_insert_block());
+
+   //! BB1:
+   //! s_nop 1                                                     ; bf800001
+   //!(then repeated 32766 times)
+   //! s_endpgm                                                    ; bf810000
+   for (unsigned i = 0; i < INT16_MAX; i++)
+      bld.sopp(aco_opcode::s_nop, -1, 1);
+
+   //! BB2:
+   //! s_endpgm                                                    ; bf810000
+   bld.reset(program->create_and_insert_block());
+
+   program->blocks[1].linear_preds.push_back(0u);
+   program->blocks[2].linear_preds.push_back(0u);
+   program->blocks[2].kind = block_kind_discard_early_exit;
+
+   finish_assembler_test();
+END_TEST
+
 BEGIN_TEST(assembler.v_add3)
    for (unsigned i = GFX9; i <= GFX10; i++) {
       if (!setup_cs(NULL, (amd_gfx_level)i))
@@ -308,3 +344,467 @@ BEGIN_TEST(assembler.p_constaddr)
    aco::lower_to_hw_instr(program.get());
    finish_assembler_test();
 END_TEST
+
+BEGIN_TEST(assembler.vopc_sdwa)
+   for (unsigned i = GFX9; i <= GFX10; i++) {
+      if (!setup_cs(NULL, (amd_gfx_level)i))
+         continue;
+
+      //~gfx9>> v_cmp_lt_u32_sdwa vcc, 0, 0 src0_sel:DWORD src1_sel:DWORD ; 7d9300f9 86860080
+      //~gfx10>> v_cmp_lt_u32_sdwa vcc, 0, 0 src0_sel:DWORD src1_sel:DWORD   ; 7d8300f9 86860080
+      bld.vopc_sdwa(aco_opcode::v_cmp_lt_u32, Definition(vcc, s2), Operand::zero(), Operand::zero());
+
+      //~gfx9! v_cmp_lt_u32_sdwa s[44:45], 0, 0 src0_sel:DWORD src1_sel:DWORD ; 7d9300f9 8686ac80
+      //~gfx10! v_cmp_lt_u32_sdwa s[44:45], 0, 0 src0_sel:DWORD src1_sel:DWORD ; 7d8300f9 8686ac80
+      bld.vopc_sdwa(aco_opcode::v_cmp_lt_u32, Definition(PhysReg(0x2c), s2), Operand::zero(), Operand::zero());
+
+      //~gfx9! v_cmp_lt_u32_sdwa exec, 0, 0 src0_sel:DWORD src1_sel:DWORD ; 7d9300f9 8686fe80
+      //~gfx10! v_cmp_lt_u32_sdwa exec, 0, 0 src0_sel:DWORD src1_sel:DWORD  ; 7d8300f9 8686fe80
+      bld.vopc_sdwa(aco_opcode::v_cmp_lt_u32, Definition(exec, s2), Operand::zero(), Operand::zero());
+
+      if (i == GFX10) {
+         //~gfx10! v_cmpx_lt_u32_sdwa 0, 0 src0_sel:DWORD src1_sel:DWORD ; 7da300f9 86860080
+         bld.vopc_sdwa(aco_opcode::v_cmpx_lt_u32, Definition(exec, s2), Operand::zero(), Operand::zero());
+      } else {
+         //~gfx9! v_cmpx_lt_u32_sdwa vcc, 0, 0 src0_sel:DWORD src1_sel:DWORD ; 7db300f9 86860080
+         bld.vopc_sdwa(aco_opcode::v_cmpx_lt_u32, Definition(vcc, s2), Definition(exec, s2), Operand::zero(), Operand::zero());
+
+         //~gfx9! v_cmpx_lt_u32_sdwa s[44:45], 0, 0 src0_sel:DWORD src1_sel:DWORD ; 7db300f9 8686ac80
+         bld.vopc_sdwa(aco_opcode::v_cmpx_lt_u32, Definition(PhysReg(0x2c), s2), Definition(exec, s2), Operand::zero(), Operand::zero());
+      }
+
+      finish_assembler_test();
+   }
+END_TEST
+
+#if LLVM_VERSION_MAJOR >= 15
+BEGIN_TEST(assembler.gfx11.smem)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   Definition dst = bld.def(s1);
+   dst.setFixed(PhysReg(4));
+
+   Operand op_s1(bld.tmp(s1));
+   op_s1.setFixed(PhysReg(8));
+
+   Operand op_s2(bld.tmp(s2));
+   op_s2.setFixed(PhysReg(16));
+
+   Operand op_s4(bld.tmp(s4));
+   op_s4.setFixed(PhysReg(32));
+
+   //>> s_dcache_inv                                                ; f4840000 f8000000
+   bld.smem(aco_opcode::s_dcache_inv);
+
+   //! s_load_b32 s4, s[16:17], 0x2a                               ; f4000108 f800002a
+   bld.smem(aco_opcode::s_load_dword, dst, op_s2, Operand::c32(42));
+
+   //! s_load_b32 s4, s[16:17], s8                                 ; f4000108 10000000
+   bld.smem(aco_opcode::s_load_dword, dst, op_s2, op_s1);
+
+   //! s_load_b32 s4, s[16:17], s8 offset:0x2a                     ; f4000108 1000002a
+   bld.smem(aco_opcode::s_load_dword, dst, op_s2, Operand::c32(42), op_s1);
+
+   //! s_buffer_load_b32 s4, s[32:35], s8 glc                      ; f4204110 10000000
+   bld.smem(aco_opcode::s_buffer_load_dword, dst, op_s4, op_s1).instr->smem().glc = true;
+
+   //! s_buffer_load_b32 s4, s[32:35], s8 dlc                      ; f4202110 10000000
+   bld.smem(aco_opcode::s_buffer_load_dword, dst, op_s4, op_s1).instr->smem().dlc = true;
+
+   finish_assembler_test();
+END_TEST
+
+BEGIN_TEST(assembler.gfx11.mubuf)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   Definition dst = bld.def(v1);
+   dst.setFixed(PhysReg(256 + 42));
+
+   Operand op_s4(bld.tmp(s4));
+   op_s4.setFixed(PhysReg(32));
+
+   Operand op_v1(bld.tmp(v1));
+   op_v1.setFixed(PhysReg(256 + 10));
+
+   Operand op_v2(bld.tmp(v2));
+   op_v2.setFixed(PhysReg(256 + 20));
+
+   Operand op_s1(bld.tmp(s1));
+   op_s1.setFixed(PhysReg(30));
+
+   Operand op_m0(bld.tmp(s1));
+   op_m0.setFixed(m0);
+
+   /* Addressing */
+   //>> buffer_load_b32 v42, off, s[32:35], s30                     ; e0500000 1e082a80
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), op_s1, 0, false);
+
+   //! buffer_load_b32 v42, off, s[32:35], 42                      ; e0500000 aa082a80
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), Operand::c32(42), 0, false);
+
+   //! buffer_load_b32 v42, v10, s[32:35], s30 offen               ; e0500000 1e482a0a
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, op_v1, op_s1, 0, true);
+
+   //! buffer_load_b32 v42, v10, s[32:35], s30 idxen               ; e0500000 1e882a0a
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, op_v1, op_s1, 0, false).instr->mubuf().idxen = true;
+
+   //! buffer_load_b32 v42, v[20:21], s[32:35], s30 idxen offen    ; e0500000 1ec82a14
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, op_v2, op_s1, 0, true).instr->mubuf().idxen = true;
+
+   //! buffer_load_b32 v42, off, s[32:35], s30 offset:84           ; e0500054 1e082a80
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), op_s1, 84, false);
+
+   /* Various flags */
+   //! buffer_load_b32 v42, off, s[32:35], 0 glc                   ; e0504000 80082a80
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), Operand::zero(), 0, false).instr->mubuf().glc = true;
+
+   //! buffer_load_b32 v42, off, s[32:35], 0 dlc                   ; e0502000 80082a80
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), Operand::zero(), 0, false).instr->mubuf().dlc = true;
+
+   //! buffer_load_b32 v42, off, s[32:35], 0 slc                   ; e0501000 80082a80
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), Operand::zero(), 0, false).instr->mubuf().slc = true;
+
+   //! buffer_load_b32 v42, off, s[32:35], 0 tfe                   ; e0500000 80282a80
+   bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), Operand::zero(), 0, false).instr->mubuf().tfe = true;
+
+   /* LDS */
+   //! buffer_load_lds_b32 off, s[32:35], 0                        ; e0c40000 80080080
+   bld.mubuf(aco_opcode::buffer_load_dword, op_s4, Operand(v1), Operand::zero(), op_m0, 0, false).instr->mubuf().lds = true;
+
+   //! buffer_load_lds_i8 off, s[32:35], 0                         ; e0b80000 80080080
+   bld.mubuf(aco_opcode::buffer_load_sbyte, op_s4, Operand(v1), Operand::zero(), op_m0, 0, false).instr->mubuf().lds = true;
+
+   //! buffer_load_lds_i16 off, s[32:35], 0                        ; e0c00000 80080080
+   bld.mubuf(aco_opcode::buffer_load_sshort, op_s4, Operand(v1), Operand::zero(), op_m0, 0, false).instr->mubuf().lds = true;
+
+   //! buffer_load_lds_u8 off, s[32:35], 0                         ; e0b40000 80080080
+   bld.mubuf(aco_opcode::buffer_load_ubyte, op_s4, Operand(v1), Operand::zero(), op_m0, 0, false).instr->mubuf().lds = true;
+
+   //! buffer_load_lds_u16 off, s[32:35], 0                        ; e0bc0000 80080080
+   bld.mubuf(aco_opcode::buffer_load_ushort, op_s4, Operand(v1), Operand::zero(), op_m0, 0, false).instr->mubuf().lds = true;
+
+   //! buffer_load_lds_format_x off, s[32:35], 0                   ; e0c80000 80080080
+   bld.mubuf(aco_opcode::buffer_load_format_x, op_s4, Operand(v1), Operand::zero(), op_m0, 0, false).instr->mubuf().lds = true;
+
+   /* Stores */
+   //! buffer_store_b32 v10, off, s[32:35], s30                    ; e0680000 1e080a80
+   bld.mubuf(aco_opcode::buffer_store_dword, op_s4, Operand(v1), op_s1, op_v1, 0, false);
+
+   //! buffer_store_b64 v[20:21], v10, s[32:35], s30 offen         ; e06c0000 1e48140a
+   bld.mubuf(aco_opcode::buffer_store_dwordx2, op_s4, op_v1, op_s1, op_v2, 0, true);
+
+   finish_assembler_test();
+END_TEST
+
+BEGIN_TEST(assembler.gfx11.mtbuf)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   Definition dst = bld.def(v1);
+   dst.setFixed(PhysReg(256 + 42));
+
+   Operand op_s4(bld.tmp(s4));
+   op_s4.setFixed(PhysReg(32));
+
+   Operand op_v1(bld.tmp(v1));
+   op_v1.setFixed(PhysReg(256 + 10));
+
+   Operand op_v2(bld.tmp(v2));
+   op_v2.setFixed(PhysReg(256 + 20));
+
+   Operand op_s1(bld.tmp(s1));
+   op_s1.setFixed(PhysReg(30));
+
+   unsigned dfmt = V_008F0C_BUF_DATA_FORMAT_32_32;
+   unsigned nfmt = V_008F0C_BUF_NUM_FORMAT_FLOAT;
+
+   /* Addressing */
+   //>> tbuffer_load_format_x v42, off, s[32:35], s30 format:[BUF_FMT_32_32_FLOAT] ; e9900000 1e082a80
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), op_s1, dfmt, nfmt, 0, false);
+
+   //! tbuffer_load_format_x v42, off, s[32:35], 42 format:[BUF_FMT_32_32_FLOAT] ; e9900000 aa082a80
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), Operand::c32(42), dfmt, nfmt, 0, false);
+
+   //! tbuffer_load_format_x v42, v10, s[32:35], s30 format:[BUF_FMT_32_32_FLOAT] offen ; e9900000 1e482a0a
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, op_v1, op_s1, dfmt, nfmt, 0, true);
+
+   //! tbuffer_load_format_x v42, v10, s[32:35], s30 format:[BUF_FMT_32_32_FLOAT] idxen ; e9900000 1e882a0a
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, op_v1, op_s1, dfmt, nfmt, 0, false).instr->mtbuf().idxen = true;
+
+   //! tbuffer_load_format_x v42, v[20:21], s[32:35], s30 format:[BUF_FMT_32_32_FLOAT] idxen offen ; e9900000 1ec82a14
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, op_v2, op_s1, dfmt, nfmt, 0, true).instr->mtbuf().idxen = true;
+
+   //! tbuffer_load_format_x v42, off, s[32:35], s30 format:[BUF_FMT_32_32_FLOAT] offset:84 ; e9900054 1e082a80
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), op_s1, dfmt, nfmt, 84, false);
+
+   /* Various flags */
+   //! tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] glc ; e9904000 80082a80
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), Operand::zero(), dfmt, nfmt, 0, false).instr->mtbuf().glc = true;
+
+   //! tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] dlc ; e9902000 80082a80
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), Operand::zero(), dfmt, nfmt, 0, false).instr->mtbuf().dlc = true;
+
+   //! tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] slc ; e9901000 80082a80
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), Operand::zero(), dfmt, nfmt, 0, false).instr->mtbuf().slc = true;
+
+   //! tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] tfe ; e9900000 80282a80
+   bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), Operand::zero(), dfmt, nfmt, 0, false).instr->mtbuf().tfe = true;
+
+   /* Stores */
+   //! tbuffer_store_format_x v10, off, s[32:35], s30 format:[BUF_FMT_32_32_FLOAT] ; e9920000 1e080a80
+   bld.mtbuf(aco_opcode::tbuffer_store_format_x, op_s4, Operand(v1), op_s1, op_v1, dfmt, nfmt, 0, false);
+
+   //! tbuffer_store_format_xy v[20:21], v10, s[32:35], s30 format:[BUF_FMT_32_32_FLOAT] offen ; e9928000 1e48140a
+   bld.mtbuf(aco_opcode::tbuffer_store_format_xy, op_s4, op_v1, op_s1, op_v2, dfmt, nfmt, 0, true);
+
+   finish_assembler_test();
+END_TEST
+
+BEGIN_TEST(assembler.gfx11.mimg)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   Definition dst_v1 = bld.def(v1);
+   dst_v1.setFixed(PhysReg(256 + 42));
+
+   Definition dst_v4 = bld.def(v4);
+   dst_v4.setFixed(PhysReg(256 + 84));
+
+   Operand op_s4(bld.tmp(s4));
+   op_s4.setFixed(PhysReg(32));
+
+   Operand op_s8(bld.tmp(s8));
+   op_s8.setFixed(PhysReg(64));
+
+   Operand op_v1(bld.tmp(v1));
+   op_v1.setFixed(PhysReg(256 + 10));
+
+   Operand op_v2(bld.tmp(v2));
+   op_v2.setFixed(PhysReg(256 + 20));
+
+   Operand op_v4(bld.tmp(v4));
+   op_v4.setFixed(PhysReg(256 + 30));
+
+   //>> image_sample v[84:87], v10, s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_1D ; f06c0f00 2010540a
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1);
+
+   //! image_sample v[84:87], v[20:21], s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_2D ; f06c0f04 20105414
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v2).instr->mimg().dim = ac_image_2d;
+
+   //! image_sample v42, v10, s[64:71], s[32:35] dmask:0x1 dim:SQ_RSRC_IMG_1D ; f06c0100 20102a0a
+   bld.mimg(aco_opcode::image_sample, dst_v1, op_s8, op_s4, Operand(v1), op_v1).instr->mimg().dmask = 0x1;
+
+   /* Various flags */
+   //! image_sample v[84:87], v10, s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_1D dlc ; f06c2f00 2010540a
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1).instr->mimg().dlc = true;
+
+   //! image_sample v[84:87], v10, s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_1D glc ; f06c4f00 2010540a
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1).instr->mimg().glc = true;
+
+   //! image_sample v[84:87], v10, s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_1D slc ; f06c1f00 2010540a
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1).instr->mimg().slc = true;
+
+   //! image_sample v[84:88], v10, s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_1D tfe ; f06c0f00 2030540a
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1).instr->mimg().tfe = true;
+
+   //! image_sample v[84:87], v10, s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_1D lwe ; f06c0f00 2050540a
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1).instr->mimg().lwe = true;
+
+   //! image_sample v[84:87], v10, s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_1D r128 ; f06c8f00 2010540a
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1).instr->mimg().r128 = true;
+
+   //! image_sample v[84:87], v10, s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_1D a16 ; f06d0f00 2010540a
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1).instr->mimg().a16 = true;
+
+   //! image_sample v[84:85], v10, s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_1D d16 ; f06e0f00 2010540a
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1).instr->mimg().d16 = true;
+
+   /* NSA */
+   //! image_sample v[84:87], [v10, v40], s[64:71], s[32:35] dmask:0xf dim:SQ_RSRC_IMG_2D ; f06c0f05 2010540a 00000028
+   bld.mimg(aco_opcode::image_sample, dst_v4, op_s8, op_s4, Operand(v1), op_v1, Operand(bld.tmp(v1), PhysReg(256 + 40))).instr->mimg().dim = ac_image_2d;
+
+   /* Stores */
+   //! image_store v[30:33], v10, s[64:71] dmask:0xf dim:SQ_RSRC_IMG_1D ; f0180f00 00101e0a
+   bld.mimg(aco_opcode::image_store, op_s8, Operand(s4), op_v4, op_v1);
+
+   //! image_atomic_add v10, v20, s[64:71] dmask:0xf dim:SQ_RSRC_IMG_2D ; f0300f04 00100a14
+   bld.mimg(aco_opcode::image_atomic_add, Definition(op_v1.physReg(), v1), op_s8, Operand(s4), op_v1, op_v2).instr->mimg().dim = ac_image_2d;
+
+   finish_assembler_test();
+END_TEST
+
+BEGIN_TEST(assembler.gfx11.flat)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   Definition dst_v1 = bld.def(v1);
+   dst_v1.setFixed(PhysReg(256 + 42));
+
+   Operand op_s1(bld.tmp(s1));
+   op_s1.setFixed(PhysReg(32));
+
+   Operand op_s2(bld.tmp(s2));
+   op_s2.setFixed(PhysReg(64));
+
+   Operand op_v1(bld.tmp(v1));
+   op_v1.setFixed(PhysReg(256 + 10));
+
+   Operand op_v2(bld.tmp(v2));
+   op_v2.setFixed(PhysReg(256 + 20));
+
+   /* Addressing */
+   //>> flat_load_b32 v42, v[20:21]                                 ; dc500000 2a7c0014
+   bld.flat(aco_opcode::flat_load_dword, dst_v1, op_v2, Operand(s1));
+
+   //! global_load_b32 v42, v[20:21], off                          ; dc520000 2a7c0014
+   bld.global(aco_opcode::global_load_dword, dst_v1, op_v2, Operand(s1));
+
+   //! global_load_b32 v42, v10, s[64:65]                          ; dc520000 2a40000a
+   bld.global(aco_opcode::global_load_dword, dst_v1, op_v1, op_s2);
+
+   //! scratch_load_b32 v42, v10, off                              ; dc510000 2afc000a
+   bld.scratch(aco_opcode::scratch_load_dword, dst_v1, op_v1, Operand(s1));
+
+   //! scratch_load_b32 v42, off, s32                              ; dc510000 2a200080
+   bld.scratch(aco_opcode::scratch_load_dword, dst_v1, Operand(v1), op_s1);
+
+   //! scratch_load_b32 v42, v10, s32                              ; dc510000 2aa0000a
+   bld.scratch(aco_opcode::scratch_load_dword, dst_v1, op_v1, op_s1);
+
+   //! global_load_b32 v42, v[20:21], off offset:-42               ; dc521fd6 2a7c0014
+   bld.global(aco_opcode::global_load_dword, dst_v1, op_v2, Operand(s1), -42);
+
+   //! global_load_b32 v42, v[20:21], off offset:84                ; dc520054 2a7c0014
+   bld.global(aco_opcode::global_load_dword, dst_v1, op_v2, Operand(s1), 84);
+
+   /* Various flags */
+   //! flat_load_b32 v42, v[20:21] slc                             ; dc508000 2a7c0014
+   bld.flat(aco_opcode::flat_load_dword, dst_v1, op_v2, Operand(s1)).instr->flat().slc = true;
+
+   //! flat_load_b32 v42, v[20:21] glc                             ; dc504000 2a7c0014
+   bld.flat(aco_opcode::flat_load_dword, dst_v1, op_v2, Operand(s1)).instr->flat().glc = true;
+
+   //! flat_load_b32 v42, v[20:21] dlc                             ; dc502000 2a7c0014
+   bld.flat(aco_opcode::flat_load_dword, dst_v1, op_v2, Operand(s1)).instr->flat().dlc = true;
+
+   /* Stores */
+   //! flat_store_b32 v[20:21], v10                                ; dc680000 007c0a14
+   bld.flat(aco_opcode::flat_store_dword, op_v2, Operand(s1), op_v1);
+
+   finish_assembler_test();
+END_TEST
+
+BEGIN_TEST(assembler.gfx11.exp)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   Operand op[4];
+   for (unsigned i = 0; i < 4; i++)
+      op[i] = Operand(PhysReg(256 + i), v1);
+
+   Operand op_m0(bld.tmp(s1));
+   op_m0.setFixed(m0);
+
+   //>> exp mrt3 v1, v0, v3, v2                                     ; f800003f 02030001
+   bld.exp(aco_opcode::exp, op[1], op[0], op[3], op[2], 0xf, 3);
+
+   //! exp mrt3 v1, off, v0, off                                   ; f8000035 80008001
+   bld.exp(aco_opcode::exp, op[1], Operand(v1), op[0], Operand(v1), 0x5, 3);
+
+   //! exp mrt3 v1, v0, v3, v2 done                                ; f800083f 02030001
+   bld.exp(aco_opcode::exp, op[1], op[0], op[3], op[2], 0xf, 3, false, true);
+
+   //>> exp mrt3 v1, v0, v3, v2 row_en                              ; f800203f 02030001
+   bld.exp(aco_opcode::exp, op[1], op[0], op[3], op[2], op_m0, 0xf, 3).instr->exp().row_en = true;
+
+   finish_assembler_test();
+END_TEST
+
+BEGIN_TEST(assembler.gfx11.vinterp)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   Definition dst = bld.def(v1);
+   dst.setFixed(PhysReg(256 + 42));
+
+   Operand op0(bld.tmp(v1));
+   op0.setFixed(PhysReg(256 + 10));
+
+   Operand op1(bld.tmp(v1));
+   op1.setFixed(PhysReg(256 + 20));
+
+   Operand op2(bld.tmp(s1));
+   op2.setFixed(PhysReg(30));
+
+   //>> v_interp_p10_f32 v42, v10, v20, s30 wait_exp:7              ; cd00072a 007a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2);
+
+   //! v_interp_p10_f32 v42, v10, v20, s30 wait_exp:6              ; cd00062a 007a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 6);
+
+   //! v_interp_p2_f32 v42, v10, v20, s30                          ; cd01002a 007a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p2_f32_inreg, dst, op0, op1, op2, 0);
+
+   //! v_interp_p10_f32 v42, -v10, v20, s30                        ; cd00002a 207a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 0).instr->vinterp_inreg().neg[0] = true;
+
+   //! v_interp_p10_f32 v42, v10, -v20, s30                        ; cd00002a 407a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 0).instr->vinterp_inreg().neg[1] = true;
+
+   //! v_interp_p10_f32 v42, v10, v20, -s30                        ; cd00002a 807a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 0).instr->vinterp_inreg().neg[2] = true;
+
+   //! v_interp_p10_f16_f32 v42, v10, v20, s30 op_sel:[1,0,0,0]    ; cd02082a 007a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f16_f32_inreg, dst, op0, op1, op2, 0, 0x1);
+
+   //! v_interp_p2_f16_f32 v42, v10, v20, s30 op_sel:[0,1,0,0]     ; cd03102a 007a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p2_f16_f32_inreg, dst, op0, op1, op2, 0, 0x2);
+
+   //! v_interp_p10_rtz_f16_f32 v42, v10, v20, s30 op_sel:[0,0,1,0] ; cd04202a 007a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_rtz_f16_f32_inreg, dst, op0, op1, op2, 0, 0x4);
+
+   //! v_interp_p2_rtz_f16_f32 v42, v10, v20, s30 op_sel:[0,0,0,1] ; cd05402a 007a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p2_rtz_f16_f32_inreg, dst, op0, op1, op2, 0, 0x8);
+
+   //! v_interp_p10_f32 v42, v10, v20, s30 clamp                   ; cd00802a 007a290a
+   bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, dst, op0, op1, op2, 0).instr->vinterp_inreg().clamp = true;
+
+   finish_assembler_test();
+END_TEST
+
+BEGIN_TEST(assembler.gfx11.ldsdir)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   Definition dst = bld.def(v1);
+   dst.setFixed(PhysReg(256 + 42));
+
+   Operand op(bld.tmp(s1));
+   op.setFixed(m0);
+
+   //>> lds_direct_load v42 wait_vdst:15                            ; ce1f002a
+   bld.ldsdir(aco_opcode::lds_direct_load, dst, op).instr->ldsdir().wait_vdst = 15;
+
+   //! lds_direct_load v42 wait_vdst:6                             ; ce16002a
+   bld.ldsdir(aco_opcode::lds_direct_load, dst, op).instr->ldsdir().wait_vdst = 6;
+
+   //! lds_direct_load v42                                         ; ce10002a
+   bld.ldsdir(aco_opcode::lds_direct_load, dst, op).instr->ldsdir().wait_vdst = 0;
+
+   //! lds_param_load v42, attr56.x wait_vdst:8                    ; ce08e02a
+   bld.ldsdir(aco_opcode::lds_param_load, dst, op, 56, 0).instr->ldsdir().wait_vdst = 8;
+
+   //! lds_param_load v42, attr56.x                                ; ce00e02a
+   bld.ldsdir(aco_opcode::lds_param_load, dst, op, 56, 0).instr->ldsdir().wait_vdst = 0;
+
+   //! lds_param_load v42, attr34.y                                ; ce00892a
+   bld.ldsdir(aco_opcode::lds_param_load, dst, op, 34, 1).instr->ldsdir().wait_vdst = 0;
+
+   //! lds_param_load v42, attr12.z                                ; ce00322a
+   bld.ldsdir(aco_opcode::lds_param_load, dst, op, 12, 2).instr->ldsdir().wait_vdst = 0;
+
+   finish_assembler_test();
+END_TEST
+#endif

@@ -33,12 +33,13 @@
 
 
 #include "c11/threads.h"
+#include "util/u_call_once.h"
 #include "u_execmem.h"
 
 
 #define EXEC_MAP_SIZE (4*1024)
 
-static mtx_t exec_mutex = _MTX_INITIALIZER_NP;
+static mtx_t exec_mutex;
 
 static unsigned int head = 0;
 
@@ -76,9 +77,8 @@ init_map(void)
    }
 #endif
 
-   if (!exec_mem)
-      exec_mem = mmap(NULL, EXEC_MAP_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE,
-		      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+   exec_mem = mmap(NULL, EXEC_MAP_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
    return (exec_mem != MAP_FAILED);
 }
@@ -117,6 +117,14 @@ init_map(void)
 
 #endif
 
+static void
+u_execmem_init_once(void)
+{
+   if (!init_map())
+      exec_mem = NULL;
+   mtx_init(&exec_mutex, mtx_plain);
+}
+
 void *
 u_execmem_alloc(unsigned int size)
 {
@@ -125,11 +133,12 @@ u_execmem_alloc(unsigned int size)
    return NULL;
 #else
    void *addr = NULL;
+   static util_once_flag once = UTIL_ONCE_FLAG_INIT;
+   util_call_once(&once, u_execmem_init_once);
+   if (exec_mem == NULL)
+      return NULL;
 
    mtx_lock(&exec_mutex);
-
-   if (!init_map())
-      goto bail;
 
    /* free space check, assumes no integer overflow */
    if (head + size > EXEC_MAP_SIZE)

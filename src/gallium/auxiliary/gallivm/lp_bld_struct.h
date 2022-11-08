@@ -55,24 +55,6 @@
 
 /**
  * Get value pointer to a structure member.
- */
-LLVMValueRef
-lp_build_struct_get_ptr(struct gallivm_state *gallivm,
-                        LLVMValueRef ptr,
-                        unsigned member,
-                        const char *name);
-
-/**
- * Get the value of a structure member.
- */
-LLVMValueRef
-lp_build_struct_get(struct gallivm_state *gallivm,
-                    LLVMValueRef ptr,
-                    unsigned member,
-                    const char *name);
-
-/**
- * Get value pointer to a structure member.
  * This takes the explicit LLVM type of ptr, as required by LLVM-15 opaque-pointers.
  */
 LLVMValueRef
@@ -93,50 +75,41 @@ lp_build_struct_get2(struct gallivm_state *gallivm,
                     unsigned member,
                     const char *name);
 
-/**
- * Get value pointer to an array element.
- */
 LLVMValueRef
-lp_build_array_get_ptr(struct gallivm_state *gallivm,
-                       LLVMValueRef ptr,
-                       LLVMValueRef index);
+lp_build_array_get_ptr2(struct gallivm_state *gallivm,
+                        LLVMTypeRef array_type,
+                        LLVMValueRef ptr,
+                        LLVMValueRef index);
+
+LLVMValueRef
+lp_build_array_get2(struct gallivm_state *gallivm,
+                    LLVMTypeRef array_type,
+                    LLVMValueRef ptr,
+                    LLVMValueRef index);
 
 /**
  * Get the value of an array element.
+ * This takes the explicit LLVM type of ptr, as required by LLVM-15 opaque-pointers.
  */
 LLVMValueRef
-lp_build_array_get(struct gallivm_state *gallivm,
-                   LLVMValueRef ptr,
-                   LLVMValueRef index);
+lp_build_pointer_get2(LLVMBuilderRef builder,
+                      LLVMTypeRef ptr_type,
+                      LLVMValueRef ptr,
+                      LLVMValueRef index);
 
 /**
- * Set the value of an array element.
- */
-void
-lp_build_array_set(struct gallivm_state *gallivm,
-                   LLVMValueRef ptr,
-                   LLVMValueRef index,
-                   LLVMValueRef value);
-
-/**
- * Get the value of an array element.
- */
-LLVMValueRef
-lp_build_pointer_get(LLVMBuilderRef builder,
-                   LLVMValueRef ptr,
-                   LLVMValueRef index);
-
-/**
- * Get the value of an array element, with explicit alignment.
+ * Get the value of an array element, with explicit alignment, and explicit type,
+ * This takes the explicit LLVM type of ptr, as required by LLVM-15 opaque-pointers.
  *
  * If the element size is different from the alignment this will
  * cause llvm to emit an unaligned load
  */
 LLVMValueRef
-lp_build_pointer_get_unaligned(LLVMBuilderRef builder,
-                               LLVMValueRef ptr,
-                               LLVMValueRef index,
-                               unsigned alignment);
+lp_build_pointer_get_unaligned2(LLVMBuilderRef builder,
+                                LLVMTypeRef ptr_type,
+                                LLVMValueRef ptr,
+                                LLVMValueRef index,
+                                unsigned alignment);
 
 /**
  * Set the value of an array element.

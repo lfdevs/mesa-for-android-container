@@ -875,6 +875,9 @@ check_unrolling_restrictions(nir_shader *shader, nir_loop *loop)
    /* Unroll much more aggressively if it can hide load latency. */
    if (shader->options->max_unroll_iterations_aggressive && can_pipeline_loads(loop))
       max_iter = shader->options->max_unroll_iterations_aggressive;
+   /* Tune differently if the loop has double ops and soft fp64 is in use */
+   else if (shader->options->max_unroll_iterations_fp64 && loop->info->has_soft_fp64)
+      max_iter = shader->options->max_unroll_iterations_fp64;
    unsigned trip_count =
       li->max_trip_count ? li->max_trip_count : li->guessed_trip_count;
 

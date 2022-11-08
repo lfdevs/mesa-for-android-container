@@ -44,7 +44,6 @@ dEQP-GLES3.functional.fbo.msaa.4_samples.depth24_stencil8,Fail
 dEQP-GLES3.functional.fbo.msaa.4_samples.depth32f_stencil8,Fail
 dEQP-GLES3.functional.fbo.msaa.4_samples.stencil_index8,Fail
 dEQP-GLES3.functional.polygon_offset.float32_displacement_with_units,Fail
-dEQP-GLES3.functional.shaders.builtin_variable.vertex_id,Fail
 dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darray_fixed_vertex,Fail
 dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2dshadow_vertex,Fail
 dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_fixed_vertex,Fail
@@ -56,6 +55,7 @@ dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2dshadow_
 dEQP-GLES3.functional.texture.specification.texstorage3d.size.3d_2x2x2_2_levels,Fail
 
 # MESA: error: ir3_ra() failed!
+dEQP-GLES31.functional.atomic_counter.inc_dec.8_counters_5_calls_1_thread,Fail
 dEQP-GLES31.functional.atomic_counter.get_dec.8_counters_5_calls_10_threads,Fail
 dEQP-GLES31.functional.atomic_counter.get_dec.8_counters_5_calls_1_thread,Fail
 dEQP-GLES31.functional.atomic_counter.get_inc.8_counters_5_calls_10_threads,Fail
@@ -65,6 +65,7 @@ dEQP-GLES31.functional.atomic_counter.get_inc_dec.4_counters_5_calls_1_thread,Fa
 dEQP-GLES31.functional.atomic_counter.get_inc_dec.8_counters_5_calls_10_threads,Fail
 dEQP-GLES31.functional.atomic_counter.get_inc_dec.8_counters_5_calls_1_thread,Fail
 dEQP-GLES31.functional.atomic_counter.inc_dec.8_counters_5_calls_10_threads,Fail
+dEQP-GLES31.functional.atomic_counter.layout.default_offset_set.get_inc.8_counters_5_calls_1_thread,Fail
 dEQP-GLES31.functional.atomic_counter.layout.default_offset_set.get_dec.8_counters_5_calls_1000_threads,Fail
 dEQP-GLES31.functional.atomic_counter.layout.default_offset_set.get_dec.8_counters_5_calls_1_thread,Fail
 dEQP-GLES31.functional.atomic_counter.layout.default_offset_set.inc_dec.8_counters_5_calls_1000_threads,Fail
@@ -84,9 +85,6 @@ dEQP-GLES31.functional.atomic_counter.layout.reverse_offset.get_inc.8_counters_5
 dEQP-GLES31.functional.atomic_counter.layout.reverse_offset.get_inc.8_counters_5_calls_1_thread,Fail
 dEQP-GLES31.functional.atomic_counter.layout.reverse_offset.inc_dec.8_counters_5_calls_1000_threads,Fail
 dEQP-GLES31.functional.atomic_counter.layout.reverse_offset.inc_dec.8_counters_5_calls_1_thread,Fail
-
-dEQP-GLES31.functional.compute.basic.image_atomic_op_local_size_1,Crash
-dEQP-GLES31.functional.compute.basic.image_atomic_op_local_size_8,Crash
 
 dEQP-GLES31.functional.draw_base_vertex.draw_elements_base_vertex.builtin_variable.vertex_id,Fail
 dEQP-GLES31.functional.draw_base_vertex.draw_elements_instanced_base_vertex.builtin_variable.vertex_id,Fail
@@ -685,11 +683,9 @@ spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@!opengl 3.0@clearbuffer-depth,Fail
 spec@!opengl 3.0@clearbuffer-stencil,Fail
-spec@!opengl 3.0@gl_vertexid used with glmultidrawarrays,Fail
 spec@!opengl 3.1@primitive-restart-xfb generated,Fail
 spec@!opengl 3.1@primitive-restart-xfb written,Fail
 spec@!opengl 3.1@vao-broken-attrib,Crash
-spec@!opengl es 3.0@gl_vertexid used with gldrawarrays,Fail
 spec@arb_depth_buffer_float@fbo-clear-formats stencil,Fail
 spec@arb_depth_buffer_float@fbo-clear-formats stencil@GL_DEPTH32F_STENCIL8,Fail
 spec@arb_depth_buffer_float@fbo-depthstencil-gl_depth32f_stencil8-blit,Fail
@@ -709,7 +705,6 @@ spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl
 spec@arb_framebuffer_object@framebuffer-blit-levels draw stencil,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels read stencil,Fail
 spec@arb_map_buffer_alignment@arb_map_buffer_alignment-map-invalidate-range,Fail
-spec@arb_multi_draw_indirect@gl-3.0-multidrawarrays-vertexid -indirect,Fail
 spec@arb_occlusion_query@occlusion_query_order,Fail
 spec@arb_point_sprite@arb_point_sprite-interactions 1.0,Fail
 spec@arb_separate_shader_objects@400 combinations by location,Fail
@@ -749,9 +744,6 @@ spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index4-blit,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index4-copypixels,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index8-blit,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index8-copypixels,Fail
-spec@ext_gpu_shader4@ext_gpu_shader4-vertexid-beginend,Fail
-spec@ext_gpu_shader4@ext_gpu_shader4-vertexid-drawarrays,Fail
-spec@ext_gpu_shader4@ext_gpu_shader4-vertexid-drawelements,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p010,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p012,Fail
@@ -855,12 +847,6 @@ spec@glsl-1.30@execution@texelfetch fs sampler3d 1x129x9-98x129x9,Fail
 spec@glsl-1.30@execution@texelfetch fs sampler3d 98x129x1-98x129x9,Fail
 spec@glsl-1.30@execution@texelfetch fs sampler3d 98x1x9-98x129x9,Fail
 
-spec@glsl-1.30@execution@vertexid-beginend,Fail
-spec@glsl-1.30@execution@vertexid-drawarrays,Fail
-spec@glsl-1.30@execution@vertexid-drawelements,Fail
-
-spec@gl-3.1@attributeless-vertexid,Fail
-
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 spec@khr_texture_compression_astc@array-gl,Fail
 spec@khr_texture_compression_astc@array-gl@12x12 Block Dim,Fail
@@ -917,3 +903,9 @@ spec@!opengl 1.0@depth-clear-precision-check@depth24,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth24_stencil8,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp,Fail
+
+# https://gitlab.freedesktop.org/mesa/mesa/-/issues/7159
+spec@arb_uniform_buffer_object@execution@shared-struct-array-array-array-struct,Fail
+spec@arb_uniform_buffer_object@execution@std140-struct-array-array-array-struct,Fail
+spec@arb_uniform_buffer_object@execution@shared-array-struct-array-struct,Fail
+spec@arb_uniform_buffer_object@execution@std140-array-struct-array-struct,Fail

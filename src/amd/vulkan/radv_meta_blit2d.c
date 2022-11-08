@@ -204,6 +204,20 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
    struct radv_device *device = cmd_buffer->device;
 
    for (unsigned r = 0; r < num_rects; ++r) {
+      radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1,
+                          &(VkViewport){.x = rects[r].dst_x,
+                                        .y = rects[r].dst_y,
+                                        .width = rects[r].width,
+                                        .height = rects[r].height,
+                                        .minDepth = 0.0f,
+                                        .maxDepth = 1.0f});
+
+      radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1,
+                         &(VkRect2D){
+                            .offset = (VkOffset2D){rects[r].dst_x, rects[r].dst_y},
+                            .extent = (VkExtent2D){rects[r].width, rects[r].height},
+                         });
+
       u_foreach_bit(i, dst->aspect_mask)
       {
          unsigned aspect_mask = 1u << i;
@@ -245,7 +259,7 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
                VkResult ret = blit2d_init_color_pipeline(
                   device, src_type, radv_fs_key_format_exemplars[fs_key], log2_samples);
                if (ret != VK_SUCCESS) {
-                  cmd_buffer->record_result = ret;
+                  vk_command_buffer_set_error(&cmd_buffer->vk, ret);
                   goto fail_pipeline;
                }
             }
@@ -277,7 +291,7 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
                 VK_NULL_HANDLE) {
                VkResult ret = blit2d_init_depth_only_pipeline(device, src_type, log2_samples);
                if (ret != VK_SUCCESS) {
-                  cmd_buffer->record_result = ret;
+                  vk_command_buffer_set_error(&cmd_buffer->vk, ret);
                   goto fail_pipeline;
                }
             }
@@ -311,7 +325,7 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
                 VK_NULL_HANDLE) {
                VkResult ret = blit2d_init_stencil_only_pipeline(device, src_type, log2_samples);
                if (ret != VK_SUCCESS) {
-                  cmd_buffer->record_result = ret;
+                  vk_command_buffer_set_error(&cmd_buffer->vk, ret);
                   goto fail_pipeline;
                }
             }
@@ -341,20 +355,6 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer,
             bind_stencil_pipeline(cmd_buffer, src_type, log2_samples);
          } else
             unreachable("Processing blit2d with multiple aspects.");
-
-         radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1,
-                             &(VkViewport){.x = rects[r].dst_x,
-                                           .y = rects[r].dst_y,
-                                           .width = rects[r].width,
-                                           .height = rects[r].height,
-                                           .minDepth = 0.0f,
-                                           .maxDepth = 1.0f});
-
-         radv_CmdSetScissor(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1,
-                            &(VkRect2D){
-                               .offset = (VkOffset2D){rects[r].dst_x, rects[r].dst_y},
-                               .extent = (VkExtent2D){rects[r].width, rects[r].height},
-                            });
 
          radv_CmdDraw(radv_cmd_buffer_to_handle(cmd_buffer), 3, 1, 0, 0);
 
@@ -748,7 +748,7 @@ blit2d_init_color_pipeline(struct radv_device *device, enum blit2d_src_type src_
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
    result = radv_graphics_pipeline_create(
-      radv_device_to_handle(device), radv_pipeline_cache_to_handle(&device->meta_state.cache),
+      radv_device_to_handle(device), device->meta_state.cache,
       &vk_pipeline_info, &radv_pipeline_info, &device->meta_state.alloc,
       &device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key]);
 
@@ -905,7 +905,7 @@ blit2d_init_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
    result = radv_graphics_pipeline_create(
-      radv_device_to_handle(device), radv_pipeline_cache_to_handle(&device->meta_state.cache),
+      radv_device_to_handle(device), device->meta_state.cache,
       &vk_pipeline_info, &radv_pipeline_info, &device->meta_state.alloc,
       &device->meta_state.blit2d[log2_samples].depth_only_pipeline[src_type]);
 
@@ -1059,7 +1059,7 @@ blit2d_init_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_ty
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
    result = radv_graphics_pipeline_create(
-      radv_device_to_handle(device), radv_pipeline_cache_to_handle(&device->meta_state.cache),
+      radv_device_to_handle(device), device->meta_state.cache,
       &vk_pipeline_info, &radv_pipeline_info, &device->meta_state.alloc,
       &device->meta_state.blit2d[log2_samples].stencil_only_pipeline[src_type]);
 

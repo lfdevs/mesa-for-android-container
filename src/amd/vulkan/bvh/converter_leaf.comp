@@ -1,0 +1,101 @@
+/*
+ * Copyright © 2022 Friedrich Vock
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */
+
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference2 : require
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+#include "build_helpers.h"
+#include "build_interface.h"
+
+layout(push_constant) uniform CONSTS {
+   convert_leaf_args args;
+};
+
+void
+main()
+{
+   uint32_t global_id = gl_GlobalInvocationID.x;
+   uint32_t dst_leaf_offset =
+      id_to_offset(RADV_BVH_ROOT_NODE) + SIZEOF(radv_bvh_box32_node);
+
+   VOID_REF dst_leaves = OFFSET(args.output_bvh, dst_leaf_offset);
+   switch (args.geometry_type) {
+   case VK_GEOMETRY_TYPE_TRIANGLES_KHR: {
+      radv_ir_triangle_node src =
+         DEREF(INDEX(radv_ir_triangle_node, args.intermediate_bvh, global_id));
+      REF(radv_bvh_triangle_node) dst =
+         INDEX(radv_bvh_triangle_node, dst_leaves, global_id);
+
+      DEREF(dst).coords = src.coords;
+      DEREF(dst).triangle_id = src.triangle_id;
+      DEREF(dst).geometry_id_and_flags = src.geometry_id_and_flags;
+      DEREF(dst).id = src.id;
+      break;
+   }
+   case VK_GEOMETRY_TYPE_AABBS_KHR: {
+      radv_ir_aabb_node src =
+         DEREF(INDEX(radv_ir_aabb_node, args.intermediate_bvh, global_id));
+      REF(radv_bvh_aabb_node) dst =
+         INDEX(radv_bvh_aabb_node, dst_leaves, global_id);
+      DEREF(dst).aabb = src.base.aabb;
+      DEREF(dst).primitive_id = src.primitive_id;
+      DEREF(dst).geometry_id_and_flags = src.geometry_id_and_flags;
+      break;
+   }
+   default: { /* instances */
+      radv_ir_instance_node src =
+         DEREF(INDEX(radv_ir_instance_node, args.intermediate_bvh, global_id));
+      REF(radv_bvh_instance_node) dst =
+         INDEX(radv_bvh_instance_node, dst_leaves, global_id);
+      uint32_t bvh_offset = 0;
+      if (src.base_ptr != 0)
+         bvh_offset = DEREF(REF(radv_accel_struct_header)(src.base_ptr)).bvh_offset;
+
+      DEREF(dst).bvh_ptr = src.base_ptr + bvh_offset;
+      DEREF(dst).custom_instance_and_mask = src.custom_instance_and_mask;
+      DEREF(dst).sbt_offset_and_flags = src.sbt_offset_and_flags;
+      DEREF(dst).instance_id = src.instance_id;
+      DEREF(dst).bvh_offset = bvh_offset;
+
+      mat4 transform = mat4(src.otw_matrix);
+
+      mat4 inv_transform = transpose(inverse(transpose(transform)));
+      DEREF(dst).wto_matrix = mat3x4(inv_transform);
+      DEREF(dst).otw_matrix = mat3x4(transform);
+
+      break;
+   }
+   }
+}

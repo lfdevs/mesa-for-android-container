@@ -955,30 +955,24 @@ nv50_ir_prog_info_out_print(struct nv50_ir_prog_info_out *info_out)
    if (info_out->numSysVals) {
       INFO("   \"sv\":[\n");
       for (i = 0; i < info_out->numSysVals; i++) {
-         if (&(info_out->sv[i])) {
             INFO("      {\"id\":\"%d\", \"sn\":\"%d\", \"si\":\"%d\"}\n",
-                   info_out->sv[i].id, info_out->sv[i].sn, info_out->sv[i].si);
-         }
+                 info_out->sv[i].id, info_out->sv[i].sn, info_out->sv[i].si);
       }
       INFO("\n   ],\n");
    }
    if (info_out->numInputs) {
       INFO("   \"in\":[\n");
       for (i = 0; i < info_out->numInputs; i++) {
-         if (&(info_out->in[i])) {
-            INFO("      {\"id\":\"%d\",\t\"sn\":\"%d\",\t\"si\":\"%d\"}\n",
-                info_out->in[i].id, info_out->in[i].sn, info_out->in[i].si);
-         }
+         INFO("      {\"id\":\"%d\",\t\"sn\":\"%d\",\t\"si\":\"%d\"}\n",
+              info_out->in[i].id, info_out->in[i].sn, info_out->in[i].si);
       }
       INFO("\n   ],\n");
    }
    if (info_out->numOutputs) {
       INFO("   \"out\":[\n");
       for (i = 0; i < info_out->numOutputs; i++) {
-         if (&(info_out->out[i])) {
-            INFO("      {\"id\":\"%d\",\t\"sn\":\"%d\",\t\"si\":\"%d\"}\n",
-                   info_out->out[i].id, info_out->out[i].sn, info_out->out[i].si);
-         }
+         INFO("      {\"id\":\"%d\",\t\"sn\":\"%d\",\t\"si\":\"%d\"}\n",
+              info_out->out[i].id, info_out->out[i].sn, info_out->out[i].si);
       }
       INFO("\n   ],\n");
    }

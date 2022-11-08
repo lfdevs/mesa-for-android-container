@@ -365,6 +365,9 @@ d3d12_video_encoder_references_manager_h264::print_dpb()
          dpbContents += "}\n";
       }
 
+      debug_printf("[D3D12 Video Encoder Picture Manager H264] DPB Current output reconstructed picture %p subresource %d\n",
+                     m_CurrentFrameReferencesData.ReconstructedPicTexture.pReconstructedPicture,
+                     m_CurrentFrameReferencesData.ReconstructedPicTexture.ReconstructedPictureSubresource);
       debug_printf("[D3D12 Video Encoder Picture Manager H264] DPB has %d frames - DPB references for frame with POC "
                     "%d (frame_num: %d) are: \n %s \n",
                     m_rDPBStorageManager.get_number_of_pics_in_dpb(),
@@ -398,11 +401,12 @@ d3d12_video_encoder_references_manager_h264::is_current_frame_used_as_reference(
 
 void
 d3d12_video_encoder_references_manager_h264::begin_frame(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA curFrameData,
-                                                         bool bUsedAsReference)
+                                                         bool bUsedAsReference, struct pipe_picture_desc* picture)
 {
    m_curFrameState = *curFrameData.pH264PicData;
    m_isCurrentFrameUsedAsReference = bUsedAsReference;
-   debug_printf("Marking frame_num %d (POC %d) as reference ? %d\n",
+   debug_printf("[Entrypoint: %d] - Marking frame_num %d (POC %d) as reference ? %d\n",
+                 picture->entry_point,
                  curFrameData.pH264PicData->FrameDecodingOrderNumber,
                  curFrameData.pH264PicData->PictureOrderCountNumber,
                  bUsedAsReference);

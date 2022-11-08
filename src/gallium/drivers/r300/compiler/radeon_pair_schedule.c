@@ -153,6 +153,7 @@ struct schedule_state {
 	void (*CalcScore)(struct schedule_instruction *);
 	long max_tex_group;
 	unsigned PrevBlockHasTex:1;
+	unsigned PrevBlockHasKil:1;
 	unsigned TEXCount;
 	unsigned Opt:1;
 };
@@ -568,6 +569,15 @@ static int merge_presub_sources(
 		/* Shuffle the sources, so we can put the
 		 * presubtract source in the correct place. */
 		for(arg = 0; arg < info->NumSrcRegs; arg++) {
+			/* If the arg does read both from rgb and alpha, then we need to rewrite
+			 * both sources and the code currently doesn't handle this.
+			 * FIXME: This is definitelly solvable, however shader-db shows it is
+			 * not worth the effort.
+			 */
+			if (rc_source_type_swz(dst_full->RGB.Arg[arg].Swizzle) & RC_SOURCE_ALPHA &&
+				rc_source_type_swz(dst_full->RGB.Arg[arg].Swizzle) & RC_SOURCE_RGB)
+				return 0;
+
 			/*If this arg does not read from an rgb source,
 			 * do nothing. */
 			if (!(rc_source_type_swz(dst_full->RGB.Arg[arg].Swizzle)
@@ -917,8 +927,6 @@ static int convert_rgb_to_alpha(
 					rc_mask_to_swizzle(old_mask));
 			new_index = i;
 			*new_regvalp = *old_regvalp;
-			*old_regvalp = NULL;
-			new_regvalp = get_reg_valuep(s, RC_FILE_TEMPORARY, i, 3);
 			break;
 		}
 	}
@@ -1102,6 +1110,7 @@ static void emit_instruction(
 	for (tex_ptr = s->ReadyTEX; tex_ptr; tex_ptr = tex_ptr->NextReady) {
 		if (tex_ptr->Instruction->U.I.Opcode == RC_OPCODE_KIL) {
 			emit_all_tex(s, before);
+			s->PrevBlockHasKil = 1;
 			return;
 		}
 		tex_count++;
@@ -1335,6 +1344,16 @@ void rc_pair_schedule(struct radeon_compiler *cc, void *user)
 		struct rc_instruction * first;
 
 		if (is_controlflow(inst)) {
+			/* The TexSemWait flag is already properly set for ALU
+			 * instructions using the results of normal TEX lookup,
+			 * however it was found empirically that TEXKIL also needs
+			 * synchronization with the control flow. This might not be optimal,
+			 * however the docs don't offer any guidance in this matter.
+			 */
+			if (s.PrevBlockHasKil) {
+				inst->U.I.TexSemWait = 1;
+				s.PrevBlockHasKil = 0;
+			}
 			inst = inst->Next;
 			continue;
 		}

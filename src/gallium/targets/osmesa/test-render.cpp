@@ -147,7 +147,7 @@ TEST_P(OSMesaRenderTestFixture, Render)
    }
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
    OSMesaRenderTest,
    OSMesaRenderTestFixture,
    testing::Values(

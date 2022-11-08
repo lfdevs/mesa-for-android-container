@@ -7,21 +7,40 @@
     FLAKES_CHANNEL: "#mesa-swrast-ci"
     GPU_VERSION: llvmpipe
 
-llvmpipe-piglit-cl:
+.llvmpipe-piglit-cl:
   extends:
     - .test-cl
     - .piglit-test
     - .llvmpipe-test
-    - .llvmpipe-cl-rules
   variables:
-    LP_CL: 1
     LP_NUM_THREADS: 1
     PIGLIT_PROFILES: cl
-    PIGLIT_RESULTS: "llvmpipe-cl"
     PIGLIT_TESTS: >
       -x bswap -x phatk -x clz-optimizations
   script:
     - install/piglit/run_cl.sh
+
+llvmpipe-piglit-clover:
+  extends:
+    - .llvmpipe-piglit-cl
+    - .llvmpipe-clover-rules
+  needs:
+    - debian-clover-testing
+    - debian/x86_test-gl
+  variables:
+    LP_CL: 1
+    PIGLIT_RESULTS: "llvmpipe-clover"
+
+llvmpipe-piglit-rusticl:
+  extends:
+    - .llvmpipe-piglit-cl
+    - .llvmpipe-rusticl-rules
+  needs:
+    - debian-rusticl-testing
+    - debian/x86_test-gl
+  variables:
+    RUSTICL_ENABLE: "llvmpipe"
+    PIGLIT_RESULTS: "llvmpipe-rusticl"
 
 llvmpipe-traces:
   extends:

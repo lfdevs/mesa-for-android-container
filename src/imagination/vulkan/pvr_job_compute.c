@@ -37,6 +37,7 @@
 static void pvr_compute_job_ws_submit_info_init(
    struct pvr_compute_ctx *ctx,
    struct pvr_sub_cmd_compute *sub_cmd,
+   struct vk_sync *barrier,
    struct vk_sync **waits,
    uint32_t wait_count,
    uint32_t *stage_flags,
@@ -47,6 +48,8 @@ static void pvr_compute_job_ws_submit_info_init(
 
    submit_info->frame_num = ctx->device->global_queue_present_count;
    submit_info->job_num = ctx->device->global_queue_job_count;
+
+   submit_info->barrier = barrier;
 
    submit_info->waits = waits;
    submit_info->wait_count = wait_count;
@@ -87,6 +90,7 @@ static void pvr_compute_job_ws_submit_info_init(
 
 VkResult pvr_compute_job_submit(struct pvr_compute_ctx *ctx,
                                 struct pvr_sub_cmd_compute *sub_cmd,
+                                struct vk_sync *barrier,
                                 struct vk_sync **waits,
                                 uint32_t wait_count,
                                 uint32_t *stage_flags,
@@ -96,6 +100,7 @@ VkResult pvr_compute_job_submit(struct pvr_compute_ctx *ctx,
 
    pvr_compute_job_ws_submit_info_init(ctx,
                                        sub_cmd,
+                                       barrier,
                                        waits,
                                        wait_count,
                                        stage_flags,

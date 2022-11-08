@@ -27,15 +27,7 @@
 
 #include <gtest/gtest.h>
 
-static inline void
-case_cb(bi_context *ctx)
-{
-   bi_foreach_instr_global(ctx, I) {
-      va_lower_isel(I);
-   }
-}
-
-#define CASE(instr, expected) INSTRUCTION_CASE(instr, expected, case_cb)
+#define CASE(instr, expected) INSTRUCTION_CASE(instr, expected, va_lower_isel)
 #define NEGCASE(instr) CASE(instr, instr)
 
 class LowerIsel : public testing::Test {

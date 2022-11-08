@@ -13,7 +13,7 @@
 #include "msm_kgsl.h"
 #include "vk_util.h"
 
-#include "util/debug.h"
+#include "util/u_debug.h"
 
 #include "tu_cmd_buffer.h"
 #include "tu_cs.h"
@@ -69,9 +69,15 @@ tu_drm_submitqueue_close(const struct tu_device *dev, uint32_t queue_id)
 }
 
 VkResult
-tu_bo_init_new(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
-               enum tu_bo_alloc_flags flags)
+tu_bo_init_new_explicit_iova(struct tu_device *dev,
+                             struct tu_bo **out_bo,
+                             uint64_t size,
+                             uint64_t client_iova,
+                             enum tu_bo_alloc_flags flags,
+                             const char *name)
 {
+   assert(client_iova == 0);
+
    struct kgsl_gpumem_alloc_id req = {
       .size = size,
    };
@@ -96,6 +102,7 @@ tu_bo_init_new(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
       .size = req.mmapsize,
       .iova = req.gpuaddr,
       .refcnt = 1,
+      .name = tu_debug_bos_add(dev, req.mmapsize, name),
    };
 
    *out_bo = bo;
@@ -144,6 +151,7 @@ tu_bo_init_dmabuf(struct tu_device *dev,
       .size = info_req.size,
       .iova = info_req.gpuaddr,
       .refcnt = 1,
+      .name = tu_debug_bos_add(dev, info_req.size, "dmabuf"),
    };
 
    *out_bo = bo;
@@ -210,22 +218,34 @@ get_kgsl_prop(int fd, unsigned int type, void *value, size_t size)
 }
 
 VkResult
-tu_enumerate_devices(struct tu_instance *instance)
+tu_enumerate_devices(struct vk_instance *vk_instance)
 {
+   struct tu_instance *instance =
+      container_of(vk_instance, struct tu_instance, vk);
+
    static const char path[] = "/dev/kgsl-3d0";
    int fd;
 
-   struct tu_physical_device *device = &instance->physical_devices[0];
-
-   if (instance->vk.enabled_extensions.KHR_display)
-      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+   if (instance->vk.enabled_extensions.KHR_display) {
+      return vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                        "I can't KHR_display");
+   }
 
    fd = open(path, O_RDWR | O_CLOEXEC);
    if (fd < 0) {
-      instance->physical_device_count = 0;
-      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+      if (errno == ENOENT)
+         return VK_SUCCESS;
+
+      return vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                        "failed to open device %s", path);
+   }
+
+   struct tu_physical_device *device =
+      vk_zalloc(&instance->vk.alloc, sizeof(*device), 8,
+                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+   if (!device) {
+      close(fd);
+      return vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
    struct kgsl_devinfo info;
@@ -250,8 +270,10 @@ tu_enumerate_devices(struct tu_instance *instance)
       ((info.chip_id >> 16) & 0xff) * 10 +
       ((info.chip_id >>  8) & 0xff);
    device->dev_id.chip_id = info.chip_id;
-   device->gmem_size = env_var_as_unsigned("TU_GMEM", info.gmem_sizebytes);
+   device->gmem_size = debug_get_num_option("TU_GMEM", info.gmem_sizebytes);
    device->gmem_base = gmem_iova;
+
+   device->submitqueue_priority_count = 1;
 
    device->heap.size = tu_get_system_heap_size();
    device->heap.used = 0u;
@@ -260,11 +282,12 @@ tu_enumerate_devices(struct tu_instance *instance)
    if (tu_physical_device_init(device, instance) != VK_SUCCESS)
       goto fail;
 
-   instance->physical_device_count = 1;
+   list_addtail(&device->vk.link, &instance->vk.physical_devices.list);
 
    return VK_SUCCESS;
 
 fail:
+   vk_free(&instance->vk.alloc, device);
    close(fd);
    return VK_ERROR_INITIALIZATION_FAILED;
 }
@@ -344,6 +367,7 @@ tu_QueueSubmit2(VkQueue _queue,
                 const VkSubmitInfo2 *pSubmits,
                 VkFence _fence)
 {
+   MESA_TRACE_FUNC();
    TU_FROM_HANDLE(tu_queue, queue, _queue);
    TU_FROM_HANDLE(tu_syncobj, fence, _fence);
    VkResult result = VK_SUCCESS;
@@ -521,6 +545,9 @@ tu_QueueSubmit2(VkQueue _queue,
          }
       }
    }
+
+   tu_debug_bos_print_stats(queue->device);
+
 fail:
    vk_free(&queue->device->vk.alloc, cmds);
 
@@ -632,6 +659,43 @@ tu_DestroyFence(VkDevice _device, VkFence fence, const VkAllocationCallbacks *pA
    vk_object_free(&device->vk, pAllocator, sync);
 }
 
+/* safe_ioctl is not enough as restarted waits would not adjust the timeout
+ * which could lead to waiting substantially longer than requested
+ */
+static int
+wait_timestamp_safe(int fd,
+                    unsigned int context_id,
+                    unsigned int timestamp,
+                    int64_t timeout_ms)
+{
+   int64_t start_time = os_time_get_nano();
+   struct kgsl_device_waittimestamp_ctxtid wait = {
+      .context_id = context_id,
+      .timestamp = timestamp,
+      .timeout = timeout_ms,
+   };
+
+   while (true) {
+      int ret = ioctl(fd, IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID, &wait);
+
+      if (ret == -1 && (errno == EINTR || errno == EAGAIN)) {
+         int64_t current_time = os_time_get_nano();
+
+         /* update timeout to consider time that has passed since the start */
+         timeout_ms -= (current_time - start_time) / 1000000;
+         if (timeout_ms <= 0) {
+            errno = ETIME;
+            return -1;
+         }
+
+         wait.timeout = (unsigned int) timeout_ms;
+         start_time = current_time;
+      } else {
+         return ret;
+      }
+   }
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 tu_WaitForFences(VkDevice _device,
                  uint32_t count,
@@ -645,12 +709,10 @@ tu_WaitForFences(VkDevice _device,
    if (!s.timestamp_valid)
       return VK_SUCCESS;
 
-   int ret = ioctl(device->fd, IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID,
-                   &(struct kgsl_device_waittimestamp_ctxtid) {
-      .context_id = device->queues[0]->msm_queue_id,
-      .timestamp = s.timestamp,
-      .timeout = timeout / 1000000,
-   });
+   int ret = wait_timestamp_safe(device->fd, 
+                                 device->queues[0]->msm_queue_id, 
+                                 s.timestamp, 
+                                 timeout / 1000000);
    if (ret) {
       assert(errno == ETIME);
       return VK_TIMEOUT;
@@ -678,25 +740,17 @@ tu_GetFenceStatus(VkDevice _device, VkFence _fence)
    if (!sync->timestamp_valid)
       return VK_NOT_READY;
 
-   int ret = ioctl(device->fd, IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID,
-               &(struct kgsl_device_waittimestamp_ctxtid) {
-      .context_id = device->queues[0]->msm_queue_id,
-      .timestamp = sync->timestamp,
-      .timeout = 0,
-   });
+
+   int ret = wait_timestamp_safe(device->fd, 
+                                 device->queues[0]->msm_queue_id, 
+                                 sync->timestamp, 
+                                 0);
    if (ret) {
       assert(errno == ETIME);
       return VK_NOT_READY;
    }
 
    return VK_SUCCESS;
-}
-
-int
-tu_syncobj_to_fd(struct tu_device *device, struct vk_sync *sync)
-{
-   tu_finishme("tu_syncobj_to_fd");
-   return -1;
 }
 
 VkResult

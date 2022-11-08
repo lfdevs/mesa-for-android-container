@@ -272,6 +272,7 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
             case nir_intrinsic_image_atomic_fmax:
             case nir_intrinsic_image_size:
             case nir_intrinsic_image_samples:
+            case nir_intrinsic_image_samples_identical:
             case nir_intrinsic_bindless_image_load:
             case nir_intrinsic_bindless_image_sparse_load:
             case nir_intrinsic_bindless_image_store:
@@ -290,6 +291,7 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
             case nir_intrinsic_bindless_image_atomic_fmax:
             case nir_intrinsic_bindless_image_size:
             case nir_intrinsic_bindless_image_samples:
+            case nir_intrinsic_bindless_image_samples_identical:
             case nir_intrinsic_image_deref_load:
             case nir_intrinsic_image_deref_sparse_load:
             case nir_intrinsic_image_deref_store:
@@ -308,6 +310,7 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
             case nir_intrinsic_image_deref_atomic_fmax:
             case nir_intrinsic_image_deref_size:
             case nir_intrinsic_image_deref_samples:
+            case nir_intrinsic_image_deref_samples_identical:
                if ((options->types & nir_lower_non_uniform_image_access) &&
                    lower_non_uniform_access_intrin(options, &b, intrin, 0))
                   progress = true;

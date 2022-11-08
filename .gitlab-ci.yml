@@ -1,6 +1,6 @@
 variables:
   FDO_UPSTREAM_REPO: mesa/mesa
-  MESA_TEMPLATES_COMMIT: &ci-templates-commit 290b79e0e78eab67a83766f4e9691be554fc4afd
+  MESA_TEMPLATES_COMMIT: &ci-templates-commit d5aa3941aa03c2f716595116354fb81eb8012acb
   CI_PRE_CLONE_SCRIPT: |-
           set -o xtrace
           wget -q -O download-git-cache.sh ${CI_PROJECT_URL}/-/raw/${CI_COMMIT_SHA}/.gitlab-ci/download-git-cache.sh
@@ -22,6 +22,7 @@ variables:
   MICROSOFT_FARM: "online"
   LIMA_FARM: "online"
   IGALIA_FARM: "online"
+  ANHOLT_FARM: "online"
 
 default:
   before_script:
@@ -70,7 +71,6 @@ include:
   - local: 'src/gallium/drivers/lima/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/llvmpipe/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/nouveau/ci/gitlab-ci.yml'
-  - local: 'src/gallium/drivers/radeonsi/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/softpipe/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/virgl/ci/gitlab-ci.yml'
   - local: 'src/gallium/drivers/zink/ci/gitlab-ci.yml'
@@ -78,6 +78,7 @@ include:
   - local: 'src/intel/ci/gitlab-ci.yml'
   - local: 'src/microsoft/ci/gitlab-ci.yml'
   - local: 'src/panfrost/ci/gitlab-ci.yml'
+  - local: 'src/virtio/ci/gitlab-ci.yml'
 
 stages:
   - sanity
@@ -85,6 +86,7 @@ stages:
   - git-archive
   - build-x86_64
   - build-misc
+  - lint
   - amd
   - intel
   - nouveau

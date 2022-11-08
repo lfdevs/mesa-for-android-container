@@ -320,11 +320,18 @@ static void si_bind_compute_state(struct pipe_context *ctx, void *state)
          program->shader.binary.elf_buffer,
          program->shader.binary.elf_size,
          0);
-      uint64_t base_address = program->shader.bo->gpu_address;
 
       struct ac_thread_trace_data *thread_trace_data = sctx->thread_trace;
       if (!si_sqtt_pipeline_is_registered(thread_trace_data, pipeline_code_hash)) {
-         si_sqtt_register_pipeline(sctx, pipeline_code_hash, base_address, true);
+         /* Short lived fake pipeline: we don't need to reupload the compute shaders,
+          * as we do for the gfx ones so just create a temp pipeline to be able to
+          * call si_sqtt_register_pipeline, and then drop it.
+          */
+         struct si_sqtt_fake_pipeline pipeline = { 0 };
+         pipeline.code_hash = pipeline_code_hash;
+         pipeline.bo = program->shader.bo;
+
+         si_sqtt_register_pipeline(sctx, &pipeline, true);
       }
 
       si_sqtt_describe_pipeline_bind(sctx, pipeline_code_hash, 1);

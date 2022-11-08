@@ -31,12 +31,16 @@
 #ifndef EGLDISPLAY_INCLUDED
 #define EGLDISPLAY_INCLUDED
 
-#include "c11/threads.h"
+#include "util/simple_mtx.h"
+#include "util/rwlock.h"
 
 #include "egltypedefs.h"
 #include "egldefines.h"
 #include "eglarray.h"
 
+#ifdef HAVE_X11_PLATFORM
+#include <X11/Xlib.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,6 +104,7 @@ struct _egl_extensions
    EGLBoolean ANDROID_native_fence_sync;
    EGLBoolean ANDROID_recordable;
 
+   EGLBoolean ANGLE_sync_control_rate;
    EGLBoolean CHROMIUM_sync_control;
 
    EGLBoolean EXT_buffer_age;
@@ -107,6 +112,7 @@ struct _egl_extensions
    EGLBoolean EXT_image_dma_buf_import;
    EGLBoolean EXT_image_dma_buf_import_modifiers;
    EGLBoolean EXT_pixel_format_float;
+   EGLBoolean EXT_protected_content;
    EGLBoolean EXT_protected_surface;
    EGLBoolean EXT_present_opaque;
    EGLBoolean EXT_surface_CTA861_3_metadata;
@@ -158,7 +164,33 @@ struct _egl_display
    /* used to link displays */
    _EGLDisplay *Next;
 
-   mtx_t Mutex;
+   /**
+    * The big-display-lock (BDL) which protects our internal state.  EGL
+    * drivers should use their own locking, as needed, to protect their
+    * own state, rather than relying on this.
+    */
+   simple_mtx_t Mutex;
+
+   /**
+    * The spec appears to allow eglTerminate() to race with more or less
+    * any other egl call.  To allow for this, while relaxing the BDL to
+    * allow other egl calls to happen in parallel, a rwlock is used.  All
+    * points where the BDL lock is acquired also acquire TerminateLock
+    * for reading, while eglTerminate() itself acquires the TerminateLock
+    * for writing.
+    *
+    * Note, we could conceivably just replace the BDL with a single
+    * rwlock.  But there are a couple shortcomings of u_rwlock:
+    *
+    *   1) The WIN32 implementation does not allow promoting a read-
+    *      lock to write-lock, nor recursive locking, whereas the
+    *      pthread based implementation does.  Because of this, it
+    *      would be difficult to keep the eglapi layer portable if
+    *      we depended on any less-than-trivial rwlock usage.
+    *
+    *   2) We'd lose simple_mtx_assert_locked().
+    */
+   struct u_rwlock TerminateLock;
 
    _EGLPlatformType Platform; /**< The type of the platform display */
    void *PlatformDisplay;     /**< A pointer to the platform display */
@@ -198,6 +230,14 @@ struct _egl_display
 };
 
 
+extern _EGLDisplay *
+_eglLockDisplay(EGLDisplay dpy);
+
+
+extern void
+_eglUnlockDisplay(_EGLDisplay *disp);
+
+
 extern _EGLPlatformType
 _eglGetNativePlatform(void *nativeDisplay);
 
@@ -219,25 +259,7 @@ _eglCleanupDisplay(_EGLDisplay *disp);
 
 
 extern EGLBoolean
-_eglCheckDisplayHandle(EGLDisplay dpy);
-
-
-extern EGLBoolean
 _eglCheckResource(void *res, _EGLResourceType type, _EGLDisplay *disp);
-
-
-/**
- * Lookup a handle to find the linked display.
- * Return NULL if the handle has no corresponding linked display.
- */
-static inline _EGLDisplay *
-_eglLookupDisplay(EGLDisplay dpy)
-{
-   _EGLDisplay *disp = (_EGLDisplay *) dpy;
-   if (!_eglCheckDisplayHandle(dpy))
-      disp = NULL;
-   return disp;
-}
 
 
 /**

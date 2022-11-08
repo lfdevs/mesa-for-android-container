@@ -65,7 +65,7 @@ build_binary_int_overflow(struct gallivm_state *gallivm,
    LLVMBuilderRef builder = gallivm->builder;
    char intr_str[256];
    LLVMTypeRef type_ref;
-   LLVMTypeKind type_kind;
+   ASSERTED LLVMTypeKind type_kind;
    unsigned type_width;
    LLVMTypeRef oelems[2];
    LLVMValueRef oresult;

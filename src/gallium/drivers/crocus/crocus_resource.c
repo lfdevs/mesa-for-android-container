@@ -762,7 +762,6 @@ crocus_resource_create_with_modifiers(struct pipe_screen *pscreen,
    return &res->base.b;
 
 fail:
-   fprintf(stderr, "XXX: resource creation failed\n");
    crocus_resource_destroy(pscreen, &res->base.b);
    return NULL;
 
@@ -1259,7 +1258,12 @@ crocus_map_copy_region(struct crocus_transfer *map)
       templ.target = PIPE_TEXTURE_2D;
 
    map->staging = crocus_resource_create(pscreen, &templ);
-   assert(map->staging);
+
+   /* If we fail to create a staging resource, the caller will fallback
+    * to mapping directly on the CPU.
+    */
+   if (!map->staging)
+      return;
 
    if (templ.target != PIPE_BUFFER) {
       struct isl_surf *surf = &((struct crocus_resource *) map->staging)->surf;
@@ -1704,9 +1708,12 @@ crocus_transfer_map(struct pipe_context *ctx,
       map->batch = &ice->batches[CROCUS_BATCH_RENDER];
       map->blorp = &ice->blorp;
       crocus_map_copy_region(map);
-   } else {
-      /* Otherwise we're free to map on the CPU. */
+   }
 
+   /* If we've requested a direct mapping, or crocus_map_copy_region failed
+    * to create a staging resource, then map it directly on the CPU.
+    */
+   if (!map->ptr) {
       if (resource->target != PIPE_BUFFER) {
          crocus_resource_access_raw(ice, res,
                                     level, box->z, box->depth,
@@ -2007,15 +2014,22 @@ crocus_init_screen_resource_functions(struct pipe_screen *pscreen)
    pscreen->resource_destroy = u_transfer_helper_resource_destroy;
    pscreen->memobj_create_from_handle = crocus_memobj_create_from_handle;
    pscreen->memobj_destroy = crocus_memobj_destroy;
+
+   enum u_transfer_helper_flags transfer_flags = U_TRANSFER_HELPER_MSAA_MAP;
+   if (screen->devinfo.ver >= 6) {
+      transfer_flags |= U_TRANSFER_HELPER_SEPARATE_Z32S8 |
+               U_TRANSFER_HELPER_SEPARATE_STENCIL;
+   }
+
    pscreen->transfer_helper =
-      u_transfer_helper_create(&transfer_vtbl, screen->devinfo.ver >= 6,
-                               screen->devinfo.ver >= 6, false, true, false);
+      u_transfer_helper_create(&transfer_vtbl, transfer_flags);
 }
 
 void
 crocus_init_resource_functions(struct pipe_context *ctx)
 {
    ctx->flush_resource = crocus_flush_resource;
+   ctx->clear_buffer = u_default_clear_buffer;
    ctx->invalidate_resource = crocus_invalidate_resource;
    ctx->buffer_map = u_transfer_helper_transfer_map;
    ctx->texture_map = u_transfer_helper_transfer_map;

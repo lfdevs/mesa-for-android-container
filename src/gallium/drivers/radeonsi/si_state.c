@@ -1215,6 +1215,9 @@ static void si_bind_rs_state(struct pipe_context *ctx, void *state)
        old_rs->poly_stipple_enable != rs->poly_stipple_enable ||
        old_rs->flatshade != rs->flatshade)
       si_update_vrs_flat_shading(sctx);
+
+   if (old_rs->flatshade_first != rs->flatshade_first)
+      si_update_ngg_prim_state_sgpr(sctx, si_get_vs(sctx)->current, sctx->ngg);
 }
 
 static void si_delete_rs_state(struct pipe_context *ctx, void *state)
@@ -3753,7 +3756,7 @@ static void si_emit_msaa_config(struct si_context *sctx)
    unsigned db_eqaa = S_028804_HIGH_QUALITY_INTERSECTIONS(1) | S_028804_INCOHERENT_EQAA_READS(1) |
                       S_028804_INTERPOLATE_COMP_Z(sctx->gfx_level < GFX11) |
                       S_028804_STATIC_ANCHOR_ASSOCIATIONS(1);
-   unsigned coverage_samples, color_samples, z_samples;
+   unsigned coverage_samples, z_samples;
    struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;
 
    /* S: Coverage samples (up to 16x):
@@ -3797,18 +3800,7 @@ static void si_emit_msaa_config(struct si_context *sctx)
     *   EQAA  4s 4z 2f - might look the same as 4x MSAA with low-density geometry
     *   EQAA  2s 2z 2f = 2x MSAA
     */
-   coverage_samples = color_samples = z_samples = si_get_num_coverage_samples(sctx);
-
-   if (sctx->framebuffer.nr_samples > 1 && rs->multisample_enable) {
-      color_samples = sctx->framebuffer.nr_color_samples;
-
-      if (sctx->framebuffer.state.zsbuf) {
-         z_samples = sctx->framebuffer.state.zsbuf->texture->nr_samples;
-         z_samples = MAX2(1, z_samples);
-      } else {
-         z_samples = coverage_samples;
-      }
-   }
+   coverage_samples = si_get_num_coverage_samples(sctx);
 
    /* The DX10 diamond test is not required by GL and decreases line rasterization
     * performance, so don't use it.
@@ -3816,7 +3808,7 @@ static void si_emit_msaa_config(struct si_context *sctx)
    unsigned sc_line_cntl = 0;
    unsigned sc_aa_config = 0;
 
-   if (coverage_samples > 1) {
+   if (coverage_samples > 1 && rs->multisample_enable) {
       /* distance from the pixel center, indexed by log2(nr_samples) */
       static unsigned max_dist[] = {
          0, /* unused */
@@ -3826,9 +3818,6 @@ static void si_emit_msaa_config(struct si_context *sctx)
          8, /* 16x MSAA */
       };
       unsigned log_samples = util_logbase2(coverage_samples);
-      unsigned log_z_samples = util_logbase2(z_samples);
-      unsigned ps_iter_samples = si_get_ps_iter_samples(sctx);
-      unsigned log_ps_iter_samples = util_logbase2(ps_iter_samples);
 
       sc_line_cntl |= S_028BDC_EXPAND_LINE_WIDTH(1) |
                       S_028BDC_PERPENDICULAR_ENDCAP_ENA(rs->perpendicular_end_caps) |
@@ -3839,7 +3828,19 @@ static void si_emit_msaa_config(struct si_context *sctx)
                      S_028BE0_MAX_SAMPLE_DIST(max_dist[log_samples]) |
                      S_028BE0_MSAA_EXPOSED_SAMPLES(log_samples) |
                      S_028BE0_COVERED_CENTROID_IS_CENTER(sctx->gfx_level >= GFX10_3);
+   }
 
+   if (sctx->framebuffer.nr_samples > 1) {
+      if (sctx->framebuffer.state.zsbuf) {
+         z_samples = sctx->framebuffer.state.zsbuf->texture->nr_samples;
+         z_samples = MAX2(1, z_samples);
+      } else {
+         z_samples = coverage_samples;
+      }
+      unsigned log_samples = util_logbase2(coverage_samples);
+      unsigned log_z_samples = util_logbase2(z_samples);
+      unsigned ps_iter_samples = si_get_ps_iter_samples(sctx);
+      unsigned log_ps_iter_samples = util_logbase2(ps_iter_samples);
       if (sctx->framebuffer.nr_samples > 1) {
          db_eqaa |= S_028804_MAX_ANCHOR_SAMPLES(log_z_samples) |
                     S_028804_PS_ITER_SAMPLES(log_ps_iter_samples) |
@@ -4769,7 +4770,7 @@ static void *si_create_sampler_state(struct pipe_context *ctx,
       (S_008F30_CLAMP_X(si_tex_wrap(state->wrap_s)) | S_008F30_CLAMP_Y(si_tex_wrap(state->wrap_t)) |
        S_008F30_CLAMP_Z(si_tex_wrap(state->wrap_r)) | S_008F30_MAX_ANISO_RATIO(max_aniso_ratio) |
        S_008F30_DEPTH_COMPARE_FUNC(si_tex_compare(state->compare_func)) |
-       S_008F30_FORCE_UNNORMALIZED(!state->normalized_coords) |
+       S_008F30_FORCE_UNNORMALIZED(state->unnormalized_coords) |
        S_008F30_ANISO_THRESHOLD(max_aniso_ratio >> 1) | S_008F30_ANISO_BIAS(max_aniso_ratio) |
        S_008F30_DISABLE_CUBE_WRAP(!state->seamless_cube_map) |
        S_008F30_TRUNC_COORD(trunc_coord) |
@@ -4875,7 +4876,6 @@ static void *si_create_vertex_elements(struct pipe_context *ctx, unsigned count,
 {
    struct si_screen *sscreen = (struct si_screen *)ctx->screen;
    struct si_vertex_elements *v = CALLOC_STRUCT(si_vertex_elements);
-   bool used[SI_NUM_VERTEX_BUFFERS] = {};
    struct si_fast_udiv_info32 divisor_factors[SI_MAX_ATTRIBS] = {};
    STATIC_ASSERT(sizeof(struct si_fast_udiv_info32) == 16);
    STATIC_ASSERT(sizeof(divisor_factors[0].multiplier) == 4);
@@ -4914,11 +4914,6 @@ static void *si_create_vertex_elements(struct pipe_context *ctx, unsigned count,
             v->instance_divisor_is_fetched |= 1u << i;
             divisor_factors[i] = si_compute_fast_udiv_info32(instance_divisor, 32);
          }
-      }
-
-      if (!used[vbo_index]) {
-         v->first_vb_use_mask |= 1 << i;
-         used[vbo_index] = true;
       }
 
       desc = util_format_description(elements[i].src_format);
@@ -5095,14 +5090,7 @@ static void si_bind_vertex_elements(struct pipe_context *ctx, void *state)
 
    sctx->vertex_elements = v;
    sctx->num_vertex_elements = v->count;
-
-   if (sctx->num_vertex_elements) {
-      sctx->vertex_buffers_dirty = true;
-   } else {
-      sctx->vertex_buffers_dirty = false;
-      sctx->vertex_buffer_pointer_dirty = false;
-      sctx->vertex_buffer_user_sgprs_dirty = false;
-   }
+   sctx->vertex_buffers_dirty = sctx->num_vertex_elements > 0;
 
    if (old->instance_divisor_is_one != v->instance_divisor_is_one ||
        old->instance_divisor_is_fetched != v->instance_divisor_is_fetched ||
@@ -5172,9 +5160,11 @@ static void si_set_vertex_buffers(struct pipe_context *ctx, unsigned start_slot,
             if (src->buffer_offset & 3 || src->stride & 3)
                unaligned |= slot_bit;
 
-            si_context_add_resource_size(sctx, buf);
-            if (buf)
+            if (buf) {
                si_resource(buf)->bind_history |= SI_BIND_VERTEX_BUFFER;
+               radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, si_resource(buf),
+                                         RADEON_USAGE_READ | RADEON_PRIO_VERTEX_BUFFER);
+            }
          }
          /* take_ownership allows us to copy pipe_resource pointers without refcounting. */
          memcpy(dst, buffers, count * sizeof(struct pipe_vertex_buffer));
@@ -5192,9 +5182,11 @@ static void si_set_vertex_buffers(struct pipe_context *ctx, unsigned start_slot,
             if (dsti->buffer_offset & 3 || dsti->stride & 3)
                unaligned |= slot_bit;
 
-            si_context_add_resource_size(sctx, buf);
-            if (buf)
+            if (buf) {
                si_resource(buf)->bind_history |= SI_BIND_VERTEX_BUFFER;
+               radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, si_resource(buf),
+                                         RADEON_USAGE_READ | RADEON_PRIO_VERTEX_BUFFER);
+            }
          }
       }
    } else {
@@ -5314,13 +5306,6 @@ static void si_set_tess_state(struct pipe_context *ctx, const float default_oute
    cb.buffer_size = sizeof(array);
 
    si_set_internal_const_buffer(sctx, SI_HS_CONST_DEFAULT_TESS_LEVELS, &cb);
-}
-
-static void si_set_patch_vertices(struct pipe_context *ctx, uint8_t patch_vertices)
-{
-   struct si_context *sctx = (struct si_context *)ctx;
-
-   sctx->patch_vertices = patch_vertices;
 }
 
 static void si_texture_barrier(struct pipe_context *ctx, unsigned flags)
@@ -5463,7 +5448,6 @@ void si_init_state_functions(struct si_context *sctx)
    sctx->b.texture_barrier = si_texture_barrier;
    sctx->b.set_min_samples = si_set_min_samples;
    sctx->b.set_tess_state = si_set_tess_state;
-   sctx->b.set_patch_vertices = si_set_patch_vertices;
 
    sctx->b.set_active_query_state = si_set_active_query_state;
 }
@@ -5567,7 +5551,7 @@ void si_init_cs_preamble_state(struct si_context *sctx, bool uses_reg_shadowing)
       return;
 
    /* Add all the space that we allocated. */
-   pm4->max_dw = sizeof(struct si_cs_preamble) - offsetof(struct si_cs_preamble, pm4.pm4);
+   pm4->max_dw = (sizeof(struct si_cs_preamble) - offsetof(struct si_cs_preamble, pm4.pm4)) / 4;
 
    if (!uses_reg_shadowing) {
       si_pm4_cmd_add(pm4, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));

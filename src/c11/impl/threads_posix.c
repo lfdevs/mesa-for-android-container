@@ -177,10 +177,9 @@ mtx_init(mtx_t *mtx, int type)
 {
     pthread_mutexattr_t attr;
     assert(mtx != NULL);
-    if (type != mtx_plain && type != mtx_timed && type != mtx_try
+    if (type != mtx_plain && type != mtx_timed
       && type != (mtx_plain|mtx_recursive)
-      && type != (mtx_timed|mtx_recursive)
-      && type != (mtx_try|mtx_recursive))
+      && type != (mtx_timed|mtx_recursive))
         return thrd_error;
 
     if ((type & mtx_recursive) == 0) {

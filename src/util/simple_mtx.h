@@ -26,12 +26,10 @@
 
 #include "util/futex.h"
 #include "util/macros.h"
+#include "util/u_call_once.h"
 #include "u_atomic.h"
 
-#include "c11/threads.h"
-
 #if UTIL_FUTEX_SUPPORTED
-
 #if defined(HAVE_VALGRIND) && !defined(NDEBUG)
 #  include <valgrind.h>
 #  include <helgrind.h>
@@ -39,6 +37,15 @@
 #else
 #  define HG(x)
 #endif
+#else /* !UTIL_FUTEX_SUPPORTED */
+#  include "c11/threads.h"
+#endif /* UTIL_FUTEX_SUPPORTED */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#if UTIL_FUTEX_SUPPORTED
 
 /* mtx_t - Fast, simple mutex
  *
@@ -68,7 +75,7 @@ typedef struct {
    uint32_t val;
 } simple_mtx_t;
 
-#define _SIMPLE_MTX_INITIALIZER_NP { 0 }
+#define SIMPLE_MTX_INITIALIZER { 0 }
 
 #define _SIMPLE_MTX_INVALID_VALUE 0xd0d0d0d0
 
@@ -135,52 +142,65 @@ simple_mtx_assert_locked(simple_mtx_t *mtx)
    assert(mtx->val);
 }
 
-#else
+#else /* !UTIL_FUTEX_SUPPORTED */
 
-typedef mtx_t simple_mtx_t;
+typedef struct simple_mtx_t {
+   util_once_flag flag;
+   mtx_t mtx;
+} simple_mtx_t;
 
-#define _SIMPLE_MTX_INITIALIZER_NP _MTX_INITIALIZER_NP
+#define SIMPLE_MTX_INITIALIZER { UTIL_ONCE_FLAG_INIT }
+
+void _simple_mtx_plain_init_once(simple_mtx_t *mtx);
 
 static inline void
-simple_mtx_init(simple_mtx_t *mtx, int type)
+_simple_mtx_init_with_once(simple_mtx_t *mtx)
 {
-   mtx_init(mtx, type);
+   util_call_once_data(&mtx->flag,
+      (util_call_once_data_func)_simple_mtx_plain_init_once, mtx);
 }
 
-static inline void
-simple_mtx_destroy(simple_mtx_t *mtx)
-{
-   mtx_destroy(mtx);
-}
+void
+simple_mtx_init(simple_mtx_t *mtx, int type);
+
+void
+simple_mtx_destroy(simple_mtx_t *mtx);
 
 static inline void
 simple_mtx_lock(simple_mtx_t *mtx)
 {
-   mtx_lock(mtx);
+   _simple_mtx_init_with_once(mtx);
+   mtx_lock(&mtx->mtx);
 }
 
 static inline void
 simple_mtx_unlock(simple_mtx_t *mtx)
 {
-   mtx_unlock(mtx);
+   _simple_mtx_init_with_once(mtx);
+   mtx_unlock(&mtx->mtx);
 }
 
 static inline void
 simple_mtx_assert_locked(simple_mtx_t *mtx)
 {
 #ifndef NDEBUG
+   _simple_mtx_init_with_once(mtx);
    /* NOTE: this would not work for recursive mutexes, but
     * mtx_t doesn't support those
     */
-   int ret = mtx_trylock(mtx);
+   int ret = mtx_trylock(&mtx->mtx);
    assert(ret == thrd_busy);
    if (ret == thrd_success)
-      mtx_unlock(mtx);
+      mtx_unlock(&mtx->mtx);
 #else
    (void)mtx;
 #endif
 }
 
+#endif /* UTIL_FUTEX_SUPPORTED */
+
+#ifdef __cplusplus
+}
 #endif
 
-#endif
+#endif /* _SIMPLE_MTX_H */

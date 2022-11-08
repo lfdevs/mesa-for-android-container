@@ -3079,7 +3079,7 @@ get_img_filter(const struct sp_sampler_view *sp_sview,
        */
       if (!gather && sp_sview->pot2d &&
           sampler->wrap_s == sampler->wrap_t &&
-          sampler->normalized_coords) 
+          !sampler->unnormalized_coords)
       {
          switch (sampler->wrap_s) {
          case PIPE_TEX_WRAP_REPEAT:
@@ -3479,7 +3479,7 @@ softpipe_create_sampler_state(struct pipe_context *pipe,
     * nearest_texcoord_s may be active at the same time, if the
     * sampler min_img_filter differs from its mag_img_filter.
     */
-   if (sampler->normalized_coords) {
+   if (!sampler->unnormalized_coords) {
       samp->linear_texcoord_s = get_linear_wrap( sampler->wrap_s );
       samp->linear_texcoord_t = get_linear_wrap( sampler->wrap_t );
       samp->linear_texcoord_p = get_linear_wrap( sampler->wrap_r );
@@ -3514,7 +3514,7 @@ softpipe_create_sampler_state(struct pipe_context *pipe,
 
    case PIPE_TEX_MIPFILTER_LINEAR:
       if (sampler->min_img_filter == sampler->mag_img_filter &&
-          sampler->normalized_coords &&
+          !sampler->unnormalized_coords &&
           sampler->wrap_s == PIPE_TEX_WRAP_REPEAT &&
           sampler->wrap_t == PIPE_TEX_WRAP_REPEAT &&
           sampler->min_img_filter == PIPE_TEX_FILTER_LINEAR &&

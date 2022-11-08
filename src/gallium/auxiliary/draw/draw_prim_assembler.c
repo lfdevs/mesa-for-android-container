@@ -36,6 +36,7 @@
 
 #include "pipe/p_defines.h"
 
+
 struct draw_assembler
 {
    struct draw_context *draw;
@@ -71,6 +72,7 @@ needs_primid(const struct draw_context *draw)
    return FALSE;
 }
 
+
 boolean
 draw_prim_assembler_is_required(const struct draw_context *draw,
                                 const struct draw_prim_info *prim_info,
@@ -90,6 +92,7 @@ draw_prim_assembler_is_required(const struct draw_context *draw,
    }
 }
 
+
 static void
 add_prim(struct draw_assembler *asmblr, unsigned length)
 {
@@ -99,6 +102,7 @@ add_prim(struct draw_assembler *asmblr, unsigned length)
    output_prims->primitive_lengths[output_prims->primitive_count] = length;
    output_prims->primitive_count++;
 }
+
 
 /*
  * Copy the vertex header along with its data from the current
@@ -110,12 +114,10 @@ static void
 copy_verts(struct draw_assembler *asmblr,
            unsigned *indices, unsigned num_indices)
 {
-   unsigned i;
-
    char *output = (char*)asmblr->output_verts->verts;
    const char *input = (const char*)asmblr->input_verts->verts;
 
-   for (i = 0; i < num_indices; ++i) {
+   for (unsigned i = 0; i < num_indices; ++i) {
       unsigned idx = indices[i];
       unsigned output_offset =
          asmblr->output_verts->count * asmblr->output_verts->stride;
@@ -165,6 +167,7 @@ prim_point(struct draw_assembler *asmblr,
    copy_verts(asmblr, indices, 1);
 }
 
+
 static void
 prim_line(struct draw_assembler *asmblr,
           unsigned i0, unsigned i1)
@@ -181,6 +184,7 @@ prim_line(struct draw_assembler *asmblr,
    add_prim(asmblr, 2);
    copy_verts(asmblr, indices, 2);
 }
+
 
 static void
 prim_tri(struct draw_assembler *asmblr,
@@ -200,6 +204,7 @@ prim_tri(struct draw_assembler *asmblr,
    add_prim(asmblr, 3);
    copy_verts(asmblr, indices, 3);
 }
+
 
 static void
 prim_quad(struct draw_assembler *asmblr,
@@ -222,6 +227,7 @@ prim_quad(struct draw_assembler *asmblr,
    add_prim(asmblr, 4);
    copy_verts(asmblr, indices, 4);
 }
+
 
 void
 draw_prim_assembler_prepare_outputs(struct draw_assembler *ia)
@@ -246,12 +252,11 @@ draw_prim_assembler_prepare_outputs(struct draw_assembler *ia)
 #include "draw_prim_assembler_tmp.h"
 
 
-
 /*
  * Primitive assembler breaks up adjacency primitives and assembles
  * the base primitives they represent, e.g. vertices forming
  * PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY
- * become vertices forming PIPE_PRIM_TRIANGLES 
+ * become vertices forming PIPE_PRIM_TRIANGLES
  * This is needed because specification says that the adjacency
  * primitives are only visible in the geometry shader so we need
  * to get rid of them so that the rest of the pipeline can
@@ -297,8 +302,7 @@ draw_prim_assembler_run(struct draw_context *draw,
 
 
    for (start = i = 0; i < input_prims->primitive_count;
-        start += input_prims->primitive_lengths[i], i++)
-   {
+        start += input_prims->primitive_lengths[i], i++) {
       unsigned count = input_prims->primitive_lengths[i];
       if (input_prims->linear) {
          assembler_run_linear(asmblr, input_prims, input_verts,
@@ -312,15 +316,17 @@ draw_prim_assembler_run(struct draw_context *draw,
    output_prims->count = output_verts->count;
 }
 
+
 struct draw_assembler *
 draw_prim_assembler_create(struct draw_context *draw)
 {
-   struct draw_assembler *ia = CALLOC_STRUCT( draw_assembler );
+   struct draw_assembler *ia = CALLOC_STRUCT(draw_assembler);
 
    ia->draw = draw;
 
    return ia;
 }
+
 
 void
 draw_prim_assembler_destroy(struct draw_assembler *ia)

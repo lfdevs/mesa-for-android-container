@@ -71,3 +71,25 @@ if (!$?) {
   Exit 1
 }
 Remove-Item C:\vulkan-runtime.exe -Force
+
+Get-Date
+Write-Host "Installing graphics tools (DirectX debug layer)"
+Set-Service -Name wuauserv -StartupType Manual
+if (!$?) {
+  Write-Host "Failed to enable Windows Update"
+  Exit 1
+}
+
+For ($i = 0; $i -lt 5; $i++) {
+  Dism /online /quiet /add-capability /capabilityname:Tools.Graphics.DirectX~~~~0.0.1.0
+  $graphics_tools_installed = $?
+  if ($graphics_tools_installed) {
+    Break
+  }
+}
+
+if (!$graphics_tools_installed) {
+  Write-Host "Failed to install graphics tools"
+  Get-Content C:\Windows\Logs\DISM\dism.log
+  Exit 1
+}

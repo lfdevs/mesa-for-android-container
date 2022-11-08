@@ -17,7 +17,6 @@
 #include <vulkan/vk_icd.h>
 
 #include "drm-uapi/drm_fourcc.h"
-#include "util/libsync.h"
 #include "util/os_file.h"
 
 #include "vn_buffer.h"
@@ -796,17 +795,39 @@ vn_AcquireImageANDROID(VkDevice device,
    return vn_result(dev->instance, result);
 }
 
+static VkResult
+vn_android_sync_fence_create(struct vn_queue *queue, bool external)
+{
+   struct vn_device *dev = queue->device;
+
+   const VkExportFenceCreateInfo export_info = {
+      .sType = VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO,
+      .pNext = NULL,
+      .handleTypes = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
+   };
+   const VkFenceCreateInfo create_info = {
+      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      .pNext = external ? &export_info : NULL,
+      .flags = 0,
+   };
+   return vn_CreateFence(vn_device_to_handle(dev), &create_info, NULL,
+                         &queue->sync_fence);
+}
+
 VkResult
-vn_QueueSignalReleaseImageANDROID(VkQueue queue,
+vn_QueueSignalReleaseImageANDROID(VkQueue _queue,
                                   uint32_t waitSemaphoreCount,
                                   const VkSemaphore *pWaitSemaphores,
                                   VkImage image,
                                   int *pNativeFenceFd)
 {
    VN_TRACE_FUNC();
-   struct vn_queue *que = vn_queue_from_handle(queue);
-   struct vn_device *dev = que->device;
+   struct vn_queue *queue = vn_queue_from_handle(_queue);
+   struct vn_device *dev = queue->device;
    const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
+   const bool has_sync_fd_fence_export =
+      dev->physical_device->renderer_sync_fd_fence_features &
+      VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT;
    VkDevice device = vn_device_to_handle(dev);
    VkPipelineStageFlags local_stage_masks[8];
    VkPipelineStageFlags *stage_masks = local_stage_masks;
@@ -816,6 +837,13 @@ vn_QueueSignalReleaseImageANDROID(VkQueue queue,
    if (waitSemaphoreCount == 0) {
       *pNativeFenceFd = -1;
       return VK_SUCCESS;
+   }
+
+   /* lazily create sync fence for Android wsi */
+   if (queue->sync_fence == VK_NULL_HANDLE) {
+      result = vn_android_sync_fence_create(queue, has_sync_fd_fence_export);
+      if (result != VK_SUCCESS)
+         return result;
    }
 
    if (waitSemaphoreCount > ARRAY_SIZE(local_stage_masks)) {
@@ -840,14 +868,7 @@ vn_QueueSignalReleaseImageANDROID(VkQueue queue,
       .signalSemaphoreCount = 0,
       .pSignalSemaphores = NULL,
    };
-   /* XXX When globalFencing is supported, our implementation is not able to
-    * reset the fence during vn_GetFenceFdKHR currently. Thus to ensure proper
-    * host driver behavior, we pass VK_NULL_HANDLE here.
-    */
-   result = vn_QueueSubmit(
-      queue, 1, &submit_info,
-      dev->instance->experimental.globalFencing == VK_TRUE ? VK_NULL_HANDLE
-                                                           : que->wait_fence);
+   result = vn_QueueSubmit(_queue, 1, &submit_info, queue->sync_fence);
 
    if (stage_masks != local_stage_masks)
       vk_free(alloc, stage_masks);
@@ -855,29 +876,21 @@ vn_QueueSignalReleaseImageANDROID(VkQueue queue,
    if (result != VK_SUCCESS)
       return vn_error(dev->instance, result);
 
-   if (dev->instance->experimental.globalFencing == VK_TRUE) {
-      /* With globalFencing, the external queue fence was not passed in the
-       * above vn_QueueSubmit to hint it to be synchronous. So we need to wait
-       * for the ring here before vn_GetFenceFdKHR which is pure kernel ops.
-       * Skip ring wait if async queue submit is disabled.
-       */
-      if (!VN_PERF(NO_ASYNC_QUEUE_SUBMIT))
-         vn_instance_ring_wait(dev->instance);
-
+   if (has_sync_fd_fence_export) {
       const VkFenceGetFdInfoKHR fd_info = {
          .sType = VK_STRUCTURE_TYPE_FENCE_GET_FD_INFO_KHR,
          .pNext = NULL,
-         .fence = que->wait_fence,
+         .fence = queue->sync_fence,
          .handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
       };
       result = vn_GetFenceFdKHR(device, &fd_info, &fd);
    } else {
       result =
-         vn_WaitForFences(device, 1, &que->wait_fence, VK_TRUE, UINT64_MAX);
+         vn_WaitForFences(device, 1, &queue->sync_fence, VK_TRUE, UINT64_MAX);
       if (result != VK_SUCCESS)
          return vn_error(dev->instance, result);
 
-      result = vn_ResetFences(device, 1, &que->wait_fence);
+      result = vn_ResetFences(device, 1, &queue->sync_fence);
    }
 
    if (result != VK_SUCCESS)
@@ -1001,14 +1014,41 @@ vn_GetAndroidHardwareBufferPropertiesANDROID(
    uint64_t alloc_size = 0;
    uint32_t mem_type_bits = 0;
 
+   VkAndroidHardwareBufferFormatProperties2ANDROID *format_props2 =
+      vk_find_struct(pProperties->pNext,
+                     ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_2_ANDROID);
    VkAndroidHardwareBufferFormatPropertiesANDROID *format_props =
       vk_find_struct(pProperties->pNext,
                      ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID);
-   if (format_props) {
+   if (format_props2 || format_props) {
+      VkAndroidHardwareBufferFormatPropertiesANDROID local_props = {
+         .sType =
+            VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID,
+      };
+      if (!format_props)
+         format_props = &local_props;
+
       result =
          vn_android_get_ahb_format_properties(dev, buffer, format_props);
       if (result != VK_SUCCESS)
          return vn_error(dev->instance, result);
+
+      if (format_props2) {
+         format_props2->format = format_props->format;
+         format_props2->externalFormat = format_props->externalFormat;
+         format_props2->formatFeatures =
+            (VkFormatFeatureFlags2)format_props->formatFeatures;
+         format_props2->samplerYcbcrConversionComponents =
+            format_props->samplerYcbcrConversionComponents;
+         format_props2->suggestedYcbcrModel =
+            format_props->suggestedYcbcrModel;
+         format_props2->suggestedYcbcrRange =
+            format_props->suggestedYcbcrRange;
+         format_props2->suggestedXChromaOffset =
+            format_props->suggestedXChromaOffset;
+         format_props2->suggestedYChromaOffset =
+            format_props->suggestedYChromaOffset;
+      }
    }
 
    dma_buf_fd = vn_android_gralloc_get_dma_buf_fd(

@@ -27,6 +27,7 @@
 #include "nv30/nv30-40_3d.xml.h"
 #include "nv30/nv30_screen.h"
 #include "nv30/nv30_context.h"
+#include "nv30/nv30_winsys.h"
 
 struct nv30_query_object {
    struct list_head list;

@@ -24,7 +24,6 @@ Build EGL
               -D egl=enabled \
               -D gles1=enabled \
               -D gles2=enabled \
-              -D dri-drivers=... \
               -D gallium-drivers=...
 
    The main library and OpenGL is enabled by default. The first two

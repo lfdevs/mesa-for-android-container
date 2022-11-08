@@ -47,7 +47,7 @@ static inline unsigned ac_llvm_reg_index_soa(unsigned index, unsigned chan)
    return (index * 4) + chan;
 }
 
-void ac_nir_translate(struct ac_llvm_context *ac, struct ac_shader_abi *abi,
+bool ac_nir_translate(struct ac_llvm_context *ac, struct ac_shader_abi *abi,
                       const struct ac_shader_args *args, struct nir_shader *nir);
 
 void ac_handle_shader_output_decl(struct ac_llvm_context *ctx, struct ac_shader_abi *abi,

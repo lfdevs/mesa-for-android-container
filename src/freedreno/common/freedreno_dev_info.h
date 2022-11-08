@@ -146,9 +146,18 @@ struct fd_dev_info {
          bool lrz_track_quirk;
 
          struct {
-            uint32_t RB_UNKNOWN_8E04_blit;
             uint32_t PC_POWER_CNTL;
             uint32_t TPL1_DBG_ECO_CNTL;
+            uint32_t GRAS_DBG_ECO_CNTL;
+            uint32_t SP_CHICKEN_BITS;
+            uint32_t UCHE_CLIENT_PF;
+            uint32_t PC_MODE_CNTL;
+            uint32_t SP_DBG_ECO_CNTL;
+            uint32_t RB_DBG_ECO_CNTL_blit;
+            uint32_t HLSQ_DBG_ECO_CNTL;
+            uint32_t RB_UNKNOWN_8E01;
+            uint32_t VPC_DBG_ECO_CNTL;
+            uint32_t UCHE_UNKNOWN_0E12;
          } magic;
       } a6xx;
    };

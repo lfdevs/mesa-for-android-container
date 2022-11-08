@@ -145,14 +145,14 @@ bool trace_dump_is_triggered(void);
       trace_dump_ret_end(); \
    } while(0)
 
-#define trace_dump_array(_type, _obj, _size) \
+#define trace_dump_array_impl(_type, _obj, _size, _prefix) \
    do { \
       if (_obj) { \
          size_t idx; \
          trace_dump_array_begin(); \
          for(idx = 0; idx < (_size); ++idx) { \
             trace_dump_elem_begin(); \
-            trace_dump_##_type((_obj)[idx]); \
+            trace_dump_##_type(_prefix(_obj)[idx]); \
             trace_dump_elem_end(); \
          } \
          trace_dump_array_end(); \
@@ -160,6 +160,12 @@ bool trace_dump_is_triggered(void);
          trace_dump_null(); \
       } \
    } while(0)
+
+#define trace_dump_array(_type, _obj, _size) \
+   trace_dump_array_impl(_type, _obj, _size, );
+
+#define trace_dump_array_val(_type, _obj, _size) \
+   trace_dump_array_impl(_type, _obj, _size, *);
 
 #define trace_dump_struct_array(_type, _obj, _size) \
    do { \
@@ -189,6 +195,20 @@ bool trace_dump_is_triggered(void);
       trace_dump_arg_begin(#_arg); \
       trace_dump_array(_type, _arg, _size); \
       trace_dump_arg_end(); \
+   } while(0)
+
+#define trace_dump_arg_array_val(_type, _arg, _size) \
+   do { \
+      trace_dump_arg_begin(#_arg); \
+      trace_dump_array_val(_type, _arg, _size); \
+      trace_dump_arg_end(); \
+   } while(0)
+
+#define trace_dump_ret_array_val(_type, _arg, _size) \
+   do { \
+      trace_dump_ret_begin(); \
+      trace_dump_array_val(_type, _arg, _size); \
+      trace_dump_ret_end(); \
    } while(0)
 
 #define trace_dump_member_array(_type, _obj, _member) \

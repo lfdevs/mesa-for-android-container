@@ -490,6 +490,7 @@ vlVdpDecoderRenderH265(struct pipe_h265_picture_desc *picture,
 
    picture->IDRPicFlag = picture_info->IDRPicFlag;
    picture->RAPPicFlag = picture_info->RAPPicFlag;
+   picture->IntraPicFlag = picture_info->RAPPicFlag;
    picture->CurrRpsIdx = picture_info->CurrRpsIdx;
    picture->NumPocTotalCurr = picture_info->NumPocTotalCurr;
    picture->NumDeltaPocsOfRefRpsIdx = picture_info->NumDeltaPocsOfRefRpsIdx;

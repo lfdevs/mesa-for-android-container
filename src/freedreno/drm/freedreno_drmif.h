@@ -30,6 +30,7 @@
 #include <stdint.h>
 
 #include "util/bitset.h"
+#include "util/list.h"
 #include "util/u_debug.h"
 
 #ifdef __cplusplus
@@ -57,11 +58,12 @@ enum fd_param_id {
    FD_CHIP_ID,       /* 64b */
    FD_MAX_FREQ,
    FD_TIMESTAMP,
-   FD_NR_RINGS,      /* # of rings == # of distinct priority levels */
+   FD_NR_PRIORITIES,      /* # of rings == # of distinct priority levels */
    FD_CTX_FAULTS,    /* # of per context faults */
    FD_GLOBAL_FAULTS, /* # of global (all context) faults */
    FD_SUSPEND_COUNT, /* # of times the GPU has suspended, and potentially lost state */
    FD_SYSPROF,       /* Settable (for CAP_SYS_ADMIN) param for system profiling */
+   FD_VA_SIZE,       /* GPU virtual address size */
 };
 
 /**
@@ -139,6 +141,7 @@ enum fd_version {
    FD_VERSION_MEMORY_FD = 2,           /* supports shared memory objects */
    FD_VERSION_SUSPENDS = 7,            /* Adds MSM_PARAM_SUSPENDS to detect device suspend */
    FD_VERSION_CACHED_COHERENT = 8,     /* Adds cached-coherent support (a6xx+) */
+   FD_VERSION_VA_SIZE = 9,
 };
 enum fd_version fd_device_version(struct fd_device *dev);
 
@@ -166,6 +169,63 @@ int fd_pipe_wait_timeout(struct fd_pipe *pipe, const struct fd_fence *fence,
 
 /* buffer-object functions:
  */
+
+struct fd_bo_fence {
+   /* For non-shared buffers, track the last pipe the buffer was active
+    * on, and the per-pipe fence value that indicates when the buffer is
+    * idle:
+    */
+   uint32_t fence;
+   struct fd_pipe *pipe;
+};
+
+struct fd_bo {
+   struct fd_device *dev;
+   uint32_t size;
+   uint32_t handle;
+   uint32_t name;
+   int32_t refcnt;
+   uint32_t reloc_flags; /* flags like FD_RELOC_DUMP to use for relocs to this BO */
+   uint32_t alloc_flags; /* flags that control allocation/mapping, ie. FD_BO_x */
+   uint64_t iova;
+   void *map;
+   const struct fd_bo_funcs *funcs;
+
+   enum {
+      NO_CACHE = 0,
+      BO_CACHE = 1,
+      RING_CACHE = 2,
+   } bo_reuse : 2;
+
+   /* Buffers that are shared (imported or exported) may be used in
+    * other processes, so we need to fallback to kernel to determine
+    * busyness.
+    */
+   bool shared : 1;
+
+   /* We need to be able to disable userspace fence synchronization for
+    * special internal buffers, namely the pipe->control buffer, to avoid
+    * a circular reference loop.
+    */
+   bool nosync : 1;
+
+   /* Most recent index in submit's bo table, used to optimize the common
+    * case where a bo is used many times in the same submit.
+    */
+   uint32_t idx;
+
+   struct list_head list; /* bucket-list entry */
+   time_t free_time;      /* time when added to bucket-list */
+
+   unsigned short nr_fences, max_fences;
+   struct fd_bo_fence *fences;
+
+   /* In the common case, there is no more than one fence attached.
+    * This provides storage for the fences table until it grows to
+    * be larger than a single element.
+    */
+   struct fd_bo_fence _inline_fence;
+};
 
 struct fd_bo *_fd_bo_new(struct fd_device *dev, uint32_t size, uint32_t flags);
 void _fd_bo_set_name(struct fd_bo *bo, const char *fmt, va_list ap);
@@ -209,7 +269,15 @@ struct fd_bo *fd_bo_from_handle(struct fd_device *dev, uint32_t handle,
 struct fd_bo *fd_bo_from_name(struct fd_device *dev, uint32_t name);
 struct fd_bo *fd_bo_from_dmabuf(struct fd_device *dev, int fd);
 void fd_bo_mark_for_dump(struct fd_bo *bo);
-uint64_t fd_bo_get_iova(struct fd_bo *bo);
+
+static inline uint64_t
+fd_bo_get_iova(struct fd_bo *bo)
+{
+   /* ancient kernels did not support this */
+   assert(bo->iova != 0);
+   return bo->iova;
+}
+
 struct fd_bo *fd_bo_ref(struct fd_bo *bo);
 void fd_bo_del(struct fd_bo *bo);
 int fd_bo_get_name(struct fd_bo *bo, uint32_t *name);
@@ -217,7 +285,8 @@ uint32_t fd_bo_handle(struct fd_bo *bo);
 int fd_bo_dmabuf(struct fd_bo *bo);
 uint32_t fd_bo_size(struct fd_bo *bo);
 void *fd_bo_map(struct fd_bo *bo);
-void fd_bo_upload(struct fd_bo *bo, void *src, unsigned len);
+void fd_bo_upload(struct fd_bo *bo, void *src, unsigned off, unsigned len);
+bool fd_bo_prefer_upload(struct fd_bo *bo, unsigned len);
 int fd_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op);
 void fd_bo_cpu_fini(struct fd_bo *bo);
 bool fd_bo_is_cached(struct fd_bo *bo);

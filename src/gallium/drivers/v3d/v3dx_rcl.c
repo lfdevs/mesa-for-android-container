@@ -864,7 +864,7 @@ v3dX(emit_rcl)(struct v3d_job *job)
 #endif
 
 #if V3D_VERSION < 40
-        /* TODO: Don't bother emitting if we don't load/clear Z/S. */
+        /* FIXME: Don't bother emitting if we don't load/clear Z/S. */
         if (job->zsbuf) {
                 struct pipe_surface *psurf = job->zsbuf;
                 struct v3d_surface *surf = v3d_surface(psurf);

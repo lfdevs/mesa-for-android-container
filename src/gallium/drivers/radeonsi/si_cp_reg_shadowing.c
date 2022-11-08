@@ -75,7 +75,7 @@ si_create_shadowing_ib_preamble(struct si_context *sctx)
    struct si_pm4_state *pm4 = (struct si_pm4_state *)CALLOC_STRUCT(si_shadow_preamble);
 
    /* Add all the space that we allocated. */
-   pm4->max_dw = sizeof(struct si_shadow_preamble) - offsetof(struct si_shadow_preamble, pm4.pm4);
+   pm4->max_dw = (sizeof(struct si_shadow_preamble) - offsetof(struct si_shadow_preamble, pm4.pm4)) / 4;
 
    if (sctx->screen->dpbb_allowed) {
       si_pm4_cmd_add(pm4, PKT3(PKT3_EVENT_WRITE, 0, 0));

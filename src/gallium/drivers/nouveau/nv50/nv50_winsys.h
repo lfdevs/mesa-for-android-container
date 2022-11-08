@@ -39,14 +39,6 @@ nv50_add_bufctx_resident(struct nouveau_bufctx *bufctx, int bin,
 #define BCTX_REFN(bctx, bin, res, acc) \
    nv50_add_bufctx_resident(bctx, NV50_BIND_##bin, res, NOUVEAU_BO_##acc)
 
-static inline void
-PUSH_REFN(struct nouveau_pushbuf *push, struct nouveau_bo *bo, uint32_t flags)
-{
-   struct nouveau_pushbuf_refn ref = { bo, flags };
-   nouveau_pushbuf_refn(push, &ref, 1);
-}
-
-
 #define SUBC_3D(m) 3, (m)
 #define NV50_3D(n) SUBC_3D(NV50_3D_##n)
 #define NV84_3D(n) SUBC_3D(NV84_3D_##n)
@@ -92,24 +84,6 @@ static inline void
 PUSH_DATAh(struct nouveau_pushbuf *push, uint64_t data)
 {
    *push->cur++ = (uint32_t)(data >> 32);
-}
-
-static inline void
-BEGIN_NV04(struct nouveau_pushbuf *push, int subc, int mthd, unsigned size)
-{
-#ifndef NV50_PUSH_EXPLICIT_SPACE_CHECKING
-   PUSH_SPACE(push, size + 1);
-#endif
-   PUSH_DATA (push, NV50_FIFO_PKHDR(subc, mthd, size));
-}
-
-static inline void
-BEGIN_NI04(struct nouveau_pushbuf *push, int subc, int mthd, unsigned size)
-{
-#ifndef NV50_PUSH_EXPLICIT_SPACE_CHECKING
-   PUSH_SPACE(push, size + 1);
-#endif
-   PUSH_DATA (push, NV50_FIFO_PKHDR_NI(subc, mthd, size));
 }
 
 /* long, non-incremental, nv50-only */

@@ -119,7 +119,6 @@ setup_miptree(struct lima_resource *res,
          util_format_get_nblocksy(pres->format, aligned_height) *
          pres->array_size * depth;
 
-      res->levels[level].width = aligned_width;
       res->levels[level].stride = stride;
       res->levels[level].offset = size;
       res->levels[level].layer_stride = util_format_get_stride(pres->format, align(width, 16)) * align(height, 16);
@@ -205,15 +204,17 @@ _lima_resource_create_with_modifiers(struct pipe_screen *pscreen,
                          modifiers, count))
       should_tile = false;
 
+   width = templat->width0;
+   height = templat->height0;
+
    /* Don't align index, vertex or constant buffers */
-   if (templat->bind & (PIPE_BIND_INDEX_BUFFER |
-                        PIPE_BIND_VERTEX_BUFFER |
-                        PIPE_BIND_CONSTANT_BUFFER)) {
-      width = templat->width0;
-      height = templat->height0;
-   } else {
-      width = align(templat->width0, 16);
-      height = align(templat->height0, 16);
+   if (!(templat->bind & (PIPE_BIND_INDEX_BUFFER |
+                          PIPE_BIND_VERTEX_BUFFER |
+                          PIPE_BIND_CONSTANT_BUFFER))) {
+      if (templat->bind & PIPE_BIND_SHARED) {
+         width = align(width, 16);
+         height = align(height, 16);
+      }
       align_to_tile = true;
    }
 
@@ -376,11 +377,7 @@ lima_resource_from_handle(struct pipe_screen *pscreen,
                  (res->bo->size - res->levels[0].offset), size);
          goto err_out;
       }
-
-      res->levels[0].width = width;
    }
-   else
-      res->levels[0].width = pres->width0;
 
    if (screen->ro) {
       /* Make sure that renderonly has a handle to our buffer in the
@@ -934,9 +931,7 @@ lima_resource_screen_init(struct lima_screen *screen)
    screen->base.resource_get_param = lima_resource_get_param;
    screen->base.set_damage_region = lima_resource_set_damage_region;
    screen->base.transfer_helper = u_transfer_helper_create(&transfer_vtbl,
-                                                           false, false,
-                                                           false, true,
-                                                           false);
+                                                           U_TRANSFER_HELPER_MSAA_MAP);
 }
 
 void

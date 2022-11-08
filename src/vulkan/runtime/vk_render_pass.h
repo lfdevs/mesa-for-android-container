@@ -79,8 +79,6 @@ typedef struct VkRenderingAttachmentInitialLayoutInfoMESA {
     VkImageLayout      initialLayout;
 } VkRenderingAttachmentInitialLayoutInfoMESA;
 
-#define VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA (VkImageLayout)1000044902
-
 struct vk_subpass_attachment {
    /** VkAttachmentReference2::attachment */
    uint32_t attachment;

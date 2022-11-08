@@ -118,7 +118,7 @@ radv_device_init_meta_buffer_state(struct radv_device *device)
    };
 
    result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), radv_pipeline_cache_to_handle(&device->meta_state.cache), 1,
+      radv_device_to_handle(device), device->meta_state.cache, 1,
       &fill_vk_pipeline_info, NULL, &device->meta_state.buffer.fill_pipeline);
    if (result != VK_SUCCESS)
       goto fail;
@@ -139,7 +139,7 @@ radv_device_init_meta_buffer_state(struct radv_device *device)
    };
 
    result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), radv_pipeline_cache_to_handle(&device->meta_state.cache), 1,
+      radv_device_to_handle(device), device->meta_state.cache, 1,
       &copy_vk_pipeline_info, NULL, &device->meta_state.buffer.copy_pipeline);
    if (result != VK_SUCCESS)
       goto fail;

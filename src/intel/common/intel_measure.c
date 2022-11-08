@@ -38,9 +38,8 @@
 #include <inttypes.h>
 
 #include "dev/intel_device_info.h"
-#include "util/debug.h"
-#include "util/macros.h"
 #include "util/u_debug.h"
+#include "util/macros.h"
 
 
 static const struct debug_control debug_control[] = {
@@ -209,7 +208,7 @@ intel_measure_init(struct intel_measure_device *device)
 
       fputs("draw_start,draw_end,frame,batch,"
             "event_index,event_count,type,count,vs,tcs,tes,"
-            "gs,fs,cs,framebuffer,idle_us,time_us\n",
+            "gs,fs,cs,ms,ts,framebuffer,idle_us,time_us\n",
             config.file);
    }
 
@@ -268,7 +267,8 @@ intel_measure_snapshot_string(enum intel_measure_snapshot_type type)
 bool
 intel_measure_state_changed(const struct intel_measure_batch *batch,
                             uintptr_t vs, uintptr_t tcs, uintptr_t tes,
-                            uintptr_t gs, uintptr_t fs, uintptr_t cs)
+                            uintptr_t gs, uintptr_t fs, uintptr_t cs,
+                            uintptr_t ms, uintptr_t ts)
 {
    if (batch->index == 0) {
       /* always record the first event */
@@ -302,7 +302,7 @@ intel_measure_state_changed(const struct intel_measure_batch *batch,
     */
    assert(config.flags & INTEL_MEASURE_SHADER);
 
-   if (!vs && !tcs && !tes && !gs && !fs && !cs) {
+   if (!vs && !tcs && !tes && !gs && !fs && !cs && !ms && !ts) {
       /* blorp always changes program */
       return true;
    }
@@ -312,7 +312,9 @@ intel_measure_state_changed(const struct intel_measure_batch *batch,
            last_snap->tes != (uintptr_t) tes ||
            last_snap->gs  != (uintptr_t) gs ||
            last_snap->fs  != (uintptr_t) fs ||
-           last_snap->cs  != (uintptr_t) cs);
+           last_snap->cs  != (uintptr_t) cs ||
+           last_snap->ms  != (uintptr_t) ms ||
+           last_snap->ts  != (uintptr_t) ts);
 }
 
 /**
@@ -568,7 +570,7 @@ buffered_event_count(struct intel_measure_device *device)
 static void
 print_combined_results(struct intel_measure_device *measure_device,
                        int result_count,
-                       struct intel_device_info *info)
+                       const struct intel_device_info *info)
 {
    if (result_count == 0)
       return;
@@ -603,13 +605,13 @@ print_combined_results(struct intel_measure_device *measure_device,
    const struct intel_measure_snapshot *begin = &start_result->snapshot;
    fprintf(config.file, "%"PRIu64",%"PRIu64",%u,%u,%u,%u,%s,%u,"
            "0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR","
-           "0x%"PRIxPTR",0x%"PRIxPTR",%.3lf,%.3lf\n",
+           "0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR",%.3lf,%.3lf\n",
            start_result->start_ts, current_result->end_ts,
            start_result->frame, start_result->batch_count,
            start_result->event_index, event_count,
            begin->event_name, begin->count,
            begin->vs, begin->tcs, begin->tes, begin->gs, begin->fs, begin->cs,
-           begin->framebuffer,
+           begin->ms, begin->ts, begin->framebuffer,
            (double)duration_idle_ns / 1000.0,
            (double)duration_time_ns / 1000.0);
 }
@@ -619,7 +621,7 @@ print_combined_results(struct intel_measure_device *measure_device,
  */
 static void
 intel_measure_print(struct intel_measure_device *device,
-                    struct intel_device_info *info)
+                    const struct intel_device_info *info)
 {
    while (true) {
       const int events_to_combine = buffered_event_count(device);
@@ -635,7 +637,7 @@ intel_measure_print(struct intel_measure_device *device,
  */
 void
 intel_measure_gather(struct intel_measure_device *measure_device,
-                     struct intel_device_info *info)
+                     const struct intel_device_info *info)
 {
    pthread_mutex_lock(&measure_device->mutex);
 

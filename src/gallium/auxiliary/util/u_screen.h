@@ -32,6 +32,8 @@ int
 u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
                                  enum pipe_cap param);
 
+uint64_t u_default_get_timestamp(struct pipe_screen *screen);
+
 #ifdef __cplusplus
 };
 #endif

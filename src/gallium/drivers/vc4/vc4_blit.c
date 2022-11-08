@@ -29,15 +29,15 @@
 
 static struct pipe_surface *
 vc4_get_blit_surface(struct pipe_context *pctx,
-                     struct pipe_resource *prsc, unsigned level)
+                     struct pipe_resource *prsc, unsigned level,
+                     unsigned layer)
 {
         struct pipe_surface tmpl;
 
         memset(&tmpl, 0, sizeof(tmpl));
         tmpl.format = prsc->format;
         tmpl.u.tex.level = level;
-        tmpl.u.tex.first_layer = 0;
-        tmpl.u.tex.last_layer = 0;
+        tmpl.u.tex.first_layer = tmpl.u.tex.last_layer = layer;
 
         return pctx->create_surface(pctx, prsc, &tmpl);
 }
@@ -69,7 +69,9 @@ vc4_tile_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
         if (info->dst.box.x != info->src.box.x ||
             info->dst.box.y != info->src.box.y ||
             info->dst.box.width != info->src.box.width ||
-            info->dst.box.height != info->src.box.height) {
+            info->dst.box.height != info->src.box.height ||
+            info->dst.box.depth != info->src.box.depth ||
+            info->dst.box.depth != 1) {
                 return false;
         }
 
@@ -123,9 +125,11 @@ vc4_tile_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
         }
 
         struct pipe_surface *dst_surf =
-                vc4_get_blit_surface(pctx, info->dst.resource, info->dst.level);
+                vc4_get_blit_surface(pctx, info->dst.resource, info->dst.level,
+                                           info->dst.box.z);
         struct pipe_surface *src_surf =
-                vc4_get_blit_surface(pctx, info->src.resource, info->src.level);
+                vc4_get_blit_surface(pctx, info->src.resource, info->src.level,
+                                           info->src.box.z);
 
         vc4_flush_jobs_reading_resource(vc4, info->src.resource);
 

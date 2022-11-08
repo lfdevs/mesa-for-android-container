@@ -38,6 +38,7 @@ static const struct debug_named_value shader_debug_options[] = {
    {"gs",         IR3_DBG_SHADER_GS,  "Print shader disasm for geometry shaders"},
    {"fs",         IR3_DBG_SHADER_FS,  "Print shader disasm for fragment shaders"},
    {"cs",         IR3_DBG_SHADER_CS,  "Print shader disasm for compute shaders"},
+   {"internal",   IR3_DBG_SHADER_INTERNAL, "Print shader disasm for internal shaders (normally not included in vs/fs/cs/etc)"},
    {"disasm",     IR3_DBG_DISASM,     "Dump NIR and adreno shader disassembly"},
    {"optmsgs",    IR3_DBG_OPTMSGS,    "Enable optimizer debug messages"},
    {"forces2en",  IR3_DBG_FORCES2EN,  "Force s2en mode for tex sampler instructions"},
@@ -70,82 +71,59 @@ ir3_compiler_destroy(struct ir3_compiler *compiler)
    ralloc_free(compiler);
 }
 
-#define COMMON_OPTIONS                                                        \
-   .lower_fpow = true,                                                        \
-   .lower_scmp = true,                                                        \
-   .lower_flrp16 = true,                                                      \
-   .lower_flrp32 = true,                                                      \
-   .lower_flrp64 = true,                                                      \
-   .lower_ffract = true,                                                      \
-   .lower_fmod = true,                                                        \
-   .lower_fdiv = true,                                                        \
-   .lower_isign = true,                                                       \
-   .lower_ldexp = true,                                                       \
-   .lower_uadd_carry = true,                                                  \
-   .lower_usub_borrow = true,                                                 \
-   .lower_mul_high = true,                                                    \
-   .lower_mul_2x32_64 = true,                                                 \
-   .fuse_ffma16 = true,                                                       \
-   .fuse_ffma32 = true,                                                       \
-   .fuse_ffma64 = true,                                                       \
-   .vertex_id_zero_based = false,                                             \
-   .lower_extract_byte = true,                                                \
-   .lower_extract_word = true,                                                \
-   .lower_insert_byte = true,                                                 \
-   .lower_insert_word = true,                                                 \
-   .lower_helper_invocation = true,                                           \
-   .lower_bitfield_insert_to_shifts = true,                                   \
-   .lower_bitfield_extract_to_shifts = true,                                  \
-   .lower_pack_half_2x16 = true,                                              \
-   .lower_pack_snorm_4x8 = true,                                              \
-   .lower_pack_snorm_2x16 = true,                                             \
-   .lower_pack_unorm_4x8 = true,                                              \
-   .lower_pack_unorm_2x16 = true,                                             \
-   .lower_unpack_half_2x16 = true,                                            \
-   .lower_unpack_snorm_4x8 = true,                                            \
-   .lower_unpack_snorm_2x16 = true,                                           \
-   .lower_unpack_unorm_4x8 = true,                                            \
-   .lower_unpack_unorm_2x16 = true,                                           \
-   .lower_pack_split = true,                                                  \
-   .use_interpolated_input_intrinsics = true,                                 \
-   .lower_rotate = true,                                                      \
-   .lower_to_scalar = true,                                                   \
-   .has_imul24 = true,                                                        \
-   .has_fsub = true,                                                          \
-   .has_isub = true,                                                          \
-   .force_indirect_unrolling_sampler = true,                                  \
-   .lower_uniforms_to_ubo = true,                                             \
-   .use_scoped_barrier = true,                                                \
-   .max_unroll_iterations = 32
+static const nir_shader_compiler_options ir3_base_options = {
+   .lower_fpow = true,
+   .lower_scmp = true,
+   .lower_flrp16 = true,
+   .lower_flrp32 = true,
+   .lower_flrp64 = true,
+   .lower_ffract = true,
+   .lower_fmod = true,
+   .lower_fdiv = true,
+   .lower_isign = true,
+   .lower_ldexp = true,
+   .lower_uadd_carry = true,
+   .lower_usub_borrow = true,
+   .lower_mul_high = true,
+   .lower_mul_2x32_64 = true,
+   .fuse_ffma16 = true,
+   .fuse_ffma32 = true,
+   .fuse_ffma64 = true,
+   .vertex_id_zero_based = false,
+   .lower_extract_byte = true,
+   .lower_extract_word = true,
+   .lower_insert_byte = true,
+   .lower_insert_word = true,
+   .lower_helper_invocation = true,
+   .lower_bitfield_insert_to_shifts = true,
+   .lower_bitfield_extract_to_shifts = true,
+   .lower_pack_half_2x16 = true,
+   .lower_pack_snorm_4x8 = true,
+   .lower_pack_snorm_2x16 = true,
+   .lower_pack_unorm_4x8 = true,
+   .lower_pack_unorm_2x16 = true,
+   .lower_unpack_half_2x16 = true,
+   .lower_unpack_snorm_4x8 = true,
+   .lower_unpack_snorm_2x16 = true,
+   .lower_unpack_unorm_4x8 = true,
+   .lower_unpack_unorm_2x16 = true,
+   .lower_pack_split = true,
+   .use_interpolated_input_intrinsics = true,
+   .lower_rotate = true,
+   .lower_to_scalar = true,
+   .has_imul24 = true,
+   .has_fsub = true,
+   .has_isub = true,
+   .force_indirect_unrolling_sampler = true,
+   .lower_uniforms_to_ubo = true,
+   .use_scoped_barrier = true,
+   .max_unroll_iterations = 32,
 
-static const nir_shader_compiler_options nir_options = {
-   COMMON_OPTIONS,
-   .lower_wpos_pntc = true,
    .lower_cs_local_index_to_id = true,
-
-   /* Only needed for the spirv_to_nir() pass done in ir3_cmdline.c
-    * but that should be harmless for GL since 64b is not
-    * supported there.
-    */
-   .lower_int64_options = (nir_lower_int64_options)~0,
-};
-
-/* we don't want to lower vertex_id to _zero_based on newer gpus: */
-static const nir_shader_compiler_options nir_options_a6xx = {
-   COMMON_OPTIONS,
-   .vectorize_io = true,
-   .force_indirect_unrolling = nir_var_all,
    .lower_wpos_pntc = true,
-   .lower_cs_local_index_to_id = true,
 
-   /* Only needed for the spirv_to_nir() pass done in ir3_cmdline.c
-    * but that should be harmless for GL since 64b is not
-    * supported there.
-    */
    .lower_int64_options = (nir_lower_int64_options)~0,
-   .lower_device_index_to_zero = true,
-   .has_udot_4x8 = true,
-   .has_sudot_4x8 = true,
+   .lower_doubles_options = (nir_lower_doubles_options)~0,
 };
 
 struct ir3_compiler *
@@ -292,15 +270,23 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    if (options->push_ubo_with_preamble)
       assert(compiler->has_preamble);
 
+   /* Set up nir shader compiler options, using device-specific overrides of our base settings. */
+   compiler->nir_options = ir3_base_options;
+
    if (compiler->gen >= 6) {
-      compiler->nir_options = nir_options_a6xx;
+      compiler->nir_options.vectorize_io = true,
+      compiler->nir_options.force_indirect_unrolling = nir_var_all,
+
+      compiler->nir_options.lower_device_index_to_zero = true,
+      compiler->nir_options.has_udot_4x8 = true,
+      compiler->nir_options.has_sudot_4x8 = true,
       compiler->nir_options.has_udot_4x8 = dev_info->a6xx.has_dp2acc;
       compiler->nir_options.has_sudot_4x8 = dev_info->a6xx.has_dp2acc;
-   } else {
-      compiler->nir_options = nir_options;
+   } else if (compiler->gen >= 3 && compiler->gen <= 5) {
+      compiler->nir_options.vertex_id_zero_based = true;
+   } else if (compiler->gen <= 2) {
       /* a2xx compiler doesn't handle indirect: */
-      if (compiler->gen <= 2)
-         compiler->nir_options.force_indirect_unrolling = nir_var_all;
+      compiler->nir_options.force_indirect_unrolling = nir_var_all;
    }
 
    /* 16-bit ALU op generation is mostly controlled by frontend compiler options, but

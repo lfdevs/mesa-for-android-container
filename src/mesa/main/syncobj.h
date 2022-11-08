@@ -44,6 +44,9 @@ _mesa_init_sync(struct gl_context *);
 extern void
 _mesa_free_sync_data(struct gl_context *);
 
+extern GLsync
+_mesa_fence_sync(struct gl_context *ctx, GLenum condition, GLbitfield flags);
+
 struct gl_sync_object *
 _mesa_get_and_ref_sync(struct gl_context *ctx, GLsync sync, bool incRefCount);
 

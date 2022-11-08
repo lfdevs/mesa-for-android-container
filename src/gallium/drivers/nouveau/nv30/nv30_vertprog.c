@@ -33,6 +33,7 @@
 #include "nv30/nv30_context.h"
 #include "nv30/nvfx_shader.h"
 #include "nv30/nv30_state.h"
+#include "nv30/nv30_winsys.h"
 
 static void
 nv30_vertprog_destroy(struct nv30_vertprog *vp)

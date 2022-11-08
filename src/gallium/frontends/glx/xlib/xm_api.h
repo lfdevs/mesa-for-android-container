@@ -394,6 +394,6 @@ xmesa_buffer_height(XMesaBuffer b)
    return b->height;
 }
 
-extern boolean xmesa_strict_invalidate;
+bool xmesa_strict_invalidate(void);
 
 #endif

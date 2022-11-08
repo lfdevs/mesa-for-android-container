@@ -83,7 +83,7 @@ apple_visual_create_pfobj(CGLPixelFormatObj * pfobj, const struct glx_config * m
    int numattr = 0;
    GLint vsref = 0;
    CGLError error = 0;
-   bool use_core_profile = env_var_as_boolean("LIBGL_PROFILE_CORE", false);
+   bool use_core_profile = debug_get_bool_option("LIBGL_PROFILE_CORE", false);
 
    if (offscreen) {
       apple_glx_diagnostic
@@ -91,13 +91,13 @@ apple_visual_create_pfobj(CGLPixelFormatObj * pfobj, const struct glx_config * m
 
       attr[numattr++] = kCGLPFAOffScreen;
    }
-   else if (env_var_as_boolean("LIBGL_ALWAYS_SOFTWARE", false)) {
+   else if (debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false)) {
       apple_glx_diagnostic
          ("Software rendering requested.  Using kCGLRendererGenericFloatID.\n");
       attr[numattr++] = kCGLPFARendererID;
       attr[numattr++] = kCGLRendererGenericFloatID;
    }
-   else if (env_var_as_boolean("LIBGL_ALLOW_SOFTWARE", false)) {
+   else if (debug_get_bool_option("LIBGL_ALLOW_SOFTWARE", false)) {
       apple_glx_diagnostic
          ("Software rendering is not being excluded.  Not using kCGLPFAAccelerated.\n");
    }

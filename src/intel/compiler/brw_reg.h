@@ -610,6 +610,12 @@ brw_uw1_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 }
 
 static inline struct brw_reg
+brw_ud8_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
+{
+   return retype(brw_vec8_reg(file, nr, subnr), BRW_REGISTER_TYPE_UD);
+}
+
+static inline struct brw_reg
 brw_ud1_reg(enum brw_reg_file file, unsigned nr, unsigned subnr)
 {
    return retype(brw_vec1_reg(file, nr, subnr), BRW_REGISTER_TYPE_UD);
@@ -811,6 +817,18 @@ static inline struct brw_reg
 brw_uw16_grf(unsigned nr, unsigned subnr)
 {
    return brw_uw16_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
+}
+
+static inline struct brw_reg
+brw_ud8_grf(unsigned nr, unsigned subnr)
+{
+   return brw_ud8_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
+}
+
+static inline struct brw_reg
+brw_ud1_grf(unsigned nr, unsigned subnr)
+{
+   return brw_ud1_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
 }
 
 

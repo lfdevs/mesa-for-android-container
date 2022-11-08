@@ -831,6 +831,16 @@ v3d_simulator_get_mem_size(void)
    return sim_state.mem_size;
 }
 
+uint32_t
+v3d_simulator_get_mem_free(void)
+{
+   uint32_t total_free = 0;
+   struct mem_block *p;
+   for (p = sim_state.heap->next_free; p != sim_state.heap; p = p->next_free)
+      total_free += p->size;
+   return total_free;
+}
+
 static void
 v3d_simulator_init_global()
 {

@@ -117,7 +117,7 @@ vk_pipeline_layout_destroy(struct vk_device *device,
 
    for (uint32_t s = 0; s < layout->set_count; s++) {
       if (layout->set_layouts[s] != NULL)
-         vk_descriptor_set_layout_unref(device, (void *)layout->set_layouts[s]);
+         vk_descriptor_set_layout_unref(device, layout->set_layouts[s]);
    }
 
    vk_object_free(device, NULL, layout);

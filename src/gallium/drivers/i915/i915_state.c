@@ -318,7 +318,7 @@ i915_create_sampler_state(struct pipe_context *pipe,
                      (translate_wrap_mode(wt) << SS3_TCY_ADDR_MODE_SHIFT) |
                      (translate_wrap_mode(wr) << SS3_TCZ_ADDR_MODE_SHIFT));
 
-   if (sampler->normalized_coords)
+   if (!sampler->unnormalized_coords)
       cso->state[1] |= SS3_NORMALIZED_COORDS;
 
    {

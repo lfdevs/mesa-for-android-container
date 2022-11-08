@@ -68,7 +68,8 @@ enum wait_event : uint16_t {
    event_gds_gpr_lock = 1 << 9,
    event_vmem_gpr_lock = 1 << 10,
    event_sendmsg = 1 << 11,
-   num_events = 12,
+   event_ldsdir = 1 << 12,
+   num_events = 13,
 };
 
 enum counter_type : uint8_t {
@@ -86,7 +87,8 @@ enum vmem_type : uint8_t {
 };
 
 static const uint16_t exp_events =
-   event_exp_pos | event_exp_param | event_exp_mrt_null | event_gds_gpr_lock | event_vmem_gpr_lock;
+   event_exp_pos | event_exp_param | event_exp_mrt_null | event_gds_gpr_lock | event_vmem_gpr_lock |
+   event_ldsdir;
 static const uint16_t lgkm_events = event_smem | event_lds | event_gds | event_flat | event_sendmsg;
 static const uint16_t vm_events = event_vmem | event_flat;
 static const uint16_t vs_events = event_vmem_store;
@@ -106,7 +108,8 @@ get_counters_for_event(wait_event ev)
    case event_exp_param:
    case event_exp_mrt_null:
    case event_gds_gpr_lock:
-   case event_vmem_gpr_lock: return counter_exp;
+   case event_vmem_gpr_lock:
+   case event_ldsdir: return counter_exp;
    default: return 0;
    }
 }
@@ -154,8 +157,7 @@ struct wait_entry {
 
       if (counter == counter_exp) {
          imm.exp = wait_imm::unset_counter;
-         events &= ~(event_exp_pos | event_exp_param | event_exp_mrt_null | event_gds_gpr_lock |
-                     event_vmem_gpr_lock);
+         events &= ~exp_events;
       }
 
       if (counter == counter_vs) {
@@ -389,6 +391,11 @@ kill(wait_imm& imm, Instruction* instr, wait_ctx& ctx, memory_sync_info sync_inf
           !instr->smem().sync.can_reorder()) {
          imm.lgkm = 0;
       }
+   }
+
+   if (instr->opcode == aco_opcode::ds_ordered_count &&
+       ((instr->ds().offset1 | (instr->ds().offset0 >> 8)) & 0x1)) {
+      imm.combine(ctx.barrier_imm[ffs(storage_gds) - 1]);
    }
 
    if (ctx.program->early_rast && instr->opcode == aco_opcode::exp) {
@@ -681,6 +688,12 @@ gen(Instruction* instr, wait_ctx& ctx)
       }
       break;
    }
+   case Format::LDSDIR: {
+      LDSDIR_instruction& ldsdir = instr->ldsdir();
+      update_counters(ctx, event_ldsdir, ldsdir.sync);
+      insert_wait_entry(ctx, instr->definitions[0], event_ldsdir);
+      break;
+   }
    case Format::MUBUF:
    case Format::MTBUF:
    case Format::MIMG:
@@ -706,6 +719,14 @@ gen(Instruction* instr, wait_ctx& ctx)
    case Format::SOPP: {
       if (instr->opcode == aco_opcode::s_sendmsg || instr->opcode == aco_opcode::s_sendmsghalt)
          update_counters(ctx, event_sendmsg);
+      break;
+   }
+   case Format::SOP1: {
+      if (instr->opcode == aco_opcode::s_sendmsg_rtn_b32 ||
+          instr->opcode == aco_opcode::s_sendmsg_rtn_b64) {
+         update_counters(ctx, event_sendmsg);
+         insert_wait_entry(ctx, instr->definitions[0], event_sendmsg);
+      }
       break;
    }
    default: break;
@@ -750,11 +771,23 @@ handle_block(Program* program, Block& block, wait_ctx& ctx)
       gen(instr.get(), ctx);
 
       if (instr->format != Format::PSEUDO_BARRIER && !is_wait) {
+         if (instr->isVINTERP_INREG() && queued_imm.exp != wait_imm::unset_counter) {
+            instr->vinterp_inreg().wait_exp = MIN2(instr->vinterp_inreg().wait_exp, queued_imm.exp);
+            queued_imm.exp = wait_imm::unset_counter;
+         }
+
          if (!queued_imm.empty())
             emit_waitcnt(ctx, new_instructions, queued_imm);
 
+         bool is_ordered_count_acquire =
+            instr->opcode == aco_opcode::ds_ordered_count &&
+            !((instr->ds().offset1 | (instr->ds().offset0 >> 8)) & 0x1);
+
          new_instructions.emplace_back(std::move(instr));
          perform_barrier(ctx, queued_imm, sync_info, semantic_acquire);
+
+         if (is_ordered_count_acquire)
+            queued_imm.combine(ctx.barrier_imm[ffs(storage_gds) - 1]);
       }
    }
 

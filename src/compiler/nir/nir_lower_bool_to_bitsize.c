@@ -402,61 +402,41 @@ lower_tex_instr(nir_tex_instr *tex)
 }
 
 static bool
-nir_lower_bool_to_bitsize_impl(nir_builder *b, nir_function_impl *impl)
+nir_lower_bool_to_bitsize_instr(nir_builder *b,
+                                nir_instr *instr,
+                                UNUSED void *cb_data)
 {
-   bool progress = false;
+   switch (instr->type) {
+   case nir_instr_type_alu:
+      return lower_alu_instr(b, nir_instr_as_alu(instr));
 
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         switch (instr->type) {
-         case nir_instr_type_alu:
-            progress |= lower_alu_instr(b, nir_instr_as_alu(instr));
-            break;
+   case nir_instr_type_load_const:
+      return lower_load_const_instr(nir_instr_as_load_const(instr));
 
-         case nir_instr_type_load_const:
-            progress |= lower_load_const_instr(nir_instr_as_load_const(instr));
-            break;
+   case nir_instr_type_phi:
+      return lower_phi_instr(b, nir_instr_as_phi(instr));
 
-         case nir_instr_type_phi:
-            progress |= lower_phi_instr(b, nir_instr_as_phi(instr));
-            break;
-
-         case nir_instr_type_ssa_undef:
-         case nir_instr_type_intrinsic:
-            nir_foreach_ssa_def(instr, rewrite_1bit_ssa_def_to_32bit,
-                                &progress);
-            break;
-
-         case nir_instr_type_tex:
-            progress |= lower_tex_instr(nir_instr_as_tex(instr));
-            break;
-
-         default:
-            nir_foreach_ssa_def(instr, assert_ssa_def_is_not_1bit, NULL);
-         }
-      }
+   case nir_instr_type_ssa_undef:
+   case nir_instr_type_intrinsic: {
+      bool progress = false;
+      nir_foreach_ssa_def(instr, rewrite_1bit_ssa_def_to_32bit, &progress);
+      return progress;
    }
 
-   if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
-   }
+   case nir_instr_type_tex:
+      return lower_tex_instr(nir_instr_as_tex(instr));
 
-   return progress;
+   default:
+      nir_foreach_ssa_def(instr, assert_ssa_def_is_not_1bit, NULL);
+      return false;
+   }
 }
 
 bool
 nir_lower_bool_to_bitsize(nir_shader *shader)
 {
-   nir_builder b;
-   bool progress = false;
-
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_builder_init(&b, function->impl);
-         progress = nir_lower_bool_to_bitsize_impl(&b, function->impl) || progress;
-      }
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, nir_lower_bool_to_bitsize_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

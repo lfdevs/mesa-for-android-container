@@ -387,6 +387,12 @@ struct midgard_predicate {
          * registers and fail to spill without breaking the schedule) */
 
         unsigned pipeline_count;
+
+        /* For load/store: is a ST_VARY.a32 instruction scheduled into the
+         * bundle? is a non-ST_VARY.a32 instruction scheduled? Potential
+         * hardware issue, unknown cause.
+         */
+        bool any_st_vary_a32, any_non_st_vary_a32;
 };
 
 static bool
@@ -738,6 +744,14 @@ mir_choose_instruction(
                 if (ldst && mir_pipeline_count(instructions[i]) + predicate->pipeline_count > 2)
                         continue;
 
+                bool st_vary_a32 = (instructions[i]->op == midgard_op_st_vary_32);
+
+                if (ldst && predicate->any_non_st_vary_a32 && st_vary_a32)
+                        continue;
+
+                if (ldst && predicate->any_st_vary_a32 && !st_vary_a32)
+                        continue;
+
                 bool conditional = alu && !branch && OP_IS_CSEL(instructions[i]->op);
                 conditional |= (branch && instructions[i]->branch.conditional);
 
@@ -772,8 +786,14 @@ mir_choose_instruction(
                 if (I->type == TAG_ALU_4)
                         mir_adjust_constants(instructions[best_index], predicate, true);
 
-                if (I->type == TAG_LOAD_STORE_4)
+                if (I->type == TAG_LOAD_STORE_4) {
                         predicate->pipeline_count += mir_pipeline_count(instructions[best_index]);
+
+                        if (instructions[best_index]->op == midgard_op_st_vary_32)
+                                predicate->any_st_vary_a32 = true;
+                        else
+                                predicate->any_non_st_vary_a32 = true;
+                }
 
                 if (I->type == TAG_ALU_4)
                         mir_adjust_unit(instructions[best_index], unit);
@@ -1220,11 +1240,8 @@ mir_schedule_alu(
                 predicate.no_cond = true;
         }
 
-        /* When MRT is in use, writeout loops require r1.w to be filled with a
-         * return address for the blend shader to jump to.  We always emit the
-         * move for blend shaders themselves for ABI reasons. */
-
-        if (writeout && (ctx->inputs->is_blend || ctx->writeout_branch[1])) {
+        /* Set r1.w to the return address so we can return from blend shaders */
+        if (writeout) {
                 vadd = ralloc(ctx, midgard_instruction);
                 *vadd = v_mov(~0, make_compiler_temp(ctx));
 

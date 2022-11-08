@@ -100,3 +100,12 @@ endforeach
 gen_pack_header_py = files('gen_pack_header.py')
 
 idep_genxml = declare_dependency(sources : [gen_xml_pack, genX_bits_h, genX_xml_h])
+
+foreach f : gen_xml_files + ['gen_rt.xml']
+  test(
+    'genxml sort @0@'.format(f),
+    prog_python,
+    args : [files('gen_sort_tags.py'), files(f), '--validate', '--quiet'],
+    suite : ['intel'],
+  )
+endforeach

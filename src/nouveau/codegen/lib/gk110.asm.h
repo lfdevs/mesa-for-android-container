@@ -1,4 +1,4 @@
-uint64_t gk110_builtin_code[] = {
+const uint64_t gk110_builtin_code[] = {
 /* 0x0000: gk110_div_u32 */
 	0x08a0a0a010a010a0,
 	0xe1800000009c000a,
@@ -194,7 +194,7 @@ uint64_t gk110_builtin_code[] = {
 	0x19000000001c003c,
 };
 
-uint64_t gk110_builtin_offsets[] = {
+const uint64_t gk110_builtin_offsets[] = {
 	0x0000000000000000,
 	0x00000000000000f0,
 	0x0000000000000218,

@@ -37,7 +37,7 @@ libintel_driver_ds = static_library(
   'intel-driver-ds',
   sources : ['intel_driver_ds.cc', intel_tracepoint_files],
   include_directories : [inc_src, inc_include, inc_intel, inc_mapi, inc_mesa],
-  link_with : [libintel_perf, libintel_dev],
+  link_with : [libintel_perf, libintel_dev, libintel_common],
   dependencies : libintel_driver_ds_deps,
   override_options : ['cpp_std=c++17'],
   gnu_symbol_visibility : 'hidden',
@@ -59,7 +59,7 @@ if with_perfetto and (with_datasources.contains('intel') or with_datasources.con
     'pps-intel',
     sources: pps_intel_sources,
     include_directories: [inc_tool, inc_src, inc_include, inc_intel],
-    link_with: [libintel_perf, libintel_dev],
+    link_with: [libintel_perf, libintel_dev, libintel_common],
     dependencies: [dep_perfetto, dep_libdrm, idep_mesautil],
     override_options: ['cpp_std=c++17']
   )

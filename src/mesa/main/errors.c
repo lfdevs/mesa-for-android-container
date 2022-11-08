@@ -283,7 +283,7 @@ _mesa_gl_debug(struct gl_context *ctx,
 
    /* limit the message to fit within KHR_debug buffers */
    char s[MAX_DEBUG_MESSAGE_LENGTH];
-   strncpy(s, msg, MAX_DEBUG_MESSAGE_LENGTH);
+   strncpy(s, msg, MAX_DEBUG_MESSAGE_LENGTH - 1);
    s[MAX_DEBUG_MESSAGE_LENGTH - 1] = '\0';
    len = MAX_DEBUG_MESSAGE_LENGTH - 1;
    _mesa_log_msg(ctx, source, type, *id, severity, len, s);

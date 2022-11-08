@@ -445,7 +445,7 @@ nir_lower_gs_intrinsics(nir_shader *shader, nir_lower_gs_intrinsics_flags option
    /* This only works because we have a single main() function. */
    append_set_vertex_and_primitive_count(impl->end_block, &state);
 
-   nir_metadata_preserve(impl, 0);
+   nir_metadata_preserve(impl, nir_metadata_none);
 
    return state.progress;
 }

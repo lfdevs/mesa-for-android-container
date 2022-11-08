@@ -47,6 +47,8 @@ confflags_DRI3 = -Ddri3=disabled
 confflags_OSMESA =  -Dosmesa=true
 confflags_SSE2 = -Dsse2=true
 
+NO_RUSTC_ARCHS = powerpc ppc64 riscv64 sparc64
+
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	confflags_DIRECT_RENDERING = -Dglx-direct=false
@@ -116,6 +118,11 @@ else
 	confflags_GALLIUM += -Dllvm=enabled
 	confflags_GALLIUM += -Dgallium-opencl=icd
 
+	# Build rusticl for archs where rustc is available
+	ifneq ($(DEB_HOST_ARCH), $(NO_RUSTC_ARCHS))
+		confflags_GALLIUM += -Dgallium-rusticl=true
+	endif
+
 	# nine makes sense only on archs that build wine
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 powerpc))
 		confflags_GALLIUM += -Dgallium-nine=true
@@ -161,7 +168,6 @@ confflags += \
 	-Dvulkan-layers="[$(VULKAN_LAYERS_LIST)]" \
 	-Dglvnd=true \
 	-Dshared-glapi=enabled \
-	-Dgallium-xvmc=disabled \
 	-Dgallium-omx=disabled \
 	-Db_ndebug=true \
 	-Dbuild-tests=true \
@@ -236,6 +242,15 @@ override_dh_install:
 	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_drv_video.so \
 	   debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
     endif
+  endif
+
+  ifneq ($(DEB_HOST_ARCH), $(NO_RUSTC_ARCHS))
+	install -m755 -d debian/mesa-opencl-icd/etc/OpenCL/vendors
+	mv debian/tmp/etc/OpenCL/vendors/rusticl.icd \
+	   debian/mesa-opencl-icd/etc/OpenCL/vendors
+	install -m755 -d debian/mesa-opencl-icd/usr/lib/${DEB_HOST_MULTIARCH}/
+	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/libRusticlOpenCL* \
+	   debian/mesa-opencl-icd/usr/lib/${DEB_HOST_MULTIARCH}/
   endif
 
 	dh_install -a

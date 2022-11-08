@@ -180,7 +180,7 @@ to the array index which is used for sampling.
 Hardware Atomic buffers
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Buffers containing hw atomics are required to support the feature
+Buffers containing HW atomics are required to support the feature
 on some drivers.
 
 Drivers that require this need to fill the ``set_hw_atomic_buffers`` method.
@@ -269,7 +269,7 @@ Clearing
 ^^^^^^^^
 
 Clear is one of the most difficult concepts to nail down to a single
-interface (due to both different requirements from APIs and also driver/hw
+interface (due to both different requirements from APIs and also driver/HW
 specific differences).
 
 ``clear`` initializes some or all of the surfaces currently bound to
@@ -567,7 +567,7 @@ Normally, if the occlusion query returned a non-zero result subsequent
 drawing happens normally so fragments may be generated, shaded and
 processed even where they're known to be obscured.
 
-The ''render_condition_mem'' function specifies the drawing is dependant
+The ''render_condition_mem'' function specifies the drawing is dependent
 on a value in memory. A buffer resource and offset denote which 32-bit
 value to use for the query. This is used for Vulkan API.
 

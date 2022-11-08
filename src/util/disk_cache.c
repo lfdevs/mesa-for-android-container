@@ -38,7 +38,7 @@
 #include <inttypes.h>
 
 #include "util/crc32.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/rand_xor.h"
 #include "util/u_atomic.h"
 #include "util/mesa-sha1.h"
@@ -111,9 +111,21 @@ disk_cache_create(const char *gpu_name, const char *driver_id,
    if (cache->path == NULL)
       goto path_fail;
 
-   if (env_var_as_boolean("MESA_DISK_CACHE_SINGLE_FILE", false)) {
-      if (!disk_cache_load_cache_index(local, cache))
+   /* Cache tests that want to have a disabled cache compression are using
+    * the "make_check_uncompressed" for the driver_id name.  Hence here we
+    * disable disk cache compression when mesa's build tests require it.
+    */
+   if (strcmp(driver_id, "make_check_uncompressed") == 0)
+      cache->compression_disabled = true;
+
+   if (debug_get_bool_option("MESA_DISK_CACHE_SINGLE_FILE", false)) {
+      if (!disk_cache_load_cache_index_foz(local, cache))
          goto path_fail;
+   } else if (debug_get_bool_option("MESA_DISK_CACHE_DATABASE", false)) {
+      if (!disk_cache_db_load_cache_index(local, cache))
+         goto path_fail;
+
+      cache->use_cache_db = true;
    }
 
    if (!disk_cache_mmap_cache_index(local, cache, path))
@@ -168,6 +180,9 @@ disk_cache_create(const char *gpu_name, const char *driver_id,
    }
 
    cache->max_size = max_size;
+
+   if (cache->use_cache_db)
+      mesa_cache_db_set_size_limit(&cache->cache_db, cache->max_size);
 
    /* 4 threads were chosen below because just about all modern CPUs currently
     * available that run Mesa have *at least* 4 cores. For these CPUs allowing
@@ -242,8 +257,11 @@ disk_cache_destroy(struct disk_cache *cache)
       util_queue_finish(&cache->cache_queue);
       util_queue_destroy(&cache->cache_queue);
 
-      if (env_var_as_boolean("MESA_DISK_CACHE_SINGLE_FILE", false))
+      if (debug_get_bool_option("MESA_DISK_CACHE_SINGLE_FILE", false))
          foz_destroy(&cache->foz_db);
+
+      if (cache->use_cache_db)
+         mesa_cache_db_close(&cache->cache_db);
 
       disk_cache_destroy_mmap(cache);
    }
@@ -345,8 +363,10 @@ cache_put(void *job, void *gdata, int thread_index)
    char *filename = NULL;
    struct disk_cache_put_job *dc_job = (struct disk_cache_put_job *) job;
 
-   if (env_var_as_boolean("MESA_DISK_CACHE_SINGLE_FILE", false)) {
+   if (debug_get_bool_option("MESA_DISK_CACHE_SINGLE_FILE", false)) {
       disk_cache_write_item_to_disk_foz(dc_job);
+   } else if (dc_job->cache->use_cache_db) {
+      disk_cache_db_write_item_to_disk(dc_job);
    } else {
       filename = disk_cache_get_cache_filename(dc_job->cache, dc_job->key);
       if (filename == NULL)
@@ -443,8 +463,10 @@ disk_cache_get(struct disk_cache *cache, const cache_key key, size_t *size)
       return blob;
    }
 
-   if (env_var_as_boolean("MESA_DISK_CACHE_SINGLE_FILE", false)) {
+   if (debug_get_bool_option("MESA_DISK_CACHE_SINGLE_FILE", false)) {
       return disk_cache_load_item_foz(cache, key, size);
+   } else if (cache->use_cache_db) {
+      return disk_cache_db_load_item(cache, key, size);
    } else {
       char *filename = disk_cache_get_cache_filename(cache, key);
       if (filename == NULL)

@@ -321,7 +321,7 @@ nv50_hw_sm_query_read_data(uint32_t count[32][4],
          if (hq->data[b + 4] != hq->sequence) {
             if (!wait)
                return false;
-            if (nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, nv50->base.client))
+            if (BO_WAIT(&nv50->screen->base, hq->bo, NOUVEAU_BO_RD, nv50->base.client))
                return false;
          }
          count[p][c] = hq->data[b + hsq->ctr[c]];

@@ -285,9 +285,7 @@ agx_open_device(void *memctx, struct agx_device *dev)
 
    /* TODO: Support other models */
    CFDictionaryRef matching = IOServiceNameMatching("AGXAcceleratorG13G_B0");
-
-   io_service_t service =
-      IOServiceGetMatchingService(kIOMasterPortDefault, matching);
+   io_service_t service = IOServiceGetMatchingService(0, matching);
 
    if (!service)
       return false;
@@ -307,10 +305,6 @@ agx_open_device(void *memctx, struct agx_device *dev)
 
    /* Oddly, the return codes are flipped for SET_API */
    if (ret != 1)
-      return false;
-#else
-   /* Only open a fake AGX device on other operating systems if forced */
-   if (!getenv("AGX_FAKE_DEVICE"))
       return false;
 #endif
 

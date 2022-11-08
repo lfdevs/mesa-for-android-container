@@ -1099,7 +1099,7 @@ lp_build_store_rgba_soa(struct gallivm_state *gallivm,
       struct lp_build_loop_state loop_state;
 
       LLVMValueRef store_offset = LLVMBuildAdd(gallivm->builder, offset, lp_build_const_int_vec(gallivm, type, i * 4), "");
-      store_offset = LLVMBuildGEP(gallivm->builder, base_ptr, &store_offset, 1, "");
+      store_offset = LLVMBuildGEP2(gallivm->builder, LLVMInt8TypeInContext(gallivm->context), base_ptr, &store_offset, 1, "");
 
       lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, 0));
 

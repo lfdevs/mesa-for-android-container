@@ -25,16 +25,16 @@ SOFTWARE.
 
 <csbgen name="ROGUE" prefix="IPF">
 
-	<define name="TILE_SIZE_PIXELS" value="32"/>
+  <define name="TILE_SIZE_PIXELS" value="32"/>
 
-	<struct name="SCISSOR_WORD_0" length="1">
-		<field name="scw0_xmin" start="16" end="31" type="uint"/>
-		<field name="scw0_xmax" start="0" end="15" type="uint"/>
-	</struct>
+  <struct name="SCISSOR_WORD_0" length="1">
+    <field name="scw0_xmin" start="16" end="31" type="uint"/>
+    <field name="scw0_xmax" start="0" end="15" type="uint"/>
+  </struct>
 
-	<struct name="SCISSOR_WORD_1" length="1">
-		<field name="scw1_ymin" start="16" end="31" type="uint"/>
-		<field name="scw1_ymax" start="0" end="15" type="uint"/>
-	</struct>
+  <struct name="SCISSOR_WORD_1" length="1">
+    <field name="scw1_ymin" start="16" end="31" type="uint"/>
+    <field name="scw1_ymax" start="0" end="15" type="uint"/>
+  </struct>
 
 </csbgen>

@@ -86,7 +86,7 @@ delete_dummy_framebuffer(struct gl_framebuffer *fb)
  * with the real frame/renderbuffer.
  */
 static struct gl_framebuffer DummyFramebuffer = {
-   .Mutex = _SIMPLE_MTX_INITIALIZER_NP,
+   .Mutex = SIMPLE_MTX_INITIALIZER,
    .Delete = delete_dummy_framebuffer,
 };
 static struct gl_renderbuffer DummyRenderbuffer = {
@@ -96,7 +96,7 @@ static struct gl_renderbuffer DummyRenderbuffer = {
 /* We bind this framebuffer when applications pass a NULL
  * drawable/surface in make current. */
 static struct gl_framebuffer IncompleteFramebuffer = {
-   .Mutex = _SIMPLE_MTX_INITIALIZER_NP,
+   .Mutex = SIMPLE_MTX_INITIALIZER,
    .Delete = delete_dummy_framebuffer,
 };
 
@@ -3279,8 +3279,10 @@ bind_framebuffer(GLenum target, GLuint framebuffer)
       /* Binding the window system framebuffer (which was originally set
        * with MakeCurrent).
        */
-      newDrawFb = ctx->WinSysDrawBuffer;
-      newReadFb = ctx->WinSysReadBuffer;
+      if (bindDrawBuf)
+         newDrawFb = ctx->WinSysDrawBuffer;
+      if (bindReadBuf)
+         newReadFb = ctx->WinSysReadBuffer;
    }
 
    _mesa_bind_framebuffers(ctx,

@@ -62,6 +62,7 @@ struct nv50_screen {
 
    struct nv50_context *cur_ctx;
    struct nv50_graph_state save_state;
+   simple_mtx_t state_lock;
 
    int num_occlusion_queries_active;
 
@@ -132,32 +133,6 @@ int nv50_screen_tic_alloc(struct nv50_screen *, void *);
 int nv50_screen_tsc_alloc(struct nv50_screen *, void *);
 
 int nv50_screen_compute_setup(struct nv50_screen *, struct nouveau_pushbuf *);
-
-static inline void
-nv50_resource_fence(struct nv04_resource *res, uint32_t flags)
-{
-   struct nv50_screen *screen = nv50_screen(res->base.screen);
-
-   if (res->mm) {
-      nouveau_fence_ref(screen->base.fence.current, &res->fence);
-      if (flags & NOUVEAU_BO_WR)
-         nouveau_fence_ref(screen->base.fence.current, &res->fence_wr);
-   }
-}
-
-static inline void
-nv50_resource_validate(struct nv04_resource *res, uint32_t flags)
-{
-   if (likely(res->bo)) {
-      if (flags & NOUVEAU_BO_WR)
-         res->status |= NOUVEAU_BUFFER_STATUS_GPU_WRITING |
-            NOUVEAU_BUFFER_STATUS_DIRTY;
-      if (flags & NOUVEAU_BO_RD)
-         res->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
-
-      nv50_resource_fence(res, flags);
-   }
-}
 
 struct nv50_format {
    uint32_t rt;

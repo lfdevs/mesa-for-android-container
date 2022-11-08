@@ -25,8 +25,9 @@
  */
 
 #include "sfn_instr_lds.h"
-#include "sfn_instr_alu.h"
+
 #include "sfn_debug.h"
+#include "sfn_instr_alu.h"
 
 namespace r600 {
 
@@ -34,30 +35,33 @@ using std::istream;
 
 LDSReadInstr::LDSReadInstr(std::vector<PRegister, Allocator<PRegister>>& value,
                            AluInstr::SrcValues& address):
-   m_address(address),
-   m_dest_value(value)
+    m_address(address),
+    m_dest_value(value)
 {
    assert(m_address.size() == m_dest_value.size());
 
-   for (auto& v: value)
+   for (auto& v : value)
       v->add_parent(this);
 
-   for (auto& s: m_address)
+   for (auto& s : m_address)
       if (s->as_register())
          s->as_register()->add_use(this);
 }
 
-void LDSReadInstr::accept(ConstInstrVisitor& visitor) const
+void
+LDSReadInstr::accept(ConstInstrVisitor& visitor) const
 {
    visitor.visit(*this);
 }
 
-void LDSReadInstr::accept(InstrVisitor& visitor)
+void
+LDSReadInstr::accept(InstrVisitor& visitor)
 {
    visitor.visit(this);
 }
 
-bool LDSReadInstr::remove_unused_components()
+bool
+LDSReadInstr::remove_unused_components()
 {
    uint8_t inactive_mask = 0;
    for (size_t i = 0; i < m_dest_value.size(); ++i) {
@@ -90,21 +94,20 @@ bool LDSReadInstr::remove_unused_components()
 
 class SetLDSAddrProperty : public AluInstrVisitor {
    using AluInstrVisitor::visit;
-   void visit(AluInstr *instr) override {
-      instr->set_alu_flag(alu_lds_address);
-   }
+   void visit(AluInstr *instr) override { instr->set_alu_flag(alu_lds_address); }
 };
 
-AluInstr *LDSReadInstr::split(std::vector<AluInstr*>& out_block, AluInstr *last_lds_instr)
+AluInstr *
+LDSReadInstr::split(std::vector<AluInstr *>& out_block, AluInstr *last_lds_instr)
 {
-   AluInstr* first_instr = nullptr;
+   AluInstr *first_instr = nullptr;
    SetLDSAddrProperty prop;
-   for (auto& addr: m_address) {
+   for (auto& addr : m_address) {
       auto reg = addr->as_register();
       if (reg) {
          reg->del_use(this);
          if (reg->parents().size() == 1) {
-            for (auto& p: reg->parents()) {
+            for (auto& p : reg->parents()) {
                p->accept(prop);
             }
          }
@@ -131,9 +134,10 @@ AluInstr *LDSReadInstr::split(std::vector<AluInstr*>& out_block, AluInstr *last_
       }
    }
 
-   for (auto& dest: m_dest_value) {
+   for (auto& dest : m_dest_value) {
       dest->del_parent(this);
-      auto instr = new AluInstr(op1_mov, dest,
+      auto instr = new AluInstr(op1_mov,
+                                dest,
                                 new InlineConstant(ALU_SRC_LDS_OQ_A_POP),
                                 AluInstr::last_write);
       instr->add_required_instr(last_lds_instr);
@@ -147,28 +151,31 @@ AluInstr *LDSReadInstr::split(std::vector<AluInstr*>& out_block, AluInstr *last_
    return last_lds_instr;
 }
 
-bool LDSReadInstr::do_ready() const
+bool
+LDSReadInstr::do_ready() const
 {
    unreachable("This instruction is not handled by the schduler");
    return false;
 }
 
-void LDSReadInstr::do_print(std::ostream& os) const
+void
+LDSReadInstr::do_print(std::ostream& os) const
 {
    os << "LDS_READ ";
 
    os << "[ ";
-   for (auto d: m_dest_value) {
+   for (auto d : m_dest_value) {
       os << *d << " ";
    }
    os << "] : [ ";
-   for (auto a: m_address) {
+   for (auto a : m_address) {
       os << *a << " ";
    }
    os << "]";
 }
 
-bool LDSReadInstr::is_equal_to(const LDSReadInstr& rhs) const
+bool
+LDSReadInstr::is_equal_to(const LDSReadInstr& rhs) const
 {
    if (m_address.size() != rhs.m_address.size())
       return false;
@@ -182,7 +189,8 @@ bool LDSReadInstr::is_equal_to(const LDSReadInstr& rhs) const
    return true;
 }
 
-auto LDSReadInstr::from_string(istream& is, ValueFactory& value_factory) -> Pointer
+auto
+LDSReadInstr::from_string(istream& is, ValueFactory& value_factory) -> Pointer
 {
    /* LDS_READ [ d1, d2, d3 ... ] : a1 a2 a3 ... */
 
@@ -191,7 +199,7 @@ auto LDSReadInstr::from_string(istream& is, ValueFactory& value_factory) -> Poin
    is >> temp_str;
    assert(temp_str == "[");
 
-   std::vector<PRegister, Allocator<PRegister> > dests;
+   std::vector<PRegister, Allocator<PRegister>> dests;
    AluInstr::SrcValues srcs;
 
    is >> temp_str;
@@ -219,12 +227,14 @@ auto LDSReadInstr::from_string(istream& is, ValueFactory& value_factory) -> Poin
    return new LDSReadInstr(dests, srcs);
 }
 
-LDSAtomicInstr::LDSAtomicInstr(ESDOp op, PRegister dest, PVirtualValue address,
+LDSAtomicInstr::LDSAtomicInstr(ESDOp op,
+                               PRegister dest,
+                               PVirtualValue address,
                                const SrcValues& srcs):
-   m_opcode(op),
-   m_address(address),
-   m_dest(dest),
-   m_srcs(srcs)
+    m_opcode(op),
+    m_address(address),
+    m_dest(dest),
+    m_srcs(srcs)
 {
    if (m_dest)
       m_dest->add_parent(this);
@@ -232,31 +242,33 @@ LDSAtomicInstr::LDSAtomicInstr(ESDOp op, PRegister dest, PVirtualValue address,
    if (m_address->as_register())
       m_address->as_register()->add_use(this);
 
-   for (auto& s: m_srcs) {
+   for (auto& s : m_srcs) {
       if (s->as_register())
          s->as_register()->add_use(this);
    }
 }
 
-
-void LDSAtomicInstr::accept(ConstInstrVisitor& visitor) const
+void
+LDSAtomicInstr::accept(ConstInstrVisitor& visitor) const
 {
    visitor.visit(*this);
 }
 
-void LDSAtomicInstr::accept(InstrVisitor& visitor)
+void
+LDSAtomicInstr::accept(InstrVisitor& visitor)
 {
    visitor.visit(this);
 }
 
-AluInstr *LDSAtomicInstr::split(std::vector<AluInstr *>& out_block, AluInstr *last_lds_instr)
+AluInstr *
+LDSAtomicInstr::split(std::vector<AluInstr *>& out_block, AluInstr *last_lds_instr)
 {
    AluInstr::SrcValues srcs = {m_address};
 
-   for(auto& s : m_srcs)
+   for (auto& s : m_srcs)
       srcs.push_back(s);
 
-   for(auto& s :srcs) {
+   for (auto& s : srcs) {
       if (s->as_register())
          s->as_register()->del_use(this);
    }
@@ -266,7 +278,7 @@ AluInstr *LDSAtomicInstr::split(std::vector<AluInstr *>& out_block, AluInstr *la
    if (reg) {
       reg->del_use(this);
       if (reg->parents().size() == 1) {
-         for (auto& p: reg->parents()) {
+         for (auto& p : reg->parents()) {
             p->accept(prop);
          }
       }
@@ -278,12 +290,14 @@ AluInstr *LDSAtomicInstr::split(std::vector<AluInstr *>& out_block, AluInstr *la
    if (last_lds_instr) {
       op_instr->add_required_instr(last_lds_instr);
    }
+   last_lds_instr = op_instr;
 
    out_block.push_back(op_instr);
    if (m_dest) {
       op_instr->set_alu_flag(alu_lds_group_start);
       m_dest->del_parent(this);
-      auto read_instr = new AluInstr(op1_mov, m_dest,
+      auto read_instr = new AluInstr(op1_mov,
+                                     m_dest,
                                      new InlineConstant(ALU_SRC_LDS_OQ_A_POP),
                                      AluInstr::last_write);
       read_instr->add_required_instr(op_instr);
@@ -295,10 +309,10 @@ AluInstr *LDSAtomicInstr::split(std::vector<AluInstr *>& out_block, AluInstr *la
    return last_lds_instr;
 }
 
-bool LDSAtomicInstr::replace_source(PRegister old_src, PVirtualValue new_src)
+bool
+LDSAtomicInstr::replace_source(PRegister old_src, PVirtualValue new_src)
 {
    bool process = false;
-
 
    if (new_src->as_uniform() && m_srcs.size() > 2) {
       int nconst = 0;
@@ -344,13 +358,15 @@ bool LDSAtomicInstr::replace_source(PRegister old_src, PVirtualValue new_src)
    return process;
 }
 
-bool LDSAtomicInstr::do_ready() const
+bool
+LDSAtomicInstr::do_ready() const
 {
    unreachable("This instruction is not handled by the schduler");
    return false;
 }
 
-void LDSAtomicInstr::do_print(std::ostream& os) const
+void
+LDSAtomicInstr::do_print(std::ostream& os) const
 {
    auto ii = lds_ops.find(m_opcode);
    assert(ii != lds_ops.end());
@@ -366,7 +382,8 @@ void LDSAtomicInstr::do_print(std::ostream& os) const
       os << " " << *m_srcs[1];
 }
 
-bool LDSAtomicInstr::is_equal_to(const LDSAtomicInstr& rhs) const
+bool
+LDSAtomicInstr::is_equal_to(const LDSAtomicInstr& rhs) const
 {
    if (m_srcs.size() != rhs.m_srcs.size())
       return false;
@@ -376,13 +393,12 @@ bool LDSAtomicInstr::is_equal_to(const LDSAtomicInstr& rhs) const
          return false;
    }
 
-   return m_opcode == rhs.m_opcode &&
-         sfn_value_equal(m_address, rhs.m_address) &&
-         sfn_value_equal(m_dest, rhs.m_dest);
+   return m_opcode == rhs.m_opcode && sfn_value_equal(m_address, rhs.m_address) &&
+          sfn_value_equal(m_dest, rhs.m_dest);
 }
 
-
-auto LDSAtomicInstr::from_string(istream& is, ValueFactory& value_factory) -> Pointer
+auto
+LDSAtomicInstr::from_string(istream& is, ValueFactory& value_factory) -> Pointer
 {
    /* LDS WRITE2 __.x [ R1.x ] : R2.y R3.z */
    /* LDS WRITE __.x [ R1.x ] : R2.y  */
@@ -433,5 +449,4 @@ auto LDSAtomicInstr::from_string(istream& is, ValueFactory& value_factory) -> Po
    return new LDSAtomicInstr(opcode, dest, addr, srcs);
 }
 
-
-}
+} // namespace r600

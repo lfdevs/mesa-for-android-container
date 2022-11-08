@@ -48,7 +48,7 @@ struct marshal_cmd_base
    uint16_t cmd_size;
 };
 
-typedef uint32_t (*_mesa_unmarshal_func)(struct gl_context *ctx, const void *cmd, const uint64_t *last);
+typedef uint32_t (*_mesa_unmarshal_func)(struct gl_context *ctx, const void *cmd);
 extern const _mesa_unmarshal_func _mesa_unmarshal_dispatch[NUM_DISPATCH_CMD];
 
 static inline void *
@@ -71,6 +71,15 @@ _mesa_glthread_allocate_command(struct gl_context *ctx,
    cmd_base->cmd_id = cmd_id;
    cmd_base->cmd_size = num_elements;
    return cmd_base;
+}
+
+static inline bool
+_mesa_glthread_call_is_last(struct glthread_state *glthread,
+                            struct marshal_cmd_base *last)
+{
+   return last &&
+          (uint64_t*)last + last->cmd_size ==
+          &glthread->next_batch->buffer[glthread->used];
 }
 
 static inline bool
@@ -133,10 +142,6 @@ _mesa_glthread_has_non_vbo_vertices_or_indices_or_indirect(const struct gl_conte
            (vao->UserPointerMask & vao->BufferEnabled));
 }
 
-
-bool
-_mesa_create_marshal_tables(struct gl_context *ctx);
-
 static inline unsigned
 _mesa_buffer_enum_to_count(GLenum buffer)
 {
@@ -182,6 +187,9 @@ _mesa_tex_param_enum_to_count(GLenum pname)
    case GL_TEXTURE_MAX_ANISOTROPY_EXT:
    case GL_TEXTURE_LOD_BIAS:
    case GL_TEXTURE_TILING_EXT:
+   case GL_TEXTURE_SPARSE_ARB:
+   case GL_VIRTUAL_PAGE_SIZE_INDEX_ARB:
+   case GL_NUM_SPARSE_LEVELS_ARB:
       return 1;
    case GL_TEXTURE_CROP_RECT_OES:
    case GL_TEXTURE_SWIZZLE_RGBA:
@@ -438,6 +446,19 @@ _mesa_get_matrix_index(struct gl_context *ctx, GLenum mode)
    return M_DUMMY;
 }
 
+static inline bool
+_mesa_matrix_is_identity(const float *m)
+{
+   static float identity[16] = {
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+   };
+
+   return !memcmp(m, identity, sizeof(identity));
+}
+
 static inline void
 _mesa_glthread_Enable(struct gl_context *ctx, GLenum cap)
 {
@@ -452,11 +473,20 @@ _mesa_glthread_Enable(struct gl_context *ctx, GLenum cap)
    case GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB:
       _mesa_glthread_destroy(ctx, "Enable(DEBUG_OUTPUT_SYNCHRONOUS)");
       break;
+   case GL_BLEND:
+      ctx->GLThread.Blend = true;
+      break;
    case GL_DEPTH_TEST:
       ctx->GLThread.DepthTest = true;
       break;
    case GL_CULL_FACE:
       ctx->GLThread.CullFace = true;
+      break;
+   case GL_LIGHTING:
+      ctx->GLThread.Lighting = true;
+      break;
+   case GL_POLYGON_STIPPLE:
+      ctx->GLThread.PolygonStipple = true;
       break;
    }
 }
@@ -472,11 +502,20 @@ _mesa_glthread_Disable(struct gl_context *ctx, GLenum cap)
    case GL_PRIMITIVE_RESTART_FIXED_INDEX:
       _mesa_glthread_set_prim_restart(ctx, cap, false);
       break;
+   case GL_BLEND:
+      ctx->GLThread.Blend = false;
+      break;
    case GL_CULL_FACE:
       ctx->GLThread.CullFace = false;
       break;
    case GL_DEPTH_TEST:
       ctx->GLThread.DepthTest = false;
+      break;
+   case GL_LIGHTING:
+      ctx->GLThread.Lighting = false;
+      break;
+   case GL_POLYGON_STIPPLE:
+      ctx->GLThread.PolygonStipple = false;
       break;
    }
 }
@@ -484,11 +523,21 @@ _mesa_glthread_Disable(struct gl_context *ctx, GLenum cap)
 static inline int
 _mesa_glthread_IsEnabled(struct gl_context *ctx, GLenum cap)
 {
+   /* This will generate GL_INVALID_OPERATION, as it should. */
+   if (ctx->GLThread.inside_begin_end)
+      return -1;
+
    switch (cap) {
+   case GL_BLEND:
+      return ctx->GLThread.Blend;
    case GL_CULL_FACE:
       return ctx->GLThread.CullFace;
    case GL_DEPTH_TEST:
       return ctx->GLThread.DepthTest;
+   case GL_LIGHTING:
+      return ctx->GLThread.Lighting;
+   case GL_POLYGON_STIPPLE:
+      return ctx->GLThread.PolygonStipple;
    case GL_VERTEX_ARRAY:
       return !!(ctx->GLThread.CurrentVAO->UserEnabled & VERT_BIT_POS);
    case GL_NORMAL_ARRAY:
@@ -517,11 +566,19 @@ _mesa_glthread_PushAttrib(struct gl_context *ctx, GLbitfield mask)
 
    attr->Mask = mask;
 
-   if (mask & (GL_POLYGON_BIT | GL_ENABLE_BIT))
+   if (mask & GL_ENABLE_BIT)
+      attr->Blend = ctx->GLThread.Blend;
+
+   if (mask & (GL_POLYGON_BIT | GL_ENABLE_BIT)) {
       attr->CullFace = ctx->GLThread.CullFace;
+      attr->PolygonStipple = ctx->GLThread.PolygonStipple;
+   }
 
    if (mask & (GL_DEPTH_BUFFER_BIT | GL_ENABLE_BIT))
       attr->DepthTest = ctx->GLThread.DepthTest;
+
+   if (mask & (GL_LIGHTING_BIT | GL_ENABLE_BIT))
+      attr->Lighting = ctx->GLThread.Lighting;
 
    if (mask & GL_TEXTURE_BIT)
       attr->ActiveTexture = ctx->GLThread.ActiveTexture;
@@ -543,11 +600,19 @@ _mesa_glthread_PopAttrib(struct gl_context *ctx)
       &ctx->GLThread.AttribStack[--ctx->GLThread.AttribStackDepth];
    unsigned mask = attr->Mask;
 
-   if (mask & (GL_POLYGON_BIT | GL_ENABLE_BIT))
+   if (mask & GL_ENABLE_BIT)
+      ctx->GLThread.Blend = attr->Blend;
+
+   if (mask & (GL_POLYGON_BIT | GL_ENABLE_BIT)) {
       ctx->GLThread.CullFace = attr->CullFace;
+      ctx->GLThread.PolygonStipple = attr->PolygonStipple;
+   }
 
    if (mask & (GL_DEPTH_BUFFER_BIT | GL_ENABLE_BIT))
       ctx->GLThread.DepthTest = attr->DepthTest;
+
+   if (mask & (GL_LIGHTING_BIT | GL_ENABLE_BIT))
+      ctx->GLThread.Lighting = attr->Lighting;
 
    if (mask & GL_TEXTURE_BIT)
       ctx->GLThread.ActiveTexture = attr->ActiveTexture;
@@ -645,7 +710,7 @@ _mesa_glthread_MatrixMode(struct gl_context *ctx, GLenum mode)
       return;
 
    ctx->GLThread.MatrixIndex = _mesa_get_matrix_index(ctx, mode);
-   ctx->GLThread.MatrixMode = mode;
+   ctx->GLThread.MatrixMode = MIN2(mode, 0xffff);
 }
 
 static inline void
@@ -788,10 +853,10 @@ _mesa_glthread_CallLists(struct gl_context *ctx, GLsizei n, GLenum type,
 }
 
 static inline void
-_mesa_glthread_NewList(struct gl_context *ctx, GLuint list, GLuint mode)
+_mesa_glthread_NewList(struct gl_context *ctx, GLuint list, GLenum mode)
 {
    if (!ctx->GLThread.ListMode)
-      ctx->GLThread.ListMode = mode;
+      ctx->GLThread.ListMode = MIN2(mode, 0xffff);
 }
 
 static inline void
@@ -819,23 +884,34 @@ _mesa_glthread_DeleteLists(struct gl_context *ctx, GLsizei range)
 }
 
 static inline void
+_mesa_glthread_BindFramebuffer(struct gl_context *ctx, GLenum target, GLuint id)
+{
+   switch (target) {
+   case GL_FRAMEBUFFER:
+      ctx->GLThread.CurrentDrawFramebuffer = id;
+      ctx->GLThread.CurrentReadFramebuffer = id;
+      break;
+   case GL_DRAW_FRAMEBUFFER:
+      ctx->GLThread.CurrentDrawFramebuffer = id;
+      break;
+   case GL_READ_FRAMEBUFFER:
+      ctx->GLThread.CurrentReadFramebuffer = id;
+      break;
+   }
+}
+
+static inline void
 _mesa_glthread_DeleteFramebuffers(struct gl_context *ctx, GLsizei n,
                                   const GLuint *ids)
 {
    if (ctx->GLThread.CurrentDrawFramebuffer) {
       for (int i = 0; i < n; i++) {
-         if (ctx->GLThread.CurrentDrawFramebuffer == ids[i]) {
+         if (ctx->GLThread.CurrentDrawFramebuffer == ids[i])
             ctx->GLThread.CurrentDrawFramebuffer = 0;
-            break;
-         }
+         if (ctx->GLThread.CurrentReadFramebuffer == ids[i])
+            ctx->GLThread.CurrentReadFramebuffer = 0;
       }
    }
 }
-
-struct marshal_cmd_CallList
-{
-   struct marshal_cmd_base cmd_base;
-   GLuint list;
-};
 
 #endif /* MARSHAL_H */

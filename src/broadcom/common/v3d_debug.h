@@ -39,7 +39,9 @@ extern "C" {
  * list of debugging flags, as well as some macros for handling them.
  */
 
-extern uint32_t V3D_DEBUG;
+extern uint32_t v3d_mesa_debug;
+
+#define V3D_DBG(flag) unlikely(v3d_mesa_debug & V3D_DEBUG_ ## flag)
 
 #define V3D_DEBUG_SHADERDB          (1 << 0)
 #define V3D_DEBUG_TGSI              (1 << 1)
@@ -88,7 +90,7 @@ extern uint32_t V3D_DEBUG;
 #define dbg_printf(...)	fprintf(stderr, __VA_ARGS__)
 #endif /* HAVE_ANDROID_PLATFORM */
 
-extern uint32_t v3d_debug_flag_for_shader_stage(gl_shader_stage stage);
+extern bool v3d_debug_flag_for_shader_stage(gl_shader_stage stage);
 
 extern void v3d_process_debug_variable(void);
 

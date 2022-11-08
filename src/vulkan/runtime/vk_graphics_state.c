@@ -49,14 +49,17 @@ get_dynamic_state_groups(BITSET_WORD *dynamic,
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE);
    }
 
-   if (groups & MESA_VK_GRAPHICS_STATE_TESSELLATION_BIT)
+   if (groups & MESA_VK_GRAPHICS_STATE_TESSELLATION_BIT) {
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_TS_PATCH_CONTROL_POINTS);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_TS_DOMAIN_ORIGIN);
+   }
 
    if (groups & MESA_VK_GRAPHICS_STATE_VIEWPORT_BIT) {
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_VP_VIEWPORT_COUNT);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_VP_VIEWPORTS);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_VP_SCISSOR_COUNT);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_VP_SCISSORS);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE);
    }
 
    if (groups & MESA_VK_GRAPHICS_STATE_DISCARD_RECTANGLES_BIT)
@@ -64,19 +67,34 @@ get_dynamic_state_groups(BITSET_WORD *dynamic,
 
    if (groups & MESA_VK_GRAPHICS_STATE_RASTERIZATION_BIT) {
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_RASTERIZER_DISCARD_ENABLE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_DEPTH_CLAMP_ENABLE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_DEPTH_CLIP_ENABLE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_CULL_MODE);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_FRONT_FACE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_CONSERVATIVE_MODE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_RASTERIZATION_ORDER_AMD);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_PROVOKING_VERTEX);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_RASTERIZATION_STREAM);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_DEPTH_BIAS_ENABLE);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_DEPTH_BIAS_FACTORS);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_LINE_WIDTH);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_LINE_MODE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_LINE_STIPPLE_ENABLE);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_LINE_STIPPLE);
    }
 
    if (groups & MESA_VK_GRAPHICS_STATE_FRAGMENT_SHADING_RATE_BIT)
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_FSR);
 
-   if (groups & MESA_VK_GRAPHICS_STATE_MULTISAMPLE_BIT)
+   if (groups & MESA_VK_GRAPHICS_STATE_MULTISAMPLE_BIT) {
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_MS_SAMPLE_MASK);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS_ENABLE);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS);
+   }
 
    if (groups & MESA_VK_GRAPHICS_STATE_DEPTH_STENCIL_BIT) {
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE);
@@ -92,8 +110,12 @@ get_dynamic_state_groups(BITSET_WORD *dynamic,
    }
 
    if (groups & MESA_VK_GRAPHICS_STATE_COLOR_BLEND_BIT) {
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_CB_LOGIC_OP_ENABLE);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_CB_LOGIC_OP);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_CB_COLOR_WRITE_ENABLES);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_CB_BLEND_ENABLES);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_CB_WRITE_MASKS);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_CB_BLEND_CONSTANTS);
    }
 }
@@ -106,9 +128,9 @@ fully_dynamic_state_groups(const BITSET_WORD *dynamic)
    if (BITSET_TEST(dynamic, MESA_VK_DYNAMIC_VI))
       groups |= MESA_VK_GRAPHICS_STATE_VERTEX_INPUT_BIT;
 
-   if (BITSET_TEST(dynamic, MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY) &&
-       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE))
-      groups |= MESA_VK_GRAPHICS_STATE_INPUT_ASSEMBLY_BIT;
+   if (BITSET_TEST(dynamic, MESA_VK_DYNAMIC_TS_PATCH_CONTROL_POINTS) &&
+       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_TS_DOMAIN_ORIGIN))
+      groups |= MESA_VK_GRAPHICS_STATE_TESSELLATION_BIT;
 
    if (BITSET_TEST(dynamic, MESA_VK_DYNAMIC_FSR))
       groups |= MESA_VK_GRAPHICS_STATE_FRAGMENT_SHADING_RATE_BIT;
@@ -124,6 +146,15 @@ fully_dynamic_state_groups(const BITSET_WORD *dynamic)
        BITSET_TEST(dynamic, MESA_VK_DYNAMIC_DS_STENCIL_WRITE_MASK) &&
        BITSET_TEST(dynamic, MESA_VK_DYNAMIC_DS_STENCIL_REFERENCE))
       groups |= MESA_VK_GRAPHICS_STATE_DEPTH_STENCIL_BIT;
+
+   if (BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_LOGIC_OP_ENABLE) &&
+       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_LOGIC_OP) &&
+       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_COLOR_WRITE_ENABLES) &&
+       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_BLEND_ENABLES) &&
+       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS) &&
+       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_WRITE_MASKS) &&
+       BITSET_TEST(dynamic, MESA_VK_DYNAMIC_CB_BLEND_CONSTANTS))
+      groups |= MESA_VK_GRAPHICS_STATE_COLOR_BLEND_BIT;
 
    return groups;
 }
@@ -203,6 +234,25 @@ vk_get_dynamic_graphics_states(BITSET_WORD *dynamic,
       CASE( PATCH_CONTROL_POINTS_EXT,     TS_PATCH_CONTROL_POINTS)
       CASE( LOGIC_OP_EXT,                 CB_LOGIC_OP)
       CASE( COLOR_WRITE_ENABLE_EXT,       CB_COLOR_WRITE_ENABLES)
+      CASE( TESSELLATION_DOMAIN_ORIGIN_EXT, TS_DOMAIN_ORIGIN)
+      CASE( DEPTH_CLAMP_ENABLE_EXT,       RS_DEPTH_CLAMP_ENABLE)
+      CASE( POLYGON_MODE_EXT,             RS_POLYGON_MODE)
+      CASE( RASTERIZATION_SAMPLES_EXT,    MS_RASTERIZATION_SAMPLES)
+      CASE( SAMPLE_MASK_EXT,              MS_SAMPLE_MASK)
+      CASE( ALPHA_TO_COVERAGE_ENABLE_EXT, MS_ALPHA_TO_COVERAGE_ENABLE)
+      CASE( ALPHA_TO_ONE_ENABLE_EXT,      MS_ALPHA_TO_ONE_ENABLE)
+      CASE( LOGIC_OP_ENABLE_EXT,          CB_LOGIC_OP_ENABLE)
+      CASE( COLOR_BLEND_ENABLE_EXT,       CB_BLEND_ENABLES)
+      CASE( COLOR_BLEND_EQUATION_EXT,     CB_BLEND_EQUATIONS)
+      CASE( COLOR_WRITE_MASK_EXT,         CB_WRITE_MASKS)
+      CASE( RASTERIZATION_STREAM_EXT,     RS_RASTERIZATION_STREAM)
+      CASE( CONSERVATIVE_RASTERIZATION_MODE_EXT, RS_CONSERVATIVE_MODE)
+      CASE( DEPTH_CLIP_ENABLE_EXT,        RS_DEPTH_CLIP_ENABLE)
+      CASE( SAMPLE_LOCATIONS_ENABLE_EXT,  MS_SAMPLE_LOCATIONS_ENABLE)
+      CASE( PROVOKING_VERTEX_MODE_EXT,    RS_PROVOKING_VERTEX)
+      CASE( LINE_RASTERIZATION_MODE_EXT,  RS_LINE_MODE)
+      CASE( LINE_STIPPLE_ENABLE_EXT,      RS_LINE_STIPPLE_ENABLE)
+      CASE( DEPTH_CLIP_NEGATIVE_ONE_TO_ONE_EXT, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE)
       default:
          unreachable("Unsupported dynamic graphics state");
       }
@@ -294,12 +344,16 @@ vk_input_assembly_state_init(struct vk_input_assembly_state *ia,
                              const BITSET_WORD *dynamic,
                              const VkPipelineInputAssemblyStateCreateInfo *ia_info)
 {
-   if (IS_DYNAMIC(IA_PRIMITIVE_TOPOLOGY)) {
-      ia->primitive_topology = -1;
-   } else {
-      assert(ia_info->topology <= UINT8_MAX);
-      ia->primitive_topology = ia_info->topology;
-   }
+   /* From the Vulkan 1.3.224 spec:
+    *
+    *    "VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY specifies that the topology
+    *    state in VkPipelineInputAssemblyStateCreateInfo only specifies the
+    *    topology class, and the specific topology order and adjacency must be
+    *    set dynamically with vkCmdSetPrimitiveTopology before any drawing
+    *    commands."
+   */
+   assert(ia_info->topology <= UINT8_MAX);
+   ia->primitive_topology = ia_info->topology;
 
    ia->primitive_restart_enable = ia_info->primitiveRestartEnable;
 }
@@ -324,14 +378,15 @@ vk_tessellation_state_init(struct vk_tessellation_state *ts,
       ts->patch_control_points = ts_info->patchControlPoints;
    }
 
-   const VkPipelineTessellationDomainOriginStateCreateInfo *ts_do_info =
-      vk_find_struct_const(ts_info->pNext,
-                           PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO);
-   if (ts_do_info != NULL) {
-      assert(ts_do_info->domainOrigin <= UINT8_MAX);
-      ts->domain_origin = ts_do_info->domainOrigin;
-   } else {
-      ts->domain_origin = VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
+   ts->domain_origin = VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
+   if (!IS_DYNAMIC(TS_DOMAIN_ORIGIN)) {
+      const VkPipelineTessellationDomainOriginStateCreateInfo *ts_do_info =
+         vk_find_struct_const(ts_info->pNext,
+                              PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO);
+      if (ts_do_info != NULL) {
+         assert(ts_do_info->domainOrigin <= UINT8_MAX);
+         ts->domain_origin = ts_do_info->domainOrigin;
+      }
    }
 }
 
@@ -340,7 +395,7 @@ vk_dynamic_graphics_state_init_ts(struct vk_dynamic_graphics_state *dst,
                                   const BITSET_WORD *needed,
                                   const struct vk_tessellation_state *ts)
 {
-   dst->ts.patch_control_points = ts->patch_control_points;
+   dst->ts = *ts;
 }
 
 static void
@@ -372,11 +427,13 @@ vk_viewport_state_init(struct vk_viewport_state *vp,
                    vp_info->scissorCount);
    }
 
-   const VkPipelineViewportDepthClipControlCreateInfoEXT *vp_dcc_info =
-      vk_find_struct_const(vp_info->pNext,
-                           PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT);
-   if (vp_dcc_info != NULL)
-      vp->negative_one_to_one = vp_dcc_info->negativeOneToOne;
+   if (!IS_DYNAMIC(VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE)) {
+      const VkPipelineViewportDepthClipControlCreateInfoEXT *vp_dcc_info =
+         vk_find_struct_const(vp_info->pNext,
+                              PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT);
+      if (vp_dcc_info != NULL)
+         vp->depth_clip_negative_one_to_one = vp_dcc_info->negativeOneToOne;
+   }
 }
 
 static void
@@ -391,6 +448,8 @@ vk_dynamic_graphics_state_init_vp(struct vk_dynamic_graphics_state *dst,
    dst->vp.scissor_count = vp->scissor_count;
    if (IS_NEEDED(VP_SCISSORS))
       typed_memcpy(dst->vp.scissors, vp->scissors, vp->scissor_count);
+
+   dst->vp.depth_clip_negative_one_to_one = vp->depth_clip_negative_one_to_one;
 }
 
 static void
@@ -403,11 +462,11 @@ vk_discard_rectangles_state_init(struct vk_discard_rectangles_state *dr,
    if (dr_info == NULL)
       return;
 
+   assert(dr_info->discardRectangleCount <= MESA_VK_MAX_DISCARD_RECTANGLES);
    dr->mode = dr_info->discardRectangleMode;
+   dr->rectangle_count = dr_info->discardRectangleCount;
 
    if (!IS_DYNAMIC(DR_RECTANGLES)) {
-      assert(dr_info->discardRectangleCount <= MESA_VK_MAX_DISCARD_RECTANGLES);
-      dr->rectangle_count = dr_info->discardRectangleCount;
       typed_memcpy(dr->rectangles, dr_info->pDiscardRectangles,
                    dr_info->discardRectangleCount);
    }
@@ -448,8 +507,14 @@ vk_rasterization_state_init(struct vk_rasterization_state *rs,
     *    depth clipping is disabled when
     *    VkPipelineRasterizationStateCreateInfo::depthClampEnable is VK_TRUE.
     */
-   rs->depth_clamp_enable = rs_info->depthClampEnable;
-   rs->depth_clip_enable = !rs_info->depthClampEnable;
+   if (IS_DYNAMIC(RS_DEPTH_CLAMP_ENABLE)) {
+      rs->depth_clip_enable = VK_MESA_DEPTH_CLIP_ENABLE_NOT_CLAMP;
+   } else {
+      rs->depth_clamp_enable = rs_info->depthClampEnable;
+      rs->depth_clip_enable = rs_info->depthClampEnable ?
+                              VK_MESA_DEPTH_CLIP_ENABLE_FALSE :
+                              VK_MESA_DEPTH_CLIP_ENABLE_TRUE;
+   }
 
    rs->polygon_mode = rs_info->polygonMode;
 
@@ -476,7 +541,9 @@ vk_rasterization_state_init(struct vk_rasterization_state *rs,
       case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT: {
          const VkPipelineRasterizationDepthClipStateCreateInfoEXT *rdc_info =
             (const VkPipelineRasterizationDepthClipStateCreateInfoEXT *)ext;
-         rs->depth_clip_enable = rdc_info->depthClipEnable;
+         rs->depth_clip_enable = rdc_info->depthClipEnable ?
+                                 VK_MESA_DEPTH_CLIP_ENABLE_TRUE :
+                                 VK_MESA_DEPTH_CLIP_ENABLE_FALSE;
          break;
       }
 
@@ -484,8 +551,9 @@ vk_rasterization_state_init(struct vk_rasterization_state *rs,
          const VkPipelineRasterizationLineStateCreateInfoEXT *rl_info =
             (const VkPipelineRasterizationLineStateCreateInfoEXT *)ext;
          rs->line.mode = rl_info->lineRasterizationMode;
-         rs->line.stipple.enable = rl_info->stippledLineEnable;
-         if (rs->line.stipple.enable && !IS_DYNAMIC(RS_LINE_STIPPLE)) {
+         if (!IS_DYNAMIC(RS_LINE_STIPPLE_ENABLE))
+            rs->line.stipple.enable = rl_info->stippledLineEnable;
+         if ((IS_DYNAMIC(RS_LINE_STIPPLE_ENABLE) || rs->line.stipple.enable) && !IS_DYNAMIC(RS_LINE_STIPPLE)) {
             rs->line.stipple.factor = rl_info->lineStippleFactor;
             rs->line.stipple.pattern = rl_info->lineStipplePattern;
          }
@@ -524,16 +592,7 @@ vk_dynamic_graphics_state_init_rs(struct vk_dynamic_graphics_state *dst,
                                   const BITSET_WORD *needed,
                                   const struct vk_rasterization_state *rs)
 {
-   dst->rs.rasterizer_discard_enable = rs->rasterizer_discard_enable;
-   dst->rs.cull_mode = rs->cull_mode;
-   dst->rs.front_face = rs->front_face;
-   dst->rs.depth_bias.enable = rs->depth_bias.enable;
-   dst->rs.depth_bias.constant = rs->depth_bias.constant;
-   dst->rs.depth_bias.clamp = rs->depth_bias.clamp;
-   dst->rs.depth_bias.slope = rs->depth_bias.slope;
-   dst->rs.line.width = rs->line.width;
-   dst->rs.line.stipple.factor = rs->line.stipple.factor;
-   dst->rs.line.stipple.pattern = rs->line.stipple.pattern;
+   dst->rs = *rs;
 }
 
 static void
@@ -591,6 +650,7 @@ vk_multisample_state_init(struct vk_multisample_state *ms,
                           const BITSET_WORD *dynamic,
                           const VkPipelineMultisampleStateCreateInfo *ms_info)
 {
+   assert(ms_info->rasterizationSamples <= MESA_VK_MAX_SAMPLES);
    ms->rasterization_samples = ms_info->rasterizationSamples;
    ms->sample_shading_enable = ms_info->sampleShadingEnable;
    ms->min_sample_shading = ms_info->minSampleShading;
@@ -616,7 +676,8 @@ needs_sample_locations_state(
    const VkPipelineSampleLocationsStateCreateInfoEXT *sl_info)
 {
    return !IS_DYNAMIC(MS_SAMPLE_LOCATIONS) &&
-          sl_info != NULL && sl_info->sampleLocationsEnable;
+          (IS_DYNAMIC(MS_SAMPLE_LOCATIONS_ENABLE) ||
+           (sl_info != NULL && sl_info->sampleLocationsEnable));
 }
 
 static void
@@ -628,14 +689,15 @@ vk_multisample_sample_locations_state_init(
    const VkPipelineSampleLocationsStateCreateInfoEXT *sl_info)
 {
    ms->sample_locations_enable =
-      sl_info != NULL && sl_info->sampleLocationsEnable;
+      IS_DYNAMIC(MS_SAMPLE_LOCATIONS_ENABLE) ||
+      (sl_info != NULL && sl_info->sampleLocationsEnable);
 
    assert(ms->sample_locations == NULL);
    if (!IS_DYNAMIC(MS_SAMPLE_LOCATIONS)) {
       if (ms->sample_locations_enable) {
          vk_sample_locations_state_init(sl, &sl_info->sampleLocationsInfo);
          ms->sample_locations = sl;
-      } else {
+      } else if (!IS_DYNAMIC(MS_RASTERIZATION_SAMPLES)) {
          /* Otherwise, pre-populate with the standard sample locations.  If
           * the driver doesn't support standard sample locations, it probably
           * doesn't support custom locations either and can completely ignore
@@ -652,6 +714,12 @@ vk_dynamic_graphics_state_init_ms(struct vk_dynamic_graphics_state *dst,
                                   const BITSET_WORD *needed,
                                   const struct vk_multisample_state *ms)
 {
+   dst->ms.rasterization_samples = ms->rasterization_samples;
+   dst->ms.sample_mask = ms->sample_mask;
+   dst->ms.alpha_to_coverage_enable = ms->alpha_to_coverage_enable;
+   dst->ms.alpha_to_one_enable = ms->alpha_to_one_enable;
+   dst->ms.sample_locations_enable = ms->sample_locations_enable;
+
    if (IS_NEEDED(MS_SAMPLE_LOCATIONS))
       *dst->ms.sample_locations = *ms->sample_locations;
 }
@@ -830,19 +898,20 @@ vk_color_blend_state_init(struct vk_color_blend_state *cb,
 
    assert(cb_info->attachmentCount <= MESA_VK_MAX_COLOR_ATTACHMENTS);
    cb->attachment_count = cb_info->attachmentCount;
+   /* pAttachments is ignored if any of these is not set */
+   bool full_dynamic = IS_DYNAMIC(CB_BLEND_ENABLES) && IS_DYNAMIC(CB_BLEND_EQUATIONS) && IS_DYNAMIC(CB_WRITE_MASKS);
    for (uint32_t a = 0; a < cb_info->attachmentCount; a++) {
-      const VkPipelineColorBlendAttachmentState *att =
-         &cb_info->pAttachments[a];
+      const VkPipelineColorBlendAttachmentState *att = full_dynamic ? NULL : &cb_info->pAttachments[a];
 
       cb->attachments[a] = (struct vk_color_blend_attachment_state) {
-         .blend_enable = att->blendEnable,
-         .src_color_blend_factor = att->srcColorBlendFactor,
-         .dst_color_blend_factor = att->dstColorBlendFactor,
-         .src_alpha_blend_factor = att->srcAlphaBlendFactor,
-         .dst_alpha_blend_factor = att->dstAlphaBlendFactor,
-         .write_mask = att->colorWriteMask,
-         .color_blend_op = att->colorBlendOp,
-         .alpha_blend_op = att->alphaBlendOp,
+         .blend_enable = IS_DYNAMIC(CB_BLEND_ENABLES) || att->blendEnable,
+         .src_color_blend_factor = IS_DYNAMIC(CB_BLEND_EQUATIONS) ? 0 : att->srcColorBlendFactor,
+         .dst_color_blend_factor = IS_DYNAMIC(CB_BLEND_EQUATIONS) ? 0 : att->dstColorBlendFactor,
+         .src_alpha_blend_factor = IS_DYNAMIC(CB_BLEND_EQUATIONS) ? 0 : att->srcAlphaBlendFactor,
+         .dst_alpha_blend_factor = IS_DYNAMIC(CB_BLEND_EQUATIONS) ? 0 : att->dstAlphaBlendFactor,
+         .write_mask = IS_DYNAMIC(CB_WRITE_MASKS) ? 0xf : att->colorWriteMask,
+         .color_blend_op = IS_DYNAMIC(CB_BLEND_EQUATIONS) ? 0 : att->colorBlendOp,
+         .alpha_blend_op = IS_DYNAMIC(CB_BLEND_EQUATIONS) ? 0 : att->alphaBlendOp,
       };
    }
 
@@ -867,8 +936,18 @@ vk_dynamic_graphics_state_init_cb(struct vk_dynamic_graphics_state *dst,
                                   const BITSET_WORD *needed,
                                   const struct vk_color_blend_state *cb)
 {
+   dst->cb.logic_op_enable = cb->logic_op_enable;
    dst->cb.logic_op = cb->logic_op;
    dst->cb.color_write_enables = cb->color_write_enables;
+
+   if (IS_NEEDED(CB_BLEND_ENABLES) ||
+       IS_NEEDED(CB_BLEND_EQUATIONS) ||
+       IS_NEEDED(CB_WRITE_MASKS)) {
+      dst->cb.attachment_count = cb->attachment_count;
+      typed_memcpy(dst->cb.attachments, cb->attachments, cb->attachment_count);
+   } else {
+      dst->cb.attachment_count = 0;
+   }
 
    if (IS_NEEDED(CB_BLEND_CONSTANTS))
       typed_memcpy(dst->cb.blend_constants, cb->blend_constants, 4);
@@ -962,6 +1041,17 @@ vk_render_pass_state_init(struct vk_render_pass_state *rp,
       rp->color_self_dependencies = rsd_info->colorSelfDependencies;
       rp->depth_self_dependency = rsd_info->depthSelfDependency;
       rp->stencil_self_dependency = rsd_info->stencilSelfDependency;
+   }
+
+   const VkAttachmentSampleCountInfoAMD *asc_info =
+      vk_get_pipeline_sample_count_info_amd(info);
+   if (asc_info != NULL) {
+      assert(asc_info->colorAttachmentCount == rp->color_attachment_count);
+      for (uint32_t i = 0; i < asc_info->colorAttachmentCount; i++) {
+         rp->color_attachment_samples[i] = asc_info->pColorAttachmentSamples[i];
+      }
+
+      rp->depth_stencil_attachment_samples = asc_info->depthStencilAttachmentSamples;
    }
 }
 
@@ -1409,7 +1499,8 @@ const struct vk_dynamic_graphics_state vk_default_dynamic_graphics_state = {
       },
    },
    .cb = {
-      .color_write_enables = 0xffffffffu,
+      .color_write_enables = 0xffu,
+      .attachment_count = MESA_VK_MAX_COLOR_ATTACHMENTS,
    },
 };
 
@@ -1542,6 +1633,7 @@ vk_dynamic_graphics_state_copy(struct vk_dynamic_graphics_state *dst,
    COPY_IF_SET(IA_PRIMITIVE_TOPOLOGY, ia.primitive_topology);
    COPY_IF_SET(IA_PRIMITIVE_RESTART_ENABLE, ia.primitive_restart_enable);
    COPY_IF_SET(TS_PATCH_CONTROL_POINTS, ts.patch_control_points);
+   COPY_IF_SET(TS_DOMAIN_ORIGIN, ts.domain_origin);
 
    COPY_IF_SET(VP_VIEWPORT_COUNT, vp.viewport_count);
    if (IS_SET_IN_SRC(VP_VIEWPORTS)) {
@@ -1555,19 +1647,31 @@ vk_dynamic_graphics_state_copy(struct vk_dynamic_graphics_state *dst,
       COPY_ARRAY(VP_SCISSORS, vp.scissors, src->vp.scissor_count);
    }
 
+   COPY_IF_SET(VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE,
+               vp.depth_clip_negative_one_to_one);
+
    if (IS_SET_IN_SRC(DR_RECTANGLES)) {
       COPY_MEMBER(DR_RECTANGLES, dr.rectangle_count);
       COPY_ARRAY(DR_RECTANGLES, dr.rectangles, src->dr.rectangle_count);
    }
 
    COPY_IF_SET(RS_RASTERIZER_DISCARD_ENABLE, rs.rasterizer_discard_enable);
+   COPY_IF_SET(RS_DEPTH_CLAMP_ENABLE, rs.depth_clamp_enable);
+   COPY_IF_SET(RS_DEPTH_CLIP_ENABLE, rs.depth_clip_enable);
+   COPY_IF_SET(RS_POLYGON_MODE, rs.polygon_mode);
    COPY_IF_SET(RS_CULL_MODE, rs.cull_mode);
    COPY_IF_SET(RS_FRONT_FACE, rs.front_face);
+   COPY_IF_SET(RS_CONSERVATIVE_MODE, rs.conservative_mode);
+   COPY_IF_SET(RS_RASTERIZATION_ORDER_AMD, rs.rasterization_order_amd);
+   COPY_IF_SET(RS_PROVOKING_VERTEX, rs.provoking_vertex);
+   COPY_IF_SET(RS_RASTERIZATION_STREAM, rs.rasterization_stream);
    COPY_IF_SET(RS_DEPTH_BIAS_ENABLE, rs.depth_bias.enable);
    COPY_IF_SET(RS_DEPTH_BIAS_FACTORS, rs.depth_bias.constant);
    COPY_IF_SET(RS_DEPTH_BIAS_FACTORS, rs.depth_bias.clamp);
    COPY_IF_SET(RS_DEPTH_BIAS_FACTORS, rs.depth_bias.slope);
    COPY_IF_SET(RS_LINE_WIDTH, rs.line.width);
+   COPY_IF_SET(RS_LINE_MODE, rs.line.mode);
+   COPY_IF_SET(RS_LINE_STIPPLE_ENABLE, rs.line.stipple.enable);
    COPY_IF_SET(RS_LINE_STIPPLE, rs.line.stipple.factor);
    COPY_IF_SET(RS_LINE_STIPPLE, rs.line.stipple.pattern);
 
@@ -1575,6 +1679,12 @@ vk_dynamic_graphics_state_copy(struct vk_dynamic_graphics_state *dst,
    COPY_IF_SET(FSR, fsr.fragment_size.height);
    COPY_IF_SET(FSR, fsr.combiner_ops[0]);
    COPY_IF_SET(FSR, fsr.combiner_ops[1]);
+
+   COPY_IF_SET(MS_RASTERIZATION_SAMPLES, ms.rasterization_samples);
+   COPY_IF_SET(MS_SAMPLE_MASK, ms.sample_mask);
+   COPY_IF_SET(MS_ALPHA_TO_COVERAGE_ENABLE, ms.alpha_to_coverage_enable);
+   COPY_IF_SET(MS_ALPHA_TO_ONE_ENABLE, ms.alpha_to_one_enable);
+   COPY_IF_SET(MS_SAMPLE_LOCATIONS_ENABLE, ms.sample_locations_enable);
 
    assert((dst->ms.sample_locations == NULL) ==
           (src->ms.sample_locations == NULL));
@@ -1622,8 +1732,31 @@ vk_dynamic_graphics_state_copy(struct vk_dynamic_graphics_state *dst,
       COPY_MEMBER(DS_STENCIL_REFERENCE, ds.stencil.back.reference);
    }
 
+   COPY_IF_SET(CB_LOGIC_OP_ENABLE, cb.logic_op_enable);
    COPY_IF_SET(CB_LOGIC_OP, cb.logic_op);
    COPY_IF_SET(CB_COLOR_WRITE_ENABLES, cb.color_write_enables);
+   if (IS_SET_IN_SRC(CB_BLEND_ENABLES)) {
+      for (uint32_t a = 0; a < src->cb.attachment_count; a++)
+         COPY_MEMBER(CB_BLEND_ENABLES, cb.attachments[a].blend_enable);
+   }
+   if (IS_SET_IN_SRC(CB_BLEND_EQUATIONS)) {
+      for (uint32_t a = 0; a < src->cb.attachment_count; a++) {
+         COPY_MEMBER(CB_BLEND_EQUATIONS,
+                     cb.attachments[a].src_color_blend_factor);
+         COPY_MEMBER(CB_BLEND_EQUATIONS,
+                     cb.attachments[a].dst_color_blend_factor);
+         COPY_MEMBER(CB_BLEND_EQUATIONS,
+                     cb.attachments[a].src_alpha_blend_factor);
+         COPY_MEMBER(CB_BLEND_EQUATIONS,
+                     cb.attachments[a].dst_alpha_blend_factor);
+         COPY_MEMBER(CB_BLEND_EQUATIONS, cb.attachments[a].color_blend_op);
+         COPY_MEMBER(CB_BLEND_EQUATIONS, cb.attachments[a].alpha_blend_op);
+      }
+   }
+   if (IS_SET_IN_SRC(CB_WRITE_MASKS)) {
+      for (uint32_t a = 0; a < src->cb.attachment_count; a++)
+         COPY_MEMBER(CB_WRITE_MASKS, cb.attachments[a].write_mask);
+   }
    if (IS_SET_IN_SRC(CB_BLEND_CONSTANTS))
       COPY_ARRAY(CB_BLEND_CONSTANTS, cb.blend_constants, 4);
 
@@ -1749,6 +1882,16 @@ vk_common_CmdSetPatchControlPointsEXT(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetTessellationDomainOriginEXT(VkCommandBuffer commandBuffer,
+                                            VkTessellationDomainOrigin domainOrigin)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, TS_DOMAIN_ORIGIN, ts.domain_origin, domainOrigin);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdSetViewport(VkCommandBuffer commandBuffer,
                          uint32_t firstViewport,
                          uint32_t viewportCount,
@@ -1799,6 +1942,17 @@ vk_common_CmdSetScissorWithCount(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetDepthClipNegativeOneToOneEXT(VkCommandBuffer commandBuffer,
+                                             VkBool32 negativeOneToOne)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_BOOL(dyn, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE,
+                vp.depth_clip_negative_one_to_one, negativeOneToOne);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdSetDiscardRectangleEXT(VkCommandBuffer commandBuffer,
                                     uint32_t firstDiscardRectangle,
                                     uint32_t discardRectangleCount,
@@ -1824,6 +1978,39 @@ vk_common_CmdSetRasterizerDiscardEnableEXT(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetDepthClampEnableEXT(VkCommandBuffer commandBuffer,
+                                    VkBool32 depthClampEnable)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_BOOL(dyn, RS_DEPTH_CLAMP_ENABLE,
+                rs.depth_clamp_enable, depthClampEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetDepthClipEnableEXT(VkCommandBuffer commandBuffer,
+                                   VkBool32 depthClipEnable)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, RS_DEPTH_CLIP_ENABLE, rs.depth_clip_enable,
+                 depthClipEnable ? VK_MESA_DEPTH_CLIP_ENABLE_TRUE :
+                                   VK_MESA_DEPTH_CLIP_ENABLE_FALSE);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetPolygonModeEXT(VkCommandBuffer commandBuffer,
+                               VkPolygonMode polygonMode)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_BOOL(dyn, RS_POLYGON_MODE, rs.polygon_mode, polygonMode);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdSetCullMode(VkCommandBuffer commandBuffer,
                          VkCullModeFlags cullMode)
 {
@@ -1841,6 +2028,40 @@ vk_common_CmdSetFrontFace(VkCommandBuffer commandBuffer,
    struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
 
    SET_DYN_VALUE(dyn, RS_FRONT_FACE, rs.front_face, frontFace);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetConservativeRasterizationModeEXT(
+   VkCommandBuffer commandBuffer,
+   VkConservativeRasterizationModeEXT conservativeRasterizationMode)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, RS_CONSERVATIVE_MODE, rs.conservative_mode,
+                 conservativeRasterizationMode);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetProvokingVertexModeEXT(VkCommandBuffer commandBuffer,
+                                       VkProvokingVertexModeEXT provokingVertexMode)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, RS_PROVOKING_VERTEX,
+                 rs.provoking_vertex, provokingVertexMode);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetRasterizationStreamEXT(VkCommandBuffer commandBuffer,
+                                       uint32_t rasterizationStream)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, RS_PROVOKING_VERTEX,
+                 rs.rasterization_stream, rasterizationStream);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1882,6 +2103,27 @@ vk_common_CmdSetLineWidth(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetLineRasterizationModeEXT(VkCommandBuffer commandBuffer,
+                                         VkLineRasterizationModeEXT lineRasterizationMode)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, RS_LINE_MODE, rs.line.mode, lineRasterizationMode);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetLineStippleEnableEXT(VkCommandBuffer commandBuffer,
+                                     VkBool32 stippledLineEnable)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_BOOL(dyn, RS_LINE_STIPPLE_ENABLE,
+                rs.line.stipple.enable, stippledLineEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdSetLineStippleEXT(VkCommandBuffer commandBuffer,
                                uint32_t lineStippleFactor,
                                uint16_t lineStipplePattern)
@@ -1907,6 +2149,54 @@ vk_common_CmdSetFragmentShadingRateKHR(VkCommandBuffer commandBuffer,
    SET_DYN_VALUE(dyn, FSR, fsr.fragment_size.height, pFragmentSize->height);
    SET_DYN_VALUE(dyn, FSR, fsr.combiner_ops[0], combinerOps[0]);
    SET_DYN_VALUE(dyn, FSR, fsr.combiner_ops[1], combinerOps[1]);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetRasterizationSamplesEXT(VkCommandBuffer commandBuffer,
+                                        VkSampleCountFlagBits rasterizationSamples)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   assert(rasterizationSamples <= MESA_VK_MAX_SAMPLES);
+
+   SET_DYN_VALUE(dyn, MS_RASTERIZATION_SAMPLES,
+                 ms.rasterization_samples, rasterizationSamples);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetSampleMaskEXT(VkCommandBuffer commandBuffer,
+                              VkSampleCountFlagBits samples,
+                              const VkSampleMask *pSampleMask)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   assert(samples <= MESA_VK_MAX_SAMPLES);
+
+   SET_DYN_VALUE(dyn, MS_SAMPLE_MASK, ms.sample_mask, *pSampleMask);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetAlphaToCoverageEnableEXT(VkCommandBuffer commandBuffer,
+                                         VkBool32 alphaToCoverageEnable)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, MS_ALPHA_TO_COVERAGE_ENABLE,
+                 ms.alpha_to_coverage_enable, alphaToCoverageEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetAlphaToOneEnableEXT(VkCommandBuffer commandBuffer,
+                                    VkBool32 alphaToOneEnable)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, MS_ALPHA_TO_ONE_ENABLE,
+                 ms.alpha_to_one_enable, alphaToOneEnable);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2099,6 +2389,16 @@ vk_common_CmdSetStencilReference(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetLogicOpEnableEXT(VkCommandBuffer commandBuffer,
+                                 VkBool32 logicOpEnable)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_BOOL(dyn, CB_LOGIC_OP_ENABLE, cb.logic_op_enable, logicOpEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdSetLogicOpEXT(VkCommandBuffer commandBuffer,
                            VkLogicOp logicOp)
 {
@@ -2126,6 +2426,81 @@ vk_common_CmdSetColorWriteEnableEXT(VkCommandBuffer commandBuffer,
 
    SET_DYN_VALUE(dyn, CB_COLOR_WRITE_ENABLES,
                  cb.color_write_enables, color_write_enables);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetColorBlendEnableEXT(VkCommandBuffer commandBuffer,
+                                    uint32_t firstAttachment,
+                                    uint32_t attachmentCount,
+                                    const VkBool32 *pColorBlendEnables)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   for (uint32_t i = 0; i < attachmentCount; i++) {
+      uint32_t a = firstAttachment + i;
+      assert(a < ARRAY_SIZE(dyn->cb.attachments));
+
+      SET_DYN_BOOL(dyn, CB_BLEND_ENABLES,
+                   cb.attachments[a].blend_enable, pColorBlendEnables[i]);
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetColorBlendEquationEXT(VkCommandBuffer commandBuffer,
+                                      uint32_t firstAttachment,
+                                      uint32_t attachmentCount,
+                                      const VkColorBlendEquationEXT *pColorBlendEquations)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   for (uint32_t i = 0; i < attachmentCount; i++) {
+      uint32_t a = firstAttachment + i;
+      assert(a < ARRAY_SIZE(dyn->cb.attachments));
+
+      SET_DYN_VALUE(dyn, CB_BLEND_EQUATIONS,
+                    cb.attachments[a].src_color_blend_factor,
+                    pColorBlendEquations[i].srcColorBlendFactor);
+
+      SET_DYN_VALUE(dyn, CB_BLEND_EQUATIONS,
+                    cb.attachments[a].dst_color_blend_factor,
+                    pColorBlendEquations[i].dstColorBlendFactor);
+
+      SET_DYN_VALUE(dyn, CB_BLEND_EQUATIONS,
+                    cb.attachments[a].color_blend_op,
+                    pColorBlendEquations[i].colorBlendOp);
+
+      SET_DYN_VALUE(dyn, CB_BLEND_EQUATIONS,
+                    cb.attachments[a].src_alpha_blend_factor,
+                    pColorBlendEquations[i].srcAlphaBlendFactor);
+
+      SET_DYN_VALUE(dyn, CB_BLEND_EQUATIONS,
+                    cb.attachments[a].dst_alpha_blend_factor,
+                    pColorBlendEquations[i].dstAlphaBlendFactor);
+
+      SET_DYN_VALUE(dyn, CB_BLEND_EQUATIONS,
+                    cb.attachments[a].alpha_blend_op,
+                    pColorBlendEquations[i].alphaBlendOp);
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetColorWriteMaskEXT(VkCommandBuffer commandBuffer,
+                                  uint32_t firstAttachment,
+                                  uint32_t attachmentCount,
+                                  const VkColorComponentFlags *pColorWriteMasks)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   for (uint32_t i = 0; i < attachmentCount; i++) {
+      uint32_t a = firstAttachment + i;
+      assert(a < ARRAY_SIZE(dyn->cb.attachments));
+
+      SET_DYN_VALUE(dyn, CB_BLEND_EQUATIONS,
+                    cb.attachments[a].write_mask, pColorWriteMasks[i]);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL

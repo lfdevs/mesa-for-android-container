@@ -1,25 +1,161 @@
 ############### LAVA
-# Run three jobs in parallel each running 1/30th of the test suite
-radv_stoney_vkcts:amd64:
+# job prefixes: radeonsi (OpenGL), radv (Vulkan), amd (radeonsi+radv)
+.stoney-test:amd64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEQP_EXPECTED_RENDERER: STONEY
+    DTB: ""
+    FDO_CI_CONCURRENT: 3
+    HWCI_FREQ_MAX: "true"
+    HWCI_KERNEL_MODULES: amdgpu
+    KERNEL_IMAGE_TYPE: ""
+
+.radeonsi-stoney-test:amd64:
   extends:
-    - .lava-test:amd64
+    - .stoney-test:amd64
+    - .radeonsi-rules
+  variables:
+    GPU_VERSION: radeonsi-stoney
+    DRIVER_NAME: radeonsi
+    # 12 devices (2022-10-12)
+    RUNNER_TAG: mesa-ci-x86-64-lava-acer-R721T-grunt
+    DEVICE_TYPE: acer-R721T-grunt
+
+.radv-stoney-test:amd64:
+  extends:
+    - .stoney-test:amd64
     - .radv-rules
-  parallel: 3
   variables:
     DEQP_VER: vk
-    DEQP_FRACTION: 10
-    FDO_CI_CONCURRENT: 4
-    DEQP_EXPECTED_RENDERER: STONEY
-    DEVICE_TYPE: hp-11A-G6-EE-grunt
-    DTB: ""
-    GPU_VERSION: radv-stoney-aco
-    BOOT_METHOD: depthcharge
-    KERNEL_IMAGE_TYPE: ""
-    HWCI_KERNEL_MODULES: amdgpu
-    HWCI_FREQ_MAX: "true"
-    VK_DRIVER: radeon
     DRIVER_NAME: radv
+    GPU_VERSION: radv-stoney-aco
+    VK_DRIVER: radeon
+    # 10 devices (2022-10-12)
+    DEVICE_TYPE: hp-11A-G6-EE-grunt
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-11A-G6-EE-grunt
+
+# Run ten jobs in parallel each running 1/40th of the test suite
+radv-stoney-vkcts:amd64:
+  extends:
+    - .lava-test:amd64
+    - .radv-stoney-test:amd64
+  parallel: 10
+  variables:
+    DEQP_FRACTION: 4
+
+radeonsi-stoney-gl:amd64:
+  extends:
+    - .lava-test:amd64
+    - .radeonsi-stoney-test:amd64
+  parallel: 11
+  variables:
+    DEQP_SUITE: radeonsi-stoney
+    HWCI_START_XORG: 1
+
+radeonsi-stoney-traces:amd64:
+  extends:
+    - .lava-piglit-traces:amd64
+    - .radeonsi-stoney-test:amd64
+  variables:
+    EGL_PLATFORM: surfaceless
+    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-amd.yml"
+    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
+
+# 5 devices (2022-10-19)
+.raven-test:amd64:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: lenovo-TPad-C13-Yoga-zork
+    DTB: ""
+    HWCI_FREQ_MAX: "true"
+    HWCI_KERNEL_MODULES: amdgpu
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-lenovo-TPad-C13-Yoga-zork
+
+.radeonsi-raven-test:amd64:
+  extends:
+    - .raven-test:amd64
+    - .radeonsi-rules
+  variables:
+    GPU_VERSION: radeonsi-raven
+    DRIVER_NAME: radeonsi
+
+.radv-raven-test:amd64:
+  extends:
+    - .raven-test:amd64
+    - .radv-rules
+  variables:
+    GPU_VERSION: radv-raven
+    VK_DRIVER: radeon
+
+.amd-raven-test:amd64:
+  extends:
+    - .raven-test:amd64
+    - .radeonsi+radv-rules
+  variables:
+    DRIVER_NAME: radeonsi
+    GPU_VERSION: amd-raven
+    VK_DRIVER: radeon
+
+amd-raven-skqp:amd64:
+  extends:
+    - .lava-test:amd64
+    - .amd-raven-test:amd64
+    - .skqp-test
+  variables:
+    # Possible skqp backends: gl, gles, unitTest and vk
+    SKQP_BACKENDS: gl gles vk unitTest  # space separated values
+
+.radv-traces:
+  extends:
+    - .lava-piglit-traces:amd64
+  variables:
+    HWCI_START_XORG: 1
+    PIGLIT_PLATFORM: mixed_glx_egl  # TODO, take wine/VK in account
+    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-amd.yml"
+    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
+
+radv-raven-traces:amd64:
+  extends:
+    - .radv-traces
+    - .radv-raven-test:amd64
+  variables:
+    PIGLIT_REPLAY_DEVICE_NAME: "vk-${GPU_VERSION}"
+
+radeonsi-raven-piglit-quick_gl:amd64:
+  extends:
+    - .lava-piglit:amd64
+    - .radeonsi-raven-test:amd64
+  variables:
+    PIGLIT_PLATFORM: mixed_glx_egl
+    PIGLIT_PROFILES: quick_gl
+    HWCI_START_XORG: 1
+
+radeonsi-raven-piglit-quick_shader:amd64:
+  extends:
+    - radeonsi-raven-piglit-quick_gl:amd64
+  variables:
+    PIGLIT_PROFILES: quick_shader
+
+radeonsi-raven-va:amd64:
+  extends:
+    - .lava-test:amd64
+    - .radeonsi-raven-test:amd64
+    - .radeonsi-vaapi-rules
+  variables:
+    HWCI_TEST_SCRIPT: "/install/gtest-runner.sh"
+    # While the tests don't need Xorg, it's an easy way to keep DRM open so we don't
+    # spend all our time in drm_lastclose()'s modesetting.
+    HWCI_START_XORG: 1
+    GTEST: test_va_api
+    # The big 10-surface 10k allocations oomkill us at around 2.5G of GPU memory
+    # allocated if we run at the normal 4 threads.
+    # https://github.com/intel/libva-utils/issues/248
+    FDO_CI_CONCURRENT: 1
+    # A whole run would be about 25 minutes currently.  Fixing
+    # https://github.com/intel/libva-utils/issues/247 and
+    # https://github.com/google/googletest/issues/3614 would probably help.
+    GTEST_FRACTION: 2
 
 ############### Valve Infra
 .test-radv:
@@ -105,7 +241,7 @@ radv_stoney_vkcts:amd64:
 
 .navi21-test-valve:
   variables:
-    FDO_CI_CONCURRENT: 16
+    FDO_CI_CONCURRENT: 32
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
     - amdgpu:codename:NAVI21
@@ -115,6 +251,7 @@ radv_stoney_vkcts:amd64:
     FDO_CI_CONCURRENT: 8
     B2C_TIMEOUT_BOOT_MINUTES: 85
     B2C_TIMEOUT_OVERALL_MINUTES: 120
+    B2C_TIMEOUT_MINUTES: 3
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
     - amdgpu:codename:VANGOGH
@@ -131,7 +268,7 @@ radv_stoney_vkcts:amd64:
     - .deqp-test-valve
   variables:
     DEQP_VER: vk
-    RADV_PERFTEST: nv_ms
+    RADV_PERFTEST: nv_ms,ext_ms
 
 # VKCTS never finishes on gfx7 due to all the GPU resets and hangs.
 # Hence, disable it for now.
@@ -166,7 +303,7 @@ vkcts-kabini-valve:
   tags:
     - amdgpu:codename:STONEY
 
-vkcts-polaris10-valve:
+.vkcts-polaris10-valve:
   extends:
     - .vkcts-test-valve
     - .polaris10-test-valve
@@ -196,6 +333,7 @@ vkcts-navi10-valve:
     GPU_VERSION: radv-navi10-aco
 
 vkcts-navi21-valve:
+  parallel: 2
   extends:
     - .vkcts-test-valve
     - .navi21-test-valve
@@ -211,6 +349,7 @@ vkcts-navi21-llvm-valve:
     RADV_DEBUG: llvm,checkir
 
 vkcts-vangogh-valve:
+  parallel: 2
   extends:
     - .vkcts-test-valve
     - .vangogh-test-valve
@@ -243,6 +382,27 @@ glcts-navi10-valve:
 gles-navi10-valve:
   extends:
     - .gles-test-valve
+    - .navi10-test-valve
+  variables:
+    GPU_VERSION: zink-radv
+
+############### piglit
+.piglit-test-valve:
+  extends:
+    - .b2c-test-radv-gl
+    # Keep all the piglit jobs as manual trigger jobs for now, until we
+    # have enough resources to meet the throughput requirements for
+    # automatic pre-merge in the Mesa CI.
+    - .test-manual-mr
+  variables:
+    B2C_JOB_SUCCESS_REGEX: '^\+ PIGLIT_EXITCODE=0\r$'
+    B2C_TEST_SCRIPT: ./install/piglit/piglit-runner.sh
+    PIGLIT_PROFILES: all
+    PIGLIT_PLATFORM: gbm
+
+piglit-navi10-valve:
+  extends:
+    - .piglit-test-valve
     - .navi10-test-valve
   variables:
     GPU_VERSION: zink-radv
@@ -288,14 +448,14 @@ radv-fossils:
     B2C_JOB_SUCCESS_REGEX: 'SUCCESS: No changes found!\r$'
     B2C_TEST_SCRIPT: ./install/vkd3d-proton/run.sh
 
-vkd3d-kabini-valve:
+.vkd3d-kabini-valve:
   extends:
     - .vkd3d-test-valve
     - .kabini-test-valve
   variables:
     VKD3D_PROTON_RESULTS: radv-kabini-vkd3d
 
-vkd3d-polaris10-valve:
+.vkd3d-polaris10-valve:
   extends:
     - .vkd3d-test-valve
     - .polaris10-test-valve

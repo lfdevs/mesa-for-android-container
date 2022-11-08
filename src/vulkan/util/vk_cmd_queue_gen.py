@@ -78,7 +78,6 @@ struct vk_device_dispatch_table;
 struct vk_cmd_queue {
    const VkAllocationCallbacks *alloc;
    struct list_head cmds;
-   VkResult error;
 };
 
 enum vk_cmd_type {
@@ -141,7 +140,7 @@ struct vk_cmd_queue_entry {
 % if c.guard is not None:
 #ifdef ${c.guard}
 % endif
-  void vk_enqueue_${to_underscore(c.name)}(struct vk_cmd_queue *queue
+  VkResult vk_enqueue_${to_underscore(c.name)}(struct vk_cmd_queue *queue
 % for p in c.params[1:]:
    , ${p.decl}
 % endfor
@@ -159,7 +158,6 @@ vk_cmd_queue_init(struct vk_cmd_queue *queue, VkAllocationCallbacks *alloc)
 {
    queue->alloc = alloc;
    list_inithead(&queue->cmds);
-   queue->error = VK_SUCCESS;
 }
 
 static inline void
@@ -167,7 +165,6 @@ vk_cmd_queue_reset(struct vk_cmd_queue *queue)
 {
    vk_free_queue(queue);
    list_inithead(&queue->cmds);
-   queue->error = VK_SUCCESS;
 }
 
 static inline void
@@ -236,46 +233,48 @@ struct vk_cmd_queue_entry *cmd)
 }
 
 % if c.name not in manual_commands and c.name not in no_enqueue_commands:
-void vk_enqueue_${to_underscore(c.name)}(struct vk_cmd_queue *queue
+VkResult vk_enqueue_${to_underscore(c.name)}(struct vk_cmd_queue *queue
 % for p in c.params[1:]:
 , ${p.decl}
 % endfor
 )
 {
-   if (queue->error)
-      return;
-
    struct vk_cmd_queue_entry *cmd = vk_zalloc(queue->alloc,
                                               sizeof(*cmd), 8,
                                               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (!cmd) goto err;
+   if (!cmd) return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    cmd->type = ${to_enum_name(c.name)};
-
+   \
+   <% need_error_handling = False %>
 % for p in c.params[1:]:
 % if p.len:
    if (${p.name}) {
       ${get_array_copy(c, p)}
-   }
+   }\
+   <% need_error_handling = True %>
 % elif '[' in p.decl:
    memcpy(cmd->u.${to_struct_field_name(c.name)}.${to_field_name(p.name)}, ${p.name},
           sizeof(*${p.name}) * ${get_array_len(p)});
 % elif p.type == "void":
    cmd->u.${to_struct_field_name(c.name)}.${to_field_name(p.name)} = (${remove_suffix(p.decl.replace("const", ""), p.name)}) ${p.name};
 % elif '*' in p.decl:
-   ${get_struct_copy("cmd->u.%s.%s" % (to_struct_field_name(c.name), to_field_name(p.name)), p.name, p.type, 'sizeof(%s)' % p.type, types)}
+   ${get_struct_copy("cmd->u.%s.%s" % (to_struct_field_name(c.name), to_field_name(p.name)), p.name, p.type, 'sizeof(%s)' % p.type, types)}\
+   <% need_error_handling = True %>
 % else:
    cmd->u.${to_struct_field_name(c.name)}.${to_field_name(p.name)} = ${p.name};
 % endif
 % endfor
 
    list_addtail(&cmd->cmd_link, &queue->cmds);
-   return;
+   return VK_SUCCESS;
 
+% if need_error_handling:
 err:
-   queue->error = VK_ERROR_OUT_OF_HOST_MEMORY;
    if (cmd)
       vk_free_${to_underscore(c.name)}(queue, cmd);
+   return VK_ERROR_OUT_OF_HOST_MEMORY;
+% endif
 }
 % endif
 % if c.guard is not None:
@@ -351,12 +350,16 @@ vk_cmd_enqueue_${c.name}(${c.decl_params()})
 {
    VK_FROM_HANDLE(vk_command_buffer, cmd_buffer, commandBuffer);
 
+   if (vk_command_buffer_has_error(cmd_buffer))
+      return;
 % if len(c.params) == 1:
-   vk_enqueue_${to_underscore(c.name)}(&cmd_buffer->cmd_queue);
+   VkResult result = vk_enqueue_${to_underscore(c.name)}(&cmd_buffer->cmd_queue);
 % else:
-   vk_enqueue_${to_underscore(c.name)}(&cmd_buffer->cmd_queue,
+   VkResult result = vk_enqueue_${to_underscore(c.name)}(&cmd_buffer->cmd_queue,
                                        ${c.call_params(1)});
 % endif
+   if (unlikely(result != VK_SUCCESS))
+      vk_command_buffer_set_error(cmd_buffer, result);
 }
 % endif
 
@@ -422,9 +425,9 @@ def get_array_copy(command, param):
         field_size = "1"
     else:
         field_size = "sizeof(*%s)" % field_name
-    allocation = "%s = vk_zalloc(queue->alloc, %s * %s, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);\n   if (%s == NULL) goto err;\n" % (field_name, field_size, param.len, field_name)
+    allocation = "%s = vk_zalloc(queue->alloc, %s * (%s), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);\n   if (%s == NULL) goto err;\n" % (field_name, field_size, param.len, field_name)
     const_cast = remove_suffix(param.decl.replace("const", ""), param.name)
-    copy = "memcpy((%s)%s, %s, %s * %s);" % (const_cast, field_name, param.name, field_size, param.len)
+    copy = "memcpy((%s)%s, %s, %s * (%s));" % (const_cast, field_name, param.name, field_size, param.len)
     return "%s\n   %s" % (allocation, copy)
 
 def get_array_member_copy(struct, src_name, member):
@@ -510,7 +513,7 @@ def get_types(doc):
             mem_type = p.find('./type').text
             mem_name = p.find('./name').text
             mem_decl = ''.join(p.itertext())
-            mem_len = p.attrib.get('len', None)
+            mem_len = p.attrib.get('altlen', p.attrib.get('len', None))
             if mem_len is None and '*' in mem_decl and mem_name != 'pNext':
                 mem_len = "struct-ptr"
 

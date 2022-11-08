@@ -35,7 +35,7 @@
 #include "glapi.h"
 #include "glxclient.h"
 #include "indirect.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 
 #ifndef GLX_USE_APPLEGL
 
@@ -338,7 +338,7 @@ indirect_create_context_attribs(struct glx_screen *psc,
       return NULL;
    }
    gc->client_state_private = state;
-   state->NoDrawArraysProtocol = env_var_as_boolean("LIBGL_NO_DRAWARRAYS", false);
+   state->NoDrawArraysProtocol = debug_get_bool_option("LIBGL_NO_DRAWARRAYS", false);
 
    /*
     ** Create a temporary buffer to hold GLX rendering commands.  The size

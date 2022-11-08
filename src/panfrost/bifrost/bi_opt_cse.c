@@ -47,7 +47,6 @@ hash_index(uint32_t hash, bi_index index)
         hash = HASH(hash, index.neg);
         hash = HASH(hash, index.swizzle);
         hash = HASH(hash, index.offset);
-        hash = HASH(hash, index.reg);
         hash = HASH(hash, index.type);
         return hash;
 }
@@ -60,6 +59,10 @@ hash_instr(const void *data)
         uint32_t hash = 0;
 
         hash = HASH(hash, I->op);
+        hash = HASH(hash, I->nr_dests);
+        hash = HASH(hash, I->nr_srcs);
+
+        assert(!I->flow && !I->slot && "CSE must be early");
 
         /* Explcitly skip destinations, except for size details */
         bi_foreach_dest(I, d) {
@@ -87,8 +90,9 @@ instrs_equal(const void *_i1, const void *_i2)
 {
         const bi_instr *i1 = _i1, *i2 = _i2;
 
-	if (i1->op != i2->op)
-		return false;
+        if (i1->op != i2->op) return false;
+        if (i1->nr_srcs != i2->nr_srcs) return false;
+        if (i1->nr_dests != i2->nr_dests) return false;
 
         /* Explicitly skip destinations */
 
@@ -135,22 +139,6 @@ instr_can_cse(const bi_instr *I)
         if (I->branch_target)
                 return false;
 
-        /* Refuse to CSE non-SSA destinations since the data flow analysis
-         * required is nontrivial */
-        bi_foreach_dest(I, d) {
-                if (!bi_is_null(I->dest[d]) && !bi_is_ssa(I->dest[d]))
-                        return false;
-        }
-
-        /* Similar refuse to CSE non-SSA sources. We allow machine registers,
-         * since CSE runs before register allocation which means any registers
-         * encountered are preloaded and hence assumed constant.
-         */
-        bi_foreach_src(I, s) {
-                if (I->src[s].reg)
-                        return false;
-        }
-
         return true;
 }
 
@@ -166,16 +154,13 @@ bi_opt_cse(bi_context *ctx)
                 bi_foreach_instr_in_block(block, instr) {
                         /* Rewrite before trying to CSE anything so we converge
                          * locally in one iteration */
-                        bi_foreach_src(instr, s) {
+                        bi_foreach_ssa_src(instr, s) {
                                 if (bi_is_staging_src(instr, s))
-                                        continue;
-
-                                if (!bi_is_ssa(instr->src[s]))
                                         continue;
 
                                 bi_index repl = replacement[instr->src[s].value];
                                 if (!bi_is_null(repl))
-                                        instr->src[s] = bi_replace_index(instr->src[s], repl);
+                                        bi_replace_src(instr, s, repl);
                         }
 
                         if (!instr_can_cse(instr))
@@ -188,8 +173,7 @@ bi_opt_cse(bi_context *ctx)
                                 const bi_instr *match = entry->key;
 
                                 bi_foreach_dest(instr, d) {
-                                        if (!bi_is_null(instr->dest[d]))
-                                                replacement[instr->dest[d].value] = match->dest[d];
+                                        replacement[instr->dest[d].value] = match->dest[d];
                                 }
                         }
                 }

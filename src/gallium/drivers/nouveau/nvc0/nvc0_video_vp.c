@@ -44,7 +44,8 @@ static void dump_comm_vp(struct nouveau_vp3_decoder *dec, struct comm *comm, u32
 
    if ((comm->pvp_stage & 0xff) != 0xff) {
       unsigned *map;
-      int ret = nouveau_bo_map(inter_bo, NOUVEAU_BO_RD|NOUVEAU_BO_NOBLOCK, dec->client);
+      int ret = BO_MAP(nouveau_screen(dec->base.context->screen), inter_bo,
+                       NOUVEAU_BO_RD|NOUVEAU_BO_NOBLOCK, dec->client);
       assert(ret >= 0);
       map = inter_bo->map;
       for (i = 0; i < comm->byte_ofs + slice_size; i += 0x10) {
@@ -111,9 +112,9 @@ nvc0_decoder_vp(struct nouveau_vp3_decoder *dec, union pipe_desc desc,
    if (!is_ref && (dec->refs[target->valid_ref].decoded_top && dec->refs[target->valid_ref].decoded_bottom))
       nvc0_decoder_kick_ref(dec, target);
 
-   nouveau_pushbuf_space(push, 32 + codec_extra, num_refs, 0);
+   PUSH_SPACE_EX(push, 32 + codec_extra, num_refs, 0);
 
-   nouveau_pushbuf_refn(push, bo_refs, num_refs);
+   PUSH_REFN(push, bo_refs, num_refs);
 
    bsp_addr = bsp_bo->offset >> 8;
 #if NOUVEAU_VP3_DEBUG_FENCE

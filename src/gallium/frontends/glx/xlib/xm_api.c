@@ -73,16 +73,10 @@
 #include "main/errors.h"
 #include "main/mtypes.h"
 
-#include "xm_public.h"
 #include <GL/glx.h>
 
-
-/* Driver interface routines, set up by xlib backend on library
- * _init().  These are global in the same way that function names are
- * global.
- */
-static struct xm_driver driver;
-static struct st_api *stapi;
+extern struct pipe_screen *
+xlib_create_screen(Display *display);
 
 /* Default strict invalidate to false.  This means we will not call
  * XGetGeometry after every swapbuffers, which allows swapbuffers to
@@ -104,17 +98,13 @@ static struct st_api *stapi;
  * invalidation.  Xcb almost looks as if it could provide this, but
  * the API doesn't seem to quite be there.
  */
-boolean xmesa_strict_invalidate = FALSE;
+DEBUG_GET_ONCE_BOOL_OPTION(xmesa_strict_invalidate, "XMESA_STRICT_INVALIDATE", false)
 
-void xmesa_set_driver( const struct xm_driver *templ )
+bool
+xmesa_strict_invalidate(void)
 {
-   driver = *templ;
-   stapi = driver.create_st_api();
-
-   xmesa_strict_invalidate =
-      debug_get_bool_option("XMESA_STRICT_INVALIDATE", FALSE);
+   return debug_get_option_xmesa_strict_invalidate();
 }
-
 
 static int
 xmesa_get_param(struct st_manager *smapi,
@@ -122,7 +112,7 @@ xmesa_get_param(struct st_manager *smapi,
 {
    switch(param) {
    case ST_MANAGER_BROKEN_INVALIDATE:
-      return !xmesa_strict_invalidate;
+      return !xmesa_strict_invalidate();
    default:
       return 0;
    }
@@ -244,7 +234,7 @@ xmesa_init_display( Display *display )
       return NULL;
    }
 
-   xmdpy->screen = driver.create_pipe_screen(display);
+   xmdpy->screen = xlib_create_screen(display);
    if (!xmdpy->screen) {
       free(xmdpy->smapi);
       Xfree(info);
@@ -607,7 +597,7 @@ xmesa_free_buffer(XMesaBuffer buffer)
          /* Notify the st manager that the associated framebuffer interface
           * object is no longer valid.
           */
-         stapi->destroy_drawable(stapi, buffer->stfb);
+         st_api_destroy_drawable(buffer->stfb);
 
          /* XXX we should move the buffer to a delete-pending list and destroy
           * the buffer until it is no longer current.
@@ -914,7 +904,7 @@ void XMesaDestroyVisual( XMesaVisual v )
 const char *
 xmesa_get_name(void)
 {
-   return stapi->name;
+   return "Mesa " PACKAGE_VERSION;
 }
 
 
@@ -1014,7 +1004,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
       goto no_st;
    }
 
-   c->st = stapi->create_context(stapi, xmdpy->smapi, &attribs,
+   c->st = st_api_create_context(xmdpy->smapi, &attribs,
          &ctx_err, (share_list) ? share_list->st : NULL);
    if (c->st == NULL)
       goto no_st;
@@ -1298,7 +1288,7 @@ GLboolean XMesaMakeCurrent2( XMesaContext c, XMesaBuffer drawBuffer,
       c->xm_buffer = drawBuffer;
       c->xm_read_buffer = readBuffer;
 
-      stapi->make_current(stapi, c->st,
+      st_api_make_current(c->st,
                           drawBuffer ? drawBuffer->stfb : NULL,
                           readBuffer ? readBuffer->stfb : NULL);
 
@@ -1308,7 +1298,7 @@ GLboolean XMesaMakeCurrent2( XMesaContext c, XMesaBuffer drawBuffer,
    }
    else {
       /* Detach */
-      stapi->make_current(stapi, NULL, NULL, NULL);
+      st_api_make_current(NULL, NULL, NULL);
 
    }
    return GL_TRUE;
@@ -1327,7 +1317,7 @@ GLboolean XMesaUnbindContext( XMesaContext c )
 
 XMesaContext XMesaGetCurrentContext( void )
 {
-   struct st_context_iface *st = stapi->get_current(stapi);
+   struct st_context_iface *st = st_api_get_current();
    return (XMesaContext) (st) ? st->st_manager_private : NULL;
 }
 
@@ -1470,7 +1460,7 @@ PUBLIC void
 XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
                   const int *attrib_list)
 {
-   struct st_context_iface *st = stapi->get_current(stapi);
+   struct st_context_iface *st = st_api_get_current();
    struct st_framebuffer_iface* stfbi = drawable->stfb;
    struct pipe_resource *res;
    int x, y, w, h;

@@ -205,6 +205,96 @@ lcra_count_constraints(struct lcra_state *l, unsigned i)
         return count;
 }
 
+/* Liveness analysis is a backwards-may dataflow analysis pass. Within a block,
+ * we compute live_out from live_in. The intrablock pass is linear-time. It
+ * returns whether progress was made. */
+
+static void
+bi_liveness_ins_update_ra(uint8_t *live, bi_instr *ins)
+{
+        /* live_in[s] = GEN[s] + (live_out[s] - KILL[s]) */
+
+        bi_foreach_dest(ins, d) {
+                live[ins->dest[d].value] &= ~bi_writemask(ins, d);
+        }
+
+        bi_foreach_ssa_src(ins, src) {
+                unsigned count = bi_count_read_registers(ins, src);
+                unsigned rmask = BITFIELD_MASK(count);
+
+                live[ins->src[src].value] |= (rmask << ins->src[src].offset);
+        }
+}
+
+static bool
+liveness_block_update(bi_block *blk, unsigned temp_count)
+{
+        bool progress = false;
+
+        /* live_out[s] = sum { p in succ[s] } ( live_in[p] ) */
+        bi_foreach_successor(blk, succ) {
+                for (unsigned i = 0; i < temp_count; ++i)
+                        blk->live_out[i] |= succ->live_in[i];
+        }
+
+        uint8_t *live = ralloc_array(blk, uint8_t, temp_count);
+        memcpy(live, blk->live_out, temp_count);
+
+        bi_foreach_instr_in_block_rev(blk, ins)
+                bi_liveness_ins_update_ra(live, ins);
+
+        /* To figure out progress, diff live_in */
+
+        for (unsigned i = 0; (i < temp_count) && !progress; ++i)
+                progress |= (blk->live_in[i] != live[i]);
+
+        ralloc_free(blk->live_in);
+        blk->live_in = live;
+
+        return progress;
+}
+
+/* Globally, liveness analysis uses a fixed-point algorithm based on a
+ * worklist. We initialize a work list with the exit block. We iterate the work
+ * list to compute live_in from live_out for each block on the work list,
+ * adding the predecessors of the block to the work list if we made progress.
+ */
+
+static void
+bi_compute_liveness_ra(bi_context *ctx)
+{
+        u_worklist worklist;
+        bi_worklist_init(ctx, &worklist);
+
+        bi_foreach_block(ctx, block) {
+                if (block->live_in)
+                        ralloc_free(block->live_in);
+
+                if (block->live_out)
+                        ralloc_free(block->live_out);
+
+                block->live_in = rzalloc_array(block, uint8_t, ctx->ssa_alloc);
+                block->live_out = rzalloc_array(block, uint8_t, ctx->ssa_alloc);
+
+                bi_worklist_push_tail(&worklist, block);
+        }
+
+        while (!u_worklist_is_empty(&worklist)) {
+                /* Pop off in reverse order since liveness is backwards */
+                bi_block *blk = bi_worklist_pop_tail(&worklist);
+
+                /* Update liveness information. If we made progress, we need to
+                 * reprocess the predecessors
+                 */
+                if (liveness_block_update(blk, ctx->ssa_alloc)) {
+                        bi_foreach_predecessor(blk, pred)
+                                bi_worklist_push_head(&worklist, *pred);
+                }
+        }
+
+        u_worklist_fini(&worklist);
+}
+
 /* Construct an affinity mask such that the vector with `count` elements does
  * not intersect any of the registers in the bitset `clobber`. In other words,
  * an allocated register r needs to satisfy for each i < count: a + i != b.
@@ -254,10 +344,7 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live, uint6
                  * interfering with the destination */
 
                 bi_foreach_dest(ins, d) {
-                        unsigned node = bi_get_node(ins->dest[d]);
-
-                        if (node >= node_count)
-                                continue;
+                        unsigned node = ins->dest[d].value;
 
                         /* Don't allocate to anything that's read later as a
                          * preloaded register. The affinity is the intersection
@@ -285,7 +372,8 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live, uint6
                                  * coalescing.
                                  */
                                 if (ins->op == BI_OPCODE_MOV_I32 &&
-                                    i == bi_get_node(ins->src[0])) {
+                                    bi_is_ssa(ins->src[0]) &&
+                                    i == ins->src[0].value) {
 
                                         r &= ~BITFIELD_BIT(ins->src[0].offset);
                                 }
@@ -296,8 +384,8 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live, uint6
                                 }
                         }
 
-                        unsigned node_first = bi_get_node(ins->dest[0]);
-                        if (d == 1 && node_first < node_count) {
+                        unsigned node_first = ins->dest[0].value;
+                        if (d == 1) {
                                 lcra_add_node_interference(l, node, bi_writemask(ins, 1),
                                                            node_first, bi_writemask(ins, 0));
                         }
@@ -305,13 +393,9 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live, uint6
 
                 /* Valhall needs >= 64-bit reads to be pair-aligned */
                 if (aligned_sr) {
-                        bi_foreach_src(ins, s) {
-                                if (bi_count_read_registers(ins, s) >= 2) {
-                                        unsigned node = bi_get_node(ins->src[s]);
-
-                                        if (node < node_count)
-                                                l->affinity[node] &= EVEN_BITS_MASK;
-                                }
+                        bi_foreach_ssa_src(ins, s) {
+                                if (bi_count_read_registers(ins, s) >= 2)
+                                        l->affinity[ins->src[s].value] &= EVEN_BITS_MASK;
                         }
                 }
 
@@ -327,7 +411,7 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live, uint6
 
                 /* Update live_in */
                 preload_live = bi_postra_liveness_ins(preload_live, ins);
-                bi_liveness_ins_update(live, ins, node_count);
+                bi_liveness_ins_update_ra(live, ins);
         }
 
         block->reg_live_in = preload_live;
@@ -336,17 +420,15 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live, uint6
 static void
 bi_compute_interference(bi_context *ctx, struct lcra_state *l, bool full_regs)
 {
-        unsigned node_count = bi_max_temp(ctx);
-
-        bi_compute_liveness(ctx);
+        bi_compute_liveness_ra(ctx);
         bi_postra_liveness(ctx);
 
         bi_foreach_block_rev(ctx, blk) {
-                uint8_t *live = mem_dup(blk->live_out, node_count);
+                uint8_t *live = mem_dup(blk->live_out, ctx->ssa_alloc);
 
                 bi_mark_interference(blk, l, live, blk->reg_live_out,
-                                node_count, ctx->inputs->is_blend, !full_regs,
-                                ctx->arch >= 9);
+                                ctx->ssa_alloc, ctx->inputs->is_blend,
+                                !full_regs, ctx->arch >= 9);
 
                 free(live);
         }
@@ -355,8 +437,7 @@ bi_compute_interference(bi_context *ctx, struct lcra_state *l, bool full_regs)
 static struct lcra_state *
 bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
 {
-        unsigned node_count = bi_max_temp(ctx);
-        struct lcra_state *l = lcra_alloc_equations(node_count);
+        struct lcra_state *l = lcra_alloc_equations(ctx->ssa_alloc);
 
         /* Blend shaders are restricted to R0-R15. Other shaders at full
          * occupancy also can access R48-R63. At half occupancy they can access
@@ -372,40 +453,29 @@ bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
                 default_affinity &= BITFIELD64_MASK(48) << 8;
 
         bi_foreach_instr_global(ctx, ins) {
-                bi_foreach_dest(ins, d) {
-                        unsigned dest = bi_get_node(ins->dest[d]);
-
-                        if (dest < node_count)
-                                l->affinity[dest] = default_affinity;
-                }
+                bi_foreach_dest(ins, d)
+                        l->affinity[ins->dest[d].value] = default_affinity;
 
                 /* Blend shaders expect the src colour to be in r0-r3 */
                 if (ins->op == BI_OPCODE_BLEND &&
                     !ctx->inputs->is_blend) {
-                        unsigned node = bi_get_node(ins->src[0]);
-                        assert(node < node_count);
-                        l->solutions[node] = 0;
+                        assert(bi_is_ssa(ins->src[0]));
+                        l->solutions[ins->src[0].value] = 0;
 
                         /* Dual source blend input in r4-r7 */
-                        node = bi_get_node(ins->src[4]);
-                        if (node < node_count)
-                                l->solutions[node] = 4;
+                        if (bi_is_ssa(ins->src[4]))
+                                l->solutions[ins->src[4].value] = 4;
 
                         /* Writes to R48 */
-                        node = bi_get_node(ins->dest[0]);
-                        if (!bi_is_null(ins->dest[0])) {
-                                assert(node < node_count);
-                                l->solutions[node] = 48;
-                        }
+                        if (!bi_is_null(ins->dest[0]))
+                                l->solutions[ins->dest[0].value] = 48;
                 }
 
                 /* Coverage mask writes stay in R60 */
                 if ((ins->op == BI_OPCODE_ATEST ||
                      ins->op == BI_OPCODE_ZS_EMIT) &&
                     !bi_is_null(ins->dest[0])) {
-                        unsigned node = bi_get_node(ins->dest[0]);
-                        assert(node < node_count);
-                        l->solutions[node] = 60;
+                        l->solutions[ins->dest[0].value] = 60;
                 }
 
                 /* Experimentally, it seems coverage masks inputs to ATEST must
@@ -414,9 +484,8 @@ bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
                  * settings is legal if depth/stencil writes are disabled).
                  */
                 if (ins->op == BI_OPCODE_ATEST) {
-                        unsigned node = bi_get_node(ins->src[0]);
-                        assert(node < node_count);
-                        l->solutions[node] = 60;
+                        assert(bi_is_ssa(ins->src[0]));
+                        l->solutions[ins->src[0].value] = 60;
                 }
         }
 
@@ -430,8 +499,7 @@ bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
                 if (I->src[0].type != BI_INDEX_REGISTER) continue;
 
                 unsigned reg = I->src[0].value;
-                unsigned node = bi_get_node(I->dest[0]);
-                assert(node < node_count);
+                unsigned node = I->dest[0].value;
 
                 if (l->solutions[node] != ~0) continue;
 
@@ -465,16 +533,15 @@ bi_reg_from_index(bi_context *ctx, struct lcra_state *l, bi_index index)
 
         ASSERTED bool is_offset = (index.offset > 0) &&
                 (index.type != BI_INDEX_FAU);
-        unsigned node_count = bi_max_temp(ctx);
 
         /* Did we run RA for this index at all */
-        if (bi_get_node(index) >= node_count) {
+        if (!bi_is_ssa(index)) {
                 assert(!is_offset);
                 return index;
         }
 
         /* LCRA didn't bother solving this index (how lazy!) */
-        signed solution = l->solutions[bi_get_node(index)];
+        signed solution = l->solutions[index.value];
         if (solution < 0) {
                 assert(!is_offset);
                 return index;
@@ -517,7 +584,7 @@ bi_install_registers(bi_context *ctx, struct lcra_state *l)
                 bi_foreach_src(ins, s)
                         ins->src[s] = bi_reg_from_index(ctx, l, ins->src[s]);
 
-                if (ins->op == BI_OPCODE_TEXC && !bi_is_null(ins->dest[1]))
+                if (ins->op == BI_OPCODE_TEXC_DUAL)
                         bi_fixup_dual_tex_register(ins);
         }
 }
@@ -528,7 +595,6 @@ bi_rewrite_index_src_single(bi_instr *ins, bi_index old, bi_index new)
         bi_foreach_src(ins, i) {
                 if (bi_is_equiv(ins->src[i], old)) {
                         ins->src[i].type = new.type;
-                        ins->src[i].reg = new.reg;
                         ins->src[i].value = new.value;
                 }
         }
@@ -544,11 +610,6 @@ bi_choose_spill_node(bi_context *ctx, struct lcra_state *l)
 
         bi_foreach_instr_global(ctx, ins) {
                 bi_foreach_dest(ins, d) {
-                        unsigned node = bi_get_node(ins->dest[d]);
-
-                        if (node >= l->node_count)
-                                continue;
-
                         /* Don't allow spilling coverage mask writes because the
                          * register preload logic assumes it will stay in R60.
                          * This could be optimized.
@@ -559,7 +620,7 @@ bi_choose_spill_node(bi_context *ctx, struct lcra_state *l)
                             (ins->op == BI_OPCODE_MOV_I32 &&
                              ins->src[0].type == BI_INDEX_REGISTER &&
                              ins->src[0].value == 60)) {
-                                BITSET_SET(no_spill, node);
+                                BITSET_SET(no_spill, ins->dest[d].value);
                         }
                 }
         }
@@ -707,7 +768,7 @@ bi_spill_register(bi_context *ctx, bi_index index, uint32_t offset)
  * these vector moves.
  */
 static void
-bi_lower_vector(bi_context *ctx)
+bi_lower_vector(bi_context *ctx, unsigned first_reg)
 {
         bi_index *remap = calloc(ctx->ssa_alloc, sizeof(bi_index));
 
@@ -718,14 +779,11 @@ bi_lower_vector(bi_context *ctx)
                         bi_index src = I->src[0];
                         assert(src.offset == 0);
 
-                        for (unsigned i = 0; i < I->nr_dests; ++i) {
-                                if (bi_is_null(I->dest[i]))
-                                        continue;
-
+                        bi_foreach_dest(I, i) {
                                 src.offset = i;
                                 bi_mov_i32_to(&b, I->dest[i], src);
 
-                                if (bi_is_ssa(I->dest[i]))
+                                if (I->dest[i].value < first_reg)
                                         remap[I->dest[i].value] = src;
                         }
 
@@ -733,9 +791,9 @@ bi_lower_vector(bi_context *ctx)
                 } else if (I->op == BI_OPCODE_COLLECT_I32) {
                         bi_index dest = I->dest[0];
                         assert(dest.offset == 0);
-                        assert((bi_is_ssa(dest) || I->nr_srcs == 1) && "nir_lower_phis_to_scalar");
+                        assert(((dest.value < first_reg) || I->nr_srcs == 1) && "nir_lower_phis_to_scalar");
 
-                        for (unsigned i = 0; i < I->nr_srcs; ++i) {
+                        bi_foreach_src(I, i) {
                                 if (bi_is_null(I->src[i]))
                                         continue;
 
@@ -748,16 +806,42 @@ bi_lower_vector(bi_context *ctx)
         }
 
         bi_foreach_instr_global(ctx, I) {
-                bi_foreach_src(I, s) {
-                        if (bi_is_ssa(I->src[s]) && !bi_is_null(remap[I->src[s].value]))
-                                I->src[s] = bi_replace_index(I->src[s], remap[I->src[s].value]);
+                bi_foreach_ssa_src(I, s) {
+                        if (I->src[s].value < first_reg && !bi_is_null(remap[I->src[s].value]))
+                                bi_replace_src(I, s, remap[I->src[s].value]);
                 }
         }
 
         free(remap);
 
         /* After generating a pile of moves, clean up */
-        bi_opt_dead_code_eliminate(ctx);
+        bi_compute_liveness_ra(ctx);
+
+        bi_foreach_block_rev(ctx, block) {
+                uint8_t *live = rzalloc_array(block, uint8_t, ctx->ssa_alloc);
+
+                bi_foreach_successor(block, succ) {
+                        for (unsigned i = 0; i < ctx->ssa_alloc; ++i)
+                                live[i] |= succ->live_in[i];
+                }
+
+                bi_foreach_instr_in_block_safe_rev(block, ins) {
+                        bool all_null = true;
+
+                        bi_foreach_dest(ins, d) {
+                                if (live[ins->dest[d].value] & bi_writemask(ins, d))
+                                        all_null = false;
+                        }
+
+                        if (all_null && !bi_side_effects(ins))
+                                bi_remove_instruction(ins);
+                        else
+                                bi_liveness_ins_update_ra(live, ins);
+                }
+
+                ralloc_free(block->live_in);
+                block->live_in = live;
+        }
 }
 
 /*
@@ -771,13 +855,12 @@ bi_lower_vector(bi_context *ctx)
 static bool
 bi_is_tied(const bi_instr *I)
 {
-        if (bi_is_null(I->src[0]))
-                return false;
-
         return (I->op == BI_OPCODE_TEXC ||
+                I->op == BI_OPCODE_TEXC_DUAL ||
                 I->op == BI_OPCODE_ATOM_RETURN_I32 ||
                 I->op == BI_OPCODE_AXCHG_I32 ||
-                I->op == BI_OPCODE_ACMPXCHG_I32);
+                I->op == BI_OPCODE_ACMPXCHG_I32) &&
+                !bi_is_null(I->src[0]);
 }
 
 /*
@@ -804,7 +887,7 @@ bi_coalesce_tied(bi_context *ctx)
                         bi_mov_i32_to(&b, dst, src);
                 }
 
-                I->src[0] = bi_replace_index(I->src[0], I->dest[0]);
+                bi_replace_src(I, 0, I->dest[0]);
         }
 }
 
@@ -828,18 +911,147 @@ squeeze_index(bi_context *ctx)
         ctx->ssa_alloc = 0;
 
         bi_foreach_instr_global(ctx, I) {
-                bi_foreach_dest(I, d) {
-                        if (I->dest[d].type == BI_INDEX_NORMAL)
-                                I->dest[d].value = find_or_allocate_temp(map, I->dest[d].value, &ctx->ssa_alloc);
-                }
+                bi_foreach_dest(I, d)
+                        I->dest[d].value = find_or_allocate_temp(map, I->dest[d].value, &ctx->ssa_alloc);
 
-                bi_foreach_src(I, s) {
-                        if (I->src[s].type == BI_INDEX_NORMAL)
-                                I->src[s].value = find_or_allocate_temp(map, I->src[s].value, &ctx->ssa_alloc);
-                }
+                bi_foreach_ssa_src(I, s)
+                        I->src[s].value = find_or_allocate_temp(map, I->src[s].value, &ctx->ssa_alloc);
         }
 
         ralloc_free(map);
+}
+
+/*
+ * Brainless out-of-SSA pass. The eventual goal is to go out-of-SSA after RA and
+ * coalesce implicitly with biased colouring in a tree scan allocator. For now,
+ * this should be good enough for LCRA.
+ */
+static unsigned
+bi_out_of_ssa(bi_context *ctx)
+{
+        bi_index zero = bi_fau(BIR_FAU_IMMEDIATE | 0, false);
+        unsigned first_reg = ctx->ssa_alloc;
+
+        /* Trivially lower phis */
+        bi_foreach_block(ctx, block) {
+                bi_foreach_instr_in_block_safe(block, I) {
+                        if (I->op != BI_OPCODE_PHI)
+                                break;
+
+                        /* Assign a register for the phi */
+                        bi_index reg = bi_temp(ctx);
+                        assert(reg.value >= first_reg);
+
+                        /* Lower to a move in each predecessor. The destinations
+                         * cannot interfere so these can be sequentialized
+                         * in arbitrary order.
+                         */
+                        bi_foreach_predecessor(block, pred) {
+                                bi_builder b = bi_init_builder(ctx, bi_after_block_logical(*pred));
+                                unsigned i = bi_predecessor_index(block, *pred);
+
+                                assert(!I->src[i].abs);
+                                assert(!I->src[i].neg);
+                                assert(I->src[i].swizzle == BI_SWIZZLE_H01);
+
+                                /* MOV of immediate needs lowering on Valhall */
+                                if (ctx->arch >= 9 && I->src[i].type == BI_INDEX_CONSTANT)
+                                        bi_iadd_imm_i32_to(&b, reg, zero, I->src[i].value);
+                                else
+                                        bi_mov_i32_to(&b, reg, I->src[i]);
+                        }
+
+                        /* Replace the phi with a move */
+                        bi_builder b = bi_init_builder(ctx, bi_before_instr(I));
+                        bi_mov_i32_to(&b, I->dest[0], reg);
+                        bi_remove_instruction(I);
+
+                        /* Propagate that move within the block. The destination
+                         * is SSA and the source is not written in this block,
+                         * so this is legal. The move itself will be DCE'd if
+                         * possible in the next pass.
+                         */
+                        bi_foreach_instr_in_block_rev(block, prop) {
+                                if (prop->op == BI_OPCODE_PHI)
+                                        break;
+
+                                bi_foreach_src(prop, s) {
+                                        if (bi_is_equiv(prop->src[s], I->dest[0])) {
+                                                bi_replace_src(prop, s, reg);
+                                        }
+                                }
+                        }
+                }
+        }
+
+        /* Try to locally propagate the moves we created. We need to be extra
+         * careful because we're not in SSA at this point, as such this
+         * algorithm is quadratic. This will go away when we go out of SSA after
+         * RA.
+         */
+        BITSET_WORD *used = calloc(sizeof(BITSET_WORD), BITSET_WORDS(ctx->ssa_alloc));
+        BITSET_WORD *multiple_uses = calloc(sizeof(BITSET_WORD), BITSET_WORDS(ctx->ssa_alloc));
+
+        bi_foreach_instr_global(ctx, I) {
+                bi_foreach_ssa_src(I, s) {
+                        if (BITSET_TEST(used, I->src[s].value))
+                                BITSET_SET(multiple_uses, I->src[s].value);
+                        else
+                                BITSET_SET(used, I->src[s].value);
+                }
+        }
+
+        bi_foreach_block(ctx, block) {
+                bi_foreach_instr_in_block_safe_rev(block, mov) {
+                        /* Match "reg = ssa" */
+                        if (mov->op != BI_OPCODE_MOV_I32) continue;
+                        if (mov->dest[0].type != BI_INDEX_NORMAL) continue;
+                        if (mov->dest[0].value < first_reg) continue;
+                        if (!bi_is_ssa(mov->src[0])) continue;
+                        if (mov->src[0].value >= first_reg) continue;
+                        if (BITSET_TEST(multiple_uses, mov->src[0].value)) continue;
+
+                        bool found = false;
+
+                        /* Look locally for the write of the SSA */
+                        bi_foreach_instr_in_block_rev(block, I) {
+                                bool bail = false;
+
+                                bi_foreach_src(I, s) {
+                                        /* Bail: write-after-read */
+                                        if (bi_is_equiv(I->src[s], mov->dest[0]))
+                                                bail = true;
+                                }
+
+                                if (bail)
+                                        break;
+
+                                bi_foreach_dest(I, d) {
+                                        /* Bail: write-after-write */
+                                        if (bi_is_equiv(I->dest[d], mov->dest[0]))
+                                                break;
+
+                                        if (!bi_is_equiv(I->dest[d], mov->src[0]))
+                                                continue;
+
+                                        /* We found it, replace */
+                                        I->dest[d] = bi_replace_index(I->dest[d], mov->dest[0]);
+                                        found = true;
+                                        break;
+                                }
+
+                                if (found)
+                                        break;
+                        }
+
+                        if (found)
+                                bi_remove_instruction(mov);
+                }
+        }
+
+        free(used);
+        free(multiple_uses);
+        return first_reg;
 }
 
 void
@@ -856,9 +1068,9 @@ bi_register_allocate(bi_context *ctx)
         if (ctx->arch >= 9)
                 va_lower_split_64bit(ctx);
 
-        bi_lower_vector(ctx);
-
         /* Lower tied operands. SSA is broken from here on. */
+        unsigned first_reg = bi_out_of_ssa(ctx);
+        bi_lower_vector(ctx, first_reg);
         bi_coalesce_tied(ctx);
         squeeze_index(ctx);
 
@@ -900,8 +1112,7 @@ bi_register_allocate(bi_context *ctx)
                                 spill_count = ALIGN_POT(spill_count, 16);
 
                         spill_count += bi_spill_register(ctx,
-                                        bi_node_to_index(spill_node, bi_max_temp(ctx)),
-                                        spill_count);
+                                        bi_get_index(spill_node), spill_count);
 
                         /* In case the spill affected an instruction with tied
                          * operands, we need to fix up.

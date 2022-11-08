@@ -104,7 +104,6 @@ typedef uint32_t xcb_window_t;
    (MAX_DYNAMIC_UNIFORM_BUFFERS + MAX_DYNAMIC_STORAGE_BUFFERS)
 #define MAX_SAMPLES_LOG2 4
 #define NUM_META_FS_KEYS 13
-#define PANVK_MAX_DRM_DEVICES 1
 #define MAX_VIEWS 8
 
 #define NUM_DEPTH_CLEAR_PIPELINES 3
@@ -212,8 +211,6 @@ struct panvk_instance {
    struct vk_instance vk;
 
    uint32_t api_version;
-   int physical_device_count;
-   struct panvk_physical_device physical_devices[PANVK_MAX_DRM_DEVICES];
 
    enum panvk_debug_flags debug_flags;
 };
@@ -776,8 +773,6 @@ struct panvk_cmd_buffer {
    struct panvk_descriptor_set meta_push_descriptors;
 
    struct panvk_cmd_bind_point_state bind_points[MAX_BIND_POINTS];
-
-   VkResult record_result;
 };
 
 #define panvk_cmd_get_bind_point_state(cmdbuf, bindpoint) \

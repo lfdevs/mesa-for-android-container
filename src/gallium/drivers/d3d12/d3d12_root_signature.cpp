@@ -208,10 +208,18 @@ create_root_signature(struct d3d12_context *ctx, struct d3d12_root_signature_key
       root_sig_desc.Desc_1_1.Flags |= D3D12_ROOT_SIGNATURE_FLAG_ALLOW_STREAM_OUTPUT;
 
    ComPtr<ID3DBlob> sig, error;
-   if (FAILED(ctx->D3D12SerializeVersionedRootSignature(&root_sig_desc,
-                                                        &sig, &error))) {
-      debug_printf("D3D12SerializeRootSignature failed\n");
-      return NULL;
+   if (ctx->dev_config) {
+      if (FAILED(ctx->dev_config->SerializeVersionedRootSignature(&root_sig_desc,
+                                                                  &sig, &error))) {
+         debug_printf("D3D12SerializeRootSignature failed\n");
+         return NULL;
+      }
+   } else {
+      if (FAILED(ctx->D3D12SerializeVersionedRootSignature(&root_sig_desc,
+                                                           &sig, &error))) {
+         debug_printf("D3D12SerializeRootSignature failed\n");
+         return NULL;
+      }
    }
 
    ID3D12RootSignature *ret;

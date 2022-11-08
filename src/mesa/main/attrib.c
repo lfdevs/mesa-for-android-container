@@ -423,10 +423,8 @@ pop_enable_group(struct gl_context *ctx, const struct gl_enable_attrib_node *ena
                    GL_RASTER_POSITION_UNCLIPPED_IBM);
    TEST_AND_UPDATE(ctx->Point.SmoothFlag, enable->PointSmooth,
                    GL_POINT_SMOOTH);
-   if (ctx->Extensions.ARB_point_sprite) {
-      TEST_AND_UPDATE(ctx->Point.PointSprite, enable->PointSprite,
-                      GL_POINT_SPRITE);
-   }
+   TEST_AND_UPDATE(ctx->Point.PointSprite, enable->PointSprite,
+                   GL_POINT_SPRITE);
    TEST_AND_UPDATE(ctx->Polygon.OffsetPoint, enable->PolygonOffsetPoint,
                    GL_POLYGON_OFFSET_POINT);
    TEST_AND_UPDATE(ctx->Polygon.OffsetLine, enable->PolygonOffsetLine,
@@ -939,18 +937,16 @@ _mesa_PopAttrib(void)
       TEST_AND_CALL1_SEL(Point.MaxSize, PointParameterf, GL_POINT_SIZE_MAX_EXT);
       TEST_AND_CALL1_SEL(Point.Threshold, PointParameterf, GL_POINT_FADE_THRESHOLD_SIZE_EXT);
 
-      if (ctx->Extensions.ARB_point_sprite) {
-         if (ctx->Point.CoordReplace != attr->Point.CoordReplace) {
-            ctx->NewState |= _NEW_POINT | _NEW_FF_VERT_PROGRAM;
-            ctx->Point.CoordReplace = attr->Point.CoordReplace;
-         }
-         TEST_AND_UPDATE(ctx->Point.PointSprite, attr->Point.PointSprite,
-                         GL_POINT_SPRITE);
-
-         if ((ctx->API == API_OPENGL_COMPAT && ctx->Version >= 20)
-             || ctx->API == API_OPENGL_CORE)
-            TEST_AND_CALL1_SEL(Point.SpriteOrigin, PointParameterf, GL_POINT_SPRITE_COORD_ORIGIN);
+      if (ctx->Point.CoordReplace != attr->Point.CoordReplace) {
+         ctx->NewState |= _NEW_POINT | _NEW_FF_VERT_PROGRAM;
+         ctx->Point.CoordReplace = attr->Point.CoordReplace;
       }
+      TEST_AND_UPDATE(ctx->Point.PointSprite, attr->Point.PointSprite,
+                      GL_POINT_SPRITE);
+
+      if ((ctx->API == API_OPENGL_COMPAT && ctx->Version >= 20)
+          || ctx->API == API_OPENGL_CORE)
+         TEST_AND_CALL1_SEL(Point.SpriteOrigin, PointParameterf, GL_POINT_SPRITE_COORD_ORIGIN);
    }
 
    if (mask & GL_POLYGON_BIT) {

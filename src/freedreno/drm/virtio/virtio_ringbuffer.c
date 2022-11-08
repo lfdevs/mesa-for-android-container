@@ -36,6 +36,8 @@ retire_execute(void *job, void *gdata, int thread_index)
 {
    struct fd_submit_sp *fd_submit = job;
 
+   MESA_TRACE_FUNC();
+
    sync_wait(fd_submit->out_fence_fd, -1);
    close(fd_submit->out_fence_fd);
 }
@@ -55,6 +57,8 @@ flush_submit_list(struct list_head *submit_list)
    struct fd_device *dev = virtio_pipe->base.dev;
 
    unsigned nr_cmds = 0;
+
+   MESA_TRACE_FUNC();
 
    /* Determine the number of extra cmds's from deferred submits that
     * we will be merging in:

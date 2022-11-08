@@ -25,6 +25,8 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#define FD_BO_NO_HARDPIN 1
+
 #include "pipe/p_state.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
@@ -52,8 +54,7 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
 
    OUT_REG(ring, A6XX_GRAS_CL_CNTL(.znear_clip_disable = !cso->depth_clip_near,
                                    .zfar_clip_disable = !cso->depth_clip_far,
-                                   .unk5 = !cso->depth_clip_near ||
-                                           !cso->depth_clip_far,
+                                   .z_clamp_enable = cso->depth_clamp,
                                    .vp_clip_code_ignore = 1,
                                    .zero_gb_scale_z = cso->clip_halfz));
 

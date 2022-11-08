@@ -101,8 +101,13 @@ bool
 tiling_possible(VkFormat format);
 
 bool
-ubwc_possible(VkFormat format, VkImageType type, VkImageUsageFlags usage, VkImageUsageFlags stencil_usage,
-              const struct fd_dev_info *info, VkSampleCountFlagBits samples,
+ubwc_possible(struct tu_device *device,
+              VkFormat format,
+              VkImageType type,
+              VkImageUsageFlags usage,
+              VkImageUsageFlags stencil_usage,
+              const struct fd_dev_info *info,
+              VkSampleCountFlagBits samples,
               bool use_z24uint_s8uint);
 
 void

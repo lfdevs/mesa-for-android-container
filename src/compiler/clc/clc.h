@@ -76,6 +76,8 @@ struct clc_compile_args {
     * extension if NULL.
     */
    const char * const *allowed_spirv_extensions;
+
+   unsigned address_bits;
 };
 
 struct clc_binary {

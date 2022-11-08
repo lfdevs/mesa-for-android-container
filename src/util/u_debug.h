@@ -347,6 +347,26 @@ debug_dump_flags(const struct debug_named_value *names,
                  unsigned long value);
 
 
+struct debug_control {
+    const char * string;
+    uint64_t     flag;
+};
+
+uint64_t
+parse_debug_string(const char *debug,
+                   const struct debug_control *control);
+
+
+uint64_t
+parse_enable_string(const char *debug,
+                    uint64_t default_value,
+                    const struct debug_control *control);
+
+
+bool
+comma_separated_list_contains(const char *list, const char *s);
+
+
 /**
  * Function enter exit loggers
  */
@@ -387,14 +407,8 @@ void debug_funclog_enter_exit(const char* f, const int line, const char* file);
 /**
  * Get option.
  *
- * It is an alias for getenv on Linux.
+ * It is an alias for getenv on Unix and Windows.
  *
- * On Windows it reads C:\gallium.cfg, which is a text file with CR+LF line
- * endings with one option per line as
- *
- *   NAME=value
- *
- * This file must be terminated with an extra empty line.
  */
 const char *
 debug_get_option(const char *name, const char *dfault);
@@ -431,29 +445,6 @@ __check_suid(void)
       return true;
 #endif
    return false;
-}
-
-/**
- * Define a getter for a debug option which specifies a 'FILE *'
- * to open, with additional checks for suid executables.  Note
- * that if the return is not NULL, the caller owns the 'FILE *'
- * reference.
- */
-#define DEBUG_GET_ONCE_FILE_OPTION(suffix, name, dfault, mode) \
-static FILE * \
-debug_get_option_ ## suffix (void) \
-{ \
-   static bool initialized = false; \
-   static const char * value; \
-   if (__check_suid()) \
-      return NULL; \
-   if (!initialized) { \
-      initialized = true; \
-      value = debug_get_option(name, dfault); \
-   } \
-   if (!value) \
-      return NULL; \
-   return fopen(value, mode); \
 }
 
 #define DEBUG_GET_ONCE_BOOL_OPTION(sufix, name, dfault) \

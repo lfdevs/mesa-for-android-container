@@ -1164,7 +1164,6 @@ wsi_display_swapchain_destroy(struct wsi_swapchain *drv_chain,
 
    for (uint32_t i = 0; i < chain->base.image_count; i++)
       wsi_display_image_finish(drv_chain, allocator, &chain->images[i]);
-   wsi_destroy_image_info(&chain->base, &chain->base.image_info);
 
    wsi_swapchain_finish(&chain->base);
    vk_free(allocator, chain);
@@ -1951,8 +1950,14 @@ wsi_display_surface_create_swapchain(
    if (chain == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+   struct wsi_drm_image_params image_params = {
+      .base.image_type = WSI_IMAGE_TYPE_DRM,
+      .same_gpu = true,
+   };
+
    VkResult result = wsi_swapchain_init(wsi_device, &chain->base, device,
-                                        create_info, allocator, false);
+                                        create_info, &image_params.base,
+                                        allocator);
    if (result != VK_SUCCESS) {
       vk_free(allocator, chain);
       return result;
@@ -1970,14 +1975,6 @@ wsi_display_surface_create_swapchain(
 
    chain->surface = (VkIcdSurfaceDisplay *) icd_surface;
 
-   result = wsi_configure_native_image(&chain->base, create_info,
-                                       0, NULL, NULL,
-                                       &chain->base.image_info);
-   if (result != VK_SUCCESS) {
-      vk_free(allocator, chain);
-      goto fail_init_images;
-   }
-
    for (uint32_t image = 0; image < chain->base.image_count; image++) {
       result = wsi_display_image_init(device, &chain->base,
                                       create_info, allocator,
@@ -1988,7 +1985,7 @@ wsi_display_surface_create_swapchain(
             wsi_display_image_finish(&chain->base, allocator,
                                      &chain->images[image]);
          }
-         wsi_destroy_image_info(&chain->base, &chain->base.image_info);
+         wsi_swapchain_finish(&chain->base);
          vk_free(allocator, chain);
          goto fail_init_images;
       }

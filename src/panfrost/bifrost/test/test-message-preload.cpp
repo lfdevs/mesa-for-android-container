@@ -80,11 +80,10 @@ protected:
 
    static void preload_moves(bi_builder *b, bi_index dest, int count, int idx)
    {
-      bi_instr *I = bi_collect_i32_to(b, dest);
-      I->nr_srcs = count;
+      bi_instr *I = bi_collect_i32_to(b, dest, count);
 
       b->cursor = bi_before_block(bi_start_block(&b->shader->blocks));
-      for (int i = 0; i < count; ++i)
+      bi_foreach_src(I, i)
          I->src[i] = bi_mov_i32(b, bi_register(idx*4 + i));
 
       b->cursor = bi_after_instr(I);

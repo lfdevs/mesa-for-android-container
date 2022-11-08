@@ -58,7 +58,7 @@ get_capset(int fd, struct virgl_renderer_capset_drm *caps)
 
    memset(caps, 0, sizeof(*caps));
 
-   return drmIoctl(fd, DRM_IOCTL_VIRTGPU_GET_CAPS, &args);
+   return virtio_ioctl(fd, VIRTGPU_GET_CAPS, &args);
 }
 
 static int
@@ -73,7 +73,7 @@ set_context(int fd)
       .ctx_set_params = VOID2U64(params),
    };
 
-   return drmIoctl(fd, DRM_IOCTL_VIRTGPU_CONTEXT_INIT, &args);
+   return virtio_ioctl(fd, VIRTGPU_CONTEXT_INIT, &args);
 }
 
 static void
@@ -258,7 +258,7 @@ execbuf_locked(struct fd_device *dev, void *cmd, uint32_t cmd_size,
          .num_bo_handles = num_handles,
    };
 
-   int ret = drmIoctl(dev->fd, DRM_IOCTL_VIRTGPU_EXECBUFFER, &eb);
+   int ret = virtio_ioctl(dev->fd, VIRTGPU_EXECBUFFER, &eb);
    if (ret) {
       ERROR_MSG("EXECBUFFER failed: %s", strerror(errno));
       return ret;
@@ -359,9 +359,11 @@ out_unlock:
       return ret;
 
    if (sync) {
+      MESA_TRACE_BEGIN("virtio_execbuf sync");
       sync_wait(fence_fd, -1);
       close(fence_fd);
       virtio_host_sync(dev, req);
+      MESA_TRACE_END();
    }
 
    return 0;

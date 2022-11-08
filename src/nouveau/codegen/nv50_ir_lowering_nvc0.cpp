@@ -1385,9 +1385,14 @@ NVC0LoweringPass::handleTXQ(TexInstruction *txq)
       txq->moveSources(0, 1);
       txq->setSrc(0, src);
    } else {
-      Value *hnd = loadTexHandle(txq->getIndirectR(), txq->tex.r);
-      txq->tex.r = 0xff;
-      txq->tex.s = 0x1f;
+      Value *hnd;
+      if (txq->tex.bindless) {
+         hnd = txq->getIndirectR();
+      } else {
+         hnd = loadTexHandle(txq->getIndirectR(), txq->tex.r);
+         txq->tex.r = 0xff;
+         txq->tex.s = 0x1f;
+      }
 
       txq->setIndirectR(NULL);
       txq->moveSources(0, 1);

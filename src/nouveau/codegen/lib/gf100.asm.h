@@ -1,4 +1,4 @@
-uint64_t gf100_builtin_code[] = {
+const uint64_t gf100_builtin_code[] = {
 /* 0x0000: gf100_div_u32 */
 	0x7800000004009c03,
 	0x0010dd187c209cdd,
@@ -55,7 +55,7 @@ uint64_t gf100_builtin_code[] = {
 	0x90001dff00001c08,
 };
 
-uint64_t gf100_builtin_offsets[] = {
+const uint64_t gf100_builtin_offsets[] = {
 	0x0000000000000000,
 	0x00000000000000b0,
 	0x0000000000000180,

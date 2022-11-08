@@ -48,7 +48,7 @@ sleep 1
 # when asked to load PE executables.
 # TODO: Have boot2container mount this filesystem for all jobs?
 mount -t binfmt_misc none /proc/sys/fs/binfmt_misc
-echo ':DOSWin:M::MZ::/usr/bin/wine:' > /proc/sys/fs/binfmt_misc/register
+echo ':DOSWin:M::MZ::/usr/bin/wine64:' > /proc/sys/fs/binfmt_misc/register
 
 # Set environment for DXVK.
 export DXVK_LOG_LEVEL="info"
@@ -68,7 +68,7 @@ if [ ${TEST_START_XORG:-0} -eq 1 ]; then
     export DISPLAY=:0
 fi
 
-wine --version
+wine64 --version
 
 SANITY_MESA_VERSION_CMD="$SANITY_MESA_VERSION_CMD | tee /tmp/version.txt | grep \"Mesa $MESA_VERSION\(\s\|$\)\""
 

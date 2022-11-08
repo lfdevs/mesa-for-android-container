@@ -50,19 +50,35 @@ enum mesa_vk_dynamic_graphics_state {
    MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY,
    MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE,
    MESA_VK_DYNAMIC_TS_PATCH_CONTROL_POINTS,
+   MESA_VK_DYNAMIC_TS_DOMAIN_ORIGIN,
    MESA_VK_DYNAMIC_VP_VIEWPORT_COUNT,
    MESA_VK_DYNAMIC_VP_VIEWPORTS,
    MESA_VK_DYNAMIC_VP_SCISSOR_COUNT,
    MESA_VK_DYNAMIC_VP_SCISSORS,
+   MESA_VK_DYNAMIC_VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE,
    MESA_VK_DYNAMIC_DR_RECTANGLES,
    MESA_VK_DYNAMIC_RS_RASTERIZER_DISCARD_ENABLE,
+   MESA_VK_DYNAMIC_RS_DEPTH_CLAMP_ENABLE,
+   MESA_VK_DYNAMIC_RS_DEPTH_CLIP_ENABLE,
+   MESA_VK_DYNAMIC_RS_POLYGON_MODE,
    MESA_VK_DYNAMIC_RS_CULL_MODE,
    MESA_VK_DYNAMIC_RS_FRONT_FACE,
+   MESA_VK_DYNAMIC_RS_CONSERVATIVE_MODE,
+   MESA_VK_DYNAMIC_RS_RASTERIZATION_ORDER_AMD,
+   MESA_VK_DYNAMIC_RS_PROVOKING_VERTEX,
+   MESA_VK_DYNAMIC_RS_RASTERIZATION_STREAM,
    MESA_VK_DYNAMIC_RS_DEPTH_BIAS_ENABLE,
    MESA_VK_DYNAMIC_RS_DEPTH_BIAS_FACTORS,
    MESA_VK_DYNAMIC_RS_LINE_WIDTH,
+   MESA_VK_DYNAMIC_RS_LINE_MODE,
+   MESA_VK_DYNAMIC_RS_LINE_STIPPLE_ENABLE,
    MESA_VK_DYNAMIC_RS_LINE_STIPPLE,
    MESA_VK_DYNAMIC_FSR,
+   MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES,
+   MESA_VK_DYNAMIC_MS_SAMPLE_MASK,
+   MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE,
+   MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE,
+   MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS_ENABLE,
    MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS,
    MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE,
    MESA_VK_DYNAMIC_DS_DEPTH_WRITE_ENABLE,
@@ -74,8 +90,12 @@ enum mesa_vk_dynamic_graphics_state {
    MESA_VK_DYNAMIC_DS_STENCIL_COMPARE_MASK,
    MESA_VK_DYNAMIC_DS_STENCIL_WRITE_MASK,
    MESA_VK_DYNAMIC_DS_STENCIL_REFERENCE,
+   MESA_VK_DYNAMIC_CB_LOGIC_OP_ENABLE,
    MESA_VK_DYNAMIC_CB_LOGIC_OP,
    MESA_VK_DYNAMIC_CB_COLOR_WRITE_ENABLES,
+   MESA_VK_DYNAMIC_CB_BLEND_ENABLES,
+   MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS,
+   MESA_VK_DYNAMIC_CB_WRITE_MASKS,
    MESA_VK_DYNAMIC_CB_BLEND_CONSTANTS,
 
    /* Must be left at the end */
@@ -141,28 +161,47 @@ struct vk_input_assembly_state {
 };
 
 struct vk_tessellation_state {
-   /** VkPipelineTessellationStateCreateInfo::patchControlPoints */
+   /** VkPipelineTessellationStateCreateInfo::patchControlPoints
+    *
+    * MESA_VK_DYNAMIC_TS_PATCH_CONTROL_POINTS
+    */
    uint8_t patch_control_points;
 
-   /** VkPipelineTessellationDomainOriginStateCreateInfo::domainOrigin */
+   /** VkPipelineTessellationDomainOriginStateCreateInfo::domainOrigin
+    *
+    * MESA_VK_DYNAMIC_TS_DOMAIN_ORIGIN
+    */
    uint8_t domain_origin;
 };
 
 struct vk_viewport_state {
-   /** VkPipelineViewportDepthClipControlCreateInfoEXT::negativeOneToOne */
-   bool negative_one_to_one;
+   /** VkPipelineViewportDepthClipControlCreateInfoEXT::negativeOneToOne
+    */
+   bool depth_clip_negative_one_to_one;
 
-   /** VkPipelineViewportStateCreateInfo::viewportCount */
+   /** VkPipelineViewportStateCreateInfo::viewportCount
+    *
+    * MESA_VK_DYNAMIC_GRAPHICS_STATE_VP_VIEWPORT_COUNT
+    */
    uint8_t viewport_count;
 
-   /** VkPipelineViewportStateCreateInfo::scissorCount */
+   /** VkPipelineViewportStateCreateInfo::scissorCount
+    *
+    * MESA_VK_DYNAMIC_GRAPHICS_STATE_VP_SCISSOR_COUNT
+    */
    uint8_t scissor_count;
 
-   /** VkPipelineViewportStateCreateInfo::pViewports */
-   VkRect2D scissors[MESA_VK_MAX_SCISSORS];
-
-   /** VkPipelineViewportStateCreateInfo::pScissors */
+   /** VkPipelineViewportStateCreateInfo::pViewports
+    *
+    * MESA_VK_DYNAMIC_GRAPHICS_STATE_VP_VIEWPORTS
+    */
    VkViewport viewports[MESA_VK_MAX_VIEWPORTS];
+
+   /** VkPipelineViewportStateCreateInfo::pScissors
+    *
+    * MESA_VK_DYNAMIC_GRAPHICS_STATE_VP_SCISSORS
+    */
+   VkRect2D scissors[MESA_VK_MAX_SCISSORS];
 };
 
 struct vk_discard_rectangles_state {
@@ -176,77 +215,151 @@ struct vk_discard_rectangles_state {
    VkRect2D rectangles[MESA_VK_MAX_DISCARD_RECTANGLES];
 };
 
+enum PACKED vk_mesa_depth_clip_enable {
+   /** Depth clipping should be disabled */
+   VK_MESA_DEPTH_CLIP_ENABLE_FALSE = 0,
+
+   /** Depth clipping should be enabled */
+   VK_MESA_DEPTH_CLIP_ENABLE_TRUE = 1,
+
+   /** Depth clipping should be enabled iff depth clamping is disabled */
+   VK_MESA_DEPTH_CLIP_ENABLE_NOT_CLAMP,
+};
+
 struct vk_rasterization_state {
    /** VkPipelineRasterizationStateCreateInfo::rasterizerDiscardEnable
     *
     * This will be false if rasterizer discard is dynamic
+    *
+    * MESA_VK_DYNAMIC_RS_RASTERIZER_DISCARD_ENABLE
     */
    bool rasterizer_discard_enable;
 
-   /** VkPipelineRasterizationStateCreateInfo::depthClampEnable */
+   /** VkPipelineRasterizationStateCreateInfo::depthClampEnable
+    *
+    * MESA_VK_DYNAMIC_RS_DEPTH_CLAMP_ENABLE
+    */
    bool depth_clamp_enable;
 
-   /** VkPipelineRasterizationDepthClipStateCreateInfoEXT::depthClipEnable */
-   bool depth_clip_enable;
+   /** VkPipelineRasterizationDepthClipStateCreateInfoEXT::depthClipEnable
+    *
+    * MESA_VK_DYNAMIC_RS_DEPTH_CLIP_ENABLE
+    */
+   enum vk_mesa_depth_clip_enable depth_clip_enable;
 
-   /** VkPipelineRasterizationStateCreateInfo::polygonMode */
+   /** VkPipelineRasterizationStateCreateInfo::polygonMode
+    *
+    * MESA_VK_DYNAMIC_RS_POLYGON_MODE_ENABLEDEPTH_CLIP_ENABLE
+    */
    VkPolygonMode polygon_mode;
 
-   /** VkPipelineRasterizationStateCreateInfo::cullMode */
+   /** VkPipelineRasterizationStateCreateInfo::cullMode
+    *
+    * MESA_VK_DYNAMIC_RS_CULL_MODE
+    */
    VkCullModeFlags cull_mode;
 
-   /** VkPipelineRasterizationStateCreateInfo::frontFace */
+   /** VkPipelineRasterizationStateCreateInfo::frontFace
+    *
+    * MESA_VK_DYNAMIC_RS_FRONT_FACE
+    */
    VkFrontFace front_face;
 
-   /** VkPipelineRasterizationConservativeStateCreateInfoEXT::conservativeRasterizationMode */
+   /** VkPipelineRasterizationConservativeStateCreateInfoEXT::conservativeRasterizationMode
+    *
+    * MESA_VK_DYNAMIC_RS_CONSERVATIVE_MODE
+    */
    VkConservativeRasterizationModeEXT conservative_mode;
 
    /** VkPipelineRasterizationStateRasterizationOrderAMD::rasterizationOrder */
    VkRasterizationOrderAMD rasterization_order_amd;
 
-   /** VkPipelineRasterizationProvokingVertexStateCreateInfoEXT::provokingVertexMode */
+   /** VkPipelineRasterizationProvokingVertexStateCreateInfoEXT::provokingVertexMode
+    *
+    * MESA_VK_DYNAMIC_RS_PROVOKING_VERTEX
+    */
    VkProvokingVertexModeEXT provoking_vertex;
 
-   /** VkPipelineRasterizationStateStreamCreateInfoEXT::rasterizationStream */
+   /** VkPipelineRasterizationStateStreamCreateInfoEXT::rasterizationStream
+    *
+    * MESA_VK_DYNAMIC_RS_RASTERIZATION_STREAM
+    */
    uint32_t rasterization_stream;
 
    struct {
-      /** VkPipelineRasterizationStateCreateInfo::depthBiasEnable */
+      /** VkPipelineRasterizationStateCreateInfo::depthBiasEnable
+       *
+       * MESA_VK_DYNAMIC_RS_DEPTH_BIAS_ENABLE
+       */
       bool enable;
 
-      /** VkPipelineRasterizationStateCreateInfo::depthBiasConstantFactor */
+      /** VkPipelineRasterizationStateCreateInfo::depthBiasConstantFactor
+       *
+       * MESA_VK_DYNAMIC_RS_DEPTH_BIAS_FACTORS
+       */
       float constant;
 
-      /** VkPipelineRasterizationStateCreateInfo::depthBiasClamp */
+      /** VkPipelineRasterizationStateCreateInfo::depthBiasClamp
+       *
+       * MESA_VK_DYNAMIC_RS_DEPTH_BIAS_FACTORS
+       */
       float clamp;
 
-      /** VkPipelineRasterizationStateCreateInfo::depthBiasSlopeFactor */
+      /** VkPipelineRasterizationStateCreateInfo::depthBiasSlopeFactor
+       *
+       * MESA_VK_DYNAMIC_RS_DEPTH_BIAS_FACTORS
+       */
       float slope;
    } depth_bias;
 
    struct {
-      /** VkPipelineRasterizationStateCreateInfo::lineWidth */
+      /** VkPipelineRasterizationStateCreateInfo::lineWidth
+       *
+       * MESA_VK_DYNAMIC_RS_LINE_WIDTH
+       */
       float width;
 
       /** VkPipelineRasterizationLineStateCreateInfoEXT::lineRasterizationMode
        *
        * Will be set to VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT if
        * VkPipelineRasterizationLineStateCreateInfoEXT is not provided.
+       *
+       * MESA_VK_DYNAMIC_RS_LINE_MODE
        */
       VkLineRasterizationModeEXT mode;
 
       struct {
-         /** VkPipelineRasterizationLineStateCreateInfoEXT::stippledLineEnable */
+         /** VkPipelineRasterizationLineStateCreateInfoEXT::stippledLineEnable
+          *
+          * MESA_VK_DYNAMIC_RS_LINE_STIPPLE_ENABLE
+          */
          bool enable;
 
-         /** VkPipelineRasterizationLineStateCreateInfoEXT::lineStippleFactor */
+         /** VkPipelineRasterizationLineStateCreateInfoEXT::lineStippleFactor
+          *
+          * MESA_VK_DYNAMIC_RS_LINE_STIPPLE
+          */
          uint32_t factor;
 
-         /** VkPipelineRasterizationLineStateCreateInfoEXT::lineStipplePattern */
+         /** VkPipelineRasterizationLineStateCreateInfoEXT::lineStipplePattern
+          *
+          * MESA_VK_DYNAMIC_RS_LINE_STIPPLE
+          */
          uint16_t pattern;
       } stipple;
    } line;
 };
+
+static inline bool
+vk_rasterization_state_depth_clip_enable(const struct vk_rasterization_state *rs)
+{
+   switch (rs->depth_clip_enable) {
+   case VK_MESA_DEPTH_CLIP_ENABLE_FALSE:     return false;
+   case VK_MESA_DEPTH_CLIP_ENABLE_TRUE:      return true;
+   case VK_MESA_DEPTH_CLIP_ENABLE_NOT_CLAMP: return !rs->depth_clamp_enable;
+   }
+   unreachable("Invalid depth clip enable");
+}
 
 struct vk_fragment_shading_rate_state {
    /** VkPipelineFragmentShadingRateStateCreateInfoKHR::fragmentSize
@@ -292,7 +405,10 @@ struct vk_multisample_state {
    /** VkPipelineMultisampleStateCreateInfo::alphaToOneEnable */
    bool alpha_to_one_enable;
 
-   /** VkPipelineSampleLocationsStateCreateInfoEXT::sampleLocationsEnable */
+   /** VkPipelineSampleLocationsStateCreateInfoEXT::sampleLocationsEnable
+    *
+    * This will be true if sample locations enable dynamic.
+    */
    bool sample_locations_enable;
 
    /** VkPipelineSampleLocationsStateCreateInfoEXT::sampleLocationsInfo
@@ -422,48 +538,89 @@ void vk_optimize_depth_stencil_state(struct vk_depth_stencil_state *ds,
                                      bool consider_write_mask);
 
 struct vk_color_blend_attachment_state {
-   /** VkPipelineColorBlendAttachmentState::blendEnable */
+   /** VkPipelineColorBlendAttachmentState::blendEnable
+    *
+    * This will be true if blend enables are dynamic
+    *
+    * MESA_VK_DYNAMIC_CB_BLEND_ENABLES
+    */
    bool blend_enable;
 
-   /** VkPipelineColorBlendAttachmentState::srcColorBlendFactor */
+   /** VkPipelineColorBlendAttachmentState::srcColorBlendFactor
+    *
+    * MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS
+    */
    uint8_t src_color_blend_factor;
 
-   /** VkPipelineColorBlendAttachmentState::dstColorBlendFactor */
+   /** VkPipelineColorBlendAttachmentState::dstColorBlendFactor
+    *
+    * MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS
+    */
    uint8_t dst_color_blend_factor;
 
-   /** VkPipelineColorBlendAttachmentState::srcAlphaBlendFactor */
+   /** VkPipelineColorBlendAttachmentState::srcAlphaBlendFactor
+    *
+    * MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS
+    */
    uint8_t src_alpha_blend_factor;
 
-   /** VkPipelineColorBlendAttachmentState::dstAlphaBlendFactor */
+   /** VkPipelineColorBlendAttachmentState::dstAlphaBlendFactor
+    *
+    * MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS
+    */
    uint8_t dst_alpha_blend_factor;
 
-   /** VkPipelineColorBlendAttachmentState::colorWriteMask */
+   /** VkPipelineColorBlendAttachmentState::colorWriteMask
+    *
+    * MESA_VK_DYNAMIC_CB_WRITE_MASKS
+    */
    uint8_t write_mask;
 
-   /** VkPipelineColorBlendAttachmentState::colorBlendOp */
+   /** VkPipelineColorBlendAttachmentState::colorBlendOp
+    *
+    * MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS
+    */
    VkBlendOp color_blend_op;
 
-   /** VkPipelineColorBlendAttachmentState::alphaBlendOp */
+   /** VkPipelineColorBlendAttachmentState::alphaBlendOp
+    *
+    * MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS
+    */
    VkBlendOp alpha_blend_op;
 };
 
 struct vk_color_blend_state {
-   /** VkPipelineColorBlendStateCreateInfo::logicOpEnable */
+   /** VkPipelineColorBlendStateCreateInfo::logicOpEnable
+    *
+    * MESA_VK_DYNAMIC_CB_LOGIC_OP_ENABLE,
+    */
    bool logic_op_enable;
 
-   /** VkPipelineColorBlendStateCreateInfo::logicOp */
+   /** VkPipelineColorBlendStateCreateInfo::logicOp
+    *
+    * MESA_VK_DYNAMIC_GRAPHICS_STATE_CB_LOGIC_OP,
+    */
    uint8_t logic_op;
 
-   /** VkPipelineColorWriteCreateInfoEXT::pColorWriteEnables */
+   /** VkPipelineColorWriteCreateInfoEXT::pColorWriteEnables
+    *
+    * Bitmask of color write enables, indexed by color attachment index.
+    *
+    * MESA_VK_DYNAMIC_GRAPHICS_STATE_CB_COLOR_WRITE_ENABLES,
+    */
    uint8_t color_write_enables;
 
-   /** VkPipelineColorBlendStateCreateInfo::attachmentCount */
+   /** VkPipelineColorBlendStateCreateInfo::attachmentCount
+    */
    uint8_t attachment_count;
 
    /** VkPipelineColorBlendStateCreateInfo::pAttachments */
    struct vk_color_blend_attachment_state attachments[MESA_VK_MAX_COLOR_ATTACHMENTS];
 
-   /** VkPipelineColorBlendStateCreateInfo::blendConstants */
+   /** VkPipelineColorBlendStateCreateInfo::blendConstants
+    *
+    * MESA_VK_DYNAMIC_GRAPHICS_STATE_CB_BLEND_CONSTANTS,
+    */
    float blend_constants[4];
 };
 
@@ -504,6 +661,12 @@ struct vk_render_pass_state {
 
    /** VkPipelineRenderingCreateInfo::stencilAttachmentFormat */
    VkFormat stencil_attachment_format;
+
+   /** VkAttachmentSampleCountInfoAMD::pColorAttachmentSamples */
+   uint8_t color_attachment_samples[MESA_VK_MAX_COLOR_ATTACHMENTS];
+
+   /** VkAttachmentSampleCountInfoAMD::depthStencilAttachmentSamples */
+   uint8_t depth_stencil_attachment_samples;
 };
 
 /** Struct representing all dynamic graphics state
@@ -532,38 +695,14 @@ struct vk_dynamic_graphics_state {
     */
    uint16_t vi_binding_strides[MESA_VK_MAX_VERTEX_BINDINGS];
 
+   /** Input assembly state */
    struct vk_input_assembly_state ia;
 
-   struct {
-      uint32_t patch_control_points;
-   } ts;
+   /** Tessellation state */
+   struct vk_tessellation_state ts;
 
    /** Viewport state */
-   struct {
-      /** Viewport count
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_VP_VIEWPORT_COUNT
-       */
-      uint32_t viewport_count;
-
-      /** Viewports
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_VP_VIEWPORTS
-       */
-      VkViewport viewports[MESA_VK_MAX_VIEWPORTS];
-
-      /** Scissor count
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_VP_SCISSOR_COUNT
-       */
-      uint32_t scissor_count;
-
-      /** Scissor rects
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_VP_SCISSORS
-       */
-      VkRect2D scissors[MESA_VK_MAX_SCISSORS];
-   } vp;
+   struct vk_viewport_state vp;
 
    /** Discard rectangles
     *
@@ -575,107 +714,58 @@ struct vk_dynamic_graphics_state {
    } dr;
 
    /** Rasterization state */
-   struct {
-      /** Rasterizer discard
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_RS_RASTERIZER_DISCARD_ENABLE
-       */
-      bool rasterizer_discard_enable;
+   struct vk_rasterization_state rs;
 
-      /** Cull mode
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_RS_CULL_MODE
-       */
-      VkCullModeFlags cull_mode;
-
-      /** Front face
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_RS_FRONT_FACE
-       */
-      VkFrontFace front_face;
-
-      struct {
-         /** Depth bias enable
-          *
-          * MESA_VK_DYNAMIC_GRAPHICS_STATE_RS_DEPTH_BIAS_ENABLE
-          */
-         bool enable;
-
-         /** Depth bias constant factor
-          *
-          * MESA_VK_DYNAMIC_GRAPHICS_STATE_RS_DEPTH_BIAS_FACTORS
-          */
-         float constant;
-
-         /** Depth bias clamp
-          *
-          * MESA_VK_DYNAMIC_GRAPHICS_STATE_RS_DEPTH_BIAS_FACTORS
-          */
-         float clamp;
-
-         /** Depth bias slope
-          *
-          * MESA_VK_DYNAMIC_GRAPHICS_STATE_RS_DEPTH_BIAS_FACTORS
-          */
-         float slope;
-      } depth_bias;
-
-      struct {
-         /** Line width
-          *
-          * MESA_VK_DYNAMIC_GRAPHICS_STATE_RS_LINE_WIDTH
-          */
-         float width;
-
-         /** Line stipple
-          *
-          * MESA_VK_DYNAMIC_GRAPHICS_STATE_RS_LINE_STIPPLE
-          */
-         struct {
-            uint32_t factor;
-            uint16_t pattern;
-         } stipple;
-      } line;
-   } rs;
-
+   /* Fragment shading rate state */
    struct vk_fragment_shading_rate_state fsr;
 
    /** Multisample state */
    struct {
+      /** Rasterization samples
+       *
+       * MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES
+       */
+      VkSampleCountFlagBits rasterization_samples;
+
+      /** Sample mask
+       *
+       * MESA_VK_DYNAMIC_MS_SAMPLE_MASK
+       */
+      uint16_t sample_mask;
+
+      /** Alpha to coverage enable
+       *
+       * MESA_VK_DYNAMIC_MS_ALPHA_TO_CONVERAGE_ENABLE
+       */
+      bool alpha_to_coverage_enable;
+
+      /** Alpha to one enable
+       *
+       * MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE
+       */
+      bool alpha_to_one_enable;
+
+      /** Custom sample locations enable
+       *
+       * MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS_ENABLE
+       */
+      bool sample_locations_enable;
+
       /** Sample locations
        *
        * Must be provided by the driver if VK_EXT_sample_locations is
        * supported.
        *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_MS_SAMPLE_LOCATIONS
+       * MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS
        */
       struct vk_sample_locations_state *sample_locations;
    } ms;
 
+   /** Depth stencil state */
    struct vk_depth_stencil_state ds;
 
    /** Color blend state */
-   struct {
-      /** Integer color logic op
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_CB_LOGIC_OP,
-       */
-      VkLogicOp logic_op;
-
-      /** Color write enables
-       *
-       * Bitmask of color write enables, indexed by color attachment index.
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_CB_COLOR_WRITE_ENABLES,
-       */
-      uint32_t color_write_enables;
-
-      /** Blend constants
-       *
-       * MESA_VK_DYNAMIC_GRAPHICS_STATE_CB_BLEND_CONSTANTS,
-       */
-      float blend_constants[4];
-   } cb;
+   struct vk_color_blend_state cb;
 
    /** For pipelines, which bits of dynamic state are set */
    BITSET_DECLARE(set, MESA_VK_DYNAMIC_GRAPHICS_STATE_ENUM_MAX);

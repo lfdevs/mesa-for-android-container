@@ -25,84 +25,93 @@
  */
 
 #include "sfn_instr_alu.h"
+
+#include "sfn_debug.h"
 #include "sfn_instr_alugroup.h"
 #include "sfn_instr_tex.h"
 #include "sfn_shader.h"
-#include "sfn_debug.h"
 
 #include <algorithm>
 #include <sstream>
 
-
 namespace r600 {
 
-using std::string;
 using std::istream;
+using std::string;
 using std::vector;
 
-AluInstr::AluInstr(EAluOp opcode, PRegister dest,
+AluInstr::AluInstr(EAluOp opcode,
+                   PRegister dest,
                    SrcValues src,
-                   const std::set<AluModifiers>& flags, int slots):
-   m_opcode(opcode),
-   m_dest(dest),
-   m_bank_swizzle(alu_vec_unknown),
-   m_cf_type(cf_alu),
-   m_alu_slots(slots)
+                   const std::set<AluModifiers>& flags,
+                   int slots):
+    m_opcode(opcode),
+    m_dest(dest),
+    m_bank_swizzle(alu_vec_unknown),
+    m_cf_type(cf_alu),
+    m_alu_slots(slots)
 {
    m_src.swap(src);
 
    if (m_src.size() == 3)
       m_alu_flags.set(alu_op3);
 
-   for(auto f : flags)
+   for (auto f : flags)
       m_alu_flags.set(f);
 
-   ASSERT_OR_THROW(m_src.size() == static_cast<size_t>(alu_ops.at(opcode).nsrc * m_alu_slots),
+   ASSERT_OR_THROW(m_src.size() ==
+                      static_cast<size_t>(alu_ops.at(opcode).nsrc * m_alu_slots),
                    "Unexpected number of source values");
 
    if (m_alu_flags.test(alu_write))
       ASSERT_OR_THROW(dest, "Write flag is set, but no destination register is given");
 
    update_uses();
-
 }
 
 AluInstr::AluInstr(EAluOp opcode):
-   AluInstr(opcode, nullptr, SrcValues(alu_ops.at(opcode).nsrc), {}, 1)
+    AluInstr(opcode, nullptr, SrcValues(alu_ops.at(opcode).nsrc), {}, 1)
 {
 }
 
 AluInstr::AluInstr(EAluOp opcode, int chan):
-   AluInstr(opcode, nullptr, SrcValues(), {}, 1)
+    AluInstr(opcode, nullptr, SrcValues(), {}, 1)
 {
    m_fallback_chan = chan;
 }
 
-AluInstr::AluInstr(EAluOp opcode, PRegister dest, PVirtualValue src0,
+AluInstr::AluInstr(EAluOp opcode,
+                   PRegister dest,
+                   PVirtualValue src0,
                    const std::set<AluModifiers>& m_flags):
-   AluInstr(opcode, dest, SrcValues{src0}, m_flags, 1)
+    AluInstr(opcode, dest, SrcValues{src0}, m_flags, 1)
 {
-
 }
 
-AluInstr::AluInstr(EAluOp opcode, PRegister dest,
-                   PVirtualValue src0, PVirtualValue src1,
+AluInstr::AluInstr(EAluOp opcode,
+                   PRegister dest,
+                   PVirtualValue src0,
+                   PVirtualValue src1,
                    const std::set<AluModifiers>& m_flags):
-   AluInstr(opcode, dest, SrcValues{src0, src1}, m_flags, 1)
+    AluInstr(opcode, dest, SrcValues{src0, src1}, m_flags, 1)
 {
-
 }
 
-AluInstr::AluInstr(EAluOp opcode, PRegister dest, PVirtualValue src0, PVirtualValue src1,
+AluInstr::AluInstr(EAluOp opcode,
+                   PRegister dest,
+                   PVirtualValue src0,
+                   PVirtualValue src1,
                    PVirtualValue src2,
                    const std::set<AluModifiers>& m_flags):
-   AluInstr(opcode, dest, SrcValues{src0, src1, src2}, m_flags, 1)
+    AluInstr(opcode, dest, SrcValues{src0, src1, src2}, m_flags, 1)
 {
-
 }
 
-AluInstr::AluInstr(ESDOp op, PVirtualValue src0, PVirtualValue src1, PVirtualValue address):
-   m_lds_opcode(op)
+AluInstr::AluInstr(ESDOp op,
+                   PVirtualValue src0,
+                   PVirtualValue src1,
+                   PVirtualValue address):
+    m_lds_opcode(op)
 {
    set_alu_flag(alu_is_lds);
 
@@ -116,17 +125,18 @@ AluInstr::AluInstr(ESDOp op, PVirtualValue src0, PVirtualValue src1, PVirtualVal
 }
 
 AluInstr::AluInstr(ESDOp op, const SrcValues& src, const std::set<AluModifiers>& flags):
-   m_lds_opcode(op),
-   m_src(src)
+    m_lds_opcode(op),
+    m_src(src)
 {
-   for(auto f : flags)
+   for (auto f : flags)
       set_alu_flag(f);
 
    set_alu_flag(alu_is_lds);
    update_uses();
 }
 
-void AluInstr::update_uses()
+void
+AluInstr::update_uses()
 {
    for (auto& s : m_src) {
       auto r = s->as_register();
@@ -158,23 +168,25 @@ void AluInstr::update_uses()
    }
 }
 
-void AluInstr::accept(ConstInstrVisitor& visitor) const
+void
+AluInstr::accept(ConstInstrVisitor& visitor) const
 {
    visitor.visit(*this);
 }
 
-void AluInstr::accept(InstrVisitor& visitor)
+void
+AluInstr::accept(InstrVisitor& visitor)
 {
    visitor.visit(this);
 }
 
 const std::map<ECFAluOpCode, std::string> AluInstr::cf_map = {
-   {cf_alu_break, "BREAK"},
-   {cf_alu_continue, "CONT"},
-   {cf_alu_else_after, "ELSE_AFTER"},
-   {cf_alu_extended, "EXTENDED"},
-   {cf_alu_pop_after, "POP_AFTER"},
-   {cf_alu_pop2_after, "POP2_AFTER"},
+   {cf_alu_break,       "BREAK"      },
+   {cf_alu_continue,    "CONT"       },
+   {cf_alu_else_after,  "ELSE_AFTER" },
+   {cf_alu_extended,    "EXTENDED"   },
+   {cf_alu_pop_after,   "POP_AFTER"  },
+   {cf_alu_pop2_after,  "POP2_AFTER" },
    {cf_alu_push_before, "PUSH_BEFORE"}
 };
 
@@ -187,16 +199,16 @@ const std::map<AluBankSwizzle, std::string> AluInstr::bank_swizzle_map = {
    {alu_vec_210, "VEC_210"}
 };
 
-const AluModifiers AluInstr::src_abs_flags[2] =
-{alu_src0_abs, alu_src1_abs};
-const AluModifiers AluInstr::src_neg_flags[3] =
-{alu_src0_neg, alu_src1_neg, alu_src2_neg};
-const AluModifiers AluInstr::src_rel_flags[3] =
-{alu_src0_rel, alu_src1_rel, alu_src2_rel};
+const AluModifiers AluInstr::src_abs_flags[2] = {alu_src0_abs, alu_src1_abs};
+const AluModifiers AluInstr::src_neg_flags[3] = {
+   alu_src0_neg, alu_src1_neg, alu_src2_neg};
+const AluModifiers AluInstr::src_rel_flags[3] = {
+   alu_src0_rel, alu_src1_rel, alu_src2_rel};
 
 struct ValuePrintFlags {
-   ValuePrintFlags(int im, int f):index_mode(im),
-      flags(f)
+   ValuePrintFlags(int im, int f):
+       index_mode(im),
+       flags(f)
    {
    }
    int index_mode = 0;
@@ -209,7 +221,8 @@ struct ValuePrintFlags {
    static const int index_loopidx = 32;
 };
 
-void AluInstr::do_print(std::ostream& os) const
+void
+AluInstr::do_print(std::ostream& os) const
 {
    const char swzchar[] = "xyzw01?_";
 
@@ -230,7 +243,8 @@ void AluInstr::do_print(std::ostream& os) const
          if (has_alu_flag(alu_write))
             os << " " << *m_dest;
          else
-            os << " __" << "." << swzchar[m_dest->chan()];
+            os << " __"
+               << "." << swzchar[m_dest->chan()];
          if (!has_alu_flag(alu_write) && m_dest->pin() != pin_none)
             os << "@" << m_dest->pin();
          os << " : ";
@@ -239,8 +253,8 @@ void AluInstr::do_print(std::ostream& os) const
       }
    }
 
-   const int n_source_per_slot = has_alu_flag(alu_is_lds) ?
-                                 m_src.size() : alu_ops.at(m_opcode).nsrc;
+   const int n_source_per_slot =
+      has_alu_flag(alu_is_lds) ? m_src.size() : alu_ops.at(m_opcode).nsrc;
 
    for (int s = 0; s < m_alu_slots; ++s) {
 
@@ -251,36 +265,47 @@ void AluInstr::do_print(std::ostream& os) const
          int pflags = 0;
          if (i)
             os << ' ';
-         if (has_alu_flag(src_neg_flags[k])) pflags |= ValuePrintFlags::has_neg;
-         if (has_alu_flag(src_rel_flags[k])) pflags |= ValuePrintFlags::is_rel;
+         if (has_alu_flag(src_neg_flags[k]))
+            pflags |= ValuePrintFlags::has_neg;
+         if (has_alu_flag(src_rel_flags[k]))
+            pflags |= ValuePrintFlags::is_rel;
          if (i < 2)
-            if (has_alu_flag(src_abs_flags[k])) pflags |= ValuePrintFlags::has_abs;
+            if (has_alu_flag(src_abs_flags[k]))
+               pflags |= ValuePrintFlags::has_abs;
 
-         if (pflags & ValuePrintFlags::has_neg) os << '-';
-         if (pflags & ValuePrintFlags::has_abs) os << '|';
+         if (pflags & ValuePrintFlags::has_neg)
+            os << '-';
+         if (pflags & ValuePrintFlags::has_abs)
+            os << '|';
          os << *m_src[i];
-         if (pflags & ValuePrintFlags::has_abs) os << '|';
+         if (pflags & ValuePrintFlags::has_abs)
+            os << '|';
          ++i;
       }
    }
 
    os << " {";
-   if (has_alu_flag(alu_write)) os << 'W';
-   if (has_alu_flag(alu_last_instr)) os << 'L';
-   if (has_alu_flag(alu_update_exec)) os << 'E';
-   if (has_alu_flag(alu_update_pred)) os << 'P';
+   if (has_alu_flag(alu_write))
+      os << 'W';
+   if (has_alu_flag(alu_last_instr))
+      os << 'L';
+   if (has_alu_flag(alu_update_exec))
+      os << 'E';
+   if (has_alu_flag(alu_update_pred))
+      os << 'P';
    os << "}";
 
    auto bs_name = bank_swizzle_map.find(m_bank_swizzle);
    if (bs_name != bank_swizzle_map.end())
-      os << ' ' <<  bs_name->second;
+      os << ' ' << bs_name->second;
 
    auto cf_name = cf_map.find(m_cf_type);
    if (cf_name != cf_map.end())
-      os <<  ' ' << cf_name->second;
+      os << ' ' << cf_name->second;
 }
 
-bool AluInstr::can_propagate_src() const
+bool
+AluInstr::can_propagate_src() const
 {
    /* We can use the source in the next instruction */
    if (!can_copy_propagate())
@@ -292,8 +317,6 @@ bool AluInstr::can_propagate_src() const
 
    assert(m_dest);
 
-
-
    if (!m_dest->is_ssa()) {
       return false;
    }
@@ -303,15 +326,15 @@ bool AluInstr::can_propagate_src() const
 
    if (m_dest->pin() == pin_chan)
       return src_reg->pin() == pin_none ||
-            (src_reg->pin() == pin_chan &&
-             src_reg->chan() == m_dest->chan());
+             (src_reg->pin() == pin_chan && src_reg->chan() == m_dest->chan());
 
    return m_dest->pin() == pin_none || m_dest->pin() == pin_free;
 }
 
-bool AluInstr::can_propagate_dest() const
+bool
+AluInstr::can_propagate_dest() const
 {
-   if (!can_copy_propagate()){
+   if (!can_copy_propagate()) {
       return false;
    }
 
@@ -322,8 +345,7 @@ bool AluInstr::can_propagate_dest() const
 
    assert(m_dest);
 
-   if (src_reg->pin() == pin_fully ||
-       src_reg->pin() == pin_group) {
+   if (src_reg->pin() == pin_fully) {
       return false;
    }
 
@@ -331,30 +353,28 @@ bool AluInstr::can_propagate_dest() const
       return false;
 
    if (src_reg->pin() == pin_chan)
-      return m_dest->pin() == pin_none ||
-             m_dest->pin() == pin_free ||
-            ((m_dest->pin() == pin_chan ||
-              m_dest->pin() == pin_group) &&
-             src_reg->chan() == m_dest->chan());
+      return m_dest->pin() == pin_none || m_dest->pin() == pin_free ||
+             ((m_dest->pin() == pin_chan || m_dest->pin() == pin_group) &&
+              src_reg->chan() == m_dest->chan());
 
-   return (src_reg->pin() == pin_none ||
-           src_reg->pin() == pin_free);
+   return (src_reg->pin() == pin_none || src_reg->pin() == pin_free);
 }
 
-bool AluInstr::can_copy_propagate() const
+bool
+AluInstr::can_copy_propagate() const
 {
    if (m_opcode != op1_mov)
       return false;
 
-   if (has_alu_flag(alu_src0_abs) ||
-       has_alu_flag(alu_src0_neg) ||
+   if (has_alu_flag(alu_src0_abs) || has_alu_flag(alu_src0_neg) ||
        has_alu_flag(alu_dst_clamp))
       return false;
 
    return has_alu_flag(alu_write);
 }
 
-bool AluInstr::replace_source(PRegister old_src, PVirtualValue new_src)
+bool
+AluInstr::replace_source(PRegister old_src, PVirtualValue new_src)
 {
    bool process = false;
 
@@ -377,11 +397,12 @@ bool AluInstr::replace_source(PRegister old_src, PVirtualValue new_src)
    }
 
    if (m_dest) {
-      /* We don't allow src and dst with rel and different indirect register addresses */
+      /* We don't allow src and dst with rel and different indirect register
+       * addresses */
       if (m_dest->pin() == pin_array && new_src->pin() == pin_array) {
          auto dav = static_cast<const LocalArrayValue *>(m_dest)->addr();
          auto sav = static_cast<const LocalArrayValue *>(new_src)->addr();
-         if (dav && sav && dav->as_register() &&  !dav->equal_to(*sav))
+         if (dav && sav && dav->as_register() && !dav->equal_to(*sav))
             return false;
       }
    }
@@ -389,9 +410,7 @@ bool AluInstr::replace_source(PRegister old_src, PVirtualValue new_src)
    /* Check the readports */
    if (m_alu_slots * alu_ops.at(m_opcode).nsrc > 2 || m_parent_group) {
       AluReadportReservation read_port_check =
-            !m_parent_group ?
-               AluReadportReservation() :
-               m_parent_group->readport_reserer();
+         !m_parent_group ? AluReadportReservation() : m_parent_group->readport_reserer();
 
       int nsrc = alu_ops.at(m_opcode).nsrc;
       PVirtualValue src[3];
@@ -403,7 +422,7 @@ bool AluInstr::replace_source(PRegister old_src, PVirtualValue new_src)
          }
          AluBankSwizzle bs = alu_vec_012;
          while (bs != alu_vec_unknown) {
-            if (read_port_check.schedule_vec_src(src,  nsrc, bs)) {
+            if (read_port_check.schedule_vec_src(src, nsrc, bs)) {
                break;
             }
             ++bs;
@@ -430,7 +449,8 @@ bool AluInstr::replace_source(PRegister old_src, PVirtualValue new_src)
    return process;
 }
 
-void AluInstr::set_sources(SrcValues src)
+void
+AluInstr::set_sources(SrcValues src)
 {
    for (auto& s : m_src) {
       auto r = s->as_register();
@@ -445,7 +465,21 @@ void AluInstr::set_sources(SrcValues src)
    }
 }
 
-bool AluInstr::replace_dest(PRegister new_dest, AluInstr *move_instr)
+uint8_t
+AluInstr::allowed_dest_chan_mask() const
+{
+   if (alu_slots() != 1) {
+      if (has_alu_flag(alu_is_cayman_trans)) {
+         return (1 << alu_slots()) - 1;
+      } else {
+         return 0;
+      }
+   }
+   return 0xf;
+}
+
+bool
+AluInstr::replace_dest(PRegister new_dest, AluInstr *move_instr)
 {
    if (m_dest->equal_to(*new_dest))
       return false;
@@ -473,10 +507,8 @@ bool AluInstr::replace_dest(PRegister new_dest, AluInstr *move_instr)
    }
    */
 
-   if (m_dest->pin() == pin_chan &&
-       new_dest->chan() != m_dest->chan())
+   if (m_dest->pin() == pin_chan && new_dest->chan() != m_dest->chan())
       return false;
-
 
    if (m_dest->pin() == pin_chan) {
       if (new_dest->pin() == pin_group)
@@ -502,20 +534,22 @@ bool AluInstr::replace_dest(PRegister new_dest, AluInstr *move_instr)
    return true;
 }
 
-void AluInstr::pin_sources_to_chan()
+void
+AluInstr::pin_sources_to_chan()
 {
-   for (auto s: m_src) {
+   for (auto s : m_src) {
       auto r = s->as_register();
       if (r) {
          if (r->pin() == pin_free)
             r->set_pin(pin_chan);
          else if (r->pin() == pin_group)
-               r->set_pin(pin_chgr);
+            r->set_pin(pin_chgr);
       }
    }
 }
 
-bool AluInstr::check_readport_validation(PRegister old_src, PVirtualValue new_src) const
+bool
+AluInstr::check_readport_validation(PRegister old_src, PVirtualValue new_src) const
 {
    bool success = true;
    AluReadportReservation rpr_sum;
@@ -525,7 +559,6 @@ bool AluInstr::check_readport_validation(PRegister old_src, PVirtualValue new_sr
 
    unsigned nsrc = alu_ops.at(m_opcode).nsrc;
    assert(nsrc * m_alu_slots == m_src.size());
-
 
    for (int s = 0; s < m_alu_slots && success; ++s) {
       for (AluBankSwizzle i = alu_vec_012; i != alu_vec_unknown; ++i) {
@@ -548,20 +581,19 @@ bool AluInstr::check_readport_validation(PRegister old_src, PVirtualValue new_sr
    return success;
 }
 
-void AluInstr::add_extra_dependency(PVirtualValue value)
+void
+AluInstr::add_extra_dependency(PVirtualValue value)
 {
    auto reg = value->as_register();
    if (reg)
       m_extra_dependencies.insert(reg);
 }
 
-
-bool AluInstr::is_equal_to(const AluInstr& lhs) const
+bool
+AluInstr::is_equal_to(const AluInstr& lhs) const
 {
-   if (lhs.m_opcode != m_opcode ||
-       lhs.m_bank_swizzle != m_bank_swizzle ||
-       lhs.m_cf_type != m_cf_type ||
-       lhs.m_alu_flags != m_alu_flags) {
+   if (lhs.m_opcode != m_opcode || lhs.m_bank_swizzle != m_bank_swizzle ||
+       lhs.m_cf_type != m_cf_type || lhs.m_alu_flags != m_alu_flags) {
       return false;
    }
 
@@ -593,27 +625,33 @@ bool AluInstr::is_equal_to(const AluInstr& lhs) const
    return true;
 }
 
-class ResolveIndirectArrayAddr: public ConstRegisterVisitor {
+class ResolveIndirectArrayAddr : public ConstRegisterVisitor {
 public:
-   void visit(const Register& value){(void) value;}
-   void visit(const LocalArray& value) {(void)value; unreachable("An array can't be used as address");}
+   void visit(const Register& value) { (void)value; }
+   void visit(const LocalArray& value)
+   {
+      (void)value;
+      unreachable("An array can't be used as address");
+   }
    void visit(const LocalArrayValue& value);
    void visit(const UniformValue& value);
-   void visit(const LiteralConstant& value) {(void)value;}
-   void visit(const InlineConstant& value) {(void)value;}
+   void visit(const LiteralConstant& value) { (void)value; }
+   void visit(const InlineConstant& value) { (void)value; }
 
    PRegister addr{nullptr};
    bool is_index{false};
 };
 
-void ResolveIndirectArrayAddr::visit(const LocalArrayValue& value)
+void
+ResolveIndirectArrayAddr::visit(const LocalArrayValue& value)
 {
    auto a = value.addr();
    if (a)
       addr = a->as_register();
 }
 
-void ResolveIndirectArrayAddr::visit(const UniformValue& value)
+void
+ResolveIndirectArrayAddr::visit(const UniformValue& value)
 {
    auto a = value.buf_addr();
    if (a) {
@@ -622,7 +660,8 @@ void ResolveIndirectArrayAddr::visit(const UniformValue& value)
    }
 }
 
-std::tuple<PRegister, bool, bool> AluInstr::indirect_addr() const
+std::tuple<PRegister, bool, bool>
+AluInstr::indirect_addr() const
 {
    ResolveIndirectArrayAddr visitor;
 
@@ -632,7 +671,7 @@ std::tuple<PRegister, bool, bool> AluInstr::indirect_addr() const
          return {visitor.addr, false, false};
    }
 
-   for (auto s: m_src) {
+   for (auto s : m_src) {
       s->accept(visitor);
       if (visitor.addr) {
          return {visitor.addr, !visitor.is_index, visitor.is_index};
@@ -641,7 +680,8 @@ std::tuple<PRegister, bool, bool> AluInstr::indirect_addr() const
    return {nullptr, false, false};
 }
 
-AluGroup *AluInstr::split(ValueFactory& vf)
+AluGroup *
+AluInstr::split(ValueFactory& vf)
 {
    if (m_alu_slots == 1)
       return nullptr;
@@ -703,8 +743,7 @@ AluGroup *AluInstr::split(ValueFactory& vf)
       sfn_log << SfnLog::instr << "   " << *instr << "\n";
 
       if (!group->add_instruction(instr)) {
-         std::cerr << "Unable to schedule '" << *instr << "' into\n"
-                   << *group << "\n";
+         std::cerr << "Unable to schedule '" << *instr << "' into\n" << *group << "\n";
 
          unreachable("Invalid group instruction");
       }
@@ -721,17 +760,25 @@ AluGroup *AluInstr::split(ValueFactory& vf)
    return group;
 }
 
-/* Alu instructions that have SSA dest registers increase the  regietsr pressure
- * Alu instructions that read from SSA registers may decresase the register pressure
- * hency evaluate a priorityx values based on register pressure change */
-int AluInstr::register_priority() const
+/* Alu instructions that have SSA dest registers increase the  regietsr
+ * pressure Alu instructions that read from SSA registers may decresase the
+ * register pressure hency evaluate a priorityx values based on register
+ * pressure change */
+int
+AluInstr::register_priority() const
 {
    int priority = 0;
    if (!has_alu_flag(alu_no_schedule_bias)) {
 
-      if (m_dest && m_dest->is_ssa() && has_alu_flag(alu_write)) {
-         if (m_dest->pin() != pin_group && m_dest->pin() != pin_chgr)
-            priority--;
+      if (m_dest) {
+         if (m_dest->is_ssa() && has_alu_flag(alu_write)) {
+            if (m_dest->pin() != pin_group && m_dest->pin() != pin_chgr)
+               priority--;
+         } else {
+            // Arrays and registers are pre-allocated, hence scheduling
+            // assignments early is unlikely to increase register pressure
+            priority++;
+         }
       }
 
       for (const auto s : m_src) {
@@ -745,18 +792,20 @@ int AluInstr::register_priority() const
             if (pending == 1)
                ++priority;
          }
+         if (s->as_uniform())
+            ++priority;
       }
    }
    return priority;
 }
 
-bool AluInstr::propagate_death()
+bool
+AluInstr::propagate_death()
 {
    if (!m_dest)
       return true;
 
-   if  (m_dest->pin() == pin_group ||
-        m_dest->pin() == pin_chan) {
+   if (m_dest->pin() == pin_group || m_dest->pin() == pin_chan) {
       switch (m_opcode) {
       case op2_interp_x:
       case op2_interp_xy:
@@ -764,12 +813,11 @@ bool AluInstr::propagate_death()
       case op2_interp_zw:
          reset_alu_flag(alu_write);
          return false;
-      default:
-         ;
+      default:;
       }
    }
 
-   if  (m_dest->pin() == pin_array)
+   if (m_dest->pin() == pin_array)
       return false;
 
    /* We assume that nir does a good job in eliminating all ALU results that
@@ -778,7 +826,7 @@ bool AluInstr::propagate_death()
    if (has_alu_flag(alu_is_cayman_trans))
       return false;
 
-   for (auto& src: m_src) {
+   for (auto& src : m_src) {
       auto reg = src->as_register();
       if (reg)
          reg->del_use(this);
@@ -786,20 +834,21 @@ bool AluInstr::propagate_death()
    return true;
 }
 
-bool AluInstr::has_lds_access() const
+bool
+AluInstr::has_lds_access() const
 {
    return has_alu_flag(alu_is_lds) || has_lds_queue_read();
 }
 
-bool AluInstr::has_lds_queue_read() const
+bool
+AluInstr::has_lds_queue_read() const
 {
    for (auto& s : m_src) {
       auto ic = s->as_inline_const();
       if (!ic)
          continue;
 
-      if (ic->sel() == ALU_SRC_LDS_OQ_A_POP ||
-          ic->sel() == ALU_SRC_LDS_OQ_B_POP)
+      if (ic->sel() == ALU_SRC_LDS_OQ_A_POP || ic->sel() == ALU_SRC_LDS_OQ_B_POP)
          return true;
    }
    return false;
@@ -816,7 +865,8 @@ struct OpDescr {
 static std::map<std::string, OpDescr> s_alu_map_by_name;
 static std::map<std::string, OpDescr> s_lds_map_by_name;
 
-Instr::Pointer AluInstr::from_string(istream& is, ValueFactory& value_factory, AluGroup *group)
+Instr::Pointer
+AluInstr::from_string(istream& is, ValueFactory& value_factory, AluGroup *group)
 {
    vector<string> tokens;
 
@@ -852,7 +902,7 @@ Instr::Pointer AluInstr::from_string(istream& is, ValueFactory& value_factory, A
    if (is_lds) {
       auto op = s_lds_map_by_name.find(opstr);
       if (op == s_lds_map_by_name.end()) {
-         for(auto [opcode, opdescr] : lds_ops ) {
+         for (auto [opcode, opdescr] : lds_ops) {
             if (opstr == opdescr.name) {
                op_descr.lds_opcode = opcode;
                op_descr.nsrc = opdescr.nsrc;
@@ -872,7 +922,7 @@ Instr::Pointer AluInstr::from_string(istream& is, ValueFactory& value_factory, A
    } else {
       auto op = s_alu_map_by_name.find(opstr);
       if (op == s_alu_map_by_name.end()) {
-         for(auto [opcode, opdescr] : alu_ops ) {
+         for (auto [opcode, opdescr] : alu_ops) {
             if (opstr == opdescr.name) {
                op_descr = {{opcode}, opdescr.nsrc};
                s_alu_map_by_name[opstr] = op_descr;
@@ -938,15 +988,22 @@ Instr::Pointer AluInstr::from_string(istream& is, ValueFactory& value_factory, A
                break;
 
             switch (*iflag) {
-            case 'L': flags.insert(alu_last_instr); break;
-            case 'W': flags.insert(alu_write); break;
-            case 'E': flags.insert(alu_update_exec); break;
-            case 'P': flags.insert(alu_update_pred); break;
+            case 'L':
+               flags.insert(alu_last_instr);
+               break;
+            case 'W':
+               flags.insert(alu_write);
+               break;
+            case 'E':
+               flags.insert(alu_update_exec);
+               break;
+            case 'P':
+               flags.insert(alu_update_pred);
+               break;
             }
             ++iflag;
          }
-      }
-      break;
+      } break;
 
       case 'V': {
          string bs = *t;
@@ -966,8 +1023,7 @@ Instr::Pointer AluInstr::from_string(istream& is, ValueFactory& value_factory, A
             std::cerr << "'" << bs << "': ";
             unreachable("Unknowe bankswizzle given");
          }
-      }
-      break;
+      } break;
 
       default: {
          string cf_str = *t;
@@ -1009,17 +1065,18 @@ Instr::Pointer AluInstr::from_string(istream& is, ValueFactory& value_factory, A
    retval->set_cf_type(cf);
    if (group) {
       group->add_instruction(retval);
-      retval= nullptr;
+      retval = nullptr;
    }
    return retval;
 }
 
-bool AluInstr::do_ready() const
+bool
+AluInstr::do_ready() const
 {
    /* Alu instructions are shuffled by the scheduler, so
     * we have to make sure that required ops are already
     * scheduled before marking this one ready */
-   for (auto i: required_instr()) {
+   for (auto i : required_instr()) {
       if (!i->is_scheduled())
          return false;
    }
@@ -1042,7 +1099,7 @@ bool AluInstr::do_ready() const
          auto av = static_cast<const LocalArrayValue *>(m_dest);
          auto addr = av->addr();
          /* For true indiect dest access we have to make sure that all
-       * instructions that write the value before are schedukled */
+          * instructions that write the value before are schedukled */
          if (addr && (!addr->ready(block_id(), index()) ||
                       !m_dest->ready(block_id(), index() - 1)))
             return false;
@@ -1052,8 +1109,7 @@ bool AluInstr::do_ready() const
        * update are scheduled, otherwise we may use the updated value when we
        * shouldn't */
       for (auto u : m_dest->uses()) {
-         if (u->block_id() <= block_id() && u->index() < index() &&
-             !u->is_scheduled()) {
+         if (u->block_id() <= block_id() && u->index() < index() && !u->is_scheduled()) {
             return false;
          }
       }
@@ -1067,7 +1123,8 @@ bool AluInstr::do_ready() const
    return true;
 }
 
-void AluInstrVisitor::visit(AluGroup *instr)
+void
+AluInstrVisitor::visit(AluGroup *instr)
 {
    for (auto& i : *instr) {
       if (i)
@@ -1075,99 +1132,162 @@ void AluInstrVisitor::visit(AluGroup *instr)
    }
 }
 
-void AluInstrVisitor::visit(Block *instr)
+void
+AluInstrVisitor::visit(Block *instr)
 {
    for (auto& i : *instr)
       i->accept(*this);
 }
 
-void AluInstrVisitor::visit(IfInstr *instr)
+void
+AluInstrVisitor::visit(IfInstr *instr)
 {
    instr->predicate()->accept(*this);
 }
 
-static bool emit_alu_b2x(const nir_alu_instr& alu, AluInlineConstants mask, Shader& shader);
+static bool
+emit_alu_b2x(const nir_alu_instr& alu, AluInlineConstants mask, Shader& shader);
 
-static bool emit_alu_op1(const nir_alu_instr& alu, EAluOp opcode, Shader& shader,
-                         const AluOpFlags& flags = 0);
-static bool emit_alu_op1_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& shader, bool switch_chan);
-static bool emit_alu_mov_64bit(const nir_alu_instr& alu, Shader& shader);
-static bool emit_alu_neg(const nir_alu_instr& alu, Shader& shader);
-static bool emit_alu_op1_64bit_trans(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
-static bool emit_alu_op2_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& shader, bool switch_order);
-static bool emit_alu_op2_64bit_one_dst(const nir_alu_instr& alu, EAluOp opcode, Shader& shader, bool switch_order);
-static bool emit_alu_fma_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
-static bool emit_alu_b2f64(const nir_alu_instr& alu, Shader& shader);
-static bool emit_alu_f2f64(const nir_alu_instr& alu, Shader& shader);
-static bool emit_alu_i2f64(const nir_alu_instr& alu, EAluOp op, Shader& shader);
-static bool emit_alu_f2f32(const nir_alu_instr& alu, Shader& shader);
-static bool emit_alu_abs64(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_alu_op1(const nir_alu_instr& alu,
+             EAluOp opcode,
+             Shader& shader,
+             const AluOpFlags& flags = 0);
+static bool
+emit_alu_op1_64bit(const nir_alu_instr& alu,
+                   EAluOp opcode,
+                   Shader& shader,
+                   bool switch_chan);
+static bool
+emit_alu_mov_64bit(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_alu_neg(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_alu_op1_64bit_trans(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_alu_op2_64bit(const nir_alu_instr& alu,
+                   EAluOp opcode,
+                   Shader& shader,
+                   bool switch_order);
+static bool
+emit_alu_op2_64bit_one_dst(const nir_alu_instr& alu,
+                           EAluOp opcode,
+                           Shader& shader,
+                           bool switch_order);
+static bool
+emit_alu_fma_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_alu_b2f64(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_alu_f2f64(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_alu_i2f64(const nir_alu_instr& alu, EAluOp op, Shader& shader);
+static bool
+emit_alu_f2f32(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_alu_abs64(const nir_alu_instr& alu, Shader& shader);
 
-static bool emit_alu_op2(const nir_alu_instr& alu, EAluOp opcode, Shader& shader,
-                         AluInstr::Op2Options opts = AluInstr::op2_opt_none);
-static bool emit_alu_op2_int(const nir_alu_instr& alu, EAluOp opcode, Shader& shader,
-                             AluInstr::Op2Options opts = AluInstr::op2_opt_none);
-static bool emit_alu_op3(const nir_alu_instr& alu, EAluOp opcode, Shader& shader,
-                  const std::array<int, 3>& src_shuffle = {0,1,2});
-static bool emit_any_all_fcomp2(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
-static bool emit_any_all_fcomp(const nir_alu_instr& alu, EAluOp opcode, int nc, bool all, Shader& shader);
-static bool emit_any_all_icomp(const nir_alu_instr& alu, EAluOp opcode, int nc, bool all, Shader& shader);
+static bool
+emit_alu_op2(const nir_alu_instr& alu,
+             EAluOp opcode,
+             Shader& shader,
+             AluInstr::Op2Options opts = AluInstr::op2_opt_none);
+static bool
+emit_alu_op2_int(const nir_alu_instr& alu,
+                 EAluOp opcode,
+                 Shader& shader,
+                 AluInstr::Op2Options opts = AluInstr::op2_opt_none);
+static bool
+emit_alu_op3(const nir_alu_instr& alu,
+             EAluOp opcode,
+             Shader& shader,
+             const std::array<int, 3>& src_shuffle = {0, 1, 2});
+static bool
+emit_any_all_fcomp2(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_any_all_fcomp(
+   const nir_alu_instr& alu, EAluOp opcode, int nc, bool all, Shader& shader);
+static bool
+emit_any_all_icomp(
+   const nir_alu_instr& alu, EAluOp opcode, int nc, bool all, Shader& shader);
 
-static bool emit_alu_i2orf2_b1(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_alu_i2orf2_b1(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
 
-static bool emit_alu_comb_with_zero(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
-static bool emit_unpack_64_2x32_split(const nir_alu_instr& alu, int comp, Shader& shader);
-static bool emit_pack_64_2x32(const nir_alu_instr& alu, Shader& shader);
-static bool emit_unpack_64_2x32(const nir_alu_instr& alu, Shader& shader);
-static bool emit_pack_64_2x32_split(const nir_alu_instr& alu, Shader& shader);
-static bool emit_pack_32_2x16_split(const nir_alu_instr& alu, Shader& shader);
-static bool emit_alu_vec2_64(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_alu_comb_with_zero(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_unpack_64_2x32_split(const nir_alu_instr& alu, int comp, Shader& shader);
+static bool
+emit_pack_64_2x32(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_unpack_64_2x32(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_pack_64_2x32_split(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_pack_32_2x16_split(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_alu_vec2_64(const nir_alu_instr& alu, Shader& shader);
 
-static bool emit_unpack_32_2x16_split_x(const nir_alu_instr& alu, Shader& shader);
-static bool emit_unpack_32_2x16_split_y(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_unpack_32_2x16_split_x(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_unpack_32_2x16_split_y(const nir_alu_instr& alu, Shader& shader);
 
-static bool emit_dot(const nir_alu_instr& alu, int nelm, Shader& shader);
-static bool emit_create_vec(const nir_alu_instr& instr, unsigned nc, Shader& shader);
+static bool
+emit_dot(const nir_alu_instr& alu, int nelm, Shader& shader);
+static bool
+emit_create_vec(const nir_alu_instr& instr, unsigned nc, Shader& shader);
 
-static bool emit_alu_trans_op1_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
-static bool emit_alu_trans_op1_cayman(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_alu_trans_op1_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_alu_trans_op1_cayman(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
 
-static bool emit_alu_trans_op2_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
-static bool emit_alu_trans_op2_cayman(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_alu_trans_op2_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_alu_trans_op2_cayman(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
 
-static bool emit_alu_f2i32_or_u32_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
+static bool
+emit_alu_f2i32_or_u32_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader);
 
-static bool emit_tex_fdd(const nir_alu_instr& alu, TexInstr::Opcode opcode, bool fine, Shader& shader);
+static bool
+emit_tex_fdd(const nir_alu_instr& alu, TexInstr::Opcode opcode, bool fine, Shader& shader);
 
-static bool emit_alu_cube(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_alu_cube(const nir_alu_instr& alu, Shader& shader);
 
-static bool emit_fdph(const nir_alu_instr& alu, Shader& shader);
+static bool
+emit_fdph(const nir_alu_instr& alu, Shader& shader);
 
-static bool check_64_bit_op_src(nir_src *src, void *state)
+static bool
+check_64_bit_op_src(nir_src *src, void *state)
 {
    if (nir_src_bit_size(*src) == 64) {
-      *(bool*)state = true;
+      *(bool *)state = true;
       return false;
    }
    return true;
 }
 
-static bool check_64_bit_op_dest(nir_dest *dest, void *state)
+static bool
+check_64_bit_op_dest(nir_dest *dest, void *state)
 {
    if (nir_dest_bit_size(*dest) == 64) {
-      *(bool*)state = true;
+      *(bool *)state = true;
       return false;
    }
    return true;
 }
 
-bool AluInstr::from_nir(nir_alu_instr *alu, Shader& shader)
+bool
+AluInstr::from_nir(nir_alu_instr *alu, Shader& shader)
 {
    bool is_64bit_op = false;
    nir_foreach_src(&alu->instr, check_64_bit_op_src, &is_64bit_op);
    if (!is_64bit_op)
       nir_foreach_dest(&alu->instr, check_64_bit_op_dest, &is_64bit_op);
-
 
    if (is_64bit_op) {
       switch (alu->op) {
@@ -1176,253 +1296,421 @@ bool AluInstr::from_nir(nir_alu_instr *alu, Shader& shader)
       case nir_op_pack_64_2x32_split:
       case nir_op_pack_half_2x16_split:
       case nir_op_unpack_64_2x32_split_x:
-      case nir_op_unpack_64_2x32_split_y: break;
-      case nir_op_mov: return emit_alu_mov_64bit(*alu, shader);
-      case nir_op_fneg: return emit_alu_neg(*alu, shader);
-      case nir_op_ffract: return emit_alu_op1_64bit(*alu, op1_fract_64, shader, true);
-      case nir_op_feq32: return emit_alu_op2_64bit_one_dst(*alu, op2_sete_64, shader, false);
-      case nir_op_fge32: return emit_alu_op2_64bit_one_dst(*alu, op2_setge_64, shader, false);
-      case nir_op_flt32: return emit_alu_op2_64bit_one_dst(*alu, op2_setgt_64, shader, true);
-      case nir_op_fneu32: return emit_alu_op2_64bit_one_dst(*alu, op2_setne_64, shader, false);
-      case nir_op_ffma: return emit_alu_fma_64bit(*alu, op3_fma_64, shader);         
+      case nir_op_unpack_64_2x32_split_y:
+         break;
+      case nir_op_mov:
+         return emit_alu_mov_64bit(*alu, shader);
+      case nir_op_fneg:
+         return emit_alu_neg(*alu, shader);
+      case nir_op_ffract:
+         return emit_alu_op1_64bit(*alu, op1_fract_64, shader, true);
+      case nir_op_feq32:
+         return emit_alu_op2_64bit_one_dst(*alu, op2_sete_64, shader, false);
+      case nir_op_fge32:
+         return emit_alu_op2_64bit_one_dst(*alu, op2_setge_64, shader, false);
+      case nir_op_flt32:
+         return emit_alu_op2_64bit_one_dst(*alu, op2_setgt_64, shader, true);
+      case nir_op_fneu32:
+         return emit_alu_op2_64bit_one_dst(*alu, op2_setne_64, shader, false);
+      case nir_op_ffma:
+         return emit_alu_fma_64bit(*alu, op3_fma_64, shader);
 
-      case nir_op_fadd: return emit_alu_op2_64bit(*alu, op2_add_64, shader, false);
-      case nir_op_fmul: return emit_alu_op2_64bit(*alu, op2_mul_64, shader, false);
-      case nir_op_fmax: return emit_alu_op2_64bit(*alu, op2_max_64, shader, false);
-      case nir_op_fmin: return emit_alu_op2_64bit(*alu, op2_min_64, shader, false);
-      case nir_op_b2f64: return emit_alu_b2f64(*alu, shader);
-      case nir_op_f2f64: return emit_alu_f2f64(*alu, shader);
-      case nir_op_i2f64: return emit_alu_i2f64(*alu, op1_int_to_flt, shader);
-      case nir_op_u2f64: return emit_alu_i2f64(*alu, op1_uint_to_flt, shader);
-      case nir_op_f2f32: return emit_alu_f2f32(*alu, shader);
-      case nir_op_fabs: return emit_alu_abs64(*alu, shader);
-      case nir_op_fsqrt: return emit_alu_op1_64bit_trans(*alu, op1_sqrt_64, shader);
-      case nir_op_frcp: return emit_alu_op1_64bit_trans(*alu, op1_recip_64, shader);
-      case nir_op_frsq: return emit_alu_op1_64bit_trans(*alu, op1_recipsqrt_64, shader);
-      case nir_op_vec2: return emit_alu_vec2_64(*alu, shader);
+      case nir_op_fadd:
+         return emit_alu_op2_64bit(*alu, op2_add_64, shader, false);
+      case nir_op_fmul:
+         return emit_alu_op2_64bit(*alu, op2_mul_64, shader, false);
+      case nir_op_fmax:
+         return emit_alu_op2_64bit(*alu, op2_max_64, shader, false);
+      case nir_op_fmin:
+         return emit_alu_op2_64bit(*alu, op2_min_64, shader, false);
+      case nir_op_b2f64:
+         return emit_alu_b2f64(*alu, shader);
+      case nir_op_f2f64:
+         return emit_alu_f2f64(*alu, shader);
+      case nir_op_i2f64:
+         return emit_alu_i2f64(*alu, op1_int_to_flt, shader);
+      case nir_op_u2f64:
+         return emit_alu_i2f64(*alu, op1_uint_to_flt, shader);
+      case nir_op_f2f32:
+         return emit_alu_f2f32(*alu, shader);
+      case nir_op_fabs:
+         return emit_alu_abs64(*alu, shader);
+      case nir_op_fsqrt:
+         return emit_alu_op1_64bit_trans(*alu, op1_sqrt_64, shader);
+      case nir_op_frcp:
+         return emit_alu_op1_64bit_trans(*alu, op1_recip_64, shader);
+      case nir_op_frsq:
+         return emit_alu_op1_64bit_trans(*alu, op1_recipsqrt_64, shader);
+      case nir_op_vec2:
+         return emit_alu_vec2_64(*alu, shader);
       default:
          return false;
          ;
       }
    }
 
-
    if (shader.chip_class() == ISA_CC_CAYMAN) {
       switch (alu->op) {
-      case nir_op_fcos_amd: return emit_alu_trans_op1_cayman(*alu, op1_cos, shader);
-      case nir_op_fexp2: return emit_alu_trans_op1_cayman(*alu, op1_exp_ieee, shader);
-      case nir_op_flog2: return emit_alu_trans_op1_cayman(*alu, op1_log_clamped, shader);
-      case nir_op_frcp: return emit_alu_trans_op1_cayman(*alu, op1_recip_ieee, shader);
-      case nir_op_frsq: return emit_alu_trans_op1_cayman(*alu,  op1_recipsqrt_ieee1, shader);
-      case nir_op_fsqrt: return emit_alu_trans_op1_cayman(*alu, op1_sqrt_ieee, shader);
-      case nir_op_fsin_amd: return emit_alu_trans_op1_cayman(*alu, op1_sin, shader);
-      case nir_op_i2f32: return emit_alu_op1(*alu, op1_int_to_flt, shader);
-      case nir_op_u2f32: return emit_alu_op1(*alu, op1_uint_to_flt, shader);
-      case nir_op_imul: return emit_alu_trans_op2_cayman(*alu, op2_mullo_int, shader);
-      case nir_op_imul_high: return emit_alu_trans_op2_cayman(*alu, op2_mulhi_int, shader);
-      case nir_op_umul_high: return emit_alu_trans_op2_cayman(*alu, op2_mulhi_uint, shader);
-      case nir_op_f2u32: return emit_alu_op1(*alu, op1_flt_to_uint, shader);
-      case nir_op_f2i32: return emit_alu_op1(*alu, op1_flt_to_int, shader);
-      case nir_op_ishl: return emit_alu_op2_int(*alu, op2_lshl_int, shader);
-      case nir_op_ishr: return emit_alu_op2_int(*alu, op2_ashr_int, shader);
-      case nir_op_ushr: return emit_alu_op2_int(*alu, op2_lshr_int, shader);
-      default:
-         ;
+      case nir_op_fcos_amd:
+         return emit_alu_trans_op1_cayman(*alu, op1_cos, shader);
+      case nir_op_fexp2:
+         return emit_alu_trans_op1_cayman(*alu, op1_exp_ieee, shader);
+      case nir_op_flog2:
+         return emit_alu_trans_op1_cayman(*alu, op1_log_clamped, shader);
+      case nir_op_frcp:
+         return emit_alu_trans_op1_cayman(*alu, op1_recip_ieee, shader);
+      case nir_op_frsq:
+         return emit_alu_trans_op1_cayman(*alu, op1_recipsqrt_ieee1, shader);
+      case nir_op_fsqrt:
+         return emit_alu_trans_op1_cayman(*alu, op1_sqrt_ieee, shader);
+      case nir_op_fsin_amd:
+         return emit_alu_trans_op1_cayman(*alu, op1_sin, shader);
+      case nir_op_i2f32:
+         return emit_alu_op1(*alu, op1_int_to_flt, shader);
+      case nir_op_u2f32:
+         return emit_alu_op1(*alu, op1_uint_to_flt, shader);
+      case nir_op_imul:
+         return emit_alu_trans_op2_cayman(*alu, op2_mullo_int, shader);
+      case nir_op_imul_high:
+         return emit_alu_trans_op2_cayman(*alu, op2_mulhi_int, shader);
+      case nir_op_umul_high:
+         return emit_alu_trans_op2_cayman(*alu, op2_mulhi_uint, shader);
+      case nir_op_f2u32:
+         return emit_alu_op1(*alu, op1_flt_to_uint, shader);
+      case nir_op_f2i32:
+         return emit_alu_op1(*alu, op1_flt_to_int, shader);
+      case nir_op_ishl:
+         return emit_alu_op2_int(*alu, op2_lshl_int, shader);
+      case nir_op_ishr:
+         return emit_alu_op2_int(*alu, op2_ashr_int, shader);
+      case nir_op_ushr:
+         return emit_alu_op2_int(*alu, op2_lshr_int, shader);
+      default:;
       }
    } else {
       if (shader.chip_class() == ISA_CC_EVERGREEN) {
          switch (alu->op) {
-         case nir_op_f2i32: return emit_alu_f2i32_or_u32_eg(*alu, op1_flt_to_int, shader);
-         case nir_op_f2u32: return emit_alu_f2i32_or_u32_eg(*alu, op1_flt_to_uint, shader);
-         default:
-            ;
+         case nir_op_f2i32:
+            return emit_alu_f2i32_or_u32_eg(*alu, op1_flt_to_int, shader);
+         case nir_op_f2u32:
+            return emit_alu_f2i32_or_u32_eg(*alu, op1_flt_to_uint, shader);
+         default:;
          }
-      } 
-      
+      }
+
       if (shader.chip_class() >= ISA_CC_R700) {
          switch (alu->op) {
-         case nir_op_ishl: return emit_alu_op2_int(*alu, op2_lshl_int, shader);
-         case nir_op_ishr: return emit_alu_op2_int(*alu, op2_ashr_int, shader);
-         case nir_op_ushr: return emit_alu_op2_int(*alu, op2_lshr_int, shader);
-         default:
-            ;
-         }         
-      } else  {
+         case nir_op_ishl:
+            return emit_alu_op2_int(*alu, op2_lshl_int, shader);
+         case nir_op_ishr:
+            return emit_alu_op2_int(*alu, op2_ashr_int, shader);
+         case nir_op_ushr:
+            return emit_alu_op2_int(*alu, op2_lshr_int, shader);
+         default:;
+         }
+      } else {
          switch (alu->op) {
-         case nir_op_ishl: return emit_alu_trans_op2_eg(*alu, op2_lshl_int, shader);
-         case nir_op_ishr: return emit_alu_trans_op2_eg(*alu, op2_ashr_int, shader);
-         case nir_op_ushr: return emit_alu_trans_op2_eg(*alu, op2_lshr_int, shader);
-         default:
-            ;
-         }                  
+         case nir_op_ishl:
+            return emit_alu_trans_op2_eg(*alu, op2_lshl_int, shader);
+         case nir_op_ishr:
+            return emit_alu_trans_op2_eg(*alu, op2_ashr_int, shader);
+         case nir_op_ushr:
+            return emit_alu_trans_op2_eg(*alu, op2_lshr_int, shader);
+         default:;
+         }
       }
-      
+
       switch (alu->op) {
-      case nir_op_f2i32: return emit_alu_trans_op1_eg(*alu, op1_flt_to_int, shader);
-      case nir_op_f2u32: return emit_alu_trans_op1_eg(*alu, op1_flt_to_uint, shader);         
-      case nir_op_fcos_amd: return emit_alu_trans_op1_eg(*alu, op1_cos, shader);
-      case nir_op_fexp2: return emit_alu_trans_op1_eg(*alu, op1_exp_ieee, shader);
-      case nir_op_flog2: return emit_alu_trans_op1_eg(*alu, op1_log_clamped, shader);
-      case nir_op_frcp: return emit_alu_trans_op1_eg(*alu, op1_recip_ieee, shader);
-      case nir_op_frsq: return emit_alu_trans_op1_eg(*alu, op1_recipsqrt_ieee1, shader);
-      case nir_op_fsin_amd: return emit_alu_trans_op1_eg(*alu, op1_sin, shader);
-      case nir_op_fsqrt: return emit_alu_trans_op1_eg(*alu, op1_sqrt_ieee, shader);
-      case nir_op_i2f32: return emit_alu_trans_op1_eg(*alu, op1_int_to_flt, shader);
-      case nir_op_u2f32: return emit_alu_trans_op1_eg(*alu, op1_uint_to_flt, shader);
-      case nir_op_imul: return emit_alu_trans_op2_eg(*alu, op2_mullo_int, shader);
-      case nir_op_imul_high: return emit_alu_trans_op2_eg(*alu, op2_mulhi_int, shader);
-      case nir_op_umul_high: return emit_alu_trans_op2_eg(*alu, op2_mulhi_uint, shader);
-      default:
-         ;
+      case nir_op_f2i32:
+         return emit_alu_trans_op1_eg(*alu, op1_flt_to_int, shader);
+      case nir_op_f2u32:
+         return emit_alu_trans_op1_eg(*alu, op1_flt_to_uint, shader);
+      case nir_op_fcos_amd:
+         return emit_alu_trans_op1_eg(*alu, op1_cos, shader);
+      case nir_op_fexp2:
+         return emit_alu_trans_op1_eg(*alu, op1_exp_ieee, shader);
+      case nir_op_flog2:
+         return emit_alu_trans_op1_eg(*alu, op1_log_clamped, shader);
+      case nir_op_frcp:
+         return emit_alu_trans_op1_eg(*alu, op1_recip_ieee, shader);
+      case nir_op_frsq:
+         return emit_alu_trans_op1_eg(*alu, op1_recipsqrt_ieee1, shader);
+      case nir_op_fsin_amd:
+         return emit_alu_trans_op1_eg(*alu, op1_sin, shader);
+      case nir_op_fsqrt:
+         return emit_alu_trans_op1_eg(*alu, op1_sqrt_ieee, shader);
+      case nir_op_i2f32:
+         return emit_alu_trans_op1_eg(*alu, op1_int_to_flt, shader);
+      case nir_op_u2f32:
+         return emit_alu_trans_op1_eg(*alu, op1_uint_to_flt, shader);
+      case nir_op_imul:
+         return emit_alu_trans_op2_eg(*alu, op2_mullo_int, shader);
+      case nir_op_imul_high:
+         return emit_alu_trans_op2_eg(*alu, op2_mulhi_int, shader);
+      case nir_op_umul_high:
+         return emit_alu_trans_op2_eg(*alu, op2_mulhi_uint, shader);
+      default:;
       }
    }
 
    switch (alu->op) {
-   case nir_op_b2b1: return emit_alu_op1(*alu, op1_mov, shader);
-   case nir_op_b2b32: return emit_alu_op1(*alu, op1_mov, shader);
-   case nir_op_b2f32: return emit_alu_b2x(*alu, ALU_SRC_1, shader);
-   case nir_op_b2i32: return emit_alu_b2x(*alu, ALU_SRC_1_INT, shader);
+   case nir_op_b2b1:
+      return emit_alu_op1(*alu, op1_mov, shader);
+   case nir_op_b2b32:
+      return emit_alu_op1(*alu, op1_mov, shader);
+   case nir_op_b2f32:
+      return emit_alu_b2x(*alu, ALU_SRC_1, shader);
+   case nir_op_b2i32:
+      return emit_alu_b2x(*alu, ALU_SRC_1_INT, shader);
 
-   case nir_op_bfm: return emit_alu_op2_int(*alu, op2_bfm_int, shader, op2_opt_none);
-   case nir_op_bit_count: return emit_alu_op1(*alu, op1_bcnt_int, shader);
+   case nir_op_bfm:
+      return emit_alu_op2_int(*alu, op2_bfm_int, shader, op2_opt_none);
+   case nir_op_bit_count:
+      return emit_alu_op1(*alu, op1_bcnt_int, shader);
 
-   case nir_op_bitfield_reverse: return emit_alu_op1(*alu, op1_bfrev_int, shader);
-   case nir_op_bitfield_select: return emit_alu_op3(*alu, op3_bfi_int, shader);
+   case nir_op_bitfield_reverse:
+      return emit_alu_op1(*alu, op1_bfrev_int, shader);
+   case nir_op_bitfield_select:
+      return emit_alu_op3(*alu, op3_bfi_int, shader);
 
-   case nir_op_b32all_fequal2: return emit_any_all_fcomp2(*alu, op2_sete_dx10, shader);
-   case nir_op_b32all_fequal3: return emit_any_all_fcomp(*alu, op2_sete, 3, true, shader);
-   case nir_op_b32all_fequal4: return emit_any_all_fcomp(*alu, op2_sete, 4, true, shader);
-   case nir_op_b32all_iequal2: return emit_any_all_icomp(*alu, op2_sete_int, 2, true, shader);
-   case nir_op_b32all_iequal3: return emit_any_all_icomp(*alu, op2_sete_int, 3, true, shader);
-   case nir_op_b32all_iequal4: return emit_any_all_icomp(*alu, op2_sete_int, 4, true, shader);
-   case nir_op_b32any_fnequal2: return emit_any_all_fcomp2(*alu, op2_setne_dx10, shader);
-   case nir_op_b32any_fnequal3: return emit_any_all_fcomp(*alu, op2_setne, 3, false, shader);
-   case nir_op_b32any_fnequal4: return emit_any_all_fcomp(*alu, op2_setne, 4, false, shader);
-   case nir_op_b32any_inequal2: return emit_any_all_icomp(*alu, op2_setne_int, 2, false, shader);
-   case nir_op_b32any_inequal3: return emit_any_all_icomp(*alu, op2_setne_int, 3, false, shader);
-   case nir_op_b32any_inequal4: return emit_any_all_icomp(*alu, op2_setne_int, 4, false, shader);
-   case nir_op_b32csel: return emit_alu_op3(*alu, op3_cnde_int, shader, {0, 2, 1});
+   case nir_op_b32all_fequal2:
+      return emit_any_all_fcomp2(*alu, op2_sete_dx10, shader);
+   case nir_op_b32all_fequal3:
+      return emit_any_all_fcomp(*alu, op2_sete, 3, true, shader);
+   case nir_op_b32all_fequal4:
+      return emit_any_all_fcomp(*alu, op2_sete, 4, true, shader);
+   case nir_op_b32all_iequal2:
+      return emit_any_all_icomp(*alu, op2_sete_int, 2, true, shader);
+   case nir_op_b32all_iequal3:
+      return emit_any_all_icomp(*alu, op2_sete_int, 3, true, shader);
+   case nir_op_b32all_iequal4:
+      return emit_any_all_icomp(*alu, op2_sete_int, 4, true, shader);
+   case nir_op_b32any_fnequal2:
+      return emit_any_all_fcomp2(*alu, op2_setne_dx10, shader);
+   case nir_op_b32any_fnequal3:
+      return emit_any_all_fcomp(*alu, op2_setne, 3, false, shader);
+   case nir_op_b32any_fnequal4:
+      return emit_any_all_fcomp(*alu, op2_setne, 4, false, shader);
+   case nir_op_b32any_inequal2:
+      return emit_any_all_icomp(*alu, op2_setne_int, 2, false, shader);
+   case nir_op_b32any_inequal3:
+      return emit_any_all_icomp(*alu, op2_setne_int, 3, false, shader);
+   case nir_op_b32any_inequal4:
+      return emit_any_all_icomp(*alu, op2_setne_int, 4, false, shader);
+   case nir_op_b32csel:
+      return emit_alu_op3(*alu, op3_cnde_int, shader, {0, 2, 1});
 
-   case nir_op_f2b32: return emit_alu_comb_with_zero(*alu, op2_setne_dx10, shader);
-   case nir_op_fabs: return emit_alu_op1(*alu, op1_mov, shader,  {1 << alu_src0_abs});
-   case nir_op_fadd: return emit_alu_op2(*alu, op2_add, shader);
-   case nir_op_fceil: return emit_alu_op1(*alu, op1_ceil, shader);
-   case nir_op_fcsel: return emit_alu_op3(*alu, op3_cnde, shader, {0, 2, 1});
-   case nir_op_fcsel_ge: return emit_alu_op3(*alu, op3_cndge, shader, {0, 1, 2});
-   case nir_op_fcsel_gt: return emit_alu_op3(*alu, op3_cndgt, shader, {0, 1, 2});
+   case nir_op_f2b32:
+      return emit_alu_comb_with_zero(*alu, op2_setne_dx10, shader);
+   case nir_op_fabs:
+      return emit_alu_op1(*alu, op1_mov, shader, {1 << alu_src0_abs});
+   case nir_op_fadd:
+      return emit_alu_op2(*alu, op2_add, shader);
+   case nir_op_fceil:
+      return emit_alu_op1(*alu, op1_ceil, shader);
+   case nir_op_fcsel:
+      return emit_alu_op3(*alu, op3_cnde, shader, {0, 2, 1});
+   case nir_op_fcsel_ge:
+      return emit_alu_op3(*alu, op3_cndge, shader, {0, 1, 2});
+   case nir_op_fcsel_gt:
+      return emit_alu_op3(*alu, op3_cndgt, shader, {0, 1, 2});
 
-   case nir_op_fdph: return emit_fdph(*alu, shader);
-   case nir_op_fdot2: return emit_dot(*alu, 2, shader);
-   case nir_op_fdot3: return emit_dot(*alu, 3, shader);
-   case nir_op_fdot4: return emit_dot(*alu, 4, shader);
+   case nir_op_fdph:
+      return emit_fdph(*alu, shader);
+   case nir_op_fdot2:
+      return emit_dot(*alu, 2, shader);
+   case nir_op_fdot3:
+      return emit_dot(*alu, 3, shader);
+   case nir_op_fdot4:
+      return emit_dot(*alu, 4, shader);
 
    case nir_op_feq32:
-   case nir_op_feq: return emit_alu_op2(*alu, op2_sete_dx10, shader);
-   case nir_op_ffloor: return emit_alu_op1(*alu, op1_floor, shader);
-   case nir_op_ffract: return emit_alu_op1(*alu, op1_fract, shader);
-   case nir_op_fge32: return emit_alu_op2(*alu, op2_setge_dx10, shader);
-   case nir_op_fge: return emit_alu_op2(*alu, op2_setge_dx10, shader);
-   case nir_op_find_lsb: return emit_alu_op1(*alu, op1_ffbl_int, shader);
+   case nir_op_feq:
+      return emit_alu_op2(*alu, op2_sete_dx10, shader);
+   case nir_op_ffloor:
+      return emit_alu_op1(*alu, op1_floor, shader);
+   case nir_op_ffract:
+      return emit_alu_op1(*alu, op1_fract, shader);
+   case nir_op_fge32:
+      return emit_alu_op2(*alu, op2_setge_dx10, shader);
+   case nir_op_fge:
+      return emit_alu_op2(*alu, op2_setge_dx10, shader);
+   case nir_op_find_lsb:
+      return emit_alu_op1(*alu, op1_ffbl_int, shader);
 
-   case nir_op_flt32: return emit_alu_op2(*alu, op2_setgt_dx10, shader, op2_opt_reverse);
-   case nir_op_flt: return emit_alu_op2(*alu, op2_setgt_dx10, shader, op2_opt_reverse);
-   case nir_op_fmax: return emit_alu_op2(*alu, op2_max_dx10, shader);
-   case nir_op_fmin: return emit_alu_op2(*alu, op2_min_dx10, shader);
+   case nir_op_flt32:
+      return emit_alu_op2(*alu, op2_setgt_dx10, shader, op2_opt_reverse);
+   case nir_op_flt:
+      return emit_alu_op2(*alu, op2_setgt_dx10, shader, op2_opt_reverse);
+   case nir_op_fmax:
+      return emit_alu_op2(*alu, op2_max_dx10, shader);
+   case nir_op_fmin:
+      return emit_alu_op2(*alu, op2_min_dx10, shader);
 
    case nir_op_fmul:
       if (!shader.has_flag(Shader::sh_legacy_math_rules))
          return emit_alu_op2(*alu, op2_mul_ieee, shader);
       FALLTHROUGH;
-   case nir_op_fmulz: return emit_alu_op2(*alu, op2_mul, shader);
+   case nir_op_fmulz:
+      return emit_alu_op2(*alu, op2_mul, shader);
 
-   case nir_op_fneg: return emit_alu_op1(*alu, op1_mov, shader, {1 << alu_src0_neg});
-   case nir_op_fneu32: return emit_alu_op2(*alu, op2_setne_dx10, shader);
-   case nir_op_fneu: return emit_alu_op2(*alu, op2_setne_dx10, shader);
+   case nir_op_fneg:
+      return emit_alu_op1(*alu, op1_mov, shader, {1 << alu_src0_neg});
+   case nir_op_fneu32:
+      return emit_alu_op2(*alu, op2_setne_dx10, shader);
+   case nir_op_fneu:
+      return emit_alu_op2(*alu, op2_setne_dx10, shader);
 
-   case nir_op_fround_even: return emit_alu_op1(*alu, op1_rndne, shader);
-   case nir_op_fsat: return emit_alu_op1(*alu, op1_mov, shader, {1 << alu_dst_clamp});
-   case nir_op_fsub: return emit_alu_op2(*alu, op2_add, shader, op2_opt_neg_src1);
-   case nir_op_ftrunc: return emit_alu_op1(*alu, op1_trunc, shader);
+   case nir_op_fround_even:
+      return emit_alu_op1(*alu, op1_rndne, shader);
+   case nir_op_fsat:
+      return emit_alu_op1(*alu, op1_mov, shader, {1 << alu_dst_clamp});
+   case nir_op_fsub:
+      return emit_alu_op2(*alu, op2_add, shader, op2_opt_neg_src1);
+   case nir_op_ftrunc:
+      return emit_alu_op1(*alu, op1_trunc, shader);
    case nir_op_i2b1:
-   case nir_op_i2b32: return emit_alu_i2orf2_b1(*alu, op2_setne_int, shader);
-   case nir_op_iadd: return emit_alu_op2_int(*alu, op2_add_int, shader);
-   case nir_op_iand: return emit_alu_op2_int(*alu, op2_and_int, shader);
-   case nir_op_ibfe: return emit_alu_op3(*alu, op3_bfe_int, shader);
-   case nir_op_i32csel_ge: return emit_alu_op3(*alu, op3_cndge_int, shader,  {0, 1, 2});
-   case nir_op_i32csel_gt: return emit_alu_op3(*alu, op3_cndgt_int, shader,  {0, 1, 2});
-   case nir_op_ieq32: return emit_alu_op2_int(*alu, op2_sete_int, shader);
-   case nir_op_ieq: return emit_alu_op2_int(*alu, op2_sete_int, shader);
-   case nir_op_ifind_msb_rev: return emit_alu_op1(*alu, op1_ffbh_int, shader);
-   case nir_op_ige32: return emit_alu_op2_int(*alu, op2_setge_int, shader);
-   case nir_op_ige: return emit_alu_op2_int(*alu, op2_setge_int, shader);
-   case nir_op_ilt32: return emit_alu_op2_int(*alu, op2_setgt_int, shader, op2_opt_reverse);
-   case nir_op_ilt: return emit_alu_op2_int(*alu, op2_setgt_int, shader, op2_opt_reverse);
-   case nir_op_imax: return emit_alu_op2_int(*alu, op2_max_int, shader);
-   case nir_op_imin: return emit_alu_op2_int(*alu, op2_min_int, shader);
-   case nir_op_ine32: return emit_alu_op2_int(*alu, op2_setne_int, shader);
-   case nir_op_ine: return emit_alu_op2_int(*alu, op2_setne_int, shader);
-   case nir_op_ineg: return emit_alu_comb_with_zero(*alu, op2_sub_int, shader);
-   case nir_op_inot: return emit_alu_op1(*alu, op1_not_int, shader);
-   case nir_op_ior: return emit_alu_op2_int(*alu, op2_or_int, shader);
-   case nir_op_isub: return emit_alu_op2_int(*alu, op2_sub_int, shader);
-   case nir_op_ixor: return emit_alu_op2_int(*alu, op2_xor_int, shader);
-   case nir_op_pack_64_2x32: return emit_pack_64_2x32(*alu, shader);
-   case nir_op_unpack_64_2x32: return emit_unpack_64_2x32(*alu, shader);
-   case nir_op_pack_64_2x32_split: return emit_pack_64_2x32_split(*alu, shader);
-   case nir_op_pack_half_2x16_split: return emit_pack_32_2x16_split(*alu, shader);
-   case nir_op_slt: return emit_alu_op2(*alu, op2_setgt, shader, op2_opt_reverse);
-   case nir_op_sge: return emit_alu_op2(*alu, op2_setge, shader);
-   case nir_op_ubfe: return emit_alu_op3(*alu, op3_bfe_uint, shader);
-   case nir_op_ufind_msb_rev: return emit_alu_op1(*alu, op1_ffbh_uint, shader);
-   case nir_op_uge32: return emit_alu_op2_int(*alu, op2_setge_uint, shader);
-   case nir_op_uge: return emit_alu_op2_int(*alu, op2_setge_uint, shader);
-   case nir_op_ult32: return emit_alu_op2_int(*alu, op2_setgt_uint, shader, op2_opt_reverse);
-   case nir_op_ult: return emit_alu_op2_int(*alu, op2_setgt_uint, shader, op2_opt_reverse);
-   case nir_op_umad24: return emit_alu_op3(*alu, op3_muladd_uint24, shader,  {0, 1, 2});
-   case nir_op_umax: return emit_alu_op2_int(*alu, op2_max_uint, shader);
-   case nir_op_umin: return emit_alu_op2_int(*alu, op2_min_uint, shader);
-   case nir_op_umul24: return emit_alu_op2(*alu, op2_mul_uint24, shader);
-   case nir_op_unpack_64_2x32_split_x: return emit_unpack_64_2x32_split(*alu, 0, shader);
-   case nir_op_unpack_64_2x32_split_y: return emit_unpack_64_2x32_split(*alu, 1, shader);
-   case nir_op_unpack_half_2x16_split_x: return emit_unpack_32_2x16_split_x(*alu, shader);
-   case nir_op_unpack_half_2x16_split_y: return emit_unpack_32_2x16_split_y(*alu, shader);
+   case nir_op_i2b32:
+      return emit_alu_i2orf2_b1(*alu, op2_setne_int, shader);
+   case nir_op_iadd:
+      return emit_alu_op2_int(*alu, op2_add_int, shader);
+   case nir_op_iand:
+      return emit_alu_op2_int(*alu, op2_and_int, shader);
+   case nir_op_ibfe:
+      return emit_alu_op3(*alu, op3_bfe_int, shader);
+   case nir_op_i32csel_ge:
+      return emit_alu_op3(*alu, op3_cndge_int, shader, {0, 1, 2});
+   case nir_op_i32csel_gt:
+      return emit_alu_op3(*alu, op3_cndgt_int, shader, {0, 1, 2});
+   case nir_op_ieq32:
+      return emit_alu_op2_int(*alu, op2_sete_int, shader);
+   case nir_op_ieq:
+      return emit_alu_op2_int(*alu, op2_sete_int, shader);
+   case nir_op_ifind_msb_rev:
+      return emit_alu_op1(*alu, op1_ffbh_int, shader);
+   case nir_op_ige32:
+      return emit_alu_op2_int(*alu, op2_setge_int, shader);
+   case nir_op_ige:
+      return emit_alu_op2_int(*alu, op2_setge_int, shader);
+   case nir_op_ilt32:
+      return emit_alu_op2_int(*alu, op2_setgt_int, shader, op2_opt_reverse);
+   case nir_op_ilt:
+      return emit_alu_op2_int(*alu, op2_setgt_int, shader, op2_opt_reverse);
+   case nir_op_imax:
+      return emit_alu_op2_int(*alu, op2_max_int, shader);
+   case nir_op_imin:
+      return emit_alu_op2_int(*alu, op2_min_int, shader);
+   case nir_op_ine32:
+      return emit_alu_op2_int(*alu, op2_setne_int, shader);
+   case nir_op_ine:
+      return emit_alu_op2_int(*alu, op2_setne_int, shader);
+   case nir_op_ineg:
+      return emit_alu_comb_with_zero(*alu, op2_sub_int, shader);
+   case nir_op_inot:
+      return emit_alu_op1(*alu, op1_not_int, shader);
+   case nir_op_ior:
+      return emit_alu_op2_int(*alu, op2_or_int, shader);
+   case nir_op_isub:
+      return emit_alu_op2_int(*alu, op2_sub_int, shader);
+   case nir_op_ixor:
+      return emit_alu_op2_int(*alu, op2_xor_int, shader);
+   case nir_op_pack_64_2x32:
+      return emit_pack_64_2x32(*alu, shader);
+   case nir_op_unpack_64_2x32:
+      return emit_unpack_64_2x32(*alu, shader);
+   case nir_op_pack_64_2x32_split:
+      return emit_pack_64_2x32_split(*alu, shader);
+   case nir_op_pack_half_2x16_split:
+      return emit_pack_32_2x16_split(*alu, shader);
+   case nir_op_slt:
+      return emit_alu_op2(*alu, op2_setgt, shader, op2_opt_reverse);
+   case nir_op_sge:
+      return emit_alu_op2(*alu, op2_setge, shader);
+   case nir_op_seq:
+      return emit_alu_op2(*alu, op2_sete, shader);
+   case nir_op_sne:
+      return emit_alu_op2(*alu, op2_setne, shader);
+   case nir_op_ubfe:
+      return emit_alu_op3(*alu, op3_bfe_uint, shader);
+   case nir_op_ufind_msb_rev:
+      return emit_alu_op1(*alu, op1_ffbh_uint, shader);
+   case nir_op_uge32:
+      return emit_alu_op2_int(*alu, op2_setge_uint, shader);
+   case nir_op_uge:
+      return emit_alu_op2_int(*alu, op2_setge_uint, shader);
+   case nir_op_ult32:
+      return emit_alu_op2_int(*alu, op2_setgt_uint, shader, op2_opt_reverse);
+   case nir_op_ult:
+      return emit_alu_op2_int(*alu, op2_setgt_uint, shader, op2_opt_reverse);
+   case nir_op_umad24:
+      return emit_alu_op3(*alu, op3_muladd_uint24, shader, {0, 1, 2});
+   case nir_op_umax:
+      return emit_alu_op2_int(*alu, op2_max_uint, shader);
+   case nir_op_umin:
+      return emit_alu_op2_int(*alu, op2_min_uint, shader);
+   case nir_op_umul24:
+      return emit_alu_op2(*alu, op2_mul_uint24, shader);
+   case nir_op_unpack_64_2x32_split_x:
+      return emit_unpack_64_2x32_split(*alu, 0, shader);
+   case nir_op_unpack_64_2x32_split_y:
+      return emit_unpack_64_2x32_split(*alu, 1, shader);
+   case nir_op_unpack_half_2x16_split_x:
+      return emit_unpack_32_2x16_split_x(*alu, shader);
+   case nir_op_unpack_half_2x16_split_y:
+      return emit_unpack_32_2x16_split_y(*alu, shader);
 
    case nir_op_ffma:
       if (!shader.has_flag(Shader::sh_legacy_math_rules))
          return emit_alu_op3(*alu, op3_muladd_ieee, shader);
       FALLTHROUGH;
-   case nir_op_ffmaz: return emit_alu_op3(*alu, op3_muladd, shader);
+   case nir_op_ffmaz:
+      return emit_alu_op3(*alu, op3_muladd, shader);
 
-   case nir_op_mov: return emit_alu_op1(*alu, op1_mov, shader);
-   case nir_op_f2i32: return emit_alu_op1(*alu, op1_flt_to_int, shader);
-   case nir_op_vec2: return emit_create_vec(*alu, 2, shader);
-   case nir_op_vec3: return emit_create_vec(*alu, 3, shader);
-   case nir_op_vec4: return emit_create_vec(*alu, 4, shader);
+   case nir_op_mov:
+      return emit_alu_op1(*alu, op1_mov, shader);
+   case nir_op_f2i32:
+      return emit_alu_op1(*alu, op1_flt_to_int, shader);
+   case nir_op_vec2:
+      return emit_create_vec(*alu, 2, shader);
+   case nir_op_vec3:
+      return emit_create_vec(*alu, 3, shader);
+   case nir_op_vec4:
+      return emit_create_vec(*alu, 4, shader);
 
    case nir_op_fddx:
-   case nir_op_fddx_coarse: return emit_tex_fdd(*alu, TexInstr::get_gradient_h, false, shader);
-   case nir_op_fddx_fine: return emit_tex_fdd(*alu, TexInstr::get_gradient_h, true, shader);
+   case nir_op_fddx_coarse:
+      return emit_tex_fdd(*alu, TexInstr::get_gradient_h, false, shader);
+   case nir_op_fddx_fine:
+      return emit_tex_fdd(*alu, TexInstr::get_gradient_h, true, shader);
    case nir_op_fddy:
-   case nir_op_fddy_coarse: return emit_tex_fdd(*alu,TexInstr::get_gradient_v, false, shader);
-   case nir_op_fddy_fine: return emit_tex_fdd(*alu, TexInstr::get_gradient_v,  true, shader);
-   case nir_op_cube_r600: return emit_alu_cube(*alu, shader);
+   case nir_op_fddy_coarse:
+      return emit_tex_fdd(*alu, TexInstr::get_gradient_v, false, shader);
+   case nir_op_fddy_fine:
+      return emit_tex_fdd(*alu, TexInstr::get_gradient_v, true, shader);
+   case nir_op_cube_r600:
+      return emit_alu_cube(*alu, shader);
    default:
       fprintf(stderr, "Unknown instruction '");
       nir_print_instr(&alu->instr, stderr);
       fprintf(stderr, "'\n");
       assert(0);
-   return false;
+      return false;
    }
 }
 
-static Pin pin_for_components(const nir_alu_instr& alu)
+static Pin
+pin_for_components(const nir_alu_instr& alu)
 {
-   return (alu.dest.dest.is_ssa &&
-           (nir_dest_num_components(alu.dest.dest) == 1)) ? pin_free : pin_none;
-
+   return (alu.dest.dest.is_ssa && (nir_dest_num_components(alu.dest.dest) == 1))
+             ? pin_free
+             : pin_none;
 }
 
-static bool emit_alu_op1_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& shader, bool switch_chan)
+static bool
+emit_alu_op1_64bit(const nir_alu_instr& alu,
+                   EAluOp opcode,
+                   Shader& shader,
+                   bool switch_chan)
 {
    auto& value_factory = shader.value_factory();
 
@@ -1430,22 +1718,24 @@ static bool emit_alu_op1_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& 
 
    AluInstr *ir = nullptr;
 
-   int swz[2] = {0,1};
+   int swz[2] = {0, 1};
    if (switch_chan) {
       swz[0] = 1;
       swz[1] = 0;
    }
 
-   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest) ; ++i) {
-      for (unsigned c = 0; c < 2 ; ++c) {
+   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest); ++i) {
+      for (unsigned c = 0; c < 2; ++c) {
          ir = new AluInstr(opcode,
                            value_factory.dest(alu.dest, 2 * i + c, pin_chan),
                            value_factory.src64(alu.src[0], i, swz[c]),
                            {alu_write});
          group->add_instruction(ir);
       }
-      if (alu.src[0].abs) ir->set_alu_flag(alu_src0_abs);
-      if (alu.src[0].negate) ir->set_alu_flag(alu_src0_neg);
+      if (alu.src[0].abs)
+         ir->set_alu_flag(alu_src0_abs);
+      if (alu.src[0].negate)
+         ir->set_alu_flag(alu_src0_neg);
    }
    if (ir)
       ir->set_alu_flag(alu_last_instr);
@@ -1453,29 +1743,33 @@ static bool emit_alu_op1_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& 
    return true;
 }
 
-static bool emit_alu_mov_64bit(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_alu_mov_64bit(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
 
    AluInstr *ir = nullptr;
 
-   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest) ; ++i) {
-      for (unsigned c = 0; c < 2 ; ++c) {
+   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest); ++i) {
+      for (unsigned c = 0; c < 2; ++c) {
          ir = new AluInstr(op1_mov,
                            value_factory.dest(alu.dest, 2 * i + c, pin_free),
                            value_factory.src64(alu.src[0], i, c),
                            {alu_write});
          shader.emit_instruction(ir);
       }
-      if (alu.src[0].abs) ir->set_alu_flag(alu_src0_abs);
-      if (alu.src[0].negate) ir->set_alu_flag(alu_src0_neg);
+      if (alu.src[0].abs)
+         ir->set_alu_flag(alu_src0_abs);
+      if (alu.src[0].negate)
+         ir->set_alu_flag(alu_src0_neg);
    }
    if (ir)
       ir->set_alu_flag(alu_last_instr);
    return true;
 }
 
-static bool emit_alu_neg(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_alu_neg(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
 
@@ -1483,8 +1777,8 @@ static bool emit_alu_neg(const nir_alu_instr& alu, Shader& shader)
 
    AluInstr *ir = nullptr;
 
-   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest) ; ++i) {
-      for (unsigned c = 0; c < 2 ; ++c) {
+   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest); ++i) {
+      for (unsigned c = 0; c < 2; ++c) {
          ir = new AluInstr(op1_mov,
                            value_factory.dest(alu.dest, 2 * i + c, pin_chan),
                            value_factory.src64(alu.src[0], i, c),
@@ -1499,17 +1793,20 @@ static bool emit_alu_neg(const nir_alu_instr& alu, Shader& shader)
    return true;
 }
 
-static bool emit_alu_abs64(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_alu_abs64(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
 
    assert(nir_dest_num_components(alu.dest.dest) == 1);
 
-   shader.emit_instruction(new AluInstr(op1_mov, value_factory.dest(alu.dest, 0, pin_chan),
+   shader.emit_instruction(new AluInstr(op1_mov,
+                                        value_factory.dest(alu.dest, 0, pin_chan),
                                         value_factory.src64(alu.src[0], 0, 0),
                                         AluInstr::write));
 
-   auto ir = new AluInstr(op1_mov, value_factory.dest(alu.dest, 1, pin_chan),
+   auto ir = new AluInstr(op1_mov,
+                          value_factory.dest(alu.dest, 1, pin_chan),
                           value_factory.src64(alu.src[0], 0, 1),
                           AluInstr::last_write);
    ir->set_alu_flag(alu_src0_abs);
@@ -1517,27 +1814,30 @@ static bool emit_alu_abs64(const nir_alu_instr& alu, Shader& shader)
    return true;
 }
 
-static bool emit_alu_op2_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& shader, bool switch_src)
+static bool
+emit_alu_op2_64bit(const nir_alu_instr& alu,
+                   EAluOp opcode,
+                   Shader& shader,
+                   bool switch_src)
 {
    auto& value_factory = shader.value_factory();
    auto group = new AluGroup();
    AluInstr *ir = nullptr;
-   int order[2] =  {0, 1};
+   int order[2] = {0, 1};
    if (switch_src) {
       order[0] = 1;
       order[1] = 0;
    }
 
-   int num_emit0  = opcode == op2_mul_64 ? 3 : 1;
+   int num_emit0 = opcode == op2_mul_64 ? 3 : 1;
 
    assert(num_emit0 == 1 || nir_dest_num_components(alu.dest.dest) == 1);
-
 
    for (unsigned k = 0; k < nir_dest_num_components(alu.dest.dest); ++k) {
       int i = 0;
       for (; i < num_emit0; ++i) {
-         auto dest = i < 2 ? value_factory.dest(alu.dest, i, pin_chan) :
-                             value_factory.dummy_dest(i);
+         auto dest = i < 2 ? value_factory.dest(alu.dest, i, pin_chan)
+                           : value_factory.dummy_dest(i);
 
          ir = new AluInstr(opcode,
                            dest,
@@ -1545,10 +1845,14 @@ static bool emit_alu_op2_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& 
                            value_factory.src64(alu.src[order[1]], k, 1),
                            i < 2 ? AluInstr::write : AluInstr::empty);
 
-         if (alu.src[0].abs) ir->set_alu_flag(switch_src ? alu_src1_abs : alu_src0_abs);
-         if (alu.src[1].abs) ir->set_alu_flag(switch_src ? alu_src0_abs : alu_src1_abs);
-         if (alu.src[0].negate) ir->set_alu_flag(switch_src ? alu_src1_neg : alu_src0_neg);
-         if (alu.src[1].negate) ir->set_alu_flag(switch_src ? alu_src0_neg : alu_src1_neg);
+         if (alu.src[0].abs)
+            ir->set_alu_flag(switch_src ? alu_src1_abs : alu_src0_abs);
+         if (alu.src[1].abs)
+            ir->set_alu_flag(switch_src ? alu_src0_abs : alu_src1_abs);
+         if (alu.src[0].negate)
+            ir->set_alu_flag(switch_src ? alu_src1_neg : alu_src0_neg);
+         if (alu.src[1].negate)
+            ir->set_alu_flag(switch_src ? alu_src0_neg : alu_src1_neg);
          if (alu.dest.saturate && i == 0) {
             ir->set_alu_flag(alu_dst_clamp);
          }
@@ -1556,8 +1860,8 @@ static bool emit_alu_op2_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& 
          group->add_instruction(ir);
       }
 
-      auto dest = i == 1 ? value_factory.dest(alu.dest, i, pin_chan) :
-                           value_factory.dummy_dest(i);
+      auto dest =
+         i == 1 ? value_factory.dest(alu.dest, i, pin_chan) : value_factory.dummy_dest(i);
 
       ir = new AluInstr(opcode,
                         dest,
@@ -1573,12 +1877,15 @@ static bool emit_alu_op2_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& 
    return true;
 }
 
-static bool emit_alu_op2_64bit_one_dst(const nir_alu_instr& alu, EAluOp opcode,
-                                       Shader& shader, bool switch_order)
+static bool
+emit_alu_op2_64bit_one_dst(const nir_alu_instr& alu,
+                           EAluOp opcode,
+                           Shader& shader,
+                           bool switch_order)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
-   int order[2] =  {0, 1};
+   int order[2] = {0, 1};
    if (switch_order) {
       order[0] = 1;
       order[1] = 0;
@@ -1595,10 +1902,14 @@ static bool emit_alu_op2_64bit_one_dst(const nir_alu_instr& alu, EAluOp opcode,
 
       ir = new AluInstr(opcode, dest, src, AluInstr::write, 2);
 
-      if (alu.src[0].abs) ir->set_alu_flag(switch_order ? alu_src1_abs : alu_src0_abs);
-      if (alu.src[1].abs) ir->set_alu_flag(switch_order ? alu_src0_abs : alu_src1_abs);
-      if (alu.src[0].negate) ir->set_alu_flag(switch_order ? alu_src1_neg : alu_src0_neg);
-      if (alu.src[1].negate) ir->set_alu_flag(switch_order ? alu_src0_neg : alu_src1_neg);
+      if (alu.src[0].abs)
+         ir->set_alu_flag(switch_order ? alu_src1_abs : alu_src0_abs);
+      if (alu.src[1].abs)
+         ir->set_alu_flag(switch_order ? alu_src0_abs : alu_src1_abs);
+      if (alu.src[0].negate)
+         ir->set_alu_flag(switch_order ? alu_src1_neg : alu_src0_neg);
+      if (alu.src[1].negate)
+         ir->set_alu_flag(switch_order ? alu_src0_neg : alu_src1_neg);
       ir->set_alu_flag(alu_64bit_op);
 
       shader.emit_instruction(ir);
@@ -1609,21 +1920,24 @@ static bool emit_alu_op2_64bit_one_dst(const nir_alu_instr& alu, EAluOp opcode,
    return true;
 }
 
-static bool emit_alu_op1_64bit_trans(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_alu_op1_64bit_trans(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    auto group = new AluGroup();
    AluInstr *ir = nullptr;
    for (unsigned i = 0; i < 3; ++i) {
       ir = new AluInstr(opcode,
-                        i < 2 ? value_factory.dest(alu.dest, i, pin_chan) :
-                                value_factory.dummy_dest(i),
+                        i < 2 ? value_factory.dest(alu.dest, i, pin_chan)
+                              : value_factory.dummy_dest(i),
                         value_factory.src64(alu.src[0], 0, 1),
                         value_factory.src64(alu.src[0], 0, 0),
                         i < 2 ? AluInstr::write : AluInstr::empty);
 
-      if (alu.src[0].abs || opcode == op1_sqrt_64) ir->set_alu_flag(alu_src1_abs);
-      if (alu.src[0].negate) ir->set_alu_flag(alu_src1_neg);
+      if (alu.src[0].abs || opcode == op1_sqrt_64)
+         ir->set_alu_flag(alu_src1_abs);
+      if (alu.src[0].negate)
+         ir->set_alu_flag(alu_src1_neg);
 
       group->add_instruction(ir);
    }
@@ -1631,19 +1945,19 @@ static bool emit_alu_op1_64bit_trans(const nir_alu_instr& alu, EAluOp opcode, Sh
       ir->set_alu_flag(alu_last_instr);
    shader.emit_instruction(group);
    return true;
-
 }
 
-static bool emit_alu_fma_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_alu_fma_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    auto group = new AluGroup();
    AluInstr *ir = nullptr;
-   for (unsigned i = 0; i < 4 ; ++i) {
+   for (unsigned i = 0; i < 4; ++i) {
 
       int chan = i < 3 ? 1 : 0;
-      auto dest = i < 2 ? value_factory.dest(alu.dest, i, pin_chan) :
-                          value_factory.dummy_dest(i);
+      auto dest =
+         i < 2 ? value_factory.dest(alu.dest, i, pin_chan) : value_factory.dummy_dest(i);
 
       ir = new AluInstr(opcode,
                         dest,
@@ -1653,13 +1967,15 @@ static bool emit_alu_fma_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& 
                         i < 2 ? AluInstr::write : AluInstr::empty);
 
       if (i < 3) {
-         if (alu.src[0].negate) ir->set_alu_flag(alu_src0_neg);
-         if (alu.src[1].negate) ir->set_alu_flag(alu_src1_neg);
-         if (alu.src[2].negate) ir->set_alu_flag(alu_src2_neg);
+         if (alu.src[0].negate)
+            ir->set_alu_flag(alu_src0_neg);
+         if (alu.src[1].negate)
+            ir->set_alu_flag(alu_src1_neg);
+         if (alu.src[2].negate)
+            ir->set_alu_flag(alu_src2_neg);
       }
 
       group->add_instruction(ir);
-
    }
    if (ir)
       ir->set_alu_flag(alu_last_instr);
@@ -1667,26 +1983,27 @@ static bool emit_alu_fma_64bit(const nir_alu_instr& alu, EAluOp opcode, Shader& 
    return true;
 }
 
-static bool emit_alu_b2f64(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_alu_b2f64(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    auto group = new AluGroup();
    AluInstr *ir = nullptr;
 
-   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest) ; ++i) {
+   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest); ++i) {
       ir = new AluInstr(op2_and_int,
-                           value_factory.dest(alu.dest, 2 * i, pin_group),
-                           value_factory.src(alu.src[0], i),
-                           value_factory.zero(),
-                           {alu_write});
-       group->add_instruction(ir);
+                        value_factory.dest(alu.dest, 2 * i, pin_group),
+                        value_factory.src(alu.src[0], i),
+                        value_factory.zero(),
+                        {alu_write});
+      group->add_instruction(ir);
 
-       ir = new AluInstr(op2_and_int,
-                         value_factory.dest(alu.dest, 2 * i  + 1, pin_group),
-                         value_factory.src(alu.src[0], i),
-                         value_factory.literal(0x3ff00000),
-                         {alu_write});
-        group->add_instruction(ir);
+      ir = new AluInstr(op2_and_int,
+                        value_factory.dest(alu.dest, 2 * i + 1, pin_group),
+                        value_factory.src(alu.src[0], i),
+                        value_factory.literal(0x3ff00000),
+                        {alu_write});
+      group->add_instruction(ir);
    }
    if (ir)
       ir->set_alu_flag(alu_last_instr);
@@ -1694,7 +2011,8 @@ static bool emit_alu_b2f64(const nir_alu_instr& alu, Shader& shader)
    return true;
 }
 
-static bool emit_alu_i2f64(const nir_alu_instr& alu, EAluOp op, Shader& shader)
+static bool
+emit_alu_i2f64(const nir_alu_instr& alu, EAluOp op, Shader& shader)
 {
    /* int 64 to f64 should have been lowered, so we only handle i32 to f64 */
    auto& value_factory = shader.value_factory();
@@ -1704,45 +2022,36 @@ static bool emit_alu_i2f64(const nir_alu_instr& alu, EAluOp op, Shader& shader)
    assert(nir_dest_num_components(alu.dest.dest) == 1);
 
    auto tmpx = value_factory.temp_register();
-   shader.emit_instruction(new AluInstr(op2_and_int, tmpx,
+   shader.emit_instruction(new AluInstr(op2_and_int,
+                                        tmpx,
                                         value_factory.src(alu.src[0], 0),
                                         value_factory.literal(0xffffff00),
                                         AluInstr::write));
    auto tmpy = value_factory.temp_register();
-   shader.emit_instruction(new AluInstr(op2_and_int, tmpy,
+   shader.emit_instruction(new AluInstr(op2_and_int,
+                                        tmpy,
                                         value_factory.src(alu.src[0], 0),
                                         value_factory.literal(0xff),
                                         AluInstr::last_write));
 
-
    auto tmpx2 = value_factory.temp_register();
    auto tmpy2 = value_factory.temp_register();
-   shader.emit_instruction(new AluInstr(op, tmpx2, tmpx,
-                                        AluInstr::last_write));
-   shader.emit_instruction(new AluInstr(op, tmpy2, tmpy,
-                                        AluInstr::last_write));
+   shader.emit_instruction(new AluInstr(op, tmpx2, tmpx, AluInstr::last_write));
+   shader.emit_instruction(new AluInstr(op, tmpy2, tmpy, AluInstr::last_write));
 
    auto tmpx3 = value_factory.temp_register(0);
    auto tmpy3 = value_factory.temp_register(1);
    auto tmpz3 = value_factory.temp_register(2);
    auto tmpw3 = value_factory.temp_register(3);
 
-
-   ir = new AluInstr(op1_flt32_to_flt64,
-                     tmpx3,
-                     tmpx2, AluInstr::write);
+   ir = new AluInstr(op1_flt32_to_flt64, tmpx3, tmpx2, AluInstr::write);
    group->add_instruction(ir);
-   ir = new AluInstr(op1_flt32_to_flt64,
-                     tmpy3,
-                     value_factory.zero(), AluInstr::write);
+   ir = new AluInstr(op1_flt32_to_flt64, tmpy3, value_factory.zero(), AluInstr::write);
    group->add_instruction(ir);
-   ir = new AluInstr(op1_flt32_to_flt64,
-                     tmpz3,
-                     tmpy2, AluInstr::write);
+   ir = new AluInstr(op1_flt32_to_flt64, tmpz3, tmpy2, AluInstr::write);
    group->add_instruction(ir);
-   ir = new AluInstr(op1_flt32_to_flt64,
-                     tmpw3,
-                     value_factory.zero(), AluInstr::last_write);
+   ir =
+      new AluInstr(op1_flt32_to_flt64, tmpw3, value_factory.zero(), AluInstr::last_write);
    group->add_instruction(ir);
    shader.emit_instruction(group);
 
@@ -1750,18 +2059,23 @@ static bool emit_alu_i2f64(const nir_alu_instr& alu, EAluOp op, Shader& shader)
 
    ir = new AluInstr(op2_add_64,
                      value_factory.dest(alu.dest, 0, pin_chan),
-                     tmpy3, tmpw3, AluInstr::write);
+                     tmpy3,
+                     tmpw3,
+                     AluInstr::write);
    group->add_instruction(ir);
    ir = new AluInstr(op2_add_64,
                      value_factory.dest(alu.dest, 1, pin_chan),
-                     tmpx3, tmpz3, AluInstr::write);
+                     tmpx3,
+                     tmpz3,
+                     AluInstr::write);
    group->add_instruction(ir);
    shader.emit_instruction(group);
 
    return true;
 }
 
-static bool emit_alu_f2f64(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_alu_f2f64(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    auto group = new AluGroup();
@@ -1771,17 +2085,20 @@ static bool emit_alu_f2f64(const nir_alu_instr& alu, Shader& shader)
 
    ir = new AluInstr(op1_flt32_to_flt64,
                      value_factory.dest(alu.dest, 0, pin_chan),
-                     value_factory.src(alu.src[0], 0), AluInstr::write);
+                     value_factory.src(alu.src[0], 0),
+                     AluInstr::write);
    group->add_instruction(ir);
    ir = new AluInstr(op1_flt32_to_flt64,
                      value_factory.dest(alu.dest, 1, pin_chan),
-                     value_factory.zero(), AluInstr::last_write);
+                     value_factory.zero(),
+                     AluInstr::last_write);
    group->add_instruction(ir);
    shader.emit_instruction(group);
    return true;
 }
 
-static bool emit_alu_f2f32(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_alu_f2f32(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    auto group = new AluGroup();
@@ -1789,32 +2106,37 @@ static bool emit_alu_f2f32(const nir_alu_instr& alu, Shader& shader)
 
    ir = new AluInstr(op1v_flt64_to_flt32,
                      value_factory.dest(alu.dest, 0, pin_chan),
-                     value_factory.src64(alu.src[0], 0, 1), {alu_write});
+                     value_factory.src64(alu.src[0], 0, 1),
+                     {alu_write});
    group->add_instruction(ir);
    ir = new AluInstr(op1v_flt64_to_flt32,
                      value_factory.dummy_dest(1),
-                     value_factory.src64(alu.src[0], 0, 0), AluInstr::last);
+                     value_factory.src64(alu.src[0], 0, 0),
+                     AluInstr::last);
    group->add_instruction(ir);
    shader.emit_instruction(group);
    return true;
-
 }
 
-static bool emit_alu_b2x(const nir_alu_instr& alu, AluInlineConstants mask, Shader& shader)
+static bool
+emit_alu_b2x(const nir_alu_instr& alu, AluInlineConstants mask, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
    auto pin = pin_for_components(alu);
 
-   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest) ; ++i) {
-      if (alu.dest.write_mask & (1 << i)){
+   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest); ++i) {
+      if (alu.dest.write_mask & (1 << i)) {
+         auto src = value_factory.src(alu.src[0], i);
          ir = new AluInstr(op2_and_int,
                            value_factory.dest(alu.dest, i, pin),
-                           value_factory.src(alu.src[0], i),
+                           src,
                            value_factory.inline_const(mask, 0),
                            {alu_write});
-         if (alu.src[0].negate) ir->set_alu_flag(alu_src0_neg);
-         if (alu.src[0].abs) ir->set_alu_flag(alu_src0_abs);
+         if (alu.src[0].negate)
+            ir->set_alu_flag(alu_src0_neg);
+         if (alu.src[0].abs)
+            ir->set_alu_flag(alu_src0_abs);
          shader.emit_instruction(ir);
       }
    }
@@ -1823,17 +2145,23 @@ static bool emit_alu_b2x(const nir_alu_instr& alu, AluInlineConstants mask, Shad
    return true;
 }
 
-static bool emit_alu_op1(const nir_alu_instr& alu, EAluOp opcode, Shader& shader, const AluOpFlags& flags)
+static bool
+emit_alu_op1(const nir_alu_instr& alu,
+             EAluOp opcode,
+             Shader& shader,
+             const AluOpFlags& flags)
 {
    auto& value_factory = shader.value_factory();
 
    AluInstr *ir = nullptr;
    auto pin = pin_for_components(alu);
 
-   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest) ; ++i) {
-      if (alu.dest.write_mask & (1 << i)){
-         ir = new AluInstr(opcode, value_factory.dest(alu.dest, i, pin),
-                           value_factory.src(alu.src[0], i), {alu_write});
+   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest); ++i) {
+      if (alu.dest.write_mask & (1 << i)) {
+         ir = new AluInstr(opcode,
+                           value_factory.dest(alu.dest, i, pin),
+                           value_factory.src(alu.src[0], i),
+                           {alu_write});
 
          if (flags.test(alu_src0_abs) || alu.src[0].abs)
             ir->set_alu_flag(alu_src0_abs);
@@ -1852,8 +2180,11 @@ static bool emit_alu_op1(const nir_alu_instr& alu, EAluOp opcode, Shader& shader
    return true;
 }
 
-static bool emit_alu_op2(const nir_alu_instr& alu, EAluOp opcode, Shader& shader,
-                  AluInstr::Op2Options opts)
+static bool
+emit_alu_op2(const nir_alu_instr& alu,
+             EAluOp opcode,
+             Shader& shader,
+             AluInstr::Op2Options opts)
 {
    auto& value_factory = shader.value_factory();
    const nir_alu_src *src0 = &alu.src[0];
@@ -1870,18 +2201,24 @@ static bool emit_alu_op2(const nir_alu_instr& alu, EAluOp opcode, Shader& shader
 
    auto pin = pin_for_components(alu);
    AluInstr *ir = nullptr;
-   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest) ; ++i) {
-      if (alu.dest.write_mask & (1 << i)){
+   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest); ++i) {
+      if (alu.dest.write_mask & (1 << i)) {
          ir = new AluInstr(opcode,
                            value_factory.dest(alu.dest.dest, i, pin),
                            value_factory.src(*src0, i),
-                           value_factory.src(*src1, i), {alu_write});
+                           value_factory.src(*src1, i),
+                           {alu_write});
 
-         if (src0->negate) ir->set_alu_flag(alu_src0_neg);
-         if (src0->abs) ir->set_alu_flag(alu_src0_abs);
-         if (src1_negate) ir->set_alu_flag(alu_src1_neg);
-         if (src1->abs) ir->set_alu_flag(alu_src1_abs);
-         if (alu.dest.saturate) ir->set_alu_flag(alu_dst_clamp);
+         if (src0->negate)
+            ir->set_alu_flag(alu_src0_neg);
+         if (src0->abs)
+            ir->set_alu_flag(alu_src0_abs);
+         if (src1_negate)
+            ir->set_alu_flag(alu_src1_neg);
+         if (src1->abs)
+            ir->set_alu_flag(alu_src1_abs);
+         if (alu.dest.saturate)
+            ir->set_alu_flag(alu_dst_clamp);
          shader.emit_instruction(ir);
       }
    }
@@ -1890,8 +2227,11 @@ static bool emit_alu_op2(const nir_alu_instr& alu, EAluOp opcode, Shader& shader
    return true;
 }
 
-static bool emit_alu_op2_int(const nir_alu_instr& alu, EAluOp opcode, Shader& shader,
-                             AluInstr::Op2Options opts)
+static bool
+emit_alu_op2_int(const nir_alu_instr& alu,
+                 EAluOp opcode,
+                 Shader& shader,
+                 AluInstr::Op2Options opts)
 {
    assert(!alu.src[0].abs);
    assert(!alu.src[0].negate);
@@ -1901,8 +2241,11 @@ static bool emit_alu_op2_int(const nir_alu_instr& alu, EAluOp opcode, Shader& sh
    return emit_alu_op2(alu, opcode, shader, opts);
 }
 
-static bool emit_alu_op3(const nir_alu_instr& alu, EAluOp opcode, Shader& shader,
-                  const std::array<int, 3>& src_shuffle)
+static bool
+emit_alu_op3(const nir_alu_instr& alu,
+             EAluOp opcode,
+             Shader& shader,
+             const std::array<int, 3>& src_shuffle)
 {
    auto& value_factory = shader.value_factory();
    const nir_alu_src *src[3];
@@ -1912,19 +2255,28 @@ static bool emit_alu_op3(const nir_alu_instr& alu, EAluOp opcode, Shader& shader
 
    auto pin = pin_for_components(alu);
    AluInstr *ir = nullptr;
-   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest) ; ++i) {
-      if (alu.dest.write_mask & (1 << i)){
-         ir = new AluInstr(opcode, value_factory.dest(alu.dest.dest, i, pin),
+   for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest); ++i) {
+      if (alu.dest.write_mask & (1 << i)) {
+         ir = new AluInstr(opcode,
+                           value_factory.dest(alu.dest.dest, i, pin),
                            value_factory.src(*src[0], i),
-               value_factory.src(*src[1], i),
-               value_factory.src(*src[2], i),
-         {alu_write});
+                           value_factory.src(*src[1], i),
+                           value_factory.src(*src[2], i),
+                           {alu_write});
 
-         if (src[0]->negate) ir->set_alu_flag(alu_src0_neg);
-         if (src[1]->negate) ir->set_alu_flag(alu_src1_neg);
-         if (src[2]->negate) ir->set_alu_flag(alu_src2_neg);
+         if (src[0]->negate)
+            ir->set_alu_flag(alu_src0_neg);
+         if (src[1]->negate)
+            ir->set_alu_flag(alu_src1_neg);
+         if (src[2]->negate)
+            ir->set_alu_flag(alu_src2_neg);
 
-         if (alu.dest.saturate) ir->set_alu_flag(alu_dst_clamp);
+         assert(!src[0]->abs);
+         assert(!src[1]->abs);
+         assert(!src[2]->abs);
+
+         if (alu.dest.saturate)
+            ir->set_alu_flag(alu_dst_clamp);
          ir->set_alu_flag(alu_write);
          shader.emit_instruction(ir);
       }
@@ -1934,7 +2286,8 @@ static bool emit_alu_op3(const nir_alu_instr& alu, EAluOp opcode, Shader& shader
    return true;
 }
 
-static bool emit_any_all_fcomp2(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_any_all_fcomp2(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    AluInstr *ir = nullptr;
    auto& value_factory = shader.value_factory();
@@ -1943,10 +2296,12 @@ static bool emit_any_all_fcomp2(const nir_alu_instr& alu, EAluOp opcode, Shader&
    tmp[0] = value_factory.temp_register();
    tmp[1] = value_factory.temp_register();
 
-   for (unsigned i = 0; i < 2 ; ++i) {
-      ir = new AluInstr(opcode, tmp[i],
+   for (unsigned i = 0; i < 2; ++i) {
+      ir = new AluInstr(opcode,
+                        tmp[i],
                         value_factory.src(alu.src[0], i),
-                        value_factory.src(alu.src[1], i), {alu_write});
+                        value_factory.src(alu.src[1], i),
+                        {alu_write});
       if (alu.src[0].abs)
          ir->set_alu_flag(alu_src0_abs);
       if (alu.src[0].negate)
@@ -1961,15 +2316,18 @@ static bool emit_any_all_fcomp2(const nir_alu_instr& alu, EAluOp opcode, Shader&
    }
    ir->set_alu_flag(alu_last_instr);
 
-   opcode = (opcode == op2_setne_dx10) ? op2_or_int: op2_and_int;
+   opcode = (opcode == op2_setne_dx10) ? op2_or_int : op2_and_int;
    ir = new AluInstr(opcode,
                      value_factory.dest(alu.dest, 0, pin_free),
-                     tmp[0], tmp[1], AluInstr::last_write);
+                     tmp[0],
+                     tmp[1],
+                     AluInstr::last_write);
    shader.emit_instruction(ir);
    return true;
 }
 
-static bool emit_any_all_fcomp(const nir_alu_instr& alu, EAluOp op, int nc, bool all, Shader& shader)
+static bool
+emit_any_all_fcomp(const nir_alu_instr& alu, EAluOp op, int nc, bool all, Shader& shader)
 {
    /* This should probabyl be lowered in nir */
    auto& value_factory = shader.value_factory();
@@ -1978,17 +2336,19 @@ static bool emit_any_all_fcomp(const nir_alu_instr& alu, EAluOp op, int nc, bool
    RegisterVec4 v = value_factory.temp_vec4(pin_group);
    AluInstr::SrcValues s;
 
-   for (int i = 0; i < nc ; ++i) {
+   for (int i = 0; i < nc; ++i) {
       s.push_back(v[i]);
    }
 
-   for (int i = nc; i < 4 ; ++i)
+   for (int i = nc; i < 4; ++i)
       s.push_back(value_factory.inline_const(all ? ALU_SRC_1 : ALU_SRC_0, 0));
 
-   for (int i = 0; i < nc ; ++i) {
-      ir = new AluInstr(op, v[i],
+   for (int i = 0; i < nc; ++i) {
+      ir = new AluInstr(op,
+                        v[i],
                         value_factory.src(alu.src[0], i),
-                        value_factory.src(alu.src[1], i), {alu_write});
+                        value_factory.src(alu.src[1], i),
+                        {alu_write});
 
       if (alu.src[0].abs)
          ir->set_alu_flag(alu_src0_abs);
@@ -2015,9 +2375,9 @@ static bool emit_any_all_fcomp(const nir_alu_instr& alu, EAluOp op, int nc, bool
    shader.emit_instruction(ir);
 
    if (all)
-      op = (op == op2_sete) ? op2_sete_dx10: op2_setne_dx10;
+      op = (op == op2_sete) ? op2_sete_dx10 : op2_setne_dx10;
    else
-      op = (op == op2_sete) ? op2_setne_dx10: op2_sete_dx10;
+      op = (op == op2_sete) ? op2_setne_dx10 : op2_sete_dx10;
 
    ir = new AluInstr(op,
                      value_factory.dest(alu.dest, 0, pin_free),
@@ -2031,7 +2391,8 @@ static bool emit_any_all_fcomp(const nir_alu_instr& alu, EAluOp op, int nc, bool
    return true;
 }
 
-static bool emit_any_all_icomp(const nir_alu_instr& alu, EAluOp op, int nc, bool all, Shader& shader)
+static bool
+emit_any_all_icomp(const nir_alu_instr& alu, EAluOp op, int nc, bool all, Shader& shader)
 {
    assert(!alu.src[0].abs);
    assert(!alu.src[0].negate);
@@ -2046,20 +2407,23 @@ static bool emit_any_all_icomp(const nir_alu_instr& alu, EAluOp op, int nc, bool
 
    auto dest = value_factory.dest(alu.dest.dest, 0, pin_free);
 
-   for (int i = 0; i < nc + nc/2; ++i)
+   for (int i = 0; i < nc + nc / 2; ++i)
       v[i] = value_factory.temp_register();
 
    EAluOp combine = all ? op2_and_int : op2_or_int;
 
-   for (int i = 0; i < nc ; ++i) {
-      ir = new AluInstr(op, v[i], value_factory.src(alu.src[0], i),
-            value_factory.src(alu.src[1], i), AluInstr::write);
+   for (int i = 0; i < nc; ++i) {
+      ir = new AluInstr(op,
+                        v[i],
+                        value_factory.src(alu.src[0], i),
+                        value_factory.src(alu.src[1], i),
+                        AluInstr::write);
       shader.emit_instruction(ir);
    }
    if (ir)
-         ir->set_alu_flag(alu_last_instr);
+      ir->set_alu_flag(alu_last_instr);
 
-   if (nc ==2) {
+   if (nc == 2) {
       ir = new AluInstr(combine, dest, v[0], v[1], AluInstr::last_write);
       shader.emit_instruction(ir);
       return true;
@@ -2086,7 +2450,8 @@ static bool emit_any_all_icomp(const nir_alu_instr& alu, EAluOp op, int nc, bool
    return false;
 }
 
-static bool emit_dot(const nir_alu_instr& alu, int n, Shader& shader)
+static bool
+emit_dot(const nir_alu_instr& alu, int n, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    const nir_alu_src& src0 = alu.src[0];
@@ -2096,32 +2461,38 @@ static bool emit_dot(const nir_alu_instr& alu, int n, Shader& shader)
 
    AluInstr::SrcValues srcs(8);
 
-   for (int i = 0; i < n ; ++i) {
-      srcs[2 * i    ] = value_factory.src(src0, i);
+   for (int i = 0; i < n; ++i) {
+      srcs[2 * i] = value_factory.src(src0, i);
       srcs[2 * i + 1] = value_factory.src(src1, i);
    }
 
-   for (int i = n; i < 4 ; ++i) {
-      srcs[2 * i    ] = value_factory.zero();
+   for (int i = n; i < 4; ++i) {
+      srcs[2 * i] = value_factory.zero();
       srcs[2 * i + 1] = value_factory.zero();
    }
 
-   auto op = unlikely(shader.has_flag(Shader::sh_legacy_math_rules)) ?
-                op2_dot4 : op2_dot4_ieee;
-   AluInstr *ir = new AluInstr(op, dest, srcs,  AluInstr::last_write, 4);
+   auto op =
+      unlikely(shader.has_flag(Shader::sh_legacy_math_rules)) ? op2_dot4 : op2_dot4_ieee;
+   AluInstr *ir = new AluInstr(op, dest, srcs, AluInstr::last_write, 4);
 
-   if (src0.negate) ir->set_alu_flag(alu_src0_neg);
-   if (src0.abs) ir->set_alu_flag(alu_src0_abs);
-   if (src1.negate) ir->set_alu_flag(alu_src1_neg);
-   if (src1.abs) ir->set_alu_flag(alu_src1_abs);
+   if (src0.negate)
+      ir->set_alu_flag(alu_src0_neg);
+   if (src0.abs)
+      ir->set_alu_flag(alu_src0_abs);
+   if (src1.negate)
+      ir->set_alu_flag(alu_src1_neg);
+   if (src1.abs)
+      ir->set_alu_flag(alu_src1_abs);
 
-   if (alu.dest.saturate) ir->set_alu_flag(alu_dst_clamp);
+   if (alu.dest.saturate)
+      ir->set_alu_flag(alu_dst_clamp);
 
    shader.emit_instruction(ir);
    return true;
 }
 
-static bool emit_fdph(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_fdph(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    const nir_alu_src& src0 = alu.src[0];
@@ -2131,43 +2502,52 @@ static bool emit_fdph(const nir_alu_instr& alu, Shader& shader)
 
    AluInstr::SrcValues srcs(8);
 
-   for (int i = 0; i < 3 ; ++i) {
-      srcs[2 * i    ] = value_factory.src(src0, i);
+   for (int i = 0; i < 3; ++i) {
+      srcs[2 * i] = value_factory.src(src0, i);
       srcs[2 * i + 1] = value_factory.src(src1, i);
    }
 
    srcs[6] = value_factory.one();
    srcs[7] = value_factory.src(src1, 3);
 
-   auto op = unlikely(shader.has_flag(Shader::sh_legacy_math_rules)) ?
-                op2_dot4 : op2_dot4_ieee;
-   AluInstr *ir = new AluInstr(op, dest, srcs,  AluInstr::last_write, 4);
+   auto op =
+      unlikely(shader.has_flag(Shader::sh_legacy_math_rules)) ? op2_dot4 : op2_dot4_ieee;
+   AluInstr *ir = new AluInstr(op, dest, srcs, AluInstr::last_write, 4);
 
-   if (src0.negate) ir->set_alu_flag(alu_src0_neg);
-   if (src0.abs) ir->set_alu_flag(alu_src0_abs);
-   if (src1.negate) ir->set_alu_flag(alu_src1_neg);
-   if (src1.abs) ir->set_alu_flag(alu_src1_abs);
+   if (src0.negate)
+      ir->set_alu_flag(alu_src0_neg);
+   if (src0.abs)
+      ir->set_alu_flag(alu_src0_abs);
+   if (src1.negate)
+      ir->set_alu_flag(alu_src1_neg);
+   if (src1.abs)
+      ir->set_alu_flag(alu_src1_abs);
 
-   if (alu.dest.saturate) ir->set_alu_flag(alu_dst_clamp);
+   if (alu.dest.saturate)
+      ir->set_alu_flag(alu_dst_clamp);
 
    shader.emit_instruction(ir);
    return true;
 }
 
-static bool emit_create_vec(const nir_alu_instr& instr, unsigned nc, Shader& shader)
+static bool
+emit_create_vec(const nir_alu_instr& instr, unsigned nc, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
 
-   for(unsigned i = 0; i < nc; ++i) {
-      if (instr.dest.write_mask & (1 << i)){
+   for (unsigned i = 0; i < nc; ++i) {
+      if (instr.dest.write_mask & (1 << i)) {
          auto src = value_factory.src(instr.src[i].src, instr.src[i].swizzle[0]);
          auto dst = value_factory.dest(instr.dest.dest, i, pin_chan);
          ir = new AluInstr(op1_mov, dst, src, {alu_write});
 
-         if (instr.dest.saturate) ir->set_alu_flag(alu_dst_clamp);
-         if (instr.src[i].negate) ir->set_alu_flag(alu_src0_neg);
-         if (instr.src[i].abs) ir->set_alu_flag(alu_src0_abs);
+         if (instr.dest.saturate)
+            ir->set_alu_flag(alu_dst_clamp);
+         if (instr.src[i].negate)
+            ir->set_alu_flag(alu_src0_neg);
+         if (instr.src[i].abs)
+            ir->set_alu_flag(alu_src0_abs);
 
          shader.emit_instruction(ir);
       }
@@ -2178,13 +2558,14 @@ static bool emit_create_vec(const nir_alu_instr& instr, unsigned nc, Shader& sha
    return true;
 }
 
-static bool emit_alu_i2orf2_b1(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_alu_i2orf2_b1(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
    Pin pin = nir_dest_num_components(alu.dest.dest) == 1 ? pin_free : pin_none;
 
-   for (int i = 0; i < 4 ; ++i) {
+   for (int i = 0; i < 4; ++i) {
       if (alu.dest.write_mask & (1 << i)) {
          ir = new AluInstr(opcode,
                            value_factory.dest(alu.dest, i, pin),
@@ -2199,13 +2580,14 @@ static bool emit_alu_i2orf2_b1(const nir_alu_instr& alu, EAluOp opcode, Shader& 
    return true;
 }
 
-static bool emit_alu_comb_with_zero(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_alu_comb_with_zero(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
    auto pin = pin_for_components(alu);
-   for (int i = 0; i < 4 ; ++i) {
-      if (alu.dest.write_mask & (1 << i)){
+   for (int i = 0; i < 4; ++i) {
+      if (alu.dest.write_mask & (1 << i)) {
          ir = new AluInstr(opcode,
                            value_factory.dest(alu.dest, i, pin),
                            value_factory.zero(),
@@ -2220,65 +2602,79 @@ static bool emit_alu_comb_with_zero(const nir_alu_instr& alu, EAluOp opcode, Sha
    return true;
 }
 
-static bool emit_pack_64_2x32_split(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_pack_64_2x32_split(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
    for (unsigned i = 0; i < 2; ++i) {
-      ir = new AluInstr(op1_mov, value_factory.dest(alu.dest, i, pin_none),
-                        value_factory.src(alu.src[i], 0), AluInstr::write);
-     shader.emit_instruction(ir);
+      ir = new AluInstr(op1_mov,
+                        value_factory.dest(alu.dest, i, pin_none),
+                        value_factory.src(alu.src[i], 0),
+                        AluInstr::write);
+      shader.emit_instruction(ir);
    }
    ir->set_alu_flag(alu_last_instr);
    return true;
 }
 
-static bool emit_pack_64_2x32(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_pack_64_2x32(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
    for (unsigned i = 0; i < 2; ++i) {
-      ir = new AluInstr(op1_mov, value_factory.dest(alu.dest, i, pin_none),
-                        value_factory.src(alu.src[0], i), AluInstr::write);
-     shader.emit_instruction(ir);
+      ir = new AluInstr(op1_mov,
+                        value_factory.dest(alu.dest, i, pin_none),
+                        value_factory.src(alu.src[0], i),
+                        AluInstr::write);
+      shader.emit_instruction(ir);
    }
    ir->set_alu_flag(alu_last_instr);
    return true;
 }
 
-
-static bool emit_unpack_64_2x32(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_unpack_64_2x32(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
    for (unsigned i = 0; i < 2; ++i) {
-      ir = new AluInstr(op1_mov, value_factory.dest(alu.dest, i, pin_none),
-                        value_factory.src64(alu.src[0], 0, i), AluInstr::write);
-     shader.emit_instruction(ir);
+      ir = new AluInstr(op1_mov,
+                        value_factory.dest(alu.dest, i, pin_none),
+                        value_factory.src64(alu.src[0], 0, i),
+                        AluInstr::write);
+      shader.emit_instruction(ir);
    }
    ir->set_alu_flag(alu_last_instr);
    return true;
 }
 
-bool emit_alu_vec2_64(const nir_alu_instr& alu, Shader& shader)
+bool
+emit_alu_vec2_64(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
    for (unsigned i = 0; i < 2; ++i) {
-      ir = new AluInstr(op1_mov, value_factory.dest(alu.dest, i, pin_chan),
-                        value_factory.src64(alu.src[0], 0, i), AluInstr::write);
-     shader.emit_instruction(ir);
+      ir = new AluInstr(op1_mov,
+                        value_factory.dest(alu.dest, i, pin_chan),
+                        value_factory.src64(alu.src[0], 0, i),
+                        AluInstr::write);
+      shader.emit_instruction(ir);
    }
    for (unsigned i = 0; i < 2; ++i) {
-      ir = new AluInstr(op1_mov, value_factory.dest(alu.dest, i + 2, pin_chan),
-                        value_factory.src64(alu.src[1], 1, i), AluInstr::write);
-     shader.emit_instruction(ir);
+      ir = new AluInstr(op1_mov,
+                        value_factory.dest(alu.dest, i + 2, pin_chan),
+                        value_factory.src64(alu.src[1], 1, i),
+                        AluInstr::write);
+      shader.emit_instruction(ir);
    }
    ir->set_alu_flag(alu_last_instr);
    return true;
 }
 
-static bool emit_pack_32_2x16_split(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_pack_32_2x16_split(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
 
@@ -2286,53 +2682,64 @@ static bool emit_pack_32_2x16_split(const nir_alu_instr& alu, Shader& shader)
    auto y = value_factory.temp_register();
    auto yy = value_factory.temp_register();
 
-   shader.emit_instruction(new AluInstr(op1_flt32_to_flt16, x,
-                                        value_factory.src(alu.src[0], 0), AluInstr::last_write));
+   shader.emit_instruction(new AluInstr(
+      op1_flt32_to_flt16, x, value_factory.src(alu.src[0], 0), AluInstr::last_write));
 
-   shader.emit_instruction(new AluInstr(op1_flt32_to_flt16, y,
-                                        value_factory.src(alu.src[1], 0), AluInstr::last_write));
+   shader.emit_instruction(new AluInstr(
+      op1_flt32_to_flt16, y, value_factory.src(alu.src[1], 0), AluInstr::last_write));
 
-   shader.emit_instruction(new AluInstr(op2_lshl_int, yy, y, value_factory.literal(16), AluInstr::last_write));
+   shader.emit_instruction(
+      new AluInstr(op2_lshl_int, yy, y, value_factory.literal(16), AluInstr::last_write));
 
    shader.emit_instruction(new AluInstr(op2_or_int,
                                         value_factory.dest(alu.dest, 0, pin_free),
-                                        x, yy, AluInstr::last_write));
+                                        x,
+                                        yy,
+                                        AluInstr::last_write));
    return true;
 }
 
-static bool emit_unpack_64_2x32_split(const nir_alu_instr& alu, int comp, Shader& shader)
+static bool
+emit_unpack_64_2x32_split(const nir_alu_instr& alu, int comp, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
-   shader.emit_instruction(new AluInstr(op1_mov, value_factory.dest(alu.dest, 0, pin_free),
-                                        value_factory.src64(alu.src[0], 0, comp), AluInstr::last_write));
+   shader.emit_instruction(new AluInstr(op1_mov,
+                                        value_factory.dest(alu.dest, 0, pin_free),
+                                        value_factory.src64(alu.src[0], 0, comp),
+                                        AluInstr::last_write));
    return true;
 }
 
-static bool emit_unpack_32_2x16_split_x(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_unpack_32_2x16_split_x(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
-   shader.emit_instruction(new AluInstr(op1_flt16_to_flt32, value_factory.dest(alu.dest, 0, pin_free),
-                                        value_factory.src(alu.src[0], 0), AluInstr::last_write));
+   shader.emit_instruction(new AluInstr(op1_flt16_to_flt32,
+                                        value_factory.dest(alu.dest, 0, pin_free),
+                                        value_factory.src(alu.src[0], 0),
+                                        AluInstr::last_write));
    return true;
 }
-static bool emit_unpack_32_2x16_split_y(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_unpack_32_2x16_split_y(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    auto tmp = value_factory.temp_register();
-   shader.emit_instruction(new AluInstr(op2_lshr_int, tmp,
+   shader.emit_instruction(new AluInstr(op2_lshr_int,
+                                        tmp,
                                         value_factory.src(alu.src[0], 0),
                                         value_factory.literal(16),
                                         AluInstr::last_write));
 
    shader.emit_instruction(new AluInstr(op1_flt16_to_flt32,
                                         value_factory.dest(alu.dest, 0, pin_free),
-                                        tmp, AluInstr::last_write));
+                                        tmp,
+                                        AluInstr::last_write));
    return true;
 }
 
-
-
-static bool emit_alu_trans_op1_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_alu_trans_op1_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    const nir_alu_src& src0 = alu.src[0];
@@ -2341,14 +2748,17 @@ static bool emit_alu_trans_op1_eg(const nir_alu_instr& alu, EAluOp opcode, Shade
    auto pin = pin_for_components(alu);
 
    for (unsigned i = 0; i < nir_dest_num_components(alu.dest.dest); ++i) {
-      if (alu.dest.write_mask & (1 << i)){
+      if (alu.dest.write_mask & (1 << i)) {
          ir = new AluInstr(opcode,
                            value_factory.dest(alu.dest.dest, i, pin),
                            value_factory.src(src0, i),
                            AluInstr::last_write);
-         if (src0.negate) ir->set_alu_flag(alu_src0_neg);
-         if (src0.abs) ir->set_alu_flag(alu_src0_abs);
-         if (alu.dest.saturate) ir->set_alu_flag(alu_dst_clamp);
+         if (src0.negate)
+            ir->set_alu_flag(alu_src0_neg);
+         if (src0.abs)
+            ir->set_alu_flag(alu_src0_abs);
+         if (alu.dest.saturate)
+            ir->set_alu_flag(alu_dst_clamp);
          ir->set_alu_flag(alu_is_trans);
          shader.emit_instruction(ir);
       }
@@ -2357,7 +2767,8 @@ static bool emit_alu_trans_op1_eg(const nir_alu_instr& alu, EAluOp opcode, Shade
    return true;
 }
 
-static bool emit_alu_f2i32_or_u32_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_alu_f2i32_or_u32_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
@@ -2368,9 +2779,14 @@ static bool emit_alu_f2i32_or_u32_eg(const nir_alu_instr& alu, EAluOp opcode, Sh
 
    for (int i = 0; i < num_comp; ++i) {
       reg[i] = value_factory.temp_register();
-      ir = new AluInstr(op1_trunc, reg[i], value_factory.src(alu.src[0], i), AluInstr::last_write);
-      if (alu.src[0].abs) ir->set_alu_flag(alu_src0_abs);
-      if (alu.src[0].negate) ir->set_alu_flag(alu_src0_neg);
+      ir = new AluInstr(op1_trunc,
+                        reg[i],
+                        value_factory.src(alu.src[0], i),
+                        AluInstr::last_write);
+      if (alu.src[0].abs)
+         ir->set_alu_flag(alu_src0_abs);
+      if (alu.src[0].negate)
+         ir->set_alu_flag(alu_src0_neg);
       shader.emit_instruction(ir);
    }
 
@@ -2378,7 +2794,8 @@ static bool emit_alu_f2i32_or_u32_eg(const nir_alu_instr& alu, EAluOp opcode, Sh
    for (int i = 0; i < num_comp; ++i) {
       ir = new AluInstr(opcode,
                         value_factory.dest(alu.dest, i, pin),
-                        reg[i], AluInstr::write);
+                        reg[i],
+                        AluInstr::write);
       if (opcode == op1_flt_to_uint) {
          ir->set_alu_flag(alu_is_trans);
          ir->set_alu_flag(alu_last_instr);
@@ -2389,31 +2806,36 @@ static bool emit_alu_f2i32_or_u32_eg(const nir_alu_instr& alu, EAluOp opcode, Sh
    return true;
 }
 
-static bool emit_alu_trans_op1_cayman(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_alu_trans_op1_cayman(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    const nir_alu_src& src0 = alu.src[0];
 
    auto pin = pin_for_components(alu);
 
+   unsigned ncomp = nir_dest_num_components(alu.dest.dest) == 4 ? 4 : 3;
+
    /* todo: Actually we need only three channels, but then we have
     * to make sure that we don't hava w dest */
-   for (unsigned j = 0; j < 4; ++j) {
+   for (unsigned j = 0; j < ncomp; ++j) {
       if (alu.dest.write_mask & (1 << j)) {
-         AluInstr::SrcValues srcs(4);
-         PRegister dest = value_factory.dest(alu.dest.dest, j, pin);
+         AluInstr::SrcValues srcs(ncomp);
+         PRegister dest = value_factory.dest(alu.dest.dest, j, pin, (1 << ncomp) - 1);
 
-         for (unsigned i = 0; i < 4; ++i)
+         for (unsigned i = 0; i < ncomp; ++i)
             srcs[i] = value_factory.src(src0, j);
 
-         auto ir = new AluInstr(opcode, dest,  srcs,  AluInstr::last_write, 4);
+         auto ir = new AluInstr(opcode, dest, srcs, AluInstr::last_write, ncomp);
 
-         if (alu.src[0].abs) ir->set_alu_flag(alu_src0_abs);
-         if (alu.src[0].negate) ir->set_alu_flag(alu_src0_neg);
-         if (alu.dest.saturate) ir->set_alu_flag(alu_dst_clamp);
+         if (alu.src[0].abs)
+            ir->set_alu_flag(alu_src0_abs);
+         if (alu.src[0].negate)
+            ir->set_alu_flag(alu_src0_neg);
+         if (alu.dest.saturate)
+            ir->set_alu_flag(alu_dst_clamp);
 
          ir->set_alu_flag(alu_is_cayman_trans);
-
 
          shader.emit_instruction(ir);
       }
@@ -2421,7 +2843,8 @@ static bool emit_alu_trans_op1_cayman(const nir_alu_instr& alu, EAluOp opcode, S
    return true;
 }
 
-static bool emit_alu_trans_op2_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_alu_trans_op2_eg(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
 
@@ -2431,16 +2854,23 @@ static bool emit_alu_trans_op2_eg(const nir_alu_instr& alu, EAluOp opcode, Shade
    AluInstr *ir = nullptr;
 
    auto pin = pin_for_components(alu);
-   for (int i = 0; i < 4 ; ++i) {
-      if (alu.dest.write_mask & (1 << i)){
-         ir = new AluInstr(opcode, value_factory.dest(alu.dest.dest, i, pin),
+   for (int i = 0; i < 4; ++i) {
+      if (alu.dest.write_mask & (1 << i)) {
+         ir = new AluInstr(opcode,
+                           value_factory.dest(alu.dest.dest, i, pin),
                            value_factory.src(src0, i),
-                           value_factory.src(src1, i), AluInstr::last_write);
-         if (src0.negate) ir->set_alu_flag(alu_src0_neg);
-         if (src0.abs) ir->set_alu_flag(alu_src0_abs);
-         if (src1.negate) ir->set_alu_flag(alu_src1_neg);
-         if (src1.abs) ir->set_alu_flag(alu_src1_abs);
-         if (alu.dest.saturate) ir->set_alu_flag(alu_dst_clamp);
+                           value_factory.src(src1, i),
+                           AluInstr::last_write);
+         if (src0.negate)
+            ir->set_alu_flag(alu_src0_neg);
+         if (src0.abs)
+            ir->set_alu_flag(alu_src0_abs);
+         if (src1.negate)
+            ir->set_alu_flag(alu_src1_neg);
+         if (src1.abs)
+            ir->set_alu_flag(alu_src1_abs);
+         if (alu.dest.saturate)
+            ir->set_alu_flag(alu_dst_clamp);
          ir->set_alu_flag(alu_is_trans);
          shader.emit_instruction(ir);
       }
@@ -2448,7 +2878,8 @@ static bool emit_alu_trans_op2_eg(const nir_alu_instr& alu, EAluOp opcode, Shade
    return true;
 }
 
-static bool emit_alu_trans_op2_cayman(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
+static bool
+emit_alu_trans_op2_cayman(const nir_alu_instr& alu, EAluOp opcode, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
 
@@ -2462,19 +2893,23 @@ static bool emit_alu_trans_op2_cayman(const nir_alu_instr& alu, EAluOp opcode, S
          AluInstr::SrcValues srcs(2 * last_slot);
          PRegister dest = value_factory.dest(alu.dest.dest, k, pin_free);
 
-         for (unsigned i = 0; i < last_slot ; ++i) {
-            srcs[2 * i    ] = value_factory.src(src0, k);
+         for (unsigned i = 0; i < last_slot; ++i) {
+            srcs[2 * i] = value_factory.src(src0, k);
             srcs[2 * i + 1] = value_factory.src(src1, k);
          }
 
-         auto ir = new AluInstr(opcode,
-                                dest, srcs, AluInstr::last_write, last_slot);
+         auto ir = new AluInstr(opcode, dest, srcs, AluInstr::last_write, last_slot);
 
-         if (src0.negate) ir->set_alu_flag(alu_src0_neg);
-         if (src0.abs) ir->set_alu_flag(alu_src0_abs);
-         if (src1.negate) ir->set_alu_flag(alu_src1_neg);
-         if (src1.abs) ir->set_alu_flag(alu_src1_abs);
-         if (alu.dest.saturate) ir->set_alu_flag(alu_dst_clamp);
+         if (src0.negate)
+            ir->set_alu_flag(alu_src0_neg);
+         if (src0.abs)
+            ir->set_alu_flag(alu_src0_abs);
+         if (src1.negate)
+            ir->set_alu_flag(alu_src1_neg);
+         if (src1.abs)
+            ir->set_alu_flag(alu_src1_abs);
+         if (alu.dest.saturate)
+            ir->set_alu_flag(alu_dst_clamp);
          ir->set_alu_flag(alu_is_cayman_trans);
          shader.emit_instruction(ir);
       }
@@ -2482,19 +2917,22 @@ static bool emit_alu_trans_op2_cayman(const nir_alu_instr& alu, EAluOp opcode, S
    return true;
 }
 
-
-static bool emit_tex_fdd(const nir_alu_instr& alu, TexInstr::Opcode opcode, bool fine, Shader& shader)
+static bool
+emit_tex_fdd(const nir_alu_instr& alu, TexInstr::Opcode opcode, bool fine, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
 
    int ncomp = nir_dest_num_components(alu.dest.dest);
-   RegisterVec4::Swizzle src_swz = {7,7,7,7};
-   for (auto i = 0; i < ncomp; ++i)
+   RegisterVec4::Swizzle src_swz = {7, 7, 7, 7};
+   RegisterVec4::Swizzle tmp_swz = {7, 7, 7, 7};
+   for (auto i = 0; i < ncomp; ++i) {
       src_swz[i] = alu.src[0].swizzle[i];
+      tmp_swz[i] = i;
+   }
 
-   auto src = value_factory.src_vec4(alu.src[0].src, pin_group, src_swz);
+   auto src = value_factory.src_vec4(alu.src[0].src, pin_none, src_swz);
 
-   auto tmp = value_factory.temp_vec4(pin_group);
+   auto tmp = value_factory.temp_vec4(pin_group, tmp_swz);
    AluInstr *mv = nullptr;
    for (int i = 0; i < ncomp; ++i) {
       mv = new AluInstr(op1_mov, tmp[i], src[i], AluInstr::write);
@@ -2508,7 +2946,7 @@ static bool emit_tex_fdd(const nir_alu_instr& alu, TexInstr::Opcode opcode, bool
       mv->set_alu_flag(alu_last_instr);
 
    auto dst = value_factory.dest_vec4(alu.dest.dest, pin_group);
-   RegisterVec4::Swizzle dst_swz = {7,7,7,7};
+   RegisterVec4::Swizzle dst_swz = {7, 7, 7, 7};
    for (auto i = 0; i < ncomp; ++i) {
       if (alu.dest.write_mask & (1 << i))
          dst_swz[i] = i;
@@ -2524,7 +2962,8 @@ static bool emit_tex_fdd(const nir_alu_instr& alu, TexInstr::Opcode opcode, bool
    return true;
 }
 
-static bool emit_alu_cube(const nir_alu_instr& alu, Shader& shader)
+static bool
+emit_alu_cube(const nir_alu_instr& alu, Shader& shader)
 {
    auto& value_factory = shader.value_factory();
    AluInstr *ir = nullptr;
@@ -2534,10 +2973,10 @@ static bool emit_alu_cube(const nir_alu_instr& alu, Shader& shader)
 
    auto group = new AluGroup();
 
-   for (int i = 0; i < 4; ++i)  {
+   for (int i = 0; i < 4; ++i) {
 
-
-      ir = new AluInstr(op2_cube, value_factory.dest(alu.dest.dest, i, pin_chan),
+      ir = new AluInstr(op2_cube,
+                        value_factory.dest(alu.dest.dest, i, pin_chan),
                         value_factory.src(alu.src[0], src0_chan[i]),
                         value_factory.src(alu.src[0], src1_chan[i]),
                         AluInstr::write);
@@ -2553,4 +2992,4 @@ const std::set<AluModifiers> AluInstr::write({alu_write});
 const std::set<AluModifiers> AluInstr::last({alu_last_instr});
 const std::set<AluModifiers> AluInstr::last_write({alu_write, alu_last_instr});
 
-}
+} // namespace r600

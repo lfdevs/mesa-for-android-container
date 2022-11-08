@@ -51,7 +51,7 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       const glsl_type *const type = glsl_type::ivec(instr->num_components);
 
       src = src_reg(ATTR, input_array_stride * vertex +
-                    instr->const_index[0] + offset_reg,
+                    nir_intrinsic_base(instr) + offset_reg,
                     type);
       src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr));
 
@@ -64,13 +64,11 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_load_input:
       unreachable("nir_lower_io should have produced per_vertex intrinsics");
 
-   case nir_intrinsic_emit_vertex_with_counter: {
+   case nir_intrinsic_emit_vertex_with_counter:
       this->vertex_count =
          retype(get_nir_src(instr->src[0], 1), BRW_REGISTER_TYPE_UD);
-      int stream_id = instr->const_index[0];
-      gs_emit_vertex(stream_id);
+      gs_emit_vertex(nir_intrinsic_stream_id(instr));
       break;
-   }
 
    case nir_intrinsic_end_primitive_with_counter:
       this->vertex_count =

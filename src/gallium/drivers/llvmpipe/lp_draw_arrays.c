@@ -74,7 +74,7 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    }
 
    if (lp->dirty)
-      llvmpipe_update_derived( lp );
+      llvmpipe_update_derived(lp);
 
    /*
     * Map vertex buffers

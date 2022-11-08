@@ -846,6 +846,7 @@ compile_vertex_list(struct gl_context *ctx)
                            vertex_to_index ? temp_vertices_buffer : save->vertex_store->buffer_in_ram,
                            node->cold->ib.obj);
    save->current_bo_bytes_used += total_vert_count * save->vertex_size * sizeof(fi_type);
+   node->cold->bo_bytes_used = save->current_bo_bytes_used;
 
   if (vertex_to_index) {
       _mesa_hash_table_destroy(vertex_to_index, _free_entry);
@@ -971,10 +972,6 @@ end:
    /* Deal with GL_COMPILE_AND_EXECUTE:
     */
    if (ctx->ExecuteFlag) {
-      struct _glapi_table *dispatch = GET_DISPATCH();
-
-      _glapi_set_dispatch(ctx->Exec);
-
       /* _vbo_loopback_vertex_list doesn't use the index buffer, so we have to
        * use buffer_in_ram (which contains all vertices) instead of current_bo
        * (which contains deduplicated vertices *when* UseLoopback is false).
@@ -988,8 +985,6 @@ end:
       vao->BufferBinding[0].Offset = -(GLintptr)(start_offset * stride);
       _vbo_loopback_vertex_list(ctx, node, save->vertex_store->buffer_in_ram);
       vao->BufferBinding[0].Offset = original;
-
-      _glapi_set_dispatch(dispatch);
    }
 
    /* Reset our structures for the next run of vertices:
@@ -1413,7 +1408,7 @@ _save_Materialfv(GLenum face, GLenum pname, const GLfloat *params)
 
 
 static void
-vbo_install_save_vtxfmt(struct gl_context *ctx);
+vbo_init_dispatch_save_begin_end(struct gl_context *ctx);
 
 
 /* Cope with EvalCoord/CallList called within a begin/end object:
@@ -1450,7 +1445,7 @@ dlist_fallback(struct gl_context *ctx)
       vbo_install_save_vtxfmt_noop(ctx);
    }
    else {
-      _mesa_install_save_vtxfmt(ctx);
+      _mesa_init_dispatch_save_begin_end(ctx);
    }
    ctx->Driver.SaveNeedFlush = GL_FALSE;
 }
@@ -1546,7 +1541,7 @@ vbo_save_NotifyBegin(struct gl_context *ctx, GLenum mode,
 
    save->no_current_update = no_current_update;
 
-   vbo_install_save_vtxfmt(ctx);
+   vbo_init_dispatch_save_begin_end(ctx);
 
    /* We need to call vbo_save_SaveFlushVertices() if there's state change */
    ctx->Driver.SaveNeedFlush = GL_TRUE;
@@ -1572,7 +1567,7 @@ _save_End(void)
       vbo_install_save_vtxfmt_noop(ctx);
    }
    else {
-      _mesa_install_save_vtxfmt(ctx);
+      _mesa_init_dispatch_save_begin_end(ctx);
    }
 }
 
@@ -1610,11 +1605,6 @@ _save_PrimitiveRestartNV(void)
 }
 
 
-/* Unlike the functions above, these are to be hooked into the vtxfmt
- * maintained in ctx->ListState, active when the list is known or
- * suspected to be outside any begin/end primitive.
- * Note: OBE = Outside Begin/End
- */
 void GLAPIENTRY
 save_Rectf(GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2)
 {
@@ -1874,10 +1864,25 @@ save_DrawRangeElements(GLenum mode, GLuint start, GLuint end,
    save_DrawElements(mode, count, type, indices);
 }
 
+void GLAPIENTRY
+save_DrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint end,
+                                 GLsizei count, GLenum type,
+                                 const GLvoid *indices, GLint basevertex)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (end < start) {
+      _mesa_compile_error(ctx, GL_INVALID_VALUE,
+                          "glDrawRangeElementsBaseVertex(end < start)");
+      return;
+   }
+
+   save_DrawElementsBaseVertex(mode, count, type, indices, basevertex);
+}
 
 void GLAPIENTRY
-save_MultiDrawElementsEXT(GLenum mode, const GLsizei *count, GLenum type,
-                           const GLvoid * const *indices, GLsizei primcount)
+save_MultiDrawElements(GLenum mode, const GLsizei *count, GLenum type,
+                       const GLvoid * const *indices, GLsizei primcount)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct _glapi_table *dispatch = ctx->CurrentServerDispatch;
@@ -1925,7 +1930,7 @@ save_MultiDrawElementsBaseVertex(GLenum mode, const GLsizei *count,
 
 
 static void
-vbo_install_save_vtxfmt(struct gl_context *ctx)
+vbo_init_dispatch_save_begin_end(struct gl_context *ctx)
 {
 #define NAME_AE(x) _mesa_##x
 #define NAME_CALLLIST(x) _save_##x
@@ -1933,7 +1938,7 @@ vbo_install_save_vtxfmt(struct gl_context *ctx)
 #define NAME_ES(x) _save_##x
 
    struct _glapi_table *tab = ctx->Save;
-   #include "api_vtxfmt_init.h"
+   #include "api_beginend_init.h"
 }
 
 
@@ -2006,7 +2011,7 @@ vbo_save_EndList(struct gl_context *ctx)
        * etc. received between here and the next begin will be compiled
        * as opcodes.
        */
-      _mesa_install_save_vtxfmt(ctx);
+      _mesa_init_dispatch_save_begin_end(ctx);
    }
 
    assert(save->vertex_size == 0);

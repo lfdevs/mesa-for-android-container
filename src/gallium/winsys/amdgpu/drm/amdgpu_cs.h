@@ -45,7 +45,7 @@ struct amdgpu_ctx {
    uint64_t *user_fence_cpu_address_base;
    int refcount;
    unsigned initial_num_total_rejected_cs;
-   unsigned num_rejected_cs;
+   bool rejected_any_cs;
 };
 
 struct amdgpu_cs_buffer {
@@ -154,7 +154,7 @@ struct amdgpu_cs {
    /* Flush CS. */
    void (*flush_cs)(void *ctx, unsigned flags, struct pipe_fence_handle **fence);
    void *flush_data;
-   bool stop_exec_on_failure;
+   bool allow_context_lost;
    bool noop;
    bool has_chaining;
 

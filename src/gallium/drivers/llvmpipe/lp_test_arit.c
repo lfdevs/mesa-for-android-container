@@ -362,11 +362,11 @@ build_unary_test_func(struct gallivm_state *gallivm,
    LLVMSetFunctionCallConv(func, LLVMCCallConv);
 
    LLVMPositionBuilderAtEnd(builder, block);
-   
-   arg1 = LLVMBuildLoad(builder, arg1, "");
+
+   arg1 = LLVMBuildLoad2(builder, vf32t, arg1, "");
 
    ret = test->builder(&bld, arg1);
-   
+
    LLVMBuildStore(builder, ret, arg0);
 
    LLVMBuildRetVoid(builder);

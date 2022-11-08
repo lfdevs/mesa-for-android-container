@@ -29,7 +29,7 @@
 #include "genxml/gen_macros.h"
 #include "panvk_private.h"
 
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/u_atomic.h"
 #include "vk_format.h"
 #include "vk_object.h"
@@ -200,11 +200,11 @@ panvk_per_arch(CreateBufferView)(VkDevice _device,
       unsigned bo_size = pan_size(SURFACE_WITH_STRIDE);
       view->bo = panfrost_bo_create(pdev, bo_size, 0, "Texture descriptor");
 
-      pan_pack(&view->bo->ptr.cpu, SURFACE_WITH_STRIDE, cfg) {
+      pan_pack(view->bo->ptr.cpu, SURFACE_WITH_STRIDE, cfg) {
          cfg.pointer = address;
       }
 
-      pan_pack(&view->descs.tex, TEXTURE, cfg) {
+      pan_pack(view->descs.tex, TEXTURE, cfg) {
          cfg.dimension = MALI_TEXTURE_DIMENSION_1D;
          cfg.format = pdev->formats[view->fmt].hw;
          cfg.width = view->elems;

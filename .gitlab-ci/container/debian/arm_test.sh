@@ -9,7 +9,6 @@ sed -i -e 's/http:\/\/deb/https:\/\/deb/g' /etc/apt/sources.list
 apt-get update
 
 apt-get install -y --no-remove \
-        abootimg \
         cpio \
         fastboot \
         netcat \
@@ -19,7 +18,8 @@ apt-get install -y --no-remove \
         python3-serial \
         rsync \
         snmp \
-        wget
+        wget \
+        zstd
 
 # setup SNMPv2 SMI MIB
 wget https://raw.githubusercontent.com/net-snmp/net-snmp/master/mibs/SNMPv2-SMI.txt \
@@ -37,3 +37,9 @@ ln -s \
     /baremetal-files/Image \
     /baremetal-files/tegra210-p3450-0000.dtb \
     /baremetal-files/jetson-nano/boot/
+
+mkdir -p /baremetal-files/jetson-tk1/boot/
+ln -s \
+    /baremetal-files/zImage \
+    /baremetal-files/tegra124-jetson-tk1.dtb \
+    /baremetal-files/jetson-tk1/boot/

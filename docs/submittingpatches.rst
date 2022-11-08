@@ -182,8 +182,8 @@ Patches are submitted to the Mesa project via a
 Add labels to your MR to help reviewers find it. For example:
 
 -  Mesa changes affecting all drivers: mesa
--  Hardware vendor specific code: amd, intel, nvidia, ...
--  Driver specific code: anvil, freedreno, i965, iris, radeonsi, radv,
+-  Hardware vendor specific code: AMD common, intel, ...
+-  Driver specific code: ANV, freedreno, i965, iris, radeonsi, RADV,
    vc4, ...
 -  Other tag examples: gallium, util
 
@@ -310,7 +310,7 @@ broad discretion in rejecting patches that have been nominated.
 -  It must not introduce a regression - be that build or runtime wise.
 
    .. note::
-      If the regression is due to faulty piglit/dEQP/CTS/other test
+      If the regression is due to faulty Piglit/dEQP/CTS/other test
       the latter must be fixed first. A reference to the offending test(s)
       and respective fix(es) should be provided in the nominated patch.
 
@@ -350,7 +350,7 @@ Sending backports for the stable branch
 By default merge conflicts are resolved by the stable-release manager.
 The release maintainer should resolve trivial conflicts, but for complex
 conflicts they should ask the original author to provide a backport or
-de-nominate the patch.
+denominate the patch.
 
 For patches that either need to be nominated after they've landed in
 main, or that are known ahead of time to not not apply cleanly to a

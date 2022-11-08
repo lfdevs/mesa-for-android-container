@@ -47,8 +47,8 @@ get_cmd_buffer(struct tu_device *dev, struct tu_cmd_buffer **cmd_buffer_out)
                          struct dynamic_rendering_entry, entry) {
       if (entry->fence <= fence) {
          VkCommandBuffer vk_buf = tu_cmd_buffer_to_handle(entry->cmd_buffer);
-         tu_FreeCommandBuffers(tu_device_to_handle(dev),
-                               dev->dynamic_rendering_pool, 1, &vk_buf);
+         vk_common_FreeCommandBuffers(tu_device_to_handle(dev),
+                                      dev->dynamic_rendering_pool, 1, &vk_buf);
       } else {
          *new_entry = *entry;
          new_entry++;
@@ -68,7 +68,7 @@ get_cmd_buffer(struct tu_device *dev, struct tu_cmd_buffer **cmd_buffer_out)
       .commandBufferCount = 1,
    };
    VkResult result =
-      tu_AllocateCommandBuffers(tu_device_to_handle(dev), &info, &vk_buf);
+      vk_common_AllocateCommandBuffers(tu_device_to_handle(dev), &info, &vk_buf);
    if (result != VK_SUCCESS)
       return result;
 
@@ -92,21 +92,22 @@ tu_init_dynamic_rendering(struct tu_device *dev)
    util_dynarray_init(&dev->dynamic_rendering_pending, NULL);
    dev->dynamic_rendering_fence = 0;
 
-   return tu_CreateCommandPool(tu_device_to_handle(dev),
-                               &(VkCommandPoolCreateInfo) {
-                                 .pNext = NULL,
-                                 .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-                                 .flags = 0,
-                                 .queueFamilyIndex = 0,
-                               }, &dev->vk.alloc, &dev->dynamic_rendering_pool);
+   return vk_common_CreateCommandPool(tu_device_to_handle(dev),
+                                      &(VkCommandPoolCreateInfo) {
+                                        .pNext = NULL,
+                                        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                                        .flags = 0,
+                                        .queueFamilyIndex = 0,
+                                      }, &dev->vk.alloc,
+                                      &dev->dynamic_rendering_pool);
 }
 
 void
 tu_destroy_dynamic_rendering(struct tu_device *dev)
 {
-   tu_DestroyCommandPool(tu_device_to_handle(dev),
-                         dev->dynamic_rendering_pool,
-                         &dev->vk.alloc);
+   vk_common_DestroyCommandPool(tu_device_to_handle(dev),
+                                dev->dynamic_rendering_pool,
+                                &dev->vk.alloc);
    util_dynarray_fini(&dev->dynamic_rendering_pending);
 }
 
@@ -200,8 +201,6 @@ tu_insert_dynamic_cmdbufs(struct tu_device *dev,
           * because we skip tu6_emit_hw().
           */
          cmd_buffer->state.ccu_state = old_cmds[i]->state.ccu_state;
-         cmd_buffer->vsc_draw_strm_pitch = old_cmds[i]->vsc_draw_strm_pitch;
-         cmd_buffer->vsc_prim_strm_pitch = old_cmds[i]->vsc_prim_strm_pitch;
          break;
       }
    }

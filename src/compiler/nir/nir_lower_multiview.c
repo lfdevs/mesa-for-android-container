@@ -239,6 +239,7 @@ nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
          assert(var->type == glsl_vec4_type());
          var->type = glsl_array_type(glsl_vec4_type(), view_count, 0);
          var->data.per_view = true;
+         shader->info.per_view_outputs |= VARYING_BIT_POS;
          pos_var = var;
          break;
       }

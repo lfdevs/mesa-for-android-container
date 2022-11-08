@@ -388,6 +388,59 @@ ir3_collect_info(struct ir3_shader_variant *v)
       }
    }
 
+   /* for vertex shader, the inputs are loaded into registers before the shader
+    * is executed, so max_regs from the shader instructions might not properly
+    * reflect the # of registers actually used, especially in case passthrough
+    * varyings.
+    *
+    * Likewise, for fragment shader, we can have some regs which are passed
+    * input values but never touched by the resulting shader (ie. as result
+    * of dead code elimination or simply because we don't know how to turn
+    * the reg off.
+    */
+   for (unsigned i = 0; i < v->inputs_count; i++) {
+      /* skip frag inputs fetch via bary.f since their reg's are
+       * not written by gpu before shader starts (and in fact the
+       * regid's might not even be valid)
+       */
+      if (v->inputs[i].bary)
+         continue;
+
+      /* ignore high regs that are global to all threads in a warp
+       * (they exist by default) (a5xx+)
+       */
+      if (v->inputs[i].regid >= regid(48, 0))
+         continue;
+
+      if (v->inputs[i].compmask) {
+         unsigned n = util_last_bit(v->inputs[i].compmask) - 1;
+         int32_t regid = v->inputs[i].regid + n;
+         if (v->inputs[i].half) {
+            if (!v->mergedregs) {
+               v->info.max_half_reg = MAX2(v->info.max_half_reg, regid >> 2);
+            } else {
+               v->info.max_reg = MAX2(v->info.max_reg, regid >> 3);
+            }
+         } else {
+            v->info.max_reg = MAX2(v->info.max_reg, regid >> 2);
+         }
+      }
+   }
+
+   for (unsigned i = 0; i < v->num_sampler_prefetch; i++) {
+      unsigned n = util_last_bit(v->sampler_prefetch[i].wrmask) - 1;
+      int32_t regid = v->sampler_prefetch[i].dst + n;
+      if (v->sampler_prefetch[i].half_precision) {
+         if (!v->mergedregs) {
+            v->info.max_half_reg = MAX2(v->info.max_half_reg, regid >> 2);
+         } else {
+            v->info.max_reg = MAX2(v->info.max_reg, regid >> 3);
+         }
+      } else {
+         v->info.max_reg = MAX2(v->info.max_reg, regid >> 2);
+      }
+   }
+
    /* TODO: for a5xx and below, is there a separate regfile for
     * half-registers?
     */

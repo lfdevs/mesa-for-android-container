@@ -33,7 +33,7 @@ foreach ver : pixel_format_versions
     ],
     c_args : ['-DPAN_ARCH=' + ver],
     gnu_symbol_visibility : 'hidden',
-    dependencies : [idep_pan_packers, dep_libdrm],
+    dependencies : [idep_pan_packers, dep_libdrm, dep_valgrind],
 )
 endforeach
 

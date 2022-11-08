@@ -40,8 +40,6 @@ files_mesa_util = files(
   'crc32.c',
   'crc32.h',
   'dag.c',
-  'debug.c',
-  'debug.h',
   'disk_cache.c',
   'disk_cache.h',
   'disk_cache_os.c',
@@ -56,6 +54,7 @@ files_mesa_util = files(
   'format_srgb.h',
   'fossilize_db.c',
   'fossilize_db.h',
+  'futex.c',
   'futex.h',
   'half_float.c',
   'half_float.h',
@@ -86,6 +85,7 @@ files_mesa_util = files(
   'u_process.h',
   'u_qsort.cpp',
   'u_qsort.h',
+  'rwlock.c',
   'rwlock.h',
   'sha1/sha1.c',
   'sha1/sha1.h',
@@ -102,6 +102,7 @@ files_mesa_util = files(
   'rounding.h',
   'set.c',
   'set.h',
+  'simple_mtx.c',
   'simple_mtx.h',
   'slab.c',
   'slab.h',
@@ -118,6 +119,8 @@ files_mesa_util = files(
   'timespec.h',
   'u_atomic.c',
   'u_atomic.h',
+  'u_call_once.c',
+  'u_call_once.h',
   'u_debug_describe.c',
   'u_debug_describe.h',
   'u_debug_refcnt.c',
@@ -133,6 +136,7 @@ files_mesa_util = files(
   'u_queue.c',
   'u_queue.h',
   'u_string.h',
+  'u_thread.c',
   'u_thread.h',
   'u_vector.c',
   'u_vector.h',
@@ -159,6 +163,8 @@ files_mesa_util = files(
   'indices/u_indices_priv.h',
   'indices/u_primconvert.c',
   'indices/u_primconvert.h',
+  'mesa_cache_db.c',
+  'mesa_cache_db.h',
 )
 
 files_drirc = files('00-mesa-defaults.conf')
@@ -230,8 +236,8 @@ endif
 
 if with_perfetto
   files_mesa_util += files(
-    'u_perfetto.cc',
-    'u_perfetto.h',
+    'perf/u_perfetto.cc',
+    'perf/u_perfetto.h',
   )
   deps_for_libmesa_util += dep_perfetto
 endif
@@ -242,16 +248,14 @@ u_indices_gen_c = custom_target(
   'u_indices_gen.c',
   input : 'indices/u_indices_gen.py',
   output : 'u_indices_gen.c',
-  command : [prog_python, '@INPUT@'],
-  capture : true,
+  command : [prog_python, '@INPUT@', '@OUTPUT@'],
 )
 
 u_unfilled_gen_c = custom_target(
   'u_unfilled_gen.c',
   input : 'indices/u_unfilled_gen.py',
   output : 'u_unfilled_gen.c',
-  command : [prog_python, '@INPUT@'],
-  capture : true,
+  command : [prog_python, '@INPUT@', '@OUTPUT@'],
 )
 
 libmesa_util_sse41 = static_library(
@@ -309,6 +313,7 @@ idep_xmlconfig = declare_dependency(
 )
 
 files_xxd = files('xxd.py')
+glsl2spirv = files('glsl2spirv.py')
 
 if with_tests
   # DRI_CONF macros use designated initializers (required for union
@@ -339,31 +344,21 @@ if with_tests
     'tests/fast_urem_by_const_test.cpp',
     'tests/half_float_test.cpp',
     'tests/int_min_max.cpp',
+    'tests/mesa-sha1_test.cpp',
     'tests/rb_tree_test.cpp',
     'tests/register_allocate_test.cpp',
     'tests/roundeven_test.cpp',
     'tests/set_test.cpp',
+    'tests/string_buffer_test.cpp',
     'tests/timespec_test.cpp',
     'tests/u_atomic_test.cpp',
+    'tests/u_call_once_test.cpp',
     'tests/u_debug_stack_test.cpp',
+    'tests/u_debug_test.cpp',
     'tests/u_printf_test.cpp',
     'tests/u_qsort_test.cpp',
     'tests/vector_test.cpp',
   )
-
-  if not (host_machine.system() == 'windows' and cc.get_id() == 'gcc')
-    # FIXME: These tests fail with mingw, but not with msvc.
-    files_util_tests += files(
-      'tests/string_buffer_test.cpp',
-    )
-  endif
-
-  # FIXME: this test crashes on windows
-  if host_machine.system() != 'windows'
-    files_util_tests += files(
-      'tests/mesa-sha1_test.cpp',
-    )
-  endif
 
   # FIXME: this test cause a big timeout on MacOS
   if host_machine.system() != 'darwin'

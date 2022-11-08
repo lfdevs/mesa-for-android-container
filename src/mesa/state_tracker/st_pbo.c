@@ -690,7 +690,13 @@ st_init_pbo_helpers(struct st_context *st)
    memset(&st->pbo.raster, 0, sizeof(struct pipe_rasterizer_state));
    st->pbo.raster.half_pixel_center = 1;
 
-   if (st->allow_compute_based_texture_transfer)
+   const char *pbo = debug_get_option("MESA_COMPUTE_PBO", NULL);
+   if (pbo) {
+      st->force_compute_based_texture_transfer = true;
+      st->force_specialized_compute_transfer = !strncmp(pbo, "spec", 4);
+   }
+
+   if (st->allow_compute_based_texture_transfer || st->force_compute_based_texture_transfer)
       st->pbo.shaders = _mesa_hash_table_create_u32_keys(NULL);
 }
 
@@ -739,9 +745,5 @@ st_destroy_pbo_helpers(struct st_context *st)
       st->pbo.vs = NULL;
    }
 
-   if (st->pbo.shaders) {
-      hash_table_foreach(st->pbo.shaders, entry)
-         st->pipe->delete_compute_state(st->pipe, entry->data);
-      _mesa_hash_table_destroy(st->pbo.shaders, NULL);
-   }
+   st_pbo_compute_deinit(st);
 }

@@ -511,6 +511,27 @@ static void update_samples(struct tu_subpass *subpass,
 }
 
 static void
+tu_render_pass_calc_hash(struct tu_render_pass *pass)
+{
+   #define HASH(hash, data) XXH64(&(data), sizeof(data), hash)
+
+   uint64_t hash = HASH(0, pass->attachment_count);
+   hash = XXH64(pass->attachments,
+         pass->attachment_count * sizeof(pass->attachments[0]), hash);
+   hash = HASH(hash, pass->subpass_count);
+   for (unsigned i = 0; i < pass->subpass_count; i++) {
+      hash = HASH(hash, pass->subpasses[i].samples);
+      hash = HASH(hash, pass->subpasses[i].input_count);
+      hash = HASH(hash, pass->subpasses[i].color_count);
+      hash = HASH(hash, pass->subpasses[i].resolve_count);
+   }
+
+   pass->autotune_hash = hash;
+
+   #undef HASH
+}
+
+static void
 tu_render_pass_cond_config(struct tu_render_pass *pass)
 {
    for (uint32_t i = 0; i < pass->attachment_count; i++) {
@@ -639,6 +660,9 @@ tu_render_pass_gmem_config(struct tu_render_pass *pass,
 static void
 tu_render_pass_bandwidth_config(struct tu_render_pass *pass)
 {
+   pass->gmem_bandwidth_per_pixel = 0;
+   pass->sysmem_bandwidth_per_pixel = 0;
+
    for (uint32_t i = 0; i < pass->attachment_count; i++) {
       const struct tu_render_pass_attachment *att = &pass->attachments[i];
 
@@ -833,9 +857,9 @@ tu_CreateRenderPass2(VkDevice _device,
       subpass->srgb_cntl = 0;
 
       const VkSubpassDescriptionFlagBits raster_order_access_bits =
-         VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_COLOR_ACCESS_BIT_ARM |
-         VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_DEPTH_ACCESS_BIT_ARM |
-         VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_STENCIL_ACCESS_BIT_ARM;
+         VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_COLOR_ACCESS_BIT_EXT |
+         VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_DEPTH_ACCESS_BIT_EXT |
+         VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_STENCIL_ACCESS_BIT_EXT;
 
       subpass->raster_order_attachment_access = desc->flags & raster_order_access_bits;
 
@@ -923,13 +947,14 @@ tu_CreateRenderPass2(VkDevice _device,
    tu_render_pass_cond_config(pass);
    tu_render_pass_gmem_config(pass, device->physical_device);
    tu_render_pass_bandwidth_config(pass);
+   tu_render_pass_calc_hash(pass);
 
    for (unsigned i = 0; i < pCreateInfo->dependencyCount; ++i) {
       tu_render_pass_add_subpass_dep(pass, &pCreateInfo->pDependencies[i]);
    }
 
    tu_render_pass_add_implicit_deps(pass, pCreateInfo);
- 
+
    *pRenderPass = tu_render_pass_to_handle(pass);
 
    return VK_SUCCESS;
@@ -1089,6 +1114,7 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
    tu_render_pass_cond_config(pass);
    tu_render_pass_gmem_config(pass, device->physical_device);
    tu_render_pass_bandwidth_config(pass);
+   tu_render_pass_calc_hash(pass);
 }
 
 void

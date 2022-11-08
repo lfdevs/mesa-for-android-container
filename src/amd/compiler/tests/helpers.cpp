@@ -214,6 +214,13 @@ void finish_to_hw_instr_test()
    aco_print_program(program.get(), output);
 }
 
+void finish_waitcnt_test()
+{
+   finish_program(program.get());
+   aco::insert_wait_states(program.get());
+   aco_print_program(program.get(), output);
+}
+
 void finish_insert_nops_test()
 {
    finish_program(program.get());
@@ -348,6 +355,71 @@ Temp ext_ubyte(Temp src, unsigned idx, Builder b)
 {
    return b.pseudo(aco_opcode::p_extract, b.def(src.regClass()), src, Operand::c32(idx),
                    Operand::c32(8u), Operand::c32(false));
+}
+
+void emit_divergent_if_else(Program* prog, aco::Builder& b, Operand cond, std::function<void()> then,
+                            std::function<void()> els)
+{
+   prog->blocks.reserve(prog->blocks.size() + 6);
+
+   Block* if_block = &prog->blocks.back();
+   Block* then_logical = prog->create_and_insert_block();
+   Block* then_linear = prog->create_and_insert_block();
+   Block* invert = prog->create_and_insert_block();
+   Block* else_logical = prog->create_and_insert_block();
+   Block* else_linear = prog->create_and_insert_block();
+   Block* endif_block = prog->create_and_insert_block();
+
+   if_block->kind |= block_kind_branch;
+   invert->kind |= block_kind_invert;
+   endif_block->kind |= block_kind_merge;
+
+   /* Set up logical CF */
+   then_logical->logical_preds.push_back(if_block->index);
+   else_logical->logical_preds.push_back(if_block->index);
+   endif_block->logical_preds.push_back(then_logical->index);
+   endif_block->logical_preds.push_back(else_logical->index);
+
+   /* Set up linear CF */
+   then_logical->linear_preds.push_back(if_block->index);
+   then_linear->linear_preds.push_back(if_block->index);
+   invert->linear_preds.push_back(then_logical->index);
+   invert->linear_preds.push_back(then_linear->index);
+   else_logical->linear_preds.push_back(invert->index);
+   else_linear->linear_preds.push_back(invert->index);
+   endif_block->linear_preds.push_back(else_logical->index);
+   endif_block->linear_preds.push_back(else_linear->index);
+
+   PhysReg saved_exec_reg(84);
+
+   b.reset(if_block);
+   Temp saved_exec = b.sop1(Builder::s_and_saveexec, b.def(b.lm, saved_exec_reg), Definition(scc, s1), Definition(exec, b.lm), cond, Operand(exec, b.lm));
+   b.branch(aco_opcode::p_cbranch_nz, Definition(vcc, bld.lm), then_logical->index, then_linear->index);
+
+   b.reset(then_logical);
+   b.pseudo(aco_opcode::p_logical_start);
+   then();
+   b.pseudo(aco_opcode::p_logical_end);
+   b.branch(aco_opcode::p_branch, Definition(vcc, bld.lm), invert->index);
+
+   b.reset(then_linear);
+   b.branch(aco_opcode::p_branch, Definition(vcc, bld.lm), invert->index);
+
+   b.reset(invert);
+   b.sop2(Builder::s_andn2, Definition(exec, bld.lm), Definition(scc, s1), Operand(saved_exec, saved_exec_reg), Operand(exec, bld.lm));
+   b.branch(aco_opcode::p_cbranch_nz, Definition(vcc, bld.lm), else_logical->index, else_linear->index);
+
+   b.reset(else_logical);
+   b.pseudo(aco_opcode::p_logical_start);
+   els();
+   b.pseudo(aco_opcode::p_logical_end);
+   b.branch(aco_opcode::p_branch, Definition(vcc, bld.lm), endif_block->index);
+
+   b.reset(else_linear);
+   b.branch(aco_opcode::p_branch, Definition(vcc, bld.lm), endif_block->index);
+
+   b.reset(endif_block);
+   b.pseudo(aco_opcode::p_parallelcopy, Definition(exec, bld.lm), Operand(saved_exec, saved_exec_reg));
 }
 
 VkDevice get_vk_device(enum amd_gfx_level gfx_level)

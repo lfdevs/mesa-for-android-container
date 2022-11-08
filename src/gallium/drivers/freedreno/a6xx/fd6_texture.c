@@ -25,6 +25,8 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#define FD_BO_NO_HARDPIN 1
+
 #include "pipe/p_state.h"
 #include "util/format/u_format.h"
 #include "util/hash_table.h"
@@ -35,6 +37,7 @@
 #include "freedreno_dev_info.h"
 #include "fd6_emit.h"
 #include "fd6_resource.h"
+#include "fd6_screen.h"
 #include "fd6_texture.h"
 
 static void
@@ -117,7 +120,7 @@ fd6_sampler_state_create(struct pipe_context *pctx,
       COND(cso->min_mip_filter == PIPE_TEX_MIPFILTER_NONE,
            A6XX_TEX_SAMP_1_MIPFILTER_LINEAR_FAR) |
       COND(!cso->seamless_cube_map, A6XX_TEX_SAMP_1_CUBEMAPSEAMLESSFILTOFF) |
-      COND(!cso->normalized_coords, A6XX_TEX_SAMP_1_UNNORM_COORDS);
+      COND(cso->unnormalized_coords, A6XX_TEX_SAMP_1_UNNORM_COORDS);
 
    so->texsamp0 |= A6XX_TEX_SAMP_0_LOD_BIAS(cso->lod_bias);
    so->texsamp1 |= A6XX_TEX_SAMP_1_MIN_LOD(cso->min_lod) |
@@ -231,8 +234,10 @@ fd6_sampler_view_update(struct fd_context *ctx,
       /* Using relocs for addresses still */
       uint64_t iova = cso->u.buf.offset;
 
-      fdl6_buffer_view_init(so->descriptor, cso->format, swiz, iova,
-                            cso->u.buf.size);
+      uint32_t size = fd_clamp_buffer_size(cso->format, cso->u.buf.size,
+                                           A4XX_MAX_TEXEL_BUFFER_ELEMENTS_UINT);
+
+      fdl6_buffer_view_init(so->descriptor, cso->format, swiz, iova, size);
    } else {
       struct fdl_view_args args = {
          /* Using relocs for addresses still */

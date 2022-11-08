@@ -251,7 +251,9 @@ struct fd_context {
    struct list_head acc_active_queries dt;
    /*@}*/
 
-   uint8_t patch_vertices;
+   float default_outer_level[4] dt;
+   float default_inner_level[2] dt;
+   uint8_t patch_vertices dt;
 
    /* Whether we need to recheck the active_queries list next
     * fd_batch_update_queries().
@@ -349,13 +351,16 @@ struct fd_context {
    /* points to either scissor or disabled_scissor depending on rast state: */
    struct pipe_scissor_state *current_scissor dt;
 
-   struct pipe_scissor_state scissor dt;
+   /* Note that all the scissor state that is traced is inclusive, ie the
+    * maxiumum maxx is one less than the width.
+    */
+   struct pipe_scissor_state scissor[PIPE_MAX_VIEWPORTS] dt;
 
    /* we don't have a disable/enable bit for scissor, so instead we keep
     * a disabled-scissor state which matches the entire bound framebuffer
     * and use that when scissor is not enabled.
     */
-   struct pipe_scissor_state disabled_scissor dt;
+   struct pipe_scissor_state disabled_scissor[PIPE_MAX_VIEWPORTS] dt;
 
    /* Per vsc pipe bo's (a2xx-a5xx): */
    struct fd_bo *vsc_pipe_bo[32] dt;
@@ -397,8 +402,11 @@ struct fd_context {
    /* local context fb state, for when ctx->batch is null: */
    struct pipe_framebuffer_state framebuffer dt;
    struct pipe_poly_stipple stipple dt;
-   struct pipe_viewport_state viewport dt;
-   struct pipe_scissor_state viewport_scissor dt;
+   struct pipe_viewport_state viewport[PIPE_MAX_VIEWPORTS] dt;
+   struct pipe_scissor_state viewport_scissor[PIPE_MAX_VIEWPORTS] dt;
+   struct {
+      unsigned x, y;
+   } guardband dt;
    struct fd_constbuf_stateobj constbuf[PIPE_SHADER_TYPES] dt;
    struct fd_shaderbuf_stateobj shaderbuf[PIPE_SHADER_TYPES] dt;
    struct fd_shaderimg_stateobj shaderimg[PIPE_SHADER_TYPES] dt;

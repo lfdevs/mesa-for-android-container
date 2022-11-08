@@ -5,7 +5,6 @@
 #include "pipe/p_compiler.h"
 #include "pipe/p_screen.h"
 #include "util/u_debug.h"
-#include "util/debug.h"
 #include "frontend/sw_winsys.h"
 #include "target-helpers/inline_debug_helper.h"
 
@@ -30,7 +29,7 @@
 #include "d3d12/d3d12_public.h"
 #endif
 
-#ifdef GALLIUM_ASAHI
+#if defined(GALLIUM_ASAHI) && __APPLE__
 #include "asahi/agx_public.h"
 #endif
 
@@ -67,9 +66,9 @@ sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
       screen = d3d12_create_dxcore_screen(winsys, NULL);
 #endif
 
-#if defined(GALLIUM_ASAHI)
+#if defined(GALLIUM_ASAHI) && __APPLE__
    if (screen == NULL && strcmp(driver, "asahi") == 0)
-      screen = agx_screen_create(winsys);
+      screen = agx_screen_create(0, NULL, winsys);
 #endif
 
    return screen ? debug_screen_wrap(screen) : NULL;
@@ -79,13 +78,13 @@ sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
 static inline struct pipe_screen *
 sw_screen_create_vk(struct sw_winsys *winsys, bool sw_vk)
 {
-   UNUSED bool only_sw = env_var_as_boolean("LIBGL_ALWAYS_SOFTWARE", false);
+   UNUSED bool only_sw = debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
    const char *drivers[] = {
       (sw_vk ? "" : debug_get_option("GALLIUM_DRIVER", "")),
 #if defined(GALLIUM_D3D12)
       (sw_vk || only_sw) ? "" : "d3d12",
 #endif
-#if defined(GALLIUM_ASAHI)
+#if defined(GALLIUM_ASAHI) && __APPLE__
       (sw_vk || only_sw) ? "" : "asahi",
 #endif
 #if defined(GALLIUM_LLVMPIPE)

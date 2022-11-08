@@ -79,7 +79,7 @@ __eglGLVNDGetProcAddress(const char *procName)
    return (void *) eglGetProcAddress(procName);
 }
 
-EGLAPI EGLBoolean
+PUBLIC EGLAPI EGLBoolean
 __egl_Main(uint32_t version, const __EGLapiExports *exports,
      __EGLvendorInfo *vendor, __EGLapiImports *imports)
 {

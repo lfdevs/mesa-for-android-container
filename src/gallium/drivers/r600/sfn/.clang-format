@@ -1,0 +1,37 @@
+BasedOnStyle: LLVM
+AlwaysBreakAfterReturnType: TopLevel
+AllowShortEnumsOnASingleLine: false
+BinPackParameters: false
+BinPackArguments: false
+BraceWrapping:
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: true
+  AfterStruct: false
+  BeforeElse: false
+  SplitEmptyFunction: true
+BreakBeforeBraces: Custom
+ColumnLimit: 90
+ContinuationIndentWidth: 3
+Cpp11BracedListStyle: true
+ForEachMacros:
+  - LIST_FOR_EACH_ENTRY
+  - LIST_FOR_EACH_ENTRY_SAFE
+IncludeBlocks: Regroup
+IndentWidth: 3
+TabWidth: 3
+PenaltyBreakBeforeFirstCallParameter: 1
+PenaltyExcessCharacter: 100
+SpaceAfterCStyleCast: false
+SpaceBeforeCpp11BracedList: false
+AlignArrayOfStructures: Left
+ReferenceAlignment: Left
+PenaltyBreakOpenParenthesis: 90
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
+SpacesInContainerLiterals: false
+PackConstructorInitializers: Never
+IndentAccessModifiers: false
+AccessModifierOffset: -3
+BreakConstructorInitializers: AfterColon
+SpaceBeforeCtorInitializerColon: False

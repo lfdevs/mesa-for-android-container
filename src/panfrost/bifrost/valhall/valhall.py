@@ -200,7 +200,7 @@ class Instruction:
         self.secondary_mask = 0xF if opcode2 is not None else 0x0
         if "left" in [x.name for x in self.modifiers]:
             self.secondary_mask |= 0x100
-        if len(srcs) == 3 and (srcs[1].widen or srcs[1].lanes):
+        if len(srcs) == 3 and (srcs[1].widen or srcs[1].lanes or srcs[1].swizzle):
             self.secondary_mask &= ~0xC # conflicts
         if opcode == 0x90:
             # XXX: XMLify this, but disambiguates sign of conversions

@@ -92,14 +92,16 @@ msm_pipe_get_param(struct fd_pipe *pipe, enum fd_param_id param,
       return query_param(pipe, MSM_PARAM_MAX_FREQ, value);
    case FD_TIMESTAMP:
       return query_param(pipe, MSM_PARAM_TIMESTAMP, value);
-   case FD_NR_RINGS:
-      return query_param(pipe, MSM_PARAM_NR_RINGS, value);
+   case FD_NR_PRIORITIES:
+      return query_param(pipe, MSM_PARAM_PRIORITIES, value);
    case FD_CTX_FAULTS:
       return query_queue_param(pipe, MSM_SUBMITQUEUE_PARAM_FAULTS, value);
    case FD_GLOBAL_FAULTS:
       return query_param(pipe, MSM_PARAM_FAULTS, value);
    case FD_SUSPEND_COUNT:
       return query_param(pipe, MSM_PARAM_SUSPENDS, value);
+   case FD_VA_SIZE:
+      return query_param(pipe, MSM_PARAM_VA_SIZE, value);
    default:
       ERROR_MSG("invalid param id: %d", param);
       return -1;
@@ -159,7 +161,7 @@ open_submitqueue(struct fd_pipe *pipe, uint32_t prio)
       .flags = 0,
       .prio = prio,
    };
-   uint64_t nr_rings = 1;
+   uint64_t nr_prio = 1;
    int ret;
 
    if (fd_device_version(pipe->dev) < FD_VERSION_SUBMIT_QUEUES) {
@@ -167,9 +169,9 @@ open_submitqueue(struct fd_pipe *pipe, uint32_t prio)
       return 0;
    }
 
-   msm_pipe_get_param(pipe, FD_NR_RINGS, &nr_rings);
+   msm_pipe_get_param(pipe, FD_NR_PRIORITIES, &nr_prio);
 
-   req.prio = MIN2(req.prio, MAX2(nr_rings, 1) - 1);
+   req.prio = MIN2(req.prio, MAX2(nr_prio, 1) - 1);
 
    ret = drmCommandWriteRead(pipe->dev->fd, DRM_MSM_SUBMITQUEUE_NEW, &req,
                              sizeof(req));

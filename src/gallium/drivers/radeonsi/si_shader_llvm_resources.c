@@ -94,8 +94,6 @@ static LLVMValueRef load_ubo(struct ac_shader_abi *abi, LLVMValueRef index)
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
    struct si_shader_selector *sel = ctx->shader->selector;
 
-   LLVMValueRef ptr = ac_get_arg(&ctx->ac, ctx->const_and_shader_buffers);
-
    if (sel->info.base.num_ubos == 1 && sel->info.base.num_ssbos == 0) {
       return load_const_buffer_desc_fast_path(ctx);
    }
@@ -104,7 +102,9 @@ static LLVMValueRef load_ubo(struct ac_shader_abi *abi, LLVMValueRef index)
    index =
       LLVMBuildAdd(ctx->ac.builder, index, LLVMConstInt(ctx->ac.i32, SI_NUM_SHADER_BUFFERS, 0), "");
 
-   return ac_build_load_to_sgpr(&ctx->ac, ptr, index);
+   return ac_build_load_to_sgpr(&ctx->ac,
+                                ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->const_and_shader_buffers),
+                                index);
 }
 
 static LLVMValueRef load_ssbo(struct ac_shader_abi *abi, LLVMValueRef index, bool write, bool non_uniform)
@@ -116,13 +116,13 @@ static LLVMValueRef load_ssbo(struct ac_shader_abi *abi, LLVMValueRef index, boo
        LLVMConstIntGetZExtValue(index) < ctx->shader->selector->cs_num_shaderbufs_in_user_sgprs)
       return ac_get_arg(&ctx->ac, ctx->cs_shaderbuf[LLVMConstIntGetZExtValue(index)]);
 
-   LLVMValueRef rsrc_ptr = ac_get_arg(&ctx->ac, ctx->const_and_shader_buffers);
-
    index = si_llvm_bound_index(ctx, index, ctx->num_shader_buffers);
    index = LLVMBuildSub(ctx->ac.builder, LLVMConstInt(ctx->ac.i32, SI_NUM_SHADER_BUFFERS - 1, 0),
                         index, "");
 
-   return ac_build_load_to_sgpr(&ctx->ac, rsrc_ptr, index);
+   return ac_build_load_to_sgpr(&ctx->ac,
+                                ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->const_and_shader_buffers),
+                                index);
 }
 
 /**
@@ -177,16 +177,15 @@ static LLVMValueRef fixup_image_desc(struct si_shader_context *ctx, LLVMValueRef
 
 /* AC_DESC_FMASK is handled exactly like AC_DESC_IMAGE. The caller should
  * adjust "index" to point to FMASK. */
-static LLVMValueRef si_load_image_desc(struct si_shader_context *ctx, LLVMValueRef list,
+static LLVMValueRef si_load_image_desc(struct si_shader_context *ctx, struct ac_llvm_pointer list,
                                        LLVMValueRef index, enum ac_descriptor_type desc_type,
                                        bool uses_store, bool bindless)
 {
-   LLVMBuilderRef builder = ctx->ac.builder;
    LLVMValueRef rsrc;
 
    if (desc_type == AC_DESC_BUFFER) {
       index = ac_build_imad(&ctx->ac, index, LLVMConstInt(ctx->ac.i32, 2, 0), ctx->ac.i32_1);
-      list = LLVMBuildPointerCast(builder, list, ac_array_in_const32_addr_space(ctx->ac.v4i32), "");
+      list.pointee_type = ctx->ac.v4i32;
    } else {
       assert(desc_type == AC_DESC_IMAGE || desc_type == AC_DESC_FMASK);
    }
@@ -205,7 +204,7 @@ static LLVMValueRef si_load_image_desc(struct si_shader_context *ctx, LLVMValueR
 /**
  * Load an image view, fmask view. or sampler state descriptor.
  */
-static LLVMValueRef si_load_sampler_desc(struct si_shader_context *ctx, LLVMValueRef list,
+static LLVMValueRef si_load_sampler_desc(struct si_shader_context *ctx, struct ac_llvm_pointer list,
                                          LLVMValueRef index, enum ac_descriptor_type type)
 {
    LLVMBuilderRef builder = ctx->ac.builder;
@@ -218,7 +217,7 @@ static LLVMValueRef si_load_sampler_desc(struct si_shader_context *ctx, LLVMValu
    case AC_DESC_BUFFER:
       /* The buffer is in [4:7]. */
       index = ac_build_imad(&ctx->ac, index, LLVMConstInt(ctx->ac.i32, 4, 0), ctx->ac.i32_1);
-      list = LLVMBuildPointerCast(builder, list, ac_array_in_const32_addr_space(ctx->ac.v4i32), "");
+      list.pointee_type = ctx->ac.v4i32;
       break;
    case AC_DESC_FMASK:
       /* The FMASK is at [8:15]. */
@@ -229,7 +228,7 @@ static LLVMValueRef si_load_sampler_desc(struct si_shader_context *ctx, LLVMValu
       /* The sampler state is at [12:15]. */
       index = ac_build_imad(&ctx->ac, index, LLVMConstInt(ctx->ac.i32, 4, 0),
                             LLVMConstInt(ctx->ac.i32, 3, 0));
-      list = LLVMBuildPointerCast(builder, list, ac_array_in_const32_addr_space(ctx->ac.v4i32), "");
+      list.pointee_type = ctx->ac.v4i32;
       break;
    case AC_DESC_PLANE_0:
    case AC_DESC_PLANE_1:
@@ -257,7 +256,7 @@ static LLVMValueRef si_nir_load_sampler_desc(struct ac_shader_abi *abi, unsigned
    assert(desc_type <= AC_DESC_BUFFER);
 
    if (bindless) {
-      LLVMValueRef list = ac_get_arg(&ctx->ac, ctx->bindless_samplers_and_images);
+      struct ac_llvm_pointer list = ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->bindless_samplers_and_images);
 
       /* dynamic_index is the bindless handle */
       if (image) {
@@ -279,7 +278,7 @@ static LLVMValueRef si_nir_load_sampler_desc(struct ac_shader_abi *abi, unsigned
        */
       dynamic_index =
          LLVMBuildMul(ctx->ac.builder, dynamic_index, LLVMConstInt(ctx->ac.i64, 2, 0), "");
-      list = ac_build_pointer_add(&ctx->ac, list, dynamic_index);
+      list.v = ac_build_pointer_add(&ctx->ac, ctx->ac.v8i32, list.v, dynamic_index);
       return si_load_sampler_desc(ctx, list, ctx->ac.i32_0, desc_type);
    }
 
@@ -289,7 +288,7 @@ static LLVMValueRef si_nir_load_sampler_desc(struct ac_shader_abi *abi, unsigned
    if (const_index >= num_slots)
       const_index = base_index;
 
-   LLVMValueRef list = ac_get_arg(&ctx->ac, ctx->samplers_and_images);
+   struct ac_llvm_pointer list = ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->samplers_and_images);
    LLVMValueRef index = LLVMConstInt(ctx->ac.i32, const_index, false);
 
    if (dynamic_index) {

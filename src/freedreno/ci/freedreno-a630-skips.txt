@@ -27,10 +27,6 @@ dEQP-VK.api.command_buffers.record_many_draws_secondary_2
 spill-dEQP-VK.graphicsfuzz.cov-function-two-loops-limit-using-arguments-array-element-copies
 spill-dEQP-VK.graphicsfuzz.cov-nested-loop-large-array-index-using-vector-components
 
-# causes a hangcheck timeout due to https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3582
-dEQP-VK.image.sample_texture.128_bit_compressed_format_cubemap
-dEQP-VK.image.sample_texture.64_bit_compressed_format_cubemap
-
 # timeout, spending all its time in nir_compare_deref_paths()
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/5152
 dEQP-VK.ubo.random.all_shared_buffer.48
@@ -40,6 +36,7 @@ KHR-GLES31.core.shader_image_load_store.basic-allFormats-store-fs
 
 # 60s timeout
 KHR-GLES31.core.tessellation_shader.tessellation_control_to_tessellation_evaluation.gl_MaxPatchVertices_Position_PointSize
+KHR-GL45.copy_image.functional
 
 # These take most of a minute to run
 spec@!opengl 3.0@clearbuffer-depth-cs-probe

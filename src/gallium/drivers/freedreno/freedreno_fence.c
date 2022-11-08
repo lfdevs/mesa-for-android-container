@@ -104,18 +104,17 @@ fd_fence_destroy(struct pipe_fence_handle *fence)
    fd_fence_ref(&fence->last_fence, NULL);
 
    tc_unflushed_batch_token_reference(&fence->tc_token, NULL);
+
+   /* If the submit is enqueued to the submit_queue, we need to wait until
+    * the fence_fd is valid before cleaning up.
+    */
+   util_queue_fence_wait(&fence->submit_fence.ready);
+
    if (fence->submit_fence.use_fence_fd)
       close(fence->submit_fence.fence_fd);
    if (fence->syncobj)
       drmSyncobjDestroy(fd_device_fd(fence->screen->dev), fence->syncobj);
    fd_pipe_del(fence->pipe);
-
-   /* TODO might be worth trying harder to avoid a potential stall here,
-    * but that would require the submit somehow holding a reference to
-    * the pipe_fence_handle.. and I'm not sure if it is a thing that is
-    * likely to matter much.
-    */
-   util_queue_fence_wait(&fence->submit_fence.ready);
 
    FREE(fence);
 }

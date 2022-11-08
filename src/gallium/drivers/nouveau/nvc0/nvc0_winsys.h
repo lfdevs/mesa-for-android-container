@@ -38,14 +38,6 @@ nvc0_add_resident(struct nouveau_bufctx *bufctx, int bin,
 #define BCTX_REFN(bctx, bin, res, acc) \
    nvc0_add_resident(bctx, NVC0_BIND_##bin, res, NOUVEAU_BO_##acc)
 
-static inline void
-PUSH_REFN(struct nouveau_pushbuf *push, struct nouveau_bo *bo, uint32_t flags)
-{
-   struct nouveau_pushbuf_refn ref = { bo, flags };
-   nouveau_pushbuf_refn(push, &ref, 1);
-}
-
-
 #define SUBC_3D(m) 0, (m)
 #define NVC0_3D(n) SUBC_3D(NVC0_3D_##n)
 #define NVE4_3D(n) SUBC_3D(NVE4_3D_##n)

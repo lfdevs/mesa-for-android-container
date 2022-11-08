@@ -365,6 +365,25 @@ color_index_for_var(const nir_variable *var)
           (var->data.location - FRAG_RESULT_DATA0);
 }
 
+/*
+ * Test if the blending options for a given channel encode the "replace" blend
+ * mode: dest = source. In this case, blending may be specially optimized.
+ */
+static bool
+nir_blend_replace_channel(const nir_lower_blend_channel *c)
+{
+   return (c->func == BLEND_FUNC_ADD) &&
+          (c->src_factor == BLEND_FACTOR_ZERO && c->invert_src_factor) &&
+          (c->dst_factor == BLEND_FACTOR_ZERO && !c->invert_dst_factor);
+}
+
+static bool
+nir_blend_replace_rt(const nir_lower_blend_rt *rt)
+{
+   return nir_blend_replace_channel(&rt->rgb) &&
+          nir_blend_replace_channel(&rt->alpha);
+}
+
 static bool
 nir_lower_blend_store(nir_builder *b, nir_intrinsic_instr *store,
                       const nir_lower_blend_options *options)
@@ -392,12 +411,18 @@ nir_lower_blend_store(nir_builder *b, nir_intrinsic_instr *store,
    b->shader->info.fs.uses_fbfetch_output = true;
    nir_ssa_def *dst = nir_pad_vector(b, nir_load_var(b, var), 4);
 
-   /* Blend the two colors per the passed options */
+   /* Blend the two colors per the passed options. We only call nir_blend if
+    * blending is enabled with a blend mode other than replace (independent of
+    * the color mask). That avoids unnecessary fsat instructions in the common
+    * case where blending is disabled at an API level, but the driver calls
+    * nir_blend (possibly for color masking).
+    */
    nir_ssa_def *blended = src;
 
    if (options->logicop_enable) {
       blended = nir_blend_logicop(b, options, rt, src, dst);
-   } else if (!util_format_is_pure_integer(options->format[rt])) {
+   } else if (!util_format_is_pure_integer(options->format[rt]) &&
+              !nir_blend_replace_rt(&options->rt[rt])) {
       assert(!util_format_is_scaled(options->format[rt]));
       blended = nir_blend(b, options, rt, src, options->src1, dst);
    }

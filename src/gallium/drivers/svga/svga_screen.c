@@ -216,8 +216,6 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return sws->have_vgpu10 ? 1 : 0;
    case PIPE_CAP_ANISOTROPIC_FILTER:
       return 1;
-   case PIPE_CAP_POINT_SPRITE:
-      return 1;
    case PIPE_CAP_MAX_RENDER_TARGETS:
       return svgascreen->max_color_buffers;
    case PIPE_CAP_OCCLUSION_QUERY:
@@ -277,9 +275,6 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1; /* The color outputs of vertex shaders are not clamped */
    case PIPE_CAP_VERTEX_COLOR_CLAMPED:
       return sws->have_vgpu10;
-
-   case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
-      return 1; /* expected for GL_ARB_framebuffer_object */
 
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
    case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
@@ -761,6 +756,7 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
    .lower_rotate = true,                                                      \
    .lower_uniforms_to_ubo = true,                                             \
    .lower_vector_cmp = true,                                                  \
+   .lower_cs_local_index_to_id = true,                                        \
    .max_unroll_iterations = 32,                                               \
    .use_interpolated_input_intrinsics = true
 
@@ -1317,7 +1313,7 @@ svga_screen_create(struct svga_winsys_screen *sws)
    }
 
    (void) mtx_init(&svgascreen->tex_mutex, mtx_plain);
-   (void) mtx_init(&svgascreen->swc_mutex, mtx_recursive);
+   (void) mtx_init(&svgascreen->swc_mutex, mtx_plain | mtx_recursive);
 
    svga_screen_cache_init(svgascreen);
 

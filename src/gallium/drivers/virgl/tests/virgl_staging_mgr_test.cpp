@@ -185,10 +185,12 @@ TEST_P(VirglStagingMgrWithAlignment,
    release_resources(out_resource, num_resources);
 }
 
-INSTANTIATE_TEST_CASE_P(WithAlignment,
-                        VirglStagingMgrWithAlignment,
-                        ::testing::Values(1, 16),
-                        testing::PrintToStringParamName());
+INSTANTIATE_TEST_SUITE_P(
+   WithAlignment,
+   VirglStagingMgrWithAlignment,
+   ::testing::Values(1, 16),
+   testing::PrintToStringParamName()
+);
 
 TEST_F(VirglStagingMgr,
        non_fitting_allocation_reallocates_resource)

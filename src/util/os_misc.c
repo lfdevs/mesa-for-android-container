@@ -35,9 +35,6 @@
 
 #if DETECT_OS_WINDOWS
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN      // Exclude rarely-used stuff from Windows headers
-#endif
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,15 +83,19 @@ os_log_message(const char *message)
       /* one-time init */
       const char *filename = os_get_option("GALLIUM_LOG_FILE");
       if (filename) {
-         const char *mode = "w";
-         if (filename[0] == '+') {
-            /* If the filename is prefixed with '+' then open the file for
-             * appending instead of normal writing.
-             */
-            mode = "a";
+         if (strcmp(filename, "stdout") == 0) {
+            fout = stdout;
+         } else {
+            const char *mode = "w";
+            if (filename[0] == '+') {
+               /* If the filename is prefixed with '+' then open the file for
+                * appending instead of normal writing.
+                */
+               mode = "a";
             filename++; /* skip the '+' */
+            }
+            fout = fopen(filename, mode);
          }
-         fout = fopen(filename, mode);
       }
 #endif
       if (!fout)
@@ -269,7 +270,7 @@ os_get_total_physical_memory(uint64_t *size)
    *size = status.ullTotalPhys;
    return (ret == TRUE);
 #else
-#error unexpected platform in os_sysinfo.c
+#error unexpected platform in os_misc.c
    return false;
 #endif
 }
@@ -317,6 +318,14 @@ os_get_available_system_memory(uint64_t *size)
 
    *size = MIN2(mem_available, rl.rlim_cur);
    return true;
+#elif DETECT_OS_WINDOWS
+   MEMORYSTATUSEX status;
+   BOOL ret;
+
+   status.dwLength = sizeof(status);
+   ret = GlobalMemoryStatusEx(&status);
+   *size = status.ullAvailPhys;
+   return (ret == TRUE);
 #else
    return false;
 #endif

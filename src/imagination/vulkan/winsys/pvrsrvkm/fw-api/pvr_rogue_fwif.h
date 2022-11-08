@@ -274,6 +274,12 @@ struct rogue_fwif_3d_regs {
    /* Only used when feature GPU_MULTICORE_SUPPORT or BRN 47217 present. */
    uint32_t isp_oclqry_stride;
 
+   /* Only used when feature ZLS_SUBTILE present. */
+   uint32_t isp_zls_pixels;
+
+   /* Only used when feature ISP_ZLS_D24_S8_PACKING_OGL_MODE present. */
+   uint32_t rgx_cr_blackpearl_fix;
+
    /* All values below the ALIGN_ATTR(8) must be 64 bit. */
    uint64_t ALIGN_ATTR(8) isp_scissor_base;
    uint64_t isp_dbias_base;
@@ -281,9 +287,6 @@ struct rogue_fwif_3d_regs {
    uint64_t isp_zlsctl;
    uint64_t isp_zload_store_base;
    uint64_t isp_stencil_load_store_base;
-
-   /* Only used when feature ZLS_SUBTILE present. */
-   uint64_t isp_zls_pixels;
 
    /*
     * Only used when feature FBCDC_ALGORITHM present and value < 3 or feature
@@ -301,9 +304,6 @@ struct rogue_fwif_3d_regs {
    uint64_t pds_bgnd_brn65101[3U];
 
    uint64_t pds_pr_bgnd[3U];
-
-   /* Only used when feature ISP_ZLS_D24_S8_PACKING_OGL_MODE present. */
-   uint64_t rgx_cr_blackpearl_fix;
 
    /* Only used when BRN 62850 or 62865 present. */
    uint64_t isp_dummy_stencil_store_base;
@@ -339,13 +339,6 @@ struct rogue_fwif_cmd_3d {
    uint32_t zls_stride;
    /** Stride IN BYTES for S-Buffer in case of RTAs. */
    uint32_t sls_stride;
-
-   /* Only used when SUPPORT_STRIP_RENDERING present. */
-   uint8_t ui8FrameStripBuffer;
-   /* Only used when SUPPORT_STRIP_RENDERING present. */
-   uint8_t ui8FrameStripIndex;
-   /* Only used when SUPPORT_STRIP_RENDERING present. */
-   uint8_t ui8FrameStripMode;
 
    /* Number of tiles to submit to GPU<N> before moving to GPU<N+1>. */
    uint32_t execute_count;
@@ -467,24 +460,8 @@ struct rogue_fwif_cmd_abort {
 struct rogue_fwif_cdm_regs {
    uint64_t tpu_border_colour_table;
 
-   /* Only used when feature COMPUTE_MORTON_CAPABLE present. */
-   uint64_t cdm_item;
-
-   /* Only used when feature CLUSTER_GROUPING present. */
-   uint64_t compute_cluster;
-
-   /* Only used when feature TPU_DM_GLOBAL_REGISTERS present. */
-   uint64_t tpu_tag_cdm_ctrl;
-
    /* Only used when feature CDM_USER_MODE_QUEUE present. */
    uint64_t cdm_cb_queue;
-
-   /*
-    * Only used when feature CDM_USER_MODE_QUEUE is present and
-    * SUPPORT_TRUSTED_DEVICE is present and SUPPORT_SECURE_ALLOC_KM is not
-    * present.
-    */
-   uint64_t cdm_cb_secure_queue;
 
    /* Only used when feature CDM_USER_MODE_QUEUE present. */
    uint64_t cdm_cb_base;
@@ -500,6 +477,17 @@ struct rogue_fwif_cdm_regs {
    uint32_t tpu;
 
    uint32_t cdm_resume_pds1;
+
+   /* Only used when feature COMPUTE_MORTON_CAPABLE present. */
+   uint32_t cdm_item;
+
+   /* Only used when feature CLUSTER_GROUPING present. */
+   uint32_t compute_cluster;
+
+   /* Only used when feature TPU_DM_GLOBAL_REGISTERS present. */
+   uint32_t tpu_tag_cdm_ctrl;
+
+   uint32_t padding;
 };
 
 /**

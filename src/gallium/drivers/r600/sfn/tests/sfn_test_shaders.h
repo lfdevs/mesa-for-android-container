@@ -95,6 +95,12 @@ extern const char *vtx_for_tcs_opt;
 extern const char *vtx_for_tcs_pre_sched;
 extern const char *vtx_for_tcs_sched;
 
+extern const char *fs_opt_tex_coord_init;
+extern const char *fs_opt_tex_coord_expect;
+
+extern const char *fs_sched_tex_coord_init;
+extern const char *fs_sched_tex_coord_expect;
+
 class TestShader : public ::testing::Test {
 
    void SetUp() override;
@@ -103,13 +109,10 @@ class TestShader : public ::testing::Test {
    virtual void SetUpMore();
    virtual void TearDownMore();
 
-
 protected:
    Shader *from_string(const std::string& s);
 };
 
-
-}
-
+} // namespace r600
 
 #endif // SFN_TEST_SHADERS_H

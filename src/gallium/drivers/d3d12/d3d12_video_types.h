@@ -82,6 +82,15 @@ const bool D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE = debug_get_bool_option("
 //
 const bool D3D12_VIDEO_ENC_FALLBACK_SLICE_CONFIG = debug_get_bool_option("D3D12_VIDEO_ENC_FALLBACK_SLICE_CONFIG", false);
 
+const bool D3D12_VIDEO_ENC_ASYNC = debug_get_bool_option("D3D12_VIDEO_ENC_ASYNC", true);
+
+/**
+ * This indicates how many in-flight encode commands can happen before blocking on the next request
+ */
+const uint64_t D3D12_VIDEO_ENC_ASYNC_DEPTH = debug_get_num_option("D3D12_VIDEO_ENC_ASYNC_DEPTH", 8);
+
+const uint64_t D3D12_VIDEO_ENC_METADATA_BUFFERS_COUNT = debug_get_num_option("D3D12_VIDEO_ENC_METADATA_BUFFERS_COUNT", 2 * D3D12_VIDEO_ENC_ASYNC_DEPTH);
+
 constexpr unsigned int D3D12_VIDEO_H264_MB_IN_PIXELS = 16;
 
 enum d3d12_video_decode_config_specific_flags
@@ -99,6 +108,9 @@ enum d3d12_video_decode_profile_type
 {
    d3d12_video_decode_profile_type_none,
    d3d12_video_decode_profile_type_h264,
+   d3d12_video_decode_profile_type_hevc,
+   d3d12_video_decode_profile_type_av1,
+   d3d12_video_decode_profile_type_vp9,
    d3d12_video_decode_profile_type_max_valid
 };
 
@@ -125,11 +137,27 @@ void
 d3d12_video_encoder_convert_from_d3d12_level_h264(D3D12_VIDEO_ENCODER_LEVELS_H264 level12,
                                                   uint32_t &                      specLevel,
                                                   uint32_t &                      constraint_set3_flag);
+void
+d3d12_video_encoder_convert_from_d3d12_level_hevc(D3D12_VIDEO_ENCODER_LEVELS_HEVC level12,
+                                                  uint32_t &                      specLevel);
 D3D12_VIDEO_ENCODER_PROFILE_H264
 d3d12_video_encoder_convert_profile_to_d3d12_enc_profile_h264(enum pipe_video_profile profile);
+D3D12_VIDEO_ENCODER_PROFILE_HEVC
+d3d12_video_encoder_convert_profile_to_d3d12_enc_profile_hevc(enum pipe_video_profile profile);
 D3D12_VIDEO_ENCODER_CODEC
 d3d12_video_encoder_convert_codec_to_d3d12_enc_codec(enum pipe_video_profile profile);
 GUID
 d3d12_video_decoder_convert_pipe_video_profile_to_d3d12_profile(enum pipe_video_profile profile);
+D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_TUSIZE 
+d3d12_video_encoder_convert_pixel_size_hevc_to_12tusize(const uint32_t& TUSize);
+D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_CUSIZE
+d3d12_video_encoder_convert_pixel_size_hevc_to_12cusize(const uint32_t& cuSize);
+uint8_t
+d3d12_video_encoder_convert_12cusize_to_pixel_size_hevc(const D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_CUSIZE& cuSize);
+uint8_t 
+d3d12_video_encoder_convert_12tusize_to_pixel_size_hevc(const D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_TUSIZE& TUSize);
+
+DEFINE_ENUM_FLAG_OPERATORS(pipe_h265_enc_feature);
+DEFINE_ENUM_FLAG_OPERATORS(pipe_h265_enc_pred_direction);
 
 #endif

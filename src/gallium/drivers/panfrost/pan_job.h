@@ -221,7 +221,7 @@ panfrost_batch_write_rsrc(struct panfrost_batch *batch,
 
 struct panfrost_bo *
 panfrost_batch_create_bo(struct panfrost_batch *batch, size_t size,
-                         uint32_t create_flags, uint32_t access_flags,
+                         uint32_t create_flags, enum pipe_shader_type stage,
                          const char *label);
 
 void

@@ -55,7 +55,7 @@
 #include "apple_cgl.h"
 #include "apple_glx_drawable.h"
 
-#include "util/debug.h"
+#include "util/u_debug.h"
 
 static pthread_mutex_t context_lock = PTHREAD_MUTEX_INITIALIZER;
 

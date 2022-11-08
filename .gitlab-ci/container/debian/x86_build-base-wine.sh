@@ -5,12 +5,9 @@ set -o xtrace
 
 # Installing wine, need this for testing mingw or nine
 
-# We need multiarch for Wine
-dpkg --add-architecture i386
 apt-get update
 apt-get install -y --no-remove \
       wine \
-      wine32 \
       wine64 \
       xvfb
 

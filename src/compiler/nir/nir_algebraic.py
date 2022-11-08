@@ -287,7 +287,7 @@ class Constant(Value):
 _var_name_re = re.compile(r"(?P<const>#)?(?P<name>\w+)"
                           r"(?:@(?P<type>int|uint|bool|float)?(?P<bits>\d+)?)?"
                           r"(?P<cond>\([^\)]+\))?"
-                          r"(?P<swiz>\.[xyzw]+)?"
+                          r"(?P<swiz>\.[xyzwabcdefghijklmnop]+)?"
                           r"$")
 
 class Variable(Value):

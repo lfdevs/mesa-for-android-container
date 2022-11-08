@@ -20,36 +20,9 @@
 # SOFTWARE.
 
 inc_asahi = include_directories([
-   '.', 'lib', 'compiler'
+   '.', 'layout', 'lib', 'compiler'
 ])
 
+subdir('layout')
 subdir('lib')
 subdir('compiler')
-
-files_agx = files(
-  'compiler/cmdline.c',
-)
-
-agx_compiler = executable(
-  'agx_compiler',
-  [files_agx],
-  include_directories : [
-    inc_include,
-    inc_src,
-    inc_gallium,
-    inc_gallium_aux,
-    inc_mapi,
-    inc_mesa,
- ],
-  dependencies : [
-    idep_nir,
-    idep_mesautil,
-    idep_agx_pack,
-    dep_libdrm,
-  ],
-  link_with : [
-    libglsl_standalone,
-    libasahi_compiler,
-  ],
-  build_by_default : with_tools.contains('asahi')
-)

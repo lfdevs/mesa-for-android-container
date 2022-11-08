@@ -246,7 +246,7 @@ svga_create_sampler_state(struct pipe_context *pipe,
    cso->addressu = translate_wrap_mode(sampler->wrap_s);
    cso->addressv = translate_wrap_mode(sampler->wrap_t);
    cso->addressw = translate_wrap_mode(sampler->wrap_r);
-   cso->normalized_coords = sampler->normalized_coords;
+   cso->normalized_coords = !sampler->unnormalized_coords;
    cso->compare_mode = sampler->compare_mode;
    cso->compare_func = sampler->compare_func;
 

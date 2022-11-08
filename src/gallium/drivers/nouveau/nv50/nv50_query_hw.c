@@ -52,7 +52,7 @@ nv50_hw_query_allocate(struct nv50_context *nv50, struct nv50_query *q,
          if (hq->state == NV50_HW_QUERY_STATE_READY)
             nouveau_mm_free(hq->mm);
          else
-            nouveau_fence_work(screen->base.fence.current,
+            nouveau_fence_work(nv50->base.fence,
                                nouveau_mm_free_work, hq->mm);
       }
    }
@@ -63,7 +63,7 @@ nv50_hw_query_allocate(struct nv50_context *nv50, struct nv50_query *q,
          return false;
       hq->offset = hq->base_offset;
 
-      ret = nouveau_bo_map(hq->bo, 0, nv50->base.client);
+      ret = BO_MAP(&screen->base, hq->bo, 0, nv50->base.client);
       if (ret) {
          nv50_hw_query_allocate(nv50, q, 0);
          return false;
@@ -82,7 +82,7 @@ nv50_hw_query_get(struct nouveau_pushbuf *push, struct nv50_query *q,
    offset += hq->offset;
 
    PUSH_SPACE(push, 5);
-   PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_WR);
+   PUSH_REF1 (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_WR);
    BEGIN_NV04(push, NV50_3D(QUERY_ADDRESS_HIGH), 4);
    PUSH_DATAh(push, hq->bo->offset + offset);
    PUSH_DATA (push, hq->bo->offset + offset);
@@ -265,7 +265,7 @@ nv50_hw_end_query(struct nv50_context *nv50, struct nv50_query *q)
       break;
    }
    if (hq->is64bit)
-      nouveau_fence_ref(nv50->screen->base.fence.current, &hq->fence);
+      nouveau_fence_ref(nv50->base.fence, &hq->fence);
 }
 
 static bool
@@ -294,7 +294,7 @@ nv50_hw_get_query_result(struct nv50_context *nv50, struct nv50_query *q,
          }
          return false;
       }
-      if (nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, nv50->base.client))
+      if (BO_WAIT(&nv50->screen->base, hq->bo, NOUVEAU_BO_RD, nv50->base.client))
          return false;
    }
    hq->state = NV50_HW_QUERY_STATE_READY;
@@ -447,14 +447,15 @@ nv50_hw_get_driver_query_info(struct nv50_screen *screen, unsigned id,
 }
 
 void
-nv50_hw_query_pushbuf_submit(struct nouveau_pushbuf *push, uint16_t method,
+nv50_hw_query_pushbuf_submit(struct nv50_context *nv50, uint16_t method,
                              struct nv50_query *q, unsigned result_offset)
 {
+   struct nouveau_pushbuf *push = nv50->base.pushbuf;
    struct nv50_hw_query *hq = nv50_hw_query(q);
 
    nv50_hw_query_update(q);
    if (hq->state != NV50_HW_QUERY_STATE_READY)
-      nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, push->client);
+      BO_WAIT(&nv50->screen->base, hq->bo, NOUVEAU_BO_RD, push->client);
    hq->state = NV50_HW_QUERY_STATE_READY;
 
    BEGIN_NV04(push, SUBC_3D(method), 1);
@@ -470,7 +471,7 @@ nv84_hw_query_fifo_wait(struct nouveau_pushbuf *push, struct nv50_query *q)
    assert(!hq->is64bit);
 
    PUSH_SPACE(push, 5);
-   PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
+   PUSH_REF1 (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
    BEGIN_NV04(push, SUBC_3D(NV84_SUBCHAN_SEMAPHORE_ADDRESS_HIGH), 4);
    PUSH_DATAh(push, hq->bo->offset + offset);
    PUSH_DATA (push, hq->bo->offset + offset);

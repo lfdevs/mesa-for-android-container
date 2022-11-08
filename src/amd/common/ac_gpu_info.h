@@ -33,6 +33,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "util/macros.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -115,6 +117,7 @@ struct radeon_info {
    bool never_send_perfcounter_stop;
    bool discardable_allows_big_page;
    bool has_export_conflict_bug;
+   bool has_vrs_ds_export_bug;
 
    /* Display features. */
    /* There are 2 display DCC codepaths, because display expects unaligned DCC. */
@@ -309,6 +312,8 @@ struct ac_task_info {
 
 void ac_get_task_info(struct radeon_info *info,
                       struct ac_task_info *task_info);
+
+uint32_t ac_memory_ops_per_clock(uint32_t vram_type);
 
 #ifdef __cplusplus
 }

@@ -36,7 +36,6 @@ struct pvr_device;
 struct pvr_free_list;
 struct pvr_render_ctx;
 struct pvr_rt_dataset;
-struct pvr_winsys_job_bo;
 struct vk_sync;
 
 /* FIXME: Turn 'struct pvr_sub_cmd' into 'struct pvr_job' and change 'struct
@@ -118,8 +117,8 @@ void pvr_render_target_dataset_destroy(struct pvr_rt_dataset *dataset);
 
 VkResult pvr_render_job_submit(struct pvr_render_ctx *ctx,
                                struct pvr_render_job *job,
-                               const struct pvr_winsys_job_bo *bos,
-                               uint32_t bo_count,
+                               struct vk_sync *barrier_geom,
+                               struct vk_sync *barrier_frag,
                                struct vk_sync **waits,
                                uint32_t wait_count,
                                uint32_t *stage_flags,

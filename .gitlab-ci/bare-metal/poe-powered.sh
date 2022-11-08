@@ -115,6 +115,19 @@ LABEL primary
       APPEND \${cbootargs} $BM_CMDLINE
 EOF
 
+# Set up the pxelinux config for Jetson TK1
+cat <<EOF >/tftp/pxelinux.cfg/default-arm-tegra124-jetson-tk1
+PROMPT 0
+TIMEOUT 30
+DEFAULT primary
+MENU TITLE jetson TK1 boot options
+LABEL primary
+      MENU LABEL CI kernel on TFTP
+      LINUX zImage
+      FDT tegra124-jetson-tk1.dtb
+      APPEND \${cbootargs} $BM_CMDLINE
+EOF
+
 # Create the rootfs in the NFS directory
 mkdir -p /nfs/results
 . $BM/rootfs-setup.sh /nfs

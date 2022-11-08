@@ -441,7 +441,7 @@ struct tgsi_token *virgl_tgsi_transform(struct virgl_screen *vscreen, const stru
    transform.cull_enabled = vscreen->caps.caps.v1.bset.has_cull;
    transform.has_precise = vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_TGSI_PRECISE;
    transform.fake_fp64 =
-      vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_FAKE_FP64;
+      vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_HOST_IS_GLES;
    transform.is_separable = is_separable && (vscreen->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_SSO);
 
    for (int i = 0; i < ARRAY_SIZE(transform.input_temp); i++)

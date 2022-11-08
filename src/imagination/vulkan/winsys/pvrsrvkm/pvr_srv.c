@@ -417,7 +417,7 @@ static inline uint64_t pvr_srv_get_total_reserved_partition_size(
                                    0);
    }
 
-   return max_partitions * 1024U;
+   return (uint64_t)max_partitions * 1024U;
 }
 
 static inline uint64_t

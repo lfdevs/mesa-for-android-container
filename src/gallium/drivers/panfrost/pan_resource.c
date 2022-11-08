@@ -1010,6 +1010,7 @@ panfrost_ptr_map(struct pipe_context *pctx,
 
         if (!create_new_bo &&
             !(usage & PIPE_MAP_UNSYNCHRONIZED) &&
+            !(resource->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT) &&
             (usage & PIPE_MAP_WRITE) &&
             !(resource->target == PIPE_BUFFER
               && !util_ranges_intersect(&rsrc->valid_buffer_range, box->x, box->x + box->width)) &&
@@ -1400,6 +1401,8 @@ panfrost_generate_mipmap(
 {
         struct panfrost_resource *rsrc = pan_resource(prsrc);
 
+        perf_debug_ctx(pan_context(pctx), "Unoptimized mipmap generation");
+
         /* Generating a mipmap invalidates the written levels, so make that
          * explicit so we don't try to wallpaper them back and end up with
          * u_blitter recursion */
@@ -1449,10 +1452,6 @@ static const struct u_transfer_vtbl transfer_vtbl = {
 void
 panfrost_resource_screen_init(struct pipe_screen *pscreen)
 {
-        struct panfrost_device *dev = pan_device(pscreen);
-
-        bool fake_rgtc = !panfrost_supports_compressed_format(dev, MALI_BC4_UNORM);
-
         pscreen->resource_create_with_modifiers =
                 panfrost_resource_create_with_modifiers;
         pscreen->resource_create = u_transfer_helper_resource_create;
@@ -1461,8 +1460,8 @@ panfrost_resource_screen_init(struct pipe_screen *pscreen)
         pscreen->resource_get_handle = panfrost_resource_get_handle;
         pscreen->resource_get_param = panfrost_resource_get_param;
         pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl,
-                                        true, false,
-                                        fake_rgtc, true, false);
+                                        U_TRANSFER_HELPER_SEPARATE_Z32S8 |
+                                        U_TRANSFER_HELPER_MSAA_MAP);
 }
 void
 panfrost_resource_screen_destroy(struct pipe_screen *pscreen)

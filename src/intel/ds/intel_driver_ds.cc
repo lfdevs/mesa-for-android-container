@@ -36,7 +36,7 @@
 
 #ifdef HAVE_PERFETTO
 
-#include "util/u_perfetto.h"
+#include "util/perf/u_perfetto.h"
 
 #include "intel_tracepoints_perfetto.h"
 
@@ -90,6 +90,11 @@ static const struct {
       true,
       INTEL_DS_QUEUE_STAGE_DRAW,
    },
+   {
+      "draw_mesh",
+      true,
+      INTEL_DS_QUEUE_STAGE_DRAW_MESH,
+   },
 };
 
 struct IntelRenderpassIncrementalState {
@@ -139,25 +144,14 @@ PERFETTO_DEFINE_DATA_SOURCE_STATIC_MEMBERS(IntelRenderpassDataSource);
 
 using perfetto::protos::pbzero::InternedGpuRenderStageSpecification_RenderStageCategory;
 
-enum InternedGpuRenderStageSpecification_RenderStageCategory
-i915_engine_class_to_category(enum drm_i915_gem_engine_class engine_class)
-{
-   switch (engine_class) {
-   case I915_ENGINE_CLASS_RENDER:
-      return InternedGpuRenderStageSpecification_RenderStageCategory::
-         InternedGpuRenderStageSpecification_RenderStageCategory_GRAPHICS;
-   default:
-      return InternedGpuRenderStageSpecification_RenderStageCategory::InternedGpuRenderStageSpecification_RenderStageCategory_OTHER;
-   }
-}
-
 static void
 sync_timestamp(IntelRenderpassDataSource::TraceContext &ctx,
                struct intel_ds_device *device)
 {
    uint64_t cpu_ts = perfetto::base::GetBootTimeNs().count();
-   uint64_t gpu_ts = intel_device_info_timebase_scale(&device->info,
-                                                      intel_read_gpu_timestamp(device->fd));
+   uint64_t gpu_ts;
+   intel_gem_read_render_timestamp(device->fd, &gpu_ts);
+   gpu_ts = intel_device_info_timebase_scale(&device->info, gpu_ts);
 
    if (cpu_ts < device->next_clock_sync_ns)
       return;
@@ -217,10 +211,10 @@ send_descriptors(IntelRenderpassDataSource::TraceContext &ctx,
          desc->set_pid(getpid());
          switch (device->api) {
          case INTEL_DS_API_OPENGL:
-            desc->set_api(perfetto::protos::pbzero::InternedGraphicsContext_Api_OPEN_GL);
+            desc->set_api(perfetto::protos::pbzero::InternedGraphicsContext_Api::OPEN_GL);
             break;
          case INTEL_DS_API_VULKAN:
-            desc->set_api(perfetto::protos::pbzero::InternedGraphicsContext_Api_VULKAN);
+            desc->set_api(perfetto::protos::pbzero::InternedGraphicsContext_Api::VULKAN);
             break;
          default:
             break;
@@ -340,7 +334,7 @@ custom_trace_payload_as_extra_end_stall(perfetto::protos::pbzero::GpuRenderStage
       auto data = event->add_extra_data();
       data->set_name("stall_reason");
 
-      snprintf(buf, sizeof(buf), "%s%s%s%s%s%s%s%s%s%s%s%s%s%s : %s",
+      snprintf(buf, sizeof(buf), "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s : %s",
               (payload->flags & INTEL_DS_DEPTH_CACHE_FLUSH_BIT) ? "+depth_flush" : "",
               (payload->flags & INTEL_DS_DATA_CACHE_FLUSH_BIT) ? "+dc_flush" : "",
               (payload->flags & INTEL_DS_HDC_PIPELINE_FLUSH_BIT) ? "+hdc_flush" : "",
@@ -355,6 +349,7 @@ custom_trace_payload_as_extra_end_stall(perfetto::protos::pbzero::GpuRenderStage
               (payload->flags & INTEL_DS_DEPTH_STALL_BIT) ? "+depth_stall" : "",
               (payload->flags & INTEL_DS_HDC_PIPELINE_FLUSH_BIT) ? "+hdc_flush" : "",
               (payload->flags & INTEL_DS_CS_STALL_BIT) ? "+cs_stall" : "",
+              (payload->flags & INTEL_DS_UNTYPED_DATAPORT_CACHE_FLUSH_BIT) ? "+udp_flush" : "",
               payload->reason ? payload->reason : "unknown");
 
       assert(strlen(buf) > 0);
@@ -417,6 +412,10 @@ CREATE_DUAL_EVENT_CALLBACK(draw_indirect, INTEL_DS_QUEUE_STAGE_DRAW)
 CREATE_DUAL_EVENT_CALLBACK(draw_indirect_count, INTEL_DS_QUEUE_STAGE_DRAW)
 CREATE_DUAL_EVENT_CALLBACK(draw_indirect_byte_count, INTEL_DS_QUEUE_STAGE_DRAW)
 CREATE_DUAL_EVENT_CALLBACK(draw_indexed_indirect_count, INTEL_DS_QUEUE_STAGE_DRAW)
+CREATE_DUAL_EVENT_CALLBACK(draw_mesh, INTEL_DS_QUEUE_STAGE_DRAW_MESH)
+CREATE_DUAL_EVENT_CALLBACK(draw_mesh_indirect, INTEL_DS_QUEUE_STAGE_DRAW_MESH)
+CREATE_DUAL_EVENT_CALLBACK(draw_mesh_indirect_count, INTEL_DS_QUEUE_STAGE_DRAW_MESH)
+CREATE_DUAL_EVENT_CALLBACK(xfb, INTEL_DS_QUEUE_STAGE_CMD_BUFFER)
 CREATE_DUAL_EVENT_CALLBACK(compute, INTEL_DS_QUEUE_STAGE_COMPUTE)
 
 void
@@ -515,7 +514,7 @@ intel_driver_ds_init(void)
 
 void
 intel_ds_device_init(struct intel_ds_device *device,
-                     struct intel_device_info *devinfo,
+                     const struct intel_device_info *devinfo,
                      int drm_fd,
                      uint32_t gpu_id,
                      enum intel_ds_api api)

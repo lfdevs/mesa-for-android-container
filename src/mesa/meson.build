@@ -354,10 +354,11 @@ files_libmesa = files(
   'state_tracker/st_format.h',
   'state_tracker/st_gen_mipmap.c',
   'state_tracker/st_gen_mipmap.h',
-  'state_tracker/st_gl_api.h',
   'state_tracker/st_glsl_to_ir.cpp',
   'state_tracker/st_glsl_to_ir.h',
   'state_tracker/st_glsl_to_nir.cpp',
+  'state_tracker/st_interop.c',
+  'state_tracker/st_interop.h',
   'state_tracker/st_manager.c',
   'state_tracker/st_manager.h',
   'state_tracker/st_nir.h',
@@ -447,7 +448,7 @@ files_libmesa += [
   main_api_exec_decl_h,
   main_api_save_h,
   main_api_save_init_h,
-  main_api_vtxfmt_init_h,
+  main_api_beginend_init_h,
   main_api_hw_select_init_h,
   main_enums_c,
   format_fallback_c,
@@ -457,6 +458,7 @@ files_libmesa += [
   ir_expression_operation_h,
   main_remap_helper_h,
   sha1_h,
+  main_unmarshal_table_c,
 ] + main_marshal_generated_c
 
 if with_sse41

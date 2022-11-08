@@ -177,7 +177,7 @@ radeon_drm_cs_create(struct radeon_cmdbuf *rcs,
                      void (*flush)(void *ctx, unsigned flags,
                                    struct pipe_fence_handle **fence),
                      void *flush_ctx,
-                     bool stop_exec_on_failure)
+                     bool allow_context_lost)
 {
    struct radeon_drm_winsys *ws = ((struct radeon_ctx*)ctx)->ws;
    struct radeon_drm_cs *cs;

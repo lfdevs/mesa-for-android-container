@@ -42,19 +42,20 @@ enum intel_ds_api {
 };
 
 enum intel_ds_stall_flag {
-   INTEL_DS_DEPTH_CACHE_FLUSH_BIT         = BITFIELD_BIT(0),
-   INTEL_DS_DATA_CACHE_FLUSH_BIT          = BITFIELD_BIT(1),
-   INTEL_DS_HDC_PIPELINE_FLUSH_BIT        = BITFIELD_BIT(2),
-   INTEL_DS_RENDER_TARGET_CACHE_FLUSH_BIT = BITFIELD_BIT(3),
-   INTEL_DS_TILE_CACHE_FLUSH_BIT          = BITFIELD_BIT(4),
-   INTEL_DS_STATE_CACHE_INVALIDATE_BIT    = BITFIELD_BIT(5),
-   INTEL_DS_CONST_CACHE_INVALIDATE_BIT    = BITFIELD_BIT(6),
-   INTEL_DS_VF_CACHE_INVALIDATE_BIT       = BITFIELD_BIT(7),
-   INTEL_DS_TEXTURE_CACHE_INVALIDATE_BIT  = BITFIELD_BIT(8),
-   INTEL_DS_INST_CACHE_INVALIDATE_BIT     = BITFIELD_BIT(9),
-   INTEL_DS_STALL_AT_SCOREBOARD_BIT       = BITFIELD_BIT(10),
-   INTEL_DS_DEPTH_STALL_BIT               = BITFIELD_BIT(11),
-   INTEL_DS_CS_STALL_BIT                  = BITFIELD_BIT(12),
+   INTEL_DS_DEPTH_CACHE_FLUSH_BIT            = BITFIELD_BIT(0),
+   INTEL_DS_DATA_CACHE_FLUSH_BIT             = BITFIELD_BIT(1),
+   INTEL_DS_HDC_PIPELINE_FLUSH_BIT           = BITFIELD_BIT(2),
+   INTEL_DS_RENDER_TARGET_CACHE_FLUSH_BIT    = BITFIELD_BIT(3),
+   INTEL_DS_TILE_CACHE_FLUSH_BIT             = BITFIELD_BIT(4),
+   INTEL_DS_STATE_CACHE_INVALIDATE_BIT       = BITFIELD_BIT(5),
+   INTEL_DS_CONST_CACHE_INVALIDATE_BIT       = BITFIELD_BIT(6),
+   INTEL_DS_VF_CACHE_INVALIDATE_BIT          = BITFIELD_BIT(7),
+   INTEL_DS_TEXTURE_CACHE_INVALIDATE_BIT     = BITFIELD_BIT(8),
+   INTEL_DS_INST_CACHE_INVALIDATE_BIT        = BITFIELD_BIT(9),
+   INTEL_DS_STALL_AT_SCOREBOARD_BIT          = BITFIELD_BIT(10),
+   INTEL_DS_DEPTH_STALL_BIT                  = BITFIELD_BIT(11),
+   INTEL_DS_CS_STALL_BIT                     = BITFIELD_BIT(12),
+   INTEL_DS_UNTYPED_DATAPORT_CACHE_FLUSH_BIT = BITFIELD_BIT(13),
 };
 
 /* Convert internal driver PIPE_CONTROL stall bits to intel_ds_stall_flag. */
@@ -67,6 +68,7 @@ enum intel_ds_queue_stage {
    INTEL_DS_QUEUE_STAGE_RENDER_PASS,
    INTEL_DS_QUEUE_STAGE_BLORP,
    INTEL_DS_QUEUE_STAGE_DRAW,
+   INTEL_DS_QUEUE_STAGE_DRAW_MESH,
    INTEL_DS_QUEUE_STAGE_N_STAGES,
 };
 
@@ -150,7 +152,7 @@ struct intel_ds_flush_data {
 void intel_driver_ds_init(void);
 
 void intel_ds_device_init(struct intel_ds_device *device,
-                          struct intel_device_info *devinfo,
+                          const struct intel_device_info *devinfo,
                           int drm_fd,
                           uint32_t gpu_id,
                           enum intel_ds_api api);

@@ -62,8 +62,6 @@ New features
 
 - VK_EXT_attachment_feedback_loop_layout on RADV
 
-- None
-
 
 Bug fixes
 ---------
@@ -3681,7 +3679,7 @@ Lionel Landwerlin (120):
 
 Liviu Prodea (7):
 
-- dzn: Fix incompatible pointer type error affecting MSYS2 MINGW32 Suggested-by: Yonggang Luo <luoyonggang@gmail.com> Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/6807
+- dzn: Fix incompatible pointer type error affecting MSYS2 MINGW32
 - ci/MSVC: LLD is not really used anywhere
 - ci/MinGW: LLD is not really used anywhere
 - d3d12/dzn/spirv2dxil: Require version library

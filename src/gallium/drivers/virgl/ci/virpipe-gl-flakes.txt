@@ -15,9 +15,6 @@ shaders@glsl-uniform-interstage-limits@subdivide 5
 
 spec@arb_fragment_layer_viewport@layer-gs-writes-in-range
 
-spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-atomic.*
-spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-roundup-samples
-
 spec@arb_gpu_shader_fp64@shader_storage@layout-std140-fp64-shader
 spec@arb_gpu_shader_fp64@shader_storage@layout-std430-fp64-shader
 spec@arb_gpu_shader_fp64@shader_storage@layout-std140-fp64-mixed-shader
@@ -28,17 +25,10 @@ spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi1
 
 spec@arb_shader_atomic_counter_ops@execution@add
 spec@arb_shader_atomic_counter_ops@execution@atomic-counter-array-out-of-bounds-access
-spec@arb_shader_atomic_counters@fragment-discard
-spec@arb_shader_atomic_counters@function-argument
 
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-load
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-store
 
-spec@arb_shader_storage_buffer_object@execution@memory-layouts-struct-deref
-spec@arb_shader_storage_buffer_object@execution@ssbo-atomicadd-int
-spec@arb_shader_storage_buffer_object@execution@ssbo-atomicexchange-int
-spec@arb_shader_storage_buffer_object@layout-std140-write-shader
-spec@arb_shader_storage_buffer_object@layout-std430-write-shader
 
 # "vrend_decode_ctx_submit_cmd: context error reported 1 "ati_fragment_shader-render-sources" Illegal command buffer 6882305"
 spec@ati_fragment_shader@ati_fragment_shader-api-alphafirst

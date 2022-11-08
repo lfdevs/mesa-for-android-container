@@ -212,7 +212,6 @@ static void init_prog(struct program *p)
 	p->sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
 	p->sampler.min_img_filter = PIPE_TEX_MIPFILTER_LINEAR;
 	p->sampler.mag_img_filter = PIPE_TEX_MIPFILTER_LINEAR;
-	p->sampler.normalized_coords = 1;
 
 	surf_tmpl.format = PIPE_FORMAT_B8G8R8A8_UNORM; /* All drivers support this */
 	surf_tmpl.u.tex.level = 0;
@@ -281,7 +280,6 @@ static void init_prog(struct program *p)
 
 	/* fragment shader */
 	p->fs = util_make_fragment_tex_shader(p->pipe, TGSI_TEXTURE_2D,
-	                                      TGSI_INTERPOLATE_LINEAR,
 	                                      TGSI_RETURN_TYPE_FLOAT,
 	                                      TGSI_RETURN_TYPE_FLOAT, false,
                                               false);

@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include "drm-uapi/amdgpu_drm.h"
 
+#include "util/os_time.h"
 #include "util/u_memory.h"
 #include "ac_debug.h"
 #include "radv_amdgpu_bo.h"
@@ -1858,7 +1859,20 @@ radv_amdgpu_cs_submit(struct radv_amdgpu_ctx *ctx, struct radv_amdgpu_cs_request
       num_chunks++;
    }
 
-   r = amdgpu_cs_submit_raw2(ctx->ws->dev, ctx->ctx, bo_list, num_chunks, chunks, &request->seq_no);
+   /* The kernel returns -ENOMEM with many parallel processes using GDS such as test suites quite
+    * often, but it eventually succeeds after enough attempts. This happens frequently with dEQP
+    * using NGG streamout.
+    */
+   uint64_t abs_timeout_ns = os_time_get_absolute_timeout(1000000000ull); /* 1s */
+
+   r = 0;
+   do {
+      /* Wait 1 ms and try again. */
+      if (r == -ENOMEM)
+         os_time_sleep(1000);
+
+      r = amdgpu_cs_submit_raw2(ctx->ws->dev, ctx->ctx, bo_list, num_chunks, chunks, &request->seq_no);
+   } while (r == -ENOMEM && os_time_get_nano() < abs_timeout_ns);
 
    if (r) {
       if (r == -ENOMEM) {

@@ -270,7 +270,7 @@ vec4_visitor::get_indirect_offset(nir_intrinsic_instr *instr)
    if (nir_src_is_const(*offset_src)) {
       /* The only constant offset we should find is 0.  brw_nir.c's
        * add_const_offset_to_base() will fold other constant offsets
-       * into instr->const_index[0].
+       * into the base index.
        */
       assert(nir_src_as_uint(*offset_src) == 0);
       return src_reg();
@@ -403,7 +403,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       dest = get_nir_dest(instr->dest);
       dest.writemask = brw_writemask_for_size(instr->num_components);
 
-      src = src_reg(ATTR, instr->const_index[0] + load_offset,
+      src = src_reg(ATTR, nir_intrinsic_base(instr) + load_offset,
                     glsl_type::uvec4_type);
       src = retype(src, dest.type);
 
@@ -416,7 +416,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    case nir_intrinsic_store_output: {
       assert(nir_src_bit_size(instr->src[0]) == 32);
       unsigned store_offset = nir_src_as_uint(instr->src[1]);
-      int varying = instr->const_index[0] + store_offset;
+      int varying = nir_intrinsic_base(instr) + store_offset;
       src = get_nir_src(instr->src[0], BRW_REGISTER_TYPE_F,
                         instr->num_components);
 
@@ -549,7 +549,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       break;
 
    case nir_intrinsic_load_vertex_id:
-      unreachable("should be lowered by lower_vertex_id()");
+      unreachable("should be lowered by vertex_id_zero_based");
 
    case nir_intrinsic_load_vertex_id_zero_base:
    case nir_intrinsic_load_base_vertex:
@@ -606,7 +606,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          dest.writemask = WRITEMASK_XYZW;
 
          emit(SHADER_OPCODE_MOV_INDIRECT, dest, src,
-              indirect, brw_imm_ud(instr->const_index[1]));
+              indirect, brw_imm_ud(nir_intrinsic_range(instr)));
       }
       break;
    }

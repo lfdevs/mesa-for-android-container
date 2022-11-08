@@ -71,13 +71,18 @@ emit_split_buffer_load(nir_builder *b, nir_ssa_def *desc, nir_ssa_def *v_off, ni
       full_dwords++;
    }
 
+   nir_ssa_def *zero = nir_imm_int(b, 0);
+
    for (unsigned i = 0; i < full_dwords; ++i)
-      comps[i] = nir_build_load_buffer_amd(b, 1, 32, desc, v_off, s_off,
-                                           .base = component_stride * i, .memory_modes = nir_var_shader_in);
+      comps[i] = nir_load_buffer_amd(b, 1, 32, desc, v_off, s_off, zero,
+                                     .base = component_stride * i, .memory_modes = nir_var_shader_in,
+                                     .access = ACCESS_COHERENT);
 
    if (remaining_bytes)
-      comps[full_dwords] = nir_build_load_buffer_amd(b, 1, remaining_bytes * 8, desc, v_off, s_off,
-                                                     .base = component_stride * full_dwords, .memory_modes = nir_var_shader_in);
+      comps[full_dwords] = nir_load_buffer_amd(b, 1, remaining_bytes * 8, desc, v_off, s_off, zero,
+                                               .base = component_stride * full_dwords,
+                                               .memory_modes = nir_var_shader_in,
+                                               .access = ACCESS_COHERENT);
 
    return nir_extract_bits(b, comps, full_dwords + !!remaining_bytes, 0, num_components, bit_size);
 }
@@ -87,6 +92,8 @@ emit_split_buffer_store(nir_builder *b, nir_ssa_def *d, nir_ssa_def *desc, nir_s
                         unsigned component_stride, unsigned num_components, unsigned bit_size,
                         unsigned writemask, bool swizzled, bool slc)
 {
+   nir_ssa_def *zero = nir_imm_int(b, 0);
+
    while (writemask) {
       int start, count;
       u_bit_scan_consecutive_range(&writemask, &start, &count);
@@ -103,8 +110,8 @@ emit_split_buffer_store(nir_builder *b, nir_ssa_def *d, nir_ssa_def *desc, nir_s
             store_bytes = MIN2(store_bytes, 2);
 
          nir_ssa_def *store_val = nir_extract_bits(b, &d, 1, start_byte * 8u, 1, store_bytes * 8u);
-         nir_build_store_buffer_amd(b, store_val, desc, v_off, s_off, .is_swizzled = swizzled, .slc_amd = slc,
-                                    .base = start_byte, .memory_modes = nir_var_shader_out);
+         nir_store_buffer_amd(b, store_val, desc, v_off, s_off, zero, .is_swizzled = swizzled, .slc_amd = slc,
+                              .base = start_byte, .memory_modes = nir_var_shader_out, .access = ACCESS_COHERENT);
 
          start_byte += store_bytes;
          bytes -= store_bytes;

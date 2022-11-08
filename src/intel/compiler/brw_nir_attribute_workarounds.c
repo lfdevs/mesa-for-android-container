@@ -42,7 +42,7 @@ apply_attr_wa_instr(nir_builder *b, nir_instr *instr, void *cb_data)
    if (intrin->intrinsic != nir_intrinsic_load_input)
       return false;
 
-   uint8_t wa_flags = attrib_wa_flags[intrin->const_index[0]];
+   uint8_t wa_flags = attrib_wa_flags[nir_intrinsic_base(intrin)];
    if (wa_flags == 0)
       return false;
 

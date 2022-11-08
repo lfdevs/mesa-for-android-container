@@ -279,6 +279,8 @@ struct pvr_winsys_transfer_submit_info {
    uint32_t frame_num;
    uint32_t job_num;
 
+   struct vk_sync *barrier;
+
    /* waits and stage_flags are arrays of length wait_count. */
    struct vk_sync **waits;
    uint32_t wait_count;
@@ -300,6 +302,8 @@ struct pvr_winsys_compute_submit_info {
    uint32_t frame_num;
    uint32_t job_num;
 
+   struct vk_sync *barrier;
+
    /* waits and stage_flags are arrays of length wait_count. */
    struct vk_sync **waits;
    uint32_t wait_count;
@@ -307,23 +311,15 @@ struct pvr_winsys_compute_submit_info {
 
    struct {
       uint64_t tpu_border_colour_table;
-      uint64_t cdm_item;
-      uint32_t compute_cluster;
       uint64_t cdm_ctrl_stream_base;
       uint64_t cdm_ctx_state_base_addr;
       uint32_t tpu;
       uint32_t cdm_resume_pds1;
+      uint32_t cdm_item;
+      uint32_t compute_cluster;
    } regs;
 
    /* Must be 0 or a combination of PVR_WINSYS_COMPUTE_FLAG_* flags. */
-   uint32_t flags;
-};
-
-#define PVR_WINSYS_JOB_BO_FLAG_WRITE BITFIELD_BIT(0U)
-
-struct pvr_winsys_job_bo {
-   struct pvr_winsys_bo *bo;
-   /* Must be 0 or a combination of PVR_WINSYS_JOB_BO_FLAG_* flags. */
    uint32_t flags;
 };
 
@@ -343,11 +339,11 @@ struct pvr_winsys_render_submit_info {
    uint32_t frame_num;
    uint32_t job_num;
 
-   uint32_t bo_count;
-   const struct pvr_winsys_job_bo *bos;
-
    /* FIXME: should this be flags instead? */
    bool run_frag;
+
+   struct vk_sync *barrier_geom;
+   struct vk_sync *barrier_frag;
 
    /* waits and stage_flags are arrays of length wait_count. */
    struct vk_sync **waits;

@@ -346,11 +346,11 @@ void pvr_srv_winsys_buffer_unmap(struct pvr_winsys_bo *bo)
    /* output error if trying to unmap memory that is not previously mapped */
    assert(bo->map);
 
+   VG(VALGRIND_FREELIKE_BLOCK(bo->map, 0));
+
    /* Unmap the whole PMR from CPU space */
    if (munmap(bo->map, bo->size))
       vk_error(NULL, VK_ERROR_UNKNOWN);
-
-   VG(VALGRIND_FREELIKE_BLOCK(bo->map, 0));
 
    bo->map = NULL;
 

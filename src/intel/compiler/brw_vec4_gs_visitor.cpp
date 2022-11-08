@@ -823,7 +823,7 @@ brw_compile_gs(const struct brw_compiler *compiler,
                    debug_enabled);
       if (v.run_gs()) {
          prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
-         prog_data->base.base.dispatch_grf_start_reg = v.payload.num_regs;
+         prog_data->base.base.dispatch_grf_start_reg = v.payload().num_regs;
 
          fs_generator g(compiler, params->log_data, mem_ctx,
                         &prog_data->base.base, false, MESA_SHADER_GEOMETRY);

@@ -689,7 +689,7 @@ util_dump_sampler_state(FILE *stream, const struct pipe_sampler_state *state)
    util_dump_member(stream, enum_tex_filter, state, mag_img_filter);
    util_dump_member(stream, uint, state, compare_mode);
    util_dump_member(stream, enum_func, state, compare_func);
-   util_dump_member(stream, bool, state, normalized_coords);
+   util_dump_member(stream, bool, state, unnormalized_coords);
    util_dump_member(stream, uint, state, max_anisotropy);
    util_dump_member(stream, bool, state, seamless_cube_map);
    util_dump_member(stream, float, state, lod_bias);

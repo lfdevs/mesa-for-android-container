@@ -74,6 +74,11 @@ class PoERun:
                 self.print_error("nouveau jetson boot bug, retrying.")
                 return 2
 
+            # network fail on tk1
+            if re.search("NETDEV WATCHDOG:.* transmit queue 0 timed out", line):
+                self.print_error("nouveau jetson tk1 network fail, retrying.")
+                return 2
+
             result = re.search("hwci: mesa: (\S*)", line)
             if result:
                 if result.group(1) == "pass":

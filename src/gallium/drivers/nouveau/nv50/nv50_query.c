@@ -132,7 +132,7 @@ nv50_render_condition(struct pipe_context *pipe,
       PUSH_DATA (push, 0);
    }
 
-   PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
+   PUSH_REF1 (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
    BEGIN_NV04(push, NV50_3D(COND_ADDRESS_HIGH), 3);
    PUSH_DATAh(push, hq->bo->offset + hq->offset);
    PUSH_DATA (push, hq->bo->offset + hq->offset);

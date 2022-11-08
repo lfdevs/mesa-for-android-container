@@ -82,7 +82,7 @@ extern struct _glapi_table *
 _mesa_alloc_dispatch_table(bool glthread);
 
 extern void
-_mesa_initialize_exec_table(struct gl_context *ctx);
+_mesa_init_dispatch(struct gl_context *ctx);
 
 extern void
 _mesa_initialize_dispatch_tables(struct gl_context *ctx);
@@ -110,9 +110,6 @@ _mesa_get_current_context(void);
 
 extern void
 _mesa_init_constants(struct gl_constants *consts, gl_api api);
-
-extern struct _glapi_table *
-_mesa_get_dispatch(struct gl_context *ctx);
 
 extern void
 _mesa_set_context_lost_dispatch(struct gl_context *ctx);

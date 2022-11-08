@@ -93,9 +93,11 @@ struct gfx_name {
    }
 };
 
-INSTANTIATE_TEST_CASE_P(eu_assembly, validation_test,
-                        ::testing::ValuesIn(gfx_names),
-                        gfx_name());
+INSTANTIATE_TEST_SUITE_P(
+   eu_assembly, validation_test,
+   ::testing::ValuesIn(gfx_names),
+   gfx_name()
+);
 
 static bool
 validate(struct brw_codegen *p)

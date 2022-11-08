@@ -135,8 +135,8 @@ get_perf_info(Program* program, aco_ptr<Instruction>& instr)
       case instr_class::branch:
       case instr_class::sendmsg: return {0, WAIT_USE(branch_sendmsg, 1)};
       case instr_class::ds:
-         return instr->ds().gds ? perf_info{0, WAIT_USE(export_gds, 1)}
-                                : perf_info{0, WAIT_USE(lds, 1)};
+         return instr->isDS() && instr->ds().gds ? perf_info{0, WAIT_USE(export_gds, 1)}
+                                                 : perf_info{0, WAIT_USE(lds, 1)};
       case instr_class::exp: return {0, WAIT_USE(export_gds, 1)};
       case instr_class::vmem: return {0, WAIT_USE(vmem, 1)};
       case instr_class::barrier:
@@ -164,8 +164,8 @@ get_perf_info(Program* program, aco_ptr<Instruction>& instr)
          return {8, WAIT_USE(branch_sendmsg, 8)};
          return {4, WAIT_USE(branch_sendmsg, 4)};
       case instr_class::ds:
-         return instr->ds().gds ? perf_info{4, WAIT_USE(export_gds, 4)}
-                                : perf_info{4, WAIT_USE(lds, 4)};
+         return instr->isDS() && instr->ds().gds ? perf_info{4, WAIT_USE(export_gds, 4)}
+                                                 : perf_info{4, WAIT_USE(lds, 4)};
       case instr_class::exp: return {16, WAIT_USE(export_gds, 16)};
       case instr_class::vmem: return {4, WAIT_USE(vmem, 4)};
       case instr_class::barrier:

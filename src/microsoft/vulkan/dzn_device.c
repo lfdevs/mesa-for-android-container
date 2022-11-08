@@ -33,10 +33,11 @@
 
 #include "git_sha1.h"
 
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/disk_cache.h"
 #include "util/macros.h"
 #include "util/mesa-sha1.h"
+#include "util/u_dl.h"
 
 #include "glsl_types.h"
 
@@ -92,12 +93,12 @@ static void
 dzn_physical_device_get_extensions(struct dzn_physical_device *pdev)
 {
    pdev->vk.supported_extensions = (struct vk_device_extension_table) {
-      .KHR_create_renderpass2                = true,
-      .KHR_depth_stencil_resolve             = true,
+      .KHR_create_renderpass2                = false,
+      .KHR_depth_stencil_resolve             = false,
       .KHR_descriptor_update_template        = true,
       .KHR_draw_indirect_count               = true,
       .KHR_driver_properties                 = true,
-      .KHR_dynamic_rendering                 = true,
+      .KHR_dynamic_rendering                 = false,
       .KHR_shader_draw_parameters            = true,
 #ifdef DZN_USE_WSI_PLATFORM
       .KHR_swapchain                         = true,
@@ -167,8 +168,97 @@ dzn_instance_destroy(struct dzn_instance *instance, const VkAllocationCallbacks 
       dzn_physical_device_destroy(pdev);
    }
 
+   if (instance->factory)
+      ID3D12DeviceFactory_Release(instance->factory);
+
+   util_dl_close(instance->d3d12_mod);
+
    vk_instance_finish(&instance->vk);
    vk_free2(vk_default_allocator(), alloc, instance);
+}
+
+#ifdef _WIN32
+extern IMAGE_DOS_HEADER __ImageBase;
+static const char *
+try_find_d3d12core_next_to_self(char *path, size_t path_arr_size)
+{
+   uint32_t path_size = GetModuleFileNameA((HINSTANCE)&__ImageBase,
+                                           path, path_arr_size);
+   if (!path_arr_size || path_size == path_arr_size) {
+      mesa_loge("Unable to get path to self\n");
+      return NULL;
+   }
+
+   char *last_slash = strrchr(path, '\\');
+   if (!last_slash) {
+      mesa_loge("Unable to get path to self\n");
+      return NULL;
+   }
+
+   *(last_slash + 1) = '\0';
+   if (strcat_s(path, path_arr_size, "D3D12Core.dll") != 0) {
+      mesa_loge("Unable to get path to D3D12Core.dll next to self\n");
+      return NULL;
+   }
+
+   if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
+      mesa_logi("No D3D12Core.dll exists next to self\n");
+      return NULL;
+   }
+
+   return path;
+}
+#endif
+
+static ID3D12DeviceFactory *
+try_create_device_factory(struct util_dl_library *d3d12_mod)
+{
+   /* A device factory allows us to isolate things like debug layer enablement from other callers,
+   * and can potentially even refer to a different D3D12 redist implementation from others.
+   */
+   ID3D12DeviceFactory *factory = NULL;
+
+   PFN_D3D12_GET_INTERFACE D3D12GetInterface = (PFN_D3D12_GET_INTERFACE)util_dl_get_proc_address(d3d12_mod, "D3D12GetInterface");
+   if (!D3D12GetInterface) {
+      mesa_loge("Failed to retrieve D3D12GetInterface\n");
+      return NULL;
+   }
+
+#ifdef _WIN32
+   /* First, try to create a device factory from a DLL-parallel D3D12Core.dll */
+   ID3D12SDKConfiguration *sdk_config = NULL;
+   if (SUCCEEDED(D3D12GetInterface(&CLSID_D3D12SDKConfiguration, &IID_ID3D12SDKConfiguration, (void **)&sdk_config))) {
+      ID3D12SDKConfiguration1 *sdk_config1 = NULL;
+      if (SUCCEEDED(IUnknown_QueryInterface(sdk_config, &IID_ID3D12SDKConfiguration1, (void **)&sdk_config1))) {
+         char self_path[MAX_PATH];
+         const char *d3d12core_path = try_find_d3d12core_next_to_self(self_path, sizeof(self_path));
+         if (d3d12core_path) {
+            if (SUCCEEDED(ID3D12SDKConfiguration1_CreateDeviceFactory(sdk_config1, D3D12_PREVIEW_SDK_VERSION, d3d12core_path, &IID_ID3D12DeviceFactory, (void **)&factory)) ||
+                SUCCEEDED(ID3D12SDKConfiguration1_CreateDeviceFactory(sdk_config1, D3D12_SDK_VERSION, d3d12core_path, &IID_ID3D12DeviceFactory, (void **)&factory))) {
+               ID3D12SDKConfiguration_Release(sdk_config);
+               ID3D12SDKConfiguration1_Release(sdk_config1);
+               return factory;
+            }
+         }
+
+         /* Nope, seems we don't have a matching D3D12Core.dll next to ourselves */
+         ID3D12SDKConfiguration1_Release(sdk_config1);
+      }
+
+      /* It's possible there's a D3D12Core.dll next to the .exe, for development/testing purposes. If so, we'll be notified
+      * by environment variables what the relative path is and the version to use.
+      */
+      const char *d3d12core_relative_path = getenv("DZN_AGILITY_RELATIVE_PATH");
+      const char *d3d12core_sdk_version = getenv("DZN_AGILITY_SDK_VERSION");
+      if (d3d12core_relative_path && d3d12core_sdk_version) {
+         ID3D12SDKConfiguration_SetSDKVersion(sdk_config, atoi(d3d12core_sdk_version), d3d12core_relative_path);
+      }
+      ID3D12SDKConfiguration_Release(sdk_config);
+   }
+#endif
+
+   (void)D3D12GetInterface(&CLSID_D3D12DeviceFactory, &IID_ID3D12DeviceFactory, (void **)&factory);
+   return factory;
 }
 
 static VkResult
@@ -226,18 +316,29 @@ dzn_instance_create(const VkInstanceCreateInfo *pCreateInfo,
    missing_validator = !instance->dxil_validator;
 #endif
 
-   instance->d3d12.serialize_root_sig = d3d12_get_serialize_root_sig();
-
-   if (missing_validator ||
-       !instance->d3d12.serialize_root_sig) {
+   if (missing_validator) {
       dzn_instance_destroy(instance, pAllocator);
       return vk_error(NULL, VK_ERROR_INITIALIZATION_FAILED);
    }
 
+   instance->d3d12_mod = util_dl_open(UTIL_DL_PREFIX "d3d12" UTIL_DL_EXT);
+   if (!instance->d3d12_mod) {
+      dzn_instance_destroy(instance, pAllocator);
+      return vk_error(NULL, VK_ERROR_INITIALIZATION_FAILED);
+   }
+
+   instance->d3d12.serialize_root_sig = d3d12_get_serialize_root_sig(instance->d3d12_mod);
+   if (!instance->d3d12.serialize_root_sig) {
+      dzn_instance_destroy(instance, pAllocator);
+      return vk_error(NULL, VK_ERROR_INITIALIZATION_FAILED);
+   }
+
+   instance->factory = try_create_device_factory(instance->d3d12_mod);
+
    if (instance->debug_flags & DZN_DEBUG_D3D12)
-      d3d12_enable_debug_layer();
+      d3d12_enable_debug_layer(instance->d3d12_mod, instance->factory);
    if (instance->debug_flags & DZN_DEBUG_GBV)
-      d3d12_enable_gpu_validation();
+      d3d12_enable_gpu_validation(instance->d3d12_mod, instance->factory);
 
    instance->sync_binary_type = vk_sync_binary_get_type(&dzn_sync_type);
 
@@ -383,6 +484,18 @@ dzn_physical_device_cache_caps(struct dzn_physical_device *pdev)
 
    ID3D12Device1_CheckFeatureSupport(pdev->dev, D3D12_FEATURE_FEATURE_LEVELS, &levels, sizeof(levels));
    pdev->feature_level = levels.MaxSupportedFeatureLevel;
+
+   static const D3D_SHADER_MODEL valid_shader_models[] = {
+      D3D_SHADER_MODEL_6_7, D3D_SHADER_MODEL_6_6, D3D_SHADER_MODEL_6_5, D3D_SHADER_MODEL_6_4,
+      D3D_SHADER_MODEL_6_3, D3D_SHADER_MODEL_6_2, D3D_SHADER_MODEL_6_1,
+   };
+   for (UINT i = 0; i < ARRAY_SIZE(valid_shader_models); ++i) {
+      D3D12_FEATURE_DATA_SHADER_MODEL shader_model = { valid_shader_models[i] };
+      if (SUCCEEDED(ID3D12Device1_CheckFeatureSupport(pdev->dev, D3D12_FEATURE_SHADER_MODEL, &shader_model, sizeof(shader_model)))) {
+         pdev->shader_model = shader_model.HighestShaderModel;
+         break;
+      }
+   }
 
    ID3D12Device1_CheckFeatureSupport(pdev->dev, D3D12_FEATURE_ARCHITECTURE1, &pdev->architecture, sizeof(pdev->architecture));
    ID3D12Device1_CheckFeatureSupport(pdev->dev, D3D12_FEATURE_D3D12_OPTIONS, &pdev->options, sizeof(pdev->options));
@@ -573,7 +686,10 @@ dzn_physical_device_get_d3d12_dev(struct dzn_physical_device *pdev)
 
    mtx_lock(&pdev->dev_lock);
    if (!pdev->dev) {
-      pdev->dev = d3d12_create_device(pdev->adapter, !instance->dxil_validator);
+      pdev->dev = d3d12_create_device(instance->d3d12_mod,
+                                      pdev->adapter,
+                                      instance->factory,
+                                      !instance->dxil_validator);
 
       dzn_physical_device_cache_caps(pdev);
       dzn_physical_device_init_memory(pdev);
@@ -1388,24 +1504,21 @@ dzn_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT |
       VK_SAMPLE_COUNT_8_BIT | VK_SAMPLE_COUNT_16_BIT;
 
-   /* FIXME: this is mostly bunk for now */
    VkPhysicalDeviceLimits limits = {
-
-      /* TODO: support older feature levels */
-      .maxImageDimension1D                      = (1 << 14),
-      .maxImageDimension2D                      = (1 << 14),
-      .maxImageDimension3D                      = (1 << 11),
-      .maxImageDimensionCube                    = (1 << 14),
-      .maxImageArrayLayers                      = (1 << 11),
+      .maxImageDimension1D                      = D3D12_REQ_TEXTURE1D_U_DIMENSION,
+      .maxImageDimension2D                      = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION,
+      .maxImageDimension3D                      = D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION,
+      .maxImageDimensionCube                    = D3D12_REQ_TEXTURECUBE_DIMENSION,
+      .maxImageArrayLayers                      = D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION,
 
       /* from here on, we simply use the minimum values from the spec for now */
-      .maxTexelBufferElements                   = 65536,
-      .maxUniformBufferRange                    = 16384,
-      .maxStorageBufferRange                    = (1ul << 27),
+      .maxTexelBufferElements                   = 1 << D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP,
+      .maxUniformBufferRange                    = D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * D3D12_STANDARD_VECTOR_SIZE * sizeof(float),
+      .maxStorageBufferRange                    = 1 << D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP,
       .maxPushConstantsSize                     = 128,
       .maxMemoryAllocationCount                 = 4096,
       .maxSamplerAllocationCount                = 4000,
-      .bufferImageGranularity                   = 131072,
+      .bufferImageGranularity                   = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT,
       .sparseAddressSpaceSize                   = 0,
       .maxBoundDescriptorSets                   = MAX_SETS,
       .maxPerStageDescriptorSamplers            =
@@ -1437,9 +1550,9 @@ dzn_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       .maxDescriptorSetInputAttachments         = MAX_DESCS_PER_CBV_SRV_UAV_HEAP,
       .maxVertexInputAttributes                 = MIN2(D3D12_STANDARD_VERTEX_ELEMENT_COUNT, MAX_VERTEX_GENERIC_ATTRIBS),
       .maxVertexInputBindings                   = MAX_VBS,
-      .maxVertexInputAttributeOffset            = 2047,
-      .maxVertexInputBindingStride              = 2048,
-      .maxVertexOutputComponents                = 64,
+      .maxVertexInputAttributeOffset            = D3D12_REQ_MULTI_ELEMENT_STRUCTURE_SIZE_IN_BYTES - 1,
+      .maxVertexInputBindingStride              = D3D12_REQ_MULTI_ELEMENT_STRUCTURE_SIZE_IN_BYTES,
+      .maxVertexOutputComponents                = D3D12_VS_OUTPUT_REGISTER_COUNT * D3D12_VS_OUTPUT_REGISTER_COMPONENTS,
       .maxTessellationGenerationLevel           = 0,
       .maxTessellationPatchSize                 = 0,
       .maxTessellationControlPerVertexInputComponents = 0,
@@ -1448,44 +1561,46 @@ dzn_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       .maxTessellationControlTotalOutputComponents = 0,
       .maxTessellationEvaluationInputComponents = 0,
       .maxTessellationEvaluationOutputComponents = 0,
-      .maxGeometryShaderInvocations             = 0,
-      .maxGeometryInputComponents               = 0,
-      .maxGeometryOutputComponents              = 0,
-      .maxGeometryOutputVertices                = 0,
-      .maxGeometryTotalOutputComponents         = 0,
-      .maxFragmentInputComponents               = 64,
-      .maxFragmentOutputAttachments             = 4,
+      .maxGeometryShaderInvocations             = D3D12_GS_MAX_INSTANCE_COUNT,
+      .maxGeometryInputComponents               = D3D12_GS_INPUT_REGISTER_COUNT * D3D12_GS_INPUT_REGISTER_COMPONENTS,
+      .maxGeometryOutputComponents              = D3D12_GS_OUTPUT_REGISTER_COUNT * D3D12_GS_OUTPUT_REGISTER_COMPONENTS,
+      .maxGeometryOutputVertices                = D3D12_GS_MAX_OUTPUT_VERTEX_COUNT_ACROSS_INSTANCES,
+      .maxGeometryTotalOutputComponents         = D3D12_REQ_GS_INVOCATION_32BIT_OUTPUT_COMPONENT_LIMIT,
+      .maxFragmentInputComponents               = D3D12_PS_INPUT_REGISTER_COUNT * D3D12_PS_INPUT_REGISTER_COMPONENTS,
+      .maxFragmentOutputAttachments             = D3D12_PS_OUTPUT_REGISTER_COUNT,
       .maxFragmentDualSrcAttachments            = 0,
-      .maxFragmentCombinedOutputResources       = 4,
-      .maxComputeSharedMemorySize               = 16384,
-      .maxComputeWorkGroupCount                 = { 65535, 65535, 65535 },
-      .maxComputeWorkGroupInvocations           = 128,
-      .maxComputeWorkGroupSize                  = { 128, 128, 64 },
-      .subPixelPrecisionBits                    = 4,
-      .subTexelPrecisionBits                    = 4,
-      .mipmapPrecisionBits                      = 4,
+      .maxFragmentCombinedOutputResources       = D3D12_PS_OUTPUT_REGISTER_COUNT,
+      .maxComputeSharedMemorySize               = D3D12_CS_TGSM_REGISTER_COUNT * sizeof(float),
+      .maxComputeWorkGroupCount                 = { D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION,
+                                                    D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION,
+                                                    D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION },
+      .maxComputeWorkGroupInvocations           = D3D12_CS_THREAD_GROUP_MAX_THREADS_PER_GROUP,
+      .maxComputeWorkGroupSize                  = { D3D12_CS_THREAD_GROUP_MAX_X, D3D12_CS_THREAD_GROUP_MAX_Y, D3D12_CS_THREAD_GROUP_MAX_Z },
+      .subPixelPrecisionBits                    = D3D12_SUBPIXEL_FRACTIONAL_BIT_COUNT,
+      .subTexelPrecisionBits                    = D3D12_SUBTEXEL_FRACTIONAL_BIT_COUNT,
+      .mipmapPrecisionBits                      = D3D12_MIP_LOD_FRACTIONAL_BIT_COUNT,
       .maxDrawIndexedIndexValue                 = 0x00ffffff,
       .maxDrawIndirectCount                     = UINT32_MAX,
-      .maxSamplerLodBias                        = 2.0f,
-      .maxSamplerAnisotropy                     = 1.0f,
-      .maxViewports                             = 1,
-      .maxViewportDimensions                    = { 4096, 4096 },
-      .viewportBoundsRange                      = { -8192, 8191 },
+      .maxSamplerLodBias                        = D3D12_MIP_LOD_BIAS_MAX,
+      .maxSamplerAnisotropy                     = D3D12_REQ_MAXANISOTROPY,
+      .maxViewports                             = MAX_VP,
+      .maxViewportDimensions                    = { D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION, D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION },
+      .viewportBoundsRange                      = { D3D12_VIEWPORT_BOUNDS_MIN, D3D12_VIEWPORT_BOUNDS_MAX },
       .viewportSubPixelBits                     = 0,
       .minMemoryMapAlignment                    = 64,
-      .minTexelBufferOffsetAlignment            = 256,
-      .minUniformBufferOffsetAlignment          = 256,
-      .minStorageBufferOffsetAlignment          = 256,
-      .minTexelOffset                           = -8,
-      .maxTexelOffset                           = 7,
-      .minTexelGatherOffset                     = 0,
-      .maxTexelGatherOffset                     = 0,
+      .minTexelBufferOffsetAlignment            = 32,
+      .minUniformBufferOffsetAlignment          = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT,
+      .minStorageBufferOffsetAlignment          = D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT,
+      .minTexelOffset                           = D3D12_COMMONSHADER_TEXEL_OFFSET_MAX_NEGATIVE,
+      .maxTexelOffset                           = D3D12_COMMONSHADER_TEXEL_OFFSET_MAX_POSITIVE,
+      .minTexelGatherOffset                     = -32,
+      .maxTexelGatherOffset                     = 31,
       .minInterpolationOffset                   = -0.5f,
       .maxInterpolationOffset                   = 0.5f,
       .subPixelInterpolationOffsetBits          = 4,
-      .maxFramebufferWidth                      = 4096,
-      .maxFramebufferHeight                     = 4096,
-      .maxFramebufferLayers                     = 256,
+      .maxFramebufferWidth                      = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION,
+      .maxFramebufferHeight                     = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION,
+      .maxFramebufferLayers                     = D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION,
       .framebufferColorSampleCounts             = supported_sample_counts,
       .framebufferDepthSampleCounts             = supported_sample_counts,
       .framebufferStencilSampleCounts           = supported_sample_counts,
@@ -1499,16 +1614,16 @@ dzn_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       .maxSampleMaskWords                       = 1,
       .timestampComputeAndGraphics              = true,
       .timestampPeriod                          = pdevice->timestamp_period,
-      .maxClipDistances                         = 8,
-      .maxCullDistances                         = 8,
-      .maxCombinedClipAndCullDistances          = 8,
+      .maxClipDistances                         = D3D12_CLIP_OR_CULL_DISTANCE_COUNT,
+      .maxCullDistances                         = D3D12_CLIP_OR_CULL_DISTANCE_COUNT,
+      .maxCombinedClipAndCullDistances          = D3D12_CLIP_OR_CULL_DISTANCE_COUNT,
       .discreteQueuePriorities                  = 2,
       .pointSizeRange                           = { 1.0f, 1.0f },
       .lineWidthRange                           = { 1.0f, 1.0f },
       .pointSizeGranularity                     = 0.0f,
       .lineWidthGranularity                     = 0.0f,
       .strictLines                              = 0,
-      .standardSampleLocations                  = false,
+      .standardSampleLocations                  = true,
       .optimalBufferCopyOffsetAlignment         = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT,
       .optimalBufferCopyRowPitchAlignment       = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT,
       .nonCoherentAtomSize                      = 256,
@@ -1517,13 +1632,7 @@ dzn_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
    VkPhysicalDeviceType devtype = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
    if (pdevice->desc.is_warp)
       devtype = VK_PHYSICAL_DEVICE_TYPE_CPU;
-   else if (false) { // TODO: detect discreete GPUs
-      /* This is a tad tricky to get right, because we need to have the
-       * actual ID3D12Device before we can query the
-       * D3D12_FEATURE_DATA_ARCHITECTURE structure... So for now, let's
-       * just pretend everything is integrated, because... well, that's
-       * what I have at hand right now ;)
-       */
+   else if (!pdevice->architecture.UMA) {
       devtype = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
    }
 
@@ -1994,6 +2103,9 @@ dzn_device_destroy(struct dzn_device *device, const VkAllocationCallbacks *pAllo
    dzn_device_query_finish(device);
    dzn_meta_finish(device);
 
+   if (device->dev_config)
+      ID3D12DeviceConfiguration_Release(device->dev_config);
+
    if (device->dev)
       ID3D12Device1_Release(device->dev);
 
@@ -2096,7 +2208,10 @@ dzn_device_create(struct dzn_physical_device *pdev,
       NewFilter.DenyList.pIDList = msg_ids;
 
       ID3D12InfoQueue_PushStorageFilter(info_queue, &NewFilter);
+      ID3D12InfoQueue_Release(info_queue);
    }
+
+   IUnknown_QueryInterface(device->dev, &IID_ID3D12DeviceConfiguration, (void **)&device->dev_config);
 
    result = dzn_meta_init(device);
    if (result != VK_SUCCESS) {
@@ -2129,17 +2244,19 @@ dzn_device_create(struct dzn_physical_device *pdev,
    return VK_SUCCESS;
 }
 
-ID3D12RootSignature *
-dzn_device_create_root_sig(struct dzn_device *device,
-                           const D3D12_VERSIONED_ROOT_SIGNATURE_DESC *desc)
+static ID3DBlob *
+serialize_root_sig(struct dzn_device *device,
+                   const D3D12_VERSIONED_ROOT_SIGNATURE_DESC *desc)
 {
    struct dzn_instance *instance =
       container_of(device->vk.physical->instance, struct dzn_instance, vk);
-   ID3D12RootSignature *root_sig = NULL;
    ID3DBlob *sig = NULL, *error = NULL;
 
-   if (FAILED(instance->d3d12.serialize_root_sig(desc,
-                                                 &sig, &error))) {
+   HRESULT hr = device->dev_config ?
+         ID3D12DeviceConfiguration_SerializeVersionedRootSignature(device->dev_config, desc, &sig, &error) :
+         instance->d3d12.serialize_root_sig(desc, &sig, &error);
+
+   if (FAILED(hr)) {
       if (instance->debug_flags & DZN_DEBUG_SIG) {
          const char *error_msg = (const char *)ID3D10Blob_GetBufferPointer(error);
          fprintf(stderr,
@@ -2148,23 +2265,29 @@ dzn_device_create_root_sig(struct dzn_device *device,
                  "== END ==========================================================\n",
                  error_msg);
       }
-
-      goto out;
    }
 
+   if (error)
+      ID3D10Blob_Release(error);
+
+   return sig;
+}
+
+ID3D12RootSignature *
+dzn_device_create_root_sig(struct dzn_device *device,
+                           const D3D12_VERSIONED_ROOT_SIGNATURE_DESC *desc)
+{
+   ID3DBlob *sig = serialize_root_sig(device, desc);
+   if (!sig)
+      return NULL;
+
+   ID3D12RootSignature *root_sig = NULL;
    ID3D12Device1_CreateRootSignature(device->dev, 0,
                                      ID3D10Blob_GetBufferPointer(sig),
                                      ID3D10Blob_GetBufferSize(sig),
                                      &IID_ID3D12RootSignature,
                                      (void **)&root_sig);
-
-out:
-   if (error)
-      ID3D10Blob_Release(error);
-
-   if (sig)
-      ID3D10Blob_Release(sig);
-
+   ID3D10Blob_Release(sig);
    return root_sig;
 }
 

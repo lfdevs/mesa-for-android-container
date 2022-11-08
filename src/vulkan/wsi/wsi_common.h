@@ -100,12 +100,18 @@ struct wsi_device {
    VkPhysicalDeviceMemoryProperties memory_props;
    uint32_t queue_family_count;
 
+   VkPhysicalDeviceDrmPropertiesEXT drm_info;
    VkPhysicalDevicePCIBusInfoPropertiesEXT pci_bus_info;
 
    VkExternalSemaphoreHandleTypeFlags semaphore_export_handle_types;
 
    bool has_import_memory_host;
 
+   /** Indicates if wsi_image_create_info::scanout is supported
+    *
+    * If false, WSI will always use either modifiers or the prime blit path.
+    */
+   bool supports_scanout;
    bool supports_modifiers;
    uint32_t maxImageDimension2D;
    uint32_t optimalBufferCopyRowPitchAlignment;

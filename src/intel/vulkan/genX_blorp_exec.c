@@ -42,7 +42,7 @@ static void blorp_measure_start(struct blorp_batch *_batch,
    struct anv_cmd_buffer *cmd_buffer = _batch->driver_batch;
    trace_intel_begin_blorp(&cmd_buffer->trace);
    anv_measure_snapshot(cmd_buffer,
-                        params->snapshot_type,
+                        blorp_op_to_intel_measure_snapshot(params->op),
                         NULL, 0);
 }
 
@@ -51,12 +51,13 @@ static void blorp_measure_end(struct blorp_batch *_batch,
 {
    struct anv_cmd_buffer *cmd_buffer = _batch->driver_batch;
    trace_intel_end_blorp(&cmd_buffer->trace,
+                         params->op,
                          params->x1 - params->x0,
                          params->y1 - params->y0,
-                         params->hiz_op,
-                         params->fast_clear_op,
-                         params->shader_type,
-                         params->shader_pipeline);
+                         params->num_samples,
+                         params->shader_pipeline,
+                         params->dst.view.format,
+                         params->src.view.format);
 }
 
 static void *
@@ -71,10 +72,13 @@ blorp_emit_reloc(struct blorp_batch *batch,
                  void *location, struct blorp_address address, uint32_t delta)
 {
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
-   assert(cmd_buffer->batch.start <= location &&
-          location < cmd_buffer->batch.end);
-   return anv_batch_emit_reloc(&cmd_buffer->batch, location,
-                               address.buffer, address.offset + delta);
+   struct anv_address anv_addr = {
+      .bo = address.buffer,
+      .offset = address.offset,
+   };
+   anv_reloc_list_add_bo(cmd_buffer->batch.relocs,
+                         cmd_buffer->batch.alloc, anv_addr.bo);
+   return anv_address_physical(anv_address_add(anv_addr, delta));
 }
 
 static void
@@ -82,48 +86,26 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
                     struct blorp_address address, uint32_t delta)
 {
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
-   VkResult result;
 
-   if (ANV_ALWAYS_SOFTPIN) {
-      result = anv_reloc_list_add_bo(&cmd_buffer->surface_relocs,
-                                     &cmd_buffer->vk.pool->alloc,
-                                     address.buffer);
-      if (unlikely(result != VK_SUCCESS))
-         anv_batch_set_error(&cmd_buffer->batch, result);
-      return;
-   }
-
-   uint64_t address_u64 = 0;
-   result = anv_reloc_list_add(&cmd_buffer->surface_relocs,
-                               &cmd_buffer->vk.pool->alloc,
-                               ss_offset, address.buffer,
-                               address.offset + delta,
-                               &address_u64);
-   if (result != VK_SUCCESS)
+   VkResult result = anv_reloc_list_add_bo(&cmd_buffer->surface_relocs,
+                                           &cmd_buffer->vk.pool->alloc,
+                                           address.buffer);
+   if (unlikely(result != VK_SUCCESS))
       anv_batch_set_error(&cmd_buffer->batch, result);
-
-   void *dest = anv_block_pool_map(
-      &cmd_buffer->device->surface_state_pool.block_pool, ss_offset, 8);
-   write_reloc(cmd_buffer->device, dest, address_u64, false);
 }
 
 static uint64_t
 blorp_get_surface_address(struct blorp_batch *blorp_batch,
                           struct blorp_address address)
 {
-   if (ANV_ALWAYS_SOFTPIN) {
-      struct anv_address anv_addr = {
-         .bo = address.buffer,
-         .offset = address.offset,
-      };
-      return anv_address_physical(anv_addr);
-   } else {
-      /* We'll let blorp_surface_reloc write the address. */
-      return 0;
-   }
+   struct anv_address anv_addr = {
+      .bo = address.buffer,
+      .offset = address.offset,
+   };
+   return anv_address_physical(anv_addr);
 }
 
-#if GFX_VER >= 7 && GFX_VER < 10
+#if GFX_VER == 9
 static struct blorp_address
 blorp_get_surface_base_address(struct blorp_batch *batch)
 {
@@ -226,6 +208,7 @@ blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
                                            uint32_t *sizes,
                                            unsigned num_vbs)
 {
+#if GFX_VER == 9
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
 
    for (unsigned i = 0; i < num_vbs; i++) {
@@ -245,6 +228,7 @@ blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
     */
    genX(cmd_buffer_update_dirty_vbs_for_gfx8_vb_flush)(cmd_buffer, SEQUENTIAL,
                                                        (1 << num_vbs) - 1);
+#endif
 }
 
 UNUSED static struct blorp_address
@@ -308,8 +292,6 @@ blorp_exec_on_render(struct blorp_batch *batch,
 
    /* Apply any outstanding flushes in case pipeline select haven't. */
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
-
-   genX(cmd_buffer_emit_gfx7_depth_flush)(cmd_buffer);
 
    /* BLORP doesn't do anything fancy with depth such as discards, so we want
     * the PMA fix off.  Also, off is always the safe option.
@@ -386,22 +368,9 @@ genX(blorp_exec)(struct blorp_batch *batch,
 
    if (!cmd_buffer->state.current_l3_config) {
       const struct intel_l3_config *cfg =
-         intel_get_default_l3_config(&cmd_buffer->device->info);
+         intel_get_default_l3_config(cmd_buffer->device->info);
       genX(cmd_buffer_config_l3)(cmd_buffer, cfg);
    }
-
-#if GFX_VER == 7
-   /* The MI_LOAD/STORE_REGISTER_MEM commands which BLORP uses to implement
-    * indirect fast-clear colors can cause GPU hangs if we don't stall first.
-    * See genX(cmd_buffer_mi_memcpy) for more details.
-    */
-   if (params->src.clear_color_addr.buffer ||
-       params->dst.clear_color_addr.buffer) {
-      anv_add_pending_pipe_bits(cmd_buffer,
-                                ANV_PIPE_CS_STALL_BIT,
-                                "before blorp prep fast clear");
-   }
-#endif
 
    if (batch->flags & BLORP_BATCH_USE_COMPUTE)
       blorp_exec_on_compute(batch, params);

@@ -459,6 +459,13 @@ alloc:
    return res;
 }
 
+static uint32_t
+virgl_drm_winsys_resource_get_storage_size(struct virgl_winsys *qws,
+                                           struct virgl_hw_res *res)
+{
+   return res->size;
+}
+
 static struct virgl_hw_res *
 virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
                                         struct winsys_handle *whandle,
@@ -579,7 +586,7 @@ virgl_drm_winsys_resource_set_type(struct virgl_winsys *qws,
                                    const uint32_t *plane_offsets)
 {
    struct virgl_drm_winsys *qdws = virgl_drm_winsys(qws);
-   uint32_t cmd[VIRGL_PIPE_RES_SET_TYPE_SIZE(VIRGL_MAX_PLANE_COUNT)];
+   uint32_t cmd[VIRGL_PIPE_RES_SET_TYPE_SIZE(VIRGL_MAX_PLANE_COUNT) + 1];
    struct drm_virtgpu_execbuffer eb;
    int ret;
 
@@ -1250,6 +1257,7 @@ virgl_drm_winsys_create(int drmFD)
    qdws->base.resource_create_from_handle = virgl_drm_winsys_resource_create_handle;
    qdws->base.resource_set_type = virgl_drm_winsys_resource_set_type;
    qdws->base.resource_get_handle = virgl_drm_winsys_resource_get_handle;
+   qdws->base.resource_get_storage_size = virgl_drm_winsys_resource_get_storage_size;
    qdws->base.resource_map = virgl_drm_resource_map;
    qdws->base.resource_wait = virgl_drm_resource_wait;
    qdws->base.resource_is_busy = virgl_drm_resource_is_busy;

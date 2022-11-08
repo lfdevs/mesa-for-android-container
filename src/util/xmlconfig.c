@@ -347,7 +347,10 @@ driParseOptionInfo(driOptionCache *info,
       driOptionInfo *optinfo = &info->info[i];
       driOptionValue *optval = &info->values[i];
 
-      assert(!optinfo->name); /* No duplicate options in your list. */
+      if (optinfo->name) {
+         /* Duplicate options override the value, but the type must match. */
+         assert(optinfo->type == opt->info.type);
+      }
 
       optinfo->type = opt->info.type;
       optinfo->range = opt->info.range;

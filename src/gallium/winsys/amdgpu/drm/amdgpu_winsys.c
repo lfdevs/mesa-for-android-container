@@ -44,7 +44,7 @@
 #include "sid.h"
 
 static struct hash_table *dev_tab = NULL;
-static simple_mtx_t dev_tab_mutex = _SIMPLE_MTX_INITIALIZER_NP;
+static simple_mtx_t dev_tab_mutex = SIMPLE_MTX_INITIALIZER;
 
 #if DEBUG
 DEBUG_GET_ONCE_BOOL_OPTION(all_bos, "RADEON_ALL_BOS", false)
@@ -363,6 +363,34 @@ static bool amdgpu_cs_is_secure(struct radeon_cmdbuf *rcs)
    return cs->csc->secure;
 }
 
+static uint32_t
+radeon_to_amdgpu_pstate(enum radeon_ctx_pstate pstate)
+{
+   switch (pstate) {
+   case RADEON_CTX_PSTATE_NONE:
+      return AMDGPU_CTX_STABLE_PSTATE_NONE;
+   case RADEON_CTX_PSTATE_STANDARD:
+      return AMDGPU_CTX_STABLE_PSTATE_STANDARD;
+   case RADEON_CTX_PSTATE_MIN_SCLK:
+      return AMDGPU_CTX_STABLE_PSTATE_MIN_SCLK;
+   case RADEON_CTX_PSTATE_MIN_MCLK:
+      return AMDGPU_CTX_STABLE_PSTATE_MIN_MCLK;
+   case RADEON_CTX_PSTATE_PEAK:
+      return AMDGPU_CTX_STABLE_PSTATE_PEAK;
+   default:
+      unreachable("Invalid pstate");
+   }
+}
+
+static bool
+amdgpu_cs_set_pstate(struct radeon_cmdbuf *rcs, enum radeon_ctx_pstate pstate)
+{
+   struct amdgpu_cs *cs = amdgpu_cs(rcs);
+   uint32_t amdgpu_pstate = radeon_to_amdgpu_pstate(pstate);
+   return amdgpu_cs_ctx_stable_pstate(cs->ctx->ctx,
+      AMDGPU_CTX_OP_SET_STABLE_PSTATE, amdgpu_pstate, NULL) == 0;
+}
+
 PUBLIC struct radeon_winsys *
 amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
 		     radeon_screen_create_t screen_create)
@@ -532,6 +560,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    ws->base.read_registers = amdgpu_read_registers;
    ws->base.pin_threads_to_L3_cache = amdgpu_pin_threads_to_L3_cache;
    ws->base.cs_is_secure = amdgpu_cs_is_secure;
+   ws->base.cs_set_pstate = amdgpu_cs_set_pstate;
 
    amdgpu_bo_init_functions(ws);
    amdgpu_cs_init_functions(ws);

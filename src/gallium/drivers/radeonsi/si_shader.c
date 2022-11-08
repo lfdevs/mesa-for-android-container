@@ -817,8 +817,8 @@ static unsigned get_lds_granularity(struct si_screen *screen, gl_shader_stage st
           screen->info.gfx_level >= GFX7 ? 512 : 256;
 }
 
-static bool si_shader_binary_open(struct si_screen *screen, struct si_shader *shader,
-                                  struct ac_rtld_binary *rtld)
+bool si_shader_binary_open(struct si_screen *screen, struct si_shader *shader,
+                           struct ac_rtld_binary *rtld)
 {
    const struct si_shader_selector *sel = shader->selector;
    const char *part_elfs[5];
@@ -889,8 +889,8 @@ static unsigned si_get_shader_binary_size(struct si_screen *screen, struct si_sh
    return size;
 }
 
-static bool si_get_external_symbol(enum amd_gfx_level gfx_level, void *data, const char *name,
-                                   uint64_t *value)
+bool si_get_external_symbol(enum amd_gfx_level gfx_level, void *data, const char *name,
+                            uint64_t *value)
 {
    uint64_t *scratch_va = data;
 
@@ -951,6 +951,7 @@ bool si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader
 
    sscreen->ws->buffer_unmap(sscreen->ws, shader->bo->buf);
    ac_rtld_close(&binary);
+   shader->gpu_address = u.rx_va;
 
    return size >= 0;
 }
@@ -1057,10 +1058,25 @@ static void si_calculate_max_simd_waves(struct si_shader *shader)
    }
 
    if (conf->num_vgprs) {
+      /* GFX 10.3 internally:
+       * - aligns VGPRS to 16 for Wave32 and 8 for Wave64
+       * - aligns LDS to 1024
+       *
+       * For shader-db stats, set num_vgprs that the hw actually uses.
+       */
+      unsigned num_vgprs = conf->num_vgprs;
+      if (sscreen->info.family == CHIP_GFX1100 || sscreen->info.family == CHIP_GFX1101) {
+         num_vgprs = util_align_npot(num_vgprs, shader->wave_size == 32 ? 24 : 12);
+      } else if (sscreen->info.gfx_level == GFX10_3) {
+         num_vgprs = align(num_vgprs, shader->wave_size == 32 ? 16 : 8);
+      } else {
+         num_vgprs = align(num_vgprs, shader->wave_size == 32 ? 8 : 4);
+      }
+
       /* Always print wave limits as Wave64, so that we can compare
        * Wave32 and Wave64 with shader-db fairly. */
       unsigned max_vgprs = sscreen->info.num_physical_wave64_vgprs_per_simd;
-      max_simd_waves = MIN2(max_simd_waves, max_vgprs / conf->num_vgprs);
+      max_simd_waves = MIN2(max_simd_waves, max_vgprs / num_vgprs);
    }
 
    unsigned max_lds_per_simd = sscreen->info.lds_size_per_workgroup / 4;
@@ -1324,6 +1340,7 @@ static void si_dump_shader_key(const struct si_shader *shader, FILE *f)
       fprintf(f, "  opt.kill_pointsize = 0x%x\n", key->ge.opt.kill_pointsize);
       fprintf(f, "  opt.kill_clip_distances = 0x%x\n", key->ge.opt.kill_clip_distances);
       fprintf(f, "  opt.ngg_culling = 0x%x\n", key->ge.opt.ngg_culling);
+      fprintf(f, "  opt.remove_streamout = 0x%x\n", key->ge.opt.remove_streamout);
    }
 
    if (stage <= MESA_SHADER_GEOMETRY)
@@ -1606,6 +1623,9 @@ struct nir_shader *si_get_nir_shader(struct si_shader *shader, bool *free_nir,
    /* Kill outputs according to the shader key. */
    if (sel->stage <= MESA_SHADER_GEOMETRY)
       NIR_PASS(progress, nir, si_nir_kill_outputs, key);
+
+   if (nir->info.uses_resource_info_query)
+      NIR_PASS(progress, nir, ac_nir_lower_resinfo, sel->screen->info.gfx_level);
 
    bool inline_uniforms = false;
    uint32_t *inlined_uniform_values;

@@ -28,19 +28,19 @@ The boards need to be able to have a kernel/initramfs supplied by the
 gitlab-runner system, since Mesa often needs to update the kernel either for new
 DRM functionality, or to fix kernel bugs.
 
-The boards must have networking, so that we can extract the dEQP .xml results to
+The boards must have networking, so that we can extract the dEQP XML results to
 artifacts on GitLab, and so that we can download traces (too large for an
 initramfs) for trace replay testing.  Given that we need networking already, and
-our deqp/piglit/etc. payload is large, we use nfs from the x86 runner system
+our dEQP/Piglit/etc. payload is large, we use NFS from the x86 runner system
 rather than initramfs.
 
 See `src/freedreno/ci/gitlab-ci.yml` for an example of fastboot on DB410c and
-DB820c (freedreno-a306 and freereno-a530).
+DB820c (freedreno-a306 and freedreno-a530).
 
-Requirements (servo)
+Requirements (Servo)
 --------------------
 
-For servo-connected boards, we can use the EC connection for power
+For Servo-connected boards, we can use the EC connection for power
 control to reboot the board.  However, loading a kernel is not as easy
 as fastboot, so we assume your bootloader can do TFTP, and that your
 gitlab-runner mounts the runner's tftp directory specific to the board
@@ -48,7 +48,7 @@ at /tftp in the container.
 
 Since we're going the TFTP route, we also use NFS root.  This avoids
 packing the rootfs and sending it to the board as a ramdisk, which
-means we can support larger rootfses (for piglit testing), at the cost
+means we can support larger rootfses (for Piglit testing), at the cost
 of needing more storage on the runner.
 
 Telling the board about where its TFTP and NFS should come from is
@@ -74,8 +74,8 @@ call "servo"::
   dhcp-option=tag:cheza1,option:root-path,/srv/nfs/cheza1
   dhcp-option=tag:cheza2,option:root-path,/srv/nfs/cheza2
 
-See `src/freedreno/ci/gitlab-ci.yml` for an example of servo on cheza.  Note
-that other servo boards in CI are managed using LAVA.
+See `src/freedreno/ci/gitlab-ci.yml` for an example of Servo on cheza.  Note
+that other Servo boards in CI are managed using LAVA.
 
 Requirements (POE)
 ------------------
@@ -98,7 +98,7 @@ You'll talk to the Cisco for configuration using its USB port, which provides a
 serial terminal at 9600 baud.  You need to enable SNMP control, which we'll do
 using a "mesaci" community name that the gitlab runner can access as its
 authentication (no password) to configure.  To talk to the SNMP on the router,
-you need to put an ip address on the default vlan (vlan 1).
+you need to put an IP address on the default vlan (vlan 1).
 
 Setting that up looks something like:
 
@@ -127,7 +127,7 @@ google, that was easier than figuring it out from finding the switch's MIB
 database.  You can query the POE status from the switch serial using the `show
 power inline` command.
 
-Other than that, find the dnsmasq/tftp/nfs setup for your boards "servo" above.
+Other than that, find the dnsmasq/tftp/NFS setup for your boards "servo" above.
 
 See `src/broadcom/ci/gitlab-ci.yml` and `src/nouveau/ci/gitlab-ci.yml` for an
 examples of POE for Raspberry Pi 3/4, and Jetson Nano.
@@ -152,7 +152,7 @@ something like this to register a fastboot board:
        --docker-privileged \
        --non-interactive
 
-For a servo board, you'll need to also volume mount the board's NFS
+For a Servo board, you'll need to also volume mount the board's NFS
 root dir at /nfs and TFTP kernel directory at /tftp.
 
 The registration token has to come from a freedesktop.org GitLab admin
@@ -166,7 +166,7 @@ into that pool.
 We need privileged mode and the /dev bind mount in order to get at the
 serial console and fastboot USB devices (--device arguments don't
 apply to devices that show up after container start, which is the case
-with fastboot, and the servo serial devices are actually links to
+with fastboot, and the Servo serial devices are actually links to
 /dev/pts).  We use host network mode so that we can spin up a nginx
 server to collect XML results for fastboot.
 

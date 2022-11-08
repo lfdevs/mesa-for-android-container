@@ -442,17 +442,76 @@ mir_is_64(midgard_instruction *ins)
         return false;
 }
 
+/*
+ * Determine if a shader needs a contiguous workgroup. This impacts register
+ * allocation. TODO: Optimize if barriers and local memory are unused.
+ */
+static bool
+needs_contiguous_workgroup(compiler_context *ctx)
+{
+        return gl_shader_stage_uses_workgroup(ctx->stage);
+}
+
+/*
+ * Determine an upper-bound on the number of threads in a workgroup. The GL
+ * driver reports 128 for the maximum number of threads (the minimum-maximum in
+ * OpenGL ES 3.1), so we pessimistically assume 128 threads for variable
+ * workgroups.
+ */
+static unsigned
+max_threads_per_workgroup(compiler_context *ctx)
+{
+        if (ctx->nir->info.workgroup_size_variable) {
+                return 128;
+        } else {
+                return ctx->nir->info.workgroup_size[0] *
+                       ctx->nir->info.workgroup_size[1] *
+                       ctx->nir->info.workgroup_size[2];
+        }
+}
+
+/*
+ * Calculate the maximum number of work registers available to the shader.
+ * Architecturally, Midgard shaders may address up to 16 work registers, but
+ * various features impose other limits:
+ *
+ * 1. Blend shaders are limited to 8 registers by ABI.
+ * 2. If there are more than 8 register-mapped uniforms, then additional
+ *    register-mapped uniforms use space that otherwise would be used for work
+ *    registers.
+ * 3. If more than 4 registers are used, at most 128 threads may be spawned. If
+ *    more than 8 registers are used, at most 64 threads may be spawned. These
+ *    limits are architecturally visible in compute kernels that require an
+ *    entire workgroup to be spawned at once (for barriers or local memory to
+ *    work properly).
+ */
+static unsigned
+max_work_registers(compiler_context *ctx)
+{
+        if (ctx->inputs->is_blend)
+                return 8;
+
+        unsigned rmu_vec4 = ctx->info->push.count / 4;
+        unsigned max_work_registers = (rmu_vec4 >= 8) ? (24 - rmu_vec4) : 16;
+
+        if (needs_contiguous_workgroup(ctx)) {
+                unsigned threads = max_threads_per_workgroup(ctx);
+                assert(threads <= 128 && "maximum threads in ABI exceeded");
+
+                if (threads > 64)
+                        max_work_registers = MIN2(max_work_registers, 8);
+        }
+
+        return max_work_registers;
+}
+
 /* This routine performs the actual register allocation. It should be succeeded
  * by install_registers */
 
 static struct lcra_state *
 allocate_registers(compiler_context *ctx, bool *spilled)
 {
-        /* The number of vec4 work registers available depends on the number of
-         * register-mapped uniforms and the shader stage. By ABI we limit blend
-         * shaders to 8 registers, should be lower XXX */
-        int rmu = ctx->info->push.count / 4;
-        int work_count = ctx->inputs->is_blend ? 8 : 16 - MAX2(rmu - 8, 0);
+        int work_count = max_work_registers(ctx);
 
        /* No register allocation to do with no SSA */
 

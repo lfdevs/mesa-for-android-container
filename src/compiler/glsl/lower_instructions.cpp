@@ -30,21 +30,8 @@
  * rather than in each driver backend.
  *
  * Currently supported transformations:
- * - SUB_TO_ADD_NEG
  * - LDEXP_TO_ARITH
- * - CARRY_TO_ARITH
- * - BORROW_TO_ARITH
  * - DOPS_TO_DFRAC
- *
- * SUB_TO_ADD_NEG:
- * ---------------
- * Breaks an ir_binop_sub expression down to add(op0, neg(op1))
- *
- * This simplifies expression reassociation, and for many backends
- * there is no subtract operation separate from adding the negation.
- * For backends with native subtract operations, they will probably
- * want to recognize add(op0, neg(op1)) or the other way around to
- * produce a subtract anyway.
  *
  * LDEXP_TO_ARITH:
  * -------------
@@ -54,14 +41,6 @@
  * ---------------
  * Converts ir_binop_ldexp, ir_unop_frexp_sig, and ir_unop_frexp_exp to
  * arithmetic and bit ops for double arguments.
- *
- * CARRY_TO_ARITH:
- * ---------------
- * Converts ir_carry into (x + y) < x.
- *
- * BORROW_TO_ARITH:
- * ----------------
- * Converts ir_borrow into (x < y).
  *
  * DOPS_TO_DFRAC:
  * --------------
@@ -76,6 +55,19 @@
 #include "util/half_float.h"
 
 #include <math.h>
+
+/* Operations for lower_instructions() */
+#define LDEXP_TO_ARITH     0x80
+#define DOPS_TO_DFRAC      0x800
+#define DFREXP_DLDEXP_TO_ARITH    0x1000
+#define BIT_COUNT_TO_MATH         0x02000
+#define EXTRACT_TO_SHIFTS         0x04000
+#define INSERT_TO_SHIFTS          0x08000
+#define REVERSE_TO_SHIFTS         0x10000
+#define FIND_LSB_TO_FLOAT_CAST    0x20000
+#define FIND_MSB_TO_FLOAT_CAST    0x40000
+#define IMUL_HIGH_TO_MUL          0x80000
+#define SQRT_TO_ABS_SQRT          0x200000
 
 using namespace ir_builder;
 
@@ -93,7 +85,6 @@ public:
 private:
    unsigned lower; /** Bitfield of which operations to lower */
 
-   void sub_to_add_neg(ir_expression *);
    void ldexp_to_arith(ir_expression *);
    void dldexp_to_arith(ir_expression *);
    void dfrexp_sig_to_arith(ir_expression *);
@@ -132,22 +123,31 @@ private:
 #define lowering(x) (this->lower & x)
 
 bool
-lower_instructions(exec_list *instructions, unsigned what_to_lower)
+lower_instructions(exec_list *instructions, bool have_ldexp, bool have_dfrexp,
+                   bool have_dround, bool force_abs_sqrt,
+                   bool have_gpu_shader5)
 {
+   unsigned what_to_lower =
+      (have_ldexp ? 0 : LDEXP_TO_ARITH) |
+      (have_dfrexp ? 0 : DFREXP_DLDEXP_TO_ARITH) |
+      (have_dround ? 0 : DOPS_TO_DFRAC) |
+      (force_abs_sqrt ? SQRT_TO_ABS_SQRT : 0) |
+      /* Assume that if ARB_gpu_shader5 is not supported then all of the
+       * extended integer functions need lowering.  It may be necessary to add
+       * some caps for individual instructions.
+       */
+      (!have_gpu_shader5 ? BIT_COUNT_TO_MATH |
+                           EXTRACT_TO_SHIFTS |
+                           INSERT_TO_SHIFTS |
+                           REVERSE_TO_SHIFTS |
+                           FIND_LSB_TO_FLOAT_CAST |
+                           FIND_MSB_TO_FLOAT_CAST |
+                           IMUL_HIGH_TO_MUL : 0);
+
    lower_instructions_visitor v(what_to_lower);
 
    visit_list_elements(&v, instructions);
    return v.progress;
-}
-
-void
-lower_instructions_visitor::sub_to_add_neg(ir_expression *ir)
-{
-   ir->operation = ir_binop_add;
-   ir->init_num_operands();
-   ir->operands[1] = new(ir) ir_expression(ir_unop_neg, ir->operands[1]->type,
-					   ir->operands[1], NULL);
-   this->progress = true;
 }
 
 void
@@ -1281,11 +1281,8 @@ lower_instructions_visitor::find_msb_to_float_cast(ir_expression *ir)
 ir_expression *
 lower_instructions_visitor::_carry(operand a, operand b)
 {
-   if (lowering(CARRY_TO_ARITH))
-      return i2u(b2i(less(add(a, b),
-                          a.val->clone(ralloc_parent(a.val), NULL))));
-   else
-      return carry(a, b);
+   return i2u(b2i(less(add(a, b),
+                       a.val->clone(ralloc_parent(a.val), NULL))));
 }
 
 void
@@ -1452,10 +1449,6 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
       if (ir->operands[0]->type->is_double())
          double_lrp(ir);
       break;
-   case ir_binop_sub:
-      if (lowering(SUB_TO_ADD_NEG))
-	 sub_to_add_neg(ir);
-      break;
 
    case ir_binop_ldexp:
       if (lowering(LDEXP_TO_ARITH) && ir->type->is_float())
@@ -1475,13 +1468,11 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
       break;
 
    case ir_binop_carry:
-      if (lowering(CARRY_TO_ARITH))
-         carry_to_arith(ir);
+      carry_to_arith(ir);
       break;
 
    case ir_binop_borrow:
-      if (lowering(BORROW_TO_ARITH))
-         borrow_to_arith(ir);
+      borrow_to_arith(ir);
       break;
 
    case ir_unop_trunc:

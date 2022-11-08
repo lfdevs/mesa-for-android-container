@@ -42,7 +42,7 @@
 #include "egl_dri2.h"
 #include "loader.h"
 #include "kopper_interface.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 
 static __DRIimage*
 device_alloc_image(struct dri2_egl_display *dri2_dpy,
@@ -274,7 +274,7 @@ static bool
 device_probe_device(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   bool request_software = env_var_as_boolean("LIBGL_ALWAYS_SOFTWARE", false);
+   bool request_software = debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
 
    if (request_software)
       _eglLog(_EGL_WARNING, "Not allowed to force software rendering when "

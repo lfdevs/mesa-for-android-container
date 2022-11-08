@@ -110,7 +110,7 @@
             NV_MME_OUT_##m0, NV_MME_OUT_##e0,                                  \
             NV_MME_OUT_##m1, NV_MME_OUT_##e1)
 
-uint32_t mmec597_per_instance_bf[] = {
+const uint32_t mmec597_per_instance_bf[] = {
 // r1 = load();      // count
 // r3 = load();      // mask
 // mthd(0x1880, 1);  // VERTEX_ARRAY_PER_INSTANCE[0]
@@ -132,7 +132,7 @@ uint32_t mmec597_per_instance_bf[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,   NONE),
 };
 
-uint32_t mmec597_vertex_array_select[] = {
+const uint32_t mmec597_vertex_array_select[] = {
 // r1 = load();            // array
 // r2 = load();            // limit hi
 // r3 = load();            // limit lo
@@ -162,7 +162,7 @@ uint32_t mmec597_vertex_array_select[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,   NONE),
 };
 
-uint32_t mmec597_blend_enables[] = {
+const uint32_t mmec597_blend_enables[] = {
 // r1 = load();         // enable mask
 // mthd(0x1360, 1);     // NVC0_3D_BLEND_ENABLE[]
 // send((r1 >> 0) & 1);
@@ -185,7 +185,7 @@ uint32_t mmec597_blend_enables[] = {
                MERGE, ZERO,  ZERO,    R1,  (0<<10)|(1<<5)|7,   NONE,   ALU1),
 };
 
-uint32_t mmec597_poly_mode_front[] = {
+const uint32_t mmec597_poly_mode_front[] = {
 // r1 = load();
 // mthd(0x0dac,0);      // POLYGON_MODE_FRONT
 // send(r1);
@@ -229,7 +229,7 @@ uint32_t mmec597_poly_mode_front[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,   NONE),
 };
 
-uint32_t mmec597_poly_mode_back[] = {
+const uint32_t mmec597_poly_mode_back[] = {
 // r1 = load();
 // mthd(0x0db0,0);      // POLYGON_MODE_BACK
 // send(r1);
@@ -273,7 +273,7 @@ uint32_t mmec597_poly_mode_back[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,   NONE),
 };
 
-uint32_t mmec597_gp_select[] = {
+const uint32_t mmec597_gp_select[] = {
 // r1 = load();
 // mthd(0x2100,0);      // SP_SELECT[4]
 // send(r1);
@@ -317,7 +317,7 @@ uint32_t mmec597_gp_select[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,   NONE),
 };
 
-uint32_t mmec597_tep_select[] = {
+const uint32_t mmec597_tep_select[] = {
 // r1 = load();
 // mthd(0x20c0,0);      // SP_SELECT[3]
 // send(r1);
@@ -361,7 +361,7 @@ uint32_t mmec597_tep_select[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,   NONE),
 };
 
-uint32_t mmec597_draw_arrays_indirect[] = {
+const uint32_t mmec597_draw_arrays_indirect[] = {
 // r1 = load();         // mode
 // r5 = read(0x1438);   // VB_INSTANCE_BASE
 // r6 = load();         // start_drawid
@@ -429,7 +429,7 @@ uint32_t mmec597_draw_arrays_indirect[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,      NONE),
 };
 
-uint32_t mmec597_draw_elts_indirect[] = {
+const uint32_t mmec597_draw_elts_indirect[] = {
 // r1 = load();         // mode
 // r8 = read(0x1434);   // VB_ELEMENT_BASE
 // r9 = read(0x1438);   // VB_INSTANCE_BASE
@@ -509,7 +509,7 @@ uint32_t mmec597_draw_elts_indirect[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,   NONE),
 };
 
-uint32_t mmec597_draw_arrays_indirect_count[] = {
+const uint32_t mmec597_draw_arrays_indirect_count[] = {
 // r1 = load();         // mode
 // r6 = load();         // start_drawid
 // r7 = load();         // numparams
@@ -606,7 +606,7 @@ uint32_t mmec597_draw_arrays_indirect_count[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,   NONE),
 };
 
-uint32_t mmec597_draw_elts_indirect_count[] = {
+const uint32_t mmec597_draw_elts_indirect_count[] = {
 // r8 = read(0x1434);
 // r1 = load();
 // r9 = read(0x1438);
@@ -718,7 +718,7 @@ uint32_t mmec597_draw_elts_indirect_count[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,   NONE),
 };
 
-uint32_t mmec597_query_buffer_write[] = {
+const uint32_t mmec597_query_buffer_write[] = {
 // r1 = load();   // clamp value
 // r2 = load();   // end value (lo)
 // r3 = load();   // end value (hi)
@@ -794,7 +794,7 @@ uint32_t mmec597_query_buffer_write[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,      NONE),
 };
 
-uint32_t mmec597_conservative_raster_state[] = {
+const uint32_t mmec597_conservative_raster_state[] = {
 // r1 = load();
 // mthd(0x3400, 1);
 // send(0);
@@ -834,7 +834,7 @@ uint32_t mmec597_conservative_raster_state[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,      NONE),
 };
 
-uint32_t mmec597_compute_counter[] = {
+const uint32_t mmec597_compute_counter[] = {
 // r0 = load();
 // r1 = 1;
 // r2 = 0;
@@ -864,7 +864,7 @@ uint32_t mmec597_compute_counter[] = {
                 ADDC,   R4,    R4,    R2,                 0,   NONE,      ALU1),
 };
 
-uint32_t mmec597_compute_counter_to_query[] = {
+const uint32_t mmec597_compute_counter_to_query[] = {
 // r1 = load();
 // r3 = read(0x3410);
 // r2 = load();

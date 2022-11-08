@@ -204,8 +204,8 @@ Compiler Specification
 
 Meson supports the standard CC and CXX environment variables for
 changing the default compiler. Note that Meson does not allow changing
-the compilers in a configured builddir so you will need to create a new
-build dir for a different compiler.
+the compilers in a configured build directory so you will need to create
+a new build dir for a different compiler.
 
 This is an example of specifying the Clang compilers and cleaning the
 build directory before reconfiguring with an extra C option:
@@ -241,7 +241,7 @@ For example:
 As of Meson 0.49.0 Meson also has the concept of a `"native
 file" <https://mesonbuild.com/Native-environments.html>`__, these files
 provide information about the native build environment (as opposed to a
-cross build environment). They are ini formatted and can override where
+cross build environment). They are INI formatted and can override where
 to find llvm-config:
 
 .. code-block:: ini
@@ -268,7 +268,7 @@ should be used. It uses the same format as the native file above:
    llvm-config = '/usr/lib/llvm-config-32'
    cmake = '/usr/bin/cmake-for-my-arch'
 
-Obviously, only cmake or llvm-config is required.
+Obviously, only CMake or llvm-config is required.
 
 Then configure Meson:
 
@@ -364,7 +364,7 @@ passed as --option=foo to ``meson``, but -Doption=foo to
 ``meson configure``. Mesa defined options are always passed as
 -Doption=foo.
 
-For those coming from autotools be aware of the following:
+For those coming from Autotools be aware of the following:
 
 ``--buildtype/-Dbuildtype``
    This option will set the compiler debug/optimization levels to aid
@@ -404,7 +404,7 @@ This file can live at any location, but you can use the bare filename
 Below are a few example of cross files, but keep in mind that you will
 likely have to alter them for your system.
 
-Those running on ArchLinux can use the AUR-maintained packages for some
+Those running on Arch Linux can use the AUR-maintained packages for some
 of those, as they'll have the right values for your system:
 
 -  `meson-cross-x86-linux-gnu <https://aur.archlinux.org/packages/meson-cross-x86-linux-gnu>`__

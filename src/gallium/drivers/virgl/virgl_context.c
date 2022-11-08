@@ -49,6 +49,7 @@
 #include "virgl_resource.h"
 #include "virgl_screen.h"
 #include "virgl_staging_mgr.h"
+#include "virgl_video.h"
 
 struct virgl_vertex_elements_state {
    uint32_t handle;
@@ -672,11 +673,37 @@ static void virgl_set_constant_buffer(struct pipe_context *ctx,
    }
 }
 
+static bool
+lower_gles_arrayshadow_offset_filter(const nir_instr *instr,
+                                     UNUSED const void *data)
+{
+   if (instr->type != nir_instr_type_tex)
+      return false;
+
+   nir_tex_instr *tex = nir_instr_as_tex(instr);
+
+   if (!tex->is_shadow || !tex->is_array)
+      return false;
+
+   // textureGradOffset can be used directly
+   int grad_index = nir_tex_instr_src_index(tex, nir_tex_src_ddx);
+   int proj_index = nir_tex_instr_src_index(tex, nir_tex_src_projector);
+   if (grad_index >= 0 && proj_index < 0)
+      return false;
+
+   int offset_index = nir_tex_instr_src_index(tex, nir_tex_src_offset);
+   if (offset_index >= 0)
+      return true;
+
+   return false;
+}
+
 static void *virgl_shader_encoder(struct pipe_context *ctx,
                                   const struct pipe_shader_state *shader,
                                   unsigned type)
 {
    struct virgl_context *vctx = virgl_context(ctx);
+   struct virgl_screen *rs = virgl_screen(ctx->screen);
    uint32_t handle;
    const struct tgsi_token *tokens;
    const struct tgsi_token *ntt_tokens = NULL;
@@ -689,6 +716,16 @@ static void *virgl_shader_encoder(struct pipe_context *ctx,
          .unoptimized_ra = true,
          .lower_fabs = true
       };
+
+      if (!(rs->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_TEXTURE_SHADOW_LOD) &&
+          rs->caps.caps.v2.capability_bits & VIRGL_CAP_HOST_IS_GLES) {
+         nir_lower_tex_options lower_tex_options = {
+            .lower_offset_filter = lower_gles_arrayshadow_offset_filter,
+         };
+
+         NIR_PASS_V(shader->ir.nir, nir_lower_tex, &lower_tex_options);
+      }
+
       nir_shader *s = nir_shader_clone(NULL, shader->ir.nir);
 
       /* Propagare the separable shader property to the host, unless
@@ -699,7 +736,7 @@ static void *virgl_shader_encoder(struct pipe_context *ctx,
       tokens = shader->tokens;
    }
 
-   new_tokens = virgl_tgsi_transform((struct virgl_screen *)vctx->base.screen, tokens, is_separable);
+   new_tokens = virgl_tgsi_transform(rs, tokens, is_separable);
    if (!new_tokens)
       return NULL;
 
@@ -857,6 +894,17 @@ static void virgl_clear(struct pipe_context *ctx,
    vctx->num_draws++;
 
    virgl_encode_clear(vctx, buffers, color, depth, stencil);
+}
+
+static void virgl_clear_render_target(struct pipe_context *ctx,
+                                      struct pipe_surface *dst,
+                                      const union pipe_color_union *color,
+                                      unsigned dstx, unsigned dsty,
+                                      unsigned width, unsigned height,
+                                      bool render_condition_enabled)
+{
+   if (virgl_debug & VIRGL_DEBUG_VERBOSE)
+      debug_printf("VIRGL: clear render target unsupported.\n");
 }
 
 static void virgl_clear_texture(struct pipe_context *ctx,
@@ -1624,6 +1672,7 @@ struct pipe_context *virgl_context_create(struct pipe_screen *pscreen,
    vctx->base.launch_grid = virgl_launch_grid;
 
    vctx->base.clear = virgl_clear;
+   vctx->base.clear_render_target = virgl_clear_render_target;
    vctx->base.clear_texture = virgl_clear_texture;
    vctx->base.draw_vbo = virgl_draw_vbo;
    vctx->base.flush = virgl_flush_from_st;
@@ -1659,6 +1708,9 @@ struct pipe_context *virgl_context_create(struct pipe_screen *pscreen,
    vctx->base.set_shader_images = virgl_set_shader_images;
    vctx->base.memory_barrier = virgl_memory_barrier;
    vctx->base.emit_string_marker = virgl_emit_string_marker;
+
+   vctx->base.create_video_codec = virgl_video_create_codec;
+   vctx->base.create_video_buffer = virgl_video_create_buffer;
 
    if (rs->caps.caps.v2.host_feature_check_version >= 7)
       vctx->base.link_shader = virgl_link_shader;

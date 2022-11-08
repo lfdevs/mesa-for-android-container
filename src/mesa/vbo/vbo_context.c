@@ -162,10 +162,6 @@ _vbo_CreateContext(struct gl_context *ctx)
    /* make sure all VBO_ATTRIB_ values can fit in an unsigned byte */
    STATIC_ASSERT(VBO_ATTRIB_MAX <= 255);
 
-   /* Hook our functions into exec and compile dispatch tables.  These
-    * will pretty much be permanently installed, which means that the
-    * vtxfmt mechanism can be removed now.
-    */
    vbo_exec_init(ctx);
    if (ctx->API == API_OPENGL_COMPAT)
       vbo_save_init(ctx);

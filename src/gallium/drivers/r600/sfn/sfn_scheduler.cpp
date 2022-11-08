@@ -25,14 +25,15 @@
  */
 
 #include "sfn_scheduler.h"
+
+#include "sfn_debug.h"
 #include "sfn_instr_alugroup.h"
 #include "sfn_instr_controlflow.h"
 #include "sfn_instr_export.h"
 #include "sfn_instr_fetch.h"
-#include "sfn_instr_mem.h"
 #include "sfn_instr_lds.h"
+#include "sfn_instr_mem.h"
 #include "sfn_instr_tex.h"
-#include "sfn_debug.h"
 
 #include <algorithm>
 #include <sstream>
@@ -43,9 +44,12 @@ class CollectInstructions : public InstrVisitor {
 
 public:
    CollectInstructions(ValueFactory& vf):
-      m_value_factory(vf)  {}
+       m_value_factory(vf)
+   {
+   }
 
-   void visit(AluInstr *instr) override {
+   void visit(AluInstr *instr) override
+   {
       if (instr->has_alu_flag(alu_is_trans))
          alu_trans.push_back(instr);
       else {
@@ -55,78 +59,63 @@ public:
             alu_groups.push_back(instr->split(m_value_factory));
       }
    }
-   void visit(AluGroup *instr) override {
-      alu_groups.push_back(instr);
-   }
-   void visit(TexInstr *instr) override {
-      tex.push_back(instr);
-   }
-   void visit(ExportInstr *instr) override {
-      exports.push_back(instr);
-   }
-   void visit(FetchInstr *instr)  override {
-      fetches.push_back(instr);
-   }
-   void visit(Block *instr) override {
-      for (auto& i: *instr)
+   void visit(AluGroup *instr) override { alu_groups.push_back(instr); }
+   void visit(TexInstr *instr) override { tex.push_back(instr); }
+   void visit(ExportInstr *instr) override { exports.push_back(instr); }
+   void visit(FetchInstr *instr) override { fetches.push_back(instr); }
+   void visit(Block *instr) override
+   {
+      for (auto& i : *instr)
          i->accept(*this);
    }
 
-   void visit(ControlFlowInstr *instr) override {
+   void visit(ControlFlowInstr *instr) override
+   {
       assert(!m_cf_instr);
       m_cf_instr = instr;
    }
 
-   void visit(IfInstr *instr) override {
+   void visit(IfInstr *instr) override
+   {
       assert(!m_cf_instr);
       m_cf_instr = instr;
    }
 
-   void visit(EmitVertexInstr *instr) override {
+   void visit(EmitVertexInstr *instr) override
+   {
       assert(!m_cf_instr);
       m_cf_instr = instr;
    }
 
-   void visit(ScratchIOInstr *instr) override {
-      mem_write_instr.push_back(instr);
-   }
+   void visit(ScratchIOInstr *instr) override { mem_write_instr.push_back(instr); }
 
-   void visit(StreamOutInstr *instr) override {
-      mem_write_instr.push_back(instr);
-   }
+   void visit(StreamOutInstr *instr) override { mem_write_instr.push_back(instr); }
 
-   void visit(MemRingOutInstr *instr) override {
-      mem_ring_writes.push_back(instr);
-   }
+   void visit(MemRingOutInstr *instr) override { mem_ring_writes.push_back(instr); }
 
-   void visit(GDSInstr *instr) override {
-      gds_op.push_back(instr);
-   }
+   void visit(GDSInstr *instr) override { gds_op.push_back(instr); }
 
-   void visit(WriteTFInstr *instr) override {
-      write_tf.push_back(instr);
-   }
+   void visit(WriteTFInstr *instr) override { write_tf.push_back(instr); }
 
-   void visit(LDSReadInstr *instr) override {
-      std::vector<AluInstr*> buffer;
+   void visit(LDSReadInstr *instr) override
+   {
+      std::vector<AluInstr *> buffer;
       m_last_lds_instr = instr->split(buffer, m_last_lds_instr);
-      for (auto& i: buffer) {
-         i->accept(*this);
-      }      
-   }
-
-   void visit(LDSAtomicInstr *instr) override {
-      std::vector<AluInstr*> buffer;
-      m_last_lds_instr = instr->split(buffer, m_last_lds_instr);
-      for (auto& i: buffer) {
+      for (auto& i : buffer) {
          i->accept(*this);
       }
    }
 
-   void visit(RatInstr *instr) override {
-      rat_instr.push_back(instr);
+   void visit(LDSAtomicInstr *instr) override
+   {
+      std::vector<AluInstr *> buffer;
+      m_last_lds_instr = instr->split(buffer, m_last_lds_instr);
+      for (auto& i : buffer) {
+         i->accept(*this);
+      }
    }
 
+   void visit(RatInstr *instr) override { rat_instr.push_back(instr); }
 
    std::list<AluInstr *> alu_trans;
    std::list<AluInstr *> alu_vec;
@@ -154,15 +143,16 @@ public:
    void finalize();
 
 private:
+   void
+   schedule_block(Block& in_block, Shader::ShaderBlocks& out_blocks, ValueFactory& vf);
 
-   void schedule_block(Block& in_block, Shader::ShaderBlocks& out_blocks, ValueFactory& vf);
-
-   bool collect_ready(CollectInstructions &available);
+   bool collect_ready(CollectInstructions& available);
 
    template <typename T>
    bool collect_ready_type(std::list<T *>& ready, std::list<T *>& orig);
 
-   bool collect_ready_alu_vec(std::list<AluInstr *>& ready, std::list<AluInstr *>& available);
+   bool collect_ready_alu_vec(std::list<AluInstr *>& ready,
+                              std::list<AluInstr *>& available);
 
    bool schedule_tex(Shader::ShaderBlocks& out_blocks);
    bool schedule_vtx(Shader::ShaderBlocks& out_blocks);
@@ -179,13 +169,12 @@ private:
    bool schedule_alu_to_group_vec(AluGroup *group);
    bool schedule_alu_to_group_trans(AluGroup *group, std::list<AluInstr *>& readylist);
 
-   bool schedule_exports(Shader::ShaderBlocks& out_blocks, std::list<ExportInstr *>& ready_list);
+   bool schedule_exports(Shader::ShaderBlocks& out_blocks,
+                         std::list<ExportInstr *>& ready_list);
 
-   template <typename I>
-   bool schedule(std::list<I *>& ready_list);
+   template <typename I> bool schedule(std::list<I *>& ready_list);
 
-   template <typename I>
-   bool schedule_block(std::list<I *>& ready_list);
+   template <typename I> bool schedule_block(std::list<I *>& ready_list);
 
    std::list<AluInstr *> alu_vec_ready;
    std::list<AluInstr *> alu_trans_ready;
@@ -219,10 +208,10 @@ private:
    int m_lds_addr_count{0};
    int m_alu_groups_schduled{0};
    r600_chip_class m_chip_class;
-
 };
 
-Shader *schedule(Shader *original)
+Shader *
+schedule(Shader *original)
 {
    Block::set_chipclass(original->chip_class());
    AluGroup::set_chipclass(original->chip_class());
@@ -253,21 +242,22 @@ Shader *schedule(Shader *original)
 }
 
 BlockSheduler::BlockSheduler(r600_chip_class chip_class):
-   current_shed(sched_alu),
-   m_last_pos(nullptr),
-   m_last_pixel(nullptr),
-   m_last_param(nullptr),
-   m_current_block(nullptr),
-   m_chip_class(chip_class)
+    current_shed(sched_alu),
+    m_last_pos(nullptr),
+    m_last_pixel(nullptr),
+    m_last_param(nullptr),
+    m_current_block(nullptr),
+    m_chip_class(chip_class)
 {
 }
 
-void BlockSheduler::run( Shader *shader)
+void
+BlockSheduler::run(Shader *shader)
 {
    Shader::ShaderBlocks scheduled_blocks;
 
    for (auto& block : shader->func()) {
-      sfn_log << SfnLog::schedule  << "Process block " << block->id() <<"\n";
+      sfn_log << SfnLog::schedule << "Process block " << block->id() << "\n";
       if (sfn_log.has_debug_flag(SfnLog::schedule)) {
          std::stringstream ss;
          block->print(ss);
@@ -279,11 +269,13 @@ void BlockSheduler::run( Shader *shader)
    shader->reset_function(scheduled_blocks);
 }
 
-void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_blocks, ValueFactory& vf)
+void
+BlockSheduler::schedule_block(Block& in_block,
+                              Shader::ShaderBlocks& out_blocks,
+                              ValueFactory& vf)
 {
 
    assert(in_block.id() >= 0);
-
 
    current_shed = sched_fetch;
    auto last_shed = sched_fetch;
@@ -304,20 +296,17 @@ void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_bl
          sfn_log << SfnLog::schedule << "  ALU V:" << alu_vec_ready.size() << "\n";
 
       if (alu_trans_ready.size())
-         sfn_log << SfnLog::schedule <<  "  ALU T:" << alu_trans_ready.size() << "\n";
+         sfn_log << SfnLog::schedule << "  ALU T:" << alu_trans_ready.size() << "\n";
 
       if (alu_groups_ready.size())
          sfn_log << SfnLog::schedule << "  ALU G:" << alu_groups_ready.size() << "\n";
 
       if (exports_ready.size())
-         sfn_log << SfnLog::schedule << "  EXP:" << exports_ready.size()
-                 << "\n";
+         sfn_log << SfnLog::schedule << "  EXP:" << exports_ready.size() << "\n";
       if (tex_ready.size())
-         sfn_log << SfnLog::schedule << "  TEX:" << tex_ready.size()
-                 << "\n";
+         sfn_log << SfnLog::schedule << "  TEX:" << tex_ready.size() << "\n";
       if (fetches_ready.size())
-         sfn_log << SfnLog::schedule << "  FETCH:" << fetches_ready.size()
-                 << "\n";
+         sfn_log << SfnLog::schedule << "  FETCH:" << fetches_ready.size() << "\n";
       if (mem_ring_writes_ready.size())
          sfn_log << SfnLog::schedule << "  MEM_RING:" << mem_ring_writes_ready.size()
                  << "\n";
@@ -332,8 +321,8 @@ void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_bl
             current_shed = sched_mem_ring;
          else if (rat_instr_ready.size() > 3)
             current_shed = sched_rat;
-         else if (tex_ready.size() > 3)
-            current_shed = sched_tex;         
+         else if (tex_ready.size() > (m_chip_class >= ISA_CC_EVERGREEN ? 15 : 7))
+            current_shed = sched_tex;
       }
 
       switch (current_shed) {
@@ -367,7 +356,8 @@ void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_bl
          current_shed = sched_mem_ring;
          continue;
       case sched_mem_ring:
-         if (mem_ring_writes_ready.empty() || !schedule_cf(out_blocks, mem_ring_writes_ready)) {
+         if (mem_ring_writes_ready.empty() ||
+             !schedule_cf(out_blocks, mem_ring_writes_ready)) {
             current_shed = sched_write_tf;
             continue;
          }
@@ -382,9 +372,9 @@ void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_bl
          break;
       case sched_rat:
          if (rat_instr_ready.empty() || !schedule_cf(out_blocks, rat_instr_ready)) {
-             current_shed = sched_free;
-             continue;
-          }
+            current_shed = sched_free;
+            continue;
+         }
          last_shed = current_shed;
          break;
       case sched_free:
@@ -402,51 +392,51 @@ void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_bl
    while (collect_ready_type(exports_ready, cir.exports))
       schedule_exports(out_blocks, exports_ready);
 
-   bool fail = false;
+   ASSERTED bool fail = false;
 
    if (!cir.alu_groups.empty()) {
       std::cerr << "Unscheduled ALU groups:\n";
       for (auto& a : cir.alu_groups) {
-          std::cerr << "   " << *a << "\n";
+         std::cerr << "   " << *a << "\n";
       }
       fail = true;
    }
 
-   if (!cir.alu_vec.empty()){
+   if (!cir.alu_vec.empty()) {
       std::cerr << "Unscheduled ALU vec ops:\n";
       for (auto& a : cir.alu_vec) {
-          std::cerr << "   " << *a << "\n";
+         std::cerr << "   " << *a << "\n";
       }
       fail = true;
    }
 
-   if (!cir.alu_trans.empty()){
+   if (!cir.alu_trans.empty()) {
       std::cerr << "Unscheduled ALU trans ops:\n";
       for (auto& a : cir.alu_trans) {
-          std::cerr << "   " << *a << "\n";
+         std::cerr << "   " << *a << "\n";
       }
       fail = true;
    }
-   if (!cir.mem_write_instr.empty()){
+   if (!cir.mem_write_instr.empty()) {
       std::cerr << "Unscheduled MEM ops:\n";
       for (auto& a : cir.mem_write_instr) {
-          std::cerr << "   " << *a << "\n";
+         std::cerr << "   " << *a << "\n";
       }
       fail = true;
    }
 
-   if (!cir.fetches.empty()){
+   if (!cir.fetches.empty()) {
       std::cerr << "Unscheduled Fetch ops:\n";
       for (auto& a : cir.fetches) {
-          std::cerr << "   " << *a << "\n";
+         std::cerr << "   " << *a << "\n";
       }
       fail = true;
    }
 
-   if (!cir.tex.empty()){
+   if (!cir.tex.empty()) {
       std::cerr << "Unscheduled Tex ops:\n";
       for (auto& a : cir.tex) {
-          std::cerr << "   " << *a << "\n";
+         std::cerr << "   " << *a << "\n";
       }
       fail = true;
    }
@@ -458,7 +448,7 @@ void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_bl
    assert(cir.mem_write_instr.empty());
    assert(cir.mem_ring_writes.empty());
 
-   assert (!fail);
+   assert(!fail);
 
    if (cir.m_cf_instr) {
       // Assert that if condition is ready
@@ -469,7 +459,8 @@ void BlockSheduler::schedule_block(Block& in_block, Shader::ShaderBlocks& out_bl
    out_blocks.push_back(m_current_block);
 }
 
-void BlockSheduler::finalize()
+void
+BlockSheduler::finalize()
 {
    if (m_last_pos)
       m_last_pos->set_is_last_export(true);
@@ -479,18 +470,19 @@ void BlockSheduler::finalize()
       m_last_param->set_is_last_export(true);
 }
 
-bool BlockSheduler::schedule_alu(Shader::ShaderBlocks& out_blocks)
+bool
+BlockSheduler::schedule_alu(Shader::ShaderBlocks& out_blocks)
 {
    bool success = false;
    AluGroup *group = nullptr;
 
    bool has_alu_ready = !alu_vec_ready.empty() || !alu_trans_ready.empty();
 
-   bool has_lds_ready = !alu_vec_ready.empty() &&
-                        (*alu_vec_ready.begin())->has_lds_access();
+   bool has_lds_ready =
+      !alu_vec_ready.empty() && (*alu_vec_ready.begin())->has_lds_access();
 
    /* If we have ready ALU instructions we have to start a new ALU block */
-   if (has_alu_ready ||  !alu_groups_ready.empty()) {
+   if (has_alu_ready || !alu_groups_ready.empty()) {
       if (m_current_block->type() != Block::alu) {
          start_new_block(out_blocks, Block::alu);
          m_alu_groups_schduled = 0;
@@ -574,17 +566,16 @@ bool BlockSheduler::schedule_alu(Shader::ShaderBlocks& out_blocks)
       m_current_block->set_instr_flag(Instr::force_cf);
    }
 
-
    return success;
 }
 
-bool BlockSheduler::schedule_tex(Shader::ShaderBlocks& out_blocks)
+bool
+BlockSheduler::schedule_tex(Shader::ShaderBlocks& out_blocks)
 {
-   if (m_current_block->type() != Block::tex || m_current_block->remaining_slots() ==  0) {
+   if (m_current_block->type() != Block::tex || m_current_block->remaining_slots() == 0) {
       start_new_block(out_blocks, Block::tex);
       m_current_block->set_instr_flag(Instr::force_cf);
    }
-
 
    if (!tex_ready.empty() && m_current_block->remaining_slots() > 0) {
       auto ii = tex_ready.begin();
@@ -606,7 +597,8 @@ bool BlockSheduler::schedule_tex(Shader::ShaderBlocks& out_blocks)
    return false;
 }
 
-bool BlockSheduler::schedule_vtx(Shader::ShaderBlocks& out_blocks)
+bool
+BlockSheduler::schedule_vtx(Shader::ShaderBlocks& out_blocks)
 {
    if (m_current_block->type() != Block::vtx || m_current_block->remaining_slots() == 0) {
       start_new_block(out_blocks, Block::vtx);
@@ -616,7 +608,8 @@ bool BlockSheduler::schedule_vtx(Shader::ShaderBlocks& out_blocks)
 }
 
 template <typename I>
-bool BlockSheduler::schedule_gds(Shader::ShaderBlocks& out_blocks, std::list<I *>& ready_list)
+bool
+BlockSheduler::schedule_gds(Shader::ShaderBlocks& out_blocks, std::list<I *>& ready_list)
 {
    bool was_full = m_current_block->remaining_slots() == 0;
    if (m_current_block->type() != Block::gds || was_full) {
@@ -627,20 +620,22 @@ bool BlockSheduler::schedule_gds(Shader::ShaderBlocks& out_blocks, std::list<I *
    return schedule_block(ready_list);
 }
 
-
-void BlockSheduler::start_new_block(Shader::ShaderBlocks& out_blocks, Block::Type type)
+void
+BlockSheduler::start_new_block(Shader::ShaderBlocks& out_blocks, Block::Type type)
 {
    if (!m_current_block->empty()) {
       sfn_log << SfnLog::schedule << "Start new block\n";
       assert(!m_current_block->lds_group_active());
       out_blocks.push_back(m_current_block);
-      m_current_block = new Block(m_current_block->nesting_depth(), m_current_block->id());
+      m_current_block =
+         new Block(m_current_block->nesting_depth(), m_current_block->id());
    }
    m_current_block->set_type(type);
 }
 
 template <typename I>
-bool BlockSheduler::schedule_cf(Shader::ShaderBlocks& out_blocks, std::list<I *>& ready_list)
+bool
+BlockSheduler::schedule_cf(Shader::ShaderBlocks& out_blocks, std::list<I *>& ready_list)
 {
    if (ready_list.empty())
       return false;
@@ -649,20 +644,20 @@ bool BlockSheduler::schedule_cf(Shader::ShaderBlocks& out_blocks, std::list<I *>
    return schedule(ready_list);
 }
 
-
-bool BlockSheduler::schedule_alu_to_group_vec(AluGroup *group)
+bool
+BlockSheduler::schedule_alu_to_group_vec(AluGroup *group)
 {
    assert(group);
    assert(!alu_vec_ready.empty());
 
-   bool success =  false;
+   bool success = false;
    auto i = alu_vec_ready.begin();
    auto e = alu_vec_ready.end();
    while (i != e) {
       sfn_log << SfnLog::schedule << "Try schedule to vec " << **i;
 
       if (!m_current_block->try_reserve_kcache(**i)) {
-           sfn_log << SfnLog::schedule << " failed (kcache)\n";
+         sfn_log << SfnLog::schedule << " failed (kcache)\n";
          ++i;
          continue;
       }
@@ -685,17 +680,19 @@ bool BlockSheduler::schedule_alu_to_group_vec(AluGroup *group)
    return success;
 }
 
-bool BlockSheduler::schedule_alu_to_group_trans(AluGroup *group, std::list<AluInstr *>& readylist)
+bool
+BlockSheduler::schedule_alu_to_group_trans(AluGroup *group,
+                                           std::list<AluInstr *>& readylist)
 {
    assert(group);
 
-   bool success =  false;
+   bool success = false;
    auto i = readylist.begin();
    auto e = readylist.end();
    while (i != e) {
       sfn_log << SfnLog::schedule << "Try schedule to trans " << **i;
       if (!m_current_block->try_reserve_kcache(**i)) {
-           sfn_log << SfnLog::schedule << " failed (kcache)\n";
+         sfn_log << SfnLog::schedule << " failed (kcache)\n";
          ++i;
          continue;
       }
@@ -716,7 +713,8 @@ bool BlockSheduler::schedule_alu_to_group_trans(AluGroup *group, std::list<AluIn
 }
 
 template <typename I>
-bool BlockSheduler::schedule(std::list<I *>& ready_list)
+bool
+BlockSheduler::schedule(std::list<I *>& ready_list)
 {
    if (!ready_list.empty() && m_current_block->remaining_slots() > 0) {
       auto ii = ready_list.begin();
@@ -730,7 +728,8 @@ bool BlockSheduler::schedule(std::list<I *>& ready_list)
 }
 
 template <typename I>
-bool BlockSheduler::schedule_block(std::list<I *>& ready_list)
+bool
+BlockSheduler::schedule_block(std::list<I *>& ready_list)
 {
    bool success = false;
    while (!ready_list.empty() && m_current_block->remaining_slots() > 0) {
@@ -745,8 +744,9 @@ bool BlockSheduler::schedule_block(std::list<I *>& ready_list)
    return success;
 }
 
-
-bool BlockSheduler::schedule_exports(Shader::ShaderBlocks& out_blocks, std::list<ExportInstr *>& ready_list)
+bool
+BlockSheduler::schedule_exports(Shader::ShaderBlocks& out_blocks,
+                                std::list<ExportInstr *>& ready_list)
 {
    if (m_current_block->type() != Block::cf)
       start_new_block(out_blocks, Block::cf);
@@ -757,9 +757,15 @@ bool BlockSheduler::schedule_exports(Shader::ShaderBlocks& out_blocks, std::list
       (*ii)->set_scheduled();
       m_current_block->push_back(*ii);
       switch ((*ii)->export_type()) {
-      case ExportInstr::pos: m_last_pos = *ii; break;
-      case ExportInstr::param: m_last_param = *ii; break;
-      case ExportInstr::pixel: m_last_pixel = *ii; break;
+      case ExportInstr::pos:
+         m_last_pos = *ii;
+         break;
+      case ExportInstr::param:
+         m_last_param = *ii;
+         break;
+      case ExportInstr::pixel:
+         m_last_pixel = *ii;
+         break;
       }
       (*ii)->set_is_last_export(false);
       ready_list.erase(ii);
@@ -768,7 +774,8 @@ bool BlockSheduler::schedule_exports(Shader::ShaderBlocks& out_blocks, std::list
    return false;
 }
 
-bool BlockSheduler::collect_ready(CollectInstructions &available)
+bool
+BlockSheduler::collect_ready(CollectInstructions& available)
 {
    sfn_log << SfnLog::schedule << "Ready instructions\n";
    bool result = false;
@@ -787,7 +794,9 @@ bool BlockSheduler::collect_ready(CollectInstructions &available)
    return result;
 }
 
-bool BlockSheduler::collect_ready_alu_vec(std::list<AluInstr *>& ready, std::list<AluInstr *>& available)
+bool
+BlockSheduler::collect_ready_alu_vec(std::list<AluInstr *>& ready,
+                                     std::list<AluInstr *>& available)
 {
    auto i = available.begin();
    auto e = available.end();
@@ -802,10 +811,10 @@ bool BlockSheduler::collect_ready_alu_vec(std::list<AluInstr *>& ready, std::lis
 
          int priority = 0;
          /* LDS fetches that use static offsets are usually ready ery fast,
-          * so that they would get schedules early, and this leaves the problem
-          * that we allocate too many registers with just constant values,
-          * and this will make problems wih RA. So limit the number of LDS
-          * address registers.
+          * so that they would get schedules early, and this leaves the
+          * problem that we allocate too many registers with just constant
+          * values, and this will make problems wih RA. So limit the number of
+          * LDS address registers.
           */
          if ((*i)->has_alu_flag(alu_lds_address)) {
             if (m_lds_addr_count > 64) {
@@ -823,7 +832,7 @@ bool BlockSheduler::collect_ready_alu_vec(std::list<AluInstr *>& ready, std::lis
           * for everything else we look at the register use */
 
          if ((*i)->has_lds_access())
-             priority = 100000;
+            priority = 100000;
          else if (AluGroup::has_t()) {
             auto opinfo = alu_ops.find((*i)->opcode());
             assert(opinfo != alu_ops.end());
@@ -844,77 +853,65 @@ bool BlockSheduler::collect_ready_alu_vec(std::list<AluInstr *>& ready, std::lis
          ++i;
    }
 
-   for (auto& i: ready)
+   for (auto& i : ready)
       sfn_log << SfnLog::schedule << "V:  " << *i << "\n";
 
    ready.sort([](const AluInstr *lhs, const AluInstr *rhs) {
-                 return lhs->priority() > rhs->priority();});
+      return lhs->priority() > rhs->priority();
+   });
 
-   for (auto& i: ready)
+   for (auto& i : ready)
       sfn_log << SfnLog::schedule << "V (S):  " << *i << "\n";
 
    return !ready.empty();
 }
 
-template <typename T>
-struct type_char {
-
+template <typename T> struct type_char {
 };
 
-
-template <>
-struct type_char<AluInstr> {
+template <> struct type_char<AluInstr> {
    static constexpr const char value = 'A';
 };
 
-template <>
-struct type_char<AluGroup>  {
+template <> struct type_char<AluGroup> {
    static constexpr const char value = 'G';
 };
 
-template <>
-struct type_char<ExportInstr>  {
+template <> struct type_char<ExportInstr> {
    static constexpr const char value = 'E';
 };
 
-template <>
-struct type_char<TexInstr>  {
+template <> struct type_char<TexInstr> {
    static constexpr const char value = 'T';
 };
 
-template <>
-struct type_char<FetchInstr>  {
+template <> struct type_char<FetchInstr> {
    static constexpr const char value = 'F';
 };
 
-template <>
-struct type_char<WriteOutInstr>  {
+template <> struct type_char<WriteOutInstr> {
    static constexpr const char value = 'M';
 };
 
-template <>
-struct type_char<MemRingOutInstr>  {
+template <> struct type_char<MemRingOutInstr> {
    static constexpr const char value = 'R';
 };
 
-template <>
-struct type_char<WriteTFInstr>  {
+template <> struct type_char<WriteTFInstr> {
    static constexpr const char value = 'X';
 };
 
-template <>
-struct type_char<GDSInstr>  {
+template <> struct type_char<GDSInstr> {
    static constexpr const char value = 'S';
 };
 
-template <>
-struct type_char<RatInstr>  {
+template <> struct type_char<RatInstr> {
    static constexpr const char value = 'I';
 };
 
-
 template <typename T>
-bool BlockSheduler::collect_ready_type(std::list<T *>& ready, std::list<T *>& available)
+bool
+BlockSheduler::collect_ready_type(std::list<T *>& ready, std::list<T *>& available)
 {
    auto i = available.begin();
    auto e = available.end();
@@ -930,10 +927,10 @@ bool BlockSheduler::collect_ready_type(std::list<T *>& ready, std::list<T *>& av
          ++i;
    }
 
-   for (auto& i: ready)
+   for (auto& i : ready)
       sfn_log << SfnLog::schedule << type_char<T>::value << ";  " << *i << "\n";
 
    return !ready.empty();
 }
 
-}
+} // namespace r600

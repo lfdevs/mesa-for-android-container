@@ -25,15 +25,10 @@
 #include "nir.h"
 #include "nir_builder.h"
 
-typedef struct {
-   nir_shader *shader;
-   nir_builder b;
-} lower_state;
-
 static bool
-is_color_output(lower_state *state, nir_variable *out)
+is_color_output(nir_shader *shader, nir_variable *out)
 {
-   switch (state->shader->info.stage) {
+   switch (shader->info.stage) {
    case MESA_SHADER_VERTEX:
    case MESA_SHADER_GEOMETRY:
    case MESA_SHADER_TESS_EVAL:
@@ -56,10 +51,9 @@ is_color_output(lower_state *state, nir_variable *out)
 }
 
 static bool
-lower_intrinsic(lower_state *state, nir_intrinsic_instr *intr)
+lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr, nir_shader *shader)
 {
    nir_variable *out = NULL;
-   nir_builder *b = &state->b;
    nir_ssa_def *s;
 
    switch (intr->intrinsic) {
@@ -68,7 +62,7 @@ lower_intrinsic(lower_state *state, nir_intrinsic_instr *intr)
       break;
    case nir_intrinsic_store_output:
       /* already had i/o lowered.. lookup the matching output var: */
-      nir_foreach_shader_out_variable(var, state->shader) {
+      nir_foreach_shader_out_variable(var, shader) {
          int drvloc = var->data.driver_location;
          if (nir_intrinsic_base(intr) == drvloc) {
             out = var;
@@ -84,7 +78,7 @@ lower_intrinsic(lower_state *state, nir_intrinsic_instr *intr)
    if (out->data.mode != nir_var_shader_out)
       return false;
 
-   if (is_color_output(state, out)) {
+   if (is_color_output(shader, out)) {
       b->cursor = nir_before_instr(&intr->instr);
       int src = intr->intrinsic == nir_intrinsic_store_deref ? 1 : 0;
       s = nir_ssa_for_src(b, intr->src[src], intr->num_components);
@@ -96,45 +90,18 @@ lower_intrinsic(lower_state *state, nir_intrinsic_instr *intr)
 }
 
 static bool
-lower_block(lower_state *state, nir_block *block)
+lower_instr(nir_builder *b, nir_instr *instr, void *cb_data)
 {
-   bool progress = false;
-
-   nir_foreach_instr_safe(instr, block) {
-      if (instr->type == nir_instr_type_intrinsic)
-         progress |= lower_intrinsic(state, nir_instr_as_intrinsic(instr));
-   }
-
-   return progress;
-}
-
-static bool
-lower_impl(lower_state *state, nir_function_impl *impl)
-{
-   nir_builder_init(&state->b, impl);
-   bool progress = false;
-
-   nir_foreach_block(block, impl) {
-      progress |= lower_block(state, block);
-   }
-   nir_metadata_preserve(impl, nir_metadata_block_index |
-                               nir_metadata_dominance);
-
-   return progress;
+   if (instr->type == nir_instr_type_intrinsic)
+      return lower_intrinsic(b, nir_instr_as_intrinsic(instr), cb_data);
+   return false;
 }
 
 bool
 nir_lower_clamp_color_outputs(nir_shader *shader)
 {
-   bool progress = false;
-   lower_state state = {
-      .shader = shader,
-   };
-
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= lower_impl(&state, function->impl);
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, lower_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       shader);
 }

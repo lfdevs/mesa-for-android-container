@@ -448,8 +448,13 @@ wsi_win32_surface_create_swapchain(
    if (chain == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+   struct wsi_cpu_image_params image_params = {
+      .base.image_type = WSI_IMAGE_TYPE_CPU,
+   };
+
    VkResult result = wsi_swapchain_init(wsi_device, &chain->base, device,
-                                        create_info, allocator, false);
+                                        create_info, &image_params.base,
+                                        allocator);
    if (result != VK_SUCCESS) {
       vk_free(allocator, chain);
       return result;
@@ -471,12 +476,6 @@ wsi_win32_surface_create_swapchain(
    assert(wsi_device->sw);
    chain->base.use_buffer_blit = true;
 
-   result = wsi_configure_cpu_image(&chain->base, create_info, NULL /*alloc_shm*/, &chain->base.image_info);
-   if (result != VK_SUCCESS) {
-      vk_free(allocator, chain);
-      goto fail_init_images;
-   }
-
    for (uint32_t image = 0; image < chain->base.image_count; image++) {
       result = wsi_win32_image_init(device, chain,
                                     create_info, allocator,
@@ -487,7 +486,7 @@ wsi_win32_surface_create_swapchain(
             wsi_win32_image_finish(chain, allocator,
                                    &chain->images[image]);
          }
-         wsi_destroy_image_info(&chain->base, &chain->base.image_info);
+         wsi_swapchain_finish(&chain->base);
          vk_free(allocator, chain);
          goto fail_init_images;
       }

@@ -24,31 +24,8 @@
  *    Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
  */
 
-#include "util/u_dynarray.h"
-#include "pipe/p_state.h"
-#include <vulkan/vulkan.h>
 #include "util/u_rect.h"
-
-struct zink_context;
-struct zink_resource;
-
-struct zink_framebuffer_clear_data {
-   union {
-      union pipe_color_union color;
-      struct {
-         float depth;
-         unsigned stencil;
-         uint8_t bits : 2; // PIPE_CLEAR_DEPTH, PIPE_CLEAR_STENCIL
-      } zs;
-   };
-   struct pipe_scissor_state scissor;
-   bool has_scissor;
-   bool conditional;
-};
-
-struct zink_framebuffer_clear {
-   struct util_dynarray clears;
-};
+#include "zink_types.h"
 
 void
 zink_clear(struct pipe_context *pctx,
@@ -112,6 +89,13 @@ zink_fb_clear_element_needs_explicit(struct zink_framebuffer_clear_data *clear)
    return clear->has_scissor || clear->conditional;
 }
 
+static inline bool
+zink_fb_clear_full_exists(struct zink_context *ctx, unsigned clear_buffer)
+{
+   struct zink_framebuffer_clear *fb_clear = &ctx->fb_clears[clear_buffer];
+   return zink_fb_clear_count(fb_clear) && !zink_fb_clear_first_needs_explicit(fb_clear);
+}
+
 void
 zink_clear_apply_conditionals(struct zink_context *ctx);
 
@@ -126,3 +110,6 @@ zink_fb_clears_apply_or_discard(struct zink_context *ctx, struct pipe_resource *
 
 void
 zink_fb_clears_apply_region(struct zink_context *ctx, struct pipe_resource *pres, struct u_rect region);
+
+void
+zink_fb_clear_rewrite(struct zink_context *ctx, unsigned idx, enum pipe_format before, enum pipe_format after);

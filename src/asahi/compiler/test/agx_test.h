@@ -58,12 +58,18 @@ agx_test_builder(void *memctx)
 static inline bool
 agx_instr_equal(agx_instr *A, agx_instr *B)
 {
-   unsigned pointers = sizeof(struct list_head) + sizeof(agx_index *);
+   unsigned pointers = sizeof(struct list_head) + sizeof(agx_index *) * 2;
 
    if (A->nr_srcs != B->nr_srcs)
       return false;
 
    if (memcmp(A->src, B->src, A->nr_srcs * sizeof(agx_index)))
+      return false;
+
+   if (A->nr_dests != B->nr_dests)
+      return false;
+
+   if (memcmp(A->dest, B->dest, A->nr_dests * sizeof(agx_index)))
       return false;
 
    return memcmp((uint8_t *) A    + pointers,

@@ -8,10 +8,20 @@
 
 #include "tu_common.h"
 
+#include "vk_descriptor_set_layout.h"
+
 /* The hardware supports 5 descriptor sets, but we reserve 1 for dynamic
  * descriptors and input attachments.
  */
 #define MAX_SETS 4
+
+/* I have no idea what the maximum size is, but the hardware supports very
+ * large numbers of descriptors (at least 2^16). This limit is based on
+ * CP_LOAD_STATE6, which has a 28-bit field for the DWORD offset, so that
+ * we don't have to think about what to do if that overflows, but really
+ * nothing is likely to get close to this.
+ */
+#define MAX_SET_SIZE ((1 << 28) * 4)
 
 struct tu_descriptor_set_binding_layout
 {
@@ -44,10 +54,7 @@ struct tu_descriptor_set_binding_layout
 
 struct tu_descriptor_set_layout
 {
-   struct vk_object_base base;
-
-   /* Descriptor set layouts can be destroyed at almost any time */
-   uint32_t ref_cnt;
+   struct vk_descriptor_set_layout vk;
 
    /* The create flags for this descriptor set layout */
    VkDescriptorSetLayoutCreateFlags flags;
@@ -66,11 +73,12 @@ struct tu_descriptor_set_layout
 
    bool has_immutable_samplers;
    bool has_variable_descriptors;
+   bool has_inline_uniforms;
 
    /* Bindings in this descriptor set */
    struct tu_descriptor_set_binding_layout binding[0];
 };
-VK_DEFINE_NONDISP_HANDLE_CASTS(tu_descriptor_set_layout, base,
+VK_DEFINE_NONDISP_HANDLE_CASTS(tu_descriptor_set_layout, vk.base,
                                VkDescriptorSetLayout,
                                VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT)
 
@@ -85,6 +93,8 @@ struct tu_pipeline_layout
       uint32_t dynamic_offset_start;
    } set[MAX_SETS];
 
+   bool independent_sets;
+
    uint32_t num_sets;
    uint32_t push_constant_size;
    uint32_t dynamic_offset_size;
@@ -93,6 +103,8 @@ struct tu_pipeline_layout
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(tu_pipeline_layout, base, VkPipelineLayout,
                                VK_OBJECT_TYPE_PIPELINE_LAYOUT)
+
+void tu_pipeline_layout_init(struct tu_pipeline_layout *layout);
 
 struct tu_descriptor_set
 {
@@ -106,7 +118,13 @@ struct tu_descriptor_set
    uint32_t size;
 
    uint64_t va;
+   /* Pointer to the GPU memory for the set for non-push descriptors, or pointer
+    * to a host memory copy for push descriptors.
+    */
    uint32_t *mapped_ptr;
+
+   /* Size of the host memory allocation for push descriptors */
+   uint32_t host_size;
 
    uint32_t *dynamic_descriptors;
 };
@@ -193,25 +211,6 @@ struct tu_sampler_ycbcr_conversion {
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(tu_sampler_ycbcr_conversion, base, VkSamplerYcbcrConversion,
                                VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION)
-
-void tu_descriptor_set_layout_destroy(struct tu_device *device,
-                                      struct tu_descriptor_set_layout *layout);
-
-static inline void
-tu_descriptor_set_layout_ref(struct tu_descriptor_set_layout *layout)
-{
-   assert(layout && layout->ref_cnt >= 1);
-   p_atomic_inc(&layout->ref_cnt);
-}
-
-static inline void
-tu_descriptor_set_layout_unref(struct tu_device *device,
-                               struct tu_descriptor_set_layout *layout)
-{
-   assert(layout && layout->ref_cnt >= 1);
-   if (p_atomic_dec_zero(&layout->ref_cnt))
-      tu_descriptor_set_layout_destroy(device, layout);
-}
 
 void
 tu_update_descriptor_sets(const struct tu_device *device,

@@ -47,27 +47,6 @@ static void translate_ubyte_ushort( const void *in,
       out_us[i] = (ushort) in_ub[i+start];
 }
 
-static void translate_memcpy_ushort( const void *in,
-                                     unsigned start,
-                                     unsigned in_nr,
-                                     unsigned out_nr,
-                                     unsigned restart_index,
-                                     void *out )
-{
-   memcpy(out, &((short *)in)[start], out_nr*sizeof(short));
-}
-
-static void translate_memcpy_uint( const void *in,
-                                   unsigned start,
-                                   unsigned in_nr,
-                                   unsigned out_nr,
-                                   unsigned restart_index,
-                                   void *out )
-{
-   memcpy(out, &((int *)in)[start], out_nr*sizeof(int));
-}
-
-
 static void generate_linear_ushort( unsigned start,
                                     unsigned nr,
                                     void *out )

@@ -52,8 +52,6 @@
 #include "st_sampler_view.h"
 #include "st_util.h"
 
-#include "state_tracker/st_gl_api.h"
-
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 #include "util/format/u_format.h"
@@ -290,6 +288,14 @@ st_framebuffer_validate(struct gl_framebuffer *stfb,
    }
 }
 
+/**
+ * Return true if the visual has the specified buffers.
+ */
+static inline bool
+st_visual_have_buffers(const struct st_visual *visual, unsigned mask)
+{
+   return ((visual->buffer_mask & mask) == mask);
+}
 
 /**
  * Update the attachments to validate by looping the existing renderbuffers.
@@ -739,9 +745,8 @@ unlock:
  * The framebuffer interface object is no longer valid.
  * Remove the object from the framebuffer interface hash table.
  */
-static void
-st_api_destroy_drawable(struct st_api *stapi,
-                        struct st_framebuffer_iface *stfbi)
+void
+st_api_destroy_drawable(struct st_framebuffer_iface *stfbi)
 {
    if (!stfbi)
       return;
@@ -900,6 +905,7 @@ st_context_teximage(struct st_context_iface *stctxi,
       _mesa_clear_texture_image(ctx, texImage);
       width = height = depth = 0;
    }
+   _mesa_update_texture_object_swizzle(ctx, texObj);
 
    pipe_resource_reference(&texObj->pt, tex);
    st_texture_release_all_sampler_views(st, texObj);
@@ -996,8 +1002,8 @@ st_manager_destroy(struct st_manager *smapi)
 }
 
 
-static struct st_context_iface *
-st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
+struct st_context_iface *
+st_api_create_context(struct st_manager *smapi,
                       const struct st_context_attribs *attribs,
                       enum st_context_error *error,
                       struct st_context_iface *shared_stctxi)
@@ -1010,7 +1016,7 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    bool no_error = false;
    unsigned ctx_flags = PIPE_CONTEXT_PREFER_THREADED;
 
-   if (!(stapi->profile_mask & (1 << attribs->profile)))
+   if (!(ST_PROFILE_ALL_MASK & (1 << attribs->profile)))
       return NULL;
 
    switch (attribs->profile) {
@@ -1061,6 +1067,9 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
 
    if (attribs->flags & ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED)
       ctx_flags |= PIPE_CONTEXT_LOSE_CONTEXT_ON_RESET;
+
+   if (attribs->flags & ST_CONTEXT_FLAG_PROTECTED)
+      ctx_flags |= PIPE_CONTEXT_PROTECTED;
 
    pipe = smapi->screen->context_create(smapi->screen, NULL, ctx_flags);
    if (!pipe) {
@@ -1145,8 +1154,8 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
 }
 
 
-static struct st_context_iface *
-st_api_get_current(struct st_api *stapi)
+struct st_context_iface *
+st_api_get_current(void)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct st_context *st = ctx ? ctx->st : NULL;
@@ -1199,8 +1208,8 @@ st_framebuffer_reuse_or_create(struct st_context *st,
 }
 
 
-static bool
-st_api_make_current(struct st_api *stapi, struct st_context_iface *stctxi,
+bool
+st_api_make_current(struct st_context_iface *stctxi,
                     struct st_framebuffer_iface *stdrawi,
                     struct st_framebuffer_iface *streadi)
 {
@@ -1269,12 +1278,6 @@ st_api_make_current(struct st_api *stapi, struct st_context_iface *stctxi,
    }
 
    return ret;
-}
-
-
-static void
-st_api_destroy(struct st_api *stapi)
-{
 }
 
 
@@ -1432,8 +1435,8 @@ get_version(struct pipe_screen *screen,
 }
 
 
-static void
-st_api_query_versions(struct st_api *stapi, struct st_manager *sm,
+void
+st_api_query_versions(struct st_manager *sm,
                       struct st_config_options *options,
                       int *gl_core_version,
                       int *gl_compat_version,
@@ -1446,30 +1449,6 @@ st_api_query_versions(struct st_api *stapi, struct st_manager *sm,
    *gl_es2_version = get_version(sm->screen, options, API_OPENGLES2);
 }
 
-
-static const struct st_api st_gl_api = {
-   .name = "Mesa " PACKAGE_VERSION,
-   .api = ST_API_OPENGL,
-   .profile_mask = ST_PROFILE_DEFAULT_MASK |
-                   ST_PROFILE_OPENGL_CORE_MASK |
-                   ST_PROFILE_OPENGL_ES1_MASK |
-                   ST_PROFILE_OPENGL_ES2_MASK |
-                   0,
-   .feature_mask = ST_API_FEATURE_MS_VISUALS_MASK,
-   .destroy = st_api_destroy,
-   .query_versions = st_api_query_versions,
-   .create_context = st_api_create_context,
-   .make_current = st_api_make_current,
-   .get_current = st_api_get_current,
-   .destroy_drawable = st_api_destroy_drawable,
-};
-
-
-struct st_api *
-st_gl_api_create(void)
-{
-   return (struct st_api *) &st_gl_api;
-}
 
 void
 st_manager_invalidate_drawables(struct gl_context *ctx)

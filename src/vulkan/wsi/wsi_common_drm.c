@@ -317,7 +317,7 @@ wsi_create_native_image_mem(const struct wsi_swapchain *chain,
                             const struct wsi_image_info *info,
                             struct wsi_image *image);
 
-VkResult
+static VkResult
 wsi_configure_native_image(const struct wsi_swapchain *chain,
                            const VkSwapchainCreateInfoKHR *pCreateInfo,
                            uint32_t num_modifier_lists,
@@ -391,6 +391,12 @@ wsi_configure_native_image(const struct wsi_swapchain *chain,
             format_list.pNext = NULL;
             __vk_append_struct(&format_info, &format_list);
          }
+
+         struct wsi_image_create_info wsi_info = (struct wsi_image_create_info) {
+            .sType = VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA,
+            .pNext = NULL,
+         };
+         __vk_append_struct(&format_info, &wsi_info);
 
          VkImageFormatProperties2 format_props = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
@@ -591,10 +597,11 @@ wsi_create_prime_image_mem(const struct wsi_swapchain *chain,
    return VK_SUCCESS;
 }
 
-VkResult
+static VkResult
 wsi_configure_prime_image(UNUSED const struct wsi_swapchain *chain,
                           const VkSwapchainCreateInfoKHR *pCreateInfo,
                           bool use_modifier,
+                          wsi_memory_type_select_cb select_buffer_memory_type,
                           struct wsi_image_info *info)
 {
    VkResult result =
@@ -607,8 +614,45 @@ wsi_configure_prime_image(UNUSED const struct wsi_swapchain *chain,
    info->prime_use_linear_modifier = use_modifier;
 
    info->create_mem = wsi_create_prime_image_mem;
-   info->select_buffer_memory_type = prime_select_buffer_memory_type;
+   info->select_buffer_memory_type = select_buffer_memory_type;
    info->select_image_memory_type = wsi_select_device_memory_type;
 
    return VK_SUCCESS;
+}
+
+bool
+wsi_drm_image_needs_buffer_blit(const struct wsi_device *wsi,
+                                const struct wsi_drm_image_params *params)
+{
+   if (!params->same_gpu)
+      return true;
+
+   if (params->num_modifier_lists > 0 || wsi->supports_scanout)
+      return false;
+
+   return true;
+}
+
+VkResult
+wsi_drm_configure_image(const struct wsi_swapchain *chain,
+                        const VkSwapchainCreateInfoKHR *pCreateInfo,
+                        const struct wsi_drm_image_params *params,
+                        struct wsi_image_info *info)
+{
+   assert(params->base.image_type == WSI_IMAGE_TYPE_DRM);
+
+   if (chain->use_buffer_blit) {
+      bool use_modifier = params->num_modifier_lists > 0;
+      wsi_memory_type_select_cb select_buffer_memory_type =
+         params->same_gpu ? wsi_select_device_memory_type :
+                            prime_select_buffer_memory_type;
+      return wsi_configure_prime_image(chain, pCreateInfo, use_modifier,
+                                       select_buffer_memory_type, info);
+   } else {
+      return wsi_configure_native_image(chain, pCreateInfo,
+                                        params->num_modifier_lists,
+                                        params->num_modifiers,
+                                        params->modifiers,
+                                        info);
+   }
 }

@@ -86,3 +86,6 @@ class marshal_function(gl_XML.gl_function):
                 # written logic to handle this yet.  TODO: fix.
                 return 'sync'
         return 'async'
+
+    def marshal_is_static(self):
+        return self.marshal_flavor() != 'custom' and self.name[0:8] != 'Internal'

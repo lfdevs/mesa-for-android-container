@@ -3,8 +3,7 @@ glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
-# X error 167 (GLXBadFBConfig (9)) was generated, but X error 8 was expected.
-glx@glx_arb_create_context_no_error@no error,Crash
+glx@glx_arb_create_context_no_error@no error,Fail
 glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
 glx@glx_ext_import_context@get current display,Fail
@@ -16,7 +15,6 @@ glx@glx_ext_import_context@make current- single process,Fail
 glx@glx_ext_import_context@query context info,Fail
 shaders@glsl-bug-110796,Fail
 spec@!opengl 1.0@gl-1.0-bitmap-heart-dance,Fail
-spec@!opengl 1.0@gl-1.0-dlist-bitmap,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
@@ -356,3 +354,9 @@ spec@!opengl 2.0@max-samplers border,Fail
 
 # https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3759
 dEQP-VK.pipeline.monolithic.color_write_enable_maxa.cwe_after_bind.attachments4_more0,Crash
+
+# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3913
+dEQP-VK.compute.workgroup_memory_explicit_layout.copy_memory.two_invocations,Crash
+dEQP-VK.compute.workgroup_memory_explicit_layout.zero_ext.block,Crash
+dEQP-VK.compute.workgroup_memory_explicit_layout.zero_ext.other_block,Crash
+dEQP-VK.compute.workgroup_memory_explicit_layout.zero_ext.block_with_offset,Crash

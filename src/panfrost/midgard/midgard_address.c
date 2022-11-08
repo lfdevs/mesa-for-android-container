@@ -256,9 +256,13 @@ mir_set_offset(compiler_context *ctx, midgard_instruction *ins, nir_src *offset,
         struct mir_address match = mir_match_offset(offset->ssa, first_free, true);
 
         if (match.A.def) {
+                unsigned bitsize = match.A.def->bit_size;
+                assert(bitsize == 32 || bitsize == 64);
+
                 ins->src[1] = nir_ssa_index(match.A.def);
                 ins->swizzle[1][0] = match.A.comp;
-                ins->src_types[1] = nir_type_uint | match.A.def->bit_size;
+                ins->src_types[1] = nir_type_uint | bitsize;
+                ins->load_store.bitsize_toggle = (bitsize == 64);
         } else {
                 ins->load_store.bitsize_toggle = true;
                 ins->load_store.arg_comp = seg & 0x3;

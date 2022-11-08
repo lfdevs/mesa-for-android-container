@@ -74,6 +74,7 @@ dEQP-VK.ssbo.phys.layout.3*
 dEQP-VK.ssbo.phys.layout.basic_unsized_array*
 dEQP-VK.ssbo.phys.layout.single_struct_array*
 dEQP-VK.synchronization.basic.timeline_semaphore.chain
+dEQP-VK.synchronization2.basic.timeline_semaphore.chain
 dEQP-VK.texture.explicit_lod.2d.sizes.128x128_linear_linear_mipmap_linear_clamp
 dEQP-VK.texture.explicit_lod.2d.sizes.128x128_linear_linear_mipmap_linear_repeat
 dEQP-VK.texture.explicit_lod.2d.sizes.128x128_nearest_linear_mipmap_linear_clamp

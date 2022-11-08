@@ -32,7 +32,7 @@
 #include "util/hash_table.h"
 #include "util/bitset.h"
 
-#include "drm-uapi/i915_drm.h"
+#include "common/intel_engine.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,7 +43,7 @@ struct intel_group;
 struct intel_field;
 union intel_field_value;
 
-#define I915_ENGINE_CLASS_TO_MASK(x) BITSET_BIT(x)
+#define INTEL_ENGINE_CLASS_TO_MASK(x) BITSET_BIT(x)
 
 static inline uint32_t intel_make_gen(uint32_t major, uint32_t minor)
 {
@@ -59,7 +59,7 @@ struct intel_spec *intel_spec_load_filename(const char *filename);
 void intel_spec_destroy(struct intel_spec *spec);
 uint32_t intel_spec_get_gen(struct intel_spec *spec);
 struct intel_group *intel_spec_find_instruction(struct intel_spec *spec,
-                                                enum drm_i915_gem_engine_class engine,
+                                                enum intel_engine_class engine,
                                                 const uint32_t *p);
 struct intel_group *intel_spec_find_register(struct intel_spec *spec, uint32_t offset);
 struct intel_group *intel_spec_find_register_by_name(struct intel_spec *spec, const char *name);
@@ -251,7 +251,7 @@ struct intel_batch_decode_ctx {
 
    int max_vbo_decoded_lines;
 
-   enum drm_i915_gem_engine_class engine;
+   enum intel_engine_class engine;
 
    int n_batch_buffer_start;
    uint64_t acthd;

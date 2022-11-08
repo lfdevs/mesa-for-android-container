@@ -1,4 +1,4 @@
-uint64_t gk104_builtin_code[] = {
+const uint64_t gk104_builtin_code[] = {
 /* 0x0000: gk104_div_u32 */
 	0x2282828042804287,
 	0x7800000004009c03,
@@ -710,7 +710,7 @@ uint64_t gk104_builtin_code[] = {
 	0xa000000000000007,
 };
 
-uint64_t gk104_builtin_offsets[] = {
+const uint64_t gk104_builtin_offsets[] = {
 	0x0000000000000000,
 	0x00000000000000f0,
 	0x0000000000000f18,

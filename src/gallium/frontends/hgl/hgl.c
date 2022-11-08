@@ -16,7 +16,6 @@
 #include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
-#include "state_tracker/st_gl_api.h" /* for st_gl_api_create */
 
 #include "GLView.h"
 
@@ -273,14 +272,6 @@ hgl_destroy_st_framebuffer(struct hgl_buffer *buffer)
 }
 
 
-struct st_api*
-hgl_create_st_api()
-{
-	CALLED();
-	return st_gl_api_create();
-}
-
-
 struct st_visual*
 hgl_create_st_visual(ulong options)
 {
@@ -350,7 +341,6 @@ hgl_create_display(struct pipe_screen* screen)
 
 	display = CALLOC_STRUCT(hgl_display);
 	assert(display);
-	display->api = st_gl_api_create();
 	display->manager = CALLOC_STRUCT(st_manager);
 	assert(display->manager);
 	display->manager->screen = screen;
@@ -367,7 +357,5 @@ hgl_destroy_display(struct hgl_display *display)
 	if (display->manager->destroy)
 		display->manager->destroy(display->manager);
 	FREE(display->manager);
-	if (display->api->destroy)
-		display->api->destroy(display->api);
 	FREE(display);
 }

@@ -31,6 +31,7 @@
 #include "nv30/nv30-40_3d.xml.h"
 #include "nv30/nv30_context.h"
 #include "nv30/nv30_format.h"
+#include "nv30/nv30_winsys.h"
 
 static void
 nv30_validate_fb(struct nv30_context *nv30)
@@ -457,13 +458,11 @@ nv30_state_context_switch(struct nv30_context *nv30)
       nv30->dirty &= ~NV30_NEW_ZSA;
 
    nv30->screen->cur_ctx = nv30;
-   nv30->base.pushbuf->user_priv = &nv30->bufctx;
 }
 
 bool
 nv30_state_validate(struct nv30_context *nv30, uint32_t mask, bool hwtnl)
 {
-   struct nouveau_screen *screen = &nv30->screen->base;
    struct nouveau_pushbuf *push = nv30->base.pushbuf;
    struct nouveau_bufctx *bctx = nv30->bufctx;
    struct nouveau_bufref *bref;
@@ -499,7 +498,7 @@ nv30_state_validate(struct nv30_context *nv30, uint32_t mask, bool hwtnl)
    }
 
    nouveau_pushbuf_bufctx(push, bctx);
-   if (nouveau_pushbuf_validate(push)) {
+   if (PUSH_VAL(push)) {
       nouveau_pushbuf_bufctx(push, NULL);
       return false;
    }
@@ -523,13 +522,13 @@ nv30_state_validate(struct nv30_context *nv30, uint32_t mask, bool hwtnl)
    LIST_FOR_EACH_ENTRY(bref, &bctx->current, thead) {
       struct nv04_resource *res = bref->priv;
       if (res && res->mm) {
-         nouveau_fence_ref(screen->fence.current, &res->fence);
+         nouveau_fence_ref(nv30->base.fence, &res->fence);
 
          if (bref->flags & NOUVEAU_BO_RD)
             res->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
 
          if (bref->flags & NOUVEAU_BO_WR) {
-            nouveau_fence_ref(screen->fence.current, &res->fence_wr);
+            nouveau_fence_ref(nv30->base.fence, &res->fence_wr);
             res->status |= NOUVEAU_BUFFER_STATUS_GPU_WRITING;
          }
       }

@@ -335,13 +335,14 @@ fs_generator::generate_send(fs_inst *inst,
    uint32_t ex_desc_imm = inst->ex_desc |
       brw_message_ex_desc(devinfo, inst->ex_mlen);
 
-   if (ex_desc.file != BRW_IMMEDIATE_VALUE || ex_desc.ud || ex_desc_imm) {
+   if (ex_desc.file != BRW_IMMEDIATE_VALUE || ex_desc.ud || ex_desc_imm ||
+       inst->send_ex_desc_scratch) {
       /* If we have any sort of extended descriptor, then we need SENDS.  This
        * also covers the dual-payload case because ex_mlen goes in ex_desc.
        */
       brw_send_indirect_split_message(p, inst->sfid, dst, payload, payload2,
                                       desc, desc_imm, ex_desc, ex_desc_imm,
-                                      inst->eot);
+                                      inst->send_ex_desc_scratch, inst->eot);
       if (inst->check_tdr)
          brw_inst_set_opcode(p->isa, brw_last_inst,
                              devinfo->ver >= 12 ? BRW_OPCODE_SENDC : BRW_OPCODE_SENDSC);
@@ -461,7 +462,18 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
    assert(indirect_byte_offset.type == BRW_REGISTER_TYPE_UD);
    assert(indirect_byte_offset.file == BRW_GENERAL_REGISTER_FILE);
    assert(!reg.abs && !reg.negate);
+
+   /* Gen12.5 adds the following region restriction:
+    *
+    *    "Vx1 and VxH indirect addressing for Float, Half-Float, Double-Float
+    *    and Quad-Word data must not be used."
+    *
+    * We require the source and destination types to match so stomp to an
+    * unsigned integer type.
+    */
    assert(reg.type == dst.type);
+   reg.type = dst.type = brw_reg_type_from_bit_size(type_sz(reg.type) * 8,
+                                                    BRW_REGISTER_TYPE_UD);
 
    unsigned imm_byte_offset = reg.nr * REG_SIZE + reg.subnr;
 
@@ -609,6 +621,18 @@ fs_generator::generate_shuffle(fs_inst *inst,
     */
    assert((devinfo->verx10 >= 75 && devinfo->has_64bit_float) ||
           type_sz(src.type) <= 4);
+
+   /* Gen12.5 adds the following region restriction:
+    *
+    *    "Vx1 and VxH indirect addressing for Float, Half-Float, Double-Float
+    *    and Quad-Word data must not be used."
+    *
+    * We require the source and destination types to match so stomp to an
+    * unsigned integer type.
+    */
+   assert(src.type == dst.type);
+   src.type = dst.type = brw_reg_type_from_bit_size(type_sz(src.type) * 8,
+                                                    BRW_REGISTER_TYPE_UD);
 
    /* Because we're using the address register, we're limited to 8-wide
     * execution on gfx7.  On gfx8, we're limited to 16-wide by the address

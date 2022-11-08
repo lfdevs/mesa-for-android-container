@@ -178,6 +178,8 @@ int
 panfrost_sysval_for_instr(nir_instr *instr, nir_dest *dest);
 
 struct panfrost_compile_inputs {
+        struct util_debug_callback *debug;
+
         unsigned gpu_id;
         bool is_blend, is_blit;
         struct {
@@ -187,7 +189,6 @@ struct panfrost_compile_inputs {
         } blend;
         int fixed_sysval_ubo;
         struct panfrost_sysvals *fixed_sysval_layout;
-        bool shaderdb;
         bool no_idvs;
         bool no_ubo_to_push;
 
@@ -292,6 +293,7 @@ struct pan_shader_info {
                         bool sample_shading;
                         bool early_fragment_tests;
                         bool can_early_z, can_fpk;
+                        bool untyped_color_outputs;
                         BITSET_WORD outputs_read;
                         BITSET_WORD outputs_written;
                 } fs;
@@ -350,6 +352,9 @@ struct pan_shader_info {
         bool separable;
         bool writes_global;
         uint64_t outputs_written;
+
+        /* Floating point controls that the driver should try to honour */
+        bool ftz_fp16, ftz_fp32;
 
         unsigned sampler_count;
         unsigned texture_count;
@@ -497,11 +502,15 @@ bool pan_has_dest_mod(nir_dest **dest, nir_op op);
 #define PAN_WRITEOUT_2 8
 
 bool pan_nir_lower_zs_store(nir_shader *nir);
+bool pan_nir_lower_store_component(nir_shader *shader);
 
 bool pan_nir_lower_64bit_intrin(nir_shader *shader);
 
 bool pan_lower_helper_invocation(nir_shader *shader);
 bool pan_lower_sample_pos(nir_shader *shader);
+bool pan_lower_xfb(nir_shader *nir);
+
+void pan_nir_collect_varyings(nir_shader *s, struct pan_shader_info *info);
 
 /*
  * Helper returning the subgroup size. Generally, this is equal to the number of

@@ -152,7 +152,7 @@ nv30_sampler_state_create(struct pipe_context *pipe,
    if (eng3d->oclass >= NV40_3D_CLASS) {
       unsigned aniso = cso->max_anisotropy;
 
-      if (!cso->normalized_coords)
+      if (cso->unnormalized_coords)
          so->fmt |= NV40_3D_TEX_FORMAT_RECT;
 
       if (aniso > 1) {

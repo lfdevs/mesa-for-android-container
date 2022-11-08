@@ -32,15 +32,21 @@
 #include "pvr_device_info.h"
 #include "util/u_math.h"
 
-#define PVR_MAX_COLOR_ATTACHMENTS 8U /* Number of PBE emit registers. */
+#define PVR_MAX_COLOR_ATTACHMENTS PVR_NUM_PBE_EMIT_REGS
 #define PVR_MAX_QUEUES 2U
 #define PVR_MAX_VIEWPORTS 1U
 #define PVR_MAX_NEG_OFFSCREEN_OFFSET 4096U
 
 #define PVR_MAX_PUSH_CONSTANTS_SIZE 256U
 
+#define PVR_MAX_TEXTURE_EXTENT_Z \
+   (PVRX(TEXSTATE_IMAGE_WORD1_DEPTH_MAX_SIZE) + 1U)
+
+#define PVR_MAX_ARRAY_LAYERS (PVRX(TEXSTATE_IMAGE_WORD1_DEPTH_MAX_SIZE) + 1U)
+
 #define PVR_MAX_DESCRIPTOR_SETS 4U
-#define PVR_MAX_FRAMEBUFFER_LAYERS ROGUE_MAX_RENDER_TARGETS
+
+#define PVR_MAX_FRAMEBUFFER_LAYERS PVR_MAX_ARRAY_LAYERS
 
 /* The limit is somewhat arbitrary, it just translates into more pds code
  * and larger arrays, 32 appears to be the popular (and highest choice) across

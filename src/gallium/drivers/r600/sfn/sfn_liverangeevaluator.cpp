@@ -25,16 +25,16 @@
  */
 
 #include "sfn_liverangeevaluator.h"
-#include "sfn_liverangeevaluator_helpers.h"
 
+#include "sfn_debug.h"
 #include "sfn_instr_alugroup.h"
 #include "sfn_instr_controlflow.h"
 #include "sfn_instr_export.h"
 #include "sfn_instr_fetch.h"
 #include "sfn_instr_mem.h"
 #include "sfn_instr_tex.h"
+#include "sfn_liverangeevaluator_helpers.h"
 #include "sfn_shader.h"
-#include "sfn_debug.h"
 
 #include <algorithm>
 #include <map>
@@ -56,7 +56,7 @@ public:
    void visit(ScratchIOInstr *instr) override;
    void visit(StreamOutInstr *instr) override;
    void visit(MemRingOutInstr *instr) override;
-   void visit(EmitVertexInstr *instr) override {(void)instr;}
+   void visit(EmitVertexInstr *instr) override { (void)instr; }
    void visit(GDSInstr *instr) override;
    void visit(WriteTFInstr *instr) override;
    void visit(LDSAtomicInstr *instr) override;
@@ -64,13 +64,13 @@ public:
    void visit(RatInstr *instr) override;
 
    void finalize();
-private:
 
+private:
    void record_write(const Register *reg);
    void record_read(const Register *reg, LiveRangeEntry::EUse use);
 
    void record_write(const RegisterVec4& reg, const RegisterVec4::Swizzle& swizzle);
-   void record_read(const RegisterVec4 &reg, LiveRangeEntry::EUse use);
+   void record_read(const RegisterVec4& reg, LiveRangeEntry::EUse use);
 
    void scope_if();
    void scope_else();
@@ -78,8 +78,8 @@ private:
    void scope_loop_begin();
    void scope_loop_end();
    void scope_loop_break();
-   ProgramScope *create_scope(ProgramScope *parent, ProgramScopeType type,
-                              int id, int nesting_depth, int line);
+   ProgramScope *create_scope(
+      ProgramScope *parent, ProgramScopeType type, int id, int nesting_depth, int line);
 
    std::vector<std::unique_ptr<ProgramScope>> m_scopes;
    ProgramScope *m_current_scope;
@@ -91,17 +91,13 @@ private:
    int m_loop_id{1};
 };
 
-LiveRangeEvaluator::LiveRangeEvaluator()
-{
+LiveRangeEvaluator::LiveRangeEvaluator() {}
 
-}
-
-
-LiveRangeMap LiveRangeEvaluator::run(Shader& sh)
+LiveRangeMap
+LiveRangeEvaluator::run(Shader& sh)
 {
 
    LiveRangeMap range_map = sh.prepare_live_range_map();
-
 
    LiveRangeInstrVisitor evaluator(range_map);
 
@@ -113,14 +109,15 @@ LiveRangeMap LiveRangeEvaluator::run(Shader& sh)
    return range_map;
 }
 
-void LiveRangeInstrVisitor::finalize()
+void
+LiveRangeInstrVisitor::finalize()
 {
    m_current_scope->set_end(m_line);
 
    for (int i = 0; i < 4; ++i) {
 
       auto& live_ranges = m_live_range_map.component(i);
-      for(const auto& r : live_ranges) {
+      for (const auto& r : live_ranges) {
          if (r.m_register->live_end_pinned())
             record_read(r.m_register, LiveRangeEntry::use_unspecified);
       }
@@ -128,7 +125,8 @@ void LiveRangeInstrVisitor::finalize()
       auto& comp_access = m_register_access.component(i);
 
       for (size_t i = 0; i < comp_access.size(); ++i) {
-         sfn_log << SfnLog::merge << "Evaluae access for " << *live_ranges[i].m_register << "\n";
+         sfn_log << SfnLog::merge << "Evaluae access for " << *live_ranges[i].m_register
+                 << "\n";
 
          auto& rca = comp_access[i];
          rca.update_required_live_range();
@@ -140,13 +138,13 @@ void LiveRangeInstrVisitor::finalize()
 }
 
 LiveRangeInstrVisitor::LiveRangeInstrVisitor(LiveRangeMap& live_range_map):
-   m_live_range_map(live_range_map),
-   m_register_access(live_range_map.sizes())
+    m_live_range_map(live_range_map),
+    m_register_access(live_range_map.sizes())
 {
    if (sfn_log.has_debug_flag(SfnLog::merge)) {
       sfn_log << SfnLog::merge << "Have component register numbers: ";
       for (auto n : live_range_map.sizes())
-         sfn_log <<  n << " ";
+         sfn_log << n << " ";
       sfn_log << "\n";
    }
 
@@ -155,7 +153,7 @@ LiveRangeInstrVisitor::LiveRangeInstrVisitor(LiveRangeMap& live_range_map):
 
    for (int i = 0; i < 4; ++i) {
       const auto& comp = live_range_map.component(i);
-      for(const auto& r : comp) {
+      for (const auto& r : comp) {
          if (r.m_register->live_start_pinned())
             record_write(r.m_register);
       }
@@ -163,7 +161,9 @@ LiveRangeInstrVisitor::LiveRangeInstrVisitor(LiveRangeMap& live_range_map):
    m_line = 1;
 }
 
-void LiveRangeInstrVisitor::record_write(const RegisterVec4& reg, const RegisterVec4::Swizzle &swizzle)
+void
+LiveRangeInstrVisitor::record_write(const RegisterVec4& reg,
+                                    const RegisterVec4::Swizzle& swizzle)
 {
    for (int i = 0; i < 4; ++i) {
       if (swizzle[i] < 6 && reg[i]->chan() < 4)
@@ -171,7 +171,8 @@ void LiveRangeInstrVisitor::record_write(const RegisterVec4& reg, const Register
    }
 }
 
-void LiveRangeInstrVisitor::record_read(const RegisterVec4& reg, LiveRangeEntry::EUse use)
+void
+LiveRangeInstrVisitor::record_read(const RegisterVec4& reg, LiveRangeEntry::EUse use)
 {
    for (int i = 0; i < 4; ++i) {
       if (reg[i]->chan() < 4)
@@ -179,54 +180,72 @@ void LiveRangeInstrVisitor::record_read(const RegisterVec4& reg, LiveRangeEntry:
    }
 }
 
-void LiveRangeInstrVisitor::scope_if()
+void
+LiveRangeInstrVisitor::scope_if()
 {
-   m_current_scope = create_scope(m_current_scope, if_branch, m_if_id++,
-                                  m_current_scope->nesting_depth() + 1, m_line + 1);
+   m_current_scope = create_scope(m_current_scope,
+                                  if_branch,
+                                  m_if_id++,
+                                  m_current_scope->nesting_depth() + 1,
+                                  m_line + 1);
 }
 
-void LiveRangeInstrVisitor::scope_else()
+void
+LiveRangeInstrVisitor::scope_else()
 {
    assert(m_current_scope->type() == if_branch);
    m_current_scope->set_end(m_line - 1);
 
-   m_current_scope = create_scope(m_current_scope->parent(), else_branch, m_current_scope->id(),
-                                  m_current_scope->nesting_depth() + 1, m_line + 1);
+   m_current_scope = create_scope(m_current_scope->parent(),
+                                  else_branch,
+                                  m_current_scope->id(),
+                                  m_current_scope->nesting_depth() + 1,
+                                  m_line + 1);
 }
 
-void LiveRangeInstrVisitor::scope_endif()
+void
+LiveRangeInstrVisitor::scope_endif()
 {
    m_current_scope->set_end(m_line - 1);
    m_current_scope = m_current_scope->parent();
    assert(m_current_scope);
 }
 
-void LiveRangeInstrVisitor::scope_loop_begin()
+void
+LiveRangeInstrVisitor::scope_loop_begin()
 {
-   m_current_scope = create_scope(m_current_scope, loop_body, m_loop_id++,
-                                  m_current_scope->nesting_depth() + 1, m_line);
+   m_current_scope = create_scope(m_current_scope,
+                                  loop_body,
+                                  m_loop_id++,
+                                  m_current_scope->nesting_depth() + 1,
+                                  m_line);
 }
 
-void LiveRangeInstrVisitor::scope_loop_end()
+void
+LiveRangeInstrVisitor::scope_loop_end()
 {
    m_current_scope->set_end(m_line);
    m_current_scope = m_current_scope->parent();
    assert(m_current_scope);
 }
 
-void LiveRangeInstrVisitor::scope_loop_break()
+void
+LiveRangeInstrVisitor::scope_loop_break()
 {
    m_current_scope->set_loop_break_line(m_line);
 }
 
-ProgramScope *LiveRangeInstrVisitor::create_scope(ProgramScope *parent, ProgramScopeType type,
-                                                  int id, int nesting_depth, int line)
+ProgramScope *
+LiveRangeInstrVisitor::create_scope(
+   ProgramScope *parent, ProgramScopeType type, int id, int nesting_depth, int line)
 {
-   m_scopes.emplace_back(std::make_unique<ProgramScope>(parent, type, id, nesting_depth, line));
+   m_scopes.emplace_back(
+      std::make_unique<ProgramScope>(parent, type, id, nesting_depth, line));
    return m_scopes[m_scopes.size() - 1].get();
 }
 
-void LiveRangeInstrVisitor::visit(AluInstr *instr)
+void
+LiveRangeInstrVisitor::visit(AluInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    if (instr->has_alu_flag(alu_write))
@@ -240,14 +259,16 @@ void LiveRangeInstrVisitor::visit(AluInstr *instr)
    }
 }
 
-void LiveRangeInstrVisitor::visit(AluGroup *group)
+void
+LiveRangeInstrVisitor::visit(AluGroup *group)
 {
    for (auto i : *group)
       if (i)
          i->accept(*this);
 }
 
-void LiveRangeInstrVisitor::visit(TexInstr *instr)
+void
+LiveRangeInstrVisitor::visit(TexInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    record_write(instr->dst(), instr->all_dest_swizzle());
@@ -255,19 +276,20 @@ void LiveRangeInstrVisitor::visit(TexInstr *instr)
    auto src = instr->src();
    record_read(src, LiveRangeEntry::use_unspecified);
 
-   if (instr->sampler_offset() && instr->sampler_offset()->as_register())
-      record_read(instr->sampler_offset()->as_register(), LiveRangeEntry::use_unspecified);
-
+   if (instr->resource_offset())
+      record_read(instr->resource_offset(), LiveRangeEntry::use_unspecified);
 }
 
-void LiveRangeInstrVisitor::visit(ExportInstr *instr)
+void
+LiveRangeInstrVisitor::visit(ExportInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    auto src = instr->value();
    record_read(src, LiveRangeEntry::use_export);
 }
 
-void LiveRangeInstrVisitor::visit(FetchInstr *instr)
+void
+LiveRangeInstrVisitor::visit(FetchInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    record_write(instr->dst(), instr->all_dest_swizzle());
@@ -276,7 +298,8 @@ void LiveRangeInstrVisitor::visit(FetchInstr *instr)
       record_read(&src, LiveRangeEntry::use_unspecified);
 }
 
-void LiveRangeInstrVisitor::visit(Block *instr)
+void
+LiveRangeInstrVisitor::visit(Block *instr)
 {
    sfn_log << SfnLog::merge << "Visit block\n";
    for (auto i : *instr) {
@@ -287,7 +310,8 @@ void LiveRangeInstrVisitor::visit(Block *instr)
    sfn_log << SfnLog::merge << "End block\n";
 }
 
-void LiveRangeInstrVisitor::visit(ScratchIOInstr *instr)
+void
+LiveRangeInstrVisitor::visit(ScratchIOInstr *instr)
 {
    auto& src = instr->value();
    for (int i = 0; i < 4; ++i) {
@@ -304,14 +328,16 @@ void LiveRangeInstrVisitor::visit(ScratchIOInstr *instr)
       record_read(addr, LiveRangeEntry::use_unspecified);
 }
 
-void LiveRangeInstrVisitor::visit(StreamOutInstr *instr)
+void
+LiveRangeInstrVisitor::visit(StreamOutInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    auto src = instr->value();
    record_read(src, LiveRangeEntry::use_unspecified);
 }
 
-void LiveRangeInstrVisitor::visit(MemRingOutInstr *instr)
+void
+LiveRangeInstrVisitor::visit(MemRingOutInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    auto src = instr->value();
@@ -322,64 +348,85 @@ void LiveRangeInstrVisitor::visit(MemRingOutInstr *instr)
       record_read(idx->as_register(), LiveRangeEntry::use_unspecified);
 }
 
-void LiveRangeInstrVisitor::visit(ControlFlowInstr *instr)
+void
+LiveRangeInstrVisitor::visit(ControlFlowInstr *instr)
 {
    switch (instr->cf_type()) {
-   case ControlFlowInstr::cf_else: scope_else(); break;
-   case ControlFlowInstr::cf_endif: scope_endif(); break;
-   case ControlFlowInstr::cf_loop_begin: scope_loop_begin(); break;
-   case ControlFlowInstr::cf_loop_end: scope_loop_end(); break;
-   case ControlFlowInstr::cf_loop_break: scope_loop_break(); break;
-   case ControlFlowInstr::cf_loop_continue: break;
-   case ControlFlowInstr::cf_wait_ack: break;
+   case ControlFlowInstr::cf_else:
+      scope_else();
+      break;
+   case ControlFlowInstr::cf_endif:
+      scope_endif();
+      break;
+   case ControlFlowInstr::cf_loop_begin:
+      scope_loop_begin();
+      break;
+   case ControlFlowInstr::cf_loop_end:
+      scope_loop_end();
+      break;
+   case ControlFlowInstr::cf_loop_break:
+      scope_loop_break();
+      break;
+   case ControlFlowInstr::cf_loop_continue:
+      break;
+   case ControlFlowInstr::cf_wait_ack:
+      break;
    default:
       unreachable("Flow control unreachanble");
    }
 }
 
-void LiveRangeInstrVisitor::visit(IfInstr *instr)
+void
+LiveRangeInstrVisitor::visit(IfInstr *instr)
 {
    instr->predicate()->accept(*this);
    scope_if();
 }
 
-void LiveRangeInstrVisitor::visit(GDSInstr *instr)
+void
+LiveRangeInstrVisitor::visit(GDSInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    record_read(instr->src(), LiveRangeEntry::use_unspecified);
-   if (instr->uav_id())
-      record_read(instr->uav_id(), LiveRangeEntry::use_unspecified);
+   if (instr->resource_offset())
+      record_read(instr->resource_offset(), LiveRangeEntry::use_unspecified);
    record_write(instr->dest());
 }
 
-void LiveRangeInstrVisitor::visit(RatInstr *instr)
+void
+LiveRangeInstrVisitor::visit(RatInstr *instr)
 {
    sfn_log << SfnLog::merge << "Visit " << *instr << "\n";
    record_read(instr->value(), LiveRangeEntry::use_unspecified);
    record_read(instr->addr(), LiveRangeEntry::use_unspecified);
 
-   auto idx = instr->rat_id_offset();
+   auto idx = instr->resource_offset();
    if (idx)
       record_read(idx, LiveRangeEntry::use_unspecified);
 }
 
-
-void LiveRangeInstrVisitor::visit(WriteTFInstr *instr)
+void
+LiveRangeInstrVisitor::visit(WriteTFInstr *instr)
 {
    record_read(instr->value(), LiveRangeEntry::use_export);
 }
 
-void LiveRangeInstrVisitor::visit(UNUSED LDSAtomicInstr *instr)
-{   
-   unreachable("LDSAtomicInstr must be lowered before scheduling and live range evaluation");
-}
-
-void LiveRangeInstrVisitor::visit(UNUSED LDSReadInstr *instr)
+void
+LiveRangeInstrVisitor::visit(UNUSED LDSAtomicInstr *instr)
 {
-   unreachable("LDSReadInstr must be lowered before scheduling and live range evaluation");
+   unreachable("LDSAtomicInstr must be lowered before scheduling and live "
+               "range evaluation");
 }
 
-void LiveRangeInstrVisitor::record_write(const Register *reg)
+void
+LiveRangeInstrVisitor::visit(UNUSED LDSReadInstr *instr)
+{
+   unreachable("LDSReadInstr must be lowered before scheduling and live "
+               "range evaluation");
+}
+
+void
+LiveRangeInstrVisitor::record_write(const Register *reg)
 {
    auto addr = reg->get_addr();
    if (addr && addr->as_register()) {
@@ -396,19 +443,20 @@ void LiveRangeInstrVisitor::record_write(const Register *reg)
       }
    } else {
       auto& ra = m_register_access(*reg);
-      sfn_log << SfnLog::merge << *reg  << " write:" << m_line << "\n";
+      sfn_log << SfnLog::merge << *reg << " write:" << m_line << "\n";
       ra.record_write(m_line, m_current_scope);
    }
 }
 
-void LiveRangeInstrVisitor::record_read(const Register *reg, LiveRangeEntry::EUse use)
+void
+LiveRangeInstrVisitor::record_read(const Register *reg, LiveRangeEntry::EUse use)
 {
    if (!reg)
       return;
 
    auto addr = reg->get_addr();
    if (addr && addr->as_register()) {
-      sfn_log << SfnLog::merge << "Record reading address register " << *addr  << "\n";
+      sfn_log << SfnLog::merge << "Record reading address register " << *addr << "\n";
 
       auto& ra = m_register_access(*addr->as_register());
       ra.record_read(m_line, m_current_scope, use);
@@ -428,7 +476,8 @@ void LiveRangeInstrVisitor::record_read(const Register *reg, LiveRangeEntry::EUs
    }
 }
 
-std::ostream& operator <<  (std::ostream& os, const LiveRangeMap& lrm)
+std::ostream&
+operator<<(std::ostream& os, const LiveRangeMap& lrm)
 {
    os << "Live ranges\n";
    for (int i = 0; i < 4; ++i) {
@@ -439,7 +488,8 @@ std::ostream& operator <<  (std::ostream& os, const LiveRangeMap& lrm)
    return os;
 }
 
-bool operator == (const LiveRangeMap& lhs, const LiveRangeMap& rhs)
+bool
+operator==(const LiveRangeMap& lhs, const LiveRangeMap& rhs)
 {
    for (int i = 0; i < 4; ++i) {
       const auto& lc = lhs.component(i);
@@ -451,10 +501,8 @@ bool operator == (const LiveRangeMap& lhs, const LiveRangeMap& rhs)
          const auto& lv = lc[j];
          const auto& rv = rc[j];
 
-         if (lv.m_start != rv.m_start ||
-             lv.m_end != rv.m_end ||
-             lv.m_color != rv.m_color ||
-             !lv.m_register->equal_to(*rv.m_register))
+         if (lv.m_start != rv.m_start || lv.m_end != rv.m_end ||
+             lv.m_color != rv.m_color || !lv.m_register->equal_to(*rv.m_register))
             return false;
       }
    }
@@ -462,6 +510,4 @@ bool operator == (const LiveRangeMap& lhs, const LiveRangeMap& rhs)
    return true;
 }
 
-
-}
-
+} // namespace r600

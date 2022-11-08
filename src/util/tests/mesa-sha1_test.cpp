@@ -39,8 +39,11 @@ static const Params test_data[] = {
 };
 
 class MesaSHA1TestFixture : public testing::TestWithParam<Params> {};
-INSTANTIATE_TEST_CASE_P(MesaSHA1Test, MesaSHA1TestFixture,
-                        testing::ValuesIn(test_data));
+INSTANTIATE_TEST_SUITE_P(
+   MesaSHA1Test,
+   MesaSHA1TestFixture,
+   testing::ValuesIn(test_data)
+);
 
 TEST_P(MesaSHA1TestFixture, Match)
 {

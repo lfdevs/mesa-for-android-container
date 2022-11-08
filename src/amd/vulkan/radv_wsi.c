@@ -113,12 +113,3 @@ radv_finish_wsi(struct radv_physical_device *physical_device)
    physical_device->vk.wsi_device = NULL;
    wsi_device_finish(&physical_device->wsi_device, &physical_device->instance->vk.alloc);
 }
-
-VKAPI_ATTR VkResult VKAPI_CALL
-radv_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
-{
-   RADV_FROM_HANDLE(radv_queue, queue, _queue);
-   return wsi_common_queue_present(&queue->device->physical_device->wsi_device,
-                                   radv_device_to_handle(queue->device), _queue,
-                                   queue->vk.queue_family_index, pPresentInfo);
-}

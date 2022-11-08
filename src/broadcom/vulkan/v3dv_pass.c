@@ -341,10 +341,12 @@ subpass_get_granularity(struct v3dv_device *device,
          msaa = true;
    }
 
+   /* If requested, double-buffer may or may not be enabled depending on
+    * heuristics so we choose a conservative granularity here, with it disabled.
+    */
    uint32_t width, height;
-   bool double_buffer = (V3D_DEBUG & V3D_DEBUG_DOUBLE_BUFFER) && !msaa;
    v3d_choose_tile_size(color_attachment_count, max_bpp, msaa,
-                        double_buffer, &width, &height);
+                        false /* double-buffer */, &width, &height);
    *granularity = (VkExtent2D) {
       .width = width,
       .height = height

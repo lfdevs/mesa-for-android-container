@@ -527,13 +527,21 @@ v3dv_write_uniforms_wg_offsets(struct v3dv_cmd_buffer *cmd_buffer,
          cl_aligned_f(&uniforms, dynamic->viewport.scale[0][1] * 256.0f);
          break;
 
-      case QUNIFORM_VIEWPORT_Z_OFFSET:
-         cl_aligned_f(&uniforms, dynamic->viewport.translate[0][2]);
+      case QUNIFORM_VIEWPORT_Z_OFFSET: {
+         float translate_z;
+         v3dv_cmd_buffer_state_get_viewport_z_xform(&cmd_buffer->state, 0,
+                                                    &translate_z, NULL);
+         cl_aligned_f(&uniforms, translate_z);
          break;
+      }
 
-      case QUNIFORM_VIEWPORT_Z_SCALE:
-         cl_aligned_f(&uniforms, dynamic->viewport.scale[0][2]);
+      case QUNIFORM_VIEWPORT_Z_SCALE: {
+         float scale_z;
+         v3dv_cmd_buffer_state_get_viewport_z_xform(&cmd_buffer->state, 0,
+                                                    NULL, &scale_z);
+         cl_aligned_f(&uniforms, scale_z);
          break;
+      }
 
       case QUNIFORM_SSBO_OFFSET:
       case QUNIFORM_UBO_ADDR:

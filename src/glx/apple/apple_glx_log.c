@@ -37,7 +37,7 @@
 #include <pthread.h>
 #include "glxclient.h"
 #include "apple_glx_log.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 
 static aslclient aslc;
 

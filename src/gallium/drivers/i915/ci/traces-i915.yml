@@ -1,67 +1,54 @@
+%YAML 1.2
+---
 traces-db:
   download-url: "https://minio-packet.freedesktop.org/mesa-tracie-public/"
 
-# glmark2 looks like maybe it fails due to wanting an xserver, but we don't have
-# Xorg in the x86 docker images we're using.
-
 traces:
-  - path: glxgears/glxgears-2-v2.trace
-    expectations:
-      - device: i915-g33
-        checksum: ee8dcdb3b9eaef2b32a2914b89373419
-  - path: gputest/plot3d-v2.trace
-    expectations:
-      - device: i915-g33
-        checksum: 456d98a570563af3bc61d91fd1742868
-  - path: gputest/triangle-v2.trace
-    expectations:
-      # Weird white bar behind Tux's head.
-      - device: i915-g33
-        checksum: ef9b19e9a6dcd928d3bd44e7eee95029
-  # Requires GLSL 1.30
-  #- path: humus/AmbientAperture-v2.trace
-  #  expectations:
-  #    - device: i915-g33
-  #      checksum: 8d4c52f0af9c09710d358f24c73fae3c
-  - path: humus/CelShading-v2.trace
-    # The cel shading is pretty chunky, but maybe that's just precision stuff.
-    expectations:
-      - device: i915-g33
-        checksum: 7518414e4f1a4f1e07c04ec1500f53e7
-  # Requires GLSL 1.30
-  #- path: humus/DynamicBranching3-v2.trace
-  #  expectations:
-  #    - device: i915-g33
-  #      checksum: 765fa742b87e411763921c6f988b2573
-  # Requires GLSL 1.30
-  #- path: humus/HDR-v2.trace
-  #  expectations:
-  #    - device: i915-g33
-  #      checksum: 80b164e85e96a413568d18ce308caae3
-  - path: humus/Portals-v2.trace
-    expectations:
-      - device: i915-g33
-        checksum: f782469019417923831d5d53dbe6a507
-  # The shadow raytracing shader fails to compile
-  #- path: humus/RaytracedShadows-v2.trace
-  #  expectations:
-  #    - device: i915-g33
-  #      checksum: 5dc0af9fead0102a791784d0f6122096
-  # Requires GLSL 1.30
-  #- path: humus/VolumetricFogging2-v2.trace
-  #  expectations:
-  #    - device: i915-g33
-  #      checksum: aec880cec7ba460f3144b789bc517891
-  - path: neverball/neverball-v2.trace
-    expectations:
-      - device: i915-g33
-        checksum: f925aa92da47ebc757285f826113f4db
-  - path: valve/counterstrike-v2.trace
-    # Tree foliage rendering is extra aliased.
-    expectations:
-      - device: i915-g33
-        checksum: d17298ad3bb44b43b6c17e017f7c1e6a
-  # Error: waffle_context_create failed
-  #- path: ror/ror-default.trace
-  # User-errors, missing text in application
-  #- path: nheko/nheko-colors.trace
+  glxgears/glxgears-2-v2.trace:
+    i915-g33:
+      checksum: ee8dcdb3b9eaef2b32a2914b89373419
+  gputest/plot3d-v2.trace:
+    i915-g33:
+      checksum: 456d98a570563af3bc61d91fd1742868
+  gputest/triangle-v2.trace:
+    i915-g33:
+      label: [broken]
+      checksum: ef9b19e9a6dcd928d3bd44e7eee95029
+      text: Weird white bar behind Tux's head.
+  humus/CelShading-v2.trace:
+    i915-g33:
+      checksum: 7518414e4f1a4f1e07c04ec1500f53e7
+      text: The cel shading is pretty chunky, but maybe that's just precision stuff.
+  humus/Portals-v2.trace:
+    i915-g33:
+      checksum: f782469019417923831d5d53dbe6a507
+  humus/RaytracedShadows-v2.trace:
+    i915-g33:
+      label: [fail]
+      text: The shadow raytracing shader fails to compile
+  neverball/neverball-v2.trace:
+    i915-g33:
+      checksum: f925aa92da47ebc757285f826113f4db
+  valve/counterstrike-v2.trace:
+    i915-g33:
+      checksum: d17298ad3bb44b43b6c17e017f7c1e6a
+      text: Tree foliage rendering is extra aliased.
+  nheko/nheko-colors.trace:
+    i915-g33:
+      label: [broken, skip]
+      text: User-errors, missing text in application
+  humus/AmbientAperture-v2.trace:
+    i915-g33:
+      label: [unsupported]
+  humus/DynamicBranching3-v2.trace:
+    i915-g33:
+      label: [unsupported]
+  humus/HDR-v2.trace:
+    i915-g33:
+      label: [unsupported]
+  humus/VolumetricFogging2-v2.trace:
+    i915-g33:
+      label: [unsupported]
+  ror/ror-default.trace:
+    i915-g33:
+      label: [unsupported]

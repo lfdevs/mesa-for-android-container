@@ -114,7 +114,8 @@ private:
 
    Instruction *loadFrom(DataFile, uint8_t, DataType, Value *def, uint32_t base,
                          uint8_t c, Value *indirect0 = NULL,
-                         Value *indirect1 = NULL, bool patch = false);
+                         Value *indirect1 = NULL, bool patch = false,
+                         CacheMode cache=CACHE_CA);
    void storeTo(nir_intrinsic_instr *, DataFile, operation, DataType,
                 Value *src, uint8_t idx, uint8_t c, Value *indirect0 = NULL,
                 Value *indirect1 = NULL);
@@ -158,6 +159,8 @@ private:
    bool visit(nir_loop *);
    bool visit(nir_ssa_undef_instr *);
    bool visit(nir_tex_instr *);
+
+   static unsigned lowerBitSizeCB(const nir_instr *, void *);
 
    // tex stuff
    unsigned int getNIRArgCount(TexInstruction::Target&);
@@ -392,16 +395,24 @@ Converter::getOperation(nir_op op)
       return OP_COS;
    case nir_op_f2f32:
    case nir_op_f2f64:
+   case nir_op_f2i8:
+   case nir_op_f2i16:
    case nir_op_f2i32:
    case nir_op_f2i64:
+   case nir_op_f2u8:
+   case nir_op_f2u16:
    case nir_op_f2u32:
    case nir_op_f2u64:
    case nir_op_i2f32:
    case nir_op_i2f64:
+   case nir_op_i2i8:
+   case nir_op_i2i16:
    case nir_op_i2i32:
    case nir_op_i2i64:
    case nir_op_u2f32:
    case nir_op_u2f64:
+   case nir_op_u2u8:
+   case nir_op_u2u16:
    case nir_op_u2u32:
    case nir_op_u2u64:
       return OP_CVT;
@@ -464,6 +475,18 @@ Converter::getOperation(nir_op op)
       return OP_RSQ;
    case nir_op_fsat:
       return OP_SAT;
+   case nir_op_ieq8:
+   case nir_op_ige8:
+   case nir_op_uge8:
+   case nir_op_ilt8:
+   case nir_op_ult8:
+   case nir_op_ine8:
+   case nir_op_ieq16:
+   case nir_op_ige16:
+   case nir_op_uge16:
+   case nir_op_ilt16:
+   case nir_op_ult16:
+   case nir_op_ine16:
    case nir_op_feq32:
    case nir_op_ieq32:
    case nir_op_fge32:
@@ -679,11 +702,11 @@ Converter::getSubOp(nir_intrinsic_op op)
    case nir_intrinsic_image_atomic_dec_wrap:
       return NV50_IR_SUBOP_ATOM_DEC;
 
-   case nir_intrinsic_group_memory_barrier:
    case nir_intrinsic_memory_barrier:
    case nir_intrinsic_memory_barrier_buffer:
    case nir_intrinsic_memory_barrier_image:
       return NV50_IR_SUBOP_MEMBAR(M, GL);
+   case nir_intrinsic_group_memory_barrier:
    case nir_intrinsic_memory_barrier_shared:
       return NV50_IR_SUBOP_MEMBAR(M, CTA);
 
@@ -702,19 +725,31 @@ CondCode
 Converter::getCondCode(nir_op op)
 {
    switch (op) {
+   case nir_op_ieq8:
+   case nir_op_ieq16:
    case nir_op_feq32:
    case nir_op_ieq32:
       return CC_EQ;
+   case nir_op_ige8:
+   case nir_op_uge8:
+   case nir_op_ige16:
+   case nir_op_uge16:
    case nir_op_fge32:
    case nir_op_ige32:
    case nir_op_uge32:
       return CC_GE;
+   case nir_op_ilt8:
+   case nir_op_ult8:
+   case nir_op_ilt16:
+   case nir_op_ult16:
    case nir_op_flt32:
    case nir_op_ilt32:
    case nir_op_ult32:
       return CC_LT;
    case nir_op_fneu32:
       return CC_NEU;
+   case nir_op_ine8:
+   case nir_op_ine16:
    case nir_op_ine32:
       return CC_NE;
    default:
@@ -1225,7 +1260,7 @@ Converter::getSlotAddress(nir_intrinsic_instr *insn, uint8_t idx, uint8_t slot)
 Instruction *
 Converter::loadFrom(DataFile file, uint8_t i, DataType ty, Value *def,
                     uint32_t base, uint8_t c, Value *indirect0,
-                    Value *indirect1, bool patch)
+                    Value *indirect1, bool patch, CacheMode cache)
 {
    unsigned int tySize = typeSizeof(ty);
 
@@ -1240,6 +1275,7 @@ Converter::loadFrom(DataFile file, uint8_t i, DataType ty, Value *def,
                 indirect0);
       loi->setIndirect(0, 1, indirect1);
       loi->perPatch = patch;
+      loi->cache = cache;
 
       Instruction *hii =
          mkLoad(TYPE_U32, hi,
@@ -1247,6 +1283,7 @@ Converter::loadFrom(DataFile file, uint8_t i, DataType ty, Value *def,
                 indirect0);
       hii->setIndirect(0, 1, indirect1);
       hii->perPatch = patch;
+      hii->cache = cache;
 
       return mkOp2(OP_MERGE, ty, def, lo, hi);
    } else {
@@ -1254,6 +1291,7 @@ Converter::loadFrom(DataFile file, uint8_t i, DataType ty, Value *def,
          mkLoad(ty, def, mkSymbol(file, i, ty, base + c * tySize), indirect0);
       ld->setIndirect(0, 1, indirect1);
       ld->perPatch = patch;
+      ld->cache = cache;
       return ld;
    }
 }
@@ -2043,13 +2081,16 @@ Converter::visit(nir_intrinsic_instr *insn)
       uint32_t buffer = getIndirect(&insn->src[1], 0, indirectBuffer);
       uint32_t offset = getIndirect(&insn->src[2], 0, indirectOffset);
 
+      CacheMode cache = convert(nir_intrinsic_access(insn));
+
       for (uint8_t i = 0u; i < nir_intrinsic_src_components(insn, 0); ++i) {
          if (!((1u << i) & nir_intrinsic_write_mask(insn)))
             continue;
          Symbol *sym = mkSymbol(FILE_MEMORY_BUFFER, buffer, sType,
                                 offset + i * typeSizeof(sType));
-         mkStore(OP_STORE, sType, sym, indirectOffset, getSrc(&insn->src[0], i))
-            ->setIndirect(0, 1, indirectBuffer);
+         Instruction *st = mkStore(OP_STORE, sType, sym, indirectOffset, getSrc(&insn->src[0], i));
+         st->setIndirect(0, 1, indirectBuffer);
+         st->cache = cache;
       }
       info_out->io.globalAccess |= 0x2;
       break;
@@ -2062,9 +2103,11 @@ Converter::visit(nir_intrinsic_instr *insn)
       uint32_t buffer = getIndirect(&insn->src[0], 0, indirectBuffer);
       uint32_t offset = getIndirect(&insn->src[1], 0, indirectOffset);
 
+      CacheMode cache = convert(nir_intrinsic_access(insn));
+
       for (uint8_t i = 0u; i < dest_components; ++i)
          loadFrom(FILE_MEMORY_BUFFER, buffer, dType, newDefs[i], offset, i,
-                  indirectOffset, indirectBuffer);
+                  indirectOffset, indirectBuffer, false, cache);
 
       info_out->io.globalAccess |= 0x1;
       break;
@@ -2466,10 +2509,10 @@ Converter::convert(nir_load_const_instr *insn, uint8_t idx)
       val = loadImm(getSSA(4), insn->value[idx].u32);
       break;
    case 16:
-      val = loadImm(getSSA(2), insn->value[idx].u16);
+      val = loadImm(getSSA(4), insn->value[idx].u16);
       break;
    case 8:
-      val = loadImm(getSSA(1), insn->value[idx].u8);
+      val = loadImm(getSSA(4), insn->value[idx].u8);
       break;
    default:
       unreachable("unhandled bit size!\n");
@@ -2605,6 +2648,14 @@ Converter::visit(nir_alu_instr *insn)
       break;
    }
    // convert instructions
+   case nir_op_f2i8:
+   case nir_op_f2u8:
+   case nir_op_i2i8:
+   case nir_op_u2u8:
+   case nir_op_f2i16:
+   case nir_op_f2u16:
+   case nir_op_i2i16:
+   case nir_op_u2u16:
    case nir_op_f2f32:
    case nir_op_f2i32:
    case nir_op_f2u32:
@@ -2621,13 +2672,26 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_u2u64: {
       DEFAULT_CHECKS;
       LValues &newDefs = convert(&insn->dest);
+      DataType stype = sTypes[0];
       Instruction *i = mkOp1(getOperation(op), dType, newDefs[0], getSrc(&insn->src[0]));
-      if (op == nir_op_f2i32 || op == nir_op_f2i64 || op == nir_op_f2u32 || op == nir_op_f2u64)
+      if (::isFloatType(stype) && isIntType(dType))
          i->rnd = ROUND_Z;
-      i->sType = sTypes[0];
+      i->sType = stype;
       break;
    }
    // compare instructions
+   case nir_op_ieq8:
+   case nir_op_ige8:
+   case nir_op_uge8:
+   case nir_op_ilt8:
+   case nir_op_ult8:
+   case nir_op_ine8:
+   case nir_op_ieq16:
+   case nir_op_ige16:
+   case nir_op_uge16:
+   case nir_op_ilt16:
+   case nir_op_ult16:
+   case nir_op_ine16:
    case nir_op_feq32:
    case nir_op_ieq32:
    case nir_op_fge32:
@@ -2865,6 +2929,8 @@ Converter::visit(nir_alu_instr *insn)
       mkCmp(OP_SET, cc, TYPE_U32, newDefs[0], sTypes[0], getSrc(&insn->src[0]), src1);
       break;
    }
+   case nir_op_b2i8:
+   case nir_op_b2i16:
    case nir_op_b2i32: {
       DEFAULT_CHECKS;
       LValues &newDefs = convert(&insn->dest);
@@ -3067,6 +3133,8 @@ Converter::visit(nir_tex_instr *insn)
 
       r = bindless ? 0xff : insn->texture_index;
       s = bindless ? 0x1f : insn->sampler_index;
+      if (op == OP_TXF || op == OP_TXQ)
+         s = 0;
 
       defs.resize(newDefs.size());
       for (uint8_t d = 0u; d < newDefs.size(); ++d) {
@@ -3177,6 +3245,71 @@ nv_nir_move_stores_to_end(nir_shader *s)
                          nir_metadata_dominance);
 }
 
+unsigned
+Converter::lowerBitSizeCB(const nir_instr *instr, void *data)
+{
+   Converter *instance = static_cast<Converter *>(data);
+   nir_alu_instr *alu;
+
+   if (instr->type != nir_instr_type_alu)
+      return 0;
+
+   alu = nir_instr_as_alu(instr);
+
+   switch (alu->op) {
+   /* TODO: Check for operation OP_SET instead of all listed nir opcodes
+    * individually.
+    *
+    * Currently, we can't call getOperation(nir_op), since not all nir opcodes
+    * are handled within getOperation() and we'd run into an assert().
+    *
+    * Adding all nir opcodes to getOperation() isn't trivial, since the
+    * enum operation of some of the nir opcodes isn't distinct (e.g. depends
+    * on the data type).
+    */
+   case nir_op_ieq8:
+   case nir_op_ige8:
+   case nir_op_uge8:
+   case nir_op_ilt8:
+   case nir_op_ult8:
+   case nir_op_ine8:
+   case nir_op_ieq16:
+   case nir_op_ige16:
+   case nir_op_uge16:
+   case nir_op_ilt16:
+   case nir_op_ult16:
+   case nir_op_ine16:
+   case nir_op_feq32:
+   case nir_op_ieq32:
+   case nir_op_fge32:
+   case nir_op_ige32:
+   case nir_op_uge32:
+   case nir_op_flt32:
+   case nir_op_ilt32:
+   case nir_op_ult32:
+   case nir_op_fneu32:
+   case nir_op_ine32: {
+      DataType stype = instance->getSTypes(alu)[0];
+
+      if (isSignedIntType(stype) && typeSizeof(stype) < 4)
+         return 32;
+
+      return 0;
+   }
+   case nir_op_i2f64:
+   case nir_op_u2f64: {
+      DataType stype = instance->getSTypes(alu)[0];
+
+      if (isIntType(stype) && (typeSizeof(stype) <= 2))
+         return 32;
+
+      return 0;
+   }
+   default:
+      return 0;
+   }
+}
+
 bool
 Converter::run()
 {
@@ -3191,7 +3324,13 @@ Converter::run()
    subgroup_options.ballot_components = 1;
    subgroup_options.lower_elect = true;
 
+   unsigned lower_flrp = (nir->options->lower_flrp16 ? 16 : 0) |
+                         (nir->options->lower_flrp32 ? 32 : 0) |
+                         (nir->options->lower_flrp64 ? 64 : 0);
+   assert(lower_flrp);
+
    /* prepare for IO lowering */
+   NIR_PASS_V(nir, nir_lower_flrp, lower_flrp, false);
    NIR_PASS_V(nir, nir_opt_deref);
    NIR_PASS_V(nir, nir_lower_regs_to_ssa);
    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
@@ -3219,7 +3358,6 @@ Converter::run()
     *      nir_opt_idiv_const effectively before this.
     */
    nir_lower_idiv_options idiv_options = {
-      .imprecise_32bit_lowering = false,
       .allow_fp16 = true,
    };
    NIR_PASS(progress, nir, nir_lower_idiv, &idiv_options);
@@ -3250,6 +3388,8 @@ Converter::run()
       NIR_PASS_V(nir, nv_nir_move_stores_to_end);
 
    NIR_PASS_V(nir, nir_lower_bool_to_int32);
+   NIR_PASS_V(nir, nir_lower_bit_size, Converter::lowerBitSizeCB, this);
+
    NIR_PASS_V(nir, nir_convert_from_ssa, true);
 
    // Garbage collect dead instructions

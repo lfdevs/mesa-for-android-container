@@ -43,6 +43,7 @@ caselists = [
     "/deqp/mustpass/gles3-khr-master.txt",
     "/deqp/mustpass/gles31-khr-master.txt",
     "/deqp/mustpass/gl46-master.txt",
+    "/deqp/mustpass/gl46-khr-single.txt",
 ]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [

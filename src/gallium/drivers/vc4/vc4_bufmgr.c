@@ -56,7 +56,7 @@ vc4_bo_label(struct vc4_screen *screen, struct vc4_bo *bo, const char *fmt, ...)
          * (for debugging a single app's allocation).
          */
 #ifndef DEBUG
-        if (!(vc4_debug & VC4_DEBUG_SURFACE))
+        if (!VC4_DBG(SURFACE))
                 return;
 #endif
         va_list va;
@@ -550,7 +550,7 @@ vc4_wait_seqno(struct vc4_screen *screen, uint64_t seqno, uint64_t timeout_ns,
         if (screen->finished_seqno >= seqno)
                 return true;
 
-        if (unlikely(vc4_debug & VC4_DEBUG_PERF) && timeout_ns && reason) {
+        if (VC4_DBG(PERF) && timeout_ns && reason) {
                 if (vc4_wait_seqno_ioctl(screen->fd, seqno, 0) == -ETIME) {
                         fprintf(stderr, "Blocking on seqno %lld for %s\n",
                                 (long long)seqno, reason);
@@ -590,7 +590,7 @@ vc4_bo_wait(struct vc4_bo *bo, uint64_t timeout_ns, const char *reason)
 {
         struct vc4_screen *screen = bo->screen;
 
-        if (unlikely(vc4_debug & VC4_DEBUG_PERF) && timeout_ns && reason) {
+        if (VC4_DBG(PERF) && timeout_ns && reason) {
                 if (vc4_wait_bo_ioctl(screen->fd, bo->handle, 0) == -ETIME) {
                         fprintf(stderr, "Blocking on %s BO for %s\n",
                                 bo->name, reason);

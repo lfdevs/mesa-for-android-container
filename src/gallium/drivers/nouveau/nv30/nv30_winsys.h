@@ -3,7 +3,9 @@
 
 #include <string.h>
 #include "nouveau_winsys.h"
+#include "nouveau_context.h"
 #include "nouveau_buffer.h"
+#include "nv30_context.h"
 
 /*XXX: rnn */
 #define NV40_3D_VTXTEX_OFFSET(i) (0x0900 + ((i) * 0x20)) // 401e80
@@ -29,21 +31,14 @@ PUSH_RELOC(struct nouveau_pushbuf *push, struct nouveau_bo *bo, uint32_t offset,
 static inline struct nouveau_bufctx *
 bufctx(struct nouveau_pushbuf *push)
 {
-   struct nouveau_bufctx **pctx = push->user_priv;
-   return *pctx;
+   struct nouveau_pushbuf_priv *p = push->user_priv;
+   return nv30_context(&p->context->pipe)->bufctx;
 }
 
 static inline void
 PUSH_RESET(struct nouveau_pushbuf *push, int bin)
 {
    nouveau_bufctx_reset(bufctx(push), bin);
-}
-
-static inline void
-PUSH_REFN(struct nouveau_pushbuf *push, int bin,
-     struct nouveau_bo *bo, uint32_t access)
-{
-   nouveau_bufctx_refn(bufctx(push), bin, bo, access);
 }
 
 static inline void
@@ -106,20 +101,6 @@ PUSH_RESRC(struct nouveau_pushbuf *push, int subc, int mthd, int bin,
 {
    PUSH_MTHD(push, subc, mthd, bin, r->bo, r->offset + data,
              r->domain | access, vor, tor)->priv = r;
-}
-
-static inline void
-BEGIN_NV04(struct nouveau_pushbuf *push, int subc, int mthd, int size)
-{
-   PUSH_SPACE(push, size + 1);
-   PUSH_DATA (push, 0x00000000 | (size << 18) | (subc << 13) | mthd);
-}
-
-static inline void
-BEGIN_NI04(struct nouveau_pushbuf *push, int subc, int mthd, int size)
-{
-   PUSH_SPACE(push, size + 1);
-   PUSH_DATA (push, 0x40000000 | (size << 18) | (subc << 13) | mthd);
 }
 
 /* subchannel assignment

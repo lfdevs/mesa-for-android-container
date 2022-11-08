@@ -27,7 +27,7 @@
 #include "dev/intel_debug.h"
 #include "compiler/nir/nir.h"
 #include "main/errors.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 
 #define COMMON_OPTIONS                                                        \
    .lower_fdiv = true,                                                        \
@@ -44,6 +44,7 @@
    .lower_ldexp = true,                                                       \
    .lower_device_index_to_zero = true,                                        \
    .vectorize_io = true,                                                      \
+   .vectorize_tess_levels = true,                                             \
    .use_interpolated_input_intrinsics = true,                                 \
    .lower_insert_byte = true,                                                 \
    .lower_insert_word = true,                                                 \
@@ -114,11 +115,9 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
    if (devinfo->ver < 8)
       brw_vec4_alloc_reg_set(compiler);
 
-   compiler->precise_trig = env_var_as_boolean("INTEL_PRECISE_TRIG", false);
+   compiler->precise_trig = debug_get_bool_option("INTEL_PRECISE_TRIG", false);
 
-   compiler->use_tcs_8_patch =
-      devinfo->ver >= 12 ||
-      (devinfo->ver >= 9 && INTEL_DEBUG(DEBUG_TCS_EIGHT_PATCH));
+   compiler->use_tcs_multi_patch = devinfo->ver >= 12;
 
    /* Default to the sampler since that's what we've done since forever */
    compiler->indirect_ubos_use_sampler = true;
@@ -200,8 +199,8 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
          brw_nir_no_indirect_mask(compiler, i);
       nir_options->force_indirect_unrolling_sampler = devinfo->ver < 7;
 
-      if (compiler->use_tcs_8_patch) {
-         /* TCS 8_PATCH mode has multiple patches per subgroup */
+      if (compiler->use_tcs_multi_patch) {
+         /* TCS MULTI_PATCH mode has multiple patches per subgroup */
          nir_options->divergence_analysis_options &=
             ~nir_divergence_single_patch_per_tcs_subgroup;
       }

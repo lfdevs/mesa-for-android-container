@@ -35,7 +35,6 @@
 #include "util/list.h"
 
 #include "aub_write.h"
-#include "drm-uapi/i915_drm.h"
 #include "intel_aub.h"
 
 #define fail_if(cond, ...) _fail_if(cond, NULL, __VA_ARGS__)
@@ -157,7 +156,7 @@ struct bo {
    uint8_t *data;
    uint64_t size;
 
-   enum drm_i915_gem_engine_class engine_class;
+   enum intel_engine_class engine_class;
    int engine_instance;
 
    struct list_head link;
@@ -166,7 +165,7 @@ struct bo {
 static struct bo *
 find_or_create(struct list_head *bo_list, uint64_t addr,
                enum address_space gtt,
-               enum drm_i915_gem_engine_class engine_class,
+               enum intel_engine_class engine_class,
                int engine_instance)
 {
    list_for_each_entry(struct bo, bo_entry, bo_list, link) {
@@ -189,24 +188,24 @@ find_or_create(struct list_head *bo_list, uint64_t addr,
 
 static void
 engine_from_name(const char *engine_name,
-                 enum drm_i915_gem_engine_class *engine_class,
+                 enum intel_engine_class *engine_class,
                  int *engine_instance)
 {
    const struct {
       const char *match;
-      enum drm_i915_gem_engine_class engine_class;
+      enum intel_engine_class engine_class;
       bool parse_instance;
    } rings[] = {
-      { "rcs", I915_ENGINE_CLASS_RENDER, true },
-      { "vcs", I915_ENGINE_CLASS_VIDEO, true },
-      { "vecs", I915_ENGINE_CLASS_VIDEO_ENHANCE, true },
-      { "bcs", I915_ENGINE_CLASS_COPY, true },
-      { "global", I915_ENGINE_CLASS_INVALID, false },
-      { "render command stream", I915_ENGINE_CLASS_RENDER, false },
-      { "blt command stream", I915_ENGINE_CLASS_COPY, false },
-      { "bsd command stream", I915_ENGINE_CLASS_VIDEO, false },
-      { "vebox command stream", I915_ENGINE_CLASS_VIDEO_ENHANCE, false },
-      { NULL, I915_ENGINE_CLASS_INVALID },
+      { "rcs", INTEL_ENGINE_CLASS_RENDER, true },
+      { "vcs", INTEL_ENGINE_CLASS_VIDEO, true },
+      { "vecs", INTEL_ENGINE_CLASS_VIDEO_ENHANCE, true },
+      { "bcs", INTEL_ENGINE_CLASS_COPY, true },
+      { "global", INTEL_ENGINE_CLASS_INVALID, false },
+      { "render command stream", INTEL_ENGINE_CLASS_RENDER, false },
+      { "blt command stream", INTEL_ENGINE_CLASS_COPY, false },
+      { "bsd command stream", INTEL_ENGINE_CLASS_VIDEO, false },
+      { "vebox command stream", INTEL_ENGINE_CLASS_VIDEO_ENHANCE, false },
+      { NULL, INTEL_ENGINE_CLASS_INVALID },
    }, *r;
 
    for (r = rings; r->match; r++) {
@@ -275,7 +274,7 @@ main(int argc, char *argv[])
 
    struct aub_file aub = {};
 
-   enum drm_i915_gem_engine_class active_engine_class = I915_ENGINE_CLASS_INVALID;
+   enum intel_engine_class active_engine_class = INTEL_ENGINE_CLASS_INVALID;
    int active_engine_instance = -1;
 
    enum address_space active_gtt = PPGTT;
@@ -286,7 +285,7 @@ main(int argc, char *argv[])
          uint32_t ring_buffer_head;
          uint32_t ring_buffer_tail;
       } instances[3];
-   } engines[I915_ENGINE_CLASS_VIDEO_ENHANCE + 1];
+   } engines[INTEL_ENGINE_CLASS_VIDEO_ENHANCE + 1];
    memset(engines, 0, sizeof(engines));
 
    int num_ring_bos = 0;
@@ -347,7 +346,7 @@ main(int argc, char *argv[])
 
       const char *global_start = "Pinned (global) [";
       if (strncmp(line, global_start, strlen(global_start)) == 0) {
-         active_engine_class = I915_ENGINE_CLASS_INVALID;
+         active_engine_class = INTEL_ENGINE_CLASS_INVALID;
          active_engine_instance = -1;
          active_gtt = GGTT;
          continue;
@@ -395,6 +394,7 @@ main(int argc, char *argv[])
             enum address_space gtt;
          } bo_types[] = {
             { "gtt_offset", BO_TYPE_BATCH,      default_gtt },
+            { "batch",      BO_TYPE_BATCH,      default_gtt },
             { "user",       BO_TYPE_USER,       default_gtt },
             { "HW context", BO_TYPE_CONTEXT,    GGTT },
             { "ringbuffer", BO_TYPE_RINGBUFFER, GGTT },
@@ -531,7 +531,7 @@ main(int argc, char *argv[])
       /* Use context id 0 -- if we are not using execlists it doesn't matter
        * anyway
        */
-      aub_write_exec(&aub, 0, batch_bo->addr, 0, I915_ENGINE_CLASS_RENDER);
+      aub_write_exec(&aub, 0, batch_bo->addr, 0, INTEL_ENGINE_CLASS_RENDER);
    }
 
    /* Cleanup */

@@ -2496,6 +2496,9 @@
   <ins name="+ATEST" staging="w=1" mask="0xfff00" exact="0xc8f00" message="atest" table="true">
     <src start="0" mask="0xf7"/>
     <src start="3" mask="0xf7"/>
+    <!-- ATEST parameter datum. Implicitly encoded into the tuple on Bifrost.
+         Real source on Valhall. -->
+    <src start="6" pseudo="true"/>
     <mod name="widen1" start="6" size="2">
       <reserved/>
       <opt>none</opt>
@@ -6192,7 +6195,7 @@
     <src start="6" mask="0xf7"/>
   </ins>
 
-  <ins name="+KABOOM" mask="0xffff8" exact="0xd7858" unused="true" message="job_management">
+  <ins name="+KABOOM" mask="0xffff8" exact="0xd7858" message="job" dests="0">
     <src start="0"/>
   </ins>
 
@@ -7743,12 +7746,28 @@
     </mod>
   </ins>
 
-  <ins name="+TEXC" staging="rw=sr_count" mask="0xffc00" exact="0xd7000" message="tex" dests="2">
+  <ins name="+TEXC" staging="rw=sr_count" mask="0xffc00" exact="0xd7000" message="tex">
     <src start="0"/>
     <src start="3"/>
     <src start="6" mask="0xf7"/>
     <mod name="skip" start="9" size="1" opt="skip"/>
     <!-- not actually encoded, but used for IR -->
+    <immediate name="sr_count" size="4" pseudo="true"/>
+    <immediate name="sr_count_2" size="4" pseudo="true"/>
+    <mod name="lod_mode" start="13" size="1" default="zero_lod" pseudo="true">
+      <opt>computed_lod</opt>
+      <opt>zero_lod</opt>
+    </mod>
+  </ins>
+
+  <!-- Pseudo instruction representing dual texturing on Bifrost. Lowered to
+       TEXC after register allocation, when the second destination register can
+       be combined with the texture operation descriptor. -->
+  <ins name="+TEXC_DUAL" staging="rw=sr_count" pseudo="true" message="tex" dests="2">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6" mask="0xf7"/>
+    <mod name="skip" start="9" size="1" opt="skip"/>
     <immediate name="sr_count" size="4" pseudo="true"/>
     <immediate name="sr_count_2" size="4" pseudo="true"/>
     <mod name="lod_mode" start="13" size="1" default="zero_lod" pseudo="true">
@@ -8835,10 +8854,464 @@
     </mod>
   </ins>
 
-  <ins name="+COLLECT.i32" pseudo="true"/>
+  <ins name="+PHI" pseudo="true" variable_srcs="true"/>
 
-  <ins name="+SPLIT.i32" pseudo="true">
+  <ins name="+COLLECT.i32" pseudo="true" variable_srcs="true"/>
+
+  <ins name="+SPLIT.i32" pseudo="true" variable_dests="true">
     <src start="0"/>
+  </ins>
+
+  <ins name="*FCMP_OR.f32" pseudo="true">
+    <src start="0" mask="0xfb"/>
+    <src start="3" mask="0xfb"/>
+    <src start="6" mask="0xfb"/>
+    <mod name="widen0" size="2">
+      <opt>none</opt>
+      <opt>h0</opt>
+      <opt>h1</opt>
+    </mod>
+    <mod name="widen1" size="2">
+      <opt>none</opt>
+      <opt>h0</opt>
+      <opt>h1</opt>
+    </mod>
+    <mod name="abs1" start="6" size="1" opt="abs"/>
+    <mod name="neg0" start="7" size="1" opt="neg"/>
+    <mod name="neg1" start="8" size="1" opt="neg"/>
+    <mod name="abs0" start="12" size="1" opt="abs"/>
+    <mod name="cmpf" start="13" size="3">
+      <opt>eq</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>ne</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+      <opt>gtlt</opt>
+      <opt>total</opt>
+    </mod>
+    <mod name="result_type" start="16" size="2" default="i1">
+      <opt>i1</opt>
+      <opt>f1</opt>
+      <opt>m1</opt>
+    </mod>
+  </ins>
+
+  <ins name="*FCMP_OR.v2f16" pseudo="true">
+    <src start="0" mask="0xfb"/>
+    <src start="3" mask="0xfb"/>
+    <src start="6" mask="0xfb"/>
+    <mod name="abs0" size="1" opt="abs"/>
+    <mod name="abs1" size="1" opt="abs"/>
+    <mod name="cmpf" size="3">
+      <opt>eq</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>ne</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+      <opt>gtlt</opt>
+      <opt>total</opt>
+    </mod>
+    <mod name="neg0" start="7" size="1" opt="neg"/>
+    <mod name="neg1" start="8" size="1" opt="neg"/>
+    <mod name="swz0" start="9" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="swz1" start="11" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="result_type" start="16" size="2" default="i1">
+      <opt>i1</opt>
+      <opt>f1</opt>
+      <opt>m1</opt>
+    </mod>
+  </ins>
+
+  <ins name="*FCMP_AND.f32" pseudo="true">
+    <src start="0" mask="0xfb"/>
+    <src start="3" mask="0xfb"/>
+    <src start="6" mask="0xfb"/>
+    <mod name="widen0" size="2">
+      <opt>none</opt>
+      <opt>h0</opt>
+      <opt>h1</opt>
+    </mod>
+    <mod name="widen1" size="2">
+      <opt>none</opt>
+      <opt>h0</opt>
+      <opt>h1</opt>
+    </mod>
+    <mod name="abs1" start="6" size="1" opt="abs"/>
+    <mod name="neg0" start="7" size="1" opt="neg"/>
+    <mod name="neg1" start="8" size="1" opt="neg"/>
+    <mod name="abs0" start="12" size="1" opt="abs"/>
+    <mod name="cmpf" start="13" size="3">
+      <opt>eq</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>ne</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+      <opt>gtlt</opt>
+      <opt>total</opt>
+    </mod>
+    <mod name="result_type" start="16" size="2" default="i1">
+      <opt>i1</opt>
+      <opt>f1</opt>
+      <opt>m1</opt>
+    </mod>
+  </ins>
+
+  <ins name="*FCMP_AND.v2f16" pseudo="true">
+    <src start="0" mask="0xfb"/>
+    <src start="3" mask="0xfb"/>
+    <src start="6" mask="0xfb"/>
+    <mod name="abs0" size="1" opt="abs"/>
+    <mod name="abs1" size="1" opt="abs"/>
+    <mod name="cmpf" size="3">
+      <opt>eq</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>ne</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+      <opt>gtlt</opt>
+      <opt>total</opt>
+    </mod>
+    <mod name="neg0" start="7" size="1" opt="neg"/>
+    <mod name="neg1" start="8" size="1" opt="neg"/>
+    <mod name="swz0" start="9" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="swz1" start="11" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="result_type" start="16" size="2" default="i1">
+      <opt>i1</opt>
+      <opt>f1</opt>
+      <opt>m1</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_MULTI.s32" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_MULTI.u32" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_OR.s32" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_OR.u32" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_OR.v2s16" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="swz0" start="6" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="swz1" start="8" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_OR.v2u16" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="swz0" start="6" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="swz1" start="8" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_OR.v4s8" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+    <derived start="6" size="1">
+      <eq left="cmpf" right="#gt"/>
+      <eq left="cmpf" right="#ge"/>
+    </derived>
+  </ins>
+
+  <ins name="+ICMP_OR.v4u8" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_AND.s32" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_AND.u32" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_AND.v2s16" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="swz0" start="6" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="swz1" start="8" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_AND.v2u16" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="swz0" start="6" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="swz1" start="8" size="2" default="h01">
+      <opt>h00</opt>
+      <opt>h10</opt>
+      <opt>h01</opt>
+      <opt>h11</opt>
+    </mod>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+  </ins>
+
+  <ins name="+ICMP_AND.v4s8" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
+    <derived start="6" size="1">
+      <eq left="cmpf" right="#gt"/>
+      <eq left="cmpf" right="#ge"/>
+    </derived>
+  </ins>
+
+  <ins name="+ICMP_AND.v4u8" pseudo="true">
+    <src start="0"/>
+    <src start="3"/>
+    <src start="6"/>
+    <mod name="result_type" start="10" size="1" default="i1">
+      <opt>i1</opt>
+      <opt>m1</opt>
+    </mod>
+    <mod name="cmpf" size="2">
+      <opt>eq</opt>
+      <opt>ne</opt>
+      <opt>gt</opt>
+      <opt>ge</opt>
+      <opt>lt</opt>
+      <opt>le</opt>
+    </mod>
   </ins>
 
 </bifrost>

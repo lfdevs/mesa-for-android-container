@@ -1706,7 +1706,9 @@ SpillCodeInserter::offsetSlot(Value *base, const LValue *lval)
       return base;
    Value *slot = cloneShallow(func, base);
 
-   slot->reg.data.offset += (ffs(lval->compMask) - 1) * lval->reg.size;
+   const unsigned int unit = func->getProgram()->getTarget()->getFileUnit(lval->reg.file);
+   slot->reg.data.offset += (ffs(lval->compMask) - 1) << unit;
+   assert((slot->reg.data.offset % lval->reg.size) == 0);
    slot->reg.size = lval->reg.size;
 
    return slot;

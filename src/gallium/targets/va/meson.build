@@ -36,43 +36,82 @@ link_with_libva_gallium = [
   libpipe_loader_static, libws_null, libwsw, libswdri, libswkmsdri,
 ]
 
-if with_glx == 'xlib' or with_glx == 'gallium-xlib'
+if with_glx == 'xlib'
   link_with_libva_gallium += [libws_xlib]
 endif
 
-libva_gallium = shared_library(
-  'gallium_drv_video',
-  'target.c',
-  gnu_symbol_visibility : 'hidden',
-  link_args : [va_link_args, ld_args_gc_sections],
-  include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_gallium_winsys, inc_gallium_drivers,
-  ],
-  link_whole : [libva_st],
-  link_with : link_with_libva_gallium,
-  dependencies : [
-    dep_libdrm, driver_r600, driver_radeonsi, driver_nouveau, driver_d3d12,
-    idep_mesautil,
-  ],
-  link_depends : va_link_depends,
-  # Will be deleted during installation, see install_megadrivers.py
-  install : true,
-  install_dir : va_drivers_path,
-  name_suffix : 'so',
-)
+if host_machine.system() == 'windows'
+  link_with_libva_gallium += [libwsgdi]
 
-foreach d : [[with_gallium_r600, 'r600'],
-             [with_gallium_radeonsi, 'radeonsi'],
-             [with_gallium_nouveau, 'nouveau'],
-             [with_gallium_d3d12_video, 'd3d12']]
-  if d[0]
-    va_drivers += '@0@_drv_video.so'.format(d[1])
-  endif
-endforeach
+  libva_init_version = dep_va.version().split('.')
+  vaon12_def_input = configure_file(
+    configuration: {
+      '__vaDriverInit_X_Y': '__vaDriverInit_@0@_@1@'.format(libva_init_version[0], libva_init_version[1]) + '@4'
+    },
+    input: 'vaon12.def.in',
+    output: 'vaon12.def.in',
+  )
 
-meson.add_install_script(
-  install_megadrivers_py.path(),
-  libva_gallium.full_path(),
-  va_drivers_path,
-  va_drivers,
-)
+  vaon12_def = custom_target(
+    'vaon12.def',
+    input: vaon12_def_input,
+    output : 'vaon12.def',
+    command : [prog_python, gen_vs_module_defs_py,
+              '--in_file', '@INPUT@', '--out_file', '@OUTPUT@',
+              '--compiler_id', cc.get_argument_syntax(), '--cpu_family', host_machine.cpu_family()]
+  )
+
+  libva_gallium = shared_library(
+    'vaon12_drv_video',
+    'target.c',
+    link_args : [va_link_args, ld_args_gc_sections],
+    vs_module_defs : vaon12_def,
+    include_directories : [
+      inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_gallium_winsys, inc_gallium_drivers, inc_gallium_winsys_sw
+    ],
+    link_whole : [libva_st],
+    link_with : link_with_libva_gallium,
+    dependencies : [driver_d3d12, idep_mesautil],
+    link_depends : va_link_depends,
+    install : true,
+    name_suffix : 'dll',
+  )
+else
+  libva_gallium = shared_library(
+    'gallium_drv_video',
+    'target.c',
+    gnu_symbol_visibility : 'hidden',
+    link_args : [va_link_args, ld_args_gc_sections],
+    include_directories : [
+      inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_gallium_winsys, inc_gallium_drivers,
+    ],
+    link_whole : [libva_st],
+    link_with : link_with_libva_gallium,
+    dependencies : [
+      dep_libdrm, driver_r600, driver_radeonsi, driver_nouveau, driver_d3d12, driver_virgl,
+      idep_mesautil,
+    ],
+    link_depends : va_link_depends,
+    # Will be deleted during installation, see install_megadrivers.py
+    install : true,
+    install_dir : va_drivers_path,
+    name_suffix : 'so',
+  )
+
+  foreach d : [[with_gallium_r600, 'r600'],
+              [with_gallium_radeonsi, 'radeonsi'],
+              [with_gallium_nouveau, 'nouveau'],
+              [with_gallium_virgl, 'virtio_gpu'],
+              [with_gallium_d3d12_video, 'd3d12']]
+    if d[0]
+      va_drivers += '@0@_drv_video.so'.format(d[1])
+    endif
+  endforeach
+
+  meson.add_install_script(
+    install_megadrivers_py.path(),
+    libva_gallium.full_path(),
+    va_drivers_path,
+    va_drivers,
+  )
+endif

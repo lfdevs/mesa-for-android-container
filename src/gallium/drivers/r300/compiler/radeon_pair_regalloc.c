@@ -390,7 +390,7 @@ static enum rc_reg_class variable_get_class(
 						can_change_writemask = 0;
 						break;
 					}
-					new_swizzle = rc_adjust_channels(
+					new_swizzle = rc_rewrite_swizzle(
 						old_swizzle, conversion_swizzle);
 					if (!r300_swizzle_is_native_basic(
 								new_swizzle)) {

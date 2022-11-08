@@ -256,6 +256,14 @@ enum gbm_bo_flags {
     * OpenCL, and Vulkan applications.
     */
    GBM_BO_USE_PROTECTED = (1 << 5),
+
+   /**
+    * The buffer will be used for front buffer rendering.  On some
+    * platforms this may (for example) disable framebuffer compression
+    * to avoid problems with compression flags data being out of sync
+    * with pixel data.
+    */
+   GBM_BO_USE_FRONT_RENDERING = (1 << 6),
 };
 
 int

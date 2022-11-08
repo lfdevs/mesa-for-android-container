@@ -164,19 +164,16 @@ def main():
         '--test-timeout', type=int, help='Test phase timeout (minutes)', required=True)
     args = parser.parse_args()
 
-    servo = CrosServoRun(args.cpu, args.ec, args.test_timeout * 60)
-
     while True:
+        servo = CrosServoRun(args.cpu, args.ec, args.test_timeout * 60)
         retval = servo.run()
+
+        # power down the CPU on the device
+        servo.ec_write("power off\n")
+        servo.close()
+
         if retval != 2:
-            break
-
-    # power down the CPU on the device
-    servo.ec_write("power off\n")
-
-    servo.close()
-
-    sys.exit(retval)
+            sys.exit(retval)
 
 
 if __name__ == '__main__':

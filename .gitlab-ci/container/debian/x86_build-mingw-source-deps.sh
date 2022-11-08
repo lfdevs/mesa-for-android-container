@@ -1,16 +1,42 @@
 #!/bin/bash
+# shellcheck disable=SC2086 # we want word splitting
+
+set -e
+
+# Building libdrm (libva dependency)
+. .gitlab-ci/container/build-libdrm.sh
+
 wd=$PWD
 CMAKE_TOOLCHAIN_MINGW_PATH=$wd/.gitlab-ci/container/debian/x86_mingw-toolchain.cmake
 mkdir -p ~/tmp
 pushd ~/tmp
 
 # Building DirectX-Headers
-git clone https://github.com/microsoft/DirectX-Headers -b v1.606.3 --depth 1
+git clone https://github.com/microsoft/DirectX-Headers -b v1.606.4 --depth 1
 mkdir -p DirectX-Headers/build
 pushd DirectX-Headers/build
 meson .. \
 --backend=ninja \
 --buildtype=release -Dbuild-test=false \
+-Dprefix=/usr/x86_64-w64-mingw32/ \
+--cross-file=$wd/.gitlab-ci/x86_64-w64-mingw32
+
+ninja install
+popd
+
+# Building libva
+git clone https://github.com/intel/libva
+pushd libva/
+# Checking out commit hash with libva-win32 support
+# This feature will be released with libva version 2.17
+git checkout 2579eb0f77897dc01a02c1e43defc63c40fd2988
+popd
+# libva already has a build dir in their repo, use builddir instead
+mkdir -p libva/builddir
+pushd libva/builddir
+meson .. \
+--backend=ninja \
+--buildtype=release \
 -Dprefix=/usr/x86_64-w64-mingw32/ \
 --cross-file=$wd/.gitlab-ci/x86_64-w64-mingw32
 

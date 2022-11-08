@@ -1,7 +1,7 @@
 Render Passes
 =============
 
-The Vulkan runtime code in Mesa provides several helpful utilities ot make
+The Vulkan runtime code in Mesa provides several helpful utilities to make
 managing render passes easier.
 
 
@@ -38,7 +38,7 @@ VK_KHR_dynamic_rendering
 ------------------------
 
 For drivers which don't need to do subpass combining, it is recommended
-that they skip implementing render passess entirely and implement
+that they skip implementing render passes entirely and implement
 VK_KHR_dynamic_rendering instead.  If they choose to do so, the runtime
 will provide the following, implemented in terms of
 :cpp:func:`vkCmdBeginRendering` and :cpp:func:`vkCmdEndRendering`:
@@ -51,7 +51,7 @@ We also provide a no-op implementation of
 :cpp:func:`vkGetRenderAreaGranularity` which returns a render area
 granularity of 1x1.
 
-Drivers which wish to use the common render pass imlementation in this way
+Drivers which wish to use the common render pass implementation in this way
 **must** also support a Mesa-specific pseudo-extension which optionally
 provides an initial image layout for each attachment at
 :cpp:func:`vkCmdBeginRendering` time.  This is required for us to combine

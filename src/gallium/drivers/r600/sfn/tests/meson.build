@@ -35,4 +35,3 @@ if with_tests
     )
     endforeach
 endif
-

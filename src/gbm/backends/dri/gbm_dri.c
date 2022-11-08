@@ -50,7 +50,7 @@
 #include "loader_dri_helper.h"
 #include "kopper_interface.h"
 #include "loader.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/macros.h"
 
 /* For importing wl_buffer */
@@ -1244,6 +1244,8 @@ gbm_dri_bo_create(struct gbm_device *gbm,
       dri_use |= __DRI_IMAGE_USE_LINEAR;
    if (usage & GBM_BO_USE_PROTECTED)
       dri_use |= __DRI_IMAGE_USE_PROTECTED;
+   if (usage & GBM_BO_USE_FRONT_RENDERING)
+      dri_use |= __DRI_IMAGE_USE_FRONT_RENDERING;
 
    /* Gallium drivers requires shared in order to get the handle/stride */
    dri_use |= __DRI_IMAGE_USE_SHARE;
@@ -1476,7 +1478,7 @@ dri_device_create(int fd, uint32_t gbm_backend_version)
 
    mtx_init(&dri->mutex, mtx_plain);
 
-   force_sw = env_var_as_boolean("GBM_ALWAYS_SOFTWARE", false);
+   force_sw = debug_get_bool_option("GBM_ALWAYS_SOFTWARE", false);
    if (!force_sw) {
       ret = dri_screen_create(dri);
       if (ret)

@@ -151,7 +151,7 @@ static void
 lower_fb_write_logical_send(const fs_builder &bld, fs_inst *inst,
                             const struct brw_wm_prog_data *prog_data,
                             const brw_wm_prog_key *key,
-                            const fs_visitor::thread_payload &payload)
+                            const fs_thread_payload &payload)
 {
    assert(inst->src[FB_WRITE_LOGICAL_SRC_COMPONENTS].file == IMM);
    const intel_device_info *devinfo = bld.shader->devinfo;
@@ -1068,6 +1068,11 @@ lower_sampler_logical_send_gfx7(const fs_builder &bld, fs_inst *inst, opcode op,
       }
 
       bld.MOV(sources[length++], min_lod);
+
+      /* Wa_14014595444: Populate MLOD as parameter 5 (twice). */
+       if (devinfo->verx10 == 125 && op == FS_OPCODE_TXB &&
+          !inst->shadow_compare)
+         bld.MOV(sources[length++], min_lod);
    }
 
    const fs_reg src_payload =
@@ -1690,6 +1695,7 @@ lower_lsc_surface_logical_send(const fs_builder &bld, fs_inst *inst)
    const unsigned addr_sz = inst->components_read(SURFACE_LOGICAL_SRC_ADDRESS);
    const unsigned src_comps = inst->components_read(SURFACE_LOGICAL_SRC_DATA);
    const unsigned src_sz = type_sz(src.type);
+   const unsigned dst_sz = type_sz(inst->dst.type);
 
    const bool has_side_effects = inst->has_side_effects();
 
@@ -1753,10 +1759,11 @@ lower_lsc_surface_logical_send(const fs_builder &bld, fs_inst *inst)
          inst->opcode == SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT_LOGICAL ?
          brw_atomic_op_to_lsc_fatomic_op(arg.ud) :
          brw_atomic_op_to_lsc_atomic_op(arg.ud);
+
       inst->desc = lsc_msg_desc(devinfo, opcode, inst->exec_size,
                                 surf_type, LSC_ADDR_SIZE_A32,
                                 1 /* num_coordinates */,
-                                lsc_bits_to_data_size(src_sz * 8),
+                                lsc_bits_to_data_size(dst_sz * 8),
                                 1 /* num_channels */,
                                 false /* transpose */,
                                 LSC_CACHE_STORE_L1UC_L3WB,
@@ -1827,6 +1834,79 @@ lower_lsc_surface_logical_send(const fs_builder &bld, fs_inst *inst)
    /* Finally, the payload */
    inst->src[2] = payload;
    inst->src[3] = payload2;
+}
+
+static void
+lower_lsc_block_logical_send(const fs_builder &bld, fs_inst *inst)
+{
+   const intel_device_info *devinfo = bld.shader->devinfo;
+   assert(devinfo->has_lsc);
+
+   /* Get the logical send arguments. */
+   const fs_reg &addr = inst->src[SURFACE_LOGICAL_SRC_ADDRESS];
+   const fs_reg &src = inst->src[SURFACE_LOGICAL_SRC_DATA];
+   const fs_reg &surface = inst->src[SURFACE_LOGICAL_SRC_SURFACE];
+   const fs_reg &surface_handle = inst->src[SURFACE_LOGICAL_SRC_SURFACE_HANDLE];
+   const fs_reg &arg = inst->src[SURFACE_LOGICAL_SRC_IMM_ARG];
+   assert(arg.file == IMM);
+   assert(inst->src[SURFACE_LOGICAL_SRC_IMM_DIMS].file == BAD_FILE);
+   assert(inst->src[SURFACE_LOGICAL_SRC_ALLOW_SAMPLE_MASK].file == BAD_FILE);
+
+   const bool is_stateless =
+      surface.file == IMM && (surface.ud == BRW_BTI_STATELESS ||
+                              surface.ud == GFX8_BTI_STATELESS_NON_COHERENT);
+
+   const bool has_side_effects = inst->has_side_effects();
+
+   const bool write = inst->opcode == SHADER_OPCODE_OWORD_BLOCK_WRITE_LOGICAL;
+
+   fs_builder ubld = bld.exec_all().group(1, 0);
+   fs_reg ex_desc = ubld.vgrf(BRW_REGISTER_TYPE_UD);
+   if (is_stateless) {
+      ubld.AND(ex_desc, retype(brw_vec1_grf(0, 5), BRW_REGISTER_TYPE_UD),
+                        brw_imm_ud(INTEL_MASK(31, 10)));
+   } else {
+      ubld.MOV(ex_desc, surface_handle);
+   }
+
+   fs_reg data;
+   if (write) {
+      const unsigned src_sz = inst->components_read(SURFACE_LOGICAL_SRC_DATA);
+      data = retype(bld.move_to_vgrf(src, src_sz), BRW_REGISTER_TYPE_UD);
+   }
+
+   inst->opcode = SHADER_OPCODE_SEND;
+   if (surface.file == IMM && surface.ud == GFX7_BTI_SLM)
+      inst->sfid = GFX12_SFID_SLM;
+   else
+      inst->sfid = GFX12_SFID_UGM;
+   inst->desc = lsc_msg_desc(devinfo,
+                             write ? LSC_OP_STORE : LSC_OP_LOAD,
+                             1 /* exec_size */,
+                             inst->sfid == GFX12_SFID_SLM ?
+                             LSC_ADDR_SURFTYPE_FLAT : LSC_ADDR_SURFTYPE_BSS,
+                             LSC_ADDR_SIZE_A32,
+                             1 /* num_coordinates */,
+                             LSC_DATA_SIZE_D32,
+                             arg.ud /* num_channels */,
+                             true /* transpose */,
+                             LSC_CACHE_LOAD_L1STATE_L3MOCS,
+                             !write /* has_dest */);
+
+   inst->mlen = lsc_msg_desc_src0_len(devinfo, inst->desc);
+   inst->size_written = lsc_msg_desc_dest_len(devinfo, inst->desc) * REG_SIZE;
+   inst->exec_size = 1;
+   inst->ex_mlen = write ? DIV_ROUND_UP(arg.ud, 8) : 0;
+   inst->header_size = 0;
+   inst->send_has_side_effects = has_side_effects;
+   inst->send_is_volatile = !has_side_effects;
+
+   inst->resize_sources(4);
+
+   inst->src[0] = brw_imm_ud(0); /* desc */
+   inst->src[1] = ex_desc;       /* ex_desc */
+   inst->src[2] = addr;          /* payload */
+   inst->src[3] = data;          /* payload2 */
 }
 
 static void
@@ -1954,6 +2034,7 @@ lower_lsc_a64_logical_send(const fs_builder &bld, fs_inst *inst)
    const fs_reg &addr = inst->src[A64_LOGICAL_ADDRESS];
    const fs_reg &src = inst->src[A64_LOGICAL_SRC];
    const unsigned src_sz = type_sz(src.type);
+   const unsigned dst_sz = type_sz(inst->dst.type);
 
    const unsigned src_comps = inst->components_read(1);
    assert(inst->src[A64_LOGICAL_ARG].file == IMM);
@@ -2024,13 +2105,43 @@ lower_lsc_a64_logical_send(const fs_builder &bld, fs_inst *inst)
       inst->desc = lsc_msg_desc(devinfo, opcode, inst->exec_size,
                                 LSC_ADDR_SURFTYPE_FLAT, LSC_ADDR_SIZE_A64,
                                 1 /* num_coordinates */,
-                                lsc_bits_to_data_size(src_sz * 8),
+                                lsc_bits_to_data_size(dst_sz * 8),
                                 1 /* num_channels */,
                                 false /* transpose */,
                                 LSC_CACHE_STORE_L1UC_L3WB,
                                 !inst->dst.is_null());
       break;
    }
+   case SHADER_OPCODE_A64_OWORD_BLOCK_READ_LOGICAL:
+   case SHADER_OPCODE_A64_UNALIGNED_OWORD_BLOCK_READ_LOGICAL:
+      inst->exec_size = 1;
+      inst->desc = lsc_msg_desc(devinfo,
+                                LSC_OP_LOAD,
+                                1 /* exec_size */,
+                                LSC_ADDR_SURFTYPE_FLAT,
+                                LSC_ADDR_SIZE_A64,
+                                1 /* num_coordinates */,
+                                LSC_DATA_SIZE_D32,
+                                arg /* num_channels */,
+                                true /* transpose */,
+                                LSC_CACHE_LOAD_L1STATE_L3MOCS,
+                                true /* has_dest */);
+      break;
+   case SHADER_OPCODE_A64_OWORD_BLOCK_WRITE_LOGICAL:
+      inst->exec_size = 1;
+      inst->desc = lsc_msg_desc(devinfo,
+                                LSC_OP_STORE,
+                                1 /* exec_size */,
+                                LSC_ADDR_SURFTYPE_FLAT,
+                                LSC_ADDR_SIZE_A64,
+                                1 /* num_coordinates */,
+                                LSC_DATA_SIZE_D32,
+                                arg /* num_channels */,
+                                true /* transpose */,
+                                LSC_CACHE_LOAD_L1STATE_L3MOCS,
+                                false /* has_dest */);
+
+      break;
    default:
       unreachable("Unknown A64 logical instruction");
    }
@@ -2573,7 +2684,7 @@ fs_visitor::lower_logical_sends()
          lower_fb_write_logical_send(ibld, inst,
                                      brw_wm_prog_data(prog_data),
                                      (const brw_wm_prog_key *)key,
-                                     payload);
+                                     fs_payload());
          break;
 
       case FS_OPCODE_FB_READ_LOGICAL:
@@ -2660,9 +2771,12 @@ fs_visitor::lower_logical_sends()
          lower_surface_logical_send(ibld, inst);
          break;
 
-      case SHADER_OPCODE_OWORD_BLOCK_READ_LOGICAL:
       case SHADER_OPCODE_UNALIGNED_OWORD_BLOCK_READ_LOGICAL:
       case SHADER_OPCODE_OWORD_BLOCK_WRITE_LOGICAL:
+         if (devinfo->has_lsc) {
+            lower_lsc_block_logical_send(ibld, inst);
+            break;
+         }
          lower_surface_block_logical_send(ibld, inst);
          break;
 
@@ -2676,13 +2790,13 @@ fs_visitor::lower_logical_sends()
       case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT16_LOGICAL:
       case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT32_LOGICAL:
       case SHADER_OPCODE_A64_UNTYPED_ATOMIC_FLOAT64_LOGICAL:
+      case SHADER_OPCODE_A64_OWORD_BLOCK_READ_LOGICAL:
+      case SHADER_OPCODE_A64_UNALIGNED_OWORD_BLOCK_READ_LOGICAL:
+      case SHADER_OPCODE_A64_OWORD_BLOCK_WRITE_LOGICAL:
          if (devinfo->has_lsc) {
             lower_lsc_a64_logical_send(ibld, inst);
             break;
          }
-      case SHADER_OPCODE_A64_OWORD_BLOCK_READ_LOGICAL:
-      case SHADER_OPCODE_A64_UNALIGNED_OWORD_BLOCK_READ_LOGICAL:
-      case SHADER_OPCODE_A64_OWORD_BLOCK_WRITE_LOGICAL:
          lower_a64_logical_send(ibld, inst);
          break;
 

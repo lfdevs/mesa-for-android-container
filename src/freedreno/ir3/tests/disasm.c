@@ -167,6 +167,7 @@ static const struct test {
    INSTR_6XX(a0c81f00_e0200005, "sam.base0 (f32)(xyzw)r0.x, r0.z, s#1, a1.x"),
    INSTR_6XX(a0c81108_e2000001, "sam.base0 (f32)(x)r2.x, r0.x, s#16, a1.x"),
    INSTR_6XX(a048d107_cc080a07, "isaml.base3 (s32)(x)r1.w, r0.w, r1.y, s#0, t#6"),
+   INSTR_6XX(a048d107_e0080a07, "isaml.base3 (s32)(x)r1.w, r0.w, r1.y, s#0, a1.x"),
 
 
    /* dEQP-VK.subgroups.arithmetic.compute.subgroupadd_float */

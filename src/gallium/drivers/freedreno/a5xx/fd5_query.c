@@ -24,7 +24,7 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
-/* NOTE: see https://github.com/freedreno/freedreno/wiki/A5xx-Queries */
+/* NOTE: see https://gitlab.freedesktop.org/freedreno/freedreno/-/wikis/A5xx-Queries */
 
 #include "freedreno_query_acc.h"
 #include "freedreno_resource.h"
@@ -35,10 +35,16 @@
 #include "fd5_query.h"
 
 struct PACKED fd5_query_sample {
+   struct fd_acc_query_sample base;
+
+   /* The RB_SAMPLE_COUNT_ADDR destination needs to be 16-byte aligned: */
+   uint64_t pad;
+
    uint64_t start;
    uint64_t result;
    uint64_t stop;
 };
+DEFINE_CAST(fd_acc_query_sample, fd5_query_sample);
 
 /* offset of a single field of an array of fd5_query_sample: */
 #define query_sample_idx(aq, idx, field)                                       \
@@ -65,6 +71,8 @@ occlusion_resume(struct fd_acc_query *aq, struct fd_batch *batch)
    OUT_PKT4(ring, REG_A5XX_RB_SAMPLE_COUNT_CONTROL, 1);
    OUT_RING(ring, A5XX_RB_SAMPLE_COUNT_CONTROL_COPY);
 
+   ASSERT_ALIGNED(struct fd5_query_sample, start, 16);
+
    OUT_PKT4(ring, REG_A5XX_RB_SAMPLE_COUNT_ADDR_LO, 2);
    OUT_RELOC(ring, query_sample(aq, start));
 
@@ -88,6 +96,8 @@ occlusion_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 
    OUT_PKT4(ring, REG_A5XX_RB_SAMPLE_COUNT_CONTROL, 1);
    OUT_RING(ring, A5XX_RB_SAMPLE_COUNT_CONTROL_COPY);
+
+   ASSERT_ALIGNED(struct fd5_query_sample, stop, 16);
 
    OUT_PKT4(ring, REG_A5XX_RB_SAMPLE_COUNT_ADDR_LO, 2);
    OUT_RELOC(ring, query_sample(aq, stop));
@@ -114,18 +124,20 @@ occlusion_pause(struct fd_acc_query *aq, struct fd_batch *batch)
 }
 
 static void
-occlusion_counter_result(struct fd_acc_query *aq, void *buf,
+occlusion_counter_result(struct fd_acc_query *aq,
+                         struct fd_acc_query_sample *s,
                          union pipe_query_result *result)
 {
-   struct fd5_query_sample *sp = buf;
+   struct fd5_query_sample *sp = fd5_query_sample(s);
    result->u64 = sp->result;
 }
 
 static void
-occlusion_predicate_result(struct fd_acc_query *aq, void *buf,
+occlusion_predicate_result(struct fd_acc_query *aq,
+                           struct fd_acc_query_sample *s,
                            union pipe_query_result *result)
 {
-   struct fd5_query_sample *sp = buf;
+   struct fd5_query_sample *sp = fd5_query_sample(s);
    result->b = !!sp->result;
 }
 
@@ -205,18 +217,20 @@ ticks_to_ns(uint32_t ts)
 }
 
 static void
-time_elapsed_accumulate_result(struct fd_acc_query *aq, void *buf,
+time_elapsed_accumulate_result(struct fd_acc_query *aq,
+                               struct fd_acc_query_sample *s,
                                union pipe_query_result *result)
 {
-   struct fd5_query_sample *sp = buf;
+   struct fd5_query_sample *sp = fd5_query_sample(s);
    result->u64 = ticks_to_ns(sp->result);
 }
 
 static void
-timestamp_accumulate_result(struct fd_acc_query *aq, void *buf,
+timestamp_accumulate_result(struct fd_acc_query *aq,
+                            struct fd_acc_query_sample *s,
                             union pipe_query_result *result)
 {
-   struct fd5_query_sample *sp = buf;
+   struct fd5_query_sample *sp = fd5_query_sample(s);
    result->u64 = ticks_to_ns(sp->result);
 }
 
@@ -345,11 +359,12 @@ perfcntr_pause(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
 }
 
 static void
-perfcntr_accumulate_result(struct fd_acc_query *aq, void *buf,
+perfcntr_accumulate_result(struct fd_acc_query *aq,
+                           struct fd_acc_query_sample *s,
                            union pipe_query_result *result)
 {
    struct fd_batch_query_data *data = aq->query_data;
-   struct fd5_query_sample *sp = buf;
+   struct fd5_query_sample *sp = fd5_query_sample(s);
 
    for (unsigned i = 0; i < data->num_query_entries; i++) {
       result->batch[i].u64 = sp[i].result;

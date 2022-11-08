@@ -310,7 +310,8 @@ xfb_decl_num_components(struct xfb_decl *xfb_decl)
 static bool
 xfb_decl_assign_location(struct xfb_decl *xfb_decl,
                          const struct gl_constants *consts,
-                         struct gl_shader_program *prog)
+                         struct gl_shader_program *prog,
+                         bool disable_varying_packing, bool xfb_enabled)
 {
    assert(xfb_decl_is_varying(xfb_decl));
 
@@ -358,8 +359,18 @@ xfb_decl_assign_location(struct xfb_decl *xfb_decl,
                          actual_array_size);
             return false;
          }
+
+         bool array_will_be_lowered =
+            lower_packed_varying_needs_lowering(prog->last_vert_prog->nir,
+                                                xfb_decl->matched_candidate->toplevel_var,
+                                                nir_var_shader_out,
+                                                disable_varying_packing,
+                                                xfb_enabled) ||
+            strcmp(xfb_decl->matched_candidate->toplevel_var->name, "gl_ClipDistance") == 0 ||
+            strcmp(xfb_decl->matched_candidate->toplevel_var->name, "gl_CullDistance") == 0;
+
          unsigned array_elem_size = xfb_decl->lowered_builtin_array_variable ?
-            1 : vector_elements * matrix_cols * dmul;
+            1 : (array_will_be_lowered ? vector_elements : 4) * matrix_cols * dmul;
          fine_location += array_elem_size * xfb_decl->array_subscript;
          xfb_decl->size = 1;
       } else {
@@ -2780,7 +2791,8 @@ assign_final_varying_locations(const struct gl_constants *consts,
 
    for (unsigned i = 0; i < num_xfb_decls; ++i) {
       if (xfb_decl_is_varying(&xfb_decls[i])) {
-         if (!xfb_decl_assign_location(&xfb_decls[i], consts, prog))
+         if (!xfb_decl_assign_location(&xfb_decls[i], consts, prog,
+             vm->disable_varying_packing, vm->xfb_enabled))
             return false;
       }
    }

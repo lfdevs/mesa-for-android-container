@@ -263,8 +263,6 @@ lower_ray_query_intrinsic(nir_builder *b,
          brw_nir_rt_mem_ray_addr(b, stack_addr, BRW_RT_BVH_LEVEL_WORLD);
 
       brw_nir_rt_query_mark_init(b, stack_addr);
-      brw_nir_rt_init_mem_hit_at_addr(b, stack_addr, false, ray_t_max);
-      brw_nir_rt_init_mem_hit_at_addr(b, stack_addr, true, ray_t_max);
       brw_nir_rt_store_mem_ray_query_at_addr(b, ray_addr, &ray_defs);
 
       update_trace_ctrl_level(b, ctrl_level_addr,

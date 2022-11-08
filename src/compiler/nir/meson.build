@@ -138,6 +138,7 @@ files_libnir = files(
   'nir_lower_bool_to_bitsize.c',
   'nir_lower_bool_to_float.c',
   'nir_lower_bool_to_int32.c',
+  'nir_lower_cl_images.c',
   'nir_lower_clamp_color_outputs.c',
   'nir_lower_clip.c',
   'nir_lower_clip_cull_distance_arrays.c',
@@ -246,6 +247,7 @@ files_libnir = files(
   'nir_opt_memcpy.c',
   'nir_opt_move.c',
   'nir_opt_move_discards_to_top.c',
+  'nir_opt_non_uniform_access.c',
   'nir_opt_offsets.c',
   'nir_opt_peephole_select.c',
   'nir_opt_phi_precision.c',
@@ -260,6 +262,7 @@ files_libnir = files(
   'nir_opt_undef.c',
   'nir_opt_uniform_atomics.c',
   'nir_opt_vectorize.c',
+  'nir_passthrough_tcs.c',
   'nir_phi_builder.c',
   'nir_phi_builder.h',
   'nir_print.c',
@@ -370,10 +373,12 @@ _libnir = static_library(
   build_by_default : false,
 )
 
+inc_nir = include_directories('.')
+
 # Headers-only dependency
 idep_nir_headers = declare_dependency(
   sources : [nir_opcodes_h, nir_builder_opcodes_h, nir_intrinsics_h, nir_intrinsics_indices_h],
-  include_directories : include_directories('.'),
+  include_directories : inc_nir,
 )
 
 # Also link with nir

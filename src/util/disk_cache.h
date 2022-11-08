@@ -45,6 +45,7 @@ extern "C" {
 
 #define CACHE_DIR_NAME "mesa_shader_cache"
 #define CACHE_DIR_NAME_SF "mesa_shader_cache_sf"
+#define CACHE_DIR_NAME_DB "mesa_shader_cache_db"
 
 typedef uint8_t cache_key[CACHE_KEY_SIZE];
 

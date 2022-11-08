@@ -51,6 +51,7 @@
 #include "pipe/p_compiler.h"
 #include "os/os_thread.h"
 #include "util/os_time.h"
+#include "util/simple_mtx.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
@@ -65,7 +66,7 @@
 
 static bool close_stream = false;
 static FILE *stream = NULL;
-static mtx_t call_mutex = _MTX_INITIALIZER_NP;
+static simple_mtx_t call_mutex = SIMPLE_MTX_INITIALIZER;
 static long unsigned call_no = 0;
 static bool dumping = false;
 static long nir_count = 0;
@@ -85,7 +86,7 @@ trace_dump_check_trigger(void)
    if (!trigger_filename)
       return;
 
-   mtx_lock(&call_mutex);
+   simple_mtx_lock(&call_mutex);
    if (trigger_active) {
       trigger_active = false;
    } else {
@@ -98,7 +99,7 @@ trace_dump_check_trigger(void)
          }
       }
    }
-   mtx_unlock(&call_mutex);
+   simple_mtx_unlock(&call_mutex);
 }
 
 bool
@@ -304,12 +305,12 @@ bool trace_dump_trace_enabled(void)
 
 void trace_dump_call_lock(void)
 {
-   mtx_lock(&call_mutex);
+   simple_mtx_lock(&call_mutex);
 }
 
 void trace_dump_call_unlock(void)
 {
-   mtx_unlock(&call_mutex);
+   simple_mtx_unlock(&call_mutex);
 }
 
 /*
@@ -333,24 +334,24 @@ bool trace_dumping_enabled_locked(void)
 
 void trace_dumping_start(void)
 {
-   mtx_lock(&call_mutex);
+   simple_mtx_lock(&call_mutex);
    trace_dumping_start_locked();
-   mtx_unlock(&call_mutex);
+   simple_mtx_unlock(&call_mutex);
 }
 
 void trace_dumping_stop(void)
 {
-   mtx_lock(&call_mutex);
+   simple_mtx_lock(&call_mutex);
    trace_dumping_stop_locked();
-   mtx_unlock(&call_mutex);
+   simple_mtx_unlock(&call_mutex);
 }
 
 bool trace_dumping_enabled(void)
 {
    bool ret;
-   mtx_lock(&call_mutex);
+   simple_mtx_lock(&call_mutex);
    ret = trace_dumping_enabled_locked();
-   mtx_unlock(&call_mutex);
+   simple_mtx_unlock(&call_mutex);
    return ret;
 }
 
@@ -397,14 +398,14 @@ void trace_dump_call_end_locked(void)
 
 void trace_dump_call_begin(const char *klass, const char *method)
 {
-   mtx_lock(&call_mutex);
+   simple_mtx_lock(&call_mutex);
    trace_dump_call_begin_locked(klass, method);
 }
 
 void trace_dump_call_end(void)
 {
    trace_dump_call_end_locked();
-   mtx_unlock(&call_mutex);
+   simple_mtx_unlock(&call_mutex);
 }
 
 void trace_dump_arg_begin(const char *name)

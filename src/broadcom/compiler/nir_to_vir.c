@@ -324,6 +324,7 @@ ntq_add_pending_tmu_flush(struct v3d_compile *c,
         c->tmu.flush[c->tmu.flush_count].dest = dest;
         c->tmu.flush[c->tmu.flush_count].component_mask = component_mask;
         c->tmu.flush_count++;
+        c->tmu.total_count++;
 
         if (c->disable_tmu_pipelining)
                 ntq_flush_tmu(c);
@@ -594,9 +595,9 @@ ntq_emit_tmu_general(struct v3d_compile *c, nir_intrinsic_instr *instr,
                  */
                 base_offset = vir_uniform_ui(c, 0);
         } else {
+                uint32_t idx = is_store ? 1 : 0;
                 base_offset = vir_uniform(c, QUNIFORM_SSBO_OFFSET,
-                                          nir_src_as_uint(instr->src[is_store ?
-                                                                      1 : 0]));
+                                          nir_src_comp_as_uint(instr->src[idx], 0));
         }
 
         /* We are ready to emit TMU register writes now, but before we actually
@@ -1312,7 +1313,7 @@ f2f16_rtz(struct v3d_compile *c, struct qreg f32)
          * the default RTE conversion.
          */
         static bool _first = true;
-        if (_first && unlikely(V3D_DEBUG & V3D_DEBUG_PERF)) {
+        if (_first && V3D_DBG(PERF)) {
                 fprintf(stderr, "Shader uses round-toward-zero f32->f16 "
                         "conversion which is not supported in hardware.\n");
                 _first = false;
@@ -2125,7 +2126,7 @@ mem_vectorize_callback(unsigned align_mul, unsigned align_offset,
 }
 
 void
-v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
+v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s, bool allow_copies)
 {
         bool progress;
         unsigned lower_flrp =
@@ -2136,7 +2137,29 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
         do {
                 progress = false;
 
+                NIR_PASS(progress, s, nir_split_array_vars, nir_var_function_temp);
+                NIR_PASS(progress, s, nir_shrink_vec_array_vars, nir_var_function_temp);
+                NIR_PASS(progress, s, nir_opt_deref);
+
                 NIR_PASS(progress, s, nir_lower_vars_to_ssa);
+                if (allow_copies) {
+                        /* Only run this pass if nir_lower_var_copies was not called
+                         * yet. That would lower away any copy_deref instructions and we
+                         * don't want to introduce any more.
+                         */
+                        NIR_PASS(progress, s, nir_opt_find_array_copies);
+                }
+
+                NIR_PASS(progress, s, nir_opt_copy_prop_vars);
+                NIR_PASS(progress, s, nir_opt_dead_write_vars);
+                NIR_PASS(progress, s, nir_opt_combine_stores, nir_var_all);
+
+                NIR_PASS(progress, s, nir_remove_dead_variables,
+                         (nir_variable_mode)(nir_var_function_temp |
+                                             nir_var_shader_temp |
+                                             nir_var_mem_shared),
+                         NULL);
+
                 NIR_PASS(progress, s, nir_lower_alu_to_scalar, NULL, NULL);
                 NIR_PASS(progress, s, nir_lower_phis_to_scalar, false);
                 NIR_PASS(progress, s, nir_copy_prop);
@@ -2144,9 +2167,32 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                 NIR_PASS(progress, s, nir_opt_dce);
                 NIR_PASS(progress, s, nir_opt_dead_cf);
                 NIR_PASS(progress, s, nir_opt_cse);
+                NIR_PASS(progress, s, nir_opt_peephole_select, 0, false, false);
                 NIR_PASS(progress, s, nir_opt_peephole_select, 8, true, true);
                 NIR_PASS(progress, s, nir_opt_algebraic);
                 NIR_PASS(progress, s, nir_opt_constant_folding);
+
+                NIR_PASS(progress, s, nir_opt_intrinsics);
+                NIR_PASS(progress, s, nir_opt_idiv_const, 32);
+                NIR_PASS(progress, s, nir_lower_alu);
+
+                if (nir_opt_trivial_continues(s)) {
+                   progress = true;
+                   NIR_PASS(progress, s, nir_copy_prop);
+                   NIR_PASS(progress, s, nir_opt_dce);
+                }
+
+                NIR_PASS(progress, s, nir_opt_conditional_discard);
+
+                NIR_PASS(progress, s, nir_opt_remove_phis);
+                NIR_PASS(progress, s, nir_opt_if, false);
+                NIR_PASS(progress, s, nir_opt_undef);
+                if (c && !c->disable_gcm) {
+                        bool local_progress = false;
+                        NIR_PASS(local_progress, s, nir_opt_gcm, false);
+                        c->gcm_progress |= local_progress;
+                        progress |= local_progress;
+                }
 
                 /* Note that vectorization may undo the load/store scalarization
                  * pass we run for non 32-bit TMU general load/store by
@@ -2163,12 +2209,22 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                         .robust_modes = 0,
                 };
                 bool vectorize_progress = false;
-                NIR_PASS(vectorize_progress, s, nir_opt_load_store_vectorize,
-                         &vectorize_opts);
-                if (vectorize_progress) {
-                        NIR_PASS(progress, s, nir_lower_alu_to_scalar, NULL, NULL);
-                        NIR_PASS(progress, s, nir_lower_pack);
-                        progress = true;
+
+
+                /* This requires that we have called
+                 * nir_lower_vars_to_explicit_types / nir_lower_explicit_io
+                 * first, which we may not have done yet if we call here too
+                 * early durign NIR pre-processing. We can detect this because
+                 * in that case we won't have a compile object
+                 */
+                if (c) {
+                        NIR_PASS(vectorize_progress, s, nir_opt_load_store_vectorize,
+                                 &vectorize_opts);
+                        if (vectorize_progress) {
+                                NIR_PASS(progress, s, nir_lower_alu_to_scalar, NULL, NULL);
+                                NIR_PASS(progress, s, nir_lower_pack);
+                                progress = true;
+                        }
                 }
 
                 if (lower_flrp != 0) {
@@ -3000,18 +3056,18 @@ ntq_get_barycentric_centroid(struct v3d_compile *c,
         /* sN = TRUE if sample N enabled in sample mask, FALSE otherwise */
         struct qreg F = vir_uniform_ui(c, 0);
         struct qreg T = vir_uniform_ui(c, ~0);
-        struct qreg s0 = vir_XOR(c, vir_AND(c, sample_mask, i1), i1);
+        struct qreg s0 = vir_AND(c, sample_mask, i1);
         vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), s0), V3D_QPU_PF_PUSHZ);
-        s0 = vir_SEL(c, V3D_QPU_COND_IFA, T, F);
-        struct qreg s1 = vir_XOR(c, vir_AND(c, sample_mask, i2), i2);
+        s0 = vir_SEL(c, V3D_QPU_COND_IFNA, T, F);
+        struct qreg s1 = vir_AND(c, sample_mask, i2);
         vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), s1), V3D_QPU_PF_PUSHZ);
-        s1 = vir_SEL(c, V3D_QPU_COND_IFA, T, F);
-        struct qreg s2 = vir_XOR(c, vir_AND(c, sample_mask, i4), i4);
+        s1 = vir_SEL(c, V3D_QPU_COND_IFNA, T, F);
+        struct qreg s2 = vir_AND(c, sample_mask, i4);
         vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), s2), V3D_QPU_PF_PUSHZ);
-        s2 = vir_SEL(c, V3D_QPU_COND_IFA, T, F);
-        struct qreg s3 = vir_XOR(c, vir_AND(c, sample_mask, i8), i8);
+        s2 = vir_SEL(c, V3D_QPU_COND_IFNA, T, F);
+        struct qreg s3 = vir_AND(c, sample_mask, i8);
         vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), s3), V3D_QPU_PF_PUSHZ);
-        s3 = vir_SEL(c, V3D_QPU_COND_IFA, T, F);
+        s3 = vir_SEL(c, V3D_QPU_COND_IFNA, T, F);
 
         /* sample_idx = s0 ? 0 : s2 ? 2 : s1 ? 1 : 3 */
         struct qreg sample_idx = i3;
@@ -3206,7 +3262,20 @@ ntq_emit_load_unifa(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 struct qreg unifa = vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_UNIFA);
                 if (!dynamic_src) {
                         if (!is_ssbo) {
-                                vir_MOV_dest(c, unifa, base_offset);
+                                /* Avoid the extra MOV to UNIFA by making
+                                 * ldunif load directly into it. We can't
+                                 * do this if we have not actually emitted
+                                 * ldunif and are instead reusing a previous
+                                 * one.
+                                 */
+                                struct qinst *inst =
+                                        (struct qinst *)c->cur_block->instructions.prev;
+                                if (inst == c->defs[base_offset.index]) {
+                                   inst->dst = unifa;
+                                   c->defs[base_offset.index] = NULL;
+                                } else {
+                                   vir_MOV_dest(c, unifa, base_offset);
+                                }
                         } else {
                                 vir_ADD_dest(c, unifa, base_offset,
                                              vir_uniform_ui(c, const_offset));
@@ -4567,8 +4636,8 @@ vir_check_payload_w(struct v3d_compile *c)
 void
 v3d_nir_to_vir(struct v3d_compile *c)
 {
-        if (V3D_DEBUG & (V3D_DEBUG_NIR |
-                         v3d_debug_flag_for_shader_stage(c->s->info.stage))) {
+        if (V3D_DBG(NIR) ||
+            v3d_debug_flag_for_shader_stage(c->s->info.stage)) {
                 fprintf(stderr, "%s prog %d/%d NIR:\n",
                         vir_get_stage_name(c),
                         c->program_id, c->variant_id);
@@ -4602,8 +4671,8 @@ v3d_nir_to_vir(struct v3d_compile *c)
                 unreachable("bad stage");
         }
 
-        if (V3D_DEBUG & (V3D_DEBUG_VIR |
-                         v3d_debug_flag_for_shader_stage(c->s->info.stage))) {
+        if (V3D_DBG(VIR) ||
+            v3d_debug_flag_for_shader_stage(c->s->info.stage)) {
                 fprintf(stderr, "%s prog %d/%d pre-opt VIR:\n",
                         vir_get_stage_name(c),
                         c->program_id, c->variant_id);
@@ -4624,8 +4693,8 @@ v3d_nir_to_vir(struct v3d_compile *c)
          * instructions until the results are needed.
          */
 
-        if (V3D_DEBUG & (V3D_DEBUG_VIR |
-                         v3d_debug_flag_for_shader_stage(c->s->info.stage))) {
+        if (V3D_DBG(VIR) ||
+            v3d_debug_flag_for_shader_stage(c->s->info.stage)) {
                 fprintf(stderr, "%s prog %d/%d VIR:\n",
                         vir_get_stage_name(c),
                         c->program_id, c->variant_id);
@@ -4646,7 +4715,7 @@ v3d_nir_to_vir(struct v3d_compile *c)
                 }
 
                 if (c->threads == min_threads &&
-                    (V3D_DEBUG & V3D_DEBUG_RA)) {
+                    V3D_DBG(RA)) {
                         fprintf(stderr,
                                 "Failed to register allocate using %s\n",
                                 c->fallback_scheduler ? "the fallback scheduler:" :
@@ -4663,7 +4732,7 @@ v3d_nir_to_vir(struct v3d_compile *c)
                 }
 
                 if (c->threads <= MAX2(c->min_threads_for_reg_alloc, min_threads)) {
-                        if (V3D_DEBUG & V3D_DEBUG_PERF) {
+                        if (V3D_DBG(PERF)) {
                                 fprintf(stderr,
                                         "Failed to register allocate %s "
                                         "prog %d/%d at %d threads.\n",
@@ -4690,8 +4759,8 @@ v3d_nir_to_vir(struct v3d_compile *c)
                 vir_restore_last_thrsw(c, restore_last_thrsw, restore_scoreboard_lock);
 
         if (c->spills &&
-            (V3D_DEBUG & (V3D_DEBUG_VIR |
-                          v3d_debug_flag_for_shader_stage(c->s->info.stage)))) {
+            (V3D_DBG(VIR) ||
+             v3d_debug_flag_for_shader_stage(c->s->info.stage))) {
                 fprintf(stderr, "%s prog %d/%d spilled VIR:\n",
                         vir_get_stage_name(c),
                         c->program_id, c->variant_id);

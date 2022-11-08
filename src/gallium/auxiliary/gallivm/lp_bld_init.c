@@ -28,6 +28,7 @@
 
 #include "pipe/p_config.h"
 #include "pipe/p_compiler.h"
+#include "util/macros.h"
 #include "util/u_cpu_detect.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
@@ -438,49 +439,11 @@ lp_build_init(void)
 
    lp_set_target_options();
 
-   /* For simulating less capable machines */
-#ifdef DEBUG
-   if (debug_get_bool_option("LP_FORCE_SSE2", FALSE)) {
-      extern struct util_cpu_caps_t util_cpu_caps;
-      assert(util_cpu_caps.has_sse2);
-      util_cpu_caps.has_sse3 = 0;
-      util_cpu_caps.has_ssse3 = 0;
-      util_cpu_caps.has_sse4_1 = 0;
-      util_cpu_caps.has_sse4_2 = 0;
-      util_cpu_caps.has_avx = 0;
-      util_cpu_caps.has_avx2 = 0;
-      util_cpu_caps.has_f16c = 0;
-      util_cpu_caps.has_fma = 0;
-   }
-#endif
-
-   if (util_get_cpu_caps()->has_avx2 || util_get_cpu_caps()->has_avx) {
-      lp_native_vector_width = 256;
-   } else {
-      /* Leave it at 128, even when no SIMD extensions are available.
-       * Really needs to be a multiple of 128 so can fit 4 floats.
-       */
-      lp_native_vector_width = 128;
-   }
+   // Default to 256 until we're confident llvmpipe with 512 is as correct and not slower than 256
+   lp_native_vector_width = MIN2(util_get_cpu_caps()->max_vector_bits, 256);
 
    lp_native_vector_width = debug_get_num_option("LP_NATIVE_VECTOR_WIDTH",
                                                  lp_native_vector_width);
-
-#if LLVM_VERSION_MAJOR < 4
-   if (lp_native_vector_width <= 128) {
-      /* Hide AVX support, as often LLVM AVX intrinsics are only guarded by
-       * "util_get_cpu_caps()->has_avx" predicate, and lack the
-       * "lp_native_vector_width > 128" predicate. And also to ensure a more
-       * consistent behavior, allowing one to test SSE2 on AVX machines.
-       * XXX: should not play games with util_cpu_caps directly as it might
-       * get used for other things outside llvm too.
-       */
-      util_get_cpu_caps()->has_avx = 0;
-      util_get_cpu_caps()->has_avx2 = 0;
-      util_get_cpu_caps()->has_f16c = 0;
-      util_get_cpu_caps()->has_fma = 0;
-   }
-#endif
 
 #ifdef PIPE_ARCH_PPC_64
    /* Set the NJ bit in VSCR to 0 so denormalized values are handled as
@@ -569,6 +532,14 @@ gallivm_verify_function(struct gallivm_state *gallivm,
    }
 }
 
+void lp_init_clock_hook(struct gallivm_state *gallivm)
+{
+   if (gallivm->get_time_hook)
+      return;
+
+   LLVMTypeRef get_time_type = LLVMFunctionType(LLVMInt64TypeInContext(gallivm->context), NULL, 0, 1);
+   gallivm->get_time_hook = LLVMAddFunction(gallivm->module, "get_time_hook", get_time_type);
+}
 
 /**
  * Compile a module.
@@ -630,7 +601,7 @@ gallivm_compile_module(struct gallivm_state *gallivm)
    LLVMRunPasses(gallivm->module, passes, LLVMGetExecutionEngineTargetMachine(gallivm->engine), opts);
 
    if (!(gallivm_perf & GALLIVM_PERF_NO_OPT))
-      strcpy(passes, "sroa,early-cse,simplifycfg,reassociate,mem2reg,constprop,instcombine,");
+      strcpy(passes, "sroa,early-cse,simplifycfg,reassociate,mem2reg,instsimplify,instcombine");
    else
       strcpy(passes, "mem2reg");
 
@@ -693,6 +664,8 @@ gallivm_compile_module(struct gallivm_state *gallivm)
    lp_init_printf_hook(gallivm);
    LLVMAddGlobalMapping(gallivm->engine, gallivm->debug_printf_hook, debug_printf);
 
+   lp_init_clock_hook(gallivm);
+   LLVMAddGlobalMapping(gallivm->engine, gallivm->get_time_hook, os_time_get_nano);
 
    if (gallivm_debug & GALLIVM_DEBUG_ASM) {
       LLVMValueRef llvm_func = LLVMGetFirstFunction(gallivm->module);

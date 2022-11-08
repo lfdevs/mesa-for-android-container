@@ -69,7 +69,7 @@ VkResult pvr_CreateQueryPool(VkDevice _device,
    /* Each Phantom writes to a separate offset within the vis test heap so
     * allocate space for the total number of Phantoms.
     */
-   alloc_size = pool->result_stride * core_count;
+   alloc_size = (uint64_t)pool->result_stride * core_count;
 
    result = pvr_bo_alloc(device,
                          device->heaps.vis_test_heap,
@@ -81,7 +81,7 @@ VkResult pvr_CreateQueryPool(VkDevice _device,
       goto err_free_pool;
 
    result = pvr_bo_alloc(device,
-                         device->heaps.vis_test_heap,
+                         device->heaps.general_heap,
                          query_size,
                          sizeof(uint32_t),
                          PVR_BO_ALLOC_FLAG_CPU_MAPPED,

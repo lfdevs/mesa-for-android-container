@@ -469,14 +469,6 @@ spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-explicit-dvec3-i6
 spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-explicit-dvec3-u64vec3: crash
 spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-explicit-dvec4-i64vec4: crash
 spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-explicit-dvec4-u64vec4: crash
-spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-implicit-i64vec2-dvec2: crash
-spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-implicit-i64vec3-dvec3: crash
-spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-implicit-i64vec4-dvec4: crash
-spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-implicit-int64_t-double: crash
-spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-implicit-u64vec2-dvec2: crash
-spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-implicit-u64vec3-dvec3: crash
-spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-implicit-u64vec4-dvec4: crash
-spec/arb_gpu_shader_int64/execution/conversion/frag-conversion-implicit-uint64_t-double: crash
 spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-explicit-double-int64_t: crash
 spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-explicit-double-uint64_t: crash
 spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-explicit-dvec2-i64vec2: crash
@@ -485,14 +477,6 @@ spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-explicit-dvec3-i6
 spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-explicit-dvec3-u64vec3: crash
 spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-explicit-dvec4-i64vec4: crash
 spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-explicit-dvec4-u64vec4: crash
-spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-implicit-i64vec2-dvec2: crash
-spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-implicit-i64vec3-dvec3: crash
-spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-implicit-i64vec4-dvec4: crash
-spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-implicit-int64_t-double: crash
-spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-implicit-u64vec2-dvec2: crash
-spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-implicit-u64vec3-dvec3: crash
-spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-implicit-u64vec4-dvec4: crash
-spec/arb_gpu_shader_int64/execution/conversion/geom-conversion-implicit-uint64_t-double: crash
 spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-explicit-double-int64_t: crash
 spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-explicit-double-uint64_t: crash
 spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-explicit-dvec2-i64vec2: crash
@@ -501,14 +485,6 @@ spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-explicit-dvec3-i6
 spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-explicit-dvec3-u64vec3: crash
 spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-explicit-dvec4-i64vec4: crash
 spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-explicit-dvec4-u64vec4: crash
-spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-implicit-i64vec2-dvec2: crash
-spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-implicit-i64vec3-dvec3: crash
-spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-implicit-i64vec4-dvec4: crash
-spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-implicit-int64_t-double: crash
-spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-implicit-u64vec2-dvec2: crash
-spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-implicit-u64vec3-dvec3: crash
-spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-implicit-u64vec4-dvec4: crash
-spec/arb_gpu_shader_int64/execution/conversion/vert-conversion-implicit-uint64_t-double: crash
 spec/arb_gpu_shader_int64/execution/indirect-array-two-accesses: fail
 spec/arb_gpu_shader_int64/execution/inout/vs-out-fs-in-s1/2-s2/2-s3/2-int64_t-location-0: crash
 spec/arb_gpu_shader_int64/execution/inout/vs-out-fs-in-s1/2-s2/2-s3/2-uint64_t-location-0: crash
@@ -3083,9 +3059,9 @@ spec/oes_viewport_array/viewport-gs-writes-out-of-range: skip
 summary:
        name:  results
        ----  --------
-       pass:    17159
+       pass:    17183
        fail:       44
-      crash:       88
+      crash:       64
        skip:     2925
     timeout:        0
        warn:       25

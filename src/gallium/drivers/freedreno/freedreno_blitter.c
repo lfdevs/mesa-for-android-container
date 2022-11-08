@@ -88,8 +88,8 @@ fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond) assert_dt
    util_blitter_save_so_targets(ctx->blitter, ctx->streamout.num_targets,
                                 ctx->streamout.targets);
    util_blitter_save_rasterizer(ctx->blitter, ctx->rasterizer);
-   util_blitter_save_viewport(ctx->blitter, &ctx->viewport);
-   util_blitter_save_scissor(ctx->blitter, &ctx->scissor);
+   util_blitter_save_viewport(ctx->blitter, &ctx->viewport[0]);
+   util_blitter_save_scissor(ctx->blitter, &ctx->scissor[0]);
    util_blitter_save_fragment_shader(ctx->blitter, ctx->prog.fs);
    util_blitter_save_blend(ctx->blitter, ctx->blend);
    util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->zsa);

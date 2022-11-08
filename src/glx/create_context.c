@@ -43,8 +43,8 @@
 
 _X_HIDDEN GLXContext
 glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
-			   GLXContext share_context, Bool direct,
-			   const int *attrib_list)
+                           GLXContext share_context, Bool direct,
+                           const int *attrib_list)
 {
    xcb_connection_t *const c = XGetXCBConnection(dpy);
    struct glx_config *const cfg = (struct glx_config *) config;
@@ -66,7 +66,7 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
     */
    if (attrib_list != NULL) {
       for (/* empty */; attrib_list[num_attribs * 2] != 0; num_attribs++)
-	 /* empty */ ;
+         /* empty */ ;
    }
 
    if (cfg) {
@@ -107,8 +107,8 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
        * will be delivered to the application.
        */
       gc = psc->vtable->create_context_attribs(psc, cfg, share, num_attribs,
-					       (const uint32_t *) attrib_list,
-					       &dummy_err);
+                                               (const uint32_t *) attrib_list,
+                                               &dummy_err);
    }
 
    if (gc == NULL) {
@@ -134,14 +134,14 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
     */
    cookie =
       xcb_glx_create_context_attribs_arb_checked(c,
-						 xid,
-						 cfg ? cfg->fbconfigID : 0,
-						 screen,
-						 share_xid,
-						 gc ? gc->isDirect : direct,
-						 num_attribs,
-						 (const uint32_t *)
-						 attrib_list);
+                                                 xid,
+                                                 cfg ? cfg->fbconfigID : 0,
+                                                 screen,
+                                                 share_xid,
+                                                 gc ? gc->isDirect : direct,
+                                                 num_attribs,
+                                                 (const uint32_t *)
+                                                 attrib_list);
    err = xcb_request_check(c, cookie);
    if (err != NULL) {
       if (gc)

@@ -279,6 +279,10 @@ static void pvr_pds_vertex_attrib_init_dma_descriptions(
       const VkVertexInputAttributeDescription *const attrib_desc =
          &vertex_input_state->pVertexAttributeDescriptions[i];
       const VkVertexInputBindingDescription *binding_desc = NULL;
+      struct pvr_pds_vertex_dma *const dma_desc = &dma_descriptions[dma_count];
+      size_t location = attrib_desc->location;
+
+      assert(location < vs_data->inputs.num_input_vars);
 
       /* Finding the matching binding description. */
       for (uint32_t j = 0;
@@ -300,15 +304,8 @@ static void pvr_pds_vertex_attrib_init_dma_descriptions(
        *    pVertexAttributeDescriptions, a
        *    VkVertexInputBindingDescription must exist in
        *    pVertexBindingDescriptions with the same value of binding"
-       *
-       * So we don't check if we found the matching binding description
-       * or not.
        */
-
-      struct pvr_pds_vertex_dma *const dma_desc = &dma_descriptions[dma_count];
-
-      size_t location = attrib_desc->location;
-      assert(location < vs_data->inputs.num_input_vars);
+      assert(binding_desc);
 
       dma_desc->offset = attrib_desc->offset;
       dma_desc->stride = binding_desc->stride;
@@ -421,8 +418,7 @@ static VkResult pvr_pds_vertex_attrib_program_create_and_upload(
    if (result != VK_SUCCESS) {
       vk_free2(&device->vk.alloc, allocator, entries_buffer);
       vk_free2(&device->vk.alloc, allocator, staging_buffer);
-
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return result;
    }
 
    vk_free2(&device->vk.alloc, allocator, staging_buffer);
@@ -522,7 +518,7 @@ static VkResult pvr_pds_vertex_attrib_programs_create_and_upload(
    return VK_SUCCESS;
 }
 
-static size_t pvr_pds_get_max_descriptor_upload_const_map_size_in_bytes()
+static size_t pvr_pds_get_max_descriptor_upload_const_map_size_in_bytes(void)
 {
    /* Maximum memory allocation needed for const map entries in
     * pvr_pds_generate_descriptor_upload_program().
@@ -616,7 +612,7 @@ static VkResult pvr_pds_descriptor_program_setup_buffers(
        * Currently we're only setting up a single buffer.
        */
       buffers[buffer_count++] = (struct pvr_pds_buffer){
-         .type = PVR_BUFFER_TYPES_COMPILE_TIME,
+         .type = PVR_BUFFER_TYPE_COMPILE_TIME,
          .size_in_dwords = compile_time_consts_data->static_consts.num,
          .destination = compile_time_consts_data->static_consts.dest,
       };
@@ -652,7 +648,7 @@ static VkResult pvr_pds_descriptor_program_create_and_upload(
    const size_t const_entries_size_in_bytes =
       pvr_pds_get_max_descriptor_upload_const_map_size_in_bytes();
    struct pvr_pds_info *const pds_info = &descriptor_state->pds_info;
-   struct pvr_descriptor_program_input program = { 0 };
+   struct pvr_pds_descriptor_program_input program = { 0 };
    struct pvr_const_map_entry *entries_buffer;
    ASSERTED uint32_t code_size_in_dwords;
    uint32_t staging_buffer_size;
@@ -784,7 +780,7 @@ static VkResult pvr_pds_descriptor_program_create_and_upload(
       vk_free2(&device->vk.alloc, allocator, entries_buffer);
       vk_free2(&device->vk.alloc, allocator, staging_buffer);
 
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return result;
    }
 
    vk_free2(&device->vk.alloc, allocator, staging_buffer);
@@ -1778,12 +1774,11 @@ static void pvr_graphics_pipeline_init_dynamic_state(
 
       /* TODO: Do we need the depthBiasEnable check? */
       if (!(dynamic_states & PVR_DYNAMIC_STATE_BIT_DEPTH_BIAS)) {
-         internal_dynamic_state->depth_bias.constant_factor =
-            rasterization_state->depthBiasConstantFactor;
-         internal_dynamic_state->depth_bias.clamp =
-            rasterization_state->depthBiasClamp;
-         internal_dynamic_state->depth_bias.slope_factor =
-            rasterization_state->depthBiasSlopeFactor;
+         internal_dynamic_state->depth_bias = (struct pvr_depth_bias_state){
+            .constant_factor = rasterization_state->depthBiasConstantFactor,
+            .slope_factor = rasterization_state->depthBiasSlopeFactor,
+            .clamp = rasterization_state->depthBiasClamp,
+         };
       }
    }
 

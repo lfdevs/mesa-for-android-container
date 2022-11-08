@@ -333,7 +333,6 @@ optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend, bool is_blit)
 
         NIR_PASS(progress, nir, nir_lower_regs_to_ssa);
         nir_lower_idiv_options idiv_options = {
-                .imprecise_32bit_lowering = true,
                 .allow_fp16 = true,
         };
         NIR_PASS(progress, nir, nir_lower_idiv, &idiv_options);
@@ -362,6 +361,13 @@ optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend, bool is_blit)
         NIR_PASS(progress, nir, midgard_nir_lower_helper_writes);
         NIR_PASS(progress, nir, pan_lower_helper_invocation);
         NIR_PASS(progress, nir, pan_lower_sample_pos);
+
+        if (nir->xfb_info != NULL && nir->info.has_transform_feedback_varyings) {
+                NIR_PASS_V(nir, nir_io_add_const_offset_to_base,
+                           nir_var_shader_in | nir_var_shader_out);
+                NIR_PASS_V(nir, nir_io_add_intrinsic_xfb_info);
+                NIR_PASS_V(nir, pan_lower_xfb);
+        }
 
         NIR_PASS(progress, nir, midgard_nir_lower_algebraic_early);
         NIR_PASS_V(nir, nir_lower_alu_to_scalar, mdg_should_scalarize, NULL);
@@ -661,10 +667,27 @@ mir_copy_src(midgard_instruction *ins, nir_alu_instr *instr, unsigned i, unsigne
         ins->src[to] = nir_src_index(NULL, &src.src);
         ins->src_types[to] = nir_op_infos[instr->op].input_types[i] | bits;
 
+        /* Figure out which component we should fill unused channels with. This
+         * doesn't matter too much in the non-broadcast case, but it makes
+         * should that scalar sources are packed with replicated swizzles,
+         * which works around issues seen with the combination of source
+         * expansion and destination shrinking.
+         */
+        unsigned replicate_c = 0;
+        if (bcast_count) {
+                replicate_c = bcast_count - 1;
+        } else {
+                for (unsigned c = 0; c < NIR_MAX_VEC_COMPONENTS; ++c) {
+                        if (nir_alu_instr_channel_used(instr, i, c))
+                                replicate_c = c;
+                }
+        }
+
         for (unsigned c = 0; c < NIR_MAX_VEC_COMPONENTS; ++c) {
                 ins->swizzle[to][c] = src.swizzle[
-                        (!bcast_count || c < bcast_count) ? c :
-                                (bcast_count - 1)];
+                        ((!bcast_count || c < bcast_count) &&
+                          nir_alu_instr_channel_used(instr, i, c)) ?
+                        c : replicate_c];
         }
 }
 
@@ -1414,9 +1437,6 @@ emit_varying_read(
         unsigned nr_comp, unsigned component,
         nir_src *indirect_offset, nir_alu_type type, bool flat)
 {
-        /* XXX: Half-floats? */
-        /* TODO: swizzle, mask */
-
         midgard_instruction ins = m_ld_vary_32(dest, PACK_LDST_ATTRIB_OFS(offset));
         ins.mask = mask_of(nr_comp);
         ins.dest_type = type;
@@ -1428,7 +1448,6 @@ emit_varying_read(
 
         for (unsigned i = 0; i < ARRAY_SIZE(ins.swizzle[0]); ++i)
                 ins.swizzle[0][i] = MIN2(i + component, COMPONENT_W);
-
 
         midgard_varying_params p = {
                 .flat_shading = flat,
@@ -1446,24 +1465,20 @@ emit_varying_read(
         ins.load_store.arg_reg = REGISTER_LDST_ZERO;
         ins.load_store.index_format = midgard_index_address_u32;
 
-        /* Use the type appropriate load */
-        switch (type) {
-        case nir_type_uint32:
-        case nir_type_bool32:
+        /* For flat shading, we always use .u32 and require 32-bit mode. For
+         * smooth shading, we use the appropriate floating-point type.
+         *
+         * This could be optimized, but it makes it easy to check correctness.
+         */
+        if (flat) {
+                assert(nir_alu_type_get_type_size(type) == 32);
                 ins.op = midgard_op_ld_vary_32u;
-                break;
-        case nir_type_int32:
-                ins.op = midgard_op_ld_vary_32i;
-                break;
-        case nir_type_float32:
-                ins.op = midgard_op_ld_vary_32;
-                break;
-        case nir_type_float16:
-                ins.op = midgard_op_ld_vary_16;
-                break;
-        default:
-                unreachable("Attempted to load unknown type");
-                break;
+        } else {
+                assert(nir_alu_type_get_base_type(type) == nir_type_float);
+
+                ins.op = (nir_alu_type_get_type_size(type) == 32) ?
+                         midgard_op_ld_vary_32 :
+                         midgard_op_ld_vary_16;
         }
 
         emit_mir_instruction(ctx, ins);
@@ -1740,11 +1755,7 @@ output_load_rt_addr(compiler_context *ctx, nir_intrinsic_instr *instr)
         if (ctx->inputs->is_blend)
                 return MIDGARD_COLOR_RT0 + ctx->inputs->blend.rt;
 
-        const nir_variable *var;
-        var = nir_find_variable_with_driver_location(ctx->nir, nir_var_shader_out, nir_intrinsic_base(instr));
-        assert(var);
-
-        unsigned loc = var->data.location;
+        unsigned loc = nir_intrinsic_io_semantics(instr).location;
 
         if (loc >= FRAG_RESULT_DATA0)
                 return loc - FRAG_RESULT_DATA0;
@@ -1798,7 +1809,6 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
         case nir_intrinsic_load_shared:
         case nir_intrinsic_load_scratch:
         case nir_intrinsic_load_input:
-        case nir_intrinsic_load_kernel_input:
         case nir_intrinsic_load_interpolated_input: {
                 bool is_ubo = instr->intrinsic == nir_intrinsic_load_ubo;
                 bool is_global = instr->intrinsic == nir_intrinsic_load_global ||
@@ -1806,7 +1816,6 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
                 bool is_shared = instr->intrinsic == nir_intrinsic_load_shared;
                 bool is_scratch = instr->intrinsic == nir_intrinsic_load_scratch;
                 bool is_flat = instr->intrinsic == nir_intrinsic_load_input;
-                bool is_kernel = instr->intrinsic == nir_intrinsic_load_kernel_input;
                 bool is_interp = instr->intrinsic == nir_intrinsic_load_interpolated_input;
 
                 /* Get the base type of the intrinsic */
@@ -1837,9 +1846,7 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
                                 nir_intrinsic_component(instr) : 0;
                 reg = nir_dest_index(&instr->dest);
 
-                if (is_kernel) {
-                        emit_ubo_read(ctx, &instr->instr, reg, offset, indirect_offset, 0, 0, nr_comp);
-                } else if (is_ubo) {
+                if (is_ubo) {
                         nir_src index = instr->src[0];
 
                         /* TODO: Is indirect block number possible? */
@@ -1969,15 +1976,10 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
                         }
 
                         if (writeout & PAN_WRITEOUT_C) {
-                                const nir_variable *var =
-                                        nir_find_variable_with_driver_location(ctx->nir, nir_var_shader_out,
-                                                 nir_intrinsic_base(instr));
+                                nir_io_semantics sem = nir_intrinsic_io_semantics(instr);
 
-                                assert(var != NULL);
-                                assert(var->data.location >= FRAG_RESULT_DATA0);
-
-                                rt = MIDGARD_COLOR_RT0 + var->data.location -
-                                     FRAG_RESULT_DATA0;
+                                rt = MIDGARD_COLOR_RT0 +
+                                     (sem.location - FRAG_RESULT_DATA0);
                         } else {
                                 rt = MIDGARD_ZS_RT;
                         }
@@ -2018,26 +2020,29 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
                         unsigned dst_component = nir_intrinsic_component(instr);
                         unsigned nr_comp = nir_src_num_components(instr->src[0]);
 
+                        /* ABI: Format controlled by the attribute descriptor.
+                         * This simplifies flat shading, although it prevents
+                         * certain (unimplemented) 16-bit optimizations.
+                         *
+                         * In particular, it lets the driver handle internal
+                         * TGSI shaders that set flat in the VS but smooth in
+                         * the FS. This matches our handling on Bifrost.
+                         */
+                        bool auto32 = true;
+                        assert(nir_alu_type_get_type_size(nir_intrinsic_src_type(instr)) == 32);
+
+                        /* ABI: varyings in the secondary attribute table */
+                        bool secondary_table = true;
+
                         midgard_instruction st = m_st_vary_32(reg, PACK_LDST_ATTRIB_OFS(offset));
                         st.load_store.arg_reg = REGISTER_LDST_ZERO;
-                        st.load_store.index_format = midgard_index_address_u32;
                         st.load_store.index_reg = REGISTER_LDST_ZERO;
 
-                        switch (nir_alu_type_get_base_type(nir_intrinsic_src_type(instr))) {
-                        case nir_type_uint:
-                        case nir_type_bool:
-                                st.op = midgard_op_st_vary_32u;
-                                break;
-                        case nir_type_int:
-                                st.op = midgard_op_st_vary_32i;
-                                break;
-                        case nir_type_float:
-                                st.op = midgard_op_st_vary_32;
-                                break;
-                        default:
-                                unreachable("Attempted to store unknown type");
-                                break;
-                        }
+                        /* Attribute instruction uses these 2-bits for the
+                         * a32 and table bits, pack this specially.
+                         */
+                        st.load_store.index_format = (auto32 ? (1 << 0) : 0) |
+                                                     (secondary_table ? (1 << 1) : 0);
 
                         /* nir_intrinsic_component(store_intr) encodes the
                          * destination component start. Source component offset
@@ -2089,9 +2094,14 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
                 emit_global(ctx, &instr->instr, false, reg, &instr->src[1], seg);
                 break;
 
-        case nir_intrinsic_load_first_vertex:
         case nir_intrinsic_load_ssbo_address:
+        case nir_intrinsic_load_xfb_address:
+                emit_sysval_read(ctx, &instr->instr, 2, 0);
+                break;
+
+        case nir_intrinsic_load_first_vertex:
         case nir_intrinsic_load_work_dim:
+        case nir_intrinsic_load_num_vertices:
                 emit_sysval_read(ctx, &instr->instr, 1, 0);
                 break;
 
@@ -2100,15 +2110,12 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
                 break;
 
         case nir_intrinsic_load_base_instance:
+        case nir_intrinsic_get_ssbo_size:
                 emit_sysval_read(ctx, &instr->instr, 1, 8);
                 break;
 
         case nir_intrinsic_load_sample_positions_pan:
                 emit_sysval_read(ctx, &instr->instr, 2, 0);
-                break;
-
-        case nir_intrinsic_get_ssbo_size:
-                emit_sysval_read(ctx, &instr->instr, 1, 8);
                 break;
 
         case nir_intrinsic_load_viewport_scale:
@@ -2143,12 +2150,15 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
                 emit_special(ctx, instr, 97);
                 break;
 
-        /* Midgard doesn't seem to want special handling */
+        /* Midgard doesn't seem to want special handling, though we do need to
+         * take care when scheduling to avoid incorrect reordering.
+         */
         case nir_intrinsic_memory_barrier:
         case nir_intrinsic_memory_barrier_buffer:
         case nir_intrinsic_memory_barrier_image:
         case nir_intrinsic_memory_barrier_shared:
         case nir_intrinsic_group_memory_barrier:
+                schedule_barrier(ctx);
                 break;
 
         case nir_intrinsic_control_barrier:
@@ -3176,12 +3186,25 @@ midgard_compile_shader_nir(nir_shader *nir,
 
         NIR_PASS_V(nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
                         glsl_type_size, 0);
+
+        if (ctx->stage == MESA_SHADER_VERTEX) {
+                /* nir_lower[_explicit]_io is lazy and emits mul+add chains even
+                 * for offsets it could figure out are constant.  Do some
+                 * constant folding before pan_nir_lower_store_component below.
+                 */
+                NIR_PASS_V(nir, nir_opt_constant_folding);
+                NIR_PASS_V(nir, pan_nir_lower_store_component);
+        }
+
         NIR_PASS_V(nir, nir_lower_ssbo);
         NIR_PASS_V(nir, pan_nir_lower_zs_store);
 
         NIR_PASS_V(nir, pan_nir_lower_64bit_intrin);
 
         NIR_PASS_V(nir, midgard_nir_lower_global_load);
+
+        /* Collect varyings after lowering I/O */
+        pan_nir_collect_varyings(nir, info);
 
         /* Optimisation passes */
 
@@ -3332,7 +3355,7 @@ midgard_compile_shader_nir(nir_shader *nir,
         if (binary->size)
                 memset(util_dynarray_grow(binary, uint8_t, 16), 0, 16);
 
-        if ((midgard_debug & MIDGARD_DBG_SHADERDB || inputs->shaderdb) &&
+        if ((midgard_debug & MIDGARD_DBG_SHADERDB || inputs->debug) &&
             !nir->info.internal) {
                 unsigned nr_bundles = 0, nr_ins = 0;
 
@@ -3357,19 +3380,28 @@ midgard_compile_shader_nir(nir_shader *nir,
                         (nr_registers <= 8) ? 2 :
                         1;
 
+                char *shaderdb = NULL;
+
                 /* Dump stats */
 
-                fprintf(stderr, "%s - %s shader: "
+                asprintf(&shaderdb, "%s shader: "
                         "%u inst, %u bundles, %u quadwords, "
                         "%u registers, %u threads, %u loops, "
-                        "%u:%u spills:fills\n",
-                        ctx->nir->info.label ?: "",
+                        "%u:%u spills:fills",
                         ctx->inputs->is_blend ? "PAN_SHADER_BLEND" :
                         gl_shader_stage_name(ctx->stage),
                         nr_ins, nr_bundles, ctx->quadword_count,
                         nr_registers, nr_threads,
                         ctx->loop_count,
                         ctx->spills, ctx->fills);
+
+                if (midgard_debug & MIDGARD_DBG_SHADERDB)
+                        fprintf(stderr, "SHADER-DB: %s\n", shaderdb);
+
+                if (inputs->debug)
+                        util_debug_message(inputs->debug, SHADER_INFO, "%s", shaderdb);
+
+                free(shaderdb);
         }
 
         _mesa_hash_table_u64_destroy(ctx->ssa_constants);

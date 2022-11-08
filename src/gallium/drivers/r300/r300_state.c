@@ -1064,7 +1064,8 @@ static void* r300_create_fs_state(struct pipe_context* pipe,
     tgsi_scan_shader(fs->state.tokens, &info);
     for (int i = 0; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; i++) {
         if (info.sampler_targets[i] == TGSI_TEXTURE_SHADOW1D ||
-            info.sampler_targets[i] == TGSI_TEXTURE_SHADOW2D) {
+            info.sampler_targets[i] == TGSI_TEXTURE_SHADOW2D ||
+            info.sampler_targets[i] == TGSI_TEXTURE_SHADOWRECT) {
             precompile_state.unit[i].compare_mode_enabled = true;
             precompile_state.unit[i].texture_compare_func = PIPE_FUNC_LESS;
         }
@@ -2075,7 +2076,7 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
         struct r300_resource *rbuf = r300_resource(cb->buffer);
 
         if (rbuf && rbuf->malloced_buffer)
-            mapped = (uint32_t*)rbuf->malloced_buffer;
+            mapped = (uint32_t*)(rbuf->malloced_buffer + cb->buffer_offset);
         else
             return;
     }

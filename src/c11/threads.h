@@ -37,7 +37,7 @@
 #include <limits.h>
 #include <stdlib.h>
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
+#if defined(_WIN32) && !defined(HAVE_PTHREAD)
 #  include <io.h> /* close */
 #  include <process.h> /* _exit */
 #elif defined(HAVE_PTHREAD)
@@ -97,12 +97,16 @@ extern "C" {
 typedef void (*tss_dtor_t)(void *);
 typedef int (*thrd_start_t)(void *);
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
+#if defined(_WIN32) && !defined(HAVE_PTHREAD)
 typedef struct
 {
    void *Ptr;
 } cnd_t;
-typedef void *thrd_t;
+/* Define thrd_t as struct type intentionally for avoid use of thrd_t as pointer type */
+typedef struct
+{
+   void *handle;
+} thrd_t;
 typedef unsigned long tss_t;
 typedef struct
 {
@@ -130,7 +134,7 @@ typedef pthread_once_t  once_flag;
 // FIXME: temporary non-standard hack to ease transition
 #  define _MTX_INITIALIZER_NP PTHREAD_MUTEX_INITIALIZER
 #  define ONCE_FLAG_INIT PTHREAD_ONCE_INIT
-#  ifdef INIT_ONCE_STATIC_INIT
+#  ifdef PTHREAD_DESTRUCTOR_ITERATIONS
 #    define TSS_DTOR_ITERATIONS PTHREAD_DESTRUCTOR_ITERATIONS
 #  else
 #    define TSS_DTOR_ITERATIONS 1  // assume TSS dtor MAY be called at least once.
@@ -142,10 +146,9 @@ typedef pthread_once_t  once_flag;
 /*-------------------- enumeration constants --------------------*/
 enum
 {
-   mtx_plain = 0,
-   mtx_try = 1,
-   mtx_timed = 2,
-   mtx_recursive = 4
+   mtx_plain = 0x1,
+   mtx_recursive = 0x2,
+   mtx_timed = 0x4,
 };
 
 enum

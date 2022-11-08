@@ -83,6 +83,9 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
                                 WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB |
                                 WGL_CONTEXT_ROBUST_ACCESS_BIT_ARB);
 
+   if (!stw_dev)
+      return NULL;
+
    /* parse attrib_list */
    if (attribList) {
       for (i = 0; !done && attribList[i]; i++) {
@@ -210,9 +213,14 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
 
       struct stw_context *share_stw = stw_lookup_context(share_dhglrc);
 
+      const struct stw_pixelformat_info *pfi = stw_pixelformat_get_info_from_hdc(hDC);
+      if (!pfi)
+         return 0;
+
       struct stw_context *stw_ctx = stw_create_context_attribs(hDC, layerPlane, share_stw,
+                                                               stw_dev->smapi,
                                                                majorVersion, minorVersion,
-                                                               contextFlags, profileMask, 0,
+                                                               contextFlags, profileMask, pfi,
                                                                resetStrategy);
 
       if (!stw_ctx) {
@@ -241,6 +249,9 @@ wglMakeContextCurrentARB(HDC hDrawDC, HDC hReadDC, HGLRC hglrc)
    if (stw_dev && stw_dev->callbacks.pfnGetDhglrc) {
       /* Convert HGLRC to DHGLRC */
       dhglrc = stw_dev->callbacks.pfnGetDhglrc(hglrc);
+   } else {
+      /* not using ICD */
+      dhglrc = (DHGLRC)(INT_PTR)hglrc;
    }
 
    return stw_make_current_by_handles(hDrawDC, hReadDC, dhglrc);

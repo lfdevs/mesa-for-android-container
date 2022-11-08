@@ -239,7 +239,7 @@ nvc0_push_setup_vertex_array(struct nvc0_context *nvc0, const unsigned count)
 
    BCTX_REFN_bo(nvc0->bufctx_3d, 3D_VTX_TMP, NOUVEAU_BO_GART | NOUVEAU_BO_RD,
                 bo);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    return dest;
 }
@@ -731,7 +731,7 @@ nvc0_push_upload_vertex_ids(struct push_context *ctx,
 
    BCTX_REFN_bo(nvc0->bufctx_3d, 3D_VTX_TMP, NOUVEAU_BO_GART | NOUVEAU_BO_RD,
                 bo);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    if (info->index_size) {
       if (!draw->index_bias) {

@@ -69,6 +69,36 @@ void
 isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
                                    const struct isl_depth_stencil_hiz_emit_info *restrict info)
 {
+   if (info->depth_surf && info->stencil_surf) {
+      if (!dev->info->has_hiz_and_separate_stencil) {
+         assert(info->depth_surf == info->stencil_surf);
+         assert(info->depth_address == info->stencil_address);
+      }
+      assert(info->depth_surf->dim == info->stencil_surf->dim);
+   }
+
+   if (info->depth_surf) {
+      assert((info->depth_surf->usage & ISL_SURF_USAGE_DEPTH_BIT));
+      if (info->depth_surf->dim == ISL_SURF_DIM_3D) {
+         assert(info->view->base_array_layer + info->view->array_len <=
+                info->depth_surf->logical_level0_px.depth);
+      } else {
+         assert(info->view->base_array_layer + info->view->array_len <=
+                info->depth_surf->logical_level0_px.array_len);
+      }
+   }
+
+   if (info->stencil_surf) {
+      assert((info->stencil_surf->usage & ISL_SURF_USAGE_STENCIL_BIT));
+      if (info->stencil_surf->dim == ISL_SURF_DIM_3D) {
+         assert(info->view->base_array_layer + info->view->array_len <=
+                info->stencil_surf->logical_level0_px.depth);
+      } else {
+         assert(info->view->base_array_layer + info->view->array_len <=
+                info->stencil_surf->logical_level0_px.array_len);
+      }
+   }
+
    struct GENX(3DSTATE_DEPTH_BUFFER) db = {
       GENX(3DSTATE_DEPTH_BUFFER_header),
 #if GFX_VER >= 6

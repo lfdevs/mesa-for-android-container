@@ -204,6 +204,7 @@
 #include "util/u_range.h"
 #include "util/u_thread.h"
 #include "util/slab.h"
+#include "util/u_dynarray.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -424,6 +425,63 @@ struct tc_unflushed_batch_token {
    struct threaded_context *tc;
 };
 
+struct tc_renderpass_info {
+   union {
+      struct {
+         /* bitmask of full-cleared color buffers */
+         uint8_t cbuf_clear;
+         /* bitmask of not-full-cleared color buffers */
+         uint8_t cbuf_load;
+         /* bitmask of color buffers that have their stores invalidated */
+         uint8_t cbuf_invalidate;
+         /* whether the zsbuf is full-cleared */
+         bool zsbuf_clear : 1;
+         /* whether the zsbuf is partial-cleared */
+         bool zsbuf_clear_partial : 1;
+         /* whether the zsbuf is not-full-cleared */
+         bool zsbuf_load : 1;
+         /* whether the zsbuf is invalidated */
+         bool zsbuf_invalidate : 1;
+         /* whether a draw occurs */
+         bool has_draw : 1;
+         uint8_t pad : 3;
+         /* 32 bits offset */
+         /* bitmask of color buffers using fbfetch */
+         uint8_t cbuf_fbfetch;
+         /* whether the fragment shader writes to the zsbuf */
+         bool zsbuf_write_fs : 1;
+         /* whether the DSA state writes to the zsbuf */
+         bool zsbuf_write_dsa : 1;
+         /* whether the DSA state reads the zsbuf */
+         bool zsbuf_read_dsa : 1;
+         /* whether the zsbuf is used for fbfetch */
+         bool zsbuf_fbfetch : 1;
+         uint8_t pad2 : 4;
+         uint16_t pad3;
+      };
+      uint64_t data;
+      /* fb info is in data32[0] */
+      uint32_t data32[2];
+      /* cso info is in data16[2] */
+      uint16_t data16[4];
+      /* zsbuf fb info is in data8[3] */
+      uint8_t data8[8];
+   };
+   /* determines whether the info can be "safely" read by drivers or if it may still be in use */
+   struct util_queue_fence ready;
+};
+
+static inline bool
+tc_renderpass_info_is_zsbuf_used(const struct tc_renderpass_info *info)
+{
+   return info->zsbuf_clear ||
+          info->zsbuf_clear_partial ||
+          info->zsbuf_write_fs ||
+          info->zsbuf_write_dsa ||
+          info->zsbuf_read_dsa ||
+          info->zsbuf_fbfetch;
+}
+
 struct tc_batch {
    struct threaded_context *tc;
 #if !defined(NDEBUG) && TC_DEBUG >= 1
@@ -431,9 +489,20 @@ struct tc_batch {
 #endif
    uint16_t num_total_slots;
    uint16_t buffer_list_index;
+   /* the index of the current renderpass info for recording */
+   int renderpass_info_idx;
+
+   /* The last mergeable call that was added to this batch (i.e.
+    * buffer subdata). This might be out-of-date or NULL.
+    */
+   struct tc_call_base *last_mergeable_call;
+
    struct util_queue_fence fence;
+   /* whether the first set_framebuffer_state call has been seen by this batch */
+   bool first_set_fb;
    struct tc_unflushed_batch_token *token;
    uint64_t slots[TC_SLOTS_PER_BATCH];
+   struct util_dynarray renderpass_infos;
 };
 
 struct tc_buffer_list {
@@ -459,6 +528,16 @@ struct threaded_context_options {
     * safe to call without synchronizing with driver thread.
     */
    bool unsynchronized_get_device_reset_status;
+
+   /* If true, create_fence_fd doesn't access the context in the driver. */
+   bool unsynchronized_create_fence_fd;
+   /* if true, parse and track renderpass info during execution */
+   bool parse_renderpass_info;
+   /* callbacks for drivers to read their DSA/FS state and update renderpass info accordingly
+    * note: drivers must ONLY append to renderpass info using |=
+    */
+   void (*dsa_parse)(void *state, struct tc_renderpass_info *info);
+   void (*fs_parse)(void *state, struct tc_renderpass_info *info);
 };
 
 struct threaded_context {
@@ -496,12 +575,16 @@ struct threaded_context {
     * there are cases where the queue is flushed directly
     * from the frontend thread
     */
-   thread_id driver_thread;
+   thrd_t driver_thread;
 #endif
 
    bool seen_tcs;
    bool seen_tes;
    bool seen_gs;
+   /* whether the current renderpass has seen a set_framebuffer_state call */
+   bool seen_fb_state;
+   /* whether a renderpass is currently active */
+   bool in_renderpass;
 
    bool seen_streamout_buffers;
    bool seen_shader_buffers[PIPE_SHADER_TYPES];
@@ -536,12 +619,32 @@ struct threaded_context {
 
    struct tc_batch batch_slots[TC_MAX_BATCHES];
    struct tc_buffer_list buffer_lists[TC_MAX_BUFFER_LISTS];
+   /* the curent framebuffer attachments; [PIPE_MAX_COLOR_BUFS] is the zsbuf */
+   struct pipe_resource *fb_resources[PIPE_MAX_COLOR_BUFS + 1];
+   /* accessed by main thread; preserves info across batches */
+   struct tc_renderpass_info *renderpass_info_recording;
+   /* accessed by driver thread */
+   struct tc_renderpass_info *renderpass_info;
 };
+
 
 void threaded_resource_init(struct pipe_resource *res, bool allow_cpu_storage);
 void threaded_resource_deinit(struct pipe_resource *res);
 struct pipe_context *threaded_context_unwrap_sync(struct pipe_context *pipe);
 void tc_driver_internal_flush_notify(struct threaded_context *tc);
+
+/** function for getting the current renderpass info:
+ * - renderpass info is always valid
+ * - set 'wait=true' when calling during normal execution
+ * - set 'wait=true' when calling from flush
+ *
+ * Rules:
+ * 1) this must be called with 'wait=true' after the driver receives a pipe_context::set_framebuffer_state callback
+ * 2) this should be called with 'wait=false' when the driver receives a blocking pipe_context::flush call
+ * 3) this must not be used during any internal driver operations (e.g., u_blitter)
+ */
+const struct tc_renderpass_info *
+threaded_context_get_renderpass_info(struct threaded_context *tc, bool wait);
 
 struct pipe_context *
 threaded_context_create(struct pipe_context *pipe,
@@ -610,7 +713,7 @@ tc_assert_driver_thread(struct threaded_context *tc)
    if (!tc)
       return;
 #ifndef NDEBUG
-   assert(util_thread_id_equal(tc->driver_thread, util_get_thread_id()));
+   assert(u_thread_is_self(tc->driver_thread));
 #endif
 }
 

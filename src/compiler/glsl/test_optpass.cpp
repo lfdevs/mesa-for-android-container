@@ -95,19 +95,15 @@ do_optimization(struct exec_list *ir, const char *optimization,
       return do_if_simplification(ir);
    } else if (strcmp(optimization, "do_mat_op_to_vec") == 0) {
       return do_mat_op_to_vec(ir);
-   } else if (strcmp(optimization, "do_structure_splitting") == 0) {
-      return do_structure_splitting(ir);
    } else if (strcmp(optimization, "do_tree_grafting") == 0) {
       return do_tree_grafting(ir);
    } else if (strcmp(optimization, "do_vec_index_to_cond_assign") == 0) {
       return do_vec_index_to_cond_assign(ir);
-   } else if (strcmp(optimization, "do_vec_index_to_swizzle") == 0) {
-      return do_vec_index_to_swizzle(ir);
    } else if (strcmp(optimization, "lower_discard") == 0) {
       return lower_discard(ir);
    } else if (sscanf(optimization, "lower_instructions ( %d ) ",
                      &int_0) == 1) {
-      return lower_instructions(ir, int_0);
+      return lower_instructions(ir, false, false, false, false, false);
    } else {
       printf("Unrecognized optimization %s\n", optimization);
       exit(EXIT_FAILURE);

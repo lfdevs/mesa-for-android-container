@@ -5,9 +5,11 @@ dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_server_sync.programs.li
 dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.programs.link.7
 dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_sync.programs.link
 dEQP-EGL.functional.sharing.gles2.multithread.simple.programs.link
+dEQP-EGL.functional.sharing.gles2.multithread.random.*copytex.*image
 
 glx@glx-multithread-clearbuffer
 glx@glx-multithread-shader-compile
+glx@glx-multithread-texture
 glx@glx-shader-sharing
 
 # The following tests started to flake after CI fix, see

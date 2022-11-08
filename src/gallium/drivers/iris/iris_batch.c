@@ -49,7 +49,7 @@
 #include "intel/common/intel_gem.h"
 #include "intel/ds/intel_tracepoints.h"
 #include "util/hash_table.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/set.h"
 #include "util/u_upload_mgr.h"
 
@@ -239,7 +239,7 @@ iris_init_batch(struct iris_context *ice,
       batch->decoder.surface_base = IRIS_MEMZONE_BINDER_START;
       batch->decoder.max_vbo_decoded_lines = 32;
       if (batch->name == IRIS_BATCH_BLITTER)
-         batch->decoder.engine = I915_ENGINE_CLASS_COPY;
+         batch->decoder.engine = INTEL_ENGINE_CLASS_COPY;
    }
 
    iris_init_batch_measure(ice, batch);
@@ -255,7 +255,7 @@ iris_init_non_engine_contexts(struct iris_context *ice, int priority)
    struct iris_screen *screen = (void *) ice->ctx.screen;
 
    iris_foreach_batch(ice, batch) {
-      batch->ctx_id = iris_create_hw_context(screen->bufmgr);
+      batch->ctx_id = iris_create_hw_context(screen->bufmgr, ice->protected);
       batch->exec_flags = I915_EXEC_RENDER;
       batch->has_engines_context = false;
       assert(batch->ctx_id);
@@ -272,30 +272,29 @@ iris_create_engines_context(struct iris_context *ice, int priority)
    const struct intel_device_info *devinfo = &screen->devinfo;
    int fd = iris_bufmgr_get_fd(screen->bufmgr);
 
-   struct drm_i915_query_engine_info *engines_info =
-      intel_i915_query_alloc(fd, DRM_I915_QUERY_ENGINE_INFO, NULL);
+   struct intel_query_engine_info *engines_info = intel_engine_get_info(fd);
 
    if (!engines_info)
       return -1;
 
-   if (intel_gem_count_engines(engines_info, I915_ENGINE_CLASS_RENDER) < 1) {
+   if (intel_engines_count(engines_info, INTEL_ENGINE_CLASS_RENDER) < 1) {
       free(engines_info);
       return -1;
    }
 
    STATIC_ASSERT(IRIS_BATCH_COUNT == 3);
-   uint16_t engine_classes[IRIS_BATCH_COUNT] = {
-      [IRIS_BATCH_RENDER] = I915_ENGINE_CLASS_RENDER,
-      [IRIS_BATCH_COMPUTE] = I915_ENGINE_CLASS_RENDER,
-      [IRIS_BATCH_BLITTER] = I915_ENGINE_CLASS_COPY,
+   enum intel_engine_class engine_classes[IRIS_BATCH_COUNT] = {
+      [IRIS_BATCH_RENDER] = INTEL_ENGINE_CLASS_RENDER,
+      [IRIS_BATCH_COMPUTE] = INTEL_ENGINE_CLASS_RENDER,
+      [IRIS_BATCH_BLITTER] = INTEL_ENGINE_CLASS_COPY,
    };
 
    /* Blitter is only supported on Gfx12+ */
    unsigned num_batches = IRIS_BATCH_COUNT - (devinfo->ver >= 12 ? 0 : 1);
 
-   if (env_var_as_boolean("INTEL_COMPUTE_CLASS", false) &&
-       intel_gem_count_engines(engines_info, I915_ENGINE_CLASS_COMPUTE) > 0)
-      engine_classes[IRIS_BATCH_COMPUTE] = I915_ENGINE_CLASS_COMPUTE;
+   if (debug_get_bool_option("INTEL_COMPUTE_CLASS", false) &&
+       intel_engines_count(engines_info, INTEL_ENGINE_CLASS_COMPUTE) > 0)
+      engine_classes[IRIS_BATCH_COMPUTE] = INTEL_ENGINE_CLASS_COMPUTE;
 
    int engines_ctx =
       intel_gem_create_context_engines(fd, engines_info, num_batches,

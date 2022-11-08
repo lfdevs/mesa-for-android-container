@@ -67,7 +67,7 @@ nv50_2d_transfer_rect(struct nv50_context *nv50,
    nouveau_bufctx_refn(bctx, 0, src->bo, src->domain | NOUVEAU_BO_RD);
    nouveau_bufctx_refn(bctx, 0, dst->bo, dst->domain | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, bctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    uint32_t format;
    switch (cpp) {
@@ -197,7 +197,7 @@ nv50_m2mf_transfer_rect(struct nv50_context *nv50,
    nouveau_bufctx_refn(bctx, 0, src->bo, src->domain | NOUVEAU_BO_RD);
    nouveau_bufctx_refn(bctx, 0, dst->bo, dst->domain | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, bctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    if (nouveau_bo_memtype(src->bo)) {
       BEGIN_NV04(push, NV50_M2MF(LINEAR_IN), 6);
@@ -284,7 +284,7 @@ nv50_sifc_linear_u8(struct nouveau_context *nv,
 
    nouveau_bufctx_refn(nv50->bufctx, 0, dst, domain | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, nv50->bufctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    offset &= ~0xff;
 
@@ -337,7 +337,7 @@ nv50_m2mf_copy_linear(struct nouveau_context *nv,
    nouveau_bufctx_refn(bctx, 0, src, srcdom | NOUVEAU_BO_RD);
    nouveau_bufctx_refn(bctx, 0, dst, dstdom | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, bctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    BEGIN_NV04(push, NV50_M2MF(LINEAR_IN), 1);
    PUSH_DATA (push, 1);
@@ -453,7 +453,7 @@ nv50_miptree_transfer_map(struct pipe_context *pctx,
    if (usage & PIPE_MAP_WRITE)
       flags |= NOUVEAU_BO_WR;
 
-   ret = nouveau_bo_map(tx->rect[1].bo, flags, nv50->base.client);
+   ret = BO_MAP(nv50->base.screen, tx->rect[1].bo, flags, nv50->base.client);
    if (ret) {
       nouveau_bo_ref(NULL, &tx->rect[1].bo);
       FREE(tx);
@@ -485,7 +485,7 @@ nv50_miptree_transfer_unmap(struct pipe_context *pctx,
       }
 
       /* Allow the copies above to finish executing before freeing the source */
-      nouveau_fence_work(nv50->screen->base.fence.current,
+      nouveau_fence_work(nv50->base.fence,
                          nouveau_fence_unref_bo, tx->rect[1].bo);
    } else {
       nouveau_bo_ref(NULL, &tx->rect[1].bo);
@@ -511,7 +511,7 @@ nv50_cb_bo_push(struct nouveau_context *nv,
       unsigned nr = MIN2(words, NV04_PFIFO_MAX_PACKET_LEN);
 
       PUSH_SPACE(push, nr + 3);
-      PUSH_REFN (push, bo, NOUVEAU_BO_WR | domain);
+      PUSH_REF1 (push, bo, NOUVEAU_BO_WR | domain);
       BEGIN_NV04(push, NV50_3D(CB_ADDR), 1);
       PUSH_DATA (push, (offset << 6) | bufid);
       BEGIN_NI04(push, NV50_3D(CB_DATA(0)), nr);

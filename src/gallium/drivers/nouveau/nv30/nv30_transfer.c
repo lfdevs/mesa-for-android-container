@@ -36,6 +36,7 @@
 
 #include "nv30/nv30_context.h"
 #include "nv30/nv30_transfer.h"
+#include "nv30/nv30_winsys.h"
 
 /* Various helper functions to transfer different types of data in a number
  * of different ways.
@@ -155,8 +156,8 @@ nv30_transfer_rect_blit(XFER_ARGS)
    u32 texfmt, texswz;
    u32 format, stride;
 
-   if (nouveau_pushbuf_space(push, 512, 8, 0) ||
-       nouveau_pushbuf_refn (push, refs, ARRAY_SIZE(refs)))
+   if (!PUSH_SPACE_EX(push, 512, 8, 0) ||
+       PUSH_REFN(push, refs, ARRAY_SIZE(refs)))
       return;
 
    /* various switches depending on cpp of the transfer */
@@ -431,8 +432,8 @@ nv30_transfer_rect_sifm(XFER_ARGS)
       si_arg |= NV03_SIFM_FORMAT_FILTER_BILINEAR;
    }
 
-   if (nouveau_pushbuf_space(push, 64, 6, 0) ||
-       nouveau_pushbuf_refn (push, refs, 2))
+   if (!PUSH_SPACE_EX(push, 64, 6, 0) ||
+       PUSH_REFN(push, refs, 2))
       return;
 
    if (dst->pitch) {
@@ -516,8 +517,8 @@ nv30_transfer_rect_m2mf(XFER_ARGS)
    while (h) {
       unsigned lines = (h > 2047) ? 2047 : h;
 
-      if (nouveau_pushbuf_space(push, 32, 2, 0) ||
-          nouveau_pushbuf_refn (push, refs, 2))
+      if (!PUSH_SPACE_EX(push, 32, 2, 0) ||
+          PUSH_REFN(push, refs, 2))
          return;
 
       BEGIN_NV04(push, NV03_M2MF(OFFSET_IN), 8);
@@ -635,8 +636,8 @@ nv30_transfer_rect_cpu(XFER_ARGS)
    char *srcmap, *dstmap;
    int x, y;
 
-   nouveau_bo_map(src->bo, NOUVEAU_BO_RD, nv30->base.client);
-   nouveau_bo_map(dst->bo, NOUVEAU_BO_WR, nv30->base.client);
+   BO_MAP(nv30->base.screen, src->bo, NOUVEAU_BO_RD, nv30->base.client);
+   BO_MAP(nv30->base.screen, dst->bo, NOUVEAU_BO_WR, nv30->base.client);
    srcmap = src->bo->map + src->offset;
    dstmap = dst->bo->map + dst->offset;
 
@@ -708,8 +709,8 @@ nv30_transfer_copy_data(struct nouveau_context *nv,
       lines  = (pages > 2047) ? 2047 : pages;
       pages -= lines;
 
-      if (nouveau_pushbuf_space(push, 32, 2, 0) ||
-          nouveau_pushbuf_refn (push, refs, 2))
+      if (!PUSH_SPACE_EX(push, 32, 2, 0) ||
+          PUSH_REFN(push, refs, 2))
          return;
 
       BEGIN_NV04(push, NV03_M2MF(OFFSET_IN), 8);
@@ -732,8 +733,8 @@ nv30_transfer_copy_data(struct nouveau_context *nv,
    }
 
    if (size) {
-      if (nouveau_pushbuf_space(push, 32, 2, 0) ||
-          nouveau_pushbuf_refn (push, refs, 2))
+      if (!PUSH_SPACE_EX(push, 32, 2, 0) ||
+          PUSH_REFN(push, refs, 2))
          return;
 
       BEGIN_NV04(push, NV03_M2MF(OFFSET_IN), 8);

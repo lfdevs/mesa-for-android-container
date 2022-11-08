@@ -51,6 +51,14 @@ isl_genX(emit_cpb_control_s)(const struct isl_device *dev, void *batch,
                              const struct isl_cpb_emit_info *restrict info)
 {
 #if GFX_VERx10 >= 125
+   if (info->surf) {
+      assert((info->surf->usage & ISL_SURF_USAGE_CPB_BIT));
+      assert(info->surf->dim != ISL_SURF_DIM_3D);
+      assert(info->surf->tiling == ISL_TILING_4 ||
+             info->surf->tiling == ISL_TILING_64);
+      assert(info->surf->format == ISL_FORMAT_R8_UINT);
+   }
+
    struct GENX(3DSTATE_CPSIZE_CONTROL_BUFFER) cpb = {
       GENX(3DSTATE_CPSIZE_CONTROL_BUFFER_header),
    };

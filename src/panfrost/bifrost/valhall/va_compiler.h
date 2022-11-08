@@ -39,7 +39,7 @@ void va_validate(FILE *fp, bi_context *ctx);
 void va_repair_fau(bi_builder *b, bi_instr *I);
 void va_fuse_add_imm(bi_instr *I);
 void va_lower_constants(bi_context *ctx, bi_instr *I);
-void va_lower_isel(bi_instr *I);
+void va_lower_isel(bi_context *ctx);
 void va_assign_slots(bi_context *ctx);
 void va_insert_flow_control_nops(bi_context *ctx);
 void va_merge_flow(bi_context *ctx);

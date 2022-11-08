@@ -518,7 +518,7 @@ nv50_state_validate_cp(struct nv50_context *nv50, uint32_t mask)
                              nv50->bufctx_cp);
 
    if (unlikely(nv50->state.flushed))
-      nv50_bufctx_fence(nv50->bufctx_cp, true);
+      nv50_bufctx_fence(nv50, nv50->bufctx_cp, true);
    return ret;
 }
 
@@ -540,19 +540,19 @@ nv50_compute_upload_input(struct nv50_context *nv50, const uint32_t *input)
       mm = nouveau_mm_allocate(screen->base.mm_GART, size, &bo, &offset);
       assert(mm);
 
-      nouveau_bo_map(bo, 0, nv50->base.client);
+      BO_MAP(&screen->base, bo, 0, nv50->base.client);
       memcpy(bo->map + offset, input, size);
 
       nouveau_bufctx_refn(nv50->bufctx, 0, bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
       nouveau_pushbuf_bufctx(push, nv50->bufctx);
-      nouveau_pushbuf_validate(push);
+      PUSH_VAL(push);
 
-      nouveau_pushbuf_space(push, 0, 0, 1);
+      PUSH_SPACE_EX(push, 0, 0, 1);
 
       BEGIN_NV04(push, NV50_CP(USER_PARAM(1)), size / 4);
       nouveau_pushbuf_data(push, bo, offset, size);
 
-      nouveau_fence_work(screen->base.fence.current, nouveau_mm_free_work, mm);
+      nouveau_fence_work(nv50->base.fence, nouveau_mm_free_work, mm);
       nouveau_bo_ref(NULL, &bo);
       nouveau_bufctx_reset(nv50->bufctx, 0);
    }
@@ -567,10 +567,11 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    struct nv50_program *cp = nv50->compprog;
    bool ret;
 
+   simple_mtx_lock(&nv50->screen->state_lock);
    ret = !nv50_state_validate_cp(nv50, ~0);
    if (ret) {
       NOUVEAU_ERR("Failed to launch grid !\n");
-      return;
+      goto out;
    }
 
    nv50_compute_upload_input(nv50, info->input);
@@ -622,4 +623,8 @@ nv50_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 
    nv50->compute_invocations += info->block[0] * info->block[1] * info->block[2] *
       grid[0] * grid[1] * grid[2];
+
+out:
+   PUSH_KICK(push);
+   simple_mtx_unlock(&nv50->screen->state_lock);
 }

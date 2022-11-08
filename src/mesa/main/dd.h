@@ -44,7 +44,6 @@
 #undef MemoryBarrier
 #endif
 
-struct gl_bitmap_atlas;
 struct gl_buffer_object;
 struct gl_context;
 struct gl_display_list;
@@ -66,8 +65,6 @@ struct gl_transform_feedback_object;
 struct gl_vertex_array_object;
 struct ati_fragment_shader;
 struct util_queue_monitoring;
-struct _mesa_prim;
-struct _mesa_index_buffer;
 struct pipe_draw_info;
 struct pipe_draw_start_count_bias;
 struct pipe_vertex_state;

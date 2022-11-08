@@ -24,7 +24,7 @@
 #include "d3d12_screen.h"
 #include "d3d12_public.h"
 
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/u_dl.h"
 
@@ -232,7 +232,10 @@ d3d12_create_dxcore_screen(struct sw_winsys *winsys, LUID *adapter_luid)
    if (!screen)
       return nullptr;
 
-   d3d12_init_screen_base(&screen->base, winsys, adapter_luid);
+   if (!d3d12_init_screen_base(&screen->base, winsys, adapter_luid)) {
+      d3d12_destroy_screen(&screen->base);
+      return nullptr;
+   }
    screen->base.base.destroy = d3d12_destroy_dxcore_screen;
    screen->base.init = d3d12_init_dxcore_screen;
    screen->base.deinit = d3d12_deinit_dxcore_screen;

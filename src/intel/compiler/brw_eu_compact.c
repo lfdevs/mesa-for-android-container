@@ -2484,19 +2484,25 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
       return;
 
    const struct intel_device_info *devinfo = p->devinfo;
+   if (devinfo->ver == 4 && devinfo->platform != INTEL_PLATFORM_G4X)
+      return;
+
    void *store = p->store + start_offset / 16;
    /* For an instruction at byte offset 16*i before compaction, this is the
     * number of compacted instructions minus the number of padding NOP/NENOPs
     * that preceded it.
     */
-   int compacted_counts[(p->next_insn_offset - start_offset) / sizeof(brw_inst)];
+   unsigned num_compacted_counts =
+      (p->next_insn_offset - start_offset) / sizeof(brw_inst);
+   int *compacted_counts =
+      calloc(1, sizeof(*compacted_counts) * num_compacted_counts);
+
    /* For an instruction at byte offset 8*i after compaction, this was its IP
     * (in 16-byte units) before compaction.
     */
-   int old_ip[(p->next_insn_offset - start_offset) / sizeof(brw_compact_inst) + 1];
-
-   if (devinfo->ver == 4 && devinfo->platform != INTEL_PLATFORM_G4X)
-      return;
+   unsigned num_old_ip =
+      (p->next_insn_offset - start_offset) / sizeof(brw_compact_inst) + 1;
+   int *old_ip = calloc(1, sizeof(*old_ip) * num_old_ip);
 
    struct compaction_state c;
    compaction_state_init(&c, p->isa);
@@ -2683,4 +2689,7 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
          offset = next_offset(devinfo, store, offset);
       }
    }
+
+   free(compacted_counts);
+   free(old_ip);
 }

@@ -89,7 +89,7 @@ tegra_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 }
 
 static int
-tegra_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
+tegra_screen_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_type shader,
                               enum pipe_shader_cap param)
 {
    struct tegra_screen *screen = to_tegra_screen(pscreen);
@@ -445,7 +445,7 @@ tegra_screen_query_memory_info(struct pipe_screen *pscreen,
 static const void *
 tegra_screen_get_compiler_options(struct pipe_screen *pscreen,
                                   enum pipe_shader_ir ir,
-                                  unsigned int shader)
+                                  enum pipe_shader_type shader)
 {
    struct tegra_screen *screen = to_tegra_screen(pscreen);
    const void *options = NULL;

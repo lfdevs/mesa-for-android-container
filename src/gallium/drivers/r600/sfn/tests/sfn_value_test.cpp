@@ -24,27 +24,19 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-
-#include "../sfn_virtualvalues.h"
 #include "../sfn_alu_defines.h"
 #include "../sfn_debug.h"
+#include "../sfn_virtualvalues.h"
 
 #include "gtest/gtest.h"
 
 using namespace r600;
 
-class ValueTest : public ::testing::Test
-{
-   void SetUp() override {
-      init_pool();
-   }
+class ValueTest : public ::testing::Test {
+   void SetUp() override { init_pool(); }
 
-   void TearDown() override {
-      release_pool();
-   }
+   void TearDown() override { release_pool(); }
 };
-
-
 
 TEST_F(ValueTest, gpr_register_fully_pinned)
 {
@@ -105,10 +97,10 @@ TEST_F(ValueTest, uniform_value)
    EXPECT_FALSE(reg1.buf_addr());
    EXPECT_FALSE(reg1.is_virtual());
 
-   auto addr = new Register( 1024, 0, pin_none);
+   auto addr = new Register(1024, 0, pin_none);
    ASSERT_TRUE(addr);
 
-   UniformValue reg_with_buffer_addr(513, 0, addr);
+   UniformValue reg_with_buffer_addr(513, 0, addr, 0);
 
    EXPECT_EQ(reg_with_buffer_addr.sel(), 513);
    EXPECT_EQ(reg_with_buffer_addr.chan(), 0);
@@ -182,7 +174,7 @@ TEST_F(ValueTest, array)
    EXPECT_EQ(elm1->pin(), pin_array);
    EXPECT_FALSE(elm1->get_addr());
 
-   auto addr = new Register( 2000, 0, pin_none);
+   auto addr = new Register(2000, 0, pin_none);
    ASSERT_TRUE(addr);
 
    auto elm_indirect = array.element(0, addr, 1);
@@ -200,7 +192,7 @@ TEST_F(ValueTest, array)
    EXPECT_EQ(elm_addr->pin(), pin_none);
 
    // A constant addr should resolve directly
-   auto addr2 = new LiteralConstant( 3);
+   auto addr2 = new LiteralConstant(3);
    ASSERT_TRUE(addr2);
 
    auto elm_direct = array.element(0, addr2, 0);
@@ -215,7 +207,7 @@ TEST_F(ValueTest, array)
    EXPECT_THROW(array.element(12, nullptr, 0), std::invalid_argument);
    EXPECT_THROW(array.element(3, nullptr, 2), std::invalid_argument);
 
-   auto addr3 = new LiteralConstant( 12);
+   auto addr3 = new LiteralConstant(12);
    ASSERT_TRUE(addr3);
    EXPECT_THROW(array.element(0, addr3, 0), std::invalid_argument);
 #endif
@@ -232,13 +224,11 @@ TEST_F(ValueTest, reg_from_string)
    EXPECT_EQ(*Register::from_string("R1000.y@chan"), Register(1000, 1, pin_chan));
    EXPECT_EQ(*Register::from_string("R1000.y@free"), Register(1000, 1, pin_free));
 
-
    EXPECT_EQ(*VirtualValue::from_string("L[0x1]"), LiteralConstant(1));
    EXPECT_EQ(*VirtualValue::from_string("L[0x2]"), LiteralConstant(2));
    EXPECT_EQ(*VirtualValue::from_string("L[0xA]"), LiteralConstant(10));
 
    EXPECT_EQ(*VirtualValue::from_string("I[0]"), InlineConstant(ALU_SRC_0));
-   EXPECT_EQ(*VirtualValue::from_string("I[HW_WAVE_ID]"), InlineConstant(ALU_SRC_HW_WAVE_ID));
-
-
+   EXPECT_EQ(*VirtualValue::from_string("I[HW_WAVE_ID]"),
+             InlineConstant(ALU_SRC_HW_WAVE_ID));
 }

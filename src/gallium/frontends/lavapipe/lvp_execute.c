@@ -152,7 +152,6 @@ struct rendering_state {
    uint32_t color_write_disables:8;
    uint32_t pad:13;
 
-   void *ss_cso[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
    void *velems_cso;
 
    uint8_t push_constants[128 * 4];
@@ -165,6 +164,7 @@ struct rendering_state {
 
    VkRect2D render_area;
    bool suspending;
+   bool render_cond;
    uint32_t color_att_count;
    struct lvp_render_attachment *color_att;
    struct lvp_render_attachment depth_att;
@@ -177,12 +177,19 @@ struct rendering_state {
 
    uint32_t sample_mask;
    unsigned min_samples;
+   float min_sample_shading;
+   bool force_min_sample;
+   bool sample_shading;
+   bool depth_clamp_sets_clip;
 
    uint32_t num_so_targets;
    struct pipe_stream_output_target *so_targets[PIPE_MAX_SO_BUFFERS];
    uint32_t so_offsets[PIPE_MAX_SO_BUFFERS];
 
    struct lvp_pipeline *pipeline[2];
+
+   bool tess_ccw;
+   void *tess_states[2];
 };
 
 ALWAYS_INLINE static void
@@ -250,15 +257,17 @@ fill_ubo0(struct rendering_state *state, uint8_t *mem, enum pipe_shader_type pst
 static void
 update_pcbuf(struct rendering_state *state, enum pipe_shader_type pstage)
 {
-   uint8_t *mem;
-   struct pipe_constant_buffer cbuf;
    unsigned size = calc_ubo0_size(state, pstage);
-   cbuf.buffer_size = size;
-   cbuf.buffer = NULL;
-   cbuf.user_buffer = NULL;
-   u_upload_alloc(state->uploader, 0, size, 64, &cbuf.buffer_offset, &cbuf.buffer, (void**)&mem);
-   fill_ubo0(state, mem, pstage);
-   state->pctx->set_constant_buffer(state->pctx, pstage, 0, true, &cbuf);
+   if (size) {
+      uint8_t *mem;
+      struct pipe_constant_buffer cbuf;
+      cbuf.buffer_size = size;
+      cbuf.buffer = NULL;
+      cbuf.user_buffer = NULL;
+      u_upload_alloc(state->uploader, 0, size, 64, &cbuf.buffer_offset, &cbuf.buffer, (void**)&mem);
+      fill_ubo0(state, mem, pstage);
+      state->pctx->set_constant_buffer(state->pctx, pstage, 0, true, &cbuf);
+   }
    state->pcbuf_dirty[pstage] = false;
 }
 
@@ -273,7 +282,10 @@ update_inline_shader_state(struct rendering_state *state, enum pipe_shader_type 
       return;
    struct lvp_pipeline *pipeline = state->pipeline[is_compute];
    /* these buffers have already been flushed in llvmpipe, so they're safe to read */
-   nir_shader *nir = nir_shader_clone(pipeline->pipeline_nir[stage], pipeline->pipeline_nir[stage]);
+   nir_shader *base_nir = pipeline->pipeline_nir[stage];
+   if (stage == PIPE_SHADER_TESS_EVAL && state->tess_ccw)
+      base_nir = pipeline->tess_ccw;
+   nir_shader *nir = nir_shader_clone(pipeline->pipeline_nir[stage], base_nir);
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    unsigned ssa_alloc = impl->ssa_alloc;
    unsigned count = pipeline->inlines[stage].count[0];
@@ -389,12 +401,7 @@ static void emit_compute_state(struct rendering_state *state)
    }
 
    if (state->ss_dirty[PIPE_SHADER_COMPUTE]) {
-      for (unsigned i = 0; i < state->num_sampler_states[PIPE_SHADER_COMPUTE]; i++) {
-         if (state->ss_cso[PIPE_SHADER_COMPUTE][i])
-            state->pctx->delete_sampler_state(state->pctx, state->ss_cso[PIPE_SHADER_COMPUTE][i]);
-         state->ss_cso[PIPE_SHADER_COMPUTE][i] = state->pctx->create_sampler_state(state->pctx, &state->ss[PIPE_SHADER_COMPUTE][i]);
-      }
-      state->pctx->bind_sampler_states(state->pctx, PIPE_SHADER_COMPUTE, 0, state->num_sampler_states[PIPE_SHADER_COMPUTE], state->ss_cso[PIPE_SHADER_COMPUTE]);
+      cso_set_samplers(state->cso, PIPE_SHADER_COMPUTE, state->num_sampler_states[PIPE_SHADER_COMPUTE], state->cso_ss_ptr[PIPE_SHADER_COMPUTE]);
       state->ss_dirty[PIPE_SHADER_COMPUTE] = false;
    }
 }
@@ -520,20 +527,18 @@ static void emit_state(struct rendering_state *state)
    }
 
    for (sh = 0; sh < PIPE_SHADER_COMPUTE; sh++) {
-
-      if (!state->sv_dirty[sh])
-         continue;
-
-      state->pctx->set_sampler_views(state->pctx, sh, 0, state->num_sampler_views[sh],
-                                     0, false, state->sv[sh]);
-      state->sv_dirty[sh] = false;
+      if (state->sv_dirty[sh]) {
+         state->pctx->set_sampler_views(state->pctx, sh, 0, state->num_sampler_views[sh],
+                                        0, false, state->sv[sh]);
+         state->sv_dirty[sh] = false;
+      }
    }
 
    for (sh = 0; sh < PIPE_SHADER_COMPUTE; sh++) {
-      if (!state->ss_dirty[sh])
-         continue;
-
-      cso_set_samplers(state->cso, sh, state->num_sampler_states[sh], state->cso_ss_ptr[sh]);
+      if (state->ss_dirty[sh]) {
+         cso_set_samplers(state->cso, sh, state->num_sampler_states[sh], state->cso_ss_ptr[sh]);
+         state->ss_dirty[sh] = false;
+      }
    }
 
    if (state->vp_dirty) {
@@ -608,12 +613,33 @@ get_viewport_xform(struct rendering_state *state,
    memcpy(&state->depth[idx].min, &viewport->minDepth, sizeof(float) * 2);
 }
 
+static void
+update_samples(struct rendering_state *state, VkSampleCountFlags samples)
+{
+   state->rs_dirty |= state->rs_state.multisample != (samples > 1);
+   state->rs_state.multisample = samples > 1;
+   state->min_samples = 1;
+   if (state->sample_shading) {
+      state->min_samples = ceil(samples * state->min_sample_shading);
+      if (state->min_samples > 1)
+         state->min_samples = samples;
+      if (state->min_samples < 1)
+         state->min_samples = 1;
+   }
+   if (state->force_min_sample)
+      state->min_samples = samples;
+   state->min_samples_dirty = true;
+   if (samples != state->framebuffer.samples) {
+      state->framebuffer.samples = samples;
+      state->pctx->set_framebuffer_state(state->pctx, &state->framebuffer);
+   }
+}
+
 static void handle_graphics_pipeline(struct vk_cmd_queue_entry *cmd,
                                      struct rendering_state *state)
 {
    LVP_FROM_HANDLE(lvp_pipeline, pipeline, cmd->u.bind_pipeline.pipeline);
    const struct vk_graphics_pipeline_state *ps = &pipeline->graphics_state;
-   unsigned fb_samples = 0;
 
    for (enum pipe_shader_type sh = PIPE_SHADER_VERTEX; sh < PIPE_SHADER_COMPUTE; sh++) {
       state->iv_dirty[sh] |= state->num_shader_images[sh] &&
@@ -646,6 +672,8 @@ static void handle_graphics_pipeline(struct vk_cmd_queue_entry *cmd,
       state->pctx->bind_tcs_state(state->pctx, NULL);
    if (state->pctx->bind_tes_state)
       state->pctx->bind_tes_state(state->pctx, NULL);
+   state->tess_states[0] = NULL;
+   state->tess_states[1] = NULL;
    state->gs_output_lines = GS_OUTPUT_NONE;
    {
       u_foreach_bit(b, pipeline->graphics_state.shader_stages) {
@@ -678,8 +706,17 @@ static void handle_graphics_pipeline(struct vk_cmd_queue_entry *cmd,
             break;
          case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
             state->inlines_dirty[PIPE_SHADER_TESS_EVAL] = pipeline->inlines[MESA_SHADER_TESS_EVAL].can_inline;
-            if (!pipeline->inlines[MESA_SHADER_TESS_EVAL].can_inline)
-               state->pctx->bind_tes_state(state->pctx, pipeline->shader_cso[PIPE_SHADER_TESS_EVAL]);
+            if (!pipeline->inlines[MESA_SHADER_TESS_EVAL].can_inline) {
+               if (BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_TS_DOMAIN_ORIGIN)) {
+                  state->tess_states[0] = pipeline->shader_cso[PIPE_SHADER_TESS_EVAL];
+                  state->tess_states[1] = pipeline->tess_ccw_cso;
+                  state->pctx->bind_tes_state(state->pctx, state->tess_states[state->tess_ccw]);
+               } else {
+                  state->pctx->bind_tes_state(state->pctx, pipeline->shader_cso[PIPE_SHADER_TESS_EVAL]);
+               }
+            }
+            if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_TS_DOMAIN_ORIGIN))
+               state->tess_ccw = false;
             has_stage[PIPE_SHADER_TESS_EVAL] = true;
             break;
          default:
@@ -701,24 +738,39 @@ static void handle_graphics_pipeline(struct vk_cmd_queue_entry *cmd,
 
    /* rasterization state */
    if (ps->rs) {
-      state->rs_state.depth_clamp = ps->rs->depth_clamp_enable;
-      state->rs_state.depth_clip_near = ps->rs->depth_clip_enable;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_RS_DEPTH_CLAMP_ENABLE))
+         state->rs_state.depth_clamp = ps->rs->depth_clamp_enable;
+      if (BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_RS_DEPTH_CLIP_ENABLE)) {
+         state->depth_clamp_sets_clip = false;
+      } else {
+         state->rs_state.depth_clip_near = state->rs_state.depth_clip_far =
+            vk_rasterization_state_depth_clip_enable(ps->rs);
+         state->depth_clamp_sets_clip =
+            ps->rs->depth_clip_enable == VK_MESA_DEPTH_CLIP_ENABLE_NOT_CLAMP;
+      }
 
       if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_RS_RASTERIZER_DISCARD_ENABLE))
          state->rs_state.rasterizer_discard = ps->rs->rasterizer_discard_enable;
 
-      state->rs_state.line_smooth = pipeline->line_smooth;
-      state->rs_state.line_stipple_enable = ps->rs->line.stipple.enable;
-      state->rs_state.fill_front = vk_polygon_mode_to_pipe(ps->rs->polygon_mode);
-      state->rs_state.fill_back = vk_polygon_mode_to_pipe(ps->rs->polygon_mode);
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_RS_LINE_MODE)) {
+         state->rs_state.line_smooth = pipeline->line_smooth;
+         state->rs_state.line_rectangular = pipeline->line_rectangular;
+      }
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_RS_LINE_STIPPLE_ENABLE))
+         state->rs_state.line_stipple_enable = ps->rs->line.stipple.enable;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE)) {
+         state->rs_state.fill_front = vk_polygon_mode_to_pipe(ps->rs->polygon_mode);
+         state->rs_state.fill_back = vk_polygon_mode_to_pipe(ps->rs->polygon_mode);
+      }
       state->rs_state.point_size_per_vertex = true;
-      state->rs_state.flatshade_first =
-         ps->rs->provoking_vertex == VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_RS_PROVOKING_VERTEX)) {
+         state->rs_state.flatshade_first =
+            ps->rs->provoking_vertex == VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT;
+      }
       state->rs_state.point_quad_rasterization = true;
       state->rs_state.half_pixel_center = true;
       state->rs_state.scissor = true;
       state->rs_state.no_ms_sample_mask_out = true;
-      state->rs_state.line_rectangular = pipeline->line_rectangular;
 
       if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_RS_LINE_WIDTH))
          state->rs_state.line_width = ps->rs->line.width;
@@ -796,36 +848,38 @@ static void handle_graphics_pipeline(struct vk_cmd_queue_entry *cmd,
       state->dsa_dirty = true;
    }
 
+   state->blend_state.independent_blend_enable = ps->rp->color_attachment_count > 1;
+
    if (ps->cb) {
-      state->blend_state.logicop_enable = ps->cb->logic_op_enable;
-      if (ps->cb->logic_op_enable) {
-         if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_CB_LOGIC_OP))
-            state->blend_state.logicop_func = vk_conv_logic_op(ps->cb->logic_op);
-      }
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_CB_LOGIC_OP_ENABLE))
+         state->blend_state.logicop_enable = ps->cb->logic_op_enable;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_CB_LOGIC_OP))
+         state->blend_state.logicop_func = vk_conv_logic_op(ps->cb->logic_op);
 
       if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_CB_COLOR_WRITE_ENABLES))
          state->color_write_disables = ~ps->cb->color_write_enables;
 
-      state->blend_state.independent_blend_enable = (ps->cb->attachment_count > 1);
-
       for (unsigned i = 0; i < ps->cb->attachment_count; i++) {
          const struct vk_color_blend_attachment_state *att = &ps->cb->attachments[i];
-         state->blend_state.rt[i].colormask = att->write_mask;
-         state->blend_state.rt[i].blend_enable = att->blend_enable;
-         if (att->blend_enable) {
-            state->blend_state.rt[i].rgb_func = vk_conv_blend_func(att->color_blend_op);
-            state->blend_state.rt[i].rgb_src_factor = vk_conv_blend_factor(att->src_color_blend_factor);
-            state->blend_state.rt[i].rgb_dst_factor = vk_conv_blend_factor(att->dst_color_blend_factor);
-            state->blend_state.rt[i].alpha_func = vk_conv_blend_func(att->alpha_blend_op);
-            state->blend_state.rt[i].alpha_src_factor = vk_conv_blend_factor(att->src_alpha_blend_factor);
-            state->blend_state.rt[i].alpha_dst_factor = vk_conv_blend_factor(att->dst_alpha_blend_factor);
-         } else {
+         if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_CB_WRITE_MASKS))
+            state->blend_state.rt[i].colormask = att->write_mask;
+         if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_CB_BLEND_ENABLES))
+            state->blend_state.rt[i].blend_enable = att->blend_enable;
+
+         if (!att->blend_enable) {
             state->blend_state.rt[i].rgb_func = 0;
             state->blend_state.rt[i].rgb_src_factor = 0;
             state->blend_state.rt[i].rgb_dst_factor = 0;
             state->blend_state.rt[i].alpha_func = 0;
             state->blend_state.rt[i].alpha_src_factor = 0;
             state->blend_state.rt[i].alpha_dst_factor = 0;
+         } else if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS)) {
+            state->blend_state.rt[i].rgb_func = vk_conv_blend_func(att->color_blend_op);
+            state->blend_state.rt[i].rgb_src_factor = vk_conv_blend_factor(att->src_color_blend_factor);
+            state->blend_state.rt[i].rgb_dst_factor = vk_conv_blend_factor(att->dst_color_blend_factor);
+            state->blend_state.rt[i].alpha_func = vk_conv_blend_func(att->alpha_blend_op);
+            state->blend_state.rt[i].alpha_src_factor = vk_conv_blend_factor(att->src_alpha_blend_factor);
+            state->blend_state.rt[i].alpha_dst_factor = vk_conv_blend_factor(att->dst_alpha_blend_factor);
          }
 
          /* At least llvmpipe applies the blend factor prior to the blend function,
@@ -849,42 +903,45 @@ static void handle_graphics_pipeline(struct vk_cmd_queue_entry *cmd,
          memcpy(state->blend_color.color, ps->cb->blend_constants, 4 * sizeof(float));
          state->blend_color_dirty = true;
       }
-   } else {
+   } else if (ps->rp->color_attachment_count == 0) {
       memset(&state->blend_state, 0, sizeof(state->blend_state));
       state->blend_dirty = true;
    }
 
-   state->disable_multisample = pipeline->disable_multisample;
+   if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_RS_LINE_MODE))
+      state->disable_multisample = pipeline->disable_multisample;
    if (ps->ms) {
-      state->rs_state.multisample = ps->ms->rasterization_samples > 1;
-      state->sample_mask = ps->ms->sample_mask;
-      state->blend_state.alpha_to_coverage = ps->ms->alpha_to_coverage_enable;
-      state->blend_state.alpha_to_one = ps->ms->alpha_to_one_enable;
-      state->blend_dirty = true;
-      state->rs_dirty = true;
-      state->min_samples = 1;
-      state->sample_mask_dirty = true;
-      fb_samples = ps->ms->rasterization_samples;
-      if (ps->ms->sample_shading_enable) {
-         state->min_samples = ceil(ps->ms->rasterization_samples *
-                                   ps->ms->min_sample_shading);
-         if (state->min_samples > 1)
-            state->min_samples = ps->ms->rasterization_samples;
-         if (state->min_samples < 1)
-            state->min_samples = 1;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_MS_SAMPLE_MASK)) {
+         state->sample_mask = ps->ms->sample_mask;
+         state->sample_mask_dirty = true;
       }
-      if (pipeline->force_min_sample)
-         state->min_samples = ps->ms->rasterization_samples;
-      state->min_samples_dirty = true;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE))
+         state->blend_state.alpha_to_coverage = ps->ms->alpha_to_coverage_enable;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE))
+         state->blend_state.alpha_to_one = ps->ms->alpha_to_one_enable;
+      state->force_min_sample = pipeline->force_min_sample;
+      state->sample_shading = ps->ms->sample_shading_enable;
+      state->min_sample_shading = ps->ms->min_sample_shading;
+      state->blend_dirty = true;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES))
+         update_samples(state, ps->ms->rasterization_samples);
    } else {
-      state->rs_state.multisample = false;
-      state->sample_mask_dirty = state->sample_mask != 0xffffffff;
-      state->sample_mask = 0xffffffff;
-      state->min_samples_dirty = state->min_samples;
-      state->min_samples = 0;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_MS_SAMPLE_MASK) &&
+          !BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE))
+         state->rs_state.multisample = false;
+      state->sample_shading = false;
+      state->force_min_sample = false;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_MS_SAMPLE_MASK)) {
+         state->sample_mask_dirty = state->sample_mask != 0xffffffff;
+         state->sample_mask = 0xffffffff;
+         state->min_samples_dirty = state->min_samples;
+         state->min_samples = 0;
+      }
       state->blend_dirty |= state->blend_state.alpha_to_coverage || state->blend_state.alpha_to_one;
-      state->blend_state.alpha_to_coverage = false;
-      state->blend_state.alpha_to_one = false;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE))
+         state->blend_state.alpha_to_coverage = false;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE))
+         state->blend_state.alpha_to_one = false;
       state->rs_dirty = true;
    }
 
@@ -959,18 +1016,14 @@ static void handle_graphics_pipeline(struct vk_cmd_queue_entry *cmd,
          state->scissor_dirty = true;
       }
 
-      if (state->rs_state.clip_halfz != !ps->vp->negative_one_to_one) {
-         state->rs_state.clip_halfz = !ps->vp->negative_one_to_one;
+      if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) &&
+          state->rs_state.clip_halfz != !ps->vp->depth_clip_negative_one_to_one) {
+         state->rs_state.clip_halfz = !ps->vp->depth_clip_negative_one_to_one;
          state->rs_dirty = true;
          for (uint32_t i = 0; i < state->num_viewports; i++)
             set_viewport_depth_xform(state, i);
          state->vp_dirty = true;
       }
-   }
-
-   if (fb_samples != state->framebuffer.samples) {
-      state->framebuffer.samples = fb_samples;
-      state->pctx->set_framebuffer_state(state->pctx, &state->framebuffer);
    }
 }
 
@@ -982,11 +1035,11 @@ handle_pipeline_access(struct rendering_state *state, gl_shader_stage stage)
       state->iv[pstage][i].access = 0;
       state->iv[pstage][i].shader_access = 0;
    }
-   u_foreach_bit(idx, state->access[stage].images_read) {
+   u_foreach_bit64(idx, state->access[stage].images_read) {
       state->iv[pstage][idx].access |= PIPE_IMAGE_ACCESS_READ;
       state->iv[pstage][idx].shader_access |= PIPE_IMAGE_ACCESS_READ;
    }
-   u_foreach_bit(idx, state->access[stage].images_written) {
+   u_foreach_bit64(idx, state->access[stage].images_written) {
       state->iv[pstage][idx].access |= PIPE_IMAGE_ACCESS_WRITE;
       state->iv[pstage][idx].shader_access |= PIPE_IMAGE_ACCESS_WRITE;
    }
@@ -1046,31 +1099,6 @@ struct dyn_info {
    uint32_t dynamic_offset_count;
 };
 
-static void fill_sampler(struct pipe_sampler_state *ss,
-                         struct lvp_sampler *samp)
-{
-   ss->wrap_s = vk_conv_wrap_mode(samp->create_info.addressModeU);
-   ss->wrap_t = vk_conv_wrap_mode(samp->create_info.addressModeV);
-   ss->wrap_r = vk_conv_wrap_mode(samp->create_info.addressModeW);
-   ss->min_img_filter = samp->create_info.minFilter == VK_FILTER_LINEAR ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
-   ss->min_mip_filter = samp->create_info.mipmapMode == VK_SAMPLER_MIPMAP_MODE_LINEAR ? PIPE_TEX_MIPFILTER_LINEAR : PIPE_TEX_MIPFILTER_NEAREST;
-   ss->mag_img_filter = samp->create_info.magFilter == VK_FILTER_LINEAR ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
-   ss->min_lod = samp->create_info.minLod;
-   ss->max_lod = samp->create_info.maxLod;
-   ss->lod_bias = samp->create_info.mipLodBias;
-   if (samp->create_info.anisotropyEnable)
-      ss->max_anisotropy = samp->create_info.maxAnisotropy;
-   else
-      ss->max_anisotropy = 1;
-   ss->normalized_coords = !samp->create_info.unnormalizedCoordinates;
-   ss->compare_mode = samp->create_info.compareEnable ? PIPE_TEX_COMPARE_R_TO_TEXTURE : PIPE_TEX_COMPARE_NONE;
-   ss->compare_func = samp->create_info.compareOp;
-   ss->seamless_cube_map = !(samp->create_info.flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
-   ss->reduction_mode = samp->reduction_mode;
-   memcpy(&ss->border_color, &samp->border_color,
-          sizeof(union pipe_color_union));
-}
-
 static void fill_sampler_stage(struct rendering_state *state,
                                struct dyn_info *dyn_info,
                                gl_shader_stage stage,
@@ -1084,20 +1112,12 @@ static void fill_sampler_stage(struct rendering_state *state,
       return;
    ss_idx += array_idx;
    ss_idx += dyn_info->stage[stage].sampler_count;
-   fill_sampler(&state->ss[p_stage][ss_idx], binding->immutable_samplers ? binding->immutable_samplers[array_idx] : descriptor->sampler);
+   struct pipe_sampler_state *ss = binding->immutable_samplers ? binding->immutable_samplers[array_idx] : descriptor->sampler;
+   state->ss[p_stage][ss_idx] = *ss;
    if (state->num_sampler_states[p_stage] <= ss_idx)
       state->num_sampler_states[p_stage] = ss_idx + 1;
    state->ss_dirty[p_stage] = true;
 }
-
-#define fix_depth_swizzle(x) do { \
-  if (x > PIPE_SWIZZLE_X && x < PIPE_SWIZZLE_0) \
-    x = PIPE_SWIZZLE_0;				\
-  } while (0)
-#define fix_depth_swizzle_a(x) do { \
-  if (x > PIPE_SWIZZLE_X && x < PIPE_SWIZZLE_0) \
-    x = PIPE_SWIZZLE_1;				\
-  } while (0)
 
 static void fill_sampler_view_stage(struct rendering_state *state,
                                     struct dyn_info *dyn_info,
@@ -1112,97 +1132,9 @@ static void fill_sampler_view_stage(struct rendering_state *state,
       return;
    sv_idx += array_idx;
    sv_idx += dyn_info->stage[stage].sampler_view_count;
-   struct lvp_image_view *iv = descriptor->iview;
-
-   if (iv) {
-      struct pipe_sampler_view templ;
-      enum pipe_format pformat;
-      if (iv->vk.aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
-         pformat = lvp_vk_format_to_pipe_format(iv->vk.format);
-      else if (iv->vk.aspects == VK_IMAGE_ASPECT_STENCIL_BIT)
-         pformat = util_format_stencil_only(lvp_vk_format_to_pipe_format(iv->vk.format));
-      else
-         pformat = lvp_vk_format_to_pipe_format(iv->vk.format);
-      u_sampler_view_default_template(&templ,
-                                      iv->image->bo,
-                                      pformat);
-      if (iv->vk.view_type == VK_IMAGE_VIEW_TYPE_1D)
-         templ.target = PIPE_TEXTURE_1D;
-      if (iv->vk.view_type == VK_IMAGE_VIEW_TYPE_2D)
-         templ.target = PIPE_TEXTURE_2D;
-      if (iv->vk.view_type == VK_IMAGE_VIEW_TYPE_CUBE)
-         templ.target = PIPE_TEXTURE_CUBE;
-      if (iv->vk.view_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)
-         templ.target = PIPE_TEXTURE_CUBE_ARRAY;
-      templ.u.tex.first_layer = iv->vk.base_array_layer;
-      templ.u.tex.last_layer = iv->vk.base_array_layer + iv->vk.layer_count - 1;
-      templ.u.tex.first_level = iv->vk.base_mip_level;
-      templ.u.tex.last_level = iv->vk.base_mip_level + iv->vk.level_count - 1;
-      templ.swizzle_r = vk_conv_swizzle(iv->vk.swizzle.r);
-      templ.swizzle_g = vk_conv_swizzle(iv->vk.swizzle.g);
-      templ.swizzle_b = vk_conv_swizzle(iv->vk.swizzle.b);
-      templ.swizzle_a = vk_conv_swizzle(iv->vk.swizzle.a);
-
-      /* depth stencil swizzles need special handling to pass VK CTS
-       * but also for zink GL tests.
-       * piping A swizzle into R fixes GL_ALPHA depth texture mode
-       * only swizzling from R/0/1 (for alpha) fixes VK CTS tests
-       * and a bunch of zink tests.
-      */
-      if (iv->vk.aspects == VK_IMAGE_ASPECT_DEPTH_BIT ||
-          iv->vk.aspects == VK_IMAGE_ASPECT_STENCIL_BIT) {
-         fix_depth_swizzle(templ.swizzle_r);
-         fix_depth_swizzle(templ.swizzle_g);
-         fix_depth_swizzle(templ.swizzle_b);
-         fix_depth_swizzle_a(templ.swizzle_a);
-      }
-
-      assert(sv_idx < ARRAY_SIZE(state->sv[p_stage]));
-      if (state->sv[p_stage][sv_idx])
-         pipe_sampler_view_reference(&state->sv[p_stage][sv_idx], NULL);
-      state->sv[p_stage][sv_idx] = state->pctx->create_sampler_view(state->pctx, iv->image->bo, &templ);
-   } else {
-      state->sv[p_stage][sv_idx] = NULL;
-   }
-   if (state->num_sampler_views[p_stage] <= sv_idx)
-      state->num_sampler_views[p_stage] = sv_idx + 1;
-   state->sv_dirty[p_stage] = true;
-}
-
-static void fill_sampler_buffer_view_stage(struct rendering_state *state,
-                                           struct dyn_info *dyn_info,
-                                           gl_shader_stage stage,
-                                           enum pipe_shader_type p_stage,
-                                           int array_idx,
-                                           const union lvp_descriptor_info *descriptor,
-                                           const struct lvp_descriptor_set_binding_layout *binding)
-{
-   int sv_idx = binding->stage[stage].sampler_view_index;
-   if (sv_idx == -1)
-      return;
-   sv_idx += array_idx;
-   sv_idx += dyn_info->stage[stage].sampler_view_count;
-   struct lvp_buffer_view *bv = descriptor->buffer_view;
 
    assert(sv_idx < ARRAY_SIZE(state->sv[p_stage]));
-   if (state->sv[p_stage][sv_idx])
-      pipe_sampler_view_reference(&state->sv[p_stage][sv_idx], NULL);
-
-   if (bv) {
-      struct pipe_sampler_view templ;
-      memset(&templ, 0, sizeof(templ));
-      templ.target = PIPE_BUFFER;
-      templ.swizzle_r = PIPE_SWIZZLE_X;
-      templ.swizzle_g = PIPE_SWIZZLE_Y;
-      templ.swizzle_b = PIPE_SWIZZLE_Z;
-      templ.swizzle_a = PIPE_SWIZZLE_W;
-      templ.format = bv->pformat;
-      templ.u.buf.offset = bv->offset + bv->buffer->offset;
-      templ.u.buf.size = bv->range == VK_WHOLE_SIZE ? (bv->buffer->size - bv->offset) : bv->range;
-      templ.texture = bv->buffer->bo;
-      templ.context = state->pctx;
-      state->sv[p_stage][sv_idx] = state->pctx->create_sampler_view(state->pctx, bv->buffer->bo, &templ);
-   }
+   state->sv[p_stage][sv_idx] = descriptor->sampler_view;
 
    if (state->num_sampler_views[p_stage] <= sv_idx)
       state->num_sampler_views[p_stage] = sv_idx + 1;
@@ -1217,70 +1149,20 @@ static void fill_image_view_stage(struct rendering_state *state,
                                   const union lvp_descriptor_info *descriptor,
                                   const struct lvp_descriptor_set_binding_layout *binding)
 {
-   struct lvp_image_view *iv = descriptor->iview;
    int idx = binding->stage[stage].image_index;
    if (idx == -1)
       return;
    idx += array_idx;
    idx += dyn_info->stage[stage].image_count;
-   if (iv) {
-      state->iv[p_stage][idx].resource = iv->image->bo;
-      if (iv->vk.aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
-         state->iv[p_stage][idx].format = lvp_vk_format_to_pipe_format(iv->vk.format);
-      else if (iv->vk.aspects == VK_IMAGE_ASPECT_STENCIL_BIT)
-         state->iv[p_stage][idx].format = util_format_stencil_only(lvp_vk_format_to_pipe_format(iv->vk.format));
-      else
-         state->iv[p_stage][idx].format = lvp_vk_format_to_pipe_format(iv->vk.format);
-
-      if (iv->vk.view_type == VK_IMAGE_VIEW_TYPE_3D) {
-         state->iv[p_stage][idx].u.tex.first_layer = 0;
-         state->iv[p_stage][idx].u.tex.last_layer = iv->vk.extent.depth - 1;
-      } else {
-         state->iv[p_stage][idx].u.tex.first_layer = iv->vk.base_array_layer,
-         state->iv[p_stage][idx].u.tex.last_layer = iv->vk.base_array_layer + iv->vk.layer_count - 1;
-      }
-      state->iv[p_stage][idx].u.tex.level = iv->vk.base_mip_level;
-   } else {
-      state->iv[p_stage][idx].resource = NULL;
-      state->iv[p_stage][idx].format = PIPE_FORMAT_NONE;
-      state->iv[p_stage][idx].u.tex.first_layer = 0;
-      state->iv[p_stage][idx].u.tex.last_layer = 0;
-      state->iv[p_stage][idx].u.tex.level = 0;
-   }
+   uint16_t access = state->iv[p_stage][idx].access;
+   uint16_t shader_access = state->iv[p_stage][idx].shader_access;
+   state->iv[p_stage][idx] = descriptor->image_view;
+   state->iv[p_stage][idx].access = access;
+   state->iv[p_stage][idx].shader_access = shader_access;
 
    if (state->num_shader_images[p_stage] <= idx)
       state->num_shader_images[p_stage] = idx + 1;
 
-   state->iv_dirty[p_stage] = true;
-}
-
-static void fill_image_buffer_view_stage(struct rendering_state *state,
-                                         struct dyn_info *dyn_info,
-                                         gl_shader_stage stage,
-                                         enum pipe_shader_type p_stage,
-                                         int array_idx,
-                                         const union lvp_descriptor_info *descriptor,
-                                         const struct lvp_descriptor_set_binding_layout *binding)
-{
-   struct lvp_buffer_view *bv = descriptor->buffer_view;
-   int idx = binding->stage[stage].image_index;
-   if (idx == -1)
-      return;
-   idx += array_idx;
-   idx += dyn_info->stage[stage].image_count;
-   if (bv) {
-      state->iv[p_stage][idx].resource = bv->buffer->bo;
-      state->iv[p_stage][idx].format = bv->pformat;
-      state->iv[p_stage][idx].u.buf.offset = bv->offset + bv->buffer->offset;
-      state->iv[p_stage][idx].u.buf.size = bv->range == VK_WHOLE_SIZE ? (bv->buffer->size - bv->offset): bv->range;
-   } else {
-      state->iv[p_stage][idx].resource = NULL;
-      state->iv[p_stage][idx].format = PIPE_FORMAT_NONE;
-      state->iv[p_stage][idx].u.buf.offset = 0;
-      state->iv[p_stage][idx].u.buf.size = 0;
-   }
-   if (state->num_shader_images[p_stage] <= idx)
-      state->num_shader_images[p_stage] = idx + 1;
    state->iv_dirty[p_stage] = true;
 }
 
@@ -1309,6 +1191,7 @@ static void handle_descriptor(struct rendering_state *state,
       break;
    }
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+   case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
       fill_image_view_stage(state, dyn_info, stage, p_stage, array_idx, descriptor, binding);
       break;
@@ -1320,18 +1203,7 @@ static void handle_descriptor(struct rendering_state *state,
          return;
       idx += array_idx;
       idx += dyn_info->stage[stage].const_buffer_count;
-      if (!descriptor->buffer) {
-         state->const_buffer[p_stage][idx].buffer = NULL;
-         state->const_buffer[p_stage][idx].buffer_offset = 0;
-         state->const_buffer[p_stage][idx].buffer_size = 0;
-      } else {
-         state->const_buffer[p_stage][idx].buffer = descriptor->buffer->bo;
-         state->const_buffer[p_stage][idx].buffer_offset = descriptor->offset + descriptor->buffer->offset;
-         if (descriptor->range == VK_WHOLE_SIZE)
-            state->const_buffer[p_stage][idx].buffer_size = descriptor->buffer->bo->width0 - state->const_buffer[p_stage][idx].buffer_offset;
-         else
-            state->const_buffer[p_stage][idx].buffer_size = descriptor->range;
-      }
+      state->const_buffer[p_stage][idx] = descriptor->ubo;
       if (is_dynamic) {
          uint32_t offset = dyn_info->dynamic_offsets[dyn_info->dyn_index + binding->dynamic_index + array_idx];
          state->const_buffer[p_stage][idx].buffer_offset += offset;
@@ -1349,18 +1221,7 @@ static void handle_descriptor(struct rendering_state *state,
          return;
       idx += array_idx;
       idx += dyn_info->stage[stage].shader_buffer_count;
-      if (!descriptor->buffer) {
-         state->sb[p_stage][idx].buffer = NULL;
-         state->sb[p_stage][idx].buffer_offset = 0;
-         state->sb[p_stage][idx].buffer_size = 0;
-      } else {
-         state->sb[p_stage][idx].buffer = descriptor->buffer->bo;
-         state->sb[p_stage][idx].buffer_offset = descriptor->offset + descriptor->buffer->offset;
-         if (descriptor->range == VK_WHOLE_SIZE)
-            state->sb[p_stage][idx].buffer_size = descriptor->buffer->bo->width0 - state->sb[p_stage][idx].buffer_offset;
-         else
-            state->sb[p_stage][idx].buffer_size = descriptor->range;
-      }
+      state->sb[p_stage][idx] = descriptor->ssbo;
       if (is_dynamic) {
          uint32_t offset = dyn_info->dynamic_offsets[dyn_info->dyn_index + binding->dynamic_index + array_idx];
          state->sb[p_stage][idx].buffer_offset += offset;
@@ -1376,17 +1237,12 @@ static void handle_descriptor(struct rendering_state *state,
       fill_sampler_stage(state, dyn_info, stage, p_stage, array_idx, descriptor, binding);
       break;
    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+   case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
       fill_sampler_view_stage(state, dyn_info, stage, p_stage, array_idx, descriptor, binding);
       break;
    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
       fill_sampler_stage(state, dyn_info, stage, p_stage, array_idx, descriptor, binding);
       fill_sampler_view_stage(state, dyn_info, stage, p_stage, array_idx, descriptor, binding);
-      break;
-   case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-      fill_sampler_buffer_view_stage(state, dyn_info, stage, p_stage, array_idx, descriptor, binding);
-      break;
-   case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-      fill_image_buffer_view_stage(state, dyn_info, stage, p_stage, array_idx, descriptor, binding);
       break;
    default:
       fprintf(stderr, "Unhandled descriptor set %d\n", type);
@@ -1696,6 +1552,9 @@ static void render_clear_fast(struct rendering_state *state)
       goto slow_clear;
 
    if (state->info.view_mask)
+      goto slow_clear;
+
+   if (state->render_cond)
       goto slow_clear;
 
    uint32_t buffers = 0;
@@ -2054,6 +1913,7 @@ static void handle_draw(struct vk_cmd_queue_entry *cmd,
 
    draw.start = cmd->u.draw.first_vertex;
    draw.count = cmd->u.draw.vertex_count;
+   draw.index_bias = 0;
 
    state->pctx->set_patch_vertices(state->pctx, state->patch_vertices);
    state->pctx->draw_vbo(state->pctx, &state->info, 0, NULL, &draw, 1);
@@ -2997,7 +2857,7 @@ static void handle_copy_query_pool_results(struct vk_cmd_queue_entry *cmd,
       flags |= PIPE_QUERY_PARTIAL;
    unsigned result_size = copycmd->flags & VK_QUERY_RESULT_64_BIT ? 8 : 4;
    for (unsigned i = copycmd->first_query; i < copycmd->first_query + copycmd->query_count; i++) {
-      unsigned offset = copycmd->dst_offset + lvp_buffer_from_handle(copycmd->dst_buffer)->offset + (copycmd->stride * (i - copycmd->first_query));
+      unsigned offset = copycmd->dst_offset + (copycmd->stride * (i - copycmd->first_query));
       if (pool->queries[i]) {
          unsigned num_results = 0;
          if (copycmd->flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) {
@@ -3292,7 +3152,8 @@ static void handle_compute_push_descriptor_set(struct lvp_cmd_push_descriptor_se
    }
 }
 
-static struct lvp_cmd_push_descriptor_set *create_push_descriptor_set(struct vk_cmd_push_descriptor_set_khr *in_cmd)
+static struct lvp_cmd_push_descriptor_set *
+create_push_descriptor_set(struct rendering_state *state, struct vk_cmd_push_descriptor_set_khr *in_cmd)
 {
    LVP_FROM_HANDLE(lvp_pipeline_layout, layout, in_cmd->layout);
    struct lvp_cmd_push_descriptor_set *out_cmd;
@@ -3335,31 +3196,65 @@ static struct lvp_cmd_push_descriptor_set *create_push_descriptor_set(struct vk_
          union lvp_descriptor_info *info = &out_cmd->infos[descriptor_index + j];
          switch (desc->descriptor_type) {
          case VK_DESCRIPTOR_TYPE_SAMPLER:
-            info->sampler = lvp_sampler_from_handle(in_cmd->descriptor_writes[i].pImageInfo[j].sampler);
+            if (in_cmd->descriptor_writes[i].pImageInfo[j].sampler)
+               info->sampler = &lvp_sampler_from_handle(in_cmd->descriptor_writes[i].pImageInfo[j].sampler)->state;
+            else
+               info->sampler = NULL;
             break;
          case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-            info->sampler = lvp_sampler_from_handle(in_cmd->descriptor_writes[i].pImageInfo[j].sampler);
-            info->iview = lvp_image_view_from_handle(in_cmd->descriptor_writes[i].pImageInfo[j].imageView);
-            info->image_layout = in_cmd->descriptor_writes[i].pImageInfo[j].imageLayout;
+            if (in_cmd->descriptor_writes[i].pImageInfo[j].sampler)
+               info->sampler = &lvp_sampler_from_handle(in_cmd->descriptor_writes[i].pImageInfo[j].sampler)->state;
+            else
+               info->sampler = NULL;
+            if (in_cmd->descriptor_writes[i].pImageInfo[j].imageView)
+               info->sampler_view = lvp_image_view_from_handle(in_cmd->descriptor_writes[i].pImageInfo[j].imageView)->sv;
+            else
+               info->sampler_view = NULL;
             break;
          case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            if (in_cmd->descriptor_writes[i].pImageInfo[j].imageView)
+               info->sampler_view = lvp_image_view_from_handle(in_cmd->descriptor_writes[i].pImageInfo[j].imageView)->sv;
+            else
+               info->sampler_view = NULL;
+            break;
          case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
          case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-            info->iview = lvp_image_view_from_handle(in_cmd->descriptor_writes[i].pImageInfo[j].imageView);
-            info->image_layout = in_cmd->descriptor_writes[i].pImageInfo[j].imageLayout;
+            if (in_cmd->descriptor_writes[i].pImageInfo[j].imageView)
+               info->image_view = lvp_image_view_from_handle(in_cmd->descriptor_writes[i].pImageInfo[j].imageView)->iv;
+            else
+               info->image_view = ((struct pipe_image_view){0});
             break;
-         case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-            info->buffer_view = lvp_buffer_view_from_handle(in_cmd->descriptor_writes[i].pTexelBufferView[j]);
+         case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER: {
+            struct lvp_buffer_view *bview = lvp_buffer_view_from_handle(in_cmd->descriptor_writes[i].pTexelBufferView[j]);
+            info->sampler_view = bview ? bview->sv : NULL;
             break;
+         }
+         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: {
+            struct lvp_buffer_view *bview = lvp_buffer_view_from_handle(in_cmd->descriptor_writes[i].pTexelBufferView[j]);
+            info->image_view = bview ? bview->iv : ((struct pipe_image_view){0});
+            break;
+         }
          case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: {
+            LVP_FROM_HANDLE(lvp_buffer, buffer, in_cmd->descriptor_writes[i].pBufferInfo[j].buffer);
+            info->ubo.buffer = buffer ? buffer->bo : NULL;
+            info->ubo.buffer_offset = buffer ? in_cmd->descriptor_writes[i].pBufferInfo[j].offset : 0;
+            info->ubo.buffer_size = buffer ? in_cmd->descriptor_writes[i].pBufferInfo[j].range : 0;
+            if (buffer && in_cmd->descriptor_writes[i].pBufferInfo[j].range == VK_WHOLE_SIZE)
+               info->ubo.buffer_size = info->ubo.buffer->width0 - info->ubo.buffer_offset;
+            break;
+         }
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: {
+            LVP_FROM_HANDLE(lvp_buffer, buffer, in_cmd->descriptor_writes[i].pBufferInfo[j].buffer);
+            info->ssbo.buffer = buffer ? buffer->bo : NULL;
+            info->ssbo.buffer_offset = buffer ? in_cmd->descriptor_writes[i].pBufferInfo[j].offset : 0;
+            info->ssbo.buffer_size = buffer ? in_cmd->descriptor_writes[i].pBufferInfo[j].range : 0;
+            if (buffer && in_cmd->descriptor_writes[i].pBufferInfo[j].range == VK_WHOLE_SIZE)
+               info->ssbo.buffer_size = info->ssbo.buffer->width0 - info->ssbo.buffer_offset;
+            break;
+         }
          default:
-            info->buffer = lvp_buffer_from_handle(in_cmd->descriptor_writes[i].pBufferInfo[j].buffer);
-            info->offset = in_cmd->descriptor_writes[i].pBufferInfo[j].offset;
-            info->range = in_cmd->descriptor_writes[i].pBufferInfo[j].range;
             break;
          }
       }
@@ -3372,7 +3267,7 @@ static struct lvp_cmd_push_descriptor_set *create_push_descriptor_set(struct vk_
 static void handle_push_descriptor_set_generic(struct vk_cmd_push_descriptor_set_khr *_pds,
                                                struct rendering_state *state)
 {
-   struct lvp_cmd_push_descriptor_set *pds = create_push_descriptor_set(_pds);
+   struct lvp_cmd_push_descriptor_set *pds = create_push_descriptor_set(state, _pds);
    const struct lvp_descriptor_set_layout *layout =
       vk_to_lvp_descriptor_set_layout(pds->layout->vk.set_layouts[pds->set]);
 
@@ -3604,7 +3499,7 @@ static void handle_draw_indirect_byte_count(struct vk_cmd_queue_entry *cmd,
 
    pipe_buffer_read(state->pctx,
                     lvp_buffer_from_handle(dibc->counter_buffer)->bo,
-                    lvp_buffer_from_handle(dibc->counter_buffer)->offset + dibc->counter_buffer_offset,
+                    dibc->counter_buffer_offset,
                     4, &draw.count);
 
    state->info.start_instance = cmd->u.draw_indirect_byte_count_ext.first_instance;
@@ -3620,14 +3515,16 @@ static void handle_begin_conditional_rendering(struct vk_cmd_queue_entry *cmd,
                                                struct rendering_state *state)
 {
    struct VkConditionalRenderingBeginInfoEXT *bcr = cmd->u.begin_conditional_rendering_ext.conditional_rendering_begin;
+   state->render_cond = true;
    state->pctx->render_condition_mem(state->pctx,
                                      lvp_buffer_from_handle(bcr->buffer)->bo,
-                                     lvp_buffer_from_handle(bcr->buffer)->offset + bcr->offset,
+                                     bcr->offset,
                                      bcr->flags & VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT);
 }
 
 static void handle_end_conditional_rendering(struct rendering_state *state)
 {
+   state->render_cond = false;
    state->pctx->render_condition_mem(state->pctx, NULL, 0, false);
 }
 
@@ -3695,7 +3592,6 @@ static void handle_set_primitive_topology(struct vk_cmd_queue_entry *cmd,
    state->info.mode = vk_conv_topology(cmd->u.set_primitive_topology.primitive_topology);
    state->rs_dirty = true;
 }
-
 
 static void handle_set_depth_test_enable(struct vk_cmd_queue_entry *cmd,
                                          struct rendering_state *state)
@@ -3812,6 +3708,176 @@ static void handle_set_color_write_enable(struct vk_cmd_queue_entry *cmd,
    state->color_write_disables = disable_mask;
 }
 
+static void handle_set_polygon_mode(struct vk_cmd_queue_entry *cmd,
+                                    struct rendering_state *state)
+{
+   unsigned polygon_mode = vk_polygon_mode_to_pipe(cmd->u.set_polygon_mode_ext.polygon_mode);
+   if (state->rs_state.fill_front != polygon_mode)
+      state->rs_dirty = true;
+   state->rs_state.fill_front = polygon_mode;
+   if (state->rs_state.fill_back != polygon_mode)
+      state->rs_dirty = true;
+   state->rs_state.fill_back = polygon_mode;
+}
+
+static void handle_set_tessellation_domain_origin(struct vk_cmd_queue_entry *cmd,
+                                                  struct rendering_state *state)
+{
+   bool tess_ccw = cmd->u.set_tessellation_domain_origin_ext.domain_origin == VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
+   if (tess_ccw == state->tess_ccw)
+      return;
+   state->tess_ccw = tess_ccw;
+   if (state->tess_states[state->tess_ccw])
+      state->pctx->bind_tes_state(state->pctx, state->tess_states[state->tess_ccw]);
+}
+
+static void handle_set_depth_clamp_enable(struct vk_cmd_queue_entry *cmd,
+                                          struct rendering_state *state)
+{
+   state->rs_dirty |= state->rs_state.depth_clamp != cmd->u.set_depth_clamp_enable_ext.depth_clamp_enable;
+   state->rs_state.depth_clamp = !!cmd->u.set_depth_clamp_enable_ext.depth_clamp_enable;
+   if (state->depth_clamp_sets_clip)
+      state->rs_state.depth_clip_near = state->rs_state.depth_clip_far = !state->rs_state.depth_clamp;
+}
+
+static void handle_set_depth_clip_enable(struct vk_cmd_queue_entry *cmd,
+                                         struct rendering_state *state)
+{
+   state->rs_dirty |= state->rs_state.depth_clip_far != !!cmd->u.set_depth_clip_enable_ext.depth_clip_enable;
+   state->rs_state.depth_clip_near = state->rs_state.depth_clip_far = !!cmd->u.set_depth_clip_enable_ext.depth_clip_enable;
+}
+
+static void handle_set_logic_op_enable(struct vk_cmd_queue_entry *cmd,
+                                         struct rendering_state *state)
+{
+   state->blend_dirty |= state->blend_state.logicop_enable != !!cmd->u.set_logic_op_enable_ext.logic_op_enable;
+   state->blend_state.logicop_enable = !!cmd->u.set_logic_op_enable_ext.logic_op_enable;
+}
+
+static void handle_set_sample_mask(struct vk_cmd_queue_entry *cmd,
+                                   struct rendering_state *state)
+{
+   unsigned mask = cmd->u.set_sample_mask_ext.sample_mask ? cmd->u.set_sample_mask_ext.sample_mask[0] : 0xffffffff;
+   state->sample_mask_dirty |= state->sample_mask != mask;
+   state->sample_mask = mask;
+}
+
+static void handle_set_samples(struct vk_cmd_queue_entry *cmd,
+                               struct rendering_state *state)
+{
+   update_samples(state, cmd->u.set_rasterization_samples_ext.rasterization_samples);
+}
+
+static void handle_set_alpha_to_coverage(struct vk_cmd_queue_entry *cmd,
+                                         struct rendering_state *state)
+{
+   state->blend_dirty |=
+      state->blend_state.alpha_to_coverage != !!cmd->u.set_alpha_to_coverage_enable_ext.alpha_to_coverage_enable;
+   state->blend_state.alpha_to_coverage = !!cmd->u.set_alpha_to_coverage_enable_ext.alpha_to_coverage_enable;
+}
+
+static void handle_set_alpha_to_one(struct vk_cmd_queue_entry *cmd,
+                                         struct rendering_state *state)
+{
+   state->blend_dirty |=
+      state->blend_state.alpha_to_one != !!cmd->u.set_alpha_to_one_enable_ext.alpha_to_one_enable;
+   state->blend_state.alpha_to_one = !!cmd->u.set_alpha_to_one_enable_ext.alpha_to_one_enable;
+   if (state->blend_state.alpha_to_one)
+      state->rs_state.multisample = true;
+}
+
+static void handle_set_halfz(struct vk_cmd_queue_entry *cmd,
+                             struct rendering_state *state)
+{
+   if (state->rs_state.clip_halfz == !cmd->u.set_depth_clip_negative_one_to_one_ext.negative_one_to_one)
+      return;
+   state->rs_dirty = true;
+   state->rs_state.clip_halfz = !cmd->u.set_depth_clip_negative_one_to_one_ext.negative_one_to_one;
+   /* handle dynamic state: convert from one transform to the other */
+   for (unsigned i = 0; i < state->num_viewports; i++)
+      set_viewport_depth_xform(state, i);
+   state->vp_dirty = true;
+}
+
+static void handle_set_line_rasterization_mode(struct vk_cmd_queue_entry *cmd,
+                                               struct rendering_state *state)
+{
+   VkLineRasterizationModeEXT lineRasterizationMode = cmd->u.set_line_rasterization_mode_ext.line_rasterization_mode;
+   /* not even going to bother trying dirty tracking on this */
+   state->rs_dirty = true;
+   state->rs_state.line_smooth = lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT;
+   state->rs_state.line_rectangular = lineRasterizationMode != VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT;;
+   state->disable_multisample = lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT ||
+                                lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT;
+}
+
+static void handle_set_line_stipple_enable(struct vk_cmd_queue_entry *cmd,
+                                           struct rendering_state *state)
+{
+   state->rs_dirty |= state->rs_state.line_stipple_enable != !!cmd->u.set_line_stipple_enable_ext.stippled_line_enable;
+   state->rs_state.line_stipple_enable = cmd->u.set_line_stipple_enable_ext.stippled_line_enable;
+}
+
+static void handle_set_provoking_vertex_mode(struct vk_cmd_queue_entry *cmd,
+                                             struct rendering_state *state)
+{
+   bool flatshade_first = cmd->u.set_provoking_vertex_mode_ext.provoking_vertex_mode != VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT;
+   state->rs_dirty |= state->rs_state.flatshade_first != flatshade_first;
+   state->rs_state.flatshade_first = flatshade_first;
+}
+
+static void handle_set_color_blend_enable(struct vk_cmd_queue_entry *cmd,
+                                          struct rendering_state *state)
+{
+   for (unsigned i = 0; i < cmd->u.set_color_blend_enable_ext.attachment_count; i++) {
+      if (state->blend_state.rt[cmd->u.set_color_blend_enable_ext.first_attachment + i].blend_enable != !!cmd->u.set_color_blend_enable_ext.color_blend_enables[i]) {
+         state->blend_dirty = true;
+      }
+      state->blend_state.rt[cmd->u.set_color_blend_enable_ext.first_attachment + i].blend_enable = !!cmd->u.set_color_blend_enable_ext.color_blend_enables[i];
+   }
+}
+
+static void handle_set_color_write_mask(struct vk_cmd_queue_entry *cmd,
+                                        struct rendering_state *state)
+{
+   for (unsigned i = 0; i < cmd->u.set_color_write_mask_ext.attachment_count; i++) {
+      if (state->blend_state.rt[cmd->u.set_color_write_mask_ext.first_attachment + i].colormask != cmd->u.set_color_write_mask_ext.color_write_masks[i])
+         state->blend_dirty = true;
+      state->blend_state.rt[cmd->u.set_color_write_mask_ext.first_attachment + i].colormask = cmd->u.set_color_write_mask_ext.color_write_masks[i];
+   }
+}
+
+static void handle_set_color_blend_equation(struct vk_cmd_queue_entry *cmd,
+                                            struct rendering_state *state)
+{
+   const VkColorBlendEquationEXT *cb = cmd->u.set_color_blend_equation_ext.color_blend_equations;
+   state->blend_dirty = true;
+   for (unsigned i = 0; i < cmd->u.set_color_blend_equation_ext.attachment_count; i++) {
+      state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].rgb_func = vk_conv_blend_func(cb[i].colorBlendOp);
+      state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].rgb_src_factor = vk_conv_blend_factor(cb[i].srcColorBlendFactor);
+      state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].rgb_dst_factor = vk_conv_blend_factor(cb[i].dstColorBlendFactor);
+      state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].alpha_func = vk_conv_blend_func(cb[i].alphaBlendOp);
+      state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].alpha_src_factor = vk_conv_blend_factor(cb[i].srcAlphaBlendFactor);
+      state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].alpha_dst_factor = vk_conv_blend_factor(cb[i].dstAlphaBlendFactor);
+
+      /* At least llvmpipe applies the blend factor prior to the blend function,
+       * regardless of what function is used. (like i965 hardware).
+       * It means for MIN/MAX the blend factor has to be stomped to ONE.
+       */
+      if (cb[i].colorBlendOp == VK_BLEND_OP_MIN ||
+          cb[i].colorBlendOp == VK_BLEND_OP_MAX) {
+         state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].rgb_src_factor = PIPE_BLENDFACTOR_ONE;
+         state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].rgb_dst_factor = PIPE_BLENDFACTOR_ONE;
+      }
+
+      if (cb[i].alphaBlendOp == VK_BLEND_OP_MIN ||
+          cb[i].alphaBlendOp == VK_BLEND_OP_MAX) {
+         state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].alpha_src_factor = PIPE_BLENDFACTOR_ONE;
+         state->blend_state.rt[cmd->u.set_color_blend_equation_ext.first_attachment + i].alpha_dst_factor = PIPE_BLENDFACTOR_ONE;
+      }
+   }
+}
+
 void lvp_add_enqueue_cmd_entrypoints(struct vk_device_dispatch_table *disp)
 {
    struct vk_device_dispatch_table cmd_enqueue_dispatch;
@@ -3901,6 +3967,23 @@ void lvp_add_enqueue_cmd_entrypoints(struct vk_device_dispatch_table *disp)
    ENQUEUE_CMD(CmdSetEvent2)
    ENQUEUE_CMD(CmdWaitEvents2)
    ENQUEUE_CMD(CmdWriteTimestamp2)
+
+   ENQUEUE_CMD(CmdSetPolygonModeEXT)
+   ENQUEUE_CMD(CmdSetTessellationDomainOriginEXT)
+   ENQUEUE_CMD(CmdSetDepthClampEnableEXT)
+   ENQUEUE_CMD(CmdSetDepthClipEnableEXT)
+   ENQUEUE_CMD(CmdSetLogicOpEnableEXT)
+   ENQUEUE_CMD(CmdSetSampleMaskEXT)
+   ENQUEUE_CMD(CmdSetRasterizationSamplesEXT)
+   ENQUEUE_CMD(CmdSetAlphaToCoverageEnableEXT)
+   ENQUEUE_CMD(CmdSetAlphaToOneEnableEXT)
+   ENQUEUE_CMD(CmdSetDepthClipNegativeOneToOneEXT)
+   ENQUEUE_CMD(CmdSetLineRasterizationModeEXT)
+   ENQUEUE_CMD(CmdSetLineStippleEnableEXT)
+   ENQUEUE_CMD(CmdSetProvokingVertexModeEXT)
+   ENQUEUE_CMD(CmdSetColorBlendEnableEXT)
+   ENQUEUE_CMD(CmdSetColorBlendEquationEXT)
+   ENQUEUE_CMD(CmdSetColorWriteMaskEXT)
 
 #undef ENQUEUE_CMD
 }
@@ -4166,6 +4249,56 @@ static void lvp_execute_cmd_buffer(struct lvp_cmd_buffer *cmd_buffer,
       case VK_CMD_WRITE_TIMESTAMP2:
          handle_write_timestamp2(cmd, state);
          break;
+
+      case VK_CMD_SET_POLYGON_MODE_EXT:
+         handle_set_polygon_mode(cmd, state);
+         break;
+      case VK_CMD_SET_TESSELLATION_DOMAIN_ORIGIN_EXT:
+         handle_set_tessellation_domain_origin(cmd, state);
+         break;
+      case VK_CMD_SET_DEPTH_CLAMP_ENABLE_EXT:
+         handle_set_depth_clamp_enable(cmd, state);
+         break;
+      case VK_CMD_SET_DEPTH_CLIP_ENABLE_EXT:
+         handle_set_depth_clip_enable(cmd, state);
+         break;
+      case VK_CMD_SET_LOGIC_OP_ENABLE_EXT:
+         handle_set_logic_op_enable(cmd, state);
+         break;
+      case VK_CMD_SET_SAMPLE_MASK_EXT:
+         handle_set_sample_mask(cmd, state);
+         break;
+      case VK_CMD_SET_RASTERIZATION_SAMPLES_EXT:
+         handle_set_samples(cmd, state);
+         break;
+      case VK_CMD_SET_ALPHA_TO_COVERAGE_ENABLE_EXT:
+         handle_set_alpha_to_coverage(cmd, state);
+         break;
+      case VK_CMD_SET_ALPHA_TO_ONE_ENABLE_EXT:
+         handle_set_alpha_to_one(cmd, state);
+         break;
+      case VK_CMD_SET_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE_EXT:
+         handle_set_halfz(cmd, state);
+         break;
+      case VK_CMD_SET_LINE_RASTERIZATION_MODE_EXT:
+         handle_set_line_rasterization_mode(cmd, state);
+         break;
+      case VK_CMD_SET_LINE_STIPPLE_ENABLE_EXT:
+         handle_set_line_stipple_enable(cmd, state);
+         break;
+      case VK_CMD_SET_PROVOKING_VERTEX_MODE_EXT:
+         handle_set_provoking_vertex_mode(cmd, state);
+         break;
+      case VK_CMD_SET_COLOR_BLEND_ENABLE_EXT:
+         handle_set_color_blend_enable(cmd, state);
+         break;
+      case VK_CMD_SET_COLOR_WRITE_MASK_EXT:
+         handle_set_color_write_mask(cmd, state);
+         break;
+      case VK_CMD_SET_COLOR_BLEND_EQUATION_EXT:
+         handle_set_color_blend_equation(cmd, state);
+         break;
+
       default:
          fprintf(stderr, "Unsupported command %s\n", vk_cmd_queue_type_names[cmd->type]);
          unreachable("Unsupported command");
@@ -4191,6 +4324,9 @@ VkResult lvp_execute_cmds(struct lvp_device *device,
    state->vp_dirty = true;
    state->rs_state.point_tri_clip = true;
    state->rs_state.unclamped_fragment_depth_values = device->vk.enabled_extensions.EXT_depth_range_unrestricted;
+   state->sample_mask_dirty = true;
+   state->min_samples_dirty = true;
+   state->sample_mask = UINT32_MAX;
    for (enum pipe_shader_type s = PIPE_SHADER_VERTEX; s < PIPE_SHADER_TYPES; s++) {
       for (unsigned i = 0; i < ARRAY_SIZE(state->cso_ss_ptr[s]); i++)
          state->cso_ss_ptr[s][i] = &state->ss[s][i];
@@ -4205,19 +4341,6 @@ VkResult lvp_execute_cmds(struct lvp_device *device,
       if (state->so_targets[i]) {
          state->pctx->stream_output_target_destroy(state->pctx, state->so_targets[i]);
       }
-   }
-
-   for (enum pipe_shader_type s = PIPE_SHADER_VERTEX; s < PIPE_SHADER_TYPES; s++) {
-      for (unsigned i = 0; i < ARRAY_SIZE(state->sv[s]); i++) {
-         if (state->sv[s][i])
-            pipe_sampler_view_reference(&state->sv[s][i], NULL);
-      }
-   }
-
-   for (unsigned i = 0;
-        i < ARRAY_SIZE(state->cso_ss_ptr[PIPE_SHADER_COMPUTE]); i++) {
-      if (state->cso_ss_ptr[PIPE_SHADER_COMPUTE][i])
-         state->pctx->delete_sampler_state(state->pctx, state->ss_cso[PIPE_SHADER_COMPUTE][i]);
    }
 
    free(state->color_att);

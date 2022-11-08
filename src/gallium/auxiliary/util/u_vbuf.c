@@ -393,9 +393,9 @@ u_vbuf_set_vertex_elements_internal(struct u_vbuf *mgr,
    /* need to include the count into the stored state data too. */
    key_size = sizeof(struct pipe_vertex_element) * velems->count +
               sizeof(unsigned);
-   hash_key = cso_construct_key((void*)velems, key_size);
+   hash_key = cso_construct_key(velems, key_size);
    iter = cso_find_state_template(&mgr->cso_cache, hash_key, CSO_VELEMENTS,
-                                  (void*)velems, key_size);
+                                  velems, key_size);
 
    if (cso_hash_iter_is_null(iter)) {
       struct cso_velements *cso = MALLOC_STRUCT(cso_velements);

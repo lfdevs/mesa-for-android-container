@@ -1290,7 +1290,7 @@ const struct name_offset known_dispatch[] = {
    { "glSecondaryColor3usv", _O(SecondaryColor3usv) },
    { "glSecondaryColorPointer", _O(SecondaryColorPointer) },
    { "glMultiDrawArrays", _O(MultiDrawArrays) },
-   { "glMultiDrawElementsEXT", _O(MultiDrawElementsEXT) },
+   { "glMultiDrawElements", _O(MultiDrawElements) },
    { "glFogCoordPointer", _O(FogCoordPointer) },
    { "glFogCoordd", _O(FogCoordd) },
    { "glFogCoorddv", _O(FogCoorddv) },

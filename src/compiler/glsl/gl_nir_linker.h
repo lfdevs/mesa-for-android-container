@@ -113,6 +113,11 @@ void gl_nir_link_assign_xfb_resources(const struct gl_constants *consts,
 
 bool gl_nir_link_uniform_blocks(struct gl_shader_program *prog);
 
+bool lower_packed_varying_needs_lowering(nir_shader *shader, nir_variable *var,
+                                         bool xfb_enabled,
+                                         bool disable_xfb_packing,
+                                         bool disable_varying_packing);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

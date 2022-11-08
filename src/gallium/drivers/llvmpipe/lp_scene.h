@@ -129,6 +129,7 @@ struct lp_scene_surface {
    unsigned nr_samples;
 };
 
+
 /**
  * All bins and bin data are contained here.
  * Per-bin data goes into the 'tile' bins.
@@ -209,8 +210,8 @@ struct lp_scene *lp_scene_create(struct lp_setup_context *setup);
 void lp_scene_destroy(struct lp_scene *scene);
 
 boolean lp_scene_is_empty(struct lp_scene *scene);
-boolean lp_scene_is_oom(struct lp_scene *scene);
 
+boolean lp_scene_is_oom(struct lp_scene *scene);
 
 struct data_block *lp_scene_new_data_block(struct lp_scene *scene);
 
@@ -421,4 +422,4 @@ void
 lp_scene_end_rasterization(struct lp_scene *scene);
 
 
-#endif /* LP_BIN_H */
+#endif /* LP_SCENE_H */

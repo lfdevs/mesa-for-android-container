@@ -131,25 +131,6 @@ lp_declare_intrinsic(LLVMModuleRef module,
    return lp_declare_intrinsic_with_type(module, name, function_type);
 }
 
-
-#if LLVM_VERSION_MAJOR < 4
-static LLVMAttribute lp_attr_to_llvm_attr(enum lp_func_attr attr)
-{
-   switch (attr) {
-   case LP_FUNC_ATTR_ALWAYSINLINE: return LLVMAlwaysInlineAttribute;
-   case LP_FUNC_ATTR_INREG: return LLVMInRegAttribute;
-   case LP_FUNC_ATTR_NOALIAS: return LLVMNoAliasAttribute;
-   case LP_FUNC_ATTR_NOUNWIND: return LLVMNoUnwindAttribute;
-   case LP_FUNC_ATTR_READNONE: return LLVMReadNoneAttribute;
-   case LP_FUNC_ATTR_READONLY: return LLVMReadOnlyAttribute;
-   default:
-      _debug_printf("Unhandled function attribute: %x\n", attr);
-      return 0;
-   }
-}
-
-#else
-
 static const char *attr_to_str(enum lp_func_attr attr)
 {
    switch (attr) {
@@ -169,26 +150,10 @@ static const char *attr_to_str(enum lp_func_attr attr)
    }
 }
 
-#endif
-
 void
 lp_add_function_attr(LLVMValueRef function_or_call,
                      int attr_idx, enum lp_func_attr attr)
 {
-
-#if LLVM_VERSION_MAJOR < 4
-   LLVMAttribute llvm_attr = lp_attr_to_llvm_attr(attr);
-   if (LLVMIsAFunction(function_or_call)) {
-      if (attr_idx == -1) {
-         LLVMAddFunctionAttr(function_or_call, llvm_attr);
-      } else {
-         LLVMAddAttribute(LLVMGetParam(function_or_call, attr_idx - 1), llvm_attr);
-      }
-   } else {
-      LLVMAddInstrAttribute(function_or_call, attr_idx, llvm_attr);
-   }
-#else
-
    LLVMModuleRef module;
    if (LLVMIsAFunction(function_or_call)) {
       module = LLVMGetGlobalParent(function_or_call);
@@ -208,7 +173,6 @@ lp_add_function_attr(LLVMValueRef function_or_call,
       LLVMAddAttributeAtIndex(function_or_call, attr_idx, llvm_attr);
    else
       LLVMAddCallSiteAttribute(function_or_call, attr_idx, llvm_attr);
-#endif
 }
 
 static void
@@ -236,8 +200,7 @@ lp_build_intrinsic(LLVMBuilderRef builder,
 {
    LLVMModuleRef module = LLVMGetGlobalParent(LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)));
    LLVMValueRef function, call;
-   bool set_callsite_attrs = LLVM_VERSION_MAJOR >= 4 &&
-                             !(attr_mask & LP_FUNC_ATTR_LEGACY);
+   bool set_callsite_attrs = !(attr_mask & LP_FUNC_ATTR_LEGACY);
 
    LLVMTypeRef arg_types[LP_MAX_FUNC_ARGS];
 

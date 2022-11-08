@@ -29,7 +29,6 @@
 #include "util/format/u_format.h"
 #include "util/half_float.h"
 #include "util/u_cpu_detect.h"
-#include "rtasm/rtasm_cpu.h"
 
 /* don't use this for serious use */
 static double rand_double()
@@ -46,11 +45,12 @@ static double rand_double()
    return v;
 }
 
+char cpu_caps_override_env[128];
+
 int main(int argc, char** argv)
 {
    struct translate *(*create_fn)(const struct translate_key *key) = 0;
 
-   extern struct util_cpu_caps_t util_cpu_caps;
    struct translate_key key;
    unsigned output_format;
    unsigned input_format;
@@ -76,60 +76,30 @@ int main(int argc, char** argv)
       create_fn = translate_generic_create;
    else if (!strcmp(argv[1], "x86"))
       create_fn = translate_sse2_create;
-   else if (!strcmp(argv[1], "nosse"))
+   else
    {
-      util_cpu_caps.has_sse = 0;
-      util_cpu_caps.has_sse2 = 0;
-      util_cpu_caps.has_sse3 = 0;
-      util_cpu_caps.has_sse4_1 = 0;
-      create_fn = translate_sse2_create;
-   }
-   else if (!strcmp(argv[1], "sse"))
-   {
-      if(!util_get_cpu_caps()->has_sse || !rtasm_cpu_has_sse())
+      const char *translate_options[] = {
+         "nosse", "sse", "sse2", "sse3", "ssse3", "sse4.1", "avx",
+         NULL
+      };
+      const char **option;
+      for (option = translate_options; *option; ++option)
       {
-         printf("Error: CPU doesn't support SSE (test with qemu)\n");
-         return 2;
+         if (!strcmp(argv[1], *option))
+         {
+            create_fn = translate_sse2_create;
+            break;
+         }
       }
-      util_cpu_caps.has_sse2 = 0;
-      util_cpu_caps.has_sse3 = 0;
-      util_cpu_caps.has_sse4_1 = 0;
-      create_fn = translate_sse2_create;
-   }
-   else if (!strcmp(argv[1], "sse2"))
-   {
-      if(!util_get_cpu_caps()->has_sse2 || !rtasm_cpu_has_sse())
-      {
-         printf("Error: CPU doesn't support SSE2 (test with qemu)\n");
-         return 2;
+      if (create_fn) {
+         snprintf(cpu_caps_override_env, sizeof(cpu_caps_override_env), "GALLIUM_OVERRIDE_CPU_CAPS=%s", argv[1]);
+         putenv(cpu_caps_override_env);
       }
-      util_cpu_caps.has_sse3 = 0;
-      util_cpu_caps.has_sse4_1 = 0;
-      create_fn = translate_sse2_create;
-   }
-   else if (!strcmp(argv[1], "sse3"))
-   {
-      if(!util_get_cpu_caps()->has_sse3 || !rtasm_cpu_has_sse())
-      {
-         printf("Error: CPU doesn't support SSE3 (test with qemu)\n");
-         return 2;
-      }
-      util_cpu_caps.has_sse4_1 = 0;
-      create_fn = translate_sse2_create;
-   }
-   else if (!strcmp(argv[1], "sse4.1"))
-   {
-      if(!util_get_cpu_caps()->has_sse4_1 || !rtasm_cpu_has_sse())
-      {
-         printf("Error: CPU doesn't support SSE4.1 (test with qemu)\n");
-         return 2;
-      }
-      create_fn = translate_sse2_create;
    }
 
    if (!create_fn)
    {
-      printf("Usage: ./translate_test [default|generic|x86|nosse|sse|sse2|sse3|sse4.1]\n");
+      printf("Usage: ./translate_test [default|generic|x86|nosse|sse|sse2|sse3|ssse3|sse4.1|avx]\n");
       return 2;
    }
 
@@ -324,5 +294,14 @@ int main(int argc, char** argv)
    }
 
    printf("%u/%u tests passed for translate_%s\n", passed, total, argv[1]);
+
+   for (i = 1; i < ARRAY_SIZE(buffer); ++i)
+      align_free(buffer[i]);
+
+   align_free(byte_buffer);
+   align_free(float_buffer);
+   align_free(double_buffer);
+   align_free(half_buffer);
+   align_free(elts);
    return passed != total;
 }

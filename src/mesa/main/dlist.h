@@ -69,44 +69,6 @@ union gl_dlist_node
    GLsizei si;
 };
 
-/**
- * Describes the location and size of a glBitmap image in a texture atlas.
- */
-struct gl_bitmap_glyph
-{
-   unsigned short x, y, w, h;  /**< position and size in the texture */
-   float xorig, yorig;         /**< bitmap origin */
-   float xmove, ymove;         /**< rasterpos move */
-};
-
-
-/**
- * Describes a set of glBitmap display lists which live in a texture atlas.
- * The idea is when we see a code sequence of glListBase(b), glCallLists(n)
- * we're probably drawing bitmap font glyphs.  We try to put all the bitmap
- * glyphs into one texture map then render the glCallLists as a textured
- * quadstrip.
- */
-struct gl_bitmap_atlas
-{
-   GLint Id;
-   bool complete;     /**< Is the atlas ready to use? */
-   bool incomplete;   /**< Did we fail to construct this atlas? */
-
-   unsigned numBitmaps;
-   unsigned texWidth, texHeight;
-   struct gl_texture_object *texObj;
-   struct gl_texture_image *texImage;
-
-   unsigned glyphHeight;
-
-   struct gl_bitmap_glyph *glyphs;
-};
-
-void
-_mesa_delete_bitmap_atlas(struct gl_context *ctx,
-                          struct gl_bitmap_atlas *atlas);
-
 struct gl_display_list *
 _mesa_lookup_list(struct gl_context *ctx, GLuint list, bool locked);
 
@@ -121,13 +83,13 @@ void
 _mesa_delete_list(struct gl_context *ctx, struct gl_display_list *dlist);
 
 void
-_mesa_initialize_save_table(const struct gl_context *);
+_mesa_init_dispatch_save(const struct gl_context *);
 
 void
 _mesa_init_display_list(struct gl_context * ctx);
 
 void
-_mesa_install_save_vtxfmt(struct gl_context *ctx);
+_mesa_init_dispatch_save_begin_end(struct gl_context *ctx);
 
 bool
 _mesa_get_list(struct gl_context *ctx, GLuint list,

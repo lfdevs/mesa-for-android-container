@@ -456,7 +456,7 @@ v3d_vertex_state_bind(struct pipe_context *pctx, void *hwcso)
 }
 
 static void
-v3d_set_constant_buffer(struct pipe_context *pctx, uint shader, uint index,
+v3d_set_constant_buffer(struct pipe_context *pctx, enum pipe_shader_type shader, uint index,
                         bool take_ownership,
                         const struct pipe_constant_buffer *cb)
 {

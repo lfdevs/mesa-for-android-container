@@ -69,6 +69,16 @@ typedef void *EGLDisplay;
 typedef void *EGLContext;
 #endif
 
+#ifndef _WINDEF_
+struct HDC__;
+typedef struct HDC__ *HDC;
+struct HGLRC__;
+typedef struct HGLRC__ *HGLRC;
+typedef void *HANDLE;
+#endif
+
+typedef struct __GLsync *GLsync;
+
 /** Returned error codes. */
 enum {
    MESA_GLINTEROP_SUCCESS = 0,
@@ -91,7 +101,7 @@ enum {
    MESA_GLINTEROP_ACCESS_WRITE_ONLY
 };
 
-#define MESA_GLINTEROP_DEVICE_INFO_VERSION 1
+#define MESA_GLINTEROP_DEVICE_INFO_VERSION 2
 
 /**
  * Device information returned by Mesa.
@@ -117,6 +127,18 @@ struct mesa_glinterop_device_info {
    uint32_t device_id;
 
    /* Structure version 1 ends here. */
+
+   /* Size of memory pointed to by out_driver_data. */
+   uint32_t driver_data_size;
+
+   /* If the caller wants to query driver-specific data about the OpenGL
+   * object, this should point to the memory where that data will be stored.
+   * This is expected to be a temporary staging memory. The pointer is not
+   * allowed to be saved for later use by Mesa.
+   */
+   void *driver_data;
+
+   /* Structure version 2 ends here. */
 };
 
 #define MESA_GLINTEROP_EXPORT_IN_VERSION 1
@@ -199,6 +221,7 @@ struct mesa_glinterop_export_out {
    /* NOTE: Do not use the MESA_GLINTEROP_EXPORT_OUT_VERSION macro */
    uint32_t version;
 
+#ifndef _WIN32
    /* The DMABUF handle. It must be closed by the caller using the POSIX
     * close() function when it's not needed anymore. Mesa is not responsible
     * for closing the handle.
@@ -208,6 +231,12 @@ struct mesa_glinterop_export_out {
     * DMABUF handles within the process.
     */
    int dmabuf_fd;
+#else
+   /* Same concept as a DMABUF, but for Windows/WDDM. It must be closed by
+    * the caller using CloseHandle() when it's not needed anymore.
+    */
+   HANDLE win32_handle;
+#endif
 
    /* The mutable OpenGL internal format specified by glTextureView or
     * glTexBuffer. If the object is not one of those, the original internal
@@ -264,6 +293,14 @@ MesaGLInteropEGLQueryDeviceInfo(EGLDisplay dpy, EGLContext context,
 
 
 /**
+* Same as MesaGLInteropGLXQueryDeviceInfo except that it accepts HDC
+* and HGLRC.
+*/
+int
+wglMesaGLInteropQueryDeviceInfo(HDC dpy, HGLRC context,
+                                struct mesa_glinterop_device_info *out);
+
+/**
  * Create and return a DMABUF handle corresponding to the given OpenGL
  * object, and return other parameters about the OpenGL object.
  *
@@ -290,9 +327,56 @@ MesaGLInteropEGLExportObject(EGLDisplay dpy, EGLContext context,
                              struct mesa_glinterop_export_out *out);
 
 
+/**
+* Same as MesaGLInteropGLXExportObject except that it accepts
+* HDC and HGLRC.
+*/
+int
+wglMesaGLInteropExportObject(HDC dpy, HGLRC context,
+                             struct mesa_glinterop_export_in *in,
+                             struct mesa_glinterop_export_out *out);
+
+
+/**
+ * Prepare OpenGL resources for being accessed by OpenCL.
+ * 
+ * \param dpy        GLX display
+ * \param context    GLX context
+ * \param count      number of resources
+ * \param resources  resources to flush
+ * \param sync       optional GLsync to map to CL event
+ * 
+ * \return MESA_GLINTEROP_SUCCESS or MESA_GLINTEROP_* != 0 on error
+ */
+int
+MesaGLInteropGLXFlushObjects(struct _XDisplay *dpy, struct __GLXcontextRec *context,
+                             unsigned count, struct mesa_glinterop_export_in *resources,
+                             GLsync *sync);
+
+/**
+* Same as MesaGLInteropGLXFlushObjects except that it accepts
+* EGLDisplay and EGLContext.
+*/
+int
+MesaGLInteropEGLFlushObjects(EGLDisplay dpy, EGLContext context,
+                             unsigned count, struct mesa_glinterop_export_in *resources,
+                             GLsync *sync);
+
+/**
+* Same as MesaGLInteropGLXFlushObjects except that it accepts
+* HDC and HGLRC.
+*/
+int
+wglMesaGLInteropFlushObjects(HDC dpy, HGLRC context,
+                             unsigned count, struct mesa_glinterop_export_in *resources,
+                             GLsync *sync);
+
+
 typedef int (PFNMESAGLINTEROPGLXQUERYDEVICEINFOPROC)(struct _XDisplay *dpy, struct __GLXcontextRec *context,
                                                      struct mesa_glinterop_device_info *out);
 typedef int (PFNMESAGLINTEROPEGLQUERYDEVICEINFOPROC)(EGLDisplay dpy, EGLContext context,
+                                                     struct mesa_glinterop_device_info *out);
+typedef int (PFNWGLMESAGLINTEROPQUERYDEVICEINFOPROC)(HDC dpy, HGLRC context,
                                                      struct mesa_glinterop_device_info *out);
 typedef int (PFNMESAGLINTEROPGLXEXPORTOBJECTPROC)(struct _XDisplay *dpy, struct __GLXcontextRec *context,
                                                   struct mesa_glinterop_export_in *in,
@@ -300,6 +384,18 @@ typedef int (PFNMESAGLINTEROPGLXEXPORTOBJECTPROC)(struct _XDisplay *dpy, struct 
 typedef int (PFNMESAGLINTEROPEGLEXPORTOBJECTPROC)(EGLDisplay dpy, EGLContext context,
                                                   struct mesa_glinterop_export_in *in,
                                                   struct mesa_glinterop_export_out *out);
+typedef int (PFNWGLMESAGLINTEROPEXPORTOBJECTPROC)(HDC dpy, HGLRC context,
+                                                  struct mesa_glinterop_export_in *in,
+                                                  struct mesa_glinterop_export_out *out);
+typedef int (PFNMESAGLINTEROPGLXFLUSHOBJECTSPROC)(struct _XDisplay *dpy, struct __GLXcontextRec *context,
+                                                  unsigned count, struct mesa_glinterop_export_in *resources,
+                                                  GLsync *sync);
+typedef int (PFNMESAGLINTEROPEGLFLUSHOBJECTSPROC)(EGLDisplay dpy, EGLContext context,
+                                                  unsigned count, struct mesa_glinterop_export_in *resources,
+                                                  GLsync *sync);
+typedef int (PFNWGLMESAGLINTEROPFLUSHOBJECTSPROC)(HDC dpy, HGLRC context,
+                                                  unsigned count, struct mesa_glinterop_export_in *resources,
+                                                  GLsync *sync);
 
 #ifdef __cplusplus
 }

@@ -32,12 +32,13 @@
 #include "util/u_video.h"
 #include "vl/vl_video_buffer.h"
 #include "util/u_sampler.h"
+#include "frontend/winsys_handle.h"
 
-/**
- * creates a video buffer
- */
-struct pipe_video_buffer *
-d3d12_video_buffer_create(struct pipe_context *pipe, const struct pipe_video_buffer *tmpl)
+static struct pipe_video_buffer *
+d3d12_video_buffer_create_impl(struct pipe_context *pipe,
+                              const struct pipe_video_buffer *tmpl,
+                              struct winsys_handle *handle,
+                              unsigned usage)
 {
    assert(pipe);
    assert(tmpl);
@@ -45,18 +46,6 @@ d3d12_video_buffer_create(struct pipe_context *pipe, const struct pipe_video_buf
    ///
    /// Initialize d3d12_video_buffer
    ///
-
-
-   if (!(tmpl->buffer_format == PIPE_FORMAT_NV12)) {
-      debug_printf("[d3d12_video_buffer] buffer_format is only supported as PIPE_FORMAT_NV12.\n");
-      return nullptr;
-   }
-
-   if (!(pipe_format_to_chroma_format(tmpl->buffer_format) == PIPE_VIDEO_CHROMA_FORMAT_420)) {
-      debug_printf(
-         "[d3d12_video_buffer] tmpl->buffer_format only supported as a PIPE_VIDEO_CHROMA_FORMAT_420 format.\n");
-      return nullptr;
-   }
 
    // Not using new doesn't call ctor and the initializations in the class declaration are lost
    struct d3d12_video_buffer *pD3D12VideoBuffer = new d3d12_video_buffer;
@@ -69,7 +58,7 @@ d3d12_video_buffer_create(struct pipe_context *pipe, const struct pipe_video_buf
    pD3D12VideoBuffer->base.height        = tmpl->height;
    pD3D12VideoBuffer->base.interlaced    = tmpl->interlaced;
    pD3D12VideoBuffer->base.associated_data = nullptr;
-   pD3D12VideoBuffer->base.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET | PIPE_BIND_DISPLAY_TARGET;
+   pD3D12VideoBuffer->base.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET | PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_CUSTOM;
 
    // Fill vtable
    pD3D12VideoBuffer->base.destroy                     = d3d12_video_buffer_destroy;
@@ -91,8 +80,15 @@ d3d12_video_buffer_create(struct pipe_context *pipe, const struct pipe_video_buf
    templ.flags      = 0;
 
    // This calls d3d12_create_resource as the function ptr is set in d3d12_screen.resource_create
-   pD3D12VideoBuffer->texture = (struct d3d12_resource *) pipe->screen->resource_create(pipe->screen, &templ);
-   d3d12_promote_to_permanent_residency((struct d3d12_screen*) pipe->screen, pD3D12VideoBuffer->texture);
+   if(handle)
+   {
+      // WINSYS_HANDLE_TYPE_D3D12_RES implies taking ownership of the reference
+      if(handle->type == WINSYS_HANDLE_TYPE_D3D12_RES)
+         ((IUnknown *)handle->com_obj)->AddRef();
+      pD3D12VideoBuffer->texture = (struct d3d12_resource *) pipe->screen->resource_from_handle(pipe->screen, &templ, handle, usage);
+   }
+   else
+      pD3D12VideoBuffer->texture = (struct d3d12_resource *) pipe->screen->resource_create(pipe->screen, &templ);
 
    if (pD3D12VideoBuffer->texture == nullptr) {
       debug_printf("[d3d12_video_buffer] d3d12_video_buffer_create - Call to resource_create() to create "
@@ -100,14 +96,37 @@ d3d12_video_buffer_create(struct pipe_context *pipe, const struct pipe_video_buf
       goto failed;
    }
 
+   d3d12_promote_to_permanent_residency((struct d3d12_screen*) pipe->screen, pD3D12VideoBuffer->texture);
+
    pD3D12VideoBuffer->num_planes = util_format_get_num_planes(pD3D12VideoBuffer->texture->overall_format);
-   assert(pD3D12VideoBuffer->num_planes == 2);
    return &pD3D12VideoBuffer->base;
 
 failed:
    d3d12_video_buffer_destroy((struct pipe_video_buffer *) pD3D12VideoBuffer);
 
    return nullptr;
+}
+
+
+/**
+ * creates a video buffer from a handle
+ */
+struct pipe_video_buffer *
+d3d12_video_buffer_from_handle( struct pipe_context *pipe,
+                              const struct pipe_video_buffer *tmpl,
+                              struct winsys_handle *handle,
+                              unsigned usage)
+{
+   return d3d12_video_buffer_create_impl(pipe, tmpl, handle, usage);
+}
+
+/**
+ * creates a video buffer
+ */
+struct pipe_video_buffer *
+d3d12_video_buffer_create(struct pipe_context *pipe, const struct pipe_video_buffer *tmpl)
+{
+   return d3d12_video_buffer_create_impl(pipe, tmpl, NULL, 0);
 }
 
 /**
@@ -282,10 +301,11 @@ d3d12_video_buffer_get_sampler_view_components(struct pipe_video_buffer *buffer)
    // starting with the plane 0 being the overall resource
    struct pipe_resource *pCurPlaneResource = &pD3D12VideoBuffer->texture->base.b;
 
+   const uint32_t MAX_NUM_COMPONENTS = 4; // ie. RGBA formats
    // At the end of the loop, "component" will have the total number of items valid in sampler_view_components
-   // since component can end up being <= VL_NUM_COMPONENTS, we assume VL_NUM_COMPONENTS first and then resize/adjust to
+   // since component can end up being <= MAX_NUM_COMPONENTS, we assume MAX_NUM_COMPONENTS first and then resize/adjust to
    // fit the container size pD3D12VideoBuffer->sampler_view_components to the actual components number
-   pD3D12VideoBuffer->sampler_view_components.resize(VL_NUM_COMPONENTS, nullptr);
+   pD3D12VideoBuffer->sampler_view_components.resize(MAX_NUM_COMPONENTS, nullptr);
    uint component = 0;
 
    for (uint i = 0; i < pD3D12VideoBuffer->num_planes; ++i) {
@@ -293,7 +313,6 @@ d3d12_video_buffer_get_sampler_view_components(struct pipe_video_buffer *buffer)
       unsigned num_components = util_format_get_nr_components(pCurPlaneResource->format);
 
       for (uint j = 0; j < num_components; ++j, ++component) {
-         assert(component < VL_NUM_COMPONENTS);
 
          if (!pD3D12VideoBuffer->sampler_view_components[component]) {
             memset(&samplerViewTemplate, 0, sizeof(samplerViewTemplate));

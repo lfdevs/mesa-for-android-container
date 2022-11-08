@@ -285,7 +285,7 @@ vbo_exec_vtx_map(struct vbo_exec_context *exec)
           * functions.  We do this test just to avoid frequent and needless
           * calls to vbo_install_exec_vtxfmt().
           */
-         vbo_install_exec_vtxfmt(ctx);
+         vbo_init_dispatch_begin_end(ctx);
       }
    }
 

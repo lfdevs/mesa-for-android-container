@@ -102,7 +102,7 @@ anv_gem_mmap_offset(struct anv_device *device, uint32_t gem_handle,
 {
    struct drm_i915_gem_mmap_offset gem_mmap = {
       .handle = gem_handle,
-      .flags = device->info.has_local_mem ? I915_MMAP_OFFSET_FIXED :
+      .flags = device->info->has_local_mem ? I915_MMAP_OFFSET_FIXED :
          (flags & I915_MMAP_WC) ? I915_MMAP_OFFSET_WC : I915_MMAP_OFFSET_WB,
    };
    assert(offset == 0);
@@ -122,7 +122,7 @@ static void*
 anv_gem_mmap_legacy(struct anv_device *device, uint32_t gem_handle,
                     uint64_t offset, uint64_t size, uint32_t flags)
 {
-   assert(!device->info.has_local_mem);
+   assert(!device->info->has_local_mem);
 
    struct drm_i915_gem_mmap gem_mmap = {
       .handle = gem_handle,
@@ -198,36 +198,6 @@ anv_gem_set_caching(struct anv_device *device,
    return intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_SET_CACHING, &gem_caching);
 }
 
-int
-anv_gem_set_domain(struct anv_device *device, uint32_t gem_handle,
-                   uint32_t read_domains, uint32_t write_domain)
-{
-   struct drm_i915_gem_set_domain gem_set_domain = {
-      .handle = gem_handle,
-      .read_domains = read_domains,
-      .write_domain = write_domain,
-   };
-
-   return intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_SET_DOMAIN, &gem_set_domain);
-}
-
-/**
- * Returns 0, 1, or negative to indicate error
- */
-int
-anv_gem_busy(struct anv_device *device, uint32_t gem_handle)
-{
-   struct drm_i915_gem_busy busy = {
-      .handle = gem_handle,
-   };
-
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_BUSY, &busy);
-   if (ret < 0)
-      return ret;
-
-   return busy.busy != 0;
-}
-
 /**
  * On error, \a timeout_ns holds the remaining time.
  */
@@ -260,6 +230,9 @@ anv_gem_execbuffer(struct anv_device *device,
 int
 anv_gem_get_tiling(struct anv_device *device, uint32_t gem_handle)
 {
+   if (!device->info->has_tiling_uapi)
+      return -1;
+
    struct drm_i915_gem_get_tiling get_tiling = {
       .handle = gem_handle,
    };
@@ -286,7 +259,7 @@ anv_gem_set_tiling(struct anv_device *device,
    /* On discrete platforms we don't have DRM_IOCTL_I915_GEM_SET_TILING. So
     * nothing needs to be done.
     */
-   if (!device->info.has_tiling_uapi)
+   if (!device->info->has_tiling_uapi)
       return 0;
 
    /* set_tiling overwrites the input on the error path, so we have to open
@@ -323,7 +296,7 @@ anv_gem_get_param(int fd, uint32_t param)
 }
 
 bool
-anv_gem_has_context_priority(int fd, int priority)
+anv_gem_has_context_priority(int fd, VkQueueGlobalPriorityKHR priority)
 {
    return !anv_gem_set_context_param(fd, 0, I915_CONTEXT_PARAM_PRIORITY,
                                      priority);
@@ -351,9 +324,29 @@ anv_gem_destroy_context(struct anv_device *device, int context)
    return intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_CONTEXT_DESTROY, &destroy);
 }
 
+static int
+vk_priority_to_i915(VkQueueGlobalPriorityKHR priority)
+{
+   switch (priority) {
+   case VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR:
+      return INTEL_CONTEXT_LOW_PRIORITY;
+   case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR:
+      return INTEL_CONTEXT_MEDIUM_PRIORITY;
+   case VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR:
+      return INTEL_CONTEXT_HIGH_PRIORITY;
+   case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR:
+      return INTEL_CONTEXT_REALTIME_PRIORITY;
+   default:
+      unreachable("Invalid priority");
+   }
+}
+
 int
 anv_gem_set_context_param(int fd, int context, uint32_t param, uint64_t value)
 {
+   if (param == I915_CONTEXT_PARAM_PRIORITY)
+      value = vk_priority_to_i915(value);
+
    struct drm_i915_gem_context_param p = {
       .ctx_id = context,
       .param = param,
@@ -410,23 +403,4 @@ anv_gem_fd_to_handle(struct anv_device *device, int fd)
       return 0;
 
    return args.handle;
-}
-
-int
-anv_gem_reg_read(int fd, uint32_t offset, uint64_t *result)
-{
-   struct drm_i915_reg_read args = {
-      .offset = offset
-   };
-
-   int ret = intel_ioctl(fd, DRM_IOCTL_I915_REG_READ, &args);
-
-   *result = args.val;
-   return ret;
-}
-
-struct drm_i915_query_engine_info *
-anv_gem_get_engine_info(int fd)
-{
-   return intel_i915_query_alloc(fd, DRM_I915_QUERY_ENGINE_INFO, NULL);
 }

@@ -908,6 +908,8 @@ struct _mesa_glsl_parse_state {
    bool NV_shader_atomic_float_warn;
    bool NV_shader_atomic_int64_enable;
    bool NV_shader_atomic_int64_warn;
+   bool NV_shader_noperspective_interpolation_enable;
+   bool NV_shader_noperspective_interpolation_warn;
    bool NV_viewport_array2_enable;
    bool NV_viewport_array2_warn;
    /*@}*/

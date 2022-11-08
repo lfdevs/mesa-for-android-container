@@ -6,6 +6,8 @@
 #include "util/u_atomic.h"
 #include "util/u_memory.h"
 
+#include "nouveau_fence.h"
+
 #ifndef NDEBUG
 # define NOUVEAU_ENABLE_DRIVER_STATISTICS
 #endif
@@ -44,15 +46,7 @@ struct nouveau_screen {
 
    uint16_t class_3d;
 
-   struct {
-      struct nouveau_fence *head;
-      struct nouveau_fence *tail;
-      struct nouveau_fence *current;
-      u32 sequence;
-      u32 sequence_ack;
-      void (*emit)(struct pipe_screen *, u32 *sequence);
-      u32  (*update)(struct pipe_screen *);
-   } fence;
+   struct nouveau_fence_list fence;
 
    struct nouveau_mman *mm_VRAM;
    struct nouveau_mman *mm_GART;
@@ -74,6 +68,7 @@ struct nouveau_screen {
    bool prefer_nir;
    bool force_enable_cl;
    bool has_svm;
+   bool is_uma;
    bool disable_fences;
    void *svm_cutout;
    size_t svm_cutout_size;
@@ -116,6 +111,11 @@ struct nouveau_screen {
 #endif
 };
 
+struct nouveau_pushbuf_priv {
+   struct nouveau_screen *screen;
+   struct nouveau_context *context;
+};
+
 #define NV_VRAM_DOMAIN(screen) ((screen)->vram_domain)
 
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
@@ -155,5 +155,11 @@ int nouveau_screen_init(struct nouveau_screen *, struct nouveau_device *);
 void nouveau_screen_fini(struct nouveau_screen *);
 
 void nouveau_screen_init_vdec(struct nouveau_screen *);
+
+int
+nouveau_pushbuf_create(struct nouveau_screen *, struct nouveau_context *, struct nouveau_client *,
+                       struct nouveau_object *chan, int nr, uint32_t size, bool immediate,
+                       struct nouveau_pushbuf **);
+void nouveau_pushbuf_destroy(struct nouveau_pushbuf **);
 
 #endif

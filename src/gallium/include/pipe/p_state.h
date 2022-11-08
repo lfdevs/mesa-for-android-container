@@ -425,7 +425,7 @@ struct pipe_sampler_state
    unsigned mag_img_filter:1;    /**< PIPE_TEX_FILTER_x */
    unsigned compare_mode:1;      /**< PIPE_TEX_COMPARE_x */
    unsigned compare_func:3;      /**< PIPE_FUNC_x */
-   unsigned normalized_coords:1; /**< Are coords normalized to [0,1]? */
+   unsigned unnormalized_coords:1; /**< Are coords normalized to [0,1]? */
    unsigned max_anisotropy:5;
    unsigned seamless_cube_map:1;
    unsigned border_color_is_integer:1;
@@ -934,7 +934,7 @@ struct pipe_grid_info
     * Will be used to initialize the INPUT resource, and it should point to a
     * buffer of at least pipe_compute_state::req_input_mem bytes.
     */
-   void *input;
+   const void *input;
 
    /**
     * Grid number of dimensions, 1-3, e.g. the work_dim parameter passed to

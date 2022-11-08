@@ -1550,7 +1550,8 @@ static struct pb_buffer *amdgpu_bo_from_handle(struct radeon_winsys *rws,
    /* Initialize the structure. */
    simple_mtx_init(&bo->lock, mtx_plain);
    pipe_reference_init(&bo->base.reference, 1);
-   bo->base.alignment_log2 = util_logbase2(info.phys_alignment);
+   bo->base.alignment_log2 = util_logbase2(info.phys_alignment ?
+				info.phys_alignment : ws->info.gart_page_size);
    bo->bo = result.buf_handle;
    bo->base.size = result.alloc_size;
    bo->base.vtbl = &amdgpu_winsys_bo_vtbl;

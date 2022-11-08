@@ -101,7 +101,7 @@ static bool virgl_can_copy_transfer_from_host(struct virgl_screen *vs,
    return virgl_can_use_staging(vs, res) &&
          !is_stencil_array(res) &&
          virgl_has_readback_format(&vs->base, pipe_to_virgl_format(res->b.format), false) &&
-         ((!(vs->caps.caps.v2.capability_bits & VIRGL_CAP_FAKE_FP64)) ||
+         ((!(vs->caps.caps.v2.capability_bits & VIRGL_CAP_HOST_IS_GLES)) ||
           virgl_can_readback_from_rendertarget(vs, res) ||
           virgl_can_readback_from_scanout(vs, res, bind));
 }
@@ -708,6 +708,8 @@ static struct pipe_resource *virgl_resource_from_handle(struct pipe_screen *scre
 {
    uint32_t winsys_stride, plane_offset, plane;
    uint64_t modifier;
+   uint32_t storage_size;
+
    struct virgl_screen *vs = virgl_screen(screen);
    if (templ->target == PIPE_BUFFER)
       return NULL;
@@ -738,6 +740,19 @@ static struct pipe_resource *virgl_resource_from_handle(struct pipe_screen *scre
       FREE(res);
       return NULL;
    }
+
+   /*
+   *  If the overall resource is larger than a single page in size, we can
+   *  compare it with the amount of memory allocated on the guest to determine
+   *  if we should be using the staging path.
+   *
+   *  If not, the decision is not as clear. However, since the resource can
+   *  fit within a single page, the import will function correctly.
+   */
+  storage_size = vs->vws->resource_get_storage_size(vs->vws, res->hw_res);
+
+   if (res->metadata.total_size > storage_size)
+      res->use_staging = 1;
 
    /* assign blob resource a type in case it was created untyped */
    if (res->blob_mem && plane == 0 &&

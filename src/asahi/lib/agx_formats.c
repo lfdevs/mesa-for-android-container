@@ -28,9 +28,10 @@
 #define F false
 #define AGX_FORMAT__ 0
 
-#define AGX_FMT(pipe, channels, type, is_renderable, internal_fmt) \
+#define AGX_FMT(pipe, channels_, type_, is_renderable, internal_fmt) \
    [PIPE_FORMAT_ ## pipe] = { \
-      .hw = (AGX_CHANNELS_ ## channels) | ((AGX_TEXTURE_TYPE_ ## type) << 7), \
+      .channels = AGX_CHANNELS_ ## channels_, \
+      .type = AGX_TEXTURE_TYPE_ ## type_, \
       .renderable = is_renderable, \
       .internal = AGX_FORMAT_ ## internal_fmt,\
    }
@@ -113,6 +114,7 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(R11G11B10_FLOAT,         R11G11B10,     FLOAT,  T, RG11B10F),
    AGX_FMT(R9G9B9E5_FLOAT,          R9G9B9E5,      FLOAT,  F, RGB9E5),
 
+   AGX_FMT(ETC1_RGB8,               ETC2_RGB8,     UNORM,  F,_),
    AGX_FMT(ETC2_RGB8,               ETC2_RGB8,     UNORM,  F,_),
    AGX_FMT(ETC2_SRGB8,              ETC2_RGB8,     UNORM,  F,_),
    AGX_FMT(ETC2_RGB8A1,             ETC2_RGB8A1,   UNORM,  F,_),
@@ -123,6 +125,36 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(ETC2_R11_SNORM,          EAC_R11,       SNORM,  F,_),
    AGX_FMT(ETC2_RG11_UNORM,         EAC_RG11,      UNORM,  F,_),
    AGX_FMT(ETC2_RG11_SNORM,         EAC_RG11,      SNORM,  F,_),
+
+   AGX_FMT(ASTC_4x4,                ASTC_4X4,      UNORM,  F, _),
+   AGX_FMT(ASTC_5x4,                ASTC_5X4,      UNORM,  F, _),
+   AGX_FMT(ASTC_5x5,                ASTC_5X5,      UNORM,  F, _),
+   AGX_FMT(ASTC_6x5,                ASTC_6X5,      UNORM,  F, _),
+   AGX_FMT(ASTC_6x6,                ASTC_6X6,      UNORM,  F, _),
+   AGX_FMT(ASTC_8x5,                ASTC_8X5,      UNORM,  F, _),
+   AGX_FMT(ASTC_8x6,                ASTC_8X6,      UNORM,  F, _),
+   AGX_FMT(ASTC_8x8,                ASTC_8X8,      UNORM,  F, _),
+   AGX_FMT(ASTC_10x5,               ASTC_10X5,     UNORM,  F, _),
+   AGX_FMT(ASTC_10x6,               ASTC_10X6,     UNORM,  F, _),
+   AGX_FMT(ASTC_10x8,               ASTC_10X8,     UNORM,  F, _),
+   AGX_FMT(ASTC_10x10,              ASTC_10X10,    UNORM,  F, _),
+   AGX_FMT(ASTC_12x10,              ASTC_12X10,    UNORM,  F, _),
+   AGX_FMT(ASTC_12x12,              ASTC_12X12,    UNORM,  F, _),
+
+   AGX_FMT(ASTC_4x4_SRGB,           ASTC_4X4,      UNORM,  F, _),
+   AGX_FMT(ASTC_5x4_SRGB,           ASTC_5X4,      UNORM,  F, _),
+   AGX_FMT(ASTC_5x5_SRGB,           ASTC_5X5,      UNORM,  F, _),
+   AGX_FMT(ASTC_6x5_SRGB,           ASTC_6X5,      UNORM,  F, _),
+   AGX_FMT(ASTC_6x6_SRGB,           ASTC_6X6,      UNORM,  F, _),
+   AGX_FMT(ASTC_8x5_SRGB,           ASTC_8X5,      UNORM,  F, _),
+   AGX_FMT(ASTC_8x6_SRGB,           ASTC_8X6,      UNORM,  F, _),
+   AGX_FMT(ASTC_8x8_SRGB,           ASTC_8X8,      UNORM,  F, _),
+   AGX_FMT(ASTC_10x5_SRGB,          ASTC_10X5,     UNORM,  F, _),
+   AGX_FMT(ASTC_10x6_SRGB,          ASTC_10X6,     UNORM,  F, _),
+   AGX_FMT(ASTC_10x8_SRGB,          ASTC_10X8,     UNORM,  F, _),
+   AGX_FMT(ASTC_10x10_SRGB,         ASTC_10X10,    UNORM,  F, _),
+   AGX_FMT(ASTC_12x10_SRGB,         ASTC_12X10,    UNORM,  F, _),
+   AGX_FMT(ASTC_12x12_SRGB,         ASTC_12X12,    UNORM,  F, _),
 };
 
 const enum agx_format

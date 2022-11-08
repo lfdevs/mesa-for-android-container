@@ -47,6 +47,13 @@ vk_pipeline_shader_stage_to_nir(struct vk_device *device,
                                 const struct nir_shader_compiler_options *nir_options,
                                 void *mem_ctx, struct nir_shader **nir_out);
 
+struct vk_pipeline_robustness_state {
+   VkPipelineRobustnessBufferBehaviorEXT storage_buffers;
+   VkPipelineRobustnessBufferBehaviorEXT uniform_buffers;
+   VkPipelineRobustnessBufferBehaviorEXT vertex_inputs;
+   VkPipelineRobustnessImageBehaviorEXT images;
+};
+
 /** Hash VkPipelineShaderStageCreateInfo info
  *
  * Returns the hash of a VkPipelineShaderStageCreateInfo:
@@ -60,7 +67,14 @@ vk_pipeline_shader_stage_to_nir(struct vk_device *device,
  */
 void
 vk_pipeline_hash_shader_stage(const VkPipelineShaderStageCreateInfo *info,
+                              const struct vk_pipeline_robustness_state *rstate,
                               unsigned char *stage_sha1);
+
+void
+vk_pipeline_robustness_state_fill(const struct vk_device *device,
+                                  struct vk_pipeline_robustness_state *rs,
+                                  const void *pipeline_pNext,
+                                  const void *shader_stage_pNext);
 
 #ifdef __cplusplus
 }

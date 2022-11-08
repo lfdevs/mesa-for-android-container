@@ -73,42 +73,42 @@ print_register(struct intel_spec *spec, const char *name, uint32_t reg)
 }
 
 struct ring_register_mapping {
-   enum drm_i915_gem_engine_class ring_class;
+   enum intel_engine_class ring_class;
    unsigned ring_instance;
    const char *register_name;
 };
 
 static const struct ring_register_mapping acthd_registers[] = {
-   { I915_ENGINE_CLASS_COPY, 0, "BCS_ACTHD_UDW" },
-   { I915_ENGINE_CLASS_VIDEO, 0, "VCS_ACTHD_UDW" },
-   { I915_ENGINE_CLASS_VIDEO, 1, "VCS2_ACTHD_UDW" },
-   { I915_ENGINE_CLASS_RENDER, 0, "ACTHD_UDW" },
-   { I915_ENGINE_CLASS_VIDEO_ENHANCE, 0, "VECS_ACTHD_UDW" },
+   { INTEL_ENGINE_CLASS_COPY, 0, "BCS_ACTHD_UDW" },
+   { INTEL_ENGINE_CLASS_VIDEO, 0, "VCS_ACTHD_UDW" },
+   { INTEL_ENGINE_CLASS_VIDEO, 1, "VCS2_ACTHD_UDW" },
+   { INTEL_ENGINE_CLASS_RENDER, 0, "ACTHD_UDW" },
+   { INTEL_ENGINE_CLASS_VIDEO_ENHANCE, 0, "VECS_ACTHD_UDW" },
 };
 
 static const struct ring_register_mapping ctl_registers[] = {
-   { I915_ENGINE_CLASS_COPY, 0, "BCS_RING_BUFFER_CTL" },
-   { I915_ENGINE_CLASS_VIDEO, 0, "VCS_RING_BUFFER_CTL" },
-   { I915_ENGINE_CLASS_VIDEO, 1, "VCS2_RING_BUFFER_CTL" },
-   { I915_ENGINE_CLASS_RENDER, 0, "RCS_RING_BUFFER_CTL" },
-   { I915_ENGINE_CLASS_VIDEO_ENHANCE, 0,  "VECS_RING_BUFFER_CTL" },
+   { INTEL_ENGINE_CLASS_COPY, 0, "BCS_RING_BUFFER_CTL" },
+   { INTEL_ENGINE_CLASS_VIDEO, 0, "VCS_RING_BUFFER_CTL" },
+   { INTEL_ENGINE_CLASS_VIDEO, 1, "VCS2_RING_BUFFER_CTL" },
+   { INTEL_ENGINE_CLASS_RENDER, 0, "RCS_RING_BUFFER_CTL" },
+   { INTEL_ENGINE_CLASS_VIDEO_ENHANCE, 0,  "VECS_RING_BUFFER_CTL" },
 };
 
 static const struct ring_register_mapping fault_registers[] = {
-   { I915_ENGINE_CLASS_COPY, 0, "BCS_FAULT_REG" },
-   { I915_ENGINE_CLASS_VIDEO, 0, "VCS_FAULT_REG" },
-   { I915_ENGINE_CLASS_RENDER, 0, "RCS_FAULT_REG" },
-   { I915_ENGINE_CLASS_VIDEO_ENHANCE, 0, "VECS_FAULT_REG" },
+   { INTEL_ENGINE_CLASS_COPY, 0, "BCS_FAULT_REG" },
+   { INTEL_ENGINE_CLASS_VIDEO, 0, "VCS_FAULT_REG" },
+   { INTEL_ENGINE_CLASS_RENDER, 0, "RCS_FAULT_REG" },
+   { INTEL_ENGINE_CLASS_VIDEO_ENHANCE, 0, "VECS_FAULT_REG" },
 };
 
 static int ring_name_to_class(const char *ring_name,
-                              enum drm_i915_gem_engine_class *class)
+                              enum intel_engine_class *class)
 {
    static const char *class_names[] = {
-      [I915_ENGINE_CLASS_RENDER] = "rcs",
-      [I915_ENGINE_CLASS_COPY] = "bcs",
-      [I915_ENGINE_CLASS_VIDEO] = "vcs",
-      [I915_ENGINE_CLASS_VIDEO_ENHANCE] = "vecs",
+      [INTEL_ENGINE_CLASS_RENDER] = "rcs",
+      [INTEL_ENGINE_CLASS_COPY] = "bcs",
+      [INTEL_ENGINE_CLASS_VIDEO] = "vcs",
+      [INTEL_ENGINE_CLASS_VIDEO_ENHANCE] = "vecs",
    };
    for (size_t i = 0; i < ARRAY_SIZE(class_names); i++) {
       if (strncmp(ring_name, class_names[i], strlen(class_names[i])))
@@ -123,11 +123,11 @@ static int ring_name_to_class(const char *ring_name,
       unsigned int class;
       int instance;
    } legacy_names[] = {
-      { "render", I915_ENGINE_CLASS_RENDER, 0 },
-      { "blt", I915_ENGINE_CLASS_COPY, 0 },
-      { "bsd", I915_ENGINE_CLASS_VIDEO, 0 },
-      { "bsd2", I915_ENGINE_CLASS_VIDEO, 1 },
-      { "vebox", I915_ENGINE_CLASS_VIDEO_ENHANCE, 0 },
+      { "render", INTEL_ENGINE_CLASS_RENDER, 0 },
+      { "blt", INTEL_ENGINE_CLASS_COPY, 0 },
+      { "bsd", INTEL_ENGINE_CLASS_VIDEO, 0 },
+      { "bsd2", INTEL_ENGINE_CLASS_VIDEO, 1 },
+      { "vebox", INTEL_ENGINE_CLASS_VIDEO_ENHANCE, 0 },
    };
    for (size_t i = 0; i < ARRAY_SIZE(legacy_names); i++) {
       if (strcmp(ring_name, legacy_names[i].name))
@@ -145,7 +145,7 @@ register_name_from_ring(const struct ring_register_mapping *mapping,
                         unsigned nb_mapping,
                         const char *ring_name)
 {
-   enum drm_i915_gem_engine_class class;
+   enum intel_engine_class class;
    int instance;
 
    instance = ring_name_to_class(ring_name, &class);
@@ -164,7 +164,7 @@ static const char *
 instdone_register_for_ring(const struct intel_device_info *devinfo,
                            const char *ring_name)
 {
-   enum drm_i915_gem_engine_class class;
+   enum intel_engine_class class;
    int instance;
 
    instance = ring_name_to_class(ring_name, &class);
@@ -172,16 +172,16 @@ instdone_register_for_ring(const struct intel_device_info *devinfo,
       return NULL;
 
    switch (class) {
-   case I915_ENGINE_CLASS_RENDER:
+   case INTEL_ENGINE_CLASS_RENDER:
       if (devinfo->ver == 6)
          return "INSTDONE_2";
       else
          return "INSTDONE_1";
 
-   case I915_ENGINE_CLASS_COPY:
+   case INTEL_ENGINE_CLASS_COPY:
       return "BCS_INSTDONE";
 
-   case I915_ENGINE_CLASS_VIDEO:
+   case INTEL_ENGINE_CLASS_VIDEO:
       switch (instance) {
       case 0:
          return "VCS_INSTDONE";
@@ -191,7 +191,7 @@ instdone_register_for_ring(const struct intel_device_info *devinfo,
          return NULL;
       }
 
-   case I915_ENGINE_CLASS_VIDEO_ENHANCE:
+   case INTEL_ENGINE_CLASS_VIDEO_ENHANCE:
       return "VECS_INSTDONE";
 
    default:
@@ -685,7 +685,7 @@ read_data_file(FILE *file)
 
 
    for (int s = 0; s < num_sections; s++) {
-      enum drm_i915_gem_engine_class class;
+      enum intel_engine_class class;
       ring_name_to_class(sections[s].ring_name, &class);
 
       printf("--- %s (%s) at 0x%08x %08x\n",

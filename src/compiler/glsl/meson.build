@@ -70,6 +70,8 @@ float64_glsl_h = custom_target(
   command : [prog_python, '@INPUT@', '@OUTPUT@', '-n', 'float64_source'],
 )
 
+float64_glsl_file = [files('float64.glsl')]
+
 files_libglsl = files(
   'ast.h',
   'ast_array_index.cpp',
@@ -135,7 +137,6 @@ files_libglsl = files(
   'ir_reader.h',
   'ir_rvalue_visitor.cpp',
   'ir_rvalue_visitor.h',
-  'ir_set_program_inouts.cpp',
   'ir_uniform.h',
   'ir_validate.cpp',
   'ir_variable_refcount.cpp',
@@ -156,7 +157,6 @@ files_libglsl = files(
   'list.h',
   'lower_blend_equation_advanced.cpp',
   'lower_builtins.cpp',
-  'lower_cs_derived.cpp',
   'lower_discard.cpp',
   'lower_discard_flow.cpp',
   'lower_distance.cpp',
@@ -170,13 +170,9 @@ files_libglsl = files(
   'lower_subroutine.cpp',
   'lower_tess_level.cpp',
   'lower_vec_index_to_cond_assign.cpp',
-  'lower_vec_index_to_swizzle.cpp',
   'lower_vector_derefs.cpp',
   'lower_vector_insert.cpp',
-  'lower_vertex_id.cpp',
-  'lower_output_reads.cpp',
   'opt_algebraic.cpp',
-  'opt_array_splitting.cpp',
   'opt_constant_folding.cpp',
   'opt_constant_propagation.cpp',
   'opt_constant_variable.cpp',
@@ -191,7 +187,6 @@ files_libglsl = files(
   'opt_if_simplification.cpp',
   'opt_minmax.cpp',
   'opt_rebalance_tree.cpp',
-  'opt_structure_splitting.cpp',
   'opt_tree_grafting.cpp',
   'program.h',
   'propagate_invariance.cpp',

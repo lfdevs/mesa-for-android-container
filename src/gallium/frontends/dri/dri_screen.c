@@ -37,7 +37,6 @@
 #include "pipe/p_screen.h"
 #include "pipe/p_format.h"
 #include "pipe-loader/pipe_loader.h"
-#include "state_tracker/st_gl_api.h" /* for st_gl_api_create */
 #include "frontend/drm_driver.h"
 
 #include "util/u_debug.h"
@@ -85,11 +84,11 @@ dri_loader_get_cap(struct dri_screen *screen, enum dri_loader_cap cap)
 
 /**
  * Creates a set of \c struct gl_config that a driver will expose.
- * 
+ *
  * A set of \c struct gl_config will be created based on the supplied
  * parameters.  The number of modes processed will be 2 *
  * \c num_depth_stencil_bits * \c num_db_modes.
- * 
+ *
  * For the most part, data is just copied from \c depth_bits, \c stencil_bits,
  * \c db_modes, and \c visType into each \c struct gl_config element.
  * However, the meanings of \c fb_format and \c fb_type require further
@@ -101,7 +100,7 @@ dri_loader_get_cap(struct dri_screen *screen, enum dri_loader_cap cap)
  * \c GL_UNSIGNED_SHORT_5_6_5_REV is specified with \c GL_RGB, bits [15:11]
  * are the blue value, bits [10:5] are the green value, and bits [4:0] are
  * the red value.
- * 
+ *
  * One sublte issue is the combination of \c GL_RGB  or \c GL_BGR and either
  * of the \c GL_UNSIGNED_INT_8_8_8_8 modes.  The resulting mask values in the
  * \c struct gl_config structure is \b identical to the \c GL_RGBA or
@@ -110,7 +109,7 @@ dri_loader_get_cap(struct dri_screen *screen, enum dri_loader_cap cap)
  * still uses 32-bits.
  *
  * If in doubt, look at the tables used in the function.
- * 
+ *
  * \param ptr_to_modes  Pointer to a pointer to a linked list of
  *                      \c struct gl_config.  Upon completion, a pointer to
  *                      the next element to be process will be stored here.
@@ -146,11 +145,11 @@ dri_loader_get_cap(struct dri_screen *screen, enum dri_loader_cap cap)
  */
 static __DRIconfig **
 driCreateConfigs(mesa_format format,
-		 const uint8_t * depth_bits, const uint8_t * stencil_bits,
-		 unsigned num_depth_stencil_bits,
-		 const GLenum * db_modes, unsigned num_db_modes,
-		 const uint8_t * msaa_samples, unsigned num_msaa_modes,
-		 GLboolean enable_accum, GLboolean color_depth_match)
+                 const uint8_t * depth_bits, const uint8_t * stencil_bits,
+                 unsigned num_depth_stencil_bits,
+                 const GLenum * db_modes, unsigned num_db_modes,
+                 const uint8_t * msaa_samples, unsigned num_msaa_modes,
+                 GLboolean enable_accum, GLboolean color_depth_match)
 {
    static const struct {
       uint32_t masks[4];
@@ -275,66 +274,66 @@ driCreateConfigs(mesa_format format,
 
     c = configs;
     for ( k = 0 ; k < num_depth_stencil_bits ; k++ ) {
-	for ( i = 0 ; i < num_db_modes ; i++ ) {
-	    for ( h = 0 ; h < num_msaa_modes; h++ ) {
-	    	for ( j = 0 ; j < num_accum_bits ; j++ ) {
-		    if (color_depth_match &&
-			(depth_bits[k] || stencil_bits[k])) {
-			/* Depth can really only be 0, 16, 24, or 32. A 32-bit
-			 * color format still matches 24-bit depth, as there
-			 * is an implicit 8-bit stencil. So really we just
-			 * need to make sure that color/depth are both 16 or
-			 * both non-16.
-			 */
-			if ((depth_bits[k] + stencil_bits[k] == 16) !=
-			    (red_bits + green_bits + blue_bits + alpha_bits == 16))
-			    continue;
-		    }
+        for ( i = 0 ; i < num_db_modes ; i++ ) {
+            for ( h = 0 ; h < num_msaa_modes; h++ ) {
+                for ( j = 0 ; j < num_accum_bits ; j++ ) {
+                    if (color_depth_match &&
+                        (depth_bits[k] || stencil_bits[k])) {
+                        /* Depth can really only be 0, 16, 24, or 32. A 32-bit
+                         * color format still matches 24-bit depth, as there
+                         * is an implicit 8-bit stencil. So really we just
+                         * need to make sure that color/depth are both 16 or
+                         * both non-16.
+                         */
+                        if ((depth_bits[k] + stencil_bits[k] == 16) !=
+                            (red_bits + green_bits + blue_bits + alpha_bits == 16))
+                            continue;
+                    }
 
-		    *c = malloc (sizeof **c);
-		    modes = &(*c)->modes;
-		    c++;
+                    *c = malloc (sizeof **c);
+                    modes = &(*c)->modes;
+                    c++;
 
-		    memset(modes, 0, sizeof *modes);
-		    modes->floatMode = is_float;
-		    modes->redBits   = red_bits;
-		    modes->greenBits = green_bits;
-		    modes->blueBits  = blue_bits;
-		    modes->alphaBits = alpha_bits;
-		    modes->redMask   = masks[0];
-		    modes->greenMask = masks[1];
-		    modes->blueMask  = masks[2];
-		    modes->alphaMask = masks[3];
-		    modes->redShift   = shifts[0];
-		    modes->greenShift = shifts[1];
-		    modes->blueShift  = shifts[2];
-		    modes->alphaShift = shifts[3];
-		    modes->rgbBits   = modes->redBits + modes->greenBits
-		    	+ modes->blueBits + modes->alphaBits;
+                    memset(modes, 0, sizeof *modes);
+                    modes->floatMode = is_float;
+                    modes->redBits   = red_bits;
+                    modes->greenBits = green_bits;
+                    modes->blueBits  = blue_bits;
+                    modes->alphaBits = alpha_bits;
+                    modes->redMask   = masks[0];
+                    modes->greenMask = masks[1];
+                    modes->blueMask  = masks[2];
+                    modes->alphaMask = masks[3];
+                    modes->redShift   = shifts[0];
+                    modes->greenShift = shifts[1];
+                    modes->blueShift  = shifts[2];
+                    modes->alphaShift = shifts[3];
+                    modes->rgbBits   = modes->redBits + modes->greenBits
+                            + modes->blueBits + modes->alphaBits;
 
-		    modes->accumRedBits   = 16 * j;
-		    modes->accumGreenBits = 16 * j;
-		    modes->accumBlueBits  = 16 * j;
-		    modes->accumAlphaBits = 16 * j;
+                    modes->accumRedBits   = 16 * j;
+                    modes->accumGreenBits = 16 * j;
+                    modes->accumBlueBits  = 16 * j;
+                    modes->accumAlphaBits = 16 * j;
 
-		    modes->stencilBits = stencil_bits[k];
-		    modes->depthBits = depth_bits[k];
+                    modes->stencilBits = stencil_bits[k];
+                    modes->depthBits = depth_bits[k];
 
-		    if (db_modes[i] == __DRI_ATTRIB_SWAP_NONE) {
-		    	modes->doubleBufferMode = GL_FALSE;
-		        modes->swapMethod = __DRI_ATTRIB_SWAP_UNDEFINED;
-		    }
-		    else {
-		    	modes->doubleBufferMode = GL_TRUE;
-		    	modes->swapMethod = db_modes[i];
-		    }
+                    if (db_modes[i] == __DRI_ATTRIB_SWAP_NONE) {
+                            modes->doubleBufferMode = GL_FALSE;
+                        modes->swapMethod = __DRI_ATTRIB_SWAP_UNDEFINED;
+                    }
+                    else {
+                            modes->doubleBufferMode = GL_TRUE;
+                            modes->swapMethod = db_modes[i];
+                    }
 
-		    modes->samples = msaa_samples[h];
+                    modes->samples = msaa_samples[h];
 
-		    modes->sRGBCapable = is_srgb;
-		}
-	    }
-	}
+                    modes->sRGBCapable = is_srgb;
+                }
+            }
+        }
     }
     *c = NULL;
 
@@ -354,17 +353,17 @@ driConcatConfigs(__DRIconfig **a, __DRIconfig **b)
 
     i = 0;
     while (a[i] != NULL)
-	i++;
+        i++;
     j = 0;
     while (b[j] != NULL)
-	j++;
-   
+        j++;
+
     all = malloc((i + j + 1) * sizeof *all);
     index = 0;
     for (i = 0; a[i] != NULL; i++)
-	all[index++] = a[i];
+        all[index++] = a[i];
     for (j = 0; b[j] != NULL; j++)
-	all[index++] = b[j];
+        all[index++] = b[j];
     all[index++] = NULL;
 
     free(a);
@@ -434,12 +433,10 @@ dri_fill_in_modes(struct dri_screen *screen)
       PIPE_FORMAT_RGBA8888_SRGB,
       PIPE_FORMAT_RGBX8888_SRGB,
    };
-   mesa_format format;
    __DRIconfig **configs = NULL;
    uint8_t depth_bits_array[5];
    uint8_t stencil_bits_array[5];
    unsigned depth_buffer_factor;
-   unsigned msaa_samples_max;
    unsigned i;
    struct pipe_screen *p_screen = screen->base.screen;
    bool pf_z16, pf_x8z24, pf_z24x8, pf_s8z24, pf_z24s8, pf_z32;
@@ -467,20 +464,17 @@ dri_fill_in_modes(struct dri_screen *screen)
    allow_rgb10 = driQueryOptionb(&screen->dev->option_cache, "allow_rgb10_configs");
    allow_fp16 = dri_loader_get_cap(screen, DRI_LOADER_CAP_FP16);
 
-   msaa_samples_max = (screen->st_api->feature_mask & ST_API_FEATURE_MS_VISUALS_MASK)
-      ? MSAA_VISUAL_MAX_SAMPLES : 1;
-
    pf_x8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24X8_UNORM,
-					    PIPE_TEXTURE_2D, 0, 0,
+                                            PIPE_TEXTURE_2D, 0, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
    pf_z24x8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_X8Z24_UNORM,
-					    PIPE_TEXTURE_2D, 0, 0,
+                                            PIPE_TEXTURE_2D, 0, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
    pf_s8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24_UNORM_S8_UINT,
-					    PIPE_TEXTURE_2D, 0, 0,
+                                            PIPE_TEXTURE_2D, 0, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
    pf_z24s8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_S8_UINT_Z24_UNORM,
-					    PIPE_TEXTURE_2D, 0, 0,
+                                            PIPE_TEXTURE_2D, 0, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
    pf_z16 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z16_UNORM,
                                           PIPE_TEXTURE_2D, 0, 0,
@@ -514,7 +508,7 @@ dri_fill_in_modes(struct dri_screen *screen)
    assert(ARRAY_SIZE(mesa_formats) == ARRAY_SIZE(pipe_formats));
 
    /* Add configs. */
-   for (format = 0; format < ARRAY_SIZE(mesa_formats); format++) {
+   for (unsigned format = 0; format < ARRAY_SIZE(mesa_formats); format++) {
       __DRIconfig **new_configs = NULL;
       unsigned num_msaa_modes = 0; /* includes a single-sample mode */
       uint8_t msaa_modes[MSAA_VISUAL_MAX_SAMPLES];
@@ -545,7 +539,7 @@ dri_fill_in_modes(struct dri_screen *screen)
                                          PIPE_BIND_DISPLAY_TARGET))
          continue;
 
-      for (i = 1; i <= msaa_samples_max; i++) {
+      for (i = 1; i <= MSAA_VISUAL_MAX_SAMPLES; i++) {
          int samples = i > 1 ? i : 0;
 
          if (p_screen->is_format_supported(p_screen, pipe_formats[format],
@@ -682,11 +676,11 @@ dri_fill_st_visual(struct st_visual *stvis,
       break;
    case 24:
       if (mode->stencilBits == 0) {
-	 stvis->depth_stencil_format = (screen->d_depth_bits_last) ?
+         stvis->depth_stencil_format = (screen->d_depth_bits_last) ?
                                           PIPE_FORMAT_Z24X8_UNORM:
                                           PIPE_FORMAT_X8Z24_UNORM;
       } else {
-	 stvis->depth_stencil_format = (screen->sd_depth_bits_last) ?
+         stvis->depth_stencil_format = (screen->sd_depth_bits_last) ?
                                           PIPE_FORMAT_Z24_UNORM_S8_UINT:
                                           PIPE_FORMAT_S8_UINT_Z24_UNORM;
       }
@@ -738,6 +732,7 @@ dri_get_egl_image(struct st_manager *smapi,
    stimg->format = map ? map->pipe_format : img->texture->format;
    stimg->level = img->level;
    stimg->layer = img->layer;
+   stimg->imported_dmabuf = img->imported_dmabuf;
 
    if (img->imported_dmabuf && map) {
       /* Guess sized internal format for dma-bufs. Could be used
@@ -776,9 +771,6 @@ dri_destroy_screen_helper(struct dri_screen * screen)
 {
    if (screen->base.destroy)
       screen->base.destroy(&screen->base);
-
-   if (screen->st_api && screen->st_api->destroy)
-      screen->st_api->destroy(screen->st_api);
 
    if (screen->base.screen)
       screen->base.screen->destroy(screen->base.screen);
@@ -824,12 +816,8 @@ dri_set_background_context(struct st_context_iface *st,
    const __DRIbackgroundCallableExtension *backgroundCallable =
       ctx->sPriv->dri2.backgroundCallable;
 
-   /* Note: Mesa will only call this function if GL multithreading is enabled
-    * We only do that if the loader exposed the __DRI_BACKGROUND_CALLABLE
-    * extension. So we know that backgroundCallable is not NULL.
-    */
-   assert(backgroundCallable);
-   backgroundCallable->setBackgroundContext(ctx->cPriv->loaderPrivate);
+   if (backgroundCallable)
+      backgroundCallable->setBackgroundContext(ctx->cPriv->loaderPrivate);
 
    if (ctx->hud)
       hud_add_queue_for_monitoring(ctx->hud, queue_info);
@@ -847,23 +835,19 @@ dri_init_screen_helper(struct dri_screen *screen,
    if (screen->validate_egl_image)
       screen->base.validate_egl_image = dri_validate_egl_image;
 
-   screen->st_api = st_gl_api_create();
-   if (!screen->st_api)
-      return NULL;
-
-   if(pscreen->get_param(pscreen, PIPE_CAP_NPOT_TEXTURES))
+   if (pscreen->get_param(pscreen, PIPE_CAP_NPOT_TEXTURES))
       screen->target = PIPE_TEXTURE_2D;
    else
       screen->target = PIPE_TEXTURE_RECT;
 
    dri_postprocessing_init(screen);
 
-   screen->st_api->query_versions(screen->st_api, &screen->base,
-                                  &screen->options,
-                                  &screen->sPriv->max_gl_core_version,
-                                  &screen->sPriv->max_gl_compat_version,
-                                  &screen->sPriv->max_gl_es1_version,
-                                  &screen->sPriv->max_gl_es2_version);
+   st_api_query_versions(&screen->base,
+                         &screen->options,
+                         &screen->sPriv->max_gl_core_version,
+                         &screen->sPriv->max_gl_compat_version,
+                         &screen->sPriv->max_gl_es1_version,
+                         &screen->sPriv->max_gl_es2_version);
 
    return dri_fill_in_modes(screen);
 }

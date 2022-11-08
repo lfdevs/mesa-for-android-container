@@ -46,6 +46,7 @@ struct ir3_cache_key {
     * not the compiled shader:
     */
    unsigned clip_plane_enable : PIPE_MAX_CLIP_PLANES;
+   unsigned patch_vertices;
 };
 
 /* per-gen backend program state object should subclass this for it's

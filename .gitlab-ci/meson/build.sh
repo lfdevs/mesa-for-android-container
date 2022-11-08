@@ -65,9 +65,10 @@ meson _build --native-file=native.file \
       -D prefix=`pwd`/install \
       -D libdir=lib \
       -D buildtype=${BUILDTYPE:-debug} \
-      -D build-tests=false \
+      -D build-tests=true \
       -D c_args="$(echo -n $C_ARGS)" \
       -D cpp_args="$(echo -n $CPP_ARGS)" \
+      -D enable-glcpp-tests=false \
       -D libunwind=${UNWIND} \
       ${DRI_LOADERS} \
       ${GALLIUM_ST} \
@@ -78,7 +79,15 @@ meson _build --native-file=native.file \
       ${EXTRA_OPTION}
 cd _build
 meson configure
-ninja
+if command -V mold &> /dev/null ; then
+    mold --run ninja
+else
+    ninja
+fi
 LC_ALL=C.UTF-8 meson test --num-processes ${FDO_CI_CONCURRENT:-4} --print-errorlogs ${MESON_TEST_ARGS}
-ninja install
+if command -V mold &> /dev/null ; then
+    mold --run ninja install
+else
+    ninja install
+fi
 cd ..

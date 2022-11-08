@@ -333,7 +333,6 @@ init_state(struct vl_zscan *zscan)
       sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
       sampler.compare_mode = PIPE_TEX_COMPARE_NONE;
       sampler.compare_func = PIPE_FUNC_ALWAYS;
-      sampler.normalized_coords = 1;
       zscan->samplers[i] = zscan->pipe->create_sampler_state(zscan->pipe, &sampler);
       if (!zscan->samplers[i])
          goto error_samplers;

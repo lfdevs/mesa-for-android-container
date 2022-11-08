@@ -112,9 +112,9 @@ lp_build_blend_factor_unswizzled(struct lp_build_blend_aos_context *bld,
    case PIPE_BLENDFACTOR_DST_ALPHA:
       return bld->dst;
    case PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE:
-      if (alpha)
+      if (alpha) {
          return bld->base.one;
-      else {
+      } else {
          /*
           * If there's no dst alpha the complement is zero but for unclamped
           * float inputs (or snorm inputs) min can be non-zero (negative).
@@ -363,8 +363,7 @@ lp_build_blend_aos(struct gallivm_state *gallivm,
       if (!type.floating) {
          result = lp_build_logicop(gallivm->builder, blend->logicop_func,
                                    src, dst);
-      }
-      else {
+      } else {
          result = src;
       }
    } else if (!state->blend_enable) {

@@ -789,6 +789,9 @@ struct gl_texture_image
    /** Cube map face: index into gl_texture_object::Image[] array */
    GLuint Face;
 
+   unsigned FormatSwizzle;
+   unsigned FormatSwizzleGLSL130; //for depth formats
+
    /** GL_ARB_texture_multisample */
    GLuint NumSamples;            /**< Sample count, or 0 for non-multisample */
    GLboolean FixedSampleLocations; /**< Same sample locations for all pixels? */
@@ -978,6 +981,9 @@ struct gl_texture_object
    /* The texture must include at levels [0..lastLevel] once validated:
     */
    GLuint lastLevel;
+
+   unsigned Swizzle;
+   unsigned SwizzleGLSL130;
 
    unsigned int validated_first_level;
    unsigned int validated_last_level;
@@ -1402,7 +1408,6 @@ struct gl_buffer_object
 {
    GLint RefCount;
    GLuint Name;
-   GLchar *Label;       /**< GL_KHR_debug */
 
    /**
     * The context that holds a global buffer reference for the lifetime of
@@ -1432,29 +1437,7 @@ struct gl_buffer_object
    struct gl_context *Ctx;
    GLint CtxRefCount;   /**< Non-atomic references held by Ctx. */
 
-   GLenum16 Usage;      /**< GL_STREAM_DRAW_ARB, GL_STREAM_READ_ARB, etc. */
-   GLbitfield StorageFlags; /**< GL_MAP_PERSISTENT_BIT, etc. */
-   GLsizeiptrARB Size;  /**< Size of buffer storage in bytes */
-   GLubyte *Data;       /**< Location of storage either in RAM or VRAM. */
-   GLboolean DeletePending;   /**< true if buffer object is removed from the hash */
-   GLboolean Written;   /**< Ever written to? (for debugging) */
-   GLboolean Immutable; /**< GL_ARB_buffer_storage */
    gl_buffer_usage UsageHistory; /**< How has this buffer been used so far? */
-
-   /** Counters used for buffer usage warnings */
-   GLuint NumSubDataCalls;
-   GLuint NumMapBufferWriteCalls;
-
-   struct gl_buffer_mapping Mappings[MAP_COUNT];
-
-   /** Memoization of min/max index computations for static index buffers */
-   simple_mtx_t MinMaxCacheMutex;
-   struct hash_table *MinMaxCache;
-   unsigned MinMaxCacheHitIndices;
-   unsigned MinMaxCacheMissIndices;
-   bool MinMaxCacheDirty;
-
-   bool HandleAllocated; /**< GL_ARB_bindless_texture */
 
    struct pipe_resource *buffer;
    struct gl_context *private_refcount_ctx;
@@ -1474,6 +1457,27 @@ struct gl_buffer_object
     */
    int private_refcount;
 
+   GLbitfield StorageFlags; /**< GL_MAP_PERSISTENT_BIT, etc. */
+
+   /** Memoization of min/max index computations for static index buffers */
+   unsigned MinMaxCacheHitIndices;
+   unsigned MinMaxCacheMissIndices;
+   struct hash_table *MinMaxCache;
+   simple_mtx_t MinMaxCacheMutex;
+   bool MinMaxCacheDirty:1;
+
+   bool DeletePending:1;  /**< true if buffer object is removed from the hash */
+   bool Immutable:1;    /**< GL_ARB_buffer_storage */
+   bool HandleAllocated:1; /**< GL_ARB_bindless_texture */
+   GLenum16 Usage;      /**< GL_STREAM_DRAW_ARB, GL_STREAM_READ_ARB, etc. */
+   GLchar *Label;       /**< GL_KHR_debug */
+   GLsizeiptrARB Size;  /**< Size of buffer storage in bytes */
+
+   /** Counters used for buffer usage warnings */
+   GLuint NumSubDataCalls;
+   GLuint NumMapBufferWriteCalls;
+
+   struct gl_buffer_mapping Mappings[MAP_COUNT];
    struct pipe_transfer *transfer[MAP_COUNT];
 };
 
@@ -2290,6 +2294,7 @@ struct gl_ati_fragment_shader_state
 #define GLSL_DUMP_ON_ERROR 0x80 /**< Dump shaders to stderr on compile error */
 #define GLSL_CACHE_INFO 0x100 /**< Print debug information about shader cache */
 #define GLSL_CACHE_FALLBACK 0x200 /**< Force shader cache fallback paths */
+#define GLSL_SOURCE 0x400 /**< Only dump GLSL */
 
 
 /**
@@ -2427,7 +2432,6 @@ struct gl_shared_state
    bool DisplayListsAffectGLThread;
 
    struct _mesa_HashTable *DisplayList;	   /**< Display lists hash table */
-   struct _mesa_HashTable *BitmapAtlas;    /**< For optimized glBitmap text */
    struct _mesa_HashTable *TexObjects;	   /**< Texture objects hash table */
 
    /** Default texture objects (shared by all texture units) */
@@ -2787,6 +2791,7 @@ struct gl_matrix_stack
    GLuint Depth;       /**< 0 <= Depth < MaxDepth */
    GLuint MaxDepth;    /**< size of Stack[] array */
    GLuint DirtyFlag;   /**< _NEW_MODELVIEW or _NEW_PROJECTION, for example */
+   bool ChangedSincePush;
 };
 
 
@@ -3667,6 +3672,9 @@ struct gl_context
    /*@}*/
 
    bool shader_builtin_ref;
+
+   struct pipe_draw_start_count_bias *tmp_draws;
+   unsigned num_tmp_draws;
 };
 
 #ifndef NDEBUG

@@ -302,7 +302,6 @@ vl_deint_filter_init(struct vl_deint_filter *filter, struct pipe_context *pipe,
    sampler.min_img_filter = PIPE_TEX_FILTER_LINEAR;
    sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
    sampler.mag_img_filter = PIPE_TEX_FILTER_LINEAR;
-   sampler.normalized_coords = 1;
    filter->sampler[0] = pipe->create_sampler_state(pipe, &sampler);
    filter->sampler[1] = filter->sampler[2] = filter->sampler[3] = filter->sampler[0];
    if (!filter->sampler[0])

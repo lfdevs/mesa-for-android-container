@@ -38,7 +38,7 @@ static nir_ssa_def *convert_to_bit_size(nir_builder *bld, nir_ssa_def *src,
    if ((type & (nir_type_uint | nir_type_int)) && bit_size == 32 &&
        alu && (alu->op == nir_op_b2i8 || alu->op == nir_op_b2i16)) {
       nir_alu_instr *instr = nir_alu_instr_create(bld->shader, nir_op_b2i32);
-      nir_alu_src_copy(&instr->src[0], &alu->src[0]);
+      nir_alu_src_copy(&instr->src[0], &alu->src[0], instr);
       return nir_builder_alu_instr_finish_and_insert(bld, instr);
    }
 
@@ -329,47 +329,26 @@ split_phi(nir_builder *b, nir_phi_instr *phi)
 }
 
 static bool
-lower_64bit_phi_impl(nir_function_impl *impl)
+lower_64bit_phi_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   bool progress = false;
+   if (instr->type != nir_instr_type_phi)
+      return false;
 
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         if (instr->type != nir_instr_type_phi)
-            break;
+   nir_phi_instr *phi = nir_instr_as_phi(instr);
+   assert(phi->dest.is_ssa);
 
-         nir_phi_instr *phi = nir_instr_as_phi(instr);
-         assert(phi->dest.is_ssa);
+   if (phi->dest.ssa.bit_size <= 32)
+      return false;
 
-         if (phi->dest.ssa.bit_size <= 32)
-            continue;
-
-         split_phi(&b, phi);
-         progress = true;
-      }
-   }
-
-   if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
-   } else {
-      nir_metadata_preserve(impl, nir_metadata_all);
-   }
-
-   return progress;
+   split_phi(b, phi);
+   return true;
 }
 
 bool
 nir_lower_64bit_phis(nir_shader *shader)
 {
-   bool progress = false;
-
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= lower_64bit_phi_impl(function->impl);
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, lower_64bit_phi_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

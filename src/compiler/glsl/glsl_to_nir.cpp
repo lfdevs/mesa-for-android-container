@@ -1704,7 +1704,7 @@ nir_visitor::visit(ir_call *ir)
          nir_ssa_def *val = evaluate_rvalue(param_rvalue);
          nir_src src = nir_src_for_ssa(val);
 
-         nir_src_copy(&call->params[i], &src);
+         nir_src_copy(&call->params[i], &src, &call->instr);
       } else if (sig_param->data.mode == ir_var_function_inout) {
          unreachable("unimplemented: inout parameters");
       }
@@ -1886,30 +1886,20 @@ nir_visitor::visit(ir_expression *ir)
 
       deref->accept(this);
 
+      assert(nir_deref_mode_is(this->deref, nir_var_shader_in));
       nir_intrinsic_op op;
-      if (nir_deref_mode_is(this->deref, nir_var_shader_in)) {
-         switch (ir->operation) {
-         case ir_unop_interpolate_at_centroid:
-            op = nir_intrinsic_interp_deref_at_centroid;
-            break;
-         case ir_binop_interpolate_at_offset:
-            op = nir_intrinsic_interp_deref_at_offset;
-            break;
-         case ir_binop_interpolate_at_sample:
-            op = nir_intrinsic_interp_deref_at_sample;
-            break;
-         default:
-            unreachable("Invalid interpolation intrinsic");
-         }
-      } else {
-         /* This case can happen if the vertex shader does not write the
-          * given varying.  In this case, the linker will lower it to a
-          * global variable.  Since interpolating a variable makes no
-          * sense, we'll just turn it into a load which will probably
-          * eventually end up as an SSA definition.
-          */
-         assert(nir_deref_mode_is(this->deref, nir_var_shader_temp));
-         op = nir_intrinsic_load_deref;
+      switch (ir->operation) {
+      case ir_unop_interpolate_at_centroid:
+         op = nir_intrinsic_interp_deref_at_centroid;
+         break;
+      case ir_binop_interpolate_at_offset:
+         op = nir_intrinsic_interp_deref_at_offset;
+         break;
+      case ir_binop_interpolate_at_sample:
+         op = nir_intrinsic_interp_deref_at_sample;
+         break;
+      default:
+         unreachable("Invalid interpolation intrinsic");
       }
 
       nir_intrinsic_instr *intrin = nir_intrinsic_instr_create(shader, op);

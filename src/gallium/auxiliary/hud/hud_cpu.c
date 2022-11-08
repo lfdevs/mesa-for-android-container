@@ -395,24 +395,35 @@ hud_thread_busy_install(struct hud_pane *pane, const char *name, bool main)
 
 struct counter_info {
    enum hud_counter counter;
-   unsigned last_value;
    int64_t last_time;
 };
 
 static unsigned get_counter(struct hud_graph *gr, enum hud_counter counter)
 {
    struct util_queue_monitoring *mon = gr->pane->hud->monitored_queue;
+   unsigned value;
 
    if (!mon || !mon->queue)
       return 0;
 
+   /* Reset the counters to 0 to only display values for 1 frame. */
    switch (counter) {
    case HUD_COUNTER_OFFLOADED:
-      return mon->num_offloaded_items;
+      value = mon->num_offloaded_items;
+      mon->num_offloaded_items = 0;
+      return value;
    case HUD_COUNTER_DIRECT:
-      return mon->num_direct_items;
+      value = mon->num_direct_items;
+      mon->num_direct_items = 0;
+      return value;
    case HUD_COUNTER_SYNCS:
-      return mon->num_syncs;
+      value = mon->num_syncs;
+      mon->num_syncs = 0;
+      return value;
+   case HUD_COUNTER_BATCHES:
+      value = mon->num_batches;
+      mon->num_batches = 0;
+      return value;
    default:
       assert(0);
       return 0;
@@ -424,18 +435,15 @@ query_thread_counter(struct hud_graph *gr, struct pipe_context *pipe)
 {
    struct counter_info *info = gr->query_data;
    int64_t now = os_time_get_nano();
+   unsigned value = get_counter(gr, info->counter);
 
    if (info->last_time) {
       if (info->last_time + gr->pane->period*1000 <= now) {
-         unsigned current_value = get_counter(gr, info->counter);
-
-         hud_graph_add_value(gr, current_value - info->last_value);
-         info->last_value = current_value;
+         hud_graph_add_value(gr, value);
          info->last_time = now;
       }
    } else {
       /* initialize */
-      info->last_value = get_counter(gr, info->counter);
       info->last_time = now;
    }
 }

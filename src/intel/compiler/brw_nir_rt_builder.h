@@ -163,7 +163,7 @@ brw_nir_num_rt_stacks(nir_builder *b,
                       const struct intel_device_info *devinfo)
 {
    return nir_imul_imm(b, nir_load_ray_num_dss_rt_stacks_intel(b),
-                          intel_device_info_num_dual_subslices(devinfo));
+                          intel_device_info_dual_subslice_id_bound(devinfo));
 }
 
 static inline nir_ssa_def *
@@ -436,24 +436,6 @@ brw_nir_rt_load_mem_hit_from_addr(nir_builder *b,
 }
 
 static inline void
-brw_nir_rt_init_mem_hit_at_addr(nir_builder *b,
-                                nir_ssa_def *stack_addr,
-                                bool committed,
-                                nir_ssa_def *t_max)
-{
-   nir_ssa_def *mem_hit_addr =
-      brw_nir_rt_mem_hit_addr_from_addr(b, stack_addr, committed);
-
-   /* Set the t_max value from the ray initialization */
-   nir_ssa_def *hit_t_addr = mem_hit_addr;
-   brw_nir_rt_store(b, hit_t_addr, 4, t_max, 0x1);
-
-   /* Clear all the flags packed behind primIndexDelta */
-   nir_ssa_def *state_addr = nir_iadd_imm(b, mem_hit_addr, 12);
-   brw_nir_rt_store(b, state_addr, 4, nir_imm_int(b, 0), 0x1);
-}
-
-static inline void
 brw_nir_rt_load_mem_hit(nir_builder *b,
                         struct brw_nir_rt_mem_hit_defs *defs,
                         bool committed)
@@ -475,9 +457,9 @@ brw_nir_memcpy_global(nir_builder *b,
 
    for (unsigned offset = 0; offset < size; offset += 16) {
       nir_ssa_def *data =
-         brw_nir_rt_load(b, nir_iadd_imm(b, src_addr, offset), src_align,
+         brw_nir_rt_load(b, nir_iadd_imm(b, src_addr, offset), 16,
                          4, 32);
-      brw_nir_rt_store(b, nir_iadd_imm(b, dst_addr, offset), dst_align,
+      brw_nir_rt_store(b, nir_iadd_imm(b, dst_addr, offset), 16,
                        data, 0xf /* write_mask */);
    }
 }

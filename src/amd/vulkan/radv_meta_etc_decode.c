@@ -595,7 +595,7 @@ create_decode_pipeline(struct radv_device *device, VkPipeline *pipeline)
    };
 
    result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        radv_pipeline_cache_to_handle(&device->meta_state.cache), 1,
+                                        device->meta_state.cache, 1,
                                         &vk_pipeline_info, NULL, pipeline);
    if (result != VK_SUCCESS)
       goto fail;
@@ -650,7 +650,7 @@ radv_get_etc_decode_pipeline(struct radv_cmd_buffer *cmd_buffer)
 
       ret = create_decode_pipeline(device, pipeline);
       if (ret != VK_SUCCESS) {
-         cmd_buffer->record_result = ret;
+         vk_command_buffer_set_error(&cmd_buffer->vk, ret);
          return VK_NULL_HANDLE;
       }
    }

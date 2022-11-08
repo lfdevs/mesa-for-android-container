@@ -102,7 +102,6 @@ bool rogue_nir_passes(struct rogue_build_ctx *ctx,
    /* Optimize GL access qualifiers. */
    const nir_opt_access_options opt_access_options = {
       .is_vulkan = true,
-      .infer_non_readable = true,
    };
    NIR_PASS_V(nir, nir_opt_access, &opt_access_options);
 

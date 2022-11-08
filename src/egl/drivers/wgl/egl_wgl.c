@@ -33,12 +33,20 @@
 #include <stw_pixelformat.h>
 #include <stw_context.h>
 #include <stw_framebuffer.h>
+#include <stw_image.h>
+#include <stw_winsys.h>
+#include <stw_ext_interop.h>
 
 #include <GL/wglext.h>
 
 #include <pipe/p_screen.h>
+#include <pipe/p_state.h>
+#include <pipe/p_context.h>
 
 #include <mapi/glapi/glapi.h>
+#include "util/u_call_once.h"
+
+#include <GL/mesa_glinterop.h>
 
 static EGLBoolean
 wgl_match_config(const _EGLConfig *conf, const _EGLConfig *criteria)
@@ -112,7 +120,8 @@ wgl_add_config(_EGLDisplay *disp, const struct stw_pixelformat_info *stw_config,
    base.Conformant = disp->ClientAPIs;
 
    base.MinSwapInterval = 0;
-   base.MaxSwapInterval = 1;
+   base.MaxSwapInterval = 4;
+   base.YInvertedNOK = EGL_TRUE;
 
    if (!_eglValidateConfig(&base, EGL_FALSE)) {
       _eglLog(_EGL_DEBUG, "wgl: failed to validate config %d", id);
@@ -158,10 +167,10 @@ wgl_add_config(_EGLDisplay *disp, const struct stw_pixelformat_info *stw_config,
 }
 
 static EGLBoolean
-wgl_add_configs(_EGLDisplay *disp, HDC hdc)
+wgl_add_configs(_EGLDisplay *disp)
 {
    unsigned int config_count = 0;
-   unsigned surface_type = EGL_PBUFFER_BIT | (hdc ? EGL_WINDOW_BIT : 0);
+   unsigned surface_type = EGL_PBUFFER_BIT | EGL_WINDOW_BIT;
 
    // This is already a filtered set of what the driver supports,
    // and there's no further filtering needed per-visual
@@ -182,7 +191,41 @@ wgl_add_configs(_EGLDisplay *disp, HDC hdc)
 static void
 wgl_display_destroy(_EGLDisplay *disp)
 {
-   free(disp);
+   struct wgl_egl_display *wgl_dpy = wgl_egl_display(disp);
+   if (wgl_dpy->base.destroy)
+      wgl_dpy->base.destroy(&wgl_dpy->base);
+   free(wgl_dpy);
+}
+
+static int
+wgl_egl_st_get_param(struct st_manager *smapi, enum st_manager_param param)
+{
+   /* no-op */
+   return 0;
+}
+
+static bool
+wgl_get_egl_image(struct st_manager *smapi, void *image, struct st_egl_image *out)
+{
+   struct wgl_egl_image *wgl_img = (struct wgl_egl_image *)image;
+   stw_translate_image(wgl_img->img, out);
+   return true;
+}
+
+static bool
+wgl_validate_egl_image(struct st_manager *smapi, void *image)
+{
+   struct wgl_egl_display *wgl_dpy = (struct wgl_egl_display *)smapi;
+   _EGLDisplay *disp = _eglLockDisplay(wgl_dpy->parent);
+   _EGLImage *img = _eglLookupImage(image, disp);
+   _eglUnlockDisplay(disp);
+
+   if (img == NULL) {
+      _eglError(EGL_BAD_PARAMETER, "wgl_validate_egl_image");
+      return false;
+   }
+
+   return true;
 }
 
 static EGLBoolean
@@ -196,13 +239,20 @@ wgl_initialize_impl(_EGLDisplay *disp, HDC hdc)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
    disp->DriverData = (void *)wgl_dpy;
+   wgl_dpy->parent = disp;
 
    if (!stw_init_screen(hdc)) {
       err = "wgl: failed to initialize screen";
       goto cleanup;
    }
 
-   wgl_dpy->screen = stw_get_device()->screen;
+   struct stw_device *stw_dev = stw_get_device();
+   wgl_dpy->screen = stw_dev->screen;
+
+   wgl_dpy->base.screen = stw_dev->screen;
+   wgl_dpy->base.get_param = wgl_egl_st_get_param;
+   wgl_dpy->base.get_egl_image = wgl_get_egl_image;
+   wgl_dpy->base.validate_egl_image = wgl_validate_egl_image;
 
    disp->ClientAPIs = 0;
    if (_eglIsApiValid(EGL_OPENGL_API))
@@ -227,23 +277,18 @@ wgl_initialize_impl(_EGLDisplay *disp, HDC hdc)
       disp->Extensions.KHR_gl_colorspace = EGL_TRUE;
 
    disp->Extensions.KHR_create_context = EGL_TRUE;
-   disp->Extensions.KHR_reusable_sync = EGL_TRUE;
 
-#if 0
    disp->Extensions.KHR_image_base = EGL_TRUE;
    disp->Extensions.KHR_gl_renderbuffer_image = EGL_TRUE;
-   if (wgl_dpy->image->base.version >= 5 &&
-      wgl_dpy->image->createImageFromTexture) {
-      disp->Extensions.KHR_gl_texture_2D_image = EGL_TRUE;
-      disp->Extensions.KHR_gl_texture_cubemap_image = EGL_TRUE;
+   disp->Extensions.KHR_gl_texture_2D_image = EGL_TRUE;
+   disp->Extensions.KHR_gl_texture_cubemap_image = EGL_TRUE;
+   disp->Extensions.KHR_gl_texture_3D_image = EGL_TRUE;
 
-      if (wgl_renderer_query_integer(wgl_dpy,
-         __wgl_RENDERER_HAS_TEXTURE_3D))
-         disp->Extensions.KHR_gl_texture_3D_image = EGL_TRUE;
-   }
-#endif
+   disp->Extensions.KHR_fence_sync = EGL_TRUE;
+   disp->Extensions.KHR_reusable_sync = EGL_TRUE;
+   disp->Extensions.KHR_wait_sync = EGL_TRUE;
 
-   if (!wgl_add_configs(disp, hdc)) {
+   if (!wgl_add_configs(disp)) {
       err = "wgl: failed to add configs";
       goto cleanup;
    }
@@ -274,7 +319,7 @@ wgl_initialize(_EGLDisplay *disp)
     * to free it up correctly.
     */
    if (wgl_dpy) {
-      wgl_dpy->ref_count++;
+      p_atomic_inc(&wgl_dpy->ref_count);
       return EGL_TRUE;
    }
 
@@ -294,7 +339,7 @@ wgl_initialize(_EGLDisplay *disp)
       return EGL_FALSE;
 
    wgl_dpy = wgl_egl_display(disp);
-   wgl_dpy->ref_count++;
+   p_atomic_inc(&wgl_dpy->ref_count);
 
    return EGL_TRUE;
 }
@@ -313,9 +358,7 @@ wgl_display_release(_EGLDisplay *disp)
    wgl_dpy = wgl_egl_display(disp);
 
    assert(wgl_dpy->ref_count > 0);
-   wgl_dpy->ref_count--;
-
-   if (wgl_dpy->ref_count > 0)
+   if (!p_atomic_dec_zero(&wgl_dpy->ref_count))
       return;
 
    _eglCleanupDisplay(disp);
@@ -436,11 +479,12 @@ wgl_create_context(_EGLDisplay *disp, _EGLConfig *conf,
    if (wgl_ctx->base.ResetNotificationStrategy != EGL_NO_RESET_NOTIFICATION)
       resetStrategy = WGL_LOSE_CONTEXT_ON_RESET_ARB;
    wgl_ctx->ctx = stw_create_context_attribs(disp->PlatformDisplay, 0, shared,
+      &wgl_dpy->base,
       wgl_ctx->base.ClientMajorVersion,
       wgl_ctx->base.ClientMinorVersion,
       flags,
       profile_mask,
-      stw_config->iPixelFormat,
+      stw_config,
       resetStrategy);
 
    if (!wgl_ctx->ctx)
@@ -477,22 +521,30 @@ wgl_destroy_surface(_EGLDisplay *disp, _EGLSurface *surf)
    if (!_eglPutSurface(surf))
       return EGL_TRUE;
 
-   struct stw_context *ctx = stw_current_context();
-   stw_framebuffer_lock(wgl_surf->fb);
-   stw_framebuffer_release_locked(wgl_surf->fb, ctx ? ctx->st : NULL);
+   if (wgl_surf->fb->owner == STW_FRAMEBUFFER_PBUFFER) {
+      DestroyWindow(wgl_surf->fb->hWnd);
+   } else {
+      struct stw_context *ctx = stw_current_context();
+      stw_framebuffer_lock(wgl_surf->fb);
+      stw_framebuffer_release_locked(wgl_surf->fb, ctx ? ctx->st : NULL);
+   }
    return EGL_TRUE;
+}
+
+static void
+wgl_gl_flush_get(_glapi_proc *glFlush)
+{
+   *glFlush = _glapi_get_proc_address("glFlush");
 }
 
 static void
 wgl_gl_flush()
 {
    static void (*glFlush)(void);
-   static mtx_t glFlushMutex = _MTX_INITIALIZER_NP;
+   static util_once_flag once = UTIL_ONCE_FLAG_INIT;
 
-   mtx_lock(&glFlushMutex);
-   if (!glFlush)
-      glFlush = _glapi_get_proc_address("glFlush");
-   mtx_unlock(&glFlushMutex);
+   util_call_once_data(&once,
+      (util_call_once_data_func)wgl_gl_flush_get, &glFlush);
 
    /* if glFlush is not available things are horribly broken */
    if (!glFlush) {
@@ -594,7 +646,7 @@ wgl_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
           * EGLDisplay is terminated and then initialized again while a
           * context is still bound. See wgl_intitialize() for a more in depth
           * explanation. */
-         wgl_dpy->ref_count++;
+         p_atomic_inc(&wgl_dpy->ref_count);
       }
    }
 
@@ -616,6 +668,7 @@ static _EGLSurface*
 wgl_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
                           void *native_window, const EGLint *attrib_list)
 {
+   struct wgl_egl_display *wgl_dpy = wgl_egl_display(disp);
    struct wgl_egl_config *wgl_conf = wgl_egl_config(conf);
 
    struct wgl_egl_surface *wgl_surf = calloc(1, sizeof(*wgl_surf));
@@ -629,15 +682,130 @@ wgl_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
 
    const struct stw_pixelformat_info *stw_conf = wgl_conf->stw_config[1] ?
       wgl_conf->stw_config[1] : wgl_conf->stw_config[0];
-   wgl_surf->fb = stw_framebuffer_create(native_window, stw_conf->iPixelFormat, STW_FRAMEBUFFER_EGL_WINDOW);
+   wgl_surf->fb = stw_framebuffer_create(native_window, stw_conf, STW_FRAMEBUFFER_EGL_WINDOW, &wgl_dpy->base);
    if (!wgl_surf->fb) {
       free(wgl_surf);
       return NULL;
    }
 
+   wgl_surf->fb->swap_interval = 1;
    stw_framebuffer_unlock(wgl_surf->fb);
 
    return &wgl_surf->base;
+}
+
+static _EGLSurface*
+wgl_create_pbuffer_surface(_EGLDisplay *disp, _EGLConfig *conf,
+                           const EGLint *attrib_list)
+{
+   struct wgl_egl_display *wgl_dpy = wgl_egl_display(disp);
+   struct wgl_egl_config *wgl_conf = wgl_egl_config(conf);
+
+   struct wgl_egl_surface *wgl_surf = calloc(1, sizeof(*wgl_surf));
+   if (!wgl_surf)
+      return NULL;
+
+   if (!_eglInitSurface(&wgl_surf->base, disp, EGL_PBUFFER_BIT, conf, attrib_list, NULL)) {
+      free(wgl_surf);
+      return NULL;
+   }
+
+   const struct stw_pixelformat_info *stw_conf = wgl_conf->stw_config[1] ?
+      wgl_conf->stw_config[1] : wgl_conf->stw_config[0];
+   wgl_surf->fb = stw_pbuffer_create(stw_conf, wgl_surf->base.Width, wgl_surf->base.Height, &wgl_dpy->base);
+   if (!wgl_surf->fb) {
+      free(wgl_surf);
+      return NULL;
+   }
+
+   wgl_surf->fb->swap_interval = 1;
+   stw_framebuffer_unlock(wgl_surf->fb);
+
+   return &wgl_surf->base;
+}
+
+static EGLBoolean
+wgl_query_surface(_EGLDisplay *disp, _EGLSurface *surf,
+                  EGLint attribute, EGLint *value)
+{
+   struct wgl_egl_surface *wgl_surf = wgl_egl_surface(surf);
+   RECT client_rect;
+
+   switch (attribute) {
+   case EGL_WIDTH:
+   case EGL_HEIGHT:
+      if (GetClientRect(wgl_surf->fb->hWnd, &client_rect)) {
+         surf->Width = client_rect.right;
+         surf->Height = client_rect.bottom;
+      }
+      break;
+   default:
+      break;
+   }
+   return _eglQuerySurface(disp, surf, attribute, value);
+}
+
+static EGLBoolean
+wgl_bind_tex_image(_EGLDisplay *disp, _EGLSurface *surf, EGLint buffer)
+{
+   struct wgl_egl_surface *wgl_surf = wgl_egl_surface(surf);
+   enum st_attachment_type target = ST_TEXTURE_2D;
+
+   _EGLContext *ctx = _eglGetCurrentContext();
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+
+   if (!_eglBindTexImage(disp, surf, buffer))
+      return EGL_FALSE;
+
+   struct pipe_resource *pres = stw_get_framebuffer_resource(wgl_surf->fb->stfb, ST_ATTACHMENT_FRONT_LEFT);
+   enum pipe_format format = pres->format;
+
+   switch (surf->TextureFormat) {
+   case EGL_TEXTURE_RGB:
+      switch (format) {
+      case PIPE_FORMAT_R16G16B16A16_FLOAT:
+         format = PIPE_FORMAT_R16G16B16X16_FLOAT;
+         break;
+      case PIPE_FORMAT_B10G10R10A2_UNORM:
+         format = PIPE_FORMAT_B10G10R10X2_UNORM;
+         break;
+      case PIPE_FORMAT_R10G10B10A2_UNORM:
+         format = PIPE_FORMAT_R10G10B10X2_UNORM;
+         break;
+      case PIPE_FORMAT_BGRA8888_UNORM:
+         format = PIPE_FORMAT_BGRX8888_UNORM;
+         break;
+      case PIPE_FORMAT_ARGB8888_UNORM:
+         format = PIPE_FORMAT_XRGB8888_UNORM;
+         break;
+      default:
+         break;
+      }
+      break;
+   case EGL_TEXTURE_RGBA:
+      break;
+   default:
+      assert(!"Unexpected texture format in wgl_bind_tex_image()");
+   }
+
+   switch (surf->TextureTarget) {
+   case EGL_TEXTURE_2D:
+      break;
+   default:
+      assert(!"Unexpected texture target in wgl_bind_tex_image()");
+   }
+
+   wgl_ctx->ctx->st->teximage(wgl_ctx->ctx->st, target, 0, format, pres, false);
+
+   return EGL_TRUE;
+}
+
+static EGLBoolean
+wgl_swap_interval(_EGLDisplay *disp, _EGLSurface *surf, EGLint interval)
+{
+   struct wgl_egl_surface *wgl_surf = wgl_egl_surface(surf);
+   wgl_surf->fb->swap_interval = interval;
+   return EGL_TRUE;
 }
 
 static EGLBoolean
@@ -653,6 +821,375 @@ wgl_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
    return ret;
 }
 
+static EGLBoolean
+wgl_wait_client(_EGLDisplay *disp, _EGLContext *ctx)
+{
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+   struct pipe_fence_handle *fence = NULL;
+   wgl_ctx->ctx->st->flush(wgl_ctx->ctx->st, ST_FLUSH_END_OF_FRAME | ST_FLUSH_WAIT, &fence, NULL, NULL);
+   return EGL_TRUE;
+}
+
+static EGLBoolean
+wgl_wait_native(EGLint engine)
+{
+   if (engine != EGL_CORE_NATIVE_ENGINE)
+      return _eglError(EGL_BAD_PARAMETER, "eglWaitNative");
+   /* It's unclear what "native" means, but GDI is as good a guess as any */
+   GdiFlush();
+   return EGL_TRUE;
+}
+
+static EGLint
+egl_error_from_stw_image_error(enum stw_image_error err)
+{
+   switch (err) {
+   case STW_IMAGE_ERROR_SUCCESS:
+      return EGL_SUCCESS;
+   case STW_IMAGE_ERROR_BAD_ALLOC:
+      return EGL_BAD_ALLOC;
+   case STW_IMAGE_ERROR_BAD_MATCH:
+      return EGL_BAD_MATCH;
+   case STW_IMAGE_ERROR_BAD_PARAMETER:
+      return EGL_BAD_PARAMETER;
+   case STW_IMAGE_ERROR_BAD_ACCESS:
+      return EGL_BAD_ACCESS;
+   default:
+      assert(!"unknown stw_image_error code");
+      return EGL_BAD_ALLOC;
+   }
+}
+
+static _EGLImage *
+wgl_create_image_khr_texture(_EGLDisplay *disp, _EGLContext *ctx,
+                                   EGLenum target,
+                                   EGLClientBuffer buffer,
+                                   const EGLint *attr_list)
+{
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+   struct wgl_egl_image *wgl_img;
+   GLuint texture = (GLuint) (uintptr_t) buffer;
+   _EGLImageAttribs attrs;
+   GLuint depth;
+   GLenum gl_target;
+   enum stw_image_error error;
+
+   if (texture == 0) {
+      _eglError(EGL_BAD_PARAMETER, "wgl_create_image_khr");
+      return EGL_NO_IMAGE_KHR;
+   }
+
+   if (!_eglParseImageAttribList(&attrs, disp, attr_list))
+      return EGL_NO_IMAGE_KHR;
+
+   switch (target) {
+   case EGL_GL_TEXTURE_2D_KHR:
+      depth = 0;
+      gl_target = GL_TEXTURE_2D;
+      break;
+   case EGL_GL_TEXTURE_3D_KHR:
+      depth = attrs.GLTextureZOffset;
+      gl_target = GL_TEXTURE_3D;
+      break;
+   case EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_X_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_X_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Y_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Z_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_KHR:
+      depth = target - EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_X_KHR;
+      gl_target = GL_TEXTURE_CUBE_MAP;
+      break;
+   default:
+      unreachable("Unexpected target in wgl_create_image_khr_texture()");
+      return EGL_NO_IMAGE_KHR;
+   }
+
+   wgl_img = malloc(sizeof *wgl_img);
+   if (!wgl_img) {
+      _eglError(EGL_BAD_ALLOC, "wgl_create_image_khr");
+      return EGL_NO_IMAGE_KHR;
+   }
+
+   _eglInitImage(&wgl_img->base, disp);
+
+   wgl_img->img = stw_create_image_from_texture(wgl_ctx->ctx,
+                                                gl_target,
+                                                texture,
+                                                depth,
+                                                attrs.GLTextureLevel,
+                                                &error);
+   assert(!!wgl_img->img == (error == STW_IMAGE_ERROR_SUCCESS));
+
+   if (!wgl_img->img) {
+      free(wgl_img);
+      _eglError(egl_error_from_stw_image_error(error), "wgl_create_image_khr");
+      return EGL_NO_IMAGE_KHR;
+   }
+   return &wgl_img->base;
+}
+
+static _EGLImage *
+wgl_create_image_khr_renderbuffer(_EGLDisplay *disp, _EGLContext *ctx,
+                                   EGLClientBuffer buffer,
+                                   const EGLint *attr_list)
+{
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+   struct wgl_egl_image *wgl_img;
+   GLuint renderbuffer = (GLuint) (uintptr_t) buffer;
+   enum stw_image_error error;
+
+   if (renderbuffer == 0) {
+      _eglError(EGL_BAD_PARAMETER, "wgl_create_image_khr");
+      return EGL_NO_IMAGE_KHR;
+   }
+
+   wgl_img = malloc(sizeof(*wgl_img));
+   if (!wgl_img) {
+      _eglError(EGL_BAD_ALLOC, "wgl_create_image");
+      return NULL;
+   }
+
+   _eglInitImage(&wgl_img->base, disp);
+
+   wgl_img->img = stw_create_image_from_renderbuffer(wgl_ctx->ctx, renderbuffer, &error);
+   assert(!!wgl_img->img == (error == STW_IMAGE_ERROR_SUCCESS));
+
+   if (!wgl_img->img) {
+      free(wgl_img);
+      _eglError(egl_error_from_stw_image_error(error), "wgl_create_image_khr");
+      return EGL_NO_IMAGE_KHR;
+   }
+
+   return &wgl_img->base;
+}
+
+static _EGLImage *
+wgl_create_image_khr(_EGLDisplay *disp, _EGLContext *ctx, EGLenum target,
+                      EGLClientBuffer buffer, const EGLint *attr_list)
+{
+   switch (target) {
+   case EGL_GL_TEXTURE_2D_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_X_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_X_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Y_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Z_KHR:
+   case EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_KHR:
+   case EGL_GL_TEXTURE_3D_KHR:
+      return wgl_create_image_khr_texture(disp, ctx, target, buffer, attr_list);
+   case EGL_GL_RENDERBUFFER_KHR:
+      return wgl_create_image_khr_renderbuffer(disp, ctx, buffer, attr_list);
+   default:
+      _eglError(EGL_BAD_PARAMETER, "wgl_create_image_khr");
+      return EGL_NO_IMAGE_KHR;
+   }
+}
+
+static EGLBoolean
+wgl_destroy_image_khr(_EGLDisplay *disp, _EGLImage *img)
+{
+   struct wgl_egl_image *wgl_img = wgl_egl_image(img);
+   stw_destroy_image(wgl_img->img);
+   free(wgl_img);
+   return EGL_TRUE;
+}
+
+static _EGLSync *
+wgl_create_sync_khr(_EGLDisplay *disp, EGLenum type, const EGLAttrib *attrib_list)
+{
+
+   _EGLContext *ctx = _eglGetCurrentContext();
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+   struct wgl_egl_sync *wgl_sync;
+
+   struct st_context_iface *st_ctx = wgl_ctx ? wgl_ctx->ctx->st : NULL;
+
+   wgl_sync = calloc(1, sizeof(struct wgl_egl_sync));
+   if (!wgl_sync) {
+      _eglError(EGL_BAD_ALLOC, "eglCreateSyncKHR");
+      return NULL;
+   }
+
+   if (!_eglInitSync(&wgl_sync->base, disp, type, attrib_list)) {
+      free(wgl_sync);
+      return NULL;
+   }
+
+   switch (type) {
+   case EGL_SYNC_FENCE_KHR:
+      st_ctx->flush(st_ctx, 0, &wgl_sync->fence, NULL, NULL);
+      if (!wgl_sync->fence) {
+         _eglError(EGL_BAD_ALLOC, "eglCreateSyncKHR");
+         free(wgl_sync);
+         return NULL;
+      }
+      break;
+
+   case EGL_SYNC_REUSABLE_KHR:
+      wgl_sync->event = CreateEvent(NULL, TRUE, FALSE, NULL);
+      if (!wgl_sync->event) {
+         _eglError(EGL_BAD_ALLOC, "eglCreateSyncKHR");
+         free(wgl_sync);
+         return NULL;
+      }
+   }
+
+   wgl_sync->refcount = 1;
+   return &wgl_sync->base;
+}
+
+static void
+wgl_egl_unref_sync(struct wgl_egl_display *wgl_dpy, struct wgl_egl_sync *wgl_sync)
+{
+   if (InterlockedDecrement((volatile LONG *)&wgl_sync->refcount) > 0)
+      return;
+
+   if (wgl_sync->fence)
+      wgl_dpy->screen->fence_reference(wgl_dpy->screen, &wgl_sync->fence, NULL);
+   if (wgl_sync->event)
+      CloseHandle(wgl_sync->event);
+   free(wgl_sync);
+}
+
+static EGLBoolean
+wgl_destroy_sync_khr(_EGLDisplay *disp, _EGLSync *sync)
+{
+   struct wgl_egl_display *wgl_dpy = wgl_egl_display(disp);
+   struct wgl_egl_sync *wgl_sync = wgl_egl_sync(sync);
+   wgl_egl_unref_sync(wgl_dpy, wgl_sync);
+   return EGL_TRUE;
+}
+
+static EGLint
+wgl_client_wait_sync_khr(_EGLDisplay *disp, _EGLSync *sync, EGLint flags, EGLTime timeout)
+{
+   _EGLContext *ctx = _eglGetCurrentContext();
+   struct wgl_egl_display *wgl_dpy = wgl_egl_display(disp);
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+   struct wgl_egl_sync *wgl_sync = wgl_egl_sync(sync);
+
+   EGLint ret = EGL_CONDITION_SATISFIED_KHR;
+
+   /* the sync object should take a reference while waiting */
+   InterlockedIncrement((volatile LONG *)&wgl_sync->refcount);
+
+   switch (sync->Type) {
+   case EGL_SYNC_FENCE_KHR:
+      if (wgl_dpy->screen->fence_finish(wgl_dpy->screen, NULL, wgl_sync->fence, timeout))
+         wgl_sync->base.SyncStatus = EGL_SIGNALED_KHR;
+      else
+         ret = EGL_TIMEOUT_EXPIRED_KHR;
+      break;
+
+   case EGL_SYNC_REUSABLE_KHR:
+      if (wgl_ctx && wgl_sync->base.SyncStatus == EGL_UNSIGNALED_KHR &&
+          (flags & EGL_SYNC_FLUSH_COMMANDS_BIT_KHR)) {
+         /* flush context if EGL_SYNC_FLUSH_COMMANDS_BIT_KHR is set */
+         wgl_gl_flush();
+      }
+
+      DWORD wait_milliseconds = (timeout == EGL_FOREVER_KHR) ? INFINITE : (DWORD)(timeout / 1000000ull);
+      DWORD wait_ret = WaitForSingleObject(wgl_sync->event, wait_milliseconds);
+      switch (wait_ret) {
+      case WAIT_OBJECT_0:
+         assert(wgl_sync->base.SyncStatus == EGL_SIGNALED_KHR);
+         break;
+      case WAIT_TIMEOUT:
+         assert(wgl_sync->base.SyncStatus == EGL_UNSIGNALED_KHR);
+         ret = EGL_TIMEOUT_EXPIRED_KHR;
+         break;
+      default:
+         _eglError(EGL_BAD_ACCESS, "eglClientWaitSyncKHR");
+         ret = EGL_FALSE;
+         break;
+      }
+      break;
+  }
+  wgl_egl_unref_sync(wgl_dpy, wgl_sync);
+
+  return ret;
+}
+
+static EGLint
+wgl_wait_sync_khr(_EGLDisplay *disp, _EGLSync *sync)
+{
+   _EGLContext *ctx = _eglGetCurrentContext();
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+   struct wgl_egl_sync *wgl_sync = wgl_egl_sync(sync);
+
+   if (!wgl_sync->fence)
+      return EGL_TRUE;
+
+   struct pipe_context *pipe = wgl_ctx->ctx->st->pipe;
+   if (pipe->fence_server_sync)
+      pipe->fence_server_sync(pipe, wgl_sync->fence);
+
+   return EGL_TRUE;
+}
+
+static EGLBoolean
+wgl_signal_sync_khr(_EGLDisplay *disp, _EGLSync *sync, EGLenum mode)
+{
+   struct wgl_egl_sync *wgl_sync = wgl_egl_sync(sync);
+
+   if (sync->Type != EGL_SYNC_REUSABLE_KHR)
+      return _eglError(EGL_BAD_MATCH, "eglSignalSyncKHR");
+
+   if (mode != EGL_SIGNALED_KHR && mode != EGL_UNSIGNALED_KHR)
+      return _eglError(EGL_BAD_ATTRIBUTE, "eglSignalSyncKHR");
+
+   wgl_sync->base.SyncStatus = mode;
+
+   if (mode == EGL_SIGNALED_KHR) {
+      if (!SetEvent(wgl_sync->event))
+         return _eglError(EGL_BAD_ACCESS, "eglSignalSyncKHR");
+   } else {
+      if (!ResetEvent(wgl_sync->event))
+         return _eglError(EGL_BAD_ACCESS, "eglSignalSyncKHR");
+   }
+
+   return EGL_TRUE;
+}
+
+static const char *
+wgl_query_driver_name(_EGLDisplay *disp)
+{
+   return stw_get_device()->stw_winsys->get_name();
+}
+
+static char *
+wgl_query_driver_config(_EGLDisplay *disp)
+{
+   return stw_get_config_xml();
+}
+
+static int
+wgl_interop_query_device_info(_EGLDisplay *disp, _EGLContext *ctx,
+                              struct mesa_glinterop_device_info *out)
+{
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+   return stw_interop_query_device_info(wgl_ctx->ctx, out);
+}
+
+static int
+wgl_interop_export_object(_EGLDisplay *disp, _EGLContext *ctx,
+                          struct mesa_glinterop_export_in *in,
+                          struct mesa_glinterop_export_out *out)
+{
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+   return stw_interop_export_object(wgl_ctx->ctx, in, out);
+}
+
+static int
+wgl_interop_flush_objects(_EGLDisplay *disp, _EGLContext *ctx,
+                          unsigned count, struct mesa_glinterop_export_in *objects,
+                          GLsync *sync)
+{
+   struct wgl_egl_context *wgl_ctx = wgl_egl_context(ctx);
+   return stw_interop_flush_objects(wgl_ctx->ctx, count, objects, sync);
+}
+
 struct _egl_driver _eglDriver = {
    .Initialize = wgl_initialize,
    .Terminate = wgl_terminate,
@@ -660,8 +1197,27 @@ struct _egl_driver _eglDriver = {
    .DestroyContext = wgl_destroy_context,
    .MakeCurrent = wgl_make_current,
    .CreateWindowSurface = wgl_create_window_surface,
+   .CreatePbufferSurface = wgl_create_pbuffer_surface,
    .DestroySurface = wgl_destroy_surface,
+   .QuerySurface = wgl_query_surface,
+   .BindTexImage = wgl_bind_tex_image,
+   .ReleaseTexImage = _eglReleaseTexImage,
    .GetProcAddress = _glapi_get_proc_address,
+   .SwapInterval = wgl_swap_interval,
    .SwapBuffers = wgl_swap_buffers,
+   .WaitClient = wgl_wait_client,
+   .WaitNative = wgl_wait_native,
+   .CreateImageKHR = wgl_create_image_khr,
+   .DestroyImageKHR = wgl_destroy_image_khr,
+   .CreateSyncKHR = wgl_create_sync_khr,
+   .DestroySyncKHR = wgl_destroy_sync_khr,
+   .ClientWaitSyncKHR = wgl_client_wait_sync_khr,
+   .WaitSyncKHR = wgl_wait_sync_khr,
+   .SignalSyncKHR = wgl_signal_sync_khr,
+   .QueryDriverName = wgl_query_driver_name,
+   .QueryDriverConfig = wgl_query_driver_config,
+   .GLInteropQueryDeviceInfo = wgl_interop_query_device_info,
+   .GLInteropExportObject = wgl_interop_export_object,
+   .GLInteropFlushObjects = wgl_interop_flush_objects,
 };
 

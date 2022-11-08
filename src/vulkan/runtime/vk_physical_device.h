@@ -27,6 +27,8 @@
 #include "vk_extensions.h"
 #include "vk_object.h"
 
+#include "util/list.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -40,6 +42,9 @@ struct vk_pipeline_cache_object_ops;
  */
 struct vk_physical_device {
    struct vk_object_base base;
+
+   /* See vk_instance::pdevices::list */
+   struct list_head link;
 
    /** Instance which is the parent of this physical device */
    struct vk_instance *instance;

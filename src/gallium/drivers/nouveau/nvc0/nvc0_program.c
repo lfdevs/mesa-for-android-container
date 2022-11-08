@@ -686,7 +686,7 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
    prog->relocs = info_out.bin.relocData;
    prog->fixups = info_out.bin.fixupData;
    if (info_out.target >= NVISA_GV100_CHIPSET)
-      prog->num_gprs = MIN2(info_out.bin.maxGPR + 5, 256); //XXX: why?
+      prog->num_gprs = MIN2(info_out.bin.maxGPR + 5, 255); //XXX: why?
    else
       prog->num_gprs = MAX2(4, (info_out.bin.maxGPR + 1));
    prog->cp.smem_size = info_out.bin.smemSize;
@@ -884,6 +884,7 @@ nvc0_program_upload(struct nvc0_context *nvc0, struct nvc0_program *prog)
          size += TU102_SHADER_HEADER_SIZE;
    }
 
+   simple_mtx_assert_locked(&nvc0->screen->state_lock);
    ret = nvc0_program_alloc_code(nvc0, prog);
    if (ret) {
       struct nouveau_heap *heap = screen->text_heap;
@@ -905,7 +906,7 @@ nvc0_program_upload(struct nvc0_context *nvc0, struct nvc0_program *prog)
       IMMED_NVC0(nvc0->base.pushbuf, NVC0_3D(SERIALIZE), 0);
 
       if ((screen->text->size << 1) <= (1 << 23)) {
-         ret = nvc0_screen_resize_text_area(screen, screen->text->size << 1);
+         ret = nvc0_screen_resize_text_area(screen, nvc0->base.pushbuf, screen->text->size << 1);
          if (ret) {
             NOUVEAU_ERR("Error allocating TEXT area: %d\n", ret);
             return false;
@@ -990,8 +991,11 @@ nvc0_program_destroy(struct nvc0_context *nvc0, struct nvc0_program *prog)
    const struct pipe_shader_state pipe = prog->pipe;
    const ubyte type = prog->type;
 
-   if (prog->mem)
+   if (prog->mem) {
+      if (nvc0)
+         simple_mtx_assert_locked(&nvc0->screen->state_lock);
       nouveau_heap_free(&prog->mem);
+   }
    FREE(prog->code); /* may be 0 for hardcoded shaders */
    FREE(prog->relocs);
    FREE(prog->fixups);

@@ -56,6 +56,9 @@ TYPED_TEST(AtomicAssignment, Test)
    r = p_atomic_read(&v);
    ASSERT_EQ(r, ones) << "p_atomic_read";
 
+   r = p_atomic_read_relaxed(&v);
+   ASSERT_EQ(r, ones) << "p_atomic_read_relaxed";
+
    v = ones;
    r = p_atomic_cmpxchg(&v, 0, 1);
    ASSERT_EQ(v, ones) << "p_atomic_cmpxchg";
@@ -64,6 +67,11 @@ TYPED_TEST(AtomicAssignment, Test)
    r = p_atomic_cmpxchg(&v, ones, 0);
    ASSERT_EQ(v, 0) << "p_atomic_cmpxchg";
    ASSERT_EQ(r, ones) << "p_atomic_cmpxchg";
+
+   v = 0;
+   r = p_atomic_xchg(&v, ones);
+   ASSERT_EQ(v, ones) << "p_atomic_xchg";
+   ASSERT_EQ(r, 0) << "p_atomic_xchg";
 }
 
 
@@ -71,6 +79,7 @@ template <typename T> class AtomicIncrementDecrement : public testing::Test {};
 
 using AtomicIncrementDecrementTypes =
    testing::Types<int, unsigned,
+                  int8_t, uint8_t,
                   int16_t, uint16_t,
                   int32_t, uint32_t, int64_t, uint64_t>;
 
@@ -114,6 +123,16 @@ TYPED_TEST(AtomicIncrementDecrement, Test)
    r = p_atomic_dec_return(&v);
    ASSERT_EQ(v, ones) << "p_atomic_dec_return";
    ASSERT_EQ(v, r) << "p_atomic_dec_return";
+
+   v = 0;
+   r = p_atomic_add_return(&v, -1);
+   ASSERT_EQ(v, ones) << "p_atomic_add_return";
+   ASSERT_EQ(v, r) << "p_atomic_add_return";
+
+   v = 0;
+   r = p_atomic_fetch_add(&v, -1);
+   ASSERT_EQ(v, ones) << "p_atomic_fetch_add";
+   ASSERT_EQ(r, 0) << "p_atomic_fetch_add";
 }
 
 template <typename T> class AtomicAdd : public testing::Test {};

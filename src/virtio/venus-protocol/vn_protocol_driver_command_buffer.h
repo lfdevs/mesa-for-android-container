@@ -11,6 +11,12 @@
 #include "vn_instance.h"
 #include "vn_protocol_driver_structs.h"
 
+/*
+ * These structs/unions/commands are not included
+ *
+ *   vkCmdPushDescriptorSetWithTemplateKHR
+ */
+
 /* struct VkCommandBufferAllocateInfo chain */
 
 static inline size_t
@@ -454,6 +460,44 @@ vn_encode_VkCommandBufferBeginInfo(struct vn_cs_encoder *enc, const VkCommandBuf
     vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO });
     vn_encode_VkCommandBufferBeginInfo_pnext(enc, val->pNext);
     vn_encode_VkCommandBufferBeginInfo_self(enc, val);
+}
+
+/* struct VkMultiDrawInfoEXT */
+
+static inline size_t
+vn_sizeof_VkMultiDrawInfoEXT(const VkMultiDrawInfoEXT *val)
+{
+    size_t size = 0;
+    size += vn_sizeof_uint32_t(&val->firstVertex);
+    size += vn_sizeof_uint32_t(&val->vertexCount);
+    return size;
+}
+
+static inline void
+vn_encode_VkMultiDrawInfoEXT(struct vn_cs_encoder *enc, const VkMultiDrawInfoEXT *val)
+{
+    vn_encode_uint32_t(enc, &val->firstVertex);
+    vn_encode_uint32_t(enc, &val->vertexCount);
+}
+
+/* struct VkMultiDrawIndexedInfoEXT */
+
+static inline size_t
+vn_sizeof_VkMultiDrawIndexedInfoEXT(const VkMultiDrawIndexedInfoEXT *val)
+{
+    size_t size = 0;
+    size += vn_sizeof_uint32_t(&val->firstIndex);
+    size += vn_sizeof_uint32_t(&val->indexCount);
+    size += vn_sizeof_int32_t(&val->vertexOffset);
+    return size;
+}
+
+static inline void
+vn_encode_VkMultiDrawIndexedInfoEXT(struct vn_cs_encoder *enc, const VkMultiDrawIndexedInfoEXT *val)
+{
+    vn_encode_uint32_t(enc, &val->firstIndex);
+    vn_encode_uint32_t(enc, &val->indexCount);
+    vn_encode_int32_t(enc, &val->vertexOffset);
 }
 
 /* struct VkBufferCopy */
@@ -3631,6 +3675,159 @@ static inline void vn_decode_vkCmdDrawIndexed_reply(struct vn_cs_decoder *dec, V
     /* skip firstInstance */
 }
 
+static inline size_t vn_sizeof_vkCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMultiEXT_EXT;
+    const VkFlags cmd_flags = 0;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type) + vn_sizeof_VkFlags(&cmd_flags);
+
+    cmd_size += vn_sizeof_VkCommandBuffer(&commandBuffer);
+    cmd_size += vn_sizeof_uint32_t(&drawCount);
+    if (pVertexInfo) {
+        cmd_size += vn_sizeof_array_size(drawCount);
+        for (uint32_t i = 0; i < drawCount; i++)
+            cmd_size += vn_sizeof_VkMultiDrawInfoEXT(&pVertexInfo[i]);
+    } else {
+        cmd_size += vn_sizeof_array_size(0);
+    }
+    cmd_size += vn_sizeof_uint32_t(&instanceCount);
+    cmd_size += vn_sizeof_uint32_t(&firstInstance);
+    cmd_size += vn_sizeof_uint32_t(&stride);
+
+    return cmd_size;
+}
+
+static inline void vn_encode_vkCmdDrawMultiEXT(struct vn_cs_encoder *enc, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMultiEXT_EXT;
+
+    vn_encode_VkCommandTypeEXT(enc, &cmd_type);
+    vn_encode_VkFlags(enc, &cmd_flags);
+
+    vn_encode_VkCommandBuffer(enc, &commandBuffer);
+    vn_encode_uint32_t(enc, &drawCount);
+    if (pVertexInfo) {
+        vn_encode_array_size(enc, drawCount);
+        for (uint32_t i = 0; i < drawCount; i++)
+            vn_encode_VkMultiDrawInfoEXT(enc, (void *)pVertexInfo + stride * i);
+    } else {
+        vn_encode_array_size(enc, 0);
+    }
+    stride = sizeof(VkMultiDrawInfoEXT);
+    vn_encode_uint32_t(enc, &instanceCount);
+    vn_encode_uint32_t(enc, &firstInstance);
+    vn_encode_uint32_t(enc, &stride);
+}
+
+static inline size_t vn_sizeof_vkCmdDrawMultiEXT_reply(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMultiEXT_EXT;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type);
+
+    /* skip commandBuffer */
+    /* skip drawCount */
+    /* skip pVertexInfo */
+    /* skip instanceCount */
+    /* skip firstInstance */
+    /* skip stride */
+
+    return cmd_size;
+}
+
+static inline void vn_decode_vkCmdDrawMultiEXT_reply(struct vn_cs_decoder *dec, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride)
+{
+    VkCommandTypeEXT command_type;
+    vn_decode_VkCommandTypeEXT(dec, &command_type);
+    assert(command_type == VK_COMMAND_TYPE_vkCmdDrawMultiEXT_EXT);
+
+    /* skip commandBuffer */
+    /* skip drawCount */
+    /* skip pVertexInfo */
+    /* skip instanceCount */
+    /* skip firstInstance */
+    /* skip stride */
+}
+
+static inline size_t vn_sizeof_vkCmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMultiIndexedEXT_EXT;
+    const VkFlags cmd_flags = 0;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type) + vn_sizeof_VkFlags(&cmd_flags);
+
+    cmd_size += vn_sizeof_VkCommandBuffer(&commandBuffer);
+    cmd_size += vn_sizeof_uint32_t(&drawCount);
+    if (pIndexInfo) {
+        cmd_size += vn_sizeof_array_size(drawCount);
+        for (uint32_t i = 0; i < drawCount; i++)
+            cmd_size += vn_sizeof_VkMultiDrawIndexedInfoEXT(&pIndexInfo[i]);
+    } else {
+        cmd_size += vn_sizeof_array_size(0);
+    }
+    cmd_size += vn_sizeof_uint32_t(&instanceCount);
+    cmd_size += vn_sizeof_uint32_t(&firstInstance);
+    cmd_size += vn_sizeof_uint32_t(&stride);
+    cmd_size += vn_sizeof_simple_pointer(pVertexOffset);
+    if (pVertexOffset)
+        cmd_size += vn_sizeof_int32_t(pVertexOffset);
+
+    return cmd_size;
+}
+
+static inline void vn_encode_vkCmdDrawMultiIndexedEXT(struct vn_cs_encoder *enc, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMultiIndexedEXT_EXT;
+
+    vn_encode_VkCommandTypeEXT(enc, &cmd_type);
+    vn_encode_VkFlags(enc, &cmd_flags);
+
+    vn_encode_VkCommandBuffer(enc, &commandBuffer);
+    vn_encode_uint32_t(enc, &drawCount);
+    if (pIndexInfo) {
+        vn_encode_array_size(enc, drawCount);
+        for (uint32_t i = 0; i < drawCount; i++)
+            vn_encode_VkMultiDrawIndexedInfoEXT(enc, (void *)pIndexInfo + stride * i);
+    } else {
+        vn_encode_array_size(enc, 0);
+    }
+    stride = sizeof(VkMultiDrawIndexedInfoEXT);
+    vn_encode_uint32_t(enc, &instanceCount);
+    vn_encode_uint32_t(enc, &firstInstance);
+    vn_encode_uint32_t(enc, &stride);
+    if (vn_encode_simple_pointer(enc, pVertexOffset))
+        vn_encode_int32_t(enc, pVertexOffset);
+}
+
+static inline size_t vn_sizeof_vkCmdDrawMultiIndexedEXT_reply(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMultiIndexedEXT_EXT;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type);
+
+    /* skip commandBuffer */
+    /* skip drawCount */
+    /* skip pIndexInfo */
+    /* skip instanceCount */
+    /* skip firstInstance */
+    /* skip stride */
+    /* skip pVertexOffset */
+
+    return cmd_size;
+}
+
+static inline void vn_decode_vkCmdDrawMultiIndexedEXT_reply(struct vn_cs_decoder *dec, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset)
+{
+    VkCommandTypeEXT command_type;
+    vn_decode_VkCommandTypeEXT(dec, &command_type);
+    assert(command_type == VK_COMMAND_TYPE_vkCmdDrawMultiIndexedEXT_EXT);
+
+    /* skip commandBuffer */
+    /* skip drawCount */
+    /* skip pIndexInfo */
+    /* skip instanceCount */
+    /* skip firstInstance */
+    /* skip stride */
+    /* skip pVertexOffset */
+}
+
 static inline size_t vn_sizeof_vkCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
 {
     const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawIndirect_EXT;
@@ -5597,6 +5794,78 @@ static inline void vn_decode_vkCmdExecuteCommands_reply(struct vn_cs_decoder *de
     /* skip commandBuffer */
     /* skip commandBufferCount */
     /* skip pCommandBuffers */
+}
+
+static inline size_t vn_sizeof_vkCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdPushDescriptorSetKHR_EXT;
+    const VkFlags cmd_flags = 0;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type) + vn_sizeof_VkFlags(&cmd_flags);
+
+    cmd_size += vn_sizeof_VkCommandBuffer(&commandBuffer);
+    cmd_size += vn_sizeof_VkPipelineBindPoint(&pipelineBindPoint);
+    cmd_size += vn_sizeof_VkPipelineLayout(&layout);
+    cmd_size += vn_sizeof_uint32_t(&set);
+    cmd_size += vn_sizeof_uint32_t(&descriptorWriteCount);
+    if (pDescriptorWrites) {
+        cmd_size += vn_sizeof_array_size(descriptorWriteCount);
+        for (uint32_t i = 0; i < descriptorWriteCount; i++)
+            cmd_size += vn_sizeof_VkWriteDescriptorSet(&pDescriptorWrites[i]);
+    } else {
+        cmd_size += vn_sizeof_array_size(0);
+    }
+
+    return cmd_size;
+}
+
+static inline void vn_encode_vkCmdPushDescriptorSetKHR(struct vn_cs_encoder *enc, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdPushDescriptorSetKHR_EXT;
+
+    vn_encode_VkCommandTypeEXT(enc, &cmd_type);
+    vn_encode_VkFlags(enc, &cmd_flags);
+
+    vn_encode_VkCommandBuffer(enc, &commandBuffer);
+    vn_encode_VkPipelineBindPoint(enc, &pipelineBindPoint);
+    vn_encode_VkPipelineLayout(enc, &layout);
+    vn_encode_uint32_t(enc, &set);
+    vn_encode_uint32_t(enc, &descriptorWriteCount);
+    if (pDescriptorWrites) {
+        vn_encode_array_size(enc, descriptorWriteCount);
+        for (uint32_t i = 0; i < descriptorWriteCount; i++)
+            vn_encode_VkWriteDescriptorSet(enc, &pDescriptorWrites[i]);
+    } else {
+        vn_encode_array_size(enc, 0);
+    }
+}
+
+static inline size_t vn_sizeof_vkCmdPushDescriptorSetKHR_reply(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdPushDescriptorSetKHR_EXT;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type);
+
+    /* skip commandBuffer */
+    /* skip pipelineBindPoint */
+    /* skip layout */
+    /* skip set */
+    /* skip descriptorWriteCount */
+    /* skip pDescriptorWrites */
+
+    return cmd_size;
+}
+
+static inline void vn_decode_vkCmdPushDescriptorSetKHR_reply(struct vn_cs_decoder *dec, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites)
+{
+    VkCommandTypeEXT command_type;
+    vn_decode_VkCommandTypeEXT(dec, &command_type);
+    assert(command_type == VK_COMMAND_TYPE_vkCmdPushDescriptorSetKHR_EXT);
+
+    /* skip commandBuffer */
+    /* skip pipelineBindPoint */
+    /* skip layout */
+    /* skip set */
+    /* skip descriptorWriteCount */
+    /* skip pDescriptorWrites */
 }
 
 static inline size_t vn_sizeof_vkCmdSetDeviceMask(VkCommandBuffer commandBuffer, uint32_t deviceMask)
@@ -8379,6 +8648,48 @@ static inline void vn_submit_vkCmdDrawIndexed(struct vn_instance *vn_instance, V
     }
 }
 
+static inline void vn_submit_vkCmdDrawMultiEXT(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, struct vn_instance_submit_command *submit)
+{
+    uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
+    void *cmd_data = local_cmd_data;
+    size_t cmd_size = vn_sizeof_vkCmdDrawMultiEXT(commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride);
+    if (cmd_size > sizeof(local_cmd_data)) {
+        cmd_data = malloc(cmd_size);
+        if (!cmd_data)
+            cmd_size = 0;
+    }
+    const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkCmdDrawMultiEXT_reply(commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride) : 0;
+
+    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    if (cmd_size) {
+        vn_encode_vkCmdDrawMultiEXT(enc, cmd_flags, commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride);
+        vn_instance_submit_command(vn_instance, submit);
+        if (cmd_data != local_cmd_data)
+            free(cmd_data);
+    }
+}
+
+static inline void vn_submit_vkCmdDrawMultiIndexedEXT(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset, struct vn_instance_submit_command *submit)
+{
+    uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
+    void *cmd_data = local_cmd_data;
+    size_t cmd_size = vn_sizeof_vkCmdDrawMultiIndexedEXT(commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset);
+    if (cmd_size > sizeof(local_cmd_data)) {
+        cmd_data = malloc(cmd_size);
+        if (!cmd_data)
+            cmd_size = 0;
+    }
+    const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkCmdDrawMultiIndexedEXT_reply(commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset) : 0;
+
+    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    if (cmd_size) {
+        vn_encode_vkCmdDrawMultiIndexedEXT(enc, cmd_flags, commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset);
+        vn_instance_submit_command(vn_instance, submit);
+        if (cmd_data != local_cmd_data)
+            free(cmd_data);
+    }
+}
+
 static inline void vn_submit_vkCmdDrawIndirect(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride, struct vn_instance_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
@@ -9024,6 +9335,27 @@ static inline void vn_submit_vkCmdExecuteCommands(struct vn_instance *vn_instanc
     struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
     if (cmd_size) {
         vn_encode_vkCmdExecuteCommands(enc, cmd_flags, commandBuffer, commandBufferCount, pCommandBuffers);
+        vn_instance_submit_command(vn_instance, submit);
+        if (cmd_data != local_cmd_data)
+            free(cmd_data);
+    }
+}
+
+static inline void vn_submit_vkCmdPushDescriptorSetKHR(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, struct vn_instance_submit_command *submit)
+{
+    uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
+    void *cmd_data = local_cmd_data;
+    size_t cmd_size = vn_sizeof_vkCmdPushDescriptorSetKHR(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
+    if (cmd_size > sizeof(local_cmd_data)) {
+        cmd_data = malloc(cmd_size);
+        if (!cmd_data)
+            cmd_size = 0;
+    }
+    const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkCmdPushDescriptorSetKHR_reply(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites) : 0;
+
+    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    if (cmd_size) {
+        vn_encode_vkCmdPushDescriptorSetKHR(enc, cmd_flags, commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
         vn_instance_submit_command(vn_instance, submit);
         if (cmd_data != local_cmd_data)
             free(cmd_data);
@@ -10346,6 +10678,44 @@ static inline void vn_async_vkCmdDrawIndexed(struct vn_instance *vn_instance, Vk
     vn_submit_vkCmdDrawIndexed(vn_instance, 0, commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance, &submit);
 }
 
+static inline void vn_call_vkCmdDrawMultiEXT(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride)
+{
+    VN_TRACE_FUNC();
+
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdDrawMultiEXT(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride, &submit);
+    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    if (dec) {
+        vn_decode_vkCmdDrawMultiEXT_reply(dec, commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride);
+        vn_instance_free_command_reply(vn_instance, &submit);
+    }
+}
+
+static inline void vn_async_vkCmdDrawMultiEXT(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride)
+{
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdDrawMultiEXT(vn_instance, 0, commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride, &submit);
+}
+
+static inline void vn_call_vkCmdDrawMultiIndexedEXT(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset)
+{
+    VN_TRACE_FUNC();
+
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdDrawMultiIndexedEXT(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset, &submit);
+    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    if (dec) {
+        vn_decode_vkCmdDrawMultiIndexedEXT_reply(dec, commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset);
+        vn_instance_free_command_reply(vn_instance, &submit);
+    }
+}
+
+static inline void vn_async_vkCmdDrawMultiIndexedEXT(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawIndexedInfoEXT* pIndexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride, const int32_t* pVertexOffset)
+{
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdDrawMultiIndexedEXT(vn_instance, 0, commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset, &submit);
+}
+
 static inline void vn_call_vkCmdDrawIndirect(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
 {
     VN_TRACE_FUNC();
@@ -10933,6 +11303,25 @@ static inline void vn_async_vkCmdExecuteCommands(struct vn_instance *vn_instance
 {
     struct vn_instance_submit_command submit;
     vn_submit_vkCmdExecuteCommands(vn_instance, 0, commandBuffer, commandBufferCount, pCommandBuffers, &submit);
+}
+
+static inline void vn_call_vkCmdPushDescriptorSetKHR(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites)
+{
+    VN_TRACE_FUNC();
+
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdPushDescriptorSetKHR(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites, &submit);
+    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    if (dec) {
+        vn_decode_vkCmdPushDescriptorSetKHR_reply(dec, commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
+        vn_instance_free_command_reply(vn_instance, &submit);
+    }
+}
+
+static inline void vn_async_vkCmdPushDescriptorSetKHR(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites)
+{
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdPushDescriptorSetKHR(vn_instance, 0, commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites, &submit);
 }
 
 static inline void vn_call_vkCmdSetDeviceMask(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t deviceMask)

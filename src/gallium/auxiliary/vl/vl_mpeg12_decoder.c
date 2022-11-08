@@ -889,7 +889,6 @@ init_pipe_state(struct vl_mpeg12_decoder *dec)
    sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
    sampler.compare_mode = PIPE_TEX_COMPARE_NONE;
    sampler.compare_func = PIPE_FUNC_ALWAYS;
-   sampler.normalized_coords = 1;
    dec->sampler_ycbcr = dec->context->create_sampler_state(dec->context, &sampler);
    if (!dec->sampler_ycbcr)
       return false;

@@ -58,6 +58,7 @@ driOptionDescription __dri2ConfigOptions[] = {
 
       DRI_CONF_SECTION_PERFORMANCE
          DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_1)
+         DRI_CONF_BLOCK_ON_DEPLETED_BUFFERS(false)
       DRI_CONF_SECTION_END
 };
 
@@ -68,21 +69,21 @@ driOptionDescription __dri2ConfigOptions[] = {
 
 static void
 setupLoaderExtensions(__DRIscreen *psp,
-		      const __DRIextension **extensions)
+                      const __DRIextension **extensions)
 {
     int i;
 
     for (i = 0; extensions[i]; i++) {
-	if (strcmp(extensions[i]->name, __DRI_DRI2_LOADER) == 0)
-	    psp->dri2.loader = (__DRIdri2LoaderExtension *) extensions[i];
-	if (strcmp(extensions[i]->name, __DRI_IMAGE_LOOKUP) == 0)
-	    psp->dri2.image = (__DRIimageLookupExtension *) extensions[i];
-	if (strcmp(extensions[i]->name, __DRI_USE_INVALIDATE) == 0)
-	    psp->dri2.useInvalidate = (__DRIuseInvalidateExtension *) extensions[i];
+        if (strcmp(extensions[i]->name, __DRI_DRI2_LOADER) == 0)
+            psp->dri2.loader = (__DRIdri2LoaderExtension *) extensions[i];
+        if (strcmp(extensions[i]->name, __DRI_IMAGE_LOOKUP) == 0)
+            psp->dri2.image = (__DRIimageLookupExtension *) extensions[i];
+        if (strcmp(extensions[i]->name, __DRI_USE_INVALIDATE) == 0)
+            psp->dri2.useInvalidate = (__DRIuseInvalidateExtension *) extensions[i];
         if (strcmp(extensions[i]->name, __DRI_BACKGROUND_CALLABLE) == 0)
             psp->dri2.backgroundCallable = (__DRIbackgroundCallableExtension *) extensions[i];
-	if (strcmp(extensions[i]->name, __DRI_SWRAST_LOADER) == 0)
-	    psp->swrast_loader = (__DRIswrastLoaderExtension *) extensions[i];
+        if (strcmp(extensions[i]->name, __DRI_SWRAST_LOADER) == 0)
+            psp->swrast_loader = (__DRIswrastLoaderExtension *) extensions[i];
         if (strcmp(extensions[i]->name, __DRI_IMAGE_LOADER) == 0)
            psp->image.loader = (__DRIimageLoaderExtension *) extensions[i];
         if (strcmp(extensions[i]->name, __DRI_MUTABLE_RENDER_BUFFER_LOADER) == 0)
@@ -110,7 +111,7 @@ driCreateNewScreen2(int scrn, int fd,
 
     psp = calloc(1, sizeof(*psp));
     if (!psp)
-	return NULL;
+        return NULL;
 
     assert(driver_extensions);
     for (int i = 0; driver_extensions[i]; i++) {
@@ -141,8 +142,8 @@ driCreateNewScreen2(int scrn, int fd,
 
     *driver_configs = psp->driver->InitScreen(psp);
     if (*driver_configs == NULL) {
-	free(psp);
-	return NULL;
+        free(psp);
+        return NULL;
     }
 
     struct gl_constants consts = { 0 };
@@ -177,8 +178,8 @@ driCreateNewScreen2(int scrn, int fd,
 
 static __DRIscreen *
 dri2CreateNewScreen(int scrn, int fd,
-		    const __DRIextension **extensions,
-		    const __DRIconfig ***driver_configs, void *data)
+                    const __DRIextension **extensions,
+                    const __DRIconfig ***driver_configs, void *data)
 {
    return driCreateNewScreen2(scrn, fd, extensions,
                               galliumdrm_driver_extensions,
@@ -187,8 +188,8 @@ dri2CreateNewScreen(int scrn, int fd,
 
 static __DRIscreen *
 swkmsCreateNewScreen(int scrn, int fd,
-		     const __DRIextension **extensions,
-		     const __DRIconfig ***driver_configs, void *data)
+                     const __DRIextension **extensions,
+                     const __DRIconfig ***driver_configs, void *data)
 {
    return driCreateNewScreen2(scrn, fd, extensions,
                               dri_swrast_kms_driver_extensions,
@@ -224,17 +225,17 @@ driSWRastCreateNewScreen2(int scrn, const __DRIextension **extensions,
 static void driDestroyScreen(__DRIscreen *psp)
 {
     if (psp) {
-	/* No interaction with the X-server is possible at this point.  This
-	 * routine is called after XCloseDisplay, so there is no protocol
-	 * stream open to the X-server anymore.
-	 */
+        /* No interaction with the X-server is possible at this point.  This
+         * routine is called after XCloseDisplay, so there is no protocol
+         * stream open to the X-server anymore.
+         */
 
-	psp->driver->DestroyScreen(psp);
+        psp->driver->DestroyScreen(psp);
 
-	driDestroyOptionCache(&psp->optionCache);
-	driDestroyOptionInfo(&psp->optionInfo);
+        driDestroyOptionCache(&psp->optionCache);
+        driDestroyOptionInfo(&psp->optionInfo);
 
-	free(psp);
+        free(psp);
     }
 }
 
@@ -250,7 +251,7 @@ static const __DRIextension **driGetExtensions(__DRIscreen *psp)
 #define GLX_NONE                                                0x8000
 #define GLX_DONT_CARE                                           0xFFFFFFFF
 
-#define __ATTRIB(attrib, field) case attrib: *value = config->modes.field; break
+#define SIMPLE_CASE(attrib, field) case attrib: *value = config->modes.field; break
 
 /**
  * Return the value of a configuration attribute.  The attribute is
@@ -258,52 +259,52 @@ static const __DRIextension **driGetExtensions(__DRIscreen *psp)
  */
 static int
 driGetConfigAttribIndex(const __DRIconfig *config,
-			unsigned int index, unsigned int *value)
+                        unsigned int index, unsigned int *value)
 {
     switch (index + 1) {
-    __ATTRIB(__DRI_ATTRIB_BUFFER_SIZE,			rgbBits);
-    __ATTRIB(__DRI_ATTRIB_RED_SIZE,			redBits);
-    __ATTRIB(__DRI_ATTRIB_GREEN_SIZE,			greenBits);
-    __ATTRIB(__DRI_ATTRIB_BLUE_SIZE,			blueBits);
+    SIMPLE_CASE(__DRI_ATTRIB_BUFFER_SIZE, rgbBits);
+    SIMPLE_CASE(__DRI_ATTRIB_RED_SIZE, redBits);
+    SIMPLE_CASE(__DRI_ATTRIB_GREEN_SIZE, greenBits);
+    SIMPLE_CASE(__DRI_ATTRIB_BLUE_SIZE, blueBits);
     case __DRI_ATTRIB_LEVEL:
     case __DRI_ATTRIB_LUMINANCE_SIZE:
     case __DRI_ATTRIB_AUX_BUFFERS:
         *value = 0;
         break;
-    __ATTRIB(__DRI_ATTRIB_ALPHA_SIZE,			alphaBits);
+    SIMPLE_CASE(__DRI_ATTRIB_ALPHA_SIZE, alphaBits);
     case __DRI_ATTRIB_ALPHA_MASK_SIZE:
         /* I have no idea what this value was ever meant to mean, it's
          * never been set to anything, just say 0.
          */
         *value = 0;
         break;
-    __ATTRIB(__DRI_ATTRIB_DEPTH_SIZE,			depthBits);
-    __ATTRIB(__DRI_ATTRIB_STENCIL_SIZE,			stencilBits);
-    __ATTRIB(__DRI_ATTRIB_ACCUM_RED_SIZE,		accumRedBits);
-    __ATTRIB(__DRI_ATTRIB_ACCUM_GREEN_SIZE,		accumGreenBits);
-    __ATTRIB(__DRI_ATTRIB_ACCUM_BLUE_SIZE,		accumBlueBits);
-    __ATTRIB(__DRI_ATTRIB_ACCUM_ALPHA_SIZE,		accumAlphaBits);
+    SIMPLE_CASE(__DRI_ATTRIB_DEPTH_SIZE, depthBits);
+    SIMPLE_CASE(__DRI_ATTRIB_STENCIL_SIZE, stencilBits);
+    SIMPLE_CASE(__DRI_ATTRIB_ACCUM_RED_SIZE, accumRedBits);
+    SIMPLE_CASE(__DRI_ATTRIB_ACCUM_GREEN_SIZE, accumGreenBits);
+    SIMPLE_CASE(__DRI_ATTRIB_ACCUM_BLUE_SIZE, accumBlueBits);
+    SIMPLE_CASE(__DRI_ATTRIB_ACCUM_ALPHA_SIZE, accumAlphaBits);
     case __DRI_ATTRIB_SAMPLE_BUFFERS:
         *value = !!config->modes.samples;
         break;
-    __ATTRIB(__DRI_ATTRIB_SAMPLES,			samples);
+    SIMPLE_CASE(__DRI_ATTRIB_SAMPLES, samples);
     case __DRI_ATTRIB_RENDER_TYPE:
         /* no support for color index mode */
-	*value = __DRI_ATTRIB_RGBA_BIT;
+        *value = __DRI_ATTRIB_RGBA_BIT;
         if (config->modes.floatMode)
             *value |= __DRI_ATTRIB_FLOAT_BIT;
-	break;
+        break;
     case __DRI_ATTRIB_CONFIG_CAVEAT:
-	if (config->modes.accumRedBits != 0)
-	    *value = __DRI_ATTRIB_SLOW_BIT;
-	else
-	    *value = 0;
-	break;
+        if (config->modes.accumRedBits != 0)
+            *value = __DRI_ATTRIB_SLOW_BIT;
+        else
+            *value = 0;
+        break;
     case __DRI_ATTRIB_CONFORMANT:
         *value = GL_TRUE;
         break;
-    __ATTRIB(__DRI_ATTRIB_DOUBLE_BUFFER,		doubleBufferMode);
-    __ATTRIB(__DRI_ATTRIB_STEREO,			stereoMode);
+    SIMPLE_CASE(__DRI_ATTRIB_DOUBLE_BUFFER, doubleBufferMode);
+    SIMPLE_CASE(__DRI_ATTRIB_STEREO, stereoMode);
     case __DRI_ATTRIB_TRANSPARENT_TYPE:
     case __DRI_ATTRIB_TRANSPARENT_INDEX_VALUE: /* horrible bc hack */
         *value = GLX_NONE;
@@ -317,10 +318,10 @@ driGetConfigAttribIndex(const __DRIconfig *config,
     case __DRI_ATTRIB_FLOAT_MODE:
         *value = config->modes.floatMode;
         break;
-    __ATTRIB(__DRI_ATTRIB_RED_MASK,			redMask);
-    __ATTRIB(__DRI_ATTRIB_GREEN_MASK,			greenMask);
-    __ATTRIB(__DRI_ATTRIB_BLUE_MASK,			blueMask);
-    __ATTRIB(__DRI_ATTRIB_ALPHA_MASK,			alphaMask);
+    SIMPLE_CASE(__DRI_ATTRIB_RED_MASK, redMask);
+    SIMPLE_CASE(__DRI_ATTRIB_GREEN_MASK, greenMask);
+    SIMPLE_CASE(__DRI_ATTRIB_BLUE_MASK, blueMask);
+    SIMPLE_CASE(__DRI_ATTRIB_ALPHA_MASK, alphaMask);
     case __DRI_ATTRIB_MAX_PBUFFER_WIDTH:
     case __DRI_ATTRIB_MAX_PBUFFER_HEIGHT:
     case __DRI_ATTRIB_MAX_PBUFFER_PIXELS:
@@ -329,7 +330,7 @@ driGetConfigAttribIndex(const __DRIconfig *config,
     case __DRI_ATTRIB_VISUAL_SELECT_GROUP:
         *value = 0;
         break;
-    __ATTRIB(__DRI_ATTRIB_SWAP_METHOD,			swapMethod);
+    SIMPLE_CASE(__DRI_ATTRIB_SWAP_METHOD, swapMethod);
     case __DRI_ATTRIB_MAX_SWAP_INTERVAL:
         *value = INT_MAX;
         break;
@@ -349,14 +350,14 @@ driGetConfigAttribIndex(const __DRIconfig *config,
                  __DRI_ATTRIB_TEXTURE_2D_BIT |
                  __DRI_ATTRIB_TEXTURE_RECTANGLE_BIT;
         break;
-    __ATTRIB(__DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE,	sRGBCapable);
+    SIMPLE_CASE(__DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE, sRGBCapable);
     case __DRI_ATTRIB_MUTABLE_RENDER_BUFFER:
         *value = GL_FALSE;
         break;
-    __ATTRIB(__DRI_ATTRIB_RED_SHIFT,			redShift);
-    __ATTRIB(__DRI_ATTRIB_GREEN_SHIFT,			greenShift);
-    __ATTRIB(__DRI_ATTRIB_BLUE_SHIFT,			blueShift);
-    __ATTRIB(__DRI_ATTRIB_ALPHA_SHIFT,			alphaShift);
+    SIMPLE_CASE(__DRI_ATTRIB_RED_SHIFT, redShift);
+    SIMPLE_CASE(__DRI_ATTRIB_GREEN_SHIFT, greenShift);
+    SIMPLE_CASE(__DRI_ATTRIB_BLUE_SHIFT, blueShift);
+    SIMPLE_CASE(__DRI_ATTRIB_ALPHA_SHIFT, alphaShift);
     default:
         /* XXX log an error or smth */
         return GL_FALSE;
@@ -373,7 +374,7 @@ driGetConfigAttribIndex(const __DRIconfig *config,
  */
 static int
 driGetConfigAttrib(const __DRIconfig *config,
-		   unsigned int attrib, unsigned int *value)
+                   unsigned int attrib, unsigned int *value)
 {
     return driGetConfigAttribIndex(config, attrib - 1, value);
 }
@@ -387,7 +388,7 @@ driGetConfigAttrib(const __DRIconfig *config,
  */
 static int
 driIndexConfigAttrib(const __DRIconfig *config, int index,
-		     unsigned int *attrib, unsigned int *value)
+                     unsigned int *attrib, unsigned int *value)
 {
     if (driGetConfigAttribIndex(config, index, value)) {
         *attrib = index + 1;
@@ -465,40 +466,40 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
     assert((num_attribs == 0) || (attribs != NULL));
 
     if (!(screen->api_mask & (1 << api))) {
-	*error = __DRI_CTX_ERROR_BAD_API;
-	return NULL;
+        *error = __DRI_CTX_ERROR_BAD_API;
+        return NULL;
     }
 
     switch (api) {
     case __DRI_API_OPENGL:
-	mesa_api = API_OPENGL_COMPAT;
-	break;
+        mesa_api = API_OPENGL_COMPAT;
+        break;
     case __DRI_API_GLES:
-	mesa_api = API_OPENGLES;
-	break;
+        mesa_api = API_OPENGLES;
+        break;
     case __DRI_API_GLES2:
     case __DRI_API_GLES3:
-	mesa_api = API_OPENGLES2;
-	break;
+        mesa_api = API_OPENGLES2;
+        break;
     case __DRI_API_OPENGL_CORE:
         mesa_api = API_OPENGL_CORE;
         break;
     default:
-	*error = __DRI_CTX_ERROR_BAD_API;
-	return NULL;
+        *error = __DRI_CTX_ERROR_BAD_API;
+        return NULL;
     }
 
     for (unsigned i = 0; i < num_attribs; i++) {
-	switch (attribs[i * 2]) {
-	case __DRI_CTX_ATTRIB_MAJOR_VERSION:
+        switch (attribs[i * 2]) {
+        case __DRI_CTX_ATTRIB_MAJOR_VERSION:
             ctx_config.major_version = attribs[i * 2 + 1];
-	    break;
-	case __DRI_CTX_ATTRIB_MINOR_VERSION:
-	    ctx_config.minor_version = attribs[i * 2 + 1];
-	    break;
-	case __DRI_CTX_ATTRIB_FLAGS:
-	    ctx_config.flags = attribs[i * 2 + 1];
-	    break;
+            break;
+        case __DRI_CTX_ATTRIB_MINOR_VERSION:
+            ctx_config.minor_version = attribs[i * 2 + 1];
+            break;
+        case __DRI_CTX_ATTRIB_FLAGS:
+            ctx_config.flags = attribs[i * 2 + 1];
+            break;
         case __DRI_CTX_ATTRIB_RESET_STRATEGY:
             if (attribs[i * 2 + 1] != __DRI_CTX_RESET_NO_NOTIFICATION) {
                 ctx_config.attribute_mask |=
@@ -509,10 +510,10 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
                     ~__DRIVER_CONTEXT_ATTRIB_RESET_STRATEGY;
             }
             break;
-	case __DRI_CTX_ATTRIB_PRIORITY:
+        case __DRI_CTX_ATTRIB_PRIORITY:
             ctx_config.attribute_mask |= __DRIVER_CONTEXT_ATTRIB_PRIORITY;
-	    ctx_config.priority = attribs[i * 2 + 1];
-	    break;
+            ctx_config.priority = attribs[i * 2 + 1];
+            break;
         case __DRI_CTX_ATTRIB_RELEASE_BEHAVIOR:
             if (attribs[i * 2 + 1] != __DRI_CTX_RELEASE_BEHAVIOR_FLUSH) {
                 ctx_config.attribute_mask |=
@@ -533,14 +534,21 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
                   ~__DRIVER_CONTEXT_ATTRIB_NO_ERROR;
             }
             break;
-	default:
-	    /* We can't create a context that satisfies the requirements of an
-	     * attribute that we don't understand.  Return failure.
-	     */
-	    assert(!"Should not get here.");
-	    *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
-	    return NULL;
-	}
+        case __DRI_CTX_ATTRIB_PROTECTED:
+           if (attribs[i * 2 + 1]) {
+              ctx_config.attribute_mask |= __DRIVER_CONTEXT_ATTRIB_PROTECTED;
+           } else {
+              ctx_config.attribute_mask &= ~__DRIVER_CONTEXT_ATTRIB_PROTECTED;
+           }
+           break;
+        default:
+            /* We can't create a context that satisfies the requirements of an
+             * attribute that we don't understand.  Return failure.
+             */
+            assert(!"Should not get here.");
+            *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+            return NULL;
+        }
     }
 
     /* The specific Mesa driver may not support the GL_ARB_compatibilty
@@ -585,8 +593,8 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
         && mesa_api != API_OPENGL_CORE
         && (ctx_config.flags & ~(__DRI_CTX_FLAG_DEBUG |
                                  __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS))) {
-	*error = __DRI_CTX_ERROR_BAD_FLAG;
-	return NULL;
+        *error = __DRI_CTX_ERROR_BAD_FLAG;
+        return NULL;
     }
 
     /* There are no forward-compatible contexts before OpenGL 3.0.  The
@@ -609,8 +617,8 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
                                     | __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS
                                     | __DRI_CTX_FLAG_RESET_ISOLATION);
     if (ctx_config.flags & ~allowed_flags) {
-	*error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
-	return NULL;
+        *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
+        return NULL;
     }
 
     if (!validate_context_version(screen, mesa_api,
@@ -621,8 +629,8 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
 
     context = calloc(1, sizeof *context);
     if (!context) {
-	*error = __DRI_CTX_ERROR_NO_MEMORY;
-	return NULL;
+        *error = __DRI_CTX_ERROR_NO_MEMORY;
+        return NULL;
     }
 
     context->loaderPrivate = data;
@@ -671,8 +679,8 @@ static void
 driDestroyContext(__DRIcontext *pcp)
 {
     if (pcp) {
-	dri_destroy_context(pcp);
-	free(pcp);
+        dri_destroy_context(pcp);
+        free(pcp);
     }
 }
 
@@ -702,8 +710,8 @@ static void dri_put_drawable(__DRIdrawable *pdp);
  * function.
  */
 static int driBindContext(__DRIcontext *pcp,
-			  __DRIdrawable *pdp,
-			  __DRIdrawable *prp)
+                          __DRIdrawable *pdp,
+                          __DRIdrawable *prp)
 {
     /*
     ** Assume error checking is done properly in glXMakeCurrent before
@@ -711,17 +719,17 @@ static int driBindContext(__DRIcontext *pcp,
     */
 
     if (!pcp)
-	return GL_FALSE;
+        return GL_FALSE;
 
     /* Bind the drawable to the context */
     pcp->driDrawablePriv = pdp;
     pcp->driReadablePriv = prp;
     if (pdp) {
-	pdp->driContextPriv = pcp;
-	dri_get_drawable(pdp);
+        pdp->driContextPriv = pcp;
+        dri_get_drawable(pdp);
     }
     if (prp && pdp != prp) {
-	dri_get_drawable(prp);
+        dri_get_drawable(prp);
     }
 
     return dri_make_current(pcp, pdp, prp);
@@ -754,7 +762,7 @@ static int driUnbindContext(__DRIcontext *pcp)
     */
 
     if (pcp == NULL)
-	return GL_FALSE;
+        return GL_FALSE;
 
     /*
     ** Call dri_unbind_context before checking for valid drawables
@@ -767,23 +775,23 @@ static int driUnbindContext(__DRIcontext *pcp)
 
     /* already unbound */
     if (!pdp && !prp)
-	return GL_TRUE;
+        return GL_TRUE;
 
     assert(pdp);
     if (pdp->refcount == 0) {
-	/* ERROR!!! */
-	return GL_FALSE;
+        /* ERROR!!! */
+        return GL_FALSE;
     }
 
     dri_put_drawable(pdp);
 
     if (prp != pdp) {
-	if (prp->refcount == 0) {
-	    /* ERROR!!! */
-	    return GL_FALSE;
-	}
+        if (prp->refcount == 0) {
+            /* ERROR!!! */
+            return GL_FALSE;
+        }
 
-	dri_put_drawable(prp);
+        dri_put_drawable(prp);
     }
 
     pcp->driDrawablePriv = NULL;
@@ -803,12 +811,12 @@ static void dri_get_drawable(__DRIdrawable *pdp)
 static void dri_put_drawable(__DRIdrawable *pdp)
 {
     if (pdp) {
-	pdp->refcount--;
-	if (pdp->refcount)
-	    return;
+        pdp->refcount--;
+        if (pdp->refcount)
+            return;
 
-	pdp->driScreenPriv->driver->DestroyBuffer(pdp);
-	free(pdp);
+        pdp->driScreenPriv->driver->DestroyBuffer(pdp);
+        free(pdp);
     }
 }
 
@@ -823,7 +831,7 @@ driCreateNewDrawable(__DRIscreen *screen,
 
     pdraw = malloc(sizeof *pdraw);
     if (!pdraw)
-	return NULL;
+        return NULL;
 
     pdraw->loaderPrivate = data;
 
@@ -865,8 +873,8 @@ driDestroyDrawable(__DRIdrawable *pdp)
 
 static __DRIbuffer *
 dri2AllocateBuffer(__DRIscreen *screen,
-		   unsigned int attachment, unsigned int format,
-		   int width, int height)
+                   unsigned int attachment, unsigned int format,
+                   int width, int height)
 {
     return screen->driver->AllocateBuffer(screen, attachment, format,
                                           width, height);

@@ -44,10 +44,8 @@ pack_header = """%(license)s
 #define %(guard)s
 
 #include <stdio.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <assert.h>
-#include <math.h>
+
+#include "util/bitpack_helpers.h"
 
 #ifndef __gen_validate_value
 #define __gen_validate_value(x)
@@ -61,67 +59,6 @@ pack_header = """%(license)s
 #else
 #define NDEBUG_UNUSED
 #endif
-
-union __intel_value {
-   float f;
-   uint32_t dw;
-};
-
-static inline __attribute__((always_inline)) uint64_t
-__gen_mbo(uint32_t start, uint32_t end)
-{
-   return (~0ull >> (64 - (end - start + 1))) << start;
-}
-
-static inline __attribute__((always_inline)) uint64_t
-__gen_uint(uint64_t v, uint32_t start, NDEBUG_UNUSED uint32_t end)
-{
-   __gen_validate_value(v);
-
-#ifndef NDEBUG
-   const int width = end - start + 1;
-   if (width < 64) {
-      const uint64_t max = (1ull << width) - 1;
-      assert(v <= max);
-   }
-#endif
-
-   return v << start;
-}
-
-static inline __attribute__((always_inline)) uint64_t
-__gen_uint_nonzero(uint64_t v, uint32_t start, uint32_t end)
-{
-   assert(v != 0ull);
-   return __gen_uint(v, start, end);
-}
-
-static inline __attribute__((always_inline)) uint64_t
-__gen_sint(int64_t v, uint32_t start, uint32_t end)
-{
-   const int width = end - start + 1;
-
-   __gen_validate_value(v);
-
-#ifndef NDEBUG
-   if (width < 64) {
-      const int64_t max = (1ll << (width - 1)) - 1;
-      const int64_t min = -(1ll << (width - 1));
-      assert(min <= v && v <= max);
-   }
-#endif
-
-   const uint64_t mask = ~0ull >> (64 - width);
-
-   return (v & mask) << start;
-}
-
-static inline __attribute__((always_inline)) uint64_t
-__gen_sint_nonzero(int64_t v, uint32_t start, uint32_t end)
-{
-   assert(v != 0ll);
-   return __gen_sint(v, start, end);
-}
 
 static inline __attribute__((always_inline)) uint64_t
 __gen_offset(uint64_t v, NDEBUG_UNUSED uint32_t start, NDEBUG_UNUSED uint32_t end)
@@ -157,71 +94,6 @@ __gen_address(__gen_user_data *data, void *location,
    } else {
       return addr_u64;
    }
-}
-
-static inline __attribute__((always_inline)) uint32_t
-__gen_float(float v)
-{
-   __gen_validate_value(v);
-   return ((union __intel_value) { .f = (v) }).dw;
-}
-
-static inline __attribute__((always_inline)) uint32_t
-__gen_float_nonzero(float v)
-{
-   assert(v != 0.0f);
-   return __gen_float(v);
-}
-
-static inline __attribute__((always_inline)) uint64_t
-__gen_sfixed(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
-{
-   __gen_validate_value(v);
-
-   const float factor = (1 << fract_bits);
-
-#ifndef NDEBUG
-   const float max = ((1 << (end - start)) - 1) / factor;
-   const float min = -(1 << (end - start)) / factor;
-   assert(min <= v && v <= max);
-#endif
-
-   const int64_t int_val = llroundf(v * factor);
-   const uint64_t mask = ~0ull >> (64 - (end - start + 1));
-
-   return (int_val & mask) << start;
-}
-
-static inline __attribute__((always_inline)) uint64_t
-__gen_sfixed_nonzero(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
-{
-   assert(v != 0.0f);
-   return __gen_sfixed(v, start, end, fract_bits);
-}
-
-static inline __attribute__((always_inline)) uint64_t
-__gen_ufixed(float v, uint32_t start, NDEBUG_UNUSED uint32_t end, uint32_t fract_bits)
-{
-   __gen_validate_value(v);
-
-   const float factor = (1 << fract_bits);
-
-#ifndef NDEBUG
-   const float max = ((1 << (end - start + 1)) - 1) / factor;
-   const float min = 0.0f;
-   assert(min <= v && v <= max);
-#endif
-
-   const uint64_t uint_val = llroundf(v * factor);
-
-   return uint_val << start;
-}
-
-static inline __attribute__((always_inline)) uint64_t
-__gen_ufixed_nonzero(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
-{
-   assert(v != 0.0f);
-   return __gen_ufixed(v, start, end, fract_bits);
 }
 
 #ifndef __gen_address_type
@@ -486,37 +358,37 @@ class Group(object):
                 nz = "_nonzero" if field.nonzero else ""
 
                 if field.type == "mbo":
-                    non_address_fields.append("__gen_mbo(%d, %d)" % \
+                    non_address_fields.append("util_bitpack_ones(%d, %d)" % \
                         (field.start - dword_start, field.end - dword_start))
                 elif field.type == "mbz":
                     assert not field.nonzero
                 elif field.type == "address":
                     pass
                 elif field.type == "uint":
-                    non_address_fields.append("__gen_uint%s(values->%s, %d, %d)" % \
+                    non_address_fields.append("util_bitpack_uint%s(values->%s, %d, %d)" % \
                         (nz, name, field.start - dword_start, field.end - dword_start))
                 elif field.is_enum_type():
-                    non_address_fields.append("__gen_uint%s(values->%s, %d, %d)" % \
+                    non_address_fields.append("util_bitpack_uint%s(values->%s, %d, %d)" % \
                         (nz, name, field.start - dword_start, field.end - dword_start))
                 elif field.type == "int":
-                    non_address_fields.append("__gen_sint%s(values->%s, %d, %d)" % \
+                    non_address_fields.append("util_bitpack_sint%s(values->%s, %d, %d)" % \
                         (nz, name, field.start - dword_start, field.end - dword_start))
                 elif field.type == "bool":
-                    non_address_fields.append("__gen_uint%s(values->%s, %d, %d)" % \
+                    non_address_fields.append("util_bitpack_uint%s(values->%s, %d, %d)" % \
                         (nz, name, field.start - dword_start, field.end - dword_start))
                 elif field.type == "float":
-                    non_address_fields.append("__gen_float%s(values->%s)" % (nz, name))
+                    non_address_fields.append("util_bitpack_float%s(values->%s)" % (nz, name))
                 elif field.type == "offset":
                     non_address_fields.append("__gen_offset%s(values->%s, %d, %d)" % \
                         (nz, name, field.start - dword_start, field.end - dword_start))
                 elif field.type == 'ufixed':
-                    non_address_fields.append("__gen_ufixed%s(values->%s, %d, %d, %d)" % \
+                    non_address_fields.append("util_bitpack_ufixed%s(values->%s, %d, %d, %d)" % \
                         (nz, name, field.start - dword_start, field.end - dword_start, field.fractional_size))
                 elif field.type == 'sfixed':
-                    non_address_fields.append("__gen_sfixed%s(values->%s, %d, %d, %d)" % \
+                    non_address_fields.append("util_bitpack_sfixed%s(values->%s, %d, %d, %d)" % \
                         (nz, name, field.start - dword_start, field.end - dword_start, field.fractional_size))
                 elif field.is_struct_type():
-                    non_address_fields.append("__gen_uint(v%d_%d, %d, %d)" % \
+                    non_address_fields.append("util_bitpack_uint(v%d_%d, %d, %d)" % \
                         (index, field_index, field.start - dword_start, field.end - dword_start))
                     field_index = field_index + 1
                 else:

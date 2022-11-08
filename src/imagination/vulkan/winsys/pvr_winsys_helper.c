@@ -404,8 +404,6 @@ pvr_winsys_helper_fill_static_memory(struct pvr_winsys *const ws,
    pvr_setup_static_pixel_event_program(pds_ptr,
                                         pds_vma->heap->static_data_offsets.eot);
 
-   /* TODO: Complete control block copying work. */
-
    ws->ops->buffer_unmap(usc_vma->bo);
    ws->ops->buffer_unmap(pds_vma->bo);
    ws->ops->buffer_unmap(general_vma->bo);

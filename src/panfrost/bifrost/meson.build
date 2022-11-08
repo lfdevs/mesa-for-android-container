@@ -29,7 +29,6 @@ libpanfrost_bifrost_files = files(
   'bi_liveness.c',
   'bi_lower_divergent_indirects.c',
   'bi_lower_swizzle.c',
-  'bi_lower_xfb.c',
   'bi_print.c',
   'bi_opt_constant_fold.c',
   'bi_opt_copy_prop.c',
@@ -128,8 +127,7 @@ bifrost_nir_algebraic_c = custom_target(
   input : 'bifrost_nir_algebraic.py',
   output : 'bifrost_nir_algebraic.c',
   command : [
-    prog_python, '@INPUT@',
-    '-p', join_paths(meson.source_root(), 'src/compiler/nir/'),
+    prog_python, '@INPUT@', '-p', dir_compiler_nir,
   ],
   capture : true,
   depend_files : nir_algebraic_depends,
@@ -165,6 +163,7 @@ if with_tests
       files(
         'test/test-constant-fold.cpp',
         'test/test-dual-texture.cpp',
+        'test/test-lower-swizzle.cpp',
         'test/test-message-preload.cpp',
 	'test/test-optimizer.cpp',
 	'test/test-pack-formats.cpp',

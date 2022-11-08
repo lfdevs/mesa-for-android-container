@@ -191,7 +191,6 @@ dri_destroy_buffer(__DRIdrawable * dPriv)
 {
    struct dri_drawable *drawable = dri_drawable(dPriv);
    struct dri_screen *screen = drawable->screen;
-   struct st_api *stapi = screen->st_api;
    int i;
 
    for (i = 0; i < ST_ATTACHMENT_COUNT; i++)
@@ -203,7 +202,7 @@ dri_destroy_buffer(__DRIdrawable * dPriv)
          &drawable->throttle_fence, NULL);
 
    /* Notify the st manager that this drawable is no longer valid */
-   stapi->destroy_drawable(stapi, &drawable->base);
+   st_api_destroy_drawable(&drawable->base);
 
    FREE(drawable->damage_rects);
    FREE(drawable);
@@ -414,6 +413,12 @@ notify_before_flush_cb(void* _args)
    struct notify_before_flush_cb_args *args = (struct notify_before_flush_cb_args *) _args;
    struct st_context_iface *st = args->ctx->st;
    struct pipe_context *pipe = st->pipe;
+
+   /* Wait for glthread to finish because we can't use pipe_context from
+    * multiple threads.
+    */
+   if (st->thread_finish)
+      st->thread_finish(st);
 
    if (args->drawable->stvis.samples > 1 &&
        (args->reason == __DRI2_THROTTLE_SWAPBUFFER ||

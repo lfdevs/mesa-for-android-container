@@ -55,9 +55,9 @@ BASE_ARGS_GN_FILE="${SCRIPT_DIR}/build-skqp_base.gn"
 SKQP_ARCH=${SKQP_ARCH:-x64}
 SKIA_DIR=${SKIA_DIR:-$(mktemp -d)}
 SKQP_OUT_DIR=${SKIA_DIR}/out/${SKQP_ARCH}
-SKQP_INSTALL_DIR=/skqp
+SKQP_INSTALL_DIR=${SKQP_INSTALL_DIR:-/skqp}
 SKQP_ASSETS_DIR="${SKQP_INSTALL_DIR}/assets"
-SKQP_BINARIES=(skqp)
+SKQP_BINARIES=(skqp list_gpu_unit_tests list_gms)
 
 download_skia_source
 

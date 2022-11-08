@@ -124,9 +124,10 @@
 #include "shaderobj.h"
 #include "shaderimage.h"
 #include "state.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/disk_cache.h"
 #include "util/strtod.h"
+#include "util/u_call_once.h"
 #include "stencil.h"
 #include "shaderimage.h"
 #include "texcompress_s3tc.h"
@@ -239,20 +240,6 @@ one_time_init(const char *extensions_override)
 }
 
 /**
- * One-time initialization flag
- *
- * \sa Used by _mesa_initialize().
- */
-static bool init_done = false;
-static mtx_t init_once_lock;
-static once_flag init_once = ONCE_FLAG_INIT;
-
-static void init_lock(void) {
-   mtx_init(&init_once_lock, mtx_plain);
-}
-
-
-/**
  * Calls all the various one-time-init functions in Mesa.
  *
  * While holding a global mutex lock, calls several initialization functions,
@@ -262,14 +249,9 @@ static void init_lock(void) {
 void
 _mesa_initialize(const char *extensions_override)
 {
-   call_once(&init_once, init_lock);
-
-   mtx_lock(&init_once_lock);
-   if (!init_done) {
-      one_time_init(extensions_override);
-      init_done = true;
-   }
-   mtx_unlock(&init_once_lock);
+   static util_once_flag once = UTIL_ONCE_FLAG_INIT;
+   util_call_once_data(&once,
+      (util_call_once_data_func)one_time_init, extensions_override);
 }
 
 
@@ -480,12 +462,6 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
    consts->GLSLVersionCompat = consts->GLSLVersion;
 
    consts->GLSLLowerConstArrays = true;
-
-   /* Assume that if GLSL 1.30+ (or GLSL ES 3.00+) is supported that
-    * gl_VertexID is implemented using a native hardware register with OpenGL
-    * semantics.
-    */
-   consts->VertexID_is_zero_based = false;
 
    /* GL_ARB_draw_buffers */
    consts->MaxDrawBuffers = MAX_DRAW_BUFFERS;
@@ -738,7 +714,7 @@ init_attrib_groups(struct gl_context *ctx)
    ctx->ErrorValue = GL_NO_ERROR;
    ctx->ShareGroupReset = false;
    ctx->VertexProgram._VaryingInputs = VERT_BIT_ALL;
-   ctx->IntelBlackholeRender = env_var_as_boolean("INTEL_BLACKHOLE_DEFAULT", false);
+   ctx->IntelBlackholeRender = debug_get_bool_option("INTEL_BLACKHOLE_DEFAULT", false);
 
    return GL_TRUE;
 }
@@ -934,14 +910,14 @@ void
 _mesa_initialize_dispatch_tables(struct gl_context *ctx)
 {
    /* Do the code-generated setup of the exec table in api_exec_init.c. */
-   _mesa_initialize_exec_table(ctx);
+   _mesa_init_dispatch(ctx);
 
    if (ctx->Save)
-      _mesa_initialize_save_table(ctx);
+      _mesa_init_dispatch_save(ctx);
 
-   vbo_install_exec_vtxfmt(ctx);
+   vbo_init_dispatch_begin_end(ctx);
    if (ctx->API == API_OPENGL_COMPAT)
-      _mesa_install_save_vtxfmt(ctx);
+      _mesa_init_dispatch_save_begin_end(ctx);
 }
 
 /**
@@ -1194,6 +1170,7 @@ _mesa_free_context_data(struct gl_context *ctx, bool destroy_debug_output)
    }
 
    free(ctx->Const.SpirVExtensions);
+   free(ctx->tmp_draws);
 }
 
 
@@ -1493,11 +1470,6 @@ _mesa_make_current( struct gl_context *newCtx,
       st_glFlush(curCtx, 0);
    }
 
-   /* Call this periodically to detect when the user has begun using
-    * GL rendering from multiple threads.
-    */
-   _glapi_check_multithread();
-
    if (!newCtx) {
       _glapi_set_dispatch(NULL);  /* none current */
       /* We need old ctx to correctly release Draw/ReadBuffer
@@ -1611,25 +1583,6 @@ struct gl_context *
 _mesa_get_current_context( void )
 {
    return (struct gl_context *) _glapi_get_context();
-}
-
-
-/**
- * Get context's current API dispatch table.
- *
- * It'll either be the immediate-mode execute dispatcher, the display list
- * compile dispatcher, or the thread marshalling dispatcher.
- *
- * \param ctx GL context.
- *
- * \return pointer to dispatch_table.
- *
- * Simply returns __struct gl_contextRec::CurrentClientDispatch.
- */
-struct _glapi_table *
-_mesa_get_dispatch(struct gl_context *ctx)
-{
-   return ctx->CurrentClientDispatch;
 }
 
 /*@}*/

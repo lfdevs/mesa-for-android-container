@@ -34,7 +34,7 @@
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
 #include "spirv/nir_spirv.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/mesa-sha1.h"
 #include "util/u_atomic.h"
 #include "vk_format.h"

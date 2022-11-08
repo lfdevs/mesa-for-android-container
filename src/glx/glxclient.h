@@ -244,6 +244,9 @@ struct glx_context_vtable {
    int (*interop_export_object)(struct glx_context *ctx,
                                 struct mesa_glinterop_export_in *in,
                                 struct mesa_glinterop_export_out *out);
+   int (*interop_flush_objects)(struct glx_context *ctx,
+                                unsigned count, struct mesa_glinterop_export_in *objects,
+                                GLsync *sync);
 };
 
 /**
@@ -343,9 +346,8 @@ struct glx_context
      */
    Bool isDirect;
 
-#if defined(GLX_DIRECT_RENDERING) && defined(GLX_USE_APPLEGL)
+   /* Backend private state for the context */
    void *driContext;
-#endif
 
     /**
      * \c dpy of current display for this context.  Will be \c NULL if not

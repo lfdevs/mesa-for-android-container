@@ -14,6 +14,11 @@ main(int argc, char *argv[])
          continue;
 
       enum pipe_format roundtrip = vk_format_to_pipe_format(vk_fmt);
+
+      /* This one gets aliased to ETC2 rather than round tripping. */
+      if (pipe_fmt == PIPE_FORMAT_ETC1_RGB8 && roundtrip == PIPE_FORMAT_ETC2_RGB8)
+         continue;
+
       if (roundtrip != pipe_fmt) {
          fprintf(stderr, "Format does not roundtrip\n"
                          "\tgot: %s\n"

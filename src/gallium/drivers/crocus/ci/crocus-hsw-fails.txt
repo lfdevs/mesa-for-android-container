@@ -39,8 +39,6 @@ spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
 
 spec@arb_direct_state_access@gettextureimage-formats init-by-rendering,Fail
 
-spec@amd_performance_monitor@measure,Crash
-
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-vs-non-uniform-control-flow-ssbo,Fail
 
 spec@arb_indirect_parameters@conditional-render,Fail
@@ -160,8 +158,6 @@ spec@glsl-1.50@execution@geometry@primitive-types gl_line_loop,Fail
 # Compat mode failures
 spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
 spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail
-
-spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 
 spec@khr_texture_compression_astc@miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp@sRGB decode full precision,Fail
@@ -962,3 +958,6 @@ spec@nv_copy_image@nv_copy_image-formats --samples=8@Source: GL_RGBA8UI/Destinat
 spec@nv_copy_image@nv_copy_image-formats --samples=8@Source: GL_RGBA8UI/Destination: GL_RGBA8I,Fail
 spec@nv_copy_image@nv_copy_image-formats --samples=8@Source: GL_RGBA8_SNORM/Destination: GL_RG16I,Fail
 spec@nv_copy_image@nv_copy_image-formats --samples=8@Source: GL_RGBA8_SNORM/Destination: GL_RGBA8I,Fail
+
+# See issue #7152
+spec@ext_transform_feedback@builtin-varyings gl_culldistance,Fail

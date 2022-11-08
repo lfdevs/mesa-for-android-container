@@ -187,7 +187,6 @@ struct etna_context {
       uint64_t rs_operations;
    } stats;
 
-   struct util_debug_callback debug;
    int in_fence_fd;
 
    /* list of accumulated HW queries */

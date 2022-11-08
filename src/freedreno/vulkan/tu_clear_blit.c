@@ -432,6 +432,7 @@ build_blit_vs_shader(void)
    nir_builder _b =
       nir_builder_init_simple_shader(MESA_SHADER_VERTEX, NULL, "blit vs");
    nir_builder *b = &_b;
+   b->shader->info.internal = true;
 
    nir_variable *out_pos =
       nir_variable_create(b->shader, nir_var_shader_out, glsl_vec4_type(),
@@ -476,6 +477,7 @@ build_clear_vs_shader(void)
    nir_builder _b =
       nir_builder_init_simple_shader(MESA_SHADER_VERTEX, NULL, "blit vs");
    nir_builder *b = &_b;
+   b->shader->info.internal = true;
 
    nir_variable *out_pos =
       nir_variable_create(b->shader, nir_var_shader_out, glsl_vec4_type(),
@@ -512,6 +514,7 @@ build_blit_fs_shader(bool zscale)
       nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, NULL,
                                      zscale ? "zscale blit fs" : "blit fs");
    nir_builder *b = &_b;
+   b->shader->info.internal = true;
 
    nir_variable *out_color =
       nir_variable_create(b->shader, nir_var_shader_out, glsl_vec4_type(),
@@ -562,6 +565,7 @@ build_ms_copy_fs_shader(void)
       nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, NULL,
                                      "multisample copy fs");
    nir_builder *b = &_b;
+   b->shader->info.internal = true;
 
    nir_variable *out_color =
       nir_variable_create(b->shader, nir_var_shader_out, glsl_vec4_type(),
@@ -617,6 +621,7 @@ build_clear_fs_shader(unsigned mrts)
       nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, NULL,
                                      "mrt%u clear fs", mrts);
    nir_builder *b = &_b;
+   b->shader->info.internal = true;
 
    for (unsigned i = 0; i < mrts; i++) {
       nir_variable *out_color =
@@ -755,7 +760,7 @@ r3d_common(struct tu_cmd_buffer *cmd, struct tu_cs *cs, bool blit,
    }
    tu_cs_emit_regs(cs, A6XX_VFD_MULTIVIEW_CNTL());
 
-   tu6_emit_vpc(cs, vs, NULL, NULL, NULL, fs, 0);
+   tu6_emit_vpc(cs, vs, NULL, NULL, NULL, fs);
 
    /* REPL_MODE for varying with RECTLIST (2 vertices only) */
    tu_cs_emit_regs(cs, A6XX_VPC_VARYING_INTERP_MODE(0, 0));
@@ -797,8 +802,7 @@ r3d_common(struct tu_cmd_buffer *cmd, struct tu_cs *cs, bool blit,
       }
    }
 
-   cmd->state.line_mode = RECTANGULAR;
-   tu6_emit_msaa(cs, samples, cmd->state.line_mode);
+   tu6_emit_msaa(cs, samples, false);
 }
 
 static void
@@ -904,7 +908,7 @@ r3d_src_common(struct tu_cmd_buffer *cmd,
                                  2, /* allocate space for a sampler too */
                                  A6XX_TEX_CONST_DWORDS, &texture);
    if (result != VK_SUCCESS) {
-      cmd->record_result = result;
+      vk_command_buffer_set_error(&cmd->vk, result);
       return;
    }
 
@@ -1986,7 +1990,7 @@ tu_copy_image_to_image(struct tu_cmd_buffer *cmd,
                                           staging_layout.size,
                                           &staging_bo);
       if (result != VK_SUCCESS) {
-         cmd->record_result = result;
+         vk_command_buffer_set_error(&cmd->vk, result);
          return;
       }
 
@@ -2151,7 +2155,7 @@ tu_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
    struct tu_cs_memory tmp;
    VkResult result = tu_cs_alloc(&cmd->sub_cs, DIV_ROUND_UP(dataSize, 64), 64 / 4, &tmp);
    if (result != VK_SUCCESS) {
-      cmd->record_result = result;
+      vk_command_buffer_set_error(&cmd->vk, result);
       return;
    }
 
@@ -2171,8 +2175,7 @@ tu_CmdFillBuffer(VkCommandBuffer commandBuffer,
    const struct blit_ops *ops = &r2d_ops;
    struct tu_cs *cs = &cmd->cs;
 
-   if (fillSize == VK_WHOLE_SIZE)
-      fillSize = buffer->size - dstOffset;
+   fillSize = vk_buffer_range(&buffer->vk, dstOffset, fillSize);
 
    uint64_t dst_va = buffer->iova + dstOffset;
    uint32_t blocks = fillSize / 4;
@@ -2271,7 +2274,7 @@ resolve_sysmem(struct tu_cmd_buffer *cmd,
 
    for_each_layer(i, layer_mask, layers) {
       if (src_separate_ds) {
-         if (vk_src_format == VK_FORMAT_D32_SFLOAT) {
+         if (vk_src_format == VK_FORMAT_D32_SFLOAT || vk_dst_format == VK_FORMAT_D32_SFLOAT) {
             r2d_src_depth(cmd, cs, src, i, VK_FILTER_NEAREST);
          } else {
             r2d_src_stencil(cmd, cs, src, i, VK_FILTER_NEAREST);
@@ -2715,17 +2718,19 @@ tu_emit_clear_gmem_attachment(struct tu_cmd_buffer *cmd,
 
    trace_start_gmem_clear(&cmd->trace, cs);
 
+   tu_cs_emit_regs(cs,
+                   A6XX_RB_BLIT_GMEM_MSAA_CNTL(tu_msaa_samples(att->samples)));
+
    enum pipe_format format = tu_vk_format_to_pipe_format(att->format);
    if (att->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
       if (mask & VK_IMAGE_ASPECT_DEPTH_BIT)
          clear_gmem_attachment(cmd, cs, PIPE_FORMAT_Z32_FLOAT, 0xf, tu_attachment_gmem_offset(cmd, att), value);
       if (mask & VK_IMAGE_ASPECT_STENCIL_BIT)
          clear_gmem_attachment(cmd, cs, PIPE_FORMAT_S8_UINT, 0xf, tu_attachment_gmem_offset_stencil(cmd, att), value);
-      return;
+   } else {
+      clear_gmem_attachment(cmd, cs, format, aspect_write_mask(format, mask),
+                            tu_attachment_gmem_offset(cmd, att), value);
    }
-
-   clear_gmem_attachment(cmd, cs, format, aspect_write_mask(format, mask),
-                         tu_attachment_gmem_offset(cmd, att), value);
 
    trace_end_gmem_clear(&cmd->trace, cs, att->format, att->samples);
 }
@@ -2941,8 +2946,6 @@ tu_clear_gmem_attachment(struct tu_cmd_buffer *cmd,
    if (!attachment->clear_mask)
       return;
 
-   tu_cs_emit_regs(cs, A6XX_RB_MSAA_CNTL(tu_msaa_samples(attachment->samples)));
-
    tu_emit_clear_gmem_attachment(cmd, cs, a, attachment->clear_mask, value);
 }
 
@@ -2955,7 +2958,7 @@ tu_emit_blit(struct tu_cmd_buffer *cmd,
              bool separate_stencil)
 {
    tu_cs_emit_regs(cs,
-                   A6XX_RB_MSAA_CNTL(tu_msaa_samples(attachment->samples)));
+                   A6XX_RB_BLIT_GMEM_MSAA_CNTL(tu_msaa_samples(attachment->samples)));
 
    tu_cs_emit_regs(cs, A6XX_RB_BLIT_INFO(
       .unk0 = !resolve,
@@ -3319,6 +3322,8 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
    if (!dst->store && !dst->store_stencil)
       return;
 
+   trace_start_gmem_store(&cmd->trace, cs);
+
    /* Unconditional store should happen only if attachment was cleared,
     * which could have happened either by load_op or via vkCmdClearAttachments.
     */
@@ -3346,8 +3351,6 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
 
    bool store_common = dst->store && !resolve_d32s8_s8;
    bool store_separate_stencil = dst->store_stencil || resolve_d32s8_s8;
-
-   trace_start_gmem_store(&cmd->trace, cs);
 
    /* use fast path when render area is aligned, except for unsupported resolve cases */
    if (!unaligned && !resolve_d24s8_s8 &&

@@ -772,21 +772,6 @@ static void si_dump_descriptors(struct si_context *sctx, gl_shader_stage stage,
       enabled_images = sctx->images[processor].enabled_mask;
    }
 
-   if (stage == MESA_SHADER_VERTEX && sctx->vb_descriptors_buffer &&
-       sctx->vb_descriptors_gpu_list) {
-      assert(info); /* only CS may not have an info struct */
-      struct si_descriptors desc = {};
-
-      desc.buffer = sctx->vb_descriptors_buffer;
-      desc.list = sctx->vb_descriptors_gpu_list;
-      desc.gpu_list = sctx->vb_descriptors_gpu_list;
-      desc.element_dw_size = 4;
-      desc.num_active_slots = sctx->vertex_elements->vb_desc_list_alloc_size / 16;
-
-      si_dump_descriptor_list(sctx->screen, &desc, name, " - Vertex buffer", 4, info->num_inputs,
-                              si_identity, log);
-   }
-
    si_dump_descriptor_list(sctx->screen, &descs[SI_SHADER_DESCS_CONST_AND_SHADER_BUFFERS], name,
                            " - Constant buffer", 4, util_last_bit(enabled_constbuf),
                            si_get_constbuf_slot, log);

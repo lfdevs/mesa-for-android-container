@@ -205,7 +205,7 @@ brw_rt_compute_scratch_layout(struct brw_rt_scratch_layout *layout,
 {
    layout->stack_ids_per_dss = stack_ids_per_dss;
 
-   const uint32_t dss_count = intel_device_info_num_dual_subslices(devinfo);
+   const uint32_t dss_count = intel_device_info_dual_subslice_id_bound(devinfo);
    const uint32_t num_stack_ids = dss_count * stack_ids_per_dss;
 
    uint64_t size = 0;

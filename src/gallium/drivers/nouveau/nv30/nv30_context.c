@@ -33,33 +33,29 @@
 #include "nv30/nv30_context.h"
 #include "nv30/nv30_transfer.h"
 #include "nv30/nv30_state.h"
+#include "nv30/nv30_winsys.h"
 
 static void
 nv30_context_kick_notify(struct nouveau_pushbuf *push)
 {
-   struct nouveau_screen *screen;
-   struct nv30_context *nv30;
+   struct nouveau_pushbuf_priv *p = push->user_priv;
+   struct nouveau_screen *screen = p->screen;
 
-   if (!push->user_priv)
-      return;
-   nv30 = container_of(push->user_priv, struct nv30_context, bufctx);
-   screen = &nv30->screen->base;
-
-   nouveau_fence_next(screen);
-   nouveau_fence_update(screen, true);
+   _nouveau_fence_next(p->context);
+   _nouveau_fence_update(screen, true);
 
    if (push->bufctx) {
       struct nouveau_bufref *bref;
       LIST_FOR_EACH_ENTRY(bref, &push->bufctx->current, thead) {
          struct nv04_resource *res = bref->priv;
          if (res && res->mm) {
-            nouveau_fence_ref(screen->fence.current, &res->fence);
+            _nouveau_fence_ref(p->context->fence, &res->fence);
 
             if (bref->flags & NOUVEAU_BO_RD)
                res->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
 
             if (bref->flags & NOUVEAU_BO_WR) {
-               nouveau_fence_ref(screen->fence.current, &res->fence_wr);
+               _nouveau_fence_ref(p->context->fence, &res->fence_wr);
                res->status |= NOUVEAU_BUFFER_STATUS_GPU_WRITING |
                   NOUVEAU_BUFFER_STATUS_DIRTY;
             }
@@ -76,7 +72,7 @@ nv30_context_flush(struct pipe_context *pipe, struct pipe_fence_handle **fence,
    struct nouveau_pushbuf *push = nv30->base.pushbuf;
 
    if (fence)
-      nouveau_fence_ref(nv30->screen->base.fence.current,
+      nouveau_fence_ref(nv30->base.fence,
                         (struct nouveau_fence **)fence);
 
    PUSH_KICK(push);
@@ -168,14 +164,12 @@ nv30_context_destroy(struct pipe_context *pipe)
    if (nv30->blit_fp)
       pipe_resource_reference(&nv30->blit_fp, NULL);
 
-   if (nv30->screen->base.pushbuf->user_priv == &nv30->bufctx)
-      nv30->screen->base.pushbuf->user_priv = NULL;
-
    nouveau_bufctx_del(&nv30->bufctx);
 
    if (nv30->screen->cur_ctx == nv30)
       nv30->screen->cur_ctx = NULL;
 
+   nouveau_fence_cleanup(&nv30->base);
    nouveau_context_destroy(&nv30->base);
 }
 
@@ -191,7 +185,6 @@ nv30_context_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 {
    struct nv30_screen *screen = nv30_screen(pscreen);
    struct nv30_context *nv30 = CALLOC_STRUCT(nv30_context);
-   struct nouveau_pushbuf *push;
    struct pipe_context *pipe;
    int ret;
 
@@ -199,7 +192,6 @@ nv30_context_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
       return NULL;
 
    nv30->screen = screen;
-   nv30->base.screen = &screen->base;
    nv30->base.copy_data = nv30_transfer_copy_data;
 
    pipe = &nv30->base.pipe;
@@ -208,20 +200,18 @@ nv30_context_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    pipe->destroy = nv30_context_destroy;
    pipe->flush = nv30_context_flush;
 
+   if (nouveau_context_init(&nv30->base, &screen->base)) {
+      nv30_context_destroy(pipe);
+      return NULL;
+   }
+   nv30->base.pushbuf->kick_notify = nv30_context_kick_notify;
+
    nv30->base.pipe.stream_uploader = u_upload_create_default(&nv30->base.pipe);
    if (!nv30->base.pipe.stream_uploader) {
       nv30_context_destroy(pipe);
       return NULL;
    }
    nv30->base.pipe.const_uploader = nv30->base.pipe.stream_uploader;
-
-   /*XXX: *cough* per-context client */
-   nv30->base.client = screen->base.client;
-
-   /*XXX: *cough* per-context pushbufs */
-   push = screen->base.pushbuf;
-   nv30->base.pushbuf = push;
-   push->kick_notify = nv30_context_kick_notify;
 
    nv30->base.invalidate_resource_storage = nv30_invalidate_resource_storage;
 
@@ -244,7 +234,6 @@ nv30_context_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    if (debug_get_bool_option("NV30_SWTNL", false))
       nv30->draw_flags |= NV30_NEW_SWTNL;
 
-   nouveau_context_init(&nv30->base);
    nv30->sample_mask = 0xffff;
    nv30_vbo_init(pipe);
    nv30_query_init(pipe);
@@ -265,6 +254,7 @@ nv30_context_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    }
 
    nouveau_context_init_vdec(&nv30->base);
+   nouveau_fence_new(&nv30->base, &nv30->base.fence);
 
    return pipe;
 }

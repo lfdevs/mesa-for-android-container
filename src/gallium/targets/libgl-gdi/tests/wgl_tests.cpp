@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <windows.h>
+#include <unknwn.h>
 #include <GL/gl.h>
 
 #undef GetMessage

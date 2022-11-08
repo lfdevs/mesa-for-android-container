@@ -28,6 +28,7 @@
 
 #include "freedreno_priv.h"
 
+#include "util/perf/cpu_trace.h"
 #include "util/u_atomic.h"
 #include "util/slab.h"
 #include "util/timespec.h"
@@ -85,6 +86,13 @@ struct virtio_device {
    uint8_t reqbuf[0x4000];
 };
 FD_DEFINE_CAST(fd_device, virtio_device);
+
+#define virtio_ioctl(fd, name, args) ({                              \
+      MESA_TRACE_BEGIN(#name);                                       \
+      int ret = drmIoctl((fd), DRM_IOCTL_ ## name, (args));          \
+      MESA_TRACE_END();                                              \
+      ret;                                                           \
+   })
 
 struct fd_device *virtio_device_new(int fd, drmVersionPtr version);
 
@@ -162,9 +170,12 @@ struct fd_submit *virtio_submit_new(struct fd_pipe *pipe);
 
 struct virtio_bo {
    struct fd_bo base;
+   uint64_t alloc_time_ns;
    uint64_t offset;
    uint32_t res_id;
    uint32_t blob_id;
+   uint32_t upload_seqno;
+   bool has_upload_seqno;
 };
 FD_DEFINE_CAST(fd_bo, virtio_bo);
 

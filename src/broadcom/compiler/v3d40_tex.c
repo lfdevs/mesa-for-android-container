@@ -229,16 +229,37 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
         unsigned texture_idx = instr->texture_index;
         unsigned sampler_idx = instr->sampler_index;
 
+        /* Even if the texture operation doesn't need a sampler by
+         * itself, we still need to add the sampler configuration
+         * parameter if the output is 32 bit
+         */
+        bool output_type_32_bit =
+                c->key->sampler[sampler_idx].return_size == 32 &&
+                !instr->is_shadow;
+
         struct V3D41_TMU_CONFIG_PARAMETER_0 p0_unpacked = {
         };
 
         /* Limit the number of channels returned to both how many the NIR
          * instruction writes and how many the instruction could produce.
          */
-        p0_unpacked.return_words_of_texture_data =
-                instr->dest.is_ssa ?
-                nir_ssa_def_components_read(&instr->dest.ssa) :
-                (1 << instr->dest.reg.reg->num_components) - 1;
+        if (instr->dest.is_ssa) {
+                p0_unpacked.return_words_of_texture_data =
+                        nir_ssa_def_components_read(&instr->dest.ssa);
+        } else {
+                /* For the non-ssa case we don't have a full equivalent to
+                 * nir_ssa_def_components_read. This is a problem for the 16
+                 * bit case. nir_lower_tex will not change the destination as
+                 * nir_tex_instr_dest_size will still return 4. The driver is
+                 * just expected to not store on other channels, so we
+                 * manually ensure that here.
+                 */
+                uint32_t num_components = output_type_32_bit ?
+                        MIN2(instr->dest.reg.reg->num_components, 4) :
+                        MIN2(instr->dest.reg.reg->num_components, 2);
+
+                p0_unpacked.return_words_of_texture_data = (1 << num_components) - 1;
+        }
         assert(p0_unpacked.return_words_of_texture_data != 0);
 
         struct V3D41_TMU_CONFIG_PARAMETER_2 p2_unpacked = {
@@ -293,14 +314,6 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
         p0_packed |= texture_idx << 24;
 
         vir_WRTMUC(c, QUNIFORM_TMU_CONFIG_P0, p0_packed);
-
-        /* Even if the texture operation doesn't need a sampler by
-         * itself, we still need to add the sampler configuration
-         * parameter if the output is 32 bit
-         */
-        bool output_type_32_bit =
-                c->key->sampler[sampler_idx].return_size == 32 &&
-                !instr->is_shadow;
 
         /* p1 is optional, but we can skip it only if p2 can be skipped too */
         bool needs_p2_config =

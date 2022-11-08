@@ -102,23 +102,6 @@ rogue_get_isp_samples_per_tile_xy(const struct pvr_device_info *dev_info,
    }
 }
 
-static inline uint64_t
-rogue_get_min_free_list_size(const struct pvr_device_info *dev_info)
-{
-   uint64_t min_num_pages;
-
-   if (PVR_HAS_FEATURE(dev_info, roguexe)) {
-      if (PVR_HAS_QUIRK(dev_info, 66011))
-         min_num_pages = 40U;
-      else
-         min_num_pages = 25U;
-   } else {
-      min_num_pages = 50U;
-   }
-
-   return min_num_pages << ROGUE_BIF_PM_PHYSICAL_PAGE_SHIFT;
-}
-
 static inline uint32_t
 rogue_get_max_num_vdm_pds_tasks(const struct pvr_device_info *dev_info)
 {
@@ -228,17 +211,27 @@ static inline uint32_t
 rogue_max_compute_shared_registers(const struct pvr_device_info *dev_info)
 {
    if (PVR_HAS_FEATURE(dev_info, compute))
-      return 2U * 1024U;
+      return 1024U;
 
    return 0U;
+}
+
+static inline uint32_t
+rogue_get_max_num_cores(const struct pvr_device_info *dev_info)
+{
+   if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support) &&
+       PVR_HAS_FEATURE(dev_info, xpu_max_slaves)) {
+      return PVR_GET_FEATURE_VALUE(dev_info, xpu_max_slaves, 0U) + 1U;
+   }
+
+   return 1U;
 }
 
 static inline uint32_t
 rogue_get_cdm_context_resume_buffer_size(const struct pvr_device_info *dev_info)
 {
    if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
-      const uint32_t max_num_cores =
-         PVR_GET_FEATURE_VALUE(dev_info, xpu_max_slaves, 0U) + 1U;
+      const uint32_t max_num_cores = rogue_get_max_num_cores(dev_info);
       const uint32_t cache_line_size = rogue_get_slc_cache_line_size(dev_info);
       const uint32_t cdm_context_resume_buffer_stride =
          ALIGN_POT(ROGUE_LLS_CDM_CONTEXT_RESUME_BUFFER_SIZE, cache_line_size);
@@ -273,5 +266,15 @@ rogue_get_compute_max_work_group_size(const struct pvr_device_info *dev_info)
 
    return ROGUE_MAX_INSTANCES_PER_TASK * max_tasks_per_usc;
 }
+
+/* Don't use this directly. Use the x and y define macros. */
+static inline uint32_t
+__rogue_get_param_vf_max(const struct pvr_device_info *dev_info)
+{
+   return (rogue_get_render_size_max(dev_info) * 3 / 2) - 1;
+}
+
+#define rogue_get_param_vf_max_x(dev_info) __rogue_get_param_vf_max(dev_info)
+#define rogue_get_param_vf_max_y(dev_info) __rogue_get_param_vf_max(dev_info)
 
 #endif /* ROGUE_HW_UTILS_H */

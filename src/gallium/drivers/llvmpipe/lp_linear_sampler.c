@@ -58,17 +58,20 @@
  */
 #define FIXED16_TOL_DERIV (FIXED16_TOL / TILE_SIZE)
 
+
 static inline int
 float_to_fixed16(float f)
 {
    return f * (float)FIXED16_ONE;
 }
 
+
 static inline int
 fixed16_frac(int x)
 {
    return x & (FIXED16_ONE - 1);
 }
+
 
 static inline int
 fixed16_approx(int x, int y, int tol)
@@ -252,6 +255,7 @@ fetch_bgrx(struct lp_linear_elem *elem)
    return row;
 }
 
+
 /* Non-axis aligned, clamped.
  */
 static const uint32_t *
@@ -287,6 +291,7 @@ fetch_bgra_clamp(struct lp_linear_elem *elem)
    return row;
 }
 
+
 static const uint32_t *
 fetch_bgrx_clamp(struct lp_linear_elem *elem)
 {
@@ -319,6 +324,7 @@ fetch_bgrx_clamp(struct lp_linear_elem *elem)
    samp->t += samp->dtdy;
    return row;
 }
+
 
 /**
  * Fetch and stretch one row.
@@ -370,8 +376,7 @@ fetch_and_stretch_bgra_row(struct lp_linear_sampler *samp,
          __m128i src = _mm_loadu_si128((const __m128i *)&src_row[i]);
          *(__m128i *)&dst_row[i] = src;
       }
-   }
-   else {
+   } else {
       util_sse2_stretch_row_8unorm((__m128i *)dst_row,
                                    align(width, 4),
                                    src_row, samp->s, samp->dsdx);
@@ -709,6 +714,7 @@ sampler_is_nearest(const struct lp_linear_sampler *samp,
    return TRUE;
 }
 
+
 /* XXX: Lots of static-state parameters being passed in here but very
  * little info is extracted from each one.  Consolidate it all down to
  * something succinct in the prepare phase?
@@ -800,8 +806,7 @@ lp_linear_init_sampler(struct lp_linear_sampler *samp,
        * at a time.
        */
       fetch_width = width - 1;
-   }
-   else {
+   } else {
       /* Linear fetch routines employ SSE, and always fetch groups of four
        * texels.
        */
@@ -819,8 +824,7 @@ lp_linear_init_sampler(struct lp_linear_sampler *samp,
       mint = MIN2(t0, t1);
       maxs = MAX2(s0, s1);
       maxt = MAX2(t0, t1);
-   }
-   else {
+   } else {
       int s0 = samp->s;
       int s1 = samp->s + fetch_width  * samp->dsdx;
       int s2 = samp->s + fetch_height * samp->dsdy;
@@ -894,8 +898,7 @@ lp_linear_init_sampler(struct lp_linear_sampler *samp,
       }
 
       FAIL("unknown format for nearest");
-   }
-   else {
+   } else {
       samp->stretched_row_y[0] = -1;
       samp->stretched_row_y[1] = -1;
       samp->stretched_row_index = 0;
@@ -985,11 +988,13 @@ lp_linear_check_sampler(const struct lp_sampler_static_state *sampler,
    return TRUE;
 }
 
-#else
+#else  // PIPE_ARCH_SSE
+
 boolean
 lp_linear_check_sampler(const struct lp_sampler_static_state *sampler,
                         const struct lp_tgsi_texture_info *tex)
 {
    return FALSE;
 }
-#endif
+
+#endif  // PIPE_ARCH_SSE

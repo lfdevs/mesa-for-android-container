@@ -43,7 +43,7 @@ aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
    ctx->get_state_size = get_state_size;
    ctx->user_data = user_data;
    ctx->devinfo = devinfo;
-   ctx->engine = I915_ENGINE_CLASS_RENDER;
+   ctx->engine = INTEL_ENGINE_CLASS_RENDER;
 
    ctx->cfg = cfg;
    ctx->decode_cfg = decode_cfg;

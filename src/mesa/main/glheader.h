@@ -44,6 +44,7 @@ extern "C" {
 
 
 /* Custom Mesa types to save space. */
+typedef unsigned char GLenum8; /* only for primitive modes */
 typedef unsigned short GLenum16;
 typedef unsigned char GLbitfield8;
 typedef unsigned short GLbitfield16;

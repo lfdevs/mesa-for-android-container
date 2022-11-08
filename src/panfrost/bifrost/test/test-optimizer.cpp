@@ -35,7 +35,14 @@ bi_optimizer(bi_context *ctx)
    bi_opt_dead_code_eliminate(ctx);
 }
 
-#define CASE(instr, expected) INSTRUCTION_CASE(instr, expected, bi_optimizer)
+/* Define reg first so it has a consistent variable index, and pass it to an
+ * instruction that cannot be dead code eliminated so the program is nontrivial.
+ */
+#define CASE(instr, expected) INSTRUCTION_CASE(\
+      { UNUSED bi_index reg = bi_temp(b->shader); instr; bi_kaboom(b, reg); }, \
+      { UNUSED bi_index reg = bi_temp(b->shader); expected; bi_kaboom(b, reg); }, \
+      bi_optimizer);
+
 #define NEGCASE(instr) CASE(instr, instr)
 
 class Optimizer : public testing::Test {
@@ -43,7 +50,6 @@ protected:
    Optimizer() {
       mem_ctx = ralloc_context(NULL);
 
-      reg     = bi_register(0);
       x       = bi_register(1);
       y       = bi_register(2);
       negabsx = bi_neg(bi_abs(x));
@@ -55,7 +61,6 @@ protected:
 
    void *mem_ctx;
 
-   bi_index reg;
    bi_index x;
    bi_index y;
    bi_index negabsx;
@@ -429,12 +434,41 @@ TEST_F(Optimizer, VarTexCoord32)
 
          bi_index x = bi_temp(b->shader);
          bi_index y = bi_temp(b->shader);
-         bi_instr *split = bi_split_i32_to(b, x, ld);
-         split->nr_dests = 2;
+         bi_instr *split = bi_split_i32_to(b, 2, ld);
+         split->dest[0] = x;
          split->dest[1] = y;
 
          bi_texs_2d_f32_to(b, reg, x, y, false, 0, 0);
    }, {
          bi_var_tex_f32_to(b, reg, false, BI_SAMPLE_CENTER, BI_UPDATE_STORE, 0, 0);
    });
+}
+
+TEST_F(Optimizer, Int8ToFloat32)
+{
+   for (unsigned i = 0; i < 4; ++i) {
+      CASE(bi_s32_to_f32_to(b, reg, bi_s8_to_s32(b, bi_byte(x, i))),
+           bi_s8_to_f32_to(b, reg, bi_byte(x, i)));
+
+      CASE(bi_s32_to_f32_to(b, reg, bi_u8_to_u32(b, bi_byte(x, i))),
+           bi_u8_to_f32_to(b, reg, bi_byte(x, i)));
+
+      CASE(bi_u32_to_f32_to(b, reg, bi_u8_to_u32(b, bi_byte(x, i))),
+           bi_u8_to_f32_to(b, reg, bi_byte(x, i)));
+   }
+}
+
+
+TEST_F(Optimizer, Int16ToFloat32)
+{
+   for (unsigned i = 0; i < 2; ++i) {
+      CASE(bi_s32_to_f32_to(b, reg, bi_s16_to_s32(b, bi_half(x, i))),
+           bi_s16_to_f32_to(b, reg, bi_half(x, i)));
+
+      CASE(bi_s32_to_f32_to(b, reg, bi_u16_to_u32(b, bi_half(x, i))),
+           bi_u16_to_f32_to(b, reg, bi_half(x, i)));
+
+      CASE(bi_u32_to_f32_to(b, reg, bi_u16_to_u32(b, bi_half(x, i))),
+           bi_u16_to_f32_to(b, reg, bi_half(x, i)));
+   }
 }

@@ -90,8 +90,6 @@ bi_write_mask(bi_instr *I)
    uint64_t mask = 0;
 
    bi_foreach_dest(I, d) {
-      if (bi_is_null(I->dest[d])) continue;
-
       assert(I->dest[d].type == BI_INDEX_REGISTER);
 
       unsigned reg = I->dest[d].value;

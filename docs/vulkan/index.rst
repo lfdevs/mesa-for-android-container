@@ -11,5 +11,6 @@ hardware-agnostic bits in common code.
 
    base-objs
    dispatch
+   command-pools
    graphics-state
    renderpass

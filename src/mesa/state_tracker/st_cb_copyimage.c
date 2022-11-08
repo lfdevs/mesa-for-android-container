@@ -589,30 +589,54 @@ fallback_copy_image(struct st_context *st,
    else
       line_bytes = _mesa_format_row_stride(dst_image->TexFormat, dst_w);
 
-   if (dst_image) {
+   if (src_image == dst_image && src_z == dst_z) {
+      assert(dst_image != NULL);
+
+      /* calculate bounding-box of the two rectangles */
+      int min_x = MIN2(src_x, dst_x);
+      int min_y = MIN2(src_y, dst_y);
+      int max_x = MAX2(src_x + src_w, dst_x + dst_w);
+      int max_y = MAX2(src_y + src_h, dst_y + dst_h);
       st_MapTextureImage(
             st->ctx, dst_image, dst_z,
-            dst_x, dst_y, dst_w, dst_h,
-            GL_MAP_WRITE_BIT, &dst, &dst_stride);
-   } else {
-      dst = pipe_texture_map(st->pipe, dst_res, 0, dst_z,
-                              PIPE_MAP_WRITE,
-                              dst_x, dst_y, dst_w, dst_h,
-                              &dst_transfer);
-      dst_stride = dst_transfer->stride;
-   }
+            min_x, min_y, max_x - min_x, max_y - min_y,
+            GL_MAP_READ_BIT | GL_MAP_WRITE_BIT, &dst, &dst_stride);
+      src = dst;
+      src_stride = dst_stride;
 
-   if (src_image) {
-      st_MapTextureImage(
-            st->ctx, src_image, src_z,
-            src_x, src_y, src_w, src_h,
-            GL_MAP_READ_BIT, &src, &src_stride);
+      /* adjust pointers */
+      int format_bytes = _mesa_get_format_bytes(dst_image->TexFormat);
+      src += ((src_y - min_y) / src_blk_h) * src_stride;
+      src += ((src_x - min_x) / src_blk_w) * format_bytes;
+      dst += ((dst_y - min_y) / src_blk_h) * dst_stride;
+      dst += ((dst_x - min_x) / dst_blk_w) * format_bytes;
    } else {
-      src = pipe_texture_map(st->pipe, src_res, 0, src_z,
-                              PIPE_MAP_READ,
-                              src_x, src_y, src_w, src_h,
-                              &src_transfer);
-      src_stride = src_transfer->stride;
+      if (dst_image) {
+         st_MapTextureImage(
+               st->ctx, dst_image, dst_z,
+               dst_x, dst_y, dst_w, dst_h,
+               GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT,
+               &dst, &dst_stride);
+      } else {
+         dst = pipe_texture_map(st->pipe, dst_res, 0, dst_z,
+                                 PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE,
+                                 dst_x, dst_y, dst_w, dst_h,
+                                 &dst_transfer);
+         dst_stride = dst_transfer->stride;
+      }
+
+      if (src_image) {
+         st_MapTextureImage(
+               st->ctx, src_image, src_z,
+               src_x, src_y, src_w, src_h,
+               GL_MAP_READ_BIT, &src, &src_stride);
+      } else {
+         src = pipe_texture_map(st->pipe, src_res, 0, src_z,
+                                 PIPE_MAP_READ,
+                                 src_x, src_y, src_w, src_h,
+                                 &src_transfer);
+         src_stride = src_transfer->stride;
+      }
    }
 
    for (int y = 0; y < lines; y++) {
@@ -628,7 +652,8 @@ fallback_copy_image(struct st_context *st,
    }
 
    if (src_image) {
-      st_UnmapTextureImage(st->ctx, src_image, src_z);
+      if (src_image != dst_image || src_z != dst_z)
+         st_UnmapTextureImage(st->ctx, src_image, src_z);
    } else {
       pipe_texture_unmap(st->pipe, src_transfer);
    }

@@ -113,11 +113,6 @@ spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-05,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-07,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-08,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-cumulative,Fail
-spec@arb_texture_compression@fbo-generatemipmap-formats,Fail
-spec@arb_texture_compression@fbo-generatemipmap-formats@GL_COMPRESSED_ALPHA NPOT,Fail
-spec@arb_texture_compression@fbo-generatemipmap-formats@GL_COMPRESSED_INTENSITY NPOT,Fail
-spec@arb_texture_compression@fbo-generatemipmap-formats@GL_COMPRESSED_LUMINANCE_ALPHA NPOT,Fail
-spec@arb_texture_compression@fbo-generatemipmap-formats@GL_COMPRESSED_LUMINANCE NPOT,Fail
 spec@arb_texture_cube_map@copyteximage cube,Fail
 spec@arb_texture_cube_map@copyteximage cube samples=2,Fail
 spec@arb_texture_cube_map@copyteximage cube samples=4,Fail
@@ -190,27 +185,6 @@ spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB8,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB,Fail
 spec@ext_framebuffer_object@fbo-cubemap,Fail
 spec@ext_framebuffer_object@fbo-depth-sample-compare,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_ALPHA12 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_ALPHA16 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_ALPHA4 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_ALPHA8 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_ALPHA NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_INTENSITY12 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_INTENSITY16 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_INTENSITY4 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_INTENSITY8 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_INTENSITY NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE12_ALPHA12 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE12 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE16_ALPHA16 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE16 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE4_ALPHA4 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE4 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE8_ALPHA8 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE8 NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE_ALPHA NPOT,Fail
-spec@ext_framebuffer_object@fbo-generatemipmap-formats@GL_LUMINANCE NPOT,Fail
 spec@ext_framebuffer_object@fbo-maxsize,Fail
 spec@ext_framebuffer_object@fbo-readpixels-depth-formats,Fail
 spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_COMPONENT/GL_FLOAT,Fail
@@ -275,6 +249,19 @@ spec@ext_texture_srgb@texwrap formats@GL_SRGB8_ALPHA8- swizzled,Fail
 spec@ext_texture_srgb@texwrap formats@GL_SRGB8,Fail
 spec@ext_texture_srgb@texwrap formats@GL_SRGB8- NPOT,Fail
 spec@ext_texture_srgb@texwrap formats@GL_SRGB8- swizzled,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB- border color only,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc@GL_COMPRESSED_SRGB_ALPHA- NPOT,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc@GL_COMPRESSED_SRGB_ALPHA- swizzled,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc@GL_COMPRESSED_SRGB_ALPHA,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc@GL_COMPRESSED_SRGB- NPOT,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc@GL_COMPRESSED_SRGB- swizzled,Fail
+spec@ext_texture_srgb@texwrap formats-s3tc@GL_COMPRESSED_SRGB,Fail
 spec@glsl-1.10@execution@built-in-functions@fs-atan-float-float,Fail
 spec@glsl-1.10@execution@built-in-functions@fs-atan-vec2-vec2,Fail
 spec@glsl-1.10@execution@built-in-functions@fs-atan-vec3-vec3,Fail
@@ -544,6 +531,7 @@ spec@khr_texture_compression_astc@basic-gles,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1,Fail
+spec@!opengl 1.0@gl-1.0-dlist-bitmap,Fail
 spec@!opengl 1.0@gl-1.0-dlist-materials,Fail
 spec@!opengl 1.0@gl-1.0-dlist-shademodel,Fail
 spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
@@ -650,3 +638,14 @@ spec@!opengl 2.1@pbo@test_bitmap,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@!opengl es 2.0@glsl-fs-pointcoord,Fail
+
+# see https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/730
+# and https://gitlab.freedesktop.org/mesa/mesa/-/issues/7208
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgb_s3tc_dxt1_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt1_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt3_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt5_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt1_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt3_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt5_ext,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_s3tc_dxt1_ext,Fail

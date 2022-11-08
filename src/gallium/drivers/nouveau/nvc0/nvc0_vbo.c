@@ -462,6 +462,7 @@ nvc0_vertex_arrays_validate(struct nvc0_context *nvc0)
    if (update_vertex) {
       const unsigned n = MAX2(vertex->num_elements, nvc0->state.num_vtxelts);
 
+      simple_mtx_assert_locked(&nvc0->screen->state_lock);
       nvc0->state.constant_vbos = const_vbos;
       nvc0->state.constant_elts = 0;
       nvc0->state.num_vtxelts = vertex->num_elements;
@@ -557,13 +558,9 @@ nvc0_prim_gl(unsigned prim)
 }
 
 static void
-nvc0_draw_vbo_kick_notify(struct nouveau_pushbuf *push)
+nvc0_draw_vbo_kick_notify(struct nouveau_context *context)
 {
-   struct nvc0_screen *screen = push->user_priv;
-
-   nouveau_fence_update(&screen->base, true);
-
-   NOUVEAU_DRV_STAT(&screen->base, pushbuf_count, 1);
+   _nouveau_fence_update(context->screen, true);
 }
 
 static void
@@ -788,7 +785,7 @@ nvc0_draw_stream_output(struct nvc0_context *nvc0,
    }
 
    while (num_instances--) {
-      nouveau_pushbuf_space(push, 16, 0, 1);
+      PUSH_SPACE_EX(push, 16, 0, 1);
       BEGIN_NVC0(push, NVC0_3D(VERTEX_BEGIN_GL), 1);
       PUSH_DATA (push, mode);
       BEGIN_NVC0(push, NVC0_3D(DRAW_TFB_BASE), 1);
@@ -869,10 +866,10 @@ nvc0_draw_indirect(struct nvc0_context *nvc0, const struct pipe_draw_info *info,
          pushes = draws;
       }
 
-      nouveau_pushbuf_space(push, 16, 0, pushes + !!buf_count);
-      PUSH_REFN(push, buf->bo, NOUVEAU_BO_RD | buf->domain);
+      PUSH_SPACE_EX(push, 16, 0, pushes + !!buf_count);
+      PUSH_REF1(push, buf->bo, NOUVEAU_BO_RD | buf->domain);
       if (buf_count)
-         PUSH_REFN(push, buf_count->bo, NOUVEAU_BO_RD | buf_count->domain);
+         PUSH_REF1(push, buf_count->bo, NOUVEAU_BO_RD | buf_count->domain);
       PUSH_DATA(push,
                 NVC0_FIFO_PKHDR_1I(0, macro, 3 + !!buf_count + draws * size));
       PUSH_DATA(push, nvc0_prim_gl(info->mode));
@@ -1024,6 +1021,8 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    BCTX_REFN_bo(nvc0->bufctx_3d, 3D_TEXT, vram_domain | NOUVEAU_BO_RD,
                 screen->text);
 
+   simple_mtx_lock(&nvc0->screen->state_lock);
+
    nvc0_state_validate_3d(nvc0, ~0);
 
    if (nvc0->vertprog->vp.need_draw_parameters && (!indirect || indirect->count_from_stream_output)) {
@@ -1047,7 +1046,7 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
                  nvc0->seamless_cube_map ? NVC0_3D_TEX_MISC_SEAMLESS_CUBE_MAP : 0);
    }
 
-   push->kick_notify = nvc0_draw_vbo_kick_notify;
+   nvc0->base.kick_notify = nvc0_draw_vbo_kick_notify;
 
    for (s = 0; s < 5 && !nvc0->cb_dirty; ++s) {
       if (nvc0->constbuf_coherent[s])
@@ -1131,7 +1130,10 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    }
 
 cleanup:
-   push->kick_notify = nvc0_default_kick_notify;
+   PUSH_KICK(push);
+   simple_mtx_unlock(&nvc0->screen->state_lock);
+
+   nvc0->base.kick_notify = nvc0_default_kick_notify;
 
    nvc0_release_user_vbufs(nvc0);
 

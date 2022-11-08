@@ -51,7 +51,6 @@ shaders/useshaderprogram-bad-type: skip
 shaders/useshaderprogram-flushverts-1: skip
 spec/!opengl 1.0/gl-1.0-beginend-coverage/glflush: fail
 spec/!opengl 1.0/gl-1.0-blend-func: fail
-spec/!opengl 1.0/gl-1.0-dlist-bitmap: fail
 spec/!opengl 1.0/gl-1.0-long-line-loop: fail
 spec/!opengl 1.0/gl-1.0-no-op-paths: fail
 spec/!opengl 1.0/gl-1.0-simple-readbuffer: fail
@@ -121,7 +120,6 @@ spec/!opengl 1.1/draw-pixels samples=32: skip
 spec/!opengl 1.1/draw-pixels samples=4: skip
 spec/!opengl 1.1/draw-pixels samples=6: skip
 spec/!opengl 1.1/draw-pixels samples=8: skip
-spec/!opengl 1.1/getteximage-depth/gl_texture_cube_map-gl_stencil_index8: fail
 spec/!opengl 1.1/linestipple/factor 2x: fail
 spec/!opengl 1.1/linestipple/factor 3x: fail
 spec/!opengl 1.1/linestipple/line loop: fail
@@ -287,14 +285,6 @@ spec/arb_blend_func_extended/arb_blend_func_extended-fbo-extended-blend-pattern_
 spec/arb_blend_func_extended/arb_blend_func_extended-fbo-extended-blend_gles3: skip
 spec/arb_blend_func_extended/arb_blend_func_extended-getfragdataindex_gles3: skip
 spec/arb_blend_func_extended/arb_blend_func_extended-output-location_gles3: skip
-spec/arb_buffer_storage/bufferstorage-persistent draw: skip
-spec/arb_buffer_storage/bufferstorage-persistent draw client-storage: skip
-spec/arb_buffer_storage/bufferstorage-persistent draw coherent: skip
-spec/arb_buffer_storage/bufferstorage-persistent draw coherent client-storage: skip
-spec/arb_buffer_storage/bufferstorage-persistent read: skip
-spec/arb_buffer_storage/bufferstorage-persistent read client-storage: skip
-spec/arb_buffer_storage/bufferstorage-persistent read coherent: skip
-spec/arb_buffer_storage/bufferstorage-persistent read coherent client-storage: skip
 spec/arb_buffer_storage/bufferstorage-persistent_gles3 draw: skip
 spec/arb_buffer_storage/bufferstorage-persistent_gles3 draw client-storage: skip
 spec/arb_buffer_storage/bufferstorage-persistent_gles3 draw coherent: skip
@@ -1507,7 +1497,6 @@ spec/arb_sparse_buffer/buffer-data: skip
 spec/arb_sparse_buffer/commit: skip
 spec/arb_sparse_buffer/minmax: skip
 spec/arb_stencil_texturing/draw: fail
-spec/arb_sync/clientwaitsync-timeout: skip
 spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 32 1 1 128 1: skip
 spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 32 1 1 128 2: skip
 spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 32 1 1 128 3: skip
@@ -1652,7 +1641,6 @@ spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 512 42 8 8 3: sk
 spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 512 42 8 8 4: skip
 spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 512 42 8 8 7: skip
 spec/arb_texture_barrier/arb_texture_barrier-blending-in-shader 512 42 8 8 8: skip
-spec/arb_texture_buffer_object/bufferstorage: skip
 spec/arb_texture_buffer_object/negative-unsupported: skip
 spec/arb_texture_buffer_range/ranges-2: fail
 spec/arb_texture_buffer_range/ranges-2 compat: fail
@@ -2517,7 +2505,6 @@ spec/arb_transform_feedback2/change objects while paused (gles3): skip
 spec/arb_transform_feedback_instanced/draw-auto instanced: fail
 spec/arb_transform_feedback_overflow_query/arb_transform_feedback_overflow_query-basic: skip
 spec/arb_transform_feedback_overflow_query/arb_transform_feedback_overflow_query-errors: skip
-spec/arb_uniform_buffer_object/bufferstorage: skip
 spec/arb_vertex_attrib_64bit/arb_vertex_attrib_64bit-overlapping-locations api: crash
 spec/arb_vertex_attrib_64bit/arb_vertex_attrib_64bit-overlapping-locations shader: crash
 spec/arb_vertex_program/arb_vertex_program-matrix-property-bindings: fail
@@ -2794,10 +2781,20 @@ spec/ext_framebuffer_multisample/blit-multiple-render-targets 32: skip
 spec/ext_framebuffer_multisample/clear 32 color: skip
 spec/ext_framebuffer_multisample/clear 32 depth: skip
 spec/ext_framebuffer_multisample/clear 32 stencil: skip
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 16 downsample: fail
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 16 msaa: fail
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 2 downsample: fail
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 2 msaa: fail
 spec/ext_framebuffer_multisample/clip-and-scissor-blit 32 downsample: skip
 spec/ext_framebuffer_multisample/clip-and-scissor-blit 32 msaa: skip
 spec/ext_framebuffer_multisample/clip-and-scissor-blit 32 normal: skip
 spec/ext_framebuffer_multisample/clip-and-scissor-blit 32 upsample: skip
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 4 downsample: fail
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 4 msaa: fail
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 6 downsample: fail
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 6 msaa: fail
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 8 downsample: fail
+spec/ext_framebuffer_multisample/clip-and-scissor-blit 8 msaa: fail
 spec/ext_framebuffer_multisample/draw-buffers-alpha-to-coverage 16: fail
 spec/ext_framebuffer_multisample/draw-buffers-alpha-to-coverage 2: fail
 spec/ext_framebuffer_multisample/draw-buffers-alpha-to-coverage 32: skip
@@ -3511,10 +3508,10 @@ wgl/wgl-sanity: skip
 summary:
        name:  results
        ----  --------
-       pass:    17873
-       fail:     2035
+       pass:    17881
+       fail:     2043
       crash:       11
-       skip:     1445
+       skip:     1434
     timeout:        0
        warn:       10
  incomplete:        0
@@ -3523,4 +3520,4 @@ summary:
     changes:        0
       fixes:        0
 regressions:        0
-      total:    21383
+      total:    21388

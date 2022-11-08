@@ -51,7 +51,7 @@ of the entire polygon.  If not set, fragment colors will be interpolated
 between the vertex colors.
 
 The actual interpolated shading algorithm is obviously
-implementation-dependent, but will usually be Gourard for most hardware.
+implementation-dependent, but will usually be Gouraud for most hardware.
 
 .. note::
 

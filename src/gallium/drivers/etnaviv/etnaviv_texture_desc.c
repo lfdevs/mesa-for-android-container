@@ -60,6 +60,7 @@ struct etna_sampler_view_desc {
    struct pipe_sampler_view base;
    /* format-dependent merged with sampler state */
    uint32_t SAMP_CTRL0;
+   uint32_t SAMP_CTRL0_MASK;
    uint32_t SAMP_CTRL1;
 
    struct pipe_resource *res;
@@ -99,15 +100,10 @@ etna_create_sampler_state_desc(struct pipe_context *pipe,
    uint32_t max_lod_fp8 = MIN2(etna_float_to_fixp88(ss->max_lod), 0xfff);
    uint32_t max_lod_min = ss->min_img_filter != ss->mag_img_filter ? 4 : 0;
 
-   if (ss->min_mip_filter != PIPE_TEX_MIPFILTER_NONE) {
-      cs->SAMP_LOD_MINMAX =
-         VIVS_NTE_DESCRIPTOR_SAMP_LOD_MINMAX_MAX(MAX2(max_lod_fp8, max_lod_min)) |
-         VIVS_NTE_DESCRIPTOR_SAMP_LOD_MINMAX_MIN(min_lod_fp8);
-   } else {
-      cs->SAMP_LOD_MINMAX =
-         VIVS_NTE_DESCRIPTOR_SAMP_LOD_MINMAX_MAX(MAX2(max_lod_fp8, max_lod_min)) |
-         VIVS_NTE_DESCRIPTOR_SAMP_LOD_MINMAX_MIN(min_lod_fp8);
-   }
+   cs->SAMP_LOD_MINMAX =
+      VIVS_NTE_DESCRIPTOR_SAMP_LOD_MINMAX_MAX(MAX2(max_lod_fp8, max_lod_min)) |
+      VIVS_NTE_DESCRIPTOR_SAMP_LOD_MINMAX_MIN(min_lod_fp8);
+
    cs->SAMP_LOD_BIAS =
       VIVS_NTE_DESCRIPTOR_SAMP_LOD_BIAS_BIAS(etna_float_to_fixp88(ss->lod_bias)) |
       COND(ss->lod_bias != 0.0, VIVS_NTE_DESCRIPTOR_SAMP_LOD_BIAS_ENABLE);
@@ -149,6 +145,7 @@ etna_create_sampler_view_desc(struct pipe_context *pctx, struct pipe_resource *p
    sv->base.texture = NULL;
    pipe_resource_reference(&sv->base.texture, prsc);
    sv->base.context = pctx;
+   sv->SAMP_CTRL0_MASK = 0xffffffff;
 
    /* Determine whether target supported */
    uint32_t target_hw = translate_texture_target(sv->base.target);
@@ -176,12 +173,22 @@ etna_create_sampler_view_desc(struct pipe_context *pctx, struct pipe_resource *p
    bool is_array = false;
    bool sint = util_format_is_pure_sint(so->format);
 
-   if (sv->base.target == PIPE_TEXTURE_1D_ARRAY) {
+   switch(sv->base.target) {
+   case PIPE_TEXTURE_1D:
+      target_hw = TEXTURE_TYPE_2D;
+      sv->SAMP_CTRL0_MASK = ~VIVS_NTE_DESCRIPTOR_SAMP_CTRL0_VWRAP__MASK;
+      sv->SAMP_CTRL0 = VIVS_NTE_DESCRIPTOR_SAMP_CTRL0_VWRAP(TEXTURE_WRAPMODE_REPEAT);
+      break;
+   case PIPE_TEXTURE_1D_ARRAY:
       is_array = true;
       base_height = res->base.array_size;
-   } else if (sv->base.target == PIPE_TEXTURE_2D_ARRAY) {
+      break;
+   case PIPE_TEXTURE_2D_ARRAY:
       is_array = true;
       base_depth = res->base.array_size;
+      break;
+   default:
+      break;
    }
 
 #define DESC_SET(x, y) buf[(TEXDESC_##x)>>2] = (y)
@@ -287,7 +294,7 @@ etna_emit_texture_desc(struct etna_context *ctx)
          if ((1 << x) & active_samplers) {
             struct etna_sampler_state_desc *ss = etna_sampler_state_desc(ctx->sampler[x]);
             struct etna_sampler_view_desc *sv = etna_sampler_view_desc(ctx->sampler_view[x]);
-            uint32_t SAMP_CTRL0 = ss->SAMP_CTRL0 | sv->SAMP_CTRL0;
+            uint32_t SAMP_CTRL0 = (ss->SAMP_CTRL0 & sv->SAMP_CTRL0_MASK) | sv->SAMP_CTRL0;
 
             if (texture_use_int_filter(&sv->base, &ss->base, true))
                SAMP_CTRL0 |= VIVS_NTE_DESCRIPTOR_SAMP_CTRL0_INT_FILTER;

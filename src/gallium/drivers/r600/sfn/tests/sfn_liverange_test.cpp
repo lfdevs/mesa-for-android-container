@@ -1,11 +1,9 @@
-#include "../sfn_shader.h"
 #include "../sfn_liverangeevaluator.h"
+#include "../sfn_shader.h"
 #include "sfn_test_shaders.h"
 
 #include "gtest/gtest.h"
 #include <sstream>
-
-#include "../sfn_liverangeevaluator.h"
 
 namespace r600 {
 
@@ -14,9 +12,7 @@ using std::ostringstream;
 class LiveRangeTests : public TestShader {
 
 protected:
-
    void check(const char *shader, LiveRangeMap& expect);
-
 };
 
 using SimpleTest = testing::Test;
@@ -70,7 +66,6 @@ TEST_F(LiveRangeTests, SimpleAssignments)
    RegisterVec4 r0 = vf.dest_vec4_from_string("S0.xyzw", dummy, pin_group);
 
    LiveRangeMap expect = vf.prepare_live_range_map();
-
 
    expect.set_life_range(*r1x, 2, 3);
    for (int i = 0; i < 4; ++i)
@@ -152,7 +147,6 @@ TEST_F(LiveRangeTests, SimpleAInterpolation)
    expect.set_life_range(*r5[1], 6, 7);
    expect.set_life_range(*r5[3], 6, 7);
 
-
    expect.set_life_range(*r6[0], 7, 8);
    expect.set_life_range(*r6[1], 7, 8);
    expect.set_life_range(*r6[2], 7, 8);
@@ -173,8 +167,7 @@ TEST_F(LiveRangeTests, SimpleArrayAccess)
    auto s2x = vf.dest_from_string("S2.x");
    auto s2y = vf.dest_from_string("S2.y");
 
-   auto s3 = vf.dest_vec4_from_string("S3.xy01", dummy, pin_group);
-
+   auto s3 = vf.dest_vec4_from_string("S3.xy01", dummy, pin_chgr);
 
    LiveRangeMap expect = vf.prepare_live_range_map();
 
@@ -195,7 +188,8 @@ TEST_F(LiveRangeTests, SimpleArrayAccess)
    check(shader_with_dest_array2_scheduled, expect);
 }
 
-void LiveRangeTests::check(const char *shader, LiveRangeMap& expect)
+void
+LiveRangeTests::check(const char *shader, LiveRangeMap& expect)
 {
    auto sh = from_string(shader);
    ASSERT_TRUE(sh);
@@ -211,7 +205,6 @@ void LiveRangeTests::check(const char *shader, LiveRangeMap& expect)
    expect_str << expect;
 
    EXPECT_EQ(eval_str.str(), expect_str.str());
-
 }
 
-}
+} // namespace r600

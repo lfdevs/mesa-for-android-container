@@ -27,10 +27,10 @@
 #ifndef SFN_SHADER_H
 #define SFN_SHADER_H
 
-#include "sfn_instr.h"
-#include "sfn_instrfactory.h"
-#include "sfn_instr_controlflow.h"
 #include "gallium/drivers/r600/r600_shader.h"
+#include "sfn_instr.h"
+#include "sfn_instr_controlflow.h"
+#include "sfn_instrfactory.h"
 #include "sfn_liverangeevaluator.h"
 
 #include <bitset>
@@ -52,26 +52,25 @@ public:
    void override_spi_sid(int spi_sid);
    void print(std::ostream& os) const;
 
-   int spi_sid() const { return m_spi_sid;}
-   unsigned sid() const { return m_sid;}
+   int spi_sid() const { return m_spi_sid; }
+   unsigned sid() const { return m_sid; }
 
-   int location() const {return m_location;}
-   unsigned name() const { return m_name;}
+   int location() const { return m_location; }
+   unsigned name() const { return m_name; }
 
-   int pos() const { return m_pos;}
-   void set_pos(int pos) {m_pos = pos;}
+   int pos() const { return m_pos; }
+   void set_pos(int pos) { m_pos = pos; }
 
-   bool is_param() const { return m_is_param;}
-   void set_is_param(bool val) { m_is_param = val;}
+   bool is_param() const { return m_is_param; }
+   void set_is_param(bool val) { m_is_param = val; }
 
-   void set_gpr(int gpr) {m_gpr = gpr;}
-   int gpr() const {return m_gpr;}
+   void set_gpr(int gpr) { m_gpr = gpr; }
+   int gpr() const { return m_gpr; }
 
 protected:
    ShaderIO(const char *type, int loc, int name);
 
 private:
-
    virtual void do_print(std::ostream& os) const = 0;
 
    const char *m_type;
@@ -89,7 +88,7 @@ public:
    ShaderOutput();
    ShaderOutput(int location, int name, int writemask);
 
-   int writemask() const { return m_writemask;}
+   int writemask() const { return m_writemask; }
 
 private:
    void do_print(std::ostream& os) const override;
@@ -97,25 +96,24 @@ private:
    int m_writemask{0};
 };
 
-
-class ShaderInput : public ShaderIO  {
+class ShaderInput : public ShaderIO {
 public:
    ShaderInput();
    ShaderInput(int location, int name);
    void set_interpolator(int interp, int interp_loc, bool uses_interpolate_at_centroid);
    void set_uses_interpolate_at_centroid();
-   void set_need_lds_pos() { m_need_lds_pos = true;}
-   int ij_index() const { return m_ij_index;}
+   void set_need_lds_pos() { m_need_lds_pos = true; }
+   int ij_index() const { return m_ij_index; }
 
-   int interpolator() const{return m_interpolator;}
-   int interpolate_loc() const {return m_interpolate_loc;}
-   bool need_lds_pos() const {return m_need_lds_pos;}
-   int lds_pos() const {return m_lds_pos;}
-   void set_lds_pos(int pos) {m_lds_pos = pos;}
+   int interpolator() const { return m_interpolator; }
+   int interpolate_loc() const { return m_interpolate_loc; }
+   bool need_lds_pos() const { return m_need_lds_pos; }
+   int lds_pos() const { return m_lds_pos; }
+   void set_lds_pos(int pos) { m_lds_pos = pos; }
 
-   int ring_offset() const {return m_ring_offset;}
-   void set_ring_offset(int offs) {m_ring_offset = offs;}
-   bool uses_interpolate_at_centroid() const {return m_uses_interpolate_at_centroid;}
+   int ring_offset() const { return m_ring_offset; }
+   void set_ring_offset(int offs) { m_ring_offset = offs; }
+   bool uses_interpolate_at_centroid() const { return m_uses_interpolate_at_centroid; }
 
 private:
    void do_print(std::ostream& os) const override;
@@ -142,8 +140,11 @@ public:
 
    bool add_info_from_string(std::istream& is);
 
-   static Shader *translate_from_nir(nir_shader *nir, const pipe_stream_output_info *so_info, r600_shader *gs_shader,
-                                     r600_shader_key& key, r600_chip_class chip_class);
+   static Shader *translate_from_nir(nir_shader *nir,
+                                     const pipe_stream_output_info *so_info,
+                                     r600_shader *gs_shader,
+                                     r600_shader_key& key,
+                                     r600_chip_class chip_class);
 
    bool process(nir_shader *nir);
 
@@ -153,48 +154,43 @@ public:
    bool process_block(nir_block *node);
    bool process_instr(nir_instr *instr);
    void emit_instruction(PInst instr);
-   bool emit_atomic_local_shared(nir_intrinsic_instr* instr);
+   bool emit_atomic_local_shared(nir_intrinsic_instr *instr);
 
-   void print(std::ostream& os ) const;
-   void print_header(std::ostream& os ) const;
+   void print(std::ostream& os) const;
+   void print_header(std::ostream& os) const;
 
    bool process_intrinsic(nir_intrinsic_instr *intr);
 
    virtual bool load_input(nir_intrinsic_instr *intr) = 0;
    virtual bool store_output(nir_intrinsic_instr *intr) = 0;
 
-   bool load_uniform(nir_intrinsic_instr *intr);
    bool load_ubo(nir_intrinsic_instr *intr);
 
    ValueFactory& value_factory();
 
-   void add_output(const ShaderOutput& output) {
-      m_outputs[output.location()] = output;
-   }
+   void add_output(const ShaderOutput& output) { m_outputs[output.location()] = output; }
 
-   void add_input(const ShaderInput& input) {
-      m_inputs[input.location()] = input;
-   }
+   void add_input(const ShaderInput& input) { m_inputs[input.location()] = input; }
 
    void set_input_gpr(int driver_lcation, int gpr);
 
-   InputIterator find_input(int location) { return m_inputs.find(location);}
+   InputIterator find_input(int location) { return m_inputs.find(location); }
 
-   InputIterator input_not_found() {return m_inputs.end();}
+   InputIterator input_not_found() { return m_inputs.end(); }
 
    OutputIterator find_output(int location);
-   OutputIterator output_not_found() {return m_outputs.end();}
+   OutputIterator output_not_found() { return m_outputs.end(); }
 
    ShaderBlocks& func() { return m_root; }
    void reset_function(ShaderBlocks& new_root);
 
-   void emit_instruction_from_string(const std::string &s);
+   void emit_instruction_from_string(const std::string& s);
 
    void set_info(nir_shader *nir);
    void get_shader_info(r600_shader *sh_info);
 
-   r600_chip_class chip_class() const {return m_chip_class;};
-   void set_chip_class(r600_chip_class cls) {m_chip_class = cls;};
+   r600_chip_class chip_class() const { return m_chip_class; };
+   void set_chip_class(r600_chip_class cls) { m_chip_class = cls; };
 
    void start_new_block(int nesting_depth);
 
@@ -202,17 +198,17 @@ public:
 
    LiveRangeMap prepare_live_range_map();
 
-   void set_last_txd(Instr *txd){m_last_txd = txd;}
-   Instr *last_txd(){return m_last_txd;}
+   void set_last_txd(Instr *txd) { m_last_txd = txd; }
+   Instr *last_txd() { return m_last_txd; }
 
    // Needed for keeping the memory access in order
    void chain_scratch_read(Instr *instr);
    void chain_ssbo_read(Instr *instr);
 
-   virtual uint32_t enabled_stream_buffers_mask() const {return 0;};
+   virtual uint32_t enabled_stream_buffers_mask() const { return 0; };
 
-   size_t noutputs() const { return m_outputs.size();}
-   size_t ninputs() const { return m_inputs.size();}
+   size_t noutputs() const { return m_outputs.size(); }
+   size_t ninputs() const { return m_inputs.size(); }
 
    enum Flags {
       sh_indirect_const_file,
@@ -229,16 +225,21 @@ public:
       sh_flags_count
    };
 
-   void set_flag(Flags f) {m_flags.set(f);}
-   bool has_flag(Flags f) const {return m_flags.test(f);}
+   void set_flag(Flags f) { m_flags.set(f); }
+   bool has_flag(Flags f) const { return m_flags.test(f); }
 
    int atomic_file_count() const { return m_atomic_file_count; }
 
    PRegister atomic_update();
    int remap_atomic_base(int base);
-   auto evaluate_resource_offset(nir_intrinsic_instr *instr, int src_id) -> std::pair<int, PRegister>;
-   int ssbo_image_offset() const {return m_ssbo_image_offset;}
-   PRegister rat_return_address() {assert(m_rat_return_address); return m_rat_return_address;}
+   auto evaluate_resource_offset(nir_intrinsic_instr *instr, int src_id)
+      -> std::pair<int, PRegister>;
+   int ssbo_image_offset() const { return m_ssbo_image_offset; }
+   PRegister rat_return_address()
+   {
+      assert(m_rat_return_address);
+      return m_rat_return_address;
+   }
 
    PRegister emit_load_to_register(PVirtualValue src);
 
@@ -272,7 +273,7 @@ protected:
    template <typename T>
    using IOMap = std::map<int, T, std::less<int>, Allocator<std::pair<const int, T>>>;
 
-   IOMap<ShaderInput>& inputs() {return m_inputs;}
+   IOMap<ShaderInput>& inputs() { return m_inputs; }
 
 private:
    virtual bool process_stage_intrinsic(nir_intrinsic_instr *intr) = 0;
@@ -281,8 +282,6 @@ private:
    bool allocate_arrays_from_string(std::istream& is);
 
    bool read_chipclass(std::istream& is);
-
-   bool load_uniform_indirect(nir_intrinsic_instr *intr, PVirtualValue addr, int offset , int buffer_id);
 
    bool scan_shader(const nir_function *impl);
    bool scan_uniforms(nir_variable *uniform);
@@ -307,10 +306,10 @@ private:
    bool emit_store_scratch(nir_intrinsic_instr *intr);
    bool emit_load_scratch(nir_intrinsic_instr *intr);
    bool emit_local_store(nir_intrinsic_instr *intr);
-   bool emit_local_load(nir_intrinsic_instr* instr);
-   bool emit_load_tcs_param_base(nir_intrinsic_instr* instr, int offset);
-   bool emit_barrier(nir_intrinsic_instr* intr);
-   bool emit_shader_clock(nir_intrinsic_instr* instr);
+   bool emit_local_load(nir_intrinsic_instr *instr);
+   bool emit_load_tcs_param_base(nir_intrinsic_instr *instr, int offset);
+   bool emit_barrier(nir_intrinsic_instr *intr);
+   bool emit_shader_clock(nir_intrinsic_instr *instr);
    bool emit_wait_ack();
 
    bool equal_to(const Shader& other) const;
@@ -333,9 +332,9 @@ private:
    int m_next_block;
    bool m_indirect_const_file{false};
 
-   Instr *m_last_txd {nullptr};
+   Instr *m_last_txd{nullptr};
 
-   uint32_t m_indirect_files{0};      
+   uint32_t m_indirect_files{0};
    std::bitset<sh_flags_count> m_flags;
    uint32_t nhwatomic_ranges{0};
    std::vector<r600_shader_atomic> m_atomics;
@@ -353,20 +352,20 @@ private:
 
    class InstructionChain : public InstrVisitor {
    public:
-      void visit(AluInstr  *instr) override {(void) instr;}
-      void visit(AluGroup *instr) override {(void) instr;}
-      void visit(TexInstr *instr) override {(void) instr;}
-      void visit(ExportInstr *instr) override {(void) instr;}
-      void visit(FetchInstr *instr) override {(void) instr;}
-      void visit(Block *instr) override {(void) instr;}
-      void visit(ControlFlowInstr *instr) override {(void) instr;}
-      void visit(IfInstr *instr) override {(void) instr;}
-      void visit(StreamOutInstr *instr) override {(void) instr;}
-      void visit(MemRingOutInstr *instr) override {(void) instr;}
-      void visit(EmitVertexInstr *instr) override {(void) instr;}
-      void visit(WriteTFInstr *instr) override {(void) instr;}
-      void visit(LDSAtomicInstr *instr) override {(void) instr;}
-      void visit(LDSReadInstr *instr) override {(void) instr;}
+      void visit(AluInstr *instr) override { (void)instr; }
+      void visit(AluGroup *instr) override { (void)instr; }
+      void visit(TexInstr *instr) override { (void)instr; }
+      void visit(ExportInstr *instr) override { (void)instr; }
+      void visit(FetchInstr *instr) override { (void)instr; }
+      void visit(Block *instr) override { (void)instr; }
+      void visit(ControlFlowInstr *instr) override { (void)instr; }
+      void visit(IfInstr *instr) override { (void)instr; }
+      void visit(StreamOutInstr *instr) override { (void)instr; }
+      void visit(MemRingOutInstr *instr) override { (void)instr; }
+      void visit(EmitVertexInstr *instr) override { (void)instr; }
+      void visit(WriteTFInstr *instr) override { (void)instr; }
+      void visit(LDSAtomicInstr *instr) override { (void)instr; }
+      void visit(LDSReadInstr *instr) override { (void)instr; }
 
       void visit(ScratchIOInstr *instr) override;
       void visit(GDSInstr *instr) override;
@@ -382,13 +381,12 @@ private:
    };
 
    InstructionChain m_chain_instr;
-   std::vector<Instr *> m_loops;
+   std::list<Instr *, Allocator<Instr *>> m_loops;
 };
-
 
 std::pair<unsigned, unsigned>
 r600_get_varying_semantic(unsigned varying_location);
 
-}
+} // namespace r600
 
 #endif // SHADER_H

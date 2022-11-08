@@ -65,7 +65,6 @@ radv_aco_convert_shader_vp_info(struct aco_vp_output_info *aco_info,
    /* don't use export params */
 }
 
-#define ASSIGN_OUTINFO(x) radv_aco_convert_shader_vp_info(&aco_info->x.outinfo, &radv->x.outinfo);
 static inline void
 radv_aco_convert_shader_info(struct aco_shader_info *aco_info,
 			     const struct radv_shader_info *radv)
@@ -74,15 +73,15 @@ radv_aco_convert_shader_info(struct aco_shader_info *aco_info,
    ASSIGN_FIELD(is_ngg);
    ASSIGN_FIELD(has_ngg_culling);
    ASSIGN_FIELD(has_ngg_early_prim_export);
-   ASSIGN_FIELD(num_tess_patches);
    ASSIGN_FIELD(workgroup_size);
-   ASSIGN_OUTINFO(vs);
+   radv_aco_convert_shader_vp_info(&aco_info->outinfo, &radv->outinfo);
    ASSIGN_FIELD(vs.as_es);
    ASSIGN_FIELD(vs.as_ls);
    ASSIGN_FIELD(vs.tcs_in_out_eq);
    ASSIGN_FIELD(vs.tcs_temp_only_input_mask);
    ASSIGN_FIELD(vs.use_per_attribute_vb_descs);
    ASSIGN_FIELD(vs.vb_desc_usage_mask);
+   ASSIGN_FIELD(vs.input_slot_usage_mask);
    ASSIGN_FIELD(vs.has_prolog);
    ASSIGN_FIELD(vs.dynamic_inputs);
    ASSIGN_FIELD_CP(gs.output_usage_mask);
@@ -90,7 +89,6 @@ radv_aco_convert_shader_info(struct aco_shader_info *aco_info,
    ASSIGN_FIELD_CP(gs.output_streams);
    ASSIGN_FIELD(gs.vertices_out);
    ASSIGN_FIELD(tcs.num_lds_blocks);
-   ASSIGN_OUTINFO(tes);
    ASSIGN_FIELD(tes.as_es);
    ASSIGN_FIELD(ps.writes_z);
    ASSIGN_FIELD(ps.writes_stencil);
@@ -99,7 +97,6 @@ radv_aco_convert_shader_info(struct aco_shader_info *aco_info,
    ASSIGN_FIELD(ps.num_interp);
    ASSIGN_FIELD(ps.spi_ps_input);
    ASSIGN_FIELD(cs.subgroup_size);
-   ASSIGN_OUTINFO(ms);
    radv_aco_convert_shader_so_info(aco_info, radv);
    aco_info->gfx9_gs_ring_lds_size = radv->gs_ring_info.lds_size;
 }
@@ -148,7 +145,6 @@ radv_aco_convert_pipe_key(struct aco_stage_input *aco_info,
    ASSIGN_FIELD_CP(vs.vertex_binding_align);
    ASSIGN_FIELD(tcs.tess_input_vertices);
    ASSIGN_FIELD(ps.col_format);
-   ASSIGN_FIELD(ps.num_samples);
    ASSIGN_FIELD(ps.alpha_to_coverage_via_mrtz);
 }
 
@@ -174,6 +170,5 @@ radv_aco_convert_opts(struct aco_compiler_options *aco_info,
 #undef ASSIGN_VS_STATE_FIELD_CP
 #undef ASSIGN_FIELD
 #undef ASSIGN_FIELD_CP
-#undef ASSIGN_OUTINFO
 
 #endif

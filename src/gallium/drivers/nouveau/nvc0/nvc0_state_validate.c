@@ -253,7 +253,7 @@ nvc0_validate_fb(struct nvc0_context *nvc0)
          PUSH_DATA(push, 0);
          PUSH_DATA(push, 0);
 
-         nvc0_resource_fence(res, NOUVEAU_BO_WR);
+         nvc0_resource_fence(nvc0, res, NOUVEAU_BO_WR);
 
          assert(!fb->zsbuf);
       }
@@ -577,6 +577,7 @@ nvc0_constbufs_validate(struct nvc0_context *nvc0)
    unsigned s;
 
    bool can_serialize = true;
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
 
    for (s = 0; s < 5; ++s) {
       while (nvc0->constbuf_dirty[s]) {
@@ -593,7 +594,7 @@ nvc0_constbufs_validate(struct nvc0_context *nvc0)
             if (!nvc0->state.uniform_buffer_bound[s]) {
                nvc0->state.uniform_buffer_bound[s] = true;
 
-               nvc0_screen_bind_cb_3d(nvc0->screen, &can_serialize, s, i,
+               nvc0_screen_bind_cb_3d(nvc0->screen, push, &can_serialize, s, i,
                                       NVC0_MAX_CONSTBUF_SIZE, bo->offset + base);
             }
             nvc0_cb_bo_push(&nvc0->base, bo, NV_VRAM_DOMAIN(&nvc0->screen->base),
@@ -604,7 +605,7 @@ nvc0_constbufs_validate(struct nvc0_context *nvc0)
             struct nv04_resource *res =
                nv04_resource(nvc0->constbuf[s][i].u.buf);
             if (res) {
-               nvc0_screen_bind_cb_3d(nvc0->screen, &can_serialize, s, i,
+               nvc0_screen_bind_cb_3d(nvc0->screen, push, &can_serialize, s, i,
                                       nvc0->constbuf[s][i].size,
                                       res->address + nvc0->constbuf[s][i].offset);
 
@@ -616,7 +617,7 @@ nvc0_constbufs_validate(struct nvc0_context *nvc0)
                if (i == 0)
                   nvc0->state.uniform_buffer_bound[s] = false;
             } else if (i != 0) {
-               nvc0_screen_bind_cb_3d(nvc0->screen, &can_serialize, s, i, -1, 0);
+               nvc0_screen_bind_cb_3d(nvc0->screen, push, &can_serialize, s, i, -1, 0);
             }
          }
       }
@@ -717,7 +718,7 @@ nvc0_validate_driverconst(struct nvc0_context *nvc0)
    int i;
 
    for (i = 0; i < 5; ++i)
-      nvc0_screen_bind_cb_3d(screen, NULL, i, 15, NVC0_CB_AUX_SIZE,
+      nvc0_screen_bind_cb_3d(screen, nvc0->base.pushbuf, NULL, i, 15, NVC0_CB_AUX_SIZE,
                              screen->uniform_bo->offset + NVC0_CB_AUX_INFO(i));
 
    nvc0->dirty_cp |= NVC0_NEW_CP_DRIVERCONST;
@@ -871,6 +872,7 @@ nvc0_switch_pipe_context(struct nvc0_context *ctx_to)
    struct nvc0_context *ctx_from = ctx_to->screen->cur_ctx;
    unsigned s;
 
+   simple_mtx_assert_locked(&ctx_to->screen->state_lock);
    if (ctx_from)
       ctx_to->state = ctx_from->state;
    else
@@ -967,6 +969,8 @@ nvc0_state_validate(struct nvc0_context *nvc0, uint32_t mask,
    int ret;
    unsigned i;
 
+   simple_mtx_assert_locked(&nvc0->screen->state_lock);
+
    if (nvc0->screen->cur_ctx != nvc0)
       nvc0_switch_pipe_context(nvc0);
 
@@ -985,7 +989,7 @@ nvc0_state_validate(struct nvc0_context *nvc0, uint32_t mask,
    }
 
    nouveau_pushbuf_bufctx(nvc0->base.pushbuf, bufctx);
-   ret = nouveau_pushbuf_validate(nvc0->base.pushbuf);
+   ret = PUSH_VAL(nvc0->base.pushbuf);
 
    return !ret;
 }

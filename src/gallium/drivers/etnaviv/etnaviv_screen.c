@@ -65,8 +65,6 @@ static const struct debug_named_value etna_debug_options[] = {
    {"no_supertile",   ETNA_DBG_NO_SUPERTILE, "Disable supertiles"},
    {"no_early_z",     ETNA_DBG_NO_EARLY_Z, "Disable early z"},
    {"cflush_all",     ETNA_DBG_CFLUSH_ALL, "Flush every cache before state update"},
-   {"msaa2x",         ETNA_DBG_MSAA_2X, "Force 2x msaa"},
-   {"msaa4x",         ETNA_DBG_MSAA_4X, "Force 4x msaa"},
    {"flush_all",      ETNA_DBG_FLUSH_ALL, "Flush after every rendered primitive"},
    {"zero",           ETNA_DBG_ZERO, "Zero all resources after allocation"},
    {"draw_stall",     ETNA_DBG_DRAW_STALL, "Stall FE/PE after each rendered primitive"},
@@ -143,7 +141,6 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    switch (param) {
    /* Supported features (boolean caps). */
-   case PIPE_CAP_POINT_SPRITE:
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT:
    case PIPE_CAP_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
@@ -206,6 +203,7 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 255;
    case PIPE_CAP_MAX_VERTEX_BUFFERS:
       return screen->specs.stream_count;
+   case PIPE_CAP_VS_INSTANCEID:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
       return VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
 
@@ -215,9 +213,12 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS: /* TODO: verify */
-      return screen->specs.max_texture_size;
-   case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
+      return screen->specs.halti >= 0 ? screen->specs.max_texture_size : 0;
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
+      if (screen->specs.halti < 0)
+         return 0;
+      FALLTHROUGH;
+   case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
    {
       int log2_max_tex_size = util_last_bit(screen->specs.max_texture_size);
       assert(log2_max_tex_size > 0);
@@ -429,12 +430,6 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
    return 0;
 }
 
-static uint64_t
-etna_screen_get_timestamp(struct pipe_screen *pscreen)
-{
-   return os_time_get_nano();
-}
-
 static bool
 gpu_supports_texture_target(struct etna_screen *screen,
                             enum pipe_texture_target target)
@@ -500,9 +495,28 @@ gpu_supports_render_format(struct etna_screen *screen, enum pipe_format format,
    if (fmt == ETNA_NO_MATCH)
       return false;
 
-   /* MSAA is broken */
-   if (sample_count > 1)
+   if (sample_count > 1) {
+      /* The hardware supports it. */
+      if (!VIV_FEATURE(screen, chipFeatures, MSAA))
          return false;
+
+      /* Number of samples must be allowed. */
+      if (!translate_samples_to_xyscale(sample_count, NULL, NULL))
+         return false;
+
+      /* On SMALL_MSAA hardware 2x MSAA does not work. */
+      if (sample_count == 2 && VIV_FEATURE(screen, chipMinorFeatures4, SMALL_MSAA))
+         return false;
+
+      /* BLT/RS supports the format. */
+      if (screen->specs.use_blt) {
+         if (translate_blt_format(format) == ETNA_NO_MATCH)
+            return false;
+      } else {
+         if (translate_rs_format(format) == ETNA_NO_MATCH)
+            return false;
+      }
+   }
 
    if (format == PIPE_FORMAT_R8_UNORM)
       return VIV_FEATURE(screen, chipMinorFeatures5, HALTI5);
@@ -961,7 +975,7 @@ etna_screen_bo_from_handle(struct pipe_screen *pscreen,
 
 static const void *
 etna_get_compiler_options(struct pipe_screen *pscreen,
-                          enum pipe_shader_ir ir, unsigned shader)
+                          enum pipe_shader_ir ir, enum pipe_shader_type shader)
 {
    return etna_compiler_get_options(etna_screen(pscreen)->compiler);
 }
@@ -1127,7 +1141,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    pscreen->get_vendor = etna_screen_get_vendor;
    pscreen->get_device_vendor = etna_screen_get_device_vendor;
 
-   pscreen->get_timestamp = etna_screen_get_timestamp;
+   pscreen->get_timestamp = u_default_get_timestamp;
    pscreen->context_create = etna_context_create;
    pscreen->is_format_supported = etna_screen_is_format_supported;
    pscreen->query_dmabuf_modifiers = etna_screen_query_dmabuf_modifiers;

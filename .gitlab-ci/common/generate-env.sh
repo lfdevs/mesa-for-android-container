@@ -111,6 +111,7 @@ for var in \
     SKQP_BACKENDS \
     TU_DEBUG \
     VIRGL_HOST_API \
+    WAFFLE_PLATFORM \
     VK_CPU \
     VK_DRIVER \
     VK_ICD_FILENAMES \

@@ -149,9 +149,9 @@ cleanup
 
 # upload artifacts
 if [ -n "$MINIO_RESULTS_UPLOAD" ]; then
-  tar -czf results.tar.gz results/;
+  tar --zstd -cf results.tar.zst results/;
   ci-fairy minio login --token-file "${CI_JOB_JWT_FILE}";
-  ci-fairy minio cp results.tar.gz minio://"$MINIO_RESULTS_UPLOAD"/results.tar.gz;
+  ci-fairy minio cp results.tar.zst minio://"$MINIO_RESULTS_UPLOAD"/results.tar.zst;
 fi
 
 # We still need to echo the hwci: mesa message, as some scripts rely on it, such

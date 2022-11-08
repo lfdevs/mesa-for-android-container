@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "util/mesa-sha1.h"
+#include "radv_acceleration_structure.h"
 #include "radv_private.h"
 #include "sid.h"
 #include "vk_descriptors.h"
@@ -45,7 +46,7 @@ radv_descriptor_type_buffer_count(VkDescriptorType type)
       case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
       case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
       case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-      case VK_DESCRIPTOR_TYPE_MUTABLE_VALVE:
+      case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
          return 3;
       default:
          return 1;
@@ -118,8 +119,8 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO);
    const VkDescriptorSetLayoutBindingFlagsCreateInfo *variable_flags =
       vk_find_struct_const(pCreateInfo->pNext, DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO);
-   const VkMutableDescriptorTypeCreateInfoVALVE *mutable_info =
-      vk_find_struct_const(pCreateInfo->pNext, MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_VALVE);
+   const VkMutableDescriptorTypeCreateInfoEXT *mutable_info =
+      vk_find_struct_const(pCreateInfo->pNext, MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT);
 
    uint32_t num_bindings = 0;
    uint32_t immutable_sampler_count = 0;
@@ -261,7 +262,7 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
          set_layout->binding[b].size = 16;
          alignment = 16;
          break;
-      case VK_DESCRIPTOR_TYPE_MUTABLE_VALVE: {
+      case VK_DESCRIPTOR_TYPE_MUTABLE_EXT: {
          uint64_t mutable_size = 0, mutable_align = 0;
          radv_mutable_descriptor_type_size_alignment(&mutable_info->pMutableDescriptorTypeLists[j],
                                                      &mutable_size, &mutable_align);
@@ -369,8 +370,8 @@ radv_GetDescriptorSetLayoutSupport(VkDevice device,
       vk_find_struct_const(pCreateInfo->pNext, DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO);
    VkDescriptorSetVariableDescriptorCountLayoutSupport *variable_count = vk_find_struct(
       (void *)pCreateInfo->pNext, DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT);
-   const VkMutableDescriptorTypeCreateInfoVALVE *mutable_info =
-      vk_find_struct_const(pCreateInfo->pNext, MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_VALVE);
+   const VkMutableDescriptorTypeCreateInfoEXT *mutable_info =
+      vk_find_struct_const(pCreateInfo->pNext, MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT);
    if (variable_count) {
       variable_count->maxVariableDescriptorCount = 0;
    }
@@ -422,7 +423,7 @@ radv_GetDescriptorSetLayoutSupport(VkDevice device,
          descriptor_size = descriptor_count;
          descriptor_count = 1;
          break;
-      case VK_DESCRIPTOR_TYPE_MUTABLE_VALVE:
+      case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
          if (!radv_mutable_descriptor_type_size_alignment(
                 &mutable_info->pMutableDescriptorTypeLists[i], &descriptor_size,
                 &descriptor_alignment)) {
@@ -563,14 +564,8 @@ radv_CreatePipelineLayout(VkDevice _device, const VkPipelineLayoutCreateInfo *pC
    for (uint32_t set = 0; set < pCreateInfo->setLayoutCount; set++) {
       RADV_FROM_HANDLE(radv_descriptor_set_layout, set_layout, pCreateInfo->pSetLayouts[set]);
 
-      /* From the Vulkan spec 1.3.211:
-       *
-       * "VUID-VkPipelineLayoutCreateInfo-flags-06562
-       *  If flags: does not include VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT, elements of
-       *  pSetLayouts must be valid VkDescriptorSetLayout objects"
-       */
       if (set_layout == NULL) {
-         assert(layout->independent_sets);
+         layout->set[set].layout = NULL;
          continue;
       }
 
@@ -673,11 +668,15 @@ radv_descriptor_set_create(struct radv_device *device, struct radv_descriptor_po
       set->header.bo = pool->bo;
       set->header.mapped_ptr = (uint32_t *)(pool->mapped_ptr + pool->current_offset);
       set->header.va = pool->bo ? (radv_buffer_get_va(set->header.bo) + pool->current_offset) : 0;
+
       if (!pool->host_memory_base) {
          pool->entries[pool->entry_count].offset = pool->current_offset;
          pool->entries[pool->entry_count].size = layout_size;
+         pool->entries[pool->entry_count].set = set;
+      } else {
+         pool->layouts[pool->entry_count] = layout;
       }
-      pool->entries[pool->entry_count].set = set;
+
       pool->current_offset += layout_size;
    } else if (!pool->host_memory_base) {
       uint64_t offset = 0;
@@ -733,10 +732,9 @@ static void
 radv_descriptor_set_destroy(struct radv_device *device, struct radv_descriptor_pool *pool,
                             struct radv_descriptor_set *set, bool free_bo)
 {
-   vk_descriptor_set_layout_unref(&device->vk, &set->header.layout->vk);
+   assert(!pool->host_memory_base);
 
-   if (pool->host_memory_base)
-      return;
+   vk_descriptor_set_layout_unref(&device->vk, &set->header.layout->vk);
 
    if (free_bo && !pool->host_memory_base) {
       for (int i = 0; i < pool->entry_count; ++i) {
@@ -756,8 +754,15 @@ static void
 radv_destroy_descriptor_pool(struct radv_device *device, const VkAllocationCallbacks *pAllocator,
                              struct radv_descriptor_pool *pool)
 {
-   for (int i = 0; i < pool->entry_count; ++i) {
-      radv_descriptor_set_destroy(device, pool, pool->entries[i].set, false);
+
+   if (!pool->host_memory_base) {
+      for (uint32_t i = 0; i < pool->entry_count; ++i) {
+         radv_descriptor_set_destroy(device, pool, pool->entries[i].set, false);
+      }
+   } else {
+      for (uint32_t i = 0; i < pool->entry_count; ++i) {
+         vk_descriptor_set_layout_unref(&device->vk, &pool->layouts[i]->vk);
+      }
    }
 
    if (pool->bo)
@@ -779,8 +784,8 @@ radv_CreateDescriptorPool(VkDevice _device, const VkDescriptorPoolCreateInfo *pC
    uint64_t size = sizeof(struct radv_descriptor_pool);
    uint64_t bo_size = 0, bo_count = 0, range_count = 0;
 
-   const VkMutableDescriptorTypeCreateInfoVALVE *mutable_info =
-      vk_find_struct_const(pCreateInfo->pNext, MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_VALVE);
+   const VkMutableDescriptorTypeCreateInfoEXT *mutable_info =
+      vk_find_struct_const(pCreateInfo->pNext, MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT);
 
    vk_foreach_struct_const(ext, pCreateInfo->pNext)
    {
@@ -822,7 +827,7 @@ radv_CreateDescriptorPool(VkDevice _device, const VkDescriptorPoolCreateInfo *pC
       case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
          bo_size += 64 * pCreateInfo->pPoolSizes[i].descriptorCount;
          break;
-      case VK_DESCRIPTOR_TYPE_MUTABLE_VALVE:
+      case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
          /* Per spec, if a mutable descriptor type list is provided for the pool entry, we
           * allocate enough memory to hold any subset of that list.
           * If there is no mutable descriptor type list available,
@@ -851,14 +856,17 @@ radv_CreateDescriptorPool(VkDevice _device, const VkDescriptorPoolCreateInfo *pC
       }
    }
 
-   uint64_t entries_size = sizeof(struct radv_descriptor_pool_entry) * pCreateInfo->maxSets;
-   size += entries_size;
+   uint64_t layouts_size = 0;
 
    if (!(pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT)) {
-      uint64_t host_size = pCreateInfo->maxSets * sizeof(struct radv_descriptor_set);
-      host_size += sizeof(struct radeon_winsys_bo *) * bo_count;
-      host_size += sizeof(struct radv_descriptor_range) * range_count;
-      size += host_size;
+      size += pCreateInfo->maxSets * sizeof(struct radv_descriptor_set);
+      size += sizeof(struct radeon_winsys_bo *) * bo_count;
+      size += sizeof(struct radv_descriptor_range) * range_count;
+
+      layouts_size = sizeof(struct radv_descriptor_set_layout *) * pCreateInfo->maxSets;
+      size += layouts_size;
+   } else {
+      size += sizeof(struct radv_descriptor_pool_entry) * pCreateInfo->maxSets;
    }
 
    pool = vk_alloc2(&device->vk.alloc, pAllocator, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
@@ -870,7 +878,7 @@ radv_CreateDescriptorPool(VkDevice _device, const VkDescriptorPoolCreateInfo *pC
    vk_object_base_init(&device->vk, &pool->base, VK_OBJECT_TYPE_DESCRIPTOR_POOL);
 
    if (!(pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT)) {
-      pool->host_memory_base = (uint8_t *)pool + sizeof(struct radv_descriptor_pool) + entries_size;
+      pool->host_memory_base = (uint8_t *)pool + sizeof(struct radv_descriptor_pool) + layouts_size;
       pool->host_memory_ptr = pool->host_memory_base;
       pool->host_memory_end = (uint8_t *)pool + size;
    }
@@ -932,9 +940,16 @@ radv_ResetDescriptorPool(VkDevice _device, VkDescriptorPool descriptorPool,
    RADV_FROM_HANDLE(radv_device, device, _device);
    RADV_FROM_HANDLE(radv_descriptor_pool, pool, descriptorPool);
 
-   for (int i = 0; i < pool->entry_count; ++i) {
-      radv_descriptor_set_destroy(device, pool, pool->entries[i].set, false);
+   if (!pool->host_memory_base) {
+      for (uint32_t i = 0; i < pool->entry_count; ++i) {
+         radv_descriptor_set_destroy(device, pool, pool->entries[i].set, false);
+      }
+   } else {
+      for (uint32_t i = 0; i < pool->entry_count; ++i) {
+         vk_descriptor_set_layout_unref(&device->vk, &pool->layouts[i]->vk);
+      }
    }
+
    pool->entry_count = 0;
 
    pool->current_offset = 0;
@@ -1176,11 +1191,9 @@ write_combined_image_sampler_descriptor(struct radv_device *device,
 }
 
 static ALWAYS_INLINE void
-write_sampler_descriptor(struct radv_device *device, unsigned *dst,
-                         const VkDescriptorImageInfo *image_info)
+write_sampler_descriptor(unsigned *dst, VkSampler _sampler)
 {
-   RADV_FROM_HANDLE(radv_sampler, sampler, image_info->sampler);
-
+   RADV_FROM_HANDLE(radv_sampler, sampler, _sampler);
    memcpy(dst, sampler->state, 16);
 }
 
@@ -1188,7 +1201,7 @@ static ALWAYS_INLINE void
 write_accel_struct(void *ptr, VkAccelerationStructureKHR _accel_struct)
 {
    RADV_FROM_HANDLE(radv_acceleration_structure, accel_struct, _accel_struct);
-   uint64_t va = accel_struct ? radv_accel_struct_get_va(accel_struct) : 0;
+   uint64_t va = accel_struct ? accel_struct->va : 0;
    memcpy(ptr, &va, sizeof(va));
 }
 
@@ -1276,7 +1289,8 @@ radv_update_descriptor_sets_impl(struct radv_device *device, struct radv_cmd_buf
          }
          case VK_DESCRIPTOR_TYPE_SAMPLER:
             if (!binding_layout->immutable_samplers_offset) {
-               write_sampler_descriptor(device, ptr, writeset->pImageInfo + j);
+               const VkDescriptorImageInfo *pImageInfo = writeset->pImageInfo + j;
+               write_sampler_descriptor(ptr, pImageInfo->sampler);
             } else if (copy_immutable_samplers) {
                unsigned idx = writeset->dstArrayElement + j;
                memcpy(ptr, samplers + 4 * idx, 16);
@@ -1568,8 +1582,10 @@ radv_update_descriptor_set_with_template_impl(struct radv_device *device,
             }
             break;
          case VK_DESCRIPTOR_TYPE_SAMPLER:
-            if (templ->entry[i].has_sampler)
-               write_sampler_descriptor(device, pDst, (struct VkDescriptorImageInfo *)pSrc);
+            if (templ->entry[i].has_sampler) {
+               const VkDescriptorImageInfo *pImageInfo = (struct VkDescriptorImageInfo *)pSrc;
+               write_sampler_descriptor(pDst, pImageInfo->sampler);
+            }
             else if (cmd_buffer && templ->entry[i].immutable_samplers)
                memcpy(pDst, templ->entry[i].immutable_samplers + 4 * j, 16);
             break;

@@ -463,6 +463,29 @@ VKAPI_ATTR void VKAPI_CALL vk_entrypoint_stub(void)
 {
    unreachable(!"Entrypoint not implemented");
 }
+
+static const void *get_function_target(const void *func)
+{
+   const uint8_t *address = func;
+#ifdef _M_X64
+   /* Incremental linking may indirect through relative jump */
+   if (*address == 0xE9)
+   {
+      /* Compute JMP target if the first byte is opcode 0xE9 */
+      uint32_t offset;
+      memcpy(&offset, address + 1, 4);
+      address += offset + 5;
+   }
+#else
+   /* Add other platforms here if necessary */
+#endif
+   return address;
+}
+
+static bool vk_function_is_stub(PFN_vkVoidFunction func)
+{
+   return (func == vk_entrypoint_stub) || (get_function_target(func) == get_function_target(vk_entrypoint_stub));
+}
 #endif
 
 <%def name="dispatch_table_from_entrypoints(type)">
@@ -479,7 +502,7 @@ void vk_${type}_dispatch_table_from_entrypoints(
         for (unsigned i = 0; i < ARRAY_SIZE(${type}_compaction_table); i++) {
 #ifdef _MSC_VER
             assert(entry[i] != NULL);
-            if (entry[i] == vk_entrypoint_stub)
+            if (vk_function_is_stub(entry[i]))
 #else
             if (entry[i] == NULL)
 #endif
@@ -493,7 +516,7 @@ void vk_${type}_dispatch_table_from_entrypoints(
             unsigned disp_index = ${type}_compaction_table[i];
 #ifdef _MSC_VER
             assert(entry[i] != NULL);
-            if (disp[disp_index] == NULL && entry[i] != vk_entrypoint_stub)
+            if (disp[disp_index] == NULL && !vk_function_is_stub(entry[i]))
 #else
             if (disp[disp_index] == NULL)
 #endif

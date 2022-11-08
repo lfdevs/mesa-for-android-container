@@ -55,9 +55,9 @@ enum lp_func_attr {
    LP_FUNC_ATTR_NOUNWIND     = (1 << 4),
    LP_FUNC_ATTR_READNONE     = (1 << 5),
    LP_FUNC_ATTR_READONLY     = (1 << 6),
-   LP_FUNC_ATTR_WRITEONLY    = LLVM_VERSION_MAJOR >= 4 ? (1 << 7) : 0,
-   LP_FUNC_ATTR_INACCESSIBLE_MEM_ONLY = LLVM_VERSION_MAJOR >= 4 ? (1 << 8) : 0,
-   LP_FUNC_ATTR_CONVERGENT   = LLVM_VERSION_MAJOR >= 4 ? (1 << 9) : 0,
+   LP_FUNC_ATTR_WRITEONLY    = (1 << 7),
+   LP_FUNC_ATTR_INACCESSIBLE_MEM_ONLY = (1 << 8),
+   LP_FUNC_ATTR_CONVERGENT   = (1 << 9),
    LP_FUNC_ATTR_PRESPLITCORO = (1 << 10),
 
    /* Legacy intrinsic that needs attributes on function declarations

@@ -23,7 +23,7 @@
  */
 
 #include "util/blob.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/disk_cache.h"
 #include "util/u_memory.h"
 #include "util/ralloc.h"
@@ -85,6 +85,7 @@ struct ttn_compile {
    nir_variable *input_var_face;
    nir_variable *input_var_position;
    nir_variable *input_var_point;
+   nir_variable *clipdist;
 
    /* How many TGSI_FILE_IMMEDIATE vec4s have been parsed so far. */
    unsigned next_imm;
@@ -94,6 +95,7 @@ struct ttn_compile {
    bool cap_point_is_sysval;
    bool cap_samplers_as_deref;
    bool cap_integers;
+   bool cap_compact_arrays;
 };
 
 #define ttn_swizzle(b, src, x, y, z, w) \
@@ -434,6 +436,12 @@ ttn_emit_declaration(struct ttn_compile *c)
                   var->type = glsl_float_type();
                } else if (var->data.location == VARYING_SLOT_LAYER) {
                   var->type = glsl_int_type();
+               } else if (c->cap_compact_arrays &&
+                          var->data.location == VARYING_SLOT_CLIP_DIST0) {
+                  var->type = glsl_array_type(glsl_float_type(),
+                                              b->shader->info.clip_distance_array_size,
+                                              sizeof(float));
+                  c->clipdist = var;
                }
             }
 
@@ -449,6 +457,11 @@ ttn_emit_declaration(struct ttn_compile *c)
             }
 
             c->outputs[idx] = var;
+
+            if (c->cap_compact_arrays && var->data.location == VARYING_SLOT_CLIP_DIST1) {
+               /* ignore this entirely */
+               continue;
+            }
 
             for (int i = 0; i < array_size; i++)
                b->shader->info.outputs_written |= 1ull << (var->data.location + i);
@@ -1423,19 +1436,20 @@ ttn_tex(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
     */
    sview = tgsi_inst->Src[samp].Register.Index;
 
+   nir_alu_type sampler_type =
+      sview < c->num_samp_types ? c->samp_types[sview] : nir_type_float32;
+
    if (op == nir_texop_lod) {
       instr->dest_type = nir_type_float32;
-   } else if (sview < c->num_samp_types) {
-      instr->dest_type = c->samp_types[sview];
    } else {
-      instr->dest_type = nir_type_float32;
+      instr->dest_type = sampler_type;
    }
 
    nir_variable *var =
       get_sampler_var(c, sview, instr->sampler_dim,
                       instr->is_shadow,
                       instr->is_array,
-                      base_type_for_alu_type(instr->dest_type),
+                      base_type_for_alu_type(sampler_type),
                       op);
 
    nir_deref_instr *deref = nir_build_deref_var(b, var);
@@ -1596,13 +1610,16 @@ ttn_txq(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
                     &qlv->sampler_dim, &qlv->is_shadow, &qlv->is_array);
 
    assert(tgsi_inst->Src[1].Register.File == TGSI_FILE_SAMPLER);
-   int tex_index = tgsi_inst->Src[1].Register.Index;
+   int sview = tgsi_inst->Src[1].Register.Index;
+
+   nir_alu_type sampler_type =
+      sview < c->num_samp_types ? c->samp_types[sview] : nir_type_float32;
 
    nir_variable *var =
-      get_sampler_var(c, tex_index, txs->sampler_dim,
+      get_sampler_var(c, sview, txs->sampler_dim,
                       txs->is_shadow,
                       txs->is_array,
-                      base_type_for_alu_type(txs->dest_type),
+                      base_type_for_alu_type(sampler_type),
                       nir_texop_txs);
 
    nir_deref_instr *deref = nir_build_deref_var(b, var);
@@ -2213,6 +2230,7 @@ ttn_add_output_stores(struct ttn_compile *c)
       src.reg.base_offset = c->output_regs[i].offset;
 
       nir_ssa_def *store_value = nir_ssa_for_src(b, src, 4);
+      uint32_t store_mask = BITFIELD_MASK(store_value->num_components);
       if (c->build.shader->info.stage == MESA_SHADER_FRAGMENT) {
          /* TGSI uses TGSI_SEMANTIC_POSITION.z for the depth output
           * and TGSI_SEMANTIC_STENCIL.y for the stencil output,
@@ -2231,10 +2249,39 @@ ttn_add_output_stores(struct ttn_compile *c)
              var->data.location == VARYING_SLOT_PSIZ) {
             store_value = nir_channel(b, store_value, 0);
          }
+         if (var->data.location == VARYING_SLOT_CLIP_DIST0)
+            store_mask = BITFIELD_MASK(MIN2(c->build.shader->info.clip_distance_array_size, 4));
+         else if (var->data.location == VARYING_SLOT_CLIP_DIST1) {
+            if (c->build.shader->info.clip_distance_array_size > 4)
+               store_mask = BITFIELD_MASK(c->build.shader->info.clip_distance_array_size - 4);
+            else
+               store_mask = 0;
+         }
       }
 
-      nir_store_deref(b, nir_build_deref_var(b, var), store_value,
-                      (1 << store_value->num_components) - 1);
+      if (c->cap_compact_arrays &&
+          (var->data.location == VARYING_SLOT_CLIP_DIST0 ||
+           var->data.location == VARYING_SLOT_CLIP_DIST1)) {
+         if (!store_mask)
+            continue;
+
+         nir_deref_instr *deref = nir_build_deref_var(b, c->clipdist);
+         nir_ssa_def *zero = nir_imm_zero(b, 1, 32);
+         unsigned offset = var->data.location == VARYING_SLOT_CLIP_DIST1 ? 4 : 0;
+         unsigned size = var->data.location == VARYING_SLOT_CLIP_DIST1 ?
+                          b->shader->info.clip_distance_array_size :
+                          MIN2(4, b->shader->info.clip_distance_array_size);
+         for (unsigned i = offset; i < size; i++) {
+            /* deref the array member and store each component */
+            nir_deref_instr *component_deref = nir_build_deref_array_imm(b, deref, i);
+            nir_ssa_def *val = zero;
+            if (store_mask & BITFIELD_BIT(i - offset))
+               val = nir_channel(b, store_value, i - offset);
+            nir_store_deref(b, component_deref, val, 0x1);
+         }
+      } else {
+         nir_store_deref(b, nir_build_deref_var(b, var), store_value, store_mask);
+      }
    }
 }
 
@@ -2281,6 +2328,7 @@ ttn_read_pipe_caps(struct ttn_compile *c,
    c->cap_position_is_sysval = screen->get_param(screen, PIPE_CAP_FS_POSITION_IS_SYSVAL);
    c->cap_point_is_sysval = screen->get_param(screen, PIPE_CAP_FS_POINT_IS_SYSVAL);
    c->cap_integers = screen->get_shader_param(screen, c->scan->processor, PIPE_SHADER_CAP_INTEGERS);
+   c->cap_compact_arrays = screen->get_param(screen, PIPE_CAP_NIR_COMPACT_ARRAYS);
 }
 
 #define BITSET_SET32(bitset, u32_mask) do { \

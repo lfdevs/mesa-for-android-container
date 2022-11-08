@@ -125,7 +125,6 @@ void util_compute_blit(struct pipe_context *ctx, struct pipe_blit_info *blit_inf
    sampler_state.wrap_s = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
    sampler_state.wrap_t = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
    sampler_state.wrap_r = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
-   sampler_state.normalized_coords = 1;
 
    if (blit_info->filter == PIPE_TEX_FILTER_LINEAR) {
       sampler_state.min_img_filter = PIPE_TEX_FILTER_LINEAR;

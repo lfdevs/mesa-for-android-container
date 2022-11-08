@@ -624,15 +624,15 @@ nv50_draw_elements(struct nv50_context *nv50, bool shorten,
        * the not-yet-written data. Ideally this wait would only happen on
        * pushbuf submit, but it's probably not a big performance difference.
        */
-      if (buf->fence_wr && !nouveau_fence_signalled(buf->fence_wr))
+      if (buf->fence_wr)
          nouveau_fence_wait(buf->fence_wr, &nv50->base.debug);
 
       while (instance_count--) {
          BEGIN_NV04(push, NV50_3D(VERTEX_BEGIN_GL), 1);
          PUSH_DATA (push, prim);
 
-         nouveau_pushbuf_space(push, 16, 0, 1);
-         PUSH_REFN(push, buf->bo, NOUVEAU_BO_RD | buf->domain);
+         PUSH_SPACE_EX(push, 16, 0, 1);
+         PUSH_REF1(push, buf->bo, NOUVEAU_BO_RD | buf->domain);
 
          switch (index_size) {
          case 4:
@@ -737,7 +737,7 @@ nva0_draw_stream_output(struct nv50_context *nv50,
       PUSH_DATA (push, 0);
       BEGIN_NV04(push, NVA0_3D(DRAW_TFB_STRIDE), 1);
       PUSH_DATA (push, so->stride);
-      nv50_hw_query_pushbuf_submit(push, NVA0_3D_DRAW_TFB_BYTES,
+      nv50_hw_query_pushbuf_submit(nv50, NVA0_3D_DRAW_TFB_BYTES,
                                    nv50_query(so->pq), 0x4);
       BEGIN_NV04(push, NV50_3D(VERTEX_END_GL), 1);
       PUSH_DATA (push, 0);
@@ -747,13 +747,9 @@ nva0_draw_stream_output(struct nv50_context *nv50,
 }
 
 static void
-nv50_draw_vbo_kick_notify(struct nouveau_pushbuf *chan)
+nv50_draw_vbo_kick_notify(struct nouveau_context *context)
 {
-   struct nv50_screen *screen = chan->user_priv;
-
-   nouveau_fence_update(&screen->base, true);
-
-   nv50_bufctx_fence(screen->cur_ctx->bufctx_3d, true);
+   _nouveau_fence_update(context->screen, true);
 }
 
 void
@@ -815,9 +811,10 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    if (unlikely(nv50->num_so_targets && !nv50->gmtyprog))
       nv50->state.prim_size = nv50_pipe_prim_to_prim_size[info->mode];
 
+   simple_mtx_lock(&nv50->screen->state_lock);
    nv50_state_validate_3d(nv50, ~0);
 
-   push->kick_notify = nv50_draw_vbo_kick_notify;
+   nv50->base.kick_notify = nv50_draw_vbo_kick_notify;
 
    for (s = 0; s < NV50_MAX_3D_SHADER_STAGES && !nv50->cb_dirty; ++s) {
       if (nv50->constbuf_coherent[s])
@@ -924,7 +921,10 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    }
 
 cleanup:
-   push->kick_notify = nv50_default_kick_notify;
+   PUSH_KICK(push);
+   simple_mtx_unlock(&nv50->screen->state_lock);
+
+   nv50->base.kick_notify = nv50_default_kick_notify;
 
    nv50_release_user_vbufs(nv50);
 

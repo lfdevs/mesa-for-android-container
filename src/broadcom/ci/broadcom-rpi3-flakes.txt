@@ -14,3 +14,11 @@ spec@ext_packed_depth_stencil@fbo-stencil-gl_depth24_stencil8-readpixels
 # CMA allocations that may sometimes succeed
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=4
+
+# https://gitlab.freedesktop.org/mesa/mesa/-/issues/7186
+spec@!opengl 1.0@rasterpos
+spec@!opengl 1.0@rasterpos@glsl_vs_uniforms
+
+# Sometimes fail when run along with other tests, never when run by themselves
+spec@!opengl 1.1@copypixels-sync
+spec@!opengl 1.1@copypixels-draw-sync

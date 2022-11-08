@@ -77,7 +77,6 @@ KHR-GLES3.packed_pixels.rectangle.rgba8,Fail
 KHR-GLES3.packed_pixels.varied_rectangle.rgba,Fail
 KHR-GLES3.packed_pixels.varied_rectangle.rgba4,Fail
 KHR-GLES3.packed_pixels.varied_rectangle.rgba8,Fail
-KHR-GLES31.core.compressed_format.api.invalid_teximage_with_compressed_format,Fail
 KHR-GLES31.core.compute_shader.atomic-case2,Fail
 KHR-GLES31.core.compute_shader.atomic-case3,Fail
 KHR-GLES31.core.compute_shader.built-in-variables,Fail
@@ -93,6 +92,10 @@ KHR-GLES31.core.compute_shader.shared-simple,Fail
 KHR-GLES31.core.compute_shader.shared-struct,Fail
 KHR-GLES31.core.compute_shader.sso-case3,Fail
 KHR-GLES31.core.draw_indirect.basic-buffer-copySubData,Fail
+
+# No useful log information
+KHR-GLES31.core.geometry_shader.api.max_atomic_counters,Fail
+
 KHR-GLES31.core.geometry_shader.input.gl_in_array_length,Fail
 KHR-GLES31.core.gpu_shader5.fma_accuracy,Fail
 KHR-GLES31.core.gpu_shader5.precise_qualifier,Fail
@@ -184,10 +187,11 @@ KHR-GLES31.core.tessellation_shader.tessellation_shader_tessellation.gl_Invocati
 KHR-GLES31.core.tessellation_shader.tessellation_shader_triangles_tessellation.degenerate_triangle,Fail
 KHR-GLES31.core.tessellation_shader.vertex.vertex_ordering,Fail
 KHR-GLES31.core.tessellation_shader.vertex.vertex_spacing,Fail
-KHR-GLES31.core.texture_cube_map_array.texture_size_tesselation_con_sh,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_texture_buffer_range,Fail
 KHR-GLES31.core.vertex_attrib_binding.advanced-iterations,Fail
 KHR-GLES31.core.vertex_attrib_binding.basic-input-case12,Fail
 KHR-GLES31.core.vertex_attrib_binding.basic-input-case2,Fail
+KHR-GLES31.core.vertex_attrib_binding.basic-input-case5,Fail
 KHR-GLES31.core.vertex_attrib_binding.basic-input-case9,Fail
 KHR-GLES31.core.vertex_attrib_binding.basic-inputI-case3,Fail
 dEQP-GLES2.functional.rasterization.limits.points,Fail

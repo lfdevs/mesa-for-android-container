@@ -293,6 +293,13 @@ PUBLIC int open(const char *path, int flags, ...)
 }
 PUBLIC int open64(const char*, int, ...) __attribute__((alias("open")));
 
+/* __open64_2 isn't declared unless _FORTIFY_SOURCE is defined. */
+PUBLIC int __open64_2(const char *path, int flags);
+PUBLIC int __open64_2(const char *path, int flags)
+{
+   return open(path, flags, 0);
+}
+
 PUBLIC int close(int fd)
 {
    init_shim();

@@ -62,13 +62,23 @@ bit_builder(void *memctx)
 }
 
 /* Helper to compare for logical equality of instructions. Need to skip over
- * the link, guaranteed to be first. After that we can compare raw data. */
+ * the pointers, guaranteed to be first. After that we can compare raw data.
+ */
 static inline bool
 bit_instr_equal(bi_instr *A, bi_instr *B)
 {
-   return memcmp((uint8_t *) A    + sizeof(struct list_head),
-                 (uint8_t *) B    + sizeof(struct list_head),
-                 sizeof(bi_instr) - sizeof(struct list_head)) == 0;
+   size_t skip = sizeof(struct list_head) + 2 * sizeof(bi_index *);
+
+   if (memcmp((uint8_t *) A + skip, (uint8_t *) B + skip, sizeof(bi_instr) - skip))
+           return false;
+
+   if (memcmp(A->dest, B->dest, sizeof(bi_index) * A->nr_dests))
+           return false;
+
+   if (memcmp(A->src, B->src, sizeof(bi_index) * A->nr_srcs))
+           return false;
+
+   return true;
 }
 
 static inline bool

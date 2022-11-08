@@ -54,7 +54,7 @@ struct point_info {
    float (*dady)[4];
 
    boolean frontfacing;
-};   
+};
 
 
 /**
@@ -131,8 +131,7 @@ texcoord_coef(struct lp_setup_context *setup,
          info->dady[slot][0] *= w0;
          info->a0[slot][0] *= w0;
       }
-   }
-   else if (i == 1) {
+   } else if (i == 1) {
       float dadx = 0.0f;
       float dady = FIXED_ONE / (float)info->dx12;
       float x0 = info->v0[0][0] - setup->pixel_offset;
@@ -151,13 +150,11 @@ texcoord_coef(struct lp_setup_context *setup,
          info->dady[slot][1] *= w0;
          info->a0[slot][1] *= w0;
       }
-   }
-   else if (i == 2) {
+   } else if (i == 2) {
       info->a0[slot][2] = 0.0f;
       info->dadx[slot][2] = 0.0f;
       info->dady[slot][2] = 0.0f;
-   }
-   else {
+   } else {
       info->a0[slot][3] = perspective ? w0 : 1.0f;
       info->dadx[slot][3] = 0.0f;
       info->dady[slot][3] = 0.0f;
@@ -166,10 +163,9 @@ texcoord_coef(struct lp_setup_context *setup,
 
 
 /**
- * Special coefficient setup for gl_FragCoord.
- * X and Y are trivial
- * Z and W are copied from position_coef which should have already been computed.
- * We could do a bit less work if we'd examine gl_FragCoord's swizzle mask.
+ * Special coefficient setup for gl_FragCoord.  X and Y are trivial.  Z and W
+ * are copied from position_coef which should have already been computed.  We
+ * could do a bit less work if we'd examine gl_FragCoord's swizzle mask.
  */
 static void
 setup_point_fragcoord_coef(struct lp_setup_context *setup,
@@ -206,18 +202,17 @@ setup_point_fragcoord_coef(struct lp_setup_context *setup,
 /**
  * Compute the point->coef[] array dadx, dady, a0 values.
  */
-static void   
-setup_point_coefficients( struct lp_setup_context *setup,
-                          struct point_info *info)
+static void
+setup_point_coefficients(struct lp_setup_context *setup,
+                         struct point_info *info)
 {
    const struct lp_setup_variant_key *key = &setup->setup.variant->key;
    const struct lp_fragment_shader *shader = setup->fs.current.variant->shader;
    unsigned fragcoord_usage_mask = TGSI_WRITEMASK_XYZ;
-   unsigned slot;
 
    /* setup interpolation for all the remaining attributes:
     */
-   for (slot = 0; slot < key->num_inputs; slot++) {
+   for (unsigned slot = 0; slot < key->num_inputs; slot++) {
       unsigned vert_attr = key->inputs[slot].src_index;
       unsigned usage_mask = key->inputs[slot].usage_mask;
       enum lp_interp interp = key->inputs[slot].interp;
@@ -237,7 +232,6 @@ setup_point_coefficients( struct lp_setup_context *setup,
           */
          fragcoord_usage_mask |= usage_mask;
          break;
-
       case LP_INTERP_LINEAR:
          /* Sprite tex coords may use linear interpolation someday */
          FALLTHROUGH;
@@ -246,11 +240,13 @@ setup_point_coefficients( struct lp_setup_context *setup,
           * If so, set it up so it up so x and y vary from 0 to 1.
           */
          bool do_texcoord_coef = false;
-         if (shader->info.base.input_semantic_name[slot] == TGSI_SEMANTIC_PCOORD) {
+         if (shader->info.base.input_semantic_name[slot] ==
+             TGSI_SEMANTIC_PCOORD) {
             do_texcoord_coef = true;
-         }
-         else if (shader->info.base.input_semantic_name[slot] == TGSI_SEMANTIC_TEXCOORD) {
-            unsigned semantic_index = shader->info.base.input_semantic_index[slot];
+         } else if (shader->info.base.input_semantic_name[slot] ==
+                  TGSI_SEMANTIC_TEXCOORD) {
+            unsigned semantic_index =
+               shader->info.base.input_semantic_index[slot];
             /* Note that sprite_coord enable is a bitfield of
              * PIPE_MAX_SHADER_OUTPUTS bits.
              */
@@ -276,21 +272,18 @@ setup_point_coefficients( struct lp_setup_context *setup,
             if (usage_mask & (1 << i)) {
                if (perspective) {
                   point_persp_coeff(setup, info, slot+1, i);
-               }
-               else {
+               } else {
                   constant_coef(setup, info, slot+1, info->v0[vert_attr][i], i);
                }
             }
          }
          break;
-
       case LP_INTERP_FACING:
          for (i = 0; i < NUM_CHANNELS; i++)
             if (usage_mask & (1 << i))
                constant_coef(setup, info, slot+1,
                              info->frontfacing ? 1.0f : -1.0f, i);
          break;
-
       default:
          assert(0);
          break;
@@ -310,6 +303,7 @@ subpixel_snap(float a)
    return util_iround(FIXED_ONE * a);
 }
 
+
 /**
  * Print point vertex attribs (for debug).
  */
@@ -319,10 +313,9 @@ print_point(struct lp_setup_context *setup,
             const float size)
 {
    const struct lp_setup_variant_key *key = &setup->setup.variant->key;
-   uint i;
 
    debug_printf("llvmpipe point, width %f\n", size);
-   for (i = 0; i < 1 + key->num_inputs; i++) {
+   for (unsigned i = 0; i < 1 + key->num_inputs; i++) {
       debug_printf("  v0[%d]:  %f %f %f %f\n", i,
                    v0[i][0], v0[i][1], v0[i][2], v0[i][3]);
    }
@@ -330,8 +323,8 @@ print_point(struct lp_setup_context *setup,
 
 
 static boolean
-try_setup_point( struct lp_setup_context *setup,
-                 const float (*v0)[4] )
+try_setup_point(struct lp_setup_context *setup,
+                const float (*v0)[4])
 {
    struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
    /* x/y positions in fixed point */
@@ -349,29 +342,30 @@ try_setup_point( struct lp_setup_context *setup,
     * up needing a bottom-left fill convention, which requires
     * slightly different rounding.
     */
-   int adj = (setup->bottom_edge_rule != 0) ? 1 : 0;
-   float pixel_offset = setup->multisample ? 0.0 : setup->pixel_offset;
+   const int adj = (setup->bottom_edge_rule != 0) ? 1 : 0;
+   const float pixel_offset = setup->multisample ? 0.0 : setup->pixel_offset;
    struct lp_scene *scene = setup->scene;
-   struct u_rect bbox;
    int x[2], y[2];
-   struct point_info info;
-   unsigned viewport_index = 0;
-   unsigned layer = 0;
-   int fixed_width;
 
+   unsigned viewport_index = 0;
    if (setup->viewport_index_slot > 0) {
       unsigned *udata = (unsigned*)v0[setup->viewport_index_slot];
       viewport_index = lp_clamp_viewport_idx(*udata);
    }
+
+   unsigned layer = 0;
    if (setup->layer_slot > 0) {
       layer = *(unsigned*)v0[setup->layer_slot];
       layer = MIN2(layer, scene->fb_max_layer);
    }
 
+   int fixed_width;
+
    if (0)
       print_point(setup, v0, size);
 
    /* Bounding rectangle (in pixels) */
+   struct u_rect bbox;
    if (!setup->legacy_points) {
       /*
        * Rasterize points as quads.
@@ -411,13 +405,12 @@ try_setup_point( struct lp_setup_context *setup,
       const int x0 = subpixel_snap(v0[0][0]);
       const int y0 = subpixel_snap(v0[0][1]) - adj;
 
-      int int_width;
       /* Point size as fixed point integer. For GL legacy points
        * the point size is always a whole integer.
        */
       fixed_width = MAX2(FIXED_ONE,
                          (subpixel_snap(size) + FIXED_ONE/2 - 1) & ~(FIXED_ONE-1));
-      int_width = fixed_width >> FIXED_ORDER;
+      int int_width = fixed_width >> FIXED_ORDER;
 
       assert(setup->pixel_offset != 0);
 
@@ -471,14 +464,14 @@ try_setup_point( struct lp_setup_context *setup,
       struct lp_rast_plane *plane;
       unsigned bytes;
       unsigned nr_planes = 4;
-      
+
       point = lp_setup_alloc_triangle(scene,
                                       key->num_inputs,
                                       nr_planes,
                                       &bytes);
      if (!point)
         return FALSE;
-        
+
 #ifdef DEBUG
       point->v[0][0] = v0[0][0];
       point->v[0][1] = v0[0][1];
@@ -493,6 +486,7 @@ try_setup_point( struct lp_setup_context *setup,
          point->inputs.frontfacing = TRUE;
       }
 
+      struct point_info info;
       info.v0 = v0;
       info.dx01 = 0;
       info.dx12 = fixed_width;
@@ -502,7 +496,7 @@ try_setup_point( struct lp_setup_context *setup,
       info.dadx = GET_DADX(&point->inputs);
       info.dady = GET_DADY(&point->inputs);
       info.frontfacing = point->inputs.frontfacing;
-   
+
       /* Setup parameter interpolants:
        */
       setup_point_coefficients(setup, &info);
@@ -553,9 +547,8 @@ try_setup_point( struct lp_setup_context *setup,
                                    &bbox, nr_planes, viewport_index);
 
    } else {
-      struct lp_rast_rectangle *point;
-      point = lp_setup_alloc_rectangle(scene,
-                                       key->num_inputs);
+      struct lp_rast_rectangle *point =
+         lp_setup_alloc_rectangle(scene, key->num_inputs);
       if (!point)
          return FALSE;
 #ifdef DEBUG
@@ -577,6 +570,7 @@ try_setup_point( struct lp_setup_context *setup,
          point->inputs.frontfacing = TRUE;
       }
 
+      struct point_info info;
       info.v0 = v0;
       info.dx01 = 0;
       info.dx12 = fixed_width;
@@ -586,7 +580,7 @@ try_setup_point( struct lp_setup_context *setup,
       info.dadx = GET_DADX(&point->inputs);
       info.dady = GET_DADY(&point->inputs);
       info.frontfacing = point->inputs.frontfacing;
-   
+
       /* Setup parameter interpolants:
        */
       setup_point_coefficients(setup, &info);
@@ -597,16 +591,18 @@ try_setup_point( struct lp_setup_context *setup,
       point->inputs.viewport_index = viewport_index;
       point->inputs.view_index = setup->view_index;
 
-      return lp_setup_bin_rectangle(setup, point, setup->fs.current.variant->opaque);
+      return lp_setup_bin_rectangle(setup, point,
+                                    setup->fs.current.variant->opaque);
    }
 }
 
 
-static void 
+static void
 lp_setup_point_discard(struct lp_setup_context *setup,
                        const float (*v0)[4])
 {
 }
+
 
 static void
 lp_setup_point(struct lp_setup_context *setup,
@@ -622,7 +618,7 @@ lp_setup_point(struct lp_setup_context *setup,
 }
 
 
-void 
+void
 lp_setup_choose_point(struct lp_setup_context *setup)
 {
    if (setup->rasterizer_discard) {

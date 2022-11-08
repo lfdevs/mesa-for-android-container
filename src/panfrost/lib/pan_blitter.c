@@ -122,6 +122,8 @@ pan_blitter_emit_blend(const struct panfrost_device *dev,
                        mali_ptr blend_shader,
                        void *out)
 {
+        assert(blend_shader == 0 || PAN_ARCH <= 5);
+
         pan_pack(out, BLEND, cfg) {
                 if (!iview) {
                         cfg.enable = false;
@@ -135,9 +137,7 @@ pan_blitter_emit_blend(const struct panfrost_device *dev,
                 cfg.srgb = util_format_is_srgb(iview->format);
 
 #if PAN_ARCH >= 6
-                cfg.internal.mode = blend_shader ?
-                                    MALI_BLEND_MODE_SHADER :
-                                    MALI_BLEND_MODE_OPAQUE;
+                cfg.internal.mode = MALI_BLEND_MODE_OPAQUE;
 #endif
 
                 if (!blend_shader) {
@@ -161,16 +161,7 @@ pan_blitter_emit_blend(const struct panfrost_device *dev,
                         cfg.internal.fixed_function.rt = rt;
 #endif
                 } else {
-#if PAN_ARCH >= 6
-                        cfg.internal.shader.pc = blend_shader;
-#if PAN_ARCH <= 7
-                        if (blit_shader->blend_ret_offsets[rt]) {
-                                cfg.internal.shader.return_value =
-                                        blit_shader->address +
-                                        blit_shader->blend_ret_offsets[rt];
-                        }
-#endif
-#else
+#if PAN_ARCH <= 5
                         cfg.blend_shader = true;
                         cfg.shader_pc = blend_shader;
 #endif
@@ -331,6 +322,7 @@ pan_blitter_get_blend_shaders(struct panfrost_device *dev,
                               const struct pan_blit_shader_data *blit_shader,
                               mali_ptr *blend_shaders)
 {
+#if PAN_ARCH <= 5
         if (!rt_count)
                 return;
 
@@ -367,15 +359,7 @@ pan_blitter_get_blend_shaders(struct panfrost_device *dev,
                         .format = rts[i]->format,
                         .nr_samples = rts[i]->image->layout.nr_samples,
                         .equation = {
-                                .blend_enable = true,
-                                .rgb_src_factor = BLEND_FACTOR_ZERO,
-                                .rgb_invert_src_factor = true,
-                                .rgb_dst_factor = BLEND_FACTOR_ZERO,
-                                .rgb_func = BLEND_FUNC_ADD,
-                                .alpha_src_factor = BLEND_FACTOR_ZERO,
-                                .alpha_invert_src_factor = true,
-                                .alpha_dst_factor = BLEND_FACTOR_ZERO,
-                                .alpha_func = BLEND_FUNC_ADD,
+                                .blend_enable = false,
                                 .color_mask = 0xf,
                         },
                 };
@@ -387,13 +371,11 @@ pan_blitter_get_blend_shaders(struct panfrost_device *dev,
                                                           nir_type_float32, /* unused */
                                                           i);
 
-                ASSERTED unsigned full_threads =
-                        (dev->arch >= 7) ? 32 : ((dev->arch == 6) ? 64 : 4);
-                assert(b->work_reg_count <= full_threads);
+                assert(b->work_reg_count <= 4);
                 struct panfrost_ptr bin =
                         pan_pool_alloc_aligned(dev->blitter.shaders.pool,
                                                b->binary.size,
-                                               PAN_ARCH >= 6 ? 128 : 64);
+                                               64);
                 memcpy(bin.cpu, b->binary.data, b->binary.size);
 
                 blend_shader->address = bin.gpu | b->first_tag;
@@ -403,6 +385,7 @@ pan_blitter_get_blend_shaders(struct panfrost_device *dev,
                 pthread_mutex_unlock(&dev->blitter.shaders.lock);
                 blend_shaders[i] = blend_shader->address;
         }
+#endif
 }
 
 static const struct pan_blit_shader_data *
@@ -484,9 +467,10 @@ pan_blitter_get_blit_shader(struct panfrost_device *dev,
                 };
 
                 unsigned ncomps = key->surfaces[i].loc >= FRAG_RESULT_DATA0 ? 4 : 1;
+                enum glsl_base_type type = nir_get_glsl_base_type_for_nir_type(key->surfaces[i].type);
                 nir_variable *out =
                         nir_variable_create(b.shader, nir_var_shader_out,
-                                            glsl_vector_type(GLSL_TYPE_FLOAT, ncomps),
+                                            glsl_vector_type(type, ncomps),
                                             out_names[active_count]);
                 out->data.location = key->surfaces[i].loc;
                 out->data.driver_location = active_count;
@@ -1160,13 +1144,9 @@ pan_preload_emit_dcd(struct pan_pool *pool,
 
         unsigned bd_count = views.rt_count;
         struct panfrost_ptr blend = pan_pool_alloc_desc_array(pool, bd_count, BLEND);
-        mali_ptr blend_shaders[8] = { 0 };
 
         if (!zs) {
-                pan_blitter_get_blend_shaders(pool->dev, views.rt_count, views.dst_rts,
-                                              blit_shader, blend_shaders);
-
-                pan_blitter_emit_blends(pool->dev, blit_shader, &views, blend_shaders,
+                pan_blitter_emit_blends(pool->dev, blit_shader, &views, NULL,
                                         blend.cpu);
         }
 

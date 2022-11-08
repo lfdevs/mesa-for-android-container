@@ -442,7 +442,10 @@ lower_hs_output_store(nir_builder *b,
 
       nir_ssa_def *hs_ring_tess_offchip = nir_load_ring_tess_offchip_amd(b);
       nir_ssa_def *offchip_offset = nir_load_ring_tess_offchip_offset_amd(b);
-      nir_store_buffer_amd(b, store_val, hs_ring_tess_offchip, vmem_off, offchip_offset, .write_mask = write_mask, .memory_modes = nir_var_shader_out);
+      nir_ssa_def *zero = nir_imm_int(b, 0);
+      nir_store_buffer_amd(b, store_val, hs_ring_tess_offchip, vmem_off, offchip_offset, zero,
+                           .write_mask = write_mask, .memory_modes = nir_var_shader_out,
+                           .access = ACCESS_COHERENT);
    }
 
    if (write_to_lds) {
@@ -564,6 +567,13 @@ hs_emit_write_tess_factors(nir_shader *shader,
    /* Only the 1st invocation of each patch needs to do this. */
    nir_if *invocation_id_zero = nir_push_if(b, nir_ieq_imm(b, invocation_id, 0));
 
+   /* When the output patch size is <= 32 then we can flatten the branch here
+    * because we know for sure that at least 1 invocation in all waves will
+    * take the branch.
+    */
+   if (shader->info.tess.tcs_vertices_out <= 32)
+      invocation_id_zero->control = nir_selection_control_divergent_always_taken;
+
    /* The descriptor where tess factors have to be stored by the shader. */
    nir_ssa_def *tessfactor_ring = nir_load_ring_tess_factors_amd(b);
 
@@ -578,6 +588,7 @@ hs_emit_write_tess_factors(nir_shader *shader,
                                                       .align_mul = 16u, .align_offset = st->tcs_tess_lvl_in_loc % 16u)
                                     : NULL;
 
+   nir_ssa_def *zero = nir_imm_int(b, 0);
    nir_ssa_def *rel_patch_id = nir_load_tess_rel_patch_id_amd(b);
    nir_ssa_def *tess_factors_base = nir_load_ring_tess_factors_offset_amd(b);
    nir_ssa_def *tess_factors_offset = nir_imul_imm(b, rel_patch_id, (inner_comps + outer_comps) * 4u);
@@ -587,7 +598,8 @@ hs_emit_write_tess_factors(nir_shader *shader,
       /* Store the dynamic HS control word. */
       nir_if *rel_patch_id_zero = nir_push_if(b, nir_ieq_imm(b, rel_patch_id, 0));
       nir_ssa_def *ctrlw = nir_imm_int(b, 0x80000000u);
-      nir_store_buffer_amd(b, ctrlw, tessfactor_ring, nir_imm_zero(b, 1, 32), tess_factors_base);
+      nir_store_buffer_amd(b, ctrlw, tessfactor_ring, zero, tess_factors_base, zero,
+                           .access = ACCESS_COHERENT);
       tess_factors_const_offset += 4;
       nir_pop_if(b, rel_patch_id_zero);
    }
@@ -596,14 +608,18 @@ hs_emit_write_tess_factors(nir_shader *shader,
    if (shader->info.tess._primitive_mode == TESS_PRIMITIVE_ISOLINES) {
       /* LINES reversal */
       nir_ssa_def *t = nir_vec2(b, nir_channel(b, tessfactors_outer, 1), nir_channel(b, tessfactors_outer, 0));
-      nir_store_buffer_amd(b, t, tessfactor_ring, tess_factors_offset, tess_factors_base, .base = tess_factors_const_offset);
+      nir_store_buffer_amd(b, t, tessfactor_ring, tess_factors_offset, tess_factors_base, zero,
+                           .base = tess_factors_const_offset, .access = ACCESS_COHERENT);
    } else if (shader->info.tess._primitive_mode == TESS_PRIMITIVE_TRIANGLES) {
       nir_ssa_def *t = nir_vec4(b, nir_channel(b, tessfactors_outer, 0), nir_channel(b, tessfactors_outer, 1),
                                 nir_channel(b, tessfactors_outer, 2), nir_channel(b, tessfactors_inner, 0));
-      nir_store_buffer_amd(b, t, tessfactor_ring, tess_factors_offset, tess_factors_base, .base = tess_factors_const_offset);
+      nir_store_buffer_amd(b, t, tessfactor_ring, tess_factors_offset, tess_factors_base, zero,
+                           .base = tess_factors_const_offset, .access = ACCESS_COHERENT);
    } else {
-      nir_store_buffer_amd(b, tessfactors_outer, tessfactor_ring, tess_factors_offset, tess_factors_base, .base = tess_factors_const_offset);
-      nir_store_buffer_amd(b, tessfactors_inner, tessfactor_ring, tess_factors_offset, tess_factors_base, .base = tess_factors_const_offset + 4u * outer_comps);
+      nir_store_buffer_amd(b, tessfactors_outer, tessfactor_ring, tess_factors_offset, tess_factors_base, zero,
+                           .base = tess_factors_const_offset, .access = ACCESS_COHERENT);
+      nir_store_buffer_amd(b, tessfactors_inner, tessfactor_ring, tess_factors_offset, tess_factors_base, zero,
+                           .base = tess_factors_const_offset + 4u * outer_comps, .access = ACCESS_COHERENT);
    }
 
    if (st->tes_reads_tessfactors) {
@@ -612,11 +628,13 @@ hs_emit_write_tess_factors(nir_shader *shader,
       nir_ssa_def *offchip_offset = nir_load_ring_tess_offchip_offset_amd(b);
 
       nir_ssa_def *vmem_off_outer = hs_per_patch_output_vmem_offset(b, st, NULL, st->tcs_tess_lvl_out_loc);
-      nir_store_buffer_amd(b, tessfactors_outer, hs_ring_tess_offchip, vmem_off_outer, offchip_offset, .memory_modes = nir_var_shader_out);
+      nir_store_buffer_amd(b, tessfactors_outer, hs_ring_tess_offchip, vmem_off_outer, offchip_offset, zero,
+                           .memory_modes = nir_var_shader_out, .access = ACCESS_COHERENT);
 
       if (inner_comps) {
          nir_ssa_def *vmem_off_inner = hs_per_patch_output_vmem_offset(b, st, NULL, st->tcs_tess_lvl_in_loc);
-         nir_store_buffer_amd(b, tessfactors_inner, hs_ring_tess_offchip, vmem_off_inner, offchip_offset, .memory_modes = nir_var_shader_out);
+         nir_store_buffer_amd(b, tessfactors_inner, hs_ring_tess_offchip, vmem_off_inner, offchip_offset, zero,
+                              .memory_modes = nir_var_shader_out, .access = ACCESS_COHERENT);
       }
    }
 
@@ -639,7 +657,12 @@ lower_tes_input_load(nir_builder *b,
                     ? hs_per_vertex_output_vmem_offset(b, st, intrin)
                     : hs_per_patch_output_vmem_offset(b, st, intrin, 0);
 
-   return nir_load_buffer_amd(b, intrin->dest.ssa.num_components, intrin->dest.ssa.bit_size, offchip_ring, off, offchip_offset);
+   nir_ssa_def *zero = nir_imm_int(b, 0);
+
+   return nir_load_buffer_amd(b, intrin->dest.ssa.num_components,
+                              intrin->dest.ssa.bit_size, offchip_ring,
+                              off, offchip_offset, zero,
+                              .access = ACCESS_COHERENT);
 }
 
 static bool

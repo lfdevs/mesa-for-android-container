@@ -107,7 +107,7 @@ if with_dri2
       files_egl += files('drivers/dri2/platform_x11_dri3.c')
       link_for_egl += libloader_dri3_helper
     endif
-    deps_for_egl += [dep_x11_xcb, dep_xcb_dri2, dep_xcb_xfixes]
+    deps_for_egl += [dep_x11_xcb, dep_xcb_dri2, dep_xcb_xrandr, dep_xcb_xfixes]
   endif
   if with_gbm and not with_platform_android
     files_egl += files('drivers/dri2/platform_drm.c')

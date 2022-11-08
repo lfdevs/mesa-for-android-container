@@ -310,12 +310,35 @@ nvc0_shader_stage(unsigned pipe)
    }
 }
 
+static inline void
+nvc0_resource_fence(struct nvc0_context *nvc0, struct nv04_resource *res, uint32_t flags)
+{
+   if (res->mm) {
+      nouveau_fence_ref(nvc0->base.fence, &res->fence);
+      if (flags & NOUVEAU_BO_WR)
+         nouveau_fence_ref(nvc0->base.fence, &res->fence_wr);
+   }
+}
+
+static inline void
+nvc0_resource_validate(struct nvc0_context *nvc0, struct nv04_resource *res, uint32_t flags)
+{
+   if (likely(res->bo)) {
+      if (flags & NOUVEAU_BO_WR)
+         res->status |= NOUVEAU_BUFFER_STATUS_GPU_WRITING |
+            NOUVEAU_BUFFER_STATUS_DIRTY;
+      if (flags & NOUVEAU_BO_RD)
+         res->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
+
+      nvc0_resource_fence(nvc0, res, flags);
+   }
+}
 
 /* nvc0_context.c */
 struct pipe_context *nvc0_create(struct pipe_screen *, void *, unsigned flags);
 void nvc0_bufctx_fence(struct nvc0_context *, struct nouveau_bufctx *,
                        bool on_flush);
-void nvc0_default_kick_notify(struct nouveau_pushbuf *);
+void nvc0_default_kick_notify(struct nouveau_context *);
 const void *nvc0_get_sample_locations(unsigned);
 
 /* nvc0_draw.c */

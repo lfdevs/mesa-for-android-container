@@ -34,10 +34,9 @@ nv50_flush(struct pipe_context *pipe,
            unsigned flags)
 {
    struct nouveau_context *context = nouveau_context(pipe);
-   struct nouveau_screen *screen = context->screen;
 
    if (fence)
-      nouveau_fence_ref(screen->fence.current, (struct nouveau_fence **)fence);
+      nouveau_fence_ref(context->fence, (struct nouveau_fence **)fence);
 
    PUSH_KICK(context->pushbuf);
 
@@ -133,16 +132,13 @@ nv50_emit_string_marker(struct pipe_context *pipe, const char *str, int len)
 }
 
 void
-nv50_default_kick_notify(struct nouveau_pushbuf *push)
+nv50_default_kick_notify(struct nouveau_context *context)
 {
-   struct nv50_screen *screen = push->user_priv;
+   struct nv50_context *nv50 = nv50_context(&context->pipe);
 
-   if (screen) {
-      nouveau_fence_next(&screen->base);
-      nouveau_fence_update(&screen->base, true);
-      if (screen->cur_ctx)
-         screen->cur_ctx->state.flushed = true;
-   }
+   _nouveau_fence_next(context);
+   _nouveau_fence_update(context->screen, true);
+   nv50->state.flushed = true;
 }
 
 static void
@@ -184,22 +180,25 @@ nv50_destroy(struct pipe_context *pipe)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
 
+   simple_mtx_lock(&nv50->screen->state_lock);
    if (nv50->screen->cur_ctx == nv50) {
       nv50->screen->cur_ctx = NULL;
       /* Save off the state in case another context gets created */
       nv50->screen->save_state = nv50->state;
    }
+   simple_mtx_unlock(&nv50->screen->state_lock);
 
    if (nv50->base.pipe.stream_uploader)
       u_upload_destroy(nv50->base.pipe.stream_uploader);
 
    nouveau_pushbuf_bufctx(nv50->base.pushbuf, NULL);
-   nouveau_pushbuf_kick(nv50->base.pushbuf, nv50->base.pushbuf->channel);
+   PUSH_KICK(nv50->base.pushbuf);
 
    nv50_context_unreference_resources(nv50);
 
    FREE(nv50->blit);
 
+   nouveau_fence_cleanup(&nv50->base);
    nouveau_context_destroy(&nv50->base);
 }
 
@@ -313,8 +312,8 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    if (!nv50_blitctx_create(nv50))
       goto out_err;
 
-   nv50->base.pushbuf = screen->base.pushbuf;
-   nv50->base.client = screen->base.client;
+   if (nouveau_context_init(&nv50->base, &screen->base))
+      goto out_err;
 
    ret = nouveau_bufctx_new(nv50->base.client, 2, &nv50->bufctx);
    if (!ret)
@@ -326,7 +325,6 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    if (ret)
       goto out_err;
 
-   nv50->base.screen    = &screen->base;
    nv50->base.copy_data = nv50_m2mf_copy_linear;
    nv50->base.push_data = nv50_sifc_linear_u8;
    nv50->base.push_cb   = nv50_cb_push;
@@ -351,17 +349,21 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    pipe->get_sample_position = nv50_context_get_sample_position;
    pipe->emit_string_marker = nv50_emit_string_marker;
 
+   simple_mtx_lock(&screen->state_lock);
    if (!screen->cur_ctx) {
       /* Restore the last context's state here, normally handled during
        * context switch
        */
       nv50->state = screen->save_state;
       screen->cur_ctx = nv50;
-      nouveau_pushbuf_bufctx(screen->base.pushbuf, nv50->bufctx);
    }
-   nv50->base.pushbuf->kick_notify = nv50_default_kick_notify;
+   simple_mtx_unlock(&screen->state_lock);
 
-   nouveau_context_init(&nv50->base);
+   nouveau_pushbuf_bufctx(nv50->base.pushbuf, nv50->bufctx);
+   nv50->base.kick_notify = nv50_default_kick_notify;
+   nv50->base.pushbuf->rsvd_kick = 5;
+   PUSH_SPACE(nv50->base.pushbuf, 8);
+
    nv50_init_query_functions(nv50);
    nv50_init_surface_functions(nv50);
    nv50_init_state_functions(nv50);
@@ -417,6 +419,8 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    // zero entry if it's not otherwise set.
    nv50->dirty_3d |= NV50_NEW_3D_SAMPLERS;
 
+   nouveau_fence_new(&nv50->base, &nv50->base.fence);
+
    return pipe;
 
 out_err:
@@ -434,7 +438,7 @@ out_err:
 }
 
 void
-nv50_bufctx_fence(struct nouveau_bufctx *bufctx, bool on_flush)
+nv50_bufctx_fence(struct nv50_context *nv50, struct nouveau_bufctx *bufctx, bool on_flush)
 {
    struct nouveau_list *list = on_flush ? &bufctx->current : &bufctx->pending;
    struct nouveau_list *it;
@@ -443,7 +447,7 @@ nv50_bufctx_fence(struct nouveau_bufctx *bufctx, bool on_flush)
       struct nouveau_bufref *ref = (struct nouveau_bufref *)it;
       struct nv04_resource *res = ref->priv;
       if (res)
-         nv50_resource_validate(res, (unsigned)ref->priv_data);
+         nv50_resource_validate(nv50, res, (unsigned)ref->priv_data);
    }
 }
 

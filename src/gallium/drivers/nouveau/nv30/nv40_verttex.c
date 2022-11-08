@@ -25,6 +25,7 @@
 
 #include "util/u_inlines.h"
 #include "nv30/nv30_context.h"
+#include "nv30/nv30_winsys.h"
 
 void
 nv40_verttex_validate(struct nv30_context *nv30)

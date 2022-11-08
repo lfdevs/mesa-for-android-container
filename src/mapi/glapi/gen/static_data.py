@@ -692,8 +692,8 @@ offsets = {
     "GetInfoLogARB": 656,
     "GetObjectParameterfvARB": 657,
     "GetObjectParameterivARB": 658,
-    "DrawArraysInstancedARB": 659,
-    "DrawElementsInstancedARB": 660,
+    "DrawArraysInstanced": 659,
+    "DrawElementsInstanced": 660,
     "BindFramebuffer": 661,
     "BindRenderbuffer": 662,
     "BlitFramebuffer": 663,
@@ -1206,7 +1206,7 @@ offsets = {
     "PushDebugGroup": 1170,
     "SecondaryColor3fEXT": 1171,
     "SecondaryColor3fvEXT": 1172,
-    "MultiDrawElementsEXT": 1173,
+    "MultiDrawElements": 1173,
     "FogCoordfEXT": 1174,
     "FogCoordfvEXT": 1175,
     "ResizeBuffersMESA": 1176,
@@ -1695,6 +1695,12 @@ offsets = {
     "ImportSemaphoreWin32HandleEXT": 1659,
     "ImportMemoryWin32NameEXT": 1660,
     "ImportSemaphoreWin32NameEXT": 1661,
+    "GetObjectLabelEXT": 1662,
+    "LabelObjectEXT": 1663,
+    "DrawArraysUserBuf": 1664,
+    "DrawElementsUserBuf": 1665,
+    "MultiDrawArraysUserBuf": 1666,
+    "MultiDrawElementsUserBuf": 1667,
 }
 
 functions = [
@@ -2139,6 +2145,7 @@ functions = [
     "GetnUniformuiv",
     "GetnUniformuivARB",
     "GetObjectLabel",
+    "GetObjectLabelEXT"
     "GetObjectParameterfvARB",
     "GetObjectParameterivARB",
     "GetObjectPtrLabel",
@@ -2270,6 +2277,7 @@ functions = [
     "IsTextureEXT",
     "IsTransformFeedback",
     "IsVertexArray",
+    "LabelObjectEXT",
     "Lightf",
     "Lightfv",
     "Lighti",

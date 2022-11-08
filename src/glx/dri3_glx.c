@@ -102,27 +102,25 @@ glx_dri3_in_current_context(struct loader_dri3_drawable *draw)
    if (!priv)
       return false;
 
-   struct dri3_context *pcp = (struct dri3_context *) __glXGetCurrentContext();
+   struct glx_context *pcp = __glXGetCurrentContext();
    struct dri3_screen *psc = (struct dri3_screen *) priv->base.psc;
 
-   return (&pcp->base != &dummyContext) && pcp->base.psc == &psc->base;
+   return (pcp != &dummyContext) && pcp->psc == &psc->base;
 }
 
 static __DRIcontext *
 glx_dri3_get_dri_context(struct loader_dri3_drawable *draw)
 {
    struct glx_context *gc = __glXGetCurrentContext();
-   struct dri3_context *dri3Ctx = (struct dri3_context *) gc;
 
-   return (gc != &dummyContext) ? dri3Ctx->driContext : NULL;
+   return (gc != &dummyContext) ? gc->driContext : NULL;
 }
 
 static __DRIscreen *
 glx_dri3_get_dri_screen(void)
 {
    struct glx_context *gc = __glXGetCurrentContext();
-   struct dri3_context *pcp = (struct dri3_context *) gc;
-   struct dri3_screen *psc = (struct dri3_screen *) pcp->base.psc;
+   struct dri3_screen *psc = (struct dri3_screen *) gc->psc;
 
    return (gc != &dummyContext && psc) ? psc->driScreen : NULL;
 }
@@ -172,24 +170,22 @@ static const struct glx_context_vtable dri3_context_vtable;
 static void
 dri3_destroy_context(struct glx_context *context)
 {
-   struct dri3_context *pcp = (struct dri3_context *) context;
    struct dri3_screen *psc = (struct dri3_screen *) context->psc;
 
-   driReleaseDrawables(&pcp->base);
+   driReleaseDrawables(context);
 
    free((char *) context->extensions);
 
-   (*psc->core->destroyContext) (pcp->driContext);
+   (*psc->core->destroyContext) (context->driContext);
 
-   free(pcp);
+   free(context);
 }
 
 static Bool
 dri3_bind_context(struct glx_context *context, struct glx_context *old,
                   GLXDrawable draw, GLXDrawable read)
 {
-   struct dri3_context *pcp = (struct dri3_context *) context;
-   struct dri3_screen *psc = (struct dri3_screen *) pcp->base.psc;
+   struct dri3_screen *psc = (struct dri3_screen *) context->psc;
    struct dri3_drawable *pdraw, *pread;
    __DRIdrawable *dri_draw = NULL, *dri_read = NULL;
 
@@ -208,7 +204,7 @@ dri3_bind_context(struct glx_context *context, struct glx_context *old,
    else if (read != None)
       return GLXBadDrawable;
 
-   if (!(*psc->core->bindContext) (pcp->driContext, dri_draw, dri_read))
+   if (!(*psc->core->bindContext) (context->driContext, dri_draw, dri_read))
       return GLXBadContext;
 
    if (dri_draw)
@@ -222,10 +218,9 @@ dri3_bind_context(struct glx_context *context, struct glx_context *old,
 static void
 dri3_unbind_context(struct glx_context *context, struct glx_context *new)
 {
-   struct dri3_context *pcp = (struct dri3_context *) context;
-   struct dri3_screen *psc = (struct dri3_screen *) pcp->base.psc;
+   struct dri3_screen *psc = (struct dri3_screen *) context->psc;
 
-   (*psc->core->unbindContext) (pcp->driContext);
+   (*psc->core->unbindContext) (context->driContext);
 }
 
 static struct glx_context *
@@ -236,8 +231,7 @@ dri3_create_context_attribs(struct glx_screen *base,
                             const uint32_t *attribs,
                             unsigned *error)
 {
-   struct dri3_context *pcp = NULL;
-   struct dri3_context *pcp_shared = NULL;
+   struct glx_context *pcp = NULL;
    struct dri3_screen *psc = (struct dri3_screen *) base;
    __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) config_base;
    __DRIcontext *shared = NULL;
@@ -270,8 +264,7 @@ dri3_create_context_attribs(struct glx_screen *base,
          return NULL;
       }
 
-      pcp_shared = (struct dri3_context *) shareList;
-      shared = pcp_shared->driContext;
+      shared = shareList->driContext;
    }
 
    pcp = calloc(1, sizeof *pcp);
@@ -280,7 +273,7 @@ dri3_create_context_attribs(struct glx_screen *base,
       goto error_exit;
    }
 
-   if (!glx_context_init(&pcp->base, &psc->base, config_base))
+   if (!glx_context_init(pcp, &psc->base, config_base))
       goto error_exit;
 
    ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_MAJOR_VERSION;
@@ -305,7 +298,7 @@ dri3_create_context_attribs(struct glx_screen *base,
    if (dca.no_error) {
       ctx_attribs[num_ctx_attribs++] = __DRI_CTX_ATTRIB_NO_ERROR;
       ctx_attribs[num_ctx_attribs++] = dca.no_error;
-      pcp->base.noError = GL_TRUE;
+      pcp->noError = GL_TRUE;
    }
 
    if (dca.flags != 0) {
@@ -313,7 +306,7 @@ dri3_create_context_attribs(struct glx_screen *base,
       ctx_attribs[num_ctx_attribs++] = dca.flags;
    }
 
-   pcp->base.renderType = dca.render_type;
+   pcp->renderType = dca.render_type;
 
    pcp->driContext =
       (*psc->image_driver->createContextAttribs) (psc->driScreen,
@@ -329,9 +322,9 @@ dri3_create_context_attribs(struct glx_screen *base,
    if (pcp->driContext == NULL)
       goto error_exit;
 
-   pcp->base.vtable = base->context_vtable;
+   pcp->vtable = base->context_vtable;
 
-   return &pcp->base;
+   return pcp;
 
 error_exit:
    free(pcp);
@@ -547,8 +540,7 @@ dri3_flush_swap_buffers(__DRIdrawable *driDrawable, void *loaderPrivate)
 static void
 dri_set_background_context(void *loaderPrivate)
 {
-   struct dri3_context *pcp = (struct dri3_context *)loaderPrivate;
-   __glXSetCurrentContext(&pcp->base);
+   __glXSetCurrentContext(loaderPrivate);
 }
 
 static GLboolean
@@ -676,7 +668,6 @@ dri3_bind_tex_image(__GLXDRIdrawable *base,
                     int buffer, const int *attrib_list)
 {
    struct glx_context *gc = __glXGetCurrentContext();
-   struct dri3_context *pcp = (struct dri3_context *) gc;
    struct dri3_drawable *pdraw = (struct dri3_drawable *) base;
    struct dri3_screen *psc;
 
@@ -687,7 +678,7 @@ dri3_bind_tex_image(__GLXDRIdrawable *base,
 
       XSync(gc->currentDpy, false);
 
-      (*psc->texBuffer->setTexBuffer2) (pcp->driContext,
+      (*psc->texBuffer->setTexBuffer2) (gc->driContext,
                                         pdraw->base.textureTarget,
                                         pdraw->base.textureFormat,
                                         pdraw->loader_drawable.dri_drawable);
@@ -698,7 +689,6 @@ static void
 dri3_release_tex_image(__GLXDRIdrawable *base, int buffer)
 {
    struct glx_context *gc = __glXGetCurrentContext();
-   struct dri3_context *pcp = (struct dri3_context *) gc;
    struct dri3_drawable *pdraw = (struct dri3_drawable *) base;
    struct dri3_screen *psc;
 
@@ -707,7 +697,7 @@ dri3_release_tex_image(__GLXDRIdrawable *base, int buffer)
 
       if (psc->texBuffer->base.version >= 3 &&
           psc->texBuffer->releaseTexBuffer != NULL)
-         (*psc->texBuffer->releaseTexBuffer) (pcp->driContext,
+         (*psc->texBuffer->releaseTexBuffer) (gc->driContext,
                                               pdraw->base.textureTarget,
                                               pdraw->loader_drawable.dri_drawable);
    }
@@ -720,7 +710,8 @@ static const struct glx_context_vtable dri3_context_vtable = {
    .wait_gl             = dri3_wait_gl,
    .wait_x              = dri3_wait_x,
    .interop_query_device_info = dri3_interop_query_device_info,
-   .interop_export_object = dri3_interop_export_object
+   .interop_export_object = dri3_interop_export_object,
+   .interop_flush_objects = dri3_interop_flush_objects
 };
 
 /** dri3_bind_extensions

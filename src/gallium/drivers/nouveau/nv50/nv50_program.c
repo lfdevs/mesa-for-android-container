@@ -402,8 +402,8 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
 
    prog->code = info_out.bin.code;
    prog->code_size = info_out.bin.codeSize;
-   prog->fixups = info_out.bin.relocData;
-   prog->interps = info_out.bin.fixupData;
+   prog->relocs = info_out.bin.relocData;
+   prog->fixups = info_out.bin.fixupData;
    prog->max_gpr = MAX2(4, (info_out.bin.maxGPR >> 1) + 1);
    prog->tls_space = info_out.bin.tlsSpace;
    prog->cp.smem_size = info_out.bin.smemSize;
@@ -486,6 +486,7 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
       return false;
    }
 
+   simple_mtx_assert_locked(&nv50->screen->state_lock);
    ret = nouveau_heap_alloc(heap, size, prog, &prog->mem);
    if (ret) {
       /* Out of space: evict everything to compactify the code segment, hoping
@@ -506,10 +507,10 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
 
    if (prog->type == PIPE_SHADER_COMPUTE) {
       /* CP code must be uploaded in FP code segment. */
-      prog_type = 1;
+      prog_type = NV50_SHADER_STAGE_FRAGMENT;
    } else {
       prog->code_base = prog->mem->start;
-      prog_type = prog->type;
+      prog_type = nv50_context_shader_stage(prog->type);
    }
 
    ret = nv50_tls_realloc(nv50->screen, prog->tls_space);
@@ -520,10 +521,10 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
    if (ret > 0)
       nv50->state.new_tls_space = true;
 
+   if (prog->relocs)
+      nv50_ir_relocate_code(prog->relocs, prog->code, prog->code_base, 0, 0);
    if (prog->fixups)
-      nv50_ir_relocate_code(prog->fixups, prog->code, prog->code_base, 0, 0);
-   if (prog->interps)
-      nv50_ir_apply_fixups(prog->interps, prog->code,
+      nv50_ir_apply_fixups(prog->fixups, prog->code,
                            prog->fp.force_persample_interp,
                            false /* flatshade */,
                            prog->fp.alphatest - 1,
@@ -545,13 +546,16 @@ nv50_program_destroy(struct nv50_context *nv50, struct nv50_program *p)
    const struct pipe_shader_state pipe = p->pipe;
    const ubyte type = p->type;
 
-   if (p->mem)
+   if (p->mem) {
+      if (nv50)
+         simple_mtx_assert_locked(&nv50->screen->state_lock);
       nouveau_heap_free(&p->mem);
+   }
 
    FREE(p->code);
 
+   FREE(p->relocs);
    FREE(p->fixups);
-   FREE(p->interps);
    FREE(p->so);
 
    memset(p, 0, sizeof(*p));

@@ -28,6 +28,20 @@ a = 'a'
 b = 'b'
 c = 'c'
 
+# In general, bcsel is cheaper than bitwise arithmetic on Mali. On
+# Bifrost, we can implement bcsel as either CSEL or MUX to schedule to either
+# execution unit. On Valhall, bitwise arithmetic may be on the SFU whereas MUX
+# is on the higher throughput CVT unit. We get a zero argument for free relative
+# to the bitwise op, which would be LSHIFT_* internally taking a zero anyway.
+#
+# As such, it's beneficial to reexpress bitwise arithmetic of booleans as bcsel.
+opt_bool_bitwise = [
+    (('iand', 'a@1', 'b@1'), ('bcsel', a, b, False)),
+    (('ior', 'a@1', 'b@1'), ('bcsel', a, a, b)),
+    (('iand', 'a@1', ('inot', 'b@1')), ('bcsel', b, 0, a)),
+    (('ior', 'a@1', ('inot', 'b@1')), ('bcsel', b, a, True)),
+]
+
 algebraic_late = [
     # Canonical form. The scheduler will convert back if it makes sense.
     (('fmul', a, 2.0), ('fadd', a, a)),
@@ -39,6 +53,26 @@ algebraic_late = [
 
     (('fabs', ('fddx', a)), ('fabs', ('fddx_must_abs_mali', a))),
     (('fabs', ('fddy', b)), ('fabs', ('fddy_must_abs_mali', b))),
+
+    (('b32csel', 'b@32', ('iadd', 'a@32', 1), a), ('iadd', a, ('b2i32', b))),
+
+    # We don't have an 8-bit CSEL, so this is the best we can do.
+    # Note that we use 8-bit booleans internally to preserve vectorization.
+    (('imin', 'a@8', 'b@8'), ('b8csel', ('ilt8', a, b), a, b)),
+    (('imax', 'a@8', 'b@8'), ('b8csel', ('ilt8', a, b), b, a)),
+    (('umin', 'a@8', 'b@8'), ('b8csel', ('ult8', a, b), a, b)),
+    (('umax', 'a@8', 'b@8'), ('b8csel', ('ult8', a, b), b, a)),
+
+    # Floats are at minimum 16-bit, which means when converting to an 8-bit
+    # integer, the vectorization changes. So there's no one-shot hardware
+    # instruction for f2i8. Instead, lower to two NIR instructions that map
+    # directly to the hardware.
+    (('f2i8', a), ('i2i8', ('f2i16', a))),
+    (('f2u8', a), ('u2u8', ('f2u16', a))),
+
+    # XXX: Duplicate of nir_lower_pack
+    (('unpack_64_2x32', a), ('vec2', ('unpack_64_2x32_split_x', a),
+                                     ('unpack_64_2x32_split_y', a))),
 ]
 
 # Handling all combinations of boolean and float sizes for b2f is nontrivial.
@@ -69,6 +103,8 @@ def run():
 
     print('#include "bifrost_nir.h"')
 
+    print(nir_algebraic.AlgebraicPass("bifrost_nir_opt_boolean_bitwise",
+                                      opt_bool_bitwise).render())
     print(nir_algebraic.AlgebraicPass("bifrost_nir_lower_algebraic_late",
                                       algebraic_late).render())
 

@@ -15,7 +15,7 @@ The CI runs a number of tests, from trivial build-testing to complex GPU renderi
 
 - Build testing for a number of build systems, configurations and platforms
 - Sanity checks (``meson test``)
-- Some drivers (softpipe, llvmpipe, freedreno and panfrost) are also tested
+- Some drivers (Softpipe, LLVMpipe, Freedreno and Panfrost) are also tested
   using `VK-GL-CTS <https://github.com/KhronosGroup/VK-GL-CTS>`__
 - Replay of application traces
 
@@ -64,7 +64,7 @@ has been granted access to these traces.
 
 A traces YAML file also includes a ``download-url`` pointing to a MinIO
 instance where to download the traces from. While the first job should always work with
-publicly accessible traces, the second job could point to an url with restricted access.
+publicly accessible traces, the second job could point to an URL with restricted access.
 
 Restricted traces are those that have been made available to Mesa developers without a
 license to redistribute at will, and thus should not be exposed to the public. Failing to
@@ -84,8 +84,13 @@ added to the OPA policy for the MinIO repository as per
 https://gitlab.freedesktop.org/freedesktop/helm-gitlab-config/-/commit/a3cd632743019f68ac8a829267deb262d9670958 .
 
 So the jobs are created in personal repositories, the name of the user's account needs
-to be added to the rules attribute of the Gitlab CI job that accesses the restricted
+to be added to the rules attribute of the GitLab CI job that accesses the restricted
 accounts.
+
+.. toctree::
+   :maxdepth: 1
+
+   local-traces
 
 Intel CI
 --------
@@ -137,9 +142,9 @@ able to handle a whole pipeline's worth of jobs in less than 15 minutes
 
 If a test farm is short the HW to provide these guarantees, consider dropping
 tests to reduce runtime.  dEQP job logs print the slowest tests at the end of
-the run, and piglit logs the runtime of tests in the results.json.bz2 in the
+the run, and Piglit logs the runtime of tests in the results.json.bz2 in the
 artifacts.  Or, you can add the following to your job to only run some fraction
-(in this case, 1/10th) of the deqp tests.
+(in this case, 1/10th) of the dEQP tests.
 
 .. code-block:: yaml
 
@@ -247,7 +252,7 @@ directory.  You can hack on mesa and iterate testing the build with:
 Conformance Tests
 -----------------
 
-Some conformance tests require a special treatment to be maintained on Gitlab CI.
+Some conformance tests require a special treatment to be maintained on GitLab CI.
 This section lists their documentation pages.
 
 .. toctree::
@@ -256,11 +261,11 @@ This section lists their documentation pages.
   skqp
 
 
-Updating Gitlab CI Linux Kernel
+Updating GitLab CI Linux Kernel
 -------------------------------
 
-Gitlab CI usually runs a bleeding-edge kernel. The following documentation has
-instructions on how to uprev Linux Kernel in the Gitlab Ci ecosystem.
+GitLab CI usually runs a bleeding-edge kernel. The following documentation has
+instructions on how to uprev Linux Kernel in the GitLab CI ecosystem.
 
 .. toctree::
   :maxdepth: 1

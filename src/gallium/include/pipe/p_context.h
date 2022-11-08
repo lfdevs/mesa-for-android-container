@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #ifndef PIPE_CONTEXT_H
@@ -32,7 +32,9 @@
 #include "p_format.h"
 #include "p_video_enums.h"
 #include "p_defines.h"
+#include "util/u_debug.h"
 #include <stdio.h>
+#include "frontend/winsys_handle.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -104,7 +106,13 @@ struct pipe_context {
    struct u_upload_mgr *stream_uploader; /* everything but shader constants */
    struct u_upload_mgr *const_uploader;  /* shader constants only */
 
-   void (*destroy)( struct pipe_context * );
+   /**
+    * Debug callback set by u_default_set_debug_callback. Frontends should use
+    * set_debug_callback in case drivers need to flush compiler queues.
+    */
+   struct util_debug_callback debug;
+
+   void (*destroy)(struct pipe_context *);
 
    /**
     * VBO drawing
@@ -192,10 +200,10 @@ struct pipe_context {
     * \param condition whether to skip on FALSE or TRUE query results
     * \param mode  one of PIPE_RENDER_COND_x
     */
-   void (*render_condition)( struct pipe_context *pipe,
-                             struct pipe_query *query,
-                             bool condition,
-                             enum pipe_render_cond_flag mode );
+   void (*render_condition)(struct pipe_context *pipe,
+                            struct pipe_query *query,
+                            bool condition,
+                            enum pipe_render_cond_flag mode);
 
    /**
     * Predicate subsequent rendering on a value in a buffer
@@ -203,17 +211,17 @@ struct pipe_context {
     * \param offset Offset in the buffer to query 32-bit
     * \param condition whether to skip on FALSE or TRUE query results
     */
-   void (*render_condition_mem)( struct pipe_context *pipe,
-                                 struct pipe_resource *buffer,
-                                 uint32_t offset,
-                                 bool condition );
+   void (*render_condition_mem)(struct pipe_context *pipe,
+                                struct pipe_resource *buffer,
+                                uint32_t offset,
+                                bool condition);
    /**
     * Query objects
     */
    /*@{*/
-   struct pipe_query *(*create_query)( struct pipe_context *pipe,
-                                       unsigned query_type,
-                                       unsigned index );
+   struct pipe_query *(*create_query)(struct pipe_context *pipe,
+                                      unsigned query_type,
+                                      unsigned index);
 
    /**
     * Create a query object that queries all given query types simultaneously.
@@ -230,9 +238,9 @@ struct pipe_context {
     * \param query_types array of \p num_queries query types
     * \return a query object, or NULL on error.
     */
-   struct pipe_query *(*create_batch_query)( struct pipe_context *pipe,
-                                             unsigned num_queries,
-                                             unsigned *query_types );
+   struct pipe_query *(*create_batch_query)(struct pipe_context *pipe,
+                                            unsigned num_queries,
+                                            unsigned *query_types);
 
    void (*destroy_query)(struct pipe_context *pipe,
                          struct pipe_query *q);
@@ -403,20 +411,20 @@ struct pipe_context {
     * Parameter-like state (or properties)
     */
    /*@{*/
-   void (*set_blend_color)( struct pipe_context *,
-                            const struct pipe_blend_color * );
+   void (*set_blend_color)(struct pipe_context *,
+                           const struct pipe_blend_color *);
 
-   void (*set_stencil_ref)( struct pipe_context *,
-                            const struct pipe_stencil_ref ref);
+   void (*set_stencil_ref)(struct pipe_context *,
+                           const struct pipe_stencil_ref ref);
 
-   void (*set_sample_mask)( struct pipe_context *,
-                            unsigned sample_mask );
+   void (*set_sample_mask)(struct pipe_context *,
+                           unsigned sample_mask);
 
-   void (*set_min_samples)( struct pipe_context *,
-                            unsigned min_samples );
+   void (*set_min_samples)(struct pipe_context *,
+                           unsigned min_samples);
 
-   void (*set_clip_state)( struct pipe_context *,
-                            const struct pipe_clip_state * );
+   void (*set_clip_state)(struct pipe_context *,
+                          const struct pipe_clip_state *);
 
    /**
     * Set constant buffer
@@ -427,10 +435,10 @@ struct pipe_context {
     *                         (the callee shouldn't increment the ref count)
     * \param buf              Constant buffer parameters
     */
-   void (*set_constant_buffer)( struct pipe_context *,
-                                enum pipe_shader_type shader, uint index,
-                                bool take_ownership,
-                                const struct pipe_constant_buffer *buf );
+   void (*set_constant_buffer)(struct pipe_context *,
+                               enum pipe_shader_type shader, uint index,
+                               bool take_ownership,
+                               const struct pipe_constant_buffer *buf);
 
    /**
     * Set inlinable constants for constant buffer 0.
@@ -448,12 +456,12 @@ struct pipe_context {
     * There is no PIPE_CAP for this. Drivers shouldn't set the shader_info
     * fields if they don't want this or if they don't implement this.
     */
-   void (*set_inlinable_constants)( struct pipe_context *,
-                                    enum pipe_shader_type shader,
-                                    uint num_values, uint32_t *values );
+   void (*set_inlinable_constants)(struct pipe_context *,
+                                   enum pipe_shader_type shader,
+                                   uint num_values, uint32_t *values);
 
-   void (*set_framebuffer_state)( struct pipe_context *,
-                                  const struct pipe_framebuffer_state * );
+   void (*set_framebuffer_state)(struct pipe_context *,
+                                 const struct pipe_framebuffer_state *);
 
    /**
     * Set the sample locations used during rasterization. When NULL or sized
@@ -479,26 +487,26 @@ struct pipe_context {
     * The pixel grid is used to vary sample locations across pixels and its
     * size can be queried with get_sample_pixel_grid().
     */
-   void (*set_sample_locations)( struct pipe_context *,
-                                 size_t size, const uint8_t *locations );
+   void (*set_sample_locations)(struct pipe_context *,
+                                size_t size, const uint8_t *locations);
 
-   void (*set_polygon_stipple)( struct pipe_context *,
-                                const struct pipe_poly_stipple * );
+   void (*set_polygon_stipple)(struct pipe_context *,
+                               const struct pipe_poly_stipple *);
 
-   void (*set_scissor_states)( struct pipe_context *,
+   void (*set_scissor_states)(struct pipe_context *,
+                              unsigned start_slot,
+                              unsigned num_scissors,
+                              const struct pipe_scissor_state *);
+
+   void (*set_window_rectangles)(struct pipe_context *,
+                                 bool include,
+                                 unsigned num_rectangles,
+                                 const struct pipe_scissor_state *);
+
+   void (*set_viewport_states)(struct pipe_context *,
                                unsigned start_slot,
-                               unsigned num_scissors,
-                               const struct pipe_scissor_state * );
-
-   void (*set_window_rectangles)( struct pipe_context *,
-                                  bool include,
-                                  unsigned num_rectangles,
-                                  const struct pipe_scissor_state * );
-
-   void (*set_viewport_states)( struct pipe_context *,
-                                unsigned start_slot,
-                                unsigned num_viewports,
-                                const struct pipe_viewport_state *);
+                               unsigned num_viewports,
+                               const struct pipe_viewport_state *);
 
    void (*set_sampler_views)(struct pipe_context *,
                              enum pipe_shader_type shader,
@@ -592,12 +600,12 @@ struct pipe_context {
     *                        that drivers shouldn't increment reference counts.
     * \param buffers         array of the buffers to bind
     */
-   void (*set_vertex_buffers)( struct pipe_context *,
-                               unsigned start_slot,
-                               unsigned num_buffers,
-                               unsigned unbind_num_trailing_slots,
-                               bool take_ownership,
-                               const struct pipe_vertex_buffer * );
+   void (*set_vertex_buffers)(struct pipe_context *,
+                              unsigned start_slot,
+                              unsigned num_buffers,
+                              unsigned unbind_num_trailing_slots,
+                              bool take_ownership,
+                              const struct pipe_vertex_buffer *);
 
    /*@}*/
 
@@ -829,32 +837,32 @@ struct pipe_context {
     * information (like texture strides for texture_map).
     */
    void *(*buffer_map)(struct pipe_context *,
-		       struct pipe_resource *resource,
-		       unsigned level,
-		       unsigned usage,  /* a combination of PIPE_MAP_x */
-		       const struct pipe_box *,
-		       struct pipe_transfer **out_transfer);
+                       struct pipe_resource *resource,
+                       unsigned level,
+                       unsigned usage,  /* a combination of PIPE_MAP_x */
+                       const struct pipe_box *,
+                       struct pipe_transfer **out_transfer);
 
    /* If transfer was created with WRITE|FLUSH_EXPLICIT, only the
     * regions specified with this call are guaranteed to be written to
     * the resource.
     */
-   void (*transfer_flush_region)( struct pipe_context *,
-				  struct pipe_transfer *transfer,
-				  const struct pipe_box *);
+   void (*transfer_flush_region)(struct pipe_context *,
+                                 struct pipe_transfer *transfer,
+                                 const struct pipe_box *);
 
    void (*buffer_unmap)(struct pipe_context *,
-			struct pipe_transfer *transfer);
+                        struct pipe_transfer *transfer);
 
    void *(*texture_map)(struct pipe_context *,
-			struct pipe_resource *resource,
-			unsigned level,
-			unsigned usage,  /* a combination of PIPE_MAP_x */
-			const struct pipe_box *,
-			struct pipe_transfer **out_transfer);
+                        struct pipe_resource *resource,
+                        unsigned level,
+                        unsigned usage,  /* a combination of PIPE_MAP_x */
+                        const struct pipe_box *,
+                        struct pipe_transfer **out_transfer);
 
    void (*texture_unmap)(struct pipe_context *,
-			 struct pipe_transfer *transfer);
+                         struct pipe_transfer *transfer);
 
    /* One-shot transfer operation with data supplied in a user
     * pointer.
@@ -901,14 +909,14 @@ struct pipe_context {
    /**
     * Creates a video codec for a specific video format/profile
     */
-   struct pipe_video_codec *(*create_video_codec)( struct pipe_context *context,
-                                                   const struct pipe_video_codec *templat );
+   struct pipe_video_codec *(*create_video_codec)(struct pipe_context *context,
+                                                  const struct pipe_video_codec *templat);
 
    /**
     * Creates a video buffer as decoding target
     */
-   struct pipe_video_buffer *(*create_video_buffer)( struct pipe_context *context,
-                                                     const struct pipe_video_buffer *templat );
+   struct pipe_video_buffer *(*create_video_buffer)(struct pipe_context *context,
+                                                    const struct pipe_video_buffer *templat);
 
    /**
     * Compute kernel execution
@@ -919,7 +927,7 @@ struct pipe_context {
     * pipe_context::launch_grid.
     */
    void *(*create_compute_state)(struct pipe_context *context,
-				 const struct pipe_compute_state *);
+                                 const struct pipe_compute_state *);
    void (*bind_compute_state)(struct pipe_context *, void *);
    void (*delete_compute_state)(struct pipe_context *, void *);
 
@@ -1185,6 +1193,15 @@ struct pipe_context {
                                                                    const struct pipe_video_buffer *templat,
                                                                    const uint64_t *modifiers,
                                                                    unsigned int modifiers_count);
+
+   /**
+    * Creates a video buffer as decoding target, from external memory
+    */
+   struct pipe_video_buffer *(*video_buffer_from_handle)( struct pipe_context *context,
+                                                     const struct pipe_video_buffer *templat,
+                                                     struct winsys_handle *handle,
+                                                     unsigned usage );
+
 };
 
 

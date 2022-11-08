@@ -192,6 +192,32 @@ fence_finish(struct pipe_screen *pscreen, struct pipe_context *pctx,
                             timeout_ns);
 }
 
+static int
+fence_get_fd(struct pipe_screen *pscreen, struct pipe_fence_handle *pfence)
+{
+   struct zink_screen *screen = zink_screen(pscreen);
+   if (screen->device_lost)
+      return -1;
+
+   struct zink_tc_fence *mfence = (struct zink_tc_fence *)pfence;
+   if (!mfence->sem)
+      return -1;
+
+   const VkSemaphoreGetFdInfoKHR sgfi = {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
+      .semaphore = mfence->sem,
+      .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
+   };
+   int fd = -1;
+   VkResult result = VKSCR(GetSemaphoreFdKHR)(screen->dev, &sgfi, &fd);
+   if (!zink_screen_handle_vkresult(screen, result)) {
+      mesa_loge("ZINK: vkGetSemaphoreFdKHR failed (%s)", vk_Result_to_str(result));
+      return -1;
+   }
+
+   return fd;
+}
+
 void
 zink_fence_server_signal(struct pipe_context *pctx, struct pipe_fence_handle *pfence)
 {
@@ -333,4 +359,5 @@ zink_screen_fence_init(struct pipe_screen *pscreen)
 {
    pscreen->fence_reference = fence_reference;
    pscreen->fence_finish = fence_finish;
+   pscreen->fence_get_fd = fence_get_fd;
 }

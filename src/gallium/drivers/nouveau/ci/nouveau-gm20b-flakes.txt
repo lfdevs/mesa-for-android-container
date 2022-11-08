@@ -24,3 +24,4 @@ KHR-GLES31.core.shader_bitfield_operation.*
 KHR-GLES31.core.shader_image.*
 KHR-GLES31.core.shader_storage_buffer_object.*
 KHR-GLES31.core.tessellation_shader.*
+KHR-GLES31.core.vertex_attrib_binding.*

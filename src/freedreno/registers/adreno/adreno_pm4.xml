@@ -70,6 +70,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 
 	<!-- a6xx events -->
 	<value name="CACHE_INVALIDATE" value="49" variants="A6XX"/>
+	<value name="LABEL" value="63" variants="A6XX-"/>
 
 	<!-- note, some of these are the same as a6xx, just named differently -->
 	<value name="CCU_INVALIDATE_DEPTH" value="24" variants="A7XX"/>
@@ -412,6 +413,12 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="CP_CONTEXT_REG_BUNCH" value="0x5c" variants="A5XX-"/>
 	<!-- A5XX Enable yield in RB only -->
 	<value name="CP_YIELD_ENABLE" value="0x1c" variants="A5XX"/>
+	<doc>
+		Enables IB2 skipping.  If both GLOBAL and LOCAL are 1 and
+		nothing is left in the visibility stream, then
+		CP_INDIRECT_BUFFER will be skipped, and draws will early return
+		from their IB.
+	</doc>
 	<value name="CP_SKIP_IB2_ENABLE_GLOBAL" value="0x1d" variants="A5XX-"/>
 	<value name="CP_SKIP_IB2_ENABLE_LOCAL" value="0x23" variants="A5XX-"/>
 	<value name="CP_SET_SUBDRAW_SIZE" value="0x35" variants="A5XX-"/>

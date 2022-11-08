@@ -34,6 +34,7 @@
 #include "nv30/nv30-40_3d.xml.h"
 #include "nv30/nv30_context.h"
 #include "nv30/nv30_format.h"
+#include "nv30/nv30_winsys.h"
 
 static void
 nv30_emit_vtxattr(struct nv30_context *nv30, struct pipe_vertex_buffer *vb,
@@ -586,7 +587,6 @@ nv30_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    if (nv30->vbo_push_hint != !!nv30->vbo_fifo)
       nv30->dirty |= NV30_NEW_ARRAYS;
 
-   push->user_priv = &nv30->bufctx;
    if (nv30->vbo_user && !(nv30->dirty & (NV30_NEW_VERTEX | NV30_NEW_ARRAYS)))
       nv30_update_user_vbufs(nv30);
 

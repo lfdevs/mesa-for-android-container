@@ -527,6 +527,7 @@ struct dri2_egl_display_vtbl dri3_x11_display_vtbl = {
    .query_buffer_age = dri3_query_buffer_age,
    .query_surface = dri3_query_surface,
    .get_sync_values = dri3_get_sync_values,
+   .get_msc_rate = dri2_x11_get_msc_rate,
    .get_dri_drawable = dri3_get_dri_drawable,
    .close_screen_notify = dri3_close_screen_notify,
 };

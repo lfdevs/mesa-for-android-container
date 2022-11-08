@@ -153,8 +153,8 @@ bi_write_mask(bi_instr *I)
          * Obscurely, ATOM_CX is sr_write but can ignore the staging register in
          * certain circumstances; this does not require consideration.
          */
-        if (bi_opcode_props[I->op].sr_write && bi_is_null(I->dest[0]) &&
-            !bi_is_null(I->src[0])) {
+        if (bi_opcode_props[I->op].sr_write && I->nr_dests && I->nr_srcs &&
+            bi_is_null(I->dest[0]) && !bi_is_null(I->src[0])) {
 
                 unsigned reg = I->src[0].value;
                 unsigned count = bi_count_write_registers(I, 0);

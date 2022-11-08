@@ -2746,6 +2746,7 @@ brw_send_indirect_split_message(struct brw_codegen *p,
                                 unsigned desc_imm,
                                 struct brw_reg ex_desc,
                                 unsigned ex_desc_imm,
+                                bool ex_desc_scratch,
                                 bool eot)
 {
    const struct intel_device_info *devinfo = p->devinfo;
@@ -2781,6 +2782,7 @@ brw_send_indirect_split_message(struct brw_codegen *p,
    }
 
    if (ex_desc.file == BRW_IMMEDIATE_VALUE &&
+       !ex_desc_scratch &&
        (devinfo->ver >= 12 ||
         ((ex_desc.ud | ex_desc_imm) & INTEL_MASK(15, 12)) == 0)) {
       ex_desc.ud |= ex_desc_imm;
@@ -2807,7 +2809,16 @@ brw_send_indirect_split_message(struct brw_codegen *p,
        */
       unsigned imm_part = ex_desc_imm | sfid | eot << 5;
 
-      if (ex_desc.file == BRW_IMMEDIATE_VALUE) {
+      if (ex_desc_scratch) {
+         /* Or the scratch surface offset together with the immediate part of
+          * the extended descriptor.
+          */
+         assert(devinfo->verx10 >= 125);
+         brw_AND(p, addr,
+                 retype(brw_vec1_grf(0, 5), BRW_REGISTER_TYPE_UD),
+                 brw_imm_ud(INTEL_MASK(31, 10)));
+         brw_OR(p, addr, addr, brw_imm_ud(imm_part));
+      } else if (ex_desc.file == BRW_IMMEDIATE_VALUE) {
          /* ex_desc bits 15:12 don't exist in the instruction encoding prior
           * to Gfx12, so we may have fallen back to an indirect extended
           * descriptor.
@@ -3462,7 +3473,18 @@ brw_broadcast(struct brw_codegen *p,
    assert(src.file == BRW_GENERAL_REGISTER_FILE &&
           src.address_mode == BRW_ADDRESS_DIRECT);
    assert(!src.abs && !src.negate);
+
+   /* Gen12.5 adds the following region restriction:
+    *
+    *    "Vx1 and VxH indirect addressing for Float, Half-Float, Double-Float
+    *    and Quad-Word data must not be used."
+    *
+    * We require the source and destination types to match so stomp to an
+    * unsigned integer type.
+    */
    assert(src.type == dst.type);
+   src.type = dst.type = brw_reg_type_from_bit_size(type_sz(src.type) * 8,
+                                                    BRW_REGISTER_TYPE_UD);
 
    if ((src.vstride == 0 && (src.hstride == 0 || !align1)) ||
        idx.file == BRW_IMMEDIATE_VALUE) {
@@ -3474,7 +3496,7 @@ brw_broadcast(struct brw_codegen *p,
       src = align1 ? stride(suboffset(src, i), 0, 1, 0) :
                      stride(suboffset(src, 4 * i), 0, 4, 1);
 
-      if (type_sz(src.type) > 4 && !devinfo->has_64bit_float) {
+      if (type_sz(src.type) > 4 && !devinfo->has_64bit_int) {
          brw_MOV(p, subscript(dst, BRW_REGISTER_TYPE_D, 0),
                     subscript(src, BRW_REGISTER_TYPE_D, 0));
          brw_set_default_swsb(p, tgl_swsb_null());
@@ -3532,7 +3554,7 @@ brw_broadcast(struct brw_codegen *p,
          /* Use indirect addressing to fetch the specified component. */
          if (type_sz(src.type) > 4 &&
              (devinfo->platform == INTEL_PLATFORM_CHV || intel_device_info_is_9lp(devinfo) ||
-              !devinfo->has_64bit_float)) {
+              !devinfo->has_64bit_int)) {
             /* From the Cherryview PRM Vol 7. "Register Region Restrictions":
              *
              *    "When source or destination datatype is 64b or operation is

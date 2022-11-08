@@ -259,6 +259,7 @@ struct fd_transfer {
    struct threaded_transfer b;
    struct pipe_resource *staging_prsc;
    struct pipe_box staging_box;
+   void *upload_ptr;
 };
 
 static inline struct fd_transfer *

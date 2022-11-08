@@ -75,8 +75,8 @@ def test_output(glcpp, contents, expfile, nl_format='\n'):
         print("Test returned general error, possibly missing linker")
         sys.exit(77)
 
-    with open(expfile, 'r') as f:
-        expected = f.read()
+    with open(expfile, 'rb') as f:
+        expected = f.read().decode('utf-8')
 
     # Bison 3.6 changed '$end' to 'end of file' in its error messages
     # See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/3181

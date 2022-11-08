@@ -33,6 +33,7 @@
 
 #include "nir.h"
 
+#include <algorithm>
 #include <bitset>
 #include <memory>
 #include <vector>
@@ -53,6 +54,8 @@ enum {
    DEBUG_NO_SCHED = 0x40,
    DEBUG_PERF_INFO = 0x80,
    DEBUG_LIVE_INFO = 0x100,
+   DEBUG_FORCE_WAITDEPS = 0x200,
+   DEBUG_NO_VALIDATE_IR = 0x400,
 };
 
 /**
@@ -77,24 +80,26 @@ enum class Format : std::uint16_t {
    SMEM = 6,
    /* LDS/GDS Format */
    DS = 8,
+   LDSDIR = 9,
    /* Vector Memory Buffer Formats */
-   MTBUF = 9,
-   MUBUF = 10,
+   MTBUF = 10,
+   MUBUF = 11,
    /* Vector Memory Image Format */
-   MIMG = 11,
+   MIMG = 12,
    /* Export Format */
-   EXP = 12,
+   EXP = 13,
    /* Flat Formats */
-   FLAT = 13,
-   GLOBAL = 14,
-   SCRATCH = 15,
+   FLAT = 14,
+   GLOBAL = 15,
+   SCRATCH = 16,
 
-   PSEUDO_BRANCH = 16,
-   PSEUDO_BARRIER = 17,
-   PSEUDO_REDUCTION = 18,
+   PSEUDO_BRANCH = 17,
+   PSEUDO_BARRIER = 18,
+   PSEUDO_REDUCTION = 19,
 
    /* Vector ALU Formats */
-   VOP3P = 19,
+   VOP3P = 20,
+   VINTERP_INREG = 21,
    VOP1 = 1 << 8,
    VOP2 = 1 << 9,
    VOPC = 1 << 10,
@@ -133,7 +138,7 @@ enum class instr_class : uint8_t {
 enum storage_class : uint8_t {
    storage_none = 0x0,   /* no synchronization and can be reordered around aliasing stores */
    storage_buffer = 0x1, /* SSBOs and global memory */
-   storage_atomic_counter = 0x2, /* not used for Vulkan */
+   storage_gds = 0x2,
    storage_image = 0x4,
    storage_shared = 0x8,       /* or TCS output */
    storage_vmem_output = 0x10, /* GS or TCS output stores using VMEM */
@@ -999,6 +1004,7 @@ struct SOPP_instruction;
 struct SOPC_instruction;
 struct SMEM_instruction;
 struct DS_instruction;
+struct LDSDIR_instruction;
 struct MTBUF_instruction;
 struct MUBUF_instruction;
 struct MIMG_instruction;
@@ -1008,11 +1014,12 @@ struct Pseudo_branch_instruction;
 struct Pseudo_barrier_instruction;
 struct Pseudo_reduction_instruction;
 struct VOP3P_instruction;
+struct VINTERP_inreg_instruction;
 struct VOP1_instruction;
 struct VOP2_instruction;
 struct VOPC_instruction;
 struct VOP3_instruction;
-struct Interp_instruction;
+struct VINTRP_instruction;
 struct DPP16_instruction;
 struct DPP8_instruction;
 struct SDWA_instruction;
@@ -1124,6 +1131,17 @@ struct Instruction {
       return *(DS_instruction*)this;
    }
    constexpr bool isDS() const noexcept { return format == Format::DS; }
+   LDSDIR_instruction& ldsdir() noexcept
+   {
+      assert(isLDSDIR());
+      return *(LDSDIR_instruction*)this;
+   }
+   const LDSDIR_instruction& ldsdir() const noexcept
+   {
+      assert(isLDSDIR());
+      return *(LDSDIR_instruction*)this;
+   }
+   constexpr bool isLDSDIR() const noexcept { return format == Format::LDSDIR; }
    MTBUF_instruction& mtbuf() noexcept
    {
       assert(isMTBUF());
@@ -1245,6 +1263,17 @@ struct Instruction {
       return *(VOP3P_instruction*)this;
    }
    constexpr bool isVOP3P() const noexcept { return format == Format::VOP3P; }
+   VINTERP_inreg_instruction& vinterp_inreg() noexcept
+   {
+      assert(isVINTERP_INREG());
+      return *(VINTERP_inreg_instruction*)this;
+   }
+   const VINTERP_inreg_instruction& vinterp_inreg() const noexcept
+   {
+      assert(isVINTERP_INREG());
+      return *(VINTERP_inreg_instruction*)this;
+   }
+   constexpr bool isVINTERP_INREG() const noexcept { return format == Format::VINTERP_INREG; }
    VOP1_instruction& vop1() noexcept
    {
       assert(isVOP1());
@@ -1289,15 +1318,15 @@ struct Instruction {
       return *(VOP3_instruction*)this;
    }
    constexpr bool isVOP3() const noexcept { return (uint16_t)format & (uint16_t)Format::VOP3; }
-   Interp_instruction& vintrp() noexcept
+   VINTRP_instruction& vintrp() noexcept
    {
       assert(isVINTRP());
-      return *(Interp_instruction*)this;
+      return *(VINTRP_instruction*)this;
    }
-   const Interp_instruction& vintrp() const noexcept
+   const VINTRP_instruction& vintrp() const noexcept
    {
       assert(isVINTRP());
-      return *(Interp_instruction*)this;
+      return *(VINTRP_instruction*)this;
    }
    constexpr bool isVINTRP() const noexcept { return (uint16_t)format & (uint16_t)Format::VINTRP; }
    DPP16_instruction& dpp16() noexcept
@@ -1433,6 +1462,14 @@ struct VOP3P_instruction : public Instruction {
 };
 static_assert(sizeof(VOP3P_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
+struct VINTERP_inreg_instruction : public Instruction {
+   uint8_t wait_exp : 3;
+   bool clamp : 1;
+   uint8_t opsel : 4;
+   bool neg[3];
+};
+static_assert(sizeof(VINTERP_inreg_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
+
 /**
  * Data Parallel Primitives Format:
  * This format can be used for VOP1, VOP2 or VOPC instructions.
@@ -1525,12 +1562,12 @@ struct SDWA_instruction : public Instruction {
 };
 static_assert(sizeof(SDWA_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
-struct Interp_instruction : public Instruction {
+struct VINTRP_instruction : public Instruction {
    uint8_t attribute;
    uint8_t component;
    uint16_t padding;
 };
-static_assert(sizeof(Interp_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
+static_assert(sizeof(VINTRP_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
 
 /**
  * Local and Global Data Sharing instructions
@@ -1549,6 +1586,20 @@ struct DS_instruction : public Instruction {
    uint8_t padding;
 };
 static_assert(sizeof(DS_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
+
+/**
+ * LDS Direct instructions
+ * Operand(0): M0
+ * Definition(0): VDST - Destination VGPR
+ */
+struct LDSDIR_instruction : public Instruction {
+   memory_sync_info sync;
+   uint8_t attr : 6;
+   uint8_t attr_chan : 2;
+   uint32_t wait_vdst : 4;
+   uint32_t padding : 28;
+};
+static_assert(sizeof(LDSDIR_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
 
 /**
  * Vector Memory Untyped-buffer Instructions
@@ -1659,7 +1710,8 @@ struct Export_instruction : public Instruction {
    bool compressed : 1;
    bool done : 1;
    bool valid_mask : 1;
-   uint8_t padding0 : 5;
+   bool row_en : 1;
+   uint8_t padding0 : 4;
    uint8_t padding1;
 };
 static_assert(sizeof(Export_instruction) == sizeof(Instruction) + 4, "Unexpected padding");
@@ -1677,8 +1729,9 @@ struct Pseudo_branch_instruction : public Instruction {
     * A value of 0 means the target has not been initialized (BB0 cannot be a branch target).
     */
    uint32_t target[2];
+   nir_selection_control selection_control;
 };
-static_assert(sizeof(Pseudo_branch_instruction) == sizeof(Instruction) + 8, "Unexpected padding");
+static_assert(sizeof(Pseudo_branch_instruction) == sizeof(Instruction) + 12, "Unexpected padding");
 
 struct Pseudo_barrier_instruction : public Instruction {
    memory_sync_info sync;
@@ -1725,8 +1778,13 @@ struct Pseudo_reduction_instruction : public Instruction {
 static_assert(sizeof(Pseudo_reduction_instruction) == sizeof(Instruction) + 4,
               "Unexpected padding");
 
+extern thread_local aco::monotonic_buffer_resource* instruction_buffer;
+
 struct instr_deleter_functor {
-   void operator()(void* p) { free(p); }
+   /* Don't yet free any instructions. They will be de-allocated
+    * all at once after compilation finished.
+    */
+   void operator()(void* p) { return; }
 };
 
 template <typename T> using aco_ptr = std::unique_ptr<T, instr_deleter_functor>;
@@ -1738,13 +1796,14 @@ create_instruction(aco_opcode opcode, Format format, uint32_t num_operands,
 {
    std::size_t size =
       sizeof(T) + num_operands * sizeof(Operand) + num_definitions * sizeof(Definition);
-   char* data = (char*)calloc(1, size);
+   void* data = instruction_buffer->allocate(size, alignof(uint32_t));
+   memset(data, 0, size);
    T* inst = (T*)data;
 
    inst->opcode = opcode;
    inst->format = format;
 
-   uint16_t operands_offset = data + sizeof(T) - (char*)&inst->operands;
+   uint16_t operands_offset = sizeof(T) - offsetof(Instruction, operands);
    inst->operands = aco::span<Operand>(operands_offset, num_operands);
    uint16_t definitions_offset = (char*)inst->operands.end() - (char*)&inst->definitions;
    inst->definitions = aco::span<Definition>(definitions_offset, num_definitions);
@@ -1794,7 +1853,19 @@ is_phi(aco_ptr<Instruction>& instr)
 
 memory_sync_info get_sync_info(const Instruction* instr);
 
-bool is_dead(const std::vector<uint16_t>& uses, Instruction* instr);
+inline bool
+is_dead(const std::vector<uint16_t>& uses, const Instruction* instr)
+{
+   if (instr->definitions.empty() || instr->isBranch() ||
+       instr->opcode == aco_opcode::p_init_scratch)
+      return false;
+
+   if (std::any_of(instr->definitions.begin(), instr->definitions.end(),
+                   [&uses](const Definition& def) { return !def.isTemp() || uses[def.tempId()]; }))
+      return false;
+
+   return !(get_sync_info(instr).semantics & (semantic_volatile | semantic_acqrel));
+}
 
 bool can_use_opsel(amd_gfx_level gfx_level, aco_opcode op, int idx);
 bool instr_is_16bit(amd_gfx_level gfx_level, aco_opcode op);
@@ -1811,7 +1882,8 @@ aco_opcode get_inverse(aco_opcode op);
 aco_opcode get_f32_cmp(aco_opcode op);
 aco_opcode get_vcmpx(aco_opcode op);
 unsigned get_cmp_bitsize(aco_opcode op);
-bool is_cmp(aco_opcode op);
+bool is_fp_cmp(aco_opcode op);
+bool is_cmpx(aco_opcode op);
 
 bool can_swap_operands(aco_ptr<Instruction>& instr, aco_opcode* new_op);
 
@@ -1835,6 +1907,7 @@ enum block_kind {
    block_kind_branch = 1 << 8,
    block_kind_merge = 1 << 9,
    block_kind_invert = 1 << 10,
+   block_kind_discard_early_exit = 1 << 11,
    block_kind_uses_discard = 1 << 12,
    block_kind_needs_lowering = 1 << 13,
    block_kind_export_end = 1 << 15,
@@ -2061,7 +2134,7 @@ struct DeviceInfo {
    uint16_t vgpr_limit;
    uint16_t sgpr_limit;
    uint16_t sgpr_alloc_granule;
-   uint16_t vgpr_alloc_granule; /* must be power of two */
+   uint16_t vgpr_alloc_granule;
    unsigned max_wave64_per_simd;
    unsigned simd_per_cu;
    bool has_fast_fma32 = false;
@@ -2082,6 +2155,7 @@ enum class CompilationProgress {
 
 class Program final {
 public:
+   aco::monotonic_buffer_resource m{65536};
    std::vector<Block> blocks;
    std::vector<RegClass> temp_rc = {s1};
    RegisterDemand max_reg_demand = RegisterDemand();
@@ -2232,6 +2306,7 @@ void lower_to_hw_instr(Program* program);
 void schedule_program(Program* program, live& live_vars);
 void spill(Program* program, live& live_vars);
 void insert_wait_states(Program* program);
+bool dealloc_vgprs(Program* program);
 void insert_NOPs(Program* program);
 void form_hard_clauses(Program* program);
 unsigned emit_program(Program* program, std::vector<uint32_t>& code);
@@ -2263,7 +2338,8 @@ enum print_flags {
 };
 
 void aco_print_operand(const Operand* operand, FILE* output, unsigned flags = 0);
-void aco_print_instr(const Instruction* instr, FILE* output, unsigned flags = 0);
+void aco_print_instr(enum amd_gfx_level gfx_level, const Instruction* instr, FILE* output,
+                     unsigned flags = 0);
 void aco_print_program(const Program* program, FILE* output, unsigned flags = 0);
 void aco_print_program(const Program* program, FILE* output, const live& live_vars,
                        unsigned flags = 0);
@@ -2298,6 +2374,7 @@ typedef struct {
    const int16_t opcode_gfx7[static_cast<int>(aco_opcode::num_opcodes)];
    const int16_t opcode_gfx9[static_cast<int>(aco_opcode::num_opcodes)];
    const int16_t opcode_gfx10[static_cast<int>(aco_opcode::num_opcodes)];
+   const int16_t opcode_gfx11[static_cast<int>(aco_opcode::num_opcodes)];
    const std::bitset<static_cast<int>(aco_opcode::num_opcodes)> can_use_input_modifiers;
    const std::bitset<static_cast<int>(aco_opcode::num_opcodes)> can_use_output_modifiers;
    const std::bitset<static_cast<int>(aco_opcode::num_opcodes)> is_atomic;

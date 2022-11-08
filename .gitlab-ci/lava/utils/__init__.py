@@ -8,4 +8,9 @@ from .log_follower import (
     hide_sensitive_data,
     print_log,
 )
-from .log_section import LogSection, LogSectionType
+from .log_section import (
+    DEFAULT_GITLAB_SECTION_TIMEOUTS,
+    FALLBACK_GITLAB_SECTION_TIMEOUT,
+    LogSection,
+    LogSectionType,
+)

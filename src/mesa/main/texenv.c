@@ -462,11 +462,6 @@ _mesa_texenvfv_indexed( struct gl_context* ctx, GLuint texunit, GLenum target,
       }
    }
    else if (target == GL_POINT_SPRITE) {
-      /* GL_ARB_point_sprite */
-      if (!ctx->Extensions.ARB_point_sprite) {
-	 _mesa_error( ctx, GL_INVALID_ENUM, "glTexEnv(target=0x%x)", target );
-	 return;
-      }
       if (pname == GL_COORD_REPLACE) {
          /* It's kind of weird to set point state via glTexEnv,
           * but that's what the spec calls for.
@@ -745,11 +740,6 @@ _mesa_gettexenvfv_indexed( GLuint texunit, GLenum target, GLenum pname, GLfloat 
       }
    }
    else if (target == GL_POINT_SPRITE) {
-      /* GL_ARB_point_sprite */
-      if (!ctx->Extensions.ARB_point_sprite) {
-         _mesa_error( ctx, GL_INVALID_ENUM, "glGetTexEnvfv(target)" );
-         return;
-      }
       if (pname == GL_COORD_REPLACE) {
          if (ctx->Point.CoordReplace & (1u << texunit))
             *params = 1.0f;
@@ -821,11 +811,6 @@ _mesa_gettexenviv_indexed( GLuint texunit, GLenum target,
       }
    }
    else if (target == GL_POINT_SPRITE) {
-      /* GL_ARB_point_sprite */
-      if (!ctx->Extensions.ARB_point_sprite) {
-         _mesa_error( ctx, GL_INVALID_ENUM, "glGetTexEnviv(target)" );
-         return;
-      }
       if (pname == GL_COORD_REPLACE) {
          if (ctx->Point.CoordReplace & (1u << texunit))
             *params = GL_TRUE;

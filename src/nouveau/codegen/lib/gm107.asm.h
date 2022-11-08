@@ -1,4 +1,4 @@
-uint64_t gm107_builtin_code[] = {
+const uint64_t gm107_builtin_code[] = {
 /* 0x0000: gm107_div_u32 */
 	0x001f9801fc21ff0d,
 	0x5c30000000170002,
@@ -237,7 +237,7 @@ uint64_t gm107_builtin_code[] = {
 	0x50b0000000070f00,
 };
 
-uint64_t gm107_builtin_offsets[] = {
+const uint64_t gm107_builtin_offsets[] = {
 	0x0000000000000000,
 	0x0000000000000120,
 	0x0000000000000280,

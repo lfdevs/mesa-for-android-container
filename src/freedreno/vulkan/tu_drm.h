@@ -26,6 +26,7 @@ enum tu_bo_alloc_flags
    TU_BO_ALLOC_NO_FLAGS = 0,
    TU_BO_ALLOC_ALLOW_DUMP = 1 << 0,
    TU_BO_ALLOC_GPU_READ_ONLY = 1 << 1,
+   TU_BO_ALLOC_REPLAYABLE = 1 << 2,
 };
 
 /* Define tu_timeline_sync type based on drm syncobj for a point type
@@ -50,6 +51,7 @@ struct tu_bo
    uint64_t size;
    uint64_t iova;
    void *map;
+   const char *name; /* pointer to device->bo_sizes's entry's name */
    int32_t refcnt;
 
 #ifndef TU_USE_KGSL
@@ -67,8 +69,18 @@ struct tu_timeline_sync {
 };
 
 VkResult
-tu_bo_init_new(struct tu_device *dev, struct tu_bo **bo, uint64_t size,
-               enum tu_bo_alloc_flags flags);
+tu_bo_init_new_explicit_iova(struct tu_device *dev,
+                             struct tu_bo **out_bo,
+                             uint64_t size,
+                             uint64_t client_iova,
+                             enum tu_bo_alloc_flags flags, const char *name);
+
+static inline VkResult
+tu_bo_init_new(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
+               enum tu_bo_alloc_flags flags, const char *name)
+{
+   return tu_bo_init_new_explicit_iova(dev, out_bo, size, 0, flags, name);
+}
 
 VkResult
 tu_bo_init_dmabuf(struct tu_device *dev,
@@ -92,8 +104,15 @@ tu_bo_get_ref(struct tu_bo *bo)
    return bo;
 }
 
+#ifdef TU_USE_KGSL
 VkResult
-tu_enumerate_devices(struct tu_instance *instance);
+tu_enumerate_devices(struct vk_instance *vk_instance);
+#else
+VkResult
+tu_physical_device_try_create(struct vk_instance *vk_instance,
+                              struct _drmDevice *drm_device,
+                              struct vk_physical_device **out);
+#endif
 
 int
 tu_device_get_gpu_timestamp(struct tu_device *dev,
@@ -116,9 +135,6 @@ tu_drm_submitqueue_new(const struct tu_device *dev,
 
 void
 tu_drm_submitqueue_close(const struct tu_device *dev, uint32_t queue_id);
-
-int
-tu_syncobj_to_fd(struct tu_device *device, struct vk_sync *sync);
 
 VkResult
 tu_queue_submit(struct vk_queue *vk_queue, struct vk_queue_submit *submit);

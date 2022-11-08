@@ -147,7 +147,6 @@ init_pipe_state(struct vl_compositor *c)
    sampler.mag_img_filter = PIPE_TEX_FILTER_LINEAR;
    sampler.compare_mode = PIPE_TEX_COMPARE_NONE;
    sampler.compare_func = PIPE_FUNC_ALWAYS;
-   sampler.normalized_coords = 1;
 
    c->sampler_linear = c->pipe->create_sampler_state(c->pipe, &sampler);
 

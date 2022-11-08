@@ -109,6 +109,8 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
    if (VIV_FEATURE(ctx->screen, chipMinorFeatures6, CACHE128B256BPERLINE))
       cs->RS_SOURCE_STRIDE |= VIVS_RS_SOURCE_STRIDE_TS_MODE(rs->source_ts_mode) |
                               COND(src_super, VIVS_RS_SOURCE_STRIDE_SUPER_TILED_NEW);
+   else if ((rs->downsample_x || rs->downsample_y) && VIV_FEATURE(screen, chipMinorFeatures4, SMALL_MSAA))
+      cs->RS_SOURCE_STRIDE |= VIVS_RS_SOURCE_STRIDE_TS_MODE(TS_MODE_256B);
 
    /* Initially all pipes are set to the base address of the source and
     * destination buffer respectively. This will be overridden below as
@@ -632,7 +634,13 @@ etna_try_rs_blit(struct pipe_context *pctx,
    if (blit_info->src.format != blit_info->dst.format)
       return false;
 
-   uint32_t format = etna_compatible_rs_format(blit_info->dst.format);
+   /* try to find a exact format match first */
+   uint32_t format = translate_rs_format(blit_info->dst.format);
+   /* When not resolving MSAA, but only doing a layout conversion, we can get
+    * away with a fallback format of matching size.
+    */
+   if (format == ETNA_NO_MATCH && msaa_xscale == 1 && msaa_yscale == 1)
+      format = etna_compatible_rs_format(blit_info->dst.format);
    if (format == ETNA_NO_MATCH)
       return false;
 
@@ -686,8 +694,11 @@ etna_try_rs_blit(struct pipe_context *pctx,
     * Note: the RS width/height are converted to source samples here. */
    unsigned int width = blit_info->src.box.width * msaa_xscale;
    unsigned int height = blit_info->src.box.height * msaa_yscale;
-   unsigned int w_align = ETNA_RS_WIDTH_MASK + 1;
-   unsigned int h_align = ETNA_RS_HEIGHT_MASK + 1;
+   unsigned int w_align = (ETNA_RS_WIDTH_MASK + 1) * msaa_xscale;
+   unsigned int h_align = (ETNA_RS_HEIGHT_MASK + 1) * msaa_yscale;
+
+   if (!ctx->screen->specs.single_buffer)
+      h_align *= ctx->screen->specs.pixel_pipes;
 
    if (width & (w_align - 1) && width >= src_lev->width * msaa_xscale && width >= dst_lev->width)
       width = align(width, w_align);
@@ -786,7 +797,8 @@ etna_try_rs_blit(struct pipe_context *pctx,
       .width = width,
       .height = height,
       .tile_count = src_lev->layer_stride /
-                    etna_screen_get_tile_size(ctx->screen, src_lev->ts_mode),
+                    etna_screen_get_tile_size(ctx->screen, src_lev->ts_mode,
+                                              src->base.nr_samples > 1),
    });
 
    etna_submit_rs_state(ctx, &copy_to_screen);
@@ -809,35 +821,6 @@ manual:
    return false;
 }
 
-static bool
-etna_blit_rs(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
-{
-   /* This is a more extended version of resource_copy_region */
-   /* TODO Some cases can be handled by RS; if not, fall back to rendering or
-    * even CPU copy block of pixels from info->src to info->dst
-    * (resource, level, box, format);
-    * function is used for scaling, flipping in x and y direction (negative
-    * width/height), format conversion, mask and filter and even a scissor rectangle
-    *
-    * What can the RS do for us:
-    *   convert between tiling formats (layouts)
-    *   downsample 2x in x and y
-    *   convert between a limited number of pixel formats
-    *
-    * For the rest, fall back to util_blitter
-    * XXX this goes wrong when source surface is supertiled. */
-
-   if (blit_info->src.resource->nr_samples > 1 &&
-       blit_info->dst.resource->nr_samples <= 1 &&
-       !util_format_is_depth_or_stencil(blit_info->src.resource->format) &&
-       !util_format_is_pure_integer(blit_info->src.resource->format)) {
-      DBG("color resolve unimplemented");
-      return false;
-   }
-
-   return etna_try_rs_blit(pctx, blit_info);
-}
-
 void
 etna_clear_blit_rs_init(struct pipe_context *pctx)
 {
@@ -845,5 +828,5 @@ etna_clear_blit_rs_init(struct pipe_context *pctx)
 
    DBG("etnaviv: Using RS blit engine");
    pctx->clear = etna_clear_rs;
-   ctx->blit = etna_blit_rs;
+   ctx->blit = etna_try_rs_blit;
 }

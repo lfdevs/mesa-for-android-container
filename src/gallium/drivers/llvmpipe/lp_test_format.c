@@ -187,7 +187,7 @@ test_format_float(unsigned verbose, FILE *fp,
 
                fetch_ptr(unpacked, packed, j, i, use_cache ? cache_ptr : NULL);
 
-               for(k = 0; k < 4; ++k) {
+               for (k = 0; k < 4; ++k) {
                   if (util_double_inf_sign(test->unpacked[i][j][k]) != util_inf_sign(unpacked[k])) {
                      match = FALSE;
                   }
@@ -230,7 +230,7 @@ test_format_float(unsigned verbose, FILE *fp,
    gallivm_destroy(gallivm);
    LLVMContextDispose(context);
 
-   if(fp)
+   if (fp)
       write_tsv_row(fp, desc, success);
 
    return success;
@@ -292,7 +292,7 @@ test_format_unorm8(unsigned verbose, FILE *fp,
                fetch_ptr(unpacked, packed, j, i, use_cache ? cache_ptr : NULL);
 
                match = TRUE;
-               for(k = 0; k < 4; ++k) {
+               for (k = 0; k < 4; ++k) {
                   int error = float_to_ubyte(test->unpacked[i][j][k]) - unpacked[k];
 
                   if (util_is_double_nan(test->unpacked[i][j][k]))
@@ -333,7 +333,7 @@ test_format_unorm8(unsigned verbose, FILE *fp,
    gallivm_destroy(gallivm);
    LLVMContextDispose(context);
 
-   if(fp)
+   if (fp)
       write_tsv_row(fp, desc, success);
 
    return success;

@@ -110,7 +110,7 @@ emit_fetch_constant(
    struct lp_type type = bld_base->base.type;
    LLVMValueRef res;
    unsigned chan;
-
+   LLVMTypeRef i8t = LLVMInt8TypeInContext(bld_base->base.gallivm->context);
    assert(!reg->Register.Indirect);
 
    /*
@@ -127,9 +127,9 @@ emit_fetch_constant(
       index = lp_build_const_int32(bld->bld_base.base.gallivm,
                                    reg->Register.Index * 4 + chan);
 
-      scalar_ptr = LLVMBuildGEP(builder, bld->consts_ptr, &index, 1, "");
+      scalar_ptr = LLVMBuildGEP2(builder, i8t, bld->consts_ptr, &index, 1, "");
 
-      scalar = LLVMBuildLoad(builder, scalar_ptr, "");
+      scalar = LLVMBuildLoad2(builder, i8t, scalar_ptr, "");
 
       lp_build_name(scalar, "const[%u].%c", reg->Register.Index, "xyzw"[chan]);
 

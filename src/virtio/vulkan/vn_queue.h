@@ -23,7 +23,11 @@ struct vn_queue {
    uint32_t index;
    uint32_t flags;
 
+   /* wait fence used for vn_QueueWaitIdle */
    VkFence wait_fence;
+
+   /* sync fence used for Android wsi */
+   VkFence sync_fence;
 };
 VK_DEFINE_HANDLE_CASTS(vn_queue, base.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 
@@ -34,12 +38,15 @@ enum vn_sync_type {
    /* device object */
    VN_SYNC_TYPE_DEVICE_ONLY,
 
-   /* already signaled by WSI */
-   VN_SYNC_TYPE_WSI_SIGNALED,
+   /* payload is an imported sync file */
+   VN_SYNC_TYPE_IMPORTED_SYNC_FD,
 };
 
 struct vn_sync_payload {
    enum vn_sync_type type;
+
+   /* If type is VN_SYNC_TYPE_IMPORTED_SYNC_FD, fd is a sync file. */
+   int fd;
 };
 
 struct vn_fence {
@@ -72,6 +79,8 @@ struct vn_semaphore {
 
    struct vn_sync_payload permanent;
    struct vn_sync_payload temporary;
+
+   bool is_external;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vn_semaphore,
                                base.base,

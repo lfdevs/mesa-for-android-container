@@ -24,69 +24,7 @@
 #ifndef ZINK_RENDERPASS_H
 #define ZINK_RENDERPASS_H
 
-#include <vulkan/vulkan.h>
-
-#include "pipe/p_state.h"
-#include "util/u_inlines.h"
-
-struct zink_screen;
-
-struct zink_rt_attrib {
-  VkFormat format;
-  VkSampleCountFlagBits samples;
-  bool clear_color;
-  union {
-     bool clear_stencil;
-     bool fbfetch;
-  };
-  union {
-     bool invalid;
-     bool needs_write;
-  };
-  bool resolve;
-  bool mixed_zs;
-};
-
-struct zink_render_pass_state {
-   union {
-      struct {
-         uint8_t num_cbufs : 5; /* PIPE_MAX_COLOR_BUFS = 8 */
-         uint8_t have_zsbuf : 1;
-         uint8_t samples:1; //for fs samplemask
-         uint32_t num_zsresolves : 1;
-         uint32_t num_cresolves : 24; /* PIPE_MAX_COLOR_BUFS, but this is a struct hole */
-      };
-      uint32_t val; //for comparison
-   };
-   struct zink_rt_attrib rts[PIPE_MAX_COLOR_BUFS + 1];
-   unsigned num_rts;
-   uint32_t clears; //for extra verification and update flagging
-   uint32_t msaa_expand_mask;
-};
-
-struct zink_pipeline_rt {
-   VkFormat format;
-   VkSampleCountFlagBits samples;
-};
-
-struct zink_render_pass_pipeline_state {
-   uint32_t num_attachments:22;
-   uint32_t fbfetch:1;
-   uint32_t color_read:1;
-   uint32_t depth_read:1;
-   uint32_t depth_write:1;
-   uint32_t num_cresolves:4;
-   uint32_t num_zsresolves:1;
-   bool samples:1; //for fs samplemask
-   struct zink_pipeline_rt attachments[PIPE_MAX_COLOR_BUFS + 1];
-   unsigned id;
-};
-
-struct zink_render_pass {
-   VkRenderPass render_pass;
-   struct zink_render_pass_state state;
-   unsigned pipeline_state;
-};
+#include "zink_types.h"
 
 struct zink_render_pass *
 zink_create_render_pass(struct zink_screen *screen,
@@ -105,7 +43,8 @@ zink_end_render_pass(struct zink_context *ctx);
 
 VkImageLayout
 zink_render_pass_attachment_get_barrier_info(const struct zink_rt_attrib *rt, bool color, VkPipelineStageFlags *pipeline, VkAccessFlags *access);
-
+VkImageLayout
+zink_tc_renderpass_info_parse(struct zink_context *ctx, const struct tc_renderpass_info *info, unsigned idx, VkPipelineStageFlags *pipeline, VkAccessFlags *access);
 bool
 zink_init_render_pass(struct zink_context *ctx);
 void
@@ -114,4 +53,8 @@ void
 zink_init_zs_attachment(struct zink_context *ctx, struct zink_rt_attrib *rt);
 void
 zink_init_color_attachment(struct zink_context *ctx, unsigned i, struct zink_rt_attrib *rt);
+void
+zink_tc_init_zs_attachment(struct zink_context *ctx, const struct tc_renderpass_info *info, struct zink_rt_attrib *rt);
+void
+zink_tc_init_color_attachment(struct zink_context *ctx, const struct tc_renderpass_info *info, unsigned i, struct zink_rt_attrib *rt);
 #endif

@@ -257,7 +257,7 @@ nv50_resource_copy_region(struct pipe_context *pipe,
    BCTX_REFN(nv50->bufctx, 2D, nv04_resource(src), RD);
    BCTX_REFN(nv50->bufctx, 2D, nv04_resource(dst), WR);
    nouveau_pushbuf_bufctx(nv50->base.pushbuf, nv50->bufctx);
-   nouveau_pushbuf_validate(nv50->base.pushbuf);
+   PUSH_VAL(nv50->base.pushbuf);
 
    for (; dst_layer < dstz + src_box->depth; ++dst_layer, ++src_layer) {
       ret = nv50_2d_texture_do_copy(nv50->base.pushbuf,
@@ -295,10 +295,10 @@ nv50_clear_render_target(struct pipe_context *pipe,
    PUSH_DATAf(push, color->f[2]);
    PUSH_DATAf(push, color->f[3]);
 
-   if (nouveau_pushbuf_space(push, 64 + sf->depth, 1, 0))
+   if (!PUSH_SPACE_EX(push, 64 + sf->depth, 1, 0))
       return;
 
-   PUSH_REFN(push, bo, mt->base.domain | NOUVEAU_BO_WR);
+   PUSH_REF1(push, bo, mt->base.domain | NOUVEAU_BO_WR);
 
    BEGIN_NV04(push, NV50_3D(SCREEN_SCISSOR_HORIZ), 2);
    PUSH_DATA (push, ( width << 16) | dstx);
@@ -394,10 +394,10 @@ nv50_clear_depth_stencil(struct pipe_context *pipe,
       mode |= NV50_3D_CLEAR_BUFFERS_S;
    }
 
-   if (nouveau_pushbuf_space(push, 64 + sf->depth, 1, 0))
+   if (!PUSH_SPACE_EX(push, 64 + sf->depth, 1, 0))
       return;
 
-   PUSH_REFN(push, bo, mt->base.domain | NOUVEAU_BO_WR);
+   PUSH_REF1(push, bo, mt->base.domain | NOUVEAU_BO_WR);
 
    BEGIN_NV04(push, NV50_3D(SCREEN_SCISSOR_HORIZ), 2);
    PUSH_DATA (push, ( width << 16) | dstx);
@@ -534,9 +534,11 @@ nv50_clear(struct pipe_context *pipe, unsigned buffers, const struct pipe_scisso
    unsigned i, j, k;
    uint32_t mode = 0;
 
+   simple_mtx_lock(&nv50->screen->state_lock);
+
    /* don't need NEW_BLEND, COLOR_MASK doesn't affect CLEAR_BUFFERS */
    if (!nv50_state_validate_3d(nv50, NV50_NEW_3D_FRAMEBUFFER))
-      return;
+      goto out;
 
    if (scissor_state) {
       uint32_t minx = scissor_state->minx;
@@ -544,7 +546,7 @@ nv50_clear(struct pipe_context *pipe, unsigned buffers, const struct pipe_scisso
       uint32_t miny = scissor_state->miny;
       uint32_t maxy = MIN2(fb->height, scissor_state->maxy);
       if (maxx <= minx || maxy <= miny)
-         return;
+         goto out;
 
       BEGIN_NV04(push, NV50_3D(SCREEN_SCISSOR_HORIZ), 2);
       PUSH_DATA (push, minx | (maxx - minx) << 16);
@@ -622,6 +624,10 @@ nv50_clear(struct pipe_context *pipe, unsigned buffers, const struct pipe_scisso
       PUSH_DATA (push, fb->width << 16);
       PUSH_DATA (push, fb->height << 16);
    }
+
+out:
+   PUSH_KICK(push);
+   simple_mtx_unlock(&nv50->screen->state_lock);
 }
 
 static void
@@ -653,7 +659,7 @@ nv50_clear_buffer_push(struct pipe_context *pipe,
 
    nouveau_bufctx_refn(nv50->bufctx, 0, buf->bo, buf->domain | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, nv50->bufctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    offset &= ~0xff;
 
@@ -692,7 +698,7 @@ nv50_clear_buffer_push(struct pipe_context *pipe,
       count -= nr;
    }
 
-   nv50_resource_validate(buf, NOUVEAU_BO_WR);
+   nv50_resource_validate(nv50, buf, NOUVEAU_BO_WR);
 
    nouveau_bufctx_reset(nv50->bufctx, 0);
 }
@@ -771,10 +777,10 @@ nv50_clear_buffer(struct pipe_context *pipe,
    PUSH_DATA (push, color.ui[2]);
    PUSH_DATA (push, color.ui[3]);
 
-   if (nouveau_pushbuf_space(push, 64, 1, 0))
+   if (!PUSH_SPACE_EX(push, 64, 1, 0))
       return;
 
-   PUSH_REFN(push, buf->bo, buf->domain | NOUVEAU_BO_WR);
+   PUSH_REF1(push, buf->bo, buf->domain | NOUVEAU_BO_WR);
 
    BEGIN_NV04(push, NV50_3D(SCREEN_SCISSOR_HORIZ), 2);
    PUSH_DATA (push, width << 16);
@@ -815,7 +821,7 @@ nv50_clear_buffer(struct pipe_context *pipe,
    BEGIN_NV04(push, NV50_3D(COND_MODE), 1);
    PUSH_DATA (push, nv50->cond_condmode);
 
-   nv50_resource_validate(buf, NOUVEAU_BO_WR);
+   nv50_resource_validate(nv50, buf, NOUVEAU_BO_WR);
 
    if (width * height != elements) {
       offset += width * height * data_size;
@@ -1639,7 +1645,7 @@ nv50_blit_eng2d(struct nv50_context *nv50, const struct pipe_blit_info *info)
    BCTX_REFN(nv50->bufctx, 2D, &dst->base, WR);
    BCTX_REFN(nv50->bufctx, 2D, &src->base, RD);
    nouveau_pushbuf_bufctx(nv50->base.pushbuf, nv50->bufctx);
-   if (nouveau_pushbuf_validate(nv50->base.pushbuf))
+   if (PUSH_VAL(nv50->base.pushbuf))
       return;
 
    for (i = 0; i < info->dst.box.depth; ++i) {
@@ -1679,7 +1685,7 @@ nv50_blit_eng2d(struct nv50_context *nv50, const struct pipe_blit_info *info)
          PUSH_DATA (push, srcy >> 32);
       }
    }
-   nv50_bufctx_fence(nv50->bufctx, false);
+   nv50_bufctx_fence(nv50, nv50->bufctx, false);
 
    nouveau_bufctx_reset(nv50->bufctx, NV50_BIND_2D);
 
@@ -1773,6 +1779,7 @@ nv50_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
         info->src.box.height != -info->dst.box.height))
       eng3d = true;
 
+   simple_mtx_lock(&nv50->screen->state_lock);
    if (nv50->screen->num_occlusion_queries_active) {
       BEGIN_NV04(push, NV50_3D(SAMPLECNT_ENABLE), 1);
       PUSH_DATA (push, 0);
@@ -1787,6 +1794,8 @@ nv50_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
       BEGIN_NV04(push, NV50_3D(SAMPLECNT_ENABLE), 1);
       PUSH_DATA (push, 1);
    }
+   PUSH_KICK(push);
+   simple_mtx_unlock(&nv50->screen->state_lock);
 }
 
 static void

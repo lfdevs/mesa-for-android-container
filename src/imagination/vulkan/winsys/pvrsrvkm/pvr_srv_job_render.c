@@ -539,10 +539,6 @@ VkResult pvr_srv_winsys_render_submit(
       to_pvr_srv_winsys_render_ctx(ctx);
    const struct pvr_srv_winsys *srv_ws = to_pvr_srv_winsys(ctx->ws);
 
-   uint32_t sync_pmr_flags[PVR_SRV_SYNC_MAX] = { 0U };
-   void *sync_pmrs[PVR_SRV_SYNC_MAX] = { NULL };
-   uint32_t sync_pmr_count;
-
    struct pvr_srv_sync *srv_signal_sync_geom;
    struct pvr_srv_sync *srv_signal_sync_frag;
 
@@ -570,7 +566,7 @@ VkResult pvr_srv_winsys_render_submit(
          ret = sync_accumulate("", &in_geom_fd, srv_wait_sync->fd);
          if (ret) {
             result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
-            goto err_close_in_fds;
+            goto end_close_in_fds;
          }
 
          submit_info->stage_flags[i] &= ~PVR_PIPELINE_STAGE_GEOM_BIT;
@@ -580,33 +576,41 @@ VkResult pvr_srv_winsys_render_submit(
          ret = sync_accumulate("", &in_frag_fd, srv_wait_sync->fd);
          if (ret) {
             result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
-            goto err_close_in_fds;
+            goto end_close_in_fds;
          }
 
          submit_info->stage_flags[i] &= ~PVR_PIPELINE_STAGE_FRAG_BIT;
       }
    }
 
-   if (submit_info->bo_count <= ARRAY_SIZE(sync_pmrs)) {
-      sync_pmr_count = submit_info->bo_count;
-   } else {
-      mesa_logw("Too many bos to synchronize access to (ignoring %zu bos)\n",
-                submit_info->bo_count - ARRAY_SIZE(sync_pmrs));
-      sync_pmr_count = ARRAY_SIZE(sync_pmrs);
+   if (submit_info->barrier_geom) {
+      struct pvr_srv_sync *srv_wait_sync =
+         to_srv_sync(submit_info->barrier_geom);
+
+      if (srv_wait_sync->fd >= 0) {
+         int ret;
+
+         ret = sync_accumulate("", &in_geom_fd, srv_wait_sync->fd);
+         if (ret) {
+            result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
+            goto end_close_in_fds;
+         }
+      }
    }
 
-   STATIC_ASSERT(ARRAY_SIZE(sync_pmrs) == ARRAY_SIZE(sync_pmr_flags));
-   assert(sync_pmr_count <= ARRAY_SIZE(sync_pmrs));
-   for (uint32_t i = 0; i < sync_pmr_count; i++) {
-      const struct pvr_winsys_job_bo *job_bo = &submit_info->bos[i];
-      const struct pvr_srv_winsys_bo *srv_bo = to_pvr_srv_winsys_bo(job_bo->bo);
+   if (submit_info->barrier_frag) {
+      struct pvr_srv_sync *srv_wait_sync =
+         to_srv_sync(submit_info->barrier_frag);
 
-      sync_pmrs[i] = srv_bo->pmr;
+      if (srv_wait_sync->fd >= 0) {
+         int ret;
 
-      if (job_bo->flags & PVR_WINSYS_JOB_BO_FLAG_WRITE)
-         sync_pmr_flags[i] = PVR_BUFFER_FLAG_WRITE;
-      else
-         sync_pmr_flags[i] = PVR_BUFFER_FLAG_READ;
+         ret = sync_accumulate("", &in_frag_fd, srv_wait_sync->fd);
+         if (ret) {
+            result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
+            goto end_close_in_fds;
+         }
+      }
    }
 
    /* The 1.14 PowerVR Services KM driver doesn't add a sync dependency to the
@@ -666,9 +670,9 @@ VkResult pvr_srv_winsys_render_submit(
                                         NULL,
                                         /* Currently no support for PRs. */
                                         NULL,
-                                        sync_pmr_count,
-                                        sync_pmr_count ? sync_pmr_flags : NULL,
-                                        sync_pmr_count ? sync_pmrs : NULL,
+                                        0,
+                                        NULL,
+                                        NULL,
                                         0,
                                         0,
                                         0,
@@ -677,7 +681,7 @@ VkResult pvr_srv_winsys_render_submit(
    } while (result == VK_NOT_READY);
 
    if (result != VK_SUCCESS)
-      goto err_close_in_fds;
+      goto end_close_in_fds;
 
    if (signal_sync_geom) {
       srv_signal_sync_geom = to_srv_sync(signal_sync_geom);
@@ -693,9 +697,7 @@ VkResult pvr_srv_winsys_render_submit(
       close(fence_frag);
    }
 
-   return VK_SUCCESS;
-
-err_close_in_fds:
+end_close_in_fds:
    if (in_geom_fd >= 0)
       close(in_geom_fd);
 

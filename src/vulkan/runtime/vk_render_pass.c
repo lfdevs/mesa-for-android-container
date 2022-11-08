@@ -615,9 +615,9 @@ vk_common_CreateRenderPass2(VkDevice _device,
             if (desc->pColorAttachments[c].attachment ==
                 desc->pInputAttachments[a].attachment) {
                subpass->input_attachments[a].layout =
-                  VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA;
+                  VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
                subpass->color_attachments[c].layout =
-                  VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA;
+                  VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
                color_self_deps |= (1u << c);
             }
          }
@@ -629,16 +629,16 @@ vk_common_CreateRenderPass2(VkDevice _device,
                subpass->input_attachments[a].aspects;
             if (aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
                subpass->input_attachments[a].layout =
-                  VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA;
+                  VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
                subpass->depth_stencil_attachment->layout =
-                  VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA;
+                  VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
                has_depth_self_dep = true;
             }
             if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
                subpass->input_attachments[a].stencil_layout =
-                  VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA;
+                  VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
                subpass->depth_stencil_attachment->stencil_layout =
-                  VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA;
+                  VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
                has_stencil_self_dep = true;
             }
          }
@@ -1142,14 +1142,7 @@ vk_image_layout_supports_input_attachment(VkImageLayout layout)
    case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL:
    case VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL:
    case VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR:
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wswitch"
-#endif
-   case VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA:
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
+   case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
       return true;
    default:
       return false;

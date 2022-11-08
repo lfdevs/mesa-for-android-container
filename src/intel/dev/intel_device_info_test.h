@@ -12,7 +12,6 @@ verify_device_info(const struct intel_device_info *devinfo)
    assert(devinfo->max_eus_per_subslice != 0);
    assert(devinfo->num_thread_per_eu != 0);
    assert(devinfo->timestamp_frequency != 0);
-   assert(devinfo->cs_prefetch_size > 0);
 
    assert(devinfo->ver < 7 || devinfo->max_constant_urb_size_kb > 0);
    assert(devinfo->ver < 8 || devinfo->max_threads_per_psd > 0);

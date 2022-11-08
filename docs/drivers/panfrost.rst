@@ -9,6 +9,7 @@ hardware is currently supported:
 =========  ============ ============ =======
 Product    Architecture OpenGL ES    OpenGL
 =========  ============ ============ =======
+Mali T620  Midgard (v4) 2.0          2.1
 Mali T720  Midgard (v4) 2.0          2.1
 Mali T760  Midgard (v5) 3.1          3.1
 Mali T820  Midgard (v5) 3.1          3.1
@@ -23,7 +24,7 @@ Mali G76   Bifrost (v7) 3.1          3.1
 Mali G57   Valhall (v9) 3.1          3.1
 =========  ============ ============ =======
 
-Other Midgard and Bifrost chips (T604, T628, G71) are not yet supported.
+Other Midgard and Bifrost chips (T604, G71) are not yet supported.
 
 Older Mali chips based on the Utgard architecture (Mali 400, Mali 450) are
 supported in the Lima driver, not Panfrost. Lima is also available in Mesa.
@@ -42,7 +43,7 @@ it's easy to add support, see the commit ``cff7de4bb597e9`` as an example.
 LLVM is *not* required by Panfrost's compilers. LLVM support in Mesa can
 safely be disabled for most OpenGL ES users with Panfrost.
 
-Build like ``meson . build/ -Ddri-drivers= -Dvulkan-drivers=
+Build like ``meson . build/ -Dvulkan-drivers=
 -Dgallium-drivers=panfrost -Dllvm=disabled`` for a build directory
 ``build``.
 
@@ -70,7 +71,7 @@ Although Mali hardware is usually paired with an Arm CPU, Panfrost is portable C
 code and should work on any Linux machine. In particular, you can test the
 compiler on shader-db on an Intel desktop.
 
-To build Mesa with Panfrost drm-shim, configure meson with
+To build Mesa with Panfrost drm-shim, configure Meson with
 ``-Dgallium-drivers=panfrost`` and ``-Dtools=drm-shim``. See the above
 building section for a full invocation. The drm-shim binary will be built to
 ``build/src/panfrost/drm-shim/libpanfrost_noop_drm_shim.so``.

@@ -142,8 +142,15 @@ static unsigned int srcs_need_rewrite(const struct rc_opcode_info * info)
 }
 
 /**
- * @return A swizzle the results from converting old_swizzle using
- * conversion_swizzle
+ * This function moves the old swizzles to new channels using the values
+ * in the conversion swizzle. For example if the instruction writemask is
+ * changed from x to y, then conversion_swizzle should be y___ and this
+ * function will adjust the old argument swizzles (of the same instruction)
+ * to the new channels, so x___ will become _x__, etc...
+ *
+ * @param old_swizzle The swizzle to change
+ * @param conversion_swizzle Describes the conversion to perform on the swizzle
+ * @return A new swizzle
  */
 unsigned int rc_adjust_channels(
 	unsigned int old_swizzle,

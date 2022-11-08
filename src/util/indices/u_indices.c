@@ -25,26 +25,6 @@
 #include "u_indices.h"
 #include "u_indices_priv.h"
 
-static void translate_memcpy_ushort( const void *in,
-                                     unsigned start,
-                                     unsigned in_nr,
-                                     unsigned out_nr,
-                                     unsigned restart_index,
-                                     void *out )
-{
-   memcpy(out, &((short *)in)[start], out_nr*sizeof(short));
-}
-
-static void translate_memcpy_uint( const void *in,
-                                   unsigned start,
-                                   unsigned in_nr,
-                                   unsigned out_nr,
-                                   unsigned restart_index,
-                                   void *out )
-{
-   memcpy(out, &((int *)in)[start], out_nr*sizeof(int));
-}
-
 static void translate_byte_to_ushort( const void *in,
                                       unsigned start,
                                       UNUSED unsigned in_nr,

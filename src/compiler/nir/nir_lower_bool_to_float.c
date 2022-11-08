@@ -140,66 +140,48 @@ lower_tex_instr(nir_tex_instr *tex)
 }
 
 static bool
-nir_lower_bool_to_float_impl(nir_function_impl *impl)
+nir_lower_bool_to_float_instr(nir_builder *b,
+                              nir_instr *instr,
+                              UNUSED void *cb_data)
 {
-   bool progress = false;
+   switch (instr->type) {
+   case nir_instr_type_alu:
+      return lower_alu_instr(b, nir_instr_as_alu(instr));
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
-
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         switch (instr->type) {
-         case nir_instr_type_alu:
-            progress |= lower_alu_instr(&b, nir_instr_as_alu(instr));
-            break;
-
-         case nir_instr_type_load_const: {
-            nir_load_const_instr *load = nir_instr_as_load_const(instr);
-            if (load->def.bit_size == 1) {
-               nir_const_value *value = load->value;
-               for (unsigned i = 0; i < load->def.num_components; i++)
-                  load->value[i].f32 = value[i].b ? 1.0 : 0.0;
-               load->def.bit_size = 32;
-               progress = true;
-            }
-            break;
-         }
-
-         case nir_instr_type_intrinsic:
-         case nir_instr_type_ssa_undef:
-         case nir_instr_type_phi:
-            nir_foreach_ssa_def(instr, rewrite_1bit_ssa_def_to_32bit,
-                                &progress);
-            break;
-
-         case nir_instr_type_tex:
-            progress |= lower_tex_instr(nir_instr_as_tex(instr));
-            break;
-
-         default:
-            nir_foreach_ssa_def(instr, assert_ssa_def_is_not_1bit, NULL);
-         }
+   case nir_instr_type_load_const: {
+      nir_load_const_instr *load = nir_instr_as_load_const(instr);
+      if (load->def.bit_size == 1) {
+         nir_const_value *value = load->value;
+         for (unsigned i = 0; i < load->def.num_components; i++)
+            load->value[i].f32 = value[i].b ? 1.0 : 0.0;
+         load->def.bit_size = 32;
+         return true;
       }
+      return false;
    }
 
-   if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
+   case nir_instr_type_intrinsic:
+   case nir_instr_type_ssa_undef:
+   case nir_instr_type_phi: {
+      bool progress = false;
+      nir_foreach_ssa_def(instr, rewrite_1bit_ssa_def_to_32bit, &progress);
+      return progress;
    }
 
-   return progress;
+   case nir_instr_type_tex:
+      return lower_tex_instr(nir_instr_as_tex(instr));
+
+   default:
+      nir_foreach_ssa_def(instr, assert_ssa_def_is_not_1bit, NULL);
+      return false;
+   }
 }
 
 bool
 nir_lower_bool_to_float(nir_shader *shader)
 {
-   bool progress = false;
-
-   nir_foreach_function(function, shader) {
-      if (function->impl && nir_lower_bool_to_float_impl(function->impl))
-         progress = true;
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, nir_lower_bool_to_float_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

@@ -37,12 +37,12 @@ public:
    LDSReadInstr(std::vector<PRegister, Allocator<PRegister>>& value,
                 AluInstr::SrcValues& address);
 
-   unsigned num_values() const { return m_dest_value.size();}
-   auto address(unsigned i) const { return m_address[i];}
-   auto dest(unsigned i) const { return m_dest_value[i];}
+   unsigned num_values() const { return m_dest_value.size(); }
+   auto address(unsigned i) const { return m_address[i]; }
+   auto dest(unsigned i) const { return m_dest_value[i]; }
 
-   auto address(unsigned i){ return m_address[i];}
-   auto dest(unsigned i)  { return m_dest_value[i];}
+   auto address(unsigned i) { return m_address[i]; }
+   auto dest(unsigned i) { return m_dest_value[i]; }
 
    void accept(ConstInstrVisitor& visitor) const override;
    void accept(InstrVisitor& visitor) override;
@@ -55,7 +55,6 @@ public:
    bool remove_unused_components();
 
 private:
-
    bool do_ready() const override;
 
    void do_print(std::ostream& os) const override;
@@ -70,17 +69,17 @@ public:
 
    LDSAtomicInstr(ESDOp op, PRegister dest, PVirtualValue address, const SrcValues& src);
 
-   auto address() const { return m_address;}
-   auto dest() const { return m_dest;}
-   auto src0() const { return m_srcs[0];}
-   auto src1() const { return m_srcs.size() > 1 ? m_srcs[1] : nullptr;}
+   auto address() const { return m_address; }
+   auto dest() const { return m_dest; }
+   auto src0() const { return m_srcs[0]; }
+   auto src1() const { return m_srcs.size() > 1 ? m_srcs[1] : nullptr; }
 
-   PVirtualValue address() { return m_address;}
-   PRegister dest()  { return m_dest;}
-   PVirtualValue src0() { return m_srcs[0];}
-   PVirtualValue src1() { return m_srcs.size() > 1 ? m_srcs[1] : nullptr;}
+   PVirtualValue address() { return m_address; }
+   PRegister dest() { return m_dest; }
+   PVirtualValue src0() { return m_srcs[0]; }
+   PVirtualValue src1() { return m_srcs.size() > 1 ? m_srcs[1] : nullptr; }
 
-   unsigned op() const {return m_opcode;}
+   unsigned op() const { return m_opcode; }
 
    void accept(ConstInstrVisitor& visitor) const override;
    void accept(InstrVisitor& visitor) override;
@@ -101,6 +100,6 @@ private:
    SrcValues m_srcs;
 };
 
-}
+} // namespace r600
 
 #endif // LDSINSTR_H

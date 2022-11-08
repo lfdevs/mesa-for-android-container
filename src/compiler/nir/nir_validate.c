@@ -101,8 +101,6 @@ typedef struct {
 
    /* map of instruction/var/etc to failed assert string */
    struct hash_table *errors;
-
-   struct set *shader_gc_list;
 } validate_state;
 
 static void
@@ -899,6 +897,31 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
          validate_assert(state, glsl_type_is_image(deref->type) ||
                                 glsl_type_is_texture(deref->type) ||
                                 glsl_type_is_sampler(deref->type));
+         switch (instr->op) {
+         case nir_texop_descriptor_amd:
+            break;
+         case nir_texop_lod:
+            validate_assert(state, nir_alu_type_get_base_type(instr->dest_type) == nir_type_float);
+            break;
+         case nir_texop_samples_identical:
+            validate_assert(state, nir_alu_type_get_base_type(instr->dest_type) == nir_type_bool);
+            break;
+         case nir_texop_txs:
+         case nir_texop_texture_samples:
+         case nir_texop_query_levels:
+         case nir_texop_fragment_mask_fetch_amd:
+         case nir_texop_txf_ms_mcs_intel:
+            validate_assert(state, nir_alu_type_get_base_type(instr->dest_type) == nir_type_int ||
+                                   nir_alu_type_get_base_type(instr->dest_type) == nir_type_uint);
+
+            break;
+         default:
+            validate_assert(state,
+                            glsl_get_sampler_result_type(deref->type) == GLSL_TYPE_VOID ||
+                            glsl_base_type_is_integer(glsl_get_sampler_result_type(deref->type)) ==
+                            (nir_alu_type_get_base_type(instr->dest_type) == nir_type_int ||
+                             nir_alu_type_get_base_type(instr->dest_type) == nir_type_uint));
+         }
          break;
       }
 
@@ -1086,9 +1109,6 @@ validate_instr(nir_instr *instr, validate_state *state)
    validate_assert(state, instr->block == state->block);
 
    state->instr = instr;
-
-   if (state->shader_gc_list)
-      validate_assert(state, _mesa_set_search(state->shader_gc_list, instr));
 
    switch (instr->type) {
    case nir_instr_type_alu:
@@ -1674,8 +1694,11 @@ validate_function_impl(nir_function_impl *impl, validate_state *state)
       validate_dominance =
          NIR_DEBUG(VALIDATE_SSA_DOMINANCE);
    }
-   if (validate_dominance)
+   if (validate_dominance) {
+      memset(state->ssa_defs_found, 0, BITSET_WORDS(impl->ssa_alloc) *
+                                       sizeof(BITSET_WORD));
       validate_ssa_dominance(impl, state);
+   }
 }
 
 static void
@@ -1698,8 +1721,6 @@ init_validate_state(validate_state *state)
    state->blocks = _mesa_pointer_set_create(state->mem_ctx);
    state->var_defs = _mesa_pointer_hash_table_create(state->mem_ctx);
    state->errors = _mesa_pointer_hash_table_create(state->mem_ctx);
-   state->shader_gc_list = NIR_DEBUG(VALIDATE_GC_LIST) ?
-                           _mesa_pointer_set_create(state->mem_ctx) : NULL;
 
    state->loop = NULL;
    state->instr = NULL;
@@ -1755,13 +1776,6 @@ nir_validate_shader(nir_shader *shader, const char *when)
 
    validate_state state;
    init_validate_state(&state);
-
-   if (state.shader_gc_list) {
-      list_for_each_entry(nir_instr, instr, &shader->gc_list, gc_node) {
-         if (instr->node.prev || instr->node.next)
-            _mesa_set_add(state.shader_gc_list, instr);
-      }
-   }
 
    state.shader = shader;
 

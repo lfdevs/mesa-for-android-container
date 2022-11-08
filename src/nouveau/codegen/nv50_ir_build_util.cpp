@@ -300,6 +300,14 @@ BuildUtil::mkSplit(Value *h[2], uint8_t halfSize, Value *val)
       h[1]->reg.size = halfSize;
       h[1]->reg.data.offset += halfSize;
    } else {
+      // The value might already be the result of a split, and further
+      // splitting it can lead to issues regarding spill-offsets computations
+      // among others. By forcing a move between the two splits, this can be
+      // avoided.
+      Instruction* valInsn = val->getInsn();
+      if (valInsn && valInsn->op == OP_SPLIT)
+         val = mkMov(getSSA(halfSize * 2), val, fTy)->getDef(0);
+
       h[0] = getSSA(halfSize, val->reg.file);
       h[1] = getSSA(halfSize, val->reg.file);
       insn = mkOp1(OP_SPLIT, fTy, h[0], val);

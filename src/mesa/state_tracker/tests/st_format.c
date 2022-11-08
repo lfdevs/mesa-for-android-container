@@ -60,6 +60,10 @@ int main(int argc, char **argv)
       .has_etc2 = true,
       .has_astc_2d_ldr = true,
       .has_astc_5x5_ldr = true,
+      .has_s3tc = true,
+      .has_rgtc = true,
+      .has_latc = true,
+      .has_bptc = true,
    };
    struct st_context *st = &local_st;
 

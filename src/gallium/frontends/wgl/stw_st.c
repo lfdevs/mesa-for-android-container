@@ -28,7 +28,6 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_atomic.h"
-#include "state_tracker/st_gl_api.h" /* for st_gl_api_create */
 #include "pipe/p_state.h"
 
 #include "stw_st.h"
@@ -494,7 +493,7 @@ stw_st_framebuffer_flush_front(struct st_context_iface *stctx,
  * Create a framebuffer interface.
  */
 struct st_framebuffer_iface *
-stw_st_create_framebuffer(struct stw_framebuffer *fb)
+stw_st_create_framebuffer(struct stw_framebuffer *fb, struct st_manager *smapi)
 {
    struct stw_st_framebuffer *stwfb;
 
@@ -505,7 +504,7 @@ stw_st_create_framebuffer(struct stw_framebuffer *fb)
    stwfb->fb = fb;
    stwfb->stvis = fb->pfi->stvis;
    stwfb->base.ID = p_atomic_inc_return(&stwfb_ID);
-   stwfb->base.state_manager = stw_dev->smapi;
+   stwfb->base.state_manager = smapi;
 
    stwfb->base.visual = &stwfb->stvis;
    p_atomic_set(&stwfb->base.stamp, 1);
@@ -533,7 +532,7 @@ stw_st_destroy_framebuffer_locked(struct st_framebuffer_iface *stfb)
    /* Notify the st manager that the framebuffer interface is no
     * longer valid.
     */
-   stw_dev->stapi->destroy_drawable(stw_dev->stapi, &stwfb->base);
+   st_api_destroy_drawable(&stwfb->base);
 
    FREE(stwfb);
 }
@@ -591,14 +590,4 @@ stw_get_framebuffer_resource(struct st_framebuffer_iface *stfb,
 {
    struct stw_st_framebuffer *stwfb = stw_st_framebuffer(stfb);
    return stwfb->textures[att];
-}
-
-
-/**
- * Create an st_api of the gallium frontend.
- */
-struct st_api *
-stw_st_create_api(void)
-{
-   return st_gl_api_create();
 }

@@ -837,7 +837,7 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
       sampler.min_img_filter = PIPE_TEX_FILTER_NEAREST;
       sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
       sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
-      sampler.normalized_coords = normalized;
+      sampler.unnormalized_coords = !normalized;
 
       if (fpv) {
          /* drawing a color image */

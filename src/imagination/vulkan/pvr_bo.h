@@ -59,8 +59,7 @@ struct pvr_bo {
  * \brief Flag passed to #pvr_bo_alloc() to indicate that the buffer should
  * be mapped to the CPU. Implies #PVR_BO_ALLOC_FLAG_CPU_ACCESS.
  */
-#define PVR_BO_ALLOC_FLAG_CPU_MAPPED \
-   (BITFIELD_BIT(1U) | PVR_BO_ALLOC_FLAG_CPU_ACCESS)
+#define PVR_BO_ALLOC_FLAG_CPU_MAPPED BITFIELD_BIT(1U)
 /**
  * \brief Flag passed to #pvr_bo_alloc() to indicate that the buffer should be
  * mapped to the GPU as uncached.

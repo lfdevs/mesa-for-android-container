@@ -50,13 +50,6 @@ subpixel_snap(float a)
 }
 
 
-static inline float
-fixed_to_float(int a)
-{
-   return a * (1.0f / FIXED_ONE);
-}
-
-
 /**
  * Alloc space for a new rectangle plus the input.a0/dadx/dady arrays
  * immediately after it.
@@ -479,10 +472,10 @@ lp_rect_cw(struct lp_setup_context *setup,
 
 /**
  * Take the six vertices for two triangles and try to determine if they
- * form a screen-aligned quad/rectangle.  If so, draw the rect directly,
- * else, draw as two regular triangles.
+ * form a screen-aligned quad/rectangle.  If so, draw the rect directly
+ * and return true.  Else, return false.
  */
-static boolean
+static bool
 do_rect_ccw(struct lp_setup_context *setup,
             const float (*v0)[4],
             const float (*v1)[4],
@@ -532,7 +525,7 @@ do_rect_ccw(struct lp_setup_context *setup,
          rv2 = v2;
          rv3 = v0;
       } else {
-         goto emit_triangles;
+         return false;
       }
    } else if (SAME_POS(v0, v5)) {
       if (SAME_POS(v2, v3)) {
@@ -564,7 +557,7 @@ do_rect_ccw(struct lp_setup_context *setup,
          rv2 = v2;
          rv3 = v0;
       } else {
-         goto emit_triangles;
+         return false;
       }
    } else if (SAME_POS(v0, v4)) {
       if (SAME_POS(v2, v5)) {
@@ -596,7 +589,7 @@ do_rect_ccw(struct lp_setup_context *setup,
          rv2 = v2;
          rv3 = v0;
       } else {
-         goto emit_triangles;
+         return false;
       }
    } else if (SAME_POS(v2, v3)) {
       if (SAME_POS(v1, v4)) {
@@ -614,7 +607,7 @@ do_rect_ccw(struct lp_setup_context *setup,
          rv2 = v0;
          rv3 = v1;
       } else {
-         goto emit_triangles;
+         return false;
       }
    } else if (SAME_POS(v2, v5)) {
       if (SAME_POS(v1, v3)) {
@@ -632,7 +625,7 @@ do_rect_ccw(struct lp_setup_context *setup,
          rv2 = v0;
          rv3 = v1;
       } else {
-         goto emit_triangles;
+         return false;
       }
    } else if (SAME_POS(v2, v4)) {
       if (SAME_POS(v1, v5)) {
@@ -650,10 +643,10 @@ do_rect_ccw(struct lp_setup_context *setup,
          rv2 = v0;
          rv3 = v1;
       } else {
-         goto emit_triangles;
+         return false;
       }
    } else {
-      goto emit_triangles;
+      return false;
    }
 
 #define SAME_X(A, B)   (A[0][0] == B[0][0])
@@ -680,15 +673,24 @@ do_rect_ccw(struct lp_setup_context *setup,
 
    if (SAME_X(rv0, rv1) && SAME_X(rv2, rv3) &&
        SAME_Y(rv0, rv3) && SAME_Y(rv1, rv2)) {
+      /* We have a rectangle */
+
+      /* Check that all vertex W components are equal.  When we divide by W in
+       * lp_linear_init_interp() we assume all vertices have the same W value.
+       */
+      const float v0_w = rv0[0][3];
+      if (rv1[0][3] != v0_w ||
+          rv2[0][3] != v0_w ||
+          rv3[0][3] != v0_w) {
+         return false;
+      }
+
       const struct lp_setup_variant_key *key = &setup->setup.variant->key;
       const unsigned n = key->num_inputs;
-      unsigned i, j;
 
-      /* We have a rectangle.  Check that the other attributes are
-       * coplanar.
-       */
-      for (i = 0; i < n; i++) {
-         for (j = 0; j < 4; j++) {
+      /* Check that the other attributes are coplanar */
+      for (unsigned i = 0; i < n; i++) {
+         for (unsigned j = 0; j < 4; j++) {
             if (key->inputs[i].usage_mask & (1<<j)) {
                unsigned k = key->inputs[i].src_index;
                float dxdx1, dxdx2, dxdy1, dxdy2;
@@ -698,7 +700,7 @@ do_rect_ccw(struct lp_setup_context *setup,
                dxdy2 = rv3[k][j] - rv2[k][j];
                if (dxdx1 != dxdx2 ||
                    dxdy1 != dxdy2) {
-                  goto emit_triangles;
+                  return false;
                }
             }
          }
@@ -709,13 +711,12 @@ do_rect_ccw(struct lp_setup_context *setup,
        * function was previously misnamed.
        */
       lp_rect_cw(setup, rv0, rv2, rv1, front);
-      return TRUE;
+      return true;
    } else {
       /* setup->quad(setup, rv0, rv1, rv2, rv3); */
    }
 
-emit_triangles:
-   return FALSE;
+   return false;
 }
 
 
@@ -817,6 +818,10 @@ setup_rect_noop(struct lp_setup_context *setup,
 }
 
 
+/*
+ * Return true if the rect is handled here, else return false indicating
+ * the caller should render with triangles instead.
+ */
 static boolean
 setup_rect_both(struct lp_setup_context *setup,
                 const float (*v0)[4],

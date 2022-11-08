@@ -640,7 +640,6 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
    struct tu_pipeline *pipeline = cmd->state.pipeline;
    bool z_test_enable = cmd->state.rb_depth_cntl & A6XX_RB_DEPTH_CNTL_Z_TEST_ENABLE;
    bool z_write_enable = cmd->state.rb_depth_cntl & A6XX_RB_DEPTH_CNTL_Z_WRITE_ENABLE;
-   bool z_read_enable = cmd->state.rb_depth_cntl & A6XX_RB_DEPTH_CNTL_Z_READ_ENABLE;
    bool z_bounds_enable = cmd->state.rb_depth_cntl & A6XX_RB_DEPTH_CNTL_Z_BOUNDS_ENABLE;
    VkCompareOp depth_compare_op = (cmd->state.rb_depth_cntl & A6XX_RB_DEPTH_CNTL_ZFUNC__MASK) >> A6XX_RB_DEPTH_CNTL_ZFUNC__SHIFT;
 
@@ -668,7 +667,7 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
    gras_lrz_cntl.lrz_write =
       z_write_enable &&
       !(pipeline->lrz.force_disable_mask & TU_LRZ_FORCE_DISABLE_WRITE);
-   gras_lrz_cntl.z_test_enable = z_read_enable && z_write_enable;
+   gras_lrz_cntl.z_test_enable = z_write_enable;
    gras_lrz_cntl.z_bounds_enable = z_bounds_enable;
    gras_lrz_cntl.fc_enable = cmd->state.lrz.fast_clear;
    gras_lrz_cntl.dir_write = cmd->state.lrz.gpu_dir_tracking;
@@ -676,12 +675,26 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
 
    /* See comment in tu_pipeline about disabling LRZ write for blending. */
    if ((cmd->state.pipeline->dynamic_state_mask & BIT(TU_DYNAMIC_STATE_LOGIC_OP)) &&
-       cmd->state.logic_op_enabled && cmd->state.rop_reads_dst)
+       cmd->state.logic_op_enabled && cmd->state.rop_reads_dst) {
+      if (gras_lrz_cntl.lrz_write)
+         perf_debug(cmd->device, "disabling lrz write due to dynamic logic op");
       gras_lrz_cntl.lrz_write = false;
+   }
 
-   if ((cmd->state.pipeline->dynamic_state_mask & BIT(TU_DYNAMIC_STATE_COLOR_WRITE_ENABLE)) &&
-        cmd->state.color_write_enable != MASK(cmd->state.pipeline->num_rts))
+   if ((cmd->state.pipeline->dynamic_state_mask &
+        BIT(TU_DYNAMIC_STATE_COLOR_WRITE_ENABLE)) &&
+       (cmd->state.color_write_enable &
+        MASK(cmd->state.subpass->color_count)) !=
+          MASK(cmd->state.pipeline->blend.num_rts)) {
+      if (gras_lrz_cntl.lrz_write) {
+         perf_debug(
+            cmd->device,
+            "disabling lrz write due to dynamic color write enables (%x/%x)",
+            cmd->state.color_write_enable,
+            MASK(cmd->state.pipeline->blend.num_rts));
+      }
       gras_lrz_cntl.lrz_write = false;
+   }
 
    /* LRZ is disabled until it is cleared, which means that one "wrong"
     * depth test or shader could disable LRZ until depth buffer is cleared.
@@ -689,12 +702,18 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
    bool disable_lrz = false;
    bool temporary_disable_lrz = false;
 
-   /* What happens in FS could affect LRZ, e.g.: writes to gl_FragDepth
-    * or early fragment tests.
+   /* What happens in FS could affect LRZ, e.g.: writes to gl_FragDepth or early
+    * fragment tests.  We have to skip LRZ testing and updating, but as long as
+    * the depth direction stayed the same we can continue with LRZ testing later.
     */
    if (pipeline->lrz.force_disable_mask & TU_LRZ_FORCE_DISABLE_LRZ) {
-      perf_debug(cmd->device, "Invalidating LRZ due to FS");
-      disable_lrz = true;
+      if (cmd->state.lrz.prev_direction != TU_LRZ_UNKNOWN || !cmd->state.lrz.gpu_dir_tracking) {
+         perf_debug(cmd->device, "Skipping LRZ due to FS");
+         temporary_disable_lrz = true;
+      } else {
+         perf_debug(cmd->device, "Disabling LRZ due to FS (TODO: fix for gpu-direction-tracking case");
+         disable_lrz = true;
+      }
    }
 
    /* If Z is not written - it doesn't affect LRZ buffer state.
@@ -783,16 +802,6 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
    /* Invalidate LRZ and disable write if stencil test is enabled */
    bool stencil_test_enable = cmd->state.rb_stencil_cntl & A6XX_RB_STENCIL_CONTROL_STENCIL_ENABLE;
    if (!disable_lrz && stencil_test_enable) {
-      bool stencil_front_writemask =
-         (pipeline->dynamic_state_mask & BIT(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK)) ?
-         (cmd->state.dynamic_stencil_wrmask & 0xff) :
-         (pipeline->stencil_wrmask & 0xff);
-
-      bool stencil_back_writemask =
-         (pipeline->dynamic_state_mask & BIT(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK)) ?
-         ((cmd->state.dynamic_stencil_wrmask & 0xff00) >> 8) :
-         (pipeline->stencil_wrmask & 0xff00) >> 8;
-
       VkCompareOp stencil_front_compare_op =
          (cmd->state.rb_stencil_cntl & A6XX_RB_STENCIL_CONTROL_FUNC__MASK) >> A6XX_RB_STENCIL_CONTROL_FUNC__SHIFT;
 
@@ -802,11 +811,11 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
       bool lrz_allowed = true;
       lrz_allowed = lrz_allowed && tu6_stencil_op_lrz_allowed(
                                       &gras_lrz_cntl, stencil_front_compare_op,
-                                      stencil_front_writemask);
+                                      cmd->state.stencil_front_write);
 
       lrz_allowed = lrz_allowed && tu6_stencil_op_lrz_allowed(
                                       &gras_lrz_cntl, stencil_back_compare_op,
-                                      stencil_back_writemask);
+                                      cmd->state.stencil_back_write);
 
       /* Without depth write it's enough to make sure that depth test
        * is executed after stencil test, so temporary disabling LRZ is enough.

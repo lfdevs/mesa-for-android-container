@@ -28,7 +28,7 @@
 #ifdef ANDROID
 #define VN_MAX_API_VERSION VK_MAKE_VERSION(1, 1, VK_HEADER_VERSION)
 #else
-#define VN_MAX_API_VERSION VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
+#define VN_MAX_API_VERSION VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION)
 #endif
 
 struct vn_instance {
@@ -109,13 +109,6 @@ vn_instance_roundtrip(struct vn_instance *instance)
 VkResult
 vn_instance_ring_submit(struct vn_instance *instance,
                         const struct vn_cs_encoder *cs);
-
-static inline void
-vn_instance_ring_wait(struct vn_instance *instance)
-{
-   struct vn_ring *ring = &instance->ring.ring;
-   vn_ring_wait_all(ring);
-}
 
 struct vn_instance_submit_command {
    /* empty command implies errors */

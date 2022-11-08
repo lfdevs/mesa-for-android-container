@@ -40,7 +40,7 @@ if with_ld_version_script
 endif
 
 if (with_gallium_va or with_gallium_vdpau or with_gallium_omx != 'disabled' or
-    with_gallium_xvmc or with_dri)
+    with_dri)
   gallium_nine_link_with += libgalliumvl
 else
   gallium_nine_link_with += libgalliumvl_stub

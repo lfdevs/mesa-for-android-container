@@ -34,10 +34,7 @@ struct sched_ctx {
         struct dag *dag;
 
         /* Live set */
-        uint8_t *live;
-
-        /* Size of the live set */
-        unsigned max;
+        BITSET_WORD *live;
 };
 
 struct sched_node {
@@ -46,18 +43,6 @@ struct sched_node {
         /* Instruction this node represents */
         bi_instr *instr;
 };
-
-static unsigned
-label_index(bi_context *ctx, bi_index idx)
-{
-        if (idx.reg) {
-                assert(idx.value < ctx->reg_alloc);
-                return idx.value + ctx->ssa_alloc;
-        } else {
-                assert(idx.value < ctx->ssa_alloc);
-                return idx.value;
-        }
-}
 
 static void
 add_dep(struct sched_node *a, struct sched_node *b)
@@ -71,11 +56,8 @@ create_dag(bi_context *ctx, bi_block *block, void *memctx)
 {
         struct dag *dag = dag_create(ctx);
 
-        unsigned count = ctx->ssa_alloc + ctx->reg_alloc;
-        struct sched_node **last_read =
-                calloc(count, sizeof(struct sched_node *));
         struct sched_node **last_write =
-                calloc(count, sizeof(struct sched_node *));
+                calloc(ctx->ssa_alloc, sizeof(struct sched_node *));
         struct sched_node *coverage = NULL;
         struct sched_node *preload = NULL;
 
@@ -96,40 +78,12 @@ create_dag(bi_context *ctx, bi_block *block, void *memctx)
                 node->instr = I;
                 dag_init_node(dag, &node->dag);
 
-                /* Reads depend on writes */
-                bi_foreach_src(I, s) {
-                        bi_index src = I->src[s];
+                /* Reads depend on writes, no other hazards in SSA */
+                bi_foreach_ssa_src(I, s)
+                        add_dep(node, last_write[I->src[s].value]);
 
-                        if (src.type == BI_INDEX_NORMAL) {
-                                add_dep(node, last_write[label_index(ctx, src)]);
-
-                                /* Serialize access to nir_register for
-                                 * simplicity. We could do better.
-                                 */
-                                if (src.reg)
-                                        add_dep(node, last_read[label_index(ctx, src)]);
-                        }
-                }
-
-                /* Writes depend on reads and writes */
-                bi_foreach_dest(I, s) {
-                        bi_index dest = I->dest[s];
-
-                        if (dest.type == BI_INDEX_NORMAL) {
-                                add_dep(node, last_read[label_index(ctx, dest)]);
-                                add_dep(node, last_write[label_index(ctx, dest)]);
-
-                                last_write[label_index(ctx, dest)] = node;
-                        }
-                }
-
-                bi_foreach_src(I, s) {
-                        bi_index src = I->src[s];
-
-                        if (src.type == BI_INDEX_NORMAL) {
-                                last_read[label_index(ctx, src)] = node;
-                        }
-                }
+                bi_foreach_dest(I, d)
+                        last_write[I->dest[d].value] = node;
 
                 switch (bi_opcode_props[I->op].message) {
                 case BIFROST_MESSAGE_LOAD:
@@ -205,12 +159,13 @@ create_dag(bi_context *ctx, bi_block *block, void *memctx)
                         add_dep(node, memory_store);
                         memory_load = node;
                         memory_store = node;
-                } else if (I->op == BI_OPCODE_MOV_I32 && I->src[0].type == BI_INDEX_REGISTER) {
+                } else if ((I->op == BI_OPCODE_PHI) ||
+                           (I->op == BI_OPCODE_MOV_I32 &&
+                            I->src[0].type == BI_INDEX_REGISTER)) {
                         preload = node;
                 }
         }
 
-        free(last_read);
         free(last_write);
 
         return dag;
@@ -226,34 +181,28 @@ create_dag(bi_context *ctx, bi_block *block, void *memctx)
  *      live_in = (live_out - KILL) + GEN
  */
 static signed
-calculate_pressure_delta(bi_instr *I, uint8_t *live, unsigned max)
+calculate_pressure_delta(bi_instr *I, BITSET_WORD *live)
 {
         signed delta = 0;
 
         /* Destinations must be unique */
         bi_foreach_dest(I, d) {
-                unsigned node = bi_get_node(I->dest[d]);
-
-                if (node < max && live[node])
+                if (BITSET_TEST(live, I->dest[d].value))
                         delta -= bi_count_write_registers(I, d);
         }
 
-        bi_foreach_src(I, src) {
-                unsigned node = bi_get_node(I->src[src]);
-                if (node >= max)
-                        continue;
-
+        bi_foreach_ssa_src(I, src) {
                 /* Filter duplicates */
                 bool dupe = false;
 
                 for (unsigned i = 0; i < src; ++i) {
-                        if (bi_get_node(I->src[i]) == node) {
+                        if (bi_is_equiv(I->src[i], I->src[src])) {
                                 dupe = true;
                                 break;
                         }
                 }
 
-                if (!dupe && !live[node])
+                if (!dupe && !BITSET_TEST(live, I->src[src].value))
                         delta += bi_count_read_registers(I, src);
         }
 
@@ -271,7 +220,7 @@ choose_instr(struct sched_ctx *s)
         struct sched_node *best = NULL;
 
         list_for_each_entry(struct sched_node, n, &s->dag->heads, dag.link) {
-                int32_t delta = calculate_pressure_delta(n->instr, s->live, s->max);
+                int32_t delta = calculate_pressure_delta(n->instr, s->live);
 
                 if (delta < min_delta) {
                         best = n;
@@ -290,16 +239,16 @@ pressure_schedule_block(bi_context *ctx, bi_block *block, struct sched_ctx *s)
         signed orig_max_pressure = 0;
         unsigned nr_ins = 0;
 
-        memcpy(s->live, block->live_out, s->max);
+        memcpy(s->live, block->ssa_live_out, BITSET_WORDS(ctx->ssa_alloc) * sizeof(BITSET_WORD));
 
         bi_foreach_instr_in_block_rev(block, I) {
-                pressure += calculate_pressure_delta(I, s->live, s->max);
+                pressure += calculate_pressure_delta(I, s->live);
                 orig_max_pressure = MAX2(pressure, orig_max_pressure);
-                bi_liveness_ins_update(s->live, I, s->max);
+                bi_liveness_ins_update_ssa(s->live, I);
                 nr_ins++;
         }
 
-        memcpy(s->live, block->live_out, s->max);
+        memcpy(s->live, block->ssa_live_out, BITSET_WORDS(ctx->ssa_alloc) * sizeof(BITSET_WORD));
 
         /* off by a constant, that's ok */
         signed max_pressure = 0;
@@ -310,12 +259,12 @@ pressure_schedule_block(bi_context *ctx, bi_block *block, struct sched_ctx *s)
 
         while (!list_is_empty(&s->dag->heads)) {
                 struct sched_node *node = choose_instr(s);
-                pressure += calculate_pressure_delta(node->instr, s->live, s->max);
+                pressure += calculate_pressure_delta(node->instr, s->live);
                 max_pressure = MAX2(pressure, max_pressure);
                 dag_prune_head(s->dag, &node->dag);
 
                 schedule[nr_ins++] = node;
-                bi_liveness_ins_update(s->live, node->instr, s->max);
+                bi_liveness_ins_update_ssa(s->live, node->instr);
         }
 
         /* Bail if it looks like it's worse */
@@ -336,15 +285,13 @@ pressure_schedule_block(bi_context *ctx, bi_block *block, struct sched_ctx *s)
 void
 bi_pressure_schedule(bi_context *ctx)
 {
-        bi_compute_liveness(ctx);
-        unsigned temp_count = bi_max_temp(ctx);
+        bi_compute_liveness_ssa(ctx);
         void *memctx = ralloc_context(ctx);
-        uint8_t *live = ralloc_array(memctx, uint8_t, temp_count);
+        BITSET_WORD *live = ralloc_array(memctx, BITSET_WORD, BITSET_WORDS(ctx->ssa_alloc));
 
         bi_foreach_block(ctx, block) {
                 struct sched_ctx sctx = {
                         .dag = create_dag(ctx, block, memctx),
-                        .max = temp_count,
                         .live = live
                 };
 

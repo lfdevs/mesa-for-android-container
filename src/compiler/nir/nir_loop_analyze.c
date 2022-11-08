@@ -141,7 +141,8 @@ init_loop_def(nir_ssa_def *def, void *void_init_loop_state)
  * unrolling doesn't cause things to blow up too much.
  */
 static unsigned
-instr_cost(nir_instr *instr, const nir_shader_compiler_options *options)
+instr_cost(loop_info_state *state, nir_instr *instr,
+           const nir_shader_compiler_options *options)
 {
    if (instr->type == nir_instr_type_intrinsic ||
        instr->type == nir_instr_type_tex)
@@ -153,6 +154,36 @@ instr_cost(nir_instr *instr, const nir_shader_compiler_options *options)
    nir_alu_instr *alu = nir_instr_as_alu(instr);
    const nir_op_info *info = &nir_op_infos[alu->op];
    unsigned cost = 1;
+
+   if (nir_op_is_selection(alu->op)) {
+      nir_ssa_scalar cond_scalar = {alu->src[0].src.ssa, 0};
+      if (nir_is_terminator_condition_with_two_inputs(cond_scalar)) {
+         nir_instr *sel_cond = alu->src[0].src.ssa->parent_instr;
+         nir_alu_instr *sel_alu = nir_instr_as_alu(sel_cond);
+
+         nir_ssa_scalar rhs, lhs;
+         lhs = nir_ssa_scalar_chase_alu_src(cond_scalar, 0);
+         rhs = nir_ssa_scalar_chase_alu_src(cond_scalar, 1);
+
+         /* If the selects condition is a comparision between a constant and
+          * a basic induction variable we know that it will be eliminated once
+          * the loop is unrolled so here we assign it a cost of 0.
+          */
+         if ((nir_src_is_const(sel_alu->src[0].src) &&
+              get_loop_var(rhs.def, state)->type == basic_induction) ||
+             (nir_src_is_const(sel_alu->src[1].src) &&
+              get_loop_var(lhs.def, state)->type == basic_induction) ) {
+            /* Also if the selects condition is only used by the select then
+             * remove that alu instructons cost from the cost total also.
+             */
+            if (!list_is_empty(&sel_alu->dest.dest.ssa.if_uses) ||
+                !list_is_singular(&sel_alu->dest.dest.ssa.uses))
+               return 0;
+            else
+               return -1;
+         }
+      }
+   }
 
    if (alu->op == nir_op_flrp) {
       if ((options->lower_flrp16 && nir_dest_bit_size(alu->dest.dest) == 16) ||
@@ -185,8 +216,10 @@ instr_cost(nir_instr *instr, const nir_shader_compiler_options *options)
          cost *= 20;
 
       /* If it's full software, it's even more expensive */
-      if (options->lower_doubles_options & nir_lower_fp64_full_software)
+      if (options->lower_doubles_options & nir_lower_fp64_full_software) {
          cost *= 100;
+         state->loop->info->has_soft_fp64 = true;
+      }
 
       return cost;
    } else {
@@ -208,15 +241,13 @@ instr_cost(nir_instr *instr, const nir_shader_compiler_options *options)
 
 static bool
 init_loop_block(nir_block *block, loop_info_state *state,
-                bool in_if_branch, bool in_nested_loop,
-                const nir_shader_compiler_options *options)
+                bool in_if_branch, bool in_nested_loop)
 {
    init_loop_state init_state = {.in_if_branch = in_if_branch,
                                  .in_nested_loop = in_nested_loop,
                                  .state = state };
 
    nir_foreach_instr(instr, block) {
-      state->loop->info->instr_cost += instr_cost(instr, options);
       nir_foreach_ssa_def(instr, init_loop_def, &init_state);
    }
 
@@ -1035,7 +1066,7 @@ try_find_trip_count_vars_in_iand(nir_ssa_scalar *cond,
    bool found_induction_var = false;
    for (unsigned i = 0; i < 2; i++) {
       nir_ssa_scalar src = nir_ssa_scalar_chase_alu_src(iand, i);
-      if (nir_is_supported_terminator_condition(src) &&
+      if (nir_is_terminator_condition_with_two_inputs(src) &&
           get_induction_and_limit_vars(src, ind, limit, limit_rhs, state)) {
          *cond = src;
          found_induction_var = true;
@@ -1098,6 +1129,13 @@ find_trip_count(loop_info_state *state, unsigned execution_mode)
 
       if (!basic_ind.def) {
          if (nir_is_supported_terminator_condition(cond)) {
+            /* Extract and inverse the comparision if it is wrapped in an inot
+             */
+            if (alu_op == nir_op_inot) {
+               cond = nir_ssa_scalar_chase_alu_src(cond, 0);
+               alu_op = inverse_comparison(nir_ssa_scalar_alu_op(cond));
+            }
+
             get_induction_and_limit_vars(cond, &basic_ind,
                                          &limit, &limit_rhs, state);
          }
@@ -1292,18 +1330,17 @@ get_loop_info(loop_info_state *state, nir_function_impl *impl)
       switch (node->type) {
 
       case nir_cf_node_block:
-         init_loop_block(nir_cf_node_as_block(node), state,
-                         false, false, options);
+         init_loop_block(nir_cf_node_as_block(node), state, false, false);
          break;
 
       case nir_cf_node_if:
          nir_foreach_block_in_cf_node(block, node)
-            init_loop_block(block, state, true, false, options);
+            init_loop_block(block, state, true, false);
          break;
 
       case nir_cf_node_loop:
          nir_foreach_block_in_cf_node(block, node) {
-            init_loop_block(block, state, false, true, options);
+            init_loop_block(block, state, false, true);
          }
          break;
 
@@ -1336,9 +1373,15 @@ get_loop_info(loop_info_state *state, nir_function_impl *impl)
    find_trip_count(state, impl->function->shader->info.float_controls_execution_mode);
 
    nir_foreach_block_in_cf_node(block, &state->loop->cf_node) {
+      nir_foreach_instr(instr, block) {
+         state->loop->info->instr_cost += instr_cost(state, instr, options);
+      }
+
+      if (state->loop->info->force_unroll)
+         continue;
+
       if (force_unroll_heuristics(state, block)) {
          state->loop->info->force_unroll = true;
-         break;
       }
    }
 }

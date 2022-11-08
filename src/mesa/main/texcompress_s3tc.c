@@ -40,6 +40,7 @@
 #include "texstore.h"
 #include "format_unpack.h"
 #include "util/format_srgb.h"
+#include "util/format/u_format_s3tc.h"
 
 
 /**
@@ -380,5 +381,51 @@ _mesa_get_dxt_fetch_func(mesa_format format)
       return fetch_srgba_dxt5;
    default:
       return NULL;
+   }
+}
+
+extern void
+_mesa_unpack_s3tc(uint8_t *dst_row,
+                  unsigned dst_stride,
+                  const uint8_t *src_row,
+                  unsigned src_stride,
+                  unsigned src_width,
+                  unsigned src_height,
+                  mesa_format format)
+{
+   /* We treat sRGB formats as RGB, because we're unpacking to another sRGB
+    * format.
+    */
+   switch (format) {
+   case MESA_FORMAT_RGB_DXT1:
+   case MESA_FORMAT_SRGB_DXT1:
+      util_format_dxt1_rgb_unpack_rgba_8unorm(dst_row, dst_stride,
+                                              src_row, src_stride,
+                                              src_width, src_height);
+      break;
+
+   case MESA_FORMAT_RGBA_DXT1:
+   case MESA_FORMAT_SRGBA_DXT1:
+      util_format_dxt1_rgba_unpack_rgba_8unorm(dst_row, dst_stride,
+                                               src_row, src_stride,
+                                               src_width, src_height);
+      break;
+
+   case MESA_FORMAT_RGBA_DXT3:
+   case MESA_FORMAT_SRGBA_DXT3:
+      util_format_dxt3_rgba_unpack_rgba_8unorm(dst_row, dst_stride,
+                                               src_row, src_stride,
+                                               src_width, src_height);
+      break;
+
+   case MESA_FORMAT_RGBA_DXT5:
+   case MESA_FORMAT_SRGBA_DXT5:
+      util_format_dxt5_rgba_unpack_rgba_8unorm(dst_row, dst_stride,
+                                               src_row, src_stride,
+                                               src_width, src_height);
+      break;
+
+   default:
+      unreachable("unexpected format");
    }
 }

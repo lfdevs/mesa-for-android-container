@@ -22,7 +22,8 @@
 #include "vk_util.h"
 
 #include "drm-uapi/msm_drm.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
+#include "util/hash_table.h"
 #include "util/timespec.h"
 #include "util/os_time.h"
 
@@ -109,6 +110,36 @@ tu_drm_get_gmem_base(const struct tu_physical_device *dev, uint64_t *base)
    return tu_drm_get_param(dev, MSM_PARAM_GMEM_BASE, base);
 }
 
+static int
+tu_drm_get_va_prop(const struct tu_physical_device *dev,
+                   uint64_t *va_start, uint64_t *va_size)
+{
+   uint64_t value;
+   int ret = tu_drm_get_param(dev, MSM_PARAM_VA_START, &value);
+   if (ret)
+      return ret;
+
+   *va_start = value;
+
+   ret = tu_drm_get_param(dev, MSM_PARAM_VA_SIZE, &value);
+   if (ret)
+      return ret;
+
+   *va_size = value;
+
+   return 0;
+}
+
+static uint32_t
+tu_drm_get_priorities(const struct tu_physical_device *dev)
+{
+   uint64_t val = 1;
+   tu_drm_get_param(dev, MSM_PARAM_PRIORITIES, &val);
+   assert(val >= 1);
+
+   return val;
+}
+
 int
 tu_device_get_gpu_timestamp(struct tu_device *dev, uint64_t *ts)
 {
@@ -144,12 +175,11 @@ tu_drm_submitqueue_new(const struct tu_device *dev,
                        int priority,
                        uint32_t *queue_id)
 {
-   uint64_t nr_rings = 1;
-   tu_drm_get_param(dev->physical_device, MSM_PARAM_NR_RINGS, &nr_rings);
-
+   assert(priority >= 0 &&
+          priority < dev->physical_device->submitqueue_priority_count);
    struct drm_msm_submitqueue req = {
       .flags = 0,
-      .prio = MIN2(priority, MAX2(nr_rings, 1) - 1),
+      .prio = priority,
    };
 
    int ret = drmCommandWriteRead(dev->fd,
@@ -195,18 +225,97 @@ tu_gem_info(const struct tu_device *dev, uint32_t gem_handle, uint32_t info)
    return req.value;
 }
 
+
+static VkResult
+tu_allocate_userspace_iova(struct tu_device *dev,
+                           uint32_t gem_handle,
+                           uint64_t size,
+                           uint64_t client_iova,
+                           enum tu_bo_alloc_flags flags,
+                           uint64_t *iova)
+{
+   mtx_lock(&dev->physical_device->vma_mutex);
+
+   *iova = 0;
+
+   if (flags & TU_BO_ALLOC_REPLAYABLE) {
+      if (client_iova) {
+         if (util_vma_heap_alloc_addr(&dev->physical_device->vma, client_iova,
+                                      size)) {
+            *iova = client_iova;
+         } else {
+            return VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS;
+         }
+      } else {
+         /* We have to separate replayable IOVAs from ordinary one in order to
+          * for them not to clash. The easiest way to do this is to allocate
+          * them from the other end of the address space.
+          */
+         dev->physical_device->vma.alloc_high = true;
+         *iova =
+            util_vma_heap_alloc(&dev->physical_device->vma, size, 0x1000);
+      }
+   } else {
+      dev->physical_device->vma.alloc_high = false;
+      *iova = util_vma_heap_alloc(&dev->physical_device->vma, size, 0x1000);
+   }
+
+   mtx_unlock(&dev->physical_device->vma_mutex);
+
+   if (!*iova)
+      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+
+   struct drm_msm_gem_info req = {
+      .handle = gem_handle,
+      .info = MSM_INFO_SET_IOVA,
+      .value = *iova,
+   };
+
+   int ret =
+      drmCommandWriteRead(dev->fd, DRM_MSM_GEM_INFO, &req, sizeof(req));
+   if (ret < 0)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+tu_allocate_kernel_iova(struct tu_device *dev,
+                        uint32_t gem_handle,
+                        uint64_t *iova)
+{
+   *iova = tu_gem_info(dev, gem_handle, MSM_INFO_GET_IOVA);
+   if (!*iova)
+      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+
+   return VK_SUCCESS;
+}
+
 static VkResult
 tu_bo_init(struct tu_device *dev,
            struct tu_bo *bo,
            uint32_t gem_handle,
            uint64_t size,
-           bool dump)
+           uint64_t client_iova,
+           enum tu_bo_alloc_flags flags,
+           const char *name)
 {
-   uint64_t iova = tu_gem_info(dev, gem_handle, MSM_INFO_GET_IOVA);
-   if (!iova) {
-      tu_gem_close(dev, gem_handle);
-      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+   VkResult result = VK_SUCCESS;
+   uint64_t iova = 0;
+
+   assert(!client_iova || dev->physical_device->has_set_iova);
+
+   if (dev->physical_device->has_set_iova) {
+      result = tu_allocate_userspace_iova(dev, gem_handle, size, client_iova,
+                                          flags, &iova);
+   } else {
+      result = tu_allocate_kernel_iova(dev, gem_handle, &iova);
    }
+
+   if (result != VK_SUCCESS)
+      goto fail_bo_list;
+
+   name = tu_debug_bos_add(dev, size, name);
 
    mtx_lock(&dev->bo_mutex);
    uint32_t idx = dev->bo_count++;
@@ -217,13 +326,16 @@ tu_bo_init(struct tu_device *dev,
       struct drm_msm_gem_submit_bo *new_ptr =
          vk_realloc(&dev->vk.alloc, dev->bo_list, new_len * sizeof(*dev->bo_list),
                     8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-      if (!new_ptr)
+      if (!new_ptr) {
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
          goto fail_bo_list;
+      }
 
       dev->bo_list = new_ptr;
       dev->bo_list_size = new_len;
    }
 
+   bool dump = flags & TU_BO_ALLOC_ALLOW_DUMP;
    dev->bo_list[idx] = (struct drm_msm_gem_submit_bo) {
       .flags = MSM_SUBMIT_BO_READ | MSM_SUBMIT_BO_WRITE |
                COND(dump, MSM_SUBMIT_BO_DUMP),
@@ -237,6 +349,7 @@ tu_bo_init(struct tu_device *dev,
       .iova = iova,
       .refcnt = 1,
       .bo_list_idx = idx,
+      .name = name,
    };
 
    mtx_unlock(&dev->bo_mutex);
@@ -245,12 +358,47 @@ tu_bo_init(struct tu_device *dev,
 
 fail_bo_list:
    tu_gem_close(dev, gem_handle);
-   return VK_ERROR_OUT_OF_HOST_MEMORY;
+   return result;
+}
+
+/**
+ * Sets the name in the kernel so that the contents of /debug/dri/0/gem are more
+ * useful.
+ *
+ * We skip this on release builds (when we're also not doing BO debugging) to
+ * reduce overhead.
+ */
+static void
+tu_bo_set_kernel_name(struct tu_device *dev, struct tu_bo *bo, const char *name)
+{
+   bool kernel_bo_names = dev->bo_sizes != NULL;
+#ifdef DEBUG
+   kernel_bo_names = true;
+#endif
+   if (!kernel_bo_names)
+      return;
+
+   struct drm_msm_gem_info req = {
+      .handle = bo->gem_handle,
+      .info = MSM_INFO_SET_NAME,
+      .value = (uintptr_t)(void *)name,
+      .len = strlen(name),
+   };
+
+   int ret = drmCommandWrite(dev->fd, DRM_MSM_GEM_INFO, &req, sizeof(req));
+   if (ret) {
+      mesa_logw_once("Failed to set BO name with DRM_MSM_GEM_INFO: %d",
+                     ret);
+   }
 }
 
 VkResult
-tu_bo_init_new(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
-               enum tu_bo_alloc_flags flags)
+tu_bo_init_new_explicit_iova(struct tu_device *dev,
+                             struct tu_bo **out_bo,
+                             uint64_t size,
+                             uint64_t client_iova,
+                             enum tu_bo_alloc_flags flags,
+                             const char *name)
 {
    /* TODO: Choose better flags. As of 2018-11-12, freedreno/drm/msm_bo.c
     * always sets `flags = MSM_BO_WC`, and we copy that behavior here.
@@ -272,12 +420,15 @@ tu_bo_init_new(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
    assert(bo && bo->gem_handle == 0);
 
    VkResult result =
-      tu_bo_init(dev, bo, req.handle, size, flags & TU_BO_ALLOC_ALLOW_DUMP);
+      tu_bo_init(dev, bo, req.handle, size, client_iova, flags, name);
 
    if (result != VK_SUCCESS)
       memset(bo, 0, sizeof(*bo));
    else
       *out_bo = bo;
+
+   /* We don't use bo->name here because for the !TU_DEBUG=bo case bo->name is NULL. */
+   tu_bo_set_kernel_name(dev, bo, name);
 
    return result;
 }
@@ -320,7 +471,8 @@ tu_bo_init_dmabuf(struct tu_device *dev,
       return VK_SUCCESS;
    }
 
-   VkResult result = tu_bo_init(dev, bo, gem_handle, size, false);
+   VkResult result =
+      tu_bo_init(dev, bo, gem_handle, size, 0, TU_BO_ALLOC_NO_FLAGS, "dmabuf");
 
    if (result != VK_SUCCESS)
       memset(bo, 0, sizeof(*bo));
@@ -377,6 +529,8 @@ tu_bo_finish(struct tu_device *dev, struct tu_bo *bo)
    if (bo->map)
       munmap(bo->map, bo->size);
 
+   tu_debug_bos_del(dev, bo);
+
    mtx_lock(&dev->bo_mutex);
    dev->bo_count--;
    dev->bo_list[bo->bo_list_idx] = dev->bo_list[dev->bo_count];
@@ -388,6 +542,12 @@ tu_bo_finish(struct tu_device *dev, struct tu_bo *bo)
       dev->implicit_sync_bo_count--;
 
    mtx_unlock(&dev->bo_mutex);
+
+   if (dev->physical_device->has_set_iova) {
+      mtx_lock(&dev->physical_device->vma_mutex);
+      util_vma_heap_free(&dev->physical_device->vma, bo->iova, bo->size);
+      mtx_unlock(&dev->physical_device->vma_mutex);
+   }
 
    /* Our BO structs are stored in a sparse array in the physical device,
     * so we don't want to free the BO pointer, instead we want to reset it
@@ -619,11 +779,18 @@ const struct vk_sync_type tu_timeline_sync_type = {
    .wait_many = tu_timeline_sync_wait,
 };
 
-static VkResult
-tu_drm_device_init(struct tu_physical_device *device,
-                   struct tu_instance *instance,
-                   drmDevicePtr drm_device)
+VkResult
+tu_physical_device_try_create(struct vk_instance *vk_instance,
+                              struct _drmDevice *drm_device,
+                              struct vk_physical_device **out)
 {
+   struct tu_instance *instance =
+      container_of(vk_instance, struct tu_instance, vk);
+
+   if (!(drm_device->available_nodes & (1 << DRM_NODE_RENDER)) ||
+       drm_device->bustype != DRM_BUS_PLATFORM)
+      return VK_ERROR_INCOMPATIBLE_DRIVER;
+
    const char *primary_path = drm_device->nodes[DRM_NODE_PRIMARY];
    const char *path = drm_device->nodes[DRM_NODE_RENDER];
    VkResult result = VK_SUCCESS;
@@ -670,6 +837,15 @@ tu_drm_device_init(struct tu_physical_device *device,
       return result;
    }
 
+   struct tu_physical_device *device =
+      vk_zalloc(&instance->vk.alloc, sizeof(*device), 8,
+                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+   if (!device) {
+      result = vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      drmFreeVersion(version);
+      goto fail;
+   }
+
    device->msm_major_version = version->version_major;
    device->msm_minor_version = version->version_minor;
 
@@ -707,13 +883,26 @@ tu_drm_device_init(struct tu_physical_device *device,
                                 "could not get GMEM size");
       goto fail;
    }
-   device->gmem_size = env_var_as_unsigned("TU_GMEM", device->gmem_size);
+   device->gmem_size = debug_get_num_option("TU_GMEM", device->gmem_size);
 
    if (tu_drm_get_gmem_base(device, &device->gmem_base)) {
       result = vk_startup_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                                  "could not get GMEM size");
       goto fail;
    }
+
+   /*
+    * device->has_set_iova = !tu_drm_get_va_prop(device, &device->va_start,
+    *                                            &device->va_size);
+    *
+    * If BO is freed while kernel considers it busy, our VMA state gets
+    * desynchronized from kernel's VMA state, because kernel waits
+    * until BO stops being busy. And whether BO is busy decided at
+    * submission granularity.
+    *
+    * Disable this capability until solution is found.
+    */
+   device->has_set_iova = false;
 
    struct stat st;
 
@@ -744,6 +933,8 @@ tu_drm_device_init(struct tu_physical_device *device,
       goto fail;
    }
 
+   device->submitqueue_priority_count = tu_drm_get_priorities(device);
+
    device->syncobj_type = vk_drm_syncobj_get_type(fd);
    /* we don't support DRM_CAP_SYNCOBJ_TIMELINE, but drm-shim does */
    if (!(device->syncobj_type.features & VK_SYNC_FEATURE_TIMELINE))
@@ -759,54 +950,17 @@ tu_drm_device_init(struct tu_physical_device *device,
 
    result = tu_physical_device_init(device, instance);
 
-   if (result == VK_SUCCESS)
-       return result;
+   if (result == VK_SUCCESS) {
+      *out = &device->vk;
+      return result;
+   }
 
 fail:
+   if (device)
+      vk_free(&instance->vk.alloc, device);
    close(fd);
    if (master_fd != -1)
       close(master_fd);
-   return result;
-}
-
-VkResult
-tu_enumerate_devices(struct tu_instance *instance)
-{
-   /* TODO: Check for more devices ? */
-   drmDevicePtr devices[8];
-   VkResult result = VK_ERROR_INCOMPATIBLE_DRIVER;
-   int max_devices;
-
-   instance->physical_device_count = 0;
-
-   max_devices = drmGetDevices2(0, devices, ARRAY_SIZE(devices));
-
-   if (instance->debug_flags & TU_DEBUG_STARTUP) {
-      if (max_devices < 0)
-         mesa_logi("drmGetDevices2 returned error: %s\n", strerror(max_devices));
-      else
-         mesa_logi("Found %d drm nodes", max_devices);
-   }
-
-   if (max_devices < 1)
-      return vk_startup_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                               "No DRM devices found");
-
-   for (unsigned i = 0; i < (unsigned) max_devices; i++) {
-      if (devices[i]->available_nodes & 1 << DRM_NODE_RENDER &&
-          devices[i]->bustype == DRM_BUS_PLATFORM) {
-
-         result = tu_drm_device_init(
-            instance->physical_devices + instance->physical_device_count,
-            instance, devices[i]);
-         if (result == VK_SUCCESS)
-            ++instance->physical_device_count;
-         else if (result != VK_ERROR_INCOMPATIBLE_DRIVER)
-            break;
-      }
-   }
-   drmFreeDevices(devices, max_devices);
-
    return result;
 }
 
@@ -1034,6 +1188,8 @@ tu_queue_submit_locked(struct tu_queue *queue, struct tu_queue_submit *submit)
 
    mtx_unlock(&queue->device->bo_mutex);
 
+   tu_debug_bos_print_stats(queue->device);
+
    if (ret)
       return vk_device_set_lost(&queue->device->vk, "submit failed: %m");
 
@@ -1133,6 +1289,7 @@ tu_device_wait_u_trace(struct tu_device *dev, struct tu_u_trace_syncobj *syncobj
 VkResult
 tu_queue_submit(struct vk_queue *vk_queue, struct vk_queue_submit *submit)
 {
+   MESA_TRACE_FUNC();
    struct tu_queue *queue = container_of(vk_queue, struct tu_queue, vk);
    uint32_t perf_pass_index = queue->device->perfcntrs_pass_cs ?
                               submit->perf_pass_index : ~0;
@@ -1189,13 +1346,4 @@ tu_queue_submit(struct vk_queue *vk_queue, struct vk_queue_submit *submit)
    u_trace_context_process(&queue->device->trace_context, true);
 
    return VK_SUCCESS;
-}
-
-int
-tu_syncobj_to_fd(struct tu_device *device, struct vk_sync *sync)
-{
-   VkResult ret;
-   int fd;
-   ret = vk_sync_export_opaque_fd(&device->vk, sync, &fd);
-   return ret ? -1 : fd;
 }

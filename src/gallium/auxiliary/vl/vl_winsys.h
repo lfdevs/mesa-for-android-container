@@ -35,6 +35,9 @@
 #ifdef HAVE_X11_PLATFORM
 #include <X11/Xlib.h>
 #endif
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "pipe/p_defines.h"
 #include "pipe/p_format.h"
 
@@ -92,6 +95,9 @@ static inline struct vl_screen *
 vl_dri3_screen_create(void *display, int screen) { return NULL; };
 #endif
 
+#ifdef _WIN32
+struct vl_screen *vl_win32_screen_create(LUID *adapter);
+#else
 /* Always enable the DRM vl winsys */
 struct vl_screen *
 vl_drm_screen_create(int fd);
@@ -106,6 +112,7 @@ struct vl_screen *
 vl_vgem_drm_screen_create(int fd);
 static inline struct vl_screen *
 vl_xlib_swrast_screen_create(void *display, int screen) { return NULL; }
+#endif
 #endif
 
 #endif

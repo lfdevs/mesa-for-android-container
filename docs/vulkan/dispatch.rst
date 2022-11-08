@@ -1,7 +1,7 @@
 Dispatch
 =============
 
-This chapter attemtps to document the Vulkan dispatch infrastructure in the
+This chapter attempts to document the Vulkan dispatch infrastructure in the
 Mesa Vulkan runtime.  There are a lot of moving pieces here but the end
 result has proven quite effective for implementing all the various Vulkan
 API requirements.
@@ -87,7 +87,7 @@ anyone who doesn't can use the table without needing to pull in all the
 platform headers.
 
 Dispatch tables are similar to entrypoint tables except that they're
-de-duplicated so that aliased entrypoints have only one entry in the table.
+deduplicated so that aliased entrypoints have only one entry in the table.
 The device dispatch table looks like this:
 
 .. code-block:: c
@@ -165,7 +165,7 @@ times if you want more than one table.  It also generates an entrypoint
 table for each prefix and each dispatch level (instance, physical device,
 and device) which is populated using the driver's functions.  Thanks to our
 use of weak function pointers (or something roughly equivalent for MSVC),
-any entrypoints which are not implented will automatically show up as
+any entrypoints which are not implemented will automatically show up as
 ``NULL`` entries in the table rather than resulting in linking errors.
 
 The above generates entrypoint tables because, thanks to aliasing and the C
@@ -192,7 +192,7 @@ something like this:
 
 The ``vk_*_dispatch_table_from_entrypoints()`` functions are designed so
 that they can be layered like this.  In this case, it starts with the
-instance entrypoints from the Intel vulkan driver and then adds in the WSI
+instance entrypoints from the Intel Vulkan driver and then adds in the WSI
 entrypoints.  If there are any entrypoints duplicated between the two, the
 first one to define the entrypoint wins.
 

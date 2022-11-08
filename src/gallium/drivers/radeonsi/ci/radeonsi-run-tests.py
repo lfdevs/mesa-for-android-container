@@ -64,6 +64,10 @@ parser.add_argument(
     help="Number of processes/threads to use.",
     default=multiprocessing.cpu_count(),
 )
+
+# The path to above the mesa directory, i.e. ../../../../../..
+path_above_mesa = os.path.realpath(os.path.join(os.path.dirname(__file__), *['..'] * 6))
+
 parser.add_argument("--piglit-path", type=str, help="Path to piglit source folder.")
 parser.add_argument("--glcts-path", type=str, help="Path to GLCTS source folder.")
 parser.add_argument("--deqp-path", type=str, help="Path to dEQP source folder.")
@@ -71,7 +75,7 @@ parser.add_argument(
     "--parent-path",
     type=str,
     help="Path to folder containing piglit/GLCTS and dEQP source folders.",
-    default=os.getenv("MAREKO_BUILD_PATH"),
+    default=os.getenv('MAREKO_BUILD_PATH', path_above_mesa),
 )
 parser.add_argument("--verbose", "-v", action="count", default=0)
 parser.add_argument(
@@ -138,7 +142,9 @@ parser.add_argument(
     nargs="?",
     help="Output folder (logs, etc)",
     default=os.path.join(
-        tempfile.gettempdir(), datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        # Default is ../../../../../../test-results/datetime
+        os.path.join(path_above_mesa, 'test-results',
+                     datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
     ),
 )
 
@@ -246,9 +252,7 @@ while os.path.exists(output_folder):
     output_folder = "{}.{}".format(os.path.abspath(args.output_folder), count)
     count += 1
 
-os.mkdir(output_folder)
-new_baseline_folder = os.path.join(output_folder, "new_baseline")
-os.mkdir(new_baseline_folder)
+os.makedirs(output_folder, exist_ok=True)
 
 logfile = open(os.path.join(output_folder, "{}-run-tests.log".format(gpu_name)), "w")
 
@@ -257,7 +261,7 @@ spin = itertools.cycle("-\\|/")
 shutil.copy(skips, output_folder)
 skips = os.path.join(output_folder, "skips.csv")
 if not args.slow:
-    # Exclude these 3 tests slow tests
+    # Exclude these 4 tests slow tests
     with open(skips, "a") as f:
         print("KHR-GL46.copy_image.functional", file=f)
         print("KHR-GL46.texture_swizzle.smoke", file=f)
@@ -265,6 +269,7 @@ if not args.slow:
             "KHR-GL46.tessellation_shader.tessellation_control_to_tessellation_evaluation.gl_MaxPatchVertices_Position_PointSize",
             file=f,
         )
+        print("KHR-Single-GL46.arrays_of_arrays_gl.AtomicUsage", file=f)
 
 
 def gfx_level_to_str(cl):
@@ -329,7 +334,6 @@ def parse_test_filters(include_tests):
                 for row in csv.reader(file, delimiter=","):
                     if not row or row[0][0] == "#":
                         continue
-                    print(row)
                     cmd += ["-t", row[0]]
         else:
             cmd += ["-t", t]
@@ -357,24 +361,33 @@ def select_baseline(basepath, gfx_level, gpu_name):
     return exact
 
 
+success = True
 filters_args = parse_test_filters(args.include_tests)
 baseline = select_baseline(base, gfx_level, gpu_name)
-flakes = os.path.join(
-    base, "{}-{}-flakes.csv".format(gfx_level_to_str(gfx_level), gpu_name)
-)
+flakes = [
+    f
+    for f in (
+        os.path.join(base, g)
+        for g in [
+            "radeonsi-flakes.csv",
+            "{}-{}-flakes.csv".format(gfx_level_to_str(gfx_level), gpu_name),
+        ]
+    )
+    if os.path.exists(f)
+]
+flakes_args = []
+for f in flakes:
+    flakes_args += ["--flakes", f]
 
 if os.path.exists(baseline):
-    print_yellow("Baseline: {}\n".format(baseline), args.verbose > 0)
-if os.path.exists(flakes):
-    print_yellow("[flakes {}]\n".format(flakes), args.verbose > 0)
+    print_yellow("Baseline: {}".format(baseline))
+if flakes_args:
+    print_yellow("Flakes: {}".format(flakes_args))
 
 # piglit test
 if args.piglit:
     out = os.path.join(output_folder, "piglit")
-    new_baseline = os.path.join(
-        new_baseline_folder, "{}-piglit-quick-fail.csv".format(gpu_name)
-    )
-    print_yellow("Running piglit tests\n", args.verbose > 0)
+    print_yellow("Running piglit tests", args.verbose > 0)
     cmd = [
         "piglit-runner",
         "run",
@@ -391,17 +404,15 @@ if args.piglit:
         str(args.jobs),
         "--skips",
         skips,
-    ] + filters_args
+    ] + filters_args + flakes_args
 
     if os.path.exists(baseline):
         cmd += ["--baseline", baseline]
 
-    if os.path.exists(flakes):
-        cmd += ["--flakes", flakes]
-
     run_cmd(cmd, args.verbose)
-    shutil.copy(os.path.join(out, "failures.csv"), new_baseline)
-    verify_results(new_baseline)
+
+    if not verify_results(os.path.join(out, "failures.csv")):
+        success = False
 
 deqp_args = "-- --deqp-surface-width=256 --deqp-surface-height=256 --deqp-gl-config-name=rgba8888d24s8ms0 --deqp-visibility=hidden".split(
     " "
@@ -410,9 +421,6 @@ deqp_args = "-- --deqp-surface-width=256 --deqp-surface-height=256 --deqp-gl-con
 # glcts test
 if args.glcts:
     out = os.path.join(output_folder, "glcts")
-    new_baseline = os.path.join(
-        new_baseline_folder, "{}-glcts-fail.csv".format(gpu_name)
-    )
     print_yellow("Running  GLCTS tests", args.verbose > 0)
     os.mkdir(os.path.join(output_folder, "glcts"))
 
@@ -427,6 +435,10 @@ if args.glcts:
         "{}/external/openglcts/modules/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl46-master.txt".format(
             glcts_path
         ),
+        "--caselist",
+        "{}/external/openglcts/modules/gl_cts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/gl46-khr-single.txt".format(
+            glcts_path
+        ),
         "--output",
         out,
         "--skips",
@@ -434,15 +446,17 @@ if args.glcts:
         "--jobs",
         str(args.jobs),
         "--timeout",
-        "1000",
-    ] + filters_args
+        "1000"
+    ] + filters_args + flakes_args
 
     if os.path.exists(baseline):
         cmd += ["--baseline", baseline]
     cmd += deqp_args
+
     run_cmd(cmd, args.verbose)
-    shutil.copy(os.path.join(out, "failures.csv"), new_baseline)
-    verify_results(new_baseline)
+
+    if not verify_results(os.path.join(out, "failures.csv")):
+        success = False
 
 if args.deqp:
     print_yellow("Running   dEQP tests", args.verbose > 0)
@@ -452,9 +466,6 @@ if args.deqp:
     suite_filename = os.path.join(output_folder, "deqp-suite.toml")
     suite = open(suite_filename, "w")
     os.mkdir(out)
-    new_baseline = os.path.join(
-        new_baseline_folder, "{}-deqp-fail.csv".format(gpu_name)
-    )
 
     deqp_tests = {
         "egl": args.deqp_egl,
@@ -498,7 +509,11 @@ if args.deqp:
         os.path.join(output_folder, "deqp"),
         "--suite",
         suite_filename,
-    ] + filters_args
+    ] + filters_args + flakes_args
+
     run_cmd(cmd, args.verbose)
-    shutil.copy(os.path.join(out, "failures.csv"), new_baseline)
-    verify_results(new_baseline)
+
+    if not verify_results(os.path.join(out, "failures.csv")):
+        success = False
+
+sys.exit(0 if success else 1)

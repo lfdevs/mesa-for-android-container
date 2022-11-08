@@ -24,7 +24,7 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/u_math.h"
 
 #include "ir3_compiler.h"
@@ -102,7 +102,7 @@ ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
 
       static int gcm = -1;
       if (gcm == -1)
-         gcm = env_var_as_unsigned("GCM", 0);
+         gcm = debug_get_num_option("GCM", 0);
       if (gcm == 1)
          progress |= OPT(s, nir_opt_gcm, true);
       else if (gcm == 2)
@@ -353,10 +353,10 @@ ir3_finalize_nir(struct ir3_compiler *compiler, nir_shader *s)
     * constants for divide by immed power-of-two:
     */
    nir_lower_idiv_options idiv_options = {
-      .imprecise_32bit_lowering = true,
       .allow_fp16 = true,
    };
-   const bool idiv_progress = OPT(s, nir_lower_idiv, &idiv_options);
+   bool idiv_progress = OPT(s, nir_opt_idiv_const, 8);
+   idiv_progress |= OPT(s, nir_lower_idiv, &idiv_options);
 
    if (idiv_progress)
       ir3_optimize_loop(compiler, s);
@@ -449,7 +449,7 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
    struct ir3_compiler *compiler = shader->compiler;
 
    NIR_PASS_V(s, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
-              ir3_glsl_type_size, (nir_lower_io_options)0);
+              ir3_glsl_type_size, nir_lower_io_lower_64bit_to_32);
 
    if (s->info.stage == MESA_SHADER_FRAGMENT) {
       /* NOTE: lower load_barycentric_at_sample first, since it
@@ -463,12 +463,44 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
 
    if (compiler->gen >= 6 && s->info.stage == MESA_SHADER_FRAGMENT &&
        !(ir3_shader_debug & IR3_DBG_NOFP16)) {
+      /* Lower FS mediump inputs to 16-bit. If you declared it mediump, you
+       * probably want 16-bit instructions (and have set
+       * mediump/RelaxedPrecision on most of the rest of the shader's
+       * instructions).  If we don't lower it in NIR, then comparisons of the
+       * results of mediump ALU ops with the mediump input will happen in highp,
+       * causing extra conversions (and, incidentally, causing
+       * dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_fragment on ANGLE to
+       * fail)
+       *
+       * However, we can't do flat inputs because flat.b doesn't have the
+       * destination type for how to downconvert the
+       * 32-bit-in-the-varyings-interpolator value. (also, even if it did, watch
+       * out for how gl_nir_lower_packed_varyings packs all flat-interpolated
+       * things together as ivec4s, so when we lower a formerly-float input
+       * you'd end up with an incorrect f2f16(i2i32(load_input())) instead of
+       * load_input).
+       */
+      uint64_t mediump_varyings = 0;
+      nir_foreach_shader_in_variable(var, s) {
+         if ((var->data.precision == GLSL_PRECISION_MEDIUM ||
+              var->data.precision == GLSL_PRECISION_LOW) &&
+             var->data.interpolation != INTERP_MODE_FLAT) {
+            mediump_varyings |= BITFIELD64_BIT(var->data.location);
+         }
+      }
+
+      if (mediump_varyings) {
+         NIR_PASS_V(s, nir_lower_mediump_io,
+                  nir_var_shader_in,
+                  mediump_varyings,
+                  false);
+      }
+
+      /* This should come after input lowering, to opportunistically lower non-mediump outputs. */
       NIR_PASS_V(s, nir_lower_mediump_io, nir_var_shader_out, 0, false);
    }
 
-   if ((s->info.stage == MESA_SHADER_COMPUTE) ||
-       (s->info.stage == MESA_SHADER_KERNEL) ||
-       compiler->has_getfiberid) {
+   {
       /* If the API-facing subgroup size is forced to a particular value, lower
        * it here. Beyond this point nir_intrinsic_load_subgroup_size will return
        * the "real" subgroup size.
@@ -497,18 +529,26 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
          break;
       }
 
-      OPT(s, nir_lower_subgroups,
-          &(nir_lower_subgroups_options){
-             .subgroup_size = subgroup_size,
-             .ballot_bit_size = 32,
-             .ballot_components = max_subgroup_size / 32,
-             .lower_to_scalar = true,
-             .lower_vote_eq = true,
-             .lower_subgroup_masks = true,
-             .lower_read_invocation_to_cond = true,
-             .lower_shuffle = true,
-             .lower_relative_shuffle = true,
-          });
+      nir_lower_subgroups_options options = {
+            .subgroup_size = subgroup_size,
+            .ballot_bit_size = 32,
+            .ballot_components = max_subgroup_size / 32,
+            .lower_to_scalar = true,
+            .lower_vote_eq = true,
+            .lower_subgroup_masks = true,
+            .lower_read_invocation_to_cond = true,
+            .lower_shuffle = true,
+            .lower_relative_shuffle = true,
+      };
+
+      if (!((s->info.stage == MESA_SHADER_COMPUTE) ||
+            (s->info.stage == MESA_SHADER_KERNEL) ||
+            compiler->has_getfiberid)) {
+         options.subgroup_size = 1;
+         options.lower_vote_trivial = true;
+      }
+
+      OPT(s, nir_lower_subgroups, &options);
    }
 
    if ((s->info.stage == MESA_SHADER_COMPUTE) ||
@@ -534,7 +574,6 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
    NIR_PASS_V(s, nir_lower_image, &lower_image_opts);
 
    const nir_lower_idiv_options lower_idiv_options = {
-      .imprecise_32bit_lowering = true,
       .allow_fp16 = true,
    };
    NIR_PASS_V(s, nir_lower_idiv, &lower_idiv_options); /* idiv generated by cube lowering */
@@ -556,70 +595,17 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
 }
 
 static bool
-ir3_nir_lower_view_layer_id(nir_shader *nir, bool layer_zero, bool view_zero)
-{
-   unsigned layer_id_loc = ~0, view_id_loc = ~0;
-   nir_foreach_shader_in_variable (var, nir) {
-      if (var->data.location == VARYING_SLOT_LAYER)
-         layer_id_loc = var->data.driver_location;
-      if (var->data.location == VARYING_SLOT_VIEWPORT)
-         view_id_loc = var->data.driver_location;
-   }
-
-   assert(!layer_zero || layer_id_loc != ~0);
-   assert(!view_zero || view_id_loc != ~0);
-
-   bool progress = false;
-   nir_builder b;
-
-   nir_foreach_function (func, nir) {
-      nir_builder_init(&b, func->impl);
-
-      nir_foreach_block (block, func->impl) {
-         nir_foreach_instr_safe (instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-
-            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-
-            if (intrin->intrinsic != nir_intrinsic_load_input)
-               continue;
-
-            unsigned base = nir_intrinsic_base(intrin);
-            if (base != layer_id_loc && base != view_id_loc)
-               continue;
-
-            b.cursor = nir_before_instr(&intrin->instr);
-            nir_ssa_def *zero = nir_imm_int(&b, 0);
-            nir_ssa_def_rewrite_uses(&intrin->dest.ssa, zero);
-            nir_instr_remove(&intrin->instr);
-            progress = true;
-         }
-      }
-
-      if (progress) {
-         nir_metadata_preserve(
-            func->impl, nir_metadata_block_index | nir_metadata_dominance);
-      } else {
-         nir_metadata_preserve(func->impl, nir_metadata_all);
-      }
-   }
-
-   return progress;
-}
-
-static bool
 lower_ucp_vs(struct ir3_shader_variant *so)
 {
    if (!so->key.ucp_enables)
       return false;
 
-   gl_shader_stage last_geom_stage = MESA_SHADER_VERTEX;
+   gl_shader_stage last_geom_stage;
 
-   if (so->key.tessellation) {
-      last_geom_stage = MESA_SHADER_TESS_EVAL;
-   } else if (so->key.has_gs) {
+   if (so->key.has_gs) {
       last_geom_stage = MESA_SHADER_GEOMETRY;
+   } else if (so->key.tessellation) {
+      last_geom_stage = MESA_SHADER_TESS_EVAL;
    } else {
       last_geom_stage = MESA_SHADER_VERTEX;
    }
@@ -646,6 +632,8 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
          progress = true;
          break;
       case MESA_SHADER_TESS_CTRL:
+         NIR_PASS_V(s, nir_lower_io_to_scalar,
+                     nir_var_shader_in | nir_var_shader_out);
          NIR_PASS_V(s, ir3_nir_lower_tess_ctrl, so, so->key.tessellation);
          NIR_PASS_V(s, ir3_nir_lower_to_explicit_input, so);
          progress = true;
@@ -672,15 +660,8 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
    if (lower_ucp_vs(so)) {
       progress |= OPT(s, nir_lower_clip_vs, so->key.ucp_enables, false, true, NULL);
    } else if (s->info.stage == MESA_SHADER_FRAGMENT) {
-      bool layer_zero =
-         so->key.layer_zero && (s->info.inputs_read & VARYING_BIT_LAYER);
-      bool view_zero =
-         so->key.view_zero && (s->info.inputs_read & VARYING_BIT_VIEWPORT);
-
       if (so->key.ucp_enables && !so->compiler->has_clip_cull)
          progress |= OPT(s, nir_lower_clip_fs, so->key.ucp_enables, true);
-      if (layer_zero || view_zero)
-         progress |= OPT(s, ir3_nir_lower_view_layer_id, layer_zero, view_zero);
    }
 
    /* Move large constant variables to the constants attached to the NIR
@@ -906,6 +887,14 @@ ir3_nir_scan_driver_consts(struct ir3_compiler *compiler, nir_shader *shader, st
             case nir_intrinsic_load_draw_id:
                layout->num_driver_params =
                   MAX2(layout->num_driver_params, IR3_DP_DRAWID + 1);
+               break;
+            case nir_intrinsic_load_tess_level_outer_default:
+               layout->num_driver_params = MAX2(layout->num_driver_params,
+                                                IR3_DP_HS_DEFAULT_OUTER_LEVEL_W + 1);
+               break;
+            case nir_intrinsic_load_tess_level_inner_default:
+               layout->num_driver_params = MAX2(layout->num_driver_params,
+                                                IR3_DP_HS_DEFAULT_INNER_LEVEL_Y + 1);
                break;
             default:
                break;

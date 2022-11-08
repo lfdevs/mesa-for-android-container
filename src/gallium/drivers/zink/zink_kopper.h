@@ -28,6 +28,11 @@
 #define ZINK_KOPPER_H
 
 #include "kopper_interface.h"
+#include "u_queue.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct kopper_swapchain_image {
    bool init;
@@ -140,4 +145,9 @@ void
 zink_kopper_set_swap_interval(struct pipe_screen *pscreen, struct pipe_resource *pres, int interval);
 int
 zink_kopper_query_buffer_age(struct pipe_context *pctx, struct pipe_resource *pres);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

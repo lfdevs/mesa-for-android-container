@@ -54,9 +54,10 @@ VM_SOCKET=crosvm-${THREAD}.sock
 # was terminated due to timeouts.  This "vm stop" may fail if the crosvm died
 # without cleaning itself up.
 if [ -e $VM_SOCKET ]; then
-   crosvm stop $VM_SOCKET || rm -rf $VM_SOCKET
+   crosvm stop $VM_SOCKET || true
    # Wait for socats from that invocation to drain
    sleep 5
+   rm -rf $VM_SOCKET || true
 fi
 
 set_vsock_context || { echo "Could not generate crosvm vsock CID" >&2; exit 1; }
@@ -93,10 +94,11 @@ set +e -x
 NIR_DEBUG="novalidate" \
 LIBGL_ALWAYS_SOFTWARE=${CROSVM_LIBGL_ALWAYS_SOFTWARE} \
 GALLIUM_DRIVER=${CROSVM_GALLIUM_DRIVER} \
-crosvm run \
-    --gpu "${CROSVM_GPU_ARGS}" -m 4096 -c 2 --disable-sandbox \
+VK_ICD_FILENAMES=$CI_PROJECT_DIR/install/share/vulkan/icd.d/${CROSVM_VK_DRIVER}_icd.x86_64.json \
+crosvm --no-syslog run \
+    --gpu "${CROSVM_GPU_ARGS}" -m "${CROSVM_MEMORY:-4096}" -c 2 --disable-sandbox \
     --shared-dir /:my_root:type=fs:writeback=true:timeout=60:cache=always \
-    --host_ip "192.168.30.1" --netmask "255.255.255.0" --mac "AA:BB:CC:00:00:12" \
+    --host-ip "192.168.30.1" --netmask "255.255.255.0" --mac "AA:BB:CC:00:00:12" \
     -s $VM_SOCKET \
     --cid ${VSOCK_CID} -p "${CROSVM_KERN_ARGS}" \
     /lava-files/${KERNEL_IMAGE_NAME:-bzImage} > ${VM_TEMP_DIR}/crosvm 2>&1

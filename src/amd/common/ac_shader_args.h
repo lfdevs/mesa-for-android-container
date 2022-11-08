@@ -40,6 +40,7 @@ enum ac_arg_regfile
 
 enum ac_arg_type
 {
+   AC_ARG_INVALID = -1,
    AC_ARG_FLOAT,
    AC_ARG_INT,
    AC_ARG_CONST_PTR,       /* Pointer to i8 array */
@@ -152,6 +153,7 @@ struct ac_shader_args {
    struct ac_arg sbt_descriptors;
    struct ac_arg ray_launch_size_addr;
    struct ac_arg force_vrs_rates;
+   struct ac_arg rt_dynamic_callable_stack_base;
 };
 
 void ac_add_arg(struct ac_shader_args *info, enum ac_arg_regfile regfile, unsigned registers,

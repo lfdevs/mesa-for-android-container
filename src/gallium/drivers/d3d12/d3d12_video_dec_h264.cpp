@@ -23,6 +23,7 @@
 
 #include "d3d12_video_dec.h"
 #include "d3d12_video_dec_h264.h"
+#include "vl/vl_zscan.h"
 
 #include <cmath>
 
@@ -112,16 +113,14 @@ d3d12_video_decoder_prepare_current_frame_references_h264(struct d3d12_video_dec
    //     RefFrameList array of the associated picture parameters structure.For more information, see section 6.2. In
    //     all cases, when Index7Bits does not contain a valid index, the value is 127.
 
-   std::vector<D3D12_RESOURCE_BARRIER>
-      neededStateTransitions;   // Returned by update_entries to perform by the method caller
    pD3D12Dec->m_spDPBManager->update_entries(
       d3d12_video_decoder_get_current_dxva_picparams<DXVA_PicParams_H264>(pD3D12Dec)->RefFrameList,
-      neededStateTransitions);
+      pD3D12Dec->m_transitionsStorage);
 
-   pD3D12Dec->m_spDecodeCommandList->ResourceBarrier(neededStateTransitions.size(), neededStateTransitions.data());
+   pD3D12Dec->m_spDecodeCommandList->ResourceBarrier(pD3D12Dec->m_transitionsStorage.size(), pD3D12Dec->m_transitionsStorage.data());
 
    // Schedule reverse (back to common) transitions before command list closes for current frame
-   for (auto BarrierDesc : neededStateTransitions) {
+   for (auto BarrierDesc : pD3D12Dec->m_transitionsStorage) {
       std::swap(BarrierDesc.Transition.StateBefore, BarrierDesc.Transition.StateAfter);
       pD3D12Dec->m_transitionsBeforeCloseCmdList.push_back(BarrierDesc);
    }
@@ -134,11 +133,15 @@ d3d12_video_decoder_prepare_current_frame_references_h264(struct d3d12_video_dec
 
 void
 d3d12_video_decoder_prepare_dxva_slices_control_h264(struct d3d12_video_decoder *pD3D12Dec,
-                                                     std::vector<DXVA_Slice_H264_Short> &pOutSliceControlBuffers,
+                                                     std::vector<uint8_t> &vecOutSliceControlBuffers,
                                                      struct pipe_h264_picture_desc *picture_h264)
 {
    debug_printf("[d3d12_video_decoder_h264] Upper layer reported %d slices for this frame, parsing them below...\n",
                   picture_h264->slice_count);
+
+   uint64_t TotalSlicesDXVAArrayByteSize = picture_h264->slice_count * sizeof(DXVA_Slice_H264_Short);
+   vecOutSliceControlBuffers.resize(TotalSlicesDXVAArrayByteSize);
+   uint8_t* pData = vecOutSliceControlBuffers.data();
    size_t processedBitstreamBytes = 0u;
    uint32_t sliceIdx = 0;
    bool sliceFound = false;
@@ -167,10 +170,11 @@ d3d12_video_decoder_prepare_dxva_slices_control_h264(struct d3d12_video_decoder 
 
          sliceIdx++;
          processedBitstreamBytes += currentSliceEntry.SliceBytesInBuffer;
-         pOutSliceControlBuffers.push_back(currentSliceEntry);
+         memcpy(pData, &currentSliceEntry, sizeof(DXVA_Slice_H264_Short));
+         pData += sizeof(DXVA_Slice_H264_Short);
       }
    } while (sliceFound && (sliceIdx < picture_h264->slice_count));
-   assert(pOutSliceControlBuffers.size() == picture_h264->slice_count);
+   assert(vecOutSliceControlBuffers.size() == TotalSlicesDXVAArrayByteSize);
 }
 
 bool
@@ -594,11 +598,11 @@ d3d12_video_decoder_dxva_qmatrix_from_pipe_picparams_h264(pipe_h264_picture_desc
    unsigned i, j;
    for (i = 0; i < 6; i++) {
       for (j = 0; j < 16; j++) {
-         outMatrixBuffer.bScalingLists4x4[i][j] = pPipeDesc->pps->ScalingList4x4[i][d3d12_video_zigzag_scan[j]];
+         outMatrixBuffer.bScalingLists4x4[i][j] = pPipeDesc->pps->ScalingList4x4[i][vl_zscan_normal_16[j]];
       }
    }
    for (i = 0; i < 64; i++) {
-      outMatrixBuffer.bScalingLists8x8[0][i] = pPipeDesc->pps->ScalingList8x8[0][d3d12_video_zigzag_direct[i]];
-      outMatrixBuffer.bScalingLists8x8[1][i] = pPipeDesc->pps->ScalingList8x8[1][d3d12_video_zigzag_direct[i]];
+      outMatrixBuffer.bScalingLists8x8[0][i] = pPipeDesc->pps->ScalingList8x8[0][vl_zscan_normal[i]];
+      outMatrixBuffer.bScalingLists8x8[1][i] = pPipeDesc->pps->ScalingList8x8[1][vl_zscan_normal[i]];
    }
 }

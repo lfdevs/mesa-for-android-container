@@ -176,18 +176,23 @@ vector_to_scalar_alu(midgard_vector_alu v, midgard_instruction *ins)
  * with rep. Pretty nifty, huh? */
 
 static unsigned
-mir_pack_swizzle_64(unsigned *swizzle, unsigned max_component)
+mir_pack_swizzle_64(unsigned *swizzle, unsigned max_component,
+                    bool expand_high)
 {
         unsigned packed = 0;
+        unsigned base = expand_high ? 2 : 0;
 
-        for (unsigned i = 0; i < 2; ++i) {
+        for (unsigned i = base; i < base + 2; ++i) {
                 assert(swizzle[i] <= max_component);
 
                 unsigned a = (swizzle[i] & 1) ?
                         (COMPONENT_W << 2) | COMPONENT_Z :
                         (COMPONENT_Y << 2) | COMPONENT_X;
 
-                packed |= a << (i * 4);
+                if (i & 1)
+                        packed |= a << 4;
+                else
+                        packed |= a;
         }
 
         return packed;
@@ -237,29 +242,26 @@ mir_pack_swizzle(unsigned mask, unsigned *swizzle,
                 assert(sz == 64 || sz == 32);
                 unsigned components = (sz == 32) ? 4 : 2;
 
-                packed = mir_pack_swizzle_64(swizzle, components);
+                packed = mir_pack_swizzle_64(swizzle, components,
+                                             mask & 0xc);
 
                 if (sz == 32) {
-                        bool lo = swizzle[0] >= COMPONENT_Z;
-                        bool hi = swizzle[1] >= COMPONENT_Z;
+                        ASSERTED bool dontcare = true;
+                        bool hi = false;
 
-                        assert(!(mask & ~0xf));
-                        assert(!(mask & 0x3) || !(mask & 0xc));
+                        assert(util_bitcount(mask) <= 2);
 
-                        if (mask > 3)
-                                mask >>= 2;
+                        u_foreach_bit(i, mask) {
+                                bool hi_i = swizzle[i] >= COMPONENT_Z;
 
-                        if (mask & 0x1) {
-                                /* We can't mix halves... */
-                                if (mask & 2)
-                                        assert(lo == hi);
-
-                                *expand_mode = lo ? midgard_src_expand_high :
-                                                    midgard_src_expand_low;
-                        } else {
-                                *expand_mode = hi ? midgard_src_expand_high :
-                                                    midgard_src_expand_low;
+                                /* We can't mix halves */
+                                assert(dontcare || (hi == hi_i));
+                                hi = hi_i;
+                                dontcare = false;
                         }
+
+                        *expand_mode = hi ? midgard_src_expand_high :
+                                            midgard_src_expand_low;
                 } else if (sz < 32) {
                         unreachable("Cannot encode 8/16 swizzle in 64-bit");
                 }

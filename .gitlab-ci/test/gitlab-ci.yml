@@ -17,6 +17,18 @@
     paths:
       - results/
 
+rustfmt:
+  # Cancel job if a newer commit is pushed to the same branch
+  interruptible: true
+  stage: lint
+  extends:
+    - .use-debian/x86_build
+    - .lint-rustfmt-rules
+  variables:
+    GIT_STRATEGY: fetch
+  script:
+    - git ls-files */{lib,app}.rs | xargs rustfmt --check
+
 .test-gl:
   extends:
     - .test
@@ -39,7 +51,6 @@
     - .use-debian/x86_test-gl
   needs:
     - debian/x86_test-gl
-    - debian-clover-testing
 
 .vkd3d-proton-test:
   artifacts:
@@ -66,21 +77,21 @@
 .piglit-traces-test:
   extends:
     - .piglit-test
-  cache:
-    key: ${CI_JOB_NAME}
-    paths:
-      - replayer-db/
   artifacts:
     when: on_failure
     name: "mesa_${CI_JOB_NAME}"
     reports:
       junit: results/junit.xml
     paths:
-      - results/summary/
-      - results/*.txt
+      - results/
+    exclude:
+      - results/*.shader_cache
   variables:
     PIGLIT_REPLAY_EXTRA_ARGS:  --keep-image --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_host=minio-packet.freedesktop.org --minio_bucket=mesa-tracie-public --role-session-name=${CI_PROJECT_PATH}:${CI_JOB_ID} --jwt-file=${CI_JOB_JWT_FILE}
   script:
+    - echo -e "\e[0Ksection_start:$(date +%s):variables[collapsed=true]\r\e[0KVariables passed through:"
+    - install/common/generate-env.sh
+    - echo -e "\e[0Ksection_end:$(date +%s):variables\r\e[0K"
     - install/piglit/piglit-traces.sh
 
 .deqp-test:
@@ -124,7 +135,7 @@
     # improve it even more (see https://docs.mesa3d.org/ci/bare-metal.html for
     # setup).
     - echo -e "\e[0Ksection_start:$(date +%s):artifacts_download[collapsed=true]\r\e[0KDownloading artifacts from minio"
-    - wget ${FDO_HTTP_CACHE_URI:-}https://${PIPELINE_ARTIFACTS_BASE}/${MINIO_ARTIFACT_NAME}.tar.gz -S --progress=dot:giga -O- | tar -xz
+    - wget ${FDO_HTTP_CACHE_URI:-}https://${PIPELINE_ARTIFACTS_BASE}/${MINIO_ARTIFACT_NAME}.tar.zst -S --progress=dot:giga -O- | tar --zstd -x
     - echo -e "\e[0Ksection_end:$(date +%s):artifacts_download\r\e[0K"
   artifacts:
     when: always
@@ -181,11 +192,6 @@
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     FDO_CI_CONCURRENT: 0 # Default to number of CPUs
 
-.baremetal-skqp-test:
-  variables:
-    HWCI_START_XORG: 1
-    HWCI_TEST_SCRIPT: "/install/skqp-runner.sh"
-
 # For Valve's bare-metal testing farm jobs.
 .b2c-test:
   # It would be nice to use ci-templates within Mesa CI for this job's
@@ -205,7 +211,7 @@
     GIT_STRATEGY: none
     # boot2container initrd configuration parameters.
     B2C_KERNEL_URL: 'https://gitlab.freedesktop.org/mupuf/valve-infra/-/package_files/144/download'  # 5.17.1
-    B2C_INITRAMFS_URL: 'https://gitlab.freedesktop.org/mupuf/boot2container/-/releases/v0.9.6/downloads/initramfs.linux_amd64.cpio.xz'
+    B2C_INITRAMFS_URL: 'https://gitlab.freedesktop.org/mupuf/boot2container/-/releases/v0.9.8/downloads/initramfs.linux_amd64.cpio.xz'
     B2C_JOB_SUCCESS_REGEX: '\[.*\]: Execution is over, pipeline status: 0\r$'
     B2C_JOB_WARN_REGEX: '\*ERROR\* ring .* timeout, but soft recovered'
     B2C_LOG_LEVEL: 6

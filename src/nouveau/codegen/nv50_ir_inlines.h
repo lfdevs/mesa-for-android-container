@@ -129,6 +129,16 @@ static inline bool isSignedIntType(DataType ty)
    return (ty == TYPE_S8 || ty == TYPE_S16 || ty == TYPE_S32 || ty == TYPE_S64);
 }
 
+static inline bool isUnsignedIntType(DataType ty)
+{
+   return (ty == TYPE_U8 || ty == TYPE_U16 || ty == TYPE_U32 || ty == TYPE_U64);
+}
+
+static inline bool isIntType(DataType ty)
+{
+   return (isSignedIntType(ty) || isUnsignedIntType(ty));
+}
+
 static inline bool isSignedType(DataType ty)
 {
    switch (ty) {

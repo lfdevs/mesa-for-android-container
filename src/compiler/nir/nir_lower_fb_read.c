@@ -46,9 +46,26 @@
  * hidden texture to read from the fb.
  */
 
-static void
-lower_fb_read(nir_builder *b, nir_intrinsic_instr *intr)
+static bool
+nir_lower_fb_read_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
 {
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   if (intr->intrinsic != nir_intrinsic_load_output)
+      return false;
+
+   /* TODO KHR_blend_equation_advanced is limited to non-MRT
+    * scenarios.. but possible there are other extensions
+    * where this pass would be useful that do support MRT?
+    *
+    * I guess for now I'll leave that as an exercise for the
+    * reader.
+    */
+   if (nir_intrinsic_base(intr) != 0 || nir_src_as_uint(intr->src[0]) != 0)
+      return false;
+
    b->cursor = nir_before_instr(&intr->instr);
 
    nir_ssa_def *fragcoord = nir_load_frag_coord(b);
@@ -70,52 +87,17 @@ lower_fb_read(nir_builder *b, nir_intrinsic_instr *intr)
    nir_builder_instr_insert(b, &tex->instr);
 
    nir_ssa_def_rewrite_uses(&intr->dest.ssa, &tex->dest.ssa);
+
+   return true;
 }
 
 bool
 nir_lower_fb_read(nir_shader *shader)
 {
-   bool progress = false;
-
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
-   nir_foreach_function(function, shader) {
-      nir_function_impl *impl = function->impl;
-
-      if (!impl)
-         continue;
-
-      nir_foreach_block(block, impl) {
-         nir_foreach_instr_safe(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-
-            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-            if (intr->intrinsic != nir_intrinsic_load_output)
-               continue;
-
-            /* TODO KHR_blend_equation_advanced is limited to non-MRT
-             * scenarios.. but possible there are other extensions
-             * where this pass would be useful that do support MRT?
-             *
-             * I guess for now I'll leave that as an exercise for the
-             * reader.
-             */
-            if (nir_intrinsic_base(intr) != 0 ||
-                nir_src_as_uint(intr->src[0]) != 0)
-               continue;
-
-            nir_builder b;
-            nir_builder_init(&b, impl);
-            lower_fb_read(&b, intr);
-            progress = true;
-         }
-      }
-
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
-
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, nir_lower_fb_read_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

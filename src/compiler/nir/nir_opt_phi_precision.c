@@ -249,14 +249,12 @@ try_move_narrowing_dst(nir_builder *b, nir_phi_instr *phi)
     */
    nir_foreach_use (use, &phi->dest.ssa) {
       /* We've previously established that all the uses were alu
-       * conversion ops:
+       * conversion ops.  Turn them into movs instead.
        */
       nir_alu_instr *alu = nir_instr_as_alu(use->parent_instr);
-
-      assert(alu->dest.dest.is_ssa);
-
-      nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa, &new_phi->dest.ssa);
+      alu->op = nir_op_mov;
    }
+   nir_ssa_def_rewrite_uses(&phi->dest.ssa, &new_phi->dest.ssa);
 
    /* And finally insert the new phi after all sources are in place: */
    b->cursor = nir_after_instr(&phi->instr);

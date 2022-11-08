@@ -24,6 +24,10 @@
 #ifndef INTEL_GEM_H
 #define INTEL_GEM_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "drm-uapi/i915_drm.h"
 
 #include <assert.h>
@@ -33,6 +37,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+
+#include "intel_engine.h"
 
 static inline uint64_t
 intel_canonical_address(uint64_t v)
@@ -74,19 +80,6 @@ intel_ioctl(int fd, unsigned long request, void *arg)
         ret = ioctl(fd, request, arg);
     } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
     return ret;
-}
-
-static inline uint64_t
-intel_read_gpu_timestamp(int fd)
-{
-   struct drm_i915_reg_read reg_read = {};
-   const uint64_t render_ring_timestamp = 0x2358;
-   reg_read.offset = render_ring_timestamp | I915_REG_READ_8B_WA;
-
-   if (intel_ioctl(fd, DRM_IOCTL_I915_REG_READ, &reg_read) < 0)
-      return 0;
-
-   return reg_read.val;
 }
 
 /**
@@ -165,10 +158,31 @@ intel_i915_query_alloc(int fd, uint64_t query_id, int32_t *query_length)
 
 bool intel_gem_supports_syncobj_wait(int fd);
 
-int intel_gem_count_engines(const struct drm_i915_query_engine_info *info,
-                            enum drm_i915_gem_engine_class engine_class);
 int intel_gem_create_context_engines(int fd,
-                                     const struct drm_i915_query_engine_info *info,
-                                     int num_engines, uint16_t *engine_classes);
+                                     const struct intel_query_engine_info *info,
+                                     int num_engines, enum intel_engine_class *engine_classes);
+
+bool intel_gem_read_render_timestamp(int fd, uint64_t *value);
+
+#ifdef __cplusplus
+}
+#endif
+
+bool intel_gem_supports_protected_context(int fd);
+
+static inline void
+intel_gem_add_ext(__u64 *ptr, uint32_t ext_name,
+                  struct i915_user_extension *ext)
+{
+   __u64 *iter = ptr;
+
+   while (*iter != 0) {
+      iter = (__u64 *) &((struct i915_user_extension *)(uintptr_t)*iter)->next_extension;
+   }
+
+   ext->name = ext_name;
+
+   *iter = (uintptr_t) ext;
+}
 
 #endif /* INTEL_GEM_H */

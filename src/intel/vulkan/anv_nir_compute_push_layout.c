@@ -84,7 +84,6 @@ anv_nir_compute_push_layout(nir_shader *nir,
    const bool has_push_intrinsic = push_start <= push_end;
 
    const bool push_ubo_ranges =
-      pdevice->info.verx10 >= 75 &&
       has_const_ubo && nir->info.stage != MESA_SHADER_COMPUTE &&
       !brw_shader_stage_requires_bindless_resources(nir->info.stage);
 

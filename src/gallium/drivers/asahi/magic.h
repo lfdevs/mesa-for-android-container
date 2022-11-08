@@ -36,6 +36,7 @@ demo_cmdbuf(uint64_t *buf, size_t size,
             uint32_t pipeline_load,
             uint32_t pipeline_store,
             bool clear_pipeline_textures,
+            unsigned clear_buffers,
             double clear_depth,
             unsigned clear_stencil);
 

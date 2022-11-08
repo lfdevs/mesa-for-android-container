@@ -186,21 +186,21 @@ gem_mmap(int fd, uint32_t handle, uint64_t offset, uint64_t size)
    return (void *)(uintptr_t) mmap.addr_ptr;
 }
 
-static enum drm_i915_gem_engine_class
+static enum intel_engine_class
 engine_class_from_ring_flag(uint32_t ring_flag)
 {
    switch (ring_flag) {
    case I915_EXEC_DEFAULT:
    case I915_EXEC_RENDER:
-      return I915_ENGINE_CLASS_RENDER;
+      return INTEL_ENGINE_CLASS_RENDER;
    case I915_EXEC_BSD:
-      return I915_ENGINE_CLASS_VIDEO;
+      return INTEL_ENGINE_CLASS_VIDEO;
    case I915_EXEC_BLT:
-      return I915_ENGINE_CLASS_COPY;
+      return INTEL_ENGINE_CLASS_COPY;
    case I915_EXEC_VEBOX:
-      return I915_ENGINE_CLASS_VIDEO_ENHANCE;
+      return INTEL_ENGINE_CLASS_VIDEO_ENHANCE;
    default:
-      return I915_ENGINE_CLASS_INVALID;
+      return INTEL_ENGINE_CLASS_INVALID;
    }
 }
 

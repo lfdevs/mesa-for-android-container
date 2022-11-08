@@ -225,25 +225,42 @@ is_not_const_zero(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
    return true;
 }
 
-/** Is value unsigned less than 0xfffc07fc? */
+/** Is value unsigned less than the limit? */
 static inline bool
-is_ult_0xfffc07fc(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
-                  unsigned src, unsigned num_components,
-                  const uint8_t *swizzle)
+is_ult(const nir_alu_instr *instr, unsigned src, unsigned num_components, const uint8_t *swizzle,
+       uint64_t limit)
 {
    /* only constant srcs: */
    if (!nir_src_is_const(instr->src[src].src))
       return false;
 
    for (unsigned i = 0; i < num_components; i++) {
-      const unsigned val =
+      const uint64_t val =
          nir_src_comp_as_uint(instr->src[src].src, swizzle[i]);
 
-      if (val >= 0xfffc07fcU)
+      if (val >= limit)
          return false;
    }
 
    return true;
+}
+
+/** Is value unsigned less than 32? */
+static inline bool
+is_ult_32(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
+          unsigned src, unsigned num_components,
+          const uint8_t *swizzle)
+{
+   return is_ult(instr, src, num_components, swizzle, 32);
+}
+
+/** Is value unsigned less than 0xfffc07fc? */
+static inline bool
+is_ult_0xfffc07fc(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
+                  unsigned src, unsigned num_components,
+                  const uint8_t *swizzle)
+{
+   return is_ult(instr, src, num_components, swizzle, 0xfffc07fcU);
 }
 
 /** Is the first 5 bits of value unsigned greater than or equal 2? */
@@ -400,6 +417,28 @@ is_only_used_as_float(const nir_alu_instr *instr)
       nir_alu_type type = nir_op_infos[user_alu->op].input_types[index];
       if (nir_alu_type_get_base_type(type) != nir_type_float)
          return false;
+   }
+
+   return true;
+}
+
+static inline bool
+is_only_used_by_fadd(const nir_alu_instr *instr)
+{
+   nir_foreach_use(src, &instr->dest.dest.ssa) {
+      const nir_instr *const user_instr = src->parent_instr;
+      if (user_instr->type != nir_instr_type_alu)
+         return false;
+
+      const nir_alu_instr *const user_alu = nir_instr_as_alu(user_instr);
+      assert(instr != user_alu);
+
+      if (user_alu->op == nir_op_fneg || user_alu->op == nir_op_fabs) {
+         if (!is_only_used_by_fadd(user_alu))
+            return false;
+      } else if (user_alu->op != nir_op_fadd) {
+         return false;
+      }
    }
 
    return true;

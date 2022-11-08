@@ -3,9 +3,8 @@ version: 1
 # Rules to match for a machine to qualify
 target:
 {% if tags %}
-{% set b2ctags = tags.split(',') %}
   tags:
-{% for tag in b2ctags %}
+{% for tag in tags %}
     - '{{ tag | trim }}'
 {% endfor %}
 {% endif %}

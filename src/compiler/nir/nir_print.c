@@ -1244,6 +1244,9 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
    case nir_texop_fragment_mask_fetch_amd:
       fprintf(fp, "fragment_mask_fetch_amd ");
       break;
+   case nir_texop_descriptor_amd:
+      fprintf(fp, "descriptor_amd ");
+      break;
    default:
       unreachable("Invalid texture operation");
       break;
@@ -1550,6 +1553,20 @@ print_if(nir_if *if_stmt, print_state *state, unsigned tabs)
    print_tabs(tabs, fp);
    fprintf(fp, "if ");
    print_src(&if_stmt->condition, state);
+   switch (if_stmt->control) {
+   case nir_selection_control_flatten:
+      fprintf(fp, " /* flatten */");
+      break;
+   case nir_selection_control_dont_flatten:
+      fprintf(fp, " /* don't flatten */");
+      break;
+   case nir_selection_control_divergent_always_taken:
+      fprintf(fp, " /* divergent always taken */");
+      break;
+   case nir_selection_control_none:
+   default:
+      break;
+   }
    fprintf(fp, " {\n");
    foreach_list_typed(nir_cf_node, node, node, &if_stmt->then_list) {
       print_cf_node(node, state, tabs + 1);
@@ -1801,7 +1818,27 @@ nir_print_instr(const nir_instr *instr, FILE *fp)
    }
 
    print_instr(instr, &state, 0);
+}
 
+char *
+nir_instr_as_str(const nir_instr *instr, void *mem_ctx)
+{
+   char *stream_data = NULL;
+   size_t stream_size = 0;
+   struct u_memstream mem;
+   if (u_memstream_open(&mem, &stream_data, &stream_size)) {
+      FILE *const stream = u_memstream_get(&mem);
+      nir_print_instr(instr, stream);
+      u_memstream_close(&mem);
+   }
+
+   char *str = ralloc_size(mem_ctx, stream_size + 1);
+   memcpy(str, stream_data, stream_size);
+   str[stream_size] = '\0';
+
+   free(stream_data);
+
+   return str;
 }
 
 void

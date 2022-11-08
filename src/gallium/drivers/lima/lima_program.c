@@ -311,7 +311,7 @@ lima_fs_compile_shader(struct lima_context *ctx,
    if (lima_debug & LIMA_DEBUG_PP)
       nir_print_shader(nir, stdout);
 
-   if (!ppir_compile_nir(fs, nir, screen->pp_ra, &ctx->debug)) {
+   if (!ppir_compile_nir(fs, nir, screen->pp_ra, &ctx->base.debug)) {
       ralloc_free(nir);
       return false;
    }
@@ -487,7 +487,7 @@ lima_vs_compile_shader(struct lima_context *ctx,
    if (lima_debug & LIMA_DEBUG_GP)
       nir_print_shader(nir, stdout);
 
-   if (!gpir_compile_nir(vs, nir, &ctx->debug)) {
+   if (!gpir_compile_nir(vs, nir, &ctx->base.debug)) {
       ralloc_free(nir);
       return false;
    }

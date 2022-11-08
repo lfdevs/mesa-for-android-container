@@ -41,8 +41,7 @@ unsigned fd6_tile_mode(const struct pipe_resource *tmpl);
  */
 
 void fd6_clear_surface(struct fd_context *ctx, struct fd_ringbuffer *ring,
-                       struct pipe_surface *psurf, uint32_t width,
-                       uint32_t height,
+                       struct pipe_surface *psurf, const struct pipe_box *box2d,
                        union pipe_color_union *color, uint32_t unknown_8c01) assert_dt;
 void fd6_resolve_tile(struct fd_batch *batch, struct fd_ringbuffer *ring,
                       uint32_t base, struct pipe_surface *psurf, uint32_t unknown_8c01) assert_dt;

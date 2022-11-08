@@ -35,7 +35,7 @@ bo_allocate(struct virtio_bo *virtio_bo)
       };
       int ret;
 
-      ret = drmIoctl(bo->dev->fd, DRM_IOCTL_VIRTGPU_MAP, &req);
+      ret = virtio_ioctl(bo->dev->fd, VIRTGPU_MAP, &req);
       if (ret) {
          ERROR_MSG("alloc failed: %s", strerror(errno));
          return ret;
@@ -52,9 +52,23 @@ virtio_bo_offset(struct fd_bo *bo, uint64_t *offset)
 {
    struct virtio_bo *virtio_bo = to_virtio_bo(bo);
    int ret = bo_allocate(virtio_bo);
+
    if (ret)
       return ret;
+
+   /* If we have uploaded, we need to wait for host to handle that
+    * before we can allow guest-side CPU access:
+    */
+   if (virtio_bo->has_upload_seqno) {
+      virtio_bo->has_upload_seqno = false;
+      virtio_execbuf_flush(bo->dev);
+      virtio_host_sync(bo->dev, &(struct msm_ccmd_req) {
+         .seqno = virtio_bo->upload_seqno,
+      });
+   }
+
    *offset = virtio_bo->offset;
+
    return 0;
 }
 
@@ -67,7 +81,7 @@ virtio_bo_cpu_prep_guest(struct fd_bo *bo)
    int ret;
 
    /* Side note, this ioctl is defined as IO_WR but should be IO_W: */
-   ret = drmIoctl(bo->dev->fd, DRM_IOCTL_VIRTGPU_WAIT, &args);
+   ret = virtio_ioctl(bo->dev->fd, VIRTGPU_WAIT, &args);
    if (ret && errno == EBUSY)
       return -EBUSY;
 
@@ -186,12 +200,13 @@ static void
 bo_upload(struct fd_bo *bo, unsigned off, void *src, unsigned len)
 {
    unsigned req_len = sizeof(struct msm_ccmd_gem_upload_req) + align(len, 4);
+   struct virtio_bo *virtio_bo = to_virtio_bo(bo);
 
    uint8_t buf[req_len];
    struct msm_ccmd_gem_upload_req *req = (void *)buf;
 
    req->hdr = MSM_CCMD(GEM_UPLOAD, req_len);
-   req->res_id = to_virtio_bo(bo)->res_id;
+   req->res_id = virtio_bo->res_id;
    req->pad = 0;
    req->off = off;
    req->len = len;
@@ -199,12 +214,14 @@ bo_upload(struct fd_bo *bo, unsigned off, void *src, unsigned len)
    memcpy(req->payload, src, len);
 
    virtio_execbuf(bo->dev, &req->hdr, false);
+
+   virtio_bo->upload_seqno = req->hdr.seqno;
+   virtio_bo->has_upload_seqno = true;
 }
 
 static void
-virtio_bo_upload(struct fd_bo *bo, void *src, unsigned len)
+virtio_bo_upload(struct fd_bo *bo, void *src, unsigned off, unsigned len)
 {
-   unsigned off = 0;
    while (len > 0) {
       unsigned sz = MIN2(len, 0x1000);
       bo_upload(bo, off, src, sz);
@@ -212,6 +229,33 @@ virtio_bo_upload(struct fd_bo *bo, void *src, unsigned len)
       src += sz;
       len -= sz;
    }
+}
+
+/**
+ * For recently allocated buffers, an immediate mmap would stall waiting
+ * for the host to handle the allocation and map to the guest, which
+ * could take a few ms.  So for small transfers to recently allocated
+ * buffers, we'd prefer to use the upload path instead.
+ */
+static bool
+virtio_bo_prefer_upload(struct fd_bo *bo, unsigned len)
+{
+   struct virtio_bo *virtio_bo = to_virtio_bo(bo);
+
+   /* If we've already taken the hit of mmap'ing the buffer, then no reason
+    * to take the upload path:
+    */
+   if (bo->map)
+      return false;
+
+   if (len > 0x4000)
+      return false;
+
+   int64_t age_ns = os_time_get_nano() - virtio_bo->alloc_time_ns;
+   if (age_ns > 5000000)
+      return false;
+
+   return true;
 }
 
 static void
@@ -255,6 +299,7 @@ static const struct fd_bo_funcs funcs = {
    .iova = virtio_bo_iova,
    .set_name = virtio_bo_set_name,
    .upload = virtio_bo_upload,
+   .prefer_upload = virtio_bo_prefer_upload,
    .destroy = virtio_bo_destroy,
 };
 
@@ -267,6 +312,8 @@ bo_from_handle(struct fd_device *dev, uint32_t size, uint32_t handle)
    virtio_bo = calloc(1, sizeof(*virtio_bo));
    if (!virtio_bo)
       return NULL;
+
+   virtio_bo->alloc_time_ns = os_time_get_nano();
 
    bo = &virtio_bo->base;
 
@@ -288,7 +335,7 @@ bo_from_handle(struct fd_device *dev, uint32_t size, uint32_t handle)
    };
    int ret;
 
-   ret = drmCommandWriteRead(dev->fd, DRM_VIRTGPU_RESOURCE_INFO, &args, sizeof(args));
+   ret = virtio_ioctl(dev->fd, VIRTGPU_RESOURCE_INFO, &args);
    if (ret) {
       INFO_MSG("failed to get resource info: %s", strerror(errno));
       free(virtio_bo);
@@ -383,7 +430,7 @@ virtio_bo_new(struct fd_device *dev, uint32_t size, uint32_t flags)
    simple_mtx_lock(&virtio_dev->eb_lock);
    if (args.cmd)
       req.hdr.seqno = ++virtio_dev->next_seqno;
-   ret = drmIoctl(dev->fd, DRM_IOCTL_VIRTGPU_RESOURCE_CREATE_BLOB, &args);
+   ret = virtio_ioctl(dev->fd, VIRTGPU_RESOURCE_CREATE_BLOB, &args);
    simple_mtx_unlock(&virtio_dev->eb_lock);
    if (ret)
       goto fail;

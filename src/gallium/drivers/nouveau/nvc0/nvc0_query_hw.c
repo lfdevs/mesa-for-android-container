@@ -44,7 +44,7 @@ nvc0_hw_query_allocate(struct nvc0_context *nvc0, struct nvc0_query *q,
          if (hq->state == NVC0_HW_QUERY_STATE_READY)
             nouveau_mm_free(hq->mm);
          else
-            nouveau_fence_work(screen->base.fence.current,
+            nouveau_fence_work(nvc0->base.fence,
                                nouveau_mm_free_work, hq->mm);
       }
    }
@@ -55,7 +55,7 @@ nvc0_hw_query_allocate(struct nvc0_context *nvc0, struct nvc0_query *q,
          return false;
       hq->offset = hq->base_offset;
 
-      ret = nouveau_bo_map(hq->bo, 0, nvc0->base.client);
+      ret = BO_MAP(&screen->base, hq->bo, 0, nvc0->base.client);
       if (ret) {
          nvc0_hw_query_allocate(nvc0, q, 0);
          return false;
@@ -74,7 +74,7 @@ nvc0_hw_query_get(struct nouveau_pushbuf *push, struct nvc0_query *q,
    offset += hq->offset;
 
    PUSH_SPACE(push, 5);
-   PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_WR);
+   PUSH_REF1 (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_WR);
    BEGIN_NVC0(push, NVC0_3D(QUERY_ADDRESS_HIGH), 4);
    PUSH_DATAh(push, hq->bo->offset + offset);
    PUSH_DATA (push, hq->bo->offset + offset);
@@ -129,8 +129,8 @@ nvc0_hw_query_write_compute_invocations(struct nvc0_context *nvc0,
 {
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
 
-   nouveau_pushbuf_space(push, 16, 0, 8);
-   PUSH_REFN(push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_WR);
+   PUSH_SPACE_EX(push, 16, 0, 8);
+   PUSH_REF1(push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_WR);
    BEGIN_1IC0(push, NVC0_3D(MACRO_COMPUTE_COUNTER_TO_QUERY), 4);
    PUSH_DATA (push, nvc0->compute_invocations);
    PUSH_DATAh(push, nvc0->compute_invocations);
@@ -301,7 +301,7 @@ nvc0_hw_end_query(struct nvc0_context *nvc0, struct nvc0_query *q)
       break;
    }
    if (hq->is64bit)
-      nouveau_fence_ref(nvc0->screen->base.fence.current, &hq->fence);
+      nouveau_fence_ref(nvc0->base.fence, &hq->fence);
 }
 
 static bool
@@ -330,7 +330,7 @@ nvc0_hw_get_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
          }
          return false;
       }
-      if (nouveau_bo_wait(hq->bo, NOUVEAU_BO_RD, nvc0->base.client))
+      if (BO_WAIT(&nvc0->screen->base, hq->bo, NOUVEAU_BO_RD, nvc0->base.client))
          return false;
       NOUVEAU_DRV_STAT(&nvc0->screen->base, query_sync_count, 1);
    }
@@ -412,7 +412,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
       util_range_add(&buf->base, &buf->valid_buffer_range, offset,
                      offset + (result_type >= PIPE_QUERY_TYPE_I64 ? 8 : 4));
 
-      nvc0_resource_validate(buf, NOUVEAU_BO_WR);
+      nvc0_resource_validate(nvc0, buf, NOUVEAU_BO_WR);
 
       return;
    }
@@ -420,7 +420,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    /* If the fence guarding this query has not been emitted, that makes a lot
     * of the following logic more complicated.
     */
-   if (hq->is64bit && hq->fence->state < NOUVEAU_FENCE_STATE_EMITTED)
+   if (hq->is64bit)
       nouveau_fence_emit(hq->fence);
 
    /* We either need to compute a 32- or 64-bit difference between 2 values,
@@ -435,9 +435,9 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    if ((flags & PIPE_QUERY_WAIT) && hq->state != NVC0_HW_QUERY_STATE_READY)
       nvc0_hw_query_fifo_wait(nvc0, q);
 
-   nouveau_pushbuf_space(push, 32, 2, 3);
-   PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
-   PUSH_REFN (push, buf->bo, buf->domain | NOUVEAU_BO_WR);
+   PUSH_SPACE_EX(push, 32, 2, 3);
+   PUSH_REF1 (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
+   PUSH_REF1 (push, buf->bo, buf->domain | NOUVEAU_BO_WR);
    BEGIN_1IC0(push, NVC0_3D(MACRO_QUERY_BUFFER_WRITE), 9);
    switch (q->type) {
    case PIPE_QUERY_OCCLUSION_PREDICATE:
@@ -511,7 +511,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    util_range_add(&buf->base, &buf->valid_buffer_range, offset,
                   offset + (result_type >= PIPE_QUERY_TYPE_I64 ? 8 : 4));
 
-   nvc0_resource_validate(buf, NOUVEAU_BO_WR);
+   nvc0_resource_validate(nvc0, buf, NOUVEAU_BO_WR);
 }
 
 static const struct nvc0_query_funcs hw_query_funcs = {
@@ -629,7 +629,7 @@ nvc0_hw_query_pushbuf_submit(struct nouveau_pushbuf *push,
 {
    struct nvc0_hw_query *hq = nvc0_hw_query(q);
 
-   PUSH_REFN(push, hq->bo, NOUVEAU_BO_RD | NOUVEAU_BO_GART);
+   PUSH_REF1(push, hq->bo, NOUVEAU_BO_RD | NOUVEAU_BO_GART);
    nouveau_pushbuf_data(push, hq->bo, hq->offset + result_offset, 4 |
                         NVC0_IB_ENTRY_1_NO_PREFETCH);
 }
@@ -642,11 +642,11 @@ nvc0_hw_query_fifo_wait(struct nvc0_context *nvc0, struct nvc0_query *q)
    unsigned offset = hq->offset;
 
    /* ensure the query's fence has been emitted */
-   if (hq->is64bit && hq->fence->state < NOUVEAU_FENCE_STATE_EMITTED)
+   if (hq->is64bit)
       nouveau_fence_emit(hq->fence);
 
    PUSH_SPACE(push, 5);
-   PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
+   PUSH_REF1 (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
    BEGIN_NVC0(push, SUBC_3D(NV84_SUBCHAN_SEMAPHORE_ADDRESS_HIGH), 4);
    if (hq->is64bit) {
       PUSH_DATAh(push, nvc0->screen->fence.bo->offset);

@@ -40,13 +40,31 @@ static struct pb_buffer *radeon_jpeg_get_decode_param(struct radeon_decoder *dec
                                                       struct pipe_picture_desc *picture)
 {
    struct si_texture *luma = (struct si_texture *)((struct vl_video_buffer *)target)->resources[0];
-   struct si_texture *chroma =
-      (struct si_texture *)((struct vl_video_buffer *)target)->resources[1];
+   struct si_texture *chroma, *chromav;
 
    dec->jpg.bsd_size = align(dec->bs_size, 128);
    dec->jpg.dt_luma_top_offset = luma->surface.u.gfx9.surf_offset;
-   if (target->buffer_format == PIPE_FORMAT_NV12)
-      dec->jpg.dt_chroma_top_offset = chroma->surface.u.gfx9.surf_offset;
+   dec->jpg.dt_chroma_top_offset = 0;
+   dec->jpg.dt_chromav_top_offset = 0;
+
+   switch (target->buffer_format) {
+      case PIPE_FORMAT_IYUV:
+      case PIPE_FORMAT_YV12:
+      case PIPE_FORMAT_Y8_U8_V8_444_UNORM:
+         chromav = (struct si_texture *)((struct vl_video_buffer *)target)->resources[2];
+         dec->jpg.dt_chromav_top_offset = chromav->surface.u.gfx9.surf_offset;
+         chroma = (struct si_texture *)((struct vl_video_buffer*)target)->resources[1];
+         dec->jpg.dt_chroma_top_offset = chroma->surface.u.gfx9.surf_offset;
+         break;
+      case PIPE_FORMAT_NV12:
+      case PIPE_FORMAT_P010:
+      case PIPE_FORMAT_P016:
+         chroma = (struct si_texture *)((struct vl_video_buffer*)target)->resources[1];
+         dec->jpg.dt_chroma_top_offset = chroma->surface.u.gfx9.surf_offset;
+         break;
+      default:
+         break;
+   }
    dec->jpg.dt_pitch = luma->surface.u.gfx9.surf_pitch * luma->surface.blk_w;
    dec->jpg.dt_uv_pitch = dec->jpg.dt_pitch / 2;
 
@@ -249,6 +267,10 @@ static void send_cmd_target_direct(struct radeon_decoder *dec, struct pb_buffer 
    set_reg_jpeg(dec, vcnipUVD_JPEG_DATA, COND0, TYPE0, dec->jpg.dt_luma_top_offset);
    set_reg_jpeg(dec, vcnipUVD_JPEG_INDEX, COND0, TYPE0, 1);
    set_reg_jpeg(dec, vcnipUVD_JPEG_DATA, COND0, TYPE0, dec->jpg.dt_chroma_top_offset);
+   if (dec->jpg.dt_chromav_top_offset) {
+      set_reg_jpeg(dec, vcnipUVD_JPEG_INDEX, COND0, TYPE0, 2);
+      set_reg_jpeg(dec, vcnipUVD_JPEG_DATA, COND0, TYPE0, dec->jpg.dt_chromav_top_offset);
+   }
    set_reg_jpeg(dec, vcnipUVD_JPEG_TIER_CNTL2, COND0, 0, 0);
 
    // set output buffer read pointer

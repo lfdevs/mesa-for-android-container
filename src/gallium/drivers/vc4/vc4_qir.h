@@ -464,6 +464,7 @@ struct vc4_compile {
         struct qreg undef;
         enum qstage stage;
         uint32_t num_temps;
+        uint32_t max_reg_pressure;
 
         struct list_head blocks;
         int next_block_index;
@@ -766,14 +767,6 @@ qir_PACK_8888_F(struct vc4_compile *c, struct qreg val)
         struct qreg dest = qir_MMOV(c, val);
         c->defs[dest.index]->dst.pack = QPU_PACK_MUL_8888;
         return dest;
-}
-
-static inline struct qreg
-qir_POW(struct vc4_compile *c, struct qreg x, struct qreg y)
-{
-        return qir_EXP2(c, qir_FMUL(c,
-                                    y,
-                                    qir_LOG2(c, x)));
 }
 
 static inline void

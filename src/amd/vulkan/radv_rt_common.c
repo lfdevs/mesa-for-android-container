@@ -99,8 +99,8 @@ intersect_ray_amd_software_box(struct radv_device *device, nir_builder *b, nir_s
    for (int i = 0; i < 4; i++) {
       const uint32_t child_offset = offsetof(struct radv_bvh_box32_node, children[i]);
       const uint32_t coord_offsets[2] = {
-         offsetof(struct radv_bvh_box32_node, coords[i][0][0]),
-         offsetof(struct radv_bvh_box32_node, coords[i][1][0]),
+         offsetof(struct radv_bvh_box32_node, coords[i].min.x),
+         offsetof(struct radv_bvh_box32_node, coords[i].max.x),
       };
 
       /* node->children[i] -> uint */
@@ -375,18 +375,6 @@ nir_build_vec3_mat_mult(nir_builder *b, nir_ssa_def *vec, nir_ssa_def *matrix[],
    return nir_vec(b, result_components, 3);
 }
 
-nir_ssa_def *
-nir_build_vec3_mat_mult_pre(nir_builder *b, nir_ssa_def *vec, nir_ssa_def *matrix[])
-{
-   nir_ssa_def *result_components[3] = {
-      nir_channel(b, matrix[0], 3),
-      nir_channel(b, matrix[1], 3),
-      nir_channel(b, matrix[2], 3),
-   };
-   return nir_build_vec3_mat_mult(b, nir_fsub(b, vec, nir_vec(b, result_components, 3)), matrix,
-                                  false);
-}
-
 void
 nir_build_wto_matrix_load(nir_builder *b, nir_ssa_def *instance_addr, nir_ssa_def **out)
 {
@@ -432,4 +420,353 @@ create_bvh_descriptor(nir_builder *b)
    return nir_imm_ivec4(
       b, 0, 1u << 31 /* Enable box sorting */, (bvh_size - 1) & 0xFFFFFFFFu,
       ((bvh_size - 1) >> 32) | (1u << 24 /* Return IJ for triangles */) | (1u << 31));
+}
+
+static void
+insert_traversal_triangle_case(struct radv_device *device, nir_builder *b,
+                               const struct radv_ray_traversal_args *args, nir_ssa_def *result,
+                               nir_ssa_def *bvh_node)
+{
+   if (!args->triangle_cb)
+      return;
+
+   struct radv_triangle_intersection intersection;
+   intersection.t = nir_channel(b, result, 0);
+   nir_ssa_def *div = nir_channel(b, result, 1);
+   intersection.t = nir_fdiv(b, intersection.t, div);
+
+   nir_push_if(b, nir_flt(b, intersection.t, nir_load_deref(b, args->vars.tmax)));
+   {
+      intersection.frontface = nir_flt(b, nir_imm_float(b, 0), div);
+      nir_ssa_def *switch_ccw =
+         nir_test_mask(b, nir_load_deref(b, args->vars.sbt_offset_and_flags),
+                       VK_GEOMETRY_INSTANCE_TRIANGLE_FLIP_FACING_BIT_KHR << 24);
+      intersection.frontface = nir_ixor(b, intersection.frontface, switch_ccw);
+
+      nir_ssa_def *not_cull =
+         nir_inot(b, nir_test_mask(b, args->flags, SpvRayFlagsSkipTrianglesKHRMask));
+      nir_ssa_def *not_facing_cull =
+         nir_ieq_imm(b,
+                     nir_iand(b, args->flags,
+                              nir_bcsel(b, intersection.frontface,
+                                        nir_imm_int(b, SpvRayFlagsCullFrontFacingTrianglesKHRMask),
+                                        nir_imm_int(b, SpvRayFlagsCullBackFacingTrianglesKHRMask))),
+                     0);
+
+      not_cull = nir_iand(
+         b, not_cull,
+         nir_ior(b, not_facing_cull,
+                 nir_test_mask(b, nir_load_deref(b, args->vars.sbt_offset_and_flags),
+                               VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR << 24)));
+
+      nir_push_if(b, nir_iand(b,
+
+                              nir_flt(b, args->tmin, intersection.t), not_cull));
+      {
+         intersection.base.node_addr = build_node_to_addr(device, b, bvh_node);
+         nir_ssa_def *triangle_info = nir_build_load_global(
+            b, 2, 32,
+            nir_iadd_imm(b, intersection.base.node_addr,
+                         offsetof(struct radv_bvh_triangle_node, triangle_id)));
+         intersection.base.primitive_id = nir_channel(b, triangle_info, 0);
+         intersection.base.geometry_id_and_flags = nir_channel(b, triangle_info, 1);
+         intersection.base.opaque =
+            hit_is_opaque(b, nir_load_deref(b, args->vars.sbt_offset_and_flags), args->flags,
+                          intersection.base.geometry_id_and_flags);
+
+         not_cull = nir_ieq_imm(b,
+                                nir_iand(b, args->flags,
+                                         nir_bcsel(b, intersection.base.opaque,
+                                                   nir_imm_int(b, SpvRayFlagsCullOpaqueKHRMask),
+                                                   nir_imm_int(b, SpvRayFlagsCullNoOpaqueKHRMask))),
+                                0);
+         nir_push_if(b, not_cull);
+         {
+            nir_ssa_def *divs[2] = {div, div};
+            intersection.barycentrics =
+               nir_fdiv(b, nir_channels(b, result, 0xc), nir_vec(b, divs, 2));
+
+            args->triangle_cb(b, &intersection, args);
+         }
+         nir_pop_if(b, NULL);
+      }
+      nir_pop_if(b, NULL);
+   }
+   nir_pop_if(b, NULL);
+}
+
+static void
+insert_traversal_aabb_case(struct radv_device *device, nir_builder *b,
+                           const struct radv_ray_traversal_args *args, nir_ssa_def *bvh_node)
+{
+   if (!args->aabb_cb)
+      return;
+
+   struct radv_leaf_intersection intersection;
+   intersection.node_addr = build_node_to_addr(device, b, bvh_node);
+   nir_ssa_def *triangle_info =
+      nir_build_load_global(b, 2, 32, nir_iadd_imm(b, intersection.node_addr, 24));
+   intersection.primitive_id = nir_channel(b, triangle_info, 0);
+   intersection.geometry_id_and_flags = nir_channel(b, triangle_info, 1);
+   intersection.opaque = hit_is_opaque(b, nir_load_deref(b, args->vars.sbt_offset_and_flags),
+                                       args->flags, intersection.geometry_id_and_flags);
+
+   nir_ssa_def *not_skip_aabb =
+      nir_inot(b, nir_test_mask(b, args->flags, SpvRayFlagsSkipAABBsKHRMask));
+   nir_ssa_def *not_cull = nir_iand(
+      b, not_skip_aabb,
+      nir_ieq_imm(
+         b,
+         nir_iand(b, args->flags,
+                  nir_bcsel(b, intersection.opaque, nir_imm_int(b, SpvRayFlagsCullOpaqueKHRMask),
+                            nir_imm_int(b, SpvRayFlagsCullNoOpaqueKHRMask))),
+         0));
+   nir_push_if(b, not_cull);
+   {
+      args->aabb_cb(b, &intersection, args);
+   }
+   nir_pop_if(b, NULL);
+}
+
+static nir_ssa_def *
+fetch_parent_node(nir_builder *b, nir_ssa_def *bvh, nir_ssa_def *node)
+{
+   nir_ssa_def *offset = nir_iadd_imm(b, nir_imul_imm(b, nir_udiv_imm(b, node, 8), 4), 4);
+
+   return nir_build_load_global(b, 1, 32, nir_isub(b, bvh, nir_u2u64(b, offset)), .align_mul = 4);
+}
+
+nir_ssa_def *
+radv_build_ray_traversal(struct radv_device *device, nir_builder *b,
+                         const struct radv_ray_traversal_args *args)
+{
+   nir_variable *incomplete = nir_local_variable_create(b->impl, glsl_bool_type(), "incomplete");
+   nir_store_var(b, incomplete, nir_ine_imm(b, args->root_bvh_base, 0), 0x1);
+
+   nir_push_if(b, nir_load_var(b, incomplete));
+   {
+      nir_ssa_def *desc = create_bvh_descriptor(b);
+      nir_ssa_def *vec3ones = nir_imm_vec3(b, 1.0, 1.0, 1.0);
+
+      nir_push_loop(b);
+      {
+         nir_push_if(
+            b, nir_ieq_imm(b, nir_load_deref(b, args->vars.current_node), RADV_BVH_INVALID_NODE));
+         {
+            /* Early exit if we never overflowed the stack, to avoid having to backtrack to
+             * the root for no reason. */
+            nir_push_if(b, nir_ilt(b, nir_load_deref(b, args->vars.stack),
+                                   nir_imm_int(b, args->stack_stride)));
+            {
+               nir_store_var(b, incomplete, nir_imm_bool(b, false), 0x1);
+               nir_jump(b, nir_jump_break);
+            }
+            nir_pop_if(b, NULL);
+
+            nir_ssa_def *stack_instance_exit = nir_ige(b, nir_load_deref(b, args->vars.top_stack),
+                                                       nir_load_deref(b, args->vars.stack));
+            nir_ssa_def *root_instance_exit =
+               nir_ieq(b, nir_load_deref(b, args->vars.previous_node),
+                       nir_load_deref(b, args->vars.instance_bottom_node));
+            nir_if *instance_exit =
+               nir_push_if(b, nir_ior(b, stack_instance_exit, root_instance_exit));
+            instance_exit->control = nir_selection_control_dont_flatten;
+            {
+               nir_store_deref(b, args->vars.top_stack, nir_imm_int(b, -1), 1);
+               nir_store_deref(b, args->vars.previous_node,
+                               nir_load_deref(b, args->vars.instance_top_node), 1);
+               nir_store_deref(b, args->vars.instance_bottom_node,
+                               nir_imm_int(b, RADV_BVH_NO_INSTANCE_ROOT), 1);
+
+               nir_store_deref(b, args->vars.bvh_base, args->root_bvh_base, 1);
+               nir_store_deref(b, args->vars.origin, args->origin, 7);
+               nir_store_deref(b, args->vars.dir, args->dir, 7);
+               nir_store_deref(b, args->vars.inv_dir, nir_fdiv(b, vec3ones, args->dir), 7);
+            }
+            nir_pop_if(b, NULL);
+
+            nir_push_if(b, nir_ige(b, nir_load_deref(b, args->vars.stack_base),
+                                   nir_load_deref(b, args->vars.stack)));
+            {
+               nir_ssa_def *prev = nir_load_deref(b, args->vars.previous_node);
+               nir_ssa_def *bvh_addr =
+                  build_node_to_addr(device, b, nir_load_deref(b, args->vars.bvh_base));
+
+               nir_ssa_def *parent = fetch_parent_node(b, bvh_addr, prev);
+               nir_push_if(b, nir_ieq(b, parent, nir_imm_int(b, RADV_BVH_INVALID_NODE)));
+               {
+                  nir_store_var(b, incomplete, nir_imm_bool(b, false), 0x1);
+                  nir_jump(b, nir_jump_break);
+               }
+               nir_pop_if(b, NULL);
+               nir_store_deref(b, args->vars.current_node, parent, 0x1);
+            }
+            nir_push_else(b, NULL);
+            {
+               nir_store_deref(
+                  b, args->vars.stack,
+                  nir_iadd_imm(b, nir_load_deref(b, args->vars.stack), -args->stack_stride), 1);
+
+               nir_ssa_def *stack_ptr =
+                  nir_umod(b, nir_load_deref(b, args->vars.stack),
+                           nir_imm_int(b, args->stack_stride * args->stack_entries));
+               nir_ssa_def *bvh_node = args->stack_load_cb(b, stack_ptr, args);
+               nir_store_deref(b, args->vars.current_node, bvh_node, 0x1);
+               nir_store_deref(b, args->vars.previous_node, nir_imm_int(b, RADV_BVH_INVALID_NODE),
+                               0x1);
+            }
+            nir_pop_if(b, NULL);
+         }
+         nir_push_else(b, NULL);
+         {
+            nir_store_deref(b, args->vars.previous_node, nir_imm_int(b, RADV_BVH_INVALID_NODE),
+                            0x1);
+         }
+         nir_pop_if(b, NULL);
+
+         nir_ssa_def *bvh_node = nir_load_deref(b, args->vars.current_node);
+
+         nir_ssa_def *prev_node = nir_load_deref(b, args->vars.previous_node);
+         nir_store_deref(b, args->vars.previous_node, bvh_node, 0x1);
+         nir_store_deref(b, args->vars.current_node, nir_imm_int(b, RADV_BVH_INVALID_NODE), 0x1);
+
+         nir_ssa_def *global_bvh_node =
+            nir_iadd(b, nir_load_deref(b, args->vars.bvh_base), nir_u2u64(b, bvh_node));
+
+         nir_ssa_def *intrinsic_result = NULL;
+         if (!radv_emulate_rt(device->physical_device)) {
+            intrinsic_result = nir_bvh64_intersect_ray_amd(
+               b, 32, desc, nir_unpack_64_2x32(b, global_bvh_node),
+               nir_load_deref(b, args->vars.tmax), nir_load_deref(b, args->vars.origin),
+               nir_load_deref(b, args->vars.dir), nir_load_deref(b, args->vars.inv_dir));
+         }
+
+         nir_push_if(b, nir_ine_imm(b, nir_iand_imm(b, bvh_node, 4), 0));
+         {
+            nir_push_if(b, nir_ine_imm(b, nir_iand_imm(b, bvh_node, 2), 0));
+            {
+               nir_push_if(b, nir_ine_imm(b, nir_iand_imm(b, bvh_node, 1), 0));
+               {
+                  insert_traversal_aabb_case(device, b, args, global_bvh_node);
+               }
+               nir_push_else(b, NULL);
+               {
+                  /* instance */
+                  nir_ssa_def *instance_node_addr = build_node_to_addr(device, b, global_bvh_node);
+                  nir_ssa_def *instance_data = nir_build_load_global(
+                     b, 4, 32, instance_node_addr, .align_mul = 64, .align_offset = 0);
+                  nir_ssa_def *instance_and_mask = nir_channel(b, instance_data, 2);
+                  nir_ssa_def *instance_mask = nir_ushr_imm(b, instance_and_mask, 24);
+
+                  nir_push_if(b, nir_ieq_imm(b, nir_iand(b, instance_mask, args->cull_mask), 0));
+                  {
+                     nir_jump(b, nir_jump_continue);
+                  }
+                  nir_pop_if(b, NULL);
+
+                  nir_ssa_def *wto_matrix[3];
+                  nir_build_wto_matrix_load(b, instance_node_addr, wto_matrix);
+
+                  nir_store_deref(b, args->vars.top_stack, nir_load_deref(b, args->vars.stack), 1);
+                  nir_store_deref(b, args->vars.bvh_base,
+                                  build_addr_to_node(
+                                     b, nir_pack_64_2x32(b, nir_channels(b, instance_data, 0x3))),
+                                  1);
+
+                  /* Push the instance root node onto the stack */
+                  nir_store_deref(b, args->vars.current_node, nir_imm_int(b, RADV_BVH_ROOT_NODE),
+                                  0x1);
+                  nir_store_deref(b, args->vars.instance_bottom_node,
+                                  nir_imm_int(b, RADV_BVH_ROOT_NODE), 1);
+                  nir_store_deref(b, args->vars.instance_top_node, bvh_node, 1);
+
+                  /* Transform the ray into object space */
+                  nir_store_deref(b, args->vars.origin,
+                                  nir_build_vec3_mat_mult(b, args->origin, wto_matrix, true), 7);
+                  nir_store_deref(b, args->vars.dir,
+                                  nir_build_vec3_mat_mult(b, args->dir, wto_matrix, false), 7);
+                  nir_store_deref(b, args->vars.inv_dir,
+                                  nir_fdiv(b, vec3ones, nir_load_deref(b, args->vars.dir)), 7);
+
+                  nir_store_deref(b, args->vars.sbt_offset_and_flags,
+                                  nir_channel(b, instance_data, 3), 1);
+                  nir_store_deref(b, args->vars.instance_addr, instance_node_addr, 1);
+               }
+               nir_pop_if(b, NULL);
+            }
+            nir_push_else(b, NULL);
+            {
+               nir_ssa_def *result = intrinsic_result;
+               if (!result) {
+                  /* If we didn't run the intrinsic cause the hardware didn't support it,
+                   * emulate ray/box intersection here */
+                  result = intersect_ray_amd_software_box(
+                     device, b, global_bvh_node, nir_load_deref(b, args->vars.tmax),
+                     nir_load_deref(b, args->vars.origin), nir_load_deref(b, args->vars.dir),
+                     nir_load_deref(b, args->vars.inv_dir));
+               }
+
+               /* box */
+               nir_push_if(b, nir_ieq_imm(b, prev_node, RADV_BVH_INVALID_NODE));
+               {
+                  nir_ssa_def *new_nodes[4];
+                  for (unsigned i = 0; i < 4; ++i)
+                     new_nodes[i] = nir_channel(b, result, i);
+
+                  for (unsigned i = 1; i < 4; ++i)
+                     nir_push_if(b, nir_ine_imm(b, new_nodes[i], RADV_BVH_INVALID_NODE));
+
+                  for (unsigned i = 4; i-- > 1;) {
+                     nir_ssa_def *stack = nir_load_deref(b, args->vars.stack);
+                     nir_ssa_def *stack_ptr = nir_umod(
+                        b, stack, nir_imm_int(b, args->stack_entries * args->stack_stride));
+                     args->stack_store_cb(b, stack_ptr, new_nodes[i], args);
+                     nir_store_deref(b, args->vars.stack,
+                                     nir_iadd_imm(b, stack, args->stack_stride), 1);
+
+                     if (i == 1) {
+                        nir_ssa_def *new_base =
+                           nir_iadd_imm(b, nir_load_deref(b, args->vars.stack),
+                                        -args->stack_entries * args->stack_stride);
+                        new_base = nir_imax(b, nir_load_deref(b, args->vars.stack_base), new_base);
+                        nir_store_deref(b, args->vars.stack_base, new_base, 0x1);
+                     }
+
+                     nir_pop_if(b, NULL);
+                  }
+                  nir_store_deref(b, args->vars.current_node, new_nodes[0], 0x1);
+               }
+               nir_push_else(b, NULL);
+               {
+                  nir_ssa_def *next = nir_imm_int(b, RADV_BVH_INVALID_NODE);
+                  for (unsigned i = 0; i < 3; ++i) {
+                     next = nir_bcsel(b, nir_ieq(b, prev_node, nir_channel(b, result, i)),
+                                      nir_channel(b, result, i + 1), next);
+                  }
+                  nir_store_deref(b, args->vars.current_node, next, 0x1);
+               }
+               nir_pop_if(b, NULL);
+            }
+            nir_pop_if(b, NULL);
+         }
+         nir_push_else(b, NULL);
+         {
+            nir_ssa_def *result = intrinsic_result;
+            if (!result) {
+               /* If we didn't run the intrinsic cause the hardware didn't support it,
+                * emulate ray/tri intersection here */
+               result = intersect_ray_amd_software_tri(
+                  device, b, global_bvh_node, nir_load_deref(b, args->vars.tmax),
+                  nir_load_deref(b, args->vars.origin), nir_load_deref(b, args->vars.dir),
+                  nir_load_deref(b, args->vars.inv_dir));
+            }
+            insert_traversal_triangle_case(device, b, args, result, global_bvh_node);
+         }
+         nir_pop_if(b, NULL);
+      }
+      nir_pop_loop(b, NULL);
+   }
+   nir_pop_if(b, NULL);
+
+   return nir_load_var(b, incomplete);
 }

@@ -407,7 +407,7 @@ copy_image_to_buffer_tlb(struct v3dv_cmd_buffer *cmd_buffer,
    const uint32_t width = DIV_ROUND_UP(region->imageExtent.width, block_w);
    const uint32_t height = DIV_ROUND_UP(region->imageExtent.height, block_h);
 
-   v3dv_job_start_frame(job, width, height, num_layers, false,
+   v3dv_job_start_frame(job, width, height, num_layers, false, true,
                         1, internal_bpp, false);
 
    struct v3dv_meta_framebuffer framebuffer;
@@ -948,7 +948,8 @@ copy_image_tlb(struct v3dv_cmd_buffer *cmd_buffer,
    const uint32_t width = DIV_ROUND_UP(region->extent.width, block_w);
    const uint32_t height = DIV_ROUND_UP(region->extent.height, block_h);
 
-   v3dv_job_start_frame(job, width, height, num_layers, false, 1, internal_bpp,
+   v3dv_job_start_frame(job, width, height, num_layers,
+                        false, true, 1, internal_bpp,
                         src->vk.samples > VK_SAMPLE_COUNT_1_BIT);
 
    struct v3dv_meta_framebuffer framebuffer;
@@ -1448,7 +1449,7 @@ copy_buffer_to_image_tlb(struct v3dv_cmd_buffer *cmd_buffer,
    const uint32_t width = DIV_ROUND_UP(region->imageExtent.width, block_w);
    const uint32_t height = DIV_ROUND_UP(region->imageExtent.height, block_h);
 
-   v3dv_job_start_frame(job, width, height, num_layers, false,
+   v3dv_job_start_frame(job, width, height, num_layers, false, true,
                         1, internal_bpp, false);
 
    struct v3dv_meta_framebuffer framebuffer;
@@ -4288,7 +4289,7 @@ resolve_image_tlb(struct v3dv_cmd_buffer *cmd_buffer,
       (fb_format, region->srcSubresource.aspectMask,
        &internal_type, &internal_bpp);
 
-   v3dv_job_start_frame(job, width, height, num_layers, false,
+   v3dv_job_start_frame(job, width, height, num_layers, false, true,
                         1, internal_bpp, true);
 
    struct v3dv_meta_framebuffer framebuffer;

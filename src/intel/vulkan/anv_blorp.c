@@ -63,12 +63,14 @@ upload_blorp_shader(struct blorp_batch *batch, uint32_t stage,
       .surface_count = 0,
       .sampler_count = 0,
    };
+   struct anv_push_descriptor_info push_desc_info = {};
 
    struct anv_shader_bin *bin =
       anv_device_upload_kernel(device, device->internal_cache, stage,
                                key, key_size, kernel, kernel_size,
                                prog_data, prog_data_size,
-                               NULL, 0, NULL, &bind_map);
+                               NULL, 0, NULL, &bind_map,
+                               &push_desc_info);
 
    if (!bin)
       return false;
@@ -88,23 +90,15 @@ void
 anv_device_init_blorp(struct anv_device *device)
 {
    const struct blorp_config config = {
-      .use_mesh_shading = device->physical->vk.supported_extensions.NV_mesh_shader,
+      .use_mesh_shading = device->physical->vk.supported_extensions.NV_mesh_shader ||
+                          device->physical->vk.supported_extensions.EXT_mesh_shader,
    };
 
    blorp_init(&device->blorp, device, &device->isl_dev, &config);
    device->blorp.compiler = device->physical->compiler;
    device->blorp.lookup_shader = lookup_blorp_shader;
    device->blorp.upload_shader = upload_blorp_shader;
-   switch (device->info.verx10) {
-   case 70:
-      device->blorp.exec = gfx7_blorp_exec;
-      break;
-   case 75:
-      device->blorp.exec = gfx75_blorp_exec;
-      break;
-   case 80:
-      device->blorp.exec = gfx8_blorp_exec;
-      break;
+   switch (device->info->verx10) {
    case 90:
       device->blorp.exec = gfx9_blorp_exec;
       break;
@@ -211,7 +205,7 @@ get_blorp_surf_for_anv_image(const struct anv_device *device,
 
    if (layout != ANV_IMAGE_LAYOUT_EXPLICIT_AUX) {
       assert(usage != 0);
-      aux_usage = anv_layout_to_aux_usage(&device->info, image,
+      aux_usage = anv_layout_to_aux_usage(device->info, image,
                                           aspect, usage, layout);
    }
 
@@ -503,7 +497,7 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
    }
 
    const enum isl_format linear_format =
-      anv_get_isl_format(&cmd_buffer->device->info, anv_image->vk.format,
+      anv_get_isl_format(cmd_buffer->device->info, anv_image->vk.format,
                          aspect, VK_IMAGE_TILING_LINEAR);
    const struct isl_format_layout *linear_fmtl =
       isl_format_get_layout(linear_format);
@@ -678,10 +672,10 @@ blit_image(struct anv_cmd_buffer *cmd_buffer,
                                    dst_image_layout, ISL_AUX_USAGE_NONE, &dst);
 
       struct anv_format_plane src_format =
-         anv_get_format_aspect(&cmd_buffer->device->info, src_image->vk.format,
+         anv_get_format_aspect(cmd_buffer->device->info, src_image->vk.format,
                                1U << aspect_bit, src_image->vk.tiling);
       struct anv_format_plane dst_format =
-         anv_get_format_aspect(&cmd_buffer->device->info, dst_image->vk.format,
+         anv_get_format_aspect(cmd_buffer->device->info, dst_image->vk.format,
                                1U << aspect_bit, dst_image->vk.tiling);
 
       unsigned dst_start, dst_end;
@@ -1019,7 +1013,7 @@ void anv_CmdClearColorImage(
                                    imageLayout, ISL_AUX_USAGE_NONE, &surf);
 
       struct anv_format_plane src_format =
-         anv_get_format_aspect(&cmd_buffer->device->info, image->vk.format,
+         anv_get_format_aspect(cmd_buffer->device->info, image->vk.format,
                                VK_IMAGE_ASPECT_COLOR_BIT, image->vk.tiling);
 
       unsigned base_layer = pRanges[r].baseArrayLayer;
@@ -1263,7 +1257,7 @@ clear_depth_stencil_attachment(struct anv_cmd_buffer *cmd_buffer,
 
    enum isl_format depth_format = ISL_FORMAT_UNSUPPORTED;
    if (d_att->vk_format != VK_FORMAT_UNDEFINED) {
-      depth_format = anv_get_isl_format(&cmd_buffer->device->info,
+      depth_format = anv_get_isl_format(cmd_buffer->device->info,
                                         d_att->vk_format,
                                         VK_IMAGE_ASPECT_DEPTH_BIT,
                                         VK_IMAGE_TILING_OPTIMAL);
@@ -1446,12 +1440,12 @@ resolve_image(struct anv_cmd_buffer *cmd_buffer,
    anv_foreach_image_aspect_bit(aspect_bit, src_image,
                                 region->srcSubresource.aspectMask) {
       enum isl_aux_usage src_aux_usage =
-         anv_layout_to_aux_usage(&cmd_buffer->device->info, src_image,
+         anv_layout_to_aux_usage(cmd_buffer->device->info, src_image,
                                  (1 << aspect_bit),
                                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                                  src_image_layout);
       enum isl_aux_usage dst_aux_usage =
-         anv_layout_to_aux_usage(&cmd_buffer->device->info, dst_image,
+         anv_layout_to_aux_usage(cmd_buffer->device->info, dst_image,
                                  (1 << aspect_bit),
                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                                  dst_image_layout);
@@ -1818,7 +1812,7 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
    /* Multisampling with multi-planar formats is not supported */
    assert(image->n_planes == 1);
 
-   const struct intel_device_info *devinfo = &cmd_buffer->device->info;
+   const struct intel_device_info *devinfo = cmd_buffer->device->info;
    struct blorp_batch batch;
    anv_blorp_batch_init(cmd_buffer, &batch,
                         BLORP_BATCH_PREDICATE_ENABLE * predicate +
@@ -1910,7 +1904,7 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
           anv_image_aux_layers(image, aspect, level));
 
    const uint32_t plane = anv_image_aspect_to_plane(image, aspect);
-   const struct intel_device_info *devinfo = &cmd_buffer->device->info;
+   const struct intel_device_info *devinfo = cmd_buffer->device->info;
 
    struct blorp_batch batch;
    anv_blorp_batch_init(cmd_buffer, &batch,

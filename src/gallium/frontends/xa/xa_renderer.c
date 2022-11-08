@@ -433,7 +433,6 @@ renderer_copy_prepare(struct xa_context *r,
 	sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
 	sampler.min_img_filter = PIPE_TEX_FILTER_NEAREST;
 	sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
-	sampler.normalized_coords = 1;
         cso_set_samplers(r->cso, PIPE_SHADER_FRAGMENT, 1, &p_sampler);
         r->num_bound_samplers = 1;
     }

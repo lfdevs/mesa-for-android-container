@@ -159,7 +159,7 @@ get_deref_reg_src(nir_deref_instr *deref, struct locals_to_regs_state *state)
          if (src.reg.indirect) {
             assert(src.reg.base_offset == 0);
          } else {
-            src.reg.indirect = malloc(sizeof(nir_src));
+            src.reg.indirect = gc_alloc(gc_get_context(deref), nir_src, 1);
             *src.reg.indirect =
                nir_src_for_ssa(nir_imm_int(b, src.reg.base_offset));
             src.reg.base_offset = 0;
@@ -218,7 +218,7 @@ lower_locals_to_regs_block(nir_block *block,
             nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
                                      &mov->dest.dest.ssa);
          } else {
-            nir_dest_copy(&mov->dest.dest, &intrin->dest);
+            nir_dest_copy(&mov->dest.dest, &intrin->dest, &mov->instr);
          }
          nir_builder_instr_insert(b, &mov->instr);
 
@@ -246,7 +246,7 @@ lower_locals_to_regs_block(nir_block *block,
 
          nir_alu_instr *mov = nir_alu_instr_create(b->shader, nir_op_mov);
 
-         nir_src_copy(&mov->src[0].src, &intrin->src[1]);
+         nir_src_copy(&mov->src[0].src, &intrin->src[1], &mov->instr);
 
          /* The normal NIR SSA copy propagate pass can't happen after this pass,
           * so do an ad-hoc copy propagate since this ALU op can do swizzles

@@ -24,6 +24,7 @@
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_phi_builder.h"
+#include "util/u_dynarray.h"
 #include "util/u_math.h"
 
 static bool
@@ -151,11 +152,15 @@ can_remat_instr(nir_instr *instr, struct brw_bitset *remat)
    case nir_instr_type_intrinsic: {
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
       switch (intrin->intrinsic) {
+      case nir_intrinsic_load_uniform:
       case nir_intrinsic_load_ubo:
       case nir_intrinsic_vulkan_resource_index:
       case nir_intrinsic_vulkan_resource_reindex:
       case nir_intrinsic_load_vulkan_descriptor:
       case nir_intrinsic_load_push_constant:
+      case nir_intrinsic_load_global_constant:
+      case nir_intrinsic_load_global_const_block_intel:
+      case nir_intrinsic_load_desc_set_address_intel:
          /* These intrinsics don't need to be spilled as long as they don't
           * depend on any spilled values.
           */
@@ -178,6 +183,7 @@ can_remat_instr(nir_instr *instr, struct brw_bitset *remat)
       case nir_intrinsic_load_callable_sbt_stride_intel:
       case nir_intrinsic_load_reloc_const_intel:
       case nir_intrinsic_load_ray_query_global_intel:
+      case nir_intrinsic_load_ray_launch_size:
          /* Notably missing from the above list is btd_local_arg_addr_intel.
           * This is because the resume shader will have a different local
           * argument pointer because it has a different BSR.  Any access of
@@ -211,12 +217,141 @@ can_remat_ssa_def(nir_ssa_def *def, struct brw_bitset *remat)
    return can_remat_instr(def->parent_instr, remat);
 }
 
-static nir_ssa_def *
-remat_ssa_def(nir_builder *b, nir_ssa_def *def)
+struct add_instr_data {
+   struct util_dynarray *buf;
+   struct brw_bitset *remat;
+};
+
+static bool
+add_src_instr(nir_src *src, void *state)
 {
-   nir_instr *clone = nir_instr_clone(b->shader, def->parent_instr);
+   if (!src->is_ssa)
+      return false;
+
+   struct add_instr_data *data = state;
+   if (BITSET_TEST(data->remat->set, src->ssa->index))
+      return true;
+
+   util_dynarray_foreach(data->buf, nir_instr *, instr_ptr) {
+      if (*instr_ptr == src->ssa->parent_instr)
+         return true;
+   }
+
+   util_dynarray_append(data->buf, nir_instr *, src->ssa->parent_instr);
+   return true;
+}
+
+static int
+compare_instr_indexes(const void *_inst1, const void *_inst2)
+{
+   const nir_instr * const *inst1 = _inst1;
+   const nir_instr * const *inst2 = _inst2;
+
+   return (*inst1)->index - (*inst2)->index;
+}
+
+static bool
+can_remat_chain_ssa_def(nir_ssa_def *def, struct brw_bitset *remat, struct util_dynarray *buf)
+{
+   assert(util_dynarray_num_elements(buf, nir_instr *) == 0);
+
+   void *mem_ctx = ralloc_context(NULL);
+
+   /* Add all the instructions involved in build this ssa_def */
+   util_dynarray_append(buf, nir_instr *, def->parent_instr);
+
+   unsigned idx = 0;
+   struct add_instr_data data = {
+      .buf = buf,
+      .remat = remat,
+   };
+   while (idx < util_dynarray_num_elements(buf, nir_instr *)) {
+      nir_instr *instr = *util_dynarray_element(buf, nir_instr *, idx++);
+      if (!nir_foreach_src(instr, add_src_instr, &data))
+         goto fail;
+   }
+
+   /* Sort instructions by index */
+   qsort(util_dynarray_begin(buf),
+         util_dynarray_num_elements(buf, nir_instr *),
+         sizeof(nir_instr *),
+         compare_instr_indexes);
+
+   /* Create a temporary bitset with all values already
+    * rematerialized/rematerializable. We'll add to this bit set as we go
+    * through values that might not be in that set but that we can
+    * rematerialize.
+    */
+   struct brw_bitset potential_remat = bitset_create(mem_ctx, remat->size);
+   memcpy(potential_remat.set, remat->set, BITSET_WORDS(remat->size) * sizeof(BITSET_WORD));
+
+   util_dynarray_foreach(buf, nir_instr *, instr_ptr) {
+      nir_ssa_def *instr_ssa_def = nir_instr_ssa_def(*instr_ptr);
+
+      /* If already in the potential rematerializable, nothing to do. */
+      if (BITSET_TEST(potential_remat.set, instr_ssa_def->index))
+         continue;
+
+      if (!can_remat_instr(*instr_ptr, &potential_remat))
+         goto fail;
+
+      /* All the sources are rematerializable and the instruction is also
+       * rematerializable, mark it as rematerializable too.
+       */
+      BITSET_SET(potential_remat.set, instr_ssa_def->index);
+   }
+
+   ralloc_free(mem_ctx);
+
+   return true;
+
+ fail:
+   util_dynarray_clear(buf);
+   ralloc_free(mem_ctx);
+   return false;
+}
+
+static nir_ssa_def *
+remat_ssa_def(nir_builder *b, nir_ssa_def *def, struct hash_table *remap_table)
+{
+   nir_instr *clone = nir_instr_clone_deep(b->shader, def->parent_instr, remap_table);
    nir_builder_instr_insert(b, clone);
    return nir_instr_ssa_def(clone);
+}
+
+static nir_ssa_def *
+remat_chain_ssa_def(nir_builder *b, struct util_dynarray *buf,
+                    struct brw_bitset *remat, nir_ssa_def ***fill_defs,
+                    unsigned call_idx, struct hash_table *remap_table)
+{
+   nir_ssa_def *last_def = NULL;
+
+   util_dynarray_foreach(buf, nir_instr *, instr_ptr) {
+      nir_ssa_def *instr_ssa_def = nir_instr_ssa_def(*instr_ptr);
+      unsigned ssa_index = instr_ssa_def->index;
+
+      if (fill_defs[ssa_index] != NULL &&
+          fill_defs[ssa_index][call_idx] != NULL)
+         continue;
+
+      /* Clone the instruction we want to rematerialize */
+      nir_ssa_def *clone_ssa_def = remat_ssa_def(b, instr_ssa_def, remap_table);
+
+      if (fill_defs[ssa_index] == NULL) {
+         fill_defs[ssa_index] =
+            rzalloc_array(fill_defs, nir_ssa_def *, remat->size);
+      }
+
+      /* Add the new ssa_def to the list fill_defs and flag it as
+       * rematerialized
+       */
+      fill_defs[ssa_index][call_idx] = last_def = clone_ssa_def;
+      BITSET_SET(remat->set, ssa_index);
+
+      _mesa_hash_table_insert(remap_table, instr_ssa_def, last_def);
+   }
+
+   return last_def;
 }
 
 struct pbv_array {
@@ -266,36 +401,27 @@ rewrite_instr_src_from_phi_builder(nir_src *src, void *_pbv_arr)
 }
 
 static nir_ssa_def *
-spill_fill(nir_builder *before, nir_builder *after, nir_ssa_def *def, unsigned offset,
-           nir_address_format address_format, unsigned stack_alignment)
+spill_fill(nir_builder *before, nir_builder *after, nir_ssa_def *def,
+           unsigned value_id, unsigned call_idx,
+           unsigned offset, unsigned stack_alignment)
 {
    const unsigned comp_size = def->bit_size / 8;
 
-   switch(address_format) {
-   case nir_address_format_32bit_offset:
-      nir_store_scratch(before, def, nir_imm_int(before, offset),
-                        .align_mul = MIN2(comp_size, stack_alignment),
-                        .write_mask = BITFIELD_MASK(def->num_components));
-      def = nir_load_scratch(after, def->num_components, def->bit_size,
-                             nir_imm_int(after, offset), .align_mul = MIN2(comp_size, stack_alignment));
-      break;
-   case nir_address_format_64bit_global: {
-      nir_ssa_def *addr = nir_iadd_imm(before, nir_load_scratch_base_ptr(before, 1, 64, 1), offset);
-      nir_store_global(before, addr, MIN2(comp_size, stack_alignment), def, ~0);
-      addr = nir_iadd_imm(after, nir_load_scratch_base_ptr(after, 1, 64, 1), offset);
-      def = nir_load_global(after, addr, MIN2(comp_size, stack_alignment),
-                            def->num_components, def->bit_size);
-      break;
-   }
-   default:
-      unreachable("Unimplemented address format");
-   }
-   return def;
+   nir_store_stack(before, def,
+                   .base = offset,
+                   .call_idx = call_idx,
+                   .align_mul = MIN2(comp_size, stack_alignment),
+                   .value_id = value_id,
+                   .write_mask = BITFIELD_MASK(def->num_components));
+   return nir_load_stack(after, def->num_components, def->bit_size,
+                         .base = offset,
+                         .call_idx = call_idx,
+                         .value_id = value_id,
+                         .align_mul = MIN2(comp_size, stack_alignment));
 }
 
 static void
 spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
-                                      nir_address_format address_format,
                                       unsigned stack_alignment)
 {
    /* TODO: If a SSA def is filled more than once, we probably want to just
@@ -321,7 +447,8 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
 
    nir_metadata_require(impl, nir_metadata_live_ssa_defs |
                               nir_metadata_dominance |
-                              nir_metadata_block_index);
+                              nir_metadata_block_index |
+                              nir_metadata_instr_index);
 
    void *mem_ctx = ralloc_context(shader);
 
@@ -345,6 +472,10 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
 
    /* For each call instruction, the block index of the block it lives in */
    uint32_t *call_block_indices = rzalloc_array(mem_ctx, uint32_t, num_calls);
+
+   /* Remap table when rebuilding instructions out of fill operations */
+   struct hash_table *trivial_remap_table =
+      _mesa_pointer_hash_table_create(mem_ctx);
 
    /* Walk the call instructions and fetch the liveness set and block index
     * for each one.  We need to do this before we start modifying the shader
@@ -386,6 +517,7 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
          if (def != NULL) {
             if (can_remat_ssa_def(def, &trivial_remat)) {
                add_ssa_def_to_bitset(def, &trivial_remat);
+               _mesa_hash_table_insert(trivial_remap_table, def, def);
             } else {
                spill_defs[def->index] = def;
             }
@@ -395,6 +527,9 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
             continue;
 
          const BITSET_WORD *live = call_live[call_idx];
+
+         struct hash_table *remap_table =
+            _mesa_hash_table_clone(trivial_remap_table, mem_ctx);
 
          /* Make a copy of trivial_remat that we'll update as we crawl through
           * the live SSA defs and unspill them.
@@ -408,6 +543,12 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
          before.cursor = nir_before_instr(instr);
          after.cursor = nir_after_instr(instr);
 
+         /* Array used to hold all the values needed to rematerialize a live
+          * value.
+          */
+         struct util_dynarray remat_chain;
+         util_dynarray_init(&remat_chain, mem_ctx);
+
          unsigned offset = shader->scratch_size;
          for (unsigned w = 0; w < live_words; w++) {
             BITSET_WORD spill_mask = live[w] & ~trivial_remat.set[w];
@@ -417,7 +558,8 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
                unsigned index = w * BITSET_WORDBITS + i;
                assert(index < num_ssa_defs);
 
-               nir_ssa_def *def = spill_defs[index];
+               def = spill_defs[index];
+               nir_ssa_def *original_def = def, *new_def;
                if (can_remat_ssa_def(def, &remat)) {
                   /* If this SSA def is re-materializable or based on other
                    * things we've already spilled, re-materialize it rather
@@ -425,7 +567,12 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
                    * re-materializable won't even get here because we take
                    * those into account in spill_mask above.
                    */
-                  def = remat_ssa_def(&after, def);
+                  new_def = remat_ssa_def(&after, def, remap_table);
+               } else if (can_remat_chain_ssa_def(def, &remat, &remat_chain)) {
+                  new_def = remat_chain_ssa_def(&after, &remat_chain, &remat,
+                                                fill_defs, call_idx,
+                                                remap_table);
+                  util_dynarray_clear(&remat_chain);
                } else {
                   bool is_bool = def->bit_size == 1;
                   if (is_bool)
@@ -434,11 +581,12 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
                   const unsigned comp_size = def->bit_size / 8;
                   offset = ALIGN(offset, comp_size);
 
-                  def = spill_fill(&before, &after, def, offset,
-                                   address_format,stack_alignment);
+                  new_def = spill_fill(&before, &after, def,
+                                       index, call_idx,
+                                       offset, stack_alignment);
 
                   if (is_bool)
-                     def = nir_b2b1(&after, def);
+                     new_def = nir_b2b1(&after, new_def);
 
                   offset += def->num_components * comp_size;
                }
@@ -454,9 +602,10 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
                 */
                if (fill_defs[index] == NULL) {
                   fill_defs[index] =
-                     rzalloc_array(mem_ctx, nir_ssa_def *, num_calls);
+                     rzalloc_array(fill_defs, nir_ssa_def *, num_calls);
                }
-               fill_defs[index][call_idx] = def;
+               fill_defs[index][call_idx] = new_def;
+               _mesa_hash_table_insert(remap_table, original_def, new_def);
             }
          }
 
@@ -1130,6 +1279,502 @@ replace_resume_with_halt(nir_shader *shader, nir_instr *keep)
    }
 }
 
+struct lower_scratch_state {
+   nir_address_format address_format;
+};
+
+static bool
+lower_stack_instr_to_scratch(struct nir_builder *b, nir_instr *instr, void *data)
+{
+   struct lower_scratch_state *state = data;
+
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *stack = nir_instr_as_intrinsic(instr);
+   switch (stack->intrinsic) {
+   case nir_intrinsic_load_stack: {
+      b->cursor = nir_instr_remove(instr);
+      nir_ssa_def *data, *old_data = nir_instr_ssa_def(instr);
+
+      if (state->address_format == nir_address_format_64bit_global) {
+         nir_ssa_def *addr = nir_iadd_imm(b,
+                                          nir_load_scratch_base_ptr(b, 1, 64, 1),
+                                          nir_intrinsic_base(stack));
+         data = nir_load_global(b, addr,
+                                nir_intrinsic_align_mul(stack),
+                                stack->dest.ssa.num_components,
+                                stack->dest.ssa.bit_size);
+      } else {
+         assert(state->address_format == nir_address_format_32bit_offset);
+         data = nir_load_scratch(b,
+                                 old_data->num_components,
+                                 old_data->bit_size,
+                                 nir_imm_int(b, nir_intrinsic_base(stack)),
+                                 .align_mul = nir_intrinsic_align_mul(stack));
+      }
+      nir_ssa_def_rewrite_uses(old_data, data);
+      break;
+   }
+
+   case nir_intrinsic_store_stack: {
+      b->cursor = nir_instr_remove(instr);
+      nir_ssa_def *data = stack->src[0].ssa;
+
+      if (state->address_format == nir_address_format_64bit_global) {
+         nir_ssa_def *addr = nir_iadd_imm(b,
+                                          nir_load_scratch_base_ptr(b, 1, 64, 1),
+                                          nir_intrinsic_base(stack));
+         nir_store_global(b, addr,
+                          nir_intrinsic_align_mul(stack),
+                          data,
+                          BITFIELD_MASK(data->num_components));
+      } else {
+         assert(state->address_format == nir_address_format_32bit_offset);
+         nir_store_scratch(b, data,
+                           nir_imm_int(b, nir_intrinsic_base(stack)),
+                           .align_mul = nir_intrinsic_align_mul(stack),
+                           .write_mask = BITFIELD_MASK(data->num_components));
+      }
+      break;
+   }
+
+   default:
+      return false;
+   }
+
+   return true;
+}
+
+static bool
+nir_lower_stack_to_scratch(nir_shader *shader,
+                           nir_address_format address_format)
+{
+   struct lower_scratch_state state = {
+      .address_format = address_format,
+   };
+
+   return nir_shader_instructions_pass(shader,
+                                       lower_stack_instr_to_scratch,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       &state);
+}
+
+static bool
+opt_remove_respills_instr(struct nir_builder *b, nir_instr *instr, void *data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *store_intrin = nir_instr_as_intrinsic(instr);
+   if (store_intrin->intrinsic != nir_intrinsic_store_stack)
+      return false;
+
+   nir_instr *value_instr = store_intrin->src[0].ssa->parent_instr;
+   if (value_instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *load_intrin = nir_instr_as_intrinsic(value_instr);
+   if (load_intrin->intrinsic != nir_intrinsic_load_stack)
+      return false;
+
+   if (nir_intrinsic_base(load_intrin) != nir_intrinsic_base(store_intrin))
+      return false;
+
+   nir_instr_remove(&store_intrin->instr);
+   return true;
+}
+
+/* After shader split, look at stack load/store operations. If we're loading
+ * and storing the same value at the same location, we can drop the store
+ * instruction.
+ */
+static bool
+nir_opt_remove_respills(nir_shader *shader)
+{
+   return nir_shader_instructions_pass(shader,
+                                       opt_remove_respills_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
+}
+
+static void
+add_use_mask(struct hash_table_u64 *offset_to_mask,
+             unsigned offset, unsigned mask)
+{
+   uintptr_t old_mask = (uintptr_t)
+      _mesa_hash_table_u64_search(offset_to_mask, offset);
+
+   _mesa_hash_table_u64_insert(offset_to_mask, offset,
+                               (void *)(uintptr_t)(old_mask | mask));
+}
+
+/* When splitting the shaders, we might have inserted store & loads of vec4s,
+ * because a live value is a 4 components. But sometimes, only some components
+ * of that vec4 will be used by after the scratch load. This pass removes the
+ * unused components of scratch load/stores.
+ */
+static bool
+nir_opt_trim_stack_values(nir_shader *shader)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+
+   struct hash_table_u64 *value_id_to_mask = _mesa_hash_table_u64_create(NULL);
+   bool progress = false;
+
+   /* Find all the loads and how their value is being used */
+   nir_foreach_block_safe(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         if (intrin->intrinsic != nir_intrinsic_load_stack)
+            continue;
+
+         const unsigned value_id = nir_intrinsic_value_id(intrin);
+
+         const unsigned mask =
+            nir_ssa_def_components_read(nir_instr_ssa_def(instr));
+         add_use_mask(value_id_to_mask, value_id, mask);
+      }
+   }
+
+   /* For each store, if it stores more than is being used, trim it.
+    * Otherwise, remove it from the hash table.
+    */
+   nir_foreach_block_safe(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         if (intrin->intrinsic != nir_intrinsic_store_stack)
+            continue;
+
+         const unsigned value_id = nir_intrinsic_value_id(intrin);
+
+         const unsigned write_mask = nir_intrinsic_write_mask(intrin);
+         const unsigned read_mask = (uintptr_t)
+            _mesa_hash_table_u64_search(value_id_to_mask, value_id);
+
+         /* Already removed from the table, nothing to do */
+         if (read_mask == 0)
+            continue;
+
+         /* Matching read/write mask, nothing to do, remove from the table. */
+         if (write_mask == read_mask) {
+            _mesa_hash_table_u64_remove(value_id_to_mask, value_id);
+            continue;
+         }
+
+         nir_builder b;
+         nir_builder_init(&b, impl);
+         b.cursor = nir_before_instr(instr);
+
+         nir_ssa_def *value = nir_channels(&b, intrin->src[0].ssa, read_mask);
+         nir_instr_rewrite_src_ssa(instr, &intrin->src[0], value);
+
+         intrin->num_components = util_bitcount(read_mask);
+         nir_intrinsic_set_write_mask(intrin, (1u << intrin->num_components) - 1);
+
+         progress = true;
+      }
+   }
+
+   /* For each load remaining in the hash table (only the ones we changed the
+    * number of components of), apply triming/reswizzle.
+    */
+   nir_foreach_block_safe(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         if (intrin->intrinsic != nir_intrinsic_load_stack)
+            continue;
+
+         const unsigned value_id = nir_intrinsic_value_id(intrin);
+
+         unsigned read_mask = (uintptr_t)
+            _mesa_hash_table_u64_search(value_id_to_mask, value_id);
+         if (read_mask == 0)
+            continue;
+
+         unsigned swiz_map[NIR_MAX_VEC_COMPONENTS] = { 0, };
+         unsigned swiz_count = 0;
+         u_foreach_bit(idx, read_mask)
+            swiz_map[idx] = swiz_count++;
+
+         nir_ssa_def *def = nir_instr_ssa_def(instr);
+
+         nir_foreach_use_safe(use_src, def) {
+            if (use_src->parent_instr->type == nir_instr_type_alu) {
+               nir_alu_instr *alu = nir_instr_as_alu(use_src->parent_instr);
+               nir_alu_src *alu_src = exec_node_data(nir_alu_src, use_src, src);
+
+               unsigned write_mask = alu->dest.write_mask;
+               u_foreach_bit(idx, write_mask)
+                  alu_src->swizzle[idx] = swiz_map[alu_src->swizzle[idx]];
+            } else if (use_src->parent_instr->type == nir_instr_type_intrinsic) {
+               nir_intrinsic_instr *use_intrin =
+                  nir_instr_as_intrinsic(use_src->parent_instr);
+               assert(nir_intrinsic_has_write_mask(use_intrin));
+               unsigned write_mask = nir_intrinsic_write_mask(use_intrin);
+               unsigned new_write_mask = 0;
+               u_foreach_bit(idx, write_mask)
+                  new_write_mask |= 1 << swiz_map[idx];
+               nir_intrinsic_set_write_mask(use_intrin, new_write_mask);
+            } else {
+               unreachable("invalid instruction type");
+            }
+         }
+
+         intrin->dest.ssa.num_components = intrin->num_components = swiz_count;
+
+         progress = true;
+      }
+   }
+
+   nir_metadata_preserve(impl,
+                         progress ?
+                         (nir_metadata_dominance |
+                          nir_metadata_block_index |
+                          nir_metadata_loop_analysis) :
+                         nir_metadata_all);
+
+   _mesa_hash_table_u64_destroy(value_id_to_mask);
+
+   return progress;
+}
+
+struct scratch_item {
+   unsigned old_offset;
+   unsigned new_offset;
+   unsigned bit_size;
+   unsigned num_components;
+   unsigned value;
+   unsigned call_idx;
+};
+
+static int
+sort_scratch_item_by_size_and_value_id(const void *_item1, const void *_item2)
+{
+   const struct scratch_item *item1 = _item1;
+   const struct scratch_item *item2 = _item2;
+
+   /* By ascending value_id */
+   if (item1->bit_size == item2->bit_size)
+      return (int) item1->value - (int) item2->value;
+
+   /* By descending size */
+   return (int) item2->bit_size - (int) item1->bit_size;
+}
+
+static bool
+nir_opt_sort_and_pack_stack(nir_shader *shader,
+                            unsigned start_call_scratch,
+                            unsigned stack_alignment,
+                            unsigned num_calls)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+
+   void *mem_ctx = ralloc_context(NULL);
+
+   struct hash_table_u64 *value_id_to_item =
+      _mesa_hash_table_u64_create(mem_ctx);
+   struct util_dynarray ops;
+   util_dynarray_init(&ops, mem_ctx);
+
+   for (unsigned call_idx = 0; call_idx < num_calls; call_idx++) {
+      _mesa_hash_table_u64_clear(value_id_to_item);
+      util_dynarray_clear(&ops);
+
+      /* Find all the stack load and their offset. */
+      nir_foreach_block_safe(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+            if (intrin->intrinsic != nir_intrinsic_load_stack)
+               continue;
+
+            if (nir_intrinsic_call_idx(intrin) != call_idx)
+               continue;
+
+            const unsigned value_id = nir_intrinsic_value_id(intrin);
+            nir_ssa_def *def = nir_instr_ssa_def(instr);
+
+            assert(_mesa_hash_table_u64_search(value_id_to_item,
+                                               value_id) == NULL);
+
+            struct scratch_item item = {
+               .old_offset = nir_intrinsic_base(intrin),
+               .bit_size = def->bit_size,
+               .num_components = def->num_components,
+               .value = value_id,
+            };
+
+            util_dynarray_append(&ops, struct scratch_item, item);
+            _mesa_hash_table_u64_insert(value_id_to_item, value_id, (void *)(uintptr_t)true);
+         }
+      }
+
+      /* Sort scratch item by component size. */
+      qsort(util_dynarray_begin(&ops),
+            util_dynarray_num_elements(&ops, struct scratch_item),
+            sizeof(struct scratch_item),
+            sort_scratch_item_by_size_and_value_id);
+
+
+      /* Reorder things on the stack */
+      _mesa_hash_table_u64_clear(value_id_to_item);
+
+      unsigned scratch_size = start_call_scratch;
+      util_dynarray_foreach(&ops, struct scratch_item, item) {
+         item->new_offset = ALIGN(scratch_size, item->bit_size / 8);
+         scratch_size = item->new_offset + (item->bit_size * item->num_components) / 8;
+         _mesa_hash_table_u64_insert(value_id_to_item, item->value, item);
+      }
+      shader->scratch_size = ALIGN(scratch_size, stack_alignment);
+
+      /* Update offsets in the instructions */
+      nir_foreach_block_safe(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+            switch (intrin->intrinsic) {
+            case nir_intrinsic_load_stack:
+            case nir_intrinsic_store_stack: {
+               if (nir_intrinsic_call_idx(intrin) != call_idx)
+                  continue;
+
+               struct scratch_item *item =
+                  _mesa_hash_table_u64_search(value_id_to_item,
+                                              nir_intrinsic_value_id(intrin));
+               assert(item);
+
+               nir_intrinsic_set_base(intrin, item->new_offset);
+               break;
+            }
+
+            case nir_intrinsic_rt_trace_ray:
+            case nir_intrinsic_rt_execute_callable:
+            case nir_intrinsic_rt_resume:
+               if (nir_intrinsic_call_idx(intrin) != call_idx)
+                  continue;
+               nir_intrinsic_set_stack_size(intrin, shader->scratch_size);
+               break;
+
+            default:
+               break;
+            }
+         }
+      }
+   }
+
+   ralloc_free(mem_ctx);
+
+   nir_shader_preserve_all_metadata(shader);
+
+   return true;
+}
+
+/* Find the last block dominating all the uses of a SSA value. */
+static nir_block *
+find_last_dominant_use_block(nir_function_impl *impl, nir_ssa_def *value)
+{
+   nir_foreach_block_reverse_safe(block, impl) {
+      bool fits = true;
+
+      /* Store on the current block of the value */
+      if (block == value->parent_instr->block)
+         return block;
+
+      nir_foreach_if_use(src, value) {
+         nir_block *block_before_if =
+            nir_cf_node_as_block(nir_cf_node_prev(&src->parent_if->cf_node));
+         if (!nir_block_dominates(block, block_before_if)) {
+            fits = false;
+            break;
+         }
+      }
+      if (!fits)
+         continue;
+
+      nir_foreach_use(src, value) {
+         if (src->parent_instr->type == nir_instr_type_phi &&
+             block == src->parent_instr->block) {
+            fits = false;
+            break;
+         }
+
+         if (!nir_block_dominates(block, src->parent_instr->block)) {
+            fits = false;
+            break;
+         }
+      }
+      if (!fits)
+         continue;
+
+      return block;
+   }
+   unreachable("Cannot find block");
+}
+
+/* Put the scratch loads in the branches where they're needed. */
+static bool
+nir_opt_stack_loads(nir_shader *shader)
+{
+   bool progress = false;
+
+   nir_foreach_function(func, shader) {
+      if (!func->impl)
+         continue;
+
+      nir_metadata_require(func->impl, nir_metadata_dominance |
+                                       nir_metadata_block_index);
+
+      bool func_progress = false;
+      nir_foreach_block_safe(block, func->impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+            if (intrin->intrinsic != nir_intrinsic_load_stack)
+               continue;
+
+            nir_ssa_def *value = &intrin->dest.ssa;
+            nir_block *new_block = find_last_dominant_use_block(func->impl, value);
+            if (new_block == block)
+               continue;
+
+            /* Move the scratch load in the new block, after the phis. */
+            nir_instr_remove(instr);
+            nir_instr_insert(nir_before_block_after_phis(new_block), instr);
+
+            func_progress = true;
+         }
+      }
+
+      nir_metadata_preserve(func->impl,
+                            func_progress ? (nir_metadata_block_index |
+                                             nir_metadata_dominance |
+                                             nir_metadata_loop_analysis) :
+                            nir_metadata_all);
+
+      progress |= func_progress;
+   }
+
+   return progress;
+}
+
 /** Lower shader call instructions to split shaders.
  *
  * Shader calls can be split into an initial shader and a series of "resume"
@@ -1154,8 +1799,7 @@ replace_resume_with_halt(nir_shader *shader, nir_instr *keep)
  */
 bool
 nir_lower_shader_calls(nir_shader *shader,
-                       nir_address_format address_format,
-                       unsigned stack_alignment,
+                       const nir_lower_shader_calls_options *options,
                        nir_shader ***resume_shaders_out,
                        uint32_t *num_resume_shaders_out,
                        void *mem_ctx)
@@ -1190,10 +1834,17 @@ nir_lower_shader_calls(nir_shader *shader,
          NIR_PASS(progress, shader, nir_opt_cse);
    }
 
-   NIR_PASS_V(shader, spill_ssa_defs_and_lower_shader_calls,
-              num_calls, address_format, stack_alignment);
+   /* Save the start point of the call stack in scratch */
+   unsigned start_call_scratch = shader->scratch_size;
 
-   nir_opt_remove_phis(shader);
+   NIR_PASS_V(shader, spill_ssa_defs_and_lower_shader_calls,
+              num_calls, options->stack_alignment);
+
+   NIR_PASS_V(shader, nir_opt_remove_phis);
+
+   NIR_PASS_V(shader, nir_opt_trim_stack_values);
+   NIR_PASS_V(shader, nir_opt_sort_and_pack_stack,
+              start_call_scratch, options->stack_alignment, num_calls);
 
    /* Make N copies of our shader */
    nir_shader **resume_shaders = ralloc_array(mem_ctx, nir_shader *, num_calls);
@@ -1209,12 +1860,35 @@ nir_lower_shader_calls(nir_shader *shader,
    }
 
    replace_resume_with_halt(shader, NULL);
+   nir_opt_dce(shader);
+   nir_opt_dead_cf(shader);
    for (unsigned i = 0; i < num_calls; i++) {
       nir_instr *resume_instr = lower_resume(resume_shaders[i], i);
       replace_resume_with_halt(resume_shaders[i], resume_instr);
       nir_opt_remove_phis(resume_shaders[i]);
       /* Remove the dummy blocks added by flatten_resume_if_ladder() */
       nir_opt_if(resume_shaders[i], nir_opt_if_optimize_phi_true_false);
+      nir_opt_dce(resume_shaders[i]);
+      nir_opt_dead_cf(resume_shaders[i]);
+   }
+
+   for (unsigned i = 0; i < num_calls; i++)
+      NIR_PASS_V(resume_shaders[i], nir_opt_remove_respills);
+
+   if (options->localized_loads) {
+      /* Once loads have been combined we can try to put them closer to where
+       * they're needed.
+       */
+      for (unsigned i = 0; i < num_calls; i++)
+         NIR_PASS_V(resume_shaders[i], nir_opt_stack_loads);
+   }
+
+   NIR_PASS_V(shader, nir_lower_stack_to_scratch, options->address_format);
+   nir_opt_cse(shader);
+   for (unsigned i = 0; i < num_calls; i++) {
+      NIR_PASS_V(resume_shaders[i], nir_lower_stack_to_scratch,
+                 options->address_format);
+      nir_opt_cse(resume_shaders[i]);
    }
 
    *resume_shaders_out = resume_shaders;

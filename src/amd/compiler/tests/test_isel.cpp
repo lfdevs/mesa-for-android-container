@@ -70,7 +70,7 @@ BEGIN_TEST(isel.compute.simple)
          };
          void main() {
             //>> v1: %data = p_parallelcopy 42
-            //buffer_store_dword %_, v1: undef, 0, %data disable_wqm storage:buffer semantics: scope:invocation
+            //! buffer_store_dword (kill)%_, v1: undef, 0, (kill)%data glc disable_wqm storage:buffer
             res = 42;
          }
       );
@@ -158,13 +158,13 @@ BEGIN_TEST(isel.sparse.clause)
             //;    funcs['sample_res'] = lambda _: 'v#_'
             //;    funcs['sample_coords'] = lambda _: '[v#_, v#_, v#_, v#_]'
             //>> v5: (noCSE)%zero0 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero0, (kill)%_, %_, %_ dmask:xyzw 2d tfe storage: semantics: scope:invocation
+            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero0, (kill)%_, %_, %_ dmask:xyzw 2d tfe
             //>> v5: (noCSE)%zero1 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero1, (kill)%_, %_, %_ dmask:xyzw 2d tfe storage: semantics: scope:invocation
+            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero1, (kill)%_, %_, %_ dmask:xyzw 2d tfe
             //>> v5: (noCSE)%zero2 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero2, (kill)%_, %_, %_ dmask:xyzw 2d tfe storage: semantics: scope:invocation
+            //>> v5: %_ = image_sample_lz_o %_, %_, (kill)%zero2, (kill)%_, %_, %_ dmask:xyzw 2d tfe
             //>> v5: (noCSE)%zero3 = p_create_vector 0, 0, 0, 0, 0
-            //>> v5: %_ = image_sample_lz_o (kill)%_, (kill)%_, (kill)%zero3, (kill)%_, (kill)%_, (kill)%_ dmask:xyzw 2d tfe storage: semantics: scope:invocation
+            //>> v5: %_ = image_sample_lz_o (kill)%_, (kill)%_, (kill)%zero3, (kill)%_, (kill)%_, (kill)%_ dmask:xyzw 2d tfe
             //>> s_clause 0x3
             //! image_sample_lz_o @sample_res, @sample_coords, @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe
             //! image_sample_lz_o @sample_res, @sample_coords, @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D tfe

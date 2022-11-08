@@ -45,8 +45,7 @@ enum ProgramScopeType {
 class ProgramScope {
 public:
    ProgramScope();
-   ProgramScope(ProgramScope *parent, ProgramScopeType type, int id,
-                int depth, int begin);
+   ProgramScope(ProgramScope *parent, ProgramScopeType type, int id, int depth, int begin);
 
    ProgramScopeType type() const;
    ProgramScope *parent() const;
@@ -100,9 +99,10 @@ public:
 
    void update_required_live_range();
 
-   const auto& range() { return m_range;}
+   const auto& range() { return m_range; }
 
    const auto& use_type() { return m_use_type; }
+
 private:
    void propagate_live_range_to_dominant_write_scope();
    bool conditional_ifelse_write_in_loop() const;
@@ -120,20 +120,22 @@ private:
    int last_write;
    int first_read;
 
-   /* This member variable tracks the current resolution of conditional writing
-    * to this temporary in IF/ELSE clauses.
+   /* This member variable tracks the current resolution of conditional
+    * writing to this temporary in IF/ELSE clauses.
     *
     * The initial value "conditionality_untouched" indicates that this
     * temporary has not yet been written to within an if clause.
     *
     * A positive (other than "conditionality_untouched") number refers to the
-    * last loop id for which the write was resolved as unconditional. With each
-    * new loop this value will be overwitten by "conditionality_unresolved"
-    * on entering the first IF clause writing this temporary.
+    * last loop id for which the write was resolved as unconditional. With
+    * each new loop this value will be overwitten by
+    * "conditionality_unresolved" on entering the first IF clause writing this
+    * temporary.
     *
     * The value "conditionality_unresolved" indicates that no resolution has
     * been achieved so far. If the variable is set to this value at the end of
-    * the processing of the whole shader it also indicates a conditional write.
+    * the processing of the whole shader it also indicates a conditional
+    * write.
     *
     * The value "write_is_conditional" marks that the variable is written
     * conditionally (i.e. not in all relevant IF/ELSE code path pairs) in at
@@ -176,7 +178,7 @@ public:
 
    RegisterAccess(const std::array<size_t, 4>& sizes);
 
-   RegisterCompAccess& operator() (const Register& reg);
+   RegisterCompAccess& operator()(const Register& reg);
 
    auto& component(int i) { return m_access_record[i]; }
 
@@ -184,5 +186,5 @@ private:
    std::array<RegisterCompAccessVector, 4> m_access_record;
 };
 
-}
+} // namespace r600
 #endif // SFN_LIFERANGEEVALUATOR_HELPERS_H

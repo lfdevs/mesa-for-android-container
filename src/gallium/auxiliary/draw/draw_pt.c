@@ -61,9 +61,6 @@ draw_pt_arrays(struct draw_context *draw,
                const struct pipe_draw_start_count_bias *draw_info,
                unsigned num_draws)
 {
-   struct draw_pt_front_end *frontend = NULL;
-   struct draw_pt_middle_end *middle = NULL;
-   unsigned opt = PT_SHADE;
    enum pipe_prim_type out_prim = prim;
 
    if (draw->gs.geometry_shader)
@@ -71,13 +68,12 @@ draw_pt_arrays(struct draw_context *draw,
    else if (draw->tes.tess_eval_shader)
       out_prim = get_tes_output_prim(draw->tes.tess_eval_shader);
 
+   unsigned opt = PT_SHADE;
    if (!draw->render) {
       opt |= PT_PIPELINE;
    }
 
-   if (draw_need_pipeline(draw,
-                           draw->rasterizer,
-                           out_prim)) {
+   if (draw_need_pipeline(draw, draw->rasterizer, out_prim)) {
       opt |= PT_PIPELINE;
    }
 
@@ -87,6 +83,7 @@ draw_pt_arrays(struct draw_context *draw,
       opt |= PT_CLIPTEST;
    }
 
+   struct draw_pt_middle_end *middle;
    if (draw->pt.middle.llvm) {
       middle = draw->pt.middle.llvm;
    } else {
@@ -96,8 +93,7 @@ draw_pt_arrays(struct draw_context *draw,
          middle = draw->pt.middle.general;
    }
 
-   frontend = draw->pt.frontend;
-
+   struct draw_pt_front_end *frontend = draw->pt.frontend;
    if (frontend) {
       if (draw->pt.prim != prim || draw->pt.opt != opt) {
          /* In certain conditions switching primitives requires us to flush
@@ -136,7 +132,6 @@ draw_pt_arrays(struct draw_context *draw,
    }
 
    for (unsigned i = 0; i < num_draws; i++) {
-      unsigned count = draw_info[i].count;
       /* Sanitize primitive length:
        */
       unsigned first, incr;
@@ -144,12 +139,23 @@ draw_pt_arrays(struct draw_context *draw,
       if (prim == PIPE_PRIM_PATCHES) {
          first = draw->pt.vertices_per_patch;
          incr = draw->pt.vertices_per_patch;
-      } else
+      } else {
          draw_pt_split_prim(prim, &first, &incr);
-      count = draw_pt_trim_count(draw_info[i].count, first, incr);
-      draw->pt.user.eltBias = draw->pt.user.eltSize ?
-                              (index_bias_varies ? draw_info[i].index_bias : draw_info[0].index_bias) :
-                              0;
+      }
+
+      unsigned count = draw_pt_trim_count(draw_info[i].count, first, incr);
+      if (draw->pt.user.eltSize) {
+         if (index_bias_varies) {
+            draw->pt.user.eltBias = draw_info[i].index_bias;
+         } else {
+            draw->pt.user.eltBias = draw_info[0].index_bias;
+         }
+      } else {
+         draw->pt.user.eltBias = 0;
+      }
+
+      draw->start_index = draw_info[i].start;
+
       if (count >= first)
          frontend->run(frontend, draw_info[i].start, count);
 
@@ -393,6 +399,7 @@ prim_restart_loop(struct draw_context *draw,
    }
 }
 
+
 /**
  * For drawing prims with primitive restart enabled.
  * Scan for restart indexes and draw the runs of elements/vertices between
@@ -404,20 +411,17 @@ draw_pt_arrays_restart(struct draw_context *draw,
                        const struct pipe_draw_start_count_bias *draw_info,
                        unsigned num_draws)
 {
-   const enum pipe_prim_type prim = info->mode;
-
    assert(info->primitive_restart);
 
    if (draw->pt.user.eltSize) {
       /* indexed prims (draw_elements) */
       for (unsigned i = 0; i < num_draws; i++)
          prim_restart_loop(draw, info, &draw_info[i], draw->pt.user.elts);
-   }
-   else {
+   } else {
       /* Non-indexed prims (draw_arrays).
        * Primitive restart should have been handled in gallium frontends.
        */
-      draw_pt_arrays(draw, prim, info->index_bias_varies, draw_info, num_draws);
+      draw_pt_arrays(draw, info->mode, info->index_bias_varies, draw_info, num_draws);
    }
 }
 
@@ -436,8 +440,8 @@ resolve_draw_info(const struct pipe_draw_info *raw_info,
                   struct pipe_draw_start_count_bias *draw,
                   struct pipe_vertex_buffer *vertex_buffer)
 {
-   memcpy(info, raw_info, sizeof(struct pipe_draw_info));
-   memcpy(draw, raw_draw, sizeof(struct pipe_draw_start_count_bias));
+   *info = *raw_info;
+   *draw = *raw_draw;
 
    struct draw_so_target *target =
       (struct draw_so_target *)indirect->count_from_stream_output;
@@ -478,8 +482,7 @@ draw_instances(struct draw_context *draw,
 
       if (info->primitive_restart) {
          draw_pt_arrays_restart(draw, info, draws, num_draws);
-      }
-      else {
+      } else {
          draw_pt_arrays(draw, info->mode, info->index_bias_varies,
                         draws, num_draws);
       }
@@ -502,12 +505,11 @@ draw_vbo(struct draw_context *draw,
          unsigned num_draws,
          uint8_t patch_vertices)
 {
-   unsigned index_limit;
    unsigned fpstate = util_fpstate_get();
    struct pipe_draw_info resolved_info;
    struct pipe_draw_start_count_bias resolved_draw;
-   struct pipe_draw_info *use_info = (struct pipe_draw_info *)info;
-   struct pipe_draw_start_count_bias *use_draws = (struct pipe_draw_start_count_bias *)draws;
+   const struct pipe_draw_info *use_info;
+   const struct pipe_draw_start_count_bias *use_draws;
 
    if (info->instance_count == 0)
       return;
@@ -523,6 +525,9 @@ draw_vbo(struct draw_context *draw,
       use_info = &resolved_info;
       use_draws = &resolved_draw;
       num_draws = 1;
+   } else {
+      use_info = info;
+      use_draws = draws;
    }
 
    if (info->index_size) {
@@ -578,10 +583,10 @@ draw_vbo(struct draw_context *draw,
                            : use_draws[0].index_bias);
    }
 
-   index_limit = util_draw_max_index(draw->pt.vertex_buffer,
-                                     draw->pt.vertex_element,
-                                     draw->pt.nr_vertex_elements,
-                                     use_info);
+   unsigned index_limit = util_draw_max_index(draw->pt.vertex_buffer,
+                                              draw->pt.vertex_element,
+                                              draw->pt.nr_vertex_elements,
+                                              use_info);
 #ifdef DRAW_LLVM_AVAILABLE
    if (!draw->llvm)
 #endif
@@ -600,7 +605,6 @@ draw_vbo(struct draw_context *draw,
    }
 
    draw->pt.max_index = index_limit - 1;
-   draw->start_index = use_draws[0].start;
 
    /*
     * TODO: We could use draw->pt.max_index to further narrow

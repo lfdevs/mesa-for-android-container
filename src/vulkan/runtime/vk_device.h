@@ -34,6 +34,7 @@
 extern "C" {
 #endif
 
+struct vk_command_buffer_ops;
 struct vk_sync;
 
 enum vk_queue_submit_mode {
@@ -105,6 +106,9 @@ struct vk_device {
 
    struct {
       bool robustBufferAccess;
+      bool robustBufferAccess2;
+      bool robustImageAccess;
+      bool robustImageAccess2;
    } enabled_features;
 
    /** Device-level dispatch table */
@@ -123,6 +127,9 @@ struct vk_device {
     *     level dispatch table.
     */
    const struct vk_device_dispatch_table *command_dispatch_table;
+
+   /** Command buffer vtable when using the common command pool */
+   const struct vk_command_buffer_ops *command_buffer_ops;
 
    /* For VK_EXT_private_data */
    uint32_t private_data_next_index;
@@ -345,6 +352,56 @@ vk_device_check_status(struct vk_device *device)
 
    return result;
 }
+
+#ifndef _WIN32
+
+uint64_t
+vk_clock_gettime(clockid_t clock_id);
+
+static inline uint64_t
+vk_time_max_deviation(uint64_t begin, uint64_t end, uint64_t max_clock_period)
+{
+    /*
+     * The maximum deviation is the sum of the interval over which we
+     * perform the sampling and the maximum period of any sampled
+     * clock. That's because the maximum skew between any two sampled
+     * clock edges is when the sampled clock with the largest period is
+     * sampled at the end of that period but right at the beginning of the
+     * sampling interval and some other clock is sampled right at the
+     * beginning of its sampling period and right at the end of the
+     * sampling interval. Let's assume the GPU has the longest clock
+     * period and that the application is sampling GPU and monotonic:
+     *
+     *                               s                 e
+     *			 w x y z 0 1 2 3 4 5 6 7 8 9 a b c d e f
+     *	Raw              -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
+     *
+     *                               g
+     *		  0         1         2         3
+     *	GPU       -----_____-----_____-----_____-----_____
+     *
+     *                                                m
+     *					    x y z 0 1 2 3 4 5 6 7 8 9 a b c
+     *	Monotonic                           -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
+     *
+     *	Interval                     <----------------->
+     *	Deviation           <-------------------------->
+     *
+     *		s  = read(raw)       2
+     *		g  = read(GPU)       1
+     *		m  = read(monotonic) 2
+     *		e  = read(raw)       b
+     *
+     * We round the sample interval up by one tick to cover sampling error
+     * in the interval clock
+     */
+
+   uint64_t sample_interval = end - begin + 1;
+
+   return sample_interval + max_clock_period;
+}
+
+#endif //!_WIN32
 
 PFN_vkVoidFunction
 vk_device_get_proc_addr(const struct vk_device *device,

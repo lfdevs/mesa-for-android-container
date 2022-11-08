@@ -39,7 +39,7 @@ Instantiate your boards by creating them in the UI or at the command
 line attached to that device type, then populate their dictionary
 (using an "extends" line probably referencing the board's template in
 ``/etc/lava-dispatcher/device-types``).  Now, go find a relevant
-healthcheck job for your board as a test job definition, or cobble
+health check job for your board as a test job definition, or cobble
 something together from a board that boots using the same boot_method
 and some public images, and figure out how to get your boards booting.
 
@@ -51,7 +51,7 @@ to restrict the jobs it takes or it will grab random jobs from tasks
 across ``gitlab.freedesktop.org``, and your runner isn't ready for
 that.
 
-The Docker image will need access to the lava instance.  If it's on a
+The Docker image will need access to the LAVA instance.  If it's on a
 public network it should be fine.  If you're running the LAVA instance
 on localhost, you'll need to set ``network_mode="host"`` in
 ``/etc/gitlab-runner/config.toml`` so it can access localhost.  Create a
@@ -74,7 +74,7 @@ access it.  You probably have a ``volumes = ["/cache"]`` already, so now it woul
 
 Note that this token is visible to anybody that can submit MRs to
 Mesa!  It is not an actual secret.  We could just bake it into the
-GitLab CI yml, but this way the current method of connecting to the
+GitLab CI YAML, but this way the current method of connecting to the
 LAVA instance is separated from the Mesa branches (particularly
 relevant as we have many stable branches all using CI).
 

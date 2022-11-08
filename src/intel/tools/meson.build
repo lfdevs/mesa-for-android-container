@@ -156,7 +156,7 @@ if with_tools.contains('intel-ui')
     link_with : [libintel_common, libintel_compiler, libintel_dev, libaub],
     c_args : [no_override_init_args],
     gnu_symbol_visibility : 'hidden',
-    cpp_args : ['-fpermissive', '-Wno-parentheses', '-Wno-class-memaccess'],
+    cpp_args : ['-fpermissive', '-Wno-parentheses'],
     install : true
   )
 endif

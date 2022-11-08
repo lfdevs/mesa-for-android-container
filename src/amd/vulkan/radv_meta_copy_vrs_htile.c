@@ -51,11 +51,13 @@ build_copy_vrs_htile_shader(struct radv_device *device, struct radeon_surf *surf
    /* Get coordinates. */
    nir_ssa_def *global_id = get_global_ids(&b, 2);
 
+   nir_ssa_def *offset = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 0), .range = 8);
+
    /* Multiply the coordinates by the HTILE block size. */
-   nir_ssa_def *coord = nir_imul_imm(&b, global_id, 8);
+   nir_ssa_def *coord = nir_iadd(&b, nir_imul_imm(&b, global_id, 8), offset);
 
    /* Load constants. */
-   nir_ssa_def *constants = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 0), .range = 12);
+   nir_ssa_def *constants = nir_load_push_constant(&b, 3, 32, nir_imm_int(&b, 8), .range = 20);
    nir_ssa_def *htile_pitch = nir_channel(&b, constants, 0);
    nir_ssa_def *htile_slice_size = nir_channel(&b, constants, 1);
    nir_ssa_def *read_htile_value = nir_channel(&b, constants, 2);
@@ -176,7 +178,7 @@ radv_device_init_meta_copy_vrs_htile_state(struct radv_device *device,
          &(VkPushConstantRange){
             VK_SHADER_STAGE_COMPUTE_BIT,
             0,
-            12,
+            20,
          },
    };
 
@@ -201,7 +203,7 @@ radv_device_init_meta_copy_vrs_htile_state(struct radv_device *device,
    };
 
    result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        radv_pipeline_cache_to_handle(&state->cache), 1,
+                                        state->cache, 1,
                                         &pipeline_info, NULL, &state->copy_vrs_htile_pipeline);
 fail:
    ralloc_free(cs);
@@ -210,7 +212,7 @@ fail:
 
 void
 radv_copy_vrs_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image *vrs_image,
-                    VkExtent2D *extent, struct radv_image *dst_image,
+                    const VkRect2D *rect, struct radv_image *dst_image,
                     struct radv_buffer *htile_buffer, bool read_htile_value)
 {
    struct radv_device *device = cmd_buffer->device;
@@ -224,7 +226,7 @@ radv_copy_vrs_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image *vrs_i
       VkResult ret = radv_device_init_meta_copy_vrs_htile_state(cmd_buffer->device,
                                                                 &dst_image->planes[0].surface);
       if (ret != VK_SUCCESS) {
-         cmd_buffer->record_result = ret;
+         vk_command_buffer_set_error(&cmd_buffer->vk, ret);
          return;
       }
    }
@@ -280,16 +282,17 @@ radv_copy_vrs_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image *vrs_i
                                                    .offset = 0,
                                                    .range = htile_buffer->vk.size}}});
 
-   const unsigned constants[3] = {
+   const unsigned constants[5] = {
+      rect->offset.x, rect->offset.y,
       dst_image->planes[0].surface.meta_pitch, dst_image->planes[0].surface.meta_slice_size,
       read_htile_value,
    };
 
    radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), state->copy_vrs_htile_p_layout,
-                         VK_SHADER_STAGE_COMPUTE_BIT, 0, 12, constants);
+                         VK_SHADER_STAGE_COMPUTE_BIT, 0, 20, constants);
 
-   uint32_t width = DIV_ROUND_UP(extent->width, 8);
-   uint32_t height = DIV_ROUND_UP(extent->height, 8);
+   uint32_t width = DIV_ROUND_UP(rect->extent.width, 8);
+   uint32_t height = DIV_ROUND_UP(rect->extent.height, 8);
 
    radv_unaligned_dispatch(cmd_buffer, width, height, 1);
 

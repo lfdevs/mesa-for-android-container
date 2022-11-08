@@ -132,6 +132,108 @@ tu6_format_texture_supported(enum pipe_format format)
    return tu6_format_texture_unchecked(format, TILE6_LINEAR).fmt != FMT6_NONE;
 }
 
+enum tu6_ubwc_compat_type {
+   TU6_UBWC_UNKNOWN_COMPAT,
+   TU6_UBWC_R8G8_UNORM,
+   TU6_UBWC_R8G8_INT,
+   TU6_UBWC_R8G8B8A8_UNORM,
+   TU6_UBWC_R8G8B8A8_INT,
+   TU6_UBWC_B8G8R8A8_UNORM,
+   TU6_UBWC_R16G16_INT,
+   TU6_UBWC_R16G16B16A16_INT,
+   TU6_UBWC_R32_INT,
+   TU6_UBWC_R32G32_INT,
+   TU6_UBWC_R32G32B32A32_INT,
+   TU6_UBWC_R32_FLOAT,
+};
+
+static enum tu6_ubwc_compat_type
+tu6_ubwc_compat_mode(VkFormat format)
+{
+   switch (format) {
+   case VK_FORMAT_R8G8_UNORM:
+   case VK_FORMAT_R8G8_SRGB:
+      return TU6_UBWC_R8G8_UNORM;
+
+   case VK_FORMAT_R8G8_UINT:
+   case VK_FORMAT_R8G8_SINT:
+      return TU6_UBWC_R8G8_INT;
+
+   case VK_FORMAT_R8G8B8A8_UNORM:
+   case VK_FORMAT_R8G8B8A8_SRGB:
+   case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+   case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
+      return TU6_UBWC_R8G8B8A8_UNORM;
+
+   case VK_FORMAT_R8G8B8A8_UINT:
+   case VK_FORMAT_R8G8B8A8_SINT:
+   case VK_FORMAT_A8B8G8R8_UINT_PACK32:
+   case VK_FORMAT_A8B8G8R8_SINT_PACK32:
+      return TU6_UBWC_R8G8B8A8_INT;
+
+   case VK_FORMAT_R16G16_UINT:
+   case VK_FORMAT_R16G16_SINT:
+      return TU6_UBWC_R16G16_INT;
+
+   case VK_FORMAT_R16G16B16A16_UINT:
+   case VK_FORMAT_R16G16B16A16_SINT:
+      return TU6_UBWC_R16G16B16A16_INT;
+
+   case VK_FORMAT_R32_UINT:
+   case VK_FORMAT_R32_SINT:
+      return TU6_UBWC_R32_INT;
+
+   case VK_FORMAT_R32G32_UINT:
+   case VK_FORMAT_R32G32_SINT:
+      return TU6_UBWC_R32G32_INT;
+
+   case VK_FORMAT_R32G32B32A32_UINT:
+   case VK_FORMAT_R32G32B32A32_SINT:
+      return TU6_UBWC_R32G32B32A32_INT;
+
+   case VK_FORMAT_D32_SFLOAT:
+   case VK_FORMAT_R32_SFLOAT:
+      /* TODO: a630 blob allows these, but not a660.  When is it legal? */
+      return TU6_UBWC_UNKNOWN_COMPAT;
+
+   case VK_FORMAT_B8G8R8A8_UNORM:
+   case VK_FORMAT_B8G8R8A8_SRGB:
+      /* The blob doesn't list these as compatible, but they surely are.
+       * freedreno's happy to cast between them, and zink would really like
+       * to.
+       */
+      return TU6_UBWC_B8G8R8A8_UNORM;
+
+   default:
+      return TU6_UBWC_UNKNOWN_COMPAT;
+   }
+}
+
+bool
+tu6_mutable_format_list_ubwc_compatible(const VkImageFormatListCreateInfo *fmt_list)
+{
+   if (!fmt_list || !fmt_list->viewFormatCount)
+      return false;
+
+   /* We're only looking at format list cross compatibility here, check
+    * ubwc_possible() for the base "is the format UBWC-able at all?"
+    */
+   if (fmt_list->viewFormatCount == 1)
+      return true;
+
+   enum tu6_ubwc_compat_type type =
+      tu6_ubwc_compat_mode(fmt_list->pViewFormats[0]);
+   if (type == TU6_UBWC_UNKNOWN_COMPAT)
+      return false;
+
+   for (uint32_t i = 1; i < fmt_list->viewFormatCount; i++) {
+      if (tu6_ubwc_compat_mode(fmt_list->pViewFormats[i]) != type)
+         return false;
+   }
+
+   return true;
+}
+
 static void
 tu_physical_device_get_format_properties(
    struct tu_physical_device *physical_device,
@@ -329,7 +431,9 @@ tu_GetPhysicalDeviceFormatProperties2(
       /* note: ubwc_possible() argument values to be ignored except for format */
       if (pFormatProperties->formatProperties.optimalTilingFeatures &&
           tiling_possible(format) &&
-          ubwc_possible(format, VK_IMAGE_TYPE_2D, 0, 0, physical_device->info, VK_SAMPLE_COUNT_1_BIT, false)) {
+          ubwc_possible(NULL, format, VK_IMAGE_TYPE_2D, 0, 0,
+                        physical_device->info, VK_SAMPLE_COUNT_1_BIT,
+                        false)) {
          vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT, &out, mod_props) {
             mod_props->drmFormatModifier = DRM_FORMAT_MOD_QCOM_COMPRESSED;
             mod_props->drmFormatModifierPlaneCount = tu6_plane_count(format);
@@ -375,13 +479,19 @@ tu_get_image_format_properties(
              !tiling_possible(info->format))
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
-         /* for mutable formats, its very unlikely to be possible to use UBWC */
-         if (info->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)
-            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+         if (info->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) {
+            const VkImageFormatListCreateInfo *format_list =
+               vk_find_struct_const(info->pNext,
+                                    IMAGE_FORMAT_LIST_CREATE_INFO);
+            if (!tu6_mutable_format_list_ubwc_compatible(format_list))
+               return VK_ERROR_FORMAT_NOT_SUPPORTED;
+         }
 
-
-         if (!ubwc_possible(info->format, info->type, info->usage, info->usage, physical_device->info, sampleCounts, false))
+         if (!ubwc_possible(NULL, info->format, info->type, info->usage,
+                            info->usage, physical_device->info, sampleCounts,
+                            false)) {
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
+         }
 
          format_feature_flags = format_props.optimalTilingFeatures;
          break;

@@ -640,7 +640,6 @@ dxil_spirv_nir_passes(nir_shader *nir,
    if (conf->read_only_images_as_srvs) {
       const nir_opt_access_options opt_access_options = {
          .is_vulkan = true,
-         .infer_non_readable = true,
       };
       NIR_PASS_V(nir, nir_opt_access, &opt_access_options);
    }
@@ -726,6 +725,7 @@ dxil_spirv_nir_passes(nir_shader *nir,
 
    NIR_PASS_V(nir, nir_lower_readonly_images_to_tex, true);
    nir_lower_tex_options lower_tex_options = {
+      .lower_txp = UINT32_MAX,
       .lower_invalid_implicit_lod = true,
    };
    NIR_PASS_V(nir, nir_lower_tex, &lower_tex_options);

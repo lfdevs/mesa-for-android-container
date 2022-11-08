@@ -24,36 +24,7 @@
 #ifndef ZINK_FENCE_H
 #define ZINK_FENCE_H
 
-#include "util/simple_mtx.h"
-#include "util/u_inlines.h"
-#include "util/u_queue.h"
-
-#include <vulkan/vulkan.h>
-
-struct pipe_context;
-struct pipe_screen;
-struct zink_batch;
-struct zink_batch_state;
-struct zink_context;
-struct zink_screen;
-
-struct tc_unflushed_batch_token;
-
-struct zink_tc_fence {
-   struct pipe_reference reference;
-   uint32_t submit_count;
-   struct util_queue_fence ready;
-   struct tc_unflushed_batch_token *tc_token;
-   struct pipe_context *deferred_ctx;
-   struct zink_fence *fence;
-   VkSemaphore sem;
-};
-
-struct zink_fence {
-   uint64_t batch_id;
-   bool submitted;
-   bool completed;
-};
+#include "zink_types.h"
 
 static inline struct zink_fence *
 zink_fence(void *pfence)

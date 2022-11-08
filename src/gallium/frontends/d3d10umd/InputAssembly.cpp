@@ -32,9 +32,6 @@
 
 
 #include <stdio.h>
-#if defined(_MSC_VER) && !defined(snprintf)
-#define snprintf _snprintf
-#endif
 
 #include "InputAssembly.h"
 #include "State.h"

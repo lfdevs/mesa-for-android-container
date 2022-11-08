@@ -117,7 +117,6 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         switch (param) {
                 /* Supported features (boolean caps). */
         case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
-        case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
         case PIPE_CAP_NPOT_TEXTURES:
         case PIPE_CAP_BLEND_EQUATION_SEPARATE:
         case PIPE_CAP_TEXTURE_MULTISAMPLE:
@@ -131,7 +130,6 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_EMULATE_NONFIXED_PRIMITIVE_RESTART:
         case PIPE_CAP_PRIMITIVE_RESTART:
         case PIPE_CAP_OCCLUSION_QUERY:
-        case PIPE_CAP_POINT_SPRITE:
         case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
         case PIPE_CAP_DRAW_INDIRECT:
         case PIPE_CAP_MULTI_DRAW_INDIRECT:
@@ -226,7 +224,6 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                         return 0;
 
         case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
-        case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
         case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
                 return 1;
 
@@ -298,7 +295,7 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return true;
 
         case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-                return 256;
+                return V3D_TMU_TEXEL_ALIGN;
 
         case PIPE_CAP_IMAGE_STORE_FORMATTED:
                 return false;
@@ -346,7 +343,7 @@ v3d_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 }
 
 static int
-v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
+v3d_screen_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_type shader,
                            enum pipe_shader_cap param)
 {
         struct v3d_screen *screen = v3d_screen(pscreen);
@@ -745,7 +742,7 @@ static const nir_shader_compiler_options v3d_nir_options = {
 
 static const void *
 v3d_screen_get_compiler_options(struct pipe_screen *pscreen,
-                                enum pipe_shader_ir ir, unsigned shader)
+                                enum pipe_shader_ir ir, enum pipe_shader_type shader)
 {
         return &v3d_nir_options;
 }

@@ -101,14 +101,12 @@ pp_init_prog(struct pp_queue_t *ppq, struct pipe_context *pipe,
    p->sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
    p->sampler.min_img_filter = p->sampler.mag_img_filter =
       PIPE_TEX_FILTER_LINEAR;
-   p->sampler.normalized_coords = 1;
 
    p->sampler_point.wrap_s = p->sampler_point.wrap_t =
       p->sampler_point.wrap_r = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
    p->sampler_point.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
    p->sampler_point.min_img_filter = p->sampler_point.mag_img_filter =
       PIPE_TEX_FILTER_NEAREST;
-   p->sampler_point.normalized_coords = 1;
 
    p->velem.count = 2;
    p->velem.velems[0].src_offset = 0;

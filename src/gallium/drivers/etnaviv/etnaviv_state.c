@@ -167,8 +167,12 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
 
       cs->PE_COLOR_FORMAT |=
          VIVS_PE_COLOR_FORMAT_COMPONENTS__MASK |
-         VIVS_PE_COLOR_FORMAT_OVERWRITE |
          COND(color_supertiled, VIVS_PE_COLOR_FORMAT_SUPER_TILED);
+
+      nr_samples_color = cbuf->base.texture->nr_samples;
+      if (nr_samples_color <= 1)
+         cs->PE_COLOR_FORMAT |= VIVS_PE_COLOR_FORMAT_OVERWRITE;
+
       if (VIV_FEATURE(screen, chipMinorFeatures6, CACHE128B256BPERLINE))
          cs->PE_COLOR_FORMAT |= COND(color_supertiled, VIVS_PE_COLOR_FORMAT_SUPER_TILED_NEW);
       /* VIVS_PE_COLOR_FORMAT_COMPONENTS() and
@@ -224,8 +228,6 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
                VIVS_TS_MEM_CONFIG_COLOR_COMPRESSION_FORMAT(cbuf->level->ts_compress_fmt);
          }
       }
-
-      nr_samples_color = cbuf->base.texture->nr_samples;
 
       if (util_format_is_srgb(cbuf->base.format))
          pe_logic_op |= VIVS_PE_LOGIC_OP_SRGB;
@@ -361,6 +363,8 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       cs->RA_CENTROID_TABLE[9] = 0x886688a2;
       cs->RA_CENTROID_TABLE[10] = 0x888866aa;
       cs->RA_CENTROID_TABLE[11] = 0x668888a6;
+      if (VIV_FEATURE(screen, chipMinorFeatures4, SMALL_MSAA))
+         pe_logic_op |= VIVS_PE_LOGIC_OP_UNK24(0x5);
       break;
    }
 
@@ -793,8 +797,14 @@ etna_record_flush_resources(struct etna_context *ctx)
    if (fb->nr_cbufs > 0) {
       struct etna_surface *surf = etna_surface(fb->cbufs[0]);
 
-      if (!etna_resource(surf->prsc)->explicit_flush)
-         _mesa_set_add(ctx->flush_resources, surf->prsc);
+      if (!etna_resource(surf->prsc)->explicit_flush) {
+         bool found;
+
+         _mesa_set_search_or_add(ctx->flush_resources, surf->prsc, &found);
+
+         if (!found)
+            pipe_reference(NULL, &surf->prsc->reference);
+      }
    }
 
    return true;

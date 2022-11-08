@@ -35,7 +35,7 @@
 
 #include "ir.h"
 #include "ir_hierarchical_visitor.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/hash_table.h"
 #include "util/macros.h"
 #include "util/set.h"
@@ -1214,7 +1214,7 @@ validate_ir_tree(exec_list *instructions)
     * anything.
     */
 #ifndef DEBUG
-   if (!env_var_as_boolean("GLSL_VALIDATE", false))
+   if (!debug_get_bool_option("GLSL_VALIDATE", false))
       return;
 #endif
    ir_validate v;

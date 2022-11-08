@@ -29,9 +29,8 @@
 #include "compiler/glsl/gl_nir_linker.h"
 #include "tgsi/tgsi_parse.h"
 
-struct pipe_shader_state *
-st_nir_finish_builtin_shader(struct st_context *st,
-                             nir_shader *nir)
+void
+st_nir_finish_builtin_nir(struct st_context *st, nir_shader *nir)
 {
    struct pipe_screen *screen = st->screen;
    gl_shader_stage stage = nir->info.stage;
@@ -75,6 +74,13 @@ st_nir_finish_builtin_shader(struct st_context *st,
    } else {
       gl_nir_opts(nir);
    }
+}
+
+struct pipe_shader_state *
+st_nir_finish_builtin_shader(struct st_context *st,
+                             nir_shader *nir)
+{
+   st_nir_finish_builtin_nir(st, nir);
 
    struct pipe_shader_state state = {
       .type = PIPE_SHADER_IR_NIR,

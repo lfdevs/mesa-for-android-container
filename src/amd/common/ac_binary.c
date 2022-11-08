@@ -27,10 +27,6 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
-#ifndef _WIN32
-#include <gelf.h>
-#include <libelf.h>
-#endif
 #include <sid.h>
 #include <stdio.h>
 
@@ -121,16 +117,6 @@ void ac_parse_shader_binary_config(const char *data, size_t nbytes, unsigned wav
 
    if (!conf->spi_ps_input_addr)
       conf->spi_ps_input_addr = conf->spi_ps_input_ena;
-
-   /* GFX 10.3 internally:
-    * - aligns VGPRS to 16 for Wave32 and 8 for Wave64
-    * - aligns LDS to 1024
-    *
-    * For shader-db stats, set num_vgprs that the hw actually uses.
-    */
-   if (info->gfx_level == GFX10_3) {
-      conf->num_vgprs = align(conf->num_vgprs, wave_size == 32 ? 16 : 8);
-   }
 
    /* Enable 64-bit and 16-bit denormals, because there is no performance
     * cost.

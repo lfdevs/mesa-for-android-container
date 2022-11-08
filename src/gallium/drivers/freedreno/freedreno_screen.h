@@ -34,7 +34,7 @@
 
 #include "pipe/p_screen.h"
 #include "renderonly/renderonly.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/simple_mtx.h"
 #include "util/slab.h"
 #include "util/u_idalloc.h"
@@ -89,6 +89,7 @@ struct fd_screen {
    uint32_t ram_size;
    uint32_t max_rts; /* max # of render targets */
    uint32_t priority_mask;
+   unsigned prio_low, prio_norm, prio_high;  /* remap low/norm/high priority to kernel priority */
    bool has_timestamp;
    bool has_robustness;
    bool has_syncobj;

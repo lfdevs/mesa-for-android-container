@@ -373,9 +373,7 @@ static void destroy_compute_resources(struct context *ctx)
 static void init_sampler_states(struct context *ctx, int n)
 {
         struct pipe_context *pipe = ctx->pipe;
-        struct pipe_sampler_state smp = {
-                .normalized_coords = 1,
-        };
+        struct pipe_sampler_state smp = {0};
         int i;
 
         for (i = 0; i < n; ++i) {

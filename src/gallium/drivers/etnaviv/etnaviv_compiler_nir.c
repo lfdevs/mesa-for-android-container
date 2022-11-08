@@ -691,7 +691,7 @@ insert_vec_mov(nir_alu_instr *vec, unsigned start_idx, nir_shader *shader)
    unsigned write_mask = (1u << start_idx);
 
    nir_alu_instr *mov = nir_alu_instr_create(shader, nir_op_mov);
-   nir_alu_src_copy(&mov->src[0], &vec->src[start_idx]);
+   nir_alu_src_copy(&mov->src[0], &vec->src[start_idx], mov);
 
    mov->src[0].swizzle[0] = vec->src[start_idx].swizzle[0];
    mov->src[0].negate = vec->src[start_idx].negate;
@@ -1129,10 +1129,10 @@ etna_compile_shader(struct etna_shader_variant *v)
 
    NIR_PASS_V(s, nir_lower_alu_to_scalar, etna_alu_to_scalar_filter_cb, specs);
    nir_lower_idiv_options idiv_options = {
-      .imprecise_32bit_lowering = true,
       .allow_fp16 = true,
    };
    NIR_PASS_V(s, nir_lower_idiv, &idiv_options);
+   NIR_PASS_V(s, nir_lower_alu);
 
    etna_optimize_loop(s);
 

@@ -107,12 +107,16 @@ struct __DriverContextConfig {
 
     /* Only valid if __DRIVER_CONTEXT_ATTRIB_NO_ERROR is set */
     int no_error;
+
+    /* Only valid if __DRIVER_CONTEXT_ATTRIB_PROTECTED is set */
+    int protected_context;
 };
 
 #define __DRIVER_CONTEXT_ATTRIB_RESET_STRATEGY   (1 << 0)
 #define __DRIVER_CONTEXT_ATTRIB_PRIORITY         (1 << 1)
 #define __DRIVER_CONTEXT_ATTRIB_RELEASE_BEHAVIOR (1 << 2)
 #define __DRIVER_CONTEXT_ATTRIB_NO_ERROR         (1 << 3)
+#define __DRIVER_CONTEXT_ATTRIB_PROTECTED        (1 << 4)
 
 /**
  * Driver callback functions.

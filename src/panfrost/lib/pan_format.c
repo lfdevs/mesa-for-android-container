@@ -398,15 +398,11 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
         FMT(R9G9B9E5_FLOAT,          R9F_G9F_B9F_E5F, RGB1, L, VT__),
         FMT(R8_SNORM,                R8_SNORM,        R001, L, VT__),
         FMT(R16_SNORM,               R16_SNORM,       R001, L, VT__),
-        FMT(R32_SNORM,               R32_SNORM,       R001, L, VT__),
         FMT(R8G8_SNORM,              RG8_SNORM,       RG01, L, VT__),
         FMT(R16G16_SNORM,            RG16_SNORM,      RG01, L, VT__),
-        FMT(R32G32_SNORM,            RG32_SNORM,      RG01, L, VT__),
         FMT(R8G8B8_SNORM,            RGB8_SNORM,      RGB1, L, VT__),
-        FMT(R32G32B32_SNORM,         RGB32_SNORM,     RGB1, L, VT__),
         FMT(R8G8B8A8_SNORM,          RGBA8_SNORM,     RGBA, L, VT__),
         FMT(R16G16B16A16_SNORM,      RGBA16_SNORM,    RGBA, L, VT__),
-        FMT(R32G32B32A32_SNORM,      RGBA32_SNORM,    RGBA, L, VT__),
         FMT(I8_SINT,                 R8I,             RRRR, L, VTR_),
         FMT(L8_SINT,                 R8I,             RRR1, L, VTR_),
         FMT(I8_UINT,                 R8UI,            RRRR, L, VTR_),
@@ -441,12 +437,33 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
         FMT(R32G32B32_FLOAT,         RGB32F,          RGB1, L, VTR_),
         FMT(R32G32B32A32_FLOAT,      RGBA32F,         RGBA, L, VTR_),
         FMT(R8_UNORM,                R8_UNORM,        R001, L, VTR_),
-        FMT(R16_UNORM,               R16_UNORM,       R001, L, VT__),
-        FMT(R32_UNORM,               R32_UNORM,       R001, L, VT__),
+        FMT(R16_UNORM,               R16_UNORM,       R001, L, VTR_),
         FMT(R8G8_UNORM,              RG8_UNORM,       RG01, L, VTR_),
-        FMT(R16G16_UNORM,            RG16_UNORM,      RG01, L, VT__),
-        FMT(R32G32_UNORM,            RG32_UNORM,      RG01, L, VT__),
+        FMT(R16G16_UNORM,            RG16_UNORM,      RG01, L, VTR_),
         FMT(R8G8B8_UNORM,            RGB8_UNORM,      RGB1, L, VTR_),
+
+        /* 32-bit NORM is not texturable in v7 onwards. It's renderable
+         * everywhere, but rendering without texturing is not useful.
+         */
+#if PAN_ARCH <= 6
+        FMT(R32_UNORM,               R32_UNORM,       R001, L, VTR_),
+        FMT(R32G32_UNORM,            RG32_UNORM,      RG01, L, VTR_),
+        FMT(R32G32B32_UNORM,         RGB32_UNORM,     RGB1, L, VT__),
+        FMT(R32G32B32A32_UNORM,      RGBA32_UNORM,    RGBA, L, VTR_),
+        FMT(R32_SNORM,               R32_SNORM,       R001, L, VT__),
+        FMT(R32G32_SNORM,            RG32_SNORM,      RG01, L, VT__),
+        FMT(R32G32B32_SNORM,         RGB32_SNORM,     RGB1, L, VT__),
+        FMT(R32G32B32A32_SNORM,      RGBA32_SNORM,    RGBA, L, VT__),
+#else
+        FMT(R32_UNORM,               R32_UNORM,       R001, L, V___),
+        FMT(R32G32_UNORM,            RG32_UNORM,      RG01, L, V___),
+        FMT(R32G32B32_UNORM,         RGB32_UNORM,     RGB1, L, V___),
+        FMT(R32G32B32A32_UNORM,      RGBA32_UNORM,    RGBA, L, V___),
+        FMT(R32_SNORM,               R32_SNORM,       R001, L, V___),
+        FMT(R32G32_SNORM,            RG32_SNORM,      RG01, L, V___),
+        FMT(R32G32B32_SNORM,         RGB32_SNORM,     RGB1, L, V___),
+        FMT(R32G32B32A32_SNORM,      RGBA32_SNORM,    RGBA, L, V___),
+#endif
 
         /* Don't allow render/texture for 48-bit  */
         FMT(R16G16B16_UNORM,         RGB16_UNORM,     RGB1, L, V___),
@@ -456,16 +473,9 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
         FMT(R16G16B16_SSCALED,       RGB16I,          RGB1, L, V___),
         FMT(R16G16B16_SNORM,         RGB16_SNORM,     RGB1, L, V___),
         FMT(R16G16B16_UINT,          RGB16UI,         RGB1, L, V___),
-
-#if PAN_ARCH <= 6
-        FMT(R32G32B32_UNORM,         RGB32_UNORM,     RGB1, L, VT__),
-#else
-        FMT(R32G32B32_UNORM,         RGB32_UNORM,     RGB1, L, V___),
-#endif
         FMT(R4G4B4A4_UNORM,          RGBA4_UNORM,     RGBA, L, VTR_),
         FMT(B4G4R4A4_UNORM,          RGBA4_UNORM,     BGRA, L, VTR_),
-        FMT(R16G16B16A16_UNORM,      RGBA16_UNORM,    RGBA, L, VT__),
-        FMT(R32G32B32A32_UNORM,      RGBA32_UNORM,    RGBA, L, VT__),
+        FMT(R16G16B16A16_UNORM,      RGBA16_UNORM,    RGBA, L, VTR_),
         FMT(B8G8R8A8_UNORM,          RGBA8_UNORM,     BGRA, L, VTR_),
         FMT(B8G8R8X8_UNORM,          RGBA8_UNORM,     BGR1, L, VTR_),
         FMT(A8R8G8B8_UNORM,          RGBA8_UNORM,     GBAR, L, VTR_),

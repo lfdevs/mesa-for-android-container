@@ -138,8 +138,12 @@ vl_matrix_filter_init(struct vl_matrix_filter *filter, struct pipe_context *pipe
    struct pipe_blend_state blend;
    struct pipe_sampler_state sampler;
    struct pipe_vertex_element ve;
-   struct vertex2f *offsets, v, sizes;
+   struct vertex2f *offsets;
    unsigned i, num_offsets = matrix_width * matrix_height;
+   int x;
+   int y;
+   int size_x;
+   int size_y;
 
    assert(filter && pipe);
    assert(video_width && video_height);
@@ -180,7 +184,6 @@ vl_matrix_filter_init(struct vl_matrix_filter *filter, struct pipe_context *pipe
    sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
    sampler.compare_mode = PIPE_TEX_COMPARE_NONE;
    sampler.compare_func = PIPE_FUNC_ALWAYS;
-   sampler.normalized_coords = 1;
    filter->sampler = pipe->create_sampler_state(pipe, &sampler);
    if (!filter->sampler)
       goto error_sampler;
@@ -202,12 +205,15 @@ vl_matrix_filter_init(struct vl_matrix_filter *filter, struct pipe_context *pipe
    if (!offsets)
       goto error_offsets;
 
-   sizes.x = (float)(matrix_width - 1) / 2.0f;
-   sizes.y = (float)(matrix_height - 1) / 2.0f;
+   size_x = (matrix_width - 1) / 2;
+   size_y = (matrix_height - 1) / 2;
 
-   for (v.x = -sizes.x, i = 0; v.x <= sizes.x; v.x += 1.0f)
-      for (v.y = -sizes.y; v.y <= sizes.y; v.y += 1.0f)
-         offsets[i++] = v;
+   for (x = -size_x, i = 0; x <= size_x; x++)
+      for (y = -size_y; y <= size_y; y++) {
+         offsets[i].x = x;
+         offsets[i].y = y;
+         i++;
+      }
 
    for (i = 0; i < num_offsets; ++i) {
       offsets[i].x /= video_width;

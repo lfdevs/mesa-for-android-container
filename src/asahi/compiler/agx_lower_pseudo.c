@@ -25,40 +25,38 @@
 #include "agx_builder.h"
 
 /* Lower pseudo instructions created during optimization. */
-
-static void
-agx_lower_to_unary_bitop(agx_instr *I, enum agx_bitop_table table)
+static agx_instr *
+lower(agx_builder *b, agx_instr *I)
 {
-   I->op = AGX_OPCODE_BITOP;
-   I->truth_table = table;
+   switch (I->op) {
 
-   /* Allocate extra source */
-   I->src = reralloc_array_size(I, I->src, sizeof(agx_index), I->nr_srcs++);
-   I->src[1] = agx_zero();
-}
+   /* Various instructions are implemented as bitwise truth tables */
+   case AGX_OPCODE_MOV:
+      return agx_bitop_to(b, I->dest[0], I->src[0], agx_zero(), AGX_BITOP_MOV);
 
-static void
-agx_lower_to_binary_bitop(agx_instr *I, enum agx_bitop_table table)
-{
-   I->op = AGX_OPCODE_BITOP;
-   I->truth_table = table;
+   case AGX_OPCODE_NOT:
+      return agx_bitop_to(b, I->dest[0], I->src[0], agx_zero(), AGX_BITOP_NOT);
+
+   case AGX_OPCODE_AND:
+      return agx_bitop_to(b, I->dest[0], I->src[0], I->src[1], AGX_BITOP_AND);
+
+   case AGX_OPCODE_XOR:
+      return agx_bitop_to(b, I->dest[0], I->src[0], I->src[1], AGX_BITOP_XOR);
+
+   case AGX_OPCODE_OR:
+      return agx_bitop_to(b, I->dest[0], I->src[0], I->src[1], AGX_BITOP_OR);
+
+   default: return NULL;
+   }
 }
 
 void
 agx_lower_pseudo(agx_context *ctx)
 {
-   agx_foreach_instr_global(ctx, I) {
-      switch (I->op) {
+   agx_foreach_instr_global_safe(ctx, I) {
+      agx_builder b = agx_init_builder(ctx, agx_before_instr(I));
 
-      /* Various instructions are implemented as bitwise truth tables */
-      case AGX_OPCODE_MOV: agx_lower_to_unary_bitop(I, AGX_BITOP_MOV); break;
-      case AGX_OPCODE_NOT: agx_lower_to_unary_bitop(I, AGX_BITOP_NOT); break;
-      case AGX_OPCODE_AND: agx_lower_to_binary_bitop(I, AGX_BITOP_AND); break;
-      case AGX_OPCODE_XOR: agx_lower_to_binary_bitop(I, AGX_BITOP_XOR); break;
-      case AGX_OPCODE_OR:  agx_lower_to_binary_bitop(I, AGX_BITOP_OR); break;
-
-      default:
-         break;
-      }
+      if (lower(&b, I))
+         agx_remove_instruction(I);
    }
 }

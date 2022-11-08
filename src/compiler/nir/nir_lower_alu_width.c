@@ -106,11 +106,11 @@ lower_reduction(nir_alu_instr *alu, nir_op chan_op, nir_op merge_op,
    for (int i = num_components - 1; i >= 0; i--) {
       nir_alu_instr *chan = nir_alu_instr_create(builder->shader, chan_op);
       nir_alu_ssa_dest_init(chan, 1, alu->dest.dest.ssa.bit_size);
-      nir_alu_src_copy(&chan->src[0], &alu->src[0]);
+      nir_alu_src_copy(&chan->src[0], &alu->src[0], chan);
       chan->src[0].swizzle[0] = chan->src[0].swizzle[i];
       if (nir_op_infos[chan_op].num_inputs > 1) {
          assert(nir_op_infos[chan_op].num_inputs == 2);
-         nir_alu_src_copy(&chan->src[1], &alu->src[1]);
+         nir_alu_src_copy(&chan->src[1], &alu->src[1], chan);
          chan->src[1].swizzle[0] = chan->src[1].swizzle[i];
       }
       chan->exact = alu->exact;
@@ -159,7 +159,7 @@ lower_fdot(nir_alu_instr *alu, nir_builder *builder)
          builder->shader, prev ? nir_op_ffma : nir_op_fmul);
       nir_alu_ssa_dest_init(instr, 1, alu->dest.dest.ssa.bit_size);
       for (unsigned j = 0; j < 2; j++) {
-         nir_alu_src_copy(&instr->src[j], &alu->src[j]);
+         nir_alu_src_copy(&instr->src[j], &alu->src[j], instr);
          instr->src[j].swizzle[0] = alu->src[j].swizzle[i];
       }
       if (i != num_components - 1)
@@ -381,7 +381,7 @@ lower_alu_instr_width(nir_builder *b, nir_instr *instr, void *_data)
       nir_alu_instr *lower = nir_alu_instr_create(b->shader, alu->op);
 
       for (i = 0; i < num_src; i++) {
-         nir_alu_src_copy(&lower->src[i], &alu->src[i]);
+         nir_alu_src_copy(&lower->src[i], &alu->src[i], lower);
 
          /* We only handle same-size-as-dest (input_sizes[] == 0) or scalar
           * args (input_sizes[] == 1).

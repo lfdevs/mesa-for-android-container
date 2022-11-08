@@ -103,6 +103,9 @@ struct virgl_winsys {
                                   uint32_t stride,
                                   struct winsys_handle *whandle);
 
+   uint32_t (*resource_get_storage_size)(struct virgl_winsys* vws,
+                                         struct virgl_hw_res* res);
+
    struct virgl_cmd_buf *(*cmd_buf_create)(struct virgl_winsys *ws, uint32_t size);
    void (*cmd_buf_destroy)(struct virgl_cmd_buf *buf);
 

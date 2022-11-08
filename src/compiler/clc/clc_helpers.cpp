@@ -764,9 +764,11 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
                                        &c->getDiagnosticOpts())
    };
 
+   const char *triple = args->address_bits == 32 ? "spir-unknown-unknown" : "spir64-unknown-unknown";
+
    std::vector<const char *> clang_opts = {
       args->source.name,
-      "-triple", "spir64-unknown-unknown",
+      "-triple", triple,
       // By default, clang prefers to use modules to pull in the default headers,
       // which doesn't work with our technique of embedding the headers in our binary
 #if LLVM_VERSION_MAJOR >= 15
@@ -785,7 +787,10 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
       // LLVM's optimizations can produce code that the translator can't translate
       "-O0",
       // Ensure inline functions are actually emitted
-      "-fgnu89-inline"
+      "-fgnu89-inline",
+      // Undefine clang added SPIR(V) defines so we don't magically enable extensions
+      "-U__SPIR__",
+      "-U__SPIRV__",
    };
    // We assume there's appropriate defines for __OPENCL_VERSION__ and __IMAGE_SUPPORT__
    // being provided by the caller here.

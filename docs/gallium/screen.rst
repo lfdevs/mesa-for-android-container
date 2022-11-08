@@ -29,7 +29,6 @@ The integer capabilities:
 * ``PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS``: How many dual-source blend RTs are support.
   :ref:`Blend` for more information.
 * ``PIPE_CAP_ANISOTROPIC_FILTER``: Whether textures can be filtered anisotropically.
-* ``PIPE_CAP_POINT_SPRITE``: Whether point sprites are available.
 * ``PIPE_CAP_MAX_RENDER_TARGETS``: The maximum number of render targets that may be
   bound.
 * ``PIPE_CAP_OCCLUSION_QUERY``: Whether occlusion queries are available.
@@ -72,8 +71,6 @@ The integer capabilities:
   pixel-center fragment convention is supported.
 * ``PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER``: Whether the integer
   pixel-center fragment convention is supported.
-* ``PIPE_CAP_POINT_COORD_ORIGIN_UPPER_LEFT``: Whether point coordinates use the
-  upper-left origin convention. Otherwise the lower-left convention is used.
 * ``PIPE_CAP_DEPTH_CLIP_DISABLE``: Whether the driver is capable of disabling
   depth clipping (through pipe_rasterizer_state).
 * ``PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE``: Whether the driver is capable of
@@ -127,20 +124,20 @@ The integer capabilities:
 * ``PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION``: Whether quads adhere to
   the flatshade_first setting in ``pipe_rasterizer_state``.
 * ``PIPE_CAP_USER_VERTEX_BUFFERS``: Whether the driver supports user vertex
-  buffers.  If not, gallium frontends must upload all data which is not in hw
+  buffers.  If not, gallium frontends must upload all data which is not in HW
   resources.  If user-space buffers are supported, the driver must also still
   accept HW resource buffers.
-* ``PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY``: This CAP describes a hw
+* ``PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY``: This CAP describes a HW
   limitation.  If true, pipe_vertex_buffer::buffer_offset must always be aligned
   to 4.  If false, there are no restrictions on the offset.
-* ``PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY``: This CAP describes a hw
+* ``PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY``: This CAP describes a HW
   limitation.  If true, pipe_vertex_buffer::stride must always be aligned to 4.
   If false, there are no restrictions on the stride.
 * ``PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY``: This CAP describes
-  a hw limitation.  If true, pipe_vertex_element::src_offset must always be
+  a HW limitation.  If true, pipe_vertex_element::src_offset must always be
   aligned to 4.  If false, there are no restrictions on src_offset.
 * ``PIPE_CAP_VERTEX_ATTRIB_ELEMENT_ALIGNED_ONLY``: This CAP describes
-  a hw limitation.  If true, the sum of
+  a HW limitation.  If true, the sum of
   ``pipe_vertex_element::src_offset + pipe_vertex_buffer::buffer_offset + pipe_vertex_buffer::stride``
   must always be aligned to the component size for the vertex attributes
   which access that buffer.  If false, there are no restrictions on these values.
@@ -153,6 +150,8 @@ The integer capabilities:
   pipe_draw_info::start_instance.
 * ``PIPE_CAP_QUERY_TIMESTAMP``: Whether PIPE_QUERY_TIMESTAMP and
   the pipe_screen::get_timestamp hook are implemented.
+* ``PIPE_CAP_QUERY_TIMESTAMP_BITS``: How many bits the driver uses for the
+  results of GL_TIMESTAMP queries.
 * ``PIPE_CAP_TEXTURE_MULTISAMPLE``: Whether all MSAA resources supported
   for rendering are also supported for texturing.
 * ``PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT``: The minimum alignment that should be
@@ -166,7 +165,7 @@ The integer capabilities:
   supports R, RG, RGB and RGBA formats for PIPE_BUFFER sampler views.
   When this is the case it should be assumed that the swizzle parameters
   in the sampler view have no effect.
-* ``PIPE_CAP_TGSI_TEXCOORD``: This CAP describes a hw limitation.
+* ``PIPE_CAP_TGSI_TEXCOORD``: This CAP describes a HW limitation.
   If true, the hardware cannot replace arbitrary shader inputs with sprite
   coordinates and hence the inputs that are desired to be replaceable must
   be declared with TGSI_SEMANTIC_TEXCOORD instead of TGSI_SEMANTIC_GENERIC.
@@ -260,8 +259,8 @@ The integer capabilities:
 * ``PIPE_CAP_DEVICE_ID``: The device ID (PCI ID) of the underlying hardware.
   0xFFFFFFFF if not available.
 * ``PIPE_CAP_ACCELERATED``: Whether the renderer is hardware accelerated. 0 means
-  not accelerated (ie. CPU rendering), 1 means accelerated (ie. GPU rendering),
-  -1 means unknown (ie. an API translation driver which doesn't known what kind of
+  not accelerated (i.e. CPU rendering), 1 means accelerated (i.e. GPU rendering),
+  -1 means unknown (i.e. an API translation driver which doesn't known what kind of
   hardware it's running above).
 * ``PIPE_CAP_VIDEO_MEMORY``: The amount of video memory in megabytes.
 * ``PIPE_CAP_UMA``: If the device has a unified memory architecture or on-card
@@ -276,13 +275,6 @@ The integer capabilities:
 * ``PIPE_CAP_CLIP_HALFZ``: Whether the driver supports the
   pipe_rasterizer_state::clip_halfz being set to true. This is required
   for enabling ARB_clip_control.
-* ``PIPE_CAP_VERTEXID_NOBASE``: If true, the driver only supports
-  TGSI_SEMANTIC_VERTEXID_NOBASE (and not TGSI_SEMANTIC_VERTEXID). This means
-  gallium frontends for APIs whose vertexIDs are offset by basevertex (such as GL)
-  will need to lower TGSI_SEMANTIC_VERTEXID to TGSI_SEMANTIC_VERTEXID_NOBASE
-  and TGSI_SEMANTIC_BASEVERTEX, so drivers setting this must handle both these
-  semantics. Only relevant if geometry shaders are supported.
-  (BASEVERTEX could be exposed separately too via ``PIPE_CAP_DRAW_PARAMETERS``).
 * ``PIPE_CAP_POLYGON_OFFSET_CLAMP``: If true, the driver implements support
   for ``pipe_rasterizer_state::offset_clamp``.
 * ``PIPE_CAP_MULTISAMPLE_Z_RESOLVE``: Whether the driver supports blitting
@@ -387,7 +379,7 @@ The integer capabilities:
   supported for patch primitives.
 * ``PIPE_CAP_SHADER_GROUP_VOTE``: Whether the ``VOTE_*`` ops can be used in
   shaders.
-* ``PIPE_CAP_MAX_WINDOW_RECTANGLES``: The maxium number of window rectangles
+* ``PIPE_CAP_MAX_WINDOW_RECTANGLES``: The maximum number of window rectangles
   supported in ``set_window_rectangles``.
 * ``PIPE_CAP_POLYGON_OFFSET_UNITS_UNSCALED``: If true, the driver implements support
   for ``pipe_rasterizer_state::offset_units_unscaled``.
@@ -568,9 +560,6 @@ The integer capabilities:
   OpenMAX should use a compute-based blit instead of pipe_context::blit and compute pipeline for compositing images.
 * ``PIPE_CAP_FRAGMENT_SHADER_INTERLOCK``: True if fragment shader interlock
   functionality is supported.
-* ``PIPE_CAP_CS_DERIVED_SYSTEM_VALUES_SUPPORTED``: True if driver handles
-  gl_LocalInvocationIndex and gl_GlobalInvocationID.  Otherwise, gallium frontends will
-  lower those system values.
 * ``PIPE_CAP_ATOMIC_FLOAT_MINMAX``: Atomic float point minimum,
   maximum, exchange and compare-and-swap support to buffer and shared variables.
 * ``PIPE_CAP_TGSI_DIV``: Whether opcode DIV is supported
@@ -587,7 +576,7 @@ The integer capabilities:
 * ``PIPE_CAP_PREFER_IMM_ARRAYS_AS_CONSTBUF``: True if gallium frontends should
   turn arrays whose contents can be deduced at compile time into constant
   buffer loads, or false if the driver can handle such arrays itself in a more
-  efficient manner.
+  efficient manner (such as through nir_opt_large_constants() and nir->constant_data).
 * ``PIPE_CAP_GL_SPIRV``: True if the driver supports ARB_gl_spirv extension.
 * ``PIPE_CAP_GL_SPIRV_VARIABLE_POINTERS``: True if the driver supports Variable Pointers in SPIR-V shaders.
 * ``PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION``: True if driver supports demote keyword in GLSL programs.
@@ -608,7 +597,7 @@ The integer capabilities:
     fragment shader.
 * ``PIPE_CAP_CLIP_PLANES``: Driver supports user-defined clip-planes. 0 denotes none, 1 denotes MAX_CLIP_PLANES. > 1 overrides MAX.
 * ``PIPE_CAP_MAX_VERTEX_BUFFERS``: Number of supported vertex buffers.
-* ``PIPE_CAP_OPENCL_INTEGER_FUNCTIONS``: Driver supports extended OpenCL-style integer functions.  This includes averge, saturating additiong, saturating subtraction, absolute difference, count leading zeros, and count trailing zeros.
+* ``PIPE_CAP_OPENCL_INTEGER_FUNCTIONS``: Driver supports extended OpenCL-style integer functions.  This includes average, saturating addition, saturating subtraction, absolute difference, count leading zeros, and count trailing zeros.
 * ``PIPE_CAP_INTEGER_MULTIPLY_32X16``: Driver supports integer multiplication between a 32-bit integer and a 16-bit integer.  If the second operand is 32-bits, the upper 16-bits are ignored, and the low 16-bits are possibly sign extended as necessary.
 * ``PIPE_CAP_NIR_IMAGES_AS_DEREF``: Whether NIR image load/store intrinsics should be nir_intrinsic_image_deref_* instead of nir_intrinsic_image_*.  Defaults to true.
 * ``PIPE_CAP_PACKED_STREAM_OUTPUT``: Driver supports packing optimization for stream output (e.g. GL transform feedback captured variables). Defaults to true.
@@ -624,7 +613,7 @@ The integer capabilities:
 * ``PIPE_CAP_NIR_ATOMICS_AS_DEREF``: Whether NIR atomics instructions should reference atomics as NIR derefs instead of by indices.
 * ``PIPE_CAP_NO_CLIP_ON_COPY_TEX``: Driver doesn't want x/y/width/height clipped based on src size when doing a copy texture operation (eg: may want out-of-bounds reads that produce 0 instead of leaving the texture content undefined)
 * ``PIPE_CAP_MAX_TEXTURE_MB``: Maximum texture size in MB (default is 1024)
-* ``PIPE_CAP_DEVICE_PROTECTED_CONTENT``: Whether the device support protected / encrypted content.
+* ``PIPE_CAP_DEVICE_PROTECTED_SURFACE``: Whether the device support protected / encrypted content.
 * ``PIPE_CAP_PREFER_REAL_BUFFER_IN_CONSTBUF0``: The state tracker is encouraged to upload constants into a real buffer and bind it into constant buffer 0 instead of binding a user pointer. This may enable a faster codepath in a gallium frontend for drivers that really prefer a real buffer.
 * ``PIPE_CAP_GL_CLAMP``: Driver natively supports GL_CLAMP.  Required for non-NIR drivers with the GL frontend.  NIR drivers with the cap unavailable will have GL_CLAMP lowered to txd/txl with a saturate on the coordinates.
 * ``PIPE_CAP_TEXRECT``: Driver supports rectangle textures.  Required for OpenGL on `!prefers_nir` drivers.  If this cap is not present, st/mesa will lower the NIR to use normal 2D texture sampling by using either `txs` or `nir_intrinsic_load_texture_scaling` to normalize the texture coordinates.
@@ -645,6 +634,7 @@ The integer capabilities:
 * ``PIPE_CAP_ALLOW_DRAW_OUT_OF_ORDER``: TRUE if the driver allows the "draw out of order" optimization to be enabled. See _mesa_update_allow_draw_out_of_order for more details.
 * ``PIPE_CAP_MAX_CONSTANT_BUFFER_SIZE_UINT``: Maximum bound constant buffer size in bytes. This is unsigned integer with the maximum of 4GB - 1. This applies to all constant buffers used by UBOs, unlike `PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE`, which is specifically for GLSL uniforms.
 * ``PIPE_CAP_HARDWARE_GL_SELECT``: Enable hardware accelerated GL_SELECT for this driver.
+* ``PIPE_CAP_DEVICE_PROTECTED_CONTEXT``: Whether the device supports protected / encrypted context which can manipulate protected / encrypted content (some devices might need protected contexts to access protected content, whereas ``PIPE_CAP_DEVICE_PROTECTED_SURFACE`` does not require any particular context to do so).
 
 .. _pipe_capf:
 
@@ -839,7 +829,7 @@ resources might be created and handled quite differently.
 * ``PIPE_BIND_STREAM_OUTPUT``: A stream output buffer.
 * ``PIPE_BIND_CUSTOM``:
 * ``PIPE_BIND_SCANOUT``: A front color buffer or scanout buffer.
-* ``PIPE_BIND_SHARED``: A sharable buffer that can be given to another
+* ``PIPE_BIND_SHARED``: A shareable buffer that can be given to another
   process.
 * ``PIPE_BIND_GLOBAL``: A buffer that can be mapped into the global
   address space of a compute program.

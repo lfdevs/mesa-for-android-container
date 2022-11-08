@@ -28,7 +28,7 @@
 
 #include "panvk_private.h"
 
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/u_atomic.h"
 #include "vk_format.h"
 #include "vk_object.h"

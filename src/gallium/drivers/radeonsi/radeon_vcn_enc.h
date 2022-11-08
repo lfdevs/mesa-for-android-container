@@ -54,6 +54,13 @@
 #define RENCODE_PREENCODE_MODE_2X                                                   0x00000002
 #define RENCODE_PREENCODE_MODE_4X                                                   0x00000004
 
+#define RENCODE_VBAQ_NONE                                                           0x00000000
+#define RENCODE_VBAQ_AUTO                                                           0x00000001
+
+#define RENCODE_PRESET_MODE_SPEED                                                   0x00000000
+#define RENCODE_PRESET_MODE_BALANCE                                                 0x00000001
+#define RENCODE_PRESET_MODE_QUALITY                                                 0x00000002
+
 #define RENCODE_H264_SLICE_CONTROL_MODE_FIXED_MBS                                   0x00000000
 #define RENCODE_H264_SLICE_CONTROL_MODE_FIXED_BITS                                  0x00000001
 
@@ -128,6 +135,11 @@
 
 #define RENCODE_MAX_NUM_TEMPORAL_LAYERS                                             4
 
+#define PIPE_H265_ENC_CTB_SIZE                                                      64
+#define PIPE_H264_MB_SIZE                                                           16
+
+#define PIPE_ALIGN_IN_BLOCK_SIZE(value, align) (((value) + ((align) - 1))/(align))
+
 #define RADEON_ENC_CS(value) (enc->cs.current.buf[enc->cs.current.cdw++] = (value))
 #define RADEON_ENC_BEGIN(cmd)                                                                      \
    {                                                                                               \
@@ -143,6 +155,15 @@
    *begin = (&enc->cs.current.buf[enc->cs.current.cdw] - begin) * 4;                             \
    enc->total_task_size += *begin;                                                                 \
    }
+
+#define RADEON_ENC_DESTROY_VIDEO_BUFFER(buf)                                                     \
+   do {                                                                                          \
+      if (buf) {                                                                                 \
+         si_vid_destroy_buffer(buf);                                                             \
+         FREE(buf);                                                                              \
+         (buf) = NULL;                                                                           \
+      }                                                                                          \
+   } while(0)
 
 typedef struct rvcn_enc_session_info_s {
    uint32_t interface_version;
@@ -210,6 +231,10 @@ typedef struct rvcn_enc_h264_spec_misc_s {
    uint32_t level_idc;
    uint32_t b_picture_enabled;
    uint32_t weighted_bipred_idc;
+   struct {
+      uint32_t deblocking_filter_control_present_flag:1;
+      uint32_t redundant_pic_cnt_present_flag:1;
+   };
 } rvcn_enc_h264_spec_misc_t;
 
 typedef struct rvcn_enc_hevc_spec_misc_s {
@@ -329,11 +354,6 @@ typedef struct rvcn_enc_intra_refresh_s {
 typedef struct rvcn_enc_reconstructed_picture_s {
    uint32_t luma_offset;
    uint32_t chroma_offset;
-} rvcn_enc_reconstructed_picture_t;
-
-typedef struct rvcn_enc_reconstructed_picture_v4_0_s {
-   uint32_t luma_offset;
-   uint32_t chroma_offset;
    union {
       struct
       {
@@ -341,12 +361,13 @@ typedef struct rvcn_enc_reconstructed_picture_v4_0_s {
          uint32_t  unused_offset2;
       } unused;
    };
-} rvcn_enc_reconstructed_picture_v4_0_t;
+} rvcn_enc_reconstructed_picture_t;
 
 typedef struct rvcn_enc_picture_info_s
 {
    bool in_use;
-   uint32_t frame_num;
+   bool is_ltr;
+   uint32_t pic_num;
 } rvcn_enc_picture_info_t;
 
 typedef struct rvcn_enc_pre_encode_input_picture_s {
@@ -371,12 +392,11 @@ typedef struct rvcn_enc_encode_context_buffer_s {
    uint32_t rec_chroma_pitch;
    uint32_t num_reconstructed_pictures;
    rvcn_enc_reconstructed_picture_t reconstructed_pictures[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
-   rvcn_enc_reconstructed_picture_v4_0_t reconstructed_pictures_v4_0[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
    uint32_t pre_encode_picture_luma_pitch;
    uint32_t pre_encode_picture_chroma_pitch;
    rvcn_enc_reconstructed_picture_t
-      pre_encode_reconstructed_pictures[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
-   rvcn_enc_reconstructed_picture_t pre_encode_input_picture;
+   pre_encode_reconstructed_pictures[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
+   rvcn_enc_pre_encode_input_picture_t pre_encode_input_picture;
    uint32_t two_pass_search_center_map_offset;
    uint32_t colloc_buffer_offset;
 } rvcn_enc_encode_context_buffer_t;
@@ -426,6 +446,27 @@ typedef struct rvcn_enc_cmd_s {
    uint32_t output_format;
 } rvcn_enc_cmd_t;
 
+typedef struct rvcn_enc_quality_modes_s
+{
+   unsigned pre_encode_mode;
+   unsigned vbaq_mode;
+   unsigned preset_mode;
+} rvcn_enc_quality_modes_t;
+
+typedef struct rvcn_enc_vui_info_s
+{
+   uint32_t vui_parameters_present_flag;
+   struct {
+      uint32_t aspect_ratio_info_present_flag : 1;
+      uint32_t timing_info_present_flag : 1;
+   } flags;
+   uint32_t aspect_ratio_idc;
+   uint32_t sar_width;
+   uint32_t sar_height;
+   uint32_t num_units_in_tick;
+   uint32_t time_scale;
+}rvcn_enc_vui_info;
+
 typedef void (*radeon_enc_get_buffer)(struct pipe_resource *resource, struct pb_buffer **handle,
                                       struct radeon_surf **surface);
 
@@ -441,7 +482,9 @@ struct radeon_enc_pic {
    unsigned pic_order_cnt;
    unsigned pic_order_cnt_type;
    unsigned ref_idx_l0;
+   bool ref_idx_l0_is_ltr;
    unsigned ref_idx_l1;
+   bool ref_idx_l1_is_ltr;
    unsigned crop_left;
    unsigned crop_right;
    unsigned crop_top;
@@ -467,8 +510,12 @@ struct radeon_enc_pic {
    unsigned temporal_id;
    unsigned num_temporal_layers;
    unsigned temporal_layer_pattern_index;
+   rvcn_enc_quality_modes_t quality_modes;
+   rvcn_enc_vui_info vui_info;
 
    bool not_referenced;
+   bool is_ltr;
+   unsigned ltr_idx;
    bool is_idr;
    bool is_even_frame;
    bool sample_adaptive_offset_enabled_flag;
@@ -559,11 +606,9 @@ struct radeon_encoder {
    struct pb_buffer *bs_handle;
    unsigned bs_size;
 
-   unsigned cpb_num;
-
    struct rvid_buffer *si;
    struct rvid_buffer *fb;
-   struct rvid_buffer cpb;
+   struct rvid_buffer *dpb;
    struct radeon_enc_pic enc_pic;
    rvcn_enc_cmd_t cmd;
 
@@ -581,7 +626,8 @@ struct radeon_encoder {
    bool emulation_prevention;
    bool need_feedback;
    unsigned dpb_size;
-   rvcn_enc_picture_info_t dpb[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
+   rvcn_enc_picture_info_t dpb_info[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
+   unsigned max_ltr_idx;
 };
 
 void radeon_enc_add_buffer(struct radeon_encoder *enc, struct pb_buffer *buf,

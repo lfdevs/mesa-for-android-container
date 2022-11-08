@@ -141,13 +141,13 @@ nv84_decoder_vp_h264(struct nv84_decoder *dec,
          { bo1, NOUVEAU_BO_RDWR | NOUVEAU_BO_VRAM },
          { bo2, NOUVEAU_BO_RDWR | NOUVEAU_BO_VRAM },
       };
-      nouveau_pushbuf_refn(push, bo_refs, ARRAY_SIZE(bo_refs));
+      PUSH_REFN(push, bo_refs, ARRAY_SIZE(bo_refs));
    }
 
    memcpy(dec->vp_params->map, &param1, sizeof(param1));
    memcpy(dec->vp_params->map + 0x400, &param2, sizeof(param2));
 
-   nouveau_pushbuf_refn(push, bo_refs, num_refs);
+   PUSH_REFN(push, bo_refs, num_refs);
 
    /* Wait for BSP to have completed */
    BEGIN_NV04(push, SUBC_VP(0x10), 4);
@@ -522,7 +522,7 @@ nv84_decoder_vp_mpeg12(struct nv84_decoder *dec,
 
    PUSH_SPACE(push, 10 + 3 + 2);
 
-   nouveau_pushbuf_refn(push, bo_refs, num_refs);
+   PUSH_REFN(push, bo_refs, num_refs);
 
    BEGIN_NV04(push, SUBC_VP(0x400), 9);
    PUSH_DATA (push, 0x543210); /* each nibble possibly a dma index */

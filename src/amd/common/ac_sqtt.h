@@ -53,6 +53,8 @@ struct ac_thread_trace_data {
    struct rgp_queue_event rgp_queue_event;
 
    struct rgp_clock_calibration rgp_clock_calibration;
+
+   struct hash_table_u64 *pipeline_bos;
 };
 
 #define SQTT_BUFFER_ALIGN_SHIFT 12
@@ -289,6 +291,14 @@ enum rgp_sqtt_marker_event_type
    EventInternalUnknown = 26,
    EventCmdDrawIndirectCount = 27,
    EventCmdDrawIndexedIndirectCount = 28,
+   /* gap */
+   EventCmdTraceRaysKHR = 30,
+   EventCmdTraceRaysIndirectKHR = 31,
+   EventCmdBuildAccelerationStructuresKHR = 32,
+   EventCmdBuildAccelerationStructuresIndirectKHR = 33,
+   EventCmdCopyAccelerationStructureKHR = 34,
+   EventCmdCopyAccelerationStructureToMemoryKHR = 35,
+   EventCmdCopyMemoryToAccelerationStructureKHR = 36,
    EventInvalid = 0xffffffff
 };
 

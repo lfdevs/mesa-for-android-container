@@ -45,11 +45,13 @@ setup_reduce_temp(Program* program)
    std::vector<bool> hasReductions(program->blocks.size());
    for (Block& block : program->blocks) {
       for (aco_ptr<Instruction>& instr : block.instructions) {
-         if (instr->format != Format::PSEUDO_REDUCTION)
-            continue;
-
-         maxSize = MAX2(maxSize, instr->operands[0].size());
-         hasReductions[block.index] = true;
+         if (instr->opcode == aco_opcode::p_interp_gfx11) {
+            maxSize = MAX2(maxSize, 1);
+            hasReductions[block.index] = true;
+         } else if (instr->format == Format::PSEUDO_REDUCTION) {
+            maxSize = MAX2(maxSize, instr->operands[0].size());
+            hasReductions[block.index] = true;
+         }
       }
    }
 
@@ -92,10 +94,10 @@ setup_reduce_temp(Program* program)
       std::vector<aco_ptr<Instruction>>::iterator it;
       for (it = block.instructions.begin(); it != block.instructions.end(); ++it) {
          Instruction* instr = (*it).get();
-         if (instr->format != Format::PSEUDO_REDUCTION)
+         if (instr->format != Format::PSEUDO_REDUCTION &&
+             instr->opcode != aco_opcode::p_interp_gfx11)
             continue;
 
-         ReduceOp op = instr->reduction().reduce_op;
          reduceTmp_in_loop |= block.loop_nest_depth > 0;
 
          if ((int)last_top_level_block_idx != inserted_at) {
@@ -122,22 +124,26 @@ setup_reduce_temp(Program* program)
          }
 
          /* same as before, except for the vector temporary instead of the reduce temporary */
-         unsigned cluster_size = instr->reduction().cluster_size;
-         bool need_vtmp = op == imul32 || op == fadd64 || op == fmul64 || op == fmin64 ||
-                          op == fmax64 || op == umin64 || op == umax64 || op == imin64 ||
-                          op == imax64 || op == imul64;
-         bool gfx10_need_vtmp = op == imul8 || op == imax8 || op == imin8 || op == umin8 ||
-                                op == imul16 || op == imax16 || op == imin16 || op == umin16 ||
-                                op == iadd64;
+         bool need_vtmp = false;
+         if (instr->isReduction()) {
+            ReduceOp op = instr->reduction().reduce_op;
+            unsigned cluster_size = instr->reduction().cluster_size;
+            need_vtmp = op == imul32 || op == fadd64 || op == fmul64 || op == fmin64 ||
+                        op == fmax64 || op == umin64 || op == umax64 || op == imin64 ||
+                        op == imax64 || op == imul64;
+            bool gfx10_need_vtmp = op == imul8 || op == imax8 || op == imin8 || op == umin8 ||
+                                   op == imul16 || op == imax16 || op == imin16 || op == umin16 ||
+                                   op == iadd64;
 
-         if (program->gfx_level >= GFX10 && cluster_size == 64)
-            need_vtmp = true;
-         if (program->gfx_level >= GFX10 && gfx10_need_vtmp)
-            need_vtmp = true;
-         if (program->gfx_level <= GFX7)
-            need_vtmp = true;
+            if (program->gfx_level >= GFX10 && cluster_size == 64)
+               need_vtmp = true;
+            if (program->gfx_level >= GFX10 && gfx10_need_vtmp)
+               need_vtmp = true;
+            if (program->gfx_level <= GFX7)
+               need_vtmp = true;
 
-         need_vtmp |= cluster_size == 32;
+            need_vtmp |= cluster_size == 32;
+         }
 
          vtmp_in_loop |= need_vtmp && block.loop_nest_depth > 0;
          if (need_vtmp && (int)last_top_level_block_idx != vtmp_inserted_at) {
@@ -158,9 +164,15 @@ setup_reduce_temp(Program* program)
             }
          }
 
-         instr->operands[1] = Operand(reduceTmp);
-         if (need_vtmp)
-            instr->operands[2] = Operand(vtmp);
+         if (instr->isReduction()) {
+            instr->operands[1] = Operand(reduceTmp);
+            if (need_vtmp)
+               instr->operands[2] = Operand(vtmp);
+         } else {
+            assert(instr->opcode == aco_opcode::p_interp_gfx11);
+            instr->operands[0] = Operand(reduceTmp);
+            instr->operands[0].setLateKill(true);
+         }
       }
    }
 }

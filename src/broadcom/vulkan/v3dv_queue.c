@@ -37,16 +37,16 @@ v3dv_clif_dump(struct v3dv_device *device,
                struct v3dv_job *job,
                struct drm_v3d_submit_cl *submit)
 {
-   if (!(unlikely(V3D_DEBUG & (V3D_DEBUG_CL |
-                               V3D_DEBUG_CL_NO_BIN |
-                               V3D_DEBUG_CLIF))))
+   if (!(V3D_DBG(CL) ||
+         V3D_DBG(CL_NO_BIN) ||
+         V3D_DBG(CLIF)))
       return;
 
    struct clif_dump *clif = clif_dump_init(&device->devinfo,
                                            stderr,
-                                           V3D_DEBUG & (V3D_DEBUG_CL |
-                                                        V3D_DEBUG_CL_NO_BIN),
-                                           V3D_DEBUG & V3D_DEBUG_CL_NO_BIN);
+                                           V3D_DBG(CL) ||
+                                           V3D_DBG(CL_NO_BIN),
+                                           V3D_DBG(CL_NO_BIN));
 
    set_foreach(job->bos, entry) {
       struct v3dv_bo *bo = (void *)entry->key;
@@ -285,60 +285,6 @@ handle_copy_query_results_cpu_job(struct v3dv_job *job)
                                offset,
                                info->stride,
                                info->flags);
-
-   return VK_SUCCESS;
-}
-
-static VkResult
-handle_set_event_cpu_job(struct v3dv_queue *queue, struct v3dv_job *job,
-                         struct v3dv_submit_sync_info *sync_info)
-{
-   /* From the Vulkan 1.0 spec:
-    *
-    *    "When vkCmdSetEvent is submitted to a queue, it defines an execution
-    *     dependency on commands that were submitted before it, and defines an
-    *     event signal operation which sets the event to the signaled state.
-    *     The first synchronization scope includes every command previously
-    *     submitted to the same queue, including those in the same command
-    *     buffer and batch".
-    *
-    * So we should wait for all prior work to be completed before signaling
-    * the event, this includes all active CPU wait threads spawned for any
-    * command buffer submitted *before* this.
-    */
-
-   VkResult result = queue_wait_idle(queue, sync_info);
-   if (result != VK_SUCCESS)
-      return result;
-
-   struct v3dv_event_set_cpu_job_info *info = &job->cpu.event_set;
-   p_atomic_set(&info->event->state, info->state);
-
-   return VK_SUCCESS;
-}
-
-static bool
-check_wait_events_complete(struct v3dv_job *job)
-{
-   assert(job->type == V3DV_JOB_TYPE_CPU_WAIT_EVENTS);
-
-   struct v3dv_event_wait_cpu_job_info *info = &job->cpu.event_wait;
-   for (uint32_t i = 0; i < info->event_count; i++) {
-      if (!p_atomic_read(&info->events[i]->state))
-         return false;
-   }
-   return true;
-}
-
-static VkResult
-handle_wait_events_cpu_job(struct v3dv_job *job)
-{
-   assert(job->type == V3DV_JOB_TYPE_CPU_WAIT_EVENTS);
-
-   /* Wait for events to be signaled */
-   const useconds_t wait_interval_ms = 1;
-   while (!check_wait_events_complete(job))
-      usleep(wait_interval_ms * 1000);
 
    return VK_SUCCESS;
 }
@@ -810,15 +756,18 @@ handle_cl_job(struct v3dv_queue *queue,
    if (queue->last_job_syncs.first[V3DV_QUEUE_CL]) {
       for (int i = 0; !needs_bcl_sync && i < sync_info->wait_count; i++) {
          needs_bcl_sync = sync_info->waits[i].stage_mask &
-             (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT |
-              VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |
-              VK_PIPELINE_STAGE_ALL_COMMANDS_BIT |
-              VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
-              VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
-              VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-              VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |
-              VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
-              VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT);
+             (VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT |
+              VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT |
+              VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT |
+              VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT |
+              VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT |
+              VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT |
+              VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT |
+              VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+              VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
+              VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT |
+              VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT |
+              VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT);
       }
    }
 
@@ -1011,10 +960,6 @@ queue_handle_job(struct v3dv_queue *queue,
       return handle_end_query_cpu_job(job, counter_pass_idx);
    case V3DV_JOB_TYPE_CPU_COPY_QUERY_RESULTS:
       return handle_copy_query_results_cpu_job(job);
-   case V3DV_JOB_TYPE_CPU_SET_EVENT:
-      return handle_set_event_cpu_job(queue, job, sync_info);
-   case V3DV_JOB_TYPE_CPU_WAIT_EVENTS:
-      return handle_wait_events_cpu_job(job);
    case V3DV_JOB_TYPE_CPU_COPY_BUFFER_TO_IMAGE:
       return handle_copy_buffer_to_image_cpu_job(queue, job, sync_info);
    case V3DV_JOB_TYPE_CPU_CSD_INDIRECT:

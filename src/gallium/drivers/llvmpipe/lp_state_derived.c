@@ -50,8 +50,6 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
 {
    const struct tgsi_shader_info *fsInfo = &llvmpipe->fs->info.base;
    struct vertex_info *vinfo = &llvmpipe->vertex_info;
-   int vs_index;
-   uint i;
 
    draw_prepare_shader_outputs(llvmpipe->draw);
 
@@ -77,12 +75,12 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
 
    vinfo->num_attribs = 0;
 
-   vs_index = draw_find_shader_output(llvmpipe->draw,
-                                      TGSI_SEMANTIC_POSITION, 0);
+   int vs_index = draw_find_shader_output(llvmpipe->draw,
+                                          TGSI_SEMANTIC_POSITION, 0);
 
    draw_emit_vertex_attr(vinfo, EMIT_4F, vs_index);
 
-   for (i = 0; i < fsInfo->num_inputs; i++) {
+   for (unsigned i = 0; i < fsInfo->num_inputs; i++) {
       /*
        * Search for each input in current vs output:
        */
@@ -124,9 +122,21 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
       }
    }
 
+   /*
+    * The new style front face is a system value, hence won't show up as
+    * ordinary fs register above. But we still need to assign a vs output
+    * location so draw can inject face info for unfilled tris.
+    */
+   if (llvmpipe->face_slot < 0 && fsInfo->uses_frontface) {
+      vs_index = draw_find_shader_output(llvmpipe->draw,
+                                         TGSI_SEMANTIC_FACE, 0);
+      llvmpipe->face_slot = (int)vinfo->num_attribs;
+      draw_emit_vertex_attr(vinfo, EMIT_4F, vs_index);
+   }
+
    /* Figure out if we need bcolor as well.
     */
-   for (i = 0; i < 2; i++) {
+   for (unsigned i = 0; i < 2; i++) {
       vs_index = draw_find_shader_output(llvmpipe->draw,
                                          TGSI_SEMANTIC_BCOLOR, i);
 
@@ -176,26 +186,23 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
 static void
 check_linear_rasterizer(struct llvmpipe_context *lp)
 {
-   boolean bgr8;
-   boolean permit_linear;
-   boolean single_vp;
-   boolean clipping_changed = FALSE;
-
-   bgr8 = (lp->framebuffer.nr_cbufs == 1 && lp->framebuffer.cbufs[0] &&
-           util_res_sample_count(lp->framebuffer.cbufs[0]->texture) == 1 &&
-           lp->framebuffer.cbufs[0]->texture->target == PIPE_TEXTURE_2D &&
-           (lp->framebuffer.cbufs[0]->format == PIPE_FORMAT_B8G8R8A8_UNORM ||
-            lp->framebuffer.cbufs[0]->format == PIPE_FORMAT_B8G8R8X8_UNORM));
+   const bool bgr8 =
+      (lp->framebuffer.nr_cbufs == 1 && lp->framebuffer.cbufs[0] &&
+       util_res_sample_count(lp->framebuffer.cbufs[0]->texture) == 1 &&
+       lp->framebuffer.cbufs[0]->texture->target == PIPE_TEXTURE_2D &&
+       (lp->framebuffer.cbufs[0]->format == PIPE_FORMAT_B8G8R8A8_UNORM ||
+        lp->framebuffer.cbufs[0]->format == PIPE_FORMAT_B8G8R8X8_UNORM));
 
    /* permit_linear means guardband, hence fake scissor, which we can only
     * handle if there's just one vp. */
-   single_vp = lp->viewport_index_slot < 0;
-   permit_linear = (!lp->framebuffer.zsbuf &&
-                    bgr8 &&
-                    single_vp);
+   const bool single_vp = lp->viewport_index_slot < 0;
+   const bool permit_linear = (!lp->framebuffer.zsbuf &&
+                               bgr8 &&
+                               single_vp);
 
    /* Tell draw that we're happy doing our own x/y clipping.
     */
+   bool clipping_changed = false;
    if (lp->permit_linear_rasterizer != permit_linear) {
       lp->permit_linear_rasterizer = permit_linear;
       lp_setup_set_linear_mode(lp->setup, permit_linear);
@@ -221,10 +228,10 @@ check_linear_rasterizer(struct llvmpipe_context *lp)
     */
    if (clipping_changed) {
       draw_set_driver_clipping(lp->draw,
-                               FALSE,
-                               FALSE,
-                               permit_linear,
-                               single_vp);
+                               FALSE, // bypass_clip_xy
+                               FALSE, //bypass_clip_z
+                               permit_linear, // guard_band_xy,
+                               single_vp); // bypass_clip_points)
    }
 }
 

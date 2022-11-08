@@ -113,6 +113,12 @@ vn_feedback_event_cmd_record(VkCommandBuffer cmd_handle,
                              VkPipelineStageFlags stage_mask,
                              VkResult status);
 
+void
+vn_feedback_event_cmd_record2(VkCommandBuffer cmd_handle,
+                              VkEvent event,
+                              VkPipelineStageFlags2 src_stage_mask,
+                              VkResult status);
+
 VkResult
 vn_feedback_fence_cmd_alloc(VkDevice dev_handle,
                             struct vn_feedback_cmd_pool *pool,

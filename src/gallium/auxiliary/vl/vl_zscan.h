@@ -31,6 +31,10 @@
 #include "pipe/p_compiler.h"
 #include "pipe/p_state.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * shader based zscan and quantification
  * expect usage of vl_vertex_buffers as a todo list
@@ -99,5 +103,9 @@ vl_zscan_upload_quant(struct vl_zscan *zscan, struct vl_zscan_buffer *buffer,
 
 void
 vl_zscan_render(struct vl_zscan *zscan, struct vl_zscan_buffer *buffer, unsigned num_instances);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

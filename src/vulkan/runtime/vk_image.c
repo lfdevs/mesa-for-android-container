@@ -557,14 +557,6 @@ vk_image_layout_is_read_only(VkImageLayout layout,
    case VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL:
    case VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL:
    case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wswitch"
-#endif
-   case VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA:
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
       return false;
 
    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
@@ -712,14 +704,6 @@ vk_image_layout_to_usage_flags(VkImageLayout layout,
       return 0u;
 
    case VK_IMAGE_LAYOUT_GENERAL:
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wswitch"
-#endif
-   case VK_IMAGE_LAYOUT_SUBPASS_SELF_DEPENDENCY_MESA:
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
       return ~0u;
 
    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
@@ -823,10 +807,19 @@ vk_image_layout_to_usage_flags(VkImageLayout layout,
              VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
    case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
-      return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-             VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
-             VK_IMAGE_USAGE_SAMPLED_BIT;
+      if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT ||
+          aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
+         return VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                VK_IMAGE_USAGE_SAMPLED_BIT |
+                VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+      } else {
+         assert(aspect == VK_IMAGE_ASPECT_COLOR_BIT);
+         return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                VK_IMAGE_USAGE_SAMPLED_BIT |
+                VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+      }
 
    case VK_IMAGE_LAYOUT_MAX_ENUM:
 #ifdef VK_ENABLE_BETA_EXTENSIONS

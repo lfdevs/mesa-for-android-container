@@ -191,6 +191,7 @@ va_pack_atom_opc_1(const bi_instr *I)
 static unsigned
 va_pack_dest(const bi_instr *I)
 {
+   assert(I->nr_dests);
    return va_pack_reg(I, I->dest[0]) | (va_pack_wrmask(I) << 6);
 }
 
@@ -309,6 +310,16 @@ va_pack_source_format(const bi_instr *I)
    }
 
    invalid_instruction(I, "source format");
+}
+
+static uint64_t
+va_pack_rhadd(const bi_instr *I)
+{
+   switch (I->round) {
+   case BI_ROUND_RTN: return 0; /* hadd */
+   case BI_ROUND_RTP: return BITFIELD_BIT(30); /* rhadd */
+   default: unreachable("Invalid round for HADD");
+   }
 }
 
 static uint64_t
@@ -442,7 +453,7 @@ va_pack_alu(const bi_instr *I)
    if (info.has_dest && info.nr_staging_dests == 0) {
       hex |= (uint64_t) va_pack_dest(I) << 40;
    } else if (info.nr_staging_dests == 0 && info.nr_staging_srcs == 0) {
-      pack_assert(I, bi_is_null(I->dest[0]));
+      pack_assert(I, I->nr_dests == 0);
       hex |= 0xC0ull << 40; /* Placeholder */
    }
 
@@ -516,6 +527,8 @@ va_pack_alu(const bi_instr *I)
       }
    }
 
+   if (info.saturate) hex |= (uint64_t) I->saturate << 30;
+   if (info.rhadd) hex |= va_pack_rhadd(I);
    if (info.clamp) hex |= (uint64_t) I->clamp << 32;
    if (info.round_mode) hex |= (uint64_t) I->round << 30;
    if (info.condition) hex |= (uint64_t) I->cmpf << 32;
@@ -902,9 +915,6 @@ va_lower_branch_target(bi_context *ctx, bi_block *start, bi_instr *I)
 static void
 va_lower_blend(bi_context *ctx)
 {
-   /* Link register (ABI between fragment and blend shaders) */
-   bi_index lr = bi_register(48);
-
    /* Program counter for *next* instruction */
    bi_index pc = bi_fau(BIR_FAU_PROGRAM_COUNTER, false);
 
@@ -916,10 +926,13 @@ va_lower_blend(bi_context *ctx)
 
       unsigned prolog_length = 2 * 8;
 
+      /* By ABI, r48 is the link register shared with blend shaders */
+      assert(bi_is_equiv(I->dest[0], bi_register(48)));
+
       if (I->flow == VA_FLOW_END)
-         bi_iadd_imm_i32_to(&b, lr, va_zero_lut(), 0);
+         bi_iadd_imm_i32_to(&b, I->dest[0], va_zero_lut(), 0);
       else
-         bi_iadd_imm_i32_to(&b, lr, pc, prolog_length - 8);
+         bi_iadd_imm_i32_to(&b, I->dest[0], pc, prolog_length - 8);
 
       bi_branchzi(&b, va_zero_lut(), I->src[3], BI_CMPF_EQ);
 

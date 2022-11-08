@@ -35,6 +35,7 @@
 #include "hw/common_3d.xml.h"
 #include "hw/state.xml.h"
 #include "hw/state_3d.xml.h"
+#include "hw/state_blt.xml.h"
 
 #include "util/format/u_format.h"
 #include "util/u_math.h"
@@ -271,6 +272,67 @@ translate_ts_format(enum pipe_format fmt)
    }
 }
 
+/* formats directly supported in the RS engine */
+static inline uint32_t
+translate_rs_format(enum pipe_format fmt)
+{
+   /* Note: Pipe format convention is LSB to MSB, VIVS is MSB to LSB */
+   switch (fmt) {
+   case PIPE_FORMAT_B4G4R4X4_UNORM:
+      return RS_FORMAT_X4R4G4B4;
+   case PIPE_FORMAT_B4G4R4A4_UNORM:
+      return RS_FORMAT_A4R4G4B4;
+   case PIPE_FORMAT_B5G5R5X1_UNORM:
+      return RS_FORMAT_X1R5G5B5;
+   case PIPE_FORMAT_B5G5R5A1_UNORM:
+      return RS_FORMAT_A1R5G5B5;
+   case PIPE_FORMAT_B5G6R5_UNORM:
+      return RS_FORMAT_R5G6B5;
+   case PIPE_FORMAT_B8G8R8X8_UNORM:
+   case PIPE_FORMAT_B8G8R8X8_SRGB:
+   case PIPE_FORMAT_R8G8B8X8_UNORM:
+      return RS_FORMAT_X8R8G8B8;
+   case PIPE_FORMAT_B8G8R8A8_UNORM:
+   case PIPE_FORMAT_B8G8R8A8_SRGB:
+   case PIPE_FORMAT_R8G8B8A8_UNORM:
+      return RS_FORMAT_A8R8G8B8;
+   default:
+      return ETNA_NO_MATCH;
+   }
+}
+
+/* formats directly supported in the BLT engine */
+static inline uint32_t
+translate_blt_format(enum pipe_format fmt)
+{
+   /* Note: Pipe format convention is LSB to MSB, VIVS is MSB to LSB */
+   switch (fmt) {
+   case PIPE_FORMAT_B4G4R4X4_UNORM:
+      return BLT_FORMAT_X4R4G4B4;
+   case PIPE_FORMAT_B4G4R4A4_UNORM:
+      return BLT_FORMAT_A4R4G4B4;
+   case PIPE_FORMAT_B5G5R5X1_UNORM:
+      return BLT_FORMAT_X1R5G5B5;
+   case PIPE_FORMAT_B5G5R5A1_UNORM:
+      return BLT_FORMAT_A1R5G5B5;
+   case PIPE_FORMAT_B5G6R5_UNORM:
+      return BLT_FORMAT_R5G6B5;
+   case PIPE_FORMAT_B8G8R8X8_UNORM:
+   case PIPE_FORMAT_B8G8R8X8_SRGB:
+   case PIPE_FORMAT_R8G8B8X8_UNORM:
+      return BLT_FORMAT_X8R8G8B8;
+   case PIPE_FORMAT_B8G8R8A8_UNORM:
+   case PIPE_FORMAT_B8G8R8A8_SRGB:
+   case PIPE_FORMAT_R8G8B8A8_UNORM:
+      return BLT_FORMAT_A8R8G8B8;
+   case PIPE_FORMAT_R10G10B10A2_UNORM:
+   case PIPE_FORMAT_R10G10B10X2_UNORM:
+      return BLT_FORMAT_A2R10G10B10;
+   default:
+      return ETNA_NO_MATCH;
+   }
+}
+
 /* Return normalization flag for vertex element format */
 static inline uint32_t
 translate_vertex_format_normalize(enum pipe_format fmt)
@@ -345,53 +407,6 @@ translate_draw_mode(unsigned mode)
    default:
       DBG("Unhandled draw mode primitive %i", mode);
       return ETNA_NO_MATCH;
-   }
-}
-
-/* Get size multiple for size of texture/rendertarget with a certain layout
- * This is affected by many different parameters:
- *   - A horizontal multiple of 16 is used when possible as resolve can be used
- *       at the cost of only a little bit extra memory usage.
- *   - If the surface is to be used with the resolve engine, set rs_align true.
- *       If set, a horizontal multiple of 16 will be used for tiled and linear,
- *       otherwise one of 16.  However, such a surface will be incompatible
- *       with the samplers if the GPU does hot support the HALIGN feature.
- *   - If the surface is supertiled, horizontal and vertical multiple is always 64
- *   - If the surface is multi tiled or supertiled, make sure that the vertical size
- *     is a multiple of the number of pixel pipes as well.
- * */
-static inline void
-etna_layout_multiple(unsigned layout, unsigned pixel_pipes, bool rs_align,
-                     unsigned *paddingX, unsigned *paddingY, unsigned *halign)
-{
-   switch (layout) {
-   case ETNA_LAYOUT_LINEAR:
-      *paddingX = rs_align ? 16 : 4;
-      *paddingY = 1;
-      *halign = rs_align ? TEXTURE_HALIGN_SIXTEEN : TEXTURE_HALIGN_FOUR;
-      break;
-   case ETNA_LAYOUT_TILED:
-      *paddingX = rs_align ? 16 : 4;
-      *paddingY = 4;
-      *halign = rs_align ? TEXTURE_HALIGN_SIXTEEN : TEXTURE_HALIGN_FOUR;
-      break;
-   case ETNA_LAYOUT_SUPER_TILED:
-      *paddingX = 64;
-      *paddingY = 64;
-      *halign = TEXTURE_HALIGN_SUPER_TILED;
-      break;
-   case ETNA_LAYOUT_MULTI_TILED:
-      *paddingX = 16;
-      *paddingY = 4 * pixel_pipes;
-      *halign = TEXTURE_HALIGN_SPLIT_TILED;
-      break;
-   case ETNA_LAYOUT_MULTI_SUPERTILED:
-      *paddingX = 64;
-      *paddingY = 64 * pixel_pipes;
-      *halign = TEXTURE_HALIGN_SPLIT_SUPER_TILED;
-      break;
-   default:
-      DBG("Unhandled layout %i", layout);
    }
 }
 

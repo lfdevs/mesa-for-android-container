@@ -203,7 +203,7 @@
     </function>
 
     <function name="BindFramebuffer" es2="2.0"
-              marshal_call_after="if (target == GL_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER) ctx->GLThread.CurrentDrawFramebuffer = framebuffer;">
+              marshal_call_after="_mesa_glthread_BindFramebuffer(ctx, target, framebuffer);">
         <param name="target" type="GLenum"/>
         <param name="framebuffer" type="GLuint"/>
         <glx rop="236"/>

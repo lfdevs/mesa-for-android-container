@@ -32,8 +32,9 @@ from lava.exceptions import (
     MesaCIRetryError,
     MesaCITimeoutError,
 )
+from lava.utils import CONSOLE_LOG
+from lava.utils import DEFAULT_GITLAB_SECTION_TIMEOUTS as GL_SECTION_TIMEOUTS
 from lava.utils import (
-    CONSOLE_LOG,
     GitlabSection,
     LogFollower,
     LogSectionType,
@@ -95,8 +96,8 @@ def generate_lava_yaml(args):
         'url': '{}/{}'.format(args.kernel_url_prefix, args.kernel_image_name),
       },
       'nfsrootfs': {
-        'url': '{}/lava-rootfs.tgz'.format(args.rootfs_url_prefix),
-        'compression': 'gz',
+        'url': '{}/lava-rootfs.tar.zst'.format(args.rootfs_url_prefix),
+        'compression': 'zstd',
       }
     }
     if args.kernel_image_type:
@@ -165,7 +166,7 @@ def generate_lava_yaml(args):
 
     run_steps += [
       'mkdir -p {}'.format(args.ci_project_dir),
-      'wget -S --progress=dot:giga -O- {} | tar -xz -C {}'.format(args.build_url, args.ci_project_dir),
+      'wget -S --progress=dot:giga -O- {} | tar --zstd -x -C {}'.format(args.build_url, args.ci_project_dir),
       'wget -S --progress=dot:giga -O- {} | tar -xz -C /'.format(args.job_rootfs_overlay_url),
 
       # Sleep a bit to give time for bash to dump shell xtrace messages into
@@ -496,6 +497,13 @@ def treat_mesa_job_name(args):
 
 def main(args):
     proxy = setup_lava_proxy()
+
+    # Overwrite the timeout for the testcases with the value offered by the
+    # user. The testcase running time should be at least 4 times greater than
+    # the other sections (boot and setup), so we can safely ignore them.
+    # If LAVA fails to stop the job at this stage, it will fall back to the
+    # script section timeout with a reasonable delay.
+    GL_SECTION_TIMEOUTS[LogSectionType.TEST_CASE] = timedelta(minutes=args.job_timeout)
 
     job_definition = generate_lava_yaml(args)
 

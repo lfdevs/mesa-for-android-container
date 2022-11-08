@@ -303,8 +303,6 @@ brw_instruction_name(const struct brw_isa_info *isa, enum opcode op)
       return "untyped_surface_write";
    case SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL:
       return "untyped_surface_write_logical";
-   case SHADER_OPCODE_OWORD_BLOCK_READ_LOGICAL:
-      return "oword_block_read_logical";
    case SHADER_OPCODE_UNALIGNED_OWORD_BLOCK_READ_LOGICAL:
       return "unaligned_oword_block_read_logical";
    case SHADER_OPCODE_OWORD_BLOCK_WRITE_LOGICAL:
@@ -1422,7 +1420,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
          return NULL;
       }
 
-      prog_data->base.base.dispatch_grf_start_reg = v.payload.num_regs;
+      prog_data->base.base.dispatch_grf_start_reg = v.payload().num_regs;
       prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
 
       fs_generator g(compiler, params->log_data, mem_ctx,

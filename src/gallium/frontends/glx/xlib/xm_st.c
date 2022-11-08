@@ -222,7 +222,7 @@ xmesa_st_framebuffer_validate(struct st_context_iface *stctx,
    /* If xmesa_strict_invalidate is not set, we will not yet have
     * called XGetGeometry().  Do so here:
     */
-   if (!xmesa_strict_invalidate)
+   if (!xmesa_strict_invalidate())
       xmesa_check_buffer_size(xstfb->buffer);
 
    resized = (xstfb->buffer->width != xstfb->texture_width ||
@@ -273,7 +273,7 @@ xmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
 
    ret = xmesa_st_framebuffer_display(stfbi, stctx, statt, NULL);
 
-   if (ret && xmesa_strict_invalidate)
+   if (ret && xmesa_strict_invalidate())
       xmesa_check_buffer_size(xstfb->buffer);
 
    return ret;
@@ -366,12 +366,12 @@ xmesa_swap_st_framebuffer(struct st_framebuffer_iface *stfbi)
          *back = tmp;
 
          /* the current context should validate the buffer after swapping */
-         if (!xmesa_strict_invalidate)
+         if (!xmesa_strict_invalidate())
             xmesa_notify_invalid_buffer(xstfb->buffer);
       }
 
-      if (xmesa_strict_invalidate)
-	 xmesa_check_buffer_size(xstfb->buffer);
+      if (xmesa_strict_invalidate())
+         xmesa_check_buffer_size(xstfb->buffer);
    }
 }
 

@@ -120,13 +120,14 @@ class TracepointArg(object):
 HEADERS = []
 
 class HeaderScope(IntEnum):
-   HEADER = (1 << 0)
-   SOURCE = (1 << 1)
+    HEADER = (1 << 0)
+    SOURCE = (1 << 1)
+    PERFETTO = (1 << 2)
 
 class Header(object):
     """Class that represents a header file dependency of generated tracepoints
     """
-    def __init__(self, hdr, scope=HeaderScope.HEADER|HeaderScope.SOURCE):
+    def __init__(self, hdr, scope=HeaderScope.HEADER):
         """Parameters:
 
         - hdr: the required header path
@@ -242,7 +243,7 @@ void __trace_${trace_name}(
      , ${arg.type} ${arg.var}
 %    endfor
 );
-static inline void trace_${trace_name}(
+static ALWAYS_INLINE void trace_${trace_name}(
      struct u_trace *ut
 %    if need_cs_param:
    , void *cs
@@ -251,13 +252,8 @@ static inline void trace_${trace_name}(
    , ${arg.type} ${arg.var}
 %    endfor
 ) {
-%    if trace.tp_perfetto is not None:
-   if (!unlikely((ut->enabled || ut_trace_instrument || ut_perfetto_enabled) &&
+   if (!unlikely(u_trace_instrument() &&
                  ${trace.enabled_expr(trace_toggle_name)}))
-%    else:
-   if (!unlikely((ut->enabled || ut_trace_instrument) &&
-                 ${trace.enabled_expr(trace_toggle_name)}))
-%    endif
       return;
    __trace_${trace_name}(
         ut
@@ -301,14 +297,14 @@ src_template = """\
  * IN THE SOFTWARE.
  */
 
+#include "${hdr}"
+
 % for header in HEADERS:
 #include "${header.hdr}"
 % endfor
 
-#include "${hdr}"
-
 #define __NEEDS_TRACE_PRIV
-#include "util/debug.h"
+#include "util/u_debug.h"
 #include "util/perf/u_trace_priv.h"
 
 % if trace_toggle_name is not None:
@@ -514,6 +510,10 @@ perfetto_utils_hdr_template = """\
 
 #include <perfetto.h>
 
+% for header in HEADERS:
+#include "${header.hdr}"
+% endfor
+
 % for trace_name, trace in TRACEPOINTS.items():
 static void UNUSED
 trace_payload_as_extra_${trace_name}(perfetto::protos::pbzero::GpuRenderStageEvent *event,
@@ -550,4 +550,5 @@ def utrace_generate_perfetto_utils(hpath):
         with open(hpath, 'wb') as f:
             f.write(Template(perfetto_utils_hdr_template, output_encoding='utf-8').render(
                 hdrname=hdr.rstrip('.h').upper(),
+                HEADERS=[h for h in HEADERS if h.scope & HeaderScope.PERFETTO],
                 TRACEPOINTS=TRACEPOINTS))

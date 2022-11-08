@@ -75,6 +75,9 @@ v3dX(job_emit_binning_prolog)(struct v3dv_job *job,
                               uint32_t layers);
 
 void
+v3dX(job_emit_enable_double_buffer)(struct v3dv_job *job);
+
+void
 v3dX(cmd_buffer_execute_inside_pass)(struct v3dv_cmd_buffer *primary,
                                      uint32_t cmd_buffer_count,
                                      const VkCommandBuffer *cmd_buffers);

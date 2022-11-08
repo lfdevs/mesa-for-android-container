@@ -415,6 +415,10 @@ set_tex_parameteri(struct gl_context *ctx,
          texObj->Attrib.BaseLevel = MIN2(texObj->Attrib.ImmutableLevels - 1, params[0]);
       else
          texObj->Attrib.BaseLevel = params[0];
+      if (texObj->Attrib.BaseLevel < MAX_TEXTURE_LEVELS) {
+         _mesa_update_teximage_format_swizzle(ctx, texObj->Image[0][texObj->Attrib.BaseLevel], texObj->Attrib.DepthMode);
+         _mesa_update_texture_object_swizzle(ctx, texObj);
+      }
 
       return GL_TRUE;
 
@@ -518,6 +522,10 @@ set_tex_parameteri(struct gl_context *ctx,
              (ctx->Extensions.ARB_texture_rg && params[0] == GL_RED)) {
             flush(ctx);
             texObj->Attrib.DepthMode = params[0];
+            if (texObj->Attrib.BaseLevel < MAX_TEXTURE_LEVELS) {
+               _mesa_update_teximage_format_swizzle(ctx, texObj->Image[0][texObj->Attrib.BaseLevel], texObj->Attrib.DepthMode);
+               _mesa_update_texture_object_swizzle(ctx, texObj);
+            }
             return GL_TRUE;
          }
          goto invalid_param;
@@ -568,6 +576,7 @@ set_tex_parameteri(struct gl_context *ctx,
          flush(ctx);
          texObj->Attrib.Swizzle[comp] = params[0];
          set_swizzle_component(&texObj->Attrib._Swizzle, comp, swz);
+         _mesa_update_texture_object_swizzle(ctx, texObj);
          return GL_TRUE;
       }
       goto invalid_pname;
@@ -582,6 +591,7 @@ set_tex_parameteri(struct gl_context *ctx,
             if (swz >= 0) {
                texObj->Attrib.Swizzle[comp] = params[comp];
                set_swizzle_component(&texObj->Attrib._Swizzle, comp, swz);
+               _mesa_update_texture_object_swizzle(ctx, texObj);
             }
             else {
                _mesa_error(ctx, GL_INVALID_ENUM,

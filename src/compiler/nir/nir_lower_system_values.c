@@ -353,6 +353,30 @@ lower_compute_system_value_instr(nir_builder *b,
       if (b->shader->options->lower_cs_local_id_to_index ||
           (options && options->lower_cs_local_id_to_index)) {
          nir_ssa_def *local_index = nir_load_local_invocation_index(b);
+
+         if (!b->shader->info.workgroup_size_variable) {
+            /* Shortcut for 1 dimensional workgroups:
+             * Use local_invocation_index directly, which is better than
+             * lower_id_to_index + constant folding, because
+             * this way we don't leave behind extra ALU instrs.
+             */
+
+            /* size_x = 1, size_y = 1, therefore Z = local index */
+            if (b->shader->info.workgroup_size[0] == 1 &&
+                b->shader->info.workgroup_size[1] == 1)
+               return nir_vec3(b, nir_imm_int(b, 0), nir_imm_int(b, 0), local_index);
+
+            /* size_x = 1, size_z = 1, therefore Y = local index */
+            if (b->shader->info.workgroup_size[0] == 1 &&
+                b->shader->info.workgroup_size[2] == 1)
+               return nir_vec3(b, nir_imm_int(b, 0), local_index, nir_imm_int(b, 0));
+
+            /* size_y = 1, size_z = 1, therefore X = local index */
+            if (b->shader->info.workgroup_size[1] == 1 &&
+                b->shader->info.workgroup_size[2] == 1)
+               return nir_vec3(b, local_index, nir_imm_int(b, 0), nir_imm_int(b, 0));
+         }
+
          nir_ssa_def *local_size = nir_load_workgroup_size(b);
          return lower_id_to_index(b, local_index, local_size, bit_size);
       }

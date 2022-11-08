@@ -62,6 +62,12 @@ stage_to_enum(char *stage)
       return MESA_SHADER_NONE;
 }
 
+static void
+log_spirv_to_dxil_error(void *priv, const char *msg)
+{
+   fprintf(stderr, "spirv_to_dxil error: %s", msg);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -142,12 +148,17 @@ main(int argc, char **argv)
    struct dxil_spirv_debug_options dbg_opts = {
       .dump_nir = debug,
    };
+   const struct dxil_spirv_logger logger = {
+      .priv = NULL,
+      .log = log_spirv_to_dxil_error
+   };
 
    struct dxil_spirv_object obj;
    memset(&obj, 0, sizeof(obj));
    if (spirv_to_dxil((uint32_t *)file_contents, word_count, NULL, 0,
                      (dxil_spirv_shader_stage)shader_stage, entry_point,
-                     &dbg_opts, &conf, &obj)) {
+                     SHADER_MODEL_6_2, DXIL_VALIDATOR_1_4,
+                     &dbg_opts, &conf, &logger, &obj)) {
 
       if (validate && !validate_dxil(&obj)) {
          fprintf(stderr, "Failed to validate DXIL\n");

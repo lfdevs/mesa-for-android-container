@@ -146,10 +146,6 @@
 extern "C" {
 #endif
 
-// Use LDS symbols when supported by LLVM. Can be disabled for testing the old
-// path on newer LLVM for now. Should be removed in the long term.
-#define USE_LDS_SYMBOLS (true)
-
 struct nir_shader;
 struct si_shader;
 struct si_context;
@@ -849,6 +845,10 @@ struct si_shader {
    struct si_shader *gs_copy_shader;
 
    struct si_resource *bo;
+   /* gpu_address should be bo->gpu_address except if SQTT is
+    * in use.
+    */
+   uint64_t gpu_address;
    struct si_resource *scratch_bo;
    union si_shader_key key;
    struct util_queue_fence ready;
@@ -964,6 +964,8 @@ struct si_shader_part {
 };
 
 /* si_shader.c */
+struct ac_rtld_binary;
+
 void si_update_shader_binary_info(struct si_shader *shader, nir_shader *nir);
 bool si_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
                        struct si_shader *shader, struct util_debug_callback *debug);
@@ -983,6 +985,10 @@ const char *si_get_shader_name(const struct si_shader *shader);
 void si_shader_binary_clean(struct si_shader_binary *binary);
 struct nir_shader *si_deserialize_shader(struct si_shader_selector *sel);
 unsigned si_get_ps_num_interp(struct si_shader *ps);
+bool si_shader_binary_open(struct si_screen *screen, struct si_shader *shader,
+                           struct ac_rtld_binary *rtld);
+bool si_get_external_symbol(enum amd_gfx_level gfx_level, void *data, const char *name,
+                            uint64_t *value);
 
 /* si_shader_info.c */
 void si_nir_scan_shader(struct si_screen *sscreen,  const struct nir_shader *nir,

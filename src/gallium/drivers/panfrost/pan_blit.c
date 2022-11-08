@@ -38,11 +38,11 @@ panfrost_blitter_save(struct panfrost_context *ctx, bool render_cond)
 
         util_blitter_save_vertex_buffer_slot(blitter, ctx->vertex_buffers);
         util_blitter_save_vertex_elements(blitter, ctx->vertex);
-        util_blitter_save_vertex_shader(blitter, ctx->shader[PIPE_SHADER_VERTEX]);
+        util_blitter_save_vertex_shader(blitter, ctx->uncompiled[PIPE_SHADER_VERTEX]);
         util_blitter_save_rasterizer(blitter, ctx->rasterizer);
         util_blitter_save_viewport(blitter, &ctx->pipe_viewport);
         util_blitter_save_scissor(blitter, &ctx->scissor);
-        util_blitter_save_fragment_shader(blitter, ctx->shader[PIPE_SHADER_FRAGMENT]);
+        util_blitter_save_fragment_shader(blitter, ctx->uncompiled[PIPE_SHADER_FRAGMENT]);
         util_blitter_save_blend(blitter, ctx->blend);
         util_blitter_save_depth_stencil_alpha(blitter, ctx->depth_stencil);
         util_blitter_save_stencil_ref(blitter, &ctx->stencil_ref);

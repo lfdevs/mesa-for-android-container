@@ -31,8 +31,8 @@
 
 namespace r600 {
 
-
-Shader *schedule(Shader *original);
+Shader *
+schedule(Shader *original);
 
 }
 

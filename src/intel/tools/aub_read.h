@@ -28,7 +28,6 @@
 #include <stdint.h>
 
 #include "dev/intel_device_info.h"
-#include "drm-uapi/i915_drm.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,9 +51,9 @@ struct aub_read {
 
    void (*reg_write)(void *user_data, uint32_t reg_offset, uint32_t reg_value);
 
-   void (*ring_write)(void *user_data, enum drm_i915_gem_engine_class engine,
+   void (*ring_write)(void *user_data, enum intel_engine_class engine,
                       const void *data, uint32_t data_len);
-   void (*execlist_write)(void *user_data, enum drm_i915_gem_engine_class engine,
+   void (*execlist_write)(void *user_data, enum intel_engine_class engine,
                           uint64_t context_descriptor);
 
    /* Reader's data */

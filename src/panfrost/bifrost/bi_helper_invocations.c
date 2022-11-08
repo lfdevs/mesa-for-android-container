@@ -67,6 +67,7 @@ bi_has_skip_bit(enum bi_opcode op)
         switch (op) {
         case BI_OPCODE_TEX_SINGLE:
         case BI_OPCODE_TEXC:
+        case BI_OPCODE_TEXC_DUAL:
         case BI_OPCODE_TEXS_2D_F16:
         case BI_OPCODE_TEXS_2D_F32:
         case BI_OPCODE_TEXS_CUBE_F16:
@@ -88,6 +89,7 @@ bi_instr_uses_helpers(bi_instr *I)
 {
         switch (I->op) {
         case BI_OPCODE_TEXC:
+        case BI_OPCODE_TEXC_DUAL:
         case BI_OPCODE_TEXS_2D_F16:
         case BI_OPCODE_TEXS_2D_F32:
         case BI_OPCODE_TEXS_CUBE_F16:
@@ -200,19 +202,13 @@ bi_helper_block_update(BITSET_WORD *deps, bi_block *block)
         bi_foreach_instr_in_block_rev(block, I) {
                 /* If a destination is required by helper invocation... */
                 bi_foreach_dest(I, d) {
-                        if (bi_is_null(I->dest[d]))
-                                continue;
-
-                        if (!BITSET_TEST(deps, bi_get_node(I->dest[d])))
+                        if (!BITSET_TEST(deps, I->dest[d].value))
                                 continue;
 
                         /* ...so are the sources */
-                        bi_foreach_src(I, s) {
-                                if (I->src[s].type == BI_INDEX_NORMAL) {
-                                        unsigned node = bi_get_node(I->src[s]);
-                                        progress |= !BITSET_TEST(deps, node);
-                                        BITSET_SET(deps, node);
-                                }
+                        bi_foreach_ssa_src(I, s) {
+                                progress |= !BITSET_TEST(deps, I->src[s].value);
+                                BITSET_SET(deps, I->src[s].value);
                         }
 
                         break;
@@ -225,8 +221,7 @@ bi_helper_block_update(BITSET_WORD *deps, bi_block *block)
 void
 bi_analyze_helper_requirements(bi_context *ctx)
 {
-        unsigned temp_count = bi_max_temp(ctx);
-        BITSET_WORD *deps = calloc(sizeof(BITSET_WORD), BITSET_WORDS(temp_count));
+        BITSET_WORD *deps = calloc(sizeof(BITSET_WORD), ctx->ssa_alloc);
 
         /* Initialize with the sources of instructions consuming
          * derivatives */
@@ -234,10 +229,8 @@ bi_analyze_helper_requirements(bi_context *ctx)
         bi_foreach_instr_global(ctx, I) {
                 if (!bi_instr_uses_helpers(I)) continue;
 
-                bi_foreach_src(I, s) {
-                        if (I->src[s].type == BI_INDEX_NORMAL)
-                                BITSET_SET(deps, bi_get_node(I->src[s]));
-                }
+                bi_foreach_ssa_src(I, s)
+                        BITSET_SET(deps, I->src[s].value);
         }
 
         /* Propagate that up */
@@ -266,10 +259,8 @@ bi_analyze_helper_requirements(bi_context *ctx)
 
                 bool exec = false;
 
-                bi_foreach_dest(I, d) {
-                        if (I->dest[d].type == BI_INDEX_NORMAL)
-                                exec |= BITSET_TEST(deps, bi_get_node(I->dest[d]));
-                }
+                bi_foreach_dest(I, d)
+                        exec |= BITSET_TEST(deps, I->dest[d].value);
 
                 I->skip = !exec;
         }

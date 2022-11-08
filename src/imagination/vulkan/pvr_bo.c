@@ -37,7 +37,7 @@ static uint32_t pvr_bo_alloc_to_winsys_flags(uint64_t flags)
 {
    uint32_t ws_flags = 0;
 
-   if (flags & PVR_BO_ALLOC_FLAG_CPU_ACCESS)
+   if (flags & (PVR_BO_ALLOC_FLAG_CPU_ACCESS | PVR_BO_ALLOC_FLAG_CPU_MAPPED))
       ws_flags |= PVR_WINSYS_BO_FLAG_CPU_ACCESS;
 
    if (flags & PVR_BO_ALLOC_FLAG_GPU_UNCACHED)

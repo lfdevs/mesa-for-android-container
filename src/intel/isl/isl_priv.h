@@ -33,6 +33,56 @@
 
 #include "isl.h"
 
+typedef void (*isl_surf_fill_state_s_func)(
+   const struct isl_device *dev, void *state,
+   const struct isl_surf_fill_state_info *restrict info);
+
+typedef void (*isl_buffer_fill_state_s_func)(
+   const struct isl_device *dev, void *state,
+   const struct isl_buffer_fill_state_info *restrict info);
+
+typedef void (*isl_emit_depth_stencil_hiz_s_func)(
+   const struct isl_device *dev, void *state,
+   const struct isl_depth_stencil_hiz_emit_info *restrict info);
+
+typedef void (*isl_null_fill_state_s_func)(const struct isl_device *dev, void *state,
+                                           const struct isl_null_fill_state_info *restrict info);
+
+typedef void (*isl_emit_cpb_control_s_func)(const struct isl_device *dev, void *batch,
+                                            const struct isl_cpb_emit_info *restrict info);
+
+#define isl_genX_declare_get_func(func)                                 \
+   static inline isl_##func##_func                                      \
+   isl_##func##_get_func(const struct isl_device *dev) {                \
+      switch (ISL_GFX_VERX10(dev)) {                                    \
+      case 40:                                                          \
+         return isl_gfx4_##func;                                        \
+      case 45:                                                          \
+         /* G45 surface state is the same as gfx5 */                    \
+      case 50:                                                          \
+         return isl_gfx5_##func;                                        \
+      case 60:                                                          \
+         return isl_gfx6_##func;                                        \
+      case 70:                                                          \
+         return isl_gfx7_##func;                                        \
+      case 75:                                                          \
+         return isl_gfx75_##func;                                       \
+      case 80:                                                          \
+         return isl_gfx8_##func;                                        \
+      case 90:                                                          \
+         return isl_gfx9_##func;                                        \
+      case 110:                                                         \
+         return isl_gfx11_##func;                                       \
+      case 120:                                                         \
+         return isl_gfx12_##func;                                       \
+      case 125:                                                         \
+         return isl_gfx125_##func;                                      \
+      default:                                                          \
+         assert(!"Unknown hardware generation");                        \
+         return NULL;                                                   \
+      }                                                                 \
+   }
+
 #define isl_finishme(format, ...) \
    do { \
       static bool reported = false; \

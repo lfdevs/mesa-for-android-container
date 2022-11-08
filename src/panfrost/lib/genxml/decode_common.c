@@ -44,7 +44,7 @@ static struct rb_tree mmap_tree;
 
 static struct util_dynarray ro_mappings;
 
-static simple_mtx_t pandecode_lock = _SIMPLE_MTX_INITIALIZER_NP;
+static simple_mtx_t pandecode_lock = SIMPLE_MTX_INITIALIZER;
 
 #define to_mapped_memory(x) \
 	rb_node_data(struct pandecode_mapped_memory, x, node)
@@ -300,12 +300,6 @@ pandecode_dump_mappings(void)
         simple_mtx_unlock(&pandecode_lock);
 }
 
-void pandecode_abort_on_fault_v4(mali_ptr jc_gpu_va);
-void pandecode_abort_on_fault_v5(mali_ptr jc_gpu_va);
-void pandecode_abort_on_fault_v6(mali_ptr jc_gpu_va);
-void pandecode_abort_on_fault_v7(mali_ptr jc_gpu_va);
-void pandecode_abort_on_fault_v9(mali_ptr jc_gpu_va);
-
 void
 pandecode_abort_on_fault(mali_ptr jc_gpu_va, unsigned gpu_id)
 {
@@ -322,12 +316,6 @@ pandecode_abort_on_fault(mali_ptr jc_gpu_va, unsigned gpu_id)
 
         simple_mtx_unlock(&pandecode_lock);
 }
-
-void pandecode_jc_v4(mali_ptr jc_gpu_va, unsigned gpu_id);
-void pandecode_jc_v5(mali_ptr jc_gpu_va, unsigned gpu_id);
-void pandecode_jc_v6(mali_ptr jc_gpu_va, unsigned gpu_id);
-void pandecode_jc_v7(mali_ptr jc_gpu_va, unsigned gpu_id);
-void pandecode_jc_v9(mali_ptr jc_gpu_va, unsigned gpu_id);
 
 void
 pandecode_jc(mali_ptr jc_gpu_va, unsigned gpu_id)

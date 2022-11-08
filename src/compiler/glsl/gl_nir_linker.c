@@ -111,7 +111,9 @@ gl_nir_opts(nir_shader *nir)
 
       NIR_PASS(progress, nir, nir_opt_undef);
       NIR_PASS(progress, nir, nir_opt_conditional_discard);
-      if (nir->options->max_unroll_iterations) {
+      if (nir->options->max_unroll_iterations ||
+            (nir->options->max_unroll_iterations_fp64 &&
+               (nir->options->lower_doubles_options & nir_lower_fp64_full_software))) {
          NIR_PASS(progress, nir, nir_opt_loop_unroll);
       }
    } while (progress);

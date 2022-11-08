@@ -54,7 +54,6 @@ typedef enum {
 
 typedef struct {
         unsigned *midg_tags;
-        struct midgard_disasm_stats midg_stats;
 
         /* For static analysis to ensure all registers are written at least once before
          * use along the source code path (TODO: does this break done for complex CF?)
@@ -186,12 +185,6 @@ print_alu_reg(disassemble_context *ctx, FILE *fp, unsigned reg, bool is_write)
 
         if (reg >= 16 && reg <= 23)
                 is_uniform = true;
-
-        /* Update the uniform count appropriately */
-
-        if (is_uniform)
-                ctx->midg_stats.uniform_count =
-                        MAX2(uniform_reg + 1, ctx->midg_stats.uniform_count);
 
         if (reg == REGISTER_UNUSED || reg == REGISTER_UNUSED + 1)
                 fprintf(fp, "TMP%u", reg - REGISTER_UNUSED);
@@ -685,10 +678,8 @@ update_dest(disassemble_context *ctx, unsigned reg)
         /* We should record writes as marking this as a work register. Store
          * the max register in work_count; we'll add one at the end */
 
-        if (reg < 16) {
-                ctx->midg_stats.work_count = MAX2(reg, ctx->midg_stats.work_count);
+        if (reg < 16)
                 ctx->midg_ever_written |= (1 << reg);
-        }
 }
 
 static void
@@ -868,7 +859,6 @@ print_vector_field(disassemble_context *ctx, FILE *fp, const char *name,
                                  shrink_mode, src_mask, is_int, argmod);
         }
 
-        ctx->midg_stats.instruction_count++;
         fprintf(fp, "\n");
 }
 
@@ -958,7 +948,6 @@ print_scalar_field(disassemble_context *ctx, FILE *fp, const char *name,
         } else
                 print_scalar_src(ctx, fp, is_int, alu_field->src2, reg_info->src2_reg);
 
-        ctx->midg_stats.instruction_count++;
         fprintf(fp, "\n");
 }
 
@@ -1033,7 +1022,6 @@ static bool
 print_compact_branch_writeout_field(disassemble_context *ctx, FILE *fp, uint16_t word)
 {
         midgard_jmp_writeout_op op = word & 0x7;
-        ctx->midg_stats.instruction_count++;
 
         switch (op) {
         case midgard_jmp_writeout_op_branch_uncond: {
@@ -1121,7 +1109,6 @@ print_extended_branch_writeout_field(disassemble_context *ctx, FILE *fp, uint8_t
 
         ctx->midg_tags[I] = br.dest_tag;
 
-        ctx->midg_stats.instruction_count++;
         return br.offset >= 0;
 }
 
@@ -1329,13 +1316,6 @@ midgard_print_sint(FILE *fp, int n)
 }
 
 static void
-update_stats(signed *stat, unsigned address)
-{
-        if (*stat >= 0)
-                *stat = MAX2(*stat, address + 1);
-}
-
-static void
 print_load_store_instr(disassemble_context *ctx, FILE *fp, uint64_t data, bool verbose)
 {
         midgard_load_store_word *word = (midgard_load_store_word *) &data;
@@ -1368,7 +1348,11 @@ print_load_store_instr(disassemble_context *ctx, FILE *fp, uint64_t data, bool v
                         (word->op == midgard_op_ld_attr_32i);
 
                 bool has_default = (default_secondary || default_primary);
-                bool is_secondary = (word->index_format >> 1);
+                bool auto32 = (word->index_format >> 0) & 1;
+                bool is_secondary = (word->index_format >> 1) & 1;
+
+                if (auto32)
+                        fprintf(fp, ".a32");
 
                 if (has_default && (is_secondary != default_secondary))
                         fprintf(fp, ".%s", is_secondary ? "secondary" : "primary");
@@ -1513,30 +1497,8 @@ print_load_store_instr(disassemble_context *ctx, FILE *fp, uint64_t data, bool v
 
         /* Debugging stuff */
 
-        if (is_op_varying(word->op)) {
-                /* Do some analysis: check if direct access */
-
-                if (word->index_reg == 0x7 && ctx->midg_stats.varying_count >= 0)
-                        update_stats(&ctx->midg_stats.varying_count,
-                                     UNPACK_LDST_ATTRIB_OFS(word->signed_offset));
-                else
-                        ctx->midg_stats.varying_count = -16;
-        } else if (is_op_attribute(word->op)) {
-                if (word->index_reg == 0x7 && ctx->midg_stats.attribute_count >= 0)
-                        update_stats(&ctx->midg_stats.attribute_count,
-                                     UNPACK_LDST_ATTRIB_OFS(word->signed_offset));
-                else
-                        ctx->midg_stats.attribute_count = -16;
-        }
-
         if (!OP_IS_STORE(word->op))
                 update_dest(ctx, word->reg);
-
-        if (OP_IS_UBO_READ(word->op))
-                update_stats(&ctx->midg_stats.uniform_buffer_count,
-                             UNPACK_LDST_UBO_OFS(word->signed_offset));
-
-        ctx->midg_stats.instruction_count++;
 }
 
 static void
@@ -1712,7 +1674,6 @@ print_texture_word(disassemble_context *ctx, FILE *fp, uint32_t *word,
                    unsigned tabs, unsigned in_reg_base, unsigned out_reg_base)
 {
         midgard_texture_word *texture = (midgard_texture_word *) word;
-        ctx->midg_stats.helper_invocations |= midgard_op_has_helpers(texture->op);
         validate_sampler_type(texture->op, texture->sampler_type);
 
         /* Broad category of texture operation in question */
@@ -1761,12 +1722,8 @@ print_texture_word(disassemble_context *ctx, FILE *fp, uint32_t *word,
                 fprintf(fp, "texture[");
                 print_texture_reg_select(fp, texture->texture_handle, in_reg_base);
                 fprintf(fp, "], ");
-
-                /* Indirect, tut tut */
-                ctx->midg_stats.texture_count = -16;
         } else {
                 fprintf(fp, "texture%u, ", texture->texture_handle);
-                update_stats(&ctx->midg_stats.texture_count, texture->texture_handle);
         }
 
         /* Print the type, GL style */
@@ -1776,11 +1733,8 @@ print_texture_word(disassemble_context *ctx, FILE *fp, uint32_t *word,
                 fprintf(fp, "[");
                 print_texture_reg_select(fp, texture->sampler_handle, in_reg_base);
                 fprintf(fp, "]");
-
-                ctx->midg_stats.sampler_count = -16;
         } else {
                 fprintf(fp, "%u", texture->sampler_handle);
-                update_stats(&ctx->midg_stats.sampler_count, texture->sampler_handle);
         }
 
         print_vec_swizzle(fp, texture->swizzle, midgard_src_passthrough, midgard_reg_mode_32, 0xFF);
@@ -1882,11 +1836,9 @@ print_texture_word(disassemble_context *ctx, FILE *fp, uint32_t *word,
                 fprintf(fp, "// unknown4 = 0x%x\n", texture->unknown4);
                 fprintf(fp, "// unknown8 = 0x%x\n", texture->unknown8);
         }
-
-        ctx->midg_stats.instruction_count++;
 }
 
-struct midgard_disasm_stats
+void
 disassemble_midgard(FILE *fp, uint8_t *code, size_t size, unsigned gpu_id, bool verbose)
 {
         uint32_t *words = (uint32_t *) code;
@@ -1901,7 +1853,6 @@ disassemble_midgard(FILE *fp, uint8_t *code, size_t size, unsigned gpu_id, bool 
 
         disassemble_context ctx = {
                 .midg_tags = calloc(sizeof(ctx.midg_tags[0]), num_words),
-                .midg_stats = {0},
                 .midg_ever_written = 0,
         };
 
@@ -1990,12 +1941,6 @@ disassemble_midgard(FILE *fp, uint8_t *code, size_t size, unsigned gpu_id, bool 
                         break;
                 }
 
-                /* We are parsing per bundle anyway. Add before we start
-                 * breaking out so we don't miss the final bundle. */
-
-                ctx.midg_stats.bundle_count++;
-                ctx.midg_stats.quadword_count += num_quad_words;
-
                 /* Include a synthetic "break" instruction at the end of the
                  * bundle to signify that if, absent a branch, the shader
                  * execution will stop here. Stop disassembly at such a break
@@ -2021,12 +1966,4 @@ disassemble_midgard(FILE *fp, uint8_t *code, size_t size, unsigned gpu_id, bool 
         }
 
         free(ctx.midg_tags);
-
-        /* We computed work_count as max_work_registers, so add one to get the
-         * count. If no work registers are written, you still have one work
-         * reported, which is exactly what the hardware expects */
-
-        ctx.midg_stats.work_count++;
-
-        return ctx.midg_stats;
 }

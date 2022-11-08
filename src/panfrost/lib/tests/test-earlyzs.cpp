@@ -47,16 +47,13 @@
 static void
 test(enum pan_earlyzs expected_update, enum pan_earlyzs expected_kill, uint32_t flags)
 {
-   struct pan_shader_info info = {
-      .fs = {
-         .can_discard = !!(flags & DISCARD),
-         .writes_depth = !!(flags & WRITES_Z),
-         .writes_stencil = !!(flags & WRITES_S),
-         .writes_coverage = !!(flags & WRITES_COV),
-         .early_fragment_tests = !!(flags & API_EARLY),
-      },
-      .writes_global = !!(flags & SIDEFX),
-   };
+   struct pan_shader_info info = {};
+   info.fs.can_discard = !!(flags & DISCARD);
+   info.fs.writes_depth = !!(flags & WRITES_Z);
+   info.fs.writes_stencil = !!(flags & WRITES_S);
+   info.fs.writes_coverage = !!(flags & WRITES_COV);
+   info.fs.early_fragment_tests = !!(flags & API_EARLY);
+   info.writes_global = !!(flags & SIDEFX);
 
    struct pan_earlyzs_state result =
       pan_earlyzs_get(pan_earlyzs_analyze(&info),

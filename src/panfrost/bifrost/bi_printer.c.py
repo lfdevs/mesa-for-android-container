@@ -90,8 +90,6 @@ bi_print_index(FILE *fp, bi_index index)
     else if (index.type == BI_INDEX_PASS)
         fprintf(fp, "%s", bir_passthrough_name(index.value));
     else if (index.type == BI_INDEX_REGISTER)
-        fprintf(fp, "br%u", index.value);
-    else if (index.type == BI_INDEX_NORMAL && index.reg)
         fprintf(fp, "r%u", index.value);
     else if (index.type == BI_INDEX_NORMAL)
         fprintf(fp, "%u", index.value);
@@ -160,22 +158,18 @@ bi_${mod}_as_str(enum bi_${mod} ${mod})
 void
 bi_print_instr(const bi_instr *I, FILE *fp)
 {
-    if (I->op == BI_OPCODE_SPLIT_I32) {
-        for (unsigned d = 0; d < I->nr_dests; ++d) {
-            if (d > 0) fprintf(fp, ", ");
+    fputs("   ", fp);
 
-            bi_print_index(fp, I->dest[d]);
-        }
-    } else {
-        bi_foreach_dest(I, d) {
-            if (bi_is_null(I->dest[d])) break;
-            if (d > 0) fprintf(fp, ", ");
+    bi_foreach_dest(I, d) {
+        if (d > 0) fprintf(fp, ", ");
 
-            bi_print_index(fp, I->dest[d]);
-        }
+        bi_print_index(fp, I->dest[d]);
     }
 
-    fprintf(fp, " = %s", bi_opcode_props[I->op].name);
+    if (I->nr_dests > 0)
+        fputs(" = ", fp);
+
+    fprintf(fp, "%s", bi_opcode_props[I->op].name);
 
     if (I->table)
         fprintf(fp, ".table%u", I->table);
@@ -183,7 +177,7 @@ bi_print_instr(const bi_instr *I, FILE *fp)
     if (I->flow)
         fprintf(fp, ".flow%u", I->flow);
 
-    if (I->op == BI_OPCODE_COLLECT_I32) {
+    if (I->op == BI_OPCODE_COLLECT_I32 || I->op == BI_OPCODE_PHI) {
         for (unsigned i = 0; i < I->nr_srcs; ++i) {
             if (i > 0)
                 fputs(", ", fp);

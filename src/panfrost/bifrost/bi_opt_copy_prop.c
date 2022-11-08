@@ -25,15 +25,7 @@
 #include "compiler.h"
 #include "bi_builder.h"
 
-/* A simple scalar-only SSA-based copy-propagation pass. TODO: vectors */
-
-static bool
-bi_is_copy(bi_instr *ins)
-{
-        return (ins->op == BI_OPCODE_MOV_I32) && bi_is_ssa(ins->dest[0])
-                && (bi_is_ssa(ins->src[0]) || ins->src[0].type == BI_INDEX_FAU
-                                || ins->src[0].type == BI_INDEX_CONSTANT);
-}
+/* SSA copy propagation */
 
 static bool
 bi_reads_fau(bi_instr *ins)
@@ -60,15 +52,11 @@ bi_opt_copy_prop(bi_context *ctx)
                         if (I->nr_srcs == 1)
                                 I->op = BI_OPCODE_MOV_I32;
 
-                        if (bi_is_ssa(I->dest[0]))
-                                collects[I->dest[0].value] = I;
+                        collects[I->dest[0].value] = I;
                 } else if (I->op == BI_OPCODE_SPLIT_I32) {
                         /* Rewrite trivial splits while we're at it */
                         if (I->nr_dests == 1)
                                 I->op = BI_OPCODE_MOV_I32;
-
-                        if (!bi_is_ssa(I->src[0]))
-                                continue;
 
                         bi_instr *collect = collects[I->src[0].value];
                         if (!collect)
@@ -77,7 +65,7 @@ bi_opt_copy_prop(bi_context *ctx)
                         /* Lower the split to moves, copyprop cleans up */
                         bi_builder b = bi_init_builder(ctx, bi_before_instr(I));
 
-                        for (unsigned d = 0; d < I->nr_dests; ++d)
+                        bi_foreach_dest(I, d)
                                 bi_mov_i32_to(&b, I->dest[d], collect->src[d]);
 
                         bi_remove_instruction(I);
@@ -89,7 +77,7 @@ bi_opt_copy_prop(bi_context *ctx)
         bi_index *replacement = calloc(sizeof(bi_index), ctx->ssa_alloc);
 
         bi_foreach_instr_global_safe(ctx, ins) {
-                if (bi_is_copy(ins)) {
+                if (ins->op == BI_OPCODE_MOV_I32 && ins->src[0].type != BI_INDEX_REGISTER) {
                         bi_index replace = ins->src[0];
 
                         /* Peek through one layer so copyprop converges in one
@@ -101,13 +89,14 @@ bi_opt_copy_prop(bi_context *ctx)
                                         replace = chained;
                         }
 
+                        assert(ins->nr_dests == 1);
                         replacement[ins->dest[0].value] = replace;
                 }
 
                 bi_foreach_src(ins, s) {
                         bi_index use = ins->src[s];
 
-                        if (use.type != BI_INDEX_NORMAL || use.reg) continue;
+                        if (use.type != BI_INDEX_NORMAL) continue;
                         if (bi_is_staging_src(ins, s)) continue;
 
                         bi_index repl = replacement[use.value];
@@ -116,7 +105,7 @@ bi_opt_copy_prop(bi_context *ctx)
                                 continue;
 
                         if (!bi_is_null(repl))
-                                ins->src[s] = bi_replace_index(ins->src[s], repl);
+                                bi_replace_src(ins, s, repl);
                 }
         }
 

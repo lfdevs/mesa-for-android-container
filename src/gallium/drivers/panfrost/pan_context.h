@@ -185,8 +185,10 @@ struct panfrost_context {
 
         struct panfrost_constant_buffer constant_buffer[PIPE_SHADER_TYPES];
         struct panfrost_rasterizer *rasterizer;
-        struct panfrost_shader_variants *shader[PIPE_SHADER_TYPES];
         struct panfrost_vertex_state *vertex;
+
+        struct panfrost_uncompiled_shader *uncompiled[PIPE_SHADER_TYPES];
+        struct panfrost_compiled_shader *prog[PIPE_SHADER_TYPES];
 
         struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];
         uint32_t vb_mask;
@@ -258,8 +260,11 @@ struct pan_linkage {
  * shaders with varying emulated features baked in
  */
 struct panfrost_fs_key {
-        /* Number of colour buffers */
-        unsigned nr_cbufs;
+        /* Number of colour buffers if gl_FragColor is written */
+        unsigned nr_cbufs_for_fragcolor;
+
+        /* On Valhall, fixed_varying_mask of the linked vertex shader */
+        uint32_t fixed_varying_mask;
 
         /* Midgard shaders that read the tilebuffer must be keyed for
          * non-blendable formats
@@ -274,15 +279,21 @@ struct panfrost_fs_key {
 };
 
 struct panfrost_shader_key {
-        /* Valhall needs special handling for desktop GL varyings */
-        uint32_t fixed_varying_mask;
+        union {
+                /* Vertex shaders do not use shader keys. However, we have a
+                 * special "transform feedback" vertex program derived from a
+                 * vertex shader. If vs_is_xfb is set on a vertex shader, this
+                 * is a transform feedback shader, else it is a regular
+                 * (unkeyed) vertex shader.
+                 */
+                bool vs_is_xfb;
 
-        /* If we need vertex shader keys, union it in */
-        struct panfrost_fs_key fs;
+                /* Fragment shaders use regular shader keys */
+                struct panfrost_fs_key fs;
+        };
 };
 
-/* A shader state corresponds to the actual, current variant of the shader */
-struct panfrost_shader_state {
+struct panfrost_compiled_shader {
         /* Respectively, shader binary and Renderer State Descriptor */
         struct panfrost_pool_ref bin, state;
 
@@ -292,9 +303,6 @@ struct panfrost_shader_state {
         struct pan_shader_info info;
 
         struct pan_earlyzs_lut earlyzs;
-
-        /* Attached transform feedback program, if one exists */
-        struct panfrost_shader_state *xfb;
 
         /* Linked varyings, for non-separable programs */
         struct pan_linkage linkage;
@@ -308,32 +316,64 @@ struct panfrost_shader_state {
         unsigned dirty_3d, dirty_shader;
 };
 
-/* A collection of varyings (the CSO) */
-struct panfrost_shader_variants {
-        nir_shader *nir;
+/* Shader CSO */
+struct panfrost_uncompiled_shader {
+        /* NIR for the shader. For graphics, this will be non-NULL even for
+         * TGSI. For compute, this will be NULL after the shader is compiled,
+         * as we don't need any compute variants.
+         */
+        const nir_shader *nir;
 
-        union {
-                struct pipe_stream_output_info stream_output;
-                unsigned req_input_mem;
-        };
+        /* A SHA1 of the serialized NIR for the disk cache. */
+        unsigned char nir_sha1[20];
+
+        /* Stream output information */
+        struct pipe_stream_output_info stream_output;
 
         /** Lock for the variants array */
         simple_mtx_t lock;
 
-        struct panfrost_shader_state *variants;
-        unsigned variant_space;
+        /* Array of panfrost_compiled_shader */
+        struct util_dynarray variants;
 
-        unsigned variant_count;
+        /* Compiled transform feedback program, if one is required */
+        struct panfrost_compiled_shader *xfb;
 
         /* On vertex shaders, bit mask of special desktop-only varyings to link
          * with the fragment shader. Used on Valhall to implement separable
          * shaders for desktop GL.
          */
         uint32_t fixed_varying_mask;
-
-        /* The current active variant */
-        unsigned active_variant;
 };
+
+/* The binary artefacts of compiling a shader. This differs from
+ * panfrost_compiled_shader, which adds extra metadata beyond compiling but
+ * throws away information not needed after the initial compile.
+ *
+ * This structure is serialized for the shader disk cache.
+ */
+struct panfrost_shader_binary {
+        /* Collected information about the compiled shader */
+        struct pan_shader_info info;
+
+        /* The binary itself */
+        struct util_dynarray binary;
+};
+
+void
+panfrost_disk_cache_store(struct disk_cache *cache,
+                          const struct panfrost_uncompiled_shader *uncompiled,
+                          const struct panfrost_shader_key *key,
+                          const struct panfrost_shader_binary *binary);
+
+bool
+panfrost_disk_cache_retrieve(struct disk_cache *cache,
+                             const struct panfrost_uncompiled_shader *uncompiled,
+                             const struct panfrost_shader_key *key,
+                             struct panfrost_shader_binary *binary);
+
+void
+panfrost_disk_cache_init(struct panfrost_screen *screen);
 
 /** (Vertex buffer index, divisor) tuple that will become an Attribute Buffer
  * Descriptor at draw-time on Midgard
@@ -366,18 +406,6 @@ pan_so_target(struct pipe_stream_output_target *target)
         return (struct panfrost_streamout_target *)target;
 }
 
-static inline struct panfrost_shader_state *
-panfrost_get_shader_state(struct panfrost_context *ctx,
-                          enum pipe_shader_type st)
-{
-        struct panfrost_shader_variants *all = ctx->shader[st];
-
-        if (!all)
-                return NULL;
-
-        return &all->variants[all->active_variant];
-}
-
 struct pipe_context *
 panfrost_create_context(struct pipe_screen *screen, void *priv, unsigned flags);
 
@@ -399,15 +427,9 @@ panfrost_render_condition_check(struct panfrost_context *ctx);
 void
 panfrost_update_shader_variant(struct panfrost_context *ctx,
                                enum pipe_shader_type type);
-void
-panfrost_shader_compile(struct pipe_screen *pscreen,
-                        struct panfrost_pool *shader_pool,
-                        struct panfrost_pool *desc_pool,
-                        const nir_shader *ir,
-                        struct panfrost_shader_state *state);
 
 void
-panfrost_analyze_sysvals(struct panfrost_shader_state *ss);
+panfrost_analyze_sysvals(struct panfrost_compiled_shader *ss);
 
 mali_ptr
 panfrost_get_index_buffer(struct panfrost_batch *batch,
@@ -425,10 +447,8 @@ panfrost_get_index_buffer_bounded(struct panfrost_batch *batch,
 mali_ptr
 panfrost_vertex_buffer_address(struct panfrost_context *ctx, unsigned i);
 
-/* Compute */
-
 void
-panfrost_compute_context_init(struct pipe_context *pctx);
+panfrost_shader_context_init(struct pipe_context *pctx);
 
 static inline void
 panfrost_dirty_state_all(struct panfrost_context *ctx)

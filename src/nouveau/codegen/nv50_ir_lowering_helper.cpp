@@ -85,25 +85,80 @@ LoweringHelper::handleCVT(Instruction *insn)
    DataType dTy = insn->dType;
    DataType sTy = insn->sType;
 
-   if (typeSizeof(dTy) <= 4 && typeSizeof(sTy) <= 4)
+   bld.setPosition(insn, true);
+
+   /* We can't convert from 32bit floating point to 8bit integer and from 64bit
+    * floating point to any integer smaller than 32bit, hence add an instruction
+    * to convert to a 32bit integer first.
+    */
+   if (((typeSizeof(dTy) == 1) && isFloatType(sTy)) ||
+       ((typeSizeof(dTy) <= 2) && sTy == TYPE_F64)) {
+      Value *tmp = insn->getDef(0);
+      DataType tmpTy = (isSignedIntType(dTy)) ? TYPE_S32 : TYPE_U32;
+
+      insn->setType(tmpTy, sTy);
+      insn->setDef(0, bld.getSSA());
+      bld.mkCvt(OP_CVT, dTy, tmp, tmpTy, insn->getDef(0))->saturate = 1;
+
       return true;
+   }
 
    bld.setPosition(insn, false);
 
-   if ((dTy == TYPE_S32 && sTy == TYPE_S64) ||
-       (dTy == TYPE_U32 && sTy == TYPE_U64)) {
+   /* We can't convert from a 64 bit integer to any integer smaller than 64 bit
+    * directly, hence split the value first and then cvt / mov to the target
+    * type.
+    */
+   if (isIntType(dTy) && typeSizeof(dTy) <= 4 &&
+       isIntType(sTy) && typeSizeof(sTy) == 8) {
+      DataType tmpTy = (isSignedIntType(dTy)) ? TYPE_S32 : TYPE_U32;
       Value *src[2];
+
       bld.mkSplit(src, 4, insn->getSrc(0));
-      insn->op = OP_MOV;
       insn->setSrc(0, src[0]);
-   } else if (dTy == TYPE_S64 && sTy == TYPE_S32) {
-      Value *tmp = bld.getSSA();
-      bld.mkOp2(OP_SHR, TYPE_S32, tmp, insn->getSrc(0), bld.loadImm(bld.getSSA(), 31));
+
+      /* For a 32 bit integer, we just need to mov the value to it's
+       * destination. */
+      if (typeSizeof(dTy) == 4) {
+         insn->op = OP_MOV;
+      } else { /* We're smaller than 32 bit, hence convert. */
+         insn->op = OP_CVT;
+         insn->setType(dTy, tmpTy);
+      }
+
+      return true;
+   }
+
+   /* We can't convert to signed 64 bit integrers, hence shift the upper word
+    * and merge. For sources smaller than 32 bit, convert to 32 bit first.
+    */
+   if (dTy == TYPE_S64 && isSignedIntType(sTy) && typeSizeof(sTy) <= 4) {
+      Value *tmpExtbf;
+      Value *tmpShr = bld.getSSA();
+
+      if (typeSizeof(sTy) < 4) {
+         unsigned int interval = typeSizeof(sTy) == 1 ? 0x800 : 0x1000;
+         tmpExtbf = bld.getSSA();
+         bld.mkOp2(OP_EXTBF, TYPE_S32, tmpExtbf, insn->getSrc(0),
+                   bld.loadImm(bld.getSSA(), interval));
+         insn->setSrc(0, tmpExtbf);
+      } else {
+         tmpExtbf = insn->getSrc(0);
+      }
+
+      bld.mkOp2(OP_SHR, TYPE_S32, tmpShr, tmpExtbf, bld.loadImm(bld.getSSA(), 31));
+
       insn->op = OP_MERGE;
-      insn->setSrc(1, tmp);
-   } else if (dTy == TYPE_U64 && sTy == TYPE_U32) {
+      insn->setSrc(1, tmpShr);
+
+      return true;
+   }
+
+   if (dTy == TYPE_U64 && isUnsignedIntType(sTy) && typeSizeof(sTy) <= 4) {
       insn->op = OP_MERGE;
       insn->setSrc(1, bld.loadImm(bld.getSSA(), 0));
+
+      return true;
    }
 
    return true;

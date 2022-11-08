@@ -40,4 +40,43 @@
 
 #define PRIM_COUNT   (PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY + 1)
 
+static void translate_memcpy_uint( const void *in,
+                                   unsigned start,
+                                   unsigned in_nr,
+                                   unsigned out_nr,
+                                   unsigned restart_index,
+                                   void *out )
+{
+   memcpy(out, &((int *)in)[start], out_nr*sizeof(int));
+}
+
+static void translate_memcpy_ushort( const void *in,
+                                     unsigned start,
+                                     unsigned in_nr,
+                                     unsigned out_nr,
+                                     unsigned restart_index,
+                                     void *out )
+{
+   memcpy(out, &((short *)in)[start], out_nr*sizeof(short));
+}
+
+static unsigned out_size_idx( unsigned index_size )
+{
+   switch (index_size) {
+   case 4: return OUT_UINT;
+   case 2: return OUT_USHORT;
+   default: assert(0); return OUT_USHORT;
+   }
+}
+
+static unsigned in_size_idx( unsigned index_size )
+{
+   switch (index_size) {
+   case 4: return IN_UINT;
+   case 2: return IN_USHORT;
+   case 1: return IN_UBYTE;
+   default: assert(0); return IN_UBYTE;
+   }
+}
+
 #endif

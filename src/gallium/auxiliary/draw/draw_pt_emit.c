@@ -46,7 +46,6 @@ struct pt_emit {
    const struct vertex_info *vinfo;
 
    float zero4[4];
-
 };
 
 
@@ -57,9 +56,7 @@ draw_pt_emit_prepare(struct pt_emit *emit,
 {
    struct draw_context *draw = emit->draw;
    const struct vertex_info *vinfo;
-   unsigned dst_offset;
    struct translate_key hw_key;
-   unsigned i;
 
    /* XXX: need to flush to get prim_vbuf.c to release its allocation??
     */
@@ -80,8 +77,8 @@ draw_pt_emit_prepare(struct pt_emit *emit,
 
    /* Translate from pipeline vertices to hw vertices.
     */
-   dst_offset = 0;
-   for (i = 0; i < vinfo->num_attribs; i++) {
+   unsigned dst_offset = 0;
+   for (unsigned i = 0; i < vinfo->num_attribs; i++) {
       unsigned emit_sz = 0;
       unsigned src_buffer = 0;
       unsigned output_format;
@@ -96,8 +93,7 @@ draw_pt_emit_prepare(struct pt_emit *emit,
       if (vinfo->attrib[i].emit == EMIT_1F_PSIZE) {
          src_buffer = 1;
          src_offset = 0;
-      }
-      else if (vinfo->attrib[i].src_index == DRAW_ATTR_NONEXIST) {
+      } else if (vinfo->attrib[i].src_index == DRAW_ATTR_NONEXIST) {
          /* elements which don't exist will get assigned zeros */
          src_buffer = 2;
          src_offset = 0;
@@ -197,8 +193,7 @@ draw_pt_emit(struct pt_emit *emit,
 
    for (start = i = 0;
         i < prim_info->primitive_count;
-        start += prim_info->primitive_lengths[i], i++)
-   {
+        start += prim_info->primitive_lengths[i], i++) {
       render->draw_elements(render,
                             elts + start,
                             prim_info->primitive_lengths[i]);
@@ -261,8 +256,7 @@ draw_pt_emit_linear(struct pt_emit *emit,
                   hw_verts);
 
    if (0) {
-      unsigned i;
-      for (i = 0; i < count; i++) {
+      for (unsigned i = 0; i < count; i++) {
          debug_printf("\n\n%s vertex %d:\n", __FUNCTION__, i);
          draw_dump_emitted_vertex(emit->vinfo,
                                   (const uint8_t *)hw_verts +
@@ -274,8 +268,7 @@ draw_pt_emit_linear(struct pt_emit *emit,
 
    for (start = i = 0;
         i < prim_info->primitive_count;
-        start += prim_info->primitive_lengths[i], i++)
-   {
+        start += prim_info->primitive_lengths[i], i++) {
       render->draw_arrays(render,
                           start,
                           prim_info->primitive_lengths[i]);

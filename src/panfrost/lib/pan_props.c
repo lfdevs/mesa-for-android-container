@@ -54,6 +54,7 @@
 
 /* Table of supported Mali GPUs */
 const struct panfrost_model panfrost_model_list[] = {
+        MODEL(0x620, "T620", "T62x", NO_ANISO, 8192, {}),
         MODEL(0x720, "T720", "T72x", NO_ANISO, 8192, { .no_hierarchical_tiling = true }),
         MODEL(0x750, "T760", "T76x", NO_ANISO, 8192, {}),
         MODEL(0x820, "T820", "T82x", NO_ANISO, 8192, { .no_hierarchical_tiling = true }),

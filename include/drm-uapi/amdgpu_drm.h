@@ -559,6 +559,10 @@ struct drm_amdgpu_gem_va {
 #define AMDGPU_HW_IP_VCE          4
 #define AMDGPU_HW_IP_UVD_ENC      5
 #define AMDGPU_HW_IP_VCN_DEC      6
+/*
+ * From VCN4, AMDGPU_HW_IP_VCN_ENC is re-used to support
+ * both encoding and decoding jobs.
+ */
 #define AMDGPU_HW_IP_VCN_ENC      7
 #define AMDGPU_HW_IP_VCN_JPEG     8
 #define AMDGPU_HW_IP_NUM          9
@@ -751,6 +755,14 @@ struct drm_amdgpu_cs_chunk_data {
 	#define AMDGPU_INFO_FW_TOC		0x15
 	/* Subquery id: Query CAP firmware version */
 	#define AMDGPU_INFO_FW_CAP		0x16
+	/* Subquery id: Query GFX RLCP firmware version */
+	#define AMDGPU_INFO_FW_GFX_RLCP		0x17
+	/* Subquery id: Query GFX RLCV firmware version */
+	#define AMDGPU_INFO_FW_GFX_RLCV		0x18
+	/* Subquery id: Query MES_KIQ firmware version */
+	#define AMDGPU_INFO_FW_MES_KIQ		0x19
+	/* Subquery id: Query MES firmware version */
+	#define AMDGPU_INFO_FW_MES		0x1a
 
 /* number of bytes moved for TTM migration */
 #define AMDGPU_INFO_NUM_BYTES_MOVED		0x0f
@@ -994,6 +1006,8 @@ struct drm_amdgpu_info_vbios {
 #define AMDGPU_VRAM_TYPE_DDR4  8
 #define AMDGPU_VRAM_TYPE_GDDR6 9
 #define AMDGPU_VRAM_TYPE_DDR5  10
+#define AMDGPU_VRAM_TYPE_LPDDR4 11
+#define AMDGPU_VRAM_TYPE_LPDDR5 12
 
 struct drm_amdgpu_info_device {
 	/** PCI Device ID */

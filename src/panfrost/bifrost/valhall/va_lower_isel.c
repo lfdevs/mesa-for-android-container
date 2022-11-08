@@ -25,48 +25,50 @@
 #include "valhall.h"
 #include "bi_builder.h"
 
-void
-va_lower_isel(bi_instr *I)
+static bi_instr *
+lower(bi_builder *b, bi_instr *I)
 {
    switch (I->op) {
 
    /* Integer addition has swizzles and addition with 0 is canonical swizzle */
    case BI_OPCODE_SWZ_V2I16:
-      I->op = BI_OPCODE_IADD_V2U16;
-      I->src[1] = bi_zero();
-      break;
+      return bi_iadd_v2u16_to(b, I->dest[0], I->src[0], bi_zero(), false);
 
    case BI_OPCODE_SWZ_V4I8:
-      I->op = BI_OPCODE_IADD_V4U8;
-      I->src[1] = bi_zero();
-      break;
+      return bi_iadd_v4u8_to(b, I->dest[0], I->src[0], bi_zero(), false);
 
-   /* Extra source in Valhall not yet modeled in the Bifrost IR */
    case BI_OPCODE_ICMP_I32:
-      I->op = BI_OPCODE_ICMP_U32;
-      I->src[2] = bi_zero();
-      break;
+      return bi_icmp_or_u32_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
 
    case BI_OPCODE_ICMP_V2I16:
-      I->op = BI_OPCODE_ICMP_V2U16;
-      I->src[2] = bi_zero();
-      break;
+      return bi_icmp_or_v2u16_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
 
    case BI_OPCODE_ICMP_V4I8:
-      I->op = BI_OPCODE_ICMP_V4U8;
-      I->src[2] = bi_zero();
-      break;
+      return bi_icmp_or_v4u8_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
 
    case BI_OPCODE_ICMP_U32:
+      return bi_icmp_or_u32_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
+
    case BI_OPCODE_ICMP_V2U16:
+      return bi_icmp_or_v2u16_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
+
    case BI_OPCODE_ICMP_V4U8:
+      return bi_icmp_or_v4u8_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
+
    case BI_OPCODE_ICMP_S32:
+      return bi_icmp_or_s32_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
+
    case BI_OPCODE_ICMP_V2S16:
+      return bi_icmp_or_v2s16_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
+
    case BI_OPCODE_ICMP_V4S8:
+      return bi_icmp_or_v4s8_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
+
    case BI_OPCODE_FCMP_F32:
+      return bi_fcmp_or_f32_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
+
    case BI_OPCODE_FCMP_V2F16:
-      I->src[2] = bi_zero();
-      break;
+      return bi_fcmp_or_v2f16_to(b, I->dest[0], I->src[0], I->src[1], bi_zero(), I->cmpf, I->result_type);
 
    /* Integer CSEL must have a signedness */
    case BI_OPCODE_CSEL_I32:
@@ -75,51 +77,60 @@ va_lower_isel(bi_instr *I)
 
       I->op = (I->op == BI_OPCODE_CSEL_I32) ? BI_OPCODE_CSEL_U32 :
               BI_OPCODE_CSEL_V2U16;
-      break;
+      return NULL;
 
    /* Jump -> conditional branch with condition tied to true. */
    case BI_OPCODE_JUMP:
-      I->op = I->branch_target ? BI_OPCODE_BRANCHZ_I16 : BI_OPCODE_BRANCHZI;
-      I->src[1] = I->src[0];
-      I->src[0] = bi_zero();
-      I->cmpf = BI_CMPF_EQ;
-      break;
+      if (I->branch_target) {
+         bi_instr *new_I = bi_branchz_i16(b, bi_zero(), I->src[0], BI_CMPF_EQ);
+         new_I->branch_target = I->branch_target;
+         return I;
+      } else {
+         return bi_branchzi(b, bi_zero(), I->src[0], BI_CMPF_EQ);
+      }
 
    case BI_OPCODE_AXCHG_I32:
       I->op = BI_OPCODE_ATOM_RETURN_I32;
       I->atom_opc = BI_ATOM_OPC_AXCHG;
       I->sr_count = 1;
-      break;
+      return NULL;
 
    case BI_OPCODE_ACMPXCHG_I32:
       I->op = BI_OPCODE_ATOM_RETURN_I32;
       I->atom_opc = BI_ATOM_OPC_ACMPXCHG;
       /* Reads 2, this is special cased in bir.c */
       I->sr_count = 1;
-      break;
+      return NULL;
 
    case BI_OPCODE_ATOM_RETURN_I32:
       if (bi_is_null(I->dest[0]))
          I->op = BI_OPCODE_ATOM_I32;
 
-      break;
+      return NULL;
 
    case BI_OPCODE_MUX_I32:
    case BI_OPCODE_MUX_V2I16:
       if (bi_can_replace_with_csel(I))
-         bi_replace_mux_with_csel(I, true);
+         return bi_csel_from_mux(b, I, true);
 
-      break;
+      return NULL;
 
-   /* FADD_RSCALE.f32(x, y, z) -> FMA_RSCALE.f32(x, 1.0, y, z) */
    case BI_OPCODE_FADD_RSCALE_F32:
-      I->op = BI_OPCODE_FMA_RSCALE_F32;
-      I->src[3] = I->src[2];
-      I->src[2] = I->src[1];
-      I->src[1] = bi_imm_f32(1.0);
-      break;
+      return bi_fma_rscale_f32_to(b, I->dest[0], I->src[0], bi_imm_f32(1.0),
+                                     I->src[1], I->src[2], I->special);
 
    default:
-      break;
+      return NULL;
+   }
+}
+
+void
+va_lower_isel(bi_context *ctx)
+{
+   bi_foreach_instr_global_safe(ctx, I) {
+      bi_builder b = bi_init_builder(ctx, bi_before_instr(I));
+
+      if (lower(&b, I))
+         bi_remove_instruction(I);
    }
 }

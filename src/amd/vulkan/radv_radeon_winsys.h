@@ -67,6 +67,7 @@ enum radeon_bo_flag { /* bitfield */
                       RADEON_FLAG_PREFER_LOCAL_BO = (1 << 9),
                       RADEON_FLAG_ZERO_VRAM = (1 << 10),
                       RADEON_FLAG_REPLAYABLE = (1 << 11),
+                      RADEON_FLAG_DISCARDABLE = (1 << 12),
 };
 
 enum radeon_ctx_priority {
@@ -304,6 +305,8 @@ struct radeon_winsys {
 
    int (*get_fd)(struct radeon_winsys *ws);
 
+   struct ac_addrlib *(*get_addrlib)(struct radeon_winsys *ws);
+
    const struct vk_sync_type *const *(*get_sync_types)(struct radeon_winsys *ws);
 };
 
@@ -321,7 +324,7 @@ radeon_emit_array(struct radeon_cmdbuf *cs, const uint32_t *values, unsigned cou
 }
 
 static inline uint64_t
-radv_buffer_get_va(struct radeon_winsys_bo *bo)
+radv_buffer_get_va(const struct radeon_winsys_bo *bo)
 {
    return bo->va;
 }

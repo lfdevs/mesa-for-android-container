@@ -2,26 +2,6 @@
 # non-zero-length and not starting with '#', will regex match to
 # delete lines from the test list.  Be careful.
 
-# Timeouts in CI even after 5 minutes
-dEQP-VK.tessellation.invariance.inner_triangle_set.quads_equal_spacing
-dEQP-VK.tessellation.invariance.inner_triangle_set.triangles_fractional_even_spacing
-dEQP-VK.tessellation.invariance.outer_edge_division.quads_equal_spacing
-dEQP-VK.tessellation.invariance.outer_edge_division.quads_fractional_even_spacing
-dEQP-VK.tessellation.invariance.outer_edge_division.quads_fractional_odd_spacing
-dEQP-VK.tessellation.invariance.outer_triangle_set.quads_equal_spacing
-dEQP-VK.tessellation.invariance.outer_triangle_set.quads_fractional_even_spacing
-dEQP-VK.tessellation.invariance.outer_triangle_set.quads_fractional_odd_spacing
-dEQP-VK.tessellation.invariance.outer_triangle_set.triangles_equal_spacing
-dEQP-VK.tessellation.invariance.outer_triangle_set.triangles_fractional_even_spacing
-dEQP-VK.tessellation.invariance.outer_triangle_set.triangles_fractional_odd_spacing
-
-# timeout in pre-merge CI
-dEQP-VK.tessellation.invariance.outer_edge_symmetry.quads_fractional_even_spacing_cw
-
-# timeout, spending all its time in nir_compare_deref_paths()
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/5152
-dEQP-VK.ubo.random.all_shared_buffer.48
-
 # Still running after 3 hours, time is spent in batch_draw_tracking().
 KHR-GLES31.core.shader_image_load_store.basic-allFormats-store-fs
 
@@ -35,12 +15,3 @@ dEQP-VK.api.command_buffers.record_many_draws_secondary_2
 dEQP-VK.graphicsfuzz.spv-stable-maze-flatten-copy-composite
 spill-dEQP-VK.graphicsfuzz.cov-function-two-loops-limit-using-arguments-array-element-copies
 spill-dEQP-VK.graphicsfuzz.cov-nested-loop-undefined-smoothstep-never-executed
-spill-dEQP-VK.graphicsfuzz.spv-stable-maze-O-dead-code
-spill-dEQP-VK.graphicsfuzz.spv-stable-maze-O-memory-accesses
-
-# causes a hangcheck timeout due to https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3582
-dEQP-VK.image.sample_texture.128_bit_compressed_format_cubemap
-dEQP-VK.image.sample_texture.64_bit_compressed_format_cubemap
-
-# Crashes in RA, but slow enough to get there that CI times out sometimes
-dEQP-VK.spirv_assembly.instruction.*.spirv_ids_abuse.lots_ids.*

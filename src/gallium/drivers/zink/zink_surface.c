@@ -101,11 +101,13 @@ create_ivci(struct zink_screen *screen,
    ivci.subresourceRange.layerCount = 1 + templ->u.tex.last_layer - templ->u.tex.first_layer;
    assert(ivci.viewType != VK_IMAGE_VIEW_TYPE_3D || ivci.subresourceRange.baseArrayLayer == 0);
    assert(ivci.viewType != VK_IMAGE_VIEW_TYPE_3D || ivci.subresourceRange.layerCount == 1);
+   /* ensure cube image types get clamped to 2D/2D_ARRAY as expected for partial views */
    ivci.viewType = zink_surface_clamp_viewtype(ivci.viewType, templ->u.tex.first_layer, templ->u.tex.last_layer, res->base.b.array_size);
 
    return ivci;
 }
 
+/* this is used for framebuffer attachments to set up imageless framebuffers */
 static void
 init_surface_info(struct zink_surface *surface, struct zink_resource *res, VkImageViewCreateInfo *ivci)
 {
@@ -121,7 +123,6 @@ init_surface_info(struct zink_surface *surface, struct zink_resource *res, VkIma
       if (zink_kopper_has_srgb(cdt))
          surface->info.format[1] = ivci->format == cdt->formats[0] ? cdt->formats[1] : cdt->formats[0];
    }
-   surface->info_hash = _mesa_hash_data(&surface->info, sizeof(surface->info));
 }
 
 static struct zink_surface *
@@ -139,14 +140,13 @@ create_surface(struct pipe_context *pctx,
    if (!surface)
       return NULL;
 
-   VkImageViewUsageCreateInfo usage_info;
-   usage_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO;
-   usage_info.pNext = NULL;
-   VkFormatFeatureFlags feats = res->optimal_tiling ?
-                                screen->format_props[templ->format].optimalTilingFeatures :
-                                screen->format_props[templ->format].linearTilingFeatures;
+   surface->usage_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO;
+   surface->usage_info.pNext = NULL;
+   VkFormatFeatureFlags feats = res->linear ?
+                                screen->format_props[templ->format].linearTilingFeatures :
+                                screen->format_props[templ->format].optimalTilingFeatures;
    VkImageUsageFlags attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-   usage_info.usage = res->obj->vkusage & ~attachment;
+   surface->usage_info.usage = res->obj->vkusage & ~attachment;
    if (res->obj->modifier_aspect) {
       feats = res->obj->vkfeats;
       /* intersect format features for current modifier */
@@ -155,9 +155,10 @@ create_surface(struct pipe_context *pctx,
             feats &= screen->modifier_props[templ->format].pDrmFormatModifierProperties[i].drmFormatModifierTilingFeatures;
       }
    }
+   /* if the format features don't support framebuffer attachment, use VkImageViewUsageCreateInfo to remove it */
    if ((res->obj->vkusage & attachment) &&
        !(feats & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
-      ivci->pNext = &usage_info;
+      ivci->pNext = &surface->usage_info;
    }
 
    pipe_resource_reference(&surface->base.texture, pres);
@@ -173,7 +174,6 @@ create_surface(struct pipe_context *pctx,
    surface->base.u.tex.first_layer = templ->u.tex.first_layer;
    surface->base.u.tex.last_layer = templ->u.tex.last_layer;
    surface->obj = zink_resource(pres)->obj;
-   util_dynarray_init(&surface->desc_set_refs.refs, NULL);
 
    init_surface_info(surface, res, ivci);
 
@@ -202,12 +202,14 @@ do_create_surface(struct pipe_context *pctx, struct pipe_resource *pres, const s
 {
    /* create a new surface */
    struct zink_surface *surface = create_surface(pctx, pres, templ, ivci, actually);
+   /* only transient surfaces have nr_samples set */
    surface->base.nr_samples = 0;
    surface->hash = hash;
    surface->ivci = *ivci;
    return surface;
 }
 
+/* get a cached surface for a shader descriptor */
 struct pipe_surface *
 zink_get_surface(struct zink_context *ctx,
             struct pipe_resource *pres,
@@ -222,8 +224,11 @@ zink_get_surface(struct zink_context *ctx,
    struct hash_entry *entry = _mesa_hash_table_search_pre_hashed(&res->surface_cache, hash, ivci);
 
    if (!entry) {
-      /* create a new surface */
-      surface = do_create_surface(&ctx->base, pres, templ, ivci, hash, true);
+      /* create a new surface, but don't actually create the imageview if mutable isn't set and the format is different;
+       * mutable will be set later and the imageview will be filled in
+       */
+      bool actually = pres->format == templ->format || (res->obj->vkflags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT);
+      surface = do_create_surface(&ctx->base, pres, templ, ivci, hash, actually);
       entry = _mesa_hash_table_insert_pre_hashed(&res->surface_cache, hash, &surface->ivci, surface);
       if (!entry) {
          simple_mtx_unlock(&res->surface_mtx);
@@ -240,6 +245,7 @@ zink_get_surface(struct zink_context *ctx,
    return &surface->base;
 }
 
+/* wrap a surface for use as a framebuffer attachment */
 static struct pipe_surface *
 wrap_surface(struct pipe_context *pctx, struct pipe_surface *psurf)
 {
@@ -252,6 +258,7 @@ wrap_surface(struct pipe_context *pctx, struct pipe_surface *psurf)
    return &csurf->base;
 }
 
+/* this the context hook that returns a zink_ctx_surface */
 static struct pipe_surface *
 zink_create_surface(struct pipe_context *pctx,
                     struct pipe_resource *pres,
@@ -260,6 +267,13 @@ zink_create_surface(struct pipe_context *pctx,
    struct zink_resource *res = zink_resource(pres);
    bool is_array = templ->u.tex.last_layer != templ->u.tex.first_layer;
    enum pipe_texture_target target_2d[] = {PIPE_TEXTURE_2D, PIPE_TEXTURE_2D_ARRAY};
+   if (!res->obj->dt && pres->format != templ->format)
+      /* mutable not set by default */
+      zink_resource_object_init_mutable(zink_context(pctx), res);
+
+   if (!zink_get_format(zink_screen(pctx->screen), templ->format))
+      return NULL;
+
    VkImageViewCreateInfo ivci = create_ivci(zink_screen(pctx->screen), res, templ,
                                             pres->target == PIPE_TEXTURE_3D ? target_2d[is_array] : pres->target);
 
@@ -278,6 +292,7 @@ zink_create_surface(struct pipe_context *pctx,
 
    struct zink_ctx_surface *csurf = (struct zink_ctx_surface*)wrap_surface(pctx, psurf);
 
+   /* TODO: use VK_EXT_multisampled_render_to_single_sampled and skip this entirely */
    if (templ->nr_samples) {
       /* transient fb attachment: not cached */
       struct pipe_resource rtempl = *pres;
@@ -307,7 +322,7 @@ zink_destroy_surface(struct zink_screen *screen, struct pipe_surface *psurface)
    if (!psurface->nr_samples && !surface->is_swapchain) {
       simple_mtx_lock(&res->surface_mtx);
       if (psurface->reference.count) {
-         /* got a cache hit during deletion */
+         /* a different context got a cache hit during deletion: this surface is alive again */
          simple_mtx_unlock(&res->surface_mtx);
          return;
       }
@@ -317,21 +332,21 @@ zink_destroy_surface(struct zink_screen *screen, struct pipe_surface *psurface)
       _mesa_hash_table_remove(&res->surface_cache, he);
       simple_mtx_unlock(&res->surface_mtx);
    }
-   zink_descriptor_set_refs_clear(&surface->desc_set_refs, surface);
-   if (surface->simage_view)
-      VKSCR(DestroyImageView)(screen->dev, surface->simage_view, NULL);
+   /* this surface is dead now */
+   simple_mtx_lock(&res->obj->view_lock);
+   /* imageviews are never destroyed directly to ensure lifetimes for in-use surfaces */
    if (surface->is_swapchain) {
-      for (unsigned i = 0; i < surface->old_swapchain_size; i++)
-         VKSCR(DestroyImageView)(screen->dev, surface->old_swapchain[i], NULL);
       for (unsigned i = 0; i < surface->swapchain_size; i++)
-         VKSCR(DestroyImageView)(screen->dev, surface->swapchain[i], NULL);
+         util_dynarray_append(&res->obj->views, VkImageView, surface->swapchain[i]);
       free(surface->swapchain);
    } else
-      VKSCR(DestroyImageView)(screen->dev, surface->image_view, NULL);
+      util_dynarray_append(&res->obj->views, VkImageView, surface->image_view);
+   simple_mtx_unlock(&res->obj->view_lock);
    pipe_resource_reference(&psurface->texture, NULL);
    FREE(surface);
 }
 
+/* this is the context hook, so only zink_ctx_surfaces will reach it */
 static void
 zink_surface_destroy(struct pipe_context *pctx,
                      struct pipe_surface *psurface)
@@ -342,13 +357,14 @@ zink_surface_destroy(struct pipe_context *pctx,
    FREE(csurf);
 }
 
+/* this is called when a surface is rebound for mutable/storage use */
 bool
 zink_rebind_surface(struct zink_context *ctx, struct pipe_surface **psurface)
 {
    struct zink_surface *surface = zink_surface(*psurface);
    struct zink_resource *res = zink_resource((*psurface)->texture);
    struct zink_screen *screen = zink_screen(ctx->base.screen);
-   if (surface->simage_view)
+   if (surface->obj == res->obj)
       return false;
    assert(!res->obj->dt);
    VkImageViewCreateInfo ivci = surface->ivci;
@@ -357,14 +373,10 @@ zink_rebind_surface(struct zink_context *ctx, struct pipe_surface **psurface)
 
    simple_mtx_lock(&res->surface_mtx);
    struct hash_entry *new_entry = _mesa_hash_table_search_pre_hashed(&res->surface_cache, hash, &ivci);
-   if (zink_batch_usage_exists(surface->batch_uses))
-      zink_batch_reference_surface(&ctx->batch, surface);
-   zink_descriptor_set_refs_clear(&surface->desc_set_refs, surface);
    if (new_entry) {
       /* reuse existing surface; old one will be cleaned up naturally */
       struct zink_surface *new_surface = new_entry->data;
       simple_mtx_unlock(&res->surface_mtx);
-      zink_batch_usage_set(&new_surface->batch_uses, ctx->batch.state);
       zink_surface_reference(screen, (struct zink_surface**)psurface, new_surface);
       return true;
    }
@@ -382,18 +394,19 @@ zink_rebind_surface(struct zink_context *ctx, struct pipe_surface **psurface)
    surface->ivci = ivci;
    entry = _mesa_hash_table_insert_pre_hashed(&res->surface_cache, surface->hash, &surface->ivci, surface);
    assert(entry);
-   surface->simage_view = surface->image_view;
+   simple_mtx_lock(&res->obj->view_lock);
+   util_dynarray_append(&res->obj->views, VkImageView, surface->image_view);
+   simple_mtx_unlock(&res->obj->view_lock);
    surface->image_view = image_view;
    surface->obj = zink_resource(surface->base.texture)->obj;
    /* update for imageless fb */
    surface->info.flags = res->obj->vkflags;
    surface->info.usage = res->obj->vkusage;
-   surface->info_hash = _mesa_hash_data(&surface->info, sizeof(surface->info));
-   zink_batch_usage_set(&surface->batch_uses, ctx->batch.state);
    simple_mtx_unlock(&res->surface_mtx);
    return true;
 }
 
+/* dummy surfaces are used for null framebuffer/descriptors */
 struct pipe_surface *
 zink_surface_create_null(struct zink_context *ctx, enum pipe_texture_target target, unsigned width, unsigned height, unsigned samples)
 {
@@ -429,6 +442,7 @@ zink_context_surface_init(struct pipe_context *context)
    context->surface_destroy = zink_surface_destroy;
 }
 
+/* must be called before a swapchain image is used to ensure correct imageview is used */
 void
 zink_surface_swapchain_update(struct zink_context *ctx, struct zink_surface *surface)
 {
@@ -438,12 +452,14 @@ zink_surface_swapchain_update(struct zink_context *ctx, struct zink_surface *sur
    if (!cdt)
       return; //dead swapchain
    if (res->obj->dt != surface->dt) {
-      /* new swapchain: clear out previous old_swapchain and move current swapchain there */
-      for (unsigned i = 0; i < surface->old_swapchain_size; i++)
-         util_dynarray_append(&ctx->batch.state->dead_swapchains, VkImageView, surface->old_swapchain[i]);
-      free(surface->old_swapchain);
-      surface->old_swapchain = surface->swapchain;
-      surface->old_swapchain_size = surface->swapchain_size;
+      /* new swapchain: clear out previous swapchain imageviews/array and setup a new one;
+       * old views will be pruned normally in zink_batch or on object destruction
+       */
+      simple_mtx_lock(&res->obj->view_lock);
+      for (unsigned i = 0; i < surface->swapchain_size; i++)
+         util_dynarray_append(&res->obj->views, VkImageView, surface->swapchain[i]);
+      simple_mtx_unlock(&res->obj->view_lock);
+      free(surface->swapchain);
       surface->swapchain_size = cdt->swapchain->num_images;
       surface->swapchain = calloc(surface->swapchain_size, sizeof(VkImageView));
       surface->base.width = res->base.b.width0;
@@ -451,10 +467,12 @@ zink_surface_swapchain_update(struct zink_context *ctx, struct zink_surface *sur
       init_surface_info(surface, res, &surface->ivci);
    }
    if (!surface->swapchain[res->obj->dt_idx]) {
+      /* no current swapchain imageview exists: create it */
       assert(res->obj->image && cdt->swapchain->images[res->obj->dt_idx].image == res->obj->image);
       surface->ivci.image = res->obj->image;
       assert(surface->ivci.image);
       VKSCR(CreateImageView)(screen->dev, &surface->ivci, NULL, &surface->swapchain[res->obj->dt_idx]);
    }
+   /* the current swapchain imageview is now the view for the current swapchain image */
    surface->image_view = surface->swapchain[res->obj->dt_idx];
 }

@@ -503,6 +503,23 @@ _mesa_update_state( struct gl_context *ctx )
    _mesa_unlock_context_textures(ctx);
 }
 
+/* This is the usual entrypoint for state updates in glClear calls:
+ */
+void
+_mesa_update_clear_state( struct gl_context *ctx )
+{
+   GLbitfield new_state = ctx->NewState;
+
+   if (MESA_VERBOSE & VERBOSE_STATE)
+      _mesa_print_state("_mesa_update_clear_state", new_state);
+
+   if (new_state & _NEW_BUFFERS) {
+      _mesa_update_framebuffer(ctx, ctx->ReadBuffer, ctx->DrawBuffer);
+
+      st_invalidate_buffers(st_context(ctx));
+      ctx->NewState &= ~_NEW_BUFFERS;
+   }
+}
 
 /**
  * Used by drivers to tell core Mesa that the driver is going to

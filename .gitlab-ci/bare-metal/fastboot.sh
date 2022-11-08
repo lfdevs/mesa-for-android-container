@@ -106,20 +106,25 @@ if echo "$BM_KERNEL $BM_DTB" | grep -q http; then
   wget $BM_DTB -O dtb
 
   cat kernel dtb > Image.gz-dtb
-  rm kernel dtb
+  rm kernel
 else
   cat $BM_KERNEL $BM_DTB > Image.gz-dtb
+  cp $BM_DTB dtb
 fi
 
-mkdir -p artifacts
-abootimg \
-  --create artifacts/fastboot.img \
-  -k Image.gz-dtb \
-  -r rootfs.cpio.gz \
-  -c cmdline="$BM_CMDLINE"
-rm Image.gz-dtb
-
 export PATH=$BM:$PATH
+
+mkdir -p artifacts
+mkbootimg.py \
+  --kernel Image.gz-dtb \
+  --ramdisk rootfs.cpio.gz \
+  --dtb dtb \
+  --cmdline "$BM_CMDLINE" \
+  $BM_MKBOOT_PARAMS \
+  --header_version 2 \
+  -o artifacts/fastboot.img
+
+rm Image.gz-dtb dtb
 
 # Start background command for talking to serial if we have one.
 if [ -n "$BM_SERIAL_SCRIPT" ]; then

@@ -29,6 +29,7 @@
 #include "util/u_debug.h"
 #include "util/ralloc.h"
 #include "util/u_inlines.h"
+#include "util/u_debug_cb.h"
 #include "util/hash_table.h"
 
 #include "lima_screen.h"
@@ -138,7 +139,8 @@ lima_context_destroy(struct pipe_context *pctx)
    struct lima_context *ctx = lima_context(pctx);
    struct lima_screen *screen = lima_screen(pctx->screen);
 
-   lima_job_fini(ctx);
+   if (ctx->jobs)
+      lima_job_fini(ctx);
 
    for (int i = 0; i < lima_ctx_buff_num; i++)
       pipe_resource_reference(&ctx->buffer_state[i].res, NULL);
@@ -187,18 +189,6 @@ plb_pp_stream_compare(const void *key1, const void *key2)
    return memcmp(key1, key2, sizeof(struct lima_ctx_plb_pp_stream_key)) == 0;
 }
 
-static void
-lima_set_debug_callback(struct pipe_context *pctx,
-                        const struct util_debug_callback *cb)
-{
-   struct lima_context *ctx = lima_context(pctx);
-
-   if (cb)
-      ctx->debug = *cb;
-   else
-      memset(&ctx->debug, 0, sizeof(ctx->debug));
-}
-
 struct pipe_context *
 lima_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {
@@ -219,7 +209,7 @@ lima_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
    ctx->base.screen = pscreen;
    ctx->base.destroy = lima_context_destroy;
-   ctx->base.set_debug_callback = lima_set_debug_callback;
+   ctx->base.set_debug_callback = u_default_set_debug_callback;
    ctx->base.invalidate_resource = lima_invalidate_resource;
 
    lima_resource_context_init(ctx);

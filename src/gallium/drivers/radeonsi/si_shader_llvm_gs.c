@@ -98,9 +98,7 @@ static LLVMValueRef si_get_gs_wave_id(struct si_shader_context *ctx)
 
 static LLVMValueRef ngg_get_emulated_counters_buf(struct si_shader_context *ctx)
 {
-   LLVMValueRef buf_ptr = ac_get_arg(&ctx->ac, ctx->internal_bindings);
-
-   return ac_build_load_to_sgpr(&ctx->ac, buf_ptr,
+   return ac_build_load_to_sgpr(&ctx->ac, ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->internal_bindings),
                                 LLVMConstInt(ctx->ac.i32, SI_GS_QUERY_EMULATED_COUNTERS_BUF, false));
 }
 
@@ -262,9 +260,9 @@ void si_preload_esgs_ring(struct si_shader_context *ctx)
 
    if (ctx->screen->info.gfx_level <= GFX8) {
       LLVMValueRef offset = LLVMConstInt(ctx->ac.i32, SI_RING_ESGS, 0);
-      LLVMValueRef buf_ptr = ac_get_arg(&ctx->ac, ctx->internal_bindings);
 
-      ctx->esgs_ring = ac_build_load_to_sgpr(&ctx->ac, buf_ptr, offset);
+      ctx->esgs_ring = ac_build_load_to_sgpr(&ctx->ac,
+         ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->internal_bindings), offset);
 
       if (ctx->stage != MESA_SHADER_GEOMETRY) {
          LLVMValueRef desc1 = LLVMBuildExtractElement(builder, ctx->esgs_ring, ctx->ac.i32_1, "");
@@ -288,14 +286,12 @@ void si_preload_esgs_ring(struct si_shader_context *ctx)
                                                  LLVMConstInt(ctx->ac.i32, 3, 0), "");
       }
    } else {
-      if (USE_LDS_SYMBOLS) {
-         /* Declare the ESGS ring as an explicit LDS symbol. */
-         si_llvm_declare_esgs_ring(ctx);
-         ctx->ac.lds = ctx->esgs_ring;
-      } else {
-         ac_declare_lds_as_pointer(&ctx->ac);
-         ctx->esgs_ring = ctx->ac.lds;
-      }
+      /* Declare the ESGS ring as an explicit LDS symbol. */
+      si_llvm_declare_esgs_ring(ctx);
+      ctx->ac.lds = (struct ac_llvm_pointer) {
+         .value = ctx->esgs_ring,
+         .pointee_type = LLVMArrayType(ctx->ac.i32, 0),
+      };
    }
 }
 
@@ -307,8 +303,8 @@ void si_preload_gs_rings(struct si_shader_context *ctx)
    const struct si_shader_selector *sel = ctx->shader->selector;
    LLVMBuilderRef builder = ctx->ac.builder;
    LLVMValueRef offset = LLVMConstInt(ctx->ac.i32, SI_RING_GSVS, 0);
-   LLVMValueRef buf_ptr = ac_get_arg(&ctx->ac, ctx->internal_bindings);
-   LLVMValueRef base_ring = ac_build_load_to_sgpr(&ctx->ac, buf_ptr, offset);
+   LLVMValueRef base_ring = ac_build_load_to_sgpr(&ctx->ac,
+      ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->internal_bindings), offset);
 
    /* The conceptual layout of the GSVS ring is
     *   v0c0 .. vLv0 v0c1 .. vLc1 ..
@@ -434,9 +430,9 @@ struct si_shader *si_generate_gs_copy_shader(struct si_screen *sscreen,
    /* Build the main function. */
    si_llvm_create_main_func(&ctx, false);
 
-   LLVMValueRef buf_ptr = ac_get_arg(&ctx.ac, ctx.internal_bindings);
    ctx.gsvs_ring[0] =
-      ac_build_load_to_sgpr(&ctx.ac, buf_ptr, LLVMConstInt(ctx.ac.i32, SI_RING_GSVS, 0));
+      ac_build_load_to_sgpr(&ctx.ac,
+         ac_get_ptr_arg(&ctx.ac, &ctx.args, ctx.internal_bindings), LLVMConstInt(ctx.ac.i32, SI_RING_GSVS, 0));
 
    LLVMValueRef voffset =
       LLVMBuildMul(ctx.ac.builder, ctx.abi.vertex_id, LLVMConstInt(ctx.ac.i32, 4, 0), "");
@@ -458,7 +454,7 @@ struct si_shader *si_generate_gs_copy_shader(struct si_screen *sscreen,
    LLVMBasicBlockRef end_bb;
    LLVMValueRef switch_inst;
 
-   end_bb = LLVMAppendBasicBlockInContext(ctx.ac.context, ctx.main_fn, "end");
+   end_bb = LLVMAppendBasicBlockInContext(ctx.ac.context, ctx.main_fn.value, "end");
    switch_inst = LLVMBuildSwitch(builder, stream_id, end_bb, 4);
 
    for (int stream = 0; stream < 4; stream++) {

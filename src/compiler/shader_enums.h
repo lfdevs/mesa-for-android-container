@@ -44,16 +44,23 @@ extern "C" {
  * The GLSL linker assumes that if i<j, then the j-th shader is
  * executed later than the i-th shader.
  */
-typedef enum
+typedef enum pipe_shader_type
 {
    MESA_SHADER_NONE = -1,
    MESA_SHADER_VERTEX = 0,
+   PIPE_SHADER_VERTEX = MESA_SHADER_VERTEX,
    MESA_SHADER_TESS_CTRL = 1,
+   PIPE_SHADER_TESS_CTRL = MESA_SHADER_TESS_CTRL,
    MESA_SHADER_TESS_EVAL = 2,
+   PIPE_SHADER_TESS_EVAL = MESA_SHADER_TESS_EVAL,
    MESA_SHADER_GEOMETRY = 3,
+   PIPE_SHADER_GEOMETRY = MESA_SHADER_GEOMETRY,
    MESA_SHADER_FRAGMENT = 4,
+   PIPE_SHADER_FRAGMENT = MESA_SHADER_FRAGMENT,
    MESA_SHADER_COMPUTE = 5,
+   PIPE_SHADER_COMPUTE = MESA_SHADER_COMPUTE,
 
+   PIPE_SHADER_TYPES = (PIPE_SHADER_COMPUTE + 1),
    /* Vulkan-only stages. */
    MESA_SHADER_TASK         = 6,
    MESA_SHADER_MESH         = 7,

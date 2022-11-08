@@ -52,7 +52,6 @@ struct hgl_display
 {
 	mtx_t mutex;
 
-	struct st_api* api;
 	struct st_manager* manager;
 };
 
@@ -78,9 +77,6 @@ struct hgl_context
 
 // hgl_buffer from statetracker interface
 struct hgl_buffer* hgl_st_framebuffer(struct st_framebuffer_iface *stfbi);
-
-// hgl frontend
-struct st_api* hgl_create_st_api(void);
 
 // hgl framebuffer
 struct hgl_buffer* hgl_create_st_framebuffer(struct hgl_context* context, void *winsysContext);

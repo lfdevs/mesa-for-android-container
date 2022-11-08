@@ -32,7 +32,7 @@ nvc0_m2mf_transfer_rect(struct nvc0_context *nvc0,
    nouveau_bufctx_refn(bctx, 0, src->bo, src->domain | NOUVEAU_BO_RD);
    nouveau_bufctx_refn(bctx, 0, dst->bo, dst->domain | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, bctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    if (nouveau_bo_memtype(src->bo)) {
       BEGIN_NVC0(push, NVC0_M2MF(TILING_MODE_IN), 5);
@@ -138,7 +138,7 @@ nve4_m2mf_transfer_rect(struct nvc0_context *nvc0,
    nouveau_bufctx_refn(bctx, 0, dst->bo, dst->domain | NOUVEAU_BO_WR);
    nouveau_bufctx_refn(bctx, 0, src->bo, src->domain | NOUVEAU_BO_RD);
    nouveau_pushbuf_bufctx(push, bctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    exec = NVE4_COPY_EXEC_SWIZZLE_ENABLE | NVE4_COPY_EXEC_2D_ENABLE | NVE4_COPY_EXEC_FLUSH | NVE4_COPY_EXEC_COPY_MODE_NON_PIPELINED;
 
@@ -207,7 +207,7 @@ nvc0_m2mf_push_linear(struct nouveau_context *nv,
 
    nouveau_bufctx_refn(nvc0->bufctx, 0, dst, domain | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, nvc0->bufctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    while (count) {
       unsigned nr = MIN2(count, NV04_PFIFO_MAX_PACKET_LEN);
@@ -249,7 +249,7 @@ nve4_p2mf_push_linear(struct nouveau_context *nv,
 
    nouveau_bufctx_refn(nvc0->bufctx, 0, dst, domain | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, nvc0->bufctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    while (count) {
       unsigned nr = MIN2(count, (NV04_PFIFO_MAX_PACKET_LEN - 1));
@@ -289,7 +289,7 @@ nvc0_m2mf_copy_linear(struct nouveau_context *nv,
    nouveau_bufctx_refn(bctx, 0, src, srcdom | NOUVEAU_BO_RD);
    nouveau_bufctx_refn(bctx, 0, dst, dstdom | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, bctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    while (size) {
       unsigned bytes = MIN2(size, 1 << 17);
@@ -327,7 +327,7 @@ nve4_m2mf_copy_linear(struct nouveau_context *nv,
    nouveau_bufctx_refn(bctx, 0, src, srcdom | NOUVEAU_BO_RD);
    nouveau_bufctx_refn(bctx, 0, dst, dstdom | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, bctx);
-   nouveau_pushbuf_validate(push);
+   PUSH_VAL(push);
 
    BEGIN_NVC0(push, NVE4_COPY(SRC_ADDRESS_HIGH), 4);
    PUSH_DATAh(push, src->offset + srcoff);
@@ -362,7 +362,7 @@ nvc0_mt_sync(struct nvc0_context *nvc0, struct nv50_miptree *mt, unsigned usage)
    if (!mt->base.mm) {
       uint32_t access = (usage & PIPE_MAP_WRITE) ?
          NOUVEAU_BO_WR : NOUVEAU_BO_RD;
-      return !nouveau_bo_wait(mt->base.bo, access, nvc0->base.client);
+      return !BO_WAIT(&nvc0->screen->base, mt->base.bo, access, nvc0->base.client);
    }
    if (usage & PIPE_MAP_WRITE)
       return !mt->base.fence || nouveau_fence_wait(mt->base.fence, &nvc0->base.debug);
@@ -388,7 +388,7 @@ nvc0_miptree_transfer_map(struct pipe_context *pctx,
    if (nvc0_mt_transfer_can_map_directly(mt)) {
       ret = !nvc0_mt_sync(nvc0, mt, usage);
       if (!ret)
-         ret = nouveau_bo_map(mt->base.bo, 0, NULL);
+         ret = BO_MAP(nvc0->base.screen, mt->base.bo, 0, NULL);
       if (ret &&
           (usage & PIPE_MAP_DIRECTLY))
          return NULL;
@@ -480,7 +480,7 @@ nvc0_miptree_transfer_map(struct pipe_context *pctx,
    if (usage & PIPE_MAP_WRITE)
       flags |= NOUVEAU_BO_WR;
 
-   ret = nouveau_bo_map(tx->rect[1].bo, flags, nvc0->base.client);
+   ret = BO_MAP(nvc0->base.screen, tx->rect[1].bo, flags, nvc0->base.client);
    if (ret) {
       pipe_resource_reference(&tx->base.resource, NULL);
       nouveau_bo_ref(NULL, &tx->rect[1].bo);
@@ -521,7 +521,7 @@ nvc0_miptree_transfer_unmap(struct pipe_context *pctx,
       NOUVEAU_DRV_STAT(&nvc0->screen->base, tex_transfers_wr, 1);
 
       /* Allow the copies above to finish executing before freeing the source */
-      nouveau_fence_work(nvc0->screen->base.fence.current,
+      nouveau_fence_work(nvc0->base.fence,
                          nouveau_fence_unref_bo, tx->rect[1].bo);
    } else {
       nouveau_bo_ref(NULL, &tx->rect[1].bo);
@@ -598,7 +598,7 @@ nvc0_cb_bo_push(struct nouveau_context *nv,
       unsigned nr = MIN2(words, NV04_PFIFO_MAX_PACKET_LEN - 1);
 
       PUSH_SPACE(push, nr + 2);
-      PUSH_REFN (push, bo, NOUVEAU_BO_WR | domain);
+      PUSH_REF1 (push, bo, NOUVEAU_BO_WR | domain);
       BEGIN_1IC0(push, NVC0_3D(CB_POS), nr + 1);
       PUSH_DATA (push, offset);
       PUSH_DATAp(push, data, nr);

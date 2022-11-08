@@ -1,1 +1,2 @@
 package-name-doesnt-match-sonames libMesaOpenCL1
+package-name-doesnt-match-sonames libRusticlOpenCL

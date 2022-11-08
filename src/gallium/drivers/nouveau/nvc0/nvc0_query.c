@@ -153,7 +153,7 @@ nvc0_render_condition(struct pipe_context *pipe,
       nvc0_hw_query_fifo_wait(nvc0, q);
 
    PUSH_SPACE(push, 10);
-   PUSH_REFN (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
+   PUSH_REF1 (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);
    BEGIN_NVC0(push, NVC0_3D(COND_ADDRESS_HIGH), 3);
    PUSH_DATAh(push, hq->bo->offset + hq->offset);
    PUSH_DATA (push, hq->bo->offset + hq->offset);

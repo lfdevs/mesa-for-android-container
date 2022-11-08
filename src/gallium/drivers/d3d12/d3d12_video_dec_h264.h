@@ -184,26 +184,6 @@ typedef struct _DXVA_Qmatrix_H264
 } DXVA_Qmatrix_H264, *LPDXVA_Qmatrix_H264;
 #pragma pack(pop, BeforeDXVApacking)
 
-// For translating the QP matrices from VA to DXVA
-const uint8_t d3d12_video_zigzag_direct[64] = {
-   0,   1,  8, 16,  9,  2,  3, 10,
-   17, 24, 32, 25, 18, 11,  4,  5,
-   12, 19, 26, 33, 40, 48, 41, 34,
-   27, 20, 13,  6,  7, 14, 21, 28,
-   35, 42, 49, 56, 57, 50, 43, 36,
-   29, 22, 15, 23, 30, 37, 44, 51,
-   58, 59, 52, 45, 38, 31, 39, 46,
-   53, 60, 61, 54, 47, 55, 62, 63
-};
-
-// For translating the QP matrices from VA to DXVA
-const uint8_t d3d12_video_zigzag_scan[16+1] = {
-   0 + 0 * 4, 1 + 0 * 4, 0 + 1 * 4, 0 + 2 * 4,
-   1 + 1 * 4, 2 + 0 * 4, 3 + 0 * 4, 2 + 1 * 4,
-   1 + 2 * 4, 0 + 3 * 4, 1 + 3 * 4, 2 + 2 * 4,
-   3 + 1 * 4, 3 + 2 * 4, 2 + 3 * 4, 3 + 3 * 4,
-};
-
 /* H.264/AVC slice control data structure - short form */
 /* If including new DXVA structs in this header, check the byte-alignment packing pragma declarations that need to be included with them */
 #pragma pack(push, BeforeDXVApacking, 1)
@@ -244,7 +224,7 @@ d3d12_video_decoder_get_slice_count_h264(std::vector<uint8_t> &buf);
 
 void
 d3d12_video_decoder_prepare_dxva_slices_control_h264(struct d3d12_video_decoder *        pD3D12Dec,
-                                                     std::vector<DXVA_Slice_H264_Short> &pOutSliceControlBuffers,
+                                                     std::vector<uint8_t> &vecOutSliceControlBuffers,
                                                      struct pipe_h264_picture_desc* picture_h264);
 
 void

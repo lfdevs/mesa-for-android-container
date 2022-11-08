@@ -29,7 +29,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "drm-uapi/i915_drm.h"
 #include "intel_aub.h"
 #include "intel_context.h"
 
@@ -348,34 +347,34 @@ ppgtt_lookup(struct aub_file *aub, uint64_t ppgtt_addr)
 
 static const struct engine {
    const char *name;
-   enum drm_i915_gem_engine_class engine_class;
+   enum intel_engine_class engine_class;
    uint32_t hw_class;
    uint32_t elsp_reg;
    uint32_t elsq_reg;
    uint32_t status_reg;
    uint32_t control_reg;
 } engines[] = {
-   [I915_ENGINE_CLASS_RENDER] = {
+   [INTEL_ENGINE_CLASS_RENDER] = {
       .name = "RENDER",
-      .engine_class = I915_ENGINE_CLASS_RENDER,
+      .engine_class = INTEL_ENGINE_CLASS_RENDER,
       .hw_class = 1,
       .elsp_reg = RCSUNIT(EXECLIST_SUBMITPORT),
       .elsq_reg = RCSUNIT(EXECLIST_SQ_CONTENTS),
       .status_reg = RCSUNIT(EXECLIST_STATUS),
       .control_reg = RCSUNIT(EXECLIST_CONTROL),
    },
-   [I915_ENGINE_CLASS_VIDEO] = {
+   [INTEL_ENGINE_CLASS_VIDEO] = {
       .name = "VIDEO",
-      .engine_class = I915_ENGINE_CLASS_VIDEO,
+      .engine_class = INTEL_ENGINE_CLASS_VIDEO,
       .hw_class = 3,
       .elsp_reg = VCSUNIT0(EXECLIST_SUBMITPORT),
       .elsq_reg = VCSUNIT0(EXECLIST_SQ_CONTENTS),
       .status_reg = VCSUNIT0(EXECLIST_STATUS),
       .control_reg = VCSUNIT0(EXECLIST_CONTROL),
    },
-   [I915_ENGINE_CLASS_COPY] = {
+   [INTEL_ENGINE_CLASS_COPY] = {
       .name = "BLITTER",
-      .engine_class = I915_ENGINE_CLASS_COPY,
+      .engine_class = INTEL_ENGINE_CLASS_COPY,
       .hw_class = 2,
       .elsp_reg = BCSUNIT0(EXECLIST_SUBMITPORT),
       .elsq_reg = BCSUNIT0(EXECLIST_SQ_CONTENTS),
@@ -448,12 +447,12 @@ aub_write_ggtt(struct aub_file *aub, uint64_t virt_addr, uint64_t size, const vo
 }
 
 static const struct engine *
-engine_from_engine_class(enum drm_i915_gem_engine_class engine_class)
+engine_from_engine_class(enum intel_engine_class engine_class)
 {
    switch (engine_class) {
-   case I915_ENGINE_CLASS_RENDER:
-   case I915_ENGINE_CLASS_COPY:
-   case I915_ENGINE_CLASS_VIDEO:
+   case INTEL_ENGINE_CLASS_RENDER:
+   case INTEL_ENGINE_CLASS_COPY:
+   case INTEL_ENGINE_CLASS_VIDEO:
       return &engines[engine_class];
    default:
       unreachable("unknown ring");
@@ -463,19 +462,19 @@ engine_from_engine_class(enum drm_i915_gem_engine_class engine_class)
 static void
 get_context_init(const struct intel_device_info *devinfo,
                  const struct intel_context_parameters *params,
-                 enum drm_i915_gem_engine_class engine_class,
+                 enum intel_engine_class engine_class,
                  uint32_t *data,
                  uint32_t *size)
 {
    static const intel_context_init_t gfx8_contexts[] = {
-      [I915_ENGINE_CLASS_RENDER] = gfx8_render_context_init,
-      [I915_ENGINE_CLASS_COPY] = gfx8_blitter_context_init,
-      [I915_ENGINE_CLASS_VIDEO] = gfx8_video_context_init,
+      [INTEL_ENGINE_CLASS_RENDER] = gfx8_render_context_init,
+      [INTEL_ENGINE_CLASS_COPY] = gfx8_blitter_context_init,
+      [INTEL_ENGINE_CLASS_VIDEO] = gfx8_video_context_init,
    };
    static const intel_context_init_t gfx10_contexts[] = {
-      [I915_ENGINE_CLASS_RENDER] = gfx10_render_context_init,
-      [I915_ENGINE_CLASS_COPY] = gfx10_blitter_context_init,
-      [I915_ENGINE_CLASS_VIDEO] = gfx10_video_context_init,
+      [INTEL_ENGINE_CLASS_RENDER] = gfx10_render_context_init,
+      [INTEL_ENGINE_CLASS_COPY] = gfx10_blitter_context_init,
+      [INTEL_ENGINE_CLASS_VIDEO] = gfx10_video_context_init,
    };
 
    assert(devinfo->ver >= 8);
@@ -500,13 +499,13 @@ alloc_ggtt_address(struct aub_file *aub, uint64_t size)
 
 static void
 write_hwsp(struct aub_file *aub,
-           enum drm_i915_gem_engine_class engine_class)
+           enum intel_engine_class engine_class)
 {
    uint32_t reg = 0;
    switch (engine_class) {
-   case I915_ENGINE_CLASS_RENDER:  reg = RCSUNIT (HWS_PGA); break;
-   case I915_ENGINE_CLASS_COPY:    reg = BCSUNIT0(HWS_PGA); break;
-   case I915_ENGINE_CLASS_VIDEO:   reg = VCSUNIT0(HWS_PGA); break;
+   case INTEL_ENGINE_CLASS_RENDER:  reg = RCSUNIT (HWS_PGA); break;
+   case INTEL_ENGINE_CLASS_COPY:    reg = BCSUNIT0(HWS_PGA); break;
+   case INTEL_ENGINE_CLASS_VIDEO:   reg = VCSUNIT0(HWS_PGA); break;
    default:
       unreachable("unknown ring");
    }
@@ -518,7 +517,7 @@ static uint32_t
 write_engine_execlist_setup(struct aub_file *aub,
                             uint32_t ctx_id,
                             struct aub_hw_context *hw_ctx,
-                            enum drm_i915_gem_engine_class engine_class)
+                            enum intel_engine_class engine_class)
 {
    const struct engine *cs = engine_from_engine_class(engine_class);
    uint32_t context_size;
@@ -650,7 +649,7 @@ aub_context_find(struct aub_file *aub, uint32_t id)
 
 static struct aub_hw_context *
 aub_write_ensure_context(struct aub_file *aub, uint32_t ctx_id,
-                         enum drm_i915_gem_engine_class engine_class)
+                         enum intel_engine_class engine_class)
 {
    struct aub_context *ctx = aub_context_find(aub, ctx_id);
    assert(ctx != NULL);
@@ -773,15 +772,15 @@ static void
 aub_dump_ring_buffer_legacy(struct aub_file *aub,
                             uint64_t batch_offset,
                             uint64_t offset,
-                            enum drm_i915_gem_engine_class engine_class)
+                            enum intel_engine_class engine_class)
 {
    uint32_t ringbuffer[4096];
    unsigned aub_mi_bbs_len;
    int ring_count = 0;
    static const int engine_class_to_ring[] = {
-      [I915_ENGINE_CLASS_RENDER] = AUB_TRACE_TYPE_RING_PRB0,
-      [I915_ENGINE_CLASS_VIDEO]  = AUB_TRACE_TYPE_RING_PRB1,
-      [I915_ENGINE_CLASS_COPY]   = AUB_TRACE_TYPE_RING_PRB2,
+      [INTEL_ENGINE_CLASS_RENDER] = AUB_TRACE_TYPE_RING_PRB0,
+      [INTEL_ENGINE_CLASS_VIDEO]  = AUB_TRACE_TYPE_RING_PRB1,
+      [INTEL_ENGINE_CLASS_COPY]   = AUB_TRACE_TYPE_RING_PRB2,
    };
    int ring = engine_class_to_ring[engine_class];
 
@@ -810,7 +809,7 @@ aub_dump_ring_buffer_legacy(struct aub_file *aub,
 
 static void
 aub_write_ensure_hwsp(struct aub_file *aub,
-                      enum drm_i915_gem_engine_class engine_class)
+                      enum intel_engine_class engine_class)
 {
    uint64_t *hwsp_addr = &aub->engine_setup[engine_class].hwsp_addr;
 
@@ -823,7 +822,7 @@ aub_write_ensure_hwsp(struct aub_file *aub,
 
 void
 aub_write_exec(struct aub_file *aub, uint32_t ctx_id, uint64_t batch_addr,
-               uint64_t offset, enum drm_i915_gem_engine_class engine_class)
+               uint64_t offset, enum intel_engine_class engine_class)
 {
    const struct engine *cs = engine_from_engine_class(engine_class);
 
@@ -843,7 +842,7 @@ aub_write_exec(struct aub_file *aub, uint32_t ctx_id, uint64_t batch_addr,
 
 void
 aub_write_context_execlists(struct aub_file *aub, uint64_t context_addr,
-                            enum drm_i915_gem_engine_class engine_class)
+                            enum intel_engine_class engine_class)
 {
    const struct engine *cs = engine_from_engine_class(engine_class);
    uint64_t descriptor = ((uint64_t)1 << 62 | context_addr  | CONTEXT_FLAGS);

@@ -30,6 +30,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 #include <vulkan/vulkan.h>
 
 #include "hwdef/rogue_hw_utils.h"
@@ -37,6 +38,8 @@
 #include "pvr_csb.h"
 #include "pvr_device_info.h"
 #include "pvr_private.h"
+#include "util/list.h"
+#include "util/u_dynarray.h"
 #include "vk_log.h"
 
 /**
@@ -82,7 +85,11 @@ void pvr_csb_init(struct pvr_device *device,
    csb->device = device;
    csb->stream_type = stream_type;
    csb->status = VK_SUCCESS;
-   list_inithead(&csb->pvr_bo_list);
+
+   if (stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED)
+      util_dynarray_init(&csb->deferred_cs_mem, NULL);
+   else
+      list_inithead(&csb->pvr_bo_list);
 }
 
 /**
@@ -94,9 +101,13 @@ void pvr_csb_init(struct pvr_device *device,
  */
 void pvr_csb_finish(struct pvr_csb *csb)
 {
-   list_for_each_entry_safe (struct pvr_bo, pvr_bo, &csb->pvr_bo_list, link) {
-      list_del(&pvr_bo->link);
-      pvr_bo_free(csb->device, pvr_bo);
+   if (csb->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED) {
+      util_dynarray_fini(&csb->deferred_cs_mem);
+   } else {
+      list_for_each_entry_safe (struct pvr_bo, pvr_bo, &csb->pvr_bo_list, link) {
+         list_del(&pvr_bo->link);
+         pvr_bo_free(csb->device, pvr_bo);
+      }
    }
 
    /* Leave the csb in a reset state to catch use after destroy instances */
@@ -123,7 +134,7 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
 {
    const uint8_t stream_link_space = (pvr_cmd_length(VDMCTRL_STREAM_LINK0) +
                                       pvr_cmd_length(VDMCTRL_STREAM_LINK1)) *
-                                     4;
+                                     sizeof(uint32_t);
    const uint32_t cache_line_size =
       rogue_get_slc_cache_line_size(&csb->device->pdevice->dev_info);
    struct pvr_bo *pvr_bo;
@@ -154,33 +165,7 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
       csb->end += stream_link_space;
       assert(csb->next + stream_link_space <= csb->end);
 
-      switch (csb->stream_type) {
-      case PVR_CMD_STREAM_TYPE_GRAPHICS:
-         pvr_csb_emit (csb, VDMCTRL_STREAM_LINK0, link) {
-            link.link_addrmsb = pvr_bo->vma->dev_addr;
-         }
-
-         pvr_csb_emit (csb, VDMCTRL_STREAM_LINK1, link) {
-            link.link_addrlsb = pvr_bo->vma->dev_addr;
-         }
-
-         break;
-
-      case PVR_CMD_STREAM_TYPE_COMPUTE:
-         pvr_csb_emit (csb, CDMCTRL_STREAM_LINK0, link) {
-            link.link_addrmsb = pvr_bo->vma->dev_addr;
-         }
-
-         pvr_csb_emit (csb, CDMCTRL_STREAM_LINK1, link) {
-            link.link_addrlsb = pvr_bo->vma->dev_addr;
-         }
-
-         break;
-
-      default:
-         unreachable("Unknown stream type");
-         break;
-      }
+      pvr_csb_emit_link(csb, pvr_bo->vma->dev_addr, false);
    }
 
    csb->pvr_bo = pvr_bo;
@@ -211,9 +196,18 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
 void *pvr_csb_alloc_dwords(struct pvr_csb *csb, uint32_t num_dwords)
 {
    const uint32_t required_space = num_dwords * 4;
+   void *p;
 
    if (csb->status != VK_SUCCESS)
       return NULL;
+
+   if (csb->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED) {
+      p = util_dynarray_grow_bytes(&csb->deferred_cs_mem, 1, required_space);
+      if (!p)
+         csb->status = vk_error(csb->device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      return p;
+   }
 
    if (csb->next + required_space > csb->end) {
       bool ret = pvr_csb_buffer_extend(csb);
@@ -221,12 +215,114 @@ void *pvr_csb_alloc_dwords(struct pvr_csb *csb, uint32_t num_dwords)
          return NULL;
    }
 
-   void *p = csb->next;
+   p = csb->next;
 
    csb->next += required_space;
    assert(csb->next <= csb->end);
 
    return p;
+}
+
+/**
+ * \brief Copies control stream words from src csb into dst csb.
+ *
+ * The intended use is to copy PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED type
+ * control stream into PVR_CMD_STREAM_TYPE_GRAPHICS type device accessible
+ * control stream for processing.
+ *
+ * This is mainly for secondary command buffers created with
+ * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT flag. In that case we need to
+ * copy secondary control stream into the primary control stream for processing.
+ * This is done as part of vkCmdExecuteCommands.
+ *
+ * We create deferred control stream which is basically the same control stream
+ * but based in host side memory to avoid reserving device side resource.
+ *
+ * \param[in,out] csb_dst Destination control Stream Builder object.
+ * \param[in]     csb_src Source Control Stream Builder object.
+ */
+VkResult pvr_csb_copy(struct pvr_csb *csb_dst, struct pvr_csb *csb_src)
+{
+   const uint8_t stream_link_space = (pvr_cmd_length(VDMCTRL_STREAM_LINK0) +
+                                      pvr_cmd_length(VDMCTRL_STREAM_LINK1)) *
+                                     sizeof(uint32_t);
+   const uint32_t size =
+      util_dynarray_num_elements(&csb_src->deferred_cs_mem, char);
+   const uint8_t *start = util_dynarray_begin(&csb_src->deferred_cs_mem);
+   void *destination;
+
+   /* Only deferred control stream supported as src. */
+   assert(csb_src->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED);
+
+   /* Only graphics control stream supported as dst. */
+   assert(csb_dst->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS);
+
+   /* TODO: For now we don't support deferred streams bigger than one csb buffer
+    * object size.
+    *
+    * While adding support for this make sure to not break the words/dwords
+    * over two csb buffers.
+    */
+   pvr_finishme("Add support to copy streams bigger than one csb buffer");
+
+   assert(size < (PVR_CMD_BUFFER_CSB_BO_SIZE - stream_link_space));
+
+   destination = pvr_csb_alloc_dwords(csb_dst, size);
+   if (!destination) {
+      assert(csb_dst->status != VK_SUCCESS);
+      return csb_dst->status;
+   }
+
+   memcpy(destination, start, size);
+
+   return VK_SUCCESS;
+}
+
+/**
+ * \brief Adds VDMCTRL_STREAM_LINK/CDMCTRL_STREAM_LINK dwords into the control
+ * stream pointed by csb object.
+ *
+ * \param[in] csb  Control Stream Builder object to add LINK dwords to.
+ * \param[in] addr Device virtual address of the sub control stream to link to.
+ * \param[in] ret  Selects whether the sub control stream will return or
+ *                 terminate.
+ */
+void pvr_csb_emit_link(struct pvr_csb *csb, pvr_dev_addr_t addr, bool ret)
+{
+   /* Not supported for deferred control stream. */
+   assert(csb->stream_type != PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED);
+
+   /* Stream return is only supported for graphics control stream. */
+   assert(!ret || csb->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS);
+
+   switch (csb->stream_type) {
+   case PVR_CMD_STREAM_TYPE_GRAPHICS:
+      pvr_csb_emit (csb, VDMCTRL_STREAM_LINK0, link) {
+         link.link_addrmsb = addr;
+         link.with_return = ret;
+      }
+
+      pvr_csb_emit (csb, VDMCTRL_STREAM_LINK1, link) {
+         link.link_addrlsb = addr;
+      }
+
+      break;
+
+   case PVR_CMD_STREAM_TYPE_COMPUTE:
+      pvr_csb_emit (csb, CDMCTRL_STREAM_LINK0, link) {
+         link.link_addrmsb = addr;
+      }
+
+      pvr_csb_emit (csb, CDMCTRL_STREAM_LINK1, link) {
+         link.link_addrlsb = addr;
+      }
+
+      break;
+
+   default:
+      unreachable("Unknown stream type");
+      break;
+   }
 }
 
 /**
@@ -240,7 +336,8 @@ void *pvr_csb_alloc_dwords(struct pvr_csb *csb, uint32_t num_dwords)
 VkResult pvr_csb_emit_return(struct pvr_csb *csb)
 {
    /* STREAM_RETURN is only supported by graphics control stream. */
-   assert(csb->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS);
+   assert(csb->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS ||
+          csb->stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED);
 
    /* clang-format off */
    pvr_csb_emit(csb, VDMCTRL_STREAM_RETURN, ret);

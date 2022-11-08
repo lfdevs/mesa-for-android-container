@@ -173,6 +173,8 @@ struct loader_dri3_drawable {
    bool first_init;
    bool adaptive_sync;
    bool adaptive_sync_active;
+   bool block_on_depleted_buffers;
+   bool queries_buffer_age;
    int swap_interval;
 
    struct loader_dri3_extensions *ext;

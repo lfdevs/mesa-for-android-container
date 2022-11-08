@@ -25,25 +25,24 @@ SOFTWARE.
 
 <csbgen name="ROGUE" prefix="LLS">
 
-	<!-- Size of the CDM's context state buffer in bytes. -->
-	<define name="CDM_CONTEXT_RESUME_BUFFER_SIZE" value="72"/>
-	<define name="CDM_CONTEXT_RESUME_BUFFER_ALIGNMENT" value="16"/>
+  <!-- Size of the CDM's context state buffer in bytes. -->
+  <define name="CDM_CONTEXT_RESUME_BUFFER_SIZE" value="72"/>
+  <define name="CDM_CONTEXT_RESUME_BUFFER_ALIGNMENT" value="16"/>
 
-	<!-- Size of the PDS's persistent-temporary register context state buffer in bytes. -->
-	<define name="PDS_PERSISTENT_TEMPS_BUFFER_ALIGNMENT" value="16"/>
-	<define name="PDS_PERSISTENT_TEMPS_BUFFER_SIZE" value="128"/>
+  <!-- Size of the PDS's persistent-temporary register context state buffer in bytes. -->
+  <define name="PDS_PERSISTENT_TEMPS_BUFFER_ALIGNMENT" value="16"/>
+  <define name="PDS_PERSISTENT_TEMPS_BUFFER_SIZE" value="128"/>
 
-	<!-- Size of the TA's context state buffer in bytes. -->
-	<define name="TA_STATE_BUFFER_ALIGNMENT" value="16"/>
-	<define name="TA_STATE_BUFFER_SIZE" value="484"/>
+  <!-- Size of the TA's context state buffer in bytes. -->
+  <define name="TA_STATE_BUFFER_ALIGNMENT" value="16"/>
+  <define name="TA_STATE_BUFFER_SIZE" value="484"/>
 
-	<!-- Size of the USC's shared register context state buffer in bytes. -->
-	<define name="USC_SHARED_REGS_BUFFER_ALIGNMENT" value="16"/>
-	<define name="USC_SHARED_REGS_BUFFER_SIZE" value="16384"/>
+  <!-- Size of the USC's shared register context state buffer in bytes. -->
+  <define name="USC_SHARED_REGS_BUFFER_ALIGNMENT" value="16"/>
+  <define name="USC_SHARED_REGS_BUFFER_SIZE" value="16384"/>
 
-	<!-- Size of the VDM's context resume control stream buffer in bytes. -->
-	<define name="VDM_CONTEXT_RESUME_BUFFER_ALIGNMENT" value="16"/>
-	<define name="VDM_CONTEXT_RESUME_BUFFER_SIZE" value="92"/>
-
+  <!-- Size of the VDM's context resume control stream buffer in bytes. -->
+  <define name="VDM_CONTEXT_RESUME_BUFFER_ALIGNMENT" value="16"/>
+  <define name="VDM_CONTEXT_RESUME_BUFFER_SIZE" value="92"/>
 
 </csbgen>

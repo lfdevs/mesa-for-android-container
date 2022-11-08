@@ -49,8 +49,7 @@ evict_aged_allocations(struct d3d12_screen *screen, uint64_t completed_fence, in
          break;
       }
 
-      if (bo->residency_status == d3d12_permanently_resident)
-         continue;
+      assert(bo->residency_status == d3d12_resident);
 
       to_evict[num_pending_evictions++] = bo->res;
       bo->residency_status = d3d12_evicted;
@@ -82,8 +81,7 @@ evict_to_fence_or_budget(struct d3d12_screen *screen, uint64_t target_fence, uin
          break;
       }
 
-      if (bo->residency_status == d3d12_permanently_resident)
-         continue;
+      assert(bo->residency_status == d3d12_resident);
 
       to_evict[num_pending_evictions++] = bo->res;
       bo->residency_status = d3d12_evicted;
@@ -155,7 +153,8 @@ d3d12_process_batch_residency(struct d3d12_screen *screen, struct d3d12_batch *b
          base_bo->residency_status = d3d12_resident;
          size_to_make_resident += base_bo->estimated_size;
          list_addtail(&base_bo->residency_list_entry, &screen->residency_list);
-      } else if (base_bo->last_used_fence != pending_fence_value) {
+      } else if (base_bo->last_used_fence != pending_fence_value &&
+                 base_bo->residency_status == d3d12_resident) {
          /* First time seeing this already-resident base bo in this batch */
          list_del(&base_bo->residency_list_entry);
          list_addtail(&base_bo->residency_list_entry, &screen->residency_list);
@@ -278,7 +277,6 @@ d3d12_promote_to_permanent_residency(struct d3d12_screen *screen, struct d3d12_r
       /* If it wasn't made resident before, make it*/
       bool was_made_resident = (base_bo->residency_status == d3d12_resident);
       if(!was_made_resident) {
-         list_addtail(&base_bo->residency_list_entry, &screen->residency_list);
          ID3D12Pageable *pageable = base_bo->res;
          HRESULT hr = screen->dev->MakeResident(1, &pageable);
          assert(SUCCEEDED(hr));

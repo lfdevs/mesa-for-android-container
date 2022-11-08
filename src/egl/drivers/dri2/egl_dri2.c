@@ -65,6 +65,7 @@
 #include "util/libsync.h"
 #include "util/os_file.h"
 #include "util/u_atomic.h"
+#include "util/u_call_once.h"
 #include "util/u_vector.h"
 #include "mapi/glapi/glapi.h"
 #include "util/bitscan.h"
@@ -133,15 +134,19 @@ dri_set_background_context(void *loaderPrivate)
 }
 
 static void
+dri2_gl_flush_get(_glapi_proc *glFlush)
+{
+   *glFlush = _glapi_get_proc_address("glFlush");
+}
+
+static void
 dri2_gl_flush()
 {
    static void (*glFlush)(void);
-   static mtx_t glFlushMutex = _MTX_INITIALIZER_NP;
+   static util_once_flag once = UTIL_ONCE_FLAG_INIT;
 
-   mtx_lock(&glFlushMutex);
-   if (!glFlush)
-      glFlush = _glapi_get_proc_address("glFlush");
-   mtx_unlock(&glFlushMutex);
+   util_call_once_data(&once,
+      (util_call_once_data_func)dri2_gl_flush_get, &glFlush);
 
    /* if glFlush is not available things are horribly broken */
    if (!glFlush) {
@@ -653,12 +658,9 @@ dri2_add_pbuffer_configs_for_visuals(_EGLDisplay *disp)
 GLboolean
 dri2_validate_egl_image(void *image, void *data)
 {
-   _EGLDisplay *disp = data;
-   _EGLImage *img;
-
-   mtx_lock(&disp->Mutex);
-   img = _eglLookupImage(image, disp);
-   mtx_unlock(&disp->Mutex);
+   _EGLDisplay *disp = _eglLockDisplay(data);
+   _EGLImage *img = _eglLookupImage(image, disp);
+   _eglUnlockDisplay(disp);
 
    if (img == NULL) {
       _eglError(EGL_BAD_PARAMETER, "dri2_validate_egl_image");
@@ -873,13 +875,19 @@ dri2_query_driver_name(_EGLDisplay *disp)
 static char *
 dri2_query_driver_config(_EGLDisplay *disp)
 {
-    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
     const __DRIconfigOptionsExtension *ext = dri2_dpy->configOptions;
+    char *ret;
 
-    if (ext->base.version >= 2)
-        return ext->getXml(dri2_dpy->driver_name);
+    if (ext->base.version >= 2) {
+        ret = ext->getXml(dri2_dpy->driver_name);
+    } else {
+       ret = strdup(ext->xml);
+    }
 
-    return strdup(ext->xml);
+    mtx_unlock(&dri2_dpy->lock);
+
+    return ret;
 }
 
 
@@ -1018,7 +1026,10 @@ dri2_setup_screen(_EGLDisplay *disp)
 
    disp->Extensions.EXT_protected_surface =
       dri2_renderer_query_integer(dri2_dpy,
-                                  __DRI2_RENDERER_HAS_PROTECTED_CONTENT);
+                                  __DRI2_RENDERER_HAS_PROTECTED_SURFACE);
+   disp->Extensions.EXT_protected_content =
+      dri2_renderer_query_integer(dri2_dpy,
+                                  __DRI2_RENDERER_HAS_PROTECTED_CONTEXT);
 }
 
 void
@@ -1162,7 +1173,7 @@ dri2_initialize(_EGLDisplay *disp)
     * to free it up correctly.
     */
    if (dri2_dpy) {
-      dri2_dpy->ref_count++;
+      p_atomic_inc(&dri2_dpy->ref_count);
       return EGL_TRUE;
    }
 
@@ -1197,7 +1208,9 @@ dri2_initialize(_EGLDisplay *disp)
       return EGL_FALSE;
 
    dri2_dpy = dri2_egl_display(disp);
-   dri2_dpy->ref_count++;
+   p_atomic_inc(&dri2_dpy->ref_count);
+
+   mtx_init(&dri2_dpy->lock, mtx_plain);
 
    return EGL_TRUE;
 }
@@ -1216,9 +1229,8 @@ dri2_display_release(_EGLDisplay *disp)
    dri2_dpy = dri2_egl_display(disp);
 
    assert(dri2_dpy->ref_count > 0);
-   dri2_dpy->ref_count--;
 
-   if (dri2_dpy->ref_count > 0)
+   if (!p_atomic_dec_zero(&dri2_dpy->ref_count))
       return;
 
    _eglCleanupDisplay(disp);
@@ -1471,6 +1483,11 @@ dri2_fill_context_attribs(struct dri2_egl_context *dri2_ctx,
       ctx_attribs[pos++] = true;
    }
 
+   if (dri2_ctx->base.Protected) {
+      ctx_attribs[pos++] = __DRI_CTX_ATTRIB_PROTECTED;
+      ctx_attribs[pos++] = true;
+   }
+
    *num_attribs = pos;
 
    return true;
@@ -1484,7 +1501,7 @@ dri2_create_context(_EGLDisplay *disp, _EGLConfig *conf,
                     _EGLContext *share_list, const EGLint *attrib_list)
 {
    struct dri2_egl_context *dri2_ctx;
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_context *dri2_ctx_shared = dri2_egl_context(share_list);
    __DRIcontext *shared =
       dri2_ctx_shared ? dri2_ctx_shared->dri_context : NULL;
@@ -1497,7 +1514,7 @@ dri2_create_context(_EGLDisplay *disp, _EGLConfig *conf,
 
    dri2_ctx = malloc(sizeof *dri2_ctx);
    if (!dri2_ctx) {
-      _eglError(EGL_BAD_ALLOC, "eglCreateContext");
+      dri2_egl_error_unlock(dri2_dpy, EGL_BAD_ALLOC, "eglCreateContext");
       return NULL;
    }
 
@@ -1543,8 +1560,7 @@ dri2_create_context(_EGLDisplay *disp, _EGLConfig *conf,
          break;
       default:
          _eglError(EGL_BAD_PARAMETER, "eglCreateContext");
-         free(dri2_ctx);
-         return NULL;
+         goto cleanup;
       }
       break;
    case EGL_OPENGL_API:
@@ -1561,8 +1577,7 @@ dri2_create_context(_EGLDisplay *disp, _EGLConfig *conf,
       break;
    default:
       _eglError(EGL_BAD_PARAMETER, "eglCreateContext");
-      free(dri2_ctx);
-      return NULL;
+      goto cleanup;
    }
 
    if (conf != NULL) {
@@ -1642,9 +1657,12 @@ dri2_create_context(_EGLDisplay *disp, _EGLConfig *conf,
    if (!dri2_ctx->dri_context)
       goto cleanup;
 
+   mtx_unlock(&dri2_dpy->lock);
+
    return &dri2_ctx->base;
 
  cleanup:
+   mtx_unlock(&dri2_dpy->lock);
    free(dri2_ctx);
    return NULL;
 }
@@ -1710,11 +1728,12 @@ static EGLBoolean
 dri2_destroy_surface(_EGLDisplay *disp, _EGLSurface *surf)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   EGLBoolean ret = EGL_TRUE;
 
-   if (!_eglPutSurface(surf))
-      return EGL_TRUE;
+   if (_eglPutSurface(surf))
+      ret = dri2_dpy->vtbl->destroy_surface(disp, surf);
 
-   return dri2_dpy->vtbl->destroy_surface(disp, surf);
+   return ret;
 }
 
 static void
@@ -1813,17 +1832,17 @@ dri2_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
          old_dri2_dpy->vtbl->set_shared_buffer_mode(old_disp, old_dsurf, false);
       }
 
-      dri2_dpy->core->unbindContext(old_cctx);
+      old_dri2_dpy->core->unbindContext(old_cctx);
 
       if (old_dsurf)
-         dri2_surf_update_fence_fd(old_ctx, disp, old_dsurf);
+         dri2_surf_update_fence_fd(old_ctx, old_disp, old_dsurf);
    }
 
    ddraw = (dsurf) ? dri2_dpy->vtbl->get_dri_drawable(dsurf) : NULL;
    rdraw = (rsurf) ? dri2_dpy->vtbl->get_dri_drawable(rsurf) : NULL;
    cctx = (dri2_ctx) ? dri2_ctx->dri_context : NULL;
 
-   if (cctx || ddraw || rdraw) {
+   if (cctx) {
       if (!dri2_dpy->core->bindContext(cctx, ddraw, rdraw)) {
          _EGLContext *tmp_ctx;
 
@@ -1878,9 +1897,9 @@ dri2_make_current(_EGLDisplay *disp, _EGLSurface *dsurf,
          /* dri2_dpy->core->bindContext succeeded, so take a reference on the
           * dri2_dpy. This prevents dri2_dpy from being reinitialized when a
           * EGLDisplay is terminated and then initialized again while a
-          * context is still bound. See dri2_intitialize() for a more in depth
+          * context is still bound. See dri2_initialize() for a more in depth
           * explanation. */
-         dri2_dpy->ref_count++;
+         p_atomic_inc(&dri2_dpy->ref_count);
       }
    }
 
@@ -1931,39 +1950,57 @@ static _EGLSurface*
 dri2_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
                            void *native_window, const EGLint *attrib_list)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   return dri2_dpy->vtbl->create_window_surface(disp, conf, native_window,
-                                                attrib_list);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   _EGLSurface *ret =
+         dri2_dpy->vtbl->create_window_surface(disp, conf, native_window,
+                                               attrib_list);
+   mtx_unlock(&dri2_dpy->lock);
+   return ret;
 }
 
 static _EGLSurface*
 dri2_create_pixmap_surface(_EGLDisplay *disp, _EGLConfig *conf,
                            void *native_pixmap, const EGLint *attrib_list)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   if (!dri2_dpy->vtbl->create_pixmap_surface)
-      return NULL;
-   return dri2_dpy->vtbl->create_pixmap_surface(disp, conf, native_pixmap,
-                                                attrib_list);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   _EGLSurface *ret = NULL;
+
+   if (dri2_dpy->vtbl->create_pixmap_surface)
+      ret = dri2_dpy->vtbl->create_pixmap_surface(disp, conf, native_pixmap,
+                                                  attrib_list);
+
+   mtx_unlock(&dri2_dpy->lock);
+
+   return ret;
 }
 
 static _EGLSurface*
 dri2_create_pbuffer_surface(_EGLDisplay *disp, _EGLConfig *conf,
                             const EGLint *attrib_list)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   if (!dri2_dpy->vtbl->create_pbuffer_surface)
-      return NULL;
-   return dri2_dpy->vtbl->create_pbuffer_surface(disp, conf, attrib_list);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   _EGLSurface *ret = NULL;
+
+   if (dri2_dpy->vtbl->create_pbuffer_surface)
+      ret = dri2_dpy->vtbl->create_pbuffer_surface(disp, conf, attrib_list);
+
+   mtx_unlock(&dri2_dpy->lock);
+
+   return ret;
 }
 
 static EGLBoolean
 dri2_swap_interval(_EGLDisplay *disp, _EGLSurface *surf, EGLint interval)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   if (!dri2_dpy->vtbl->swap_interval)
-      return EGL_TRUE;
-   return dri2_dpy->vtbl->swap_interval(disp, surf, interval);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   EGLBoolean ret = EGL_TRUE;
+
+   if (dri2_dpy->vtbl->swap_interval)
+      ret = dri2_dpy->vtbl->swap_interval(disp, surf, interval);
+
+   mtx_unlock(&dri2_dpy->lock);
+
+   return ret;
 }
 
 /**
@@ -2077,13 +2114,16 @@ static EGLBoolean
 dri2_set_damage_region(_EGLDisplay *disp, _EGLSurface *surf,
                        EGLint *rects, EGLint n_rects)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    __DRIdrawable *drawable = dri2_dpy->vtbl->get_dri_drawable(surf);
 
-   if (!dri2_dpy->buffer_damage || !dri2_dpy->buffer_damage->set_damage_region)
+   if (!dri2_dpy->buffer_damage || !dri2_dpy->buffer_damage->set_damage_region) {
+      mtx_unlock(&dri2_dpy->lock);
       return EGL_FALSE;
+   }
 
    dri2_dpy->buffer_damage->set_damage_region(drawable, n_rects, rects);
+   mtx_unlock(&dri2_dpy->lock);
    return EGL_TRUE;
 }
 
@@ -2091,19 +2131,26 @@ static EGLBoolean
 dri2_post_sub_buffer(_EGLDisplay *disp, _EGLSurface *surf,
                      EGLint x, EGLint y, EGLint width, EGLint height)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   if (!dri2_dpy->vtbl->post_sub_buffer)
-      return EGL_FALSE;
-   return dri2_dpy->vtbl->post_sub_buffer(disp, surf, x, y, width, height);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   EGLBoolean ret = EGL_FALSE;
+
+   if (dri2_dpy->vtbl->post_sub_buffer)
+      ret = dri2_dpy->vtbl->post_sub_buffer(disp, surf, x, y, width, height);
+
+   mtx_unlock(&dri2_dpy->lock);
+
+   return ret;
 }
 
 static EGLBoolean
 dri2_copy_buffers(_EGLDisplay *disp, _EGLSurface *surf, void *native_pixmap_target)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    if (!dri2_dpy->vtbl->copy_buffers)
-      return _eglError(EGL_BAD_NATIVE_PIXMAP, "no support for native pixmaps");
-   return dri2_dpy->vtbl->copy_buffers(disp, surf, native_pixmap_target);
+      return dri2_egl_error_unlock(dri2_dpy, EGL_BAD_NATIVE_PIXMAP, "no support for native pixmaps");
+   EGLBoolean ret = dri2_dpy->vtbl->copy_buffers(disp, surf, native_pixmap_target);
+   mtx_unlock(&dri2_dpy->lock);
+   return ret;
 }
 
 static EGLint
@@ -2144,7 +2191,7 @@ dri2_wait_native(EGLint engine)
 static EGLBoolean
 dri2_bind_tex_image(_EGLDisplay *disp, _EGLSurface *surf, EGLint buffer)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_context *dri2_ctx;
    _EGLContext *ctx;
    GLint format, target;
@@ -2153,8 +2200,10 @@ dri2_bind_tex_image(_EGLDisplay *disp, _EGLSurface *surf, EGLint buffer)
    ctx = _eglGetCurrentContext();
    dri2_ctx = dri2_egl_context(ctx);
 
-   if (!_eglBindTexImage(disp, surf, buffer))
+   if (!_eglBindTexImage(disp, surf, buffer)) {
+      mtx_unlock(&dri2_dpy->lock);
       return EGL_FALSE;
+   }
 
    switch (surf->TextureFormat) {
    case EGL_TEXTURE_RGB:
@@ -2181,13 +2230,15 @@ dri2_bind_tex_image(_EGLDisplay *disp, _EGLSurface *surf, EGLint buffer)
                                        target, format,
                                        dri_drawable);
 
+   mtx_unlock(&dri2_dpy->lock);
+
    return EGL_TRUE;
 }
 
 static EGLBoolean
 dri2_release_tex_image(_EGLDisplay *disp, _EGLSurface *surf, EGLint buffer)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_context *dri2_ctx;
    _EGLContext *ctx;
    GLint  target;
@@ -2196,8 +2247,10 @@ dri2_release_tex_image(_EGLDisplay *disp, _EGLSurface *surf, EGLint buffer)
    ctx = _eglGetCurrentContext();
    dri2_ctx = dri2_egl_context(ctx);
 
-   if (!_eglReleaseTexImage(disp, surf, buffer))
+   if (!_eglReleaseTexImage(disp, surf, buffer)) {
+      mtx_unlock(&dri2_dpy->lock);
       return EGL_FALSE;
+   }
 
    switch (surf->TextureTarget) {
    case EGL_TEXTURE_2D:
@@ -2213,6 +2266,8 @@ dri2_release_tex_image(_EGLDisplay *disp, _EGLSurface *surf, EGLint buffer)
                                              target, dri_drawable);
    }
 
+   mtx_unlock(&dri2_dpy->lock);
+
    return EGL_TRUE;
 }
 
@@ -2220,9 +2275,11 @@ static _EGLImage*
 dri2_create_image(_EGLDisplay *disp, _EGLContext *ctx, EGLenum target,
                   EGLClientBuffer buffer, const EGLint *attr_list)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   return dri2_dpy->vtbl->create_image(disp, ctx, target, buffer,
-                                       attr_list);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   _EGLImage *ret = dri2_dpy->vtbl->create_image(disp, ctx, target, buffer,
+                                                 attr_list);
+   mtx_unlock(&dri2_dpy->lock);
+   return ret;
 }
 
 _EGLImage *
@@ -2382,9 +2439,24 @@ dri2_get_sync_values_chromium(_EGLDisplay *disp, _EGLSurface *surf,
                               EGLuint64KHR *sbc)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   if (!dri2_dpy->vtbl->get_sync_values)
+   EGLBoolean ret = EGL_FALSE;
+
+   if (dri2_dpy->vtbl->get_sync_values)
+      ret = dri2_dpy->vtbl->get_sync_values(disp, surf, ust, msc, sbc);
+
+   mtx_unlock(&dri2_dpy->lock);
+
+   return ret;
+}
+
+static EGLBoolean
+dri2_get_msc_rate_angle(_EGLDisplay *disp, _EGLSurface *surf,
+                        EGLint *numerator, EGLint *denominator)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   if (!dri2_dpy->vtbl->get_msc_rate)
       return EGL_FALSE;
-   return dri2_dpy->vtbl->get_sync_values(disp, surf, ust, msc, sbc);
+   return dri2_dpy->vtbl->get_msc_rate(disp, surf, numerator, denominator);
 }
 
 /**
@@ -2490,18 +2562,31 @@ dri2_query_surface(_EGLDisplay *disp, _EGLSurface *surf,
                    EGLint attribute, EGLint *value)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   if (!dri2_dpy->vtbl->query_surface)
-      return _eglQuerySurface(disp, surf, attribute, value);
-   return dri2_dpy->vtbl->query_surface(disp, surf, attribute, value);
+   EGLBoolean ret;
+
+   if (!dri2_dpy->vtbl->query_surface) {
+      ret = _eglQuerySurface(disp, surf, attribute, value);
+   } else {
+      ret = dri2_dpy->vtbl->query_surface(disp, surf, attribute, value);
+   }
+
+   mtx_unlock(&dri2_dpy->lock);
+
+   return ret;
 }
 
 static struct wl_buffer*
 dri2_create_wayland_buffer_from_image(_EGLDisplay *disp, _EGLImage *img)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   if (!dri2_dpy->vtbl->create_wayland_buffer_from_image)
-      return NULL;
-   return dri2_dpy->vtbl->create_wayland_buffer_from_image(disp, img);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   struct wl_buffer *ret = NULL;
+
+   if (dri2_dpy->vtbl->create_wayland_buffer_from_image)
+      ret = dri2_dpy->vtbl->create_wayland_buffer_from_image(disp, img);
+
+   mtx_unlock(&dri2_dpy->lock);
+
+   return ret;
 }
 
 #ifdef HAVE_LIBDRM
@@ -2776,17 +2861,19 @@ static EGLBoolean
 dri2_query_dma_buf_formats(_EGLDisplay *disp, EGLint max,
                            EGLint *formats, EGLint *count)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   if (max < 0 || (max > 0 && formats == NULL))
-      return _eglError(EGL_BAD_PARAMETER, "invalid value for max count of formats");
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   if (max < 0 || (max > 0 && formats == NULL)) {
+      _eglError(EGL_BAD_PARAMETER, "invalid value for max count of formats");
+      goto fail;
+   }
 
    if (dri2_dpy->image->base.version < 15 ||
        dri2_dpy->image->queryDmaBufFormats == NULL)
-      return EGL_FALSE;
+      goto fail;
 
    if (!dri2_dpy->image->queryDmaBufFormats(dri2_dpy->dri_screen, max,
                                             formats, count))
-      return EGL_FALSE;
+      goto fail;
 
    if (max > 0) {
       /* Assert that all of the formats returned are actually fourcc formats.
@@ -2800,7 +2887,13 @@ dri2_query_dma_buf_formats(_EGLDisplay *disp, EGLint max,
       }
    }
 
+   mtx_unlock(&dri2_dpy->lock);
+
    return EGL_TRUE;
+
+fail:
+   mtx_unlock(&dri2_dpy->lock);
+   return EGL_FALSE;
 }
 
 static EGLBoolean
@@ -2808,26 +2901,30 @@ dri2_query_dma_buf_modifiers(_EGLDisplay *disp, EGLint format,
                              EGLint max, EGLuint64KHR *modifiers,
                              EGLBoolean *external_only, EGLint *count)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
 
    if (dri2_num_fourcc_format_planes(format) == 0)
-      return _eglError(EGL_BAD_PARAMETER, "invalid fourcc format");
+      return dri2_egl_error_unlock(dri2_dpy, EGL_BAD_PARAMETER, "invalid fourcc format");
 
    if (max < 0)
-      return _eglError(EGL_BAD_PARAMETER, "invalid value for max count of formats");
+      return dri2_egl_error_unlock(dri2_dpy, EGL_BAD_PARAMETER, "invalid value for max count of formats");
 
    if (max > 0 && modifiers == NULL)
-      return _eglError(EGL_BAD_PARAMETER, "invalid modifiers array");
+      return dri2_egl_error_unlock(dri2_dpy, EGL_BAD_PARAMETER, "invalid modifiers array");
 
    if (dri2_dpy->image->base.version < 15 ||
-       dri2_dpy->image->queryDmaBufModifiers == NULL)
+       dri2_dpy->image->queryDmaBufModifiers == NULL) {
+      mtx_unlock(&dri2_dpy->lock);
       return EGL_FALSE;
+   }
 
    if (dri2_dpy->image->queryDmaBufModifiers(dri2_dpy->dri_screen, format,
                                              max, modifiers,
                                              (unsigned int *) external_only,
                                              count) == false)
-      return _eglError(EGL_BAD_PARAMETER, "invalid format");
+      return dri2_egl_error_unlock(dri2_dpy, EGL_BAD_PARAMETER, "invalid format");
+
+   mtx_unlock(&dri2_dpy->lock);
 
    return EGL_TRUE;
 }
@@ -2857,6 +2954,7 @@ dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
    uint64_t modifier;
    bool has_modifier = false;
    unsigned error;
+   EGLint egl_error;
 
    /**
     * The spec says:
@@ -2944,7 +3042,10 @@ dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
             &error,
             NULL);
    }
-   dri2_create_image_khr_texture_error(error);
+
+   egl_error = egl_error_from_dri_image_error(error);
+   if (egl_error != EGL_SUCCESS)
+      _eglError(egl_error, "createImageFromDmaBufs failed");
 
    if (!dri_image)
       return EGL_NO_IMAGE_KHR;
@@ -2956,7 +3057,7 @@ dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
 static _EGLImage *
 dri2_create_drm_image_mesa(_EGLDisplay *disp, const EGLint *attr_list)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_image *dri2_img;
    _EGLImageAttribs attrs;
    unsigned int dri_use, valid_mask;
@@ -2964,15 +3065,15 @@ dri2_create_drm_image_mesa(_EGLDisplay *disp, const EGLint *attr_list)
 
    if (!attr_list) {
       _eglError(EGL_BAD_PARAMETER, __func__);
-      return EGL_NO_IMAGE_KHR;
+      goto fail;
    }
 
    if (!_eglParseImageAttribList(&attrs, disp, attr_list))
-      return EGL_NO_IMAGE_KHR;
+      goto fail;
 
    if (attrs.Width <= 0 || attrs.Height <= 0) {
       _eglError(EGL_BAD_PARAMETER, __func__);
-      return EGL_NO_IMAGE_KHR;
+      goto fail;
    }
 
    switch (attrs.DRMBufferFormatMESA) {
@@ -2981,7 +3082,7 @@ dri2_create_drm_image_mesa(_EGLDisplay *disp, const EGLint *attr_list)
       break;
    default:
       _eglError(EGL_BAD_PARAMETER, __func__);
-      return EGL_NO_IMAGE_KHR;
+      goto fail;
    }
 
    valid_mask =
@@ -2990,7 +3091,7 @@ dri2_create_drm_image_mesa(_EGLDisplay *disp, const EGLint *attr_list)
       EGL_DRM_BUFFER_USE_CURSOR_MESA;
    if (attrs.DRMBufferUseMESA & ~valid_mask) {
       _eglError(EGL_BAD_PARAMETER, __func__);
-      return EGL_NO_IMAGE_KHR;
+      goto fail;
    }
 
    dri_use = 0;
@@ -3004,7 +3105,7 @@ dri2_create_drm_image_mesa(_EGLDisplay *disp, const EGLint *attr_list)
    dri2_img = malloc(sizeof *dri2_img);
    if (!dri2_img) {
       _eglError(EGL_BAD_ALLOC, "dri2_create_image_khr");
-      return EGL_NO_IMAGE_KHR;
+      goto fail;
    }
 
    _eglInitImage(&dri2_img->base, disp);
@@ -3015,18 +3116,24 @@ dri2_create_drm_image_mesa(_EGLDisplay *disp, const EGLint *attr_list)
                                    format, dri_use, dri2_img);
    if (dri2_img->dri_image == NULL) {
       free(dri2_img);
-       _eglError(EGL_BAD_ALLOC, "dri2_create_drm_image_mesa");
-      return EGL_NO_IMAGE_KHR;
+      _eglError(EGL_BAD_ALLOC, "dri2_create_drm_image_mesa");
+      goto fail;
    }
 
+   mtx_unlock(&dri2_dpy->lock);
+
    return &dri2_img->base;
+
+fail:
+   mtx_unlock(&dri2_dpy->lock);
+   return EGL_NO_IMAGE_KHR;
 }
 
 static EGLBoolean
 dri2_export_drm_image_mesa(_EGLDisplay *disp, _EGLImage *img,
                           EGLint *name, EGLint *handle, EGLint *stride)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_image *dri2_img = dri2_egl_image(img);
 
    if (name && !dri2_dpy->image->queryImage(dri2_img->dri_image,
@@ -3040,6 +3147,8 @@ dri2_export_drm_image_mesa(_EGLDisplay *disp, _EGLImage *img,
    if (stride)
       dri2_dpy->image->queryImage(dri2_img->dri_image,
                                   __DRI_IMAGE_ATTRIB_STRIDE, stride);
+
+   mtx_unlock(&dri2_dpy->lock);
 
    return EGL_TRUE;
 }
@@ -3071,12 +3180,14 @@ dri2_export_dma_buf_image_query_mesa(_EGLDisplay *disp, _EGLImage *img,
                                      EGLint *fourcc, EGLint *nplanes,
                                      EGLuint64KHR *modifiers)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_image *dri2_img = dri2_egl_image(img);
    int num_planes;
 
-   if (!dri2_can_export_dma_buf_image(disp, img))
+   if (!dri2_can_export_dma_buf_image(disp, img)) {
+      mtx_unlock(&dri2_dpy->lock);
       return EGL_FALSE;
+   }
 
    dri2_dpy->image->queryImage(dri2_img->dri_image,
                                __DRI_IMAGE_ATTRIB_NUM_PLANES, &num_planes);
@@ -3105,6 +3216,8 @@ dri2_export_dma_buf_image_query_mesa(_EGLDisplay *disp, _EGLImage *img,
         modifiers[i] = modifier;
    }
 
+   mtx_unlock(&dri2_dpy->lock);
+
    return EGL_TRUE;
 }
 
@@ -3112,7 +3225,7 @@ static EGLBoolean
 dri2_export_dma_buf_image_mesa(_EGLDisplay *disp, _EGLImage *img,
                                int *fds, EGLint *strides, EGLint *offsets)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_image *dri2_img = dri2_egl_image(img);
    EGLint nplanes;
 
@@ -3148,6 +3261,8 @@ dri2_export_dma_buf_image_mesa(_EGLDisplay *disp, _EGLImage *img,
       else
          offsets[0] = 0;
    }
+
+   mtx_unlock(&dri2_dpy->lock);
 
    return EGL_TRUE;
 }
@@ -3189,11 +3304,13 @@ dri2_create_image_khr(_EGLDisplay *disp, _EGLContext *ctx, EGLenum target,
 static EGLBoolean
 dri2_destroy_image_khr(_EGLDisplay *disp, _EGLImage *image)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_image *dri2_img = dri2_egl_image(image);
 
    dri2_dpy->image->destroyImage(dri2_img->dri_image);
    free(dri2_img);
+
+   mtx_unlock(&dri2_dpy->lock);
 
    return EGL_TRUE;
 }
@@ -3256,7 +3373,7 @@ dri2_wl_release_buffer(void *user_data, struct wl_drm_buffer *buffer)
 static EGLBoolean
 dri2_bind_wayland_display_wl(_EGLDisplay *disp, struct wl_display *wl_dpy)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    const struct wayland_drm_callbacks wl_drm_callbacks = {
       .authenticate = (int(*)(void *, uint32_t)) dri2_dpy->vtbl->authenticate,
       .reference_buffer = dri2_wl_reference_buffer,
@@ -3268,13 +3385,13 @@ dri2_bind_wayland_display_wl(_EGLDisplay *disp, struct wl_display *wl_dpy)
    uint64_t cap;
 
    if (dri2_dpy->wl_server_drm)
-           return EGL_FALSE;
+      goto fail;
 
    device_name = drmGetRenderDeviceNameFromFd(dri2_dpy->fd);
    if (!device_name)
       device_name = strdup(dri2_dpy->device_name);
    if (!device_name)
-      return EGL_FALSE;
+      goto fail;
 
    if (drmGetCap(dri2_dpy->fd, DRM_CAP_PRIME, &cap) == 0 &&
        cap == (DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT) &&
@@ -3289,7 +3406,7 @@ dri2_bind_wayland_display_wl(_EGLDisplay *disp, struct wl_display *wl_dpy)
    free(device_name);
 
    if (!dri2_dpy->wl_server_drm)
-           return EGL_FALSE;
+      goto fail;
 
 #ifdef HAVE_DRM_PLATFORM
    /* We have to share the wl_drm instance with gbm, so gbm can convert
@@ -3298,7 +3415,12 @@ dri2_bind_wayland_display_wl(_EGLDisplay *disp, struct wl_display *wl_dpy)
       dri2_dpy->gbm_dri->wl_drm = dri2_dpy->wl_server_drm;
 #endif
 
+   mtx_unlock(&dri2_dpy->lock);
    return EGL_TRUE;
+
+fail:
+   mtx_unlock(&dri2_dpy->lock);
+   return EGL_FALSE;
 }
 
 static EGLBoolean
@@ -3378,7 +3500,7 @@ static _EGLSync *
 dri2_create_sync(_EGLDisplay *disp, EGLenum type, const EGLAttrib *attrib_list)
 {
    _EGLContext *ctx = _eglGetCurrentContext();
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_context *dri2_ctx = dri2_egl_context(ctx);
    struct dri2_egl_sync *dri2_sync;
    EGLint ret;
@@ -3387,12 +3509,11 @@ dri2_create_sync(_EGLDisplay *disp, EGLenum type, const EGLAttrib *attrib_list)
    dri2_sync = calloc(1, sizeof(struct dri2_egl_sync));
    if (!dri2_sync) {
       _eglError(EGL_BAD_ALLOC, "eglCreateSyncKHR");
-      return NULL;
+      goto fail;
    }
 
    if (!_eglInitSync(&dri2_sync->base, disp, type, attrib_list)) {
-      free(dri2_sync);
-      return NULL;
+      goto fail;
    }
 
    switch (type) {
@@ -3403,8 +3524,7 @@ dri2_create_sync(_EGLDisplay *disp, EGLenum type, const EGLAttrib *attrib_list)
           * a generic EGL error that doesn't communicate user error.
           */
          _eglError(EGL_BAD_ALLOC, "eglCreateSyncKHR");
-         free(dri2_sync);
-         return NULL;
+         goto fail;
       }
       break;
 
@@ -3415,8 +3535,7 @@ dri2_create_sync(_EGLDisplay *disp, EGLenum type, const EGLAttrib *attrib_list)
       /* this can only happen if the cl_event passed in is invalid. */
       if (!dri2_sync->fence) {
          _eglError(EGL_BAD_ATTRIBUTE, "eglCreateSyncKHR");
-         free(dri2_sync);
-         return NULL;
+         goto fail;
       }
 
       /* the initial status must be "signaled" if the cl_event is signaled */
@@ -3431,8 +3550,7 @@ dri2_create_sync(_EGLDisplay *disp, EGLenum type, const EGLAttrib *attrib_list)
 
       if (ret) {
          _eglError(EGL_BAD_ACCESS, "eglCreateSyncKHR");
-         free(dri2_sync);
-         return NULL;
+         goto fail;
       }
 
       /* change clock attribute to CLOCK_MONOTONIC */
@@ -3440,16 +3558,14 @@ dri2_create_sync(_EGLDisplay *disp, EGLenum type, const EGLAttrib *attrib_list)
 
       if (ret) {
          _eglError(EGL_BAD_ACCESS, "eglCreateSyncKHR");
-         free(dri2_sync);
-         return NULL;
+         goto fail;
       }
 
       ret = pthread_cond_init(&dri2_sync->cond, &attr);
 
       if (ret) {
          _eglError(EGL_BAD_ACCESS, "eglCreateSyncKHR");
-         free(dri2_sync);
-         return NULL;
+         goto fail;
       }
 
       /* initial status of reusable sync must be "unsignaled" */
@@ -3464,20 +3580,26 @@ dri2_create_sync(_EGLDisplay *disp, EGLenum type, const EGLAttrib *attrib_list)
       }
       if (!dri2_sync->fence) {
          _eglError(EGL_BAD_ATTRIBUTE, "eglCreateSyncKHR");
-         free(dri2_sync);
-         return NULL;
+         goto fail;
       }
       break;
    }
 
    p_atomic_set(&dri2_sync->refcount, 1);
+   mtx_unlock(&dri2_dpy->lock);
+
    return &dri2_sync->base;
+
+fail:
+   free(dri2_sync);
+   mtx_unlock(&dri2_dpy->lock);
+   return NULL;
 }
 
 static EGLBoolean
 dri2_destroy_sync(_EGLDisplay *disp, _EGLSync *sync)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_sync *dri2_sync = dri2_egl_sync(sync);
    EGLint ret = EGL_TRUE;
    EGLint err;
@@ -3500,13 +3622,15 @@ dri2_destroy_sync(_EGLDisplay *disp, _EGLSync *sync)
 
    dri2_egl_unref_sync(dri2_dpy, dri2_sync);
 
+   mtx_unlock(&dri2_dpy->lock);
+
    return ret;
 }
 
 static EGLint
 dri2_dup_native_fence_fd(_EGLDisplay *disp, _EGLSync *sync)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
    struct dri2_egl_sync *dri2_sync = dri2_egl_sync(sync);
 
    assert(sync->Type == EGL_SYNC_NATIVE_FENCE_ANDROID);
@@ -3518,6 +3642,8 @@ dri2_dup_native_fence_fd(_EGLDisplay *disp, _EGLSync *sync)
       sync->SyncFd = dri2_dpy->fence->get_fence_fd(dri2_dpy->dri_screen,
                                                    dri2_sync->fence);
    }
+
+   mtx_unlock(&dri2_dpy->lock);
 
    if (sync->SyncFd == EGL_NO_NATIVE_FENCE_FD_ANDROID) {
       /* if native fence fd still not created, return an error: */
@@ -3535,10 +3661,9 @@ dri2_set_blob_cache_funcs(_EGLDisplay *disp,
                           EGLSetBlobFuncANDROID set,
                           EGLGetBlobFuncANDROID get)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   dri2_dpy->blob->set_cache_funcs(dri2_dpy->dri_screen,
-                                   disp->BlobCacheSet,
-                                   disp->BlobCacheGet);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
+   dri2_dpy->blob->set_cache_funcs(dri2_dpy->dri_screen, set, get);
+   mtx_unlock(&dri2_dpy->lock);
 }
 
 static EGLint
@@ -3627,10 +3752,11 @@ dri2_client_wait_sync(_EGLDisplay *disp, _EGLSync *sync,
          }
       }
       break;
-  }
-  dri2_egl_unref_sync(dri2_dpy, dri2_sync);
+   }
 
-  return ret;
+   dri2_egl_unref_sync(dri2_dpy, dri2_sync);
+
+   return ret;
 }
 
 static EGLBoolean
@@ -3698,6 +3824,20 @@ dri2_interop_export_object(_EGLDisplay *disp, _EGLContext *ctx,
    return dri2_dpy->interop->export_object(dri2_ctx->dri_context, in, out);
 }
 
+static int
+dri2_interop_flush_objects(_EGLDisplay *disp, _EGLContext *ctx,
+                           unsigned count, struct mesa_glinterop_export_in *objects,
+                           GLsync *sync)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_context *dri2_ctx = dri2_egl_context(ctx);
+
+   if (!dri2_dpy->interop || dri2_dpy->interop->base.version < 2)
+      return MESA_GLINTEROP_UNSUPPORTED;
+
+   return dri2_dpy->interop->flush_objects(dri2_ctx->dri_context, count, objects, sync);
+}
+
 const _EGLDriver _eglDriver = {
    .Initialize = dri2_initialize,
    .Terminate = dri2_terminate,
@@ -3741,6 +3881,7 @@ const _EGLDriver _eglDriver = {
    .QueryWaylandBufferWL = dri2_query_wayland_buffer_wl,
 #endif
    .GetSyncValuesCHROMIUM = dri2_get_sync_values_chromium,
+   .GetMscRateANGLE = dri2_get_msc_rate_angle,
    .CreateSyncKHR = dri2_create_sync,
    .ClientWaitSyncKHR = dri2_client_wait_sync,
    .SignalSyncKHR = dri2_signal_sync,
@@ -3748,6 +3889,7 @@ const _EGLDriver _eglDriver = {
    .DestroySyncKHR = dri2_destroy_sync,
    .GLInteropQueryDeviceInfo = dri2_interop_query_device_info,
    .GLInteropExportObject = dri2_interop_export_object,
+   .GLInteropFlushObjects = dri2_interop_flush_objects,
    .DupNativeFenceFDANDROID = dri2_dup_native_fence_fd,
    .SetBlobCacheFuncsANDROID = dri2_set_blob_cache_funcs,
 };

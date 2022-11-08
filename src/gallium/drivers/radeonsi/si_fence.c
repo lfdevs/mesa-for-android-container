@@ -213,7 +213,7 @@ static void si_fence_reference(struct pipe_screen *screen, struct pipe_fence_han
    *sdst = ssrc;
 }
 
-static struct si_fence *si_create_multi_fence()
+static struct si_fence *si_alloc_fence()
 {
    struct si_fence *fence = CALLOC_STRUCT(si_fence);
    if (!fence)
@@ -228,7 +228,7 @@ static struct si_fence *si_create_multi_fence()
 struct pipe_fence_handle *si_create_fence(struct pipe_context *ctx,
                                           struct tc_unflushed_batch_token *tc_token)
 {
-   struct si_fence *fence = si_create_multi_fence();
+   struct si_fence *fence = si_alloc_fence();
    if (!fence)
       return NULL;
 
@@ -387,7 +387,7 @@ static void si_create_fence_fd(struct pipe_context *ctx, struct pipe_fence_handl
 
    *pfence = NULL;
 
-   sfence = si_create_multi_fence();
+   sfence = si_alloc_fence();
    if (!sfence)
       return;
 
@@ -488,6 +488,11 @@ static void si_flush_all_queues(struct pipe_context *ctx,
          ws->cs_sync_flush(&sctx->gfx_cs);
 
       tc_driver_internal_flush_notify(sctx->tc);
+
+      if (unlikely(sctx->thread_trace &&
+                   (flags & PIPE_FLUSH_END_OF_FRAME))) {
+         si_handle_thread_trace(sctx, &sctx->gfx_cs);
+      }
    } else {
       /* Instead of flushing, create a deferred fence. Constraints:
        * - the gallium frontend must allow a deferred flush.
@@ -511,7 +516,7 @@ static void si_flush_all_queues(struct pipe_context *ctx,
          new_fence = (struct si_fence *)*fence;
          assert(new_fence);
       } else {
-         new_fence = si_create_multi_fence();
+         new_fence = si_alloc_fence();
          if (!new_fence) {
             ws->fence_reference(&gfx_fence, NULL);
             goto finish;

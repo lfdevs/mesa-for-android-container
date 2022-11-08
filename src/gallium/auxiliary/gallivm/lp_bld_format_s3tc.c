@@ -1197,12 +1197,11 @@ s3tc_update_cache_access(struct gallivm_state *gallivm,
 
    assert(index == LP_BUILD_FORMAT_CACHE_MEMBER_ACCESS_TOTAL ||
           index == LP_BUILD_FORMAT_CACHE_MEMBER_ACCESS_MISS);
-
-   member_ptr = lp_build_struct_get_ptr(gallivm, ptr, index, "");
-   cache_access = LLVMBuildLoad(builder, member_ptr, "cache_access");
+   LLVMTypeRef cache_type = lp_build_format_cache_type(gallivm);
+   member_ptr = lp_build_struct_get_ptr2(gallivm, cache_type, ptr, index, "");
+   cache_access = LLVMBuildLoad2(builder, LLVMInt64TypeInContext(gallivm->context), member_ptr, "cache_access");
    cache_access = LLVMBuildAdd(builder, cache_access,
-                               LLVMConstInt(LLVMInt64TypeInContext(gallivm->context),
-                                                                   count, 0), "");
+                               LLVMConstInt(LLVMInt64TypeInContext(gallivm->context), count, 0), "");
    LLVMBuildStore(builder, cache_access, member_ptr);
 }
 #endif

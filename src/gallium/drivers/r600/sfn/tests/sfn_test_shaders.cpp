@@ -1,17 +1,18 @@
 #include "sfn_test_shaders.h"
+
+#include "../sfn_memorypool.h"
 #include "../sfn_shader_fs.h"
 #include "../sfn_shader_gs.h"
 #include "../sfn_shader_tess.h"
 #include "../sfn_shader_vs.h"
-#include "../sfn_memorypool.h"
 
 namespace r600 {
 
 using std::istringstream;
 using std::string;
 
-const char *red_triangle_fs_nir  =
-R"(shader: MESA_SHADER_FRAGMENT
+const char *red_triangle_fs_nir =
+   R"(shader: MESA_SHADER_FRAGMENT
 name: TTN
 inputs: 0
 outputs: 1
@@ -60,9 +61,8 @@ ALU MOV S0.w@group : I[1.0] {WL}
 EXPORT_DONE PIXEL 0 S0.xyzw
 )";
 
-
 const char *add_add_1_nir =
-R"(shader: MESA_SHADER_FRAGMENT
+   R"(shader: MESA_SHADER_FRAGMENT
 name: GLSL3
 inputs: 0
 outputs: 1
@@ -86,7 +86,7 @@ impl main {
 })";
 
 const char *add_add_1_expect_from_nir =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -108,9 +108,8 @@ ALU MOV S4.w@group : S2.w {WL}
 EXPORT_DONE PIXEL 0 S4.xyzw
 )";
 
-
 const char *add_add_1_expect_from_nir_copy_prop_fwd =
-R"(
+   R"(
 FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
@@ -134,7 +133,7 @@ EXPORT_DONE PIXEL 0 S4.xyzw
 )";
 
 const char *add_add_1_expect_from_nir_copy_prop_fwd_dce =
-R"(
+   R"(
 FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
@@ -151,9 +150,8 @@ ALU MOV S4.w@group : KC0[0].w {WL}
 EXPORT_DONE PIXEL 0 S4.xyzw
 )";
 
-
 const char *add_add_1_expect_from_nir_copy_prop_fwd_dce_bwd =
-R"(
+   R"(
 FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
@@ -170,9 +168,8 @@ ALU MOV S4.w@group : KC0[0].w {WL}
 EXPORT_DONE PIXEL 0 S4.xyzw
 )";
 
-
 const char *basic_interpolation_nir =
-R"(shader: MESA_SHADER_FRAGMENT
+   R"(shader: MESA_SHADER_FRAGMENT
 name: TTN
 inputs: 1
 outputs: 1
@@ -199,7 +196,7 @@ impl main {
 })";
 
 const char *basic_interpolation_expect_from_nir =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -240,9 +237,8 @@ ALU MOV S9.w@group : S7.x@free {WL}
 TEX LD S10.xyzw : S9.xy_w RID:18 SID:0 NNNN
 EXPORT_DONE PIXEL 0 S10.xyzw)";
 
-
 const char *basic_interpolation_translated_1 =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -277,10 +273,8 @@ ALU MOV S5.w@group : S3.z {WL}
 TEX LD S6.xyzw : S5.xy_w RID:18 SID:0 NNNN
 EXPORT_DONE PIXEL 0 S6.xyzw)";
 
-
-
 const char *basic_interpolation_2 =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -305,9 +299,8 @@ ALU_GROUP_END
 EXPORT_DONE PIXEL 0 S2.xyzw
 )";
 
-
 const char *basic_interpolation_orig =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -344,7 +337,7 @@ EXPORT_DONE PIXEL 0 S1029.xyzw
 )";
 
 const char *basic_interpolation_expect_from_nir_sched =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -391,9 +384,8 @@ EXPORT_DONE PIXEL 0 S1029.xyzw
 BLOCK_END
 )";
 
-
 const char *basic_interpolation_orig_cayman =
-R"(FS
+   R"(FS
 CHIPCLASS CAYMAN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -430,7 +422,7 @@ EXPORT_DONE PIXEL 0 S1029.xyzw
 )";
 
 const char *basic_interpolation_expect_from_nir_sched_cayman =
-R"(FS
+   R"(FS
 CHIPCLASS CAYMAN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -480,7 +472,7 @@ BLOCK_END
 )";
 
 const char *basic_interpolation_expect_opt_sched_cayman =
-R"(FS
+   R"(FS
 CHIPCLASS CAYMAN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -504,13 +496,13 @@ ALU INTERP_XY __.z@chan : R0.y@fully Param0.z {} VEC_210
 ALU INTERP_XY __.w@chan : R0.x@fully Param0.w {L} VEC_210
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU FLT_TO_INT S1028.x@group : S1025.x@chan {W}
-ALU FLT_TO_INT S1028.y@group : S1025.y@chan {W}
-ALU FLT_TO_INT S1028.w@group : S1025.w@chan {WL}
+ALU FLT_TO_INT S1026.x@group : S1025.x@chan {W}
+ALU FLT_TO_INT S1026.y@group : S1025.y@chan {W}
+ALU FLT_TO_INT S1026.z@group : S1025.w@chan {WL}
 ALU_GROUP_END
 BLOCK_END
 BLOCK_START
-TEX LD S1029.xyzw : S1028.xy_w RID:0 SID:18 NNNN
+TEX LD S1029.xyzw : S1026.xy_z RID:0 SID:18 NNNN
 BLOCK_END
 BLOCK_START
 EXPORT_DONE PIXEL 0 S1029.xyzw
@@ -518,7 +510,7 @@ BLOCK_END
 )";
 
 const char *basic_interpolation_expect_from_nir_opt =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -540,15 +532,15 @@ ALU INTERP_XY  S1025.y@chan : R0.x@fully Param0.y VEC_210 {W}
 ALU INTERP_XY  __.z@chan : R0.y@fully Param0.z VEC_210 {}
 ALU INTERP_XY  __.w@chan : R0.x@fully Param0.w VEC_210 {L}
 ALU_GROUP_END
-ALU FLT_TO_INT S1028.x@group : S1025.x@chan {W}
-ALU FLT_TO_INT S1028.y@group : S1025.y@chan {W}
-ALU FLT_TO_INT S1028.w@group : S1025.w@chan {WL}
-TEX LD S1029.xyzw : S1028.xy_w RID:0 SID:18 NNNN
+ALU FLT_TO_INT S1026.x@group : S1025.x@chan {W}
+ALU FLT_TO_INT S1026.y@group : S1025.y@chan {W}
+ALU FLT_TO_INT S1026.z@group : S1025.w@chan {WL}
+TEX LD S1029.xyzw : S1026.xy_z RID:0 SID:18 NNNN
 EXPORT_DONE PIXEL 0 S1029.xyzw
 )";
 
 const char *dot4_pre =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -573,7 +565,7 @@ EXPORT_DONE PIXEL 0 S4.xyzw
 )";
 
 const char *dot4_copy_prop_dce =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -585,16 +577,12 @@ ALU MOV S2.x : KC0[1].x  {W}
 ALU MOV S2.y : KC0[1].y  {W}
 ALU MOV S2.z : KC0[1].z  {W}
 ALU MOV S2.w : KC0[1].w  {WL}
-ALU DOT4_IEEE S3.x@free : KC0[0].x S2.x + KC0[0].y S2.y + KC0[0].z S2.z + KC0[0].w S2.w  {WL}
-ALU MOV S4.x : S3.x@free {W}
-ALU MOV S4.y : S3.x@free {W}
-ALU MOV S4.z : S3.x@free {W}
-ALU MOV S4.w : S3.x@free {W}
-EXPORT_DONE PIXEL 0 S4.xyzw
+ALU DOT4_IEEE S3.x@group : KC0[0].x S2.x + KC0[0].y S2.y + KC0[0].z S2.z + KC0[0].w S2.w  {WL}
+EXPORT_DONE PIXEL 0 S3.xxxx
 )";
 
 const char *glxgears_vs2_nir =
-R"(shader: MESA_SHADER_VERTEX
+   R"(shader: MESA_SHADER_VERTEX
 name: ARB0
 inputs: 2
 outputs: 2
@@ -652,7 +640,7 @@ impl main {
 })";
 
 const char *glxgears_vs2_from_nir_expect =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 INPUT LOC:0 NAME:0
 INPUT LOC:1 NAME:1
@@ -759,9 +747,8 @@ ALU MOV S40.z@group : S38.z {W}
 ALU MOV S40.w@group : S39.x@free {WL}
 EXPORT_DONE PARAM 0 S40.xyzw)";
 
-
 const char *glxgears_vs2_from_nir_expect_cayman =
-R"(VS
+   R"(VS
 CHIPCLASS CAYMAN
 INPUT LOC:0 NAME:0
 INPUT LOC:1 NAME:1
@@ -868,9 +855,8 @@ ALU MOV S40.z@group : S38.z {W}
 ALU MOV S40.w@group : S39.x@free {WL}
 EXPORT_DONE PARAM 0 S40.xyzw)";
 
-
 const char *glxgears_vs2_from_nir_expect_optimized =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 INPUT LOC:0 NAME:0
 INPUT LOC:1 NAME:1
@@ -915,10 +901,8 @@ EXPORT_DONE POS 0 S15.xyzw
 ALU MOV CLAMP S40.w@group : KC0[2].w {WL}
 EXPORT_DONE PARAM 0 S40.xyzw)";
 
-
-
 const char *vs_nexted_loop_nir =
-R"(shader: MESA_SHADER_VERTEX
+   R"(shader: MESA_SHADER_VERTEX
 name: GLSL3
 inputs: 1
 outputs: 2
@@ -1033,7 +1017,7 @@ impl main {
 })";
 
 const char *vs_nexted_loop_from_nir_expect =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 INPUT LOC:0 NAME:0
 OUTPUT LOC:0 NAME:0 MASK:15 SID:0 SPI_SID:0
@@ -1102,7 +1086,7 @@ EXPORT_DONE PARAM 0 S34.xyzw
 )";
 
 const char *vs_nexted_loop_from_nir_expect_opt =
-R"(
+   R"(
 VS
 CHIPCLASS EVERGREEN
 INPUT LOC:0 NAME:0
@@ -1125,18 +1109,18 @@ IF (( ALU PREDE_INT __.x@free : KC0[0].x I[1] {LEP} PUSH_BEFORE ))
       ALU MOV R3.x : R5.x {WL}
     LOOP_END
     ALU MOV R8.x : I[1.0] {WL}
-    ALU MOV R7.x : R8.x {WL}
+    ALU MOV R7.x : I[1.0] {WL}
     ALU MOV R6.x : I[-1] {WL}
   ELSE
     ALU MOV R8.x : I[1.0] {WL}
     ALU MOV R7.x : I[0] {WL}
-    ALU MOV R4.x : R8.x {WL}
+    ALU MOV R4.x : I[1.0] {WL}
     ALU MOV R6.x : I[0] {WL}
   ENDIF
 ELSE
   ALU MOV R8.x : I[1.0] {WL}
   ALU MOV R7.x : I[0] {WL}
-  ALU MOV R4.x : R8.x {WL}
+  ALU MOV R4.x : I[1.0] {WL}
   ALU MOV R6.x : I[-1] {WL}
 ENDIF
 ALU CNDE_INT S27.x@free : R6.x I[1.0] R4.x {WL}
@@ -1150,7 +1134,7 @@ EXPORT_DONE PARAM 0 S34.xy0w
 )";
 
 const char *shader_with_local_array_nir =
-R"(
+   R"(
 shader: MESA_SHADER_FRAGMENT
 name: GLSL3
 inputs: 2
@@ -1231,7 +1215,7 @@ impl main {
 )";
 
 const char *shader_with_local_array_expect =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
@@ -1322,7 +1306,7 @@ ALU MOV S35.w@group : S34.y {WL}
 EXPORT_DONE PIXEL 0 S35.xyzw)";
 
 const char *test_schedule_group =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -1353,7 +1337,7 @@ EXPORT_DONE PIXEL 0 S12.xyzw
 )";
 
 const char *test_schedule_group_expect =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -1391,9 +1375,8 @@ EXPORT_DONE PIXEL 0 S12.xy01
 BLOCK_END
 )";
 
-
 const char *shader_with_bany_nir =
-R"(shader: MESA_SHADER_FRAGMENT
+   R"(shader: MESA_SHADER_FRAGMENT
 source_sha1: {0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000}
 name: GLSL3
 inputs: 0
@@ -1436,9 +1419,8 @@ impl main {
 	block block_1:
 })";
 
-
 const char *shader_with_bany_expect_eg =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -1531,7 +1513,7 @@ EXPORT_DONE PIXEL 0 S35.xyzw
 )";
 
 const char *shader_with_bany_expect_opt_sched_eg =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -1585,10 +1567,10 @@ ALU_GROUP_BEGIN
   ALU MAX4 __.y@chan : S16.y@chgr {}
   ALU MAX4 S17.z@chan : S16.z@chgr {W}
   ALU MAX4 __.w@chan : S16.w@chgr {}
-  ALU OR_INT S31.x@chan : S27.x@chan S28.y@chan {WL}
+  ALU SETNE S21.x@chgr : KC0[7].x KC0[3].x {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU SETNE S21.x@chgr : KC0[7].x KC0[3].x {W}
+  ALU OR_INT S31.x@chan : S27.x@chan S28.y@chan {W}
   ALU SETNE S21.y@chgr : KC0[7].y KC0[3].y {W}
   ALU SETE_DX10 S18.z@chan : S17.z@chan I[1.0] {WL}
 ALU_GROUP_END
@@ -1628,7 +1610,7 @@ BLOCK_END
 )";
 
 const char *shader_copy_prop_dont_kill_double_use =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -1664,9 +1646,8 @@ ALU MOV S15.w@group : S2.x {WL}
 EXPORT_DONE PIXEL 0 S15.xyzw
 )";
 
-
 const char *shader_copy_prop_dont_kill_double_use_expect =
-R"(
+   R"(
 FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
@@ -1681,9 +1662,9 @@ ALU_GROUP_BEGIN
   ALU SETNE_DX10 S5.y : KC0[2].x KC0[0].x {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU OR_INT S6.x : S5.x S5.y {W}
+  ALU SETNE_DX10 S9.x : KC0[3].y KC0[1].y {W}
   ALU SETNE_DX10 S9.y : KC0[3].x KC0[1].x {W}
-  ALU SETNE_DX10 S9.x : KC0[3].y KC0[1].y {WL}
+  ALU OR_INT S6.x : S5.x S5.y {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
   ALU OR_INT S10.x : S9.x S9.y {WL}
@@ -1708,9 +1689,8 @@ EXPORT_DONE PIXEL 0 S15.xyz1
 BLOCK_END
 )";
 
-
 const char *shader_with_dest_array =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 INPUT LOC:0 NAME:0
 OUTPUT LOC:0 NAME:0 MASK:15
@@ -1849,7 +1829,7 @@ EXPORT_DONE PARAM 3 S49.xyzw
 )";
 
 const char *shader_with_dest_array_opt_expect =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 INPUT LOC:0 NAME:0
 OUTPUT LOC:0 NAME:0 MASK:15
@@ -1925,7 +1905,7 @@ EXPORT_DONE PARAM 3 S49.xyzw
 )";
 
 const char *shader_with_dest_array_opt_scheduled =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 INPUT LOC:0 NAME:0
 OUTPUT LOC:0 NAME:0 MASK:15
@@ -2038,9 +2018,8 @@ EXPORT_DONE PARAM 3 S49.xyzw
 BLOCK_END
 )";
 
-
 const char *shader_with_dest_array2 =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2068,7 +2047,7 @@ BLOCK_END
 )";
 
 const char *shader_with_dest_array2_scheduled =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2106,7 +2085,7 @@ BLOCK_END
 )";
 
 const char *shader_with_dest_array2_scheduled_ra =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2144,7 +2123,7 @@ BLOCK_END
 )";
 
 const char *shader_group_chan_pin_to_combine =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2173,9 +2152,8 @@ ALU MOV S2.w@group : S1.w@chan {WL} VEC_210
 EXPORT_DONE PIXEL 0 S2.xyzw
 )";
 
-
 const char *shader_group_chan_pin_combined =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2188,20 +2166,20 @@ SHADER
 ALU_GROUP_BEGIN
 ALU INTERP_ZW __.x@chan : R0.y@fully Param0.x {} VEC_210
 ALU INTERP_ZW __.y@chan : R0.x@fully Param0.y {} VEC_210
-ALU INTERP_ZW S2.z@chgr : R0.y@fully Param0.z {W} VEC_210
-ALU INTERP_ZW S2.w@chgr : R0.x@fully Param0.w {WL} VEC_210
+ALU INTERP_ZW S1.z@chgr : R0.y@fully Param0.z {W} VEC_210
+ALU INTERP_ZW S1.w@chgr : R0.x@fully Param0.w {WL} VEC_210
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU INTERP_XY S2.x@chgr : R0.y@fully Param0.x {W} VEC_210
-ALU INTERP_XY S2.y@chgr : R0.x@fully Param0.y {W} VEC_210
+ALU INTERP_XY S1.x@chgr : R0.y@fully Param0.x {W} VEC_210
+ALU INTERP_XY S1.y@chgr : R0.x@fully Param0.y {W} VEC_210
 ALU INTERP_XY __.z@chan : R0.y@fully Param0.z {} VEC_210
 ALU INTERP_XY __.w@chan : R0.x@fully Param0.w {L} VEC_210
 ALU_GROUP_END
-EXPORT_DONE PIXEL 0 S2.xyzw
+EXPORT_DONE PIXEL 0 S1.xyzw
 )";
 
 const char *shader_group_chan_pin_combined_sheduled =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2227,7 +2205,7 @@ EXPORT_DONE PIXEL 0 S2.xyzw
 )";
 
 const char *shader_group_chan_pin_combined_sheduled_ra =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2252,9 +2230,8 @@ ALU_GROUP_END
 EXPORT_DONE PIXEL 0 R1.xyzw
 )";
 
-
 const char *shader_group_chan_pin_to_combine_2 =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2278,7 +2255,7 @@ EXPORT_DONE PIXEL 0 S5.xyzw
 )";
 
 const char *shader_group_chan_pin_to_combine_2_opt =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2294,9 +2271,8 @@ ALU MOV S5.z@group : S3.x@free {W}
 EXPORT_DONE PIXEL 0 S5.xyzw
 )";
 
-
 const char *fs_with_grand_and_abs =
-R"(FS
+   R"(FS
 CHIPCLASS EVERGREEN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2350,9 +2326,151 @@ ALU MOV S25.w@group : S4.x@free {WL}
 EXPORT_DONE PIXEL 0 S25.xyzw
 )";
 
+const char *fs_opt_tex_coord_init =
+   R"(FS
+CHIPCLASS EVERGREEN
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+INPUT LOC:0 NAME:5 INTERP:2 SID:9 SPI_SID:10
+OUTPUT LOC:0 NAME:1 MASK:15
+REGISTERS R0.x@fully R0.y@fully
+SHADER
+ALU_GROUP_BEGIN
+  ALU INTERP_XY S1.x@chan : R0.y@fully Param0.x {W} VEC_210
+  ALU INTERP_XY S1.y@chan : R0.x@fully Param0.y {W} VEC_210
+  ALU INTERP_XY __.z@chan : R0.y@fully Param0.z {} VEC_210
+  ALU INTERP_XY __.w@chan : R0.x@fully Param0.w {L} VEC_210
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU INTERP_ZW __.x@chan : R0.y@fully Param0.x {} VEC_210
+  ALU INTERP_ZW __.y@chan : R0.x@fully Param0.y {} VEC_210
+  ALU INTERP_ZW S1.z@chan : R0.y@fully Param0.z {W} VEC_210
+  ALU INTERP_ZW S1.w@chan : R0.x@fully Param0.w {WL} VEC_210
+ALU_GROUP_END
+ALU MOV S2.x@group : S1.z@chan {W}
+ALU MOV S2.y@group : S1.w@chan {WL}
+TEX SAMPLE S3.xyzw : S1.xy__ RID:18 SID:0 NNNN
+TEX SAMPLE S4.xyzw : S2.xy__ RID:18 SID:0 NNNN
+ALU ADD S5.x@group : S3.x@group S4.x@group {W}
+ALU ADD S5.y@group : S3.y@group S4.y@group {W}
+ALU ADD S5.z@group : S3.z@group S4.z@group {W}
+ALU ADD S5.w@group : S3.w@group S4.w@group {W}
+EXPORT_DONE PIXEL 0 S5.xyzw)";
+
+const char *fs_opt_tex_coord_expect =
+   R"(FS
+CHIPCLASS EVERGREEN
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+INPUT LOC:0 NAME:5 INTERP:2 SID:9 SPI_SID:10
+OUTPUT LOC:0 NAME:1 MASK:15
+REGISTERS R0.x@fully R0.y@fully
+SHADER
+ALU_GROUP_BEGIN
+   ALU INTERP_XY S1.x@chan : R0.y@fully Param0.x {W} VEC_210
+   ALU INTERP_XY S1.y@chan : R0.x@fully Param0.y {W} VEC_210
+   ALU INTERP_XY __.z@chan : R0.y@fully Param0.z {} VEC_210
+   ALU INTERP_XY __.w@chan : R0.x@fully Param0.w {L} VEC_210
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+   ALU INTERP_ZW __.x@chan : R0.y@fully Param0.x {} VEC_210
+   ALU INTERP_ZW __.y@chan : R0.x@fully Param0.y {} VEC_210
+   ALU INTERP_ZW S1.z@chgr : R0.y@fully Param0.z {W} VEC_210
+   ALU INTERP_ZW S1.w@chgr : R0.x@fully Param0.w {WL} VEC_210
+ALU_GROUP_END
+TEX SAMPLE S3.xyzw : S1.xy__ RID:18 SID:0 NNNN
+TEX SAMPLE S4.xyzw : S1.zw__ RID:18 SID:0 NNNN
+ALU ADD S5.x@group : S3.x@group S4.x@group {W}
+ALU ADD S5.y@group : S3.y@group S4.y@group {W}
+ALU ADD S5.z@group : S3.z@group S4.z@group {W}
+ALU ADD S5.w@group : S3.w@group S4.w@group {W}
+EXPORT_DONE PIXEL 0 S5.xyzw)";
+
+const char *fs_sched_tex_coord_init =
+   R"(FS
+CHIPCLASS EVERGREEN
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+INPUT LOC:0 NAME:5 INTERP:2 SID:9 SPI_SID:10
+OUTPUT LOC:0 NAME:1 MASK:15
+REGISTERS R0.x@fully R0.y@fully
+SHADER
+ALU_GROUP_BEGIN
+  ALU INTERP_XY S1.x@chan : R0.y@fully Param0.x {W} VEC_210
+  ALU INTERP_XY S1.y@chan : R0.x@fully Param0.y {W} VEC_210
+  ALU INTERP_XY __.z@chan : R0.y@fully Param0.z {} VEC_210
+  ALU INTERP_XY __.w@chan : R0.x@fully Param0.w {L} VEC_210
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU INTERP_ZW __.x@chan : R0.y@fully Param0.x {} VEC_210
+  ALU INTERP_ZW __.y@chan : R0.x@fully Param0.y {} VEC_210
+  ALU INTERP_ZW S1.z@chan : R0.y@fully Param0.z {W} VEC_210
+  ALU INTERP_ZW S1.w@chan : R0.x@fully Param0.w {WL} VEC_210
+ALU_GROUP_END
+ALU ADD S2.x@group : S1.x@chan S1.z@chan {W}
+ALU ADD S2.y@group : S1.y@chan S1.w@chan {WL}
+ALU MUL_IEEE S3.x@group : S1.x@chan S1.z@chan {W}
+ALU MUL_IEEE S3.y@group : S1.y@chan S1.w@chan {WL}
+
+TEX SAMPLE S4.xyzw : S2.xy__ RID:18 SID:0 NNNN
+TEX SAMPLE S5.xyzw : S3.xy__ RID:18 SID:0 NNNN
+ALU ADD S6.x@group : S5.x@group S4.x@group {W}
+ALU ADD S6.y@group : S5.y@group S4.y@group {W}
+ALU ADD S6.z@group : S5.z@group S4.z@group {W}
+ALU ADD S6.w@group : S5.w@group S4.w@group {W}
+EXPORT_DONE PIXEL 0 S5.xyzw)";
+
+const char *fs_sched_tex_coord_expect =
+   R"(FS
+CHIPCLASS EVERGREEN
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+INPUT LOC:0 NAME:5 INTERP:2 SID:9 SPI_SID:10
+OUTPUT LOC:0 NAME:1 MASK:15
+REGISTERS R0.x@fully R0.y@fully
+SHADER
+BLOCK_START
+ALU_GROUP_BEGIN
+  ALU INTERP_XY S1.x@chan : R0.y@fully Param0.x {W} VEC_210
+  ALU INTERP_XY S1.y@chan : R0.x@fully Param0.y {W} VEC_210
+  ALU INTERP_XY __.z@chan : R0.y@fully Param0.z {} VEC_210
+  ALU INTERP_XY __.w@chan : R0.x@fully Param0.w {L} VEC_210
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU INTERP_ZW __.x@chan : R0.y@fully Param0.x {} VEC_210
+  ALU INTERP_ZW __.y@chan : R0.x@fully Param0.y {} VEC_210
+  ALU INTERP_ZW S1.z@chan : R0.y@fully Param0.z {W} VEC_210
+  ALU INTERP_ZW S1.w@chan : R0.x@fully Param0.w {WL} VEC_210
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU ADD S2.x@group : S1.x@chan S1.z@chan {W}
+  ALU ADD S2.y@group : S1.y@chan S1.w@chan {W}
+  ALU MUL_IEEE S3.z@chgr : S1.x@chan S1.z@chan {W}
+  ALU MUL_IEEE S3.w@chgr : S1.y@chan S1.w@chan {WL}
+ALU_GROUP_END
+BLOCK_END
+BLOCK_START
+TEX SAMPLE S4.xyzw : S2.xy__ RID:18 SID:0 NNNN
+TEX SAMPLE S5.xyzw : S3.zw__ RID:18 SID:0 NNNN
+BLOCK_END
+BLOCK_START
+ALU_GROUP_BEGIN
+ALU ADD S6.x@group : S5.x@group S4.x@group {W}
+ALU ADD S6.y@group : S5.y@group S4.y@group {W}
+ALU ADD S6.z@group : S5.z@group S4.z@group {W}
+ALU ADD S6.w@group : S5.w@group S4.w@group {WL}
+ALU_GROUP_END
+BLOCK_END
+BLOCK_START
+EXPORT_DONE PIXEL 0 S5.xyzw
+BLOCK_END)";
 
 const char *fs_with_loop_multislot_reuse =
-R"(FS
+   R"(FS
 CHIPCLASS CAYMAN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2375,7 +2493,7 @@ EXPORT_DONE PIXEL 0 R1.xxxx
 )";
 
 const char *fs_with_loop_multislot_reuse_scheduled =
-R"(FS
+   R"(FS
 CHIPCLASS CAYMAN
 PROP MAX_COLOR_EXPORTS:1
 PROP COLOR_EXPORTS:1
@@ -2409,9 +2527,8 @@ LOOP_END
 EXPORT_DONE PIXEL 0 R1.xxxx
 )";
 
-
 const char *gs_abs_float_nir =
-R"(shader: MESA_SHADER_GEOMETRY
+   R"(shader: MESA_SHADER_GEOMETRY
 source_sha1: {0xdfd2ba73, 0x5eff5b0c, 0x577ee695, 0xb65ae49e, 0xecc34679}
 name: GLSL4
 inputs: 1
@@ -2464,7 +2581,7 @@ impl main {
 })";
 
 const char *gs_abs_float_expect =
-R"(GS
+   R"(GS
 CHIPCLASS EVERGREEN
 INPUT LOC:0 NAME:5 SID:9 SPI_SID:10
 OUTPUT LOC:0 NAME:0 MASK:15
@@ -2508,9 +2625,8 @@ EMIT_VERTEX @0
 ALU ADD_INT S24.x@chan : S23.x@chan L[0x2] {WL}
 )";
 
-
 const char *vtx_for_tcs_nir =
-R"(shader: MESA_SHADER_VERTEX
+   R"(shader: MESA_SHADER_VERTEX
 source_sha1: {0xbd6100f2, 0xc71e7b0e, 0x74662024, 0x261073d8, 0xeae01762}
 name: GLSL5
 inputs: 0
@@ -2542,9 +2658,8 @@ impl main {
         block block_1:
 })";
 
-
 const char *vtx_for_tcs_from_nir_expect =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 REGISTERS R0.x@fully R0.y@fully
 SHADER
@@ -2566,9 +2681,8 @@ ALU MOV S11.x@free : L[0x8] {WL}
 ALU ADD_INT S12.x@free : S11.x@free S10.x@free {WL}
 LDS WRITE_REL __.x [ S12.x@free ] : S6.z S6.w)";
 
-
 const char *vtx_for_tcs_inp =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 REGISTERS R0.x@fully R0.y@fully
 SHADER
@@ -2591,7 +2705,7 @@ ALU ADD_INT S12.x@free : S11.x@free S10.x@free {WL}
 LDS WRITE_REL __.x [ S12.x@free ] : S6.z S6.w)";
 
 const char *vtx_for_tcs_opt =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 REGISTERS R0.x@fully R0.y@fully
 SHADER
@@ -2605,7 +2719,7 @@ ALU ADD_INT S12.x@free : L[0x8] S10.x@free {WL}
 LDS WRITE_REL __.x [ S12.x@free ] : I[0] I[1.0])";
 
 const char *vtx_for_tcs_pre_sched =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 REGISTERS R0.x@fully R0.y@fully
 SHADER
@@ -2620,7 +2734,7 @@ ALU ADD_INT S12.x@free : L[0x8] S10.x@free {WL}
 LDS WRITE_REL __.x [ S12.x@free ] : I[0] I[1.0])";
 
 const char *vtx_for_tcs_sched =
-R"(VS
+   R"(VS
 CHIPCLASS EVERGREEN
 REGISTERS R0.x@fully R0.y@fully
 SHADER
@@ -2641,9 +2755,6 @@ ALU_GROUP_END
 ALU_GROUP_BEGIN
   ALU ADD_INT S12.x@chan : L[0x8] S10.x@free {WL}
 ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU LDS WRITE_REL __.x : S12.x@chan I[0] I[1.0] {L}
-ALU_GROUP_END
 BLOCK_END
 BLOCK_START
 LOAD_BUF S5.xyzw : S4.x@group + 96b RID:0
@@ -2652,10 +2763,13 @@ BLOCK_START
 ALU_GROUP_BEGIN
   ALU LDS WRITE_REL __.x : S10.x@free S5.x@group S5.y@group {L}
 ALU_GROUP_END
+ALU_GROUP_BEGIN
+  ALU LDS WRITE_REL __.x : S12.x@chan I[0] I[1.0] {L}
+ALU_GROUP_END
 BLOCK_END)";
 
 const char *tcs_nir =
-R"(shader: MESA_SHADER_TESS_CTRL
+   R"(shader: MESA_SHADER_TESS_CTRL
 source_sha1: {0xc83b0de6, 0x36934b97, 0xccddb436, 0xb0952cb0, 0x07a450a1}
 name: GLSL5
 inputs: 1
@@ -2728,7 +2842,7 @@ impl main {
 })";
 
 const char *tcs_from_nir_expect =
-R"(TCS
+   R"(TCS
 CHIPCLASS EVERGREEN
 PROP TCS_PRIM_MODE:4
 REGISTERS R0.x@fully R0.y@fully R0.z@fully R0.w@fully
@@ -2822,7 +2936,7 @@ IF (( ALU PRED_SETNE_INT __.z@free : S28.x@free I[0] {LEP} PUSH_BEFORE ))
 ENDIF)";
 
 const char *tes_nir =
-R"(shader: MESA_SHADER_TESS_EVAL
+   R"(shader: MESA_SHADER_TESS_EVAL
 source_sha1: {0x2db04154, 0x4884cf59, 0x50e43ee6, 0x4bb239d7, 0x0b502229}
 name: GLSL5
 inputs: 1
@@ -2856,7 +2970,7 @@ impl main {
 })";
 
 const char *tes_from_nir_expect =
-R"(TES
+   R"(TES
 CHIPCLASS EVERGREEN
 OUTPUT LOC:0 NAME:0 MASK:15
 REGISTERS R0.x@fully R0.y@fully R0.z@fully
@@ -2888,9 +3002,8 @@ LDS_READ [ S17.x@group S17.y@group S17.z@group S17.w@group ] : [ S16.x S16.y S16
 EXPORT_DONE POS 0 S17.xyzw
 EXPORT_DONE PARAM 0 R0.____)";
 
-
 const char *tes_pre_op =
-R"(TES
+   R"(TES
 CHIPCLASS EVERGREEN
 OUTPUT LOC:0 NAME:0 MASK:15
 REGISTERS R0.x@fully R0.y@fully R0.z@fully
@@ -2923,7 +3036,7 @@ EXPORT_DONE POS 0 S1040.xyzw
 EXPORT_DONE PARAM 0 R0.____)";
 
 const char *tes_optimized =
-R"(TES
+   R"(TES
 CHIPCLASS EVERGREEN
 OUTPUT LOC:0 NAME:0 MASK:15
 REGISTERS R0.x@fully R0.y@fully R0.z@fully
@@ -2946,7 +3059,7 @@ EXPORT_DONE POS 0 S1040.xyzw
 EXPORT_DONE PARAM 0 R0.____)";
 
 const char *tes_optimized_pre_sched =
-R"(TES
+   R"(TES
 CHIPCLASS EVERGREEN
 OUTPUT LOC:0 NAME:0 MASK:15
 REGISTERS R0.x@fully R0.y@fully R0.z@fully
@@ -2969,7 +3082,7 @@ EXPORT_DONE POS 0 S1040.xyzw
 EXPORT_DONE PARAM 0 R0.____)";
 
 const char *tes_optimized_sched =
-R"(TES
+   R"(TES
 CHIPCLASS EVERGREEN
 OUTPUT LOC:0 NAME:0 MASK:15
 REGISTERS R0.x@fully R0.y@fully R0.z@fully
@@ -3038,32 +3151,37 @@ EXPORT_DONE POS 0 S1040.xyzw
 EXPORT_DONE PARAM 0 R0.____
 BLOCK_END)";
 
-void TestShader::SetUp()
+void
+TestShader::SetUp()
 {
    init_pool();
    SetUpMore();
 }
 
-void TestShader::TearDown()
+void
+TestShader::TearDown()
 {
    TearDownMore();
    release_pool();
 }
 
-void TestShader::SetUpMore()
+void
+TestShader::SetUpMore()
 {
 }
 
-void TestShader::TearDownMore()
+void
+TestShader::TearDownMore()
 {
 }
 
-Shader *TestShader::from_string(const std::string& s)
+Shader *
+TestShader::from_string(const std::string& s)
 {
    istringstream is(s);
    string line;
 
-   r600_shader_key key = {0};
+   r600_shader_key key = {{0}};
    key.ps.nr_cbufs = 1;
 
    do {
@@ -3072,15 +3190,15 @@ Shader *TestShader::from_string(const std::string& s)
 
    Shader *shader = nullptr;
 
-   if (line.substr(0,2) == "FS")
+   if (line.substr(0, 2) == "FS")
       shader = new FragmentShaderEG(key);
-   else if (line.substr(0,2) == "VS")
-      shader = new VertexShader(nullptr, nullptr,  key);
-   else if (line.substr(0,2) == "GS")
+   else if (line.substr(0, 2) == "VS")
+      shader = new VertexShader(nullptr, nullptr, key);
+   else if (line.substr(0, 2) == "GS")
       shader = new GeometryShader(key);
-   else if (line.substr(0,3) == "TCS")
+   else if (line.substr(0, 3) == "TCS")
       shader = new TCSShader(key);
-   else if (line.substr(0,3) == "TES")
+   else if (line.substr(0, 3) == "TES")
       shader = new TESShader(nullptr, nullptr, key);
    else
       return nullptr;
@@ -3091,7 +3209,7 @@ Shader *TestShader::from_string(const std::string& s)
       if (line[0] == '#')
          continue;
 
-      if (line.substr(0,6) == "SHADER")
+      if (line.substr(0, 6) == "SHADER")
          break;
 
       istringstream ls(line);
@@ -3113,4 +3231,4 @@ Shader *TestShader::from_string(const std::string& s)
    return shader;
 }
 
-}
+} // namespace r600

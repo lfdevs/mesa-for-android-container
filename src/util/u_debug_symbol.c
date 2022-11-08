@@ -34,6 +34,7 @@
 
 #include "pipe/p_compiler.h"
 #include "os/os_thread.h"
+#include "util/simple_mtx.h"
 #include "util/u_string.h"
 
 #include "util/u_debug.h"
@@ -250,26 +251,13 @@ debug_symbol_print(const void *addr)
 }
 
 static struct hash_table* symbols_hash;
-#ifdef PIPE_OS_WINDOWS
-static mtx_t symbols_mutex;
-#else
-static mtx_t symbols_mutex = _MTX_INITIALIZER_NP;
-#endif
+static simple_mtx_t symbols_mutex = SIMPLE_MTX_INITIALIZER;
 
 const char*
 debug_symbol_name_cached(const void *addr)
 {
    const char* name;
-#ifdef PIPE_OS_WINDOWS
-   static boolean first = TRUE;
-
-   if (first) {
-      (void) mtx_init(&symbols_mutex, mtx_plain);
-      first = FALSE;
-   }
-#endif
-
-   mtx_lock(&symbols_mutex);
+   simple_mtx_lock(&symbols_mutex);
    if(!symbols_hash)
       symbols_hash = _mesa_pointer_hash_table_create(NULL);
    struct hash_entry *entry = _mesa_hash_table_search(symbols_hash, addr);
@@ -280,6 +268,6 @@ debug_symbol_name_cached(const void *addr)
 
       entry = _mesa_hash_table_insert(symbols_hash, addr, (void*)name);
    }
-   mtx_unlock(&symbols_mutex);
+   simple_mtx_unlock(&symbols_mutex);
    return entry->data;
 }

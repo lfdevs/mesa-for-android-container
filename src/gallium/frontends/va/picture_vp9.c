@@ -90,6 +90,15 @@ void vlVaHandlePictureParameterBufferVP9(vlVaDriver *drv, vlVaContext *context, 
 
    if (!context->decoder && !context->templat.max_references)
       context->templat.max_references = NUM_VP9_REFS;
+
+   context->desc.vp9.slice_parameter.slice_count = 0;
+   context->desc.vp9.slice_parameter.slice_info_present = false;
+   memset(context->desc.vp9.slice_parameter.slice_data_flag, 0,
+      sizeof(context->desc.vp9.slice_parameter.slice_data_flag));
+   memset(context->desc.vp9.slice_parameter.slice_data_offset, 0,
+      sizeof(context->desc.vp9.slice_parameter.slice_data_offset));
+   memset(context->desc.vp9.slice_parameter.slice_data_size, 0,
+      sizeof(context->desc.vp9.slice_parameter.slice_data_size));
 }
 
 void vlVaHandleSliceParameterBufferVP9(vlVaContext *context, vlVaBuffer *buf)
@@ -99,9 +108,38 @@ void vlVaHandleSliceParameterBufferVP9(vlVaContext *context, vlVaBuffer *buf)
 
    assert(buf->size >= sizeof(VASliceParameterBufferVP9) && buf->num_elements == 1);
 
-   context->desc.vp9.slice_parameter.slice_data_size = vp9->slice_data_size;
-   context->desc.vp9.slice_parameter.slice_data_offset = vp9->slice_data_offset;
-   context->desc.vp9.slice_parameter.slice_data_flag = vp9->slice_data_flag;
+   ASSERTED const size_t max_pipe_vp9_slices = ARRAY_SIZE(context->desc.vp9.slice_parameter.slice_data_offset);
+   assert(context->desc.vp9.slice_parameter.slice_count < max_pipe_vp9_slices);
+
+   context->desc.vp9.slice_parameter.slice_info_present = true;
+   context->desc.vp9.slice_parameter.slice_data_size[context->desc.vp9.slice_parameter.slice_count] =
+      vp9->slice_data_size;
+   context->desc.vp9.slice_parameter.slice_data_offset[context->desc.vp9.slice_parameter.slice_count] =
+      vp9->slice_data_offset;
+
+   switch (vp9->slice_data_flag) {
+   case VA_SLICE_DATA_FLAG_ALL:
+      context->desc.vp9.slice_parameter.slice_data_flag[context->desc.vp9.slice_parameter.slice_count] =
+         PIPE_SLICE_BUFFER_PLACEMENT_TYPE_WHOLE;
+      break;
+   case VA_SLICE_DATA_FLAG_BEGIN:
+      context->desc.vp9.slice_parameter.slice_data_flag[context->desc.vp9.slice_parameter.slice_count] =
+         PIPE_SLICE_BUFFER_PLACEMENT_TYPE_BEGIN;
+      break;
+   case VA_SLICE_DATA_FLAG_MIDDLE:
+      context->desc.vp9.slice_parameter.slice_data_flag[context->desc.vp9.slice_parameter.slice_count] =
+         PIPE_SLICE_BUFFER_PLACEMENT_TYPE_MIDDLE;
+      break;
+   case VA_SLICE_DATA_FLAG_END:
+      context->desc.vp9.slice_parameter.slice_data_flag[context->desc.vp9.slice_parameter.slice_count] =
+         PIPE_SLICE_BUFFER_PLACEMENT_TYPE_END;
+      break;
+   default:
+      break;
+   }
+
+   /* assert(buf->num_elements == 1) above; */
+   context->desc.vp9.slice_parameter.slice_count++;
 
    for (i = 0; i < 8; ++i) {
       context->desc.vp9.slice_parameter.seg_param[i].segment_flags.segment_reference_enabled =
@@ -289,13 +327,13 @@ void vlVaDecoderVP9BitstreamHeader(vlVaContext *context, vlVaBuffer *buf)
             /* update_ref_delta */
             if (vp9_u(&vlc, 1))
                /* ref_deltas */
-               vp9_s(&vlc, 6);
+               context->desc.vp9.picture_parameter.ref_deltas[i] = vp9_s(&vlc, 6);
          }
          for (i = 0; i < 2; ++i) {
             /* update_mode_delta */
             if (vp9_u(&vlc, 1))
                /* mode_deltas */
-               vp9_s(&vlc, 6);
+               context->desc.vp9.picture_parameter.mode_deltas[i] = vp9_s(&vlc, 6);
          }
       }
    }

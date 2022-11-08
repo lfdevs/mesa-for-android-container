@@ -56,7 +56,7 @@ pan_nir_emit_combined_store(nir_builder *b,
         intr->num_components = rt0_store ? rt0_store->src[0].ssa->num_components : 4;
 
         if (rt0_store)
-                nir_intrinsic_set_base(intr, nir_intrinsic_base(rt0_store));
+                nir_intrinsic_set_io_semantics(intr, nir_intrinsic_io_semantics(rt0_store));
         nir_intrinsic_set_src_type(intr, pan_nir_rt_store_type(rt0_store));
         nir_intrinsic_set_dest_type(intr, pan_nir_rt_store_type(stores[2]));
         nir_intrinsic_set_component(intr, writeout);
@@ -80,29 +80,16 @@ pan_nir_emit_combined_store(nir_builder *b,
 bool
 pan_nir_lower_zs_store(nir_shader *nir)
 {
+        bool progress = false;
+
         if (nir->info.stage != MESA_SHADER_FRAGMENT)
                 return false;
-
-        nir_variable *vars[3] = { NULL };
-
-        nir_foreach_shader_out_variable(var, nir) {
-                if (var->data.location == FRAG_RESULT_DEPTH)
-                        vars[0] = var;
-                else if (var->data.location == FRAG_RESULT_STENCIL)
-                        vars[1] = var;
-                else if (var->data.index)
-                        vars[2] = var;
-        }
-
-        if (!vars[0] && !vars[1] && !vars[2])
-                return false;
-
-        bool progress = false;
 
         nir_foreach_function(function, nir) {
                 if (!function->impl) continue;
 
                 nir_intrinsic_instr *stores[3] = { NULL };
+                unsigned writeout = 0;
 
                 nir_foreach_block(block, function->impl) {
                         nir_foreach_instr_safe(instr, block) {
@@ -113,16 +100,21 @@ pan_nir_lower_zs_store(nir_shader *nir)
                                 if (intr->intrinsic != nir_intrinsic_store_output)
                                         continue;
 
-                                for (unsigned i = 0; i < ARRAY_SIZE(vars); ++i) {
-                                        if (vars[i] && nir_intrinsic_base(intr) == vars[i]->data.driver_location) {
-                                                assert(!stores[i]);
-                                                stores[i] = intr;
-                                        }
+                                nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
+                                if (sem.location == FRAG_RESULT_DEPTH) {
+                                        stores[0] = intr;
+                                        writeout |= PAN_WRITEOUT_Z;
+                                } else if (sem.location == FRAG_RESULT_STENCIL) {
+                                        stores[1] = intr;
+                                        writeout |= PAN_WRITEOUT_S;
+                                } else if (sem.dual_source_blend_index) {
+                                        stores[2] = intr;
+                                        writeout |= PAN_WRITEOUT_2;
                                 }
                         }
                 }
 
-                if (!stores[0] && !stores[1] && !stores[2]) continue;
+                if (!writeout) continue;
 
                 nir_block *common_block = NULL;
 
@@ -139,14 +131,6 @@ pan_nir_lower_zs_store(nir_shader *nir)
                                 common_block = block;
                 }
 
-                unsigned writeout = 0;
-                if (stores[0])
-                        writeout |= PAN_WRITEOUT_Z;
-                if (stores[1])
-                        writeout |= PAN_WRITEOUT_S;
-                if (stores[2])
-                        writeout |= PAN_WRITEOUT_2;
-
                 bool replaced = false;
 
                 nir_foreach_block(block, function->impl) {
@@ -158,13 +142,12 @@ pan_nir_lower_zs_store(nir_shader *nir)
                                 if (intr->intrinsic != nir_intrinsic_store_output)
                                         continue;
 
-                                const nir_variable *var = nir_find_variable_with_driver_location(nir, nir_var_shader_out, nir_intrinsic_base(intr));
-                                assert(var);
+                                nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
-                                if (var->data.location < FRAG_RESULT_DATA0)
+                                if (sem.location < FRAG_RESULT_DATA0)
                                         continue;
 
-                                if (var->data.index)
+                                if (sem.dual_source_blend_index)
                                         continue;
 
                                 assert(nir_src_is_const(intr->src[1]) && "no indirect outputs");

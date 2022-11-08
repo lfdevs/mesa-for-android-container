@@ -1,3 +1,20 @@
+mesa (22.3.0~rc1-1) experimental; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release candidate.
+  * rules: Drop removed gallium-xvmc flag.
+
+  [ Christopher Obbard ]
+  * Package rusticl, include in mesa-opencl-icd.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 08 Nov 2022 13:32:45 +0200
+
+mesa (22.2.3-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #1022730)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 08 Nov 2022 12:17:23 +0200
+
 mesa (22.2.2-1) unstable; urgency=medium
 
   * control: Bump build-depends on wayland-protocols. (Closes: #1021666)

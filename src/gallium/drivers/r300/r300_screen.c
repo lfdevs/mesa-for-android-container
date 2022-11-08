@@ -130,7 +130,6 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
         case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
         case PIPE_CAP_ANISOTROPIC_FILTER:
-        case PIPE_CAP_POINT_SPRITE:
         case PIPE_CAP_OCCLUSION_QUERY:
         case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
         case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
@@ -141,7 +140,6 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_CONDITIONAL_RENDER:
         case PIPE_CAP_TEXTURE_BARRIER:
         case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
-        case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
         case PIPE_CAP_CLIP_HALFZ:
         case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
         case PIPE_CAP_LEGACY_MATH_RULES:

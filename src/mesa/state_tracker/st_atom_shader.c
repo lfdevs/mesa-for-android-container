@@ -87,7 +87,7 @@ update_gl_clamp(struct st_context *st, struct gl_program *prog, uint32_t *gl_cla
       if (samplers_used & 1 &&
           (st->ctx->Texture.Unit[tex_unit]._Current->Target != GL_TEXTURE_BUFFER ||
            st->texture_buffer_sampler)) {
-         const struct gl_texture_object *texobj;
+         ASSERTED const struct gl_texture_object *texobj;
          struct gl_context *ctx = st->ctx;
          const struct gl_sampler_object *msamp;
 
@@ -143,11 +143,6 @@ st_update_fp( struct st_context *st )
       /* _NEW_LIGHT_STATE | _NEW_PROGRAM */
       key.lower_two_sided_color = st->lower_two_sided_color &&
          _mesa_vertex_program_two_side_enabled(st->ctx);
-
-      /* _NEW_POINT | _NEW_PROGRAM */
-      if (st->lower_texcoord_replace && st->ctx->Point.PointSprite &&
-          st->ctx->Point.CoordReplace)
-         key.lower_texcoord_replace = st->ctx->Point.CoordReplace;
 
       /* gl_driver_flags::NewFragClamp */
       key.clamp_color = st->clamp_frag_color_in_shader &&

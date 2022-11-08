@@ -28,13 +28,12 @@ pipe_loader_incs = [
 ]
 
 if (with_gallium_va or with_gallium_vdpau or with_gallium_omx != 'disabled' or
-    with_gallium_xvmc or with_dri or with_gallium_radeonsi)
+    with_dri or with_gallium_radeonsi)
   pipe_loader_link_with += libgalliumvl
 else
   pipe_loader_link_with += libgalliumvl_stub
 endif
-if (with_gallium_va or with_gallium_vdpau or with_gallium_omx != 'disabled' or
-    with_gallium_xvmc)
+if (with_gallium_va or with_gallium_vdpau or with_gallium_omx != 'disabled')
   pipe_loader_link_with += libgalliumvlwinsys
 endif
 
@@ -49,7 +48,7 @@ pipe_loader_install_dir = join_paths(get_option('libdir'), 'gallium-pipe')
 
 _kmsro_targets = [
    driver_kmsro, driver_v3d, driver_vc4, driver_freedreno, driver_etnaviv,
-   driver_panfrost, driver_lima,
+   driver_panfrost, driver_lima, driver_asahi,
 ]
 
 if with_gallium_v3d

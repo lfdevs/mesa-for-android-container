@@ -31,11 +31,11 @@
 #include "util/macros.h"
 #include "compiler/shader_enums.h"
 
+#include "intel/common/intel_engine.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-struct drm_i915_query_topology_info;
 
 #define INTEL_DEVICE_MAX_NAME_SIZE        64
 #define INTEL_DEVICE_MAX_SLICES           8
@@ -74,6 +74,8 @@ enum intel_platform {
    INTEL_PLATFORM_GROUP_START(DG2, INTEL_PLATFORM_DG2_G10),
    INTEL_PLATFORM_DG2_G11,
    INTEL_PLATFORM_GROUP_END(DG2, INTEL_PLATFORM_DG2_G12),
+   INTEL_PLATFORM_GROUP_START(MTL, INTEL_PLATFORM_MTL_M),
+   INTEL_PLATFORM_GROUP_END(MTL, INTEL_PLATFORM_MTL_P),
 };
 
 #undef INTEL_PLATFORM_GROUP_START
@@ -85,6 +87,9 @@ enum intel_platform {
 
 #define intel_device_info_is_dg2(devinfo) \
    intel_platform_in_range((devinfo)->platform, DG2)
+
+#define intel_device_info_is_mtl(devinfo) \
+   intel_platform_in_range((devinfo)->platform, MTL)
 
 /**
  * Intel hardware information and quirks
@@ -344,7 +349,7 @@ struct intel_device_info
     * Size of the command streamer prefetch. This is important to know for
     * self modifying batches.
     */
-   unsigned cs_prefetch_size;
+   unsigned engine_class_prefetch[INTEL_ENGINE_CLASS_COMPUTE + 1];
 
    /**
     * For the longest time the timestamp frequency for Gen's timestamp counter
@@ -469,11 +474,29 @@ intel_device_info_eu_total(const struct intel_device_info *devinfo)
    return total;
 }
 
+/**
+ * Computes the bound of dualsubslice ID that can be used on this device.
+ *
+ * You should use this number if you're going to make calculation based on the
+ * slice/dualsubslice ID provided by the SR0.0 EU register. The maximum
+ * dualsubslice ID can be superior to the total number of dualsubslices on the
+ * device, depending on fusing.
+ *
+ * On a 16 dualsubslice GPU, the maximum dualsubslice ID is 15. This function
+ * would return the exclusive bound : 16.
+ */
 static inline unsigned
-intel_device_info_num_dual_subslices(UNUSED
-                                     const struct intel_device_info *devinfo)
+intel_device_info_dual_subslice_id_bound(const struct intel_device_info *devinfo)
 {
-   unreachable("TODO");
+   /* Start from the last slice/subslice so we find the answer faster. */
+   for (int s = devinfo->max_slices - 1; s >= 0; s--) {
+      for (int ss = devinfo->max_subslices_per_slice - 1; ss >= 0; ss--) {
+         if (intel_device_info_subslice_available(devinfo, s, ss))
+            return s * devinfo->max_subslices_per_slice + ss + 1;
+      }
+   }
+   unreachable("Invalid topology");
+   return 0;
 }
 
 int intel_device_name_to_pci_device_id(const char *name);

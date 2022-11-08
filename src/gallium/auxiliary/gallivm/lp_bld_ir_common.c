@@ -209,8 +209,9 @@ void lp_exec_mask_store(struct lp_exec_mask *mask,
 
    assert(lp_check_value(bld_store->type, val));
    assert(LLVMGetTypeKind(LLVMTypeOf(dst_ptr)) == LLVMPointerTypeKind);
-   assert(LLVMGetElementType(LLVMTypeOf(dst_ptr)) == LLVMTypeOf(val) ||
-          LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(dst_ptr))) == LLVMArrayTypeKind);
+   assert(LLVM_VERSION_MAJOR >= 15
+          || (LLVMGetElementType(LLVMTypeOf(dst_ptr)) == LLVMTypeOf(val)
+              || LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(dst_ptr))) == LLVMArrayTypeKind));
 
    if (exec_mask) {
       LLVMValueRef res, dst;

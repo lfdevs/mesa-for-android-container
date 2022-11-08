@@ -1,4 +1,7 @@
 #!/bin/bash
+# shellcheck disable=SC2140  # ugly array, remove later
+# shellcheck disable=SC2288  # ugly array, remove later
+# shellcheck disable=SC2086 # we want word splitting
 
 set -ex
 
@@ -15,6 +18,10 @@ elif [ $DEBIAN_ARCH = amd64 ]; then
     apt-get -y install --no-install-recommends wget gnupg2 software-properties-common
     apt-key add /llvm-snapshot.gpg.key
     add-apt-repository "deb https://apt.llvm.org/bullseye/ llvm-toolchain-bullseye-13 main"
+    # Debian bullseye has older wine 5.0, we want >= 7.0 for traces.
+    apt-key add /winehq.gpg.key
+    apt-add-repository https://dl.winehq.org/wine-builds/debian/
+
 
     ARCH_PACKAGES="firmware-amd-graphics
                    inetutils-syslogd
@@ -34,6 +41,10 @@ elif [ $DEBIAN_ARCH = amd64 ]; then
                    spirv-tools
                    sysvinit-core
                   "
+
+elif [ $DEBIAN_ARCH = armhf ]; then
+    ARCH_PACKAGES="firmware-misc-nonfree
+                  "
 fi
 
 INSTALL_CI_FAIRY_PACKAGES="git
@@ -52,6 +63,7 @@ apt-get -y install --no-install-recommends \
     ca-certificates \
     firmware-realtek \
     initramfs-tools \
+    jq \
     libasan6 \
     libexpat1 \
     libpng16-16 \
@@ -92,11 +104,29 @@ apt-get -y install --no-install-recommends \
     waffle-utils \
     wget \
     xinit \
-    xserver-xorg-core
+    xserver-xorg-core \
+    zstd
+
+
+if [ "$DEBIAN_ARCH" = "amd64" ]; then
+  # workaround wine needing 32-bit
+  # https://bugs.winehq.org/show_bug.cgi?id=53393
+  apt-get install -y --no-remove wine-stable-amd64  # a requirement for wine-stable
+  WINE_PKG="wine-stable"
+  WINE_PKG_DROP="wine-stable-i386"
+  apt download "${WINE_PKG}"
+  dpkg --ignore-depends="${WINE_PKG_DROP}" -i "${WINE_PKG}"*.deb
+  rm "${WINE_PKG}"*.deb
+  sed -i "/${WINE_PKG_DROP}/d" /var/lib/dpkg/status
+  apt-get install -y --no-remove winehq-stable  # symlinks-only, depends on wine-stable
+fi
 
 # Needed for ci-fairy, this revision is able to upload files to
 # MinIO and doesn't depend on git
 pip3 install git+http://gitlab.freedesktop.org/freedesktop/ci-templates@34f4ade99434043f88e164933f570301fd18b125
+
+# Needed for manipulation with traces yaml files.
+pip3 install yq
 
 apt-get purge -y \
         $INSTALL_CI_FAIRY_PACKAGES
@@ -225,7 +255,7 @@ rm -rf etc/dpkg
 # Drop directories not part of ostree
 # Note that /var needs to exist as ostree bind mounts the deployment /var over
 # it
-rm -rf var/* opt srv share
+rm -rf var/* srv share
 
 # ca-certificates are in /etc drop the source
 rm -rf usr/share/ca-certificates

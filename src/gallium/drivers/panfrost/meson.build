@@ -20,6 +20,7 @@
 # SOFTWARE.
 
 files_panfrost = files(
+  'pan_disk_cache.c',
   'pan_helpers.c',
   'pan_public.h',
   'pan_screen.c',
@@ -29,8 +30,7 @@ files_panfrost = files(
   'pan_context.c',
   'pan_blit.c',
   'pan_job.c',
-  'pan_assemble.c',
-  'pan_compute.c',
+  'pan_shader.c',
   'pan_mempool.c',
   'pan_mempool.h',
 )

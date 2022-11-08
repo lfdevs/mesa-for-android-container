@@ -81,10 +81,6 @@ dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_srgb
 dEQP-EGL.functional.wide_color.window_8888_colorspace_default
 dEQP-EGL.functional.wide_color.window_8888_colorspace_srgb
 
-dEQP-VK.pipeline.multisample.alpha_to_coverage_unused_attachment.samples_2.alpha_opaque
-dEQP-VK.pipeline.multisample.alpha_to_coverage_unused_attachment.samples_4.alpha_opaque
-gmem-dEQP-VK.pipeline.monolithic.multisample.alpha_to_coverage_unused_attachment.samples_2.alpha_opaque
-
 # Started at least by Jan 2020, current as of May 2021
 dEQP-GLES31.functional.layout_binding.ssbo.fragment_binding_array
 
@@ -93,11 +89,17 @@ dEQP-GLES3.functional.fbo.blit.conversion.rg8i_to_r16i
 dEQP-GLES3.functional.fbo.blit.conversion.rg8_to_r16f
 
 # First noticed Jun 1 2020 on an innocent branch.
-KHR-GL33.packed_depth_stencil.verify_copy_tex_image.depth32f_stencil8
+KHR-GL45.packed_depth_stencil.verify_copy_tex_image.depth32f_stencil8
+
+KHR-GL45.shader_image_size.basic-nonMS-fs-float
+KHR-GL45.shader_image_size.advanced-nonMS-fs-float
+KHR-GL45.shader_image_size.advanced-nonMS-fs-uint
 
 # Flaky with introduction of testing
 KHR-GLES31.core.arrays_of_arrays.InteractionFunctionCalls2
 KHR-GLES31.core.geometry_shader.layered_framebuffer.depth_support
+
+# [  359.031093] *** gpu fault: ttbr0=00000001040d6000 iova=0000001012c0a880 dir=WRITE type=TRANSLATION source=UCHE (0,0,0,1)
 KHR-GLES31.core.tessellation_shader.tessellation_shader_tc_barriers.barrier_guarded_read_calls
 
 # edfff331b3241d1c18d5c589fcdf75728089c886 mostly fixed this, but apparently it still flakes.
@@ -190,3 +192,17 @@ spec@egl_nok_texture_from_pixmap@basic
 spec@ext_framebuffer_blit@fbo-sys-blit
 spec@ext_framebuffer_blit@fbo-sys-sub-blit
 spec@glsl-1.30@execution@texelfetch fs sampler2d 1x71-501x71
+
+# Started around 2022-06-26, first time was on an unlikely MR.
+KHR-GLES31.core.shader_image_size.advanced-nonMS-fs-int
+KHR-GL45.shader_image_size.advanced-nonMS-fs-int
+KHR-GLES31.core.shader_image_size.basic-nonMS-fs-float
+KHR-GLES31.core.shader_image_size.basic-nonMS-fs-int
+KHR-GLES31.core.shader_image_size.basic-nonMS-fs-uint
+
+# An old classic I thought I fixed at one point, but it still haunts us (particularly sensitive to specific frequencies iirc)
+spec@arb_depth_buffer_float@fbo-depthstencil-gl_depth32f_stencil8-blit
+
+# Flakes from aug-oct 2022.
+spec@ext_timer_query@time-elapsed
+spec@ext_texture_lod_bias@lodbias

@@ -114,7 +114,7 @@
   stage: software-renderer
   rules:
     - !reference [.no_scheduled_pipelines-rules, rules]
-    - changes:
+    - changes: &llvmpipe_cl_files
       - .gitlab-ci.yml
       - .gitlab-ci/**/*
       - meson.build
@@ -130,8 +130,19 @@
     - changes:
         *llvmpipe_file_list
       when: on_success
-    - changes: &clover_file_list
+
+.llvmpipe-clover-rules:
+  rules:
+    - !reference [.llvmpipe-cl-rules, rules]
+    - changes:
       - src/gallium/frontends/clover/**/*
+      when: on_success
+
+.llvmpipe-rusticl-rules:
+  rules:
+    - !reference [.llvmpipe-cl-rules, rules]
+    - changes:
+      - src/gallium/frontends/rusticl/**/*
       when: on_success
 
 .collabora-farm-rules:
@@ -142,6 +153,11 @@
 .igalia-farm-rules:
   rules:
     - if: '$IGALIA_FARM == "offline"'
+      when: never
+
+.anholt-farm-rules:
+  rules:
+    - if: '$ANHOLT_FARM == "offline"'
       when: never
 
 # Skips freedreno jobs if either of the farms we use are offline.
@@ -168,8 +184,8 @@
 .freedreno-rules:
   stage: freedreno
   rules:
-    - !reference [.gl-rules, rules]
     - !reference [.freedreno-common-rules, rules]
+    - !reference [.gl-rules, rules]
     - changes: &freedreno_gl_file_list
       - src/freedreno/ir2/**/*
       - src/gallium/drivers/freedreno/**/*
@@ -179,8 +195,8 @@
 .turnip-rules:
   stage: freedreno
   rules:
-    - !reference [.vulkan-rules, rules]
     - !reference [.freedreno-common-rules, rules]
+    - !reference [.vulkan-rules, rules]
     - changes:
       - src/freedreno/vulkan/**/*
       when: on_success
@@ -195,7 +211,7 @@
   stage: freedreno
   rules:
     # If the triggerer has access to the restricted traces and if it is pre-merge
-    - if: '($GITLAB_USER_LOGIN !~ "/^(robclark|anholt|flto|cwabbott0|Danil|tomeu|okias)$/") &&
+    - if: '($GITLAB_USER_LOGIN !~ "/^(robclark|anholt|flto|cwabbott0|Danil|tomeu|okias|gallo)$/") &&
            ($GITLAB_USER_LOGIN != "marge-bot" || $CI_COMMIT_BRANCH)'
       when: never
     - !reference [.freedreno-rules, rules]
@@ -234,6 +250,7 @@
 .nouveau-rules:
   stage: nouveau
   rules:
+    - !reference [.anholt-farm-rules, rules]
     - !reference [.gl-rules, rules]
     - changes:
       - src/nouveau/**/*
@@ -363,6 +380,15 @@
         *virgl_file_list
       when: manual
 
+.venus-rules:
+  stage: layered-backends
+  rules:
+    - !reference [.lavapipe-rules, rules]
+    - changes: &venus_file_list
+      - src/virtio/**/*
+      when: on_success
+    - when: never
+
 .radeonsi-rules:
   stage: amd
   rules:
@@ -374,9 +400,22 @@
       - src/gallium/winsys/amdgpu/**/*
       - src/amd/*
       - src/amd/addrlib/**/*
+      - src/amd/ci/*
       - src/amd/common/**/*
       - src/amd/llvm/**/*
       - src/amd/registers/**/*
+      when: on_success
+
+.radeonsi+radv-rules:
+  stage: amd
+  rules:
+    - !reference [.collabora-farm-rules, rules]
+    - !reference [.gl-rules, rules]
+    - changes:
+        *radeonsi_file_list
+      when: on_success
+    - changes:
+        *radv_file_list
       when: on_success
 
 .radeonsi-vaapi-rules:
@@ -468,20 +507,20 @@
 .zink-lvp-rules:
   stage: layered-backends
   rules:
-    - !reference [.zink-common-rules, rules]
     - !reference [.lavapipe-rules, rules]
+    - !reference [.zink-common-rules, rules]
 
 .zink-anv-rules:
   stage: layered-backends
   rules:
-    - !reference [.zink-common-rules, rules]
     - !reference [.anv-rules, rules]
+    - !reference [.zink-common-rules, rules]
 
 .zink-turnip-rules:
   stage: layered-backends
   rules:
-    - !reference [.zink-common-rules, rules]
     - !reference [.turnip-rules, rules]
+    - !reference [.zink-common-rules, rules]
 
 # Unfortunately YAML doesn't let us concatenate arrays, so we have to do the
 # rules duplication manually
@@ -599,4 +638,13 @@
       when: on_success
     - changes:
         *lavapipe_file_list
+      when: on_success
+
+# Rules for linters
+.lint-rustfmt-rules:
+   rules:
+    - !reference [.no_scheduled_pipelines-rules, rules]
+    - !reference [.core-rules, rules]
+    - changes:
+      - src/**/*.rs
       when: on_success

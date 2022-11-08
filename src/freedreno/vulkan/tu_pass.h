@@ -100,6 +100,7 @@ struct tu_render_pass
    uint32_t subpass_count;
    uint32_t gmem_pixels[TU_GMEM_LAYOUT_COUNT];
    uint32_t tile_align_w;
+   uint64_t autotune_hash;
 
    /* memory bandwidth costs (in bytes) for gmem / sysmem rendering */
    uint32_t gmem_bandwidth_per_pixel;

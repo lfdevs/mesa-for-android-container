@@ -115,8 +115,13 @@ lower_tex_src_to_offset(nir_builder *b,
 }
 
 static bool
-lower_sampler(nir_builder *b, nir_tex_instr *instr)
+lower_sampler(nir_builder *b, nir_instr *instr_, UNUSED void *cb_data)
 {
+   if (instr_->type != nir_instr_type_tex)
+      return false;
+
+   nir_tex_instr *instr = nir_instr_as_tex(instr_);
+
    int texture_idx =
       nir_tex_instr_src_index(instr, nir_tex_src_texture_deref);
 
@@ -139,40 +144,11 @@ lower_sampler(nir_builder *b, nir_tex_instr *instr)
    return true;
 }
 
-static bool
-lower_impl(nir_function_impl *impl)
-{
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   bool progress = false;
-
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr(instr, block) {
-         if (instr->type == nir_instr_type_tex)
-            progress |= lower_sampler(&b, nir_instr_as_tex(instr));
-      }
-   }
-
-   if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
-   } else {
-      nir_metadata_preserve(impl, nir_metadata_all);
-   }
-
-   return progress;
-}
-
 bool
 nir_lower_samplers(nir_shader *shader)
 {
-   bool progress = false;
-
-   /* Next, lower derefs to offsets. */
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= lower_impl(function->impl);
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader, lower_sampler,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

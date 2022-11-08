@@ -178,7 +178,7 @@ add_inlinable_uniforms(const nir_src *cond, nir_loop_info *info,
       /* Limit terminator condition to loop unroll support case which is a simple
        * comparison (ie. "i < count" is supported, but "i + 1 < count" is not).
        */
-      if (nir_is_supported_terminator_condition(cond_scalar)) {
+      if (nir_is_terminator_condition_with_two_inputs(cond_scalar)) {
          nir_alu_instr *alu = nir_instr_as_alu(cond->ssa->parent_instr);
 
          /* One side of comparison is induction variable, the other side is

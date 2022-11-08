@@ -135,8 +135,7 @@ va_repair_fau(bi_builder *b, bi_instr *I)
       bi_index src = I->src[s];
 
       if (!valid_src(&fau, fau_page, src)) {
-         bi_index copy = bi_mov_i32(b, bi_strip_index(src));
-         I->src[s] = bi_replace_index(src, copy);
+         bi_replace_src(I, s, bi_mov_i32(b, bi_strip_index(src)));
 
          /* Rollback update. Since the replacement move doesn't affect FAU
           * state, there is no need to call valid_src again.

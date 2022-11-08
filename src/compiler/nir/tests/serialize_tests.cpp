@@ -110,13 +110,13 @@ class nir_serialize_all_but_one_test : public nir_serialize_test {};
 #endif
 
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
    nir_serialize_all_test,
    nir_serialize_all_test,
    ::testing::Values(1, COMPONENTS)
 );
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
    nir_serialize_all_but_one_test,
    nir_serialize_all_but_one_test,
    ::testing::Values(COMPONENTS)

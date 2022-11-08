@@ -37,7 +37,7 @@
 #define PAN_DBG_DEQP            0x0004
 #define PAN_DBG_DIRTY           0x0008
 #define PAN_DBG_SYNC            0x0010
-#define PAN_DBG_PRECOMPILE      0x0020
+/* 0x20 unused */
 #define PAN_DBG_NOFP16          0x0040
 #define PAN_DBG_NO_CRC          0x0080
 #define PAN_DBG_GL3             0x0100

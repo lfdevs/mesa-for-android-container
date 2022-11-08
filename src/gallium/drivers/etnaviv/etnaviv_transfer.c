@@ -222,6 +222,7 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
     */
    if ((usage & PIPE_MAP_DISCARD_RANGE) &&
        !(usage & PIPE_MAP_UNSYNCHRONIZED) &&
+       !(prsc->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT) &&
        prsc->last_level == 0 &&
        prsc->width0 == box->width &&
        prsc->height0 == box->height &&
@@ -268,12 +269,6 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
       if (usage & PIPE_MAP_DIRECTLY) {
          slab_free(&ctx->transfer_pool, trans);
          BUG("unsupported map flags %#x with tile status/tiled layout", usage);
-         return NULL;
-      }
-
-      if (prsc->depth0 > 1 && rsc->ts_bo) {
-         slab_free(&ctx->transfer_pool, trans);
-         BUG("resource has depth >1 with tile status");
          return NULL;
       }
 

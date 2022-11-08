@@ -48,7 +48,7 @@
 #include "apple_glx.h"
 #include "glxconfig.h"
 #include "apple_cgl.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 
 /* mesa defines in glew.h, Apple in glext.h.
  * Due to namespace nightmares, just do it here.

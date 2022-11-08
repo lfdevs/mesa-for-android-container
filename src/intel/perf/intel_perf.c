@@ -368,13 +368,8 @@ compute_topology_builtins(struct intel_perf_config *perf)
       }
    }
 
-   for (int i = 0; i < sizeof(devinfo->subslice_masks[i]); i++) {
-      perf->sys_vars.n_eu_sub_slices +=
-         util_bitcount(devinfo->subslice_masks[i]);
-   }
-
-   for (int i = 0; i < sizeof(devinfo->eu_masks); i++)
-      perf->sys_vars.n_eus += util_bitcount(devinfo->eu_masks[i]);
+   perf->sys_vars.n_eu_sub_slices = intel_device_info_subslice_total(devinfo);
+   perf->sys_vars.n_eus = intel_device_info_eu_total(devinfo);
 
    /* The subslice mask builtin contains bits for all slices. Prior to Gfx11
     * it had groups of 3bits for each slice, on Gfx11 and above it's 8bits for

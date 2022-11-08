@@ -34,4 +34,6 @@ tu6_base_format(enum pipe_format format)
    return tu6_format_color(format, TILE6_LINEAR).fmt;
 }
 
+bool tu6_mutable_format_list_ubwc_compatible(const VkImageFormatListCreateInfo *fmt_list);
+
 #endif /* TU_FORMATS_H */

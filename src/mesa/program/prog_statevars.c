@@ -743,8 +743,7 @@ fetch_state(struct gl_context *ctx, const gl_state_index16 state[],
 
    case STATE_FB_PNTC_Y_TRANSFORM:
       {
-         bool flip_y = (ctx->Point.SpriteOrigin == GL_UPPER_LEFT) ^
-            (ctx->Const.PointCoordOriginUpperLeft) ^
+         bool flip_y = (ctx->Point.SpriteOrigin == GL_LOWER_LEFT) ^
             (ctx->DrawBuffer->FlipY);
 
          value[0] = flip_y ? -1.0F : 1.0F;

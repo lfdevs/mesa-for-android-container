@@ -40,8 +40,8 @@
 #include "nouveau_gldefs.h"
 
 /* Caveats:
- *  ! pipe_sampler_state.normalized_coords is ignored - rectangle textures will
- *     use non-normalized coordinates, everything else won't
+ *  ! pipe_sampler_state.unnormalized_coords is ignored - rectangle textures
+ *     will use non-normalized coordinates, everything else won't
  *    (The relevant bit is in the TIC entry and not the TSC entry.)
  *
  *  ! pipe_sampler_state.seamless_cube_map is ignored - seamless filtering is
@@ -530,7 +530,7 @@ nv50_sampler_state_create(struct pipe_context *pipe,
    if (nouveau_screen(pipe->screen)->class_3d >= NVE4_3D_CLASS) {
       if (cso->seamless_cube_map)
          so->tsc[1] |= GK104_TSC_1_CUBEMAP_INTERFACE_FILTERING;
-      if (!cso->normalized_coords)
+      if (cso->unnormalized_coords)
          so->tsc[1] |= GK104_TSC_1_FLOAT_COORD_NORMALIZATION_FORCE_UNNORMALIZED_COORDS;
    } else {
       so->seamless_cube_map = cso->seamless_cube_map;
@@ -774,9 +774,12 @@ nv50_sp_state_create(struct pipe_context *pipe,
 static void
 nv50_sp_state_delete(struct pipe_context *pipe, void *hwcso)
 {
+   struct nv50_context *nv50 = nv50_context(pipe);
    struct nv50_program *prog = (struct nv50_program *)hwcso;
 
-   nv50_program_destroy(nv50_context(pipe), prog);
+   simple_mtx_lock(&nv50->screen->state_lock);
+   nv50_program_destroy(nv50, prog);
+   simple_mtx_unlock(&nv50->screen->state_lock);
 
    if (prog->pipe.type == PIPE_SHADER_IR_TGSI)
       FREE((void *)prog->pipe.tokens);
@@ -1426,7 +1429,7 @@ nv50_set_global_bindings(struct pipe_context *pipe,
    unsigned i;
    const unsigned end = start + nr;
 
-   if (nv50->global_residents.size <= (end * sizeof(struct pipe_resource *))) {
+   if (nv50->global_residents.size < (end * sizeof(struct pipe_resource *))) {
       const unsigned old_size = nv50->global_residents.size;
       if (util_dynarray_resize(&nv50->global_residents, struct pipe_resource *, end)) {
          memset((uint8_t *)nv50->global_residents.data + old_size, 0,

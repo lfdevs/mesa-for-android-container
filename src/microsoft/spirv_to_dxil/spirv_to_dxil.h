@@ -24,6 +24,8 @@
 #ifndef SPIRV_TO_DXIL_H
 #define SPIRV_TO_DXIL_H
 
+#include "dxil_versions.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -163,6 +165,13 @@ struct dxil_spirv_debug_options {
    bool dump_nir;
 };
 
+typedef void (*dxil_spirv_msg_callback)(void *priv, const char *msg);
+
+struct dxil_spirv_logger {
+   void *priv;
+   dxil_spirv_msg_callback log;
+};
+
 /**
  * Compile a SPIR-V module into DXIL.
  * \param  words  SPIR-V module to compile
@@ -180,8 +189,11 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
               struct dxil_spirv_specialization *specializations,
               unsigned int num_specializations, dxil_spirv_shader_stage stage,
               const char *entry_point_name,
+              enum dxil_shader_model shader_model_max,
+              enum dxil_validator_version validator_version_max,
               const struct dxil_spirv_debug_options *debug_options,
               const struct dxil_spirv_runtime_conf *conf,
+              const struct dxil_spirv_logger *logger,
               struct dxil_spirv_object *out_dxil);
 
 /**

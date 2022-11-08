@@ -113,7 +113,7 @@ upload_shader_variant(struct ir3_shader_variant *v)
    /* Always include shaders in kernel crash dumps. */
    fd_bo_mark_for_dump(v->bo);
 
-   fd_bo_upload(v->bo, v->bin, v->info.size);
+   fd_bo_upload(v->bo, v->bin, 0, v->info.size);
 }
 
 struct ir3_shader_variant *

@@ -209,8 +209,10 @@ struct lower_packed_varyings_state
    bool ifc_exposed_to_query_api;
 };
 
-static bool
-needs_lowering(struct lower_packed_varyings_state *state, nir_variable *var)
+bool
+lower_packed_varying_needs_lowering(nir_shader *shader, nir_variable *var,
+                                    bool xfb_enabled, bool disable_xfb_packing,
+                                    bool disable_varying_packing)
 {
    /* Things composed of vec4's, varyings with explicitly assigned
     * locations or varyings marked as must_be_shader_input (which might be used
@@ -220,7 +222,7 @@ needs_lowering(struct lower_packed_varyings_state *state, nir_variable *var)
       return false;
 
    const struct glsl_type *type = var->type;
-   if (nir_is_arrayed_io(var, state->shader->info.stage) || var->data.per_view) {
+   if (nir_is_arrayed_io(var, shader->info.stage) || var->data.per_view) {
       assert(glsl_type_is_array(type));
       type = glsl_get_array_element(type);
    }
@@ -228,9 +230,9 @@ needs_lowering(struct lower_packed_varyings_state *state, nir_variable *var)
    /* Some drivers (e.g. panfrost) don't support packing of transform
     * feedback varyings.
     */
-   if (state->disable_xfb_packing && var->data.is_xfb &&
+   if (disable_xfb_packing && var->data.is_xfb &&
        !(glsl_type_is_array(type) || glsl_type_is_struct(type) || glsl_type_is_matrix(type)) &&
-       state->xfb_enabled)
+       xfb_enabled)
       return false;
 
    /* Override disable_varying_packing if the var is only used by transform
@@ -238,9 +240,9 @@ needs_lowering(struct lower_packed_varyings_state *state, nir_variable *var)
     * variable is an array, struct or matrix as the elements of these types
     * will always have the same interpolation and therefore are safe to pack.
     */
-   if (state->disable_varying_packing && !var->data.is_xfb_only &&
+   if (disable_varying_packing && !var->data.is_xfb_only &&
        !((glsl_type_is_array(type) || glsl_type_is_struct(type) || glsl_type_is_matrix(type)) &&
-         state->xfb_enabled))
+         xfb_enabled))
       return false;
 
    type = glsl_without_array(type);
@@ -899,7 +901,11 @@ static void
 lower_output_var(struct lower_packed_varyings_state *state, nir_variable *var)
 {
    if (var->data.mode != state->mode ||
-       var->data.location < VARYING_SLOT_VAR0 || !needs_lowering(state, var))
+       var->data.location < VARYING_SLOT_VAR0 ||
+       !lower_packed_varying_needs_lowering(state->shader, var,
+                                            state->xfb_enabled,
+                                            state->disable_xfb_packing,
+                                            state->disable_varying_packing))
       return;
 
       /* Skip any new packed varyings we just added */
@@ -980,7 +986,11 @@ lower_packed_inputs(struct lower_packed_varyings_state *state)
     */
    nir_foreach_shader_in_variable_safe(var, state->shader) {
       if (var->data.mode != state->mode ||
-          var->data.location < VARYING_SLOT_VAR0 || !needs_lowering(state, var))
+          var->data.location < VARYING_SLOT_VAR0 ||
+          !lower_packed_varying_needs_lowering(state->shader, var,
+                                               state->xfb_enabled,
+                                               state->disable_xfb_packing,
+                                               state->disable_varying_packing))
          continue;
 
       /* Skip any new packed varyings we just added */

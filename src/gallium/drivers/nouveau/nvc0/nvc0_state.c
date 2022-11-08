@@ -635,9 +635,12 @@ nvc0_sp_state_create(struct pipe_context *pipe,
 static void
 nvc0_sp_state_delete(struct pipe_context *pipe, void *hwcso)
 {
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nvc0_program *prog = (struct nvc0_program *)hwcso;
 
+   simple_mtx_lock(&nvc0->screen->state_lock);
    nvc0_program_destroy(nvc0_context(pipe), prog);
+   simple_mtx_unlock(&nvc0->screen->state_lock);
 
    if (prog->pipe.type == PIPE_SHADER_IR_TGSI)
       FREE((void *)prog->pipe.tokens);
@@ -1419,7 +1422,7 @@ nvc0_set_global_bindings(struct pipe_context *pipe,
    if (!nr)
       return;
 
-   if (nvc0->global_residents.size <= (end * sizeof(struct pipe_resource *))) {
+   if (nvc0->global_residents.size < (end * sizeof(struct pipe_resource *))) {
       const unsigned old_size = nvc0->global_residents.size;
       if (util_dynarray_resize(&nvc0->global_residents, struct pipe_resource *, end)) {
          memset((uint8_t *)nvc0->global_residents.data + old_size, 0,

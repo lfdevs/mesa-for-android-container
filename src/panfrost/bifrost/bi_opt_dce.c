@@ -25,54 +25,63 @@
 #include "compiler.h"
 #include "util/u_memory.h"
 
-/* A simple liveness-based dead code elimination pass. */
+/* A simple SSA-based mark-and-sweep dead code elimination pass. */
 
 void
 bi_opt_dead_code_eliminate(bi_context *ctx)
 {
-        unsigned temp_count = bi_max_temp(ctx);
+        /* Mark live values */
+        BITSET_WORD *mark = calloc(sizeof(BITSET_WORD), BITSET_WORDS(ctx->ssa_alloc));
 
-        bi_compute_liveness(ctx);
+        u_worklist worklist;
+        u_worklist_init(&worklist, ctx->num_blocks, NULL);
 
-        bi_foreach_block_rev(ctx, block) {
-                uint8_t *live = rzalloc_array(block, uint8_t, temp_count);
-
-                bi_foreach_successor(block, succ) {
-                        for (unsigned i = 0; i < temp_count; ++i)
-                                live[i] |= succ->live_in[i];
-                }
-
-                bi_foreach_instr_in_block_safe_rev(block, ins) {
-                        bool all_null = true;
-
-                        bi_foreach_dest(ins, d) {
-                                unsigned index = bi_get_node(ins->dest[d]);
-
-                                /* Destination required */
-                                if (ins->op == BI_OPCODE_AXCHG_I32 ||
-                                    ins->op == BI_OPCODE_ACMPXCHG_I32 ||
-                                    ins->op == BI_OPCODE_ATOM_RETURN_I32 ||
-                                    ins->op == BI_OPCODE_ATOM1_RETURN_I32 ||
-                                    ins->op == BI_OPCODE_BLEND ||
-                                    ins->op == BI_OPCODE_ATEST ||
-                                    ins->op == BI_OPCODE_ZS_EMIT)
-                                        continue;
-
-                                if (index < temp_count && !(live[index] & bi_writemask(ins, d)))
-                                        ins->dest[d] = bi_null();
-
-                                all_null &= bi_is_null(ins->dest[d]);
-                        }
-
-                        if (all_null && !bi_side_effects(ins))
-                                bi_remove_instruction(ins);
-                        else
-                                bi_liveness_ins_update(live, ins, temp_count);
-                }
-
-                ralloc_free(block->live_in);
-                block->live_in = live;
+        bi_foreach_block(ctx, block) {
+                bi_worklist_push_head(&worklist, block);
         }
+
+        while(!u_worklist_is_empty(&worklist)) {
+                /* Pop in reverse order for backwards pass */
+                bi_block *blk = bi_worklist_pop_head(&worklist);
+
+                bool progress = false;
+
+                bi_foreach_instr_in_block_rev(blk, I) {
+                        bool needed = bi_side_effects(I);
+
+                        bi_foreach_dest(I, d)
+                                needed |= BITSET_TEST(mark, I->dest[d].value);
+
+                        if (!needed)
+                                continue;
+
+                        bi_foreach_ssa_src(I, s) {
+                                progress |= !BITSET_TEST(mark, I->src[s].value);
+                                BITSET_SET(mark, I->src[s].value);
+                        }
+                }
+
+                /* XXX: slow */
+                if (progress) {
+                        bi_foreach_block(ctx, block)
+                                bi_worklist_push_head(&worklist, block);
+                }
+        }
+
+        u_worklist_fini(&worklist);
+
+        /* Sweep */
+        bi_foreach_instr_global_safe(ctx, I) {
+                bool needed = bi_side_effects(I);
+
+                bi_foreach_dest(I, d)
+                        needed |= BITSET_TEST(mark, I->dest[d].value);
+
+                if (!needed)
+                        bi_remove_instruction(I);
+        }
+
+        free(mark);
 }
 
 /* Post-RA liveness-based dead code analysis to clean up results of bundling */

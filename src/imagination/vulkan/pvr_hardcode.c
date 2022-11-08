@@ -349,3 +349,17 @@ void pvr_hard_code_get_idfwdf_program(
    *usc_shareds_out = 12U;
    *usc_temps_out = 4U;
 }
+
+void pvr_hard_code_get_passthrough_vertex_shader(
+   const struct pvr_device_info *const dev_info,
+   const struct rogue_shader_binary **const program_out)
+{
+   static const struct rogue_shader_binary shader = {
+      .size = 8U,
+      .data = { 0, 0, 0, 0, 0, 0, 0, 0 }
+   };
+
+   mesa_loge(
+      "No hard coded passthrough vertex shader. Returning empty shader.");
+   *program_out = &shader;
+};

@@ -157,3 +157,6 @@ dEQP-VK.transform_feedback.fuzz.random_geometry.basic_arrays.36
 dEQP-VK.transform_feedback.fuzz.random_geometry.nested_structs_instance_arrays.26
 dEQP-VK.transform_feedback.simple.query_triangle_strip_with_adjacency_0_6_64bits_beginqueryindexed_streamid_0
 dEQP-VK.ycbcr.conversion.g16_b16_r16_3plane_420_unorm.color_conversion.ycbcr_identity_itu_full_tiling_optimal_cosited_binding_15
+
+# Causes OOM: https://gitlab.freedesktop.org/mesa/mesa/-/issues/7534
+dEQP-VK.api.buffer.basic.max_size_sparse

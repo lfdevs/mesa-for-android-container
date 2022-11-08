@@ -39,7 +39,6 @@
 
 struct access_state {
    nir_shader *shader;
-   bool infer_non_readable;
 
    struct set *vars_written;
    struct set *vars_read;
@@ -97,6 +96,7 @@ gather_intrinsic(struct access_state *state, nir_intrinsic_instr *instr)
    case nir_intrinsic_image_deref_atomic_fadd:
    case nir_intrinsic_image_deref_atomic_fmin:
    case nir_intrinsic_image_deref_atomic_fmax:
+   case nir_intrinsic_image_deref_samples_identical:
       var = nir_intrinsic_get_var(instr, 0);
       read = instr->intrinsic != nir_intrinsic_image_deref_store;
       write = instr->intrinsic != nir_intrinsic_image_deref_load &&
@@ -139,6 +139,7 @@ gather_intrinsic(struct access_state *state, nir_intrinsic_instr *instr)
    case nir_intrinsic_bindless_image_atomic_fadd:
    case nir_intrinsic_bindless_image_atomic_fmin:
    case nir_intrinsic_bindless_image_atomic_fmax:
+   case nir_intrinsic_bindless_image_samples_identical:
       read = instr->intrinsic != nir_intrinsic_bindless_image_store;
       write = instr->intrinsic != nir_intrinsic_bindless_image_load &&
               instr->intrinsic != nir_intrinsic_bindless_image_sparse_load;
@@ -208,7 +209,7 @@ process_variable(struct access_state *state, nir_variable *var)
          access |= ACCESS_NON_WRITEABLE;
    }
 
-   if (state->infer_non_readable && !(access & ACCESS_NON_READABLE)) {
+   if (!(access & ACCESS_NON_READABLE)) {
       if (is_buffer ? !state->buffers_read : !state->images_read)
          access |= ACCESS_NON_READABLE;
       else if ((access & ACCESS_RESTRICT) && !_mesa_set_search(state->vars_read, var))
@@ -248,7 +249,7 @@ update_access(struct access_state *state, nir_intrinsic_instr *instr, bool is_bu
 
    if (is_memory_readonly)
       access |= ACCESS_NON_WRITEABLE;
-   if (state->infer_non_readable && is_memory_writeonly)
+   if (is_memory_writeonly)
       access |= ACCESS_NON_READABLE;
    if (!(access & ACCESS_VOLATILE) && is_memory_readonly)
       access |= ACCESS_CAN_REORDER;
@@ -325,7 +326,6 @@ nir_opt_access(nir_shader *shader, const nir_opt_access_options *options)
 {
    struct access_state state = {
       .shader = shader,
-      .infer_non_readable = options->infer_non_readable,
       .vars_written = _mesa_pointer_set_create(NULL),
       .vars_read = _mesa_pointer_set_create(NULL),
    };

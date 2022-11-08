@@ -128,6 +128,7 @@ nv50_program_validate(struct nv50_context *nv50, struct nv50_program *prog)
    if (prog->mem)
       return true;
 
+   simple_mtx_assert_locked(&nv50->screen->state_lock);
    return nv50_program_upload_code(nv50, prog);
 }
 
@@ -717,7 +718,7 @@ nv50_stream_output_validate(struct nv50_context *nv50)
          PUSH_DATA(push, targ->pipe.buffer_size);
          if (!targ->clean) {
             assert(targ->pq);
-            nv50_hw_query_pushbuf_submit(push, NVA0_3D_STRMOUT_OFFSET(i),
+            nv50_hw_query_pushbuf_submit(nv50, NVA0_3D_STRMOUT_OFFSET(i),
                                          nv50_query(targ->pq), 0x4);
          } else {
             BEGIN_NV04(push, NVA0_3D(STRMOUT_OFFSET(i)), 1);

@@ -127,7 +127,7 @@ v3dv_CreateSwapchainKHR(
 {
    V3DV_FROM_HANDLE(v3dv_device, device, _device);
    struct v3dv_instance *instance = device->instance;
-   struct v3dv_physical_device *pdevice = &instance->physicalDevice;
+   struct v3dv_physical_device *pdevice = device->pdevice;
 
    ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, pCreateInfo->surface);
    VkResult result =

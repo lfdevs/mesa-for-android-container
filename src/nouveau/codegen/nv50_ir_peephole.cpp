@@ -1070,7 +1070,8 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          Value *def = i->getDef(d);
          assert(def->reg.size == size);
 
-         newi = bld.mkMov(def, bld.mkImm((uint32_t)(val & mask)), TYPE_U32);
+         newi = bld.mkMov(def, bld.mkImm((uint32_t)(val & mask)),
+                          typeOfSize(size));
          val >>= bitsize;
       }
       delete_Instruction(prog, i);
@@ -3172,6 +3173,12 @@ MemoryOpt::runOpt(BasicBlock *bb)
       bool keep = true;
       bool isLoad = true;
       next = ldst->next;
+
+      // TODO: Handle combining sub 4-bytes loads/stores.
+      if (ldst->op == OP_STORE && typeSizeof(ldst->dType) < 4) {
+         purgeRecords(ldst, ldst->src(0).getFile());
+         continue;
+      }
 
       if (ldst->op == OP_LOAD || ldst->op == OP_VFETCH) {
          if (ldst->subOp == NV50_IR_SUBOP_LOAD_LOCKED) {

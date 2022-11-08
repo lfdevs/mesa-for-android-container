@@ -12,9 +12,9 @@
     BASE_SYSTEM_MAINLINE_HOST_PATH: "${BASE_SYSTEM_HOST_PREFIX}/${FDO_UPSTREAM_REPO}/${DISTRIBUTION_TAG}/${ARCH}"
     BASE_SYSTEM_FORK_HOST_PATH: "${BASE_SYSTEM_HOST_PREFIX}/${CI_PROJECT_PATH}/${DISTRIBUTION_TAG}/${ARCH}"
     # per-job build artifacts
-    BUILD_PATH: "${PIPELINE_ARTIFACTS_BASE}/${CI_PROJECT_NAME}-${ARCH}.tar.gz"
+    BUILD_PATH: "${PIPELINE_ARTIFACTS_BASE}/${CI_PROJECT_NAME}-${ARCH}.tar.zst"
     JOB_ROOTFS_OVERLAY_PATH: "${JOB_ARTIFACTS_BASE}/job-rootfs-overlay.tar.gz"
-    JOB_RESULTS_PATH: "${JOB_ARTIFACTS_BASE}/results.tar.gz"
+    JOB_RESULTS_PATH: "${JOB_ARTIFACTS_BASE}/results.tar.zst"
     MINIO_RESULTS_UPLOAD: "${JOB_ARTIFACTS_BASE}"
     PIGLIT_NO_WINDOW: 1
     VISIBILITY_GROUP: "Collabora+fdo"
@@ -27,10 +27,12 @@
       - results/
     exclude:
       - results/*.shader_cache
+    reports:
+      junit: results/junit.xml
   tags:
     - $RUNNER_TAG
   after_script:
-    - wget -q "https://${JOB_RESULTS_PATH}" -O- | tar -xz
+    - wget -q "https://${JOB_RESULTS_PATH}" -O- | tar --zstd -x
 
 .lava-test:armhf:
   variables:

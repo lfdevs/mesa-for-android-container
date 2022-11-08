@@ -24,36 +24,7 @@
 #ifndef ZINK_FRAMEBUFFER_H
 #define ZINK_FRAMEBUFFER_H
 
-#include "pipe/p_state.h"
-#include <vulkan/vulkan.h>
-
-#include "util/hash_table.h"
-#include "util/u_inlines.h"
-
-struct zink_context;
-struct zink_screen;
-struct zink_render_pass;
-
-struct zink_framebuffer_state {
-   uint32_t width;
-   uint16_t height;
-   uint32_t layers:6;
-   uint32_t samples:6;
-   uint32_t num_attachments:4;
-   struct zink_surface_info infos[PIPE_MAX_COLOR_BUFS + 1];
-};
-
-struct zink_framebuffer {
-   struct pipe_reference reference;
-
-   /* current objects */
-   VkFramebuffer fb;
-   struct zink_render_pass *rp;
-
-   struct zink_framebuffer_state state;
-   VkFramebufferAttachmentImageInfo infos[PIPE_MAX_COLOR_BUFS + 1];
-   struct hash_table objects;
-};
+#include "zink_types.h"
 
 void
 zink_init_framebuffer(struct zink_screen *screen, struct zink_framebuffer *fb, struct zink_render_pass *rp);

@@ -44,3 +44,4 @@ eglWaitNative
 eglWaitSync
 MesaGLInteropEGLQueryDeviceInfo
 MesaGLInteropEGLExportObject
+MesaGLInteropEGLFlushObjects

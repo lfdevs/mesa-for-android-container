@@ -83,10 +83,8 @@ glcpp = executable(
 #
 # TODO: has_exe_wrapper() is deprecated and renamed to can_run_host_binaries()
 # starting with Meson 0.55.0
-#
-# FIXME: these fail on windows due to whitespace differences
 if with_any_opengl and with_tests and meson.has_exe_wrapper() and \
-   host_machine.system() != 'windows'
+   with_glcpp_tests
   modes = ['unix', 'windows', 'oldmac', 'bizarro']
 
   foreach m : modes

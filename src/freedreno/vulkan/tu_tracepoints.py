@@ -24,6 +24,18 @@ from u_trace import TracepointArgStruct as ArgStruct
 from u_trace import utrace_generate
 from u_trace import utrace_generate_perfetto_utils
 
+Header('vk_enum_to_str.h', scope=HeaderScope.SOURCE|HeaderScope.PERFETTO)
+Header('vk_format.h')
+Header('tu_cmd_buffer.h', scope=HeaderScope.SOURCE)
+Header('tu_device.h', scope=HeaderScope.SOURCE)
+
+# we can't use tu_common.h because it includes ir3 headers which are not
+# compatible with C++
+ForwardDecl('struct tu_cmd_buffer')
+ForwardDecl('struct tu_device')
+ForwardDecl('struct tu_framebuffer')
+ForwardDecl('struct tu_tiling_config')
+
 # List of the default tracepoints enabled. By default tracepoints are enabled,
 # set tp_default_enabled=False to disable them by default.
 tu_default_tps = []
@@ -31,13 +43,6 @@ tu_default_tps = []
 #
 # Tracepoint definitions:
 #
-
-Header('util/u_dump.h')
-Header('vk_format.h')
-Header('freedreno/vulkan/tu_device.h', scope=HeaderScope.SOURCE)
-
-ForwardDecl('struct tu_device')
-
 
 def begin_end_tp(name, args=[], tp_struct=None, tp_print=None,
                  tp_default_enabled=True):
@@ -54,6 +59,10 @@ def begin_end_tp(name, args=[], tp_struct=None, tp_print=None,
                tp_perfetto='tu_end_{0}'.format(name),
                tp_print=tp_print)
 
+begin_end_tp('cmd_buffer',
+    args=[ArgStruct(type='const struct tu_cmd_buffer *', var='cmd')],
+    tp_struct=[Arg(type='VkCommandBufferLevel', name='level', var='cmd->vk.level', c_format='%s', to_prim_type='vk_CommandBufferLevel_to_str({})'),
+               Arg(type='uint8_t', name='render_pass_continue', var='!!(cmd->usage_flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)', c_format='%u')])
 
 begin_end_tp('render_pass',
     args=[ArgStruct(type='const struct tu_framebuffer *', var='fb'),

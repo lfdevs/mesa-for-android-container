@@ -416,11 +416,12 @@ struct __DRI2fenceExtensionRec {
  */
 
 #define __DRI2_INTEROP "DRI2_Interop"
-#define __DRI2_INTEROP_VERSION 1
+#define __DRI2_INTEROP_VERSION 2
 
 struct mesa_glinterop_device_info;
 struct mesa_glinterop_export_in;
 struct mesa_glinterop_export_out;
+typedef struct __GLsync *GLsync;
 
 struct __DRI2interopExtensionRec {
    __DRIextension base;
@@ -433,6 +434,15 @@ struct __DRI2interopExtensionRec {
    int (*export_object)(__DRIcontext *ctx,
                         struct mesa_glinterop_export_in *in,
                         struct mesa_glinterop_export_out *out);
+
+   /**
+    * Same as MesaGLInterop*FlushObjects.
+    * 
+    * \since 2
+    */
+   int (*flush_objects)(__DRIcontext *ctx,
+                        unsigned count, struct mesa_glinterop_export_in *objects,
+                        GLsync *sync);
 };
 
 
@@ -1090,7 +1100,14 @@ struct __DRIdri2LoaderExtensionRec {
 
 #define __DRI_CTX_ATTRIB_NO_ERROR               6
 
-#define __DRI_CTX_NUM_ATTRIBS                   7
+/**
+ * \requires __DRI2_RENDER_HAS_PROTECTED_CONTEXT.
+ *
+ */
+#define __DRI_CTX_ATTRIB_PROTECTED              7
+
+
+#define __DRI_CTX_NUM_ATTRIBS                   8
 
 /**
  * \name Reasons that __DRIdri2Extension::createContextAttribs might fail
@@ -1224,6 +1241,7 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_USE_BACKBUFFER      0x0010
 #define __DRI_IMAGE_USE_PROTECTED       0x0020
 #define __DRI_IMAGE_USE_PRIME_BUFFER    0x0040
+#define __DRI_IMAGE_USE_FRONT_RENDERING 0x0080
 
 
 #define __DRI_IMAGE_TRANSFER_READ            0x1
@@ -1889,9 +1907,11 @@ typedef struct __DRIDriverVtableExtensionRec {
 #define   __DRI2_RENDERER_HAS_CONTEXT_PRIORITY_MEDIUM         (1 << 1)
 #define   __DRI2_RENDERER_HAS_CONTEXT_PRIORITY_HIGH           (1 << 2)
 
-#define __DRI2_RENDERER_HAS_PROTECTED_CONTENT                 0x000e
+#define __DRI2_RENDERER_HAS_PROTECTED_SURFACE                 0x000e
 #define __DRI2_RENDERER_PREFER_BACK_BUFFER_REUSE              0x000f
 #define __DRI2_RENDERER_HAS_NO_ERROR_CONTEXT                  0x0010
+
+#define __DRI2_RENDERER_HAS_PROTECTED_CONTEXT                 0x0020
 
 typedef struct __DRI2rendererQueryExtensionRec __DRI2rendererQueryExtension;
 struct __DRI2rendererQueryExtensionRec {

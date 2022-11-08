@@ -103,9 +103,9 @@ private:
 
       operator int64_t() const { return get_value(); };
 
-      void configure(struct fd_ringbuffer *ring, bool reset);
-      void collect();
-      void resolve();
+      void configure(struct fd_ringbuffer *ring, bool reset) const;
+      void collect() const;
+      void resolve() const;
 
    private:
 

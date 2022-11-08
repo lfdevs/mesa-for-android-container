@@ -165,7 +165,8 @@ generate_offsets(enum vl_median_filter_shape shape, unsigned size,
 {
    unsigned i = 0;
    int half_size;
-   struct vertex2f v;
+   int x;
+   int y;
 
    assert(offsets && num_offsets);
 
@@ -199,41 +200,62 @@ generate_offsets(enum vl_median_filter_shape shape, unsigned size,
 
    switch(shape) {
    case VL_MEDIAN_FILTER_BOX:
-      for (v.x = -half_size; v.x <= half_size; ++v.x)
-         for (v.y = -half_size; v.y <= half_size; ++v.y)
-            (*offsets)[i++] = v;
+      for (x = -half_size; x <= half_size; ++x)
+         for (y = -half_size; y <= half_size; ++y) {
+            (*offsets)[i].x = x;
+            (*offsets)[i].y = y;
+             i++;
+         }
       break;
 
    case VL_MEDIAN_FILTER_CROSS:
-      v.y = 0.0f;
-      for (v.x = -half_size; v.x <= half_size; ++v.x)
-         (*offsets)[i++] = v;
+      y = 0;
+      for (x = -half_size; x <= half_size; ++x) {
+          (*offsets)[i].x = x;
+          (*offsets)[i].y = y;
+           i++;
+      }
 
-      v.x = 0.0f;
-      for (v.y = -half_size; v.y <= half_size; ++v.y)
-         if (v.y != 0.0f)
-            (*offsets)[i++] = v;
+      x = 0;
+      for (y = -half_size; y <= half_size; ++y)
+         if (y != 0) {
+             (*offsets)[i].x = x;
+             (*offsets)[i].y = y;
+              i++;
+         }
       break;
 
    case VL_MEDIAN_FILTER_X:
-      for (v.x = v.y = -half_size; v.x <= half_size; ++v.x, ++v.y)
-         (*offsets)[i++] = v;
+       for (x = y = -half_size; x <= half_size; ++x, ++y) {
+           (*offsets)[i].x = x;
+           (*offsets)[i].y = y;
+            i++;
+       }
 
-      for (v.x = -half_size, v.y = half_size; v.x <= half_size; ++v.x, --v.y)
-         if (v.y != 0.0f)
-            (*offsets)[i++] = v;
+      for (x = -half_size, y = half_size; x <= half_size; ++x, --y)
+          if (y != 0) {
+              (*offsets)[i].x = x;
+              (*offsets)[i].y = y;
+               i++;
+          }
       break;
 
    case VL_MEDIAN_FILTER_HORIZONTAL:
-      v.y = 0.0f;
-      for (v.x = -half_size; v.x <= half_size; ++v.x)
-         (*offsets)[i++] = v;
+      y = 0;
+      for (x = -half_size; x <= half_size; ++x) {
+          (*offsets)[i].x = x;
+          (*offsets)[i].y = y;
+           i++;
+      }
       break;
 
    case VL_MEDIAN_FILTER_VERTICAL:
-      v.x = 0.0f;
-      for (v.y = -half_size; v.y <= half_size; ++v.y)
-         (*offsets)[i++] = v;
+      x = 0;
+      for (y = -half_size; y <= half_size; ++y) {
+          (*offsets)[i].x = x;
+          (*offsets)[i].y = y;
+           i++;
+      }
       break;
    }
 
@@ -291,7 +313,6 @@ vl_median_filter_init(struct vl_median_filter *filter, struct pipe_context *pipe
    sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
    sampler.compare_mode = PIPE_TEX_COMPARE_NONE;
    sampler.compare_func = PIPE_FUNC_ALWAYS;
-   sampler.normalized_coords = 1;
    filter->sampler = pipe->create_sampler_state(pipe, &sampler);
    if (!filter->sampler)
       goto error_sampler;

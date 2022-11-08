@@ -25,6 +25,8 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#define FD_BO_NO_HARDPIN 1
+
 #include <stdio.h>
 
 #include "pipe/p_state.h"
@@ -787,8 +789,8 @@ emit_msaa(struct fd_ringbuffer *ring, unsigned nr)
             A6XX_RB_DEST_MSAA_CNTL_SAMPLES(samples) |
                COND(samples == MSAA_ONE, A6XX_RB_DEST_MSAA_CNTL_MSAA_DISABLE));
 
-   OUT_PKT4(ring, REG_A6XX_RB_MSAA_CNTL, 1);
-   OUT_RING(ring, A6XX_RB_MSAA_CNTL_SAMPLES(samples));
+   OUT_PKT4(ring, REG_A6XX_RB_BLIT_GMEM_MSAA_CNTL, 1);
+   OUT_RING(ring, A6XX_RB_BLIT_GMEM_MSAA_CNTL_SAMPLES(samples));
 }
 
 static void prepare_tile_setup_ib(struct fd_batch *batch);
@@ -964,12 +966,14 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
 static void
 set_blit_scissor(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
-   struct pipe_scissor_state blit_scissor = batch->max_scissor;
+   const struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 
-   blit_scissor.minx = ROUND_DOWN_TO(blit_scissor.minx, 16);
-   blit_scissor.miny = ROUND_DOWN_TO(blit_scissor.miny, 4);
-   blit_scissor.maxx = ALIGN(blit_scissor.maxx, 16);
-   blit_scissor.maxy = ALIGN(blit_scissor.maxy, 4);
+   struct pipe_scissor_state blit_scissor;
+
+   blit_scissor.minx = 0;
+   blit_scissor.miny = 0;
+   blit_scissor.maxx = ALIGN(pfb->width, 16);
+   blit_scissor.maxy = ALIGN(pfb->height, 4);
 
    OUT_PKT4(ring, REG_A6XX_RB_BLIT_SCISSOR_TL, 2);
    OUT_RING(ring, A6XX_RB_BLIT_SCISSOR_TL_X(blit_scissor.minx) |
@@ -1433,14 +1437,17 @@ fd6_emit_tile(struct fd_batch *batch, const struct fd_tile *tile)
       emit_conditional_ib(batch, tile, batch->draw);
    }
 
-   if (batch->epilogue)
-      fd6_emit_ib(batch->gmem, batch->epilogue);
+   if (batch->tile_epilogue)
+      fd6_emit_ib(batch->gmem, batch->tile_epilogue);
 }
 
 static void
 fd6_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
 {
    struct fd_ringbuffer *ring = batch->gmem;
+
+   if (batch->epilogue)
+      fd6_emit_ib(batch->gmem, batch->epilogue);
 
    if (use_hw_binning(batch)) {
       OUT_PKT7(ring, CP_SET_MARKER, 1);
@@ -1501,6 +1508,9 @@ emit_sysmem_clears(struct fd_batch *batch, struct fd_ringbuffer *ring) assert_dt
    if (!buffers)
       return;
 
+   struct pipe_box box2d;
+   u_box_2d(0, 0, pfb->width, pfb->height, &box2d);
+
    trace_start_clear_restore(&batch->trace, ring, buffers);
 
    if (buffers & PIPE_CLEAR_COLOR) {
@@ -1513,8 +1523,7 @@ emit_sysmem_clears(struct fd_batch *batch, struct fd_ringbuffer *ring) assert_dt
          if (!(buffers & (PIPE_CLEAR_COLOR0 << i)))
             continue;
 
-         fd6_clear_surface(ctx, ring, pfb->cbufs[i], pfb->width, pfb->height,
-                           &color, 0);
+         fd6_clear_surface(ctx, ring, pfb->cbufs[i], &box2d, &color, 0);
       }
    }
    if (buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) {
@@ -1529,7 +1538,7 @@ emit_sysmem_clears(struct fd_batch *batch, struct fd_ringbuffer *ring) assert_dt
       if ((buffers & PIPE_CLEAR_DEPTH) || (!separate_stencil && (buffers & PIPE_CLEAR_STENCIL))) {
          value.f[0] = batch->clear_depth;
          value.ui[1] = batch->clear_stencil;
-         fd6_clear_surface(ctx, ring, pfb->zsbuf, pfb->width, pfb->height,
+         fd6_clear_surface(ctx, ring, pfb->zsbuf, &box2d,
                            &value, fd6_unknown_8c01(pfb->zsbuf->format, buffers));
       }
 
@@ -1540,8 +1549,7 @@ emit_sysmem_clears(struct fd_batch *batch, struct fd_ringbuffer *ring) assert_dt
          stencil_surf.format = PIPE_FORMAT_S8_UINT;
          stencil_surf.texture = separate_stencil;
 
-         fd6_clear_surface(ctx, ring, &stencil_surf, pfb->width, pfb->height,
-                           &value, 0);
+         fd6_clear_surface(ctx, ring, &stencil_surf, &box2d, &value, 0);
       }
    }
 
@@ -1627,6 +1635,9 @@ fd6_emit_sysmem_fini(struct fd_batch *batch) assert_dt
    struct fd_ringbuffer *ring = batch->gmem;
 
    emit_common_fini(batch);
+
+   if (batch->tile_epilogue)
+      fd6_emit_ib(batch->gmem, batch->tile_epilogue);
 
    if (batch->epilogue)
       fd6_emit_ib(batch->gmem, batch->epilogue);

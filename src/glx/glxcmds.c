@@ -43,7 +43,7 @@
 #ifdef GLX_USE_APPLEGL
 #include "apple/apple_glx_context.h"
 #include "apple/apple_glx.h"
-#include "util/debug.h"
+#include "util/u_debug.h"
 #else
 #ifndef GLX_USE_WINDOWSGL
 #include <X11/extensions/xf86vmode.h>
@@ -1304,7 +1304,7 @@ glXChooseVisual(Display * dpy, int screen, int *attribList)
    }
 
 #ifdef GLX_USE_APPLEGL
-   if(visualList && env_var_as_boolean("LIBGL_DUMP_VISUALID", false)) {
+   if(visualList && debug_get_bool_option("LIBGL_DUMP_VISUALID", false)) {
       printf("visualid 0x%lx\n", visualList[0].visualid);
    }
 #endif

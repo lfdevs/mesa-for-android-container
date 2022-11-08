@@ -25,6 +25,8 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#define FD_BO_NO_HARDPIN 1
+
 #include "pipe/p_state.h"
 #include "util/u_memory.h"
 #include "util/u_prim.h"
@@ -152,17 +154,16 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
          .key = {
             .rasterflat = ctx->rasterizer->flatshade,
             .ucp_enables = ctx->rasterizer->clip_plane_enable,
-            .layer_zero = !gs_info || !(gs_info->outputs_written & VARYING_BIT_LAYER),
             .sample_shading = (ctx->min_samples > 1),
             .msaa = (ctx->framebuffer.samples > 1),
          },
          .clip_plane_enable = ctx->rasterizer->clip_plane_enable,
+         .patch_vertices = ctx->patch_vertices,
       },
       .rasterflat = ctx->rasterizer->flatshade,
       .sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
       .sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
       .primitive_restart = info->primitive_restart && info->index_size,
-      .patch_vertices = ctx->patch_vertices,
    };
 
    if (!(ctx->prog.vs && ctx->prog.fs))
@@ -171,9 +172,6 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
    if (info->mode == PIPE_PRIM_PATCHES) {
       emit.key.hs = ctx->prog.hs;
       emit.key.ds = ctx->prog.ds;
-
-      if (!(ctx->prog.hs && ctx->prog.ds))
-         return false;
 
       struct shader_info *ds_info = ir3_get_shader_info(emit.key.ds);
       emit.key.key.tessellation = ir3_tess_mode(ds_info->tess._primitive_mode);
@@ -221,9 +219,11 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 
    if (emit.vs->need_driver_params || fd6_ctx->has_dp_state)
       emit.dirty_groups |= BIT(FD6_GROUP_DRIVER_PARAMS);
-   else if (emit.gs && emit.gs->need_driver_params)
+   else if (emit.hs && emit.hs->need_driver_params)
       emit.dirty_groups |= BIT(FD6_GROUP_DRIVER_PARAMS);
    else if (emit.ds && emit.ds->need_driver_params)
+      emit.dirty_groups |= BIT(FD6_GROUP_DRIVER_PARAMS);
+   else if (emit.gs && emit.gs->need_driver_params)
       emit.dirty_groups |= BIT(FD6_GROUP_DRIVER_PARAMS);
 
    /* If we are doing xfb, we need to emit the xfb state on every draw: */
@@ -431,16 +431,16 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth) a
 
    OUT_WFI5(ring);
 
-   OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-   OUT_RING(ring, screen->info->a6xx.magic.RB_UNKNOWN_8E04_blit);
+   OUT_PKT4(ring, REG_A6XX_RB_DBG_ECO_CNTL, 1);
+   OUT_RING(ring, screen->info->a6xx.magic.RB_DBG_ECO_CNTL_blit);
 
    OUT_PKT7(ring, CP_BLIT, 1);
    OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
 
    OUT_WFI5(ring);
 
-   OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-   OUT_RING(ring, 0x0); /* RB_UNKNOWN_8E04 */
+   OUT_PKT4(ring, REG_A6XX_RB_DBG_ECO_CNTL, 1);
+   OUT_RING(ring, 0x0); /* RB_DBG_ECO_CNTL */
 
    fd6_event_write(batch, ring, PC_CCU_FLUSH_COLOR_TS, true);
    fd6_event_write(batch, ring, PC_CCU_FLUSH_DEPTH_TS, true);

@@ -68,6 +68,15 @@
             <param><ptype>EGLuint64KHR *</ptype> <name>msc</name></param>
             <param><ptype>EGLuint64KHR *</ptype> <name>sbc</name></param>
         </command>
+
+        <!-- EGL_ANGLE_sync_control_rate -->
+        <command>
+            <proto>EGLBoolean <name>eglGetMscRateANGLE</name></proto>
+            <param><ptype>EGLDisplay</ptype> <name>display</name></param>
+            <param><ptype>EGLSurface</ptype> <name>surface</name></param>
+            <param><ptype>EGLint *</ptype> <name>numerator</name></param>
+            <param><ptype>EGLint *</ptype> <name>denominator</name></param>
+        </command>
     </commands>
 </registry>
 

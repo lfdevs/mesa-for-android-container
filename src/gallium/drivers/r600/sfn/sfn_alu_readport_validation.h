@@ -35,9 +35,9 @@ class AluReadportReservation {
 public:
    AluReadportReservation();
    AluReadportReservation(const AluReadportReservation& orig) = default;
-   AluReadportReservation& operator = (const AluReadportReservation& orig) = default;
+   AluReadportReservation& operator=(const AluReadportReservation& orig) = default;
 
-   bool schedule_vec_src(PVirtualValue src[3],  int nsrc, AluBankSwizzle swz);
+   bool schedule_vec_src(PVirtualValue src[3], int nsrc, AluBankSwizzle swz);
 
    bool schedule_vec_instruction(const AluInstr& alu, AluBankSwizzle swz);
    bool schedule_trans_instruction(const AluInstr& alu, AluBankSwizzle swz);
@@ -55,13 +55,12 @@ public:
 
    std::array<std::array<int, max_chan_channels>, max_gpr_readports> m_hw_gpr;
    std::array<int, max_chan_channels> m_hw_const_addr;
-   std::array<int, max_chan_channels>  m_hw_const_chan;
-   std::array<int, max_chan_channels>  m_hw_const_bank;
+   std::array<int, max_chan_channels> m_hw_const_chan;
+   std::array<int, max_chan_channels> m_hw_const_bank;
    std::array<uint32_t, max_chan_channels> m_literals;
    uint32_t m_nliterals{0};
 };
 
-
-}
+} // namespace r600
 
 #endif // ALUREADPORTVALIDATION_H

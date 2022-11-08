@@ -1,5 +1,5 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 /* Authors:  Keith Whitwell <keithw@vmware.com>
@@ -115,12 +115,12 @@ struct llvmpipe_context {
    unsigned cs_dirty; /**< Mask of LP_CSNEW_x flags */
    /** Mapped vertex buffers */
    ubyte *mapped_vbuffer[PIPE_MAX_ATTRIBS];
-   
+
    /** Vertex format */
    struct vertex_info vertex_info;
 
    uint8_t patch_vertices;
-   
+
    /** Which vertex shader output slot contains color */
    int8_t color_slot[2];
 
@@ -193,6 +193,7 @@ struct pipe_context *
 llvmpipe_create_context(struct pipe_screen *screen, void *priv,
                         unsigned flags);
 
+
 struct pipe_resource *
 llvmpipe_user_buffer_create(struct pipe_screen *screen,
                             void *ptr,
@@ -201,7 +202,7 @@ llvmpipe_user_buffer_create(struct pipe_screen *screen,
 
 
 static inline struct llvmpipe_context *
-llvmpipe_context( struct pipe_context *pipe )
+llvmpipe_context(struct pipe_context *pipe)
 {
    return (struct llvmpipe_context *)pipe;
 }

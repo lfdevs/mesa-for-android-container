@@ -75,6 +75,7 @@
 #define dzn_stub() unreachable("Unsupported feature")
 
 struct dxil_validator;
+struct util_dl_library;
 
 struct dzn_instance;
 struct dzn_device;
@@ -201,6 +202,7 @@ struct dzn_physical_device {
    mtx_t dev_lock;
    ID3D12Device2 *dev;
    D3D_FEATURE_LEVEL feature_level;
+   D3D_SHADER_MODEL shader_model;
    D3D12_FEATURE_DATA_ARCHITECTURE1 architecture;
    D3D12_FEATURE_DATA_D3D12_OPTIONS options;
    D3D12_FEATURE_DATA_D3D12_OPTIONS2 options2;
@@ -219,20 +221,23 @@ uint32_t
 dzn_physical_device_get_mem_type_mask_for_resource(const struct dzn_physical_device *pdev,
                                                    const D3D12_RESOURCE_DESC *desc);
 
+enum dxil_shader_model
+dzn_get_shader_model(const struct dzn_physical_device *pdev);
+
 #define dzn_debug_ignored_stype(sType) \
    mesa_logd("%s: ignored VkStructureType %u\n", __func__, (sType))
 
 PFN_D3D12_SERIALIZE_VERSIONED_ROOT_SIGNATURE
-d3d12_get_serialize_root_sig(void);
+d3d12_get_serialize_root_sig(struct util_dl_library *d3d12_mod);
 
 void
-d3d12_enable_debug_layer(void);
+d3d12_enable_debug_layer(struct util_dl_library *d3d12_mod, ID3D12DeviceFactory *factory);
 
 void
-d3d12_enable_gpu_validation(void);
+d3d12_enable_gpu_validation(struct util_dl_library *d3d12_mod, ID3D12DeviceFactory *factory);
 
 ID3D12Device2 *
-d3d12_create_device(IUnknown *adapter, bool experimental_features);
+d3d12_create_device(struct util_dl_library *d3d12_mod, IUnknown *adapter, ID3D12DeviceFactory *factory, bool experimental_features);
 
 struct dzn_queue {
    struct vk_queue vk;
@@ -248,6 +253,7 @@ struct dzn_device {
    struct vk_device_dispatch_table cmd_dispatch;
 
    ID3D12Device2 *dev;
+   ID3D12DeviceConfiguration *dev_config;
 
    struct dzn_meta_indirect_draw indirect_draws[DZN_NUM_INDIRECT_DRAW_TYPES];
    struct dzn_meta_triangle_fan_rewrite_index triangle_fan[DZN_NUM_INDEX_TYPE];
@@ -307,9 +313,9 @@ enum dzn_cmd_dirty {
    DZN_CMD_DIRTY_DEPTH_BOUNDS = 1 << 7,
 };
 
-#define MAX_VBS 16
-#define MAX_VP 16
-#define MAX_SCISSOR 16
+#define MAX_VBS D3D12_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT
+#define MAX_VP D3D12_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE
+#define MAX_SCISSOR D3D12_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE
 #define MAX_SETS 4
 #define MAX_DYNAMIC_UNIFORM_BUFFERS 8
 #define MAX_DYNAMIC_STORAGE_BUFFERS 4
@@ -553,7 +559,6 @@ struct dzn_cmd_buffer_dsv_entry {
 
 struct dzn_cmd_buffer {
    struct vk_command_buffer vk;
-   VkResult error;
    struct dzn_cmd_buffer_state state;
 
    struct {
@@ -1043,6 +1048,8 @@ struct dzn_instance {
    struct vk_instance vk;
 
    struct dxil_validator *dxil_validator;
+   struct util_dl_library *d3d12_mod;
+   ID3D12DeviceFactory *factory;
    struct {
       PFN_D3D12_SERIALIZE_VERSIONED_ROOT_SIGNATURE serialize_root_sig;
    } d3d12;

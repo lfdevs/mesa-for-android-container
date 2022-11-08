@@ -3862,6 +3862,10 @@ apply_layout_qualifier_to_variable(const struct ast_type_qualifier *qual,
                _mesa_glsl_error(loc, state,
                                 "misaligned atomic counter offset");
 
+            if (*offset >= state->Const.MaxAtomicCounterBufferSize)
+               _mesa_glsl_error(loc, state,
+                                "offset > max atomic counter buffer size");
+
             var->data.offset = *offset;
             *offset += var->type->atomic_size();
 

@@ -204,7 +204,7 @@ vbo_merge_draws(struct gl_context *ctx, bool in_dlist,
       if (begin1 == 1 && (in_dlist || ctx->Line.StippleFlag))
          return false;
 
-      /* _mesa_prim::end is irrelevant at this point and is only used
+      /* end is irrelevant at this point and is only used
        * before this function is called.
        */
    }

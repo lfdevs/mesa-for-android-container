@@ -4,6 +4,29 @@
     PAN_MESA_DEBUG: sync
     HWCI_FREQ_MAX: "true"
 
+.panfrost-traces:
+  variables:
+    PAN_MESA_DEBUG: "deqp,sync"
+    MESA_GLES_VERSION_OVERRIDE: "3.1"
+    MESA_GL_VERSION_OVERRIDE: "3.3"
+    MESA_GLSL_VERSION_OVERRIDE: 330
+    EGL_PLATFORM: surfaceless
+    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-panfrost.yml"
+    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
+
+# 2 machines, but shared with KernelCI (2022-10-24)
+.lava-rk3288-veyron-jaq:
+  variables:
+    BOOT_METHOD: depthcharge
+    DEVICE_TYPE: rk3288-veyron-jaq
+    DEQP_SUITE: panfrost-t760
+    DRIVER_NAME: panfrost
+    DTB: $DEVICE_TYPE
+    GPU_VERSION: panfrost-t760
+    KERNEL_IMAGE_TYPE: ""
+    FDO_CI_CONCURRENT: 6
+    RUNNER_TAG: mesa-ci-x86-64-lava-rk3288-veyron-jaq
+
 panfrost-t720-gles2:arm64:
   extends:
     - .lava-test:arm64
@@ -17,41 +40,23 @@ panfrost-t720-gles2:arm64:
     FDO_CI_CONCURRENT: 6
     RUNNER_TAG: mesa-ci-x86-64-lava-sun50i-h6-pine-h64
 
-.panfrost-t760-gles2:armhf:
+# We only have two machines, which we share with KernelCI.
+# Keep the second t760 job manual.
+panfrost-t760-gles2:armhf:
   extends:
     - .lava-test:armhf
     - .panfrost-midgard-rules
     - .panfrost-test
-  variables:
-    DEVICE_TYPE: rk3288-veyron-jaq
-    DTB: $DEVICE_TYPE
-    GPU_VERSION: panfrost-t760
-    BOOT_METHOD: depthcharge
-    KERNEL_IMAGE_TYPE: ""
-    DEQP_SUITE: panfrost-t760
-    FDO_CI_CONCURRENT: 6
-    RUNNER_TAG: mesa-ci-x86-64-lava-rk3288-veyron-jaq
+    - .lava-rk3288-veyron-jaq
+    - .test-manual-mr
 
 .panfrost-t760-traces:armhf:
   extends:
     - .lava-piglit-traces:armhf
     - .panfrost-midgard-rules
     - .panfrost-test
-  variables:
-    DEVICE_TYPE: rk3288-veyron-jaq
-    DTB: $DEVICE_TYPE
-    GPU_VERSION: panfrost-t760
-    DRIVER_NAME: panfrost
-    BOOT_METHOD: depthcharge
-    KERNEL_IMAGE_TYPE: ""
-    PAN_MESA_DEBUG: "deqp,sync"
-    MESA_GLES_VERSION_OVERRIDE: "3.1"
-    MESA_GL_VERSION_OVERRIDE: "3.3"
-    MESA_GLSL_VERSION_OVERRIDE: 330
-    EGL_PLATFORM: surfaceless
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-panfrost.yml"
-    PIGLIT_REPLAY_EXTRA_ARGS: "--keep-image"
-    RUNNER_TAG: mesa-ci-x86-64-lava-rk3288-veyron-jaq
+    - .lava-rk3288-veyron-jaq
+    - .panfrost-traces
 
 .lava-rk3399-gru-kevin:
   extends:
@@ -75,18 +80,11 @@ panfrost-t860-gl:arm64:
     FDO_CI_CONCURRENT: 6
     DEQP_SUITE: panfrost-t860
 
-panfrost-t860-traces:arm64:
+.panfrost-t860-traces:arm64:
   extends:
     - .lava-piglit-traces:arm64
     - .lava-rk3399-gru-kevin
-  variables:
-    PAN_MESA_DEBUG: "deqp,sync"
-    MESA_GLES_VERSION_OVERRIDE: "3.1"
-    MESA_GL_VERSION_OVERRIDE: "3.3"
-    MESA_GLSL_VERSION_OVERRIDE: 330
-    EGL_PLATFORM: surfaceless
-    PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-panfrost.yml"
-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
+    - .panfrost-traces
 
 .lava-meson-g12b-a311d-khadas-vim3:
   extends:
@@ -119,12 +117,10 @@ panfrost-g52-gl:arm64:
     DEQP_SUITE: panfrost-g52-vk
 
 panfrost-g52-piglit-gl:arm64:
-  parallel: 2    # TODO: Reduce to a single job once all crashes are fixed
   extends:
     - .piglit-test
     - .lava-test:arm64
     - .lava-meson-g12b-a311d-khadas-vim3
-    - .test-manual-mr
   variables:
     HWCI_START_XORG: 1
     PIGLIT_PROFILES: quick_gl

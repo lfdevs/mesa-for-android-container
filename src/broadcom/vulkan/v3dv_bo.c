@@ -31,11 +31,12 @@
 
 /* Default max size of the bo cache, in MB.
  *
- * FIXME: we got this value when testing some apps using the rpi4 with 4GB,
- * but it should depend on the total amount of RAM. But for that we would need
- * to test on real hw with different amount of RAM. Using this value for now.
+ * This value comes from testing different Vulkan application. Greater values
+ * didn't get any further performance benefit. This looks somewhat small, but
+ * from testing those applications, the main consumer of the bo cache are
+ * the bos used for the CLs, that are usually small.
  */
-#define DEFAULT_MAX_BO_CACHE_SIZE 512
+#define DEFAULT_MAX_BO_CACHE_SIZE 64
 
 /* Discarded to use a V3D_DEBUG for this, as it would mean adding a run-time
  * check for most of the calls

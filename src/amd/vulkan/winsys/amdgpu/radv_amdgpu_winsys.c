@@ -138,7 +138,7 @@ radv_amdgpu_winsys_get_chip_name(struct radeon_winsys *rws)
    return amdgpu_get_marketing_name(dev);
 }
 
-static simple_mtx_t winsys_creation_mutex = _SIMPLE_MTX_INITIALIZER_NP;
+static simple_mtx_t winsys_creation_mutex = SIMPLE_MTX_INITIALIZER;
 static struct hash_table *winsyses = NULL;
 
 static void

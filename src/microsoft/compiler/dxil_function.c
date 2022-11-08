@@ -88,6 +88,9 @@ static struct  predefined_func_descr predefined_funcs[] = {
 {"dx.op.storePatchConstant", "v", "iiicO", DXIL_ATTR_KIND_NO_UNWIND},
 {"dx.op.loadPatchConstant", "O", "iiic", DXIL_ATTR_KIND_READ_NONE},
 {"dx.op.loadOutputControlPoint", "O", "iiici", DXIL_ATTR_KIND_READ_NONE},
+{"dx.op.createHandleFromBinding", "@", "i#ib", DXIL_ATTR_KIND_READ_NONE},
+{"dx.op.annotateHandle", "@", "i@P", DXIL_ATTR_KIND_READ_NONE},
+{"dx.op.isHelperLane", "b", "i", DXIL_ATTR_KIND_READ_ONLY},
 };
 
 struct func_descr {
@@ -192,6 +195,8 @@ get_type_from_string(struct dxil_module *mod, const char *param_descr,
    case DXIL_FUNC_PARAM_SAMPLE_POS: return dxil_module_get_samplepos_type(mod);
    case DXIL_FUNC_PARAM_CBUF_RET: return dxil_module_get_cbuf_ret_type(mod, overload);
    case DXIL_FUNC_PARAM_SPLIT_DOUBLE: return dxil_module_get_split_double_ret_type(mod);
+   case DXIL_FUNC_PARAM_RES_BIND: return dxil_module_get_res_bind_type(mod);
+   case DXIL_FUNC_PARAM_RES_PROPS: return dxil_module_get_res_props_type(mod);
    case DXIL_FUNC_PARAM_POINTER: {
          const struct dxil_type *target = get_type_from_string(mod, param_descr, overload, idx);
          return dxil_module_get_pointer_type(mod, target);

@@ -143,7 +143,7 @@ va_resolve_constant(bi_builder *b, uint32_t value, struct va_src_info info, bool
    }
 
    /* Try extending a byte */
-   if (!staging && (info.widen || info.lanes) &&
+   if (!staging && (info.widen || info.lanes || info.lane) &&
        is_extension_of_8(value, is_signed)) {
 
       bi_index lut = va_lut_index_8(value & 0xFF);
@@ -207,7 +207,7 @@ va_lower_constants(bi_context *ctx, bi_instr *I)
          } else if (info.size == VA_SIZE_16) {
             assert(swz >= BI_SWIZZLE_H00 && swz <= BI_SWIZZLE_H11);
             value = bi_apply_swizzle(value, swz);
-         } else if (info.size == VA_SIZE_8 && info.lanes) {
+         } else if (info.size == VA_SIZE_8 && (info.lane || info.lanes)) {
             /* 8-bit extract */
             unsigned chan = (swz - BI_SWIZZLE_B0000);
             assert(chan < 4);
@@ -221,6 +221,16 @@ va_lower_constants(bi_context *ctx, bi_instr *I)
          bi_index cons = va_resolve_constant(&b, value, info, is_signed, staging);
          cons.neg ^= I->src[s].neg;
          I->src[s] = cons;
+
+         /* If we're selecting a single 8-bit lane, we should return a single
+          * 8-bit lane to ensure the result is encodeable. By convention,
+          * applying the lane select puts the desired constant (at least) in the
+          * bottom byte, so we can always select the bottom byte.
+          */
+         if (info.lane && I->src[s].swizzle == BI_SWIZZLE_H01) {
+            assert(info.size == VA_SIZE_8);
+            I->src[s] = bi_byte(I->src[s], 0);
+         }
       }
    }
 }

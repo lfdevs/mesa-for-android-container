@@ -87,7 +87,7 @@ static void lower_load_ubo_to_scalar(nir_builder *b, nir_intrinsic_instr *intr)
       nir_intrinsic_set_range(chan_intr, scaled_range);
 
       /* Base (desc_set, binding). */
-      nir_src_copy(&chan_intr->src[0], &intr->src[0]);
+      nir_src_copy(&chan_intr->src[0], &intr->src[0], &chan_intr->instr);
 
       /* Offset (unused). */
       chan_intr->src[1] = nir_src_for_ssa(nir_imm_int(b, 0));

@@ -5,11 +5,11 @@ Debugging
 ---------
 
 Here are a few environment variable debug environment variables
-specific to Anv:
+specific to ANV:
 
 :envvar:`ANV_ENABLE_PIPELINE_CACHE`
    If defined to ``0`` or ``false``, this will disable pipeline
-   caching, forcing Anv to reparse and recompile any VkShaderModule
+   caching, forcing ANV to reparse and recompile any VkShaderModule
    (SPIRV) it is given.
 :envvar:`ANV_DISABLE_SECONDARY_CMD_BUFFER_CALLS`
    If defined to ``1`` or ``true``, this will prevent usage of self
@@ -22,7 +22,7 @@ specific to Anv:
    If defined to ``1`` or ``true``, this disables support for timeline
    semaphores.
 :envvar:`ANV_USERSPACE_RELOCS`
-   If defined to ``1`` or ``true``, this forces Anv to always do
+   If defined to ``1`` or ``true``, this forces ANV to always do
    kernel relocations in command buffers. This should only have an
    effect on hardware that doesn't support soft-pinning (Ivybridge,
    Haswell, Cherryview).
@@ -47,7 +47,7 @@ Experimental features
 Binding Model
 -------------
 
-Here is the Anv bindless binding model that was implemented for the
+Here is the ANV bindless binding model that was implemented for the
 descriptor indexing feature of Vulkan 1.2 :
 
 .. graphviz::
@@ -239,7 +239,7 @@ Vulkan initially started by baking as much state as possible in
 pipelines. But extension after extension, more and more state has
 become potentially dynamic.
 
-Anv tries to limit the amount of time an instruction has to be packed
+ANV tries to limit the amount of time an instruction has to be packed
 to reprogram part of the 3D pipeline state. The packing is happening
 in 2 places :
 

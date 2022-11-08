@@ -127,7 +127,12 @@ radv_null_winsys_query_info(struct radeon_winsys *rws, struct radeon_info *info)
    else
       info->num_physical_sgprs_per_simd = 512;
 
-   info->num_physical_wave64_vgprs_per_simd = info->gfx_level >= GFX10 ? 512 : 256;
+   if (info->family == CHIP_GFX1100 || info->family == CHIP_GFX1101)
+      info->num_physical_wave64_vgprs_per_simd = 768;
+   else if (info->gfx_level >= GFX10)
+      info->num_physical_wave64_vgprs_per_simd = 512;
+   else
+      info->num_physical_wave64_vgprs_per_simd = 256;
    info->num_simd_per_compute_unit = info->gfx_level >= GFX10 ? 2 : 4;
    info->lds_size_per_workgroup = info->gfx_level >= GFX10 ? 128 * 1024 : 64 * 1024;
    info->lds_encode_granularity = info->gfx_level >= GFX7 ? 128 * 4 : 64 * 4;

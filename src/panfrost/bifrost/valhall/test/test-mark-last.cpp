@@ -121,18 +121,18 @@ TEST(MarkLast, Half64) {
 
 TEST(MarkLast, RegisterBlendDescriptor) {
    CASE({
-         bi_blend_to(b, bi_null(), R(0), DR(60), DR(4), DR(5), bi_null(),
+         bi_blend_to(b, R(48), R(0), DR(60), DR(4), DR(5), bi_null(),
                      BI_REGISTER_FORMAT_F32, 4, 0);
    });
 
    CASE({
-         bi_blend_to(b, bi_null(), R(0), DR(60), R(4), R(5), bi_null(),
+         bi_blend_to(b, R(48), R(0), DR(60), R(4), R(5), bi_null(),
                      BI_REGISTER_FORMAT_F32, 4, 0);
          bi_fadd_f32_to(b, R(4), DR(4), DR(7));
    });
 
    CASE({
-         bi_blend_to(b, bi_null(), R(0), DR(60), R(4), R(5), bi_null(),
+         bi_blend_to(b, R(48), R(0), DR(60), R(4), R(5), bi_null(),
                      BI_REGISTER_FORMAT_F32, 4, 0);
          bi_fadd_f32_to(b, R(4), DR(5), DR(7));
    });

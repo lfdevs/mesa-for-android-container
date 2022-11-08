@@ -38,16 +38,6 @@
  */
 
 /**
- * The supported rendering API.
- */
-enum st_api_type {
-   ST_API_OPENGL,
-   ST_API_OPENVG,
-
-   ST_API_COUNT
-};
-
-/**
  * The profile of a context.
  */
 enum st_profile_type
@@ -63,17 +53,10 @@ enum st_profile_type
 #define ST_PROFILE_OPENGL_CORE_MASK  (1 << ST_PROFILE_OPENGL_CORE)
 #define ST_PROFILE_OPENGL_ES1_MASK   (1 << ST_PROFILE_OPENGL_ES1)
 #define ST_PROFILE_OPENGL_ES2_MASK   (1 << ST_PROFILE_OPENGL_ES2)
-
-/**
- * Optional API features.
- */
-enum st_api_feature
-{
-   ST_API_FEATURE_MS_VISUALS  /**< support for multisample visuals */
-};
-
-/* for feature_mask in st_api */
-#define ST_API_FEATURE_MS_VISUALS_MASK (1 << ST_API_FEATURE_MS_VISUALS)
+#define ST_PROFILE_ALL_MASK          (ST_PROFILE_DEFAULT_MASK | \
+                                      ST_PROFILE_OPENGL_CORE_MASK | \
+                                      ST_PROFILE_OPENGL_ES1_MASK | \
+                                      ST_PROFILE_OPENGL_ES2_MASK)
 
 /**
  * New context flags for GL 3.0 and beyond.
@@ -89,6 +72,7 @@ enum st_api_feature
 #define ST_CONTEXT_FLAG_RELEASE_NONE	    (1 << 5)
 #define ST_CONTEXT_FLAG_HIGH_PRIORITY       (1 << 6)
 #define ST_CONTEXT_FLAG_LOW_PRIORITY        (1 << 7)
+#define ST_CONTEXT_FLAG_PROTECTED           (1 << 8)
 
 /**
  * Reasons that context creation might fail.
@@ -193,6 +177,8 @@ struct st_egl_image
 
    /* one of __DRI_YUV_RANGE_* */
    unsigned yuv_range;
+
+   bool imported_dmabuf;
 };
 
 /**
@@ -516,88 +502,54 @@ struct st_manager
 };
 
 /**
- * Represent a rendering API such as OpenGL or OpenVG.
+ * The following st_api_* functions represent the OpenGL rendering API.
  *
  * Implemented by the gallium frontend and used by the frontend manager.
  */
-struct st_api
-{
-   /**
-    * The name of the rendering API.  This is informative.
-    */
-   const char *name;
-
-   /**
-    * The supported rendering API.
-    */
-   enum st_api_type api;
-
-   /**
-    * The supported profiles.  Tested with ST_PROFILE_*_MASK.
-    */
-   unsigned profile_mask;
-
-   /**
-    * The supported optional features.  Tested with ST_FEATURE_*_MASK.
-    */
-   unsigned feature_mask;
-
-   /**
-    * Destroy the API.
-    */
-   void (*destroy)(struct st_api *stapi);
-
-   /**
-    * Query supported OpenGL versions. (if applicable)
-    * The format is (major*10+minor).
-    */
-   void (*query_versions)(struct st_api *stapi, struct st_manager *sm,
-                          struct st_config_options *options,
-                          int *gl_core_version,
-                          int *gl_compat_version,
-                          int *gl_es1_version,
-                          int *gl_es2_version);
-
-   /**
-    * Create a rendering context.
-    */
-   struct st_context_iface *(*create_context)(struct st_api *stapi,
-                                              struct st_manager *smapi,
-                                              const struct st_context_attribs *attribs,
-                                              enum st_context_error *error,
-                                              struct st_context_iface *stsharei);
-
-   /**
-    * Bind the context to the calling thread with draw and read as drawables.
-    *
-    * The framebuffers might be NULL, or might have different visuals than the
-    * context does.
-    */
-   bool (*make_current)(struct st_api *stapi,
-                        struct st_context_iface *stctxi,
-                        struct st_framebuffer_iface *stdrawi,
-                        struct st_framebuffer_iface *streadi);
-
-   /**
-    * Get the currently bound context in the calling thread.
-    */
-   struct st_context_iface *(*get_current)(struct st_api *stapi);
-
-   /**
-    * Notify the st manager the framebuffer interface object
-    * is no longer valid.
-    */
-   void (*destroy_drawable)(struct st_api *stapi,
-                            struct st_framebuffer_iface *stfbi);
-};
 
 /**
- * Return true if the visual has the specified buffers.
+ * Query supported OpenGL versions. (if applicable)
+ * The format is (major*10+minor).
  */
-static inline bool
-st_visual_have_buffers(const struct st_visual *visual, unsigned mask)
-{
-   return ((visual->buffer_mask & mask) == mask);
-}
+void
+st_api_query_versions(struct st_manager *sm,
+                      struct st_config_options *options,
+                      int *gl_core_version,
+                      int *gl_compat_version,
+                      int *gl_es1_version,
+                      int *gl_es2_version);
+
+/**
+ * Create a rendering context.
+ */
+struct st_context_iface *
+st_api_create_context(struct st_manager *smapi,
+                      const struct st_context_attribs *attribs,
+                      enum st_context_error *error,
+                      struct st_context_iface *stsharei);
+
+/**
+ * Bind the context to the calling thread with draw and read as drawables.
+ *
+ * The framebuffers might be NULL, or might have different visuals than the
+ * context does.
+ */
+bool
+st_api_make_current(struct st_context_iface *stctxi,
+                    struct st_framebuffer_iface *stdrawi,
+                    struct st_framebuffer_iface *streadi);
+
+/**
+ * Get the currently bound context in the calling thread.
+ */
+struct st_context_iface *
+st_api_get_current(void);
+
+/**
+ * Notify the st manager the framebuffer interface object
+ * is no longer valid.
+ */
+void
+st_api_destroy_drawable(struct st_framebuffer_iface *stfbi);
 
 #endif /* _API_H_ */

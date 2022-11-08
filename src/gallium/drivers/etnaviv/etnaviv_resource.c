@@ -84,9 +84,11 @@ etna_screen_resource_alloc_ts(struct pipe_screen *pscreen,
                               struct etna_resource *rsc)
 {
    struct etna_screen *screen = etna_screen(pscreen);
-   size_t rt_ts_size, ts_layer_stride;
+   struct pipe_resource *prsc = &rsc->base;
+   size_t tile_size, rt_ts_size, ts_layer_stride;
    uint8_t ts_mode = TS_MODE_128B;
    int8_t ts_compress_fmt;
+   unsigned layers;
 
    assert(!rsc->ts_bo);
 
@@ -94,8 +96,8 @@ etna_screen_resource_alloc_ts(struct pipe_screen *pscreen,
     * v4 compression can be enabled everywhere without any known drawback,
     * except that in-place resolve must go through a slower path
     */
-   ts_compress_fmt = (screen->specs.v4_compression || rsc->base.nr_samples > 1) ?
-                      translate_ts_format(rsc->base.format) : -1;
+   ts_compress_fmt = (screen->specs.v4_compression || prsc->nr_samples > 1) ?
+                      translate_ts_format(prsc->format) : -1;
 
    /* enable 256B ts mode with compression, as it improves performance
     * the size of the resource might also determine if we want to use it or not
@@ -106,11 +108,12 @@ etna_screen_resource_alloc_ts(struct pipe_screen *pscreen,
         rsc->levels[0].stride % 256 == 0) )
          ts_mode = TS_MODE_256B;
 
+   tile_size = etna_screen_get_tile_size(screen, ts_mode, prsc->nr_samples > 1);
+   layers = prsc->target == PIPE_TEXTURE_3D ? prsc->depth0 : prsc->array_size;
    ts_layer_stride = align(DIV_ROUND_UP(rsc->levels[0].layer_stride,
-                                        etna_screen_get_tile_size(screen, ts_mode) *
-                                        8 / screen->specs.bits_per_tile),
+                                        tile_size * 8 / screen->specs.bits_per_tile),
                            0x100 * screen->specs.pixel_pipes);
-   rt_ts_size = ts_layer_stride * rsc->base.array_size;
+   rt_ts_size = ts_layer_stride * layers;
    if (rt_ts_size == 0)
       return true;
 
@@ -187,13 +190,65 @@ setup_miptree(struct etna_resource *rsc, unsigned paddingX, unsigned paddingY,
    return size;
 }
 
-/* Is rs alignment needed? */
-static bool is_rs_align(struct etna_screen *screen,
-                        const struct pipe_resource *tmpl)
+/* Compute the slice/miplevel alignment (in pixels) and the texture sampler
+ * HALIGN parameter from the resource parameters and the target layout.
+ */
+static void
+etna_layout_multiple(const struct etna_screen *screen,
+                     const struct pipe_resource *templat, unsigned layout,
+                     unsigned *paddingX, unsigned *paddingY, unsigned *halign)
 {
-   return screen->specs.use_blt ? false : (
-      VIV_FEATURE(screen, chipMinorFeatures1, TEXTURE_HALIGN) ||
-      !etna_resource_sampler_only(tmpl));
+   const struct etna_specs *specs = &screen->specs;
+   /* If we have the TEXTURE_HALIGN feature, we can always align to the resolve
+    * engine's width.  If not, we must not align resources used only for
+    * textures. If this GPU uses the BLT engine, never do RS align.
+    */
+   bool rs_align = !specs->use_blt && !etna_resource_sampler_only(templat) &&
+                   VIV_FEATURE(screen, chipMinorFeatures1, TEXTURE_HALIGN);
+   int msaa_xscale = 1, msaa_yscale = 1;
+
+   /* Compressed textures are padded to their block size, but we don't have
+    * to do anything special for that.
+    */
+   if (unlikely(util_format_is_compressed(templat->format))) {
+      assert(layout == ETNA_LAYOUT_LINEAR);
+      *paddingX = 1;
+      *paddingY = 1;
+      *halign = TEXTURE_HALIGN_FOUR;
+      return;
+   }
+
+   translate_samples_to_xyscale(templat->nr_samples, &msaa_xscale, &msaa_yscale);
+
+   switch (layout) {
+   case ETNA_LAYOUT_LINEAR:
+      *paddingX = rs_align ? 16 : 4;
+      *paddingY = !specs->use_blt && templat->target != PIPE_BUFFER ? 4 : 1;
+      *halign = rs_align ? TEXTURE_HALIGN_SIXTEEN : TEXTURE_HALIGN_FOUR;
+      break;
+   case ETNA_LAYOUT_TILED:
+      *paddingX = rs_align ? 16 * msaa_xscale : 4;
+      *paddingY = 4 * msaa_yscale;
+      *halign = rs_align ? TEXTURE_HALIGN_SIXTEEN : TEXTURE_HALIGN_FOUR;
+      break;
+   case ETNA_LAYOUT_SUPER_TILED:
+      *paddingX = 64;
+      *paddingY = 64;
+      *halign = TEXTURE_HALIGN_SUPER_TILED;
+      break;
+   case ETNA_LAYOUT_MULTI_TILED:
+      *paddingX = 16 * msaa_xscale;
+      *paddingY = 4 * msaa_yscale * specs->pixel_pipes;
+      *halign = TEXTURE_HALIGN_SPLIT_TILED;
+      break;
+   case ETNA_LAYOUT_MULTI_SUPERTILED:
+      *paddingX = 64;
+      *paddingY = 64 * specs->pixel_pipes;
+      *halign = TEXTURE_HALIGN_SPLIT_SUPER_TILED;
+      break;
+   default:
+      unreachable("Unhandled layout");
+   }
 }
 
 /* Create a new resource object, using the given template info */
@@ -213,43 +268,16 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
          templat->last_level, templat->nr_samples, templat->usage,
          templat->bind, templat->flags);
 
-   /* Determine scaling for antialiasing, allow override using debug flag */
-   int nr_samples = templat->nr_samples;
-   if ((templat->bind & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_DEPTH_STENCIL)) &&
-       !(templat->bind & PIPE_BIND_SAMPLER_VIEW)) {
-      if (DBG_ENABLED(ETNA_DBG_MSAA_2X))
-         nr_samples = 2;
-      if (DBG_ENABLED(ETNA_DBG_MSAA_4X))
-         nr_samples = 4;
-   }
-
+   /* Determine scaling for antialiasing */
    int msaa_xscale = 1, msaa_yscale = 1;
-   if (!translate_samples_to_xyscale(nr_samples, &msaa_xscale, &msaa_yscale)) {
+   if (!translate_samples_to_xyscale(templat->nr_samples, &msaa_xscale, &msaa_yscale)) {
       /* Number of samples not supported */
       return NULL;
    }
 
    /* Determine needed padding (alignment of height/width) */
-   unsigned paddingX = 0, paddingY = 0;
-   unsigned halign = TEXTURE_HALIGN_FOUR;
-   if (!util_format_is_compressed(templat->format)) {
-      /* If we have the TEXTURE_HALIGN feature, we can always align to the
-       * resolve engine's width.  If not, we must not align resources used
-       * only for textures. If this GPU uses the BLT engine, never do RS align.
-       */
-      etna_layout_multiple(layout, screen->specs.pixel_pipes,
-                           is_rs_align (screen, templat),
-                           &paddingX, &paddingY, &halign);
-      assert(paddingX && paddingY);
-   } else {
-      /* Compressed textures are padded to their block size, but we don't have
-       * to do anything special for that. */
-      paddingX = 1;
-      paddingY = 1;
-   }
-
-   if (!screen->specs.use_blt && templat->target != PIPE_BUFFER && layout == ETNA_LAYOUT_LINEAR)
-      paddingY = align(paddingY, ETNA_RS_HEIGHT_MASK + 1);
+   unsigned paddingX, paddingY, halign;
+   etna_layout_multiple(screen, templat, layout, &paddingX, &paddingY, &halign);
 
    rsc = CALLOC_STRUCT(etna_resource);
    if (!rsc)
@@ -257,7 +285,7 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
 
    rsc->base = *templat;
    rsc->base.screen = pscreen;
-   rsc->base.nr_samples = nr_samples;
+   rsc->base.nr_samples = templat->nr_samples;
    rsc->layout = layout;
    rsc->halign = halign;
    rsc->explicit_flush = true;
@@ -341,6 +369,15 @@ etna_resource_create(struct pipe_screen *pscreen,
               VIV_FEATURE(screen, chipMinorFeatures2, SUPERTILED_TEXTURE) &&
               etna_resource_hw_tileable(screen->specs.use_blt, templat)) {
       layout |= ETNA_LAYOUT_BIT_SUPER;
+   }
+
+   if (/* MSAA render target */
+       (templat->nr_samples > 1) &&
+       (templat->bind & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_DEPTH_STENCIL))) {
+      if (screen->specs.pixel_pipes > 1 && !screen->specs.single_buffer)
+         layout |= ETNA_LAYOUT_BIT_MULTI;
+      if (screen->specs.can_supertile)
+         layout |= ETNA_LAYOUT_BIT_SUPER;
    }
 
    if (/* linear base or scanout without modifier requested */
@@ -495,7 +532,6 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
 
    rsc->seqno = 1;
    rsc->layout = modifier_to_layout(handle->modifier);
-   rsc->halign = TEXTURE_HALIGN_FOUR;
 
    if (usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH)
       rsc->explicit_flush = true;
@@ -507,13 +543,10 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
    level->offset = handle->offset;
 
    /* Determine padding of the imported resource. */
-   unsigned paddingX = 0, paddingY = 0;
-   etna_layout_multiple(rsc->layout, screen->specs.pixel_pipes,
-                        is_rs_align(screen, tmpl),
+   unsigned paddingX, paddingY;
+   etna_layout_multiple(screen, tmpl, rsc->layout,
                         &paddingX, &paddingY, &rsc->halign);
 
-   if (!screen->specs.use_blt && rsc->layout == ETNA_LAYOUT_LINEAR)
-      paddingY = align(paddingY, ETNA_RS_HEIGHT_MASK + 1);
    level->padded_width = align(level->width, paddingX);
    level->padded_height = align(level->height, paddingY);
 

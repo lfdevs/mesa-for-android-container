@@ -151,7 +151,7 @@ vk_common_CreateFence(VkDevice _device,
                       VkFence *pFence)
 {
    VK_FROM_HANDLE(vk_device, device, _device);
-   struct vk_fence *fence;
+   struct vk_fence *fence = NULL;
 
    VkResult result = vk_fence_create(device, pCreateInfo, pAllocator, &fence);
    if (result != VK_SUCCESS)

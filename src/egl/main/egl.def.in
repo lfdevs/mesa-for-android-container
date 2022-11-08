@@ -47,3 +47,4 @@ eglWaitSync@12
 ; __cdecl calling convention have no @number suffix
 MesaGLInteropEGLQueryDeviceInfo
 MesaGLInteropEGLExportObject
+MesaGLInteropEGLFlushObjects

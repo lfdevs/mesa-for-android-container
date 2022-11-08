@@ -105,17 +105,12 @@ dzn_cmd_buffer_queue_transition_barriers(struct dzn_cmd_buffer *cmdbuf,
       barriers =
          vk_zalloc(&cmdbuf->vk.pool->alloc, sizeof(*barriers) * barrier_count,
                    8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-      if (!barriers) {
-         cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-         return cmdbuf->error;
-      }
+      if (!barriers)
+         return vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
 
       he = _mesa_hash_table_insert(cmdbuf->transition_barriers, res, barriers);
-      if (!he) {
-         vk_free(&cmdbuf->vk.pool->alloc, barriers);
-         cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-         return cmdbuf->error;
-      }
+      if (!he)
+         return vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
    for (uint32_t subres = first_subres; subres < first_subres + subres_count; subres++) {
@@ -340,6 +335,10 @@ dzn_cmd_buffer_dsv_key_equals_function(const void *a, const void *b)
    return memcmp(a, b, sizeof(struct dzn_cmd_buffer_dsv_key)) == 0;
 }
 
+static const struct vk_command_buffer_ops cmd_buffer_ops = {
+   .destroy = dzn_cmd_buffer_destroy,
+};
+
 static VkResult
 dzn_cmd_buffer_create(const VkCommandBufferAllocateInfo *info,
                       VkCommandBuffer *out)
@@ -360,7 +359,7 @@ dzn_cmd_buffer_create(const VkCommandBufferAllocateInfo *info,
       return vk_error(pool->base.device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    VkResult result =
-      vk_command_buffer_init(&cmdbuf->vk, pool, info->level);
+      vk_command_buffer_init(pool, &cmdbuf->vk, &cmd_buffer_ops, info->level);
    if (result != VK_SUCCESS) {
       vk_free(&pool->alloc, cmdbuf);
       return result;
@@ -407,8 +406,6 @@ dzn_cmd_buffer_create(const VkCommandBufferAllocateInfo *info,
       goto out;
    }
 
-   cmdbuf->vk.destroy = dzn_cmd_buffer_destroy;
-
    if (FAILED(ID3D12Device1_CreateCommandAllocator(device->dev, type,
                                                    &IID_ID3D12CommandAllocator,
                                                    (void **)&cmdbuf->cmdalloc))) {
@@ -451,7 +448,6 @@ dzn_cmd_buffer_reset(struct dzn_cmd_buffer *cmdbuf)
       vk_free(&cmdbuf->vk.pool->alloc, res);
    }
 
-   cmdbuf->error = VK_SUCCESS;
    util_dynarray_clear(&cmdbuf->events.wait);
    util_dynarray_clear(&cmdbuf->events.signal);
    util_dynarray_clear(&cmdbuf->queries.reset);
@@ -498,10 +494,10 @@ dzn_cmd_buffer_reset(struct dzn_cmd_buffer *cmdbuf)
                                               cmdbuf->cmdalloc, NULL,
                                               &IID_ID3D12GraphicsCommandList1,
                                               (void **)&cmdbuf->cmdlist))) {
-      cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
-   return cmdbuf->error;
+   return vk_command_buffer_get_record_result(&cmdbuf->vk);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -565,9 +561,7 @@ dzn_BeginCommandBuffer(VkCommandBuffer commandBuffer,
 static void
 dzn_cmd_buffer_gather_events(struct dzn_cmd_buffer *cmdbuf)
 {
-   struct dzn_device *device = container_of(cmdbuf->vk.base.device, struct dzn_device, vk);
-
-   if (cmdbuf->error != VK_SUCCESS)
+   if (vk_command_buffer_has_error(&cmdbuf->vk))
       goto out;
 
    hash_table_foreach(cmdbuf->events.ht, he) {
@@ -579,7 +573,7 @@ dzn_cmd_buffer_gather_events(struct dzn_cmd_buffer *cmdbuf)
             util_dynarray_grow(&cmdbuf->events.signal, struct dzn_cmd_event_signal, 1);
 
          if (!entry) {
-            cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+            vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
             break;
          }
 
@@ -594,17 +588,14 @@ out:
 static VkResult
 dzn_cmd_buffer_dynbitset_reserve(struct dzn_cmd_buffer *cmdbuf, struct util_dynarray *array, uint32_t bit)
 {
-   struct dzn_device *device = container_of(cmdbuf->vk.base.device, struct dzn_device, vk);
 
    if (bit < util_dynarray_num_elements(array, BITSET_WORD) * BITSET_WORDBITS)
       return VK_SUCCESS;
 
    unsigned old_sz = array->size;
    void *ptr = util_dynarray_grow(array, BITSET_WORD, (bit + BITSET_WORDBITS) / BITSET_WORDBITS);
-   if (!ptr) {
-      cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-      return cmdbuf->error;
-   }
+   if (!ptr)
+      return vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    memset(ptr, 0, array->size - old_sz);
    return VK_SUCCESS;
@@ -676,12 +667,11 @@ dzn_cmd_buffer_dynbitset_clear_range(struct dzn_cmd_buffer *cmdbuf,
 static struct dzn_cmd_buffer_query_pool_state *
 dzn_cmd_buffer_create_query_pool_state(struct dzn_cmd_buffer *cmdbuf)
 {
-   struct dzn_device *device = container_of(cmdbuf->vk.base.device, struct dzn_device, vk);
    struct dzn_cmd_buffer_query_pool_state *state =
       vk_alloc(&cmdbuf->vk.pool->alloc, sizeof(*state),
                8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!state) {
-      cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
       return NULL;
    }
 
@@ -707,7 +697,6 @@ static struct dzn_cmd_buffer_query_pool_state *
 dzn_cmd_buffer_get_query_pool_state(struct dzn_cmd_buffer *cmdbuf,
                                     struct dzn_query_pool *qpool)
 {
-   struct dzn_device *device = container_of(cmdbuf->vk.base.device, struct dzn_device, vk);
    struct dzn_cmd_buffer_query_pool_state *state = NULL;
    struct hash_entry *he =
       _mesa_hash_table_search(cmdbuf->queries.ht, qpool);
@@ -720,7 +709,7 @@ dzn_cmd_buffer_get_query_pool_state(struct dzn_cmd_buffer *cmdbuf,
       he = _mesa_hash_table_insert(cmdbuf->queries.ht, qpool, state);
       if (!he) {
          dzn_cmd_buffer_destroy_query_pool_state(cmdbuf, state);
-         cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+         vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
          return NULL;
       }
    } else {
@@ -819,7 +808,6 @@ dzn_cmd_buffer_collect_query_ops(struct dzn_cmd_buffer *cmdbuf,
                                  struct util_dynarray *bitset_array,
                                  struct util_dynarray *ops_array)
 {
-   struct dzn_device *device = container_of(cmdbuf->vk.base.device, struct dzn_device, vk);
    BITSET_WORD *bitset = util_dynarray_element(bitset_array, BITSET_WORD, 0);
    uint32_t nbits = util_dynarray_num_elements(bitset_array, BITSET_WORD) * BITSET_WORDBITS;
    uint32_t start, end;
@@ -829,10 +817,8 @@ dzn_cmd_buffer_collect_query_ops(struct dzn_cmd_buffer *cmdbuf,
       struct dzn_cmd_buffer_query_range *entry =
          util_dynarray_grow(ops_array, struct dzn_cmd_buffer_query_range, 1);
 
-      if (!entry) {
-         cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-         return cmdbuf->error;
-      }
+      if (!entry)
+         return vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
 
       *entry = range;
    }
@@ -877,12 +863,10 @@ dzn_EndCommandBuffer(VkCommandBuffer commandBuffer)
       dzn_cmd_buffer_gather_queries(cmdbuf);
       HRESULT hres = ID3D12GraphicsCommandList1_Close(cmdbuf->cmdlist);
       if (FAILED(hres))
-         cmdbuf->error = vk_error(cmdbuf->vk.base.device, VK_ERROR_OUT_OF_HOST_MEMORY);
-   } else {
-      cmdbuf->error = cmdbuf->vk.cmd_queue.error;
+         vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
-   return cmdbuf->error;
+   return vk_command_buffer_get_record_result(&cmdbuf->vk);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1084,17 +1068,15 @@ dzn_cmd_buffer_alloc_internal_buf(struct dzn_cmd_buffer *cmdbuf,
                                             &IID_ID3D12Resource,
                                             (void **)&res);
    if (FAILED(hres)) {
-      cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
-      return cmdbuf->error;
+      return vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
    }
 
    struct dzn_internal_resource *entry =
       vk_alloc(&cmdbuf->vk.pool->alloc, sizeof(*entry), 8,
                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!entry) {
-      cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
       ID3D12Resource_Release(res);
-      return cmdbuf->error;
+      return vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
    }
 
    entry->res = res;
@@ -2929,7 +2911,7 @@ dzn_cmd_buffer_indirect_draw(struct dzn_cmd_buffer *cmdbuf,
       dzn_graphics_pipeline_get_indirect_cmd_sig(pipeline, cmd_sig_type);
 
    if (!cmdsig) {
-      cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
       return;
    }
 
@@ -3176,7 +3158,7 @@ dzn_CmdBlitImage2(VkCommandBuffer commandBuffer,
                                            desc_count, &heap, &heap_slot);
 
    if (result != VK_SUCCESS) {
-      cmdbuf->error = result;
+      vk_command_buffer_set_error(&cmdbuf->vk, result);
       return;
    }
 
@@ -3219,7 +3201,7 @@ dzn_CmdResolveImage2(VkCommandBuffer commandBuffer,
       dzn_descriptor_heap_pool_alloc_slots(&cmdbuf->cbv_srv_uav_pool, device,
                                            desc_count, &heap, &heap_slot);
    if (result != VK_SUCCESS) {
-      cmdbuf->error = result;
+      vk_command_buffer_set_error(&cmdbuf->vk, result);
       return;
    }
 
@@ -4086,11 +4068,10 @@ dzn_CmdResetEvent(VkCommandBuffer commandBuffer,
                   VkPipelineStageFlags stageMask)
 {
    VK_FROM_HANDLE(dzn_cmd_buffer, cmdbuf, commandBuffer);
-   struct dzn_device *device = container_of(cmdbuf->vk.base.device, struct dzn_device, vk);
    VK_FROM_HANDLE(dzn_event, evt, event);
 
    if (!_mesa_hash_table_insert(cmdbuf->events.ht, evt, (void *)(uintptr_t)DZN_EVENT_STATE_RESET))
-      cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -4099,11 +4080,10 @@ dzn_CmdSetEvent(VkCommandBuffer commandBuffer,
                 VkPipelineStageFlags stageMask)
 {
    VK_FROM_HANDLE(dzn_cmd_buffer, cmdbuf, commandBuffer);
-   struct dzn_device *device = container_of(cmdbuf->vk.base.device, struct dzn_device, vk);
    VK_FROM_HANDLE(dzn_event, evt, event);
 
    if (!_mesa_hash_table_insert(cmdbuf->events.ht, evt, (void *)(uintptr_t)DZN_EVENT_STATE_SET))
-      cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -4120,7 +4100,6 @@ dzn_CmdWaitEvents(VkCommandBuffer commandBuffer,
                   const VkImageMemoryBarrier *pImageMemoryBarriers)
 {
    VK_FROM_HANDLE(dzn_cmd_buffer, cmdbuf, commandBuffer);
-   struct dzn_device *device = container_of(cmdbuf->vk.base.device, struct dzn_device, vk);
 
    /* Intra-command list wait is handle by this pipeline flush, which is
     * overkill, but that's the best we can do with the standard D3D12 barrier
@@ -4155,7 +4134,7 @@ dzn_CmdWaitEvents(VkCommandBuffer commandBuffer,
       } else {
          if (!_mesa_hash_table_insert(cmdbuf->events.ht, event,
                                       (void *)(uintptr_t)DZN_EVENT_STATE_EXTERNAL_WAIT)) {
-            cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+            vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
             return;
          }
 
@@ -4163,7 +4142,7 @@ dzn_CmdWaitEvents(VkCommandBuffer commandBuffer,
             util_dynarray_grow(&cmdbuf->events.wait, struct dzn_event *, 1);
 
          if (!entry) {
-            cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+            vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
             return;
          }
 
@@ -4399,7 +4378,6 @@ dzn_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
                         VkDeviceSize offset)
 {
    VK_FROM_HANDLE(dzn_cmd_buffer, cmdbuf, commandBuffer);
-   struct dzn_device *device = container_of(cmdbuf->vk.base.device, struct dzn_device, vk);
    VK_FROM_HANDLE(dzn_buffer, buf, buffer);
 
    cmdbuf->state.sysvals.compute.group_count_x = 0;
@@ -4416,7 +4394,7 @@ dzn_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
       dzn_compute_pipeline_get_indirect_cmd_sig(pipeline);
 
    if (!cmdsig) {
-      cmdbuf->error = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
       return;
    }
 

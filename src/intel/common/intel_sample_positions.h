@@ -67,8 +67,8 @@ intel_get_sample_positions(int samples)
  */
 
 #define INTEL_SAMPLE_POS_ELEM(prefix, arr, sample_idx) \
-prefix##sample_idx##XOffset = arr[sample_idx].x; \
-prefix##sample_idx##YOffset = arr[sample_idx].y;
+prefix##sample_idx##XOffset = CLAMP(arr[sample_idx].x, 0.0, 0.9375); \
+prefix##sample_idx##YOffset = CLAMP(arr[sample_idx].y, 0.0, 0.9375);
 
 #define INTEL_SAMPLE_POS_1X_ARRAY(prefix, arr)\
    INTEL_SAMPLE_POS_ELEM(prefix, arr, 0);
