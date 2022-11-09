@@ -13,7 +13,8 @@ DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 
 # for finding the correct llvm-config when meson doesn't know about it yet
-export PATH:=/usr/lib/llvm-15/bin/:$(PATH)
+LLVM_VERSION = 15
+export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:$(PATH)
 
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
 
@@ -47,7 +48,10 @@ confflags_DRI3 = -Ddri3=disabled
 confflags_OSMESA =  -Dosmesa=true
 confflags_SSE2 = -Dsse2=true
 
-NO_RUSTC_ARCHS = alpha arc hppa hurd-i386 ia64 kfreebsd-amd64 kfreebsd-i386 m68k powerpc ppc64 riscv64 sh4 sparc64 x32
+LLVM_ARCHS     = amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x sparc64 x32
+RUSTICL_ARCHS  = amd64 arm64 armel armhf i386 mips64el mipsel ppc64el s390x
+VALGRIND_ARCHS = amd64 arm64 armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x
+WINE_ARCHS     = amd64 arm64 armel armhf i386 powerpc
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
@@ -61,12 +65,6 @@ else
 	confflags_GALLIUM += -Dgallium-extra-hud=true
 	confflags_GALLIUM += -Dgallium-vdpau=enabled
 	confflags_GALLIUM += -Dlmsensors=enabled
-
-  # radv/lavapipe needs LLVM and the Vulkan loader, so only build on the subset of
-  # arches where we have LLVM enabled and where the Vulkan loader is built.
-  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x sparc64))
-	VULKAN_DRIVERS += amd swrast
-  endif
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = -Ddri3=enabled
@@ -89,6 +87,7 @@ else
 		# svga needs xa state tracker
 		confflags_GALLIUM += -Dgallium-xa=enabled
 		VULKAN_DRIVERS += intel
+		confflags_GALLIUM += -Dintel-clc=enabled
 	endif
 
 	# Non-Linux ports lack epoll, so wayland isn't ready yet:
@@ -96,7 +95,7 @@ else
 	# hurd also lacks *_CLOEXEC
 	EGL_PLATFORMS += ,wayland
 
-	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x))
+	ifneq (,$(filter $(DEB_HOST_ARCH), $(VALGRIND_ARCHS)))
 		confflags_VALGRIND += -Dvalgrind=enabled
 	endif
 
@@ -113,28 +112,24 @@ else
 
   # LLVM is required for building r300g, radeonsi and llvmpipe drivers.
   # It's also required for building OpenCL support.
-  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x sparc64))
-	GALLIUM_DRIVERS += radeonsi
+  ifneq (,$(filter $(DEB_HOST_ARCH), $(LLVM_ARCHS)))
+	GALLIUM_DRIVERS += radeonsi zink
+	VULKAN_DRIVERS += amd swrast
+	VULKAN_LAYERS += device-select intel-nullhw overlay
 	confflags_GALLIUM += -Dllvm=enabled
 	confflags_GALLIUM += -Dgallium-opencl=icd
 
 	# Build rusticl for archs where rustc is available
-	ifneq ($(DEB_HOST_ARCH), $(NO_RUSTC_ARCHS))
+	ifneq (,$(filter $(DEB_HOST_ARCH), $(RUSTICL_ARCHS)))
 		confflags_GALLIUM += -Dgallium-rusticl=true
 	endif
 
 	# nine makes sense only on archs that build wine
-	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 powerpc))
+	ifneq (,$(filter $(DEB_HOST_ARCH), $(WINE_ARCHS)))
 		confflags_GALLIUM += -Dgallium-nine=true
 	endif
   else
 	confflags_GALLIUM += -Dllvm=disabled
-  endif
-
-  # build vulkan layers where Vulkan loader is available
-  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x sparc64 x32))
-	GALLIUM_DRIVERS += zink
-	VULKAN_LAYERS += device-select intel-nullhw overlay
   endif
 
   ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
@@ -181,13 +176,13 @@ confflags += \
 	$(confflags_SSE2) \
 	$(confflags_VALGRIND)
 
-override_dh_clean:
+override_dh_clean: regen_control
 	rm -rf .pc
 	rm -rf build
 	rm -rf configure bin/config.guess bin/config.sub config.h.in
 	rm -rf $$(find -name Makefile.in)
 	rm -rf bin/install-sh bin/ltmain.sh
-	for file in debian/*.in; do rm -f $${file%%.in}; done
+	for file in debian/*.links.in; do rm -f $${file%%.in}; done
 	find -name '*.pyc' -delete
 	find -name '__pycache__' -delete
 	dh_clean
@@ -198,7 +193,7 @@ override_dh_auto_configure:
 
 override_dh_auto_install:
 	dh_auto_install
-	for file in debian/*.in; \
+	for file in debian/*.links.in; \
 	do \
 		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
 			$${file} > $${file%%.in}; \
@@ -224,6 +219,8 @@ override_dh_install:
 	rm debian/tmp/usr/lib/*/libglapi.so
 	rm debian/tmp/usr/lib/*/libEGL_mesa.so
 	rm debian/tmp/usr/lib/*/libGLX_mesa.so
+	# use -f here though
+	rm -f debian/tmp/usr/lib/*/libgrl.a
 
 	# Copy the hardlinked *_dri.so correctly.
 	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
@@ -244,7 +241,7 @@ override_dh_install:
     endif
   endif
 
-  ifneq ($(DEB_HOST_ARCH), $(NO_RUSTC_ARCHS))
+  ifneq (,$(filter $(DEB_HOST_ARCH), $(RUSTICL_ARCHS)))
 	install -m755 -d debian/mesa-opencl-icd/etc/OpenCL/vendors
 	mv debian/tmp/etc/OpenCL/vendors/rusticl.icd \
 	   debian/mesa-opencl-icd/etc/OpenCL/vendors
@@ -277,3 +274,11 @@ override_dh_makeshlibs:
 gentarball:
 	git archive --format=tar upstream-experimental --prefix=$(DEB_SOURCE)-$(DEB_VERSION_UPSTREAM)/ \
 		| gzip -9 > ../$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM).orig.tar.gz
+
+regen_control:
+	sed -e"s,@LLVM_VERSION@,$(LLVM_VERSION),g" \
+	    -e"s,@LLVM_ARCHS@,$(LLVM_ARCHS),g" \
+	    -e"s,@RUSTICL_ARCHS@,$(RUSTICL_ARCHS),g" \
+	    -e"s,@VALGRIND_ARCHS@,$(VALGRIND_ARCHS),g" \
+	    -e"s,@WINE_ARCHS@,$(WINE_ARCHS),g" \
+	    debian/control.in > debian/control

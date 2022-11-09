@@ -1,3 +1,18 @@
+mesa (22.3.0~rc1-3) experimental; urgency=medium
+
+  * control, rules: Enable intel vulkan raytracing support, add
+    python3-ply and libclc-15 to build-depends.
+  * rules: Fix rusticl logic.
+  * rules: Add some variables for architecture lists.
+  * rules: Drop the check for where vulkan loader exists, it's the same
+    list of archs now as for llvm.
+  * rules: Drop a duplicate check for llvm archs.
+  * rules, control.in: Add a template file for d/control, which makes
+    maintaining the llvm version and some arch lists easier.
+  * rules: Remove unused libgrl.a from the intel raytracing build.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 09 Nov 2022 13:37:20 +0200
+
 mesa (22.3.0~rc1-2) experimental; urgency=medium
 
   * rules: Update list of archs without rustc.
