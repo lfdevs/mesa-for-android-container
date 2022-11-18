@@ -85,7 +85,13 @@ if not _shared_llvm or not (dep_clang.found() and dep_clang_usable)
   endif
 endif
 
-ocldef = files(opencl_libname + '.def')[0]
+ocldef_in = files(opencl_libname + '.def.in')[0]
+ocldef = custom_target(
+  'ocldef.def',
+  input: ocldef_in,
+  output : 'ocldef.def',
+  command : gen_vs_module_defs_normal_command,
+)
 
 libopencl = shared_library(
   opencl_libname,
@@ -99,7 +105,9 @@ libopencl = shared_library(
     idep_mesautil,
     dep_clock, dep_dl, dep_unwind, dep_elf, dep_clang, dep_version
   ],
+  name_prefix : host_machine.system() == 'windows' ? '' : 'lib',  # otherwise mingw will create libOpenCL-1.dll or libMesaOpenCL-1.dll
   version : '@0@.0.0'.format(opencl_version),
+  soversion : host_machine.system() == 'windows' ? '' : opencl_version,
   install : true,
 )
 

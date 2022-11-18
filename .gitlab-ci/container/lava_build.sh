@@ -267,7 +267,6 @@ popd
 . .gitlab-ci/container/container_post_build.sh
 
 ############### Upload the files!
-ci-fairy minio login --token-file "${CI_JOB_JWT_FILE}"
 FILES_TO_UPLOAD="lava-rootfs.tar.zst \
                  $KERNEL_IMAGE_NAME"
 
@@ -276,9 +275,9 @@ if [[ -n $DEVICE_TREES ]]; then
 fi
 
 for f in $FILES_TO_UPLOAD; do
-    ci-fairy minio cp /lava-files/$f \
-             minio://${MINIO_PATH}/$f
+    ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/$f \
+             https://${MINIO_PATH}/$f
 done
 
 touch /lava-files/done
-ci-fairy minio cp /lava-files/done minio://${MINIO_PATH}/done
+ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/done https://${MINIO_PATH}/done

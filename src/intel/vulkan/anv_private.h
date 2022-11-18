@@ -139,31 +139,34 @@ struct intel_perf_query_result;
  * heap. This is to work around a VF cache issue described in a comment in
  * anv_physical_device_init_heaps.
  *
- * (2) the binding table pool is located at lower addresses than the surface
- * state pool, within a 4 GiB range. This allows surface state base addresses
- * to cover both binding tables (16 bit offsets) and surface states (32 bit
- * offsets).
+ * (2) the binding table pool is located at lower addresses than the BT
+ * (binding table) surface state pool, within a 4 GiB range which also
+ * contains the bindless surface state pool. This allows surface state base
+ * addresses to cover both binding tables (16 bit offsets), the internal
+ * surface states (32 bit offsets) and the bindless surface states.
  *
  * (3) the last 4 GiB of the address space is withheld from the high
  * heap. Various hardware units will read past the end of an object for
  * various reasons. This healthy margin prevents reads from wrapping around
  * 48-bit addresses.
  */
-#define GENERAL_STATE_POOL_MIN_ADDRESS     0x000000200000ULL /* 2 MiB */
-#define GENERAL_STATE_POOL_MAX_ADDRESS     0x00003fffffffULL
-#define LOW_HEAP_MIN_ADDRESS               0x000040000000ULL /* 1 GiB */
-#define LOW_HEAP_MAX_ADDRESS               0x00007fffffffULL
-#define DYNAMIC_STATE_POOL_MIN_ADDRESS     0x0000c0000000ULL /* 3 GiB */
-#define DYNAMIC_STATE_POOL_MAX_ADDRESS     0x0000ffffffffULL
-#define BINDING_TABLE_POOL_MIN_ADDRESS     0x000100000000ULL /* 4 GiB */
-#define BINDING_TABLE_POOL_MAX_ADDRESS     0x00013fffffffULL
-#define SURFACE_STATE_POOL_MIN_ADDRESS     0x000140000000ULL /* 5 GiB */
-#define SURFACE_STATE_POOL_MAX_ADDRESS     0x00017fffffffULL
-#define INSTRUCTION_STATE_POOL_MIN_ADDRESS 0x000180000000ULL /* 6 GiB */
-#define INSTRUCTION_STATE_POOL_MAX_ADDRESS 0x0001bfffffffULL
-#define CLIENT_VISIBLE_HEAP_MIN_ADDRESS    0x0001c0000000ULL /* 7 GiB */
-#define CLIENT_VISIBLE_HEAP_MAX_ADDRESS    0x0009bfffffffULL
-#define HIGH_HEAP_MIN_ADDRESS              0x0009c0000000ULL /* 39 GiB */
+#define GENERAL_STATE_POOL_MIN_ADDRESS             0x000000200000ULL /* 2 MiB */
+#define GENERAL_STATE_POOL_MAX_ADDRESS             0x00003fffffffULL
+#define LOW_HEAP_MIN_ADDRESS                       0x000040000000ULL /* 1 GiB */
+#define LOW_HEAP_MAX_ADDRESS                       0x00007fffffffULL
+#define DYNAMIC_STATE_POOL_MIN_ADDRESS             0x0000c0000000ULL /* 3 GiB */
+#define DYNAMIC_STATE_POOL_MAX_ADDRESS             0x0000ffffffffULL
+#define BINDING_TABLE_POOL_MIN_ADDRESS             0x000100000000ULL /* 4 GiB */
+#define BINDING_TABLE_POOL_MAX_ADDRESS             0x00013fffffffULL
+#define INTERNAL_SURFACE_STATE_POOL_MIN_ADDRESS    0x000140000000ULL /* 5 GiB */
+#define INTERNAL_SURFACE_STATE_POOL_MAX_ADDRESS    0x0001bfffffffULL
+#define BINDLESS_SURFACE_STATE_POOL_MIN_ADDRESS    0x0001c0000000ULL /* 7 GiB */
+#define BINDLESS_SURFACE_STATE_POOL_MAX_ADDRESS    0x0001bfffffffULL
+#define INSTRUCTION_STATE_POOL_MIN_ADDRESS         0x000200000000ULL /* 8 GiB */
+#define INSTRUCTION_STATE_POOL_MAX_ADDRESS         0x00023fffffffULL
+#define CLIENT_VISIBLE_HEAP_MIN_ADDRESS            0x000240000000ULL /* 9 GiB */
+#define CLIENT_VISIBLE_HEAP_MAX_ADDRESS            0x000a3fffffffULL
+#define HIGH_HEAP_MIN_ADDRESS                      0x000a40000000ULL /* 41 GiB */
 
 #define GENERAL_STATE_POOL_SIZE     \
    (GENERAL_STATE_POOL_MAX_ADDRESS - GENERAL_STATE_POOL_MIN_ADDRESS + 1)
@@ -174,8 +177,10 @@ struct intel_perf_query_result;
 #define BINDING_TABLE_POOL_SIZE     \
    (BINDING_TABLE_POOL_MAX_ADDRESS - BINDING_TABLE_POOL_MIN_ADDRESS + 1)
 #define BINDING_TABLE_POOL_BLOCK_SIZE (65536)
-#define SURFACE_STATE_POOL_SIZE     \
-   (SURFACE_STATE_POOL_MAX_ADDRESS - SURFACE_STATE_POOL_MIN_ADDRESS + 1)
+#define INTERNAL_SURFACE_STATE_POOL_SIZE \
+   (INTERNAL_SURFACE_STATE_POOL_MAX_ADDRESS - INTERNAL_SURFACE_STATE_POOL_MIN_ADDRESS + 1)
+#define BINDLESS_SURFACE_STATE_POOL_SIZE \
+   (BINDLESS_SURFACE_STATE_POOL_MAX_ADDRESS - BINDLESS_SURFACE_STATE_POOL_MIN_ADDRESS + 1)
 #define INSTRUCTION_STATE_POOL_SIZE \
    (INSTRUCTION_STATE_POOL_MAX_ADDRESS - INSTRUCTION_STATE_POOL_MIN_ADDRESS + 1)
 #define CLIENT_VISIBLE_HEAP_SIZE               \
@@ -734,7 +739,7 @@ struct anv_fixed_size_state_pool {
 };
 
 #define ANV_MIN_STATE_SIZE_LOG2 6
-#define ANV_MAX_STATE_SIZE_LOG2 21
+#define ANV_MAX_STATE_SIZE_LOG2 22
 
 #define ANV_STATE_BUCKETS (ANV_MAX_STATE_SIZE_LOG2 - ANV_MIN_STATE_SIZE_LOG2 + 1)
 
@@ -1156,7 +1161,8 @@ struct anv_device {
     struct anv_state_pool                       dynamic_state_pool;
     struct anv_state_pool                       instruction_state_pool;
     struct anv_state_pool                       binding_table_pool;
-    struct anv_state_pool                       surface_state_pool;
+    struct anv_state_pool                       internal_surface_state_pool;
+    struct anv_state_pool                       bindless_surface_state_pool;
 
     struct anv_state_reserved_pool              custom_border_colors;
 
@@ -1256,6 +1262,14 @@ static inline void
 anv_binding_table_pool_free(struct anv_device *device, struct anv_state state)
 {
    anv_state_pool_free(&device->binding_table_pool, state);
+}
+
+static inline struct anv_state
+anv_bindless_state_for_binding_table(struct anv_state state)
+{
+   state.offset += BINDLESS_SURFACE_STATE_POOL_MIN_ADDRESS -
+                   INTERNAL_SURFACE_STATE_POOL_MIN_ADDRESS;
+   return state;
 }
 
 static inline uint32_t
@@ -2573,6 +2587,17 @@ struct anv_cmd_state {
     * last command buffer to the primary (if known).
     */
    enum anv_depth_reg_mode                      depth_reg_mode;
+
+   /**
+    * Whether RHWO optimization is enabled (Wa_1508744258).
+    */
+   bool                                         rhwo_optimization_enabled;
+
+   /**
+    * Pending state of the RHWO optimization, to be applied at the next
+    * genX(cmd_buffer_apply_pipe_flushes).
+    */
+   bool                                         pending_rhwo_optimization_enabled;
 
    bool                                         conditional_render_enabled;
 

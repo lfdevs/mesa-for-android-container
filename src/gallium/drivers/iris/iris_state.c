@@ -988,6 +988,8 @@ iris_alloc_push_constants(struct iris_batch *batch)
     */
    if (intel_device_info_is_dg2(devinfo)) {
       iris_emit_cmd(batch, GENX(3DSTATE_CONSTANT_ALL), c) {
+         /* Update empty push constants for all stages (bitmask = 11111b) */
+         c.ShaderUpdateEnable = 0x1f;
          c.MOCS = iris_mocs(NULL, &batch->screen->isl_dev, 0);
       }
    }

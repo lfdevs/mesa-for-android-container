@@ -561,7 +561,8 @@ radv_declare_shader_args(enum amd_gfx_level gfx_level, const struct radv_pipelin
 {
    struct user_sgpr_info user_sgpr_info;
    bool needs_view_index = info->uses_view_index;
-   bool has_ngg_query = stage == MESA_SHADER_GEOMETRY || key->primitives_generated_query;
+   bool has_ngg_query = info->has_ngg_prim_query || info->has_ngg_xfb_query ||
+                        (stage == MESA_SHADER_GEOMETRY && info->gs.has_ngg_pipeline_stat_query);
 
    if (gfx_level >= GFX10 && info->is_ngg && stage != MESA_SHADER_GEOMETRY) {
       /* Handle all NGG shaders as GS to simplify the code here. */

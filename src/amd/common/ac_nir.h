@@ -128,13 +128,14 @@ typedef struct {
    const uint8_t *vs_output_param_offset; /* GFX11+ */
    bool can_cull;
    bool disable_streamout;
+   bool has_gen_prim_query;
+   bool has_xfb_prim_query;
 
    /* VS */
    unsigned num_vertices_per_primitive;
    bool early_prim_export;
    bool passthrough;
    bool use_edgeflags;
-   bool has_prim_query;
    int primitive_id_location;
    uint32_t instance_rate_inputs;
    uint32_t clipdist_enable_mask;
@@ -142,7 +143,6 @@ typedef struct {
 
    /* GS */
    unsigned gs_out_vtx_bytes;
-   bool has_xfb_query;
 } ac_nir_lower_ngg_options;
 
 void

@@ -67,6 +67,8 @@ struct aco_ps_epilog_key {
    uint8_t color_is_int8;
    uint8_t color_is_int10;
    uint8_t enable_mrt_output_nan_fixup;
+
+   bool mrt0_is_dual_src;
 };
 
 struct aco_vp_output_info {
@@ -173,6 +175,7 @@ struct aco_stage_input {
 
       /* Used to export alpha through MRTZ for alpha-to-coverage (GFX11+). */
       bool alpha_to_coverage_via_mrtz;
+      bool mrt0_is_dual_src;
    } ps;
 };
 

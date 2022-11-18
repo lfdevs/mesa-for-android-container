@@ -45,6 +45,13 @@
 
 #include "util/u_dynarray.h"
 #include "os/os_thread.h"
+#include "util/detect_os.h"
+
+#if DETECT_OS_WINDOWS
+#define VA_PUBLIC_API
+#else
+#define VA_PUBLIC_API PUBLIC
+#endif
 
 #ifndef VA_RT_FORMAT_YUV420_10
 #define VA_RT_FORMAT_YUV420_10  VA_RT_FORMAT_YUV420_10BPP
@@ -383,9 +390,7 @@ typedef struct {
 } vlVaQualityBits;
 
 // Public functions:
-#ifndef _WIN32
 VAStatus VA_DRIVER_INIT_FUNC(VADriverContextP ctx);
-#endif
 
 // vtable functions:
 VAStatus vlVaTerminate(VADriverContextP ctx);

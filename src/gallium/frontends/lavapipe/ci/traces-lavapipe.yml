@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: "https://minio-packet.freedesktop.org/mesa-tracie-public/"
+  download-url: "https://s3.freedesktop.org/mesa-tracie-public/"
 
 traces:
   unigine/sanctuary-d3d9.trace-dxgi:

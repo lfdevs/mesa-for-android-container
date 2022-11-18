@@ -2594,10 +2594,12 @@ tu_CmdBindPipeline(VkCommandBuffer commandBuffer,
       cmd->state.rp.has_tess = true;
 
       if (!(pipeline->dynamic_state_mask &
-            BIT(TU_DYNAMIC_STATE_PATCH_CONTROL_POINTS)))
+            BIT(TU_DYNAMIC_STATE_PATCH_CONTROL_POINTS))) {
          cmd->state.patch_control_points = pipeline->tess.patch_control_points;
-      else
+         cmd->state.dirty &= ~TU_CMD_DIRTY_PATCH_CONTROL_POINTS;
+      } else {
          cmd->state.dirty |= TU_CMD_DIRTY_PATCH_CONTROL_POINTS;
+      }
    }
 
    cmd->state.line_mode = pipeline->rast.line_mode;

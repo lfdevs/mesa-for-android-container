@@ -547,7 +547,7 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
    }
 
    unsigned tmpring_size;
-   ac_get_scratch_tmpring_size(&sctx->screen->info, true,
+   ac_get_scratch_tmpring_size(&sctx->screen->info,
                                config->scratch_bytes_per_wave,
                                &sctx->max_seen_compute_scratch_bytes_per_wave, &tmpring_size);
 

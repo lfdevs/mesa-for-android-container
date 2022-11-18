@@ -916,7 +916,7 @@ void ac_set_reg_cu_en(void *cs, unsigned reg_offset, uint32_t value, uint32_t cl
 }
 
 /* Return the register value and tune bytes_per_wave to increase scratch performance. */
-void ac_get_scratch_tmpring_size(const struct radeon_info *info, bool compute,
+void ac_get_scratch_tmpring_size(const struct radeon_info *info,
                                  unsigned bytes_per_wave, unsigned *max_seen_bytes_per_wave,
                                  uint32_t *tmpring_size)
 {
@@ -949,8 +949,8 @@ void ac_get_scratch_tmpring_size(const struct radeon_info *info, bool compute,
    *max_seen_bytes_per_wave = MAX2(*max_seen_bytes_per_wave, bytes_per_wave);
 
    unsigned max_scratch_waves = info->max_scratch_waves;
-   if (info->gfx_level >= GFX11 && !compute)
-      max_scratch_waves /= info->num_se; /* WAVES is per SE for SPI_TMPRING_SIZE. */
+   if (info->gfx_level >= GFX11)
+      max_scratch_waves /= info->num_se; /* WAVES is per SE */
 
    /* TODO: We could decrease WAVES to make the whole buffer fit into the infinity cache. */
    *tmpring_size = S_0286E8_WAVES(max_scratch_waves) |

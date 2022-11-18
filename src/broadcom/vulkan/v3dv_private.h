@@ -1673,6 +1673,9 @@ bool v3dv_cmd_buffer_check_needs_store(const struct v3dv_cmd_buffer_state *state
                                        uint32_t last_subpass_idx,
                                        VkAttachmentStoreOp store_op);
 
+void v3dv_cmd_buffer_emit_pipeline_barrier(struct v3dv_cmd_buffer *cmd_buffer,
+                                           const VkDependencyInfoKHR *info);
+
 struct v3dv_event {
    struct vk_object_base base;
 
@@ -1682,7 +1685,7 @@ struct v3dv_event {
    uint32_t index;
 };
 
-bool
+VkResult
 v3dv_event_allocate_resources(struct v3dv_device *device);
 
 void

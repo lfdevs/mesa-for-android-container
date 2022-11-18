@@ -14,16 +14,14 @@ Features
 The feature-level of Zink depends on two things; what's implemented in Zink,
 as well as the capabilities of the Vulkan driver. 
 
-The feature-levels implemented by Zink are exposed by 
-`Vulkan Profiles<https://dev.vulkan.org/tools#vulkan-profiles>` in the 
-`VP_ZINK_requirements.json<src/gallium/drivers/zink/VP_ZINK_requirements.json>`
-profiles file.
+The feature-levels implemented by Zink are exposed by `Vulkan Profiles
+<https://dev.vulkan.org/tools#vulkan-profiles>`__ in the
+:file:`VP_ZINK_requirements.json` profiles file.
 
-Used with the `Vulkan Profiles tools<https://github.com/KhronosGroup/Vulkan-Profiles>`, 
+Used with the `Vulkan Profiles tools <https://github.com/KhronosGroup/Vulkan-Profiles>`__,
 we can compare the ZINK profiles with Vulkan devices profiles generated with 
-`Vulkaninfo<https://vulkan.lunarg.com/doc/view/latest/windows/vulkaninfo.html>`
-or downloaded from 
-`GPUinfo.org<https://www.saschawillems.de/blog/2022/03/12/vulkan-profiles-support-for-the-vulkan-hardware-capability-viewer-and-database/>`
+`Vulkaninfo <https://vulkan.lunarg.com/doc/view/latest/windows/vulkaninfo.html>`__
+or `downloaded from GPUinfo.org`_
 to establish the feature-levels supported by these drivers.
 
 OpenGL 2.1
@@ -309,6 +307,7 @@ questions, don't hesitate to visit `#zink on OFTC
 <irc://irc.oftc.net/zink>`__ and say hi!
 
 
+.. _downloaded from GPUinfo.org: https://www.saschawillems.de/blog/2022/03/12/vulkan-profiles-support-for-the-vulkan-hardware-capability-viewer-and-database/
 .. _VK_KHR_maintenance1: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_KHR_maintenance1.html
 .. _VK_KHR_create_renderpass2: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_KHR_create_renderpass2.html
 .. _VK_KHR_imageless_framebuffer: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_KHR_imageless_framebuffer.html

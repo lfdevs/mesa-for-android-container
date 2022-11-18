@@ -215,11 +215,13 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
 
    /* Precompute PS_INPUT_COUNT and TEMP_REGISTER_CONTROL in the case of MSAA
     * mode, avoids some fumbling in sync_context. */
+   /* MSAA adds another input */
    cs->PS_INPUT_COUNT_MSAA =
-      VIVS_PS_INPUT_COUNT_COUNT(link.num_varyings + 2) | /* MSAA adds another input */
+      VIVS_PS_INPUT_COUNT_COUNT(link.num_varyings + 2) |
       VIVS_PS_INPUT_COUNT_UNK8(fs->input_count_unk8);
+   /* MSAA adds another temp */
    cs->PS_TEMP_REGISTER_CONTROL_MSAA =
-      VIVS_PS_TEMP_REGISTER_CONTROL_NUM_TEMPS(MAX2(fs->num_temps, link.num_varyings + 2));
+      VIVS_PS_TEMP_REGISTER_CONTROL_NUM_TEMPS(MAX2(fs->num_temps + 1, link.num_varyings + 2));
 
    uint32_t total_components = 0;
    DEFINE_ETNA_BITARRAY(num_components, ETNA_NUM_VARYINGS, 4) = {0};

@@ -486,7 +486,7 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
       request.flags |= AMDGPU_GEM_CREATE_CPU_GTT_USWC;
    if (!(flags & RADEON_FLAG_IMPLICIT_SYNC))
       request.flags |= AMDGPU_GEM_CREATE_EXPLICIT_SYNC;
-   if (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING &&
+   if ((initial_domain & RADEON_DOMAIN_VRAM_GTT) && (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING) &&
        ((ws->perftest & RADV_PERFTEST_LOCAL_BOS) || (flags & RADEON_FLAG_PREFER_LOCAL_BO))) {
       bo->base.is_local = true;
       request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;

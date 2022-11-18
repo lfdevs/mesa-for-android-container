@@ -1000,8 +1000,7 @@ gfx10_make_texture_descriptor(struct radv_device *device, struct radv_image *ima
       depth = image->info.array_size / 6;
 
    state[0] = 0;
-   state[1] = S_00A004_MIN_LOD(radv_float_to_ufixed(CLAMP(min_lod, 0, 15), 8)) |
-              S_00A004_FORMAT(img_format) |
+   state[1] = S_00A004_FORMAT(img_format) |
               S_00A004_WIDTH_LO(width - 1);
    state[2] = S_00A008_WIDTH_HI((width - 1) >> 2) | S_00A008_HEIGHT(height - 1) |
               S_00A008_RESOURCE_LEVEL(device->physical_device->rad_info.gfx_level < GFX11);
@@ -1040,9 +1039,13 @@ gfx10_make_texture_descriptor(struct radv_device *device, struct radv_image *ima
    if (nbc_view && nbc_view->valid)
       max_mip = nbc_view->max_mip;
 
+   unsigned min_lod_clamped = radv_float_to_ufixed(CLAMP(min_lod, 0, 15), 8);
    if (device->physical_device->rad_info.gfx_level >= GFX11) {
       state[1] |= S_00A004_MAX_MIP(max_mip);
+      state[5] |= S_00A014_MIN_LOD_LO(min_lod_clamped);
+      state[6] |= S_00A018_MIN_LOD_HI(min_lod_clamped >> 5);
    } else {
+      state[1] |= S_00A004_MIN_LOD(min_lod_clamped);
       state[5] |= S_00A014_MAX_MIP(max_mip);
    }
 

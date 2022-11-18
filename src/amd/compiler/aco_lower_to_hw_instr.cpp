@@ -2384,12 +2384,14 @@ lower_to_hw_instr(Program* program)
                assert(instr->definitions[0].regClass() == v1 ||
                       instr->definitions[0].regClass() == v2b);
                assert(instr->definitions[1].regClass() == bld.lm);
+               assert(instr->definitions[2].isFixed() && instr->definitions[2].physReg() == scc);
                assert(instr->operands[0].regClass() == v1.as_linear());
                assert(instr->operands[1].isConstant());
                assert(instr->operands[2].isConstant());
                assert(instr->operands.back().physReg() == m0);
                Definition dst = instr->definitions[0];
                PhysReg exec_tmp = instr->definitions[1].physReg();
+               Definition clobber_scc = instr->definitions[2];
                PhysReg lin_vgpr = instr->operands[0].physReg();
                unsigned attribute = instr->operands[1].constantValue();
                unsigned component = instr->operands[2].constantValue();
@@ -2406,7 +2408,8 @@ lower_to_hw_instr(Program* program)
                }
 
                bld.sop1(Builder::s_mov, Definition(exec_tmp, bld.lm), Operand(exec, bld.lm));
-               bld.sop1(Builder::s_wqm, Definition(exec, bld.lm), Operand(exec, bld.lm));
+               bld.sop1(Builder::s_wqm, Definition(exec, bld.lm), clobber_scc,
+                        Operand(exec, bld.lm));
                bld.ldsdir(aco_opcode::lds_param_load, Definition(lin_vgpr, v1), Operand(m0, s1),
                           attribute, component);
                bld.sop1(Builder::s_mov, Definition(exec, bld.lm), Operand(exec_tmp, bld.lm));
@@ -2426,6 +2429,85 @@ lower_to_hw_instr(Program* program)
                   bld.vinterp_inreg(aco_opcode::v_interp_p2_f32_inreg, Definition(dst), p, coord2,
                                     dst_op);
                }
+               break;
+            }
+            case aco_opcode::p_dual_src_export_gfx11: {
+               PhysReg dst0 = instr->definitions[0].physReg();
+               PhysReg dst1 = instr->definitions[1].physReg();
+               Definition tmp = instr->definitions[2];
+               Definition exec_tmp = instr->definitions[3];
+               Definition clobber_vcc = instr->definitions[4];
+               Definition clobber_scc = instr->definitions[5];
+
+               assert(tmp.regClass() == v1);
+               assert(exec_tmp.regClass() == bld.lm);
+               assert(clobber_vcc.regClass() == bld.lm && clobber_vcc.physReg() == vcc);
+               assert(clobber_scc.isFixed() && clobber_scc.physReg() == scc);
+
+               bld.sop1(Builder::s_mov, Definition(exec_tmp.physReg(), bld.lm),
+                        Operand(exec, bld.lm));
+               bld.sop1(Builder::s_wqm, Definition(exec, bld.lm), clobber_scc,
+                        Operand(exec, bld.lm));
+
+               uint8_t enabled_channels = 0;
+               Operand mrt0[4], mrt1[4];
+
+               bld.sop1(aco_opcode::s_mov_b32, Definition(clobber_vcc.physReg(), s1),
+                        Operand::c32(0x55555555));
+               if (ctx.program->wave_size == 64)
+                  bld.sop1(aco_opcode::s_mov_b32, Definition(clobber_vcc.physReg().advance(4), s1),
+                           Operand::c32(0x55555555));
+
+               for (unsigned i = 0; i < 4; i++) {
+                  if (instr->operands[i].isUndefined() && instr->operands[i + 4].isUndefined()) {
+                     mrt0[i] = instr->operands[i];
+                     mrt1[i] = instr->operands[i + 4];
+                     continue;
+                  }
+
+                  Operand src0 = instr->operands[i];
+                  Operand src1 = instr->operands[i + 4];
+
+                  /* Swap odd, even lanes of mrt0. */
+                  Builder::Result ret =
+                     bld.vop1_dpp8(aco_opcode::v_mov_b32, Definition(dst0, v1), src0);
+                  for (unsigned j = 0; j < 8; j++) {
+                     ret.instr->dpp8().lane_sel[j] = j ^ 1;
+                  }
+
+                  /* Swap even lanes between mrt0 and mrt1. */
+                  bld.vop2(aco_opcode::v_cndmask_b32, tmp, Operand(dst0, v1), src1,
+                           Operand(clobber_vcc.physReg(), bld.lm));
+                  bld.vop2(aco_opcode::v_cndmask_b32, Definition(dst1, v1), src1, Operand(dst0, v1),
+                           Operand(clobber_vcc.physReg(), bld.lm));
+
+                  /* Swap odd, even lanes of mrt0 again. */
+                  ret = bld.vop1_dpp8(aco_opcode::v_mov_b32, Definition(dst0, v1),
+                                      Operand(tmp.physReg(), v1));
+                  for (unsigned j = 0; j < 8; j++) {
+                     ret.instr->dpp8().lane_sel[j] = j ^ 1;
+                  }
+
+                  mrt0[i] = Operand(dst0, v1);
+                  mrt1[i] = Operand(dst1, v1);
+
+                  enabled_channels |= 1 << i;
+
+                  dst0 = dst0.advance(4);
+                  dst1 = dst1.advance(4);
+               }
+
+               bld.sop1(Builder::s_mov, Definition(exec, bld.lm),
+                        Operand(exec_tmp.physReg(), bld.lm));
+
+               /* Force export all channels when everything is undefined. */
+               if (!enabled_channels)
+                  enabled_channels = 0xf;
+
+               bld.exp(aco_opcode::exp, mrt0[0], mrt0[1], mrt0[2], mrt0[3], enabled_channels,
+                       V_008DFC_SQ_EXP_MRT + 21, false);
+               bld.exp(aco_opcode::exp, mrt1[0], mrt1[1], mrt1[2], mrt1[3], enabled_channels,
+                       V_008DFC_SQ_EXP_MRT + 22, false);
                break;
             }
             default: break;

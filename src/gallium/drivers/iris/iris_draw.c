@@ -408,6 +408,12 @@ iris_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info *grid)
       ice->state.shaders[MESA_SHADER_COMPUTE].sysvals_need_upload = true;
    }
 
+   if (ice->state.last_grid_dim != grid->work_dim) {
+      ice->state.last_grid_dim = grid->work_dim;
+      ice->state.stage_dirty |= IRIS_STAGE_DIRTY_CONSTANTS_CS;
+      ice->state.shaders[MESA_SHADER_COMPUTE].sysvals_need_upload = true;
+   }
+
    iris_update_grid_size_resource(ice, grid);
 
    iris_binder_reserve_compute(ice);

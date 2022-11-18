@@ -2367,6 +2367,13 @@ void anv_GetPhysicalDeviceProperties2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT: {
+         VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *props =
+            (VkPhysicalDeviceExtendedDynamicState3PropertiesEXT *) ext;
+         props->dynamicPrimitiveTopologyUnrestricted = true;
+         break;
+      }
+
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT: {
          VkPhysicalDeviceExternalMemoryHostPropertiesEXT *props =
             (VkPhysicalDeviceExternalMemoryHostPropertiesEXT *) ext;
@@ -3064,7 +3071,9 @@ decode_get_bo(void *v_batch, bool ppgtt, uint64_t address)
       return ret_bo;
    if (get_bo_from_pool(&ret_bo, &device->binding_table_pool.block_pool, address))
       return ret_bo;
-   if (get_bo_from_pool(&ret_bo, &device->surface_state_pool.block_pool, address))
+   if (get_bo_from_pool(&ret_bo, &device->internal_surface_state_pool.block_pool, address))
+      return ret_bo;
+   if (get_bo_from_pool(&ret_bo, &device->bindless_surface_state_pool.block_pool, address))
       return ret_bo;
 
    if (!device->cmd_buffer_being_decoded)
@@ -3293,7 +3302,7 @@ VkResult anv_CreateDevice(
                                   decode_get_bo, NULL, device);
 
       device->decoder_ctx.dynamic_base = DYNAMIC_STATE_POOL_MIN_ADDRESS;
-      device->decoder_ctx.surface_base = SURFACE_STATE_POOL_MIN_ADDRESS;
+      device->decoder_ctx.surface_base = INTERNAL_SURFACE_STATE_POOL_MIN_ADDRESS;
       device->decoder_ctx.instruction_base =
          INSTRUCTION_STATE_POOL_MIN_ADDRESS;
    }
@@ -3434,11 +3443,17 @@ VkResult anv_CreateDevice(
    if (result != VK_SUCCESS)
       goto fail_dynamic_state_pool;
 
-   result = anv_state_pool_init(&device->surface_state_pool, device,
-                                "surface state pool",
-                                SURFACE_STATE_POOL_MIN_ADDRESS, 0, 4096);
+   result = anv_state_pool_init(&device->internal_surface_state_pool, device,
+                                "internal surface state pool",
+                                INTERNAL_SURFACE_STATE_POOL_MIN_ADDRESS, 0, 4096);
    if (result != VK_SUCCESS)
       goto fail_instruction_state_pool;
+
+   result = anv_state_pool_init(&device->bindless_surface_state_pool, device,
+                                "bindless surface state pool",
+                                BINDLESS_SURFACE_STATE_POOL_MIN_ADDRESS, 0, 4096);
+   if (result != VK_SUCCESS)
+      goto fail_internal_surface_state_pool;
 
    if (device->info->verx10 >= 125) {
       /* We're using 3DSTATE_BINDING_TABLE_POOL_ALLOC to give the binding
@@ -3450,16 +3465,16 @@ VkResult anv_CreateDevice(
                                    BINDING_TABLE_POOL_BLOCK_SIZE);
    } else {
       int64_t bt_pool_offset = (int64_t)BINDING_TABLE_POOL_MIN_ADDRESS -
-                               (int64_t)SURFACE_STATE_POOL_MIN_ADDRESS;
+                               (int64_t)INTERNAL_SURFACE_STATE_POOL_MIN_ADDRESS;
       assert(INT32_MIN < bt_pool_offset && bt_pool_offset < 0);
       result = anv_state_pool_init(&device->binding_table_pool, device,
                                    "binding table pool",
-                                   SURFACE_STATE_POOL_MIN_ADDRESS,
+                                   INTERNAL_SURFACE_STATE_POOL_MIN_ADDRESS,
                                    bt_pool_offset,
                                    BINDING_TABLE_POOL_BLOCK_SIZE);
    }
    if (result != VK_SUCCESS)
-      goto fail_surface_state_pool;
+      goto fail_bindless_surface_state_pool;
 
    if (device->info->has_aux_map) {
       device->aux_map_ctx = intel_aux_map_init(device, &aux_map_allocator,
@@ -3540,7 +3555,7 @@ VkResult anv_CreateDevice(
     * to zero and they have a valid descriptor.
     */
    device->null_surface_state =
-      anv_state_pool_alloc(&device->surface_state_pool,
+      anv_state_pool_alloc(&device->internal_surface_state_pool,
                            device->isl_dev.ss.size,
                            device->isl_dev.ss.align);
    isl_null_fill_state(&device->isl_dev, device->null_surface_state.map,
@@ -3637,8 +3652,10 @@ VkResult anv_CreateDevice(
    }
  fail_binding_table_pool:
    anv_state_pool_finish(&device->binding_table_pool);
- fail_surface_state_pool:
-   anv_state_pool_finish(&device->surface_state_pool);
+ fail_bindless_surface_state_pool:
+   anv_state_pool_finish(&device->bindless_surface_state_pool);
+ fail_internal_surface_state_pool:
+   anv_state_pool_finish(&device->internal_surface_state_pool);
  fail_instruction_state_pool:
    anv_state_pool_finish(&device->instruction_state_pool);
  fail_dynamic_state_pool:
@@ -3727,7 +3744,8 @@ void anv_DestroyDevice(
    }
 
    anv_state_pool_finish(&device->binding_table_pool);
-   anv_state_pool_finish(&device->surface_state_pool);
+   anv_state_pool_finish(&device->internal_surface_state_pool);
+   anv_state_pool_finish(&device->bindless_surface_state_pool);
    anv_state_pool_finish(&device->instruction_state_pool);
    anv_state_pool_finish(&device->dynamic_state_pool);
    anv_state_pool_finish(&device->general_state_pool);

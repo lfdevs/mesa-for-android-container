@@ -212,7 +212,7 @@ cmp_phi_src(const void *data1, const void *data2)
 {
    nir_phi_src *src1 = *(nir_phi_src **)data1;
    nir_phi_src *src2 = *(nir_phi_src **)data2;
-   return src1->pred - src2->pred;
+   return src1->pred > src2->pred ? 1 : (src1->pred == src2->pred ? 0 : -1);
 }
 
 static uint32_t

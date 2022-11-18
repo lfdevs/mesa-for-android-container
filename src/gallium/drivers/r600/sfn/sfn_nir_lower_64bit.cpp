@@ -219,6 +219,7 @@ class LowerSplit64op : public NirLowerInstruction {
              * rounds, we have to remove the fractional part in the hi bits
              * For values > UINT_MAX the result is undefined */
             auto src = nir_ssa_for_alu_src(b, alu, 0);
+            src = nir_fsub(b, src, nir_ffract(b, src));
             auto gt0 = nir_flt(b, nir_imm_double(b, 0.0), src);
             auto highval = nir_fmul_imm(b, src, 1.0 / 65536.0);
             auto fract = nir_ffract(b, highval);
@@ -229,26 +230,7 @@ class LowerSplit64op : public NirLowerInstruction {
                              gt0,
                              nir_ior(b, nir_ishl_imm(b, high, 16), low),
                              nir_imm_int(b, 0));
-         }
-         case nir_op_f2i64: {
-            auto src = nir_ssa_for_alu_src(b, alu, 0);
-            auto gt0 = nir_flt(b, nir_imm_double(b, 0.0), src);
-            auto abs_src = nir_fabs(b, src);
-            auto value = nir_f2u64(b, abs_src);
-            return nir_bcsel(b, gt0, value, nir_isub(b, nir_imm_zero(b, 1, 64), value));
-         }
-         case nir_op_f2u64: {
-            auto src = nir_ssa_for_alu_src(b, alu, 0);
-            auto gt0 = nir_flt(b, nir_imm_double(b, 0.0), src);
-            auto highval = nir_fmul_imm(b, src, 1.0 / (65536.0 * 65536.0));
-            auto fract = nir_ffract(b, highval);
-            auto high = nir_f2u32(b, nir_fsub(b, highval, fract));
-            auto low = nir_f2u32(b, nir_fmul_imm(b, fract, 65536.0 * 65536.0));
-            return nir_bcsel(b,
-                             gt0,
-                             nir_pack_64_2x32_split(b, low, high),
-                             nir_imm_zero(b, 1, 64));
-         }
+         }        
          case nir_op_u2f64: {
             auto src = nir_ssa_for_alu_src(b, alu, 0);
             auto low = nir_unpack_64_2x32_split_x(b, src);

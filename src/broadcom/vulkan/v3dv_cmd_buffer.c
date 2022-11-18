@@ -2661,15 +2661,20 @@ cmd_buffer_binning_sync_required(struct v3dv_cmd_buffer *cmd_buffer,
       cmd_buffer->state.barrier.bcl_buffer_access;
    if (buffer_access) {
       /* Index buffer read */
-      if (indexed && (buffer_access & VK_ACCESS_2_INDEX_READ_BIT))
+      if (indexed && (buffer_access & (VK_ACCESS_2_INDEX_READ_BIT |
+                                       VK_ACCESS_2_MEMORY_READ_BIT))) {
          return true;
+      }
 
       /* Indirect buffer read */
-      if (indirect && (buffer_access & VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT))
+      if (indirect && (buffer_access & (VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT |
+                                        VK_ACCESS_2_MEMORY_READ_BIT))) {
          return true;
+      }
 
       /* Attribute read */
-      if (buffer_access & VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT) {
+      if (buffer_access & (VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT |
+                          VK_ACCESS_2_MEMORY_READ_BIT)) {
          const struct v3d_vs_prog_data *prog_data =
             pipeline->shared_data->variants[BROADCOM_SHADER_VERTEX_BIN]->prog_data.vs;
 
@@ -2708,7 +2713,8 @@ cmd_buffer_binning_sync_required(struct v3dv_cmd_buffer *cmd_buffer,
       }
 
       /* Texel Buffer read */
-      if (buffer_access & (VK_ACCESS_2_SHADER_SAMPLED_READ_BIT)) {
+      if (buffer_access & (VK_ACCESS_2_SHADER_SAMPLED_READ_BIT |
+                           VK_ACCESS_2_MEMORY_READ_BIT)) {
          if (vs_bin_maps->texture_map.num_desc > 0)
             return true;
 
@@ -3141,9 +3147,9 @@ handle_barrier(VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask,
    }
 }
 
-static void
-pipeline_barrier(struct v3dv_cmd_buffer *cmd_buffer,
-                 const VkDependencyInfoKHR *info)
+void
+v3dv_cmd_buffer_emit_pipeline_barrier(struct v3dv_cmd_buffer *cmd_buffer,
+                                      const VkDependencyInfoKHR *info)
 {
    uint32_t imageBarrierCount = info->imageMemoryBarrierCount;
    const VkImageMemoryBarrier2 *pImageBarriers = info->pImageMemoryBarriers;
@@ -3208,7 +3214,7 @@ v3dv_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
                          const VkDependencyInfoKHR *pDependencyInfo)
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
-   pipeline_barrier(cmd_buffer, pDependencyInfo);
+   v3dv_cmd_buffer_emit_pipeline_barrier(cmd_buffer, pDependencyInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL

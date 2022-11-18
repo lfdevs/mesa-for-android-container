@@ -66,6 +66,18 @@ else
 	confflags_GALLIUM += -Dgallium-vdpau=enabled
 	confflags_GALLIUM += -Dlmsensors=enabled
 
+  # radv/lavapipe needs LLVM and the Vulkan loader, so only build on the subset of
+  # arches where we have LLVM enabled and where the Vulkan loader is built.
+  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
+	VULKAN_DRIVERS += amd swrast
+  endif
+
+  # Only enable amd on riscv64, swrast needs CPU JIT support which doesn't work properly yet
+  ifneq (,$(filter $(DEB_HOST_ARCH), riscv64))
+	VULKAN_DRIVERS += amd
+	confflags_GALLIUM += -Ddraw-use-llvm=false
+  endif
+
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = -Ddri3=enabled
 	# Gallium drivers which require kernel support, not yet ported to non-Linux
@@ -78,8 +90,12 @@ else
 
 	# etnaviv, tegra, vc4 and v3d kernel support are only available on armhf and arm64
 	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64))
-		GALLIUM_DRIVERS += etnaviv lima panfrost svga tegra vc4 v3d
+		GALLIUM_DRIVERS += etnaviv panfrost svga tegra vc4 v3d
 		VULKAN_DRIVERS += broadcom freedreno
+	endif
+
+	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64 riscv64))
+		GALLIUM_DRIVERS += lima
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
@@ -87,6 +103,8 @@ else
 		# svga needs xa state tracker
 		confflags_GALLIUM += -Dgallium-xa=enabled
 		VULKAN_DRIVERS += intel
+	endif
+	ifneq (,$(filter $(DEB_HOST_ARCH), amd64))
 		confflags_GALLIUM += -Dintel-clc=enabled
 	endif
 
@@ -114,7 +132,15 @@ else
   # It's also required for building OpenCL support.
   ifneq (,$(filter $(DEB_HOST_ARCH), $(LLVM_ARCHS)))
 	GALLIUM_DRIVERS += radeonsi zink
-	VULKAN_DRIVERS += amd swrast
+
+	# Only enable amd on riscv64, swrast needs CPU JIT support which doesn't work properly yet
+	ifneq (,$(filter $(DEB_HOST_ARCH), riscv64))
+		VULKAN_DRIVERS += amd
+		confflags_GALLIUM += -Ddraw-use-llvm=false
+	else
+		VULKAN_DRIVERS += amd swrast
+	endif
+
 	VULKAN_LAYERS += device-select intel-nullhw overlay
 	confflags_GALLIUM += -Dllvm=enabled
 	confflags_GALLIUM += -Dgallium-opencl=icd

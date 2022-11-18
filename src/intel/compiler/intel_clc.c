@@ -450,8 +450,10 @@ int main(int argc, char **argv)
          ralloc_free(mem_ctx);
          return 1;
       }
+   }
 
-      util_dynarray_append(&spirv_ptr_objs, struct clc_binary *, spirv_out);
+   util_dynarray_foreach(&spirv_objs, struct clc_binary, p) {
+      util_dynarray_append(&spirv_ptr_objs, struct clc_binary *, p);
    }
 
    /* The SPIRV-Tools linker started checking that all modules have the same

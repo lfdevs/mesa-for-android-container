@@ -56,9 +56,7 @@ if host_machine.system() == 'windows'
     'vaon12.def',
     input: vaon12_def_input,
     output : 'vaon12.def',
-    command : [prog_python, gen_vs_module_defs_py,
-              '--in_file', '@INPUT@', '--out_file', '@OUTPUT@',
-              '--compiler_id', cc.get_argument_syntax(), '--cpu_family', host_machine.cpu_family()]
+    command : gen_vs_module_defs_normal_command,
   )
 
   libva_gallium = shared_library(

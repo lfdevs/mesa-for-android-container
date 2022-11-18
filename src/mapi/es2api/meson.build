@@ -36,9 +36,7 @@ gles2_def = custom_target(
   'gles2.def',
   input: 'gles2.def.in',
   output : 'gles2.def',
-  command : [prog_python, gen_vs_module_defs_py,
-             '--in_file', '@INPUT@', '--out_file', '@OUTPUT@',
-             '--compiler_id', cc.get_argument_syntax(), '--cpu_family', host_machine.cpu_family()]
+  command : gen_vs_module_defs_normal_command,
 )
 
 libgles2 = shared_library(

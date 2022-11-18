@@ -30,8 +30,9 @@
 
 namespace r600 {
 
-ComputeShader::ComputeShader(UNUSED const r600_shader_key& key):
-    Shader("CS")
+ComputeShader::ComputeShader(UNUSED const r600_shader_key& key, int num_samplers):
+    Shader("CS", 0),
+    m_image_size_const_offset(num_samplers)
 {
 }
 

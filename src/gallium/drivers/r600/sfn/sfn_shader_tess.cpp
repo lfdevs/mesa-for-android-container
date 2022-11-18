@@ -36,7 +36,7 @@ namespace r600 {
 using std::string;
 
 TCSShader::TCSShader(const r600_shader_key& key):
-    Shader("TCS"),
+    Shader("TCS", key.tcs.first_atomic_counter),
     m_tcs_prim_mode(key.tcs.prim_mode)
 {
 }
@@ -182,7 +182,7 @@ TCSShader::do_print_properties(std::ostream& os) const
 TESShader::TESShader(const pipe_stream_output_info *so_info,
                      const r600_shader *gs_shader,
                      const r600_shader_key& key):
-    VertexStageShader("TES"),
+    VertexStageShader("TES", key.tes.first_atomic_counter),
     m_vs_as_gs_a(key.vs.as_gs_a),
     m_tes_as_es(key.tes.as_es)
 {

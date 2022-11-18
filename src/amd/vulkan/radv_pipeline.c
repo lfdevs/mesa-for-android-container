@@ -2906,7 +2906,8 @@ radv_fill_shader_info_ngg(struct radv_pipeline *pipeline,
          stages[MESA_SHADER_MESH].info.is_ngg = true;
       }
 
-      if (stages[MESA_SHADER_TESS_CTRL].nir && stages[MESA_SHADER_GEOMETRY].nir &&
+      if (device->physical_device->rad_info.gfx_level < GFX11 &&
+          stages[MESA_SHADER_TESS_CTRL].nir && stages[MESA_SHADER_GEOMETRY].nir &&
           stages[MESA_SHADER_GEOMETRY].nir->info.gs.invocations *
                 stages[MESA_SHADER_GEOMETRY].nir->info.gs.vertices_out >
              256) {
@@ -2916,9 +2917,6 @@ radv_fill_shader_info_ngg(struct radv_pipeline *pipeline,
           * might hang.
           */
          stages[MESA_SHADER_TESS_EVAL].info.is_ngg = false;
-
-         /* GFX11+ requires NGG. */
-         assert(device->physical_device->rad_info.gfx_level < GFX11);
       }
 
       gl_shader_stage last_xfb_stage = MESA_SHADER_VERTEX;
@@ -3974,6 +3972,7 @@ radv_pipeline_create_ps_epilog(struct radv_graphics_pipeline *pipeline,
          .color_is_int8 = pipeline_key->ps.is_int8,
          .color_is_int10 = pipeline_key->ps.is_int10,
          .enable_mrt_output_nan_fixup = pipeline_key->ps.enable_mrt_output_nan_fixup,
+         .mrt0_is_dual_src = pipeline_key->ps.mrt0_is_dual_src,
       };
 
       pipeline->ps_epilog = radv_create_ps_epilog(device, &epilog_key);
@@ -6341,6 +6340,7 @@ radv_graphics_lib_pipeline_init(struct radv_graphics_lib_pipeline *pipeline,
          .color_is_int8 = blend.col_format_is_int8,
          .color_is_int10 = blend.col_format_is_int10,
          .enable_mrt_output_nan_fixup = key.ps.enable_mrt_output_nan_fixup,
+         .mrt0_is_dual_src = blend.mrt0_is_dual_src,
       };
 
       pipeline->base.ps_epilog = radv_create_ps_epilog(device, &epilog_key);

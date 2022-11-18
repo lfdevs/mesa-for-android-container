@@ -756,6 +756,8 @@ struct iris_context {
 
       /** The last compute grid size */
       uint32_t last_grid[3];
+      /** The last compute grid dimensions */
+      uint32_t last_grid_dim;
       /** Reference to the BO containing the compute grid size */
       struct iris_state_ref grid_size;
       /** Reference to the SURFACE_STATE for the compute grid resource */

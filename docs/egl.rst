@@ -89,12 +89,6 @@ at runtime
    the main library uses the first platform listed in
    ``-D platforms=...`` as the native platform.
 
-   Extensions like ``EGL_MESA_drm_display`` define new functions to
-   create displays for non-native platforms. These extensions are
-   usually used by applications that support non-native platforms.
-   Setting this variable is probably required only for some of the demos
-   found in mesa/demo repository.
-
 ``EGL_LOG_LEVEL``
    This changes the log level of the main library and the drivers. The
    valid values are: ``debug``, ``info``, ``warning``, and ``fatal``.

@@ -25,9 +25,7 @@ opengl32_def = custom_target(
   'opengl32.def',
   input: 'opengl32.def.in',
   output : 'opengl32.def',
-  command : [prog_python, gen_vs_module_defs_py,
-             '--in_file', '@INPUT@', '--out_file', '@OUTPUT@',
-             '--compiler_id', cc.get_argument_syntax(), '--cpu_family', host_machine.cpu_family()]
+  command : gen_vs_module_defs_normal_command,
 )
 
 libopengl32 = shared_library(

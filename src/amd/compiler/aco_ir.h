@@ -1857,7 +1857,8 @@ inline bool
 is_dead(const std::vector<uint16_t>& uses, const Instruction* instr)
 {
    if (instr->definitions.empty() || instr->isBranch() ||
-       instr->opcode == aco_opcode::p_init_scratch)
+       instr->opcode == aco_opcode::p_init_scratch ||
+       instr->opcode == aco_opcode::p_dual_src_export_gfx11)
       return false;
 
    if (std::any_of(instr->definitions.begin(), instr->definitions.end(),

@@ -103,7 +103,8 @@ needs_exact(aco_ptr<Instruction>& instr)
        * emitted inside the same block, the main FS will always jump to the PS
        * epilog without considering the exec mask.
        */
-      return instr->isEXP() || instr->opcode == aco_opcode::p_jump_to_epilog;
+      return instr->isEXP() || instr->opcode == aco_opcode::p_jump_to_epilog ||
+             instr->opcode == aco_opcode::p_dual_src_export_gfx11;
    }
 }
 

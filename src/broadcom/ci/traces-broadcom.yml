@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: "http://192.168.40.131:8888/cache/?uri=https://minio-packet.freedesktop.org/mesa-tracie-public/"
+  download-url: "http://192.168.40.131:8888/cache/?uri=https://s3.freedesktop.org/mesa-tracie-public/"
 
 traces:
   0ad/0ad-v2.trace:

@@ -298,13 +298,27 @@
       - src/panfrost/bifrost/**/*
       when: on_success
 
+.broadcom-common-rules:
+  rules:
+    - changes:
+      - src/broadcom/meson.build
+      - src/broadcom/ci/**/*
+      - src/broadcom/cle/**/*
+      - src/broadcom/clif/**/*
+      - src/broadcom/common/**/*
+      - src/broadcom/compiler/**/*
+      - src/broadcom/drm-shim/**/*
+      - src/broadcom/qpu/**/*
+      - src/broadcom/simulator/**/*
+      when: on_success
+
 .vc4-rules:
   stage: broadcom
   rules:
     - !reference [.igalia-farm-rules, rules]
     - !reference [.gl-rules, rules]
+    - !reference [.broadcom-common-rules, rules]
     - changes:
-      - src/broadcom/**/*
       - src/gallium/drivers/vc4/**/*
       - src/gallium/winsys/kmsro/**/*
       - src/gallium/winsys/vc4/**/*
@@ -315,8 +329,8 @@
   rules:
     - !reference [.igalia-farm-rules, rules]
     - !reference [.gl-rules, rules]
+    - !reference [.broadcom-common-rules, rules]
     - changes:
-      - src/broadcom/**/*
       - src/gallium/drivers/v3d/**/*
       - src/gallium/winsys/kmsro/**/*
       - src/gallium/winsys/v3d/**/*
@@ -545,6 +559,8 @@
       when: on_success
     - changes:
       - src/microsoft/**/*
+      - src/gallium/frontends/va/*
+      - src/gallium/targets/va/*
       when: on_success
     - changes:
         *radv_file_list

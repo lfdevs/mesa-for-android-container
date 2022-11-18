@@ -1199,6 +1199,18 @@ gfx10_get_ngg_info(const struct radv_device *device, struct radv_pipeline_stage 
 }
 
 static void
+gfx10_get_ngg_query_info(const struct radv_device *device, struct radv_pipeline_stage *es_stage,
+                         struct radv_pipeline_stage *gs_stage,
+                         const struct radv_pipeline_key *pipeline_key)
+{
+   struct radv_shader_info *info = gs_stage ? &gs_stage->info : &es_stage->info;
+
+   info->gs.has_ngg_pipeline_stat_query = !!gs_stage;
+   info->has_ngg_xfb_query = gs_stage ? !!gs_stage->nir->xfb_info : !!es_stage->nir->xfb_info;
+   info->has_ngg_prim_query = pipeline_key->primitives_generated_query || info->has_ngg_xfb_query;
+}
+
+static void
 radv_determine_ngg_settings(struct radv_device *device, struct radv_pipeline_stage *es_stage,
                             struct radv_pipeline_stage *fs_stage,
                             const struct radv_pipeline_key *pipeline_key)
@@ -1299,6 +1311,7 @@ radv_link_shaders_info(struct radv_device *device,
             consumer && consumer->stage == MESA_SHADER_GEOMETRY ? consumer : NULL;
 
          gfx10_get_ngg_info(device, producer, gs_stage);
+         gfx10_get_ngg_query_info(device, producer, gs_stage, pipeline_key);
 
          /* Determine other NGG settings like culling for VS or TES without GS. */
          if (!gs_stage && consumer) {

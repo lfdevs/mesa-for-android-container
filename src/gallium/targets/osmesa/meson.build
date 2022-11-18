@@ -36,9 +36,7 @@ osmesa_def = custom_target(
   'osmesa.def',
   input: 'osmesa.def.in',
   output : 'osmesa.def',
-  command : [prog_python, gen_vs_module_defs_py,
-             '--in_file', '@INPUT@', '--out_file', '@OUTPUT@',
-             '--compiler_id', cc.get_argument_syntax(), '--cpu_family', host_machine.cpu_family()]
+  command : gen_vs_module_defs_normal_command,
 )
 
 libosmesa = shared_library(

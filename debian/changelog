@@ -1,3 +1,20 @@
+mesa (22.3.0~rc3-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * fix-symbols.diff: Dropped, upstream.
+  * rules: Limit anv ray-tracing support to amd64.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 18 Nov 2022 13:00:20 +0200
+
+mesa (22.2.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * rules: Enable building lima drivers on riscv64. (LP: #1995137)
+  * rules: Disable building llvmpipe on riscv64. (Closes: #1004039)
+  * patches: Refreshed.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 18 Nov 2022 12:03:09 +0200
+
 mesa (22.3.0~rc1-3) experimental; urgency=medium
 
   * control, rules: Enable intel vulkan raytracing support, add

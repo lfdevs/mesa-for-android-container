@@ -115,7 +115,7 @@ static struct VADriverVTableVPP vtable_vpp =
    &vlVaQueryVideoProcPipelineCaps
 };
 
-PUBLIC VAStatus
+VA_PUBLIC_API VAStatus
 VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
 {
    vlVaDriver *drv;

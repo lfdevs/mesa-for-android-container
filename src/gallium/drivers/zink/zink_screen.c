@@ -228,12 +228,14 @@ disk_cache_init(struct zink_screen *screen)
    struct mesa_sha1 ctx;
    _mesa_sha1_init(&ctx);
 
+#ifdef HAVE_DL_ITERATE_PHDR
    /* Hash in the zink driver build. */
    const struct build_id_note *note =
        build_id_find_nhdr_for_addr(disk_cache_init);
    unsigned build_id_len = build_id_length(note);
    assert(note && build_id_len == 20); /* sha1 */
    _mesa_sha1_update(&ctx, build_id_data(note), build_id_len);
+#endif
 
    /* Hash in the Vulkan pipeline cache UUID to identify the combination of
    *  vulkan device and driver (or any inserted layer that would invalidate our

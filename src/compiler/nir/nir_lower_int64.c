@@ -813,10 +813,15 @@ lower_f2(nir_builder *b, nir_ssa_def *x, bool dst_is_signed)
    if (dst_is_signed)
       x = nir_fabs(b, x);
 
-   nir_ssa_def *div = nir_imm_floatN_t(b, 1ULL << 32, x->bit_size);
-   nir_ssa_def *res_hi = nir_f2u32(b, nir_fdiv(b, x, div));
-   nir_ssa_def *res_lo = nir_f2u32(b, nir_frem(b, x, div));
-   nir_ssa_def *res = nir_pack_64_2x32_split(b, res_lo, res_hi);
+   nir_ssa_def *res;
+   if (x->bit_size < 32) {
+      res = nir_pack_64_2x32_split(b, nir_f2u32(b, x), nir_imm_int(b, 0));
+   } else {
+      nir_ssa_def *div = nir_imm_floatN_t(b, 1ULL << 32, x->bit_size);
+      nir_ssa_def *res_hi = nir_f2u32(b, nir_fdiv(b, x, div));
+      nir_ssa_def *res_lo = nir_f2u32(b, nir_frem(b, x, div));
+      res = nir_pack_64_2x32_split(b, res_lo, res_hi);
+   }
 
    if (dst_is_signed)
       res = nir_bcsel(b, nir_flt(b, x_sign, nir_imm_floatN_t(b, 0, x->bit_size)),

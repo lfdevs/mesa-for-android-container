@@ -1023,6 +1023,8 @@ radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_pipeline_
                .lower_subgroup_masks = 1,
                .lower_relative_shuffle = 1,
                .lower_shuffle_to_32bit = 1,
+               /* TODO: Verify shared VGPRs on GFX11. */
+               .lower_shuffle = device->physical_device->rad_info.gfx_level >= GFX11,
                .lower_vote_eq = 1,
                .lower_quad_broadcast_dynamic = 1,
                .lower_quad_broadcast_dynamic_to_const = gfx7minus,
@@ -1442,6 +1444,8 @@ void radv_lower_ngg(struct radv_device *device, struct radv_pipeline_stage *ngg_
    options.vs_output_param_offset = info->outinfo.vs_output_param_offset;
    options.can_cull = nir->info.stage != MESA_SHADER_GEOMETRY && info->has_ngg_culling;
    options.disable_streamout = !device->physical_device->use_ngg_streamout;
+   options.has_gen_prim_query = info->has_ngg_prim_query;
+   options.has_xfb_prim_query = info->has_ngg_xfb_query;
 
    if (nir->info.stage == MESA_SHADER_VERTEX ||
        nir->info.stage == MESA_SHADER_TESS_EVAL) {
@@ -1453,7 +1457,6 @@ void radv_lower_ngg(struct radv_device *device, struct radv_pipeline_stage *ngg_
       options.num_vertices_per_primitive = num_vertices_per_prim;
       options.early_prim_export = info->has_ngg_early_prim_export;
       options.passthrough = info->is_ngg_passthrough;
-      options.has_prim_query = pl_key->primitives_generated_query;
       options.primitive_id_location = info->outinfo.export_prim_id ? VARYING_SLOT_PRIMITIVE_ID : -1;
       options.instance_rate_inputs = pl_key->vs.instance_rate_inputs;
 
@@ -1465,7 +1468,6 @@ void radv_lower_ngg(struct radv_device *device, struct radv_pipeline_stage *ngg_
       assert(info->is_ngg);
 
       options.gs_out_vtx_bytes = info->gs.gsvs_vertex_size;
-      options.has_xfb_query = true;
 
       NIR_PASS_V(nir, ac_nir_lower_ngg_gs, &options);
    } else if (nir->info.stage == MESA_SHADER_MESH) {

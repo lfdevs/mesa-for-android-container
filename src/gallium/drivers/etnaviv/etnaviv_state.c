@@ -190,7 +190,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
              cbuf->surf.offset, cbuf->surf.stride * 4);
       }
 
-      if (screen->specs.halti >= 0) {
+      if (screen->specs.halti >= 0 && screen->model != 0x880) {
          /* Rendertargets on GPUs with more than a single pixel pipe must always
           * be multi-tiled, or single-buffer mode must be supported */
          assert(screen->specs.pixel_pipes == 1 ||
@@ -273,7 +273,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       /* VIVS_PE_DEPTH_CONFIG_ONLY_DEPTH */
       /* merged with depth_stencil_alpha */
 
-      if (screen->specs.halti >= 0) {
+      if (screen->specs.halti >= 0 && screen->model != 0x880) {
          for (int i = 0; i < screen->specs.pixel_pipes; i++) {
             cs->PE_PIPE_DEPTH_ADDR[i] = zsbuf->reloc[i];
             cs->PE_PIPE_DEPTH_ADDR[i].flags = ETNA_RELOC_READ | ETNA_RELOC_WRITE;
@@ -718,12 +718,26 @@ etna_update_zsa(struct etna_context *ctx)
    struct etna_zsa_state *zsa = etna_zsa_state(zsa_state);
    struct etna_screen *screen = ctx->screen;
    uint32_t new_pe_depth, new_ra_depth;
+   bool early_z_allowed = !VIV_FEATURE(screen, chipFeatures, NO_EARLY_Z);
    bool late_z_write = false, early_z_write = false,
         late_z_test = false, early_z_test = false;
 
+   /* Linear PE breaks the combination of early test with late write, as it
+    * seems RA and PE disagree about the buffer layout in this mode. Fall back
+    * to late Z always even though early Z write might be possible, as we don't
+    * know if any other draws to the same surface require late Z write.
+    */
+   if (ctx->framebuffer_s.nr_cbufs > 0) {
+      struct etna_surface *cbuf = etna_surface(ctx->framebuffer_s.cbufs[0]);
+      struct etna_resource *res = etna_resource(cbuf->base.texture);
+
+      if (res->layout == ETNA_LAYOUT_LINEAR)
+         early_z_allowed = false;
+   }
+
    if (zsa->z_write_enabled) {
       if (VIV_FEATURE(screen, chipMinorFeatures5, RA_WRITE_DEPTH) &&
-          !VIV_FEATURE(screen, chipFeatures, NO_EARLY_Z) &&
+          early_z_allowed &&
           !zsa->stencil_enabled &&
           !zsa_state->alpha_enabled &&
           !shader_state->writes_z &&
@@ -734,26 +748,12 @@ etna_update_zsa(struct etna_context *ctx)
    }
 
    if (zsa->z_test_enabled) {
-      if (!VIV_FEATURE(screen, chipFeatures, NO_EARLY_Z) &&
+      if (early_z_allowed &&
           !zsa->stencil_modified &&
           !shader_state->writes_z)
          early_z_test = true;
       else
          late_z_test = true;
-   }
-
-   /* Linear PE breaks the combination of early test with late write, as it
-    * seems RA and PE disagree about the cache layout in this mode. Switch to
-    * late test to work around this issue.
-    */
-   if (ctx->framebuffer_s.nr_cbufs > 0) {
-      struct etna_surface *cbuf = etna_surface(ctx->framebuffer_s.cbufs[0]);
-      struct etna_resource *res = etna_resource(cbuf->base.texture);
-
-      if (res->layout == ETNA_LAYOUT_LINEAR && early_z_test && late_z_write) {
-         early_z_test = false;
-         late_z_test = true;
-      }
    }
 
    new_pe_depth = VIVS_PE_DEPTH_CONFIG_DEPTH_FUNC(zsa->z_test_enabled ?
@@ -777,6 +777,13 @@ etna_update_zsa(struct etna_context *ctx)
        */
       if (late_z_test || (early_z_test && late_z_write))
          new_ra_depth |= VIVS_RA_EARLY_DEPTH_HDEPTH_DISABLE;
+
+      if (ctx->framebuffer_s.nr_cbufs > 0) {
+         struct pipe_resource *res = ctx->framebuffer_s.cbufs[0]->texture;
+
+         if ((late_z_test || late_z_write) && res->nr_samples > 1)
+            new_ra_depth |= VIVS_RA_EARLY_DEPTH_LATE_DEPTH_MSAA;
+      }
    }
 
    if (new_pe_depth != zsa->PE_DEPTH_CONFIG ||

@@ -1374,7 +1374,7 @@ get_reg(struct ra_ctx *ctx, struct ra_file *file, struct ir3_register *reg)
    if (reg->merge_set && reg->merge_set->preferred_reg != (physreg_t)~0) {
       physreg_t preferred_reg =
          reg->merge_set->preferred_reg + reg->merge_set_offset;
-      if (preferred_reg < file_size &&
+      if (preferred_reg + reg_size(reg) <= file_size &&
           preferred_reg % reg_elem_size(reg) == 0 &&
           get_reg_specified(ctx, file, reg, preferred_reg, false))
          return preferred_reg;

@@ -5329,7 +5329,7 @@ emit_interp_instr_gfx11(isel_context* ctx, unsigned idx, unsigned component, Tem
       prim_mask_op.setLateKill(true); /* we don't want the bld.lm definition to use m0 */
       Operand coord2_op(coord2);
       coord2_op.setLateKill(true); /* we re-use the destination reg in the middle */
-      bld.pseudo(aco_opcode::p_interp_gfx11, Definition(dst), bld.def(bld.lm),
+      bld.pseudo(aco_opcode::p_interp_gfx11, Definition(dst), bld.def(bld.lm), bld.def(s1, scc),
                  Operand(v1.as_linear()), Operand::c32(idx), Operand::c32(component), coord1,
                  coord2_op, prim_mask_op);
       return;
@@ -5347,7 +5347,10 @@ emit_interp_instr_gfx11(isel_context* ctx, unsigned idx, unsigned component, Tem
       res = bld.vinterp_inreg(aco_opcode::v_interp_p2_f32_inreg, bld.def(v1), p, coord2, p10);
    }
    /* lds_param_load must be done in WQM, and the result kept valid for helper lanes. */
-   emit_wqm(bld, res, dst, true);
+   if (dst.regClass() != v2b)
+      emit_wqm(bld, res, dst, true);
+   else
+      emit_extract_vector(ctx, emit_wqm(bld, res, Temp(0, s1), true), 0, dst);
 }
 
 void
@@ -5408,7 +5411,7 @@ emit_interp_mov_instr(isel_context* ctx, unsigned idx, unsigned component, unsig
       if (in_exec_divergent_or_in_loop(ctx)) {
          Operand prim_mask_op = bld.m0(prim_mask);
          prim_mask_op.setLateKill(true); /* we don't want the bld.lm definition to use m0 */
-         bld.pseudo(aco_opcode::p_interp_gfx11, Definition(dst), bld.def(bld.lm),
+         bld.pseudo(aco_opcode::p_interp_gfx11, Definition(dst), bld.def(bld.lm), bld.def(s1, scc),
                     Operand(v1.as_linear()), Operand::c32(idx), Operand::c32(component),
                     Operand::c32(dpp_ctrl), prim_mask_op);
       } else {
@@ -5417,7 +5420,10 @@ emit_interp_mov_instr(isel_context* ctx, unsigned idx, unsigned component, unsig
          Temp res = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), p, dpp_ctrl);
 
          /* lds_param_load must be done in WQM, and the result kept valid for helper lanes. */
-         emit_wqm(bld, res, dst, true);
+         if (dst.regClass() != v2b)
+            emit_wqm(bld, res, dst, true);
+         else
+            emit_extract_vector(ctx, emit_wqm(bld, res, Temp(0, s1), true), 0, dst);
       }
    } else {
       bld.vintrp(aco_opcode::v_interp_mov_f32, Definition(dst), Operand::c32(vertex_id),
@@ -11189,9 +11195,25 @@ struct mrt_color_export {
    bool enable_mrt_output_nan_fixup;
 };
 
+struct aco_export_mrt {
+   Operand out[4];
+   unsigned enabled_channels;
+   unsigned target;
+   bool compr;
+};
+
+static void
+export_mrt(isel_context* ctx, const struct aco_export_mrt* mrt)
+{
+   Builder bld(ctx->program, ctx->block);
+
+   bld.exp(aco_opcode::exp, mrt->out[0], mrt->out[1], mrt->out[2], mrt->out[3],
+           mrt->enabled_channels, mrt->target, mrt->compr);
+}
+
 static bool
-export_fs_mrt_color(isel_context* ctx, const struct mrt_color_export *out,
-                    bool is_ps_epilog)
+export_fs_mrt_color(isel_context* ctx, const struct mrt_color_export* out, bool is_ps_epilog,
+                    struct aco_export_mrt* mrt)
 {
    Builder bld(ctx->program, ctx->block);
    Operand values[4];
@@ -11359,8 +11381,12 @@ export_fs_mrt_color(isel_context* ctx, const struct mrt_color_export *out,
       compr = false;
    }
 
-   bld.exp(aco_opcode::exp, values[0], values[1], values[2], values[3], enabled_channels, target,
-           compr);
+   for (unsigned i = 0; i < 4; i++)
+      mrt->out[i] = values[i];
+   mrt->target = target;
+   mrt->enabled_channels = enabled_channels;
+   mrt->compr = compr;
+
    return true;
 }
 
@@ -11429,6 +11455,31 @@ create_fs_jump_to_epilog(isel_context* ctx)
 }
 
 static void
+create_fs_dual_src_export_gfx11(isel_context* ctx, const struct aco_export_mrt* mrt0,
+                                const struct aco_export_mrt* mrt1)
+{
+   Builder bld(ctx->program, ctx->block);
+
+   aco_ptr<Pseudo_instruction> exp{create_instruction<Pseudo_instruction>(
+      aco_opcode::p_dual_src_export_gfx11, Format::PSEUDO, 8, 6)};
+   for (unsigned i = 0; i < 4; i++) {
+      exp->operands[i] = mrt0 ? mrt0->out[i] : Operand(v1);
+      exp->operands[i].setLateKill(true);
+      exp->operands[i + 4] = mrt1 ? mrt1->out[i] : Operand(v1);
+      exp->operands[i + 4].setLateKill(true);
+   }
+
+   RegClass type = RegClass(RegType::vgpr, util_bitcount(mrt0->enabled_channels));
+   exp->definitions[0] = bld.def(type); /* mrt0 */
+   exp->definitions[1] = bld.def(type); /* mrt1 */
+   exp->definitions[2] = bld.def(v1);
+   exp->definitions[3] = bld.def(bld.lm);
+   exp->definitions[4] = bld.def(bld.lm, vcc);
+   exp->definitions[5] = bld.def(s1, scc);
+   ctx->block->instructions.emplace_back(std::move(exp));
+}
+
+static void
 create_fs_exports(isel_context* ctx)
 {
    Builder bld(ctx->program, ctx->block);
@@ -11442,10 +11493,15 @@ create_fs_exports(isel_context* ctx)
    if (ctx->program->info.ps.has_epilog) {
       create_fs_jump_to_epilog(ctx);
    } else {
+      struct aco_export_mrt mrts[8];
       unsigned compacted_mrt_index = 0;
 
       /* Export all color render targets. */
       for (unsigned i = FRAG_RESULT_DATA0; i < FRAG_RESULT_DATA7 + 1; ++i) {
+         unsigned idx = i - FRAG_RESULT_DATA0;
+
+         mrts[idx].enabled_channels = 0;
+
          if (!ctx->outputs.mask[i])
             continue;
 
@@ -11453,7 +11509,7 @@ create_fs_exports(isel_context* ctx)
 
          out.slot = compacted_mrt_index;
          out.write_mask = ctx->outputs.mask[i];
-         out.col_format = (ctx->options->key.ps.col_format >> (4 * (i - FRAG_RESULT_DATA0))) & 0xf;
+         out.col_format = (ctx->options->key.ps.col_format >> (4 * idx)) & 0xf;
 
          for (unsigned c = 0; c < 4; ++c) {
             if (out.write_mask & (1 << c)) {
@@ -11463,14 +11519,25 @@ create_fs_exports(isel_context* ctx)
             }
          }
 
-         if (export_fs_mrt_color(ctx, &out, false)) {
+         if (export_fs_mrt_color(ctx, &out, false, &mrts[compacted_mrt_index])) {
             compacted_mrt_index++;
             exported = true;
          }
       }
 
-      if (!exported)
+      if (exported) {
+         if (ctx->options->gfx_level >= GFX11 && ctx->options->key.ps.mrt0_is_dual_src) {
+            struct aco_export_mrt* mrt0 = mrts[0].enabled_channels ? &mrts[0] : NULL;
+            struct aco_export_mrt* mrt1 = mrts[1].enabled_channels ? &mrts[1] : NULL;
+            create_fs_dual_src_export_gfx11(ctx, mrt0, mrt1);
+         } else {
+            for (unsigned i = 0; i < compacted_mrt_index; i++) {
+               export_mrt(ctx, &mrts[i]);
+            }
+         }
+      } else {
          create_fs_null_export(ctx);
+      }
    }
 
    ctx->block->kind |= block_kind_export_end;
@@ -12583,7 +12650,8 @@ select_ps_epilog(Program* program, const struct aco_ps_epilog_key* key, ac_shade
    Builder bld(ctx.program, ctx.block);
 
    /* Export all color render targets */
-   bool exported = false;
+   struct aco_export_mrt mrts[8];
+   uint8_t exported_mrts = 0;
 
    for (unsigned i = 0; i < 8; i++) {
       unsigned col_format = (key->spi_shader_col_format >> (i * 4)) & 0xf;
@@ -12605,11 +12673,24 @@ select_ps_epilog(Program* program, const struct aco_ps_epilog_key* key, ac_shade
          out.values[c] = Operand(emit_extract_vector(&ctx, inputs, c, v1));
       }
 
-      exported |= export_fs_mrt_color(&ctx, &out, true);
+      if (export_fs_mrt_color(&ctx, &out, true, &mrts[i])) {
+         exported_mrts |= 1 << i;
+      }
    }
 
-   if (!exported)
+   if (exported_mrts) {
+      if (ctx.options->gfx_level >= GFX11 && key->mrt0_is_dual_src) {
+         struct aco_export_mrt* mrt0 = (exported_mrts & BITFIELD_BIT(0)) ? &mrts[0] : NULL;
+         struct aco_export_mrt* mrt1 = (exported_mrts & BITFIELD_BIT(1)) ? &mrts[1] : NULL;
+         create_fs_dual_src_export_gfx11(&ctx, mrt0, mrt1);
+      } else {
+         u_foreach_bit (i, exported_mrts) {
+            export_mrt(&ctx, &mrts[i]);
+         }
+      }
+   } else {
       create_fs_null_export(&ctx);
+   }
 
    program->config->float_mode = program->blocks[0].fp_mode.val;
 

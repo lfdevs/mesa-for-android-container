@@ -210,8 +210,16 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_QUERY_TIMESTAMP:
                 return is_gl3;
 
-        /* TODO: Where does this req come from in practice? */
-        case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
+        /* The hardware requires element alignment for data conversion to work
+         * as expected. If data conversion is not required, this restriction is
+         * lifted on Midgard at a performance penalty. We conservatively
+         * require element alignment for vertex buffers, using u_vbuf to
+         * translate to match the hardware requirement.
+         *
+         * This is less heavy-handed than the 4BYTE_ALIGNED_ONLY caps, which
+         * would needlessly require alignment even for 8-bit formats.
+         */
+        case PIPE_CAP_VERTEX_ATTRIB_ELEMENT_ALIGNED_ONLY:
                 return 1;
 
         case PIPE_CAP_MAX_TEXTURE_2D_SIZE:

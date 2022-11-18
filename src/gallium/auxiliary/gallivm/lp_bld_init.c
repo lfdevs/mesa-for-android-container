@@ -37,6 +37,7 @@
 #include "lp_bld_debug.h"
 #include "lp_bld_misc.h"
 #include "lp_bld_init.h"
+#include "lp_bld_coro.h"
 #include "lp_bld_printf.h"
 
 #include <llvm/Config/llvm-config.h>
@@ -409,6 +410,7 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
    if (!create_pass_manager(gallivm))
       goto fail;
 
+   lp_build_coro_declare_malloc_hooks(gallivm);
    return TRUE;
 
 fail:
@@ -666,6 +668,8 @@ gallivm_compile_module(struct gallivm_state *gallivm)
 
    lp_init_clock_hook(gallivm);
    LLVMAddGlobalMapping(gallivm->engine, gallivm->get_time_hook, os_time_get_nano);
+
+   lp_build_coro_add_malloc_hooks(gallivm);
 
    if (gallivm_debug & GALLIVM_DEBUG_ASM) {
       LLVMValueRef llvm_func = LLVMGetFirstFunction(gallivm->module);

@@ -3,7 +3,7 @@
 set -ex
 
 INSTALL=$(realpath -s "$PWD"/install)
-MINIO_ARGS="--credentials=/tmp/.minio_credentials"
+MINIO_ARGS="--token-file ${CI_JOB_JWT_FILE}"
 
 RESULTS=$(realpath -s "$PWD"/results)
 mkdir -p "$RESULTS"
@@ -137,8 +137,8 @@ replay_minio_upload_images() {
             __DESTINATION_FILE_PATH="$__MINIO_TRACES_PREFIX/${line##*-}"
         fi
 
-        ci-fairy minio cp $MINIO_ARGS "$RESULTS/$__PREFIX/$line" \
-            "minio://${__MINIO_PATH}/${__DESTINATION_FILE_PATH}"
+        ci-fairy s3cp $MINIO_ARGS "$RESULTS/$__PREFIX/$line" \
+            "https://${__MINIO_PATH}/${__DESTINATION_FILE_PATH}"
     done
 }
 
@@ -172,8 +172,6 @@ RUN_CMD="export LD_LIBRARY_PATH=$__LD_LIBRARY_PATH; $SANITY_MESA_VERSION_CMD && 
 if [ "$RUN_CMD_WRAPPER" ]; then
     RUN_CMD="set +e; $RUN_CMD_WRAPPER "$(/usr/bin/printf "%q" "$RUN_CMD")"; set -e"
 fi
-
-ci-fairy minio login $MINIO_ARGS --token-file "${CI_JOB_JWT_FILE}"
 
 # The replayer doesn't do any size or checksum verification for the traces in
 # the replayer db, so if we had to restart the system due to intermittent device

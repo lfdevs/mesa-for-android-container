@@ -1050,7 +1050,7 @@ glsl_type::get_texture_instance(enum glsl_sampler_dim dim,
       case GLSL_SAMPLER_DIM_3D:
          return (array ? error_type : vtexture3D_type);
       case GLSL_SAMPLER_DIM_BUF:
-         return (array ? error_type : vbuffer_type);
+         return (array ? error_type : vtextureBuffer_type);
       default:
          return error_type;
       }

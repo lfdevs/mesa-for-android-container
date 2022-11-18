@@ -1,9 +1,9 @@
 variables:
    DEBIAN_X86_BUILD_BASE_IMAGE: "debian/x86_build-base"
-   DEBIAN_BASE_TAG: "2022-10-19-remove-xvmc-dev"
+   DEBIAN_BASE_TAG: "2022-11-15-ci-fairy"
 
    DEBIAN_X86_BUILD_IMAGE_PATH: "debian/x86_build"
-   DEBIAN_BUILD_TAG: "2022-10-22-mold-1_6"
+   DEBIAN_BUILD_TAG: "2022-11-15-ci-fairy"
 
    DEBIAN_X86_BUILD_MINGW_IMAGE_PATH: "debian/x86_build-mingw"
    DEBIAN_BUILD_MINGW_TAG: "2022-10-18-dx-headers-va"
@@ -11,11 +11,11 @@ variables:
    DEBIAN_X86_TEST_BASE_IMAGE: "debian/x86_test-base"
 
    DEBIAN_X86_TEST_IMAGE_PATH: "debian/x86_test-gl"
-   DEBIAN_X86_TEST_GL_TAG: "2022-10-20-bindgen-zlib-cve"
-   DEBIAN_X86_TEST_VK_TAG: "2022-10-20-bindgen-zlib-cve"
+   DEBIAN_X86_TEST_GL_TAG: "2022-11-15-ci-fairy"
+   DEBIAN_X86_TEST_VK_TAG: "2022-11-15-ci-fairy"
 
    FEDORA_X86_BUILD_TAG: "2022-09-22-python3-ply-2"
-   KERNEL_ROOTFS_TAG: "2022-10-20-bindgen-zlib-cve"
+   KERNEL_ROOTFS_TAG: "2022-11-03-piglit_mesa-22.3"
 
    WINDOWS_X64_VS_PATH: "windows/x64_vs"
    WINDOWS_X64_VS_TAG: "2022-10-20-upgrade-zlib"

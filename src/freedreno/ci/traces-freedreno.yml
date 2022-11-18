@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: http://10.42.0.1:8888/cache/?uri=https://minio-packet.freedesktop.org/mesa-tracie-public/
+  download-url: http://10.42.0.1:8888/cache/?uri=https://s3.freedesktop.org/mesa-tracie-public/
 
 text: |-
   NOTE for faster runtime, try to sort tests so the longer running traces
@@ -129,24 +129,24 @@ traces:
     zink-a630:
       checksum: d25edb433abfcde517b626b3071906ff
 
-  glmark2/buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false-v2.trace:
-    freedreno-a306:
+  ? glmark2/buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false-v2.trace
+  : freedreno-a306:
       checksum: 67f73c60b3ff286b7a4a10f4c14eec8b
     freedreno-a530:
       checksum: eaee77d5109260a2c91f38e7428a9cb6
     freedreno-a630:
       checksum: e79224d7afc13318a3511b3dbdca57c1
 
-  glmark2/buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true-v2.trace:
-    freedreno-a306:
+  ? glmark2/buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true-v2.trace
+  : freedreno-a306:
       checksum: ec04315638a814e1bd870f52883a4564
     freedreno-a530:
       checksum: 52b81ddea38b362105b64847d64b80c9
     freedreno-a630:
       checksum: df325d374967a1508675f17d38a16a2c
 
-  glmark2/buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false-v2.trace:
-    freedreno-a306:
+  ? glmark2/buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false-v2.trace
+  : freedreno-a306:
       checksum: f03b78ff377bacd073b4bc46384c4c06
     freedreno-a530:
       checksum: 9209aa63fcc0c3608bbb0299437fd54c
@@ -201,8 +201,8 @@ traces:
     freedreno-a630:
       checksum: 809b7b66f30f134490012817a30774c3
 
-  glmark2/desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true-v2.trace:
-    freedreno-a306:
+  ? glmark2/desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true-v2.trace
+  : freedreno-a306:
       checksum: e24428dc1f1669e2fa763a14ff81a35e
     freedreno-a530:
       checksum: 70e18ba06d56fea277cd3fb000729879
@@ -431,7 +431,7 @@ traces:
     freedreno-a630:
       checksum: f83f7ad4b147607e2a7de65a48f8ed4d
       label: [crash]
-      text: 'intermittent msm ae00000.mdss: [drm:hangcheck_handler] *ERROR* A630: hangcheck detected gpu lockup rb 0!'
+      text: "intermittent msm ae00000.mdss: [drm:hangcheck_handler] *ERROR* A630: hangcheck detected gpu lockup rb 0!"
 
   gputest/pixmark-piano-v2.trace:
     freedreno-a630:
@@ -651,7 +651,7 @@ traces:
       text: needs GL 4.5
     freedreno-a630:
       label: [crash, no-perf]
-      text: 'msm ae00000.mdss: [drm:hangcheck_handler] *ERROR* A630: hangcheck detected gpu lockup rb 0!'
+      text: "msm ae00000.mdss: [drm:hangcheck_handler] *ERROR* A630: hangcheck detected gpu lockup rb 0!"
   blender/blender-demo-ellie_pose.trace:
     freedreno-a306:
       label: [unsupported]

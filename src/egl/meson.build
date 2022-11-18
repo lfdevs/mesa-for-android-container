@@ -183,9 +183,7 @@ egl_def = custom_target(
   'egl.def',
   input: 'main/egl.def.in',
   output : 'egl.def',
-  command : [prog_python, gen_vs_module_defs_py,
-             '--in_file', '@INPUT@', '--out_file', '@OUTPUT@',
-             '--compiler_id', cc.get_argument_syntax(), '--cpu_family', host_machine.cpu_family()]
+  command : gen_vs_module_defs_normal_command,
 )
 
 libegl = shared_library(

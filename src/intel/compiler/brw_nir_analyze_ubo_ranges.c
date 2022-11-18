@@ -67,16 +67,16 @@ cmp_ubo_range_entry(const void *va, const void *vb)
    const struct ubo_range_entry *a = va;
    const struct ubo_range_entry *b = vb;
 
-   /* Rank based on scores */
+   /* Rank based on scores, descending order */
    int delta = score(b) - score(a);
 
-   /* Then use the UBO block index as a tie-breaker */
+   /* Then use the UBO block index as a tie-breaker, descending order */
    if (delta == 0)
       delta = b->range.block - a->range.block;
 
-   /* Finally use the UBO offset as a second tie-breaker */
+   /* Finally use the start offset as a second tie-breaker, ascending order */
    if (delta == 0)
-      delta = b->range.block - a->range.block;
+      delta = a->range.start - b->range.start;
 
    return delta;
 }

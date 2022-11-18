@@ -1165,10 +1165,10 @@ handle_candidate_triangle(nir_builder *b, struct radv_triangle_intersection *int
    nir_ssa_def *hit_kind =
       nir_bcsel(b, intersection->frontface, nir_imm_int(b, 0xFE), nir_imm_int(b, 0xFF));
 
-   nir_store_scratch(
-      b, intersection->barycentrics,
-      nir_iadd_imm(b, nir_load_var(b, data->vars->stack_ptr), RADV_HIT_ATTRIB_OFFSET),
-      .align_mul = 16);
+   nir_ssa_def *barycentrics_addr =
+      nir_iadd_imm(b, nir_load_var(b, data->vars->stack_ptr), RADV_HIT_ATTRIB_OFFSET);
+   nir_ssa_def *prev_barycentrics = nir_load_scratch(b, 2, 32, barycentrics_addr, .align_mul = 16);
+   nir_store_scratch(b, intersection->barycentrics, barycentrics_addr, .align_mul = 16);
 
    nir_store_var(b, data->vars->ahit_accept, nir_imm_true(b), 0x1);
    nir_store_var(b, data->vars->ahit_terminate, nir_imm_false(b), 0x1);
@@ -1191,6 +1191,7 @@ handle_candidate_triangle(nir_builder *b, struct radv_triangle_intersection *int
 
       nir_push_if(b, nir_inot(b, nir_load_var(b, data->vars->ahit_accept)));
       {
+         nir_store_scratch(b, prev_barycentrics, barycentrics_addr, .align_mul = 16);
          nir_jump(b, nir_jump_continue);
       }
       nir_pop_if(b, NULL);

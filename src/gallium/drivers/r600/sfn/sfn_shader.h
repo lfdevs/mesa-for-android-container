@@ -243,6 +243,8 @@ public:
 
    PRegister emit_load_to_register(PVirtualValue src);
 
+   virtual unsigned image_size_const_offset() { return 0;}
+
 protected:
    enum ESlots {
       es_face,
@@ -264,7 +266,7 @@ protected:
 
    std::bitset<es_last> m_sv_values;
 
-   Shader(const char *type_id);
+   Shader(const char *type_id, unsigned atomic_base);
 
    const ShaderInput& input(int base) const;
 

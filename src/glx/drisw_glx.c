@@ -1054,8 +1054,11 @@ static struct glx_screen *
 driswCreateScreen(int screen, struct glx_display *priv)
 {
    const struct drisw_display *pdpyp = (struct drisw_display *)priv->driswDisplay;
+   if (pdpyp->zink && !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false)) {
+      return driswCreateScreenDriver(screen, priv, "zink");
+   }
 
-   return driswCreateScreenDriver(screen, priv, pdpyp->zink ? "zink" : "swrast");
+   return driswCreateScreenDriver(screen, priv, "swrast");
 }
 
 /* Called from __glXFreeDisplayPrivate.

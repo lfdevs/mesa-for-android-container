@@ -1920,6 +1920,47 @@ begin_subpass(struct vk_command_buffer *cmd_buffer,
       mem_barrier.dstAccessMask |= dep->dst_access_mask;
    }
 
+   if (subpass_idx == 0) {
+      /* From the Vulkan 1.3.232 spec:
+       *
+       *    "If there is no subpass dependency from VK_SUBPASS_EXTERNAL to the
+       *    first subpass that uses an attachment, then an implicit subpass
+       *    dependency exists from VK_SUBPASS_EXTERNAL to the first subpass it
+       *    is used in. The implicit subpass dependency only exists if there
+       *    exists an automatic layout transition away from initialLayout. The
+       *    subpass dependency operates as if defined with the following
+       *    parameters:
+       *
+       *    VkSubpassDependency implicitDependency = {
+       *        .srcSubpass = VK_SUBPASS_EXTERNAL;
+       *        .dstSubpass = firstSubpass; // First subpass attachment is used in
+       *        .srcStageMask = VK_PIPELINE_STAGE_NONE;
+       *        .dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+       *        .srcAccessMask = 0;
+       *        .dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT |
+       *                         VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+       *                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+       *                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+       *                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+       *        .dependencyFlags = 0;
+       *    };"
+       *
+       * We could track individual subpasses and attachments and views to make
+       * sure we only insert this barrier when it's absolutely necessary.
+       * However, this is only going to happen for the first subpass and
+       * you're probably going to take a stall in BeginRenderPass() anyway.
+       * If this is ever a perf problem, we can re-evaluate and do something
+       * more intellegent at that time.
+       */
+      needs_mem_barrier = true;
+      mem_barrier.dstStageMask |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+      mem_barrier.dstAccessMask |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT |
+                                   VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+   }
+
    uint32_t max_image_barrier_count = 0;
    for (uint32_t a = 0; a < subpass->attachment_count; a++) {
       const struct vk_subpass_attachment *sp_att = &subpass->attachments[a];
@@ -2047,9 +2088,77 @@ static void
 end_subpass(struct vk_command_buffer *cmd_buffer,
             const VkSubpassEndInfo *end_info)
 {
+   const struct vk_render_pass *pass = cmd_buffer->render_pass;
+   const uint32_t subpass_idx = cmd_buffer->subpass_idx;
    struct vk_device_dispatch_table *disp =
       &cmd_buffer->base.device->dispatch_table;
+
    disp->CmdEndRendering(vk_command_buffer_to_handle(cmd_buffer));
+
+   bool needs_mem_barrier = false;
+   VkMemoryBarrier2 mem_barrier = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+   };
+   for (uint32_t d = 0; d < pass->dependency_count; d++) {
+      const struct vk_subpass_dependency *dep = &pass->dependencies[d];
+      if (dep->src_subpass != subpass_idx)
+         continue;
+
+      if (dep->dst_subpass != VK_SUBPASS_EXTERNAL)
+         continue;
+
+      needs_mem_barrier = true;
+      mem_barrier.srcStageMask |= dep->src_stage_mask;
+      mem_barrier.srcAccessMask |= dep->src_access_mask;
+      mem_barrier.dstStageMask |= dep->dst_stage_mask;
+      mem_barrier.dstAccessMask |= dep->dst_access_mask;
+   }
+
+   if (subpass_idx == pass->subpass_count - 1) {
+      /* From the Vulkan 1.3.232 spec:
+       *
+       *    "Similarly, if there is no subpass dependency from the last
+       *    subpass that uses an attachment to VK_SUBPASS_EXTERNAL, then an
+       *    implicit subpass dependency exists from the last subpass it is
+       *    used in to VK_SUBPASS_EXTERNAL. The implicit subpass dependency
+       *    only exists if there exists an automatic layout transition into
+       *    finalLayout. The subpass dependency operates as if defined with
+       *    the following parameters:
+       *
+       *    VkSubpassDependency implicitDependency = {
+       *        .srcSubpass = lastSubpass; // Last subpass attachment is used in
+       *        .dstSubpass = VK_SUBPASS_EXTERNAL;
+       *        .srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+       *        .dstStageMask = VK_PIPELINE_STAGE_NONE;
+       *        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+       *                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+       *        .dstAccessMask = 0;
+       *        .dependencyFlags = 0;
+       *    };"
+       *
+       * We could track individual subpasses and attachments and views to make
+       * sure we only insert this barrier when it's absolutely necessary.
+       * However, this is only going to happen for the last subpass and
+       * you're probably going to take a stall in EndRenderPass() anyway.
+       * If this is ever a perf problem, we can re-evaluate and do something
+       * more intellegent at that time.
+       */
+      needs_mem_barrier = true;
+      mem_barrier.srcStageMask |= VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+      mem_barrier.srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+   }
+
+   if (needs_mem_barrier) {
+      const VkDependencyInfo dependency_info = {
+         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+         .dependencyFlags = 0,
+         .memoryBarrierCount = 1,
+         .pMemoryBarriers = &mem_barrier,
+      };
+      disp->CmdPipelineBarrier2(vk_command_buffer_to_handle(cmd_buffer),
+                                &dependency_info);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL

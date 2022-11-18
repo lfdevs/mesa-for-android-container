@@ -899,7 +899,7 @@ RatInstr::emit_image_size(nir_intrinsic_instr *intrin, Shader& shader)
          shader.set_flag(Shader::sh_txs_cube_array_comp);
 
          if (const_offset) {
-            unsigned lookup_resid = const_offset[0].u32;
+            unsigned lookup_resid = const_offset[0].u32 + shader.image_size_const_offset();
             shader.emit_instruction(
                new AluInstr(op1_mov,
                             dest[2],

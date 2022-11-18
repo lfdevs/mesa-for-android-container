@@ -58,7 +58,6 @@ spec@arb_fragment_program_shadow@txp-shadow2drect,Fail
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query,Fail
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query@MS8,Fail
 spec@arb_framebuffer_object@fbo-gl_pointcoord,Fail
-spec@arb_get_program_binary@restore-sso-program,Fail
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail
@@ -368,6 +367,7 @@ spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on bottom ed
 spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on left edge,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on right edge,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on top edge,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 0: Expected blue pixel in center,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 1: Expected blue pixel in center,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 2: Expected blue pixel in center,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 2: Expected white pixel on right edge,Fail

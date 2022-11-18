@@ -33,7 +33,9 @@ namespace r600 {
 
 class ComputeShader : public Shader {
 public:
-   ComputeShader(const r600_shader_key& key);
+   ComputeShader(const r600_shader_key& key, int num_samplers);
+
+   unsigned image_size_const_offset() override { return m_image_size_const_offset;}
 
 private:
    bool do_scan_instruction(nir_instr *instr) override;
@@ -61,6 +63,7 @@ private:
    std::array<PRegister, 3> m_local_invocation_id{nullptr};
 
    PRegister m_zero_register{0};
+   int m_image_size_const_offset{0};
 };
 
 } // namespace r600

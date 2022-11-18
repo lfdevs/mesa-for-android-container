@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: "http://caching-proxy/cache/?uri=https://minio-packet.freedesktop.org/mesa-tracie-public/"
+  download-url: "http://caching-proxy/cache/?uri=https://s3.freedesktop.org/mesa-tracie-public/"
 
 traces:
   unigine/heaven-scene1-low-d3d11.trace-dxgi:

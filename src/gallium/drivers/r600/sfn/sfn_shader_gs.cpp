@@ -32,7 +32,7 @@
 namespace r600 {
 
 GeometryShader::GeometryShader(const r600_shader_key& key):
-    Shader("GS"),
+    Shader("GS", key.gs.first_atomic_counter),
     m_tri_strip_adj_fix(key.gs.tri_strip_adj_fix)
 {
 }

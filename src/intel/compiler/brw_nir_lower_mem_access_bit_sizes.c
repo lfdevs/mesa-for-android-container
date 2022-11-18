@@ -29,8 +29,7 @@
 static nir_intrinsic_instr *
 dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
                   nir_ssa_def *store_src, int offset,
-                  unsigned num_components, unsigned bit_size,
-                  unsigned align)
+                  unsigned num_components, unsigned bit_size)
 {
    const nir_intrinsic_info *info = &nir_intrinsic_infos[intrin->intrinsic];
 
@@ -63,7 +62,10 @@ dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    if (nir_intrinsic_has_access(intrin))
       nir_intrinsic_set_access(dup, nir_intrinsic_access(intrin));
 
-   nir_intrinsic_set_align(dup, align, 0);
+   const unsigned align_mul = nir_intrinsic_align_mul(intrin);
+   const unsigned align_offset =
+      (nir_intrinsic_align_offset(intrin) + (unsigned)offset) % align_mul;
+   nir_intrinsic_set_align_offset(dup, align_offset);
 
    if (info->has_dest) {
       assert(intrin->dest.is_ssa);
@@ -89,6 +91,8 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
    const unsigned bit_size = intrin->dest.ssa.bit_size;
    const unsigned num_components = intrin->dest.ssa.num_components;
    const unsigned bytes_read = num_components * (bit_size / 8);
+   const unsigned align_mul = nir_intrinsic_align_mul(intrin);
+   const unsigned align_offset = nir_intrinsic_align_offset(intrin);
    const unsigned align = nir_intrinsic_align(intrin);
 
    if (bit_size == 32 && align >= 32 && intrin->num_components <= 4 &&
@@ -110,7 +114,7 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
       assert(load_comps32 <= 3);
 
       nir_intrinsic_instr *load_instr =
-            dup_mem_intrinsic(b, intrin, NULL, -load_offset, load_comps32, 32, 4);
+            dup_mem_intrinsic(b, intrin, NULL, -load_offset, load_comps32, 32);
       nir_ssa_def *load = &load_instr->dest.ssa;
       result = nir_extract_bits(b, &load, 1, load_offset * 8,
                                 num_components, bit_size);
@@ -128,7 +132,7 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
       nir_ssa_def *dword_offset = nir_iand_imm(b, unaligned_offset, 0x3u);
 
       nir_intrinsic_instr *new_load_instr =
-            dup_mem_intrinsic(b, intrin, NULL, 0, 1, 32, align);
+            dup_mem_intrinsic(b, intrin, NULL, 0, 1, 32);
 
       nir_ssa_def *new_load = &new_load_instr->dest.ssa;
 
@@ -151,9 +155,24 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
          const unsigned bytes_left = bytes_read - load_offset;
          unsigned load_bit_size, load_comps;
          if (align < 4) {
-            load_comps = 1;
             /* Choose a byte, word, or dword */
-            load_bit_size = util_next_power_of_two(MIN2(bytes_left, 4)) * 8;
+            unsigned load_bytes = util_next_power_of_two(MIN2(bytes_left, 4));
+
+            if (intrin->intrinsic == nir_intrinsic_load_scratch) {
+               /* The way scratch address swizzling works in the back-end, it
+                * happens at a DWORD granularity so we can't have a single load
+                * or store cross a DWORD boundary.
+                */
+               if ((align_offset % 4) + load_bytes > MIN2(align_mul, 4))
+                  load_bytes = MIN2(align_mul, 4) - (align_offset % 4);
+            }
+
+            /* Must be a power of two */
+            if (load_bytes == 3)
+               load_bytes = 2;
+
+            load_bit_size = load_bytes * 8;
+            load_comps = 1;
          } else {
             assert(load_offset % 4 == 0);
             load_bit_size = 32;
@@ -163,7 +182,7 @@ lower_mem_load_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
 
          nir_intrinsic_instr *load_instr =
                dup_mem_intrinsic(b, intrin, NULL, load_offset, load_comps,
-                                 load_bit_size, align);
+                                 load_bit_size);
          loads[num_loads++] = &load_instr->dest.ssa;
 
          load_offset += load_comps * (load_bit_size / 8);
@@ -238,18 +257,28 @@ lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
          (align_mul >= 4 && (align_offset + start) % 4 == 0) ||
          (offset_is_const && (start + const_offset) % 4 == 0);
 
-      unsigned store_comps, store_bit_size, store_align;
+      unsigned store_comps, store_bit_size;
       if (chunk_bytes >= 4 && is_dword_aligned) {
-         store_align = MAX2(align, 4);
          store_bit_size = 32;
          store_comps = needs_scalar ? 1 : MIN2(chunk_bytes, 16) / 4;
       } else {
-         store_align = align;
+         unsigned store_bytes = MIN2(chunk_bytes, 4);
+
+         if (intrin->intrinsic == nir_intrinsic_store_scratch) {
+            /* The way scratch address swizzling works in the back-end, it
+             * happens at a DWORD granularity so we can't have a single load
+             * or store cross a DWORD boundary.
+             */
+            if ((align_offset % 4) + store_bytes > MIN2(align_mul, 4))
+               store_bytes = MIN2(align_mul, 4) - (align_offset % 4);
+         }
+
+         /* Must be a power of two */
+         if (store_bytes == 3)
+            store_bytes = 2;
+
+         store_bit_size = store_bytes * 8;
          store_comps = 1;
-         store_bit_size = MIN2(chunk_bytes, 4) * 8;
-         /* The bit size must be a power of two */
-         if (store_bit_size == 24)
-            store_bit_size = 16;
       }
       const unsigned store_bytes = store_comps * (store_bit_size / 8);
 
@@ -257,7 +286,7 @@ lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin,
                                              store_comps, store_bit_size);
 
       dup_mem_intrinsic(b, intrin, packed, start,
-                        store_comps, store_bit_size, store_align);
+                        store_comps, store_bit_size);
 
       BITSET_CLEAR_RANGE(mask, start, (start + store_bytes - 1));
    }

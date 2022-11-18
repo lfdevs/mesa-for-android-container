@@ -1443,7 +1443,11 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
    }
 
    /* Add all the global BOs to the object list for softpin case. */
-   result = pin_state_pool(device, execbuf, &device->surface_state_pool);
+   result = pin_state_pool(device, execbuf, &device->internal_surface_state_pool);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result = pin_state_pool(device, execbuf, &device->bindless_surface_state_pool);
    if (result != VK_SUCCESS)
       return result;
 

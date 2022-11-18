@@ -414,7 +414,7 @@ VertexExportForFs::output_register(int loc) const
 VertexShader::VertexShader(const pipe_stream_output_info *so_info,
                            r600_shader *gs_shader,
                            r600_shader_key& key):
-    VertexStageShader("VS"),
+    VertexStageShader("VS", key.vs.first_atomic_counter),
     m_vs_as_gs_a(key.vs.as_gs_a)
 {
    if (key.vs.as_es)

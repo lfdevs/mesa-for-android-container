@@ -140,7 +140,11 @@ compiler_perf_log(UNUSED void *data, UNUSED unsigned *id, const char *fmt, ...)
 VkResult anv_EnumerateInstanceVersion(
     uint32_t*                                   pApiVersion)
 {
+#ifdef ANDROID
+   *pApiVersion = ANV_API_VERSION;
+#else
    *pApiVersion = ANV_API_VERSION_1_3;
+#endif
    return VK_SUCCESS;
 }
 
@@ -1819,7 +1823,11 @@ void anv_GetPhysicalDeviceProperties(
    };
 
    *pProperties = (VkPhysicalDeviceProperties) {
+#ifdef ANDROID
+      .apiVersion = ANV_API_VERSION,
+#else
       .apiVersion = pdevice->use_softpin ? ANV_API_VERSION_1_3 : ANV_API_VERSION_1_2,
+#endif
       .driverVersion = vk_get_driver_version(),
       .vendorID = 0x8086,
       .deviceID = pdevice->info.pci_device_id,

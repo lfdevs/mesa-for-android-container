@@ -220,7 +220,7 @@ vk_device_init(struct vk_device *device,
 }
 
 void
-vk_device_finish(UNUSED struct vk_device *device)
+vk_device_finish(struct vk_device *device)
 {
    /* Drivers should tear down their own queues */
    assert(list_is_empty(&device->queues));

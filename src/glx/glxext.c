@@ -923,9 +923,9 @@ __glXInitialize(Display * dpy)
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
    Bool glx_direct = !debug_get_bool_option("LIBGL_ALWAYS_INDIRECT", false);
    Bool glx_accel = !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
+   Bool zink;
    const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
-   Bool explicit_zink = env && !strcmp(env, "zink");
-   Bool infer_zink = false;
+   zink = env && !strcmp(env, "zink");
 
    dpyPriv->drawHash = __glxHashCreate();
 
@@ -940,20 +940,17 @@ __glXInitialize(Display * dpy)
     ** (e.g., those called in AllocAndFetchScreenConfigs).
     */
 #if defined(GLX_USE_DRM)
-   if (glx_direct && glx_accel && !explicit_zink) {
+   if (glx_direct && glx_accel && !zink) {
 #if defined(HAVE_DRI3)
       if (!debug_get_bool_option("LIBGL_DRI3_DISABLE", false))
          dpyPriv->dri3Display = dri3_create_display(dpy);
 #endif /* HAVE_DRI3 */
       if (!debug_get_bool_option("LIBGL_DRI2_DISABLE", false))
          dpyPriv->dri2Display = dri2CreateDisplay(dpy);
-      /* zink fallback */
-      if (!dpyPriv->dri3Display && !dpyPriv->dri2Display)
-         infer_zink =  !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false) && !getenv("GALLIUM_DRIVER");
    }
 #endif /* GLX_USE_DRM */
    if (glx_direct)
-      dpyPriv->driswDisplay = driswCreateDisplay(dpy, explicit_zink | infer_zink);
+      dpyPriv->driswDisplay = driswCreateDisplay(dpy, zink);
 
 #ifdef GLX_USE_WINDOWSGL
    if (glx_direct && glx_accel)
@@ -969,22 +966,8 @@ __glXInitialize(Display * dpy)
 #endif
 
    if (!AllocAndFetchScreenConfigs(dpy, dpyPriv)) {
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
-      Bool fail = true;
-      /* if zink was inferred, retry without zink */
-      if (infer_zink && !explicit_zink) {
-         free(dpyPriv->screens);
-         driswCreateDisplay(dpy, false);
-         fail = !AllocAndFetchScreenConfigs(dpy, dpyPriv);
-      }
-      if (fail) {
-         free(dpyPriv);
-         return NULL;
-      }
-#else
       free(dpyPriv);
       return NULL;
-#endif
    }
 
    __glX_send_client_info(dpyPriv);

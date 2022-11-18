@@ -92,6 +92,7 @@ int futex_wait(uint32_t *addr, int32_t value, const struct timespec *timeout)
 #elif defined(__OpenBSD__)
 
 #include <sys/futex.h>
+#include <sys/time.h>
 
 int futex_wake(uint32_t *addr, int count)
 {

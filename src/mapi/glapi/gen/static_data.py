@@ -2145,7 +2145,7 @@ functions = [
     "GetnUniformuiv",
     "GetnUniformuivARB",
     "GetObjectLabel",
-    "GetObjectLabelEXT"
+    "GetObjectLabelEXT",
     "GetObjectParameterfvARB",
     "GetObjectParameterivARB",
     "GetObjectPtrLabel",

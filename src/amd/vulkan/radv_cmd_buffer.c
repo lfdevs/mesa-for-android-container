@@ -4574,11 +4574,8 @@ radv_src_access_flush(struct radv_cmd_buffer *cmd_buffer, VkAccessFlags2 src_fla
             }
          }
 
-         /* This is valid even for the rb_noncoherent_dirty case, because with how we account for
-          * dirtyness, if it isn't dirty it doesn't contain the data at all and hence doesn't need
-          * invalidating. */
          if (!image_is_coherent)
-            flush_bits |= RADV_CMD_FLAG_WB_L2;
+            flush_bits |= RADV_CMD_FLAG_INV_L2;
          break;
       case VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR:
       case VK_ACCESS_2_TRANSFORM_FEEDBACK_WRITE_BIT_EXT:
@@ -7544,7 +7541,8 @@ radv_emit_ngg_culling_state(struct radv_cmd_buffer *cmd_buffer, const struct rad
       cmd_buffer->state.dirty &
       (RADV_CMD_DIRTY_PIPELINE |
        RADV_CMD_DIRTY_DYNAMIC_CULL_MODE | RADV_CMD_DIRTY_DYNAMIC_FRONT_FACE |
-       RADV_CMD_DIRTY_DYNAMIC_RASTERIZER_DISCARD_ENABLE | RADV_CMD_DIRTY_DYNAMIC_VIEWPORT);
+       RADV_CMD_DIRTY_DYNAMIC_RASTERIZER_DISCARD_ENABLE | RADV_CMD_DIRTY_DYNAMIC_VIEWPORT |
+       RADV_CMD_DIRTY_DYNAMIC_CONSERVATIVE_RAST_MODE);
 
    /* Check small draw status:
     * For small draw calls, we disable culling by setting the SGPR to 0.
@@ -8490,7 +8488,7 @@ radv_CmdDrawMeshTasksIndirectCountEXT(VkCommandBuffer commandBuffer, VkBuffer _b
    radv_after_draw(cmd_buffer);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 radv_CmdExecuteGeneratedCommandsNV(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
                                    const VkGeneratedCommandsInfoNV *pGeneratedCommandsInfo)
 {
@@ -10215,7 +10213,7 @@ radv_CmdWriteBufferMarker2AMD(VkCommandBuffer commandBuffer, VkPipelineStageFlag
    assert(cmd_buffer->cs->cdw <= cdw_max);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 radv_CmdBindPipelineShaderGroupNV(VkCommandBuffer commandBuffer,
                                   VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline,
                                   uint32_t groupIndex)

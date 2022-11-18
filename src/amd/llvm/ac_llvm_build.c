@@ -1034,7 +1034,7 @@ LLVMValueRef ac_build_fs_interp_f16(struct ac_llvm_context *ctx, LLVMValueRef ll
       args[3] = high_16bits ? ctx->i1true : ctx->i1false;
 
       return ac_build_intrinsic(ctx, "llvm.amdgcn.interp.inreg.p2.f16",
-                                ctx->f32, args, 4, AC_FUNC_ATTR_READNONE);
+                                ctx->f16, args, 4, AC_FUNC_ATTR_READNONE);
 
    } else {
       LLVMValueRef p1;

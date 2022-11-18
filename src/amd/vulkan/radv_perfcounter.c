@@ -836,7 +836,7 @@ radv_pc_get_results(const struct radv_pc_query_pool *pc_pool, const uint64_t *da
    }
 }
 
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 radv_EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
    VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, uint32_t *pCounterCount,
    VkPerformanceCounterKHR *pCounters, VkPerformanceCounterDescriptionKHR *pCounterDescriptions)
@@ -889,7 +889,7 @@ radv_EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
    return result;
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 radv_GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR(
    VkPhysicalDevice physicalDevice,
    const VkQueryPoolPerformanceCreateInfoKHR *pPerformanceQueryCreateInfo, uint32_t *pNumPasses)

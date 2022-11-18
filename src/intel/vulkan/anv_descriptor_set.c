@@ -924,8 +924,12 @@ VkResult anv_CreateDescriptorPool(
       pool->bo = NULL;
    }
 
+   /* All the surface states allocated by the descriptor pool are internal. We
+    * have to allocate them to handle the fact that we do not have surface
+    * states for VkBuffers.
+    */
    anv_state_stream_init(&pool->surface_state_stream,
-                         &device->surface_state_pool, 4096);
+                         &device->internal_surface_state_pool, 4096);
    pool->surface_state_free_list = NULL;
 
    list_inithead(&pool->desc_sets);
@@ -984,7 +988,7 @@ VkResult anv_ResetDescriptorPool(
 
    anv_state_stream_finish(&pool->surface_state_stream);
    anv_state_stream_init(&pool->surface_state_stream,
-                         &device->surface_state_pool, 4096);
+                         &device->internal_surface_state_pool, 4096);
    pool->surface_state_free_list = NULL;
 
    return VK_SUCCESS;
@@ -1062,7 +1066,8 @@ anv_descriptor_pool_alloc_state(struct anv_descriptor_pool *pool)
       assert(state.alloc_size == 64);
       return state;
    } else {
-      return anv_state_stream_alloc(&pool->surface_state_stream, 64, 64);
+      struct anv_state state = anv_state_stream_alloc(&pool->surface_state_stream, 64, 64);
+      return state;
    }
 }
 

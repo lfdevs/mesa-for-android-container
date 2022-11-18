@@ -90,10 +90,7 @@ def gather_results(
                         print(f"Trace {trace} crashed")
                         continue
 
-                    if (
-                        checksum in target['traces'][trace][dev_name] and
-                        target['traces'][trace][dev_name]['checksum'] == checksum
-                    ):
+                    if target['traces'][trace][dev_name].get('checksum') == checksum:
                         continue
 
                     if "label" in target['traces'][trace][dev_name]:

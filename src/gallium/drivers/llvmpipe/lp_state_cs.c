@@ -148,8 +148,6 @@ generate_compute(struct llvmpipe_context *lp,
       }
    }
 
-   lp_build_coro_declare_malloc_hooks(gallivm);
-
    if (variant->gallivm->cache->data_size)
       return;
 
@@ -831,7 +829,6 @@ generate_variant(struct llvmpipe_context *lp,
 
    gallivm_compile_module(variant->gallivm);
 
-   lp_build_coro_add_malloc_hooks(variant->gallivm);
    variant->nr_instrs += lp_build_count_ir_module(variant->gallivm->module);
 
    variant->jit_function = (lp_jit_cs_func)

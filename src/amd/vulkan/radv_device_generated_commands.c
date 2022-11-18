@@ -972,7 +972,7 @@ cleanup:
    return result;
 }
 
-VkResult
+VKAPI_ATTR VkResult VKAPI_CALL
 radv_CreateIndirectCommandsLayoutNV(VkDevice _device,
                                     const VkIndirectCommandsLayoutCreateInfoNV *pCreateInfo,
                                     const VkAllocationCallbacks *pAllocator,
@@ -1048,7 +1048,7 @@ radv_CreateIndirectCommandsLayoutNV(VkDevice _device,
    return VK_SUCCESS;
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 radv_DestroyIndirectCommandsLayoutNV(VkDevice _device,
                                      VkIndirectCommandsLayoutNV indirectCommandsLayout,
                                      const VkAllocationCallbacks *pAllocator)
@@ -1063,7 +1063,7 @@ radv_DestroyIndirectCommandsLayoutNV(VkDevice _device,
    vk_free2(&device->vk.alloc, pAllocator, layout);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 radv_GetGeneratedCommandsMemoryRequirementsNV(
    VkDevice _device, const VkGeneratedCommandsMemoryRequirementsInfoNV *pInfo,
    VkMemoryRequirements2 *pMemoryRequirements)
@@ -1086,7 +1086,7 @@ radv_GetGeneratedCommandsMemoryRequirementsNV(
       align(cmd_buf_size + upload_buf_size, pMemoryRequirements->memoryRequirements.alignment);
 }
 
-void
+VKAPI_ATTR void VKAPI_CALL
 radv_CmdPreprocessGeneratedCommandsNV(VkCommandBuffer commandBuffer,
                                       const VkGeneratedCommandsInfoNV *pGeneratedCommandsInfo)
 {

@@ -336,9 +336,12 @@ opcode("p_init_scratch")
 opcode("p_jump_to_epilog")
 
 # loads and interpolates a fragment shader input with a correct exec mask
-#dst0=result, dst1=exec_tmp, src0=linear_vgpr, src1=attribute, src2=component, src3=coord1, src4=coord2, src5=m0
-#dst0=result, dst1=exec_tmp, src0=linear_vgpr, src1=attribute, src2=component, src3=dpp_ctrl, src4=m0
+#dst0=result, dst1=exec_tmp, dst2=clobber_scc, src0=linear_vgpr, src1=attribute, src2=component, src3=coord1, src4=coord2, src5=m0
+#dst0=result, dst1=exec_tmp, dst2=clobber_scc, src0=linear_vgpr, src1=attribute, src2=component, src3=dpp_ctrl, src4=m0
 opcode("p_interp_gfx11")
+
+# performs dual source MRTs swizzling and emits exports on GFX11
+opcode("p_dual_src_export_gfx11")
 
 # SOP2 instructions: 2 scalar inputs, 1 scalar output (+optional scc)
 SOP2 = {

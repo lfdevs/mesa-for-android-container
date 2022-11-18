@@ -3629,12 +3629,10 @@ draw_tcs_llvm_create_variant(struct draw_llvm *llvm,
       draw_tcs_llvm_dump_variant_key(&variant->key);
    }
 
-   lp_build_coro_declare_malloc_hooks(variant->gallivm);
    draw_tcs_llvm_generate(llvm, variant);
 
    gallivm_compile_module(variant->gallivm);
 
-   lp_build_coro_add_malloc_hooks(variant->gallivm);
    variant->jit_func = (draw_tcs_jit_func)
       gallivm_jit_function(variant->gallivm, variant->function);
 

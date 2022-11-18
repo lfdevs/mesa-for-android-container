@@ -1953,6 +1953,14 @@ emit_branch(struct v3d_compile *c,
                         break;
                 }
 
+                /* Do not move up a branch if it can disrupt an ldvary sequence
+                 * as that can cause stomping of the r5 register.
+                 */
+                if (scoreboard->last_ldvary_tick + 2 >=
+                    branch_tick - slots_filled) {
+                       break;
+                }
+
                 /* Can't move a conditional branch before the instruction
                  * that writes the flags for its condition.
                  */

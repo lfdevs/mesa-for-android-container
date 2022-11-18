@@ -98,7 +98,7 @@
 #endif
 #endif
 
-#if defined(__ppc__) || defined(__ppc64__) || defined(__PPC__)
+#if defined(__ppc__) || defined(__ppc64__) || defined(__PPC__) || defined(__PPC64__)
 #define PIPE_ARCH_PPC
 #if defined(__ppc64__) || defined(__PPC64__)
 #define PIPE_ARCH_PPC_64

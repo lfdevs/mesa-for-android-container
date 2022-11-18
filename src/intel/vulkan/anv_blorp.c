@@ -1962,10 +1962,20 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
                        0, 0, level_width, level_height);
       break;
    case ISL_AUX_OP_FULL_RESOLVE:
-   case ISL_AUX_OP_PARTIAL_RESOLVE:
+   case ISL_AUX_OP_PARTIAL_RESOLVE: {
+      /* Wa_1508744258: Enable RHWO optimization for resolves */
+      const bool enable_rhwo_opt = cmd_buffer->device->info->verx10 == 120;
+
+      if (enable_rhwo_opt)
+         cmd_buffer->state.pending_rhwo_optimization_enabled = true;
+
       blorp_ccs_resolve(&batch, &surf, level, base_layer, layer_count,
                         format, ccs_op);
+
+      if (enable_rhwo_opt)
+         cmd_buffer->state.pending_rhwo_optimization_enabled = false;
       break;
+   }
    case ISL_AUX_OP_AMBIGUATE:
       for (uint32_t a = 0; a < layer_count; a++) {
          const uint32_t layer = base_layer + a;
