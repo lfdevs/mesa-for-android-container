@@ -11496,6 +11496,19 @@ create_fs_exports(isel_context* ctx)
       struct aco_export_mrt mrts[8];
       unsigned compacted_mrt_index = 0;
 
+      /* MRT compaction doesn't work with dual-source blending. Dual-source blending seems to
+       * require MRT0 to be written. Just copy MRT1 into MRT0. Skipping MRT1 exports seems to be
+       * fine.
+       */
+      if (ctx->options->key.ps.mrt0_is_dual_src && !ctx->outputs.mask[FRAG_RESULT_DATA0] &&
+          ctx->outputs.mask[FRAG_RESULT_DATA1]) {
+         u_foreach_bit (j, ctx->outputs.mask[FRAG_RESULT_DATA1]) {
+            ctx->outputs.temps[FRAG_RESULT_DATA0 * 4u + j] =
+               ctx->outputs.temps[FRAG_RESULT_DATA1 * 4u + j];
+         }
+         ctx->outputs.mask[FRAG_RESULT_DATA0] = ctx->outputs.mask[FRAG_RESULT_DATA1];
+      }
+
       /* Export all color render targets. */
       for (unsigned i = FRAG_RESULT_DATA0; i < FRAG_RESULT_DATA7 + 1; ++i) {
          unsigned idx = i - FRAG_RESULT_DATA0;

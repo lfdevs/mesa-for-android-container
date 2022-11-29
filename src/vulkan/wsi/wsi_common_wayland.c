@@ -1836,7 +1836,10 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
          if (f != NULL) {
             num_drm_modifiers = u_vector_length(&f->modifiers);
             drm_modifiers = u_vector_tail(&f->modifiers);
-            drm_image_params.num_modifier_lists = 1;
+            if (num_drm_modifiers > 0)
+               drm_image_params.num_modifier_lists = 1;
+            else
+               drm_image_params.num_modifier_lists = 0;
             drm_image_params.num_modifiers = &num_drm_modifiers;
             drm_image_params.modifiers = &drm_modifiers;
          }

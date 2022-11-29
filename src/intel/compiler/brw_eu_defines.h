@@ -1567,6 +1567,11 @@ enum brw_message_target {
 #define GFX8_BTI_STATELESS_NON_COHERENT  253
 #define GFX9_BTI_BINDLESS                252
 
+/* This ID doesn't map anything HW related value. It exists to inform the
+ * lowering code to not use the bindless heap.
+ */
+#define GFX125_NON_BINDLESS              (1u << 16)
+
 /* Dataport atomic operations for Untyped Atomic Integer Operation message
  * (and others).
  */

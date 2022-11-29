@@ -70,7 +70,7 @@ void v3d_disk_cache_init(struct v3d_screen *screen)
         char timestamp[41];
         _mesa_sha1_format(timestamp, id_sha1);
 
-        screen->disk_cache = disk_cache_create(renderer, timestamp, 0);
+        screen->disk_cache = disk_cache_create(renderer, timestamp, v3d_mesa_debug);
 
         free(renderer);
 }

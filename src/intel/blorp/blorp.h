@@ -122,7 +122,7 @@ void blorp_batch_finish(struct blorp_batch *batch);
 
 struct blorp_address {
    void *buffer;
-   uint64_t offset;
+   int64_t offset;
    unsigned reloc_flags;
    uint32_t mocs;
 

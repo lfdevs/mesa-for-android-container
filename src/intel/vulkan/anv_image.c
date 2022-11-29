@@ -2793,6 +2793,8 @@ anv_CreateImageView(VkDevice _device,
                                    .h = image->vk.extent.height,
                                    .d = image->vk.extent.depth,
                                 });
+
+            iview->planes[vplane].lowered_surface_state_is_null = true;
          }
       }
    }

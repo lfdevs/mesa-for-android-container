@@ -870,43 +870,43 @@ template <typename T> struct type_char {
 };
 
 template <> struct type_char<AluInstr> {
-   static constexpr const char value = 'A';
+   static const char value() { return 'A';};
 };
 
 template <> struct type_char<AluGroup> {
-   static constexpr const char value = 'G';
+   static const char value() { return 'G';};
 };
 
 template <> struct type_char<ExportInstr> {
-   static constexpr const char value = 'E';
+   static const char value() { return 'E';};
 };
 
 template <> struct type_char<TexInstr> {
-   static constexpr const char value = 'T';
+   static const char value() { return 'T';};
 };
 
 template <> struct type_char<FetchInstr> {
-   static constexpr const char value = 'F';
+   static const char value() { return 'F';};
 };
 
 template <> struct type_char<WriteOutInstr> {
-   static constexpr const char value = 'M';
+   static const char value() { return 'M';};
 };
 
 template <> struct type_char<MemRingOutInstr> {
-   static constexpr const char value = 'R';
+   static const char value() { return 'R';};
 };
 
 template <> struct type_char<WriteTFInstr> {
-   static constexpr const char value = 'X';
+   static const char value() { return 'X';};
 };
 
 template <> struct type_char<GDSInstr> {
-   static constexpr const char value = 'S';
+   static const char value() { return 'S';};
 };
 
 template <> struct type_char<RatInstr> {
-   static constexpr const char value = 'I';
+   static const char value() { return 'I';};
 };
 
 template <typename T>
@@ -928,7 +928,7 @@ BlockSheduler::collect_ready_type(std::list<T *>& ready, std::list<T *>& availab
    }
 
    for (auto& i : ready)
-      sfn_log << SfnLog::schedule << type_char<T>::value << ";  " << *i << "\n";
+      sfn_log << SfnLog::schedule << type_char<T>::value() << ";  " << *i << "\n";
 
    return !ready.empty();
 }

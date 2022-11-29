@@ -100,6 +100,7 @@ static bool virgl_can_copy_transfer_from_host(struct virgl_screen *vs,
 {
    return virgl_can_use_staging(vs, res) &&
          !is_stencil_array(res) &&
+         !(bind & VIRGL_BIND_SHARED) &&
          virgl_has_readback_format(&vs->base, pipe_to_virgl_format(res->b.format), false) &&
          ((!(vs->caps.caps.v2.capability_bits & VIRGL_CAP_HOST_IS_GLES)) ||
           virgl_can_readback_from_rendertarget(vs, res) ||

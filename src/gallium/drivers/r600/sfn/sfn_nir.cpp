@@ -169,7 +169,19 @@ insert_fsoutput_sorted(struct exec_list *var_list, nir_variable *new_var)
 
    nir_foreach_variable_in_list(var, var_list)
    {
-      if (var->data.location > new_var->data.location ||
+      if ((var->data.location >= FRAG_RESULT_DATA0 ||
+          var->data.location == FRAG_RESULT_COLOR) &&
+          (new_var->data.location < FRAG_RESULT_COLOR ||
+           new_var->data.location == FRAG_RESULT_SAMPLE_MASK)) {
+         exec_node_insert_after(&var->node, &new_var->node);
+         return;
+      } else if ((new_var->data.location >= FRAG_RESULT_DATA0 ||
+                  new_var->data.location == FRAG_RESULT_COLOR) &&
+                 (var->data.location < FRAG_RESULT_COLOR ||
+                  var->data.location == FRAG_RESULT_SAMPLE_MASK)) {
+         exec_node_insert_node_before(&var->node, &new_var->node);
+         return;
+      } else if (var->data.location > new_var->data.location ||
           (var->data.location == new_var->data.location &&
            var->data.index > new_var->data.index)) {
          exec_node_insert_node_before(&var->node, &new_var->node);
@@ -789,6 +801,9 @@ r600_shader_from_nir(struct r600_context *rctx,
    if (sel->nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS_V(sel->nir, nir_lower_fragcoord_wtrans);
       NIR_PASS_V(sel->nir, r600_lower_fs_out_to_vector);
+      NIR_PASS_V(sel->nir, nir_opt_dce);
+      NIR_PASS_V(sel->nir, nir_remove_dead_variables, nir_var_shader_out, 0);
+      r600::sort_fsoutput(sel->nir);
    }
    nir_variable_mode io_modes = nir_var_uniform | nir_var_shader_in | nir_var_shader_out;
 
@@ -894,9 +909,6 @@ r600_shader_from_nir(struct r600_context *rctx,
    } while (late_algebraic_progress);
 
    NIR_PASS_V(sh, nir_lower_bool_to_int32);
-
-   if (sh->info.stage == MESA_SHADER_FRAGMENT)
-      r600::sort_fsoutput(sh);
 
    NIR_PASS_V(sh, nir_lower_locals_to_regs);
 

@@ -112,7 +112,7 @@ blorp_get_surface_base_address(struct blorp_batch *batch)
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
    return (struct blorp_address) {
       .buffer = cmd_buffer->device->internal_surface_state_pool.block_pool.bo,
-      .offset = 0,
+      .offset = -cmd_buffer->device->internal_surface_state_pool.start_offset,
    };
 }
 #endif
@@ -181,7 +181,11 @@ static uint32_t
 blorp_binding_table_offset_to_pointer(struct blorp_batch *batch,
                                       uint32_t offset)
 {
+#if GFX_VERX10 >= 125
+   return SCRATCH_SURFACE_STATE_POOL_SIZE + offset;
+#else
    return offset;
+#endif
 }
 
 static void *

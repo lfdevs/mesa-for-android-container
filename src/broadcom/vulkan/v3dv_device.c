@@ -749,7 +749,7 @@ v3dv_physical_device_init_disk_cache(struct v3dv_physical_device *device)
    _mesa_sha1_format(timestamp, device->driver_build_sha1);
 
    assert(device->name);
-   device->disk_cache = disk_cache_create(device->name, timestamp, 0);
+   device->disk_cache = disk_cache_create(device->name, timestamp, v3d_mesa_debug);
 #else
    device->disk_cache = NULL;
 #endif

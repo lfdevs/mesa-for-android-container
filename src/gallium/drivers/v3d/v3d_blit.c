@@ -630,9 +630,14 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
 
         nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,
                                                        options, "%s", name);
+        b.shader->info.num_ubos = 1;
+        b.shader->num_outputs = 1;
+        b.shader->num_inputs = 1;
+        b.shader->num_uniforms = 1;
+
         const struct glsl_type *vec4 = glsl_vec4_type();
 
-        const struct glsl_type *glsl_int = glsl_int_type();
+        const struct glsl_type *glsl_uint = glsl_uint_type();
 
         nir_variable *color_out =
                 nir_variable_create(b.shader, nir_var_shader_out,
@@ -655,13 +660,13 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
         nir_ssa_def *y = nir_f2i32(&b, nir_channel(&b, pos, 1));
 
         nir_variable *stride_in =
-                nir_variable_create(b.shader, nir_var_uniform, glsl_int,
+                nir_variable_create(b.shader, nir_var_uniform, glsl_uint,
                                     "sand8_stride");
         nir_ssa_def *stride =
                 nir_load_uniform(&b, 1, 32, zero,
                                  .base = stride_in->data.driver_location,
-                                 .range = 1,
-                                 .dest_type = nir_type_int32);
+                                 .range = 4,
+                                 .dest_type = nir_type_uint32);
 
         nir_ssa_def *x_offset;
         nir_ssa_def *y_offset;
@@ -676,7 +681,7 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
          *  32bpp microtile dimensions are 4x4
          *
          * As we are reading and writing with 32bpp to optimize
-         * the number of texture operations during the blit. We need
+         * the number of texture operations during the blit, we need
          * to adjust the offsets were we read and write as data will
          * be later read using 8bpp (luma) and 16bpp (chroma).
          *
@@ -687,7 +692,7 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
          * 16 bytes per line. So if we read a 8bpp texture that was
          * written as 32bpp texture. Bytes would be misplaced.
          *
-         * inter/intra_utile_x_offests takes care of mapping the offsets
+         * inter/intra_utile_x_offsets takes care of mapping the offsets
          * between microtiles to deal with this issue for luma planes.
          */
         if (cpp == 1) {
@@ -717,7 +722,7 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
         }
         nir_ssa_def *ubo_offset = nir_iadd(&b, x_offset, y_offset);
         nir_ssa_def *load =
-        nir_load_ubo(&b, 1, 32, one, ubo_offset,
+        nir_load_ubo(&b, 1, 32, zero, ubo_offset,
                     .align_mul = 4,
                     .align_offset = 0,
                     .range_base = 0,
@@ -806,13 +811,18 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 
         pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 0, false,
                                   &cb_uniforms);
+        struct pipe_constant_buffer saved_fs_cb1 = { 0 };
+        pipe_resource_reference(&saved_fs_cb1.buffer,
+                                v3d->constbuf[PIPE_SHADER_FRAGMENT].cb[1].buffer);
+        memcpy(&saved_fs_cb1, &v3d->constbuf[PIPE_SHADER_FRAGMENT].cb[1],
+               sizeof(struct pipe_constant_buffer));
         struct pipe_constant_buffer cb_src = {
                 .buffer = info->src.resource,
                 .buffer_offset = src->slices[info->src.level].offset,
                 .buffer_size = (src->bo->size -
                                 src->slices[info->src.level].offset),
         };
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 2, false,
+        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, false,
                                   &cb_src);
         /* Unbind the textures, to make sure we don't try to recurse into the
          * shadow blit.
@@ -828,14 +838,12 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         util_blitter_restore_constant_buffer_state(v3d->blitter);
 
         /* Restore cb1 (util_blitter doesn't handle this one). */
-        struct pipe_constant_buffer cb_disabled = { 0 };
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, false,
-                                  &cb_disabled);
+        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, true,
+                                  &saved_fs_cb1);
 
         pipe_surface_reference(&dst_surf, NULL);
 
         info->mask &= ~PIPE_MASK_RGBA;
-        return;
 }
 
 

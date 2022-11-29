@@ -1349,10 +1349,11 @@ setup_ngg_lds_layout(struct radv_device *device, nir_shader *nir, struct radv_sh
          BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_INSTANCE_ID);
       bool uses_primtive_id =
          BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID);
+      bool streamout_enabled = nir->xfb_info && device->physical_device->use_ngg_streamout;
       unsigned pervertex_lds_bytes =
          ac_ngg_nogs_get_pervertex_lds_size(stage,
                                             nir->num_outputs,
-                                            device->physical_device->use_ngg_streamout,
+                                            streamout_enabled,
                                             info->outinfo.export_prim_id,
                                             false, /* user edge flag */
                                             info->has_ngg_culling,

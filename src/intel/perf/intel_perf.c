@@ -649,7 +649,7 @@ build_unique_counter_list(struct intel_perf_config *perf)
     * below contains pointers to this array.
     */
    struct intel_perf_query_counter_info *counter_infos =
-         ralloc_array_size(perf, sizeof(counter_infos[0]), max_counters);
+         rzalloc_array_size(perf, sizeof(counter_infos[0]), max_counters);
 
    perf->n_counters = 0;
 
@@ -1084,7 +1084,8 @@ intel_perf_query_result_accumulate(struct intel_perf_query_result *result,
                            result->accumulator + query->a_offset + 32 + i);
       }
 
-      if (can_use_mi_rpc_bc_counters(&query->perf->devinfo)) {
+      if (can_use_mi_rpc_bc_counters(&query->perf->devinfo) ||
+          !query->perf->sys_vars.query_mode) {
          /* 8x 32bit B counters */
          for (i = 0; i < 8; i++) {
             accumulate_uint32(start + 48 + i, end + 48 + i,

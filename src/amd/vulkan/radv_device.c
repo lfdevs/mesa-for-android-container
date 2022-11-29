@@ -117,9 +117,10 @@ radv_device_get_cache_uuid(struct radv_physical_device *pdevice, void *uuid)
 
 #ifdef RADV_BUILD_ID_OVERRIDE
    {
-      char data[strlen(RADV_BUILD_ID_OVERRIDE) / 2];
-      parse_hex(data, RADV_BUILD_ID_OVERRIDE, ARRAY_SIZE(data));
-      _mesa_sha1_update(&ctx, data, ARRAY_SIZE(data));
+      unsigned size = strlen(RADV_BUILD_ID_OVERRIDE) / 2;
+      char *data = alloca(size);
+      parse_hex(data, RADV_BUILD_ID_OVERRIDE, size);
+      _mesa_sha1_update(&ctx, data, size);
    }
 #else
    if (!disk_cache_get_function_identifier(radv_device_get_cache_uuid, &ctx))

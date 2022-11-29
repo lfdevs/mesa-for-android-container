@@ -6167,18 +6167,34 @@ needs_dummy_fence(const intel_device_info *devinfo, fs_inst *inst)
 {
    /* This workaround is about making sure that any instruction writing
     * through UGM has completed before we hit EOT.
-    *
-    * The workaround talks about UGM writes or atomic message but what is
-    * important is anything that hasn't completed. Usually any SEND
-    * instruction that has a destination register will be read by something
-    * else so we don't need to care about those as they will be synchronized
-    * by other parts of the shader or optimized away. What is left are
-    * instructions that don't have a destination register.
     */
    if (inst->sfid != GFX12_SFID_UGM)
       return false;
 
-   return inst->dst.file == BAD_FILE;
+   /* Any UGM, non-Scratch-surface Stores (not including Atomic) messages,
+    * where the L1-cache override is NOT among {WB, WS, WT}
+    */
+   enum lsc_opcode opcode = lsc_msg_desc_opcode(devinfo, inst->desc);
+   if (lsc_opcode_is_store(opcode)) {
+      switch (lsc_msg_desc_cache_ctrl(devinfo, inst->desc)) {
+      case LSC_CACHE_STORE_L1STATE_L3MOCS:
+      case LSC_CACHE_STORE_L1WB_L3WB:
+      case LSC_CACHE_STORE_L1S_L3UC:
+      case LSC_CACHE_STORE_L1S_L3WB:
+      case LSC_CACHE_STORE_L1WT_L3UC:
+      case LSC_CACHE_STORE_L1WT_L3WB:
+         return false;
+
+      default:
+         return true;
+      }
+   }
+
+   /* Any UGM Atomic message WITHOUT return value */
+   if (lsc_opcode_is_atomic(opcode) && inst->dst.file == BAD_FILE)
+      return true;
+
+   return false;
 }
 
 /* Wa_22013689345

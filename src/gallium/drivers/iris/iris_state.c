@@ -709,6 +709,9 @@ init_state_base_address(struct iris_batch *batch)
       sba.IndirectObjectMOCS          = mocs;
       sba.InstructionMOCS             = mocs;
       sba.SurfaceStateMOCS            = mocs;
+#if GFX_VER >= 9
+      sba.BindlessSurfaceStateMOCS    = mocs;
+#endif
 
       sba.GeneralStateBaseAddressModifyEnable   = true;
       sba.DynamicStateBaseAddressModifyEnable   = true;
@@ -717,12 +720,6 @@ init_state_base_address(struct iris_batch *batch)
       sba.GeneralStateBufferSizeModifyEnable    = true;
       sba.DynamicStateBufferSizeModifyEnable    = true;
       sba.SurfaceStateBaseAddressModifyEnable   = true;
-#if GFX_VER >= 9
-      sba.BindlessSurfaceStateBaseAddress = ro_bo(NULL, IRIS_MEMZONE_BINDLESS_START);
-      sba.BindlessSurfaceStateSize = (IRIS_BINDLESS_SIZE >> 12) - 1;
-      sba.BindlessSurfaceStateBaseAddressModifyEnable = true;
-      sba.BindlessSurfaceStateMOCS    = mocs;
-#endif
 #if GFX_VER >= 11
       sba.BindlessSamplerStateMOCS    = mocs;
 #endif

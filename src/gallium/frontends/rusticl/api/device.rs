@@ -186,7 +186,7 @@ impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_TYPE => cl_prop::<cl_device_type>(dev.device_type(false)),
             CL_DEVICE_VENDOR => cl_prop(dev.screen().device_vendor()),
             CL_DEVICE_VENDOR_ID => cl_prop::<cl_uint>(dev.vendor_id()),
-            CL_DEVICE_VERSION => cl_prop::<String>(format!("OpenCL {}", dev.cl_version.api_str())),
+            CL_DEVICE_VERSION => cl_prop::<String>(format!("OpenCL {} ", dev.cl_version.api_str())),
             CL_DRIVER_VERSION => cl_prop::<&CStr>(unsafe { CStr::from_ptr(mesa_version_string()) }),
             CL_DEVICE_WORK_GROUP_COLLECTIVE_FUNCTIONS_SUPPORT => cl_prop::<bool>(false),
             // CL_INVALID_VALUE if param_name is not one of the supported values

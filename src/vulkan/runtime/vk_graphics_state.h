@@ -64,6 +64,7 @@ enum mesa_vk_dynamic_graphics_state {
    MESA_VK_DYNAMIC_RS_CULL_MODE,
    MESA_VK_DYNAMIC_RS_FRONT_FACE,
    MESA_VK_DYNAMIC_RS_CONSERVATIVE_MODE,
+   MESA_VK_DYNAMIC_RS_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE,
    MESA_VK_DYNAMIC_RS_RASTERIZATION_ORDER_AMD,
    MESA_VK_DYNAMIC_RS_PROVOKING_VERTEX,
    MESA_VK_DYNAMIC_RS_RASTERIZATION_STREAM,
@@ -270,6 +271,12 @@ struct vk_rasterization_state {
     * MESA_VK_DYNAMIC_RS_CONSERVATIVE_MODE
     */
    VkConservativeRasterizationModeEXT conservative_mode;
+
+   /** VkPipelineRasterizationConservativeStateCreateInfoEXT::extraPrimitiveOverestimationSize
+    *
+    * MESA_VK_DYNAMIC_RS_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE
+    */
+   float extra_primitive_overestimation_size;
 
    /** VkPipelineRasterizationStateRasterizationOrderAMD::rasterizationOrder */
    VkRasterizationOrderAMD rasterization_order_amd;

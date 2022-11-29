@@ -489,6 +489,7 @@ vk_rasterization_state_init(struct vk_rasterization_state *rs,
    *rs = (struct vk_rasterization_state) {
       .rasterizer_discard_enable = false,
       .conservative_mode = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT,
+      .extra_primitive_overestimation_size = 0.0f,
       .rasterization_order_amd = VK_RASTERIZATION_ORDER_STRICT_AMD,
       .provoking_vertex = VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT,
       .line.mode = VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT,
@@ -535,6 +536,8 @@ vk_rasterization_state_init(struct vk_rasterization_state *rs,
          const VkPipelineRasterizationConservativeStateCreateInfoEXT *rcs_info =
             (const VkPipelineRasterizationConservativeStateCreateInfoEXT *)ext;
          rs->conservative_mode = rcs_info->conservativeRasterizationMode;
+         rs->extra_primitive_overestimation_size =
+            rcs_info->extraPrimitiveOverestimationSize;
          break;
       }
 
@@ -1662,6 +1665,8 @@ vk_dynamic_graphics_state_copy(struct vk_dynamic_graphics_state *dst,
    COPY_IF_SET(RS_CULL_MODE, rs.cull_mode);
    COPY_IF_SET(RS_FRONT_FACE, rs.front_face);
    COPY_IF_SET(RS_CONSERVATIVE_MODE, rs.conservative_mode);
+   COPY_IF_SET(RS_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE,
+               rs.extra_primitive_overestimation_size);
    COPY_IF_SET(RS_RASTERIZATION_ORDER_AMD, rs.rasterization_order_amd);
    COPY_IF_SET(RS_PROVOKING_VERTEX, rs.provoking_vertex);
    COPY_IF_SET(RS_RASTERIZATION_STREAM, rs.rasterization_stream);
@@ -2043,6 +2048,19 @@ vk_common_CmdSetConservativeRasterizationModeEXT(
 }
 
 VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetExtraPrimitiveOverestimationSizeEXT(
+    VkCommandBuffer commandBuffer,
+    float extraPrimitiveOverestimationSize)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, RS_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE,
+                 rs.extra_primitive_overestimation_size,
+                 extraPrimitiveOverestimationSize);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdSetProvokingVertexModeEXT(VkCommandBuffer commandBuffer,
                                        VkProvokingVertexModeEXT provokingVertexMode)
 {
@@ -2228,6 +2246,17 @@ vk_common_CmdSetSampleLocationsEXT(VkCommandBuffer commandBuffer,
                  ms.sample_locations->locations,
                  0, pSampleLocationsInfo->sampleLocationsCount,
                  pSampleLocationsInfo->pSampleLocations);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetSampleLocationsEnableEXT(VkCommandBuffer commandBuffer,
+                                         VkBool32 sampleLocationsEnable)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_BOOL(dyn, MS_SAMPLE_LOCATIONS_ENABLE,
+                ms.sample_locations_enable, sampleLocationsEnable);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2512,4 +2541,13 @@ vk_common_CmdSetBlendConstants(VkCommandBuffer commandBuffer,
 
    SET_DYN_ARRAY(dyn, CB_BLEND_CONSTANTS, cb.blend_constants,
                  0, 4, blendConstants);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetColorBlendAdvancedEXT(VkCommandBuffer commandBuffer,
+                                      uint32_t firstAttachment,
+                                      uint32_t attachmentCount,
+                                      const VkColorBlendAdvancedEXT* pColorBlendAdvanced)
+{
+   unreachable("VK_EXT_blend_operation_advanced unsupported");
 }

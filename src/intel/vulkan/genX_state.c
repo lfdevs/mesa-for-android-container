@@ -178,7 +178,10 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
    device->l3_config = cfg;
 #endif
 
-#if GFX_VERx10 >= 125
+   /* Emit STATE_BASE_ADDRESS on Gfx12+ because we set a default CPS_STATE and
+    * those are relative to STATE_BASE_ADDRESS::DynamicStateBaseAddress.
+    */
+#if GFX_VER >= 12
    /* GEN:BUG:1607854226:
     *
     *  Non-pipelined state has issues with not applying in MEDIA/GPGPU mode.
@@ -230,7 +233,9 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
       sba.BindlessSamplerStateBaseAddressModifyEnable = true;
       sba.BindlessSamplerStateBufferSize = 0;
 
+#if GFX_VERx10 >= 125
       sba.L1CacheControl = L1CC_WB;
+#endif
    }
 #endif
 
@@ -299,7 +304,24 @@ init_render_queue_state(struct anv_queue *queue)
 
    anv_batch_emit(&batch, GENX(3DSTATE_WM_CHROMAKEY), ck);
 
-   genX(emit_sample_pattern)(&batch, NULL);
+   /* SKL PRMs, Volume 2a: Command Reference: Instructions: 3DSTATE_WM_HZ_OP:
+    *
+    *   "3DSTATE_RASTER if used must be programmed prior to using this
+    *    packet."
+    *
+    * Emit this before 3DSTATE_WM_HZ_OP below.
+    */
+   anv_batch_emit(&batch, GENX(3DSTATE_RASTER), rast);
+
+   /* SKL PRMs, Volume 2a: Command Reference: Instructions: 3DSTATE_WM_HZ_OP:
+    *
+    *    "3DSTATE_MULTISAMPLE packet must be used prior to this packet to
+    *     change the Number of Multisamples. This packet must not be used to
+    *     change Number of Multisamples in a rendering sequence."
+    *
+    * Emit this before 3DSTATE_WM_HZ_OP below.
+    */
+   genX(emit_multisample)(&batch, 1);
 
    /* The BDW+ docs describe how to use the 3DSTATE_WM_HZ_OP instruction in the
     * section titled, "Optimized Depth Buffer Clear and/or Stencil Buffer
@@ -310,6 +332,8 @@ init_render_queue_state(struct anv_queue *queue)
     * number of GPU hangs on ICL.
     */
    anv_batch_emit(&batch, GENX(3DSTATE_WM_HZ_OP), hzp);
+
+   genX(emit_sample_pattern)(&batch, NULL);
 
 #if GFX_VER == 11
    /* The default behavior of bit 5 "Headerless Message for Pre-emptable
@@ -433,6 +457,21 @@ init_render_queue_state(struct anv_queue *queue)
 
    init_common_queue_state(queue, &batch);
 
+   /* Because 3DSTATE_CPS::CoarsePixelShadingStateArrayPointer is relative to
+    * the dynamic state base address we need to emit this instruction after
+    * STATE_BASE_ADDRESS in init_common_queue_state().
+    */
+#if GFX_VER == 11
+   anv_batch_emit(&batch, GENX(3DSTATE_CPS), cps);
+#elif GFX_VER >= 12
+   anv_batch_emit(&batch, GENX(3DSTATE_CPS_POINTERS), cps) {
+      assert(device->cps_states.alloc_size != 0);
+      /* Offset 0 is the disabled state */
+      cps.CoarsePixelShadingStateArrayPointer =
+         device->cps_states.offset;
+   }
+#endif
+
    anv_batch_emit(&batch, GENX(MI_BATCH_BUFFER_END), bbe);
 
    assert(batch.next <= batch.end);
@@ -523,15 +562,19 @@ genX(init_cps_device_state)(struct anv_device *device)
 
    /* Disabled CPS mode */
    for (uint32_t __v = 0; __v < MAX_VIEWPORTS; __v++) {
+      /* ICL PRMs, Volume 2d: Command Reference: Structures: 3DSTATE_CPS_BODY:
+       *
+       *   "It is an INVALID configuration to set the CPS mode other than
+       *    CPS_MODE_NONE and request per-sample dispatch in 3DSTATE_PS_EXTRA.
+       *    Such configuration should be disallowed at the API level, and
+       *    rendering results are undefined."
+       *
+       * Since we select this state when per coarse pixel is disabled and that
+       * includes when per-sample dispatch is enabled, we need to ensure this
+       * is set to NONE.
+       */
       struct GENX(CPS_STATE) cps_state = {
-         .CoarsePixelShadingMode = CPS_MODE_CONSTANT,
-         .MinCPSizeX = 1,
-         .MinCPSizeY = 1,
-#if GFX_VERx10 >= 125
-         .Combiner0OpcodeforCPsize = PASSTHROUGH,
-         .Combiner1OpcodeforCPsize = PASSTHROUGH,
-#endif /* GFX_VERx10 >= 125 */
-
+         .CoarsePixelShadingMode = CPS_MODE_NONE,
       };
 
       GENX(CPS_STATE_pack)(NULL, cps_state_ptr, &cps_state);

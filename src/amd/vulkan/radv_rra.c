@@ -1021,7 +1021,7 @@ rra_copy_acceleration_structures(VkQueue vk_queue, struct rra_accel_struct_copy 
    radv_BeginCommandBuffer(dst->cmd_buffer, &begin_info);
 
    uint64_t dst_offset = 0;
-   for (uint32_t i = 0; i < count;) {
+   for (uint32_t i = 0; i < count; i++) {
       struct hash_entry *entry = entries[i];
 
       VkResult event_result = radv_GetEventStatus(vk_device, radv_event_to_handle(entry->data));
@@ -1050,13 +1050,12 @@ rra_copy_acceleration_structures(VkQueue vk_queue, struct rra_accel_struct_copy 
 
       radv_buffer_finish(&tmp_buffer);
 
-      dst->copied_structures[i].handle = structure;
-      dst->copied_structures[i].data = dst->map_data + dst_offset;
+      dst->copied_structures[*copied_structure_count].handle = structure;
+      dst->copied_structures[*copied_structure_count].data = dst->map_data + dst_offset;
 
       dst_offset += accel_struct->size;
 
       ++(*copied_structure_count);
-      ++i;
    }
    result = radv_EndCommandBuffer(dst->cmd_buffer);
    if (result != VK_SUCCESS)

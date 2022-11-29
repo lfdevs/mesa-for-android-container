@@ -230,6 +230,7 @@ etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
 {
    assert(src->format == dst->format);
    assert(src->array_size == dst->array_size);
+   assert(!etna_resource_needs_flush(etna_resource(dst)));
 
    struct pipe_blit_info blit = {};
    blit.mask = util_format_get_mask(dst->format);

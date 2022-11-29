@@ -1294,8 +1294,19 @@ static const nir_unsigned_upper_bound_config default_ub_config = {
    .min_subgroup_size = 1u,
    .max_subgroup_size = UINT16_MAX,
    .max_workgroup_invocations = UINT16_MAX,
-   .max_workgroup_count = {UINT16_MAX, UINT16_MAX, UINT16_MAX},
+
+   /* max_workgroup_count represents the maximum compute shader / kernel
+    * dispatchable work size. On most hardware, this is essentially
+    * unbounded. On some hardware max_workgroup_count[1] and
+    * max_workgroup_count[2] may be smaller.
+    */
+   .max_workgroup_count = {UINT32_MAX, UINT32_MAX, UINT32_MAX},
+
+   /* max_workgroup_size is the local invocation maximum. This is generally
+    * small the OpenGL 4.2 minimum maximum is 1024.
+    */
    .max_workgroup_size = {UINT16_MAX, UINT16_MAX, UINT16_MAX},
+
    .vertex_attrib_max = {
       UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX,
       UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX,

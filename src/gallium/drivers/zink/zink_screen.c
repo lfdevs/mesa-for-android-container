@@ -2323,6 +2323,7 @@ init_driver_workarounds(struct zink_screen *screen)
             screen->info.dynamic_state3_feats.extendedDynamicState3ColorBlendEnable &&
             screen->info.dynamic_state3_feats.extendedDynamicState3RasterizationSamples &&
             screen->info.dynamic_state3_feats.extendedDynamicState3ColorWriteMask &&
+            screen->info.dynamic_state3_feats.extendedDynamicState3ColorBlendEquation &&
             screen->info.dynamic_state3_feats.extendedDynamicState3LogicOpEnable &&
             screen->info.dynamic_state2_feats.extendedDynamicState2LogicOp)
       screen->have_full_ds3 = true;

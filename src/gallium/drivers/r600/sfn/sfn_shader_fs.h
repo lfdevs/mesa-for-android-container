@@ -75,7 +75,6 @@ private:
    unsigned m_export_highest;
    unsigned m_num_color_exports;
    unsigned m_color_export_mask;
-   unsigned m_depth_exports;
    ExportInstr *m_last_pixel_export;
 
    std::bitset<s_max_interpolators> m_interpolators_used;

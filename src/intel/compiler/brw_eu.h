@@ -1203,6 +1203,43 @@ lsc_opcode_has_transpose(enum lsc_opcode opcode)
    return opcode == LSC_OP_LOAD || opcode == LSC_OP_STORE;
 }
 
+static inline bool
+lsc_opcode_is_store(enum lsc_opcode opcode)
+{
+   return opcode == LSC_OP_STORE ||
+          opcode == LSC_OP_STORE_CMASK;
+}
+
+static inline bool
+lsc_opcode_is_atomic(enum lsc_opcode opcode)
+{
+   switch (opcode) {
+   case LSC_OP_ATOMIC_INC:
+   case LSC_OP_ATOMIC_DEC:
+   case LSC_OP_ATOMIC_LOAD:
+   case LSC_OP_ATOMIC_STORE:
+   case LSC_OP_ATOMIC_ADD:
+   case LSC_OP_ATOMIC_SUB:
+   case LSC_OP_ATOMIC_MIN:
+   case LSC_OP_ATOMIC_MAX:
+   case LSC_OP_ATOMIC_UMIN:
+   case LSC_OP_ATOMIC_UMAX:
+   case LSC_OP_ATOMIC_CMPXCHG:
+   case LSC_OP_ATOMIC_FADD:
+   case LSC_OP_ATOMIC_FSUB:
+   case LSC_OP_ATOMIC_FMIN:
+   case LSC_OP_ATOMIC_FMAX:
+   case LSC_OP_ATOMIC_FCMPXCHG:
+   case LSC_OP_ATOMIC_AND:
+   case LSC_OP_ATOMIC_OR:
+   case LSC_OP_ATOMIC_XOR:
+      return true;
+
+   default:
+      return false;
+   }
+}
+
 static inline uint32_t
 lsc_data_size_bytes(enum lsc_data_size data_size)
 {

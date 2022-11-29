@@ -124,10 +124,17 @@ etna_transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
       etna_bo_cpu_fini(etna_resource(trans->rsc)->bo);
 
    if (ptrans->usage & PIPE_MAP_WRITE) {
+      if (etna_resource_needs_flush(rsc)) {
+         if (ptrans->usage & PIPE_MAP_DISCARD_WHOLE_RESOURCE)
+            rsc->flush_seqno = rsc->seqno;
+         else
+            etna_copy_resource(pctx, &rsc->base, &rsc->base, 0, rsc->base.last_level);
+      }
+
       if (trans->rsc) {
          /* We have a temporary resource due to either tile status or
           * tiling format. Write back the updated buffer contents.
-          * FIXME: we need to invalidate the tile status. */
+          */
          etna_copy_resource_box(pctx, ptrans->resource, trans->rsc, ptrans->level, &ptrans->box);
       } else if (trans->staging) {
          /* map buffer object */
@@ -156,6 +163,7 @@ etna_transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
          FREE(trans->staging);
       }
 
+      rsc->levels[ptrans->level].ts_valid = false;
       rsc->seqno++;
 
       if (rsc->base.bind & PIPE_BIND_SAMPLER_VIEW) {

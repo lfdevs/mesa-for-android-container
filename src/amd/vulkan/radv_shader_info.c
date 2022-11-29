@@ -1048,8 +1048,13 @@ gfx10_get_ngg_info(const struct radv_device *device, struct radv_pipeline_stage 
       /* LDS size for passing data from GS to ES. */
       struct radv_streamout_info *so_info = &es_info->so;
 
-      if (so_info->num_outputs)
-         esvert_lds_size = 4 * so_info->num_outputs + 1;
+      if (so_info->num_outputs) {
+         /* Compute the same pervertex LDS size as the NGG streamout lowering pass which allocates
+          * space for all outputs.
+          * TODO: only alloc space for outputs that really need streamout.
+          */
+         esvert_lds_size = 4 * es_stage->nir->num_outputs + 1;
+      }
 
       /* GS stores Primitive IDs (one DWORD) into LDS at the address
        * corresponding to the ES thread of the provoking vertex. All

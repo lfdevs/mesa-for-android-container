@@ -498,8 +498,14 @@ emit_alu(struct etna_compile *c, nir_alu_instr * alu)
          src.neg = asrc->negate || (alu->op == nir_op_fneg);
          src.abs = asrc->abs || (alu->op == nir_op_fabs);
       } else {
-         assert(!asrc->negate && alu->op != nir_op_fneg);
+         assert(alu->op != nir_op_fneg);
          assert(!asrc->abs && alu->op != nir_op_fabs);
+
+         if (src.imm_type > 0)
+            assert(!asrc->negate);
+
+         if (asrc->negate && src.imm_type == 0)
+            src.imm_val ^= 0x80000;
       }
 
       srcs[i] = src;
