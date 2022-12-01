@@ -15,6 +15,7 @@
 #include "venus-protocol/vn_protocol_driver_pipeline_layout.h"
 #include "venus-protocol/vn_protocol_driver_shader_module.h"
 
+#include "vn_descriptor_set.h"
 #include "vn_device.h"
 #include "vn_physical_device.h"
 #include "vn_render_pass.h"
@@ -69,6 +70,39 @@ vn_DestroyShaderModule(VkDevice device,
 
 /* pipeline layout commands */
 
+static void
+vn_pipeline_layout_destroy(struct vn_device *dev,
+                           struct vn_pipeline_layout *pipeline_layout)
+{
+   const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
+   if (pipeline_layout->push_descriptor_set_layout) {
+      vn_descriptor_set_layout_unref(
+         dev, pipeline_layout->push_descriptor_set_layout);
+   }
+   vn_async_vkDestroyPipelineLayout(
+      dev->instance, vn_device_to_handle(dev),
+      vn_pipeline_layout_to_handle(pipeline_layout), NULL);
+
+   vn_object_base_fini(&pipeline_layout->base);
+   vk_free(alloc, pipeline_layout);
+}
+
+static inline struct vn_pipeline_layout *
+vn_pipeline_layout_ref(struct vn_device *dev,
+                       struct vn_pipeline_layout *pipeline_layout)
+{
+   vn_refcount_inc(&pipeline_layout->refcount);
+   return pipeline_layout;
+}
+
+static inline void
+vn_pipeline_layout_unref(struct vn_device *dev,
+                         struct vn_pipeline_layout *pipeline_layout)
+{
+   if (vn_refcount_dec(&pipeline_layout->refcount))
+      vn_pipeline_layout_destroy(dev, pipeline_layout);
+}
+
 VkResult
 vn_CreatePipelineLayout(VkDevice device,
                         const VkPipelineLayoutCreateInfo *pCreateInfo,
@@ -76,17 +110,30 @@ vn_CreatePipelineLayout(VkDevice device,
                         VkPipelineLayout *pPipelineLayout)
 {
    struct vn_device *dev = vn_device_from_handle(device);
-   const VkAllocationCallbacks *alloc =
-      pAllocator ? pAllocator : &dev->base.base.alloc;
+   /* ignore pAllocator as the pipeline layout is reference-counted */
+   const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
 
    struct vn_pipeline_layout *layout =
       vk_zalloc(alloc, sizeof(*layout), VN_DEFAULT_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (!layout)
       return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    vn_object_base_init(&layout->base, VK_OBJECT_TYPE_PIPELINE_LAYOUT,
                        &dev->base);
+   layout->refcount = VN_REFCOUNT_INIT(1);
+
+   for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; i++) {
+      struct vn_descriptor_set_layout *descriptor_set_layout =
+         vn_descriptor_set_layout_from_handle(pCreateInfo->pSetLayouts[i]);
+      if (descriptor_set_layout->is_push_descriptor) {
+         layout->push_descriptor_set_layout =
+            vn_descriptor_set_layout_ref(dev, descriptor_set_layout);
+      }
+      break;
+   }
+
+   layout->has_push_constant_ranges = pCreateInfo->pPushConstantRanges > 0;
 
    VkPipelineLayout layout_handle = vn_pipeline_layout_to_handle(layout);
    vn_async_vkCreatePipelineLayout(dev->instance, device, pCreateInfo, NULL,
@@ -105,17 +152,11 @@ vn_DestroyPipelineLayout(VkDevice device,
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_pipeline_layout *layout =
       vn_pipeline_layout_from_handle(pipelineLayout);
-   const VkAllocationCallbacks *alloc =
-      pAllocator ? pAllocator : &dev->base.base.alloc;
 
    if (!layout)
       return;
 
-   vn_async_vkDestroyPipelineLayout(dev->instance, device, pipelineLayout,
-                                    NULL);
-
-   vn_object_base_fini(&layout->base);
-   vk_free(alloc, layout);
+   vn_pipeline_layout_unref(dev, layout);
 }
 
 /* pipeline cache commands */
@@ -288,6 +329,9 @@ vn_destroy_failed_pipelines(struct vn_device *dev,
       struct vn_pipeline *pipeline = vn_pipeline_from_handle(pipelines[i]);
 
       if (pipeline->base.id == 0) {
+         if (pipeline->layout) {
+            vn_pipeline_layout_unref(dev, pipeline->layout);
+         }
          vn_object_base_fini(&pipeline->base);
          vk_free(alloc, pipeline);
          pipelines[i] = VK_NULL_HANDLE;
@@ -702,6 +746,13 @@ vn_CreateGraphicsPipelines(VkDevice device,
    }
 
    for (uint32_t i = 0; i < createInfoCount; i++) {
+      struct vn_pipeline *pipeline = vn_pipeline_from_handle(pPipelines[i]);
+      struct vn_pipeline_layout *layout =
+         vn_pipeline_layout_from_handle(pCreateInfos[i].layout);
+      if (layout->push_descriptor_set_layout ||
+          layout->has_push_constant_ranges) {
+         pipeline->layout = vn_pipeline_layout_ref(dev, layout);
+      }
       if ((pCreateInfos[i].flags & VN_PIPELINE_CREATE_SYNC_MASK))
          want_sync = true;
 
@@ -748,6 +799,13 @@ vn_CreateComputePipelines(VkDevice device,
       return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    for (uint32_t i = 0; i < createInfoCount; i++) {
+      struct vn_pipeline *pipeline = vn_pipeline_from_handle(pPipelines[i]);
+      struct vn_pipeline_layout *layout =
+         vn_pipeline_layout_from_handle(pCreateInfos[i].layout);
+      if (layout->push_descriptor_set_layout ||
+          layout->has_push_constant_ranges) {
+         pipeline->layout = vn_pipeline_layout_ref(dev, layout);
+      }
       if ((pCreateInfos[i].flags & VN_PIPELINE_CREATE_SYNC_MASK))
          want_sync = true;
 
@@ -784,6 +842,10 @@ vn_DestroyPipeline(VkDevice device,
 
    if (!pipeline)
       return;
+
+   if (pipeline->layout) {
+      vn_pipeline_layout_unref(dev, pipeline->layout);
+   }
 
    vn_async_vkDestroyPipeline(dev->instance, device, _pipeline, NULL);
 

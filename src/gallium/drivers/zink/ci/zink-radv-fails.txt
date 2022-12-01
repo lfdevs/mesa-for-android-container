@@ -2,6 +2,7 @@ dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler2dsh
 dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.sampler2dshadow_vertex,Fail
 
 # kopper
+glx@glx-multi-window-single-context,Crash
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_ust_test,Fail
 
 # #6115
@@ -29,6 +30,7 @@ glx@glx_ext_import_context@imported context has same context id,Fail
 glx@glx_ext_import_context@make current- multi process,Fail
 glx@glx_ext_import_context@make current- single process,Fail
 glx@glx_ext_import_context@query context info,Fail
+glx@glx-make-current,Crash
 glx@glx-swap-copy,Fail
 glx@glx-swap-pixmap-bad,Fail
 

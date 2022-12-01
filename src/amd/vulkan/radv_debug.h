@@ -67,6 +67,7 @@ enum {
    RADV_DEBUG_NO_DMA_BLIT = 1ull << 36,
    RADV_DEBUG_SPLIT_FMA = 1ull << 37,
    RADV_DEBUG_DUMP_EPILOGS = 1ull << 38,
+   RADV_DEBUG_NO_FMASK = 1ull << 39,
 };
 
 enum {

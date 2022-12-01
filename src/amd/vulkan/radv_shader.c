@@ -986,7 +986,7 @@ radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_pipeline_
       .lower_txf_offset = true,
       .lower_tg4_offsets = true,
       .lower_txs_cube_array = true,
-      .lower_to_fragment_fetch_amd = device->physical_device->rad_info.gfx_level < GFX11,
+      .lower_to_fragment_fetch_amd = device->physical_device->use_fmask,
       .lower_lod_zero_width = true,
       .lower_invalid_implicit_lod = true,
       .lower_array_layer_round_even = true,

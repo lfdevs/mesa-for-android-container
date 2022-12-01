@@ -281,6 +281,9 @@ struct radv_physical_device {
    /* Whether DCC should be enabled for MSAA textures. */
    bool dcc_msaa_allowed;
 
+   /* Whether to enable FMASK compression for MSAA textures (GFX6-GFX10.3) */
+   bool use_fmask;
+
    /* Whether to enable NGG. */
    bool use_ngg;
 
@@ -1914,6 +1917,7 @@ struct radv_event {
 #define RADV_HASH_SHADER_EMULATE_RT            (1 << 16)
 #define RADV_HASH_SHADER_SPLIT_FMA             (1 << 17)
 #define RADV_HASH_SHADER_RT_WAVE64             (1 << 18)
+#define RADV_HASH_SHADER_NO_FMASK              (1 << 19)
 
 struct radv_pipeline_key;
 

@@ -10,6 +10,7 @@ KHR-GL46.shader_ballot_tests.ShaderBallotFunctionRead
 
 # ignores copied from the old runner script
 spec@arb_map_buffer_alignment@arb_map_buffer_alignment-map-invalidate-range
+glx@glx-make-current
 spec@arb_timer_query.*
 spec@arb_sample_shading@builtin-gl-sample-mask
 spec@glsl-1.30@execution@tex-miplevel-selection.*

@@ -2190,7 +2190,9 @@ radv_emit_fb_color_state(struct radv_cmd_buffer *cmd_buffer, int index,
       }
    }
 
-   if (G_028C70_DCC_ENABLE(cb_color_info)) {
+   if (cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX11
+          ? G_028C78_FDCC_ENABLE(cb_fdcc_control)
+          : G_028C70_DCC_ENABLE(cb_color_info)) {
       /* Drawing with DCC enabled also compresses colorbuffers. */
       VkImageSubresourceRange range = {
          .aspectMask = iview->vk.aspects,
@@ -3587,7 +3589,8 @@ radv_cmd_buffer_flush_dynamic_state(struct radv_cmd_buffer *cmd_buffer, bool pip
    if (states & RADV_CMD_DIRTY_DYNAMIC_SAMPLE_MASK)
       radv_emit_sample_mask(cmd_buffer);
 
-   if (states & RADV_CMD_DIRTY_DYNAMIC_DEPTH_CLAMP_ENABLE)
+   if (states & (RADV_CMD_DIRTY_DYNAMIC_DEPTH_CLAMP_ENABLE |
+                 RADV_CMD_DIRTY_DYNAMIC_DEPTH_CLIP_ENABLE))
       radv_emit_depth_clamp_enable(cmd_buffer);
 
    cmd_buffer->state.dirty &= ~states;
@@ -6523,6 +6526,7 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
       }
    }
 
+   radeon_check_space(cmd_buffer->device->ws, cmd_buffer->cs, 6);
    radeon_set_context_reg(cmd_buffer->cs, R_028204_PA_SC_WINDOW_SCISSOR_TL,
                           S_028204_TL_X(render->area.offset.x) |
                           S_028204_TL_Y(render->area.offset.y));
@@ -8972,6 +8976,8 @@ radv_trace_rays(struct radv_cmd_buffer *cmd_buffer, const VkTraceRaysIndirectCom
    } else
       info.va = launch_size_va;
 
+   ASSERTED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cmd_buffer->cs, 11);
+
    struct radv_userdata_info *desc_loc =
       radv_lookup_user_sgpr(&pipeline->base, MESA_SHADER_COMPUTE, AC_UD_CS_SBT_DESCRIPTORS);
    if (desc_loc->sgpr_idx != -1) {
@@ -8993,6 +8999,8 @@ radv_trace_rays(struct radv_cmd_buffer *cmd_buffer, const VkTraceRaysIndirectCom
       radeon_set_sh_reg(cmd_buffer->cs, R_00B900_COMPUTE_USER_DATA_0 + base_loc->sgpr_idx * 4,
                         pipeline->base.scratch_bytes_per_wave / cs_info->wave_size);
    }
+
+   assert(cmd_buffer->cs->cdw <= cdw_max);
 
    radv_dispatch(cmd_buffer, &info, pipeline, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
 }

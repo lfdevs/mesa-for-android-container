@@ -2074,6 +2074,9 @@ tu_CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
 
       descriptors_state->sets[idx] = set;
 
+      if (!set)
+         continue;
+
       if (!set->layout->dynamic_offset_size)
          continue;
 

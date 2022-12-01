@@ -281,6 +281,10 @@ radv_use_dcc_for_image_early(struct radv_device *device, struct radv_image *imag
          return false;
    }
 
+   /* FIXME: Figure out how to use DCC for MSAA images without FMASK. */
+   if (pCreateInfo->samples > 1 && !device->physical_device->use_fmask)
+      return false;
+
    return radv_are_formats_dcc_compatible(device->physical_device, pCreateInfo->pNext, format,
                                           pCreateInfo->flags, sign_reinterpret);
 }
@@ -336,8 +340,9 @@ radv_image_use_dcc_predication(const struct radv_device *device, const struct ra
 static inline bool
 radv_use_fmask_for_image(const struct radv_device *device, const struct radv_image *image)
 {
-   return image->info.samples > 1 && ((image->vk.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) ||
-                                      (device->instance->debug_flags & RADV_DEBUG_FORCE_COMPRESS));
+   return device->physical_device->use_fmask && image->info.samples > 1 &&
+          ((image->vk.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) ||
+           (device->instance->debug_flags & RADV_DEBUG_FORCE_COMPRESS));
 }
 
 static inline bool
@@ -2144,8 +2149,8 @@ radv_image_view_init(struct radv_image_view *iview, struct radv_device *device,
       const struct util_format_description *desc = vk_format_description(iview->vk.format);
       if (desc->layout == UTIL_FORMAT_LAYOUT_ETC) {
          iview->plane_id = 1;
-         iview->vk.format = etc2_emulation_format(iview->vk.format);
          iview->vk.view_format = etc2_emulation_format(iview->vk.format);
+         iview->vk.format = etc2_emulation_format(iview->vk.format);
       }
 
       plane_count = 1;

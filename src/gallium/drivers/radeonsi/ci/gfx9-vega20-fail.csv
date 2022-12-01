@@ -5,6 +5,8 @@ spec@!opengl 1.1@windowoverlap,Fail
 spec@arb_shader_clock@execution@clock,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
+glx@glx-make-current,Crash
+glx@glx-multi-window-single-context,Fail
 glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail

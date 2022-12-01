@@ -724,6 +724,8 @@ RADV driver environment variables
       do not check OOB access for dynamic descriptors
    ``nofastclears``
       disable fast color/depthstencil clears
+   ``nofmask``
+      disable FMASK compression on MSAA images (GFX6-GFX10.3)
    ``nohiz``
       disable HIZ for depthstencil images
    ``noibs``

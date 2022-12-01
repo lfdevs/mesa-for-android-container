@@ -1,6 +1,8 @@
 # LLVM 15.0.1
 
 # piglit failures
+glx@glx-make-current,Crash
+glx@glx-multi-window-single-context,Fail
 glx@glx-swap-event_interval,Fail
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail

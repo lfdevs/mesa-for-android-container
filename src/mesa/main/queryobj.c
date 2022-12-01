@@ -124,6 +124,21 @@ target_to_index(const struct gl_query_object *q)
    return 0;
 }
 
+static bool
+query_type_is_dummy(struct gl_context *ctx, unsigned type)
+{
+   struct st_context *st = st_context(ctx);
+   switch (type) {
+   case PIPE_QUERY_OCCLUSION_COUNTER:
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
+      return !st->has_occlusion_query;
+   default:
+      break;
+   }
+   return false;
+}
+
 static void
 begin_query(struct gl_context *ctx, struct gl_query_object *q)
 {
@@ -198,7 +213,12 @@ begin_query(struct gl_context *ctx, struct gl_query_object *q)
       if (q->pq_begin)
          ret = pipe->end_query(pipe, q->pq_begin);
    } else {
-      if (!q->pq) {
+      if (query_type_is_dummy(ctx, type)) {
+         /* starting a dummy-query; ignore */
+         assert(!q->pq);
+         q->type = type;
+         ret = true;
+      } else if (!q->pq) {
          q->pq = pipe->create_query(pipe, type, target_to_index(q));
          q->type = type;
       }
@@ -237,7 +257,10 @@ end_query(struct gl_context *ctx, struct gl_query_object *q)
       q->type = PIPE_QUERY_TIMESTAMP;
    }
 
-   if (q->pq)
+   if (query_type_is_dummy(ctx, q->type)) {
+      /* ending a dummy-query; ignore */
+      ret = true;
+   } else if (q->pq)
       ret = pipe->end_query(pipe, q->pq);
 
    if (!ret) {
@@ -258,8 +281,10 @@ get_query_result(struct pipe_context *pipe,
    union pipe_query_result data;
 
    if (!q->pq) {
-      /* Only needed in case we failed to allocate the gallium query earlier.
-       * Return TRUE so we don't spin on this forever.
+      /* Needed in case we failed to allocate the gallium query earlier, or
+       * in the case of a dummy query.
+       *
+       * Return TRUE in either case so we don't spin on this forever.
        */
       return TRUE;
    }
@@ -430,8 +455,9 @@ store_query_result(struct gl_context *ctx, struct gl_query_object *q,
       index = 0;
    }
 
-   pipe->get_query_result_resource(pipe, q->pq, flags, result_type, index,
-                                   buf->buffer, offset);
+   if (q->pq)
+      pipe->get_query_result_resource(pipe, q->pq, flags, result_type, index,
+                                      buf->buffer, offset);
 }
 
 static struct gl_query_object **

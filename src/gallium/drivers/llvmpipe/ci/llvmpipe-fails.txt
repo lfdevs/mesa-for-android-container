@@ -29,6 +29,13 @@ spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 glx@glx-copy-sub-buffer,Fail
 glx@glx-copy-sub-buffer samples=2,Fail
 glx@glx-copy-sub-buffer samples=4,Fail
+
+# X Error of failed request:  BadMatch (invalid parameter attributes)
+#   Major opcode of failed request:  150 (GLX)
+#   Minor opcode of failed request:  11 (X_GLXSwapBuffers)
+glx@glx-make-current,Crash
+
+glx@glx-multi-window-single-context,Fail
 glx@glx-swap-copy,Fail
 glx@glx-swap-pixmap-bad,Fail
 

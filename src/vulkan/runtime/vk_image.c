@@ -184,8 +184,6 @@ VkImageUsageFlags
 vk_image_usage(const struct vk_image *image,
                VkImageAspectFlags aspect_mask)
 {
-   assert(!(aspect_mask & ~image->aspects));
-
    /* From the Vulkan 1.2.131 spec:
     *
     *    "If the image was has a depth-stencil format and was created with
@@ -368,22 +366,13 @@ vk_image_view_init(struct vk_device *device,
    const VkImageSubresourceRange *range = &pCreateInfo->subresourceRange;
 
    if (driver_internal) {
-      /* For driver internal images, all we require is that the block sizes
-       * match.  Otherwise, we trust the driver to use a format it knows what
-       * to do with.  Combined depth/stencil images might not match if the
-       * driver only cares about one of the two aspects.
-       */
-      if (image->aspects == VK_IMAGE_ASPECT_COLOR_BIT ||
-          image->aspects == VK_IMAGE_ASPECT_DEPTH_BIT ||
-          image->aspects == VK_IMAGE_ASPECT_STENCIL_BIT) {
-         assert(vk_format_get_blocksize(image->format) ==
-                vk_format_get_blocksize(image_view->format));
-      }
       image_view->aspects = range->aspectMask;
       image_view->view_format = pCreateInfo->format;
    } else {
       image_view->aspects =
          vk_image_expand_aspect_mask(image, range->aspectMask);
+
+      assert(!(image_view->aspects & ~image->aspects));
 
       /* From the Vulkan 1.2.184 spec:
        *

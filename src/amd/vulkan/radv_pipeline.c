@@ -291,6 +291,8 @@ radv_get_hash_flags(const struct radv_device *device, bool stats)
       hash_flags |= RADV_HASH_SHADER_ROBUST_BUFFER_ACCESS2;
    if (device->instance->debug_flags & RADV_DEBUG_SPLIT_FMA)
       hash_flags |= RADV_HASH_SHADER_SPLIT_FMA;
+   if (device->instance->debug_flags & RADV_DEBUG_NO_FMASK)
+      hash_flags |= RADV_HASH_SHADER_NO_FMASK;
    return hash_flags;
 }
 
@@ -1139,7 +1141,8 @@ radv_pipeline_init_multisample_state(struct radv_graphics_pipeline *pipeline,
 
    ms->pa_sc_aa_config = 0;
    ms->db_eqaa = S_028804_HIGH_QUALITY_INTERSECTIONS(1) | S_028804_INCOHERENT_EQAA_READS(1) |
-                 S_028804_INTERPOLATE_COMP_Z(1) | S_028804_STATIC_ANCHOR_ASSOCIATIONS(1);
+                 S_028804_INTERPOLATE_COMP_Z(pdevice->rad_info.gfx_level < GFX11) |
+                 S_028804_STATIC_ANCHOR_ASSOCIATIONS(1);
 
    ms->pa_sc_mode_cntl_1 =
       S_028A4C_WALK_FENCE_ENABLE(1) | // TODO linear dst fixes
@@ -5693,6 +5696,9 @@ gfx103_pipeline_vrs_coarse_shading(const struct radv_graphics_pipeline *pipeline
 {
    struct radv_shader *ps = pipeline->base.shaders[MESA_SHADER_FRAGMENT];
    struct radv_device *device = pipeline->base.device;
+
+   if (device->physical_device->rad_info.gfx_level != GFX10_3)
+      return false;
 
    if (device->instance->debug_flags & RADV_DEBUG_NO_VRS_FLAT_SHADING)
       return false;

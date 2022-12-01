@@ -175,8 +175,7 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-      /* Divide by 6 because this also applies to cubemaps */
-      return D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION / 6;
+      return D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
 
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
       return 1;

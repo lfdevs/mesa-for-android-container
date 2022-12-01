@@ -247,18 +247,10 @@ panfrost_get_surface_strides(const struct pan_image_layout *layout,
                  * repurposed as a Y offset which we don't use */
                 *row_stride = PAN_ARCH < 7 ? 0 : slice->row_stride;
                 *surf_stride = slice->afbc.surface_stride;
-
-                /* Row stride alignment requirement does not apply to AFBC */
         } else {
                 *row_stride = slice->row_stride;
                 *surf_stride = slice->surface_stride;
-
-                /* Particular for linear, the row stride must be aligned */
-                assert(pan_is_stride_aligned(layout->format, *row_stride));
         }
-
-        /* All surface strides are aligned, required for linear */
-        assert(pan_is_stride_aligned(layout->format, *surf_stride));
 }
 
 static mali_ptr

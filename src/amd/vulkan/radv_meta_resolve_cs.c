@@ -88,8 +88,7 @@ build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_s
 
    nir_variable *color = nir_local_variable_create(b.impl, glsl_vec4_type(), "color");
 
-   radv_meta_build_resolve_shader_core(&b, is_integer, samples, input_img, color, src_coord,
-                                       dev->physical_device->rad_info.gfx_level);
+   radv_meta_build_resolve_shader_core(dev, &b, is_integer, samples, input_img, color, src_coord);
 
    nir_ssa_def *outval = nir_load_var(&b, color);
    if (is_srgb)

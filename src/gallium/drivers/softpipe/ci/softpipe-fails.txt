@@ -908,8 +908,14 @@ KHR-GLES31.core.texture_storage_multisample.GLCoverage.gl_tex_parameter_handlers
 
 fast_color_clear@fcc-front-buffer-distraction,Fail
 
+# X Error of failed request:  BadMatch (invalid parameter attributes)
+#   Major opcode of failed request:  150 (GLX)
+#   Minor opcode of failed request:  11 (X_GLXSwapBuffers)
+glx@glx-make-current,Crash
+
 
 glx@glx-multi-context-front,Fail
+glx@glx-multi-window-single-context,Fail
 glx@glx-swap-copy,Fail
 glx@glx-swap-pixmap-bad,Fail
 

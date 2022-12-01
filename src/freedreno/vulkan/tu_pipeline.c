@@ -4994,7 +4994,7 @@ tu_compute_pipeline_create(VkDevice device,
 
    pipeline->executables_mem_ctx = ralloc_context(NULL);
    util_dynarray_init(&pipeline->executables, pipeline->executables_mem_ctx);
-   pipeline->active_stages = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+   pipeline->active_stages = VK_SHADER_STAGE_COMPUTE_BIT;
 
    struct tu_shader_key key = { };
    tu_shader_key_init(&key, stage_info, dev);

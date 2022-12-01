@@ -158,7 +158,6 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
       assert(layer_offset < surf->surf.ts_size);
 
       surf->surf.ts_offset += layer_offset;
-      surf->surf.ts_size -= layer_offset;
       surf->surf.ts_valid = false;
 
       surf->ts_reloc.bo = rsc->ts_bo;
@@ -179,7 +178,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
             .dest_tiling = ETNA_LAYOUT_TILED,
             .dither = {0xffffffff, 0xffffffff},
             .width = 16,
-            .height = align(surf->surf.ts_size / 0x40, 4),
+            .height = align(lev->ts_layer_stride / 0x40, 4),
             .clear_value = {screen->specs.ts_clear_value},
             .clear_mode = VIVS_RS_CLEAR_CONTROL_MODE_ENABLED1,
             .clear_bits = 0xffff

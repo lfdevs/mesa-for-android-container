@@ -352,11 +352,14 @@ si_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
       if (physical_device->rad_info.gfx_level >= GFX10 &&
           physical_device->rad_info.gfx_level < GFX11) {
          /* Logical CUs 16 - 31 */
-         ac_set_reg_cu_en(cs, R_00B404_SPI_SHADER_PGM_RSRC4_HS, S_00B404_CU_EN(0xffff),
-                          C_00B404_CU_EN, 16, &physical_device->rad_info,
-                          (void*)gfx10_set_sh_reg_idx3);
          ac_set_reg_cu_en(cs, R_00B104_SPI_SHADER_PGM_RSRC4_VS, S_00B104_CU_EN(0xffff),
                           C_00B104_CU_EN, 16, &physical_device->rad_info,
+                          (void*)gfx10_set_sh_reg_idx3);
+      }
+
+      if (physical_device->rad_info.gfx_level >= GFX10) {
+         ac_set_reg_cu_en(cs, R_00B404_SPI_SHADER_PGM_RSRC4_HS, S_00B404_CU_EN(0xffff),
+                          C_00B404_CU_EN, 16, &physical_device->rad_info,
                           (void*)gfx10_set_sh_reg_idx3);
          ac_set_reg_cu_en(cs, R_00B004_SPI_SHADER_PGM_RSRC4_PS, S_00B004_CU_EN(cu_mask_ps >> 16),
                           C_00B004_CU_EN, 16, &physical_device->rad_info,

@@ -468,7 +468,7 @@ radv_device_init_meta(struct radv_device *device)
    if (result != VK_SUCCESS)
       goto fail_resolve_fragment;
 
-   if (device->physical_device->rad_info.gfx_level < GFX11) {
+   if (device->physical_device->use_fmask) {
       result = radv_device_init_meta_fmask_expand_state(device);
       if (result != VK_SUCCESS)
          goto fail_fmask_expand;
@@ -609,9 +609,9 @@ radv_meta_build_nir_fs_noop(struct radv_device *dev)
 }
 
 void
-radv_meta_build_resolve_shader_core(nir_builder *b, bool is_integer, int samples,
-                                    nir_variable *input_img, nir_variable *color,
-                                    nir_ssa_def *img_coord, enum amd_gfx_level gfx_level)
+radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, bool is_integer,
+                                    int samples, nir_variable *input_img, nir_variable *color,
+                                    nir_ssa_def *img_coord)
 {
    /* do a txf_ms on each sample */
    nir_ssa_def *tmp;
@@ -641,7 +641,7 @@ radv_meta_build_resolve_shader_core(nir_builder *b, bool is_integer, int samples
       return;
    }
 
-   if (gfx_level < GFX11) {
+   if (device->physical_device->use_fmask) {
       nir_tex_instr *tex_all_same = nir_tex_instr_create(b->shader, 2);
       tex_all_same->sampler_dim = GLSL_SAMPLER_DIM_MS;
       tex_all_same->op = nir_texop_samples_identical;
@@ -683,7 +683,7 @@ radv_meta_build_resolve_shader_core(nir_builder *b, bool is_integer, int samples
    tmp = nir_fdiv(b, tmp, nir_imm_float(b, samples));
    nir_store_var(b, color, tmp, 0xf);
 
-   if (gfx_level < GFX11) {
+   if (device->physical_device->use_fmask) {
       nir_push_else(b, NULL);
       nir_store_var(b, color, &tex->dest.ssa, 0xf);
       nir_pop_if(b, NULL);

@@ -73,6 +73,7 @@ static const struct debug_named_value etna_debug_options[] = {
    {"deqp",           ETNA_DBG_DEQP, "Hacks to run dEQP GLES3 tests"}, /* needs MESA_GLES_VERSION_OVERRIDE=3.0 */
    {"nocache",        ETNA_DBG_NOCACHE,    "Disable shader cache"},
    {"no_linear_pe",   ETNA_DBG_NO_LINEAR_PE, "Disable linear PE"},
+   {"msaa",           ETNA_DBG_MSAA, "Enable MSAA support"},
    DEBUG_NAMED_VALUE_END
 };
 
@@ -496,6 +497,10 @@ gpu_supports_render_format(struct etna_screen *screen, enum pipe_format format,
       return false;
 
    if (sample_count > 1) {
+      /* Explicitly enabled. */
+      if (!DBG_ENABLED(ETNA_DBG_MSAA))
+         return false;
+
       /* The hardware supports it. */
       if (!VIV_FEATURE(screen, chipFeatures, MSAA))
          return false;

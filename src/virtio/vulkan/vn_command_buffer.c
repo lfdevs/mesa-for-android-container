@@ -13,6 +13,7 @@
 #include "venus-protocol/vn_protocol_driver_command_buffer.h"
 #include "venus-protocol/vn_protocol_driver_command_pool.h"
 
+#include "vn_descriptor_set.h"
 #include "vn_device.h"
 #include "vn_image.h"
 #include "vn_render_pass.h"
@@ -2030,4 +2031,39 @@ vn_CmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer,
 
    vn_cmd_count_draw_and_submit_on_batch_limit(
       vn_command_buffer_from_handle(commandBuffer));
+}
+
+void
+vn_CmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,
+                           VkPipelineBindPoint pipelineBindPoint,
+                           VkPipelineLayout layout,
+                           uint32_t set,
+                           uint32_t descriptorWriteCount,
+                           const VkWriteDescriptorSet *pDescriptorWrites)
+{
+   VN_CMD_ENQUEUE(vkCmdPushDescriptorSetKHR, commandBuffer, pipelineBindPoint,
+                  layout, set, descriptorWriteCount, pDescriptorWrites);
+}
+
+void
+vn_CmdPushDescriptorSetWithTemplateKHR(
+   VkCommandBuffer commandBuffer,
+   VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+   VkPipelineLayout layout,
+   uint32_t set,
+   const void *pData)
+{
+   struct vn_descriptor_update_template *templ =
+      vn_descriptor_update_template_from_handle(descriptorUpdateTemplate);
+
+   mtx_lock(&templ->mutex);
+
+   struct vn_update_descriptor_sets *update =
+      vn_update_descriptor_set_with_template_locked(templ, VK_NULL_HANDLE,
+                                                    pData);
+   VN_CMD_ENQUEUE(vkCmdPushDescriptorSetKHR, commandBuffer,
+                  templ->pipeline_bind_point, layout, set,
+                  update->write_count, update->writes);
+
+   mtx_unlock(&templ->mutex);
 }

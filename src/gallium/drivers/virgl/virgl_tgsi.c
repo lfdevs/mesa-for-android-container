@@ -368,15 +368,16 @@ virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
          temp_inst.Instruction.NumDstRegs = 1;
          temp_inst.Dst[0].Register.File = TGSI_FILE_TEMPORARY,
          temp_inst.Dst[0].Register.Index = vtctx->src_temp + i;
-         temp_inst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_XYZ;
+         temp_inst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_XY;
          temp_inst.Instruction.NumSrcRegs = 1;
-         tgsi_transform_src_reg_xyzw(&temp_inst.Src[0], inst->Src[i].Register.File, inst->Src[i].Register.Index);
+         memcpy(&temp_inst.Src[0], &inst->Src[i], sizeof(temp_inst.Src[0]));
          temp_inst.Src[0].Register.SwizzleX = inst->Src[i].Register.SwizzleX;
          temp_inst.Src[0].Register.SwizzleY = inst->Src[i].Register.SwizzleY;
          temp_inst.Src[0].Register.SwizzleZ = inst->Src[i].Register.SwizzleZ;
          temp_inst.Src[0].Register.SwizzleW = inst->Src[i].Register.SwizzleW;
          ctx->emit_instruction(ctx, &temp_inst);
 
+         memset(&inst->Src[i], 0, sizeof(inst->Src[i]));
          inst->Src[i].Register.File = TGSI_FILE_TEMPORARY;
          inst->Src[i].Register.Index = vtctx->src_temp + i;
          inst->Src[i].Register.SwizzleX = TGSI_SWIZZLE_X;

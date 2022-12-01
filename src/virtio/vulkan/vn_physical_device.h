@@ -58,6 +58,9 @@ struct vn_physical_device_properties {
    VkPhysicalDeviceVulkan12Properties vulkan_1_2;
    VkPhysicalDeviceVulkan13Properties vulkan_1_3;
 
+   /* KHR */
+   VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor;
+
    /* EXT */
    VkPhysicalDeviceConservativeRasterizationPropertiesEXT
       conservative_rasterization;

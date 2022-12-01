@@ -203,8 +203,8 @@ etna_layout_multiple(const struct etna_screen *screen,
     * engine's width.  If not, we must not align resources used only for
     * textures. If this GPU uses the BLT engine, never do RS align.
     */
-   bool rs_align = !specs->use_blt && !etna_resource_sampler_only(templat) &&
-                   VIV_FEATURE(screen, chipMinorFeatures1, TEXTURE_HALIGN);
+   bool rs_align = !specs->use_blt && (!etna_resource_sampler_only(templat) ||
+                   VIV_FEATURE(screen, chipMinorFeatures1, TEXTURE_HALIGN));
    int msaa_xscale = 1, msaa_yscale = 1;
 
    /* Compressed textures are padded to their block size, but we don't have

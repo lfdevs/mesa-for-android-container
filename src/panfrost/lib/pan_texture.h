@@ -248,12 +248,6 @@ panfrost_from_legacy_stride(unsigned legacy_stride,
                             enum pipe_format format,
                             uint64_t modifier);
 
-uint32_t
-pan_stride_align_B(enum pipe_format format);
-
-bool
-pan_is_stride_aligned(enum pipe_format format, unsigned stride_B);
-
 struct pan_surface {
         union {
                 mali_ptr data;

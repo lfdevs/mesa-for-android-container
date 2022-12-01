@@ -1,10 +1,12 @@
 # piglit failures
-
 glx@extension string sanity,Fail
 glx@glx-buffer-age vblank_mode=0,Fail
+glx@glx-make-current,Crash
 glx@glx-make-glxdrawable-current,Fail
 glx@glx-multithread-makecurrent-1,Fail
 glx@glx-multithread-texture,Fail
+glx@glx-multithread-texture,Fail
+glx@glx-multi-window-single-context,Fail
 glx@glx-swap-event_async,Fail
 glx@glx-tfp,Fail
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail

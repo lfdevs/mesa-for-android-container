@@ -625,6 +625,8 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       screen->get_param(screen, PIPE_CAP_MULTI_DRAW_INDIRECT);
    st->has_indirect_partial_stride =
       screen->get_param(screen, PIPE_CAP_MULTI_DRAW_INDIRECT_PARTIAL_STRIDE);
+   st->has_occlusion_query =
+      screen->get_param(screen, PIPE_CAP_OCCLUSION_QUERY);
    st->has_single_pipe_stat =
       screen->get_param(screen, PIPE_CAP_QUERY_PIPELINE_STATISTICS_SINGLE);
    st->has_indep_blend_func =

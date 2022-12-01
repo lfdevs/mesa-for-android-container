@@ -63,6 +63,30 @@ static void radeon_dec_destroy_associated_data(void *data)
    /* NOOP, since we only use an intptr */
 }
 
+static void get_current_pic_index(struct radeon_decoder *dec,
+                                    struct pipe_video_buffer *target,
+                                    unsigned char *curr_pic_idx)
+{
+   for (int i = 0; i < ARRAY_SIZE(dec->render_pic_list); ++i) {
+      if (dec->render_pic_list[i] && dec->render_pic_list[i] == target) {
+         if (target->codec != NULL)
+            *curr_pic_idx = (uintptr_t)vl_video_buffer_get_associated_data(target, &dec->base);
+         else {
+            *curr_pic_idx = i;
+            vl_video_buffer_set_associated_data(target, &dec->base, (void *)(uintptr_t)i,
+                                                &radeon_dec_destroy_associated_data);
+         }
+         break;
+      } else if (!dec->render_pic_list[i]) {
+         dec->render_pic_list[i] = target;
+         *curr_pic_idx = i;
+         vl_video_buffer_set_associated_data(target, &dec->base, (void *)(uintptr_t)i,
+                                             &radeon_dec_destroy_associated_data);
+         break;
+      }
+   }
+}
+
 static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
                                            struct pipe_video_buffer *target,
                                            struct pipe_h264_picture_desc *pic)
@@ -637,24 +661,7 @@ static rvcn_dec_message_vp9_t get_vp9_msg(struct radeon_decoder *dec,
       }
    }
 
-   for (i = 0; i < ARRAY_SIZE(dec->render_pic_list); ++i) {
-      if (dec->render_pic_list[i] && dec->render_pic_list[i] == target) {
-         if (target->codec != NULL) {
-            result.curr_pic_idx =(uintptr_t)vl_video_buffer_get_associated_data(target, &dec->base);
-         } else {
-            result.curr_pic_idx = i;
-            vl_video_buffer_set_associated_data(target, &dec->base, (void *)(uintptr_t)i,
-            &radeon_dec_destroy_associated_data);
-         }
-         break;
-      } else if (!dec->render_pic_list[i]) {
-         dec->render_pic_list[i] = target;
-         result.curr_pic_idx = i;
-         vl_video_buffer_set_associated_data(target, &dec->base, (void *)(uintptr_t)i,
-                                             &radeon_dec_destroy_associated_data);
-         break;
-      }
-   }
+   get_current_pic_index(dec, target, &result.curr_pic_idx);
 
    for (i = 0; i < 8; i++) {
       result.ref_frame_map[i] =
@@ -880,18 +887,8 @@ static rvcn_dec_message_av1_t get_av1_msg(struct radeon_decoder *dec,
    result.is_annexb = 0;
    result.frame_type = pic->picture_parameter.pic_info_fields.frame_type;
    result.primary_ref_frame = pic->picture_parameter.primary_ref_frame;
-   for (i = 0; i < ARRAY_SIZE(dec->render_pic_list); ++i) {
-      if (dec->render_pic_list[i] && dec->render_pic_list[i] == target) {
-         result.curr_pic_idx = (uintptr_t)vl_video_buffer_get_associated_data(target, &dec->base);
-         break;
-      } else if (!dec->render_pic_list[i]) {
-         dec->render_pic_list[i] = target;
-         result.curr_pic_idx = dec->ref_idx;
-         vl_video_buffer_set_associated_data(target, &dec->base, (void *)(uintptr_t)dec->ref_idx++,
-                                             &radeon_dec_destroy_associated_data);
-         break;
-      }
-   }
+
+   get_current_pic_index(dec, target, &result.curr_pic_idx);
 
    result.sb_size = pic->picture_parameter.seq_info_fields.use_128x128_superblock;
    result.interp_filter = pic->picture_parameter.interp_filter;

@@ -291,6 +291,8 @@ spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@ext_packed_float@query-rgba-signed-components,Fail
 
 # Uncategorized piglit failures
+glx@glx-make-current,Crash
+glx@glx-multi-window-single-context,Fail
 glx@glx-query-drawable-glx_fbconfig_id-window,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Crash

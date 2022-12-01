@@ -937,8 +937,8 @@ __attribute__((__packed__))
          * be any dependency (the blob appears to forbid even accessing other
          * channels of a given texture register). */
 
-        unsigned out_of_order   : 2;
-        unsigned unknown4  : 10;
+        unsigned out_of_order   : 4;
+        unsigned unknown4  : 8;
 
         /* In immediate mode, each offset field is an immediate range [0, 7].
          *

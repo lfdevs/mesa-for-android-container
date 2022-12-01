@@ -30,6 +30,7 @@ LIBDRM_VERSION = $(shell cat external/libdrm/meson.build | grep -o "\<version\>\
 
 MESA_VK_LIB_SUFFIX_amd := radeon
 MESA_VK_LIB_SUFFIX_intel := intel
+MESA_VK_LIB_SUFFIX_intel_hasvk := intel_hasvk
 MESA_VK_LIB_SUFFIX_freedreno := freedreno
 MESA_VK_LIB_SUFFIX_broadcom := broadcom
 MESA_VK_LIB_SUFFIX_panfrost := panfrost

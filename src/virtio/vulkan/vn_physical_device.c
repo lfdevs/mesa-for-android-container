@@ -512,6 +512,9 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
       VN_ADD_PNEXT_EXT(props2, TEXEL_BUFFER_ALIGNMENT_PROPERTIES, local_props.texel_buffer_alignment, exts->EXT_texel_buffer_alignment);
    }
 
+   /* KHR */
+   VN_ADD_PNEXT_EXT(props2, PUSH_DESCRIPTOR_PROPERTIES_KHR, props->push_descriptor, exts->KHR_push_descriptor);
+
    /* EXT */
    VN_ADD_PNEXT_EXT(props2, CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT, props->conservative_rasterization, exts->EXT_conservative_rasterization);
    VN_ADD_PNEXT_EXT(props2, CUSTOM_BORDER_COLOR_PROPERTIES_EXT, props->custom_border_color, exts->EXT_custom_border_color);
@@ -1072,6 +1075,9 @@ vn_physical_device_get_passthrough_extensions(
       .EXT_texel_buffer_alignment = true,
       .EXT_texture_compression_astc_hdr = true,
       .EXT_ycbcr_2plane_444_formats = true,
+
+      /* KHR */
+      .KHR_push_descriptor = true,
 
       /* EXT */
       .EXT_calibrated_timestamps = true,
@@ -1772,6 +1778,9 @@ vn_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       break
 
          /* clang-format off */
+
+      /* KHR */
+      CASE(PUSH_DESCRIPTOR_PROPERTIES_KHR, push_descriptor);
 
       /* EXT */
       CASE(CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT, conservative_rasterization);

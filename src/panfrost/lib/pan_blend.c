@@ -587,10 +587,10 @@ pan_inline_blend_constants(nir_builder *b, nir_instr *instr, void *data)
 
         float *floats = data;
         const nir_const_value constants[4] = {
-                { .f32 = floats[0] },
-                { .f32 = floats[1] },
-                { .f32 = floats[2] },
-                { .f32 = floats[3] }
+                nir_const_value_for_float(floats[0], 32),
+                nir_const_value_for_float(floats[1], 32),
+                nir_const_value_for_float(floats[2], 32),
+                nir_const_value_for_float(floats[3], 32)
         };
 
         b->cursor = nir_after_instr(instr);

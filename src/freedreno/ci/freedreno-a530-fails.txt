@@ -594,6 +594,8 @@ KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_2_mirrored_repeat,Fail
 KHR-GLES3.texture_repeat_mode.rgba32ui_49x23_2_repeat,Fail
 
 glx@glx-multithread-buffer,Fail
+glx@glx-make-current,Crash
+glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-tfp,Fail
 glx@glx-visuals-depth -pixmap,Crash

@@ -267,9 +267,9 @@ nir_builder PRINTFLIKE(3, 4)
 nir_shader *radv_meta_build_nir_vs_generate_vertices(struct radv_device *dev);
 nir_shader *radv_meta_build_nir_fs_noop(struct radv_device *dev);
 
-void radv_meta_build_resolve_shader_core(nir_builder *b, bool is_integer, int samples,
-                                         nir_variable *input_img, nir_variable *color,
-                                         nir_ssa_def *img_coord, enum amd_gfx_level gfx_level);
+void radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, bool is_integer,
+                                         int samples, nir_variable *input_img, nir_variable *color,
+                                         nir_ssa_def *img_coord);
 
 nir_ssa_def *radv_meta_load_descriptor(nir_builder *b, unsigned desc_set, unsigned binding);
 

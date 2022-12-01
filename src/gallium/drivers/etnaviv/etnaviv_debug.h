@@ -55,6 +55,7 @@
 #define ETNA_DBG_DEQP            0x800000 /* Hacks to run dEQP GLES3 tests */
 #define ETNA_DBG_NOCACHE         0x1000000 /* Disable shader cache */
 #define ETNA_DBG_NO_LINEAR_PE    0x2000000 /* Disable linear PE */
+#define ETNA_DBG_MSAA            0x4000000 /* Enable MSAA */
 
 extern int etna_mesa_debug; /* set in etnaviv_screen.c from ETNA_MESA_DEBUG */
 

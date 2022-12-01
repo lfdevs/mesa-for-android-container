@@ -145,7 +145,8 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
                         VIVS_RS_WINDOW_SIZE_HEIGHT(rs->height);
 
    /* use dual pipe mode when required */
-   if (!screen->specs.single_buffer && screen->specs.pixel_pipes == 2 && !(rs->height & 7)) {
+   if (!screen->specs.single_buffer && screen->specs.pixel_pipes == 2 &&
+       !(rs->height & (rs->downsample_y ? 0xf : 0x7))) {
       cs->RS_WINDOW_SIZE = VIVS_RS_WINDOW_SIZE_WIDTH(rs->width) |
                               VIVS_RS_WINDOW_SIZE_HEIGHT(rs->height / 2);
       cs->RS_PIPE_OFFSET[1] = VIVS_RS_PIPE_OFFSET_X(0) | VIVS_RS_PIPE_OFFSET_Y(rs->height / 2);
@@ -697,14 +698,17 @@ etna_try_rs_blit(struct pipe_context *pctx,
    unsigned int w_align = (ETNA_RS_WIDTH_MASK + 1) * msaa_xscale;
    unsigned int h_align = (ETNA_RS_HEIGHT_MASK + 1) * msaa_yscale;
 
-   if (!ctx->screen->specs.single_buffer)
-      h_align *= ctx->screen->specs.pixel_pipes;
-
    if (width & (w_align - 1) && width >= src_lev->width * msaa_xscale && width >= dst_lev->width)
       width = align(width, w_align);
 
-   if (height & (h_align - 1) && height >= src_lev->height * msaa_yscale && height >= dst_lev->height)
-      height = align(height, h_align);
+   if (height & (h_align - 1) && height >= src_lev->height * msaa_yscale && height >= dst_lev->height) {
+      if (!ctx->screen->specs.single_buffer &&
+          align(height, h_align * ctx->screen->specs.pixel_pipes) <=
+          dst_lev->padded_height * msaa_yscale)
+         height = align(height, h_align * ctx->screen->specs.pixel_pipes);
+      else
+         height = align(height, h_align);
+   }
 
    /* The padded dimensions are in samples */
    if (width > src_lev->padded_width ||

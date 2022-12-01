@@ -23,6 +23,10 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(vn_shader_module,
 
 struct vn_pipeline_layout {
    struct vn_object_base base;
+
+   struct vn_descriptor_set_layout *push_descriptor_set_layout;
+   bool has_push_constant_ranges;
+   struct vn_refcount refcount;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vn_pipeline_layout,
                                base.base,
@@ -39,6 +43,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(vn_pipeline_cache,
 
 struct vn_pipeline {
    struct vn_object_base base;
+   struct vn_pipeline_layout *layout;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vn_pipeline,
                                base.base,

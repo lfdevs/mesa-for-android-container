@@ -62,7 +62,7 @@ def branch_has_backport_of_commit(upstream: str, branch: str, commit: str) -> st
     or an empty string if is hasn't
     """
     out = subprocess.check_output(['git', 'log', '--format=%H',
-                                   branch + '-branchpoint..' + upstream + '/' + branch,
+                                   upstream + '..' + upstream + '/' + branch,
                                    '--grep', 'cherry picked from commit ' + commit],
                                   stderr=subprocess.DEVNULL)
     return out.decode().strip()
@@ -89,7 +89,7 @@ def validate_branch(branch: str) -> str:
     out = subprocess.check_output(['git', 'remote', '--verbose'],
                                   stderr=subprocess.DEVNULL)
     remotes = out.decode().splitlines()
-    (upstream, _) = branch.split('/')
+    upstream, _ = branch.split('/', 1)
     valid_remote = False
     for line in remotes:
         if line.startswith(upstream + '\t'):
@@ -125,7 +125,7 @@ if __name__ == "__main__":
                         help='colorize output (default: true if stdout is a terminal)')
     args = parser.parse_args()
 
-    (upstream, branch) = args.branch.split('/')
+    upstream, branch = args.branch.split('/', 1)
 
     if branch_has_commit(upstream, branch, args.commit):
         print_(args, True, 'Commit ' + args.commit + ' is in branch ' + branch)

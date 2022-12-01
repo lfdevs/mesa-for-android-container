@@ -436,7 +436,7 @@ drisw_bind_context(struct glx_context *context, struct glx_context *old,
    pdraw = (struct drisw_drawable *) driFetchDrawable(context, draw);
    pread = (struct drisw_drawable *) driFetchDrawable(context, read);
 
-   driReleaseDrawables(old);
+   driReleaseDrawables(context);
 
    if (!psc->core->bindContext(context->driContext,
                                pdraw ? pdraw->driDrawable : NULL,

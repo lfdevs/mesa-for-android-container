@@ -1736,7 +1736,7 @@ visit_atomic_image(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_image_atomic_fadd:
       params.op = LLVMAtomicRMWBinOpFAdd;
       break;
-#if LLVM_VERSION >= 15
+#if LLVM_VERSION_MAJOR >= 15
    case nir_intrinsic_image_atomic_fmin:
       params.op = LLVMAtomicRMWBinOpFMin;
       break;

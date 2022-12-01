@@ -5,6 +5,7 @@ dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_pos_x_and_neg_x_n
 dEQP-GLES2.functional.draw.random.51
 dEQP-GLES2.functional.texture.size.cube.256x256_rgb888
 
+glx@glx-multi-window-single-context
 shaders@glsl-vs-loop
 shaders@glsl-vs-loop-nested
 spec@arb_framebuffer_srgb@blit renderbuffer srgb single_sampled enabled clear

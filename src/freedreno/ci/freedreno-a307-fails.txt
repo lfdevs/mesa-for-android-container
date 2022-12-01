@@ -156,6 +156,8 @@ spec@glsl-1.30@execution@interpolation@interpolation-noperspective-gl_frontsecon
 spec@glsl-1.30@execution@interpolation@interpolation-noperspective-other-flat-fixed,Fail
 spec@glsl-1.30@execution@interpolation@interpolation-noperspective-other-smooth-fixed,Fail
 
+glx@glx-make-current,Crash
+glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash

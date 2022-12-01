@@ -192,7 +192,7 @@ dri3_bind_context(struct glx_context *context, struct glx_context *old,
    pdraw = (struct dri3_drawable *) driFetchDrawable(context, draw);
    pread = (struct dri3_drawable *) driFetchDrawable(context, read);
 
-   driReleaseDrawables(old);
+   driReleaseDrawables(context);
 
    if (pdraw)
       dri_draw = pdraw->loader_drawable.dri_drawable;

@@ -118,6 +118,7 @@ supported, although some of these might not actually get verified:
 * ``VkPhysicalDeviceFeatures``:
 
   * ``occlusionQueryPrecise``
+  * ``dualSrcBlend``
 
 * Device extensions:
 
@@ -173,15 +174,14 @@ supported:
 
   * ``shaderStorageImageExtendedFormats``
   * ``shaderStorageImageWriteWithoutFormat``
+  * ``vertexPipelineStoresAndAtomics``
+  * ``fragmentStoresAndAtomics``
 
 * For Vulkan 1.2 and above:
 
   * ``VkPhysicalDeviceVulkan11Features``:
 
     * ``shaderDrawParameters``
-    * ``vertexPipelineStoresAndAtomics``
-    * ``fragmentStoresAndAtomics``
-    * ``textureCompressionBC``
 
 * For Vulkan 1.1 and below:
 

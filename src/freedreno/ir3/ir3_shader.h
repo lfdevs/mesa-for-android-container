@@ -521,6 +521,8 @@ struct ir3_shader_variant {
     */
    void *constant_data;
 
+   struct ir3_disasm_info disasm_info;
+
    /*
     * Below here is serialized when written to disk cache:
     */
@@ -772,8 +774,6 @@ struct ir3_shader_variant {
 
    /* For when we don't have a shader, variant's copy of streamout state */
    struct ir3_stream_output_info stream_output;
-
-   struct ir3_disasm_info disasm_info;
 };
 
 static inline const char *
