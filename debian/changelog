@@ -1,3 +1,10 @@
+mesa (22.3.0-2) unstable; urgency=medium
+
+  * patches: Import two upstream commits to fix crashes when libd3d12.so
+    can't be found. (Closes: #1025312)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 05 Dec 2022 16:34:36 +0200
+
 mesa (22.3.0-1) unstable; urgency=medium
 
   * New upstream release.

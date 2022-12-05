@@ -1,0 +1,35 @@
+From b5133894005720db24a8e0cc17e047a291953ff4 Mon Sep 17 00:00:00 2001
+From: "Jan Alexander Steffens (heftig)" <heftig@archlinux.org>
+Date: Sun, 4 Dec 2022 00:21:45 +0000
+Subject: [PATCH 2/2] dzn: Don't crash when libd3d12.so can't be found
+
+`dzn_instance_create` will call `dzn_instance_destroy` when the d3d12
+library fails to load. Just like the issue in `d3d12_screen`, this will
+lead to a crash because `d3d12_mod` is NULL.
+
+To fix this, only close the library after if it was actually opened.
+
+Cc: mesa-stable
+Reviewed-by: Jesse Natalie <jenatali@microsoft.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/20145>
+---
+ src/microsoft/vulkan/dzn_device.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/microsoft/vulkan/dzn_device.c b/src/microsoft/vulkan/dzn_device.c
+index 16a5aca331f..8f9b5939eb8 100644
+--- a/src/microsoft/vulkan/dzn_device.c
++++ b/src/microsoft/vulkan/dzn_device.c
+@@ -174,7 +174,8 @@ dzn_instance_destroy(struct dzn_instance *instance, const VkAllocationCallbacks
+    if (instance->factory)
+       ID3D12DeviceFactory_Release(instance->factory);
+ 
+-   util_dl_close(instance->d3d12_mod);
++   if (instance->d3d12_mod)
++      util_dl_close(instance->d3d12_mod);
+ 
+    vk_instance_finish(&instance->vk);
+    vk_free2(vk_default_allocator(), alloc, instance);
+-- 
+2.37.2
+
