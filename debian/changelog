@@ -1,3 +1,10 @@
+mesa (22.3.0-3) unstable; urgency=medium
+
+  * control: Enable i915 gallium driver. (Closes: #1013311)
+  * rules: Enable intel_hasvk. (Closes: #1025864)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sun, 11 Dec 2022 19:14:28 +0200
+
 mesa (22.3.0-2) unstable; urgency=medium
 
   * patches: Import two upstream commits to fix crashes when libd3d12.so
