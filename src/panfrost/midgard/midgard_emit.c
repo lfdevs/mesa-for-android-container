@@ -340,12 +340,6 @@ mir_pack_vector_srcs(midgard_instruction *ins, midgard_vector_alu *alu)
                 unsigned sz = nir_alu_type_get_type_size(ins->src_types[i]);
                 assert((sz == base_size) || (sz == base_size / 2));
 
-                /* Promote 8bit moves to 16bit ones so we can support any swizzles. */
-                if (sz == 8 && base_size == 8 && ins->op == midgard_alu_op_imov) {
-                        ins->outmod = midgard_outmod_keeplo;
-                        base_size = 16;
-                }
-
                 midgard_src_expand_mode expand_mode = midgard_src_passthrough;
                 unsigned swizzle = mir_pack_swizzle(ins->mask, ins->swizzle[i],
                                                     sz, base_size, channeled,

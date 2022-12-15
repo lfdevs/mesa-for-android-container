@@ -108,10 +108,10 @@ main()
             children[found_child_count++] = src.children[i];
 
       while (found_child_count < 4) {
-         uint32_t collapsed_child_index;
-         float largest_surface_area = 0.0f;
+         int32_t collapsed_child_index = -1;
+         float largest_surface_area = -INFINITY;
 
-         for (uint32_t i = 0; i < found_child_count; ++i) {
+         for (int32_t i = 0; i < found_child_count; ++i) {
             if (ir_id_to_type(children[i]) != radv_ir_node_internal)
                continue;
 
@@ -126,7 +126,7 @@ main()
             }
          }
 
-         if (largest_surface_area > 0.0f) {
+         if (collapsed_child_index != -1) {
             REF(radv_ir_box_node) child_node =
                REF(radv_ir_box_node)OFFSET(args.intermediate_bvh,
                                         ir_id_to_offset(children[collapsed_child_index]));
@@ -146,6 +146,10 @@ main()
 
             if (valid_grandchild_count > 0)
                children[collapsed_child_index] = grandchildren[0];
+            else {
+               found_child_count--;
+               children[collapsed_child_index] = children[found_child_count];
+            }
 
             if (in_final_tree == FINAL_TREE_PRESENT)
                DEREF(child_node).in_final_tree = FINAL_TREE_NOT_PRESENT;

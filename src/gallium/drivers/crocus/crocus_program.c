@@ -2708,7 +2708,8 @@ crocus_create_uncompiled_shader(struct pipe_context *ctx,
    else
      ish->needs_edge_flag = false;
 
-   brw_preprocess_nir(screen->compiler, nir, NULL);
+   struct brw_nir_compiler_opts opts = {};
+   brw_preprocess_nir(screen->compiler, nir, &opts);
 
    NIR_PASS_V(nir, brw_nir_lower_storage_image, devinfo);
    NIR_PASS_V(nir, crocus_lower_storage_image_derefs);

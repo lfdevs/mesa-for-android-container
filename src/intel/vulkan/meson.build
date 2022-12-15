@@ -142,7 +142,6 @@ endforeach
 
 libanv_files = files(
   'layers/anv_hitman3.c',
-  'anv_acceleration_structure.c',
   'anv_allocator.c',
   'anv_android.h',
   'anv_batch_chain.c',

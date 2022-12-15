@@ -407,10 +407,10 @@ compile_instruction(struct st_translate *t,
       result = emit_dstmod(t, result, inst->DstReg[optype].dstMod);
 
       /* Do the writemask */
-      nir_const_value wrmask[4] = { 0 };
+      nir_const_value wrmask[4];
       for (int i = 0; i < 4; i++) {
-         if (inst->DstReg[optype].dstMask & (1 << i))
-            wrmask[i].b = 1;
+         bool bit = inst->DstReg[optype].dstMask & (1 << i);
+         wrmask[i] = nir_const_value_for_bool(bit, 1);
       }
 
       t->temps[dstreg] = nir_bcsel(t->b,

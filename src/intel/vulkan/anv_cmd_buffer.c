@@ -892,7 +892,7 @@ anv_cmd_buffer_push_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
       set->layout = layout;
    }
    set->is_push = true;
-   set->size = anv_descriptor_set_layout_size(layout, 0);
+   set->size = anv_descriptor_set_layout_size(layout, false /* host_only */, 0);
    set->buffer_view_count = layout->buffer_view_count;
    set->descriptor_count = layout->descriptor_count;
    set->buffer_views = (*push_set)->buffer_views;

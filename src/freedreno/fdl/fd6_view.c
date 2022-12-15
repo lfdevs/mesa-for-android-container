@@ -382,6 +382,7 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
 
    view->storage_descriptor[0] =
       A6XX_TEX_CONST_0_FMT(storage_format) |
+      COND(util_format_is_srgb(args->format), A6XX_TEX_CONST_0_SRGB) |
       fdl6_texswiz(args, has_z24uint_s8uint) |
       A6XX_TEX_CONST_0_TILE_MODE(tile_mode) |
       A6XX_TEX_CONST_0_SWAP(color_swap);

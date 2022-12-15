@@ -171,7 +171,8 @@ dzn_instance_destroy(struct dzn_instance *instance, const VkAllocationCallbacks 
    if (instance->factory)
       ID3D12DeviceFactory_Release(instance->factory);
 
-   util_dl_close(instance->d3d12_mod);
+   if (instance->d3d12_mod)
+      util_dl_close(instance->d3d12_mod);
 
    vk_instance_finish(&instance->vk);
    vk_free2(vk_default_allocator(), alloc, instance);

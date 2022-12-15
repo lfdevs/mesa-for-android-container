@@ -48,6 +48,8 @@ static void
 lower_rt_intrinsics_impl(nir_function_impl *impl,
                          const struct intel_device_info *devinfo)
 {
+   bool progress = false;
+
    nir_builder build;
    nir_builder_init(&build, impl);
    nir_builder *b = &build;
@@ -327,6 +329,8 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
             continue;
          }
 
+         progress = true;
+
          if (sysval) {
             nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
                                      sysval);
@@ -335,8 +339,11 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
       }
    }
 
-   nir_metadata_preserve(impl, nir_metadata_block_index |
-                               nir_metadata_dominance);
+   nir_metadata_preserve(impl,
+                         progress ?
+                         nir_metadata_none :
+                         (nir_metadata_block_index |
+                          nir_metadata_dominance));
 }
 
 /** Lower ray-tracing system values and intrinsics

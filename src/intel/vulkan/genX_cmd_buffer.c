@@ -1826,6 +1826,45 @@ genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
                               uint32_t current_pipeline,
                               enum anv_pipe_bits bits)
 {
+#if GFX_VER >= 12
+   /* From the TGL PRM, Volume 2a, "PIPE_CONTROL":
+    *
+    *     "SW must follow below programming restrictions when programming
+    *      PIPE_CONTROL command [for ComputeCS]:
+    *      ...
+    *      Following bits must not be set when programmed for ComputeCS:
+    *      - "Render Target Cache Flush Enable", "Depth Cache Flush Enable"
+    *         and "Tile Cache Flush Enable"
+    *      - "Depth Stall Enable", Stall at Pixel Scoreboard and
+    *         "PSD Sync Enable".
+    *      - "OVR Tile 0 Flush", "TBIMR Force Batch Closure",
+    *         "AMFS Flush Enable", "VF Cache Invalidation Enable" and
+    *         "Global Snapshot Count Reset"."
+    *
+    * XXX: According to spec this should not be a concern for a regular
+    * RCS in GPGPU mode, but during testing it was found that at least
+    * "VF Cache Invalidation Enable" bit is ignored in such case.
+    * This can cause us to miss some important invalidations
+    * (e.g. from CmdPipelineBarriers) and have incoherent data.
+    *
+    * There is also a Wa_1606932921 "RCS is not waking up fixed function clock
+    * when specific 3d related bits are programmed in pipecontrol in
+    * compute mode" that suggests us not to use "RT Cache Flush" in GPGPU mode.
+    *
+    * The other bits are not confirmed to cause problems, but included here
+    * just to be safe, as they're also not really relevant in the GPGPU mode,
+    * and having them doesn't seem to cause any regressions.
+    *
+    * So if we're currently in GPGPU mode, we hide some bits from
+    * this flush, and will flush them only when we'll be able to.
+    * Similar thing with GPGPU-only bits.
+    */
+   enum anv_pipe_bits defer_bits = bits &
+      (current_pipeline == GPGPU ? ANV_PIPE_GFX_BITS: ANV_PIPE_GPGPU_BITS);
+
+   bits &= ~defer_bits;
+#endif
+
    /*
     * From Sandybridge PRM, volume 2, "1.7.2 End-of-Pipe Synchronization":
     *
@@ -2088,6 +2127,10 @@ genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
 
       bits &= ~ANV_PIPE_INVALIDATE_BITS;
    }
+
+#if GFX_VER >= 12
+   bits |= defer_bits;
+#endif
 
    return bits;
 }
@@ -3451,10 +3494,13 @@ cmd_buffer_emit_scissor(struct anv_cmd_buffer *cmd_buffer)
 
       uint32_t y_min = MAX2(s->offset.y, MIN2(vp->y, vp->y + vp->height));
       uint32_t x_min = MAX2(s->offset.x, vp->x);
-      uint32_t y_max = MIN2(s->offset.y + s->extent.height - 1,
+      int64_t y_max = MIN2(s->offset.y + s->extent.height - 1,
                        MAX2(vp->y, vp->y + vp->height) - 1);
-      uint32_t x_max = MIN2(s->offset.x + s->extent.width - 1,
+      int64_t x_max = MIN2(s->offset.x + s->extent.width - 1,
                        vp->x + vp->width - 1);
+
+      y_max = clamp_int64(y_max, 0, INT16_MAX >> 1);
+      x_max = clamp_int64(x_max, 0, INT16_MAX >> 1);
 
       /* Do this math using int64_t so overflow gets clamped correctly. */
       if (cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY) {
@@ -5824,7 +5870,7 @@ cmd_buffer_trace_rays(struct anv_cmd_buffer *cmd_buffer,
 
    anv_batch_emit(&cmd_buffer->batch, GENX(COMPUTE_WALKER), cw) {
       cw.IndirectParameterEnable        = is_indirect;
-      cw.PredicateEnable                = false;
+      cw.PredicateEnable                = cmd_buffer->state.conditional_render_enabled;
       cw.SIMDSize                       = dispatch.simd_size / 16;
       cw.LocalXMaximum                  = (1 << local_size_log2[0]) - 1;
       cw.LocalYMaximum                  = (1 << local_size_log2[1]) - 1;

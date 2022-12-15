@@ -3958,11 +3958,7 @@ zink_create_stream_output_target(struct pipe_context *pctx,
    if (!t)
       return NULL;
 
-   /* using PIPE_BIND_CUSTOM here lets us create a custom pipe buffer resource,
-    * which allows us to differentiate and use VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT
-    * as we must for this case
-    */
-   t->counter_buffer = pipe_buffer_create(pctx->screen, PIPE_BIND_STREAM_OUTPUT | PIPE_BIND_CUSTOM, PIPE_USAGE_DEFAULT, 4);
+   t->counter_buffer = pipe_buffer_create(pctx->screen, PIPE_BIND_STREAM_OUTPUT, PIPE_USAGE_DEFAULT, 4);
    if (!t->counter_buffer) {
       FREE(t);
       return NULL;

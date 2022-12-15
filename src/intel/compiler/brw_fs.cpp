@@ -6197,6 +6197,35 @@ needs_dummy_fence(const intel_device_info *devinfo, fs_inst *inst)
    return false;
 }
 
+/* Wa_14017989577
+ *
+ * The first instruction of any kernel should have non-zero emask.
+ * Make sure this happens by introducing a dummy mov instruction.
+ */
+void
+fs_visitor::emit_dummy_mov_instruction()
+{
+   if (devinfo->verx10 < 120)
+      return;
+
+   struct backend_instruction *first_inst =
+      cfg->first_block()->start();
+
+   /* We can skip the WA if first instruction is marked with
+    * force_writemask_all or exec_size equals dispatch_width.
+    */
+   if (first_inst->force_writemask_all ||
+       first_inst->exec_size == dispatch_width)
+      return;
+
+   /* Insert dummy mov as first instruction. */
+   const fs_builder ubld =
+      bld.at(cfg->first_block(), first_inst).exec_all().group(8, 0);
+   ubld.MOV(bld.null_reg_ud(), brw_imm_ud(0u));
+
+   invalidate_analysis(DEPENDENCY_INSTRUCTIONS | DEPENDENCY_VARIABLES);
+}
+
 /* Wa_22013689345
  *
  * We need to emit UGM fence message before EOT, if shader has any UGM write
@@ -6557,6 +6586,10 @@ fs_visitor::run_vs()
 
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
+
+   /* Wa_14017989577 */
+   emit_dummy_mov_instruction();
+
    allocate_registers(true /* allow_spilling */);
 
    return !failed;
@@ -6679,6 +6712,10 @@ fs_visitor::run_tcs()
 
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
+
+   /* Wa_14017989577 */
+   emit_dummy_mov_instruction();
+
    allocate_registers(true /* allow_spilling */);
 
    return !failed;
@@ -6707,6 +6744,10 @@ fs_visitor::run_tes()
 
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
+
+   /* Wa_14017989577 */
+   emit_dummy_mov_instruction();
+
    allocate_registers(true /* allow_spilling */);
 
    return !failed;
@@ -6751,6 +6792,10 @@ fs_visitor::run_gs()
 
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
+
+   /* Wa_14017989577 */
+   emit_dummy_mov_instruction();
+
    allocate_registers(true /* allow_spilling */);
 
    return !failed;
@@ -6851,6 +6896,9 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
       fixup_3src_null_dest();
       emit_dummy_memory_fence_before_eot();
 
+      /* Wa_14017989577 */
+      emit_dummy_mov_instruction();
+
       allocate_registers(allow_spilling);
    }
 
@@ -6887,6 +6935,10 @@ fs_visitor::run_cs(bool allow_spilling)
 
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
+
+   /* Wa_14017989577 */
+   emit_dummy_mov_instruction();
+
    allocate_registers(allow_spilling);
 
    return !failed;
@@ -6915,6 +6967,10 @@ fs_visitor::run_bs(bool allow_spilling)
 
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
+
+   /* Wa_14017989577 */
+   emit_dummy_mov_instruction();
+
    allocate_registers(allow_spilling);
 
    return !failed;
@@ -6944,6 +7000,10 @@ fs_visitor::run_task(bool allow_spilling)
 
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
+
+   /* Wa_14017989577 */
+   emit_dummy_mov_instruction();
+
    allocate_registers(allow_spilling);
 
    return !failed;
@@ -6973,6 +7033,10 @@ fs_visitor::run_mesh(bool allow_spilling)
 
    fixup_3src_null_dest();
    emit_dummy_memory_fence_before_eot();
+
+   /* Wa_14017989577 */
+   emit_dummy_mov_instruction();
+
    allocate_registers(allow_spilling);
 
    return !failed;
@@ -7443,26 +7507,6 @@ brw_compile_fs(const struct brw_compiler *compiler,
          prog_data->base.dispatch_grf_start_reg =
             prog_data->dispatch_grf_start_reg_32;
       }
-   }
-
-   if (prog_data->persample_dispatch) {
-      /* Starting with SandyBridge (where we first get MSAA), the different
-       * pixel dispatch combinations are grouped into classifications A
-       * through F (SNB PRM Vol. 2 Part 1 Section 7.7.1).  On most hardware
-       * generations, the only configurations supporting persample dispatch
-       * are those in which only one dispatch width is enabled.
-       *
-       * The Gfx12 hardware spec has a similar dispatch grouping table, but
-       * the following conflicting restriction applies (from the page on
-       * "Structure_3DSTATE_PS_BODY"), so we need to keep the SIMD16 shader:
-       *
-       *  "SIMD32 may only be enabled if SIMD16 or (dual)SIMD8 is also
-       *   enabled."
-       */
-      if (simd32_cfg || simd16_cfg)
-         simd8_cfg = NULL;
-      if (simd32_cfg && devinfo->ver < 12)
-         simd16_cfg = NULL;
    }
 
    fs_generator g(compiler, params->log_data, mem_ctx, &prog_data->base,

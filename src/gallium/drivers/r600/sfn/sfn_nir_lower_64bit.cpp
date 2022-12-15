@@ -929,12 +929,12 @@ Lower64BitToVec2::lower(nir_instr *instr)
    }
    case nir_instr_type_load_const: {
       auto lc = nir_instr_as_load_const(instr);
-      assert(lc->def.num_components < 3);
-      nir_const_value val[4] = {{0}};
+      assert(lc->def.num_components <= 2);
+      nir_const_value val[4];
       for (uint i = 0; i < lc->def.num_components; ++i) {
          uint64_t v = lc->value[i].u64;
-         val[0].u32 = v & 0xffffffff;
-         val[1].u32 = (v >> 32) & 0xffffffff;
+         val[i * 2 + 0] = nir_const_value_for_uint(v & 0xffffffff, 32);
+         val[i * 2 + 1] = nir_const_value_for_uint(v >> 32, 32);
       }
 
       return nir_build_imm(b, 2 * lc->def.num_components, 32, val);

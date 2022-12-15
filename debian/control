@@ -57,6 +57,7 @@ Build-Depends:
  llvm-spirv-15 [amd64 arm64 armel armhf i386 mips64el mipsel ppc64el s390x],
  libclc-15 [amd64 arm64 armel armhf i386 mips64el mipsel ppc64el s390x],
  libllvmspirvlib-15-dev [amd64 arm64 armel armhf i386 mips64el mipsel ppc64el s390x],
+Rules-Requires-Root: no
 Vcs-Git: https://salsa.debian.org/xorg-team/lib/mesa.git
 Vcs-Browser: https://salsa.debian.org/xorg-team/lib/mesa
 Homepage: https://mesa3d.org/

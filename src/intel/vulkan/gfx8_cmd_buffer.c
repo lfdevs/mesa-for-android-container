@@ -257,12 +257,8 @@ genX(cmd_emit_te)(struct anv_cmd_buffer *cmd_buffer)
 static void
 genX(cmd_emit_sample_mask)(struct anv_cmd_buffer *cmd_buffer)
 {
-   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
    const struct vk_dynamic_graphics_state *dyn =
       &cmd_buffer->vk.dynamic_graphics_state;
-
-   if (!anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT))
-      return;
 
    /* From the Vulkan 1.0 spec:
    *    If pSampleMask is NULL, it is treated as if the mask has all bits

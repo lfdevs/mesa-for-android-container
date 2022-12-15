@@ -232,19 +232,15 @@ mir_set_bytemask(midgard_instruction *ins, uint16_t bytemask)
         ins->mask = mir_from_bytemask(bytemask, type_size);
 }
 
-/* Checks if we should use an upper destination override, rather than the lower
- * one in the IR. Returns zero if no, returns the bytes to shift otherwise */
-
+/*
+ * Checks if we should use an upper destination override, rather than the lower
+ * one in the IR. If yes, returns the bytes to shift by. If no, returns zero
+ * for a lower override and negative for no override.
+ */
 signed
 mir_upper_override(midgard_instruction *ins, unsigned inst_size)
 {
         unsigned type_size = nir_alu_type_get_type_size(ins->dest_type);
-
-        /* 8bit imovs are promoted to 16bit ones with .sext on the source and
-         * .keeplo on the destination to accomodate with non-identity swizzles.
-         */
-        if (ins->op == midgard_alu_op_imov && type_size == 8)
-                return 0;
 
         /* If the sizes are the same, there's nothing to override */
         if (type_size == inst_size)

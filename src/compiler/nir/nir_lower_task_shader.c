@@ -38,6 +38,7 @@ typedef struct {
    bool payload_in_shared;
    /* Shared memory address where task_payload will be located. */
    uint32_t payload_shared_addr;
+   uint32_t payload_offset_in_bytes;
 } lower_task_state;
 
 static bool
@@ -191,21 +192,49 @@ lower_task_payload_to_shared(nir_builder *b,
 }
 
 static void
+copy_shared_to_payload(nir_builder *b,
+                       unsigned num_components,
+                       nir_ssa_def *addr,
+                       unsigned shared_base,
+                       unsigned off)
+{
+   /* Read from shared memory. */
+   nir_ssa_def *copy = nir_load_shared(b, num_components, 32, addr,
+                                       .align_mul = 16,
+                                       .base = shared_base + off);
+
+   /* Write to task payload memory. */
+   nir_store_task_payload(b, copy, addr, .base = off);
+}
+
+static void
 emit_shared_to_payload_copy(nir_builder *b,
                             uint32_t payload_addr,
                             uint32_t payload_size,
                             lower_task_state *s)
 {
+   /* Copy from shared memory to task payload using as much parallelism
+    * as possible. This is achieved by splitting the work into max 3 phases:
+    * 1) copy maximum number of vec4s using all invocations within workgroup
+    * 2) copy maximum number of vec4s using some invocations
+    * 3) copy remaining dwords (< 4) using only the first invocation
+    */
    const unsigned invocations = b->shader->info.workgroup_size[0] *
-                          b->shader->info.workgroup_size[1] *
-                          b->shader->info.workgroup_size[2];
-   const unsigned bytes_per_copy = 16;
-   const unsigned copies_needed = DIV_ROUND_UP(payload_size, bytes_per_copy);
-   const unsigned copies_per_invocation = DIV_ROUND_UP(copies_needed, invocations);
+                                b->shader->info.workgroup_size[1] *
+                                b->shader->info.workgroup_size[2];
+   const unsigned vec4size = 16;
+   const unsigned whole_wg_vec4_copies = payload_size / vec4size;
+   const unsigned vec4_copies_per_invocation = whole_wg_vec4_copies / invocations;
+   const unsigned remaining_vec4_copies = whole_wg_vec4_copies % invocations;
+   const unsigned remaining_dwords =
+         DIV_ROUND_UP(payload_size
+                       - vec4size * vec4_copies_per_invocation * invocations
+                       - vec4size * remaining_vec4_copies,
+                      4);
    const unsigned base_shared_addr = s->payload_shared_addr + payload_addr;
 
    nir_ssa_def *invocation_index = nir_load_local_invocation_index(b);
-   nir_ssa_def *addr = nir_imul_imm(b, invocation_index, bytes_per_copy);
+   nir_ssa_def *addr = nir_imul_imm(b, invocation_index, vec4size);
 
    /* Wait for all previous shared stores to finish.
     * This is necessary because we placed the payload in shared memory.
@@ -215,17 +244,50 @@ emit_shared_to_payload_copy(nir_builder *b,
                          .memory_semantics = NIR_MEMORY_ACQ_REL,
                          .memory_modes = nir_var_mem_shared);
 
-   for (unsigned i = 0; i < copies_per_invocation; ++i) {
-      unsigned const_off = bytes_per_copy * invocations * i;
+   /* Payload_size is a size of user-accessible payload, but on some
+    * hardware (e.g. Intel) payload has a private header, which we have
+    * to offset (payload_offset_in_bytes).
+    */
+   unsigned off = s->payload_offset_in_bytes;
 
-      /* Read from shared memory. */
-      nir_ssa_def *copy =
-         nir_load_shared(b, 4, 32, addr, .align_mul = 16,
-                         .base = base_shared_addr + const_off);
+   /* Technically dword-alignment is not necessary for correctness
+    * of the code below, but even if backend implements unaligned
+    * load/stores, they will very likely be slow(er).
+    */
+   assert(off % 4 == 0);
 
-      /* Write to task payload memory. */
-      nir_store_task_payload(b, copy, addr, .base = const_off);
+   /* Copy full vec4s using all invocations in workgroup. */
+   for (unsigned i = 0; i < vec4_copies_per_invocation; ++i) {
+      copy_shared_to_payload(b, vec4size / 4, addr, base_shared_addr, off);
+      off += vec4size * invocations;
    }
+
+   /* Copy full vec4s using only the invocations needed to not overflow. */
+   if (remaining_vec4_copies > 0) {
+      assert(remaining_vec4_copies < invocations);
+
+      nir_ssa_def *cmp = nir_ilt(b, invocation_index, nir_imm_int(b, remaining_vec4_copies));
+      nir_if *if_stmt = nir_push_if(b, cmp);
+      {
+         copy_shared_to_payload(b, vec4size / 4, addr, base_shared_addr, off);
+      }
+      nir_pop_if(b, if_stmt);
+      off += vec4size * remaining_vec4_copies;
+   }
+
+   /* Copy the last few dwords not forming full vec4. */
+   if (remaining_dwords > 0) {
+      assert(remaining_dwords < 4);
+      nir_ssa_def *cmp = nir_ieq(b, invocation_index, nir_imm_int(b, 0));
+      nir_if *if_stmt = nir_push_if(b, cmp);
+      {
+         copy_shared_to_payload(b, remaining_dwords, addr, base_shared_addr, off);
+      }
+      nir_pop_if(b, if_stmt);
+      off += remaining_dwords * 4;
+   }
+
+   assert(s->payload_offset_in_bytes + ALIGN(payload_size, 4) == off);
 }
 
 static bool
@@ -430,6 +492,7 @@ nir_lower_task_shader(nir_shader *shader,
    lower_task_state state = {
       .payload_shared_addr = ALIGN(shader->info.shared_size, 16),
       .payload_in_shared = payload_in_shared,
+      .payload_offset_in_bytes = options.payload_offset_in_bytes,
    };
 
    if (payload_in_shared)

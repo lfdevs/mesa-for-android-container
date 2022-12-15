@@ -719,6 +719,11 @@ lower_rt_instructions(nir_shader *shader, struct rt_variables *vars, unsigned ca
                nir_store_var(&b_shader, vars->hit_kind, undef, 0x1);
                nir_ssa_def *miss_index = nir_load_var(&b_shader, vars->miss_index);
                load_sbt_entry(&b_shader, vars, miss_index, SBT_MISS, 0);
+
+               /* In case of a NULL miss shader, do nothing and just return. */
+               nir_push_if(&b_shader, nir_ieq_imm(&b_shader, nir_load_var(&b_shader, vars->idx), 0));
+               insert_rt_return(&b_shader, vars);
+               nir_pop_if(&b_shader, NULL);
                break;
             }
             default:

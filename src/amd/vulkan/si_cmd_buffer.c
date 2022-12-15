@@ -745,8 +745,12 @@ si_write_scissors(struct radeon_cmdbuf *cs, int count, const VkRect2D *scissors,
 
 void
 si_write_guardband(struct radeon_cmdbuf *cs, int count, const VkViewport *viewports,
-                   unsigned rast_prim, float line_width)
+                   unsigned rast_prim, unsigned polygon_mode, float line_width)
 {
+   const bool draw_points =
+      radv_rast_prim_is_point(rast_prim) || radv_polygon_mode_is_point(polygon_mode);
+   const bool draw_lines =
+      radv_rast_prim_is_line(rast_prim) || radv_polygon_mode_is_line(polygon_mode);
    int i;
    float scale[3], translate[3], guardband_x = INFINITY, guardband_y = INFINITY;
    float discard_x = 1.0f, discard_y = 1.0f;
@@ -767,12 +771,12 @@ si_write_guardband(struct radeon_cmdbuf *cs, int count, const VkViewport *viewpo
       guardband_x = MIN2(guardband_x, (max_range - fabsf(translate[0])) / scale[0]);
       guardband_y = MIN2(guardband_y, (max_range - fabsf(translate[1])) / scale[1]);
 
-      if (radv_rast_prim_is_points_or_lines(rast_prim)) {
+      if (draw_points || draw_lines) {
          /* When rendering wide points or lines, we need to be more conservative about when to
           * discard them entirely. */
          float pixels;
 
-         if (rast_prim == V_028A6C_POINTLIST) {
+         if (draw_points) {
             pixels = 8191.875f;
          } else {
             pixels = line_width;

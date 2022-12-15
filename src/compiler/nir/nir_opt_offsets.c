@@ -123,7 +123,7 @@ try_fold_load_store(nir_builder *b,
    if (!nir_src_is_const(*off_src)) {
       uint32_t add_offset = 0;
       nir_ssa_scalar val = {.def = off_src->ssa, .comp = 0};
-      val = try_extract_const_addition(b, val, state, &add_offset, max);
+      val = try_extract_const_addition(b, val, state, &add_offset, max - off_const);
       if (add_offset == 0)
          return false;
       off_const += add_offset;
@@ -139,6 +139,8 @@ try_fold_load_store(nir_builder *b,
       return false;
 
    nir_instr_rewrite_src(&intrin->instr, &intrin->src[offset_src_idx], nir_src_for_ssa(replace_src));
+
+   assert(off_const <= max);
    nir_intrinsic_set_base(intrin, off_const);
    return true;
 }

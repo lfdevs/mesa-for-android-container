@@ -1322,6 +1322,18 @@ nir_link_precision(unsigned producer, unsigned consumer, bool fs)
       return fs ? MAX2(producer, consumer) : consumer;
 }
 
+static nir_variable *
+find_consumer_variable(const nir_shader *consumer,
+                       const nir_variable *producer_var)
+{
+   nir_foreach_variable_with_modes(var, consumer, nir_var_shader_in) {
+      if (var->data.location == producer_var->data.location &&
+          var->data.location_frac == producer_var->data.location_frac)
+         return var;
+   }
+   return NULL;
+}
+
 void
 nir_link_varying_precision(nir_shader *producer, nir_shader *consumer)
 {
@@ -1332,8 +1344,8 @@ nir_link_varying_precision(nir_shader *producer, nir_shader *consumer)
       if (producer_var->data.location < 0)
          continue;
 
-      nir_variable *consumer_var = nir_find_variable_with_location(consumer,
-            nir_var_shader_in, producer_var->data.location);
+      nir_variable *consumer_var = find_consumer_variable(consumer,
+            producer_var);
 
       /* Skip if the variable will be eliminated */
       if (!consumer_var)

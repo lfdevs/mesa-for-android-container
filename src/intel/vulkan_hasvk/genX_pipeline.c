@@ -1806,9 +1806,11 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
 #endif
 
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_PS), ps) {
-      ps._8PixelDispatchEnable      = wm_prog_data->dispatch_8;
-      ps._16PixelDispatchEnable     = wm_prog_data->dispatch_16;
-      ps._32PixelDispatchEnable     = wm_prog_data->dispatch_32;
+      brw_fs_get_dispatch_enables(devinfo, wm_prog_data,
+                                  ms != NULL ? ms->rasterization_samples : 1,
+                                  &ps._8PixelDispatchEnable,
+                                  &ps._16PixelDispatchEnable,
+                                  &ps._32PixelDispatchEnable);
 
       /* From the Sky Lake PRM 3DSTATE_PS::32 Pixel Dispatch Enable:
        *

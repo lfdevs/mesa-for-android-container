@@ -258,8 +258,8 @@ static_assert(sizeof(struct rra_geometry_info) == 12, "rra_geometry_info does no
 
 static struct rra_accel_struct_header
 rra_fill_accel_struct_header_common(struct radv_accel_struct_header *header,
-                                    size_t leaf_node_data_size, size_t internal_node_data_size,
-                                    uint64_t primitive_count)
+                                    size_t parent_id_table_size, size_t leaf_node_data_size,
+                                    size_t internal_node_data_size, uint64_t primitive_count)
 {
    return (struct rra_accel_struct_header){
       .post_build_info =
@@ -268,8 +268,8 @@ rra_fill_accel_struct_header_common(struct radv_accel_struct_header *header,
             /* Seems to be no compression */
             .tri_compression_mode = 0,
          },
-      .metadata_size = sizeof(struct rra_accel_struct_metadata),
-      .file_size = sizeof(struct rra_accel_struct_metadata) +
+      .metadata_size = sizeof(struct rra_accel_struct_metadata) + parent_id_table_size,
+      .file_size = sizeof(struct rra_accel_struct_metadata) + parent_id_table_size +
                    sizeof(struct rra_accel_struct_header) + internal_node_data_size +
                    leaf_node_data_size,
       .primitive_count = primitive_count,
@@ -346,11 +346,12 @@ struct rra_triangle_node {
 static_assert(sizeof(struct rra_triangle_node) == 64, "rra_triangle_node does not match RRA spec!");
 
 static void
-rra_dump_tlas_header(struct radv_accel_struct_header *header, size_t leaf_node_data_size,
-                     size_t internal_node_data_size, uint64_t primitive_count, FILE *output)
+rra_dump_tlas_header(struct radv_accel_struct_header *header, size_t parent_id_table_size,
+                     size_t leaf_node_data_size, size_t internal_node_data_size,
+                     uint64_t primitive_count, FILE *output)
 {
    struct rra_accel_struct_header file_header = rra_fill_accel_struct_header_common(
-      header, leaf_node_data_size, internal_node_data_size, primitive_count);
+      header, parent_id_table_size, leaf_node_data_size, internal_node_data_size, primitive_count);
    file_header.post_build_info.bvh_type = RRA_BVH_TYPE_TLAS;
    file_header.geometry_type = VK_GEOMETRY_TYPE_INSTANCES_KHR;
 
@@ -358,13 +359,13 @@ rra_dump_tlas_header(struct radv_accel_struct_header *header, size_t leaf_node_d
 }
 
 static void
-rra_dump_blas_header(struct radv_accel_struct_header *header,
+rra_dump_blas_header(struct radv_accel_struct_header *header, size_t parent_id_table_size,
                      struct radv_accel_struct_geometry_info *geometry_infos,
                      size_t leaf_node_data_size, size_t internal_node_data_size,
                      uint64_t primitive_count, FILE *output)
 {
    struct rra_accel_struct_header file_header = rra_fill_accel_struct_header_common(
-      header, leaf_node_data_size, internal_node_data_size, primitive_count);
+      header, parent_id_table_size, leaf_node_data_size, internal_node_data_size, primitive_count);
    file_header.post_build_info.bvh_type = RRA_BVH_TYPE_BLAS;
    file_header.geometry_type =
       header->geometry_count ? geometry_infos->type : VK_GEOMETRY_TYPE_TRIANGLES_KHR;
@@ -823,10 +824,10 @@ rra_dump_acceleration_structure(struct rra_copied_accel_struct *copied_struct,
    fwrite(node_parent_table, 1, node_parent_table_size, output);
 
    if (is_tlas)
-      rra_dump_tlas_header(header, bvh_info.leaf_nodes_size, bvh_info.internal_nodes_size,
-                           primitive_count, output);
+      rra_dump_tlas_header(header, node_parent_table_size, bvh_info.leaf_nodes_size,
+                           bvh_info.internal_nodes_size, primitive_count, output);
    else
-      rra_dump_blas_header(header, geometry_infos, bvh_info.leaf_nodes_size,
+      rra_dump_blas_header(header, node_parent_table_size, geometry_infos, bvh_info.leaf_nodes_size,
                            bvh_info.internal_nodes_size, primitive_count, output);
 
    /* Write acceleration structure data  */

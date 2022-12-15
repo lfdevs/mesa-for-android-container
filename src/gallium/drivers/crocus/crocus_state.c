@@ -6446,9 +6446,11 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
           */
          ps.VectorMaskEnable = GFX_VER >= 8 && wm_prog_data->uses_vmask;
 
-         ps._8PixelDispatchEnable = wm_prog_data->dispatch_8;
-         ps._16PixelDispatchEnable = wm_prog_data->dispatch_16;
-         ps._32PixelDispatchEnable = wm_prog_data->dispatch_32;
+         brw_fs_get_dispatch_enables(&batch->screen->devinfo, wm_prog_data,
+                                     ice->state.framebuffer.samples,
+                                     &ps._8PixelDispatchEnable,
+                                     &ps._16PixelDispatchEnable,
+                                     &ps._32PixelDispatchEnable);
 
          ps.DispatchGRFStartRegisterForConstantSetupData0 =
             brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, ps, 0);

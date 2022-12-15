@@ -22,6 +22,12 @@ spec@glsl-es-3.20.*
 dEQP-VK.draw.inverted_depth_ranges.nodepthclamp_deltazero
 dEQP-VK.rasterization.depth_bias.d32_sfloat
 
+# Invalid tests; these will be fixed or removed from CTS in a future release
+# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/4075
+dEQP-VK.api.external.fence.sync_fd.export_multiple_times_temporary
+dEQP-VK.api.external.semaphore.sync_fd.export_multiple_times_temporary
+dEQP-VK.api.external.semaphore.sync_fd.import_twice_temporary
+
 # Slow tests (> 1 minute to run)
 dEQP-VK.api.object_management.max_concurrent.query_pool
 dEQP-VK.binding_model.buffer_device_address.set3.depth3.basessbo.convertcheckuv2.nostore.multi.std140.comp

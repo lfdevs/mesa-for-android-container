@@ -3647,10 +3647,13 @@ cmd_buffer_emit_scissor(struct anv_cmd_buffer *cmd_buffer)
 
       uint32_t y_min = MAX2(s->offset.y, MIN2(vp->y, vp->y + vp->height));
       uint32_t x_min = MAX2(s->offset.x, vp->x);
-      uint32_t y_max = MIN2(s->offset.y + s->extent.height - 1,
+      int64_t y_max = MIN2(s->offset.y + s->extent.height - 1,
                        MAX2(vp->y, vp->y + vp->height) - 1);
-      uint32_t x_max = MIN2(s->offset.x + s->extent.width - 1,
+      int64_t x_max = MIN2(s->offset.x + s->extent.width - 1,
                        vp->x + vp->width - 1);
+
+      y_max = clamp_int64(y_max, 0, INT16_MAX >> 1);
+      x_max = clamp_int64(x_max, 0, INT16_MAX >> 1);
 
       /* Do this math using int64_t so overflow gets clamped correctly. */
       if (cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY) {

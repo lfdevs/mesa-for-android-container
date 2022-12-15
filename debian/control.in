@@ -57,6 +57,7 @@ Build-Depends:
  llvm-spirv-@LLVM_VERSION@ [@RUSTICL_ARCHS@],
  libclc-@LLVM_VERSION@ [@RUSTICL_ARCHS@],
  libllvmspirvlib-@LLVM_VERSION@-dev [@RUSTICL_ARCHS@],
+Rules-Requires-Root: no
 Vcs-Git: https://salsa.debian.org/xorg-team/lib/mesa.git
 Vcs-Browser: https://salsa.debian.org/xorg-team/lib/mesa
 Homepage: https://mesa3d.org/

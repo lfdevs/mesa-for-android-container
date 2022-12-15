@@ -502,8 +502,12 @@ vn_descriptor_pool_alloc_descriptors(
        * pool to exceed the value of
        * VkDescriptorPoolInlineUniformBlockCreateInfo::maxInlineUniformBlockBindings
        * used to create the descriptor pool.
+       *
+       * If descriptorCount is zero this binding entry is reserved and the
+       * resource must not be accessed from any stage via this binding within
+       * any pipeline using the set layout.
        */
-      if (type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
+      if (type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK && count != 0) {
          if (++pool->used.iub_binding_count > pool->max.iub_binding_count)
             goto fail;
       }

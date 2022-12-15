@@ -8,11 +8,6 @@ dEQP-VK.api.copy_and_blit.dedicated_allocation.resolve_image.layer_copy_before_r
 dEQP-VK.api.copy_and_blit.dedicated_allocation.resolve_image.layer_copy_before_resolving.4_bit,Fail
 dEQP-VK.api.copy_and_blit.dedicated_allocation.resolve_image.layer_copy_before_resolving.8_bit,Fail
 dEQP-VK.pipeline.monolithic.timestamp.calibrated.calibration_test,Fail
-dEQP-VK.rasterization.rasterization_order_attachment_access.depth.samples_1.multi_draw_barriers,Fail
-dEQP-VK.rasterization.rasterization_order_attachment_access.stencil.samples_1.multi_draw_barriers,Fail
-dEQP-VK.rasterization.rasterization_order_attachment_access.stencil.samples_2.multi_draw_barriers,Fail
-dEQP-VK.rasterization.rasterization_order_attachment_access.stencil.samples_4.multi_draw_barriers,Fail
-dEQP-VK.rasterization.rasterization_order_attachment_access.stencil.samples_8.multi_draw_barriers,Fail
 dEQP-VK.texture.mipmap.2d.image_view_min_lod.base_level.linear_linear,Fail
 dEQP-VK.texture.mipmap.2d.image_view_min_lod.base_level.linear_linear_integer_texel_coord,Fail
 dEQP-VK.texture.mipmap.2d.image_view_min_lod.base_level.linear_nearest,Fail

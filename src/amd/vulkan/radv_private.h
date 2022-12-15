@@ -1733,7 +1733,7 @@ void si_write_scissors(struct radeon_cmdbuf *cs, int count, const VkRect2D *scis
                        const VkViewport *viewports);
 
 void si_write_guardband(struct radeon_cmdbuf *cs, int count, const VkViewport *viewports,
-                        unsigned rast_prim, float line_width);
+                        unsigned rast_prim, unsigned polygon_mode, float line_width);
 
 uint32_t si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer, bool instanced_draw,
                                    bool indirect_draw, bool count_from_stream_output,
@@ -3025,6 +3025,24 @@ static inline bool
 radv_rast_prim_is_points_or_lines(unsigned rast_prim)
 {
    return radv_rast_prim_is_point(rast_prim) || radv_rast_prim_is_line(rast_prim);
+}
+
+static inline bool
+radv_polygon_mode_is_point(unsigned polygon_mode)
+{
+   return polygon_mode == V_028814_X_DRAW_POINTS;
+}
+
+static inline bool
+radv_polygon_mode_is_line(unsigned polygon_mode)
+{
+   return polygon_mode == V_028814_X_DRAW_LINES;
+}
+
+static inline bool
+radv_polygon_mode_is_points_or_lines(unsigned polygon_mode)
+{
+   return radv_polygon_mode_is_point(polygon_mode) || radv_polygon_mode_is_line(polygon_mode);
 }
 
 static inline unsigned

@@ -287,7 +287,8 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
    wm_prog_data->base.nr_params = 0;
    wm_prog_data->base.param = NULL;
 
-   brw_preprocess_nir(compiler, nir, NULL);
+   struct brw_nir_compiler_opts opts = {};
+   brw_preprocess_nir(compiler, nir, &opts);
    nir_remove_dead_variables(nir, nir_var_shader_in, NULL);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
@@ -321,7 +322,8 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
 
    nir->options = compiler->nir_options[MESA_SHADER_VERTEX];
 
-   brw_preprocess_nir(compiler, nir, NULL);
+   struct brw_nir_compiler_opts opts = {};
+   brw_preprocess_nir(compiler, nir, &opts);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
    vs_prog_data->inputs_read = nir->info.inputs_read;
@@ -358,7 +360,8 @@ blorp_compile_cs(struct blorp_context *blorp, void *mem_ctx,
 
    memset(cs_prog_data, 0, sizeof(*cs_prog_data));
 
-   brw_preprocess_nir(compiler, nir, NULL);
+   struct brw_nir_compiler_opts opts = {};
+   brw_preprocess_nir(compiler, nir, &opts);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
    NIR_PASS_V(nir, nir_lower_io, nir_var_uniform, type_size_scalar_bytes,

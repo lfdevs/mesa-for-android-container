@@ -202,6 +202,10 @@ brw_nir_adjust_task_payload_offsets_instr(struct nir_builder *b,
       nir_ssa_def *offset = nir_ishr_imm(b, offset_src->ssa, 2);
       nir_instr_rewrite_src(&intrin->instr, offset_src, nir_src_for_ssa(offset));
 
+      unsigned base = nir_intrinsic_base(intrin);
+      assert(base % 4 == 0);
+      nir_intrinsic_set_base(intrin, base / 4);
+
       return true;
    }
 
@@ -247,6 +251,10 @@ brw_compile_task(const struct brw_compiler *compiler,
    nir_lower_task_shader_options lower_ts_opt = {
       .payload_to_shared_for_atomics = true,
       .payload_to_shared_for_small_types = true,
+      /* The actual payload data starts after the TUE header and padding,
+       * so skip those when copying.
+       */
+      .payload_offset_in_bytes = prog_data->map.per_task_data_start_dw * 4,
    };
    NIR_PASS(_, nir, nir_lower_task_shader, lower_ts_opt);
 

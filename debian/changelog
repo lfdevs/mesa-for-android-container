@@ -1,3 +1,11 @@
+mesa (22.3.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * patches: Drop upstreamed patches.
+  * control: Use Rules-Requires-Root: no.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 15 Dec 2022 13:21:21 +0200
+
 mesa (22.3.0-3) unstable; urgency=medium
 
   * control: Enable i915 gallium driver. (Closes: #1013311)

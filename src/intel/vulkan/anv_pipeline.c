@@ -296,7 +296,13 @@ anv_shader_stage_to_nir(struct anv_device *device,
    /* Vulkan uses the separate-shader linking model */
    nir->info.separate_shader = true;
 
-   brw_preprocess_nir(compiler, nir, device->fp64_nir);
+   struct brw_nir_compiler_opts opts = {
+      .softfp64 = device->fp64_nir,
+      .robust_image_access =
+         device->vk.enabled_features.robustImageAccess ||
+         device->vk.enabled_features.robustImageAccess2,
+   };
+   brw_preprocess_nir(compiler, nir, &opts);
 
    if (nir->info.stage == MESA_SHADER_MESH && !nir->info.mesh.nv) {
       bool progress = false;

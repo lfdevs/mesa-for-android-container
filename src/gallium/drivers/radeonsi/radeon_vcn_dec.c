@@ -743,6 +743,218 @@ static void set_drm_keys(rvcn_dec_message_drm_t *drm, DECRYPT_PARAMETERS *decryp
    }
 }
 
+static int32_t rvcn_av1_film_grain_random_number(unsigned short *seed, int32_t bits)
+{
+   unsigned short bit;
+   unsigned short value = *seed;
+
+   bit = ((value >> 0) ^ (value >> 1) ^ (value >> 3) ^ (value >> 12)) & 1;
+   value = (value >> 1) | (bit << 15);
+   *seed = value;
+
+   return (value >> (16 - bits)) & ((1 << bits) - 1);
+}
+
+static void rvcn_av1_film_grain_init_scaling(uint8_t scaling_points[][2],
+                                             uint8_t num,
+                                             short scaling_lut[])
+{
+   int32_t i, x, delta_x, delta_y;
+   int64_t delta;
+
+   if (num == 0)
+      return;
+
+   for ( i = 0; i < scaling_points[0][0]; i++ )
+      scaling_lut[i] = scaling_points[0][1];
+
+   for ( i = 0; i < num - 1; i++ ) {
+      delta_y = scaling_points[i + 1][1] - scaling_points[i][1];
+      delta_x = scaling_points[i + 1][0] - scaling_points[i][0];
+
+      delta = delta_y * ((65536 + (delta_x >> 1)) / delta_x);
+
+      for ( x = 0; x < delta_x; x++ )
+         scaling_lut[scaling_points[i][0] + x] =
+            (short)(scaling_points[i][1] + (int32_t)((x * delta + 32768) >> 16));
+   }
+
+   for ( i = scaling_points[num - 1][0]; i < 256; i++ )
+      scaling_lut[i] = scaling_points[num - 1][1];
+}
+
+static void rvcn_av1_init_film_grain_buffer(rvcn_dec_film_grain_params_t *fg_params,
+                                            rvcn_dec_av1_fg_init_buf_t *fg_buf)
+{
+   const int32_t luma_block_size_y = 73;
+   const int32_t luma_block_size_x = 82;
+   const int32_t chroma_block_size_y = 38;
+   const int32_t chroma_block_size_x = 44;
+   const int32_t gauss_bits = 11;
+   int32_t filt_luma_grain_block[luma_block_size_y][luma_block_size_x];
+   int32_t filt_cb_grain_block[chroma_block_size_y][chroma_block_size_x];
+   int32_t filt_cr_grain_block[chroma_block_size_y][chroma_block_size_x];
+   int32_t chroma_subsamp_y = 1;
+   int32_t chroma_subsamp_x = 1;
+   unsigned short seed = fg_params->random_seed;
+   int32_t ar_coeff_lag = fg_params->ar_coeff_lag;
+   int32_t bit_depth = fg_params->bit_depth_minus_8 + 8;
+   short grain_center = 128 << (bit_depth - 8);
+   short grain_min = 0 - grain_center;
+   short grain_max = (256 << (bit_depth - 8)) - 1 - grain_center;
+   int32_t shift = 12 - bit_depth + fg_params->grain_scale_shift;
+   short luma_grain_block_tmp[64][80];
+   short cb_grain_block_tmp[32][40];
+   short cr_grain_block_tmp[32][40];
+   short *align_ptr, *align_ptr0, *align_ptr1;
+   int32_t x, y, g, i, j, c, c0, c1, delta_row, delta_col;
+   int32_t s, s0, s1, pos, r;
+
+   /* generate luma grain block */
+   memset(filt_luma_grain_block, 0, sizeof(filt_luma_grain_block));
+   for ( y = 0; y < luma_block_size_y; y++ ) {
+      for ( x = 0; x < luma_block_size_x; x++ ) {
+         g = 0;
+         if (fg_params->num_y_points > 0) {
+            r = rvcn_av1_film_grain_random_number(&seed, gauss_bits);
+            g = gaussian_sequence[CLAMP(r, 0, 2048 - 1)];
+         }
+         filt_luma_grain_block[y][x] = ROUND_POWER_OF_TWO(g, shift);
+      }
+   }
+
+   for ( y = 3; y < luma_block_size_y; y++ ) {
+      for ( x = 3; x < luma_block_size_x - 3; x++ ) {
+         s = 0;
+         pos = 0;
+         for (delta_row = -ar_coeff_lag; delta_row <= 0; delta_row++) {
+            for (delta_col = -ar_coeff_lag; delta_col <= ar_coeff_lag; delta_col++) {
+               if (delta_row == 0 && delta_col == 0)
+                  break;
+               c = fg_params->ar_coeffs_y[pos];
+               s += filt_luma_grain_block[y + delta_row][x + delta_col] * c;
+               pos++;
+            }
+         }
+         filt_luma_grain_block[y][x] =
+            AV1_CLAMP(filt_luma_grain_block[y][x]
+                      + ROUND_POWER_OF_TWO(s, fg_params->ar_coeff_shift),
+                      grain_min, grain_max);
+      }
+   }
+
+   /* generate chroma grain block */
+   memset(filt_cb_grain_block, 0, sizeof(filt_cb_grain_block));
+   shift = 12 - bit_depth + fg_params->grain_scale_shift;
+   seed = fg_params->random_seed ^ 0xb524;
+   for (y = 0; y < chroma_block_size_y; y++) {
+      for (x = 0; x < chroma_block_size_x; x++) {
+         g = 0;
+         if (fg_params->num_cb_points || fg_params->chroma_scaling_from_luma) {
+            r = rvcn_av1_film_grain_random_number(&seed, gauss_bits);
+            g = gaussian_sequence[CLAMP(r, 0, 2048 - 1)];
+         }
+         filt_cb_grain_block[y][x] = ROUND_POWER_OF_TWO(g, shift);
+      }
+   }
+
+   memset(filt_cr_grain_block, 0, sizeof(filt_cr_grain_block));
+   seed = fg_params->random_seed ^ 0x49d8;
+   for (y = 0; y < chroma_block_size_y; y++) {
+      for (x = 0; x < chroma_block_size_x; x++) {
+         g = 0;
+         if (fg_params->num_cr_points || fg_params->chroma_scaling_from_luma) {
+            r = rvcn_av1_film_grain_random_number(&seed, gauss_bits);
+            g = gaussian_sequence[CLAMP(r, 0, 2048 - 1)];
+         }
+         filt_cr_grain_block[y][x] = ROUND_POWER_OF_TWO(g, shift);
+      }
+   }
+
+   for (y = 3; y < chroma_block_size_y; y++) {
+      for (x = 3; x < chroma_block_size_x - 3; x++) {
+         s0 = 0, s1 = 0, pos = 0;
+         for (delta_row = -ar_coeff_lag; delta_row <= 0; delta_row++) {
+            for (delta_col = -ar_coeff_lag; delta_col <= ar_coeff_lag; delta_col++) {
+               c0 = fg_params->ar_coeffs_cb[pos];
+               c1 = fg_params->ar_coeffs_cr[pos];
+               if (delta_row == 0 && delta_col == 0) {
+                  if (fg_params->num_y_points > 0) {
+                     int luma = 0;
+                     int luma_x = ((x - 3) << chroma_subsamp_x) + 3;
+                     int luma_y = ((y - 3) << chroma_subsamp_y) + 3;
+                     for ( i = 0; i <= chroma_subsamp_y; i++)
+                        for ( j = 0; j <= chroma_subsamp_x; j++)
+                           luma += filt_luma_grain_block[luma_y + i][luma_x + j];
+
+                     luma = ROUND_POWER_OF_TWO(luma, chroma_subsamp_x + chroma_subsamp_y);
+                     s0 += luma * c0;
+                     s1 += luma * c1;
+                  }
+                  break;
+               }
+               s0 += filt_cb_grain_block[y + delta_row][x + delta_col] * c0;
+               s1 += filt_cr_grain_block[y + delta_row][x + delta_col] * c1;
+               pos++;
+            }
+         }
+         filt_cb_grain_block[y][x] = AV1_CLAMP(filt_cb_grain_block[y][x] +
+                                       ROUND_POWER_OF_TWO(s0, fg_params->ar_coeff_shift),
+                                     grain_min, grain_max);
+         filt_cr_grain_block[y][x] = AV1_CLAMP(filt_cr_grain_block[y][x] +
+                                       ROUND_POWER_OF_TWO(s1, fg_params->ar_coeff_shift),
+                                     grain_min, grain_max);
+      }
+   }
+
+   for ( i = 9; i < luma_block_size_y; i++ )
+      for ( j = 9; j < luma_block_size_x; j++ )
+         luma_grain_block_tmp[i - 9][j - 9] = filt_luma_grain_block[i][j];
+
+   for ( i = 6; i < chroma_block_size_y; i++ )
+      for ( j = 6; j < chroma_block_size_x; j++ ) {
+         cb_grain_block_tmp[i - 6][j - 6] = filt_cb_grain_block[i][j];
+         cr_grain_block_tmp[i - 6][j - 6] = filt_cr_grain_block[i][j];
+      }
+
+   align_ptr = &fg_buf->luma_grain_block[0][0];
+   for ( i = 0; i < 64; i++ ) {
+      for ( j = 0; j < 80; j++)
+         *align_ptr++ = luma_grain_block_tmp[i][j];
+
+      if (((i + 1) % 4) == 0)
+         align_ptr += 64;
+   }
+
+   align_ptr0 = &fg_buf->cb_grain_block[0][0];
+   align_ptr1 = &fg_buf->cr_grain_block[0][0];
+   for ( i = 0; i < 32; i++) {
+      for ( j = 0; j < 40; j++) {
+         *align_ptr0++ = cb_grain_block_tmp[i][j];
+         *align_ptr1++ = cr_grain_block_tmp[i][j];
+      }
+      if (((i + 1) % 8) == 0) {
+         align_ptr0 += 64;
+         align_ptr1 += 64;
+      }
+   }
+
+   memset(fg_buf->scaling_lut_y, 0, sizeof(fg_buf->scaling_lut_y));
+   rvcn_av1_film_grain_init_scaling(fg_params->scaling_points_y, fg_params->num_y_points,
+                                    fg_buf->scaling_lut_y);
+   if (fg_params->chroma_scaling_from_luma) {
+      memcpy(fg_buf->scaling_lut_cb, fg_buf->scaling_lut_y, sizeof(fg_buf->scaling_lut_y));
+      memcpy(fg_buf->scaling_lut_cr, fg_buf->scaling_lut_y, sizeof(fg_buf->scaling_lut_y));
+   } else {
+      memset(fg_buf->scaling_lut_cb, 0, sizeof(fg_buf->scaling_lut_cb));
+      memset(fg_buf->scaling_lut_cr, 0, sizeof(fg_buf->scaling_lut_cr));
+      rvcn_av1_film_grain_init_scaling(fg_params->scaling_points_cb, fg_params->num_cb_points,
+                                       fg_buf->scaling_lut_cb);
+      rvcn_av1_film_grain_init_scaling(fg_params->scaling_points_cr, fg_params->num_cr_points,
+                                       fg_buf->scaling_lut_cr);
+   }
+}
+
 static rvcn_dec_message_av1_t get_av1_msg(struct radeon_decoder *dec,
                                           struct pipe_video_buffer *target,
                                           struct pipe_av1_picture_desc *pic)
@@ -1021,6 +1233,8 @@ static rvcn_dec_message_av1_t get_av1_msg(struct radeon_decoder *dec,
    rvcn_dec_film_grain_params_t* fg_params = &result.film_grain;
    fg_params->apply_grain = pic->picture_parameter.film_grain_info.film_grain_info_fields.apply_grain;
    if (fg_params->apply_grain) {
+      rvcn_dec_av1_fg_init_buf_t *fg_buf = (rvcn_dec_av1_fg_init_buf_t *)(dec->probs + 256);
+
       fg_params->random_seed = pic->picture_parameter.film_grain_info.grain_seed;
       fg_params->grain_scale_shift =
          pic->picture_parameter.film_grain_info.film_grain_info_fields.grain_scale_shift;
@@ -1067,6 +1281,8 @@ static rvcn_dec_message_av1_t get_av1_msg(struct radeon_decoder *dec,
       fg_params->overlap_flag = pic->picture_parameter.film_grain_info.film_grain_info_fields.overlap_flag;
       fg_params->clip_to_restricted_range =
          pic->picture_parameter.film_grain_info.film_grain_info_fields.clip_to_restricted_range;
+
+      rvcn_av1_init_film_grain_buffer(fg_params, fg_buf);
    }
 
    result.uncompressed_header_size = 0;

@@ -396,6 +396,7 @@ struct brw_nir_rt_mem_hit_defs {
    nir_ssa_def *aabb_hit_kind; /**< Only valid for AABB geometry */
    nir_ssa_def *valid;
    nir_ssa_def *leaf_type;
+   nir_ssa_def *prim_index_delta;
    nir_ssa_def *prim_leaf_index;
    nir_ssa_def *bvh_level;
    nir_ssa_def *front_face;
@@ -418,6 +419,8 @@ brw_nir_rt_load_mem_hit_from_addr(nir_builder *b,
    defs->aabb_hit_kind = nir_channel(b, data, 1);
    defs->tri_bary = nir_channels(b, data, 0x6);
    nir_ssa_def *bitfield = nir_channel(b, data, 3);
+   defs->prim_index_delta =
+      nir_ubitfield_extract(b, bitfield, nir_imm_int(b, 0), nir_imm_int(b, 16));
    defs->valid = nir_i2b(b, nir_iand_imm(b, bitfield, 1u << 16));
    defs->leaf_type =
       nir_ubitfield_extract(b, bitfield, nir_imm_int(b, 17), nir_imm_int(b, 3));
@@ -912,17 +915,30 @@ brw_nir_rt_load_primitive_id_from_hit(nir_builder *b,
                     nir_imm_int(b, BRW_RT_BVH_NODE_TYPE_PROCEDURAL));
    }
 
-   /* The IDs are located in the leaf. Take the index of the hit.
-    *
-    * The index in dw[3] for procedural and dw[2] for quad.
-    */
-   nir_ssa_def *offset =
-      nir_bcsel(b, is_procedural,
-                   nir_iadd_imm(b, nir_ishl_imm(b, defs->prim_leaf_index, 2), 12),
-                   nir_imm_int(b, 8));
-   return nir_load_global(b, nir_iadd(b, defs->prim_leaf_ptr,
-                                         nir_u2u64(b, offset)),
-                             4, /* align */ 1, 32);
+   nir_ssa_def *prim_id_proc, *prim_id_quad;
+   nir_push_if(b, is_procedural);
+   {
+      /* For procedural leafs, the index is in dw[3]. */
+      nir_ssa_def *offset =
+         nir_iadd_imm(b, nir_ishl_imm(b, defs->prim_leaf_index, 2), 12);
+      prim_id_proc = nir_load_global(b, nir_iadd(b, defs->prim_leaf_ptr,
+                                                 nir_u2u64(b, offset)),
+                                     4, /* align */ 1, 32);
+   }
+   nir_push_else(b, NULL);
+   {
+      /* For quad leafs, the index is dw[2] and there is a 16bit additional
+       * offset in dw[3].
+       */
+      prim_id_quad = nir_load_global(b, nir_iadd_imm(b, defs->prim_leaf_ptr, 8),
+                                     4, /* align */ 1, 32);
+      prim_id_quad = nir_iadd(b,
+                              prim_id_quad,
+                              defs->prim_index_delta);
+   }
+   nir_pop_if(b, NULL);
+
+   return nir_if_phi(b, prim_id_proc, prim_id_quad);
 }
 
 static inline nir_ssa_def *

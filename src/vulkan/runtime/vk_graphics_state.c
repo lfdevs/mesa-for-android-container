@@ -2012,7 +2012,7 @@ vk_common_CmdSetPolygonModeEXT(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
    struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
 
-   SET_DYN_BOOL(dyn, RS_POLYGON_MODE, rs.polygon_mode, polygonMode);
+   SET_DYN_VALUE(dyn, RS_POLYGON_MODE, rs.polygon_mode, polygonMode);
 }
 
 VKAPI_ATTR void VKAPI_CALL

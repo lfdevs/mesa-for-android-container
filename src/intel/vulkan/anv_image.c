@@ -59,21 +59,28 @@ memory_range_end(struct anv_image_memory_range memory_range)
 static struct anv_image_binding *
 image_aspect_to_binding(struct anv_image *image, VkImageAspectFlags aspect)
 {
-   uint32_t plane;
+   uint32_t plane = 0;
 
    assert(image->disjoint);
 
    if (image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
       /* Spec requires special aspects for modifier images. */
-      assert(aspect >= VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT &&
-             aspect <= VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT);
+      assert(aspect == VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT ||
+             aspect == VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT ||
+             aspect == VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT ||
+             aspect == VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT);
 
       /* We don't advertise DISJOINT for modifiers with aux, and therefore we
        * don't handle queries of the modifier's "aux plane" here.
        */
       assert(!isl_drm_modifier_has_aux(image->vk.drm_format_mod));
 
-      plane = aspect - VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT;
+      switch(aspect) {
+         case VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT: plane = 0; break;
+         case VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT: plane = 1; break;
+         case VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT: plane = 2; break;
+         case VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT: plane = 3; break;
+      }
    } else {
       plane = anv_image_aspect_to_plane(image, aspect);
    }
@@ -2604,7 +2611,10 @@ anv_image_fill_surface_state(struct anv_device *device,
                           .mocs = anv_mocs(device, state_inout->address.bo,
                                            view_usage),
                           .x_offset_sa = tile_x_sa,
-                          .y_offset_sa = tile_y_sa);
+                          .y_offset_sa = tile_y_sa,
+                          .robust_image_access =
+                             device->vk.enabled_features.robustImageAccess ||
+                             device->vk.enabled_features.robustImageAccess2);
 
       /* With the exception of gfx8, the bottom 12 bits of the MCS base address
        * are used to store other information.  This should be ok, however,

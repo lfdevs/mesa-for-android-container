@@ -5330,7 +5330,7 @@ pin_scratch_space(struct iris_context *ice,
                          false, IRIS_DOMAIN_NONE);
       scratch_addr = ref->offset +
                      iris_resource_bo(ref->res)->address -
-                     IRIS_MEMZONE_BINDLESS_START;
+                     IRIS_MEMZONE_SCRATCH_START;
       assert((scratch_addr & 0x3f) == 0 && scratch_addr < (1 << 26));
 #else
       scratch_addr = scratch_bo->address;
@@ -6225,23 +6225,11 @@ iris_upload_dirty_render_state(struct iris_context *ice,
 
             uint32_t ps_state[GENX(3DSTATE_PS_length)] = {0};
             _iris_pack_command(batch, GENX(3DSTATE_PS), ps_state, ps) {
-               ps._8PixelDispatchEnable = wm_prog_data->dispatch_8;
-               ps._16PixelDispatchEnable = wm_prog_data->dispatch_16;
-               ps._32PixelDispatchEnable = wm_prog_data->dispatch_32;
-
-              /* The docs for 3DSTATE_PS::32 Pixel Dispatch Enable say:
-               *
-               *    "When NUM_MULTISAMPLES = 16 or FORCE_SAMPLE_COUNT = 16,
-               *     SIMD32 Dispatch must not be enabled for PER_PIXEL dispatch
-               *     mode."
-               *
-               * 16x MSAA only exists on Gfx9+, so we can skip this on Gfx8.
-               */
-               if (GFX_VER >= 9 && cso_fb->samples == 16 &&
-                   !wm_prog_data->persample_dispatch) {
-                  assert(ps._8PixelDispatchEnable || ps._16PixelDispatchEnable);
-                  ps._32PixelDispatchEnable = false;
-               }
+               brw_fs_get_dispatch_enables(&screen->devinfo, wm_prog_data,
+                                           cso_fb->samples,
+                                           &ps._8PixelDispatchEnable,
+                                           &ps._16PixelDispatchEnable,
+                                           &ps._32PixelDispatchEnable);
 
                ps.DispatchGRFStartRegisterForConstantSetupData0 =
                   brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, ps, 0);

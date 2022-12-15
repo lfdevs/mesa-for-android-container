@@ -64,6 +64,7 @@ struct radv_pipeline_key {
    uint32_t primitives_generated_query : 1;
    uint32_t dynamic_patch_control_points : 1;
    uint32_t dynamic_rasterization_samples : 1;
+   uint32_t enable_remove_point_size : 1;
 
    struct {
       uint32_t instance_rate_inputs;

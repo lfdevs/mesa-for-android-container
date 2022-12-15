@@ -1487,23 +1487,11 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
 
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_PS), ps) {
-      ps._8PixelDispatchEnable      = wm_prog_data->dispatch_8;
-      ps._16PixelDispatchEnable     = wm_prog_data->dispatch_16;
-      ps._32PixelDispatchEnable     = wm_prog_data->dispatch_32;
-
-      /* From the Sky Lake PRM 3DSTATE_PS::32 Pixel Dispatch Enable:
-       *
-       *    "When NUM_MULTISAMPLES = 16 or FORCE_SAMPLE_COUNT = 16, SIMD32
-       *    Dispatch must not be enabled for PER_PIXEL dispatch mode."
-       *
-       * Since 16x MSAA is first introduced on SKL, we don't need to apply
-       * the workaround on any older hardware.
-       */
-      if (!wm_prog_data->persample_dispatch &&
-          ms != NULL && ms->rasterization_samples == 16) {
-         assert(ps._8PixelDispatchEnable || ps._16PixelDispatchEnable);
-         ps._32PixelDispatchEnable = false;
-      }
+      brw_fs_get_dispatch_enables(devinfo, wm_prog_data,
+                                  ms != NULL ? ms->rasterization_samples : 1,
+                                  &ps._8PixelDispatchEnable,
+                                  &ps._16PixelDispatchEnable,
+                                  &ps._32PixelDispatchEnable);
 
       ps.KernelStartPointer0 = fs_bin->kernel.offset +
                                brw_wm_prog_data_prog_offset(wm_prog_data, ps, 0);

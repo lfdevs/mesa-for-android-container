@@ -2361,11 +2361,25 @@ nir_visitor::visit(ir_expression *ir)
       result = ir->type->is_int_16_32() ?
          nir_ibitfield_extract(&b, nir_i2i32(&b, srcs[0]), nir_i2i32(&b, srcs[1]), nir_i2i32(&b, srcs[2])) :
          nir_ubitfield_extract(&b, nir_u2u32(&b, srcs[0]), nir_i2i32(&b, srcs[1]), nir_i2i32(&b, srcs[2]));
+
+      if (ir->type->base_type == GLSL_TYPE_INT16) {
+         result = nir_i2i16(&b, result);
+      } else if (ir->type->base_type == GLSL_TYPE_UINT16) {
+         result = nir_u2u16(&b, result);
+      }
+
       break;
    case ir_quadop_bitfield_insert:
       result = nir_bitfield_insert(&b,
                                    nir_u2u32(&b, srcs[0]), nir_u2u32(&b, srcs[1]),
                                    nir_i2i32(&b, srcs[2]), nir_i2i32(&b, srcs[3]));
+
+      if (ir->type->base_type == GLSL_TYPE_INT16) {
+         result = nir_i2i16(&b, result);
+      } else if (ir->type->base_type == GLSL_TYPE_UINT16) {
+         result = nir_u2u16(&b, result);
+      }
+
       break;
    case ir_quadop_vector:
       result = nir_vec(&b, srcs, ir->type->vector_elements);
@@ -2374,6 +2388,11 @@ nir_visitor::visit(ir_expression *ir)
    default:
       unreachable("not reached");
    }
+
+   /* The bit-size of the NIR SSA value must match the bit-size of the
+    * original GLSL IR expression.
+    */
+   assert(result->bit_size == glsl_base_type_get_bit_size(ir->type->base_type));
 }
 
 void

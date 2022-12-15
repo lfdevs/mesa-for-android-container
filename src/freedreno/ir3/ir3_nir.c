@@ -134,7 +134,10 @@ ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
           */
          .uniform_max = (1 << 9) - 1,
 
-         .shared_max = (1 << 13) - 1,
+         /* STL/LDL have 13b for offset with MSB being a sign bit, but this opt
+          * doesn't deal with negative offsets.
+          */
+         .shared_max = (1 << 12) - 1,
 
          .buffer_max = ~0,
       };

@@ -516,11 +516,11 @@ radv_pipeline_layout_hash(struct radv_pipeline_layout *layout)
       if (!set_layout)
          continue;
 
-      /* Hash the entire set layout except for the vk_object_base and the reference counter. The
-       * rest of the set layout is carefully constructed to not have pointers so a full hash instead
-       * of a per-field hash should be ok.
+      /* Hash the entire set layout except vk_descriptor_set_layout. The rest of the set layout is
+       * carefully constructed to not have pointers so a full hash instead of a per-field hash
+       * should be ok.
        */
-      uint32_t hash_offset = sizeof(struct vk_object_base) + sizeof(uint32_t);
+      uint32_t hash_offset = sizeof(struct vk_descriptor_set_layout);
       _mesa_sha1_update(&ctx, (const char *)set_layout + hash_offset,
                         set_layout->layout_size - hash_offset);
    }

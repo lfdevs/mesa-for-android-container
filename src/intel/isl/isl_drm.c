@@ -188,8 +188,10 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
 
       return 3;
    case I915_FORMAT_MOD_Y_TILED_CCS:
-      /* Gfx12's CCS layout differs from Gfx9-11. */
-      if (devinfo->ver >= 12)
+      /* Not supported before Gfx9 and also Gfx12's CCS layout differs from
+       * Gfx9-11.
+       */
+      if (devinfo->ver <= 8 || devinfo->ver >= 12)
          return 0;
 
       if (INTEL_DEBUG(DEBUG_NO_CCS))

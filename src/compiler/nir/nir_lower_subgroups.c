@@ -420,14 +420,14 @@ build_ballot_imm_ishl(nir_builder *b, int64_t val, nir_ssa_def *shift,
     * answer or 0 for the first component (and something similar with the
     * second component). This idea is generalized here for any component count
     */
-   nir_const_value min_shift[4] = { 0 };
+   nir_const_value min_shift[4];
    for (unsigned i = 0; i < options->ballot_components; i++)
-      min_shift[i].i32 = i * options->ballot_bit_size;
+      min_shift[i] = nir_const_value_for_int(i * options->ballot_bit_size, 32);
    nir_ssa_def *min_shift_val = nir_build_imm(b, options->ballot_components, 32, min_shift);
 
-   nir_const_value max_shift[4] = { 0 };
+   nir_const_value max_shift[4];
    for (unsigned i = 0; i < options->ballot_components; i++)
-      max_shift[i].i32 = (i + 1) * options->ballot_bit_size;
+      max_shift[i] = nir_const_value_for_int((i + 1) * options->ballot_bit_size, 32);
    nir_ssa_def *max_shift_val = nir_build_imm(b, options->ballot_components, 32, max_shift);
 
    return nir_bcsel(b, nir_ult(b, shift, max_shift_val),
@@ -501,9 +501,9 @@ build_subgroup_mask(nir_builder *b,
     * result if we just follow (2) and then replace the first component with
     * "result". 
     */ 
-   nir_const_value min_idx[4] = { 0 };
+   nir_const_value min_idx[4];
    for (unsigned i = 0; i < options->ballot_components; i++)
-      min_idx[i].i32 = i * options->ballot_bit_size;
+      min_idx[i] = nir_const_value_for_int(i * options->ballot_bit_size, 32);
    nir_ssa_def *min_idx_val = nir_build_imm(b, options->ballot_components, 32, min_idx);
 
    nir_ssa_def *result_extended =

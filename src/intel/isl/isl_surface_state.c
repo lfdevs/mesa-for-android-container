@@ -362,9 +362,16 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
    }
 
 #if GFX_VER >= 12
-   /* Wa_1806565034: Only set SurfaceArray if arrayed surface is > 1. */
+   /* Wa_1806565034:
+    *
+    *    "Only set SurfaceArray if arrayed surface is > 1."
+    *
+    * Since this is a performance workaround, we only enable it when robust
+    * image access is disabled. Otherwise layered robust access is not
+    * specification compliant.
+    */
    s.SurfaceArray = info->surf->dim != ISL_SURF_DIM_3D &&
-      info->view->array_len > 1;
+      (info->robust_image_access || info->view->array_len > 1);
 #elif GFX_VER >= 7
    s.SurfaceArray = info->surf->dim != ISL_SURF_DIM_3D;
 #endif

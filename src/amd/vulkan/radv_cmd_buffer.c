@@ -2825,8 +2825,8 @@ radv_emit_framebuffer_state(struct radv_cmd_buffer *cmd_buffer)
    int i;
    bool disable_constant_encode_ac01 = false;
    unsigned color_invalid = cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX11
-                            ? G_028C70_FORMAT_GFX11(V_028C70_COLOR_INVALID)
-                            : G_028C70_FORMAT_GFX6(V_028C70_COLOR_INVALID);
+                            ? S_028C70_FORMAT_GFX11(V_028C70_COLOR_INVALID)
+                            : S_028C70_FORMAT_GFX6(V_028C70_COLOR_INVALID);
 
    for (i = 0; i < render->color_att_count; ++i) {
       struct radv_image_view *iview = render->color_att[i].iview;
@@ -2980,7 +2980,7 @@ radv_emit_guardband_state(struct radv_cmd_buffer *cmd_buffer)
    }
 
    si_write_guardband(cmd_buffer->cs, d->viewport.count, d->viewport.viewports, rast_prim,
-                      d->line_width);
+                      d->polygon_mode, d->line_width);
 
    cmd_buffer->state.dirty &= ~RADV_CMD_DIRTY_GUARDBAND;
 }
@@ -3034,7 +3034,8 @@ radv_set_db_count_control(struct radv_cmd_buffer *cmd_buffer, bool enable_occlus
             radeon_set_context_reg(cmd_buffer->cs, R_028A4C_PA_SC_MODE_CNTL_1, pa_sc_mode_cntl_1);
          }
       }
-      db_count_control = S_028004_ZPASS_INCREMENT_DISABLE(1);
+      db_count_control =
+         S_028004_ZPASS_INCREMENT_DISABLE(cmd_buffer->device->physical_device->rad_info.gfx_level < GFX11);
    } else {
       uint32_t sample_rate = util_logbase2(cmd_buffer->state.render.max_samples);
       bool gfx10_perfect =
@@ -6008,8 +6009,13 @@ radv_CmdSetPolygonModeEXT(VkCommandBuffer commandBuffer, VkPolygonMode polygonMo
 {
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    struct radv_cmd_state *state = &cmd_buffer->state;
+   unsigned polygon_mode = si_translate_fill(polygonMode);
 
-   state->dynamic.polygon_mode = si_translate_fill(polygonMode);
+   if (radv_polygon_mode_is_points_or_lines(state->dynamic.polygon_mode) !=
+       radv_polygon_mode_is_points_or_lines(polygon_mode))
+      state->dirty |= RADV_CMD_DIRTY_GUARDBAND;
+
+   state->dynamic.polygon_mode = polygon_mode;
 
    state->dirty |= RADV_CMD_DIRTY_DYNAMIC_POLYGON_MODE;
 }

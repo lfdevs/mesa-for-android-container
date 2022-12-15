@@ -2650,6 +2650,9 @@ max_bitsize_for_alu(midgard_instruction *ins)
         unsigned dst_bitsize = nir_alu_type_get_type_size(ins->dest_type);
         max_bitsize = MAX2(dst_bitsize, max_bitsize);
 
+        /* We emulate 8-bit as 16-bit for simplicity of packing */
+        max_bitsize = MAX2(max_bitsize, 16);
+
         /* We don't have fp16 LUTs, so we'll want to emit code like:
          *
          *      vlut.fsinr hr0, hr0

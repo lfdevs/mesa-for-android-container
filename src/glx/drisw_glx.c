@@ -884,6 +884,7 @@ check_xshm(Display *dpy)
 
    shm_cookie = xcb_query_extension(c, 7, "MIT-SHM");
    shm_reply = xcb_query_extension_reply(c, shm_cookie, NULL);
+   xshm_opcode = shm_reply->major_opcode;
 
    has_mit_shm = shm_reply->present;
    free(shm_reply);

@@ -161,7 +161,9 @@ anv_shader_stage_to_nir(struct anv_device *device,
    /* Vulkan uses the separate-shader linking model */
    nir->info.separate_shader = true;
 
-   brw_preprocess_nir(compiler, nir, NULL);
+   struct brw_nir_compiler_opts opts = {};
+
+   brw_preprocess_nir(compiler, nir, &opts);
 
    return nir;
 }
@@ -1572,8 +1574,9 @@ done:
    if (create_feedback) {
       *create_feedback->pPipelineCreationFeedback = pipeline_feedback;
 
-      assert(info->stageCount == create_feedback->pipelineStageCreationFeedbackCount);
-      for (uint32_t i = 0; i < info->stageCount; i++) {
+      uint32_t stage_count = create_feedback->pipelineStageCreationFeedbackCount;
+      assert(stage_count == 0 || info->stageCount == stage_count);
+      for (uint32_t i = 0; i < stage_count; i++) {
          gl_shader_stage s = vk_to_mesa_shader_stage(info->pStages[i].stage);
          create_feedback->pPipelineStageCreationFeedbacks[i] = stages[s].feedback;
       }
@@ -1751,8 +1754,10 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
    if (create_feedback) {
       *create_feedback->pPipelineCreationFeedback = pipeline_feedback;
 
-      assert(create_feedback->pipelineStageCreationFeedbackCount == 1);
-      create_feedback->pPipelineStageCreationFeedbacks[0] = stage.feedback;
+      if (create_feedback->pipelineStageCreationFeedbackCount) {
+         assert(create_feedback->pipelineStageCreationFeedbackCount == 1);
+         create_feedback->pPipelineStageCreationFeedbacks[0] = stage.feedback;
+      }
    }
 
    pipeline->cs = bin;

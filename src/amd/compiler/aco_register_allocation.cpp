@@ -1091,7 +1091,7 @@ get_reg_for_create_vector_copy(ra_ctx& ctx, RegisterFile& reg_file,
             assignment& op = ctx.assignments[instr->operands[i].tempId()];
             /* if everything matches, create parallelcopy for the killed operand */
             if (!intersects(def_reg, PhysRegInterval{op.reg, op.rc.size()}) &&
-                reg_file.get_id(op.reg) == instr->operands[i].tempId()) {
+                op.reg != scc && reg_file.get_id(op.reg) == instr->operands[i].tempId()) {
                Definition pc_def = Definition(reg, info.rc);
                parallelcopies.emplace_back(instr->operands[i], pc_def);
                return {op.reg, true};
