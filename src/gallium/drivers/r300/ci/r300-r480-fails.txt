@@ -622,8 +622,6 @@ dEQP-GLES2.functional.shaders.operator.angle_and_trigonometry.asin.highp_vec2_fr
 dEQP-GLES2.functional.shaders.operator.angle_and_trigonometry.asin.mediump_vec2_fragment,Fail
 dEQP-GLES2.functional.shaders.operator.angle_and_trigonometry.atan.highp_vec2_fragment,Fail
 dEQP-GLES2.functional.shaders.operator.angle_and_trigonometry.atan.mediump_vec2_fragment,Fail
-dEQP-GLES2.functional.shaders.operator.angle_and_trigonometry.atan2.highp_vec2_fragment,Fail
-dEQP-GLES2.functional.shaders.operator.angle_and_trigonometry.atan2.mediump_vec2_fragment,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.1,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.5,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.6,Fail

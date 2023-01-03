@@ -396,7 +396,7 @@ radv_vrs_attachment_enabled(const struct radv_physical_device *pdevice)
 static bool
 radv_taskmesh_enabled(const struct radv_physical_device *pdevice)
 {
-   return pdevice->use_ngg && !pdevice->use_llvm && pdevice->rad_info.gfx_level >= GFX10_3 &&
+   return pdevice->use_ngg && !pdevice->use_llvm && pdevice->rad_info.gfx_level == GFX10_3 &&
           !(pdevice->instance->debug_flags & RADV_DEBUG_NO_COMPUTE_QUEUE) &&
           pdevice->rad_info.has_scheduled_fence_dependency;
 }
@@ -3037,6 +3037,8 @@ radv_queue_state_finish(struct radv_queue_state *queue, struct radeon_winsys *ws
       ws->buffer_destroy(ws, queue->tess_rings_bo);
    if (queue->task_rings_bo)
       ws->buffer_destroy(ws, queue->task_rings_bo);
+   if (queue->mesh_scratch_ring_bo)
+      ws->buffer_destroy(ws, queue->mesh_scratch_ring_bo);
    if (queue->attr_ring_bo)
       ws->buffer_destroy(ws, queue->attr_ring_bo);
    if (queue->gds_bo) {

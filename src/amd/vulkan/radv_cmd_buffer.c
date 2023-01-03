@@ -7293,6 +7293,9 @@ radv_emit_indirect_taskmesh_draw_packets(struct radv_cmd_buffer *cmd_buffer,
                                      info->count_buffer->offset + info->count_buffer_offset;
    uint64_t workaround_cond_va = 0;
 
+   if (num_views > 1)
+      ace_predication_size += num_views * 3; /* SET_SH_REG size (view index SGPR) */
+
    if (count_va) {
       radv_cs_add_buffer(ws, cmd_buffer->ace_internal.cs, info->count_buffer->bo);
 

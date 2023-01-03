@@ -2760,9 +2760,11 @@ flush_push_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
          struct anv_descriptor *desc = &set->descriptors[desc_idx];
          struct anv_buffer_view *bview = desc->set_buffer_view;
 
-         bview->surface_state = anv_cmd_buffer_alloc_surface_state(cmd_buffer);
-         anv_descriptor_write_surface_state(cmd_buffer->device, desc,
-                                            bview->surface_state);
+         if (bview != NULL) {
+            bview->surface_state = anv_cmd_buffer_alloc_surface_state(cmd_buffer);
+            anv_descriptor_write_surface_state(cmd_buffer->device, desc,
+                                               bview->surface_state);
+         }
       }
    }
 

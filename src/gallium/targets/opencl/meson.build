@@ -75,6 +75,10 @@ if not _shared_llvm or not (dep_clang.found() and dep_clang_usable)
     cpp.find_library('clangBasic', dirs : llvm_libdir),
     polly_dep, polly_isl_dep,
   ]
+  if dep_llvm.version().version_compare('>= 15.0')
+    dep_clang += cpp.find_library('clangSupport', dirs : llvm_libdir)
+  endif
+
   # check clang once more
   if can_check_clang
     test_run = cpp.run(clang_test_code, name : 'dep-clang-usable',

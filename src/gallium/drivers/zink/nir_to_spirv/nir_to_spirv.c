@@ -971,9 +971,9 @@ get_bare_image_type(struct ntv_context *ctx, struct nir_variable *var, bool is_s
    }
    if (dimension == SpvDimBuffer) {
       if (is_sampler)
-         spirv_builder_emit_cap(&ctx->builder, SpvCapabilityImageBuffer);
-      else
          spirv_builder_emit_cap(&ctx->builder, SpvCapabilitySampledBuffer);
+      else
+         spirv_builder_emit_cap(&ctx->builder, SpvCapabilityImageBuffer);
    }
 
    bool arrayed = glsl_sampler_type_is_array(type);

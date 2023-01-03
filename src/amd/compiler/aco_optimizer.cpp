@@ -673,6 +673,7 @@ alu_can_accept_constant(aco_opcode opcode, unsigned operand)
    case aco_opcode::v_readfirstlane_b32:
    case aco_opcode::p_extract:
    case aco_opcode::p_insert: return operand != 0;
+   case aco_opcode::p_bpermute:
    case aco_opcode::p_interp_gfx11:
    case aco_opcode::p_dual_src_export_gfx11: return false;
    default: return true;

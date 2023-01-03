@@ -623,11 +623,14 @@ emit_resolve_image_layer_per_tile_list(struct v3dv_job *job,
       region->dstSubresource.baseArrayLayer + layer_offset :
       region->dstOffset.z + layer_offset;
 
+   bool is_depth_or_stencil =
+      region->dstSubresource.aspectMask &
+      (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
    emit_image_store(job->device, cl, framebuffer, dst,
                     region->dstSubresource.aspectMask,
                     dst_layer,
                     region->dstSubresource.mipLevel,
-                    false, false, true);
+                    false, false, !is_depth_or_stencil);
 
    cl_emit(cl, END_OF_TILE_MARKER, end);
 

@@ -45,11 +45,14 @@ static void test_rc_inst_can_use_presub(
 	struct rc_instruction add_inst, replace_inst;
 	int ret;
 
+	struct r300_fragment_program_compiler c = {};
+	init_compiler(&c.Base, RC_FRAGMENT_PROGRAM, 0, 0);
+
 	test_begin(result);
 	init_rc_normal_instruction(&add_inst, add_str);
 	init_rc_normal_instruction(&replace_inst, replace_str);
 
-	ret = rc_inst_can_use_presub(&replace_inst, RC_PRESUB_ADD, 0,
+	ret = rc_inst_can_use_presub(&c.Base, &replace_inst, RC_PRESUB_ADD, 0,
 			&replace_inst.U.I.SrcReg[0],
 			&add_inst.U.I.SrcReg[0], &add_inst.U.I.SrcReg[1]);
 

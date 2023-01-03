@@ -196,19 +196,33 @@ shared uint32_t shared_aggregate_sum;
 void
 main(void)
 {
+   VOID_REF src_ids = args.ids_0;
+   VOID_REF dst_ids = args.ids_1;
+
+   /* We try to use LBVH for BVHs where we know there will be less than 5 leaves,
+    * but sometimes all leaves might be inactive */
+   if (DEREF(args.header).active_leaf_count <= 2) {
+      if (gl_GlobalInvocationID.x == 0) {
+         uint32_t children[2] = {RADV_BVH_INVALID_NODE, RADV_BVH_INVALID_NODE};
+         for (uint32_t i = 0; i < DEREF(args.header).active_leaf_count; ++i)
+            children[i] = DEREF(REF(key_id_pair)(INDEX(key_id_pair, src_ids, i))).id;
+         push_node(children);
+      }
+      return;
+   }
+
    atomicCompSwap(DEREF(args.header).sync_data.task_counts[0], 0xFFFFFFFF,
                   DEREF(args.header).active_leaf_count);
+   atomicCompSwap(DEREF(args.header).sync_data.current_phase_end_counter, 0xFFFFFFFF,
+                  DIV_ROUND_UP(DEREF(args.header).active_leaf_count, gl_WorkGroupSize.x));
    REF(ploc_prefix_scan_partition)
    partitions = REF(ploc_prefix_scan_partition)(args.prefix_scan_partitions);
 
    uint32_t task_index = fetch_task(args.header, false);
 
-   VOID_REF src_ids = args.ids_0;
-   VOID_REF dst_ids = args.ids_1;
-
    for (uint iter = 0;; ++iter) {
       uint32_t current_task_count = task_count(args.header);
-      if (current_task_count <= 1)
+      if (task_index == TASK_INDEX_INVALID)
          break;
 
       /* Find preferred partners and merge them */
@@ -367,6 +381,8 @@ main(void)
 
          if (task_index == current_task_count - 1) {
             set_next_task_count(args.header, new_offset);
+            if (new_offset == 1)
+               DEREF(args.header).sync_data.next_phase_exit_flag = 1;
          }
       }
    }

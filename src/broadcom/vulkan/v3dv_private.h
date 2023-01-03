@@ -1622,7 +1622,6 @@ void v3dv_cmd_buffer_subpass_finish(struct v3dv_cmd_buffer *cmd_buffer);
 void v3dv_cmd_buffer_meta_state_push(struct v3dv_cmd_buffer *cmd_buffer,
                                      bool push_descriptor_state);
 void v3dv_cmd_buffer_meta_state_pop(struct v3dv_cmd_buffer *cmd_buffer,
-                                    uint32_t dirty_dynamic_state,
                                     bool needs_subpass_resume);
 
 void v3dv_cmd_buffer_reset_queries(struct v3dv_cmd_buffer *cmd_buffer,

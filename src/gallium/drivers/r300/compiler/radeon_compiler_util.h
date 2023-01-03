@@ -87,6 +87,7 @@ unsigned int rc_source_type_swz(unsigned int swizzle);
 unsigned int rc_source_type_mask(unsigned int mask);
 
 unsigned int rc_inst_can_use_presub(
+	struct radeon_compiler * c,
 	struct rc_instruction * inst,
 	rc_presubtract_op presub_op,
 	unsigned int presub_writemask,

@@ -1739,15 +1739,21 @@ if with_gallium_opencl
     'linker', 'coverage', 'instrumentation', 'ipo', 'irreader',
     'lto', 'option', 'objcarcopts', 'profiledata'
   ]
-  llvm_optional_modules += ['all-targets', 'frontendopenmp']
+  # all-targets is needed to support static linking LLVM build with multiple targets
+  # windowsdriver is needded with LLVM>=15, but we don't know what LLVM verrsion we are using yet
+  llvm_optional_modules += ['all-targets', 'frontendopenmp', 'windowsdriver']
 endif
 if with_clc
   llvm_modules += ['coverage', 'target', 'linker', 'irreader', 'option', 'libdriver', 'lto']
-  llvm_optional_modules += ['all-targets']
+  # all-targets is needed to support static linking LLVM build with multiple targets
+  # windowsdriver is needded with LLVM>=15, but we don't know what LLVM verrsion we are using yet
+  llvm_optional_modules += ['all-targets', 'windowsdriver']
 endif
 draw_with_llvm = get_option('draw-use-llvm')
 if draw_with_llvm
   llvm_modules += 'native'
+  # lto is needded with LLVM>=15, but we don't know what LLVM verrsion we are using yet
+  llvm_optional_modules += ['lto']
 endif
 
 if with_intel_clc
@@ -1905,6 +1911,9 @@ if with_clc
       'clangHandleCXX', 'clangHandleLLVM', 'clangSerialization',
       'clangSema', 'clangParse', 'clangEdit', 'clangAnalysis'
     ]
+    if dep_llvm.version().version_compare('>= 15.0')
+      clang_modules += 'clangSupport'
+    endif
 
     dep_clang = []
     foreach m : clang_modules

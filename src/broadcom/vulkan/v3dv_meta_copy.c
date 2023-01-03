@@ -2094,7 +2094,6 @@ texel_buffer_shader_copy(struct v3dv_cmd_buffer *cmd_buffer,
 
    /* Push command buffer state before starting meta operation */
    v3dv_cmd_buffer_meta_state_push(cmd_buffer, true);
-   uint32_t dirty_dynamic_state = 0;
 
    /* Bind common state for all layers and regions  */
    VkCommandBuffer _cmd_buffer = v3dv_cmd_buffer_to_handle(cmd_buffer);
@@ -2221,7 +2220,6 @@ texel_buffer_shader_copy(struct v3dv_cmd_buffer *cmd_buffer,
       }
 
       /* For each region */
-      dirty_dynamic_state = V3DV_CMD_DIRTY_VIEWPORT | V3DV_CMD_DIRTY_SCISSOR;
       for (uint32_t r = 0; r < region_count; r++) {
          const VkBufferImageCopy2 *region = &regions[r];
 
@@ -2279,7 +2277,7 @@ texel_buffer_shader_copy(struct v3dv_cmd_buffer *cmd_buffer,
    } /* For each layer */
 
 fail:
-   v3dv_cmd_buffer_meta_state_pop(cmd_buffer, dirty_dynamic_state, true);
+   v3dv_cmd_buffer_meta_state_pop(cmd_buffer, true);
    return handled;
 }
 
@@ -3803,7 +3801,6 @@ blit_shader(struct v3dv_cmd_buffer *cmd_buffer,
 {
    bool handled = true;
    VkResult result;
-   uint32_t dirty_dynamic_state = 0;
 
    /* We don't support rendering to linear depth/stencil, this should have
     * been rewritten to a compatible color blit by the caller.
@@ -4204,11 +4201,10 @@ blit_shader(struct v3dv_cmd_buffer *cmd_buffer,
       };
 
       v3dv_CmdEndRenderPass2(_cmd_buffer, &sp_end_info);
-      dirty_dynamic_state = V3DV_CMD_DIRTY_VIEWPORT | V3DV_CMD_DIRTY_SCISSOR;
    }
 
 fail:
-   v3dv_cmd_buffer_meta_state_pop(cmd_buffer, dirty_dynamic_state, true);
+   v3dv_cmd_buffer_meta_state_pop(cmd_buffer, true);
 
    return handled;
 }

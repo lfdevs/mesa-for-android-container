@@ -654,7 +654,7 @@ rra_transcode_node(struct rra_transcoding_context *ctx, uint32_t parent_id, uint
    ctx->parent_id_table[parent_id_index] = parent_id;
 
    uint32_t dst_id = node_type | (dst_offset >> 3);
-   if (is_internal_node(node_type))
+   if (!is_internal_node(node_type))
       ctx->leaf_node_ids[ctx->leaf_index++] = dst_id;
 
    return dst_id;

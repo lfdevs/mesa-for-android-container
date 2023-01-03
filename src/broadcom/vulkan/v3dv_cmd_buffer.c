@@ -844,6 +844,55 @@ cmd_buffer_reset(struct vk_command_buffer *vk_cmd_buffer,
    assert(cmd_buffer->status == V3DV_CMD_BUFFER_STATUS_INITIALIZED);
 }
 
+
+static void
+cmd_buffer_emit_resolve(struct v3dv_cmd_buffer *cmd_buffer,
+                        uint32_t dst_attachment_idx,
+                        uint32_t src_attachment_idx,
+                        VkImageAspectFlagBits aspect)
+{
+   struct v3dv_image_view *src_iview =
+      cmd_buffer->state.attachments[src_attachment_idx].image_view;
+   struct v3dv_image_view *dst_iview =
+      cmd_buffer->state.attachments[dst_attachment_idx].image_view;
+
+   const VkRect2D *ra = &cmd_buffer->state.render_area;
+
+   VkImageResolve2 region = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2,
+      .srcSubresource = {
+         aspect,
+         src_iview->vk.base_mip_level,
+         src_iview->vk.base_array_layer,
+         src_iview->vk.layer_count,
+      },
+      .srcOffset = { ra->offset.x, ra->offset.y, 0 },
+      .dstSubresource =  {
+         aspect,
+         dst_iview->vk.base_mip_level,
+         dst_iview->vk.base_array_layer,
+         dst_iview->vk.layer_count,
+      },
+      .dstOffset = { ra->offset.x, ra->offset.y, 0 },
+      .extent = { ra->extent.width, ra->extent.height, 1 },
+   };
+
+   struct v3dv_image *src_image = (struct v3dv_image *) src_iview->vk.image;
+   struct v3dv_image *dst_image = (struct v3dv_image *) dst_iview->vk.image;
+   VkResolveImageInfo2 resolve_info = {
+      .sType = VK_STRUCTURE_TYPE_RESOLVE_IMAGE_INFO_2,
+      .srcImage = v3dv_image_to_handle(src_image),
+      .srcImageLayout = VK_IMAGE_LAYOUT_GENERAL,
+      .dstImage = v3dv_image_to_handle(dst_image),
+      .dstImageLayout = VK_IMAGE_LAYOUT_GENERAL,
+      .regionCount = 1,
+      .pRegions = &region,
+   };
+
+   VkCommandBuffer cmd_buffer_handle = v3dv_cmd_buffer_to_handle(cmd_buffer);
+   v3dv_CmdResolveImage2KHR(cmd_buffer_handle, &resolve_info);
+}
+
 static void
 cmd_buffer_subpass_handle_pending_resolves(struct v3dv_cmd_buffer *cmd_buffer)
 {
@@ -874,7 +923,6 @@ cmd_buffer_subpass_handle_pending_resolves(struct v3dv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.pass = NULL;
    cmd_buffer->state.subpass_idx = -1;
 
-   VkCommandBuffer cmd_buffer_handle = v3dv_cmd_buffer_to_handle(cmd_buffer);
    for (uint32_t i = 0; i < subpass->color_count; i++) {
       const uint32_t src_attachment_idx =
          subpass->color_attachments[i].attachment;
@@ -893,42 +941,24 @@ cmd_buffer_subpass_handle_pending_resolves(struct v3dv_cmd_buffer *cmd_buffer)
          subpass->resolve_attachments[i].attachment;
       assert(dst_attachment_idx != VK_ATTACHMENT_UNUSED);
 
-      struct v3dv_image_view *src_iview =
-         cmd_buffer->state.attachments[src_attachment_idx].image_view;
-      struct v3dv_image_view *dst_iview =
-         cmd_buffer->state.attachments[dst_attachment_idx].image_view;
+      cmd_buffer_emit_resolve(cmd_buffer, dst_attachment_idx, src_attachment_idx,
+                              VK_IMAGE_ASPECT_COLOR_BIT);
+   }
 
-      VkImageResolve2 region = {
-         .sType = VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2,
-         .srcSubresource = {
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            src_iview->vk.base_mip_level,
-            src_iview->vk.base_array_layer,
-            src_iview->vk.layer_count,
-         },
-         .srcOffset = { 0, 0, 0 },
-         .dstSubresource =  {
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            dst_iview->vk.base_mip_level,
-            dst_iview->vk.base_array_layer,
-            dst_iview->vk.layer_count,
-         },
-         .dstOffset = { 0, 0, 0 },
-         .extent = src_iview->vk.image->extent,
-      };
-
-      struct v3dv_image *src_image = (struct v3dv_image *) src_iview->vk.image;
-      struct v3dv_image *dst_image = (struct v3dv_image *) dst_iview->vk.image;
-      VkResolveImageInfo2 resolve_info = {
-         .sType = VK_STRUCTURE_TYPE_RESOLVE_IMAGE_INFO_2,
-         .srcImage = v3dv_image_to_handle(src_image),
-         .srcImageLayout = VK_IMAGE_LAYOUT_GENERAL,
-         .dstImage = v3dv_image_to_handle(dst_image),
-         .dstImageLayout = VK_IMAGE_LAYOUT_GENERAL,
-         .regionCount = 1,
-         .pRegions = &region,
-      };
-      v3dv_CmdResolveImage2KHR(cmd_buffer_handle, &resolve_info);
+   const uint32_t ds_src_attachment_idx =
+      subpass->ds_attachment.attachment;
+   if (ds_src_attachment_idx != VK_ATTACHMENT_UNUSED &&
+       cmd_buffer->state.attachments[ds_src_attachment_idx].has_resolve &&
+       !cmd_buffer->state.attachments[ds_src_attachment_idx].use_tlb_resolve) {
+      assert(subpass->resolve_depth || subpass->resolve_stencil);
+      const VkImageAspectFlags ds_aspects =
+         (subpass->resolve_depth ? VK_IMAGE_ASPECT_DEPTH_BIT : 0) |
+         (subpass->resolve_stencil ? VK_IMAGE_ASPECT_STENCIL_BIT : 0);
+      const uint32_t ds_dst_attachment_idx =
+         subpass->ds_resolve_attachment.attachment;
+      assert(ds_dst_attachment_idx != VK_ATTACHMENT_UNUSED);
+      cmd_buffer_emit_resolve(cmd_buffer, ds_dst_attachment_idx,
+                              ds_src_attachment_idx, ds_aspects);
    }
 
    cmd_buffer->state.framebuffer = restore_fb;
@@ -2400,31 +2430,42 @@ v3dv_cmd_buffer_meta_state_push(struct v3dv_cmd_buffer *cmd_buffer,
 {
    struct v3dv_cmd_buffer_state *state = &cmd_buffer->state;
 
+   /* Attachment state.
+    *
+    * We store this state even if we are not currently in a subpass
+    * (subpass_idx != -1) because we may get here to implement subpass
+    * resolves via vkCmdResolveImage from
+    * cmd_buffer_subpass_handle_pending_resolves. In that scenario we pretend
+    * we are no longer in a subpass because Vulkan disallows image resolves
+    * via vkCmdResolveImage during subpasses, but we still need to preserve
+    * attachment state because we may have more subpasses to go through
+    * after processing resolves in the current subass.
+    */
+   const uint32_t attachment_state_item_size =
+      sizeof(struct v3dv_cmd_buffer_attachment_state);
+   const uint32_t attachment_state_total_size =
+      attachment_state_item_size * state->attachment_alloc_count;
+   if (state->meta.attachment_alloc_count < state->attachment_alloc_count) {
+      if (state->meta.attachment_alloc_count > 0)
+         vk_free(&cmd_buffer->device->vk.alloc, state->meta.attachments);
+
+      state->meta.attachments = vk_zalloc(&cmd_buffer->device->vk.alloc,
+                                          attachment_state_total_size, 8,
+                                          VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+      if (!state->meta.attachments) {
+         v3dv_flag_oom(cmd_buffer, NULL);
+         return;
+      }
+      state->meta.attachment_alloc_count = state->attachment_alloc_count;
+   }
+   state->meta.attachment_count = state->attachment_alloc_count;
+   memcpy(state->meta.attachments, state->attachments,
+          attachment_state_total_size);
+
    if (state->subpass_idx != -1) {
       state->meta.subpass_idx = state->subpass_idx;
       state->meta.framebuffer = v3dv_framebuffer_to_handle(state->framebuffer);
       state->meta.pass = v3dv_render_pass_to_handle(state->pass);
-
-      const uint32_t attachment_state_item_size =
-         sizeof(struct v3dv_cmd_buffer_attachment_state);
-      const uint32_t attachment_state_total_size =
-         attachment_state_item_size * state->attachment_alloc_count;
-      if (state->meta.attachment_alloc_count < state->attachment_alloc_count) {
-         if (state->meta.attachment_alloc_count > 0)
-            vk_free(&cmd_buffer->device->vk.alloc, state->meta.attachments);
-
-         state->meta.attachments = vk_zalloc(&cmd_buffer->device->vk.alloc,
-                                             attachment_state_total_size, 8,
-                                             VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-         if (!state->meta.attachments) {
-            v3dv_flag_oom(cmd_buffer, NULL);
-            return;
-         }
-         state->meta.attachment_alloc_count = state->attachment_alloc_count;
-      }
-      state->meta.attachment_count = state->attachment_alloc_count;
-      memcpy(state->meta.attachments, state->attachments,
-             attachment_state_total_size);
 
       state->meta.tile_aligned_render_area = state->tile_aligned_render_area;
       memcpy(&state->meta.render_area, &state->render_area, sizeof(VkRect2D));
@@ -2461,22 +2502,22 @@ v3dv_cmd_buffer_meta_state_push(struct v3dv_cmd_buffer *cmd_buffer,
  */
 void
 v3dv_cmd_buffer_meta_state_pop(struct v3dv_cmd_buffer *cmd_buffer,
-                               uint32_t dirty_dynamic_state,
                                bool needs_subpass_resume)
 {
    struct v3dv_cmd_buffer_state *state = &cmd_buffer->state;
 
+   /* Attachment state */
+   assert(state->meta.attachment_count <= state->attachment_alloc_count);
+   const uint32_t attachment_state_item_size =
+      sizeof(struct v3dv_cmd_buffer_attachment_state);
+   const uint32_t attachment_state_total_size =
+      attachment_state_item_size * state->meta.attachment_count;
+   memcpy(state->attachments, state->meta.attachments,
+          attachment_state_total_size);
+
    if (state->meta.subpass_idx != -1) {
       state->pass = v3dv_render_pass_from_handle(state->meta.pass);
       state->framebuffer = v3dv_framebuffer_from_handle(state->meta.framebuffer);
-
-      assert(state->meta.attachment_count <= state->attachment_alloc_count);
-      const uint32_t attachment_state_item_size =
-         sizeof(struct v3dv_cmd_buffer_attachment_state);
-      const uint32_t attachment_state_total_size =
-         attachment_state_item_size * state->meta.attachment_count;
-      memcpy(state->attachments, state->meta.attachments,
-             attachment_state_total_size);
 
       state->tile_aligned_render_area = state->meta.tile_aligned_render_area;
       memcpy(&state->render_area, &state->meta.render_area, sizeof(VkRect2D));
@@ -2503,10 +2544,9 @@ v3dv_cmd_buffer_meta_state_pop(struct v3dv_cmd_buffer *cmd_buffer,
       state->gfx.pipeline = NULL;
    }
 
-   if (dirty_dynamic_state) {
-      memcpy(&state->dynamic, &state->meta.dynamic, sizeof(state->dynamic));
-      state->dirty |= dirty_dynamic_state;
-   }
+   /* Restore dynamic state */
+   memcpy(&state->dynamic, &state->meta.dynamic, sizeof(state->dynamic));
+   state->dirty = ~0;
 
    if (state->meta.has_descriptor_state) {
       if (state->meta.gfx.descriptor_state.valid != 0) {

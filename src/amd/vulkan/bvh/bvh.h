@@ -140,6 +140,9 @@ struct radv_global_sync_data {
    uint32_t current_phase_start_counter;
    uint32_t current_phase_end_counter;
    uint32_t phase_index;
+   /* If this flag is set, the shader should exit
+    * instead of executing another phase */
+   uint32_t next_phase_exit_flag;
 };
 
 struct radv_ir_header {

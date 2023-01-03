@@ -828,6 +828,7 @@ static void init_get_readers_callback_data(
 	rc_pair_read_arg_fn read_pair_cb,
 	rc_read_write_mask_fn write_cb)
 {
+	reader_data->C = c;
 	reader_data->Abort = 0;
 	reader_data->ReaderCount = 0;
 	reader_data->ReadersReserved = 0;

@@ -436,21 +436,28 @@ fetch_task(REF(radv_ir_header) header, bool did_work)
          if (global_task_index == DEREF(header).sync_data.current_phase_end_counter &&
              DEREF(header).sync_data.task_done_counter ==
                 DEREF(header).sync_data.current_phase_end_counter) {
-            atomicAdd(DEREF(header).sync_data.phase_index, 1);
-            DEREF(header).sync_data.current_phase_start_counter =
-               DEREF(header).sync_data.current_phase_end_counter;
-            atomicAdd(DEREF(header).sync_data.current_phase_end_counter,
-                      DIV_ROUND_UP(task_count(header), gl_WorkGroupSize.x));
-            /* Ensure the changes to the phase index and start/end counter are visible for other
-             * workgroup waiting in the loop. */
-            memoryBarrier(
-               gl_ScopeDevice, gl_StorageSemanticsBuffer,
-               gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+            if (DEREF(header).sync_data.next_phase_exit_flag != 0) {
+               DEREF(header).sync_data.phase_index = TASK_INDEX_INVALID;
+               memoryBarrier(
+                  gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                  gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+            } else {
+               atomicAdd(DEREF(header).sync_data.phase_index, 1);
+               DEREF(header).sync_data.current_phase_start_counter =
+                  DEREF(header).sync_data.current_phase_end_counter;
+               /* Ensure the changes to the phase index and start/end counter are visible for other
+                * workgroup waiting in the loop. */
+               memoryBarrier(
+                  gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                  gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+               atomicAdd(DEREF(header).sync_data.current_phase_end_counter,
+                         DIV_ROUND_UP(task_count(header), gl_WorkGroupSize.x));
+            }
             break;
          }
 
          /* If other invocations have finished all nodes, break out; there is no work to do */
-         if (task_count(header) == 1) {
+         if (DEREF(header).sync_data.phase_index == TASK_INDEX_INVALID) {
             break;
          }
       } while (global_task_index >= DEREF(header).sync_data.current_phase_end_counter);
@@ -459,7 +466,7 @@ fetch_task(REF(radv_ir_header) header, bool did_work)
    }
 
    barrier();
-   if (task_count(header) == 1)
+   if (DEREF(header).sync_data.phase_index == TASK_INDEX_INVALID)
       return TASK_INDEX_INVALID;
 
    num_tasks_to_skip = shared_phase_index - phase_index;

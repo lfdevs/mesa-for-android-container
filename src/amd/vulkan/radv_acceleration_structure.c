@@ -728,7 +728,7 @@ ploc_build_internal(VkCommandBuffer commandBuffer, uint32_t infoCount,
          continue;
 
       struct radv_global_sync_data initial_sync_data = {
-         .current_phase_end_counter = DIV_ROUND_UP(bvh_states[i].node_count, PLOC_WORKGROUP_SIZE),
+         .current_phase_end_counter = TASK_INDEX_INVALID,
          /* Will be updated by the first PLOC shader invocation */
          .task_counts = {TASK_INDEX_INVALID, TASK_INDEX_INVALID},
       };

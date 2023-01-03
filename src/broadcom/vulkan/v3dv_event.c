@@ -544,7 +544,7 @@ cmd_buffer_emit_set_event(struct v3dv_cmd_buffer *cmd_buffer,
 
    v3dv_CmdDispatch(commandBuffer, 1, 1, 1);
 
-   v3dv_cmd_buffer_meta_state_pop(cmd_buffer, 0, false);
+   v3dv_cmd_buffer_meta_state_pop(cmd_buffer, false);
 }
 
 static void
@@ -574,7 +574,7 @@ cmd_buffer_emit_wait_event(struct v3dv_cmd_buffer *cmd_buffer,
 
    v3dv_CmdDispatch(commandBuffer, 1, 1, 1);
 
-   v3dv_cmd_buffer_meta_state_pop(cmd_buffer, 0, false);
+   v3dv_cmd_buffer_meta_state_pop(cmd_buffer, false);
 }
 
 VKAPI_ATTR void VKAPI_CALL

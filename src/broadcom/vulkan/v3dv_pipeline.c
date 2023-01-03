@@ -2057,9 +2057,11 @@ write_creation_feedback(struct v3dv_pipeline *pipeline,
              pipeline_feedback,
              1);
 
-      assert(stage_count == create_feedback->pipelineStageCreationFeedbackCount);
+      const uint32_t feedback_stage_count =
+         create_feedback->pipelineStageCreationFeedbackCount;
+      assert(feedback_stage_count <= stage_count);
 
-      for (uint32_t i = 0; i < stage_count; i++) {
+      for (uint32_t i = 0; i < feedback_stage_count; i++) {
          gl_shader_stage s = vk_to_mesa_shader_stage(stages[i].stage);
          enum broadcom_shader_stage bs = gl_shader_stage_to_broadcom(s);
 

@@ -72,7 +72,7 @@ static const struct debug_named_value etna_debug_options[] = {
    {"no_singlebuffer",ETNA_DBG_NO_SINGLEBUF, "Disable single buffer feature"},
    {"deqp",           ETNA_DBG_DEQP, "Hacks to run dEQP GLES3 tests"}, /* needs MESA_GLES_VERSION_OVERRIDE=3.0 */
    {"nocache",        ETNA_DBG_NOCACHE,    "Disable shader cache"},
-   {"no_linear_pe",   ETNA_DBG_NO_LINEAR_PE, "Disable linear PE"},
+   {"linear_pe",      ETNA_DBG_LINEAR_PE, "Enable linear PE"},
    {"msaa",           ETNA_DBG_MSAA, "Enable MSAA support"},
    DEBUG_NAMED_VALUE_END
 };
@@ -213,6 +213,7 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
       return 1;
    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
+      return screen->specs.max_texture_size;
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS: /* TODO: verify */
       return screen->specs.halti >= 0 ? screen->specs.max_texture_size : 0;
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
@@ -1132,7 +1133,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
       screen->specs.can_supertile = 0;
    if (DBG_ENABLED(ETNA_DBG_NO_SINGLEBUF))
       screen->specs.single_buffer = 0;
-   if (DBG_ENABLED(ETNA_DBG_NO_LINEAR_PE))
+   if (!DBG_ENABLED(ETNA_DBG_LINEAR_PE))
       screen->features[viv_chipMinorFeatures2] &= ~chipMinorFeatures2_LINEAR_PE;
 
    pscreen->destroy = etna_screen_destroy;

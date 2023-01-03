@@ -237,8 +237,10 @@ panfrost_get_legacy_stride(const struct pan_image_layout *layout,
 
         if (drm_is_afbc(layout->modifier)) {
                 unsigned width = u_minify(layout->width, level);
-                width = ALIGN_POT(width, block_size.width);
+                unsigned alignment = block_size.width *
+                                     pan_afbc_tile_size(layout->modifier);
 
+                width = ALIGN_POT(width, alignment);
                 return width * util_format_get_blocksize(layout->format);
         } else {
                 return row_stride / block_size.height;

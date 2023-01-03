@@ -11208,6 +11208,8 @@ export_mrt(isel_context* ctx, const struct aco_export_mrt* mrt)
 
    bld.exp(aco_opcode::exp, mrt->out[0], mrt->out[1], mrt->out[2], mrt->out[3],
            mrt->enabled_channels, mrt->target, mrt->compr);
+
+   ctx->program->has_color_exports = true;
 }
 
 static bool
@@ -11401,6 +11403,8 @@ create_fs_null_export(isel_context* ctx)
    unsigned dest = ctx->options->gfx_level >= GFX11 ? V_008DFC_SQ_EXP_MRT : V_008DFC_SQ_EXP_NULL;
    bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1),
            /* enabled_mask */ 0, dest, /* compr */ false, /* done */ true, /* vm */ true);
+
+   ctx->program->has_color_exports = true;
 }
 
 static void
@@ -11476,6 +11480,8 @@ create_fs_dual_src_export_gfx11(isel_context* ctx, const struct aco_export_mrt* 
    exp->definitions[4] = bld.def(bld.lm, vcc);
    exp->definitions[5] = bld.def(s1, scc);
    ctx->block->instructions.emplace_back(std::move(exp));
+
+   ctx->program->has_color_exports = true;
 }
 
 static void
