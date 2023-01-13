@@ -932,7 +932,7 @@ struct pipe_av1_picture_desc
    struct pipe_picture_desc base;
 
    struct pipe_video_buffer *ref[16];
-
+   struct pipe_video_buffer *film_grain_target;
    struct {
       uint8_t profile;
       uint8_t order_hint_bits_minus_1;

@@ -41,7 +41,6 @@
 #include "virgl_resource.h"
 #include "virgl_public.h"
 #include "virgl_context.h"
-#include "virtio-gpu/virgl_protocol.h"
 #include "virgl_encode.h"
 
 int virgl_debug = 0;
@@ -365,6 +364,9 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    }
 }
 
+#define VIRGL_SHADER_STAGE_CAP_V2(CAP, STAGE) \
+   vscreen->caps.caps.v2. CAP[virgl_shader_stage_convert(STAGE)]
+
 static int
 virgl_get_shader_param(struct pipe_screen *screen,
                        enum pipe_shader_type shader,
@@ -430,7 +432,7 @@ virgl_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE:
          if (vscreen->caps.caps.v2.host_feature_check_version < 12)
             return 4096 * sizeof(float[4]);
-         return vscreen->caps.caps.v2.max_const_buffer_size[shader];
+         return VIRGL_SHADER_STAGE_CAP_V2(max_const_buffer_size, shader);
       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
          if (shader == PIPE_SHADER_FRAGMENT || shader == PIPE_SHADER_COMPUTE)
             return vscreen->caps.caps.v2.max_shader_buffer_frag_compute;
@@ -446,9 +448,9 @@ virgl_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_SUPPORTED_IRS:
          return (1 << PIPE_SHADER_IR_TGSI) | ((virgl_debug & VIRGL_DEBUG_USE_TGSI) ? 0 : (1 << PIPE_SHADER_IR_NIR));
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
-         return vscreen->caps.caps.v2.max_atomic_counters[shader];
+         return VIRGL_SHADER_STAGE_CAP_V2(max_atomic_counters, shader);
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
-         return vscreen->caps.caps.v2.max_atomic_counter_buffers[shader];
+         return VIRGL_SHADER_STAGE_CAP_V2(max_atomic_counter_buffers, shader);
       case PIPE_SHADER_CAP_INT64_ATOMICS:
       case PIPE_SHADER_CAP_FP16:
       case PIPE_SHADER_CAP_FP16_DERIVATIVES:

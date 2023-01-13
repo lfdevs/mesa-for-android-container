@@ -465,6 +465,7 @@ zink_surface_swapchain_update(struct zink_context *ctx, struct zink_surface *sur
       surface->base.width = res->base.b.width0;
       surface->base.height = res->base.b.height0;
       init_surface_info(surface, res, &surface->ivci);
+      surface->dt = res->obj->dt;
    }
    if (!surface->swapchain[res->obj->dt_idx]) {
       /* no current swapchain imageview exists: create it */

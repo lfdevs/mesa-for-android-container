@@ -504,26 +504,6 @@ int virgl_encode_rasterizer_state(struct virgl_context *ctx,
    return 0;
 }
 
-static enum virgl_shader_stage virgl_shader_stage_convert(enum pipe_shader_type type)
-{
-   switch (type) {
-   case PIPE_SHADER_VERTEX:
-      return VIRGL_SHADER_VERTEX;
-   case PIPE_SHADER_TESS_CTRL:
-      return VIRGL_SHADER_TESS_CTRL;
-   case PIPE_SHADER_TESS_EVAL:
-      return VIRGL_SHADER_TESS_EVAL;
-   case PIPE_SHADER_GEOMETRY:
-      return VIRGL_SHADER_GEOMETRY;
-   case PIPE_SHADER_FRAGMENT:
-      return VIRGL_SHADER_FRAGMENT;
-   case PIPE_SHADER_COMPUTE:
-      return VIRGL_SHADER_COMPUTE;
-   default:
-      unreachable("virgl: unknown shader stage.\n");
-   }
-}
-
 static void virgl_emit_shader_header(struct virgl_context *ctx,
                                      uint32_t handle, uint32_t len,
                                      uint32_t type, uint32_t offlen,

@@ -164,7 +164,7 @@ anv_nir_push_desc_ubo_fully_promoted(nir_shader *nir,
    const struct anv_descriptor_set_layout *push_set_layout =
       anv_pipeline_layout_get_push_set(layout, &push_set);
    if (push_set_layout == NULL)
-      return false;
+      return 0;
 
    uint32_t ubos_fully_promoted = 0;
    for (uint32_t b = 0; b < push_set_layout->binding_count; b++) {
@@ -222,7 +222,9 @@ anv_nir_push_desc_ubo_fully_promoted(nir_shader *nir,
                   (nir_dest_bit_size(intrin->dest) / 8);
 
                for (unsigned i = 0; i < ARRAY_SIZE(bind_map->push_ranges); i++) {
-                  if (bind_map->push_ranges[i].start * 32 <= load_offset &&
+                  if (bind_map->push_ranges[i].set == binding->set &&
+                      bind_map->push_ranges[i].index == desc_idx &&
+                      bind_map->push_ranges[i].start * 32 <= load_offset &&
                       (bind_map->push_ranges[i].start +
                        bind_map->push_ranges[i].length) * 32 >=
                       (load_offset + load_bytes)) {

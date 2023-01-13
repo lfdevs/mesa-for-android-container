@@ -94,7 +94,10 @@ libv3d = static_library(
   c_args : [v3d_args],
   cpp_args : [v3d_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_v3dv3, dep_libdrm, dep_valgrind, idep_nir_headers],
+  dependencies : [
+    dep_v3dv3, dep_libdrm, dep_valgrind,
+    idep_nir_headers, idep_mesautil,
+  ],
   link_with: [per_version_libs],
 )
 

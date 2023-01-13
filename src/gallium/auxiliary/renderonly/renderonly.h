@@ -30,10 +30,13 @@
 #include <stdint.h>
 #include "frontend/drm_driver.h"
 #include "pipe/p_state.h"
+#include "util/simple_mtx.h"
+#include "util/sparse_array.h"
 
 struct renderonly_scanout {
    uint32_t handle;
    uint32_t stride;
+   int32_t refcnt;
 };
 
 struct renderonly {
@@ -77,6 +80,9 @@ struct renderonly {
    void (*destroy)(struct renderonly *ro);
    int kms_fd;
    int gpu_fd;
+
+   simple_mtx_t bo_map_lock;
+   struct util_sparse_array bo_map;
 };
 
 static inline struct renderonly_scanout *

@@ -5464,10 +5464,12 @@ radv_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipeline
             cmd_buffer->state.tess_lds_size = tcs->info.tcs.num_lds_blocks;
          }
 
-         /* Always re-emit patch control points when a new pipeline with tessellation is bound
-          * because a bunch of parameters (user SGPRs, TCS vertices out, etc) can be different.
+         /* Always re-emit patch control points/domain origin when a new pipeline with tessellation
+          * is bound because a bunch of parameters (user SGPRs, TCS vertices out, ccw, etc) can be
+          * different.
           */
-         cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_PATCH_CONTROL_POINTS;
+         cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_PATCH_CONTROL_POINTS |
+                                    RADV_CMD_DIRTY_DYNAMIC_TESS_DOMAIN_ORIGIN;
       }
 
       /* Re-emit the streamout buffers because the SGPR idx can be different and with NGG streamout

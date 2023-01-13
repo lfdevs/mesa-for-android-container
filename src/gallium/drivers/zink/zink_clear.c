@@ -88,6 +88,9 @@ clear_in_rp(struct pipe_context *pctx,
 
    VkClearRect cr = {0};
    if (scissor_state) {
+      /* invalid clear */
+      if (scissor_state->minx > ctx->fb_state.width || scissor_state->miny > ctx->fb_state.height)
+         return;
       cr.rect.offset.x = scissor_state->minx;
       cr.rect.offset.y = scissor_state->miny;
       cr.rect.extent.width = MIN2(fb->width, scissor_state->maxx - scissor_state->minx);

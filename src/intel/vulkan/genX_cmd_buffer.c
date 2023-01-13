@@ -2446,11 +2446,20 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
       }
 
       case ANV_DESCRIPTOR_SET_DESCRIPTORS: {
+         struct anv_descriptor_set *set =
+            pipe_state->descriptors[binding->index];
+
+         /* If the shader doesn't access the set buffer, just put the null
+          * surface.
+          */
+         if (set->is_push && !shader->push_desc_info.used_set_buffer) {
+            bt_map[s] = 0;
+            break;
+         }
+
          /* This is a descriptor set buffer so the set index is actually
           * given by binding->binding.  (Yes, that's confusing.)
           */
-         struct anv_descriptor_set *set =
-            pipe_state->descriptors[binding->index];
          assert(set->desc_mem.alloc_size);
          assert(set->desc_surface_state.alloc_size);
          bt_map[s] = set->desc_surface_state.offset + state_offset;
@@ -2463,6 +2472,7 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
          assert(binding->set < MAX_SETS);
          const struct anv_descriptor_set *set =
             pipe_state->descriptors[binding->set];
+
          if (binding->index >= set->descriptor_count) {
             /* From the Vulkan spec section entitled "DescriptorSet and
              * Binding Assignment":
@@ -2479,6 +2489,21 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
             assert(binding->index < set->layout->descriptor_count);
             continue;
          }
+
+         /* For push descriptor, if the binding is fully promoted to push
+          * constants, just reference the null surface in the binding table.
+          * It's unused and we didn't allocate/pack a surface state for it .
+          */
+         if (set->is_push) {
+            uint32_t desc_idx = set->layout->binding[binding->binding].descriptor_index;
+            assert(desc_idx < MAX_PUSH_DESCRIPTORS);
+
+            if (shader->push_desc_info.fully_promoted_ubo_descriptors & BITFIELD_BIT(desc_idx)) {
+               surface_state = cmd_buffer->device->null_surface_state;
+               break;
+            }
+         }
+
          const struct anv_descriptor *desc = &set->descriptors[binding->index];
          /* Relative offset in the STATE_BASE_ADDRESS::SurfaceStateBaseAddress
           * heap. Depending on where the descriptor surface state is
@@ -7461,17 +7486,34 @@ VkResult genX(CmdSetPerformanceStreamMarkerINTEL)(
 void genX(cmd_emit_timestamp)(struct anv_batch *batch,
                               struct anv_device *device,
                               struct anv_address addr,
-                              bool end_of_pipe) {
-   if (end_of_pipe) {
+                              enum anv_timestamp_capture_type type) {
+   switch (type) {
+   case ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE: {
+      struct mi_builder b;
+      mi_builder_init(&b, device->info, batch);
+      mi_store(&b, mi_mem64(addr), mi_reg64(TIMESTAMP));
+      break;
+   }
+
+   case ANV_TIMESTAMP_CAPTURE_END_OF_PIPE:
       anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
          pc.PostSyncOperation   = WriteTimestamp;
          pc.Address             = addr;
          anv_debug_dump_pc(pc);
       }
-   } else {
-      struct mi_builder b;
-      mi_builder_init(&b, device->info, batch);
-      mi_store(&b, mi_mem64(addr), mi_reg64(TIMESTAMP));
+      break;
+
+   case ANV_TIMESTAMP_CAPTURE_AT_CS_STALL:
+      anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
+         pc.CommandStreamerStallEnable = true;
+         pc.PostSyncOperation    = WriteTimestamp;
+         pc.Address              = addr;
+         anv_debug_dump_pc(pc);
+      }
+      break;
+
+   default:
+      unreachable("invalid");
    }
 }
 

@@ -1786,11 +1786,20 @@ void radv_cmd_buffer_clear_attachment(struct radv_cmd_buffer *cmd_buffer,
 void radv_cmd_buffer_clear_rendering(struct radv_cmd_buffer *cmd_buffer,
                                      const VkRenderingInfo *render_info);
 void radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer);
-void radv_cmd_buffer_resolve_rendering_cs(struct radv_cmd_buffer *cmd_buffer);
+void radv_cmd_buffer_resolve_rendering_cs(struct radv_cmd_buffer *cmd_buffer,
+                                          struct radv_image_view *src_iview,
+                                          VkImageLayout src_layout,
+                                          struct radv_image_view *dst_iview,
+                                          VkImageLayout dst_layout,
+                                          const VkImageResolve2 *region);
 void radv_depth_stencil_resolve_rendering_cs(struct radv_cmd_buffer *cmd_buffer,
                                              VkImageAspectFlags aspects,
                                              VkResolveModeFlagBits resolve_mode);
-void radv_cmd_buffer_resolve_rendering_fs(struct radv_cmd_buffer *cmd_buffer);
+void  radv_cmd_buffer_resolve_rendering_fs(struct radv_cmd_buffer *cmd_buffer,
+                                           struct radv_image_view *src_iview,
+                                           VkImageLayout src_layout,
+                                           struct radv_image_view *dst_iview,
+                                           VkImageLayout dst_layout);
 void radv_depth_stencil_resolve_rendering_fs(struct radv_cmd_buffer *cmd_buffer,
                                              VkImageAspectFlags aspects,
                                              VkResolveModeFlagBits resolve_mode);

@@ -164,6 +164,10 @@
    DRI_CONF_OPT_B(disable_glsl_line_continuations, def, \
                   "Disable backslash-based line continuations in GLSL source")
 
+#define DRI_CONF_DISABLE_UNIFORM_ARRAY_RESIZE(def) \
+   DRI_CONF_OPT_B(disable_uniform_array_resize, def, \
+                  "Disable the glsl optimisation that resizes uniform arrays")
+
 #define DRI_CONF_FORCE_GLSL_VERSION(def) \
    DRI_CONF_OPT_I(force_glsl_version, def, 0, 999, \
                   "Force a default GLSL version for shaders that lack an explicit #version line")

@@ -158,12 +158,20 @@ dri2_gl_flush()
 }
 
 static GLboolean
-dri_is_thread_safe(void *loaderPrivate)
+dri_is_thread_safe(UNUSED void *loaderPrivate)
 {
-   struct dri2_egl_surface *dri2_surf = loaderPrivate;
-   UNUSED _EGLDisplay *display =  dri2_surf->base.Resource.Display;
-
 #ifdef HAVE_X11_PLATFORM
+   struct dri2_egl_surface *dri2_surf = loaderPrivate;
+
+   /* loader_dri3_blit_context_get creates a context with
+    * loaderPrivate being NULL. Enabling glthread for a blitting
+    * context isn't useful so return false.
+    */
+   if (!loaderPrivate)
+      return false;
+
+   _EGLDisplay *display =  dri2_surf->base.Resource.Display;
+
    Display *xdpy = (Display*)display->PlatformDisplay;
 
    /* Check Xlib is running in thread safe mode when running on EGL/X11-xlib

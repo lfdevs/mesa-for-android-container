@@ -181,7 +181,13 @@ void vlVaHandlePictureParameterBufferAV1(vlVaDriver *drv, vlVaContext *context, 
 
    context->desc.av1.picture_parameter.matrix_coefficients =
       av1->matrix_coefficients;
-   context->desc.av1.picture_parameter.current_frame_id = av1->current_frame;
+
+   context->desc.av1.film_grain_target = NULL;
+   if (av1->film_grain_info.film_grain_info_fields.bits.apply_grain)
+      context->desc.av1.picture_parameter.current_frame_id = av1->current_display_picture;
+   else
+      context->desc.av1.picture_parameter.current_frame_id = av1->current_frame;
+
    context->desc.av1.picture_parameter.order_hint = av1->order_hint;
    context->desc.av1.picture_parameter.primary_ref_frame = av1->primary_ref_frame;
    context->desc.av1.picture_parameter.frame_width = av1->frame_width_minus1 + 1;

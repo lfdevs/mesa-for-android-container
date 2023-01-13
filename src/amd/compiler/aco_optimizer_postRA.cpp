@@ -89,13 +89,14 @@ struct pr_opt_ctx {
 
       /* Mark overwritten if it doesn't match with other predecessors. */
       const unsigned until_reg = min_reg + num_regs;
-      for (unsigned pred = 1; pred < num_preds; ++pred) {
-         for (unsigned i = min_reg; i < until_reg; ++i) {
-            Idx& idx = instr_idx_by_regs[block_index][i];
+      for (unsigned i = 1; i < num_preds; ++i) {
+         unsigned pred = preds[i];
+         for (unsigned reg = min_reg; reg < until_reg; ++reg) {
+            Idx& idx = instr_idx_by_regs[block_index][reg];
             if (idx == overwritten_untrackable)
                continue;
 
-            if (idx != instr_idx_by_regs[pred][i])
+            if (idx != instr_idx_by_regs[pred][reg])
                idx = overwritten_untrackable;
          }
       }

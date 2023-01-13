@@ -1468,6 +1468,9 @@ void st_init_extensions(struct pipe_screen *screen,
    if (options->disable_glsl_line_continuations)
       consts->DisableGLSLLineContinuations = 1;
 
+   if (options->disable_uniform_array_resize)
+      consts->DisableUniformArrayResize = 1;
+
    if (options->allow_glsl_extension_directive_midshader)
       consts->AllowGLSLExtensionDirectiveMidShader = GL_TRUE;
 

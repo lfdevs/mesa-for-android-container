@@ -336,8 +336,7 @@ cache_get_job(void *data, void *gdata, int thread_index)
    VkPipelineCacheCreateInfo pcci;
    pcci.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
    pcci.pNext = NULL;
-   pcci.flags = screen->info.have_EXT_pipeline_creation_cache_control || screen->info.feats13.pipelineCreationCacheControl ?
-                VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT : 0;
+   pcci.flags = 0;
    pcci.initialDataSize = 0;
    pcci.pInitialData = NULL;
 
@@ -594,9 +593,13 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return screen->info.feats.features.multiDrawIndirect;
 
    case PIPE_CAP_IMAGE_ATOMIC_FLOAT_ADD:
-      return screen->info.have_EXT_shader_atomic_float;
+      return (screen->info.have_EXT_shader_atomic_float &&
+              screen->info.atomic_float_feats.shaderSharedFloat32AtomicAdd &&
+              screen->info.atomic_float_feats.shaderBufferFloat32AtomicAdd);
    case PIPE_CAP_SHADER_ATOMIC_INT64:
-      return screen->info.have_KHR_shader_atomic_int64;
+      return (screen->info.have_KHR_shader_atomic_int64 &&
+              screen->info.atomic_int_feats.shaderSharedInt64Atomics &&
+              screen->info.atomic_int_feats.shaderBufferInt64Atomics);
 
    case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
       return screen->info.have_KHR_draw_indirect_count;

@@ -148,6 +148,45 @@ async def test_gather_commits():
             ''',
             ['3456', '3457', '3458'],
         ),
+        (
+            '''\
+            Without /-/
+
+            Closes: https://gitlab.freedesktop.org/mesa/mesa/issues/36
+            ''',
+            ['36'],
+        ),
+        (
+            '''\
+            Ignore merge_requests
+
+            Closes: https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/20241
+            ''',
+            [],
+        ),
+        (
+            '''\
+            Parse "Fixes:" tag too
+
+            Fixes: https://gitlab.freedesktop.org/mesa/mesa/issues/36
+            Fixes: 142565a3bc2
+            Fixes: 142565a3bc2 ("docs: do something very useful")
+            Fixes: 142565a3bc2 ("docs: fix #1234, have a comma")
+            Fixes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/37
+            ''',
+            ['36', '37'],
+        ),
+        (
+            '''\
+            Parse Fixes/Closes in weird cases
+
+            fixes: https://gitlab.freedesktop.org/mesa/mesa/issues/36
+            fiXES: https://gitlab.freedesktop.org/mesa/mesa/issues/37
+            closes: https://gitlab.freedesktop.org/mesa/mesa/issues/38
+            cloSES: https://gitlab.freedesktop.org/mesa/mesa/issues/39
+            ''',
+            ['36', '37', '38', '39'],
+        ),
     ])
 async def test_parse_issues(content: str, bugs: typing.List[str]) -> None:
     mock_com = mock.AsyncMock(return_value=(textwrap.dedent(content).encode(), ''))

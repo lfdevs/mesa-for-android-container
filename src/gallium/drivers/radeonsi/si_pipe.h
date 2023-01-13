@@ -1005,7 +1005,7 @@ struct si_context {
    uint16_t prefetch_L2_mask;
 
    bool blitter_running;
-   bool in_update_ps_colorbuf0_slot;
+   bool suppress_update_ps_colorbuf0_slot;
    bool is_noop:1;
    bool has_graphics:1;
    bool gfx_flush_in_progress : 1;

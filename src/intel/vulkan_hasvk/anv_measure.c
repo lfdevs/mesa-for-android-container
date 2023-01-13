@@ -150,7 +150,7 @@ anv_measure_start_snapshot(struct anv_cmd_buffer *cmd_buffer,
                                  (struct anv_address) {
                                     .bo = measure->bo,
                                     .offset = index * sizeof(uint64_t) },
-                                 true /* end_of_pipe */);
+                                 ANV_TIMESTAMP_CAPTURE_AT_CS_STALL);
 
    if (event_name == NULL)
       event_name = intel_measure_snapshot_string(type);
@@ -191,7 +191,7 @@ anv_measure_end_snapshot(struct anv_cmd_buffer *cmd_buffer,
                                  (struct anv_address) {
                                     .bo = measure->bo,
                                     .offset = index * sizeof(uint64_t) },
-                                 true /* end_of_pipe */);
+                                 ANV_TIMESTAMP_CAPTURE_AT_CS_STALL);
 
    struct intel_measure_snapshot *snapshot = &(measure->base.snapshots[index]);
    memset(snapshot, 0, sizeof(*snapshot));

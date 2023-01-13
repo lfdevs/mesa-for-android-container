@@ -7172,9 +7172,11 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
 #endif
      {
 #if GFX_VER <= 6
-         wm._8PixelDispatchEnable = wm_prog_data->dispatch_8;
-         wm._16PixelDispatchEnable = wm_prog_data->dispatch_16;
-         wm._32PixelDispatchEnable = wm_prog_data->dispatch_32;
+         brw_fs_get_dispatch_enables(&batch->screen->devinfo, wm_prog_data,
+                                     ice->state.framebuffer.samples,
+                                     &wm._8PixelDispatchEnable,
+                                     &wm._16PixelDispatchEnable,
+                                     &wm._32PixelDispatchEnable);
 #endif
 #if GFX_VER == 4
       /* On gen4, we only have one shader kernel */

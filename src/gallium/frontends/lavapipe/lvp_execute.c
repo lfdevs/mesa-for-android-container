@@ -1232,8 +1232,6 @@ static void handle_descriptor(struct rendering_state *state,
       break;
    }
    case VK_DESCRIPTOR_TYPE_SAMPLER:
-      if (!descriptor->sampler)
-         return;
       fill_sampler_stage(state, dyn_info, stage, p_stage, array_idx, descriptor, binding);
       break;
    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
@@ -1851,6 +1849,8 @@ static void handle_begin_rendering(struct vk_cmd_queue_entry *cmd,
             state->color_att[i].imgv = create_multisample_surface(state, imgv, state->forced_sample_count,
                                                                   att_needs_replicate(state, imgv, state->color_att[i].load_op));
          state->framebuffer.cbufs[i] = state->color_att[i].imgv->surface;
+         assert(state->render_area.offset.x + state->render_area.extent.width <= state->framebuffer.cbufs[i]->texture->width0);
+         assert(state->render_area.offset.y + state->render_area.extent.height <= state->framebuffer.cbufs[i]->texture->height0);
       } else {
          state->framebuffer.cbufs[i] = NULL;
       }
@@ -1882,6 +1882,8 @@ static void handle_begin_rendering(struct vk_cmd_queue_entry *cmd,
                                                      att_needs_replicate(state, imgv, load_op));
       }
       state->framebuffer.zsbuf = state->ds_imgv->surface;
+      assert(state->render_area.offset.x + state->render_area.extent.width <= state->framebuffer.zsbuf->texture->width0);
+      assert(state->render_area.offset.y + state->render_area.extent.height <= state->framebuffer.zsbuf->texture->height0);
    } else {
       state->ds_imgv = NULL;
       state->framebuffer.zsbuf = NULL;

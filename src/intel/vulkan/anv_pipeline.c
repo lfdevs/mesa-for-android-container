@@ -799,38 +799,6 @@ anv_pipeline_hash_ray_tracing_combined_shader(struct anv_ray_tracing_pipeline *p
    _mesa_sha1_final(&ctx, sha1_out);
 }
 
-static void
-anv_stage_nullify_unused_push_desc_surfaces(struct anv_pipeline_stage *stage,
-                                            struct anv_pipeline_layout *layout)
-{
-   uint8_t push_set;
-   const struct anv_descriptor_set_layout *push_set_layout =
-      anv_pipeline_layout_get_push_set(layout, &push_set);
-   if (push_set_layout == NULL)
-      return;
-
-   const uint32_t to_keep_descriptors =
-      stage->push_desc_info.used_descriptors &
-      ~stage->push_desc_info.fully_promoted_ubo_descriptors;
-
-   for (unsigned s = 0; s < stage->bind_map.surface_count; s++) {
-      if (stage->bind_map.surface_to_descriptor[s].set == ANV_DESCRIPTOR_SET_DESCRIPTORS &&
-          stage->bind_map.surface_to_descriptor[s].index == push_set &&
-          !stage->push_desc_info.used_set_buffer)
-         stage->bind_map.surface_to_descriptor[s].set = ANV_DESCRIPTOR_SET_NULL;
-
-
-      if (stage->bind_map.surface_to_descriptor[s].set == push_set) {
-         const uint32_t binding =
-            stage->bind_map.surface_to_descriptor[s].binding;
-         const uint32_t desc_index =
-            push_set_layout->binding[binding].descriptor_index;
-         if (!(BITFIELD_BIT(desc_index) & to_keep_descriptors))
-            stage->bind_map.surface_to_descriptor[s].set = ANV_DESCRIPTOR_SET_NULL;
-      }
-   }
-}
-
 static nir_shader *
 anv_pipeline_stage_get_nir(struct anv_pipeline *pipeline,
                            struct vk_pipeline_cache *cache,
@@ -1013,7 +981,6 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
       anv_nir_loads_push_desc_buffer(nir, layout, &stage->bind_map);
    stage->push_desc_info.fully_promoted_ubo_descriptors =
       anv_nir_push_desc_ubo_fully_promoted(nir, layout, &stage->bind_map);
-   anv_stage_nullify_unused_push_desc_surfaces(stage, layout);
 
    stage->nir = nir;
 }

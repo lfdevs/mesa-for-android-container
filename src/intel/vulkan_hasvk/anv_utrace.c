@@ -227,11 +227,14 @@ anv_utrace_record_ts(struct u_trace *ut, void *cs,
    struct anv_device *device = cmd_buffer->device;
    struct anv_bo *bo = timestamps;
 
+   enum anv_timestamp_capture_type capture_type =
+      (end_of_pipe) ? ANV_TIMESTAMP_CAPTURE_END_OF_PIPE
+                    : ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
    device->physical->cmd_emit_timestamp(&cmd_buffer->batch, device,
                                         (struct anv_address) {
                                            .bo = bo,
                                            .offset = idx * sizeof(uint64_t) },
-                                        end_of_pipe);
+                                        capture_type);
 }
 
 static uint64_t

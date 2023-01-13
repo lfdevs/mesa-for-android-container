@@ -472,9 +472,6 @@ spec@!opengl 1.1@read-front samples=6,Fail
 spec@!opengl 1.1@read-front samples=8,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 
-# Zink bug (RADV doesn't support shaderBufferFloat64AtomicAdd)
-spec@nv_shader_atomic_float@execution@ssbo-atomicadd-float,Crash
-
 # ACO bugs (pass with LLVM)
 spec@nv_shader_atomic_int64@execution@shared-atomicmax-int,Crash
 spec@nv_shader_atomic_int64@execution@shared-atomicmax-uint,Crash

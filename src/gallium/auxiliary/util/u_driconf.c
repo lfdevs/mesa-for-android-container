@@ -41,6 +41,7 @@ u_driconf_fill_st_options(struct st_config_options *options,
    query_bool_option(disable_blend_func_extended);
    query_bool_option(disable_arb_gpu_shader5);
    query_bool_option(disable_glsl_line_continuations);
+   query_bool_option(disable_uniform_array_resize);
    query_bool_option(force_compat_shaders);
    query_bool_option(force_glsl_extensions_warn);
    query_int_option(force_glsl_version);

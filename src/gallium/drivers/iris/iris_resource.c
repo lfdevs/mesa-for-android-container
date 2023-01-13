@@ -674,6 +674,14 @@ iris_resource_configure_main(const struct iris_screen *screen,
    } else if (templ->usage == PIPE_USAGE_STAGING ||
               templ->bind & (PIPE_BIND_LINEAR | PIPE_BIND_CURSOR)) {
       tiling_flags = ISL_TILING_LINEAR_BIT;
+   } else if (res->external_format != PIPE_FORMAT_NONE) {
+      /* This came from iris_resource_from_memobj and didn't have
+       * PIPE_BIND_LINEAR set, so "optimal" tiling is desired.  Let isl
+       * select the tiling.  The implicit contract is that both drivers
+       * will arrive at the same tiling by using the same code to decide.
+       */
+      assert(modifier == DRM_FORMAT_MOD_INVALID);
+      tiling_flags = ISL_TILING_ANY_MASK;
    } else if (!screen->devinfo.has_tiling_uapi &&
               (templ->bind & (PIPE_BIND_SCANOUT | PIPE_BIND_SHARED))) {
       tiling_flags = ISL_TILING_LINEAR_BIT;
@@ -1461,16 +1469,16 @@ iris_resource_from_memobj(struct pipe_screen *pscreen,
    if (!res)
       return NULL;
 
+   res->bo = memobj->bo;
+   res->offset = offset;
+   res->external_format = templ->format;
+   res->internal_format = templ->format;
+
    if (templ->flags & PIPE_RESOURCE_FLAG_TEXTURING_MORE_LIKELY) {
       UNUSED const bool isl_surf_created_successfully =
          iris_resource_configure_main(screen, res, templ, DRM_FORMAT_MOD_INVALID, 0);
       assert(isl_surf_created_successfully);
    }
-
-   res->bo = memobj->bo;
-   res->offset = offset;
-   res->external_format = memobj->format;
-   res->internal_format = templ->format;
 
    iris_bo_reference(memobj->bo);
 

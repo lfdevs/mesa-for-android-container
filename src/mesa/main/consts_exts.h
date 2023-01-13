@@ -796,6 +796,11 @@ struct gl_constants
    GLboolean DisableTransformFeedbackPacking;
 
    /**
+    * Disable the glsl optimisation that resizes uniform arrays.
+    */
+   bool DisableUniformArrayResize;
+
+   /**
     * Align varyings to POT in a slot
     *
     * Drivers that prefer varyings to be aligned to POT must set this value to GL_TRUE

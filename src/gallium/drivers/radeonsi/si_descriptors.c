@@ -939,54 +939,67 @@ static void si_images_update_needs_color_decompress_mask(struct si_images *image
    }
 }
 
+void si_force_disable_ps_colorbuf0_slot(struct si_context *sctx)
+{
+   if (sctx->ps_uses_fbfetch) {
+      sctx->ps_uses_fbfetch = false;
+      si_update_ps_iter_samples(sctx);
+   }
+}
+
 void si_update_ps_colorbuf0_slot(struct si_context *sctx)
 {
    struct si_buffer_resources *buffers = &sctx->internal_bindings;
    struct si_descriptors *descs = &sctx->descriptors[SI_DESCS_INTERNAL];
    unsigned slot = SI_PS_IMAGE_COLORBUF0;
    struct pipe_surface *surf = NULL;
+   struct si_texture *tex = NULL;
 
-   /* si_texture_disable_dcc can get us here again. */
-   if (sctx->in_update_ps_colorbuf0_slot || sctx->blitter_running) {
-      assert(!sctx->ps_uses_fbfetch || sctx->framebuffer.state.cbufs[0]);
+   /* FBFETCH is always disabled for u_blitter, and will be re-enabled after u_blitter is done. */
+   if (sctx->blitter_running || sctx->suppress_update_ps_colorbuf0_slot) {
+      assert(!sctx->ps_uses_fbfetch);
       return;
    }
-   sctx->in_update_ps_colorbuf0_slot = true;
 
-   /* See whether FBFETCH is used and color buffer 0 is set. */
+   /* Get the color buffer if FBFETCH should be enabled. */
    if (sctx->shader.ps.cso && sctx->shader.ps.cso->info.base.fs.uses_fbfetch_output &&
-       sctx->framebuffer.state.nr_cbufs && sctx->framebuffer.state.cbufs[0])
+       sctx->framebuffer.state.nr_cbufs && sctx->framebuffer.state.cbufs[0]) {
       surf = sctx->framebuffer.state.cbufs[0];
+      if (surf) {
+         tex = (struct si_texture *)surf->texture;
+         assert(tex && !tex->is_depth);
+      }
+   }
 
    /* Return if FBFETCH transitions from disabled to disabled. */
-   if (!buffers->buffers[slot] && !surf) {
-      assert(!sctx->ps_uses_fbfetch);
-      sctx->in_update_ps_colorbuf0_slot = false;
+   if (!sctx->ps_uses_fbfetch && !surf)
       return;
-   }
-
-   sctx->ps_uses_fbfetch = surf != NULL;
-   si_update_ps_iter_samples(sctx);
 
    if (surf) {
-      struct si_texture *tex = (struct si_texture *)surf->texture;
-      struct pipe_image_view view = {0};
+      bool disable_dcc = tex->surface.meta_offset != 0;
+      bool disable_cmask = tex->buffer.b.b.nr_samples <= 1 && tex->cmask_buffer;
 
-      assert(tex);
-      assert(!tex->is_depth);
-
-      /* Disable DCC, because the texture is used as both a sampler
+      /* Disable DCC and eliminate fast clear because the texture is used as both a sampler
        * and color buffer.
        */
-      si_texture_disable_dcc(sctx, tex);
+      if (disable_dcc || disable_cmask) {
+         /* Disable fbfetch only for decompression. */
+         si_force_disable_ps_colorbuf0_slot(sctx);
+         sctx->suppress_update_ps_colorbuf0_slot = true;
 
-      if (tex->buffer.b.b.nr_samples <= 1 && tex->cmask_buffer) {
-         /* Disable CMASK. */
-         assert(tex->cmask_buffer != &tex->buffer);
-         si_eliminate_fast_color_clear(sctx, tex, NULL);
-         si_texture_discard_cmask(sctx->screen, tex);
+         si_texture_disable_dcc(sctx, tex);
+
+         if (disable_cmask) {
+            assert(tex->cmask_buffer != &tex->buffer);
+            si_eliminate_fast_color_clear(sctx, tex, NULL);
+            si_texture_discard_cmask(sctx->screen, tex);
+         }
+
+         sctx->suppress_update_ps_colorbuf0_slot = false;
       }
 
+      /* Bind color buffer 0 as a shader image. */
+      struct pipe_image_view view = {0};
       view.resource = surf->texture;
       view.format = surf->format;
       view.access = PIPE_IMAGE_ACCESS_READ;
@@ -1011,7 +1024,9 @@ void si_update_ps_colorbuf0_slot(struct si_context *sctx)
    }
 
    sctx->descriptors_dirty |= 1u << SI_DESCS_INTERNAL;
-   sctx->in_update_ps_colorbuf0_slot = false;
+   sctx->ps_uses_fbfetch = surf != NULL;
+   si_update_ps_iter_samples(sctx);
+   si_ps_key_update_framebuffer(sctx);
 }
 
 /* SAMPLER STATES */

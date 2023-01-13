@@ -856,7 +856,7 @@ vn_update_descriptor_sets_parse_writes(uint32_t write_count,
             switch (write->descriptorType) {
             case VK_DESCRIPTOR_TYPE_SAMPLER:
                imgs[j].imageView = VK_NULL_HANDLE;
-               break;
+               FALLTHROUGH;
             case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
                if (binding->has_immutable_samplers)
                   imgs[j].sampler = VK_NULL_HANDLE;

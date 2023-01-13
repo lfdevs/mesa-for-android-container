@@ -1541,7 +1541,7 @@ gl_nir_link_uniforms(const struct gl_constants *consts,
    /* Iterate through all linked shaders */
    struct nir_link_uniforms_state state = {0,};
 
-   if (!prog->data->spirv) {
+   if (!prog->data->spirv && !consts->DisableUniformArrayResize) {
       /* Gather information on uniform use */
       for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
          struct gl_linked_shader *sh = prog->_LinkedShaders[stage];

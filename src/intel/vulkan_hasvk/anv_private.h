@@ -930,6 +930,12 @@ struct anv_memregion {
    uint64_t available;
 };
 
+enum anv_timestamp_capture_type {
+    ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE,
+    ANV_TIMESTAMP_CAPTURE_END_OF_PIPE,
+    ANV_TIMESTAMP_CAPTURE_AT_CS_STALL,
+};
+
 struct anv_physical_device {
     struct vk_physical_device                   vk;
 
@@ -1031,7 +1037,7 @@ struct anv_physical_device {
     int64_t                                     master_minor;
     struct intel_query_engine_info *            engine_info;
 
-    void (*cmd_emit_timestamp)(struct anv_batch *, struct anv_device *, struct anv_address, bool);
+    void (*cmd_emit_timestamp)(struct anv_batch *, struct anv_device *, struct anv_address, enum anv_timestamp_capture_type);
     struct intel_measure_device                 measure_device;
 };
 

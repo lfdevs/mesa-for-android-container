@@ -463,7 +463,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.ts_addr.offset = src_lev->ts_offset + blit_info->src.box.z * src_lev->ts_layer_stride;
       op.ts_addr.flags = ETNA_RELOC_READ;
       op.ts_clear_value[0] = src_lev->clear_value;
-      op.ts_clear_value[1] = src_lev->clear_value;
+      op.ts_clear_value[1] = src_lev->clear_value >> 32;
       op.ts_mode = src_lev->ts_mode;
       op.num_tiles = DIV_ROUND_UP(src_lev->size, tile_size);
       op.bpp = util_format_get_blocksize(src->base.format);
@@ -492,7 +492,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
          op.src.ts_addr.offset = src_lev->ts_offset + blit_info->src.box.z * src_lev->ts_layer_stride;
          op.src.ts_addr.flags = ETNA_RELOC_READ;
          op.src.ts_clear_value[0] = src_lev->clear_value;
-         op.src.ts_clear_value[1] = src_lev->clear_value;
+         op.src.ts_clear_value[1] = src_lev->clear_value >> 32;
          op.src.ts_mode = src_lev->ts_mode;
          op.src.ts_compress_fmt = src_lev->ts_compress_fmt;
       }

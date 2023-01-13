@@ -835,7 +835,8 @@ zink_render_update_swapchain(struct zink_context *ctx)
       zink_kopper_fixup_depth_buffer(ctx);
       if (ctx->fb_state.width != old_w || ctx->fb_state.height != old_h)
          ctx->scissor_changed = true;
-      zink_update_framebuffer_state(ctx);
+      if (ctx->framebuffer)
+         zink_update_framebuffer_state(ctx);
       ctx->swapchain_size.width = ctx->swapchain_size.height = 0;
    }
 }

@@ -1085,8 +1085,9 @@ pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
          key->sample_coverage =
             p_stage->pipeline->sample_mask != (1 << V3D_MAX_SAMPLES) - 1;
          key->sample_alpha_to_coverage = ms_info->alphaToCoverageEnable;
-         key->sample_alpha_to_one = ms_info->alphaToOneEnable;
       }
+
+      key->sample_alpha_to_one = ms_info->alphaToOneEnable;
    }
 
    /* This is intended for V3D versions before 4.1, otherwise we just use the
@@ -1904,8 +1905,9 @@ pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
          key->sample_coverage =
             pipeline->sample_mask != (1 << V3D_MAX_SAMPLES) - 1;
          key->sample_alpha_to_coverage = ms_info->alphaToCoverageEnable;
-         key->sample_alpha_to_one = ms_info->alphaToOneEnable;
       }
+
+      key->sample_alpha_to_one = ms_info->alphaToOneEnable;
    }
 
    const struct v3dv_render_pass *pass =

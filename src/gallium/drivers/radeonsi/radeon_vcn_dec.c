@@ -955,6 +955,16 @@ static void rvcn_av1_init_film_grain_buffer(rvcn_dec_film_grain_params_t *fg_par
    }
 }
 
+static void rvcn_dec_av1_film_grain_surface(struct pipe_video_buffer **target,
+                                            struct pipe_av1_picture_desc *pic)
+{
+   if (!pic->picture_parameter.film_grain_info.film_grain_info_fields.apply_grain ||
+       !pic->film_grain_target)
+      return;
+
+   *target = pic->film_grain_target;
+}
+
 static rvcn_dec_message_av1_t get_av1_msg(struct radeon_decoder *dec,
                                           struct pipe_video_buffer *target,
                                           struct pipe_av1_picture_desc *pic)
@@ -1916,9 +1926,9 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 {
    DECRYPT_PARAMETERS *decrypt = (DECRYPT_PARAMETERS *)picture->decrypt_key;
    bool encrypted = (DECRYPT_PARAMETERS *)picture->protected_playback;
-   struct si_texture *luma = (struct si_texture *)((struct vl_video_buffer *)target)->resources[0];
-   struct si_texture *chroma =
-      (struct si_texture *)((struct vl_video_buffer *)target)->resources[1];
+   struct si_texture *luma;
+   struct si_texture *chroma;
+   struct pipe_video_buffer *out_surf = target;
    ASSERTED struct si_screen *sscreen = (struct si_screen *)dec->screen;
    rvcn_dec_message_header_t *header;
    rvcn_dec_message_index_t *index_codec;
@@ -2116,9 +2126,15 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
       dec->ws->cs_flush(&dec->cs, RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION, NULL);
    }
 
+   if (dec->stream_type == RDECODE_CODEC_AV1)
+      rvcn_dec_av1_film_grain_surface(&out_surf, (struct pipe_av1_picture_desc *)picture);
+
+   luma   = (struct si_texture *)((struct vl_video_buffer *)out_surf)->resources[0];
+   chroma = (struct si_texture *)((struct vl_video_buffer *)out_surf)->resources[1];
+
    decode->dpb_size = (dec->dpb_type != DPB_DYNAMIC_TIER_2) ? dec->dpb.res->buf->size : 0;
-   decode->dt_size = si_resource(((struct vl_video_buffer *)target)->resources[0])->buf->size +
-                     si_resource(((struct vl_video_buffer *)target)->resources[1])->buf->size;
+   decode->dt_size = si_resource(((struct vl_video_buffer *)out_surf)->resources[0])->buf->size +
+                     si_resource(((struct vl_video_buffer *)out_surf)->resources[1])->buf->size;
 
    decode->sct_size = 0;
    decode->sc_coeff_size = 0;
@@ -2145,7 +2161,7 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
    decode->dt_tiling_mode = 0;
    decode->dt_swizzle_mode = luma->surface.u.gfx9.swizzle_mode;
    decode->dt_array_mode = dec->addr_gfx_mode;
-   decode->dt_field_mode = ((struct vl_video_buffer *)target)->base.interlaced;
+   decode->dt_field_mode = ((struct vl_video_buffer *)out_surf)->base.interlaced;
    decode->dt_surf_tile_config = 0;
    decode->dt_uv_surf_tile_config = 0;
 

@@ -484,7 +484,7 @@ process_singlesync_signals(struct v3dv_queue *queue,
    if (device->pdevice->caps.multisync)
       return VK_SUCCESS;
 
-   int fd;
+   int fd = -1;
    drmSyncobjExportSyncFile(device->pdevice->render_fd,
                             queue->last_job_syncs.syncs[V3DV_QUEUE_ANY],
                             &fd);

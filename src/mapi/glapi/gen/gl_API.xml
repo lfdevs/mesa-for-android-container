@@ -12760,15 +12760,15 @@
     <function name="ProgramEnvParameters4fvEXT" deprecated="3.1" exec="dlist">
         <param name="target" type="GLenum"/>
         <param name="index" type="GLuint"/>
-        <param name="count" type="GLsizei"/>
-        <param name="params" type="const GLfloat *" count="4"/>
+        <param name="count" type="GLsizei" counter="true"/>
+        <param name="params" type="const GLfloat *" count="count" count_scale="4"/>
     </function>
 
     <function name="ProgramLocalParameters4fvEXT" deprecated="3.1" exec="dlist">
         <param name="target" type="GLenum"/>
         <param name="index" type="GLuint"/>
-        <param name="count" type="GLsizei"/>
-        <param name="params" type="const GLfloat *" count="4"/>
+        <param name="count" type="GLsizei" counter="true"/>
+        <param name="params" type="const GLfloat *" count="count" count_scale="4"/>
     </function>
 </category>
 

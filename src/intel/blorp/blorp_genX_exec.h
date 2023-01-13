@@ -837,9 +837,9 @@ blorp_emit_ps_config(struct blorp_batch *batch,
     * configure the WM state whether or not there is a WM program.
     */
 
-#if GFX_VER >= 8
    const struct intel_device_info *devinfo = batch->blorp->compiler->devinfo;
 
+#if GFX_VER >= 8
    blorp_emit(batch, GENX(3DSTATE_WM), wm);
 
    blorp_emit(batch, GENX(3DSTATE_PS), ps) {
@@ -977,9 +977,11 @@ blorp_emit_ps_config(struct blorp_batch *batch,
 #endif
 
       if (prog_data) {
-         ps._8PixelDispatchEnable = prog_data->dispatch_8;
-         ps._16PixelDispatchEnable = prog_data->dispatch_16;
-         ps._32PixelDispatchEnable = prog_data->dispatch_32;
+         brw_fs_get_dispatch_enables(devinfo, prog_data,
+                                     params->num_samples,
+                                     &ps._8PixelDispatchEnable,
+                                     &ps._16PixelDispatchEnable,
+                                     &ps._32PixelDispatchEnable);
 
          ps.DispatchGRFStartRegisterForConstantSetupData0 =
             brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 0);
@@ -1045,9 +1047,11 @@ blorp_emit_ps_config(struct blorp_batch *batch,
       if (prog_data) {
          wm.ThreadDispatchEnable = true;
 
-         wm._8PixelDispatchEnable = prog_data->dispatch_8;
-         wm._16PixelDispatchEnable = prog_data->dispatch_16;
-         wm._32PixelDispatchEnable = prog_data->dispatch_32;
+         brw_fs_get_dispatch_enables(devinfo, prog_data,
+                                     params->num_samples,
+                                     &wm._8PixelDispatchEnable,
+                                     &wm._16PixelDispatchEnable,
+                                     &wm._32PixelDispatchEnable);
 
          wm.DispatchGRFStartRegisterForConstantSetupData0 =
             brw_wm_prog_data_dispatch_grf_start_reg(prog_data, wm, 0);
